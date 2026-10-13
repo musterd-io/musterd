@@ -342,6 +342,12 @@ judged on the transcript's `user`+`assistant` record bytes — what a resume rep
 `stat().size`; a Claude Code transcript is 45% attachment metadata the model never re-reads, so a
 284 KiB file was a 47k-token conversation the ladder refused. The 256 KiB number is unchanged._
 
+_2026-10-12 ([ADR 576](576-wake-lease-claim-short-transaction.md), lane 01M4SDYXKC): the one
+transaction made double-spawn impossible only because the SQLite driver runs one transaction at a
+time; on Postgres's read-committed default two polls could both insert. On the hub the poll also
+held that transaction for 1 to 2.2 s, stalling every other write. ADR 576 derives outside it,
+writes each seat in a short transaction after a recheck, and adds a unique index on live leases._
+
 ## Observability & Evaluation
 
 **Traces** — one `musterd.residency.wake` span per actuation (lease → spawn → occupied →

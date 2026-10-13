@@ -27,7 +27,7 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
-import { appendAudit } from './audit.js';
+import { type AuditEntry, appendAudit } from './audit.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
@@ -1674,6 +1674,55 @@ async function dreamNight(
   return { count: spent.size, costUsd };
 }
 
+type SeatWakePolicy = ReturnType<typeof effectiveWakePolicy>;
+
+/** What the read-only pass decided for one seat (ADR 576 §1): at most one wake, and the exhaustion
+ *  rows its gates reached on the way. Nothing here has been written yet. */
+interface SeatPass {
+  member: MemberRow;
+  policy: SeatWakePolicy;
+  plan:
+    | { kind: 'provisioned'; provisionId: string; sponsorName: string }
+    | { kind: 'candidate'; candidate: WakeCandidate; edge: LoopEdge | null; exhKey: string }
+    | { kind: 'dream' }
+    | null;
+  /** `once`: an attempt-cap row, written only while the act is not already exhausted (one terminal
+   *  row per act). The edge-breaker rows are written on every pass that reaches them, as before. */
+  exhausted: { entry: AuditEntry; once: boolean }[];
+}
+
+/**
+ * Insert a lease unless the seat already holds a live one. `idx_wake_leases_one_live` (v94) is the
+ * guarantee on every driver (ADR 576 §3); false means another poll got there first.
+ */
+async function insertLease(t: Driver, lease: WakeLeaseRow): Promise<boolean> {
+  const { changes } = await t.run(
+    `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+    [
+      lease.id,
+      lease.team_id,
+      lease.member_id,
+      lease.act_id,
+      lease.lane_id,
+      lease.host,
+      lease.lane,
+      lease.status,
+      lease.created_at,
+      lease.expires_at,
+      lease.edge,
+      lease.spawned_at,
+    ],
+  );
+  return changes > 0;
+}
+
+/**
+ * The host's poll (ADR 131 §4 as amended by ADR 576). Each enrolled seat's wake is worked out with
+ * plain reads, outside any transaction, and then each seat that has one is rechecked and written in
+ * its own short transaction. On a large team the derivation is hundreds of awaited statements, and
+ * on SQLite every other write on the daemon queued behind it while it ran inside one transaction.
+ */
 export async function claimWakeLeases(
   db: Driver,
   teamId: string,
@@ -1683,206 +1732,194 @@ export async function claimWakeLeases(
   now = Date.now(),
   scope: HostScope = TEAM_WIDE_HOST,
 ): Promise<WakeOrder[]> {
-  const tx = () =>
-    db.tx(async (t): Promise<WakeOrder[]> => {
-      const orders: WakeOrder[] = [];
-      const reclaimable = await listReclaimableMemberIds(t, teamId, now);
-      const enrollments = (await listResidency(t, teamId)).filter((r) => r.host === host);
-      const teamPolicy = await getPolicy(t, teamId);
-      // One ledger read for the whole poll, and only if some seat actually reaches the batched lane —
-      // a team where every enrolled seat is on the interrupt lane, or is inside its cooldown, pays
-      // nothing. Lazy rather than eager for exactly that case; memoised for exactly this transaction.
-      let ledgerMemo: ActDelivery[] | null = null;
-      const teamLedger = async (): Promise<ActDelivery[]> =>
-        (ledgerMemo ??= await openDirectedLedger(t, teamId));
-      const reviewLoopOn = teamPolicy.loops?.review === true;
-      const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
-      // ADR 271 §4 (built, lane 01M3TAM0X3): the incident wake knobs, read once per poll with the
-      // rest of the team policy — both default off (ADR 271's posture), so an upgrade arms nothing.
-      const wakeOnIncidentRoute = teamPolicy.incident?.wake_on_route === true;
-      const wakeOnIncidentResolve = teamPolicy.incident?.wake_on_resolve === true;
-      // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
-      const teamHours = parseWorkingHours((await getTeamById(t, teamId))?.working_hours);
-      for (const enrollment of enrollments) {
-        const member = await getMemberById(t, enrollment.member_id);
-        if (!member || member.left_at !== null) continue;
-        // ADR 501: a halted seat is never handed to a host; its enrollment stays for resume.
-        if (member.halted_at !== null && member.halted_at !== undefined) continue;
-        // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
-        // seats it may serve — a sponsored seat only from its sponsor's own key.
-        if (!hostMayServe(scope, member)) continue;
-        if (await hasLivePresence(t, member.id, presenceTimeoutMs)) continue;
-        if (reclaimable.has(member.id)) continue;
-        if (await liveLease(t, member.id, now)) continue;
-        // Local-session guard snooze (increment 4): the host reported a live local session in this
-        // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
-        // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
-        const snoozeUntil = await deferralSnoozeUntil(t, teamId, member.name);
-        if (snoozeUntil !== null && now < snoozeUntil) continue;
-        const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
-        // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
-        // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
-        const provisioned = await takeProvisionedWake(t, teamId, member.id, now);
-        if (provisioned) {
-          const sponsorName = (await getMemberById(t, provisioned.sponsor_id))?.name ?? '?';
-          const lease: WakeLeaseRow = {
-            id: ulid(),
-            team_id: teamId,
-            member_id: member.id,
-            act_id: null,
-            lane_id: null,
-            host,
-            lane: 'immediate',
-            status: 'leased',
-            created_at: now,
-            expires_at: now + WAKE_LEASE_TTL_MS,
-            edge: null,
-            spawned_at: null,
-          };
-          await t.run(
-            `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              lease.id,
-              lease.team_id,
-              lease.member_id,
-              lease.act_id,
-              lease.lane_id,
-              lease.host,
-              lease.lane,
-              lease.status,
-              lease.created_at,
-              lease.expires_at,
-              lease.edge,
-              lease.spawned_at,
-            ],
-          );
-          await appendAudit(t, teamId, {
-            actor: null,
-            action: 'residency.wake_leased',
-            target: member.name,
-            result: 'allow',
-            detail: {
-              lease_id: lease.id,
-              reason: 'provisioned',
-              provision_id: provisioned.id,
-              sponsor: sponsorName,
-              lane: 'immediate',
-              host,
-              derivation: 'immediate',
-            },
-          });
-          orders.push({
-            lease_id: lease.id,
-            seat: member.name,
-            lane: 'immediate',
-            composed_line: composeProvisionedLine(member.name, teamSlug, sponsorName),
-            expires_at: lease.expires_at,
-            tool_policy: policy.tool_policy,
-            bounds: {
-              timeout_ms: policy.timeout_ms,
-              ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
-              ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
-            },
-            transcript_max_bytes: policy.transcript_max_bytes,
-            continuity_requirement: 'portable',
-            intended_delivery: 'fresh',
-            derivation: 'immediate',
-            reason: 'provisioned',
-          });
-          continue;
-        }
-        if ((await wakesSince(t, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap)
-          continue;
+  const passes = await deriveSeatPasses(db, teamId, teamSlug, host, presenceTimeoutMs, now, scope);
+  const orders: WakeOrder[] = [];
+  for (const pass of passes) {
+    const order = await writeSeatPass(db, teamId, teamSlug, host, presenceTimeoutMs, now, pass);
+    if (order) orders.push(order);
+  }
+  return orders;
+}
 
-        const cooled = (await wakesSince(t, teamId, member.name, now - policy.cooldown_ms)) === 0;
-        const candidates = await dueCandidates(
-          t,
-          teamSlug,
-          member,
-          {
-            immediate: policy.lane !== 'batched',
-            batched: cooled && policy.lane !== 'interrupt',
-            raisedDeferralWakes: policy.raised_deferral_wakes,
-            conveneHuddles: policy.convene_huddles,
-            wakeOnIncidentRoute,
-            wakeOnIncidentResolve,
-          },
-          teamLedger,
-        );
-        // ADR 199: dispatch work-orders (continuation then handoff — handoff unshifted last so it
-        // leads). ADR 191: review work-orders prefer ahead of both + inbox.
-        if (dispatchLoopOn && policy.flow === 'auto' && cooled) {
-          candidates.unshift(
-            ...(await dueDispatchContinuationWorkOrders(t, teamId, teamSlug, member)),
-          );
-          candidates.unshift(...(await dueDispatchHandoffWorkOrders(t, teamId, teamSlug, member)));
+/** ADR 576 §1: the derivation, unchanged in its gates and their order, with every write deferred. */
+async function deriveSeatPasses(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  host: string,
+  presenceTimeoutMs: number,
+  now: number,
+  scope: HostScope,
+): Promise<SeatPass[]> {
+  const passes: SeatPass[] = [];
+  const reclaimable = await listReclaimableMemberIds(db, teamId, now);
+  const enrollments = (await listResidency(db, teamId)).filter((r) => r.host === host);
+  const teamPolicy = await getPolicy(db, teamId);
+  // One ledger read for the whole poll, and only if some seat actually reaches the batched lane —
+  // a team where every enrolled seat is on the interrupt lane, or is inside its cooldown, pays
+  // nothing. Lazy rather than eager for exactly that case; memoised for exactly this poll.
+  let ledgerMemo: ActDelivery[] | null = null;
+  const teamLedger = async (): Promise<ActDelivery[]> =>
+    (ledgerMemo ??= await openDirectedLedger(db, teamId));
+  const reviewLoopOn = teamPolicy.loops?.review === true;
+  const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
+  // ADR 271 §4 (built, lane 01M3TAM0X3): the incident wake knobs, read once per poll with the
+  // rest of the team policy — both default off (ADR 271's posture), so an upgrade arms nothing.
+  const wakeOnIncidentRoute = teamPolicy.incident?.wake_on_route === true;
+  const wakeOnIncidentResolve = teamPolicy.incident?.wake_on_resolve === true;
+  // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
+  const teamHours = parseWorkingHours((await getTeamById(db, teamId))?.working_hours);
+  for (const enrollment of enrollments) {
+    const member = await getMemberById(db, enrollment.member_id);
+    if (!member || member.left_at !== null) continue;
+    // ADR 501: a halted seat is never handed to a host; its enrollment stays for resume.
+    if (member.halted_at !== null && member.halted_at !== undefined) continue;
+    // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
+    // seats it may serve — a sponsored seat only from its sponsor's own key.
+    if (!hostMayServe(scope, member)) continue;
+    if (await hasLivePresence(db, member.id, presenceTimeoutMs)) continue;
+    if (reclaimable.has(member.id)) continue;
+    if (await liveLease(db, member.id, now)) continue;
+    // Local-session guard snooze (increment 4): the host reported a live local session in this
+    // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
+    // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
+    const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name);
+    if (snoozeUntil !== null && now < snoozeUntil) continue;
+    const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
+    const pass: SeatPass = { member, policy, plan: null, exhausted: [] };
+    passes.push(pass);
+    // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
+    // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
+    const provisioned = await db.get<{ id: string; sponsor_id: string }>(
+      `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
+         AND state = 'ready' AND first_wake_at IS NULL ORDER BY ready_at ASC LIMIT 1`,
+      [teamId, member.id],
+    );
+    if (provisioned) {
+      const sponsorName = (await getMemberById(db, provisioned.sponsor_id))?.name ?? '?';
+      pass.plan = { kind: 'provisioned', provisionId: provisioned.id, sponsorName };
+      continue;
+    }
+    if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) continue;
+
+    const cooled = (await wakesSince(db, teamId, member.name, now - policy.cooldown_ms)) === 0;
+    const candidates = await dueCandidates(
+      db,
+      teamSlug,
+      member,
+      {
+        immediate: policy.lane !== 'batched',
+        batched: cooled && policy.lane !== 'interrupt',
+        raisedDeferralWakes: policy.raised_deferral_wakes,
+        conveneHuddles: policy.convene_huddles,
+        wakeOnIncidentRoute,
+        wakeOnIncidentResolve,
+      },
+      teamLedger,
+    );
+    // ADR 199: dispatch work-orders (continuation then handoff — handoff unshifted last so it
+    // leads). ADR 191: review work-orders prefer ahead of both + inbox.
+    if (dispatchLoopOn && policy.flow === 'auto' && cooled) {
+      candidates.unshift(
+        ...(await dueDispatchContinuationWorkOrders(db, teamId, teamSlug, member)),
+      );
+      candidates.unshift(...(await dueDispatchHandoffWorkOrders(db, teamId, teamSlug, member)));
+    }
+    if (reviewLoopOn && policy.flow === 'auto' && cooled) {
+      candidates.unshift(...(await dueReviewWorkOrders(db, teamId, teamSlug, member)));
+    }
+    // ADR 434 §c, read once per seat per poll and only when something is due.
+    const horizon = candidates.length > 0 ? await wakeHorizon(db, teamId, member.name) : null;
+    for (const candidate of candidates) {
+      const exhKey = wakeExhaustionKey(candidate.act_id, candidate.lane_id);
+      const edge = loopEdgeOf(candidate);
+      // ADR 434, inbox wakes only (an edge-bearing work order is a lane fact, not an act):
+      //  §c — an act received before the seat's fresh enrollment is not this enrollment's to
+      //       wake for; §b — an act that already completed a wake is spent, unless someone else
+      //       has since added to its thread. Both silent, like the still-true skip: a spent act
+      //       is the resting state of an answered inbox, not an event.
+      if (edge === null && candidate.act_id) {
+        const received = await actReceivedAt(db, teamId, candidate.act_id);
+        if (horizon !== null && received !== null && received < horizon) continue;
+        const woke = await lastWokeForAct(db, teamId, member.name, candidate.act_id);
+        if (
+          woke !== null &&
+          !(await threadReopenedSince(db, teamId, member.id, candidate.act_id, woke))
+        )
+          continue;
+      }
+      /**
+       * ADR 306 §1. An edge-bearing work order is bounded by the ADR 262 (lane, edge) rules
+       * below and by nothing else. The per-act cap does NOT apply to it, for two reasons the
+       * live ledger showed on 2026-08-21:
+       *
+       *  - it counts `residency.woke` alongside `wake_failed` against a LIFETIME terminal row,
+       *    so three SUCCESSFUL continuations exhausted a lane forever — the exact case ADR 262
+       *    §4.1 promised would keep deriving, dead on two real lanes;
+       *  - keyed `act_id` else `lane:<id>`, it is coarser than (lane, edge) at the same
+       *    threshold of 3 while counting a SUPERSET of the rows. A subset counter behind a
+       *    superset counter at an equal threshold is unreachable: the ADR 262 breaker fired
+       *    zero times in eight days while five (lane, edge) pairs reached its threshold.
+       *
+       * Inbox wakes (edge NULL) are untouched — there a success SHOULD retire the act.
+       */
+      const edgeBound = edge !== null && candidate.lane_id !== undefined;
+      if (!edgeBound) {
+        if (await isExhausted(db, teamId, exhKey)) continue;
+        if ((await attemptsForAct(db, teamId, exhKey)) >= policy.attempt_cap) {
+          pass.exhausted.push({
+            once: true,
+            entry: {
+              actor: null,
+              action: 'residency.wake_exhausted',
+              target: member.name,
+              result: 'deny',
+              detail: {
+                act: exhKey,
+                sender: candidate.sender ?? 'board',
+                attempts: policy.attempt_cap,
+                derivation: candidate.derivation,
+                ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
+              },
+            },
+          });
+          continue;
         }
-        if (reviewLoopOn && policy.flow === 'auto' && cooled) {
-          candidates.unshift(...(await dueReviewWorkOrders(t, teamId, teamSlug, member)));
+      }
+      if (edge && candidate.lane_id) {
+        if (
+          (await workOrderEdgeFailureCount(db, teamId, candidate.lane_id, edge)) >=
+          WORK_ORDER_EDGE_BREAKER_N
+        ) {
+          pass.exhausted.push({
+            once: false,
+            entry: {
+              actor: null,
+              action: 'residency.wake_exhausted',
+              target: member.name,
+              result: 'deny',
+              detail: {
+                act: exhKey,
+                edge,
+                lane_id: candidate.lane_id,
+                breaker: true,
+                attempts: WORK_ORDER_EDGE_BREAKER_N,
+                derivation: candidate.derivation,
+              },
+            },
+          });
+          continue;
         }
-        // ADR 434 §c, read once per seat per poll and only when something is due.
-        const horizon = candidates.length > 0 ? await wakeHorizon(t, teamId, member.name) : null;
-        let leased = false;
-        for (const candidate of candidates) {
-          const exhKey = wakeExhaustionKey(candidate.act_id, candidate.lane_id);
-          const edge = loopEdgeOf(candidate);
-          // ADR 434, inbox wakes only (an edge-bearing work order is a lane fact, not an act):
-          //  §c — an act received before the seat's fresh enrollment is not this enrollment's to
-          //       wake for; §b — an act that already completed a wake is spent, unless someone else
-          //       has since added to its thread. Both silent, like the still-true skip: a spent act
-          //       is the resting state of an answered inbox, not an event.
-          if (edge === null && candidate.act_id) {
-            const received = await actReceivedAt(t, teamId, candidate.act_id);
-            if (horizon !== null && received !== null && received < horizon) continue;
-            const woke = await lastWokeForAct(t, teamId, member.name, candidate.act_id);
-            if (
-              woke !== null &&
-              !(await threadReopenedSince(t, teamId, member.id, candidate.act_id, woke))
-            )
-              continue;
-          }
-          /**
-           * ADR 306 §1. An edge-bearing work order is bounded by the ADR 262 (lane, edge) rules
-           * below and by nothing else. The per-act cap does NOT apply to it, for two reasons the
-           * live ledger showed on 2026-08-21:
-           *
-           *  - it counts `residency.woke` alongside `wake_failed` against a LIFETIME terminal row,
-           *    so three SUCCESSFUL continuations exhausted a lane forever — the exact case ADR 262
-           *    §4.1 promised would keep deriving, dead on two real lanes;
-           *  - keyed `act_id` else `lane:<id>`, it is coarser than (lane, edge) at the same
-           *    threshold of 3 while counting a SUPERSET of the rows. A subset counter behind a
-           *    superset counter at an equal threshold is unreachable: the ADR 262 breaker fired
-           *    zero times in eight days while five (lane, edge) pairs reached its threshold.
-           *
-           * Inbox wakes (edge NULL) are untouched — there a success SHOULD retire the act.
-           */
-          const edgeBound = edge !== null && candidate.lane_id !== undefined;
-          if (!edgeBound) {
-            if (await isExhausted(t, teamId, exhKey)) continue;
-            if ((await attemptsForAct(t, teamId, exhKey)) >= policy.attempt_cap) {
-              await appendAudit(t, teamId, {
-                actor: null,
-                action: 'residency.wake_exhausted',
-                target: member.name,
-                result: 'deny',
-                detail: {
-                  act: exhKey,
-                  sender: candidate.sender ?? 'board',
-                  attempts: policy.attempt_cap,
-                  derivation: candidate.derivation,
-                  ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-                },
-              });
-              continue;
-            }
-          }
-          if (edge && candidate.lane_id) {
-            if (
-              (await workOrderEdgeFailureCount(t, teamId, candidate.lane_id, edge)) >=
-              WORK_ORDER_EDGE_BREAKER_N
-            ) {
-              await appendAudit(t, teamId, {
+        if (await workOrderEdgeStillTrue(db, teamId, candidate.lane_id, edge)) continue;
+        if (edge === 'dispatch_continuation') {
+          // ADR 306 §3 — the succeeding chain has a ceiling too.
+          if (
+            (await workOrderEdgeWokeCount(db, teamId, candidate.lane_id, edge)) >=
+            WORK_ORDER_CONTINUATION_SUCCESS_CAP
+          ) {
+            pass.exhausted.push({
+              once: false,
+              entry: {
                 actor: null,
                 action: 'residency.wake_exhausted',
                 target: member.name,
@@ -1891,243 +1928,236 @@ export async function claimWakeLeases(
                   act: exhKey,
                   edge,
                   lane_id: candidate.lane_id,
-                  breaker: true,
-                  attempts: WORK_ORDER_EDGE_BREAKER_N,
+                  reason: 'continuation_cap',
+                  attempts: WORK_ORDER_CONTINUATION_SUCCESS_CAP,
                   derivation: candidate.derivation,
                 },
-              });
-              continue;
-            }
-            if (await workOrderEdgeStillTrue(t, teamId, candidate.lane_id, edge)) continue;
-            if (edge === 'dispatch_continuation') {
-              // ADR 306 §3 — the succeeding chain has a ceiling too.
-              if (
-                (await workOrderEdgeWokeCount(t, teamId, candidate.lane_id, edge)) >=
-                WORK_ORDER_CONTINUATION_SUCCESS_CAP
-              ) {
-                await appendAudit(t, teamId, {
-                  actor: null,
-                  action: 'residency.wake_exhausted',
-                  target: member.name,
-                  result: 'deny',
-                  detail: {
-                    act: exhKey,
-                    edge,
-                    lane_id: candidate.lane_id,
-                    reason: 'continuation_cap',
-                    attempts: WORK_ORDER_CONTINUATION_SUCCESS_CAP,
-                    derivation: candidate.derivation,
-                  },
-                });
-                continue;
-              }
-              // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
-              // still-true skip: a stalled lane is the normal resting state of a claimed board, not
-              // an event worth a row on every poll.
-              if (!(await laneMovedSinceLastWoke(t, teamId, candidate.lane_id, edge))) continue;
-            }
-          }
-          const lease: WakeLeaseRow = {
-            id: ulid(),
-            team_id: teamId,
-            member_id: member.id,
-            act_id: candidate.act_id ?? null,
-            lane_id: candidate.lane_id ?? null,
-            host,
-            lane: candidate.lane,
-            status: 'leased',
-            created_at: now,
-            expires_at: now + WAKE_LEASE_TTL_MS,
-            edge,
-            spawned_at: null,
-          };
-          await t.run(
-            `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              lease.id,
-              lease.team_id,
-              lease.member_id,
-              lease.act_id,
-              lease.lane_id,
-              lease.host,
-              lease.lane,
-              lease.status,
-              lease.created_at,
-              lease.expires_at,
-              lease.edge,
-              lease.spawned_at,
-            ],
-          );
-          await appendAudit(t, teamId, {
-            actor: null,
-            action: 'residency.wake_leased',
-            target: member.name,
-            result: 'allow',
-            detail: {
-              lease_id: lease.id,
-              act: exhKey,
-              sender: candidate.sender ?? 'board',
-              lane: candidate.lane,
-              host,
-              derivation: candidate.derivation,
-              ...(isPortableWakeCandidate(candidate, policy.portable_inbox_replies)
-                ? { continuity_requirement: 'portable', intended_delivery: 'fresh' }
-                : {}),
-              // ADR 210: the eligibility BIT is audited; the thread id that produced it is not. The
-              // ledger records that a resume was permitted, never anything about the local session.
-              ...(isResumeEligible(candidate, policy, now) ? { resume_eligible: true } : {}),
-              ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-              ...(edge !== null ? { edge } : {}),
-            },
-          });
-          const isWorkOrder = candidate.derivation === 'work_order';
-          const isPortable = isPortableWakeCandidate(candidate, policy.portable_inbox_replies);
-          const kind = candidate.work_order_kind ?? 'dispatch';
-          orders.push({
-            lease_id: lease.id,
-            seat: member.name,
-            ...(candidate.act_id !== undefined ? { act_id: candidate.act_id } : {}),
-            ...(candidate.act !== undefined ? { act: candidate.act } : {}),
-            ...(candidate.sender !== undefined ? { sender: candidate.sender } : {}),
-            lane: candidate.lane,
-            composed_line: isWorkOrder
-              ? composeWorkOrderLine(
-                  member.name,
-                  teamSlug,
-                  candidate.lane_id!,
-                  kind,
-                  candidate.act_id,
-                )
-              : composeWakeLine(
-                  member.name,
-                  teamSlug,
-                  candidate.act ?? 'message',
-                  candidate.sender ?? '?',
-                  candidate.act_id,
-                ),
-            expires_at: lease.expires_at,
-            tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
-            bounds: {
-              timeout_ms: isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms,
-              ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
-              ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
-            },
-            transcript_max_bytes: policy.transcript_max_bytes,
-            ...(isPortable
-              ? { continuity_requirement: 'portable' as const, intended_delivery: 'fresh' as const }
-              : {}),
-            // The mark and the key it needs travel together: an eligible wake carries the thread id
-            // so the host can look for an exact local binding. Never audited, never returned.
-            ...(isResumeEligible(candidate, policy, now)
-              ? { resume_eligible: true as const, thread_id: candidate.thread_id! }
-              : {}),
-            derivation: candidate.derivation,
-            ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-          });
-          leased = true;
-          break; // one lease per seat per poll
-        }
-        // ADR 494: nothing asked-for was leased, so the seat may be due a dream — idle (the live
-        // presence and deferral-snooze gates above already passed), cooled, outside its working
-        // hours, inside tonight's count and budget. A dream never shares a pass with another wake.
-        if (!leased && policy.dream_enabled && cooled) {
-          const hours = parseWorkingHours(member.working_hours) ?? teamHours;
-          const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
-          const night =
-            nightStart === null
-              ? { count: 0, costUsd: 0 }
-              : await dreamNight(t, teamId, member.name, nightStart);
-          const blocker = dreamBlocker({
-            enabled: policy.dream_enabled,
-            enrolled: true,
-            live: false,
-            otherWakeDue: false,
-            hours,
-            now,
-            dreamsTonight: night.count,
-            nightlyWakes: policy.dream_nightly_wakes,
-            costTonightUsd: night.costUsd,
-            ...(policy.dream_budget_usd !== undefined
-              ? { budgetUsd: policy.dream_budget_usd }
-              : {}),
-          });
-          if (blocker === null) {
-            const lease: WakeLeaseRow = {
-              id: ulid(),
-              team_id: teamId,
-              member_id: member.id,
-              act_id: null,
-              lane_id: null,
-              host,
-              lane: 'batched',
-              status: 'leased',
-              created_at: now,
-              expires_at: now + WAKE_LEASE_TTL_MS,
-              edge: null,
-              spawned_at: null,
-            };
-            await t.run(
-              `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                lease.id,
-                lease.team_id,
-                lease.member_id,
-                lease.act_id,
-                lease.lane_id,
-                lease.host,
-                lease.lane,
-                lease.status,
-                lease.created_at,
-                lease.expires_at,
-                lease.edge,
-                lease.spawned_at,
-              ],
-            );
-            await appendAudit(t, teamId, {
-              actor: null,
-              action: 'residency.wake_leased',
-              target: member.name,
-              result: 'allow',
-              detail: {
-                lease_id: lease.id,
-                act: 'dream',
-                sender: 'dream',
-                lane: 'batched',
-                host,
-                derivation: 'dream',
-                continuity_requirement: 'portable',
-                intended_delivery: 'fresh',
               },
             });
-            orders.push({
-              lease_id: lease.id,
-              seat: member.name,
-              lane: 'batched',
-              composed_line: composeDreamLine(member.name, teamSlug),
-              expires_at: lease.expires_at,
-              // A dream writes wiki pages and opens a PR, so it runs under the seat's own tool
-              // policy; the write fence (store/dream.ts) is what keeps it to memory.
-              tool_policy: 'seat-policy',
-              bounds: {
-                timeout_ms: policy.work_timeout_ms,
-                ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
-                ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
-              },
-              transcript_max_bytes: policy.transcript_max_bytes,
-              // ADR 494 §3: always fresh — a dream re-reads the record, it never resumes a life.
-              continuity_requirement: 'portable',
-              intended_delivery: 'fresh',
-              derivation: 'dream',
-            });
+            continue;
           }
+          // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
+          // still-true skip: a stalled lane is the normal resting state of a claimed board, not
+          // an event worth a row on every poll.
+          if (!(await laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge))) continue;
         }
       }
-      return orders;
-    });
-  return tx();
+      pass.plan = { kind: 'candidate', candidate, edge, exhKey };
+      break; // one lease per seat per poll
+    }
+    // ADR 494: nothing asked-for was leased, so the seat may be due a dream — idle (the live
+    // presence and deferral-snooze gates above already passed), cooled, outside its working
+    // hours, inside tonight's count and budget. A dream never shares a pass with another wake.
+    if (pass.plan === null && policy.dream_enabled && cooled) {
+      const hours = parseWorkingHours(member.working_hours) ?? teamHours;
+      const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
+      const night =
+        nightStart === null
+          ? { count: 0, costUsd: 0 }
+          : await dreamNight(db, teamId, member.name, nightStart);
+      const blocker = dreamBlocker({
+        enabled: policy.dream_enabled,
+        enrolled: true,
+        live: false,
+        otherWakeDue: false,
+        hours,
+        now,
+        dreamsTonight: night.count,
+        nightlyWakes: policy.dream_nightly_wakes,
+        costTonightUsd: night.costUsd,
+        ...(policy.dream_budget_usd !== undefined ? { budgetUsd: policy.dream_budget_usd } : {}),
+      });
+      if (blocker === null) pass.plan = { kind: 'dream' };
+    }
+  }
+  return passes.filter((p) => p.plan !== null || p.exhausted.length > 0);
 }
+
+/**
+ * ADR 576 §2: one seat's writes, in a transaction a few statements long. The seat is rechecked for
+ * the facts its wake depends on — still offline, still no live lease, the provisioned first wake
+ * still untaken — and dropped for this poll if any has changed; the next poll derives it again.
+ */
+async function writeSeatPass(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  host: string,
+  presenceTimeoutMs: number,
+  now: number,
+  pass: SeatPass,
+): Promise<WakeOrder | null> {
+  const { member, policy, plan } = pass;
+  return db
+    .tx(async (t): Promise<WakeOrder | null> => {
+      for (const { entry, once } of pass.exhausted) {
+        if (once && (await isExhausted(t, teamId, String(entry.detail?.act)))) continue;
+        await appendAudit(t, teamId, entry);
+      }
+      if (plan === null) return null;
+      if (await hasLivePresence(t, member.id, presenceTimeoutMs)) return null;
+      if (await liveLease(t, member.id, now)) return null;
+      if (plan.kind === 'provisioned') {
+        const { changes } = await t.run(
+          'UPDATE host_provisions SET first_wake_at = ? WHERE id = ? AND first_wake_at IS NULL',
+          [now, plan.provisionId],
+        );
+        if (changes === 0) return null;
+      }
+      const candidate = plan.kind === 'candidate' ? plan.candidate : null;
+      const edge = plan.kind === 'candidate' ? plan.edge : null;
+      const lane: WakeLane =
+        plan.kind === 'provisioned'
+          ? 'immediate'
+          : plan.kind === 'dream'
+            ? 'batched'
+            : candidate!.lane;
+      const lease: WakeLeaseRow = {
+        id: ulid(),
+        team_id: teamId,
+        member_id: member.id,
+        act_id: candidate?.act_id ?? null,
+        lane_id: candidate?.lane_id ?? null,
+        host,
+        lane,
+        status: 'leased',
+        created_at: now,
+        expires_at: now + WAKE_LEASE_TTL_MS,
+        edge,
+        spawned_at: null,
+      };
+      if (!(await insertLease(t, lease))) {
+        // The insert lost to a concurrent poll, so the provision mark above must not stand.
+        if (plan.kind === 'provisioned') throw new LeaseLost();
+        return null;
+      }
+      const bounds = (timeoutMs: number) => ({
+        timeout_ms: timeoutMs,
+        ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
+        ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+      });
+      if (plan.kind === 'provisioned') {
+        await appendAudit(t, teamId, {
+          actor: null,
+          action: 'residency.wake_leased',
+          target: member.name,
+          result: 'allow',
+          detail: {
+            lease_id: lease.id,
+            reason: 'provisioned',
+            provision_id: plan.provisionId,
+            sponsor: plan.sponsorName,
+            lane: 'immediate',
+            host,
+            derivation: 'immediate',
+          },
+        });
+        return {
+          lease_id: lease.id,
+          seat: member.name,
+          lane: 'immediate',
+          composed_line: composeProvisionedLine(member.name, teamSlug, plan.sponsorName),
+          expires_at: lease.expires_at,
+          tool_policy: policy.tool_policy,
+          bounds: bounds(policy.timeout_ms),
+          transcript_max_bytes: policy.transcript_max_bytes,
+          continuity_requirement: 'portable',
+          intended_delivery: 'fresh',
+          derivation: 'immediate',
+          reason: 'provisioned',
+        };
+      }
+      if (plan.kind === 'dream') {
+        await appendAudit(t, teamId, {
+          actor: null,
+          action: 'residency.wake_leased',
+          target: member.name,
+          result: 'allow',
+          detail: {
+            lease_id: lease.id,
+            act: 'dream',
+            sender: 'dream',
+            lane: 'batched',
+            host,
+            derivation: 'dream',
+            continuity_requirement: 'portable',
+            intended_delivery: 'fresh',
+          },
+        });
+        return {
+          lease_id: lease.id,
+          seat: member.name,
+          lane: 'batched',
+          composed_line: composeDreamLine(member.name, teamSlug),
+          expires_at: lease.expires_at,
+          // A dream writes wiki pages and opens a PR, so it runs under the seat's own tool
+          // policy; the write fence (store/dream.ts) is what keeps it to memory.
+          tool_policy: 'seat-policy',
+          bounds: bounds(policy.work_timeout_ms),
+          transcript_max_bytes: policy.transcript_max_bytes,
+          // ADR 494 §3: always fresh — a dream re-reads the record, it never resumes a life.
+          continuity_requirement: 'portable',
+          intended_delivery: 'fresh',
+          derivation: 'dream',
+        };
+      }
+      const c = plan.candidate;
+      const isPortable = isPortableWakeCandidate(c, policy.portable_inbox_replies);
+      const resumeEligible = isResumeEligible(c, policy, now);
+      await appendAudit(t, teamId, {
+        actor: null,
+        action: 'residency.wake_leased',
+        target: member.name,
+        result: 'allow',
+        detail: {
+          lease_id: lease.id,
+          act: plan.exhKey,
+          sender: c.sender ?? 'board',
+          lane: c.lane,
+          host,
+          derivation: c.derivation,
+          ...(isPortable ? { continuity_requirement: 'portable', intended_delivery: 'fresh' } : {}),
+          // ADR 210: the eligibility BIT is audited; the thread id that produced it is not. The
+          // ledger records that a resume was permitted, never anything about the local session.
+          ...(resumeEligible ? { resume_eligible: true } : {}),
+          ...(c.lane_id !== undefined ? { lane_id: c.lane_id } : {}),
+          ...(edge !== null ? { edge } : {}),
+        },
+      });
+      const isWorkOrder = c.derivation === 'work_order';
+      const kind = c.work_order_kind ?? 'dispatch';
+      return {
+        lease_id: lease.id,
+        seat: member.name,
+        ...(c.act_id !== undefined ? { act_id: c.act_id } : {}),
+        ...(c.act !== undefined ? { act: c.act } : {}),
+        ...(c.sender !== undefined ? { sender: c.sender } : {}),
+        lane: c.lane,
+        composed_line: isWorkOrder
+          ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)
+          : composeWakeLine(member.name, teamSlug, c.act ?? 'message', c.sender ?? '?', c.act_id),
+        expires_at: lease.expires_at,
+        tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
+        bounds: bounds(isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms),
+        transcript_max_bytes: policy.transcript_max_bytes,
+        ...(isPortable
+          ? { continuity_requirement: 'portable' as const, intended_delivery: 'fresh' as const }
+          : {}),
+        // The mark and the key it needs travel together: an eligible wake carries the thread id
+        // so the host can look for an exact local binding. Never audited, never returned.
+        ...(resumeEligible ? { resume_eligible: true as const, thread_id: c.thread_id! } : {}),
+        derivation: c.derivation,
+        ...(c.lane_id !== undefined ? { lane_id: c.lane_id } : {}),
+      };
+    })
+    .catch((e: unknown) => {
+      if (e instanceof LeaseLost) return null;
+      throw e;
+    });
+}
+
+/** Rolls back a provisioned wake whose lease insert lost the race, so its first wake stays due. */
+class LeaseLost extends Error {}
 
 /**
  * Settle a lease from the host's `WakeOutcome` report. `leased` (or `expired` — a slow-but-honest

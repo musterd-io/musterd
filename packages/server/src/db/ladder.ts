@@ -227,7 +227,29 @@ export const LADDER: PortableMigration[] = [
     version: 93,
     sql: 'CREATE INDEX IF NOT EXISTS idx_messages_thread_act_ts ON messages(team_id, act, thread_id, ts)',
   },
+  {
+    // v94 — ADR 576 §3: at most one live wake lease per seat, held by the schema. The claim no longer
+    // derives inside one transaction, and on Postgres one transaction never prevented two polls
+    // inserting for the same seat. A store that already holds two `leased` rows for a member keeps
+    // the newest (ULIDs sort by time) and expires the rest, or the index could not be built.
+    version: 94,
+    sqlite: (db) => {
+      db.exec(WAKE_LEASES_DEDUPE_SQL);
+      db.exec(WAKE_LEASES_ONE_LIVE_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec(WAKE_LEASES_DEDUPE_SQL);
+      await d.exec(WAKE_LEASES_ONE_LIVE_SQL);
+    },
+  },
 ];
+
+const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'
+  WHERE status = 'leased'
+    AND id NOT IN (SELECT MAX(id) FROM wake_leases WHERE status = 'leased' GROUP BY member_id)`;
+
+const WAKE_LEASES_ONE_LIVE_SQL =
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_wake_leases_one_live ON wake_leases(member_id) WHERE status = 'leased'";
 
 const LANES_SOURCE_REF_INDEX_SQL =
   'CREATE INDEX IF NOT EXISTS idx_lanes_team_source_ref ON lanes(team_id, source_ref) WHERE source_ref IS NOT NULL';
