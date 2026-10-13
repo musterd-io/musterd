@@ -1063,17 +1063,29 @@ export function deriveGoalStatus(
 }
 
 /**
- * Glob-vs-glob surface intersection — cheap path-prefix relation, not a real glob engine (P1 accepts
- * false positives; warn-not-block makes them cheap, ADR 083). Two declared surfaces overlap when one's
- * literal prefix (up to the first wildcard) is a path-prefix of the other's.
+ * Glob-vs-glob surface intersection, segment by segment (ADR 083; ADR 575). Two declared surfaces
+ * overlap when every segment they both have can name the same thing: equal, one a wildcard segment
+ * matching the other's literal, or both wildcards. A `**` absorbs the rest, and a surface that runs
+ * out first is a directory covering what lies under it. Still not a full glob engine: two wildcard
+ * segments are assumed to meet, so it errs towards warning. It used to compare only the literal text
+ * before the first wildcard, so a glob for every package's `package.json` read as `packages` and
+ * overlapped every file in every package.
  */
 export function globsOverlap(a: string, b: string): boolean {
-  const prefix = (g: string) => g.split(/[*?[]/, 1)[0]!.replace(/\/+$/, '');
-  const pa = prefix(a);
-  const pb = prefix(b);
-  const isPrefix = (short: string, long: string) =>
-    short === long || long.startsWith(short === '' ? '' : short + '/') || short === '';
-  return pa.length <= pb.length ? isPrefix(pa, pb) : isPrefix(pb, pa);
+  const sa = a.split('/').filter(Boolean);
+  const sb = b.split('/').filter(Boolean);
+  const wild = (seg: string) => /[*?[]/.test(seg);
+  const meets = (x: string, y: string) =>
+    x === y ||
+    (wild(x) && wild(y)) ||
+    (wild(x) && globToRegExp(x, 'path').test(y)) ||
+    (wild(y) && globToRegExp(y, 'path').test(x));
+  for (let i = 0; ; i++) {
+    const x = sa[i];
+    const y = sb[i];
+    if (x === undefined || y === undefined || x === '**' || y === '**') return true;
+    if (!meets(x, y)) return false;
+  }
 }
 
 /**

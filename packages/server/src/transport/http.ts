@@ -1525,6 +1525,8 @@ async function deliverSeedPromotion(
 /**
  * Directed wakes for fresh lane warnings (ADR 083 §4): the *affected* owner gets one targeted act —
  * never the team, never the firehose. The actor already saw the warning inline in the verb response.
+ * A surface overlap is not sent (ADR 575): measured over 1,863 lanes, 27% of warned pairs ever
+ * touched a common file and 5 of 2,359 got a reply. It stays inline and on the board.
  */
 async function deliverLaneWarnings(
   ctx: Ctx,
@@ -1534,6 +1536,7 @@ async function deliverLaneWarnings(
 ): Promise<void> {
   for (const w of warnings) {
     if (!w.owner || w.owner === actor.name) continue;
+    if (w.kind === 'surface_overlap') continue;
     await deliverLaneAct(ctx, team, actor, w.owner, `[lane] ${w.detail}`, { lane_warning: w });
   }
 }

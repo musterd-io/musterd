@@ -48,6 +48,7 @@ warn-only contention checks.**
    it rides the entire existing wake path (inbox, ADR 053 Notification hook, ADR 054 `inbox --wait`,
    ADR 024/035 notify) and needs **no new act and no SPEC bump** (free-form `meta`, like `meta.usage` in
    ADR 082). (c) On demand via `lane_board`. Nothing reaches the firehose/team.
+   _(Amended 2026-10-12: (b) no longer applies to `surface_overlap`; see [ADR 575](575-overlap-warnings-are-not-messages.md).)_
 
 5. **Lifecycle closes as a fact, not a courtesy.** `lane_resolve` → `done` manually; git bonus: when the
    lane's `branch` is observed merged into the main line (checked cheaply at the next lane-verb
@@ -81,6 +82,10 @@ warn-only contention checks.**
   and stays out of scope here.
 - Whether lanes actually cut the wasted-work ratio is now *measurable*: ADR 082's telemetry shipped
   first for exactly this A/B.
+- _2026-10-12:_ the warning-precision eval below was run over 1,863 lanes. Directed
+  `surface_overlap` warnings had 27% precision (warned pairs that ever changed a common file) and 15%
+  recall, and 5 of 2,359 got a reply. [ADR 575](575-overlap-warnings-are-not-messages.md) stops
+  sending them as directed acts and makes the glob matcher segment-wise.
 
 ## Observability & Evaluation
 
