@@ -814,7 +814,31 @@ describe('team_inbox_check handler', () => {
     // Everything was rendered in one form or the other, so the cursor goes to the newest.
     expect(markRead).toHaveBeenCalledWith('n119');
     expect((r as any).structuredContent.digested_unread).toHaveLength(70);
+    // Lane 01M4VR8FSP: a structured-only reader (Claude Code) gets the line, not a bare id.
+    expect((r as any).structuredContent.digested_unread[0]).toBe(
+      '· nick [message] → @team: body of n0 (id=n0)',
+    );
     expect((r as any).structuredContent.elided_unread).toBe(0);
+  });
+
+  it('a folded teammate status reaches a structured-only reader as a readable line (lane 01M4VR8FSP)', async () => {
+    const status = makeEnvelope({
+      id: 's1',
+      team: 'dawn',
+      from: 'bea',
+      to: { kind: 'team' },
+      act: 'status_update',
+      body: 'shipping the board filter',
+      ts: 1000,
+    });
+    const handler = capture(
+      registerInboxCheck,
+      inboxClient({ fetchInbox: (async () => ({ messages: [status], cursor: null })) as any }),
+    );
+    const r = await handler({ unread_only: true, limit: 50 });
+    expect((r as any).structuredContent.folded_ambient).toEqual([
+      '· bea [status_update] → @team: shipping the board filter (id=s1)',
+    ]);
   });
 
   it('merges buffered + fetched, dedups by id, sorts by ts, and advances the cursor', async () => {
