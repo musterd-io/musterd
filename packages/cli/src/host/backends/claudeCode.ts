@@ -434,6 +434,7 @@ function runAttempt(
         }),
         spec.order.lease_id,
         'claude-code',
+        spec.gateway?.env, // ADR 583: the metering gateway's ANTHROPIC_BASE_URL wins, last
       ),
       detached: true, // its own process group, so the watchdog can kill harness + MCP children
       stdio: ['ignore', 'pipe', 'pipe'],

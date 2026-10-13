@@ -132,11 +132,13 @@ export function codexWakeEnv(
   base: NodeJS.ProcessEnv,
   leaseId?: string,
   pinnedDir?: string,
+  /** ADR 583: the metering gateway's base-URL variables, applied last. */
+  extra?: Record<string, string>,
 ): NodeJS.ProcessEnv {
   const allowed = ['HOME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM'];
   const env: NodeJS.ProcessEnv = {};
   for (const key of allowed) if (base[key] !== undefined) env[key] = base[key];
-  return wakeEnv(env, pinnedDir, leaseId, 'codex');
+  return wakeEnv(env, pinnedDir, leaseId, 'codex', extra);
 }
 
 function killTree(child: ChildProcess, graceMs: number): void {
@@ -218,7 +220,7 @@ async function attempt(
   try {
     child = (deps.spawn ?? nodeSpawn)(bin, args, {
       cwd: spec.workspace,
-      env: codexWakeEnv(process.env, spec.order.lease_id, pinnedDir),
+      env: codexWakeEnv(process.env, spec.order.lease_id, pinnedDir, spec.gateway?.env),
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

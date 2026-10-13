@@ -708,8 +708,14 @@ const HostMeasuredCount = z.number().nonnegative().transform(Math.round);
  *    (codex `turn.completed`). A subscription seat has no marginal price the host could vouch for.
  *  - `harness_price_unverified`: the harness prints a price the host cannot attest (opencode
  *    `step_finish.cost`, computed from a table the host does not hold; a literal `0` is the common
- *    case). The figure rides as `harness_cost_usd`, labelled as the harness's claim, never as ours. */
-export const UNPRICED_REASONS = ['harness_prints_no_price', 'harness_price_unverified'] as const;
+ *    case). The figure rides as `harness_cost_usd`, labelled as the harness's claim, never as ours.
+ *  - `no_price_row`: the metering gateway (ADR 583) metered the wake's calls but at least one model
+ *    id has no row in the host's price table — tokens are recorded, dollars are not guessed. */
+export const UNPRICED_REASONS = [
+  'harness_prints_no_price',
+  'harness_price_unverified',
+  'no_price_row',
+] as const;
 export type UnpricedReason = (typeof UNPRICED_REASONS)[number];
 
 const TokenCount = z.number().int().nonnegative();
@@ -771,6 +777,11 @@ export const WakeReportBodySchema = z.object({
   unpriced_reason: z.enum(UNPRICED_REASONS).optional(),
   /** ADR 364: a price the HARNESS printed and the host did not verify. Never folded into totals. */
   harness_cost_usd: z.number().nonnegative().optional(),
+  /** ADR 583: which path priced the wake — the host's metering gateway (every call seen and priced
+   *  from the response usage) or the harness's own cost artifact (the gateway saw no calls). */
+  price_source: z.enum(['gateway', 'harness_artifact']).optional(),
+  /** ADR 583 §4: the gateway refused at least one model call because `budget_usd` was spent. */
+  budget_exhausted: z.boolean().optional(),
   /** Failure summary for a not-occupied outcome (watchdog timeout, spawn error) — host-composed,
    *  never model output. */
   reason: z.string().max(200).optional(),

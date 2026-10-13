@@ -3,6 +3,8 @@ import {
   type MemberSummary,
   type WakeLeasesResponse,
   type WakeReportBody,
+  type WakeTurnBody,
+  type WakeUsage,
   type WorkspaceRepairBody,
 } from '@musterd/protocol';
 import { resolveWorkspace } from '@musterd/protocol/project';
@@ -27,6 +29,12 @@ import type {
   WakeOutcome,
 } from './backend.js';
 import { freshenForDream } from './dreamCheckout.js';
+import {
+  startMeteringGateway,
+  type GatewaySummary,
+  type MeteringGateway,
+  type MeteringGatewayOptions,
+} from './gateway.js';
 import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
 import { endWakeCapture } from './wakeCapture.js';
 
@@ -98,6 +106,8 @@ export interface WakeClient {
   wakeLeases(team: string, host: string): Promise<WakeLeasesResponse>;
   wakeReport(team: string, body: WakeReportBody): Promise<unknown>;
   wakeProgress(team: string, leaseId: string): Promise<unknown>;
+  /** ADR 583: one `wake_turns` row per metered model call (the ADR 251 §7 rail, every backend). */
+  wakeTurn(team: string, body: WakeTurnBody): Promise<unknown>;
   roster(team: string): Promise<{ members: MemberSummary[] }>;
 }
 
@@ -117,6 +127,9 @@ export interface HostPollDeps {
   attendedProcess?: (workspace: string, harness?: string) => { pid: number } | null | undefined;
   /** ADR 436 clause 4: stamp a settled wake's claimed capture ended. */
   endCapture?: typeof endWakeCapture;
+  /** ADR 583: the per-wake metering gateway. `false` runs wakes without one (the `--no-gateway`
+   *  flag, and tests that assert the bare spawn); undefined starts the real one per actuation. */
+  gateway?: ((opts: MeteringGatewayOptions) => Promise<MeteringGateway>) | false;
   /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
   heal?: (workspace: string) => string;
   /** The repo-server mirror run before a spawn (ADR 529; tests). */
@@ -138,6 +151,35 @@ export interface HostPollDeps {
 
 /** The deferral reason an actuator sends for an order it was stopped before starting. */
 export const ACTUATOR_RESTART_REASON = 'actuator_restart';
+
+/** ADR 583 §2: fold the gateway's summary into the settled completion. The harness's own figure,
+ *  when it printed one, rides as `harness_cost_usd` (its claim, ADR 364) beside the metered one. */
+export function gatewayCompletion(
+  g: GatewaySummary,
+  backend: WakeCompletion | undefined,
+  actuatedAt: number,
+): WakeCompletion {
+  const usage: WakeUsage = {
+    input_tokens: g.usage.input_tokens,
+    output_tokens: g.usage.output_tokens,
+    ...(g.usage.cache_read_input_tokens
+      ? { cached_input_tokens: g.usage.cache_read_input_tokens }
+      : {}),
+    ...(g.usage.cache_creation_input_tokens
+      ? { cache_write_input_tokens: g.usage.cache_creation_input_tokens }
+      : {}),
+  };
+  const { cost_usd: harnessCost, unpriced_reason: _dropped, ...rest } = backend ?? {};
+  return {
+    ...rest,
+    duration_ms: backend?.duration_ms ?? Date.now() - actuatedAt,
+    usage,
+    price_source: 'gateway',
+    ...(g.cost_usd !== undefined ? { cost_usd: g.cost_usd } : { unpriced_reason: 'no_price_row' }),
+    ...(harnessCost !== undefined ? { harness_cost_usd: harnessCost } : {}),
+    ...(g.budget_exhausted ? { budget_exhausted: true } : {}),
+  };
+}
 
 /** One tick's result: how many orders were claimed, and the in-flight actuations (`host --once`
  *  awaits them so the mandatory watchdog is never orphaned by a short-lived host process). */
@@ -161,6 +203,7 @@ const defaultClientFor = (server: string, agentKey: string): WakeClient => {
     wakeLeases: (team, host) => http.wakeLeases(team, host),
     wakeReport: (team, body) => http.wakeReport(team, body),
     wakeProgress: (team, leaseId) => http.wakeProgress(team, { lease_id: leaseId }),
+    wakeTurn: (team, body) => http.wakeTurn(team, body),
     roster: (team) => http.roster(team),
   };
 };
@@ -523,6 +566,37 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           `wake bounds: ${order.seat} work_order using policy timeout ${policyTimeout}ms ` +
             `(host --timeout ${deps.bounds.timeout_ms}ms is not a ceiling for work_orders)`,
         );
+      // ADR 583: the metering gateway, one per wake, dies with it (closed at settle below). Every
+      // metered call lands as a `wake_turns` row at once — fire-and-forget like the native row's
+      // rail, one narrator line on the first failure.
+      let turnPostFailed = false;
+      const gateway =
+        deps.gateway === false
+          ? undefined
+          : await (deps.gateway ?? startMeteringGateway)({
+              leaseId: order.lease_id,
+              budgetUsd: order.bounds?.budget_usd,
+              log: deps.log,
+              onCall: (call) => {
+                void client
+                  .wakeTurn(group.team, {
+                    lease_id: order.lease_id,
+                    turn: call.turn,
+                    usage: call.usage,
+                    ...(call.cost_usd !== undefined ? { cost_usd: call.cost_usd } : {}),
+                  })
+                  .catch((err: Error) => {
+                    if (!turnPostFailed)
+                      deps.log(`! wake-turn post failed for ${order.seat}: ${err.message}`);
+                    turnPostFailed = true;
+                  });
+              },
+            }).catch((err: Error) => {
+              deps.log(
+                `! metering gateway failed to start for ${order.seat}: ${err.message} — wake runs unmetered`,
+              );
+              return undefined;
+            });
       const actuation = await backend.wake(
         {
           order,
@@ -536,6 +610,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
               ? { budget_usd: order.bounds.budget_usd }
               : {}),
           },
+          ...(gateway ? { gateway: { env: gateway.env } } : {}),
         },
         {
           verifyOccupied: (seat, windowMs, sinceTs) =>
@@ -591,6 +666,23 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             if ((deps.endCapture ?? endWakeCapture)(entry.workspace, claim))
               deps.log(`${order.seat}'s wake session marked ended (${claim.harness})`);
           let completion: WakeCompletion | undefined = settledWith ? cost : undefined;
+          // ADR 583 §2: the gateway's metered calls are the price source when it saw any; the
+          // harness's own artifact is the fallback, named as such. Tokens come from the provider's
+          // usage block; dollars only from the host's table (`no_price_row` otherwise).
+          if (gateway) {
+            const g = gateway.summary();
+            await gateway.close();
+            if (g.calls > 0) {
+              completion = gatewayCompletion(g, completion, actuatedAt);
+              deps.log(
+                `${order.seat}'s wake metered by the gateway: ${String(g.calls)} call(s)` +
+                  (g.cost_usd !== undefined ? ` $${g.cost_usd.toFixed(4)}` : ' (no price row)') +
+                  (g.budget_exhausted ? ` — budget exhausted, ${String(g.refused)} refused` : ''),
+              );
+            } else if (completion?.cost_usd !== undefined || completion?.usage) {
+              completion = { ...completion, price_source: 'harness_artifact' };
+            }
+          }
           if (!completion && actuation.outcome.occupied) {
             completion = {
               duration_ms: Date.now() - actuatedAt,

@@ -6,6 +6,7 @@ import type {
   EngineTurn,
   EngineUsage,
 } from '../engine.js';
+import { priceUsage } from '../prices.js';
 
 /**
  * The one shipping {@link AgentLoopEngine} (ADR 251 §3): `client.beta.messages.toolRunner` drives
@@ -22,31 +23,9 @@ import type {
 /** Output cap per turn. Phase 1 wakes are coordination-only replies, not long deliverables. */
 const MAX_TOKENS_PER_TURN = 16_000;
 
-/** List prices per MTok (input, output), by model-id prefix. Cache read is 0.1x the input rate,
- *  cache write 1.25x (5m TTL — the runner's default). An unknown model prices to `undefined`:
- *  the wake ledger records honest absence, never a guess. */
-const PRICES: readonly { prefix: string; input: number; output: number }[] = [
-  { prefix: 'claude-fable', input: 10, output: 50 },
-  { prefix: 'claude-mythos', input: 10, output: 50 },
-  { prefix: 'claude-opus', input: 5, output: 25 },
-  { prefix: 'claude-sonnet', input: 3, output: 15 },
-  { prefix: 'claude-haiku', input: 1, output: 5 },
-];
-
-/** Price one turn's usage in USD from the list table; undefined when the model is not priceable. */
-export function priceUsage(model: string, usage: Partial<EngineUsage>): number | undefined {
-  const normalized = model.trim().toLowerCase();
-  const row = PRICES.find((p) => normalized.startsWith(p.prefix));
-  if (!row) return undefined;
-  const input = usage.input_tokens ?? 0;
-  const output = usage.output_tokens ?? 0;
-  const read = usage.cache_read_input_tokens ?? 0;
-  const write = usage.cache_creation_input_tokens ?? 0;
-  return (
-    (input * row.input + output * row.output + read * 0.1 * row.input + write * 1.25 * row.input) /
-    1e6
-  );
-}
+/** Turn pricing now reads the host's shared table (ADR 583 Consequences: one table, dated
+ *  provenance per row) — re-exported so the native row's callers keep their import. */
+export { priceUsage } from '../prices.js';
 
 /** Injectable client so the scripted suite never opens a socket or needs a key. */
 export interface AnthropicEngineDeps {

@@ -11,8 +11,10 @@ import type { UnpricedReason, WakeOrder, WakeReportBody, WakeUsage } from '@must
 /** Bounds for one wake run (ADR 131 §6). The watchdog timeout is the one universally enforceable
  *  bound and is mandatory; turn/budget caps apply where a backend supports them. Policy-supplied
  *  values arrive per-order (increment 5) and can only TIGHTEN the operator's local `--timeout`
- *  ceiling — the loop computes the effective minimum before the backend sees it. `budget_usd` is a
- *  report bound, not a kill switch: no backend can stop a run mid-flight on dollars. */
+ *  ceiling — the loop computes the effective minimum before the backend sees it. `budget_usd` was a
+ *  report bound until ADR 583: the metering gateway now refuses the next model call once a wake's
+ *  metered spend reaches it, on every harness the gateway fronts; a backend still never kills on
+ *  dollars itself. */
 export interface WakeBounds {
   timeout_ms: number;
   max_turns?: number;
@@ -27,6 +29,10 @@ export interface WakeSpec {
   server: string;
   workspace: string;
   bounds: WakeBounds;
+  /** ADR 583: the per-wake metering gateway's base-URL variables, to be placed in the spawned
+   *  harness's environment last (after the backend's own allowlist). Absent when the loop runs
+   *  without a gateway (tests, `--no-gateway`). */
+  gateway?: { env: Record<string, string> };
 }
 
 /** What one actuation produced — the `wake-report` body minus the lease id (the loop owns leases).
@@ -46,6 +52,11 @@ export interface WakeCompletion {
   unpriced_reason?: UnpricedReason;
   /** ADR 364: a price the harness printed that the host cannot attest (opencode). */
   harness_cost_usd?: number;
+  /** ADR 583: which path priced this wake — the gateway's metered calls, or the harness's own
+   *  artifact when the gateway saw none. */
+  price_source?: 'gateway' | 'harness_artifact';
+  /** ADR 583 §4: the gateway refused at least one model call because `budget_usd` was spent. */
+  budget_exhausted?: boolean;
   /** ADR 436 clause 4: the session capture(s) this run made or resumed, which the LOOP stamps
    *  ended at settle. Host-local — stripped before the supplementary report. */
   captures?: CaptureClaim[];

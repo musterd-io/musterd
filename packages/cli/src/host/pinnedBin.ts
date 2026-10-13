@@ -193,8 +193,11 @@ export function wakeEnv(
   pinnedDir: string | undefined,
   leaseId?: string,
   harness?: string,
+  /** ADR 583: the metering gateway's base-URL variables, applied LAST so they win over any
+   *  inherited vendor setting (the gateway chains to that setting as its upstream). */
+  extra?: Record<string, string>,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base, MUSTERD_PROVENANCE: 'wake' };
+  const env: NodeJS.ProcessEnv = { ...base, MUSTERD_PROVENANCE: 'wake', ...(extra ?? {}) };
   delete env['MUSTERD_WAKE_HARNESS'];
   if (leaseId) {
     env['MUSTERD_WAKE_LEASE'] = leaseId;

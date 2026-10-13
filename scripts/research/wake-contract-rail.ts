@@ -58,6 +58,9 @@ export interface WakeFacts {
   /** null when no `wake_cost` row settled this lease. */
   priced: boolean | null;
   unpricedReason: string | null;
+  /** ADR 583: `gateway` when the host's metering gateway priced the wake from the provider's usage
+   *  block; `harness_artifact` when the harness's own output did; null before ADR 583 landed. */
+  priceSource: string | null;
   promptTokens: number | null;
   musterdReads: number;
   /** null when trace.db holds no rows for this seat inside the wake. */
@@ -71,6 +74,8 @@ export interface HarnessRow {
   wakes: number;
   settled: number;
   priced: number;
+  /** ADR 583: of the priced wakes, how many the gateway priced. */
+  viaGateway: number;
   unpricedReasons: Record<string, number>;
   floor: { median: number | null; n: number };
   musterdReads: { median: number | null; n: number };
@@ -89,6 +94,7 @@ export function promptTokens(harness: string, u: Usage): number {
     case 'claude-code':
       return n('input_tokens') + n('cache_read_tokens') + n('cache_creation_tokens');
     case 'opencode':
+    case 'gateway': // ADR 583: the wake_turns shape, cached input split out for every vendor
       return n('input_tokens') + n('cached_input_tokens') + n('cache_write_input_tokens');
     default:
       // codex, grok: the cached prefix is already inside input_tokens.
@@ -130,6 +136,7 @@ export function summarise(wakes: WakeFacts[]): HarnessRow[] {
       wakes: ws.length,
       settled: ws.filter((w) => w.priced !== null).length,
       priced: ws.filter((w) => w.priced === true).length,
+      viaGateway: ws.filter((w) => w.priced === true && w.priceSource === 'gateway').length,
       unpricedReasons,
       floor: { median: median(floors), n: floors.length },
       musterdReads: { median: median(reads), n: reads.length },
@@ -310,7 +317,14 @@ function load(dbPath: string, tracePath: string, team: string, sinceMs: number):
 
       let promptTok: number | null = null;
       const usage = cost?.d['usage'];
-      if (usage && typeof usage === 'object') promptTok = promptTokens(harness, usage as Usage);
+      const priceSource =
+        typeof cost?.d['price_source'] === 'string' ? cost.d['price_source'] : null;
+      // ADR 583 Decision 3: a gateway-metered wake's floor is read from the provider's usage block
+      // in one shape for every vendor (cached input split out) — no per-harness normalisation.
+      if (priceSource === 'gateway' && usage && typeof usage === 'object')
+        promptTok = promptTokens('gateway', usage as Usage);
+      else if (usage && typeof usage === 'object')
+        promptTok = promptTokens(harness, usage as Usage);
       else if (traceUsage && cost) {
         const digest = leaseId ? wakeDigest.get(leaseId) : undefined;
         const rows = traceUsage.all(
@@ -340,6 +354,7 @@ function load(dbPath: string, tracePath: string, team: string, sinceMs: number):
         act,
         session: typeof d['session'] === 'string' ? d['session'] : null,
         priced: cost ? typeof cost.d['cost_usd'] === 'number' : null,
+        priceSource,
         unpricedReason:
           cost && typeof cost.d['unpriced_reason'] === 'string' ? cost.d['unpriced_reason'] : null,
         promptTokens: promptTok,
@@ -405,12 +420,13 @@ function main(): void {
     `=== ADR 436 wake contract rail (${team}, wakes since ${stamped(since.getTime())}) ===`,
   );
   console.log(
-    '  harness         wakes  priced        floor (prompt tok)  musterd reads  tool calls    in thread  no act',
+    '  harness         wakes  priced        via gw  floor (prompt tok)  musterd reads  tool calls    in thread  no act',
   );
   for (const r of rows) {
     const priced = `${String(r.priced)}/${String(r.settled)}`;
     console.log(
       `  ${(r.kind === 'reply' ? r.harness : `${r.harness} (w/o)`).padEnd(15)} ${String(r.wakes).padStart(5)}  ${priced.padEnd(13)} ` +
+        `${(r.viaGateway > 0 ? `gw ${String(r.viaGateway)}` : '').padEnd(7)} ` +
         `${med(r.floor).padEnd(19)} ${med(r.musterdReads).padEnd(14)} ${med(r.toolCalls).padEnd(13)} ` +
         `${`${String(r.inThread.yes)}/${String(r.inThread.n)}`.padEnd(10)} ${String(r.noAct)}`,
     );

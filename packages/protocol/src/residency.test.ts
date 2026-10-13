@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PolicySchema } from './credentials.js';
 import { resolveAttestedProvenance } from './model.js';
 import {
+  UNPRICED_REASONS,
   SessionAttestationBodySchema,
   LOOP_EDGES,
   LoopEdgeSchema,
@@ -421,5 +422,34 @@ describe('WakeReportBodySchema yielded (ADR 546)', () => {
     expect(
       WakeReportBodySchema.parse({ lease_id: 'L1', occupied: true, yielded: true }).yielded,
     ).toBe(true);
+  });
+});
+
+describe('ADR 583 — the metering gateway on the wake report', () => {
+  it('a settled report may say which path priced it and that the budget gate fired', () => {
+    const parsed = WakeReportBodySchema.parse({
+      lease_id: 'L1',
+      occupied: true,
+      cost_usd: 0.01,
+      usage: { input_tokens: 10, output_tokens: 2, cached_input_tokens: 4 },
+      price_source: 'gateway',
+      budget_exhausted: true,
+    });
+    expect(parsed.price_source).toBe('gateway');
+    expect(parsed.budget_exhausted).toBe(true);
+    expect(() =>
+      WakeReportBodySchema.parse({ lease_id: 'L1', occupied: true, price_source: 'model' }),
+    ).toThrow();
+  });
+
+  it('no_price_row is an unpriced reason: tokens metered, no row to price them by', () => {
+    expect(UNPRICED_REASONS).toContain('no_price_row');
+    expect(
+      WakeReportBodySchema.parse({
+        lease_id: 'L1',
+        occupied: true,
+        unpriced_reason: 'no_price_row',
+      }).unpriced_reason,
+    ).toBe('no_price_row');
   });
 });
