@@ -873,3 +873,49 @@ misses). The bench now logs every viewer socket close with its offset, lifetime 
   initiated by the bench process, not the hub or edge.
 - Follows-up: a run that captures the hub's `ws_close` reasons live during the burst windows, with the
   bench reconnecting a closed viewer (lane 01M4VAWG302W0MYD45DW583ZS5).
+
+## 2026-10-13 — Cloud run 37: the edge closes the viewer sockets and the hub never sees it; reconnect makes a close a 1–2 s blip; p95 1 226 ms on `6fd7aca` is a new build, not a matched repeat (lane 01M4VAWG302W0MYD45DW583ZS5)
+
+Same app machine, Neon 1 CU, shape and `performance-4x` bench as runs 32/35/36, team `lb-run37`, but
+the app was rolled from `dc09c35` to main `6fd7aca` (#2499) first: the hub's `ws_close` line now
+carries `code`, `reason`, `error` and `lived_ms`, the bench's viewers reconnect with `/live`'s backoff
+(1 s doubling to 15 s), and `bench-run.mjs` tailed the hub's log for the whole run
+(`BENCH_HUB_APP=musterd-cloud`, socket lines kept in `~/.musterd/cloud/bench/out/hub-git-6fd7aca44986-*.log`).
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | viewer closes | `GET /teams` calls / p95 | `/health` p95 / max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 | `dc09c35` | 355 ms | 791 ms | 1 203 ms | 66 306 (51.0) | 1 | 0 | 30 481 / 794 ms | 231 ms / 983 ms |
+| 36 | `dc09c35` | 365 ms | 809 ms | 1 105 ms | 61 596 (47.4) | 27 | 23 | 27 337 / 816 ms | 275 ms / 1.5 s |
+| 37 | `6fd7aca` | 493 ms | **1 226 ms** | 1 685 ms | 66 203 (50.9) | 3 | 3, all back in 1–2 s | 31 522 / 1 180 ms | 477 ms / 1.7 s |
+
+- **Who closes the viewer sockets: the edge, and the hub does not see it.** The bench saw three
+  `1006` closes at +508, +511 and +522 s (lifetimes 188–270 s, all claimed). The hub's log for the
+  whole run holds exactly 75 `ws_close` lines, all at the bench's teardown at +1 300 s, one per
+  viewer, 75 distinct members — and the three dropped viewers appear once each with `lived_ms`
+  counted from their *reconnect*, not their first open (h24: 791 s = 1 300 − 508). So the hub never
+  logged the three original sockets closing: no close frame reached it and the TCP stream did not
+  end on its side within the run. A `1006` at the client with silence at the origin is the proxy
+  between them dropping the client leg and holding the origin leg. The falsifier (the bench
+  initiating the closes) fails on the same evidence — a bench `close()` or `terminate()` would have
+  reached the hub as a `ws_close` at +508 s. What the hub carries afterwards is a socket nobody is
+  heartbeating, which the reaper takes offline later; `ws_heartbeat_reaped` is the tell if a
+  reconnected viewer's old presence ever shows up as a second row.
+- **Reconnect works and costs nothing visible.** Each of the three came back in 1–2 s (first
+  backoff step) and re-claimed; 75 of 75 viewers were live at stop, and the roster rail read
+  31 522 times — the full load, where run 36's late drops and run 35's early ones had lightened it.
+  The bench's load is now honest across closes.
+- **Three closes in one 14 s window, not run 36's three bursts of 5–8.** Same shape (a cluster
+  taking sockets of different ages), smaller and earlier. With two runs the burst count is noise;
+  the mechanism is not.
+- **p95 1 226 ms is not a matched repeat and must not be read against the 800 ms headroom.** Two
+  things changed at once: the viewers now hold the full roster load through the whole run (+3% reads
+  over run 32, not a 55% jump), and the app build moved 10 server/protocol commits from `dc09c35` to
+  `6fd7aca` (#2438–#2499). `/health` p95 went 231 → 477 ms with the same request rate, which is the
+  app being slower per request, not the bench asking for more. Candidates in that range that touch
+  the hot path: #2473 (every replicated row rings the push loop), #2452 (wake-lease claim
+  transactions), #2440 (`/report` rewrites). Nothing here says which, or whether it is noise.
+- Falsify: a run 38 on `6fd7aca` with the same shape lands p95 under 900 ms — then run 37 was
+  noise and the headroom from runs 32/36 stands on the new build. If it repeats at ~1 200 ms, bisect
+  the ten commits with two deploys (`dc09c35` + #2440 + #2452, then + #2473).
+- Follows-up: run 38, a matched repeat on `6fd7aca`, to separate the build from the noise; then the
+  bisect above if it repeats (lane to open from this one's close).
