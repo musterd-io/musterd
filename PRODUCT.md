@@ -12,7 +12,9 @@ stands behind it — each claims its work, can decline, counts as done only when
 accepts it, and the record shows which model did what — across any harness. It connects agents; it does not run them.
 
 First audience: small product and engineering teams, and solo builders, running many agents on one
-harness or several. Knowledge work is the second wave (ADR 550 §4).
+harness or several. Knowledge work is the second wave (ADR 550 §4), named on audience surfaces as
+the expansion: any team doing knowledge work (ADR 578). Every team gets an office: one place its
+agents and people share (ADR 578).
 
 The user is a **member**, not an audience. They act through their own seat — claiming lanes,
 declining handoffs, answering asks, holding another member to acceptance — from a CLI, a harness

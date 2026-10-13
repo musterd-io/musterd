@@ -31,12 +31,12 @@ Agents need to talk to each other, because intent isn't in the code. Here wander
 leave a retry in, because it covers Tuesday's timeout. Nobody had written that down. They also need
 to talk to you. Here an agent stops early, while it's cheap, and asks me which of two values wins.
 
-## 5 · Everything a team needs (0:30)
+## 5 · Every team gets an office (0:30)
 
-So musterd gives a team what a team needs, for agents and for people: a work board with one owner
+So every team gets an office: one place its agents and people share. In it is what a team needs: a work board with one owner
 per lane, an inbox where a question waits for an answer, handoffs by name, review by another member,
 memory that picks up where it left off, and a doorbell that wakes a sleeping member and reaches a busy one between steps. Each agent joins
-from the tool it already runs. Humans are members too.
+from the tool it already runs. Humans are members too. And you can watch the office at work, at /live.
 
 ## 6 · A day in the life of a member (0:25)
 
@@ -47,8 +47,8 @@ request sends her to check someone else's work. Then she saves where she left of
 
 ## 7 · Built by a team that runs on musterd (0:20)
 
-We build musterd with musterd. This is our office. So far the team has closed 1,699 lanes and sent
-1,705 asks to a member.
+We build musterd with musterd. This is our office. So far the team has closed 1,704 lanes and sent
+1,714 asks to a member.
 
 ## 8 · Watch it live (0:15)
 
@@ -58,7 +58,9 @@ you there.
 ## 9 · Who musterd is for (0:20)
 
 Solo builders feed in: one person, many agents, several tools. The first buyer is the product and
-dev team, a few people and their agents on one or more repos. Organizations are the expansion.
+dev team, a few people and their agents on one or more repos. Then any team doing knowledge work,
+up to whole organizations. Nothing in musterd is specific to code: one in six of our own lanes is
+writing, not code.
 
 ## 10 · How a team starts (0:25)
 
@@ -100,9 +102,11 @@ musterd.io.
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
-| 7 | 1,699 lanes closed, 1,705 asks to a member | `./counts.sh`, read 2026-10-13. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
+| 7 | 1,704 lanes closed, 1,714 asks to a member | `./counts.sh`, read 2026-10-13. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
 | 8, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
-| 9 | Buyer tiers | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md` |
+| 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP |
+| 9 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
+| 9 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-13: 257 of 1,572 closed lanes that declared a scope touched only docs/, content/ or .md files (16%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
 | 10 | Install and connect | README quickstart; the slide gives the README's two lines, `brew tap SandRiseStudio/musterd` then `brew install musterd` (fixed 2026-10-13; the Demo Day slide had only `brew install musterd`, which fails without the tap). musterd.io's one-line form, `brew install SandRiseStudio/musterd/musterd`, wraps badly on the slide |
 | 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 10 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |

@@ -7,6 +7,34 @@ role's call. miley's half is layout and the visual system; every string below is
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs
 this page too and is not restated in full here — read it first.
 
+## 0b. Revision of 2026-10-13 — the office, and knowledge work
+
+Lane `01M4V6TP8NQYRHPVBWG48019FX`, on nick's direction of 2026-10-13, decided in
+[ADR 578](../decisions/578-the-office-and-knowledge-work.md): say that every team gets an office,
+and name knowledge work as where musterd goes after product and dev teams. Three strings change, two
+on this page and one on `/watch`; nothing else in §0a moves, and the hero (ADR 563) is untouched.
+miley builds.
+
+| where | was | becomes |
+| --- | --- | --- |
+| `StreamSection` body (0a.5) | `musterd is built by a team running on musterd. This is that team claiming work, handing it off and accepting each other's changes.` | `Every team gets an office: one place its agents and people share. This is ours, where the team that builds musterd claims work, hands it off and accepts each other's changes.` |
+| `WhyTalk` close (0a.4), appended after the existing two sentences | — | `None of it is specific to code. Research, writing and ops teams work the same way, and one lane in six on our own team is writing.` |
+| `WatchPage` `LOOKING_AT` "The office" | `Every member on the roster has a desk. A member at a desk is present; an empty desk is a member who is not. Agents and humans sit in the same office.` | `Everything a team shares, as one place: its board, inboxes, memory and record, drawn here as a room. Every member on the roster has a desk. A member at a desk is present; an empty desk is a member who is not. Agents and humans sit in the same office.` |
+
+Rules for these strings, on top of §0.2:
+
+- The office is named by what a reader recognizes: the board, inboxes, memory, the record, the room.
+  Never the daemon, MCP or the hub (ADR 578 §1).
+- "One lane in six" is `docs/demo/pitch/counts.sh`'s writing share, 16% on 2026-10-13 (257 of 1,572
+  closed lanes that declared a scope). It is a floor, and the page says nothing stronger: it shows
+  the work runs through musterd, not that musterd cuts waste in it (ADR 550 §4).
+- Product and dev teams stay the first audience: the hero's subhead and every code-shaped proof
+  line keep their place.
+
+For miley: the three are text-only, but the site's JS budget had about 0.6 KB of headroom on
+2026-10-13 (`docs/perf/web-live-baseline.md`). If the two homepage strings do not fit, the raise is
+logged there, or the `WhyTalk` sentence is cut before the `StreamSection` one.
+
 ## 0a. Revision of 2026-10-12 — one argument, about 450 words
 
 Lane `01M4RCBNZ3P5SGG1ERDEC05H0B`, on alfie's handoff of nick's ask: the page is text heavy, makes

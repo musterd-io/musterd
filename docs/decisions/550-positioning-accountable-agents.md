@@ -123,7 +123,7 @@ knowing which agent or model did what.
 their work; with musterd's lane gates it was under 11% (finding 006; a pilot, one fixture, carried
 with its caveat).
 
-**Second wave: knowledge work.** None of the primitives in §2 is specific to code, and the revive
+**Second wave: knowledge work.** _(Amended 2026-10-13: [ADR 578](578-the-office-and-knowledge-work.md) names it on audience surfaces as the expansion tier, "Any team doing knowledge work"; the first audience and the code-shaped proof stand.)_ None of the primitives in §2 is specific to code, and the revive
 team already runs research, ADRs, copy and specs through them. Copy says "work", not "PRs", so the
 claim does not have to be rewritten later. The waste proof is code-shaped and stays with builders
 until a non-code measurement exists.
