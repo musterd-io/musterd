@@ -1367,6 +1367,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
   adapterVersion: 2,
   interactive: {
     resolveBin: () => resolveClaudeBin(),
+    installHint: 'npm install -g @anthropic-ai/claude-code',
     fresh: () => [],
     resume: (id) => (id ? ['--resume', id] : ['--continue']),
   },

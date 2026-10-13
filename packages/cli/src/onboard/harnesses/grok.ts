@@ -535,6 +535,7 @@ export const grokAdapter: HarnessAdapter = {
   adapterVersion: 1,
   interactive: {
     resolveBin: () => resolveGrokBin(),
+    installHint: 'see https://docs.x.ai/build',
     fresh: () => [],
     resume: (id) => (id ? ['--resume', id] : ['--continue']),
   },

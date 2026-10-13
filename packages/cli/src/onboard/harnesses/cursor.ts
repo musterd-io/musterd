@@ -505,6 +505,7 @@ export const cursorAdapter: HarnessAdapter = {
   adapterVersion: 2,
   interactive: {
     resolveBin: () => resolveCursorAgentBin(),
+    installHint: 'see https://cursor.com/cli',
     fresh: () => [],
     resume: (id) => (id ? ['--resume', id] : ['--continue']),
   },
