@@ -97,7 +97,7 @@ One predicate, `LIVE_PRESENCE_SQL` in `store/presence.ts`, used by every reader 
 `REMOTE_PRESENCE_TTL_MS = PRESENCE_TIMEOUT_MS + 2 × SYNC_PUSH_INTERVAL_MS` (165 s) — the origin's
 reap window plus two chances to report. This is the staleness ADR 325 §Consequences said the build
 must tolerate explicitly. A seat on a machine that lost power is displaceable in under three
-minutes; a seat on a machine between pushes is not.
+minutes; a seat on a machine between pushes is not. _(Amended 2026-10-13: the two chances are two PULL ticks, not push ticks: an idle push sends nothing, so only the pull stamps `last_seen_at`. The value is unchanged; ADR 552 Consequences.)_
 
 The hub stamps `nodes.last_seen_at` on every authenticated sync contact (push, pull, claim) and the
 pull response carries `nodes[]` for the team, the hub's own row stamped now. The puller upserts

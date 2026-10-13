@@ -99,7 +99,23 @@ export function stampOriginAtCommit(
     ))!.seq;
     await c.run(`UPDATE ${table} SET origin_seq = ? WHERE id = ?`, [seq, row.id]);
     row.origin_seq = seq;
+    for (const listener of replicatedCommitListeners) listener();
   });
+}
+
+const replicatedCommitListeners = new Set<() => void>();
+
+/**
+ * Be told when a replicated row (message, `lane.*`, `presence.*`, ledger, policy…) is about to
+ * commit: this is the one place every such row is numbered, so a writer added tomorrow rings it
+ * without opting in. The push loop listens so a lane or presence change leaves for the hub at once,
+ * not at the next 60 s tick (realtime-sync step 4). It fires just BEFORE the commit — the listener
+ * must defer (the push kick is debounced 200 ms) and must not throw; a rollback after it is a
+ * spurious ring, which costs one empty pass. Returns the unsubscribe.
+ */
+export function onReplicatedCommit(listener: () => void): () => void {
+  replicatedCommitListeners.add(listener);
+  return () => void replicatedCommitListeners.delete(listener);
 }
 
 /**

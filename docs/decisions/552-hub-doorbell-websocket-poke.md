@@ -78,6 +78,7 @@ not leave a ghost registered; the joiner treats a missed ping the same way and r
 The socket is duplex so that step 4 (lane and presence writes riding the push timer) can send
 `{type:'push'}` over it. This ADR defines no joiner → hub data frame. The one joiner → hub frame is
 `pong`. Step 4 amends the frame schema in its own ADR.
+_(Amended 2026-10-13: step 4 needed no joiner → hub data frame; see Consequences.)_
 
 ### 6. What does not change
 
@@ -103,6 +104,15 @@ not (a pong proves the socket, not the node's work: the next pull does).
 - Measured 2026-10-12 on two real daemons (the `push.test.ts` harness), hub send → live `deliver` frame
   on a joiner seat, five runs: 324, 329, 336, 347, 358 ms (median 336 ms), 60 s tick still enabled.
   Hub CPU per event at 1 and 3 joiners is not yet recorded; the eval above still owes it.
+- Step 4 (lane `01M4EEQE88R73033QHNQQQASPB`, 2026-10-13) shipped without the reserved `push` frame and
+  without a protocol change: a joiner already pushes over HTTP, and the delay was only that nothing rang
+  its push loop for a lane or presence write. `stampOriginAtCommit` (the one place every replicated row
+  is numbered) now fires `onReplicatedCommit`, which `startSyncPush` listens to. A joiner
+  `presence.attached` with no message reaches the hub's `sync_log` in under 2 s where it took 60 077 ms
+  (`push.test.ts`, "step 4"). `REMOTE_PRESENCE_TTL_MS` stays 165 s: a remote seat lives while its node's
+  `last_seen_at` is fresh, an idle push contacts nobody, and the pull tick is what keeps an idle node
+  fresh, so the TTL budgets two PULL intervals, not two push intervals (the comment in `config.ts` said
+  push). Shortening it would need a pong to stamp the node alive, which §6 declines.
 - Superseded within this ADR before acceptance: the first draft chose a long-poll
   (`GET /sync/pull?wait=S`). It was dropped on 2026-10-12 because step 4 needs a duplex channel and the
   `ws` server already exists; `ringStreams` is the same single ring point that design used.

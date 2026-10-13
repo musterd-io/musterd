@@ -12,7 +12,7 @@ import type { Driver } from '../db/driver.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { REPLICATED_LEDGER_VERBS, type AuditRow } from '../store/audit.js';
-import { rowToEnvelope } from '../store/messages.js';
+import { onReplicatedCommit, rowToEnvelope } from '../store/messages.js';
 import type { MessageRow } from '../store/rows.js';
 import { listActiveTeams, restateUnstampedPolicy } from '../store/teams.js';
 import { hasEnrolledJoiners, ingestBatch, SyncGapError } from './log.js';
@@ -465,7 +465,8 @@ export async function pushTeam(
 /**
  * A local write rings this: push now rather than at the next 60 s tick. Debounced so a burst of
  * acts (a handoff and its status line) is one pass; the interval stays as the fallback for a kick
- * that landed while the hub was unreachable.
+ * that landed while the hub was unreachable. Messages ring via {@link kickSyncPush}; every other
+ * replicated row (lane, presence, ledger, policy…) rings through `onReplicatedCommit`.
  */
 export const SYNC_PUSH_KICK_DEBOUNCE_MS = 200;
 
@@ -513,17 +514,23 @@ export function startSyncPush(ctx: Ctx): () => void {
   if (typeof handle.unref === 'function') handle.unref();
 
   let kick: ReturnType<typeof setTimeout> | null = null;
-  kickers.set(ctx.config, () => {
+  const ring = () => {
     if (kick) return;
     kick = setTimeout(() => {
       kick = null;
       void tick();
     }, SYNC_PUSH_KICK_DEBOUNCE_MS);
     if (typeof kick.unref === 'function') kick.unref();
-  });
+  };
+  kickers.set(ctx.config, ring);
+  // Every replicated row rings this too (realtime-sync step 4): a lane transition or a presence
+  // attach is an audit row, and only a message send used to kick. In-process, so another daemon's
+  // commit also rings this one in a test; the pass finds nothing of ours to push and costs a read.
+  const unlisten = onReplicatedCommit(ring);
   return () => {
     clearInterval(handle);
     if (kick) clearTimeout(kick);
+    unlisten();
     kickers.delete(ctx.config);
   };
 }
