@@ -313,6 +313,7 @@ import {
   listInbox,
   listTeamMessages,
   localNodeForTeam,
+  latestStatusUpdates,
   localNodeIfAny,
   pendingInterrupts,
   rowToEnvelope,
@@ -353,6 +354,7 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import {
+  lastActionBySubject,
   quietestBusyMs,
   resolveQuiescence,
   QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
@@ -407,7 +409,7 @@ import {
   acceptanceWaits,
 } from '../store/review.js';
 import { getRoleCharter, listRoles } from '../store/roles.js';
-import { rosterSharedReads } from '../store/rosterCache.js';
+import { sharedRosterBase } from '../store/rosterCache.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   messageVisibilityOf,
@@ -2054,6 +2056,56 @@ async function tryAuth(ctx: Ctx, slug: string, req: IncomingMessage): Promise<Me
   }
 }
 
+/** The roster's team-wide reads — none depends on who is reading (ADR 573). */
+async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
+  const teamWorkingHours = parseWorkingHours(
+    (await getTeamBySlug(ctx.db, teamSlug))?.working_hours,
+  );
+  // Seats held within their ADR 010 reclaim grace — read `offline` above, but a reservation the clobber
+  // guard (ADR 066/105) must treat as occupied. Computed once for the team, not per-member.
+  const reclaimable = await listReclaimableMemberIds(ctx.db, teamId, Date.now());
+  // Seats enrolled in harness residency (ADR 131) — offline reads `offline · wakeable`, and the
+  // capture timestamp feeds the `resumable` badge (inc 5: a timestamp, so renderers apply the GC
+  // freshness instead of trusting a stale boolean). One listResidency pass covers both facts.
+  // ADR 357: the same pass now carries host liveness (from the actuator's poll heartbeat) and
+  // workspace readability (from the last wake report), so the roster can say WHY an enrolled seat
+  // is not wakeable instead of labelling enrolment as reachability.
+  const residency = await seatWakeabilityFacts(ctx.db, teamId, Date.now());
+  // ADR 503 Decision 5: WHERE each enrolled seat lives, from its node binding — so a launcher on
+  // another machine can tell `wake` from `setup` without a folder scan. One read for the roster.
+  const residences = await seatResidences(ctx.db, teamId, {
+    nodeId: (await localNodeIfAny(ctx.db, teamId))?.id ?? null,
+    cloud: ctx.config.mode === 'cloud',
+  });
+  // Steering marks you present (ADR 155 Inc 1): the humans named as `driver` on a live agent seat.
+  // Derived here at read time — no synthetic presence row for the steering human (ADR 155 decision 1).
+  const liveDrivers = await listLiveDrivers(ctx.db, teamId, ctx.config.presenceTimeoutMs);
+  // Quiescence (ADR 219): the decision-grade busy read, beside — never folded into — the
+  // display fields. One audit read for the whole roster; a seat with no evidence is absent
+  // from the map and reports `unknown` rather than borrowing the shape of quiet.
+  const lastAction = await lastActionBySubject(ctx.db, teamId);
+  // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once
+  // per member, and /live refetches the roster on presence frames for every viewer.
+  const statuses = await latestStatusUpdates(ctx.db, teamId);
+  // ADR 514: the team's style once; each human row resolves their own dials against it, and every
+  // row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
+  const style = await teamStyle(ctx.db, teamId);
+  // The humans come from the presence read's own member list (non-left, non-observer — a superset
+  // of what the only-human rule counts), not a second `SELECT * FROM members` (lane 01M477S003).
+  const presenceRows = await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs);
+  return {
+    teamWorkingHours,
+    reclaimable,
+    residency,
+    residences,
+    liveDrivers,
+    lastAction,
+    statuses,
+    style,
+    presenceRows,
+  };
+}
+
 /**
  * Project the roster, **scoped to the viewer's `visibility_level`** (ADR 071, P2). An `admin` viewer (or
  * the seat looking at *itself*) sees the full `Member` incl. effective `capabilities`; a `team`-level
@@ -2067,47 +2119,26 @@ async function summarize(
   teamSlug: string,
   teamId: string,
   viewer: MemberRow | null = null,
+  opts: { fresh?: boolean } = {},
 ): Promise<MemberSummary[]> {
-  const teamWorkingHours = parseWorkingHours(
-    (await getTeamBySlug(ctx.db, teamSlug))?.working_hours,
-  );
+  // Every read below is the same for every viewer of the team, so in cloud one load per team serves
+  // them all for 1 s (ADR 541, widened to the whole set by ADR 573); a route that has just written
+  // passes `fresh` to read its own write back.
+  const {
+    teamWorkingHours,
+    reclaimable,
+    residency,
+    residences,
+    liveDrivers,
+    lastAction,
+    statuses,
+    style,
+    presenceRows,
+  } = await sharedRosterBase(ctx, teamId, () => loadRosterBase(ctx, teamSlug, teamId), opts);
   const viewerIsAdmin = viewer ? resolveCapabilities(viewer).is_admin : false;
-  // Seats held within their ADR 010 reclaim grace — read `offline` above, but a reservation the clobber
-  // guard (ADR 066/105) must treat as occupied. Computed once for the team, not per-member.
-  const reclaimable = await listReclaimableMemberIds(ctx.db, teamId, Date.now());
-  // Seats enrolled in harness residency (ADR 131) — offline reads `offline · wakeable`, and the
-  // capture timestamp feeds the `resumable` badge (inc 5: a timestamp, so renderers apply the GC
-  // freshness instead of trusting a stale boolean). One listResidency pass covers both facts.
-  // ADR 357: the same pass now carries host liveness (from the actuator's poll heartbeat) and
-  // workspace readability (from the last wake report), so the roster can say WHY an enrolled seat
-  // is not wakeable instead of labelling enrolment as reachability.
-  const rosterNow = Date.now();
-  const residency = await seatWakeabilityFacts(ctx.db, teamId, rosterNow);
-  // ADR 503 Decision 5: WHERE each enrolled seat lives, from its node binding — so a launcher on
-  // another machine can tell `wake` from `setup` without a folder scan. One read for the roster.
-  const residences = await seatResidences(ctx.db, teamId, {
-    nodeId: (await localNodeIfAny(ctx.db, teamId))?.id ?? null,
-    cloud: ctx.config.mode === 'cloud',
-  });
-  // Steering marks you present (ADR 155 Inc 1): the humans named as `driver` on a live agent seat.
-  // Derived here at read time — no synthetic presence row for the steering human (ADR 155 decision 1).
-  const liveDrivers = await listLiveDrivers(ctx.db, teamId, ctx.config.presenceTimeoutMs);
-  // Quiescence (ADR 219): the decision-grade busy read, beside — never folded into — the
-  // display fields below. One audit read for the whole roster; a seat with no evidence is absent
-  // from the map and reports `unknown` rather than borrowing the shape of quiet.
-  // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once per
-  // member, and /live refetches the roster on presence frames for every viewer. Both reads are the
-  // same for every viewer, so in cloud one load per team serves them all for 1 s (ADR 541).
-  const { lastAction, statuses } = await rosterSharedReads(ctx, teamId);
   const quiescenceNow = Date.now();
-  // ADR 514: the team's style once; each human row resolves their own dials against it below, and
-  // every row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
-  const style = await teamStyle(ctx.db, teamId);
   // One resolve per distinct prefs blob for the whole roster, not two per row (lane 01M4GQ2G7B).
   const resolveRowStyle = styleResolver(style);
-  // The humans come from the presence read's own member list (non-left, non-observer — a superset
-  // of what the only-human rule counts), not a second `SELECT * FROM members` (lane 01M477S003).
-  const presenceRows = await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs);
   const styleHumansOnTeam = styleHumansOf(presenceRows.map((s) => s.member));
   return Promise.all(
     presenceRows.map(async (s) => {
@@ -8349,7 +8380,7 @@ export async function handleHttp(
         // ADR 443 §4: leaving away/dnd releases the rings held for you.
         const updated = await getMemberById(ctx.db, member.id);
         if (updated) await flushHeldRings(ctx, team, updated);
-        const me = (await summarize(ctx, team.slug, team.id, member)).find(
+        const me = (await summarize(ctx, team.slug, team.id, member, { fresh: true })).find(
           (m) => m.name === member.name,
         );
         return sendJson(res, 200, { member: me });
@@ -8571,7 +8602,7 @@ export async function handleHttp(
             `"${slug}" is file-backed — set \`hue = ${body.hue}\` in seats/${targetName}.toml (the file owns it; \`musterd team hue\` does this)`,
           );
         const sharedWith = await setMemberHue(ctx.db, target, body.hue);
-        const me = (await summarize(ctx, team.slug, team.id, member)).find(
+        const me = (await summarize(ctx, team.slug, team.id, member, { fresh: true })).find(
           (m) => m.name === targetName,
         );
         return sendJson(res, 200, {
