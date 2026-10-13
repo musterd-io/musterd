@@ -81,6 +81,7 @@ import {
 } from './render';
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
+import { createLaneOwners } from './laneOwners';
 import { laneSeed, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
@@ -588,6 +589,8 @@ export function mountOffice(
   /** The verb over a walker (ADR 464 §3.2): set when an act walk starts, worn while
    *  `actors.actWalkingFor(name)`, dropped after — an ambient stroll never wears one. */
   const walkTags = new Map<string, string>();
+  /** Who owns each lane the room has watched (lane 01M4V774MK): the deliver walk's carrier. */
+  const laneOwners = createLaneOwners();
   let asksSeeded = false; // the first update seeds the open set silently — no hands go up for backfill
   const speeches = new Map<string, Speech>(); // one live speech bubble per member (name → bubble)
   const queued = new Map<string, Utterance[]>(); // acts waiting behind a member's live bubble
@@ -2433,6 +2436,7 @@ export function mountOffice(
         break;
       case 'walk-claim':
         // Claiming a lane (nick, 2026-10-09): to the wall board, think, take the card, carry it home.
+        laneOwners.note(ev.lane, ev.who);
         if (actors.claim(ev.who, laneSeed(ev.lane))) {
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
           walkTags.set(ev.who, walkTag('claim', t || null));
@@ -2444,6 +2448,7 @@ export function mountOffice(
         // A lane finished or submitted (nick, 2026-10-12): the owner carries the card back to the wall
         // board and pins it under its new column. Falls back to the in-place ✓ when they are not in the
         // room to make the trip.
+        laneOwners.note(ev.lane, ev.who);
         if (actors.pin(ev.who, laneSeed(ev.lane), ev.state)) {
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
           walkTags.set(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
@@ -2451,15 +2456,19 @@ export function mountOffice(
           pushCue(ev.who, '#5cd49a', '✓');
         }
         break;
-      case 'walk-deliver':
+      case 'walk-deliver': {
         // Submitted to a named acceptor (nick, 2026-10-12): the owner carries the card to the acceptor's
         // desk and hands it over; this replaces the submit's board pin when both play. When either of
         // them is out of the room the pin walk (already queued) stands, so only a thread is drawn.
-        pushThread(ev.from, ev.to, toneColor('handoff'));
-        if (actors.deliver(ev.from, ev.to, laneSeed(ev.lane))) {
-          walkTags.set(ev.from, walkTag('deliver', ev.to));
+        // The carrier is the lane's owner, not the ask's sender: a re-routed ask (ADR 545) comes from
+        // whoever re-routed it (lane 01M4V774MK).
+        const carrier = laneOwners.carrier(ev.lane, ev.from);
+        pushThread(carrier, ev.to, toneColor('handoff'));
+        if (actors.deliver(carrier, ev.to, laneSeed(ev.lane))) {
+          walkTags.set(carrier, walkTag('deliver', ev.to));
         }
         break;
+      }
       case 'megaphone':
         // Broadcast staging: the announcer raises a megaphone, a wave sweeps the room, and every other
         // present member gets a brief "heard it" pulse.

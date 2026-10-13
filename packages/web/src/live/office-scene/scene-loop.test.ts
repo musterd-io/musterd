@@ -235,3 +235,17 @@ describe('claiming a lane walks to the board (nick, 2026-10-09)', () => {
     expect(index).toMatch(/recep,\s*wallBoardNow\(\),/);
   });
 });
+
+describe('the deliver walk is carried by the lane owner (lane 01M4V774MK)', () => {
+  it('remembers owners from claim and pin walks, and carries as that owner', () => {
+    const claim = index.slice(index.indexOf("case 'walk-claim':"), index.indexOf("case 'walk-pin':"));
+    expect(claim).toContain('laneOwners.note(ev.lane, ev.who)');
+    const pin = index.slice(index.indexOf("case 'walk-pin':"), index.indexOf("case 'walk-deliver':"));
+    expect(pin).toContain('laneOwners.note(ev.lane, ev.who)');
+    const at = index.indexOf("case 'walk-deliver':");
+    const body = index.slice(at, index.indexOf("case 'megaphone':", at));
+    expect(body).toContain('laneOwners.carrier(ev.lane, ev.from)');
+    expect(body).toContain('actors.deliver(carrier, ev.to');
+    expect(body).not.toContain('actors.deliver(ev.from');
+  });
+});
