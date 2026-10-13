@@ -140,7 +140,17 @@ A/B/A on this laptop, headless Chrome with `--disable-gpu` (software Viz like th
 
 The lane pauses every animation the page runs and advances `currentTime` by the wall time each drawn
 frame covers, right before the canvas draws, broadcast only. The props move at the rate the stream can
-show and the compositor gets one damage per draw. Box numbers after the image rebuild go here.
+show and the compositor gets one damage per draw.
+
+**On the box (2026-10-13 02:08–02:16Z, machine `683e6e3fe3e038`, 2 h 18 min up, bundle 88afd724e
+picked up by the page's own build-sync reload):** read through Chrome's debug port on the box,
+`__office.stats()` over 30 s: **15.0 draws/s** — the full capture rate, against 8.7/s under the
+12/s floor on the morning's machine — with 56 of 57 DOM animations held paused by the cadence and 0
+running. `top -H` one-shot: `VizCompositor` 88% → 81%, GPU main 94% → 81%, renderer 75% → 88%,
+1-min load 4.0 → 2.7. The thread shares moved less than the laptop A/B (a single sample, and the
+renderer now draws 15 frames where it drew 8.7), but the number that matters moved all the way: the
+room draws at the stream's rate. The floor's `the office drew` line has not fired since the
+veryfast relaunch.
 
 **What the first row is expected to show,** from #369's spot measurement: delivered ~35 fps at
 ~181 KB/frame, canvas drawing at ~60, so **draws/delivered ≈ 1.7–2.0**. If that holds, the page is
