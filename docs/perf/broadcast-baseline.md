@@ -193,6 +193,53 @@ rentable hardware**: delivery above the encode rate, flat-zero queue.
 only directionally: ffmpeg ~102%, queue +502 KB/s, delivered 22.4. The Air cannot software-encode
 1080p30 either.)
 
+## GPU host trial (GCP `g2-standard-4` + NVIDIA L4, us-west1-a, 2026-10-13)
+
+nick asked for an "extremely smooth" stream, and whether a bigger box would do it (lane
+`01M4VPAP852MDQZN7E57R1K6B9`; falsify: a run of this harness on a GPU host whose capture path is
+unchanged delivers ≥ 30 fps at 1080p30 with a flat queue). A bigger Fly CPU box was already ruled out
+by the 2026-07-27 rows above: the compositor is single-thread bound. So the trial asked whether
+hardware compositing changes that. Method: the same fixture and harness as run D, on a spot VM that
+deleted itself after an hour (it was torn down after about 25 minutes). The repo at `b00c3fc`; the
+only change was an env-injected set of Chrome flags in the VM's own `dist`.
+
+Making headless Chrome use the GPU on this image took three things that a capture image would also
+need. The Ubuntu accelerator image ships a compute-only driver, so `libnvidia-gl-580-server` (pinned
+to the kernel module's version) plus the glvnd loaders `libegl1 libgles2 libglx0 libopengl0` are
+required. ANGLE's Vulkan backend still fell back to SwiftShader. The working path was
+`--enable-gpu --ignore-gpu-blocklist --use-gl=angle --use-angle=gl-egl`, which WebGL then reported
+as `ANGLE (NVIDIA Corporation, NVIDIA L4/PCIe/SSE2, OpenGL ES 3.2)`. Debian's `/usr/bin/chromium` was
+symlinked to Google Chrome 155, so this box ran a different browser build from the Fly image.
+
+| Config (same L4 box) | delivered fps | draw fps | encoded | queue growth | chrome % | ffmpeg % | pipeline % |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| CPU render, 1080p15 (the stream's config) | 5.6 | 11.0 | 15.0 | 0.0 KB/s | 202.9 | 65.2 | 275.2 |
+| GPU render, 1080p30 | 16.3 | 19.6 | 30.0 | 161.7 KB/s | 232.0 | 99.6 | 344.9 |
+| GPU render + forced GPU raster, 1080p30 | 16.2 | 19.6 | 30.0 | 199.6 KB/s | 239.6 | 102.2 | — |
+| GPU render, 1080p60 | — | — | — | aborted | — | — | — |
+
+The 1080p60 arm hit the encoder watchdog after about 16 s (`speed=0.39x`, 256 MB queued).
+
+Readings:
+
+- **The GPU roughly doubles the draw rate, and that is all it does.** Draws went from 11 to 19.6/s on
+  the same box. That is short of 30, and well short of 60.
+- **Chrome still burns 2.3 cores with the GPU in use.** Forcing GPU rasterisation moved nothing, so
+  what remains is not raster. It is the renderer's main thread (canvas commands and JS) and the
+  screencast, which JPEG-encodes every 1080p frame on the CPU. On top of that, ffmpeg decodes JPEG
+  and runs `libx264` on the CPU, which is a full core at 30 fps. The 4 vCPUs are saturated
+  (pipeline 345%), and the queue grows.
+- **The g2's CPU is slower than Fly's.** The CPU arm drew 11/s here against the ~15/s the stream holds
+  on `performance-4x`, so a GPU box with the same capture path is a sideways move for the hosted
+  stream, not a fix.
+
+**Verdict:** a GPU host does not make the stream smooth while the capture path stays
+screencast → JPEG → CPU `libx264`. The cost that is left is the capture path itself. Smoothness
+needs that path changed: frames taken from the page's own canvas rather than a JPEG screencast of
+the page, and a hardware encoder. That is a design question for the stream, not a hosting one. The
+quota grant (`GPUS_ALL_REGIONS` = 1 on `izzocam`) stays in place for a re-run once the path has
+changed.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
