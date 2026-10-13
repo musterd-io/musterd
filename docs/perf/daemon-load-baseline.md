@@ -751,3 +751,28 @@ since runs 22–26's `1831ecf5`, not the memo alone.
 - **The bench log stream can drop the summary.** Run 31's streamed log stopped after the seed. The
   summary came back from `fly logs -a musterd-loadbench --no-tail`, which keeps only the last ~100
   lines, so read it before the next run.
+
+## 2026-10-12 — Cloud run 32: the shared roster base meets the budget on one machine (lane 01M4S94RMJY1ZSG1FHVMD8MFMW)
+
+Staging redeployed on main `dc09c35` ([ADR 573](../decisions/573-roster-base-shared-reads.md), #2434),
+the same shape as runs 29–31: `performance-1x` / 2 GB app machine, Neon 1 CU, `performance-4x` bench
+machine, 75/75/75, no profiler, team `lb-run32`.
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `GET /teams` p95 | `GET /report` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 31 | `daeb0a3` | 840 ms | 1 872 ms | 2 337 ms | 58 511 (45.0) | 19 | 1 864 ms | 1 650 ms |
+| 32 | `dc09c35` | 355 ms | **791 ms** | 1 203 ms | 66 306 (51.0) | 1 | 794 ms | 880 ms |
+
+- **All-request p95 is under the 1 000 ms budget for the first time on Cloud.** It fell 58% from
+  run 31, far outside the ±8% spread, and every route fell, not only the roster: `POST /claim` 3 334 →
+  1 055 ms, `GET /inbox` 2 540 → 928 ms, `interrupt-check` 1 790 → 672 ms. The roster was half the
+  requests and about nine transactions each, so sharing it freed the one app core for everything else.
+- **More work, not less.** The bench is closed-loop: faster answers drew 13% more requests (51 req/s
+  against 45), with 30 481 roster reads, and errors fell from 19 to 1. This is not the light-load
+  effect that made run 29 look better than it was.
+- **ADR 573's falsifier did not fire.** Roster p95 fell from 1 864 to 794 ms, not merely past the
+  spread.
+- **One run.** The margin is large, but the budget holds with about 200 ms to spare. A repeat run, or a
+  run at a larger audience, is what says how much headroom there is.
+- **The second machine (lane 01M3Z4EMH3) is not needed to meet this budget at this audience.** It
+  stays a capacity decision for a larger demo, not a latency fix. Nick decides that lane.
