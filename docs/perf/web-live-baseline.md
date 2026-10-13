@@ -1349,3 +1349,21 @@ object on the client; +~120 B).
 - Falsify: on a daemon at or past this commit, `/live`'s lanes request carries `brief=1`, every row's
   `detail` is null, and the response is under 110 KB gzip on revive's board; the Now card's "d of n done"
   equals `/board`'s done count per goal.
+
+### 2026-10-13 — `totalJsGzipBytes` 310,000 → 310,500 B: the home page's third capture (lane `01M4V74X9WA29DGH3BNTFQ2F6Y`)
+
+The `musterd status` frame under Getting started step 3 is ~400 B of JSX text in the home route's
+chunk, ~100 B gzipped; no new chunk, no new CSS (it reuses WhyTalk's terminal frame; site CSS stayed
+5.8 of 6.0 KB).
+
+| Budget   | Before (main `556b0b53`) | This branch                      | Ceiling                    |
+| -------- | ------------------------ | -------------------------------- | -------------------------- |
+| total JS | 302.5 KB (locally)       | 302.5 KB locally · 302.8 KB (310,067 B) in CI | RAISED 310,000 → 310,500 B |
+
+The ceiling was already saturated when the replay raise above was made (measured + 0.9%), and CI's gzip
+lands 50–300 B above a laptop's for the same source. Raised tight again, measured + 0.14%; a trim of 70
+bytes is below the noise and not a lever. The next web feature of any size on this route needs a real
+trim or a re-baseline that tightens elsewhere.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 310,500 B with the frame in
+  the home route.
