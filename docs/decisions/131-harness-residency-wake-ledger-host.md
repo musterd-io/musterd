@@ -120,7 +120,9 @@ precedent for actuation-shaped state is the `requests` table, not the delivery l
 So: a **`wake_leases`** table (short TTL ~120s, reaper-expired exactly like requests). The host's
 poll is `POST …/residency/wake-leases`: in one transaction the daemon derives due wakes, inserts
 a lease per grant, and returns the orders — two hosts, a crash mid-spawn, or a re-poll race can
-never double-spawn a seat. A crashed wake's lease expires and the wake re-becomes due, still
+never double-spawn a seat. _(Amended 2026-10-12: the one-transaction clause is superseded by
+[ADR 576](576-wake-lease-claim-short-transaction.md); the no-double-spawn guarantee stands, now held
+by a unique index.)_ A crashed wake's lease expires and the wake re-becomes due, still
 bounded by rate policy. Enrollment names one host per seat (last-enrolled-wins, audited), so a
 second host is told it is not the actuator instead of silently racing.
 
@@ -341,6 +343,12 @@ _Amendment (2026-09-21, the §5 hygiene clause's unit; [ADR 427](427-resume-boun
 judged on the transcript's `user`+`assistant` record bytes — what a resume replays — not on
 `stat().size`; a Claude Code transcript is 45% attachment metadata the model never re-reads, so a
 284 KiB file was a 47k-token conversation the ladder refused. The 256 KiB number is unchanged._
+
+_2026-10-12 ([ADR 576](576-wake-lease-claim-short-transaction.md), lane 01M4SDYXKC): the one
+transaction made double-spawn impossible only because the SQLite driver runs one transaction at a
+time; on Postgres's read-committed default two polls could both insert. On the hub the poll also
+held that transaction for 1 to 2.2 s, stalling every other write. ADR 576 derives outside it,
+writes each seat in a short transaction after a recheck, and adds a unique index on live leases._
 
 ## Observability & Evaluation
 
