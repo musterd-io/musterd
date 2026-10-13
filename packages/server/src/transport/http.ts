@@ -4603,6 +4603,9 @@ export async function handleHttp(
                 ...(body.harness_cost_usd !== undefined
                   ? { harness_cost_usd: body.harness_cost_usd }
                   : {}),
+                // ADR 583: which path priced it, and whether the gateway refused on budget.
+                ...(body.price_source ? { price_source: body.price_source } : {}),
+                ...(body.budget_exhausted ? { budget_exhausted: true } : {}),
                 ...(await adapterBuildStamp(ctx, settled.member_id)),
                 ...(body.delivery_outcome ? { delivery_outcome: body.delivery_outcome } : {}),
                 ...(body.exact_match ? { exact_match: body.exact_match } : {}),

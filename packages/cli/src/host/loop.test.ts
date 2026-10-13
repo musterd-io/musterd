@@ -1,10 +1,11 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MemberSummary, WakeOrder, WakeReportBody } from '@musterd/protocol';
+import type { MemberSummary, WakeOrder, WakeReportBody, WakeTurnBody } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveBinding } from '../config.js';
 import type { ActuatorBackend, BackendContext, WakeSpec } from './backend.js';
+import type { GatewaySummary, MeteredCall, MeteringGateway } from './gateway.js';
 import { healBeforeWake, pollHostOnce, type HostPollDeps, type WakeClient } from './loop.js';
 import type { HostRegistryEntry } from './registry.js';
 
@@ -42,6 +43,7 @@ interface FakeCalls {
   leases: { team: string; host: string }[];
   reports: WakeReportBody[];
   progress: string[];
+  turns: WakeTurnBody[];
   rosters: number;
 }
 
@@ -52,7 +54,7 @@ function fakeClient(
   client: WakeClient;
   calls: FakeCalls;
 } {
-  const calls: FakeCalls = { leases: [], reports: [], progress: [], rosters: 0 };
+  const calls: FakeCalls = { leases: [], reports: [], progress: [], turns: [], rosters: 0 };
   const client: WakeClient = {
     wakeLeases: async (team, host) => {
       calls.leases.push({ team, host });
@@ -65,6 +67,10 @@ function fakeClient(
     wakeProgress: async (_team, leaseId) => {
       calls.progress.push(leaseId);
       return { ok: true };
+    },
+    wakeTurn: async (_team, body) => {
+      calls.turns.push(body);
+      return { ok: true, turn: body.turn };
     },
     roster: async () => {
       const page = members[Math.min(calls.rosters, members.length - 1)] ?? [];
@@ -105,6 +111,9 @@ function deps(over: Partial<HostPollDeps> & Pick<HostPollDeps, 'backends'>): Hos
     freshen: () => '',
     verifyWindowMs: 50,
     verifyPollMs: 5,
+    // ADR 583: no real gateway in a unit test — the gateway suite covers it; the loop tests
+    // below inject a fake to assert the env hand-off and the settle merge.
+    gateway: false,
     ...over,
   };
 }
@@ -1402,5 +1411,180 @@ describe('pollHostOnce — stopping mid-poll hands back what it has not started'
     expect(calls.reports).toEqual([
       { lease_id: 'L1', occupied: false, deferred: true, reason: 'actuator_restart' },
     ]);
+  });
+});
+
+describe('the metering gateway rides every wake (ADR 583)', () => {
+  function fakeGateway(summary: Partial<GatewaySummary>, calls: MeteredCall[] = []) {
+    const started: { leaseId: string; budgetUsd: number | undefined }[] = [];
+    let closed = 0;
+    const gateway = async (opts: {
+      leaseId: string;
+      budgetUsd?: number | undefined;
+      onCall?: (c: MeteredCall) => void;
+    }): Promise<MeteringGateway> => {
+      started.push({ leaseId: opts.leaseId, budgetUsd: opts.budgetUsd });
+      for (const c of calls) opts.onCall?.(c);
+      return {
+        port: 1,
+        env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:1/anthropic' },
+        summary: () => ({
+          calls: calls.length,
+          refused: 0,
+          unmetered: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          cost_usd: undefined,
+          floor_tokens: null,
+          models: [],
+          budget_exhausted: false,
+          ...summary,
+        }),
+        close: async () => {
+          closed += 1;
+        },
+      };
+    };
+    return { gateway, started, closed: () => closed };
+  }
+
+  it('hands the gateway env to the backend, posts a wake_turns row per metered call, and prices the supplement from the gateway', async () => {
+    const { client, calls } = fakeClient([
+      order({ bounds: { timeout_ms: 30_000, budget_usd: 1 } }),
+    ]);
+    const { backend, specs } = fakeBackend();
+    const metered: MeteredCall = {
+      turn: 1,
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+      usage: { input_tokens: 1000, output_tokens: 10, cache_read_input_tokens: 500 },
+      cost_usd: 0.0002,
+      status: 200,
+    };
+    const g = fakeGateway(
+      {
+        calls: 1,
+        usage: { input_tokens: 1000, output_tokens: 10, cache_read_input_tokens: 500 },
+        cost_usd: 0.0002,
+        floor_tokens: 1500,
+        models: ['claude-haiku-5-5'],
+      },
+      [metered],
+    );
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        gateway: g.gateway,
+      }),
+    );
+    await Promise.all(result.settled);
+    expect(g.started).toEqual([{ leaseId: 'L1', budgetUsd: 1 }]);
+    expect(specs[0]!.gateway).toEqual({
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:1/anthropic' },
+    });
+    expect(calls.turns).toEqual([
+      { lease_id: 'L1', turn: 1, usage: metered.usage, cost_usd: 0.0002 },
+    ]);
+    expect(g.closed()).toBe(1);
+    const supplement = calls.reports[1]!;
+    expect(supplement).toMatchObject({
+      lease_id: 'L1',
+      cost_usd: 0.0002,
+      price_source: 'gateway',
+      usage: { input_tokens: 1000, output_tokens: 10, cached_input_tokens: 500 },
+    });
+    expect(supplement.unpriced_reason).toBeUndefined();
+    expect(supplement.duration_ms).toBeTypeOf('number');
+  });
+
+  it("a metered wake with no price row reports tokens and no_price_row; the harness's own figure rides as its claim", async () => {
+    const { client, calls } = fakeClient([order()]);
+    const backend: ActuatorBackend = {
+      harness: 'grok',
+      wake: async () => ({
+        outcome: { occupied: true, session: 'fresh' },
+        settled: Promise.resolve({ cost_usd: 0.9, duration_ms: 5_000 }),
+      }),
+    };
+    const g = fakeGateway({
+      calls: 2,
+      usage: { input_tokens: 40, output_tokens: 4 },
+      cost_usd: undefined,
+      models: ['muse-spark-1.3'],
+      budget_exhausted: true,
+      refused: 1,
+    });
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['grok', backend]]),
+        loadRegistry: () => ({ entries: [entryOf({ harness: 'grok' })] }),
+        clientFor: () => client,
+        gateway: g.gateway,
+      }),
+    );
+    await Promise.all(result.settled);
+    const supplement = calls.reports[1]!;
+    expect(supplement).toMatchObject({
+      price_source: 'gateway',
+      unpriced_reason: 'no_price_row',
+      harness_cost_usd: 0.9,
+      duration_ms: 5_000,
+      budget_exhausted: true,
+      usage: { input_tokens: 40, output_tokens: 4 },
+    });
+    expect(supplement.cost_usd).toBeUndefined();
+  });
+
+  it('a gateway that saw no calls leaves the harness artifact as the price source, named', async () => {
+    const { client, calls } = fakeClient([order()]);
+    const backend: ActuatorBackend = {
+      harness: 'codex',
+      wake: async () => ({
+        outcome: { occupied: true, session: 'fresh' },
+        settled: Promise.resolve({
+          duration_ms: 900,
+          usage: { input_tokens: 5, output_tokens: 1 },
+          unpriced_reason: 'harness_prints_no_price',
+        }),
+      }),
+    };
+    const g = fakeGateway({ calls: 0 });
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['codex', backend]]),
+        loadRegistry: () => ({ entries: [entryOf({ harness: 'codex' })] }),
+        clientFor: () => client,
+        gateway: g.gateway,
+      }),
+    );
+    await Promise.all(result.settled);
+    expect(g.closed()).toBe(1);
+    expect(calls.turns).toEqual([]);
+    expect(calls.reports[1]).toMatchObject({
+      price_source: 'harness_artifact',
+      unpriced_reason: 'harness_prints_no_price',
+    });
+  });
+
+  it('a gateway that fails to start does not fail the wake: the spec carries no gateway env', async () => {
+    const { client, calls } = fakeClient([order()]);
+    const { backend, specs } = fakeBackend();
+    const lines: string[] = [];
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        log: (l) => lines.push(l),
+        gateway: async () => {
+          throw new Error('EADDRINUSE');
+        },
+      }),
+    );
+    await Promise.all(result.settled);
+    expect(specs[0]!.gateway).toBeUndefined();
+    expect(calls.reports[0]).toMatchObject({ occupied: true });
+    expect(lines.some((l) => l.includes('metering gateway failed to start'))).toBe(true);
   });
 });

@@ -29,6 +29,8 @@ export function grokWakeEnv(
   base: NodeJS.ProcessEnv,
   leaseId?: string,
   pinnedDir?: string,
+  /** ADR 583: the metering gateway's base-URL variables, applied last. */
+  extra?: Record<string, string>,
 ): NodeJS.ProcessEnv {
   const allowed = [
     'HOME',
@@ -43,7 +45,7 @@ export function grokWakeEnv(
   ];
   const env: NodeJS.ProcessEnv = {};
   for (const key of allowed) if (base[key] !== undefined) env[key] = base[key];
-  return wakeEnv(env, pinnedDir, leaseId, 'grok');
+  return wakeEnv(env, pinnedDir, leaseId, 'grok', extra);
 }
 
 function killTree(child: ChildProcess, graceMs: number): void {
@@ -166,7 +168,7 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
         try {
           child = spawn(bin, args, {
             cwd: spec.workspace,
-            env: grokWakeEnv(process.env, spec.order.lease_id, pinnedDir),
+            env: grokWakeEnv(process.env, spec.order.lease_id, pinnedDir, spec.gateway?.env),
             detached: true,
             stdio: ['ignore', 'ignore', 'ignore'],
           });

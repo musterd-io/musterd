@@ -133,6 +133,23 @@ the agent loop, and without holding or reading any credential.
   body schema). Replay into any harness needs no new decision: the ADR 430 packet plus each
   harness's native resume is already the path.
 
+- _Implementation note (dated, 2026-10-13, lane `01M4VNFB7BQF6KEDYT08RRYJTA`)._ Landed as
+  `packages/cli/src/host/gateway.ts` + `prices.ts`, wired into `pollHostOnce` (one gateway per
+  actuation, closed at settle; `musterd host --no-gateway` runs without it), the base-URL
+  variables placed last in every backend's child environment, `price_source` /
+  `budget_exhausted` on the supplementary report and the `wake_cost` row, `no_price_row` as an
+  unpriced reason, and `pnpm wake:rail` reading a gateway-priced wake's floor from the usage block.
+  The lane's primary-doc research changed two things the Decision assumed: **(a)** Claude Code
+  honours `ANTHROPIC_BASE_URL` under a claude.ai login (the gateway forwards `anthropic-beta`,
+  which carries the OAuth capability) and Grok Build honours `GROK_MODELS_BASE_URL`; but **Codex
+  reads no base-URL variable** (`openai_base_url` lives in user-level `config.toml`, and its
+  built-in provider also speaks WebSocket) and **OpenCode reads only `opencode.json`**. Both are
+  therefore still priced by their own artifact (Decision 2's fallback, now named
+  `harness_artifact`) until a config-path lane points each at the gateway — that is the remaining
+  distance to this ADR's Eval bar, and the Codex WebSocket transport is an open question for it.
+  **(b)** Cache-read multipliers differ per model (0.1× standard, 0.05× Opus/Sonnet 5.5, 0.025×
+  Fable 5.1, 0.25× xAI), so the table carries them per row. Long-context tiers are not modelled.
+
 ## Observability & Evaluation
 
 - **Traces.** Per metered call: a `wake_turns` row (lease, turn, usage, cost, model) through the

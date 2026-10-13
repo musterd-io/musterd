@@ -23,6 +23,7 @@ const wake = (over: Partial<WakeFacts>): WakeFacts => ({
   session: 'fresh',
   priced: false,
   unpricedReason: 'harness_price_unverified',
+  priceSource: null,
   promptTokens: 100,
   musterdReads: 1,
   toolCalls: null,
@@ -99,6 +100,7 @@ describe('readTrigger — ADR 436 Decision 5', () => {
     wakes: 5,
     settled: 5,
     priced: 5,
+    viaGateway: 0,
     unpricedReasons: {},
     floor: { median: 100_000, n: 5 },
     musterdReads: { median: 1, n: 5 },
@@ -149,5 +151,36 @@ describe('readTrigger — ADR 436 Decision 5', () => {
     const t = readTrigger([row({ harness: 'grok' })]);
     expect(t.fires).toBe(false);
     expect(t.unjudged).toEqual(['floor ratio: no Claude Code floor to compare against']);
+  });
+});
+
+describe('ADR 583 — a gateway-priced wake', () => {
+  it('counts as priced via the gateway and its floor reads from the one usage shape', () => {
+    const rows = summarise([
+      wake({
+        harness: 'grok',
+        priced: true,
+        unpricedReason: null,
+        priceSource: 'gateway',
+        promptTokens: 1500,
+      }),
+      wake({
+        harness: 'grok',
+        priced: true,
+        unpricedReason: null,
+        priceSource: 'harness_artifact',
+        promptTokens: 900,
+      }),
+    ]);
+    const row = rows.find((r) => r.harness === 'grok');
+    expect(row!.priced).toBe(2);
+    expect(row!.viaGateway).toBe(1);
+    expect(
+      promptTokens('gateway', {
+        input_tokens: 1000,
+        cached_input_tokens: 400,
+        cache_write_input_tokens: 100,
+      }),
+    ).toBe(1500);
   });
 });

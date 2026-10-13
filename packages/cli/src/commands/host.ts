@@ -151,7 +151,7 @@ async function provisionsCommand(parsed: Parsed): Promise<number> {
 }
 
 const HOST_USAGE =
-  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--clone] — ' +
+  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--no-gateway] [--clone] — ' +
   '`musterd host` runs the wake actuator; `musterd host provisions` lists claimable provisions. ' +
   'There is no `host status`: read ~/.musterd/host.log, or `musterd service status --wake`.';
 
@@ -194,6 +194,8 @@ export async function hostCommand(
   const pollDeps: HostPollDeps = {
     backends,
     bounds: { timeout_ms: opts.timeoutMs },
+    // ADR 583: every wake runs behind the metering gateway unless the operator says otherwise.
+    ...(parsed.flags['no-gateway'] === true ? { gateway: false as const } : {}),
     log,
     signal: stop.signal,
     ...(hostLabel !== undefined ? { hostLabel } : {}),

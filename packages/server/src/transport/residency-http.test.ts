@@ -782,6 +782,34 @@ withDrivers('residency-http', (_o, kind) => {
       );
     });
 
+    it('a gateway-priced report records its price source and the budget gate (ADR 583)', async () => {
+      const leaseId = await reportedLease();
+      const supplement = await post(
+        '/teams/dawn/residency/wake-report',
+        {
+          lease_id: leaseId,
+          occupied: true,
+          duration_ms: 4_000,
+          cost_usd: 0.0123,
+          usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 },
+          price_source: 'gateway',
+          budget_exhausted: true,
+          harness_cost_usd: 0,
+        },
+        agentKey,
+      );
+      expect(supplement.status).toBe(200);
+      const rows = await audits('residency.wake_cost');
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0]!.detail as string)).toMatchObject({
+        lease_id: leaseId,
+        cost_usd: 0.0123,
+        price_source: 'gateway',
+        budget_exhausted: true,
+        harness_cost_usd: 0,
+      });
+    });
+
     it('an unpriced report records tokens and the reason, and never enters the cost totals (ADR 364)', async () => {
       const leaseId = await reportedLease();
       const supplement = await post(
