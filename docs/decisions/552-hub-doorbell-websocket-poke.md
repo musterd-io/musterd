@@ -104,6 +104,39 @@ not (a pong proves the socket, not the node's work: the next pull does).
 - Measured 2026-10-12 on two real daemons (the `push.test.ts` harness), hub send → live `deliver` frame
   on a joiner seat, five runs: 324, 329, 336, 347, 358 ms (median 336 ms), 60 s tick still enabled.
   Hub CPU per event at 1 and 3 joiners is not yet recorded; the eval above still owes it.
+  _(Recorded 2026-10-13, lane `01M4V9D2NEXZ5TSP1S20N4DGE7`: next bullet.)_
+- **Measured end to end 2026-10-13, all four steps in** (`node scripts/perf/sync-fanout.mjs`: a hub and N
+  joiners as separate OS processes, own databases and `node.json`, every 60 s tick enabled; 10 timed
+  rounds after 3 warm-up; one quiet laptop).
+
+  | Path | 1 joiner | 3 joiners | Before the four steps |
+  | --- | --- | --- | --- |
+  | joiner send → live frame on a hub seat, median (min–max) | 318 (309–321) ms | 317 (308–324) ms | none in 20 s |
+  | hub send → live frame on a joiner seat, median | 313 (309–319) ms | 314 (308–323) ms; slowest joiner of a round 314 ms | up to 60 s |
+  | seat claims on a joiner → hub roster shows it live | 320 (310–329) ms | 317 (313–331) ms | up to 60 s |
+
+  No probe was lost in 60 timed samples per column. The same run on a hub holding 5 000 prior events:
+  308–316 ms medians, unchanged. Every path sits near 310 ms regardless of direction or joiner count,
+  which is the `SYNC_PUSH_KICK_DEBOUNCE_MS` (200 ms) plus one push/pull and fold; it is the floor now and
+  the next lever if the goal's "about a second" is tightened.
+- **Hub cost per event** (40 hub sends 250 ms apart; hub-process CPU from `process.cpuUsage()`, read
+  before and after; pull requests and handler time from the hub's own `http_request` lines):
+
+  | | 1 joiner | 3 joiners |
+  | --- | --- | --- |
+  | empty hub: CPU per event (idle window subtracted) | 7.3 ms | 6.3 ms |
+  | 5 000-event hub: CPU per event, burst total ÷ 40 | 7.5 ms | 12.1 ms |
+  | `/sync/pull` requests per hub event | 1.0 | 3.0 |
+  | `/sync/pull` handler time per request | 1.4 ms (5 000 events) | 1.1 ms |
+
+  One pull per joiner per event, as designed. On the 5 000-event hub the second joiner pair adds about
+  2.3 ms of hub CPU per event, against about 5 ms for the event itself (POST, route, `sync_log`, ring);
+  a page read is about 1 ms. The reopen condition above, "the per-joiner page read dominating hub load",
+  is **not met** at 3 joiners. Not shown: the 2026-10-12 saturation (4–8 s per pull, wallow's lane
+  `01M4RNPQD0`) did not reproduce here, and this run does not establish its cause; this measures steady state on a
+  quiet hub, not a contended one. The 1-joiner 5 000-event
+  idle window read 149 ms CPU against 3 ms elsewhere (the hub was still settling after the history
+  load), so that cell is reported as burst ÷ 40 rather than idle-subtracted.
 - Step 4 (lane `01M4EEQE88R73033QHNQQQASPB`, 2026-10-13) shipped without the reserved `push` frame and
   without a protocol change: a joiner already pushes over HTTP, and the delay was only that nothing rang
   its push loop for a lane or presence write. `stampOriginAtCommit` (the one place every replicated row
