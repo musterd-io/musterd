@@ -35,7 +35,7 @@ idle life, and a real act always wins.
 | Beat | Trigger (envelope) | Who walks, to where | The card | If it cannot play | Code |
 | --- | --- | --- | --- | --- | --- |
 | **claim** `walk-claim` | `lane_claim` (`meta.lane_claim.lane`) | claimer → wall board, stands and thinks, reaches up, takes the card, carries it home, sets it down. nick 2026-10-09. | slot goes empty (`taken`), paper leaves with the walker | blue in-place cue | `actors.claim`, `buildClaim` |
-| **pin** `walk-pin` | `lane_resolve` / `lane_state` with state `done` or `awaiting_acceptance` | owner picks the card up at the desk, carries it to the board, pins it under its new column. nick 2026-10-12. | wall shows the card pinned before the board data does (`pinnedSeeds`) | green ✓ cue; an abandon keeps the in-place ✓ (nothing was finished) | `actors.pin`, `buildPin` |
+| **pin** `walk-pin` | `lane_resolve` / `lane_state` with state `done` or `awaiting_acceptance` | whoever resolves or submits the lane picks the card up at their desk, carries it to the board, pins it under its new column — the owner on a submit, the **acceptor** on a done (the daemon sends the resolve as them). nick 2026-10-12. | wall shows the card pinned before the board data does (`pinnedSeeds`); an acceptance's done pin puffs confetti over the done column as it lands (L3, shipped) | green ✓ cue, plus the puff at once; an abandon keeps the in-place ✓ (nothing was finished) | `actors.pin`, `buildPin` |
 | **deliver** `walk-deliver` | `ask` to a member carrying `meta.lane_review` (the acceptance ask, ADR 192) | the **lane owner** carries the card to the acceptor's desk and hands it over. Replaces that submit's pin. nick 2026-10-12. | off the cork until it changes hands (`takenSeeds`) | the already-queued pin stands; only a thread is drawn | `actors.deliver`, `buildDeliver`, `laneOwners.ts` |
 | **handoff** `walk-handoff` | `lane_handoff`, or a `handoff` act to a member | sender → recipient's desk, with a short label | none | team megaphone if the act has no named recipient | `actors.walk` |
 | **aisle meet** (ambient) | none — scheduled | two idle members get up, meet between their desks, talk a few seconds, go back. nick 2026-10-12. | none | the slot passes | `actors.aisleMeet`, `decideAmbient` |
@@ -89,9 +89,9 @@ These are what a new beat must keep. Each has bitten once.
 - **Replay's tempo and cap are checked by eye.** The foreground check on 2026-10-13 saw the room fill by
   ~4 s and walks reach the board and a desk. It did not time the 2× or count to eight. There is no
   automated check of either (the unit tests cover the selection in `replay.ts`, not the playback).
-- **The acceptor's accept celebrates at the celebrant's desk, not at the board.** The deliver lane's
-  title promised "pins it on the wall board with a small celebration"; what ships is the confetti over
-  the member whose work was accepted plus the owner's pin walk when the daemon resolves the lane.
+- **Acceptance is inferred, not told.** The resolve carries no flag, so the room calls a done pin an
+  acceptance when the resolver is not the owner it saw claim or submit. A lane it never saw owned counts
+  as accepted, and a self-close of such a lane puffs too.
 - **A viewer who is the sender sees nothing live from another machine.** Separate from the room, and
   filed as `01M4V95YGT` (a human's hub-origin accepts never reach their own joiner tab).
 

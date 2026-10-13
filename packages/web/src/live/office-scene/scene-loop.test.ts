@@ -249,3 +249,20 @@ describe('the deliver walk is carried by the lane owner (lane 01M4V774MK)', () =
     expect(body).not.toContain('actors.deliver(ev.from');
   });
 });
+
+describe('the accept flourish at the board (spec 2026-10-13 L3)', () => {
+  it('flourishes a done pin an acceptor made, once, when the card lands — and never during a replay', () => {
+    const at = index.indexOf("case 'walk-pin':");
+    const body = index.slice(at, index.indexOf("case 'walk-deliver':", at));
+    // Only a submit names the owner; a done pin by anyone else is an acceptance.
+    expect(body).toContain("laneOwners.closedByOther(ev.lane, ev.who)");
+    expect(body).toContain("if (ev.state === 'awaiting_acceptance') laneOwners.note(ev.lane, ev.who)");
+    // The walk's flourish waits for the card to land; the fallback flourishes at once, live only.
+    expect(body).toContain('acceptedPins.add(seed)');
+    expect(body).toContain('accepted && tempo === 1');
+    const fn = index.slice(index.indexOf('function flourishFreshPins'), index.indexOf('function nearestNeighbors'));
+    expect(fn).toContain("p.state !== 'done'");
+    expect(fn).toContain('!prevPinned.has(p.seed) && acceptedPins.delete(p.seed) && tempo === 1');
+    expect(index).toMatch(/actors\.step\(dt \* tempo\);\s*flourishFreshPins\(\);/);
+  });
+});
