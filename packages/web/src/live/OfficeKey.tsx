@@ -50,6 +50,9 @@ export function OfficeKey() {
         <li>
           <b>✋</b> asking a human
         </li>
+        <li>
+          <b>faded card</b> a plan that stopped
+        </li>
       </ul>
     </aside>
   );

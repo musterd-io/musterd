@@ -14,6 +14,8 @@ describe('OfficeKey — how to read the office (ADR 464 §3.4)', () => {
       'carrying a box',
       'handing off',
       'asking a human',
+      'faded card',
+      'a plan that stopped',
     ]) {
       expect(html).toContain(line);
     }

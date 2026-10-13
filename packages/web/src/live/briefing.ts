@@ -375,21 +375,12 @@ export function briefing(input: {
     (a, b) => Number(a.goalId === null) - Number(b.goalId === null) || b.latest - a.latest,
   );
 
-  // Stopped plans. Live = not done/abandoned and not parked (a parked lane is a decision, not
-  // neglect). The threshold is the protocol's, so this row and `team_next`'s warning agree.
-  const staleCutoff = now - GOAL_STALE_DAYS * 86_400_000;
+  // Stopped plans — the rule is `stalledGoals` below, shared with the wall board's tell.
   const goalsStalled: GoalStalled[] = [];
   for (const [key, { goalId, lanes: ls }] of motion) {
     if (goalId === null) continue;
-    const live = ls.filter((l) => !LANE_TERMINAL_STATES.has(l.state) && l.state !== 'parked');
-    if (live.length === 0) continue;
-    const quiet = live.every((l) => l.updated_at <= staleCutoff);
-    const orphaned = live.filter(
-      (l) => l.state === 'open' && l.owner_seat === null && l.updated_at <= staleCutoff,
-    );
-    if (!quiet && orphaned.length === 0) continue;
-    const oldest = live.reduce((a, l) => (l.updated_at < a.updated_at ? l : a));
-    const newest = live.reduce((a, l) => (l.updated_at > a.updated_at ? l : a));
+    const s = stalledGoal(ls, now);
+    if (!s) continue;
     goalsStalled.push({
       key: `stalled:${key}`,
       goalId,
@@ -397,10 +388,10 @@ export function briefing(input: {
       title: goalTitle.get(goalId) ?? goalId,
       done: ls.filter((l) => l.state === 'done').length,
       total: ls.length,
-      quiet,
-      idleMs: now - newest.updated_at,
-      orphans: orphaned.length,
-      oldest: { title: oldest.title, idleMs: now - oldest.updated_at },
+      quiet: s.quiet,
+      idleMs: now - s.newest.updated_at,
+      orphans: s.orphaned.length,
+      oldest: { title: s.oldest.title, idleMs: now - s.oldest.updated_at },
     });
   }
   goalsStalled.sort((a, b) => b.oldest!.idleMs - a.oldest!.idleMs);
@@ -445,6 +436,53 @@ export function briefing(input: {
  * first, for the band at the top of the card; everyone else's as counts for the quiet line under it.
  * A viewer who is not signed in has nothing of their own.
  */
+/**
+ * One goal's stopped-plan reading over its (non-abandoned) lanes, or null when it is not stopped.
+ * Live = not done/abandoned and not parked (a parked lane is a decision, not neglect). **Quiet**
+ * is the server's `stale_goals` rule (ADR 487 §5.4): every live lane untouched for
+ * {@link GOAL_STALE_DAYS}. **Orphaned** lanes are open, unowned and that old, counted even while the
+ * rest of the goal moves. The threshold is the protocol's, so this and `team_next`'s warning agree.
+ */
+function stalledGoal(
+  ls: readonly Lane[],
+  now: number,
+): { quiet: boolean; live: Lane[]; orphaned: Lane[]; oldest: Lane; newest: Lane } | null {
+  const cutoff = now - GOAL_STALE_DAYS * 86_400_000;
+  const live = ls.filter((l) => !LANE_TERMINAL_STATES.has(l.state) && l.state !== 'parked');
+  if (live.length === 0) return null;
+  const quiet = live.every((l) => l.updated_at <= cutoff);
+  const orphaned = live.filter(
+    (l) => l.state === 'open' && l.owner_seat === null && l.updated_at <= cutoff,
+  );
+  if (!quiet && orphaned.length === 0) return null;
+  const oldest = live.reduce((a, l) => (l.updated_at < a.updated_at ? l : a));
+  const newest = live.reduce((a, l) => (l.updated_at > a.updated_at ? l : a));
+  return { quiet, live, orphaned, oldest, newest };
+}
+
+/**
+ * The lanes a stopped plan is made of (lane 01M4V9YKMG): every live lane of a quiet goal, and the
+ * orphans of a moving one. The wall board sun-fades these cards; it is `goalsStalled` at lane level,
+ * so the Now card and the room never disagree about what stopped. Goalless lanes never count.
+ */
+export function stalledLaneIds(board: LaneBoard | null, now: number): Set<string> {
+  const out = new Set<string>();
+  if (!board) return out;
+  const byGoal = new Map<string, Lane[]>();
+  for (const l of board.lanes) {
+    if (l.goal_id === null || l.state === 'abandoned') continue;
+    const g = byGoal.get(l.goal_id);
+    if (g) g.push(l);
+    else byGoal.set(l.goal_id, [l]);
+  }
+  for (const ls of byGoal.values()) {
+    const s = stalledGoal(ls, now);
+    if (!s) continue;
+    for (const l of s.quiet ? s.live : s.orphaned) out.add(l.id);
+  }
+  return out;
+}
+
 export function waitingFor(
   brief: Pick<Briefing, 'needsGroups'>,
   viewer: string | null,

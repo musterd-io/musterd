@@ -13,6 +13,7 @@ import {
   LANE_TERMINAL_STATES,
   needsHeading,
   SHIPPED_WINDOW_MS,
+  stalledLaneIds,
   waitingFor,
 } from './briefing';
 
@@ -444,5 +445,33 @@ describe('goalsStalled', () => {
     expect(b.goalsStalled.map((g) => [g.goalId, g.quiet, g.orphans, g.idleMs])).toEqual([
       ['g1', true, 1, 7 * DAY],
     ]);
+  });
+});
+
+describe('stalledLaneIds', () => {
+  // The wall board's tell (lane 01M4V9YKMG, inc 2): the same rule as goalsStalled, at lane level —
+  // every live lane of a quiet goal, and the orphans of a moving one — so the card and the room agree.
+  const DAY = 86_400_000;
+  it('names every live lane of a quiet goal, and only the orphans of a moving one', () => {
+    const ids = stalledLaneIds(
+      board(
+        // g1 moves: 'a' is fresh, 'b' is an orphan, 'c' is old but owned (not an orphan).
+        lane('a', 'active', { goal_id: 'g1', owner_seat: 'ann', updated_at: NOW - 60_000 }),
+        lane('b', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 9 * DAY }),
+        lane('c', 'claimed', { goal_id: 'g1', owner_seat: 'ann', updated_at: NOW - 9 * DAY }),
+        // g2 is quiet: both live lanes count, the done one does not.
+        lane('d', 'open', { goal_id: 'g2', owner_seat: null, updated_at: NOW - 8 * DAY }),
+        lane('e', 'claimed', { goal_id: 'g2', owner_seat: 'ann', updated_at: NOW - 10 * DAY }),
+        lane('f', 'done', { goal_id: 'g2', updated_at: NOW - 10 * DAY }),
+        // goalless and parked never count.
+        lane('g', 'open', { goal_id: null, owner_seat: null, updated_at: NOW - 30 * DAY }),
+        lane('h', 'parked', { goal_id: 'g2', owner_seat: null, updated_at: NOW - 30 * DAY }),
+      ),
+      NOW,
+    );
+    expect([...ids].sort()).toEqual(['b', 'd', 'e']);
+  });
+  it('is empty for a missing board', () => {
+    expect(stalledLaneIds(null, NOW).size).toBe(0);
   });
 });
