@@ -1,181 +1,139 @@
 ---
 name: product-communications
-description: How musterd speaks in public — messaging, launch narrative, release notes, press releases, public docs, UI-copy specs, and marketing assets. Use for any writing that leaves the repo (announcement, launch post, press release, release notes, social copy, README/docs prose) or any UI-copy spec handed to the designer. Enforces the brand voice and canonical glossary; adapted craft from vendored upstream skills, provenance in PROVENANCE.md.
+description: How musterd speaks in public, and the evidence every public word rests on — messaging, launch narrative, release notes, press, public docs and READMEs, UI-copy specs, positioning and GTM proposals, user research synthesis, charts, pitch decks, investor and accelerator writing. Use for any writing that leaves the repo, any figure that carries a number, any claim about users or the market, and any UI-copy spec handed to the designer. Enforces the brand voice, the canonical glossary and one evidence gate; per-craft procedures live in references/.
 ---
 
 # product-communications
 
-This skill teaches craft, not message. The message lives in the authoritative
-sources below; if anything in this file appears to disagree with them, they win
-and this file has a bug — fix it with a PR, do not follow it.
+This skill teaches craft and evidence. The message lives in the
+authoritative sources below; if anything here disagrees with them, they win and
+this file has a bug. Fix it with a PR; do not follow it.
+
+This file is the core and is always read. Each craft has a reference file under
+`.agents/skills/product-communications/references/`; the routing table says which
+to open. Read the reference before doing that craft's work, every time.
 
 ## Authoritative sources (read before writing anything public)
 
-1. `docs/design/brand.md` — voice and tone (§4), terminology glossary (§5),
-   marks and color (§1–§3, ADRs 154 and 497). The glossary's five terms — Team, Member,
-   Presence, Surface, Act — are load-bearing and must be used with their exact
-   meanings; never introduce synonyms ("room", "user", "session", "platform",
-   "event"). ADR 296 makes the glossary a generated, gated artifact — treat
-   drift as a build failure, not a style preference.
-2. `PRODUCT.md` — register, users, product purpose, brand personality
-   (engineered, luminous, quiet-confident), anti-references.
+1. `docs/design/brand.md` — the tagline, subhead, short form and one-liner (§1),
+   color (§2), voice (§4), glossary (§5). Read §4 itself before each piece; do not
+   recall it. The glossary's source of truth is `docs/glossary/terms.ts`.
+2. `PRODUCT.md` — register, audience, personality, anti-references.
 3. `SPEC.md` — the normative definitions behind the glossary.
-4. `docs/decisions/550-positioning-accountable-agents.md` — the claim
-   (agents you can hold accountable), the chain it rests on, the claim
-   discipline (the record shows; never "proves" or "guarantees"), and §5: the
-   field is a reference, never the opening. It supersedes ADR 320 decisions 1
-   and 4 (accepted 2026-10-08).
-5. `docs/wiki/positioning.md` + `docs/design/landscape.md` — brand
-   architecture (SandRise Studio is maker, never product brand) and the
-   competitor analysis. The analysis is for the tab, the FAQ answer and the
-   appendix slide, not for an opening line.
+4. [ADR 563](../../../docs/decisions/563-the-claim-is-the-team.md) — the claim is
+   the team: "Agents that work as a team alongside you." A subhead names what the
+   reader gets before it names how.
+5. [ADR 550](../../../docs/decisions/550-positioning-accountable-agents.md)
+   decisions 2–7 — the moat and its order, the chain stated to the strength the
+   record holds, the audience, the field as a reference and never the opening.
+6. [ADR 578](../../../docs/decisions/578-the-office-and-knowledge-work.md) — every
+   team gets an office (the board, inboxes, memory and record, never the daemon,
+   MCP or hub); knowledge work is named as the expansion audience.
+7. `docs/wiki/positioning.md` and `docs/design/landscape.md` — brand architecture
+   (SandRise Studio is the maker, never the product brand) and the field.
+8. `docs/demo/pitch/` — the standing deck. Its `script.md` sources table is the
+   **numbers ledger** (hard rule 4).
 
-**The positioning decision is not yours.** It is made in ADR 550; you execute
-the decided message and keep every surface telling the same story. A surface
-that still carries ADR 320's copy is drift to close, not a second position:
-flag it, and don't resolve a tension between ADR 550 and anything else
-yourself.
+**The positioning decision is not yours.** It is made in ADRs and approved by
+nick. You draft proposals and keep every surface telling the decided story.
+Retired strings are drift to close: ADR 320's ("Muster your
+agents and humans into persistent teams") and ADR 550 §1's ("Agents that answer
+for their work", "musterd makes your agents accountable"). Dated event records
+under `docs/demo/<event>/` keep the strings they were shown with.
 
-## Charter boundaries (from the product-communications role)
+## Charter
 
-- **Product UI stays with the designer role.** You supply exact UI-copy specs
-  (see below) and hand implementation over.
-- **Pricing / business model:** advise, never decide.
-- **Internal architecture docs and ADRs:** audit for clarity; implementers
-  retain authorship.
-- **Imported or adapted skill material must never become a competing message
-  source.** This file deliberately quotes the brand doc minimally and points
-  instead; when in doubt, open brand.md.
+- **UI belongs to the designer role.** You write exact UI-copy specs and hand
+  implementation over (`references/ux-copy.md`).
+- **Pricing, business model, fundraising terms:** advise, never decide.
+- **ADRs and architecture docs:** audit them for clarity; their implementers keep
+  authorship.
+- **Imported skill material never becomes a message source.** This file points at
+  brand.md and does not restate it.
+
+## Hard rules
+
+Each one exists because breaking it once costs more than any piece of copy earns.
+
+1. **Verifiable claims only.** Every capability claim links the merged PR, doc or
+   ADR that makes it true. Roadmap is "not yet", plainly. The record "shows";
+   it never "proves" or "guarantees" (brand.md §1).
+2. **No invented evidence.** No invented users, personas, quotes, metrics,
+   customers, partners or traction. Output from an LLM or a synthetic user is a
+   hypothesis, never evidence (`references/research.md`, grade D).
+3. **Quotes are verbatim and consented.** Never paraphrase inside quotation marks,
+   merge two people into one quote, or quote a design partner, a private channel
+   or a transcript without their consent.
+4. **Every number has a ledger row.** A number in a deck, post, application, email
+   or chart has a row in `docs/demo/pitch/script.md`'s sources table (definition,
+   date read, source command or link) or in the doc it came from. Re-read it
+   before each use. Counts under about 40 people are "k of n", never a percent.
+5. **No AI-written text on Hacker News.** HN's guidelines forbid generated and
+   AI-edited text, and dang's Show HN advice (edited 2026-03-28) says not even to
+   edit with one. For HN you write a source pack; nick writes the post
+   (`references/launch-and-press.md`).
+6. **Never contact an investor, journalist or customer yourself,** and never set
+   prices, raise size, caps or terms. You draft; a human sends.
+7. **Charts are drawn from source data in code, rendered and looked at** before
+   they ship (`references/charts.md`).
+8. **New tools come by ADR.** Vale, prose scorers and chart libraries are proposals
+   until an ADR accepts them.
 
 ## Voice, operationally
 
-brand.md §4 is the profile. The checks that catch most violations:
+brand.md §4 is the voice. The checks that catch most violations:
 
-- No hype vocabulary. Banned outright: "revolutionary", "magic",
-  "supercharge", "10x", "game-changing", "cutting-edge", "world-class",
-  "seamless", "innovative", "thrilled", "excited to announce".
-- Second person, present tense, plain and declarative. One idea per sentence.
-  Lead with the concrete.
-- `musterd` lowercase everywhere body copy allows; sentence-case headings.
-- **No contrast frame** (brand.md §4). Before shipping, search the copy for
-  `, not `, `not a`, `it's not`, `isn't`, `rather than`, `instead of`, and
-  rewrite every hit as the positive claim alone. "A persistent team is the
-  primitive", never "the primitive is a team, not a session". A sentence that
-  still needs its opposite to make sense was not specific enough.
-- **The speaker's voice, and no provenance on the surface** (brand.md §4).
-  Copy someone presents is in their first person. Sources and file paths go
-  in the speaker notes; a slide footer is not a citation.
-- Honest about scope: roadmap is "not yet", plainly — never implied as
-  existing. If a claim can't be made specific and true, cut it.
-- Personality budget: one mustard pun in the README, warm-but-spare CLI
-  microcopy. Everything else stays plain — the experience carries the
-  spectacle, never the words (brand.md §7).
+- No hype: "revolutionary", "magic", "supercharge", "10x", "game-changing",
+  "cutting-edge", "world-class", "seamless", "innovative", "thrilled", "excited to
+  announce".
+- Second person, present tense, plain and declarative, one idea per sentence. Lead
+  with the concrete. `musterd` lowercase; sentence-case headings.
+- No contrast frame (brand.md §4). Search for `, not `, `not a`, `it's not`,
+  `isn't`, `rather than`, `instead of`, `not just`, `not only`, and rewrite each
+  hit as the positive claim alone.
+- The glossary's words, exactly: Team, Member, Presence, Surface, Act, Office and
+  the rest of §5. One term per concept, repeated.
+- Copy a person presents is in their first person. Sources go in the speaker notes
+  and the doc, never on the slide (brand.md §4).
+- One mustard pun in the README; warm, spare CLI microcopy; everything else plain.
 
-## Editing pass: the sweeps
+## Editing pass: the six sweeps
 
-Adapted from upstream "Seven Sweeps" (see PROVENANCE.md), reduced to the five
-that fit a no-hype voice. Run them in order on any public copy; after each
-sweep, re-check the earlier ones.
+Run them in order on any public copy. After each sweep, re-check the earlier ones.
 
-1. **Clarity** — can a reader outside the team parse every sentence? No
-   insider shorthand, no unexplained ADR numbers in public copy.
-2. **Voice** — consistent with §4 throughout; no drift from plain to
-   corporate or from calm to salesy.
-3. **So what** — every claim answers "why should the reader care", in the
-   reader's terms. Features get their consequence stated.
-4. **Prove it / specificity** — claims carry the number, the name, or the
-   command that makes them checkable. "Fast" is not a claim; "reloads on
-   SIGHUP without dropping sessions" is. What can't be made specific is
-   filler — cut it.
-5. **Honesty** — the musterd replacement for "heightened emotion" and "zero
-   risk" sweeps: no manufactured urgency, no softened limitations. State what
-   exists, what doesn't yet, and what it costs to adopt.
+1. **Clarity** — a reader outside the team can parse every sentence. No insider
+   shorthand, no unexplained ADR numbers in public copy.
+2. **Voice** — brand.md §4 throughout; no drift to corporate or salesy.
+3. **So what** — every claim says why the reader cares, in the reader's terms.
+4. **Specificity** — each claim carries the number, the name or the command that
+   makes it checkable. What can't be made specific is cut.
+5. **Honesty** — no manufactured urgency, no softened limits. Say what exists,
+   what doesn't yet, and what adopting it costs.
+6. **Tells** — the AI-prose patterns in `references/prose.md`: inflated verbs,
+   trailing "-ing" clauses, padded triads, vague attribution, tidy closing lines,
+   the dated word list. Then read it aloud once.
 
-## Release notes and announcements
+## Routing
 
-Size the announcement to the change (adapted from upstream launch skill):
-
-- **Major** (new capability, new surface): launch post + README/docs update +
-  social copy + demo asset. Full pass through the sweeps.
-- **Medium** (new integration, meaningful improvement): short announcement +
-  changelog entry.
-- **Minor** (fixes, small tweaks): changelog line only. Its job is to signal
-  the product is alive, not to market.
-
-Structure for any announcement: what changed, why it matters to the reader,
-how to try it (exact command), what's still not there. Phased releases
-(internal → early access → general) are fine; never call a phase more than it
-is.
-
-## Press releases
-
-Adapted from upstream press-release-writer (see PROVENANCE.md). A press
-release is a news document, not an advertisement — if there is no genuine
-news, say so and stop.
-
-Structure (inverted pyramid — every paragraph removable from the bottom):
-
-```
-FOR IMMEDIATE RELEASE / EMBARGO [date, tz]
-Headline — sentence case, the core news
-Dateline — Lead: the 5W1H in 25–35 words (count them)
-Body 1 — expand the lead; primary data point
-Quote — a named person saying something with content, not enthusiasm
-Body 2 — context; availability; how to try it
-Boilerplate — about musterd / SandRise Studio, ≤100 words, factual
-Media contact
-###
-```
-
-Quality bar before it leaves the building:
-
-- Lead answers who/what/when/where/why/how in 25–35 words.
-- 300–500 words total; third person outside quotes; attribution verb is
-  "said"; at least one concrete number; no banned vocabulary (see Voice).
-- Boilerplate matches positioning.md's brand architecture: SandRise Studio is
-  "from the makers of", never the product brand.
-
-## UX-copy specs (handoff to designer)
-
-Adapted from upstream ux-writing skill (see PROVENANCE.md). Four standards for
-every string: **purposeful** (helps the user's task), **concise** (no word
-that isn't working), **conversational** (how a person says it), **clear**
-(no ambiguity about what happens next).
-
-- Error messages: what happened, why (if known), what to do next — in that
-  order. Never blame the user; never a bare "something went wrong" when the
-  cause is known.
-- Empty states: say what will appear here and how to cause it. The CLI's
-  registered example: `inbox empty — nobody's mustered anything yet`.
-- Buttons/links: verb-first, outcome-named.
-- Act meaning never relies on color alone; the act name is always written
-  (PRODUCT.md accessibility).
-
-Handoff format: a table of `surface / state / exact string / notes
-(constraints, char limits, glossary terms used)`. The spec is exact — the
-designer implements it verbatim or bounces it back; nobody paraphrases copy
-in transit.
-
-## Marketing assets
-
-- Marks: only the wordmark, the mark (ADR 497, which replaced the ADR 154
-  chip) and the Nameplate Tile (ADR 154, face by ADR 497); sources in
-  `docs/design/assets/`. Never a lone capital M, gradients on the mark, or a
-  new mascot.
-- One accent: mustard `#E1AD01` on zinc neutrals. Web/marketing surfaces may
-  go maximal per brand.md §7; the words stay plain even when the pixels
-  don't.
-- Social cards: the live reference is https://musterd.io's og:image; keep new
-  cards consistent with it.
-- Screenshots: real product output only — never mock terminal output that the
-  CLI doesn't actually produce.
+| You are writing or making | Open first |
+| --- | --- |
+| Any public prose | `references/prose.md`, then `references/examples.md` |
+| Docs, a README, release notes, a changelog, an ADR clarity audit | `references/docs-and-a11y.md` |
+| An announcement, launch, Show HN, press release or pitch, social post, landing page | `references/launch-and-press.md` |
+| A positioning proposal, messaging, a GTM plan, a landscape entry, pricing advice | `references/positioning-and-gtm.md` |
+| Any claim about users, an interview guide, a synthesis, a PMF read | `references/research.md` |
+| A chart, graph, number tile or diagram | `references/charts.md` |
+| A pitch deck or script, an investor email or update, an accelerator or credit application | `references/fundraising.md` |
+| A UI-copy spec for the designer | `references/ux-copy.md` |
 
 ## Definition of done for public copy
 
-- [ ] Sweeps run (all five, in order)
-- [ ] Glossary terms used exactly; no synonyms introduced
-- [ ] Every claim specific and checkable; roadmap marked "not yet"
-- [ ] Voice check against brand.md §4 (read it, don't recall it)
-- [ ] `pnpm format:check` passes if the copy lives in-repo
-- [ ] For high-stakes copy (launch post, press release, pricing page): a
-      second seat reads it before it ships
+- [ ] The reference for this craft was opened and followed
+- [ ] Six sweeps run, in order
+- [ ] Glossary terms exact; no synonyms introduced
+- [ ] Every claim links its PR, doc or ADR; every number has a ledger row, re-read today
+- [ ] No hard rule broken; roadmap marked "not yet"
+- [ ] Charts rendered and looked at in both themes and at phone width
+- [ ] `pnpm format:check` passes if the copy lives in the repo
+- [ ] High-stakes copy (launch post, press release, pricing page, deck, application)
+      read by a second seat before it ships

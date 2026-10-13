@@ -1,0 +1,84 @@
+# Charts: form, honesty, contrast, render and look
+
+Open for any chart, graph, number tile, diagram or figure that carries a number.
+
+## 1. Form: pick the chart from the question
+
+Name the relationship first, then the chart. The FT Visual Vocabulary groups
+charts into nine families: deviation, correlation, ranking, distribution, change
+over time, magnitude, part-to-whole, spatial, flow
+([FT chart-doctor](https://github.com/Financial-Times/chart-doctor/tree/main/visual-vocabulary)).
+
+Within a family, use the encoding people read most accurately. Position on a
+common scale beats length, which beats angle and area, with color last
+([Cleveland and McGill 1984](https://doi.org/10.1080/01621459.1984.10478080);
+replicated by [Heer and Bostock 2010](https://homes.cs.washington.edu/~jheer/files/2010-MTurk-CHI.pdf)).
+
+- One or two numbers: a number tile with its label and source. No chart.
+- A before and after: two bars on a zero baseline, or the two numbers side by
+  side.
+- Performance and latency: show the distribution (dots, a box or percentiles).
+  Mean bars hide the spread ([Weissgerber et al., PLOS Biology](http://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.1002128)).
+- Seven series at most; fewer is better.
+
+## 2. Honesty gate
+
+- Bars and areas start at zero. A line chart may start above zero only when the
+  effect justifies it, and the axis says so. Truncation inflates the perceived
+  effect even when it is visibly marked
+  ([Correll, Bertini and Franconeri, CHI 2020](https://www.tableau.com/research/publications/truncating-y-axis-threat-or-menace)).
+- One y-axis. No dual axes.
+- Every headline number carries its denominator, its window and n.
+- A source line under every chart: the command, query or SHA, and the date read.
+  The same number has a ledger row (hard rule 4).
+- The title states the takeaway, and the takeaway is what the data shows.
+- Label lines and bars directly; use a legend only when direct labels cannot fit.
+
+The Urban Institute's style guide codifies most of these and is Apache-2.0
+([Urban Institute](https://urbaninstitute.github.io/graphics-styleguide/)).
+
+## 3. Brand tokens that pass contrast
+
+One accent: color the one series the title is about, grey the rest. The catch: mustard
+`#E1AD01` is 2.06:1 on white, below the 3:1 that WCAG 2.2 requires for chart marks
+(SC 1.4.11, [W3C](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)).
+Ratios computed 2026-10-13 against brand.md's ramp:
+
+| Use | Light theme (on `#FFFFFF`) | Dark theme (on zinc-900 `#18181B`) |
+| --- | --- | --- |
+| Highlight mark | mustard-700 `#B8860B` (3.25:1), or `#E1AD01` with a 1px dark outline | mustard-500 `#E1AD01` (8.59:1) or mustard-300 `#EFC94C` (11.08:1) |
+| Accent text, value labels | mustard-900 `#7A5A06` (6.38:1) | mustard-300 `#EFC94C` |
+| Context series | zinc-300/400 with direct labels (zinc-400 is 2.56:1, so label it) | zinc-500 |
+| Never | `#E1AD01` as a bare mark or as text on white; rainbow or jet scales; meaning by hue alone | mustard-900 as text (2.78:1) |
+
+SC 1.4.11 does not apply when every value is also shown as a label or in a table,
+so direct labels serve honesty and accessibility at once. Make them the default.
+
+## 4. Render and look
+
+LLM-generated charts fail in known ways: fields mapped to the wrong axis,
+overlapping labels, poor scales, missing legends ([VisEval, IEEE VIS 2024](https://arxiv.org/pdf/2407.00981)).
+Vision models also misjudge whether a chart misleads
+([arXiv 2502.20503](https://arxiv.org/pdf/2502.20503v2)). So:
+
+1. Compute every coordinate in code from the source data. Never type a data point
+   by hand.
+2. Assert n, min, max and sum in that code against the source.
+3. Render to an image in the light theme, the dark theme and at phone width.
+4. Look at each image yourself.
+5. Reconcile every number in the title, labels, alt text and surrounding copy
+   with the data.
+
+## 5. Accessibility deliverables
+
+Each chart ships with a short alt text (what it shows and the takeaway, about one
+sentence) and either a long description or the data as a table next to it. That
+two-part pattern is W3C's for complex images
+([W3C complex images](https://www.w3.org/WAI/tutorials/images/complex/)).
+In SVG, give the figure `role="img"` with `<title>` and `<desc>`.
+
+## Not yet
+
+A chart library (Observable Plot or Vega-Lite) and a color library (culori) wait
+for the comms-skill-v2 tooling ADR (lane `01M4V98KAW`). Until then, hand-written
+SVG or HTML from computed data, as `docs/demo/pitch/deck.html` does.
