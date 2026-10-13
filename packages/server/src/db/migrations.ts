@@ -2069,5 +2069,38 @@ export function runMigrations(db: Database, ladder: readonly Migration[] = MIGRA
     }
     applied = m.version;
   }
+  analyzeTablesMissingIndexStats(db);
   return applied;
+}
+
+/**
+ * Re-`ANALYZE` every table that has planner statistics but is missing an index from them, and
+ * return the tables it analyzed (lane 01M4VGRX57).
+ *
+ * SQLite plans from `sqlite_stat1` once a table has any rows there, and an index with no row of its
+ * own gets default estimates that look far more selective than the measured ones. So an index added
+ * after a table was last analyzed can win plans it should lose. That happened on the revive hub:
+ * `messages` was last analyzed at 17k rows, v93 added `idx_messages_thread_act_ts` without an
+ * ANALYZE, and the open-directed ledger's "answered by anyone" check began to walk every
+ * accept/decline in the team through that index instead of seeking `idx_messages_in_reply_to`.
+ * Every wake-lease poll ran that query: 3.2 s warm on the hub's 25k messages, 0.026 s once analyzed.
+ *
+ * Done here, after every ladder run, rather than as an `ANALYZE` in each index migration, so a
+ * migration that forgets it cannot leave the trap. A table with no statistics stays as it is: the
+ * planner treats all of its indexes alike, so a new one cannot outrank the rest. On a store whose
+ * statistics already cover every index this is one read of `sqlite_master`.
+ */
+export function analyzeTablesMissingIndexStats(db: Database): string[] {
+  if (!tableExists(db, 'sqlite_stat1')) return [];
+  const tables = db
+    .prepare<[], string>(
+      `SELECT DISTINCT m.tbl_name FROM sqlite_master m
+        WHERE m.type = 'index' AND m.name NOT LIKE 'sqlite_autoindex_%'
+          AND m.tbl_name IN (SELECT tbl FROM sqlite_stat1)
+          AND NOT EXISTS (SELECT 1 FROM sqlite_stat1 s WHERE s.idx = m.name)`,
+    )
+    .pluck()
+    .all();
+  for (const table of tables) db.exec(`ANALYZE "${table.replaceAll('"', '""')}"`);
+  return tables;
 }
