@@ -434,6 +434,16 @@ export function planInboxCheck(
   };
 }
 
+/**
+ * A folded or digested row in the STRUCTURED reply: the same line the text form renders. Claude
+ * Code shows the model the structured content, so a bare id here was a row the agent paid for,
+ * could not read, and had marked read anyway (lane 01M4VR8FSP). The line is what the budget costs
+ * the row at, so the reply size does not change.
+ */
+export function structuredLine(env: Envelope): string {
+  return formatDigestLine(env).trim();
+}
+
 /** One line per digested row: enough to recognise it and to go and fetch it, nothing more. */
 export function formatDigestLine(env: Envelope): string {
   const to =
@@ -764,10 +774,10 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
             elided_unread: plan.elided,
             // The rows the cursor walked over in digest form — ids only; the lines are in `text`.
             ...(plan.digested.length > 0
-              ? { digested_unread: plan.digested.map((m) => m.id) }
+              ? { digested_unread: plan.digested.map(structuredLine) }
               : {}),
             // The ambient rows folded to a line (ADR 433) — ids only, same as the digest.
-            ...(plan.folded.length > 0 ? { folded_ambient: plan.folded.map((m) => m.id) } : {}),
+            ...(plan.folded.length > 0 ? { folded_ambient: plan.folded.map(structuredLine) } : {}),
             messages: messages.map((m) => ({
               ...structuredRow(m),
               // The topic on the message itself, so a structured reader can tell a turn from a
