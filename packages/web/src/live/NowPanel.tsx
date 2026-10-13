@@ -1,6 +1,12 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { useState } from 'react';
-import { waitingFor, type Briefing, type GoalMotion, type ShippedGroup } from './briefing';
+import {
+  waitingFor,
+  type Briefing,
+  type GoalMotion,
+  type GoalStalled,
+  type ShippedGroup,
+} from './briefing';
 import { coarseAge, rosterIndex } from './format';
 import { MemberFace } from './MemberFace';
 
@@ -9,13 +15,27 @@ import { MemberFace } from './MemberFace';
  * having forgotten yesterday. What waits on **you**, the goals that are **moving** — how far along,
  * what is moving, whose faces are on them — and what landed **by who landed it**.
  *
- * Colour on this card means something, and comes from three places only: the members' own faces, the
- * mustard band for what waits on you (and the goal bars), and danger ink on "blocked". nick turned
- * down a glow, a rainbow, a legend and initials on the way here; the spec keeps the list.
+ * Colour on this card means something, and comes from four places only: the members' own faces, the
+ * mustard band for what waits on you (and the goal bars), danger ink on "blocked", and warn ink on a
+ * stopped goal's line (lane 01M4V754ZD, 2026-10-13). nick turned down a glow, a rainbow, a legend and
+ * initials on the way here; the spec keeps the list.
  */
 
 /** Rows shown before "N more" in the overlay. Full view shows everything. */
-export const CAP = { goals: 4, people: 4, faces: 3 } as const;
+export const CAP = { goals: 4, stopped: 3, people: 4, faces: 3 } as const;
+
+const days = (ms: number) => `${Math.floor(ms / 86_400_000)}d`;
+
+/**
+ * The line under a stopped goal (lane 01M4V754ZD): "nothing moved in 9d · 3 waiting, nobody's".
+ * A quiet goal leads with how long; a moving goal with orphans says how many wait and how old the
+ * oldest is. Plain words, no verdict — the row says what the board shows, not what to do about it.
+ */
+export function stoppedLine(g: GoalStalled): string {
+  const orphans = g.orphans ? `${g.orphans} waiting, nobody's` : '';
+  if (g.quiet) return [`nothing moved in ${days(g.idleMs)}`, orphans].filter(Boolean).join(' · ');
+  return [orphans, g.oldest ? `oldest ${days(g.oldest.idleMs)}` : ''].filter(Boolean).join(' · ');
+}
 
 /** "yesterday" · "Friday" — where the shipped list starts, said the way a person says it. */
 export function sinceLabel(since: number, now: number): string {
@@ -77,10 +97,13 @@ export function NowCard({
 }: NowCardProps) {
   const idx = rosterIndex(roster as MemberSummary[]);
   const [allGoals, setAllGoals] = useState(false);
+  const [allStopped, setAllStopped] = useState(false);
   const [allPeople, setAllPeople] = useState(false);
   const { mine, others } = waitingFor(brief, viewer);
   const top = mine[0];
   const goals = full || allGoals ? brief.goalsInMotion : brief.goalsInMotion.slice(0, CAP.goals);
+  const stopped =
+    full || allStopped ? brief.goalsStalled : brief.goalsStalled.slice(0, CAP.stopped);
   const people = full || allPeople ? brief.shippedBy : brief.shippedBy.slice(0, CAP.people);
 
   return (
@@ -122,6 +145,26 @@ export function NowCard({
             <button type="button" className="nowc-more" onClick={() => setAllGoals(true)}>
               {brief.goalsInMotion.length - CAP.goals} more goals
             </button>
+          )}
+          {/* Stopped plans (lane 01M4V754ZD): a goal whose later increments nobody is building used
+              to vanish from this card the moment nothing in it was moving — which is exactly when
+              someone needs to see it. Absent when nothing is stalled, so a healthy board stays quiet. */}
+          {brief.goalsStalled.length > 0 && (
+            <>
+              <h3 className="nowc-h" id="nowc-stopped">
+                Stopped
+              </h3>
+              <ul className="nowc-list" aria-labelledby="nowc-stopped">
+                {stopped.map((g) => (
+                  <StopRow key={g.key} g={g} onOpen={onOpenGoal} />
+                ))}
+              </ul>
+              {!full && !allStopped && brief.goalsStalled.length > CAP.stopped && (
+                <button type="button" className="nowc-more" onClick={() => setAllStopped(true)}>
+                  {brief.goalsStalled.length - CAP.stopped} more stopped
+                </button>
+              )}
+            </>
           )}
         </section>
 
@@ -206,6 +249,35 @@ function GoalRow({
           {states}
           {states && g.blocked ? ' · ' : ''}
           {g.blocked > 0 && <span className="nowc-blocked">{g.blocked} blocked</span>}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** A stopped goal: the motion row's grammar without faces or states — the bar, the count, the line. */
+function StopRow({ g, onOpen }: { g: GoalStalled; onOpen: (goalId: string | null) => void }) {
+  const pct = g.total ? Math.round((100 * g.done) / g.total) : 0;
+  const line = stoppedLine(g);
+  const label = [g.title, `${g.done} of ${g.total} done`, line].join(', ');
+  return (
+    <li>
+      <button
+        type="button"
+        className="nowc-goal nowc-goal--stopped"
+        aria-label={label}
+        title={g.oldest?.title ?? g.title}
+        onClick={() => onOpen(g.goalId)}
+      >
+        <span className="nowc-goal__name">{g.name}</span>
+        <span className="nowc-bar" aria-hidden="true">
+          <i style={{ width: `${pct}%` }} />
+        </span>
+        <span className="nowc-goal__of" aria-hidden="true">
+          {g.done} of {g.total} done
+        </span>
+        <span className="nowc-goal__state" aria-hidden="true">
+          <span className="nowc-stop">{line}</span>
         </span>
       </button>
     </li>

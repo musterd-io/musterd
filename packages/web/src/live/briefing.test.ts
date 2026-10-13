@@ -1,7 +1,20 @@
-import type { LaneBoard, MemberSummary } from '@musterd/protocol';
+import {
+  GOAL_STALE_DAYS as PROTOCOL_STALE_DAYS,
+  LANE_TERMINAL_STATES as PROTOCOL_TERMINAL,
+  type LaneBoard,
+  type MemberSummary,
+} from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { AskView } from './asks';
-import { briefing, briefingSince, needsHeading, SHIPPED_WINDOW_MS, waitingFor } from './briefing';
+import {
+  briefing,
+  briefingSince,
+  GOAL_STALE_DAYS,
+  LANE_TERMINAL_STATES,
+  needsHeading,
+  SHIPPED_WINDOW_MS,
+  waitingFor,
+} from './briefing';
 
 const NOW = 1_800_000_000_000;
 const lane = (id: string, state: string, over: Record<string, unknown> = {}) => ({
@@ -351,5 +364,85 @@ describe('waitingFor', () => {
   it('gives a viewer who is not signed in nothing of their own', () => {
     const b = run({ asks: [ask('1', 'open', 'approve', 9_000, 'nick')] });
     expect(waitingFor(b, null)).toEqual({ mine: [], others: [{ who: 'nick', n: 1 }] });
+  });
+});
+
+describe('goalsStalled', () => {
+  it('uses the protocol\'s threshold and terminal states, copied so the bundle stays light', () => {
+    expect(GOAL_STALE_DAYS).toBe(PROTOCOL_STALE_DAYS);
+    expect([...LANE_TERMINAL_STATES].sort()).toEqual([...PROTOCOL_TERMINAL].sort());
+  });
+
+  // The lane this exists for (nick, 2026-10-13): a plan's early increments get built, the later
+  // ones sit open and unowned, and the goal reads in-flight forever. Two signals, both counted:
+  // quiet (the server's stale_goals rule, ADR 487 §5.4) and orphans (open, nobody's, past the
+  // same threshold).
+  const DAY = 86_400_000;
+  const GOALS = [
+    { id: 'g1', title: 'Launch — musterd ships publicly' },
+    { id: 'g2', title: 'Office liveliness — the floor is alive' },
+  ];
+
+  it('names a goal quiet when every live lane went GOAL_STALE_DAYS untouched, oldest first', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'open', { goal_id: 'g2', owner_seat: null, updated_at: NOW - 9 * DAY }),
+        lane('b', 'claimed', { goal_id: 'g2', owner_seat: 'ann', updated_at: NOW - 8 * DAY }),
+        lane('c', 'done', { goal_id: 'g2', updated_at: NOW - 10 * DAY }),
+        lane('d', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 12 * DAY }),
+      ),
+    });
+    expect(b.goalsStalled.map((g) => g.goalId)).toEqual(['g1', 'g2']);
+    const g = b.goalsStalled[1]!;
+    expect(g.name).toBe('Office liveliness');
+    expect(g.quiet).toBe(true);
+    expect(g.idleMs).toBe(8 * DAY);
+    expect([g.done, g.total]).toEqual([1, 3]);
+    expect(g.oldest).toEqual({ title: 'title a', idleMs: 9 * DAY });
+  });
+
+  it('names a moving goal too, when later lanes sit open and unowned past the threshold', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'active', { goal_id: 'g1', owner_seat: 'ann', updated_at: NOW - 60_000 }),
+        lane('b', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 9 * DAY }),
+        lane('c', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 20 * DAY }),
+        lane('d', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 2 * DAY }),
+      ),
+    });
+    expect(b.goalsInMotion.map((g) => g.goalId)).toEqual(['g1']);
+    const g = b.goalsStalled.find((x) => x.goalId === 'g1')!;
+    expect(g.quiet).toBe(false);
+    expect(g.orphans).toBe(2);
+    expect(g.oldest).toEqual({ title: 'title c', idleMs: 20 * DAY });
+  });
+
+  it('leaves out a goal whose lanes were touched inside the threshold, and one with nothing live', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 6 * DAY }),
+        lane('b', 'claimed', { goal_id: 'g1', owner_seat: 'ann', updated_at: NOW - 60_000 }),
+        lane('c', 'done', { goal_id: 'g2', updated_at: NOW - 30 * DAY }),
+        lane('d', 'abandoned', { goal_id: 'g2', updated_at: NOW - 30 * DAY }),
+      ),
+    });
+    expect(b.goalsStalled).toEqual([]);
+  });
+
+  it('ignores parked lanes and the goalless, and counts the threshold inclusively', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'parked', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 30 * DAY }),
+        lane('b', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 7 * DAY }),
+        lane('c', 'open', { goal_id: null, owner_seat: null, updated_at: NOW - 30 * DAY }),
+      ),
+    });
+    expect(b.goalsStalled.map((g) => [g.goalId, g.quiet, g.orphans, g.idleMs])).toEqual([
+      ['g1', true, 1, 7 * DAY],
+    ]);
   });
 });

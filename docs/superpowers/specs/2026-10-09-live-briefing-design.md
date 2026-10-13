@@ -117,7 +117,16 @@ rounds followed. What he rejected is as useful as what he approved:
 the **members' own faces** (each person drawn as the office draws them, so the hues belong to people),
 **mustard** (the one accent: the "waiting on you" band and the goal bars) and **danger ink** (only on
 "blocked"). Everything else is the `/live` paper and ink, in the three Recursive cuts. No gradient, no
-pulse, no pill, no legend.
+pulse, no pill, no legend. _(2026-10-13, lane `01M4V754ZD36MBYBACTD54G60D`, nick: a fourth place —
+**warn ink** on the line under a **stopped** goal. "Goals in motion" lists only goals with something
+working, in review or blocked, so a plan whose later increments nobody is building vanished from the
+card exactly when someone needed to see it. A "Stopped" list follows the goals in motion, absent when
+nothing is stalled: one row per goal that is **quiet** — every live, unparked lane untouched for
+`GOAL_STALE_DAYS`, the server's `stale_goals` rule, ADR 487 §5.4 — or that has **orphans**, open
+unowned lanes that old while the rest of the goal moves. The row is the motion row without faces or
+states: name, bar, "d of n done", and the line "nothing moved in 9d · 3 waiting, nobody's"; hover
+names the oldest untouched lane, click drills the board into the goal. Capped at three with "N more
+stopped". The office's own tell for a stopped goal is a second increment, after this one is seen.)_
 
 **Shape.** One card, `min(920px, 100vw − 48px)` wide, over the room, placed just under the room's
 asks strip and huddle rail (measured, since the rail grows as huddles open — a fixed offset covered the

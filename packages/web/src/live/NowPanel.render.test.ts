@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AskView } from './asks';
 import { briefing } from './briefing';
-import { goalStates, NowCard, othersLine, sinceLabel } from './NowPanel';
+import { goalStates, NowCard, othersLine, sinceLabel, stoppedLine } from './NowPanel';
 
 const NOW = new Date('2026-10-08T09:00:00').getTime(); // a Thursday morning
 const SINCE = new Date('2026-10-07T00:00:00').getTime();
@@ -140,5 +140,81 @@ describe('the words', () => {
     expect(sinceLabel(new Date('2026-10-02T00:00:00').getTime(), new Date('2026-10-05T09:00:00').getTime())).toBe(
       'Friday',
     );
+  });
+});
+
+describe('Stopped', () => {
+  // Lane 01M4V754ZD (nick, 2026-10-13): a plan whose later increments nobody is building shows on
+  // the card, in its own section, instead of vanishing because nothing in it is "in motion".
+  const DAY = 86_400_000;
+  const goals = [
+    { id: 'g1', title: 'Launch — ships publicly' },
+    { id: 'g2', title: 'Office liveliness — the floor is alive' },
+  ];
+  const renderWith = (lanes: unknown[], full = false) =>
+    renderToStaticMarkup(
+      createElement(NowCard, {
+        brief: make(lanes, [], { goals }),
+        roster,
+        viewer: 'nick',
+        now: NOW,
+        since: SINCE,
+        full,
+        onOpenAsk: () => {},
+        onOpenLane: () => {},
+        onOpenGoal: () => {},
+        onLight: () => {},
+      }),
+    );
+
+  it('draws a stopped goal as a row in its own section, naming the oldest lane on hover', () => {
+    const html = renderWith([
+      lane('a', 'open', { goal_id: 'g2', owner_seat: null, updated_at: NOW - 9 * DAY }),
+      lane('b', 'done', { goal_id: 'g2', updated_at: NOW - 10 * DAY }),
+    ]);
+    expect(html).toContain('>Stopped<');
+    expect(html).toContain('class="nowc-goal nowc-goal--stopped"');
+    expect(html).toContain('>Office liveliness<');
+    expect(html).toContain('1 of 2 done');
+    expect(html).toContain('<span class="nowc-stop">nothing moved in 9d · 1 waiting, nobody&#x27;s</span>');
+    expect(html).toContain('title="title a"');
+  });
+
+  it('shows a goal in motion and stopped at once, in both sections', () => {
+    const html = renderWith([
+      lane('a', 'active', { goal_id: 'g1' }),
+      lane('b', 'open', { goal_id: 'g1', owner_seat: null, updated_at: NOW - 20 * DAY }),
+    ]);
+    expect(html).toContain('Goals in motion');
+    expect(html).toContain('>Stopped<');
+    expect(html.match(/>Launch</g)).toHaveLength(2);
+    expect(html).toContain('<span class="nowc-stop">1 waiting, nobody&#x27;s · oldest 20d</span>');
+  });
+
+  it('has no Stopped section when nothing is stalled', () => {
+    expect(renderWith([lane('a', 'active', { goal_id: 'g1' })])).not.toContain('>Stopped<');
+  });
+
+  it('shows three and says how many more', () => {
+    const lanes = Array.from({ length: 5 }, (_, i) =>
+      lane(`l${i}`, 'open', { goal_id: `g${i}`, owner_seat: null, updated_at: NOW - (8 + i) * DAY }),
+    );
+    const html = renderWith(lanes);
+    expect(html.match(/nowc-goal--stopped"/g)).toHaveLength(3);
+    expect(html).toContain('2 more stopped');
+    expect(renderWith(lanes, true).match(/nowc-goal--stopped"/g)).toHaveLength(5);
+  });
+
+  it('says the line plainly for each shape', () => {
+    const base = { key: 'k', goalId: 'g', name: 'G', title: 'G', done: 0, total: 1, oldest: null };
+    expect(stoppedLine({ ...base, quiet: true, idleMs: 8 * DAY, orphans: 0 })).toBe(
+      'nothing moved in 8d',
+    );
+    expect(stoppedLine({ ...base, quiet: true, idleMs: 8 * DAY, orphans: 2 })).toBe(
+      "nothing moved in 8d · 2 waiting, nobody's",
+    );
+    expect(
+      stoppedLine({ ...base, quiet: false, idleMs: 0, orphans: 1, oldest: { title: 't', idleMs: 20 * DAY } }),
+    ).toBe("1 waiting, nobody's · oldest 20d");
   });
 });

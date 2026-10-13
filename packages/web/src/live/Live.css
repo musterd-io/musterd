@@ -7674,6 +7674,33 @@
   font-weight: 600;
   color: var(--lc-danger-ink);
 }
+/* A stopped goal (lane 01M4V754ZD): no faces, so the bar takes their column; the bar's fill goes
+   to the quiet surface ink because nothing is filling it, and the line wears the warn INK token —
+   never the fill (--lc-warn is ~1.2:1 on paper by design; see the token pair's note). */
+.nowc-goal--stopped {
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  grid-template-areas:
+    'name bar of'
+    'state state state';
+}
+@container (max-width: 560px) {
+  .nowc-goal--stopped {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name name'
+      'bar of'
+      'state state';
+  }
+}
+/* The same mustard, faded: measured on the first capture, a darker ink fill read as HEAVIER than
+   the moving goals' bars — the opposite of "stopped". */
+.nowc-goal--stopped .nowc-bar > i {
+  opacity: 0.4;
+}
+.nowc-stop {
+  font-weight: 600;
+  color: var(--lc-warn-ink);
+}
 .nowc-shiprow {
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
