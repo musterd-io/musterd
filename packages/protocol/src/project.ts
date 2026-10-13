@@ -136,9 +136,14 @@ interface GitContext {
 }
 
 function gitContext(cwd: string): GitContext | null {
-  const top = gitToplevel(cwd);
+  // One git spawn, not two: this runs on the MCP adapter's startup path, where every spawn is paid
+  // before the harness gets an answer (lane 01M4S9SCT5). rev-parse prints one line per argument, in
+  // order. An unborn HEAD (no commit yet) fails the whole command, so fall back to the toplevel alone
+  // and keep the label ladder exactly as it was: no branch, then the subpath.
+  const both = git(['rev-parse', '--show-toplevel', '--abbrev-ref', 'HEAD'], cwd)?.split('\n');
+  const top = both?.[0] || gitToplevel(cwd);
   if (!top) return null;
-  const branchRaw = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  const branchRaw = both?.[1]?.trim();
   const branch = branchRaw && branchRaw !== 'HEAD' ? branchRaw : '';
   const subpath = relative(top, cwd);
   return { branch, subpath: subpath === '' || subpath.startsWith('..') ? '' : subpath };

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PROJECT,
   repoProject,
@@ -10,6 +10,12 @@ import {
   resolveWorkspace,
   resolveWorkspaceKey,
 } from './project.js';
+
+// A pass-through spy, so a test can count the git processes a resolver spawns (lane 01M4S9SCT5).
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+});
 
 function git(args: string[], cwd: string): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -172,6 +178,56 @@ describe('resolveWorkspace (where-on-attach label, ADR 014 — moved here from @
       g('checkout', '-b', 'my-branch');
       g('commit', '--allow-empty', '-m', 'seed');
       expect(resolveWorkspace({}, dir)).toBe(`${basename(dir)}@my-branch`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  /** A throwaway repo; `seed` makes a first commit so HEAD is born. */
+  function repoIn(seed: boolean): { dir: string; g: (...args: string[]) => void } {
+    // The real path: macOS tmpdir() sits behind /var -> /private/var, and git reports the toplevel
+    // resolved, so a symlinked cwd would read as outside the tree and lose its subpath.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'musterd-ws-')));
+    const g = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], {
+        cwd: dir,
+        stdio: 'ignore',
+      });
+    g('init');
+    g('checkout', '-b', 'my-branch');
+    if (seed) g('commit', '--allow-empty', '-m', 'seed');
+    return { dir, g };
+  }
+
+  it('asks git once for the folder@branch label (the MCP startup path)', () => {
+    const { dir } = repoIn(true);
+    try {
+      const spy = vi.mocked(execFileSync);
+      const before = spy.mock.calls.length;
+      expect(resolveWorkspace({}, dir)).toBe(`${basename(dir)}@my-branch`);
+      expect(spy.mock.calls.length - before).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a detached HEAD names no branch, so the subpath qualifies instead', () => {
+    const { dir, g } = repoIn(true);
+    try {
+      g('checkout', '--detach');
+      mkdirSync(join(dir, 'pkg'));
+      expect(resolveWorkspace({}, join(dir, 'pkg'))).toBe('pkg@pkg');
+      expect(resolveWorkspace({}, dir)).toBe(basename(dir));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an unborn HEAD (no commit yet) still finds the toplevel, so the subpath qualifies', () => {
+    const { dir } = repoIn(false);
+    try {
+      mkdirSync(join(dir, 'pkg'));
+      expect(resolveWorkspace({}, join(dir, 'pkg'))).toBe('pkg@pkg');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
