@@ -1,5 +1,5 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
@@ -8,6 +8,7 @@ import type { OfficeAsk, OfficeData, OfficeHandle } from './office-scene/types';
 import { askIsLoud, type AskView } from './asks';
 import { SETTLED_MS } from './askPhrase';
 import { actToEvent, speechEventFor } from './office-scene/mapping';
+import { replayEvents } from './office-scene/replay';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
 import type { RoomEntry } from './workingOn';
@@ -26,6 +27,19 @@ const LazyOfficeKey = lazy(() => import('./OfficeKey').then((m) => ({ default: m
  *
  * Surface/model/work fields feed the floating nameplates (presence-chrome design, 2026-07-30).
  */
+/** Replay on open fires once, on the first envelopes the mounted scene sees (office-scene/replay). */
+interface ReplayOnce {
+  done: boolean;
+  envelopes: Envelope[];
+  liveIds: ReadonlySet<string>;
+}
+function replayOnce(h: OfficeHandle | null, ref: MutableRefObject<ReplayOnce>): void {
+  const r = ref.current;
+  if (!h || r.done || r.envelopes.length === 0) return;
+  r.done = true;
+  h.replay(replayEvents(r.envelopes, r.liveIds, Date.now()));
+}
+
 function computeData(
   teamName: string,
   teamWorkingHours: WorkingHours | null,
@@ -230,6 +244,15 @@ export function OfficeScene({
   // Latest-value refs for the mount effect below, which subscribes ONCE and must not re-run when a
   // prop identity changes (re-running it would tear down and rebuild the whole canvas scene).
   //
+  // Replay on open (nick, 2026-10-12): the last ten minutes' lane walks, once, when the scene and the
+  // first backfill are both here — whichever lands second fires it. Declared before the mount effect, which reads the ref. /broadcast replays too: a stream
+  // that opens on a still room is the same problem.
+  const replayRef = useRef<ReplayOnce>({ done: false, envelopes, liveIds });
+  useEffect(() => {
+    replayRef.current = { ...replayRef.current, envelopes, liveIds };
+    replayOnce(handleRef.current, replayRef);
+  }, [envelopes, liveIds]);
+
   // Written in an effect rather than during render: a render must be pure, and React may render a
   // component and throw the result away. This effect is declared BEFORE the mount effect on purpose
   // — effects run in declaration order, so the refs are populated by the time the scene mounts and
@@ -293,10 +316,13 @@ export function OfficeScene({
         handle.update(dataRef.current);
         handle.setSuspended(collapsedRef.current); // mounted while collapsed → start parked
         handleRef.current = handle;
+        replayOnce(handle, replayRef);
         onReadyRef.current?.(handle);
       })
-      .catch(() => {
-        /* canvas unavailable — the warm gradient + labels stand in. */
+      .catch((err: unknown) => {
+        /* canvas unavailable — the warm gradient + labels stand in. A thrown update/replay lands
+           here too and used to vanish; say so where a developer can see it. */
+        if (import.meta.env.DEV) console.error('office mount failed', err);
       });
     return () => {
       disposed = true;

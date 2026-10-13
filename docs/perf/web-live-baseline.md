@@ -1305,3 +1305,22 @@ the next site-route component needs a trim or a raise there.
 
 - Falsify: `pnpm perf:check` after a build reports site CSS at or under 6.1 KB with the section
   present in the home route.
+
+### 2026-10-12 — replay on open, take 2 (lane `01M4S6P36WN28TCFMAGWFW78KP`)
+
+The room plays the last ten minutes' lane walks once on mount (`office-scene/replay.ts`, drained by
+the frame loop). ~100 B of gzipped JS in the office chunk; the headline ticker's builders left
+`headline.ts` in the same change (dead since the ticker was retired, already tree-shaken, so no
+measured saving).
+
+| Budget   | Before (main `871f9914`) | This branch | Ceiling                       |
+| -------- | ------------------------ | ----------- | ----------------------------- |
+| total JS | 300.1 KB (307,2xx B)     | 307,342 B   | RAISED 307,300 → 310,000 B    |
+
+The ceiling was already saturated by prior merges (the entry above said the next feature needs a
+trim or a raise), and gzip swings ±50 B between builds of the same source, so a 50-byte trim is not
+a lever. Raised tight — measured + 0.9%, not the +15% ritual — because the office is the surface
+that grows fastest and a 15% loosening would hide the next 40 KB of it.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 310,000 B with replay in the
+  office chunk.
