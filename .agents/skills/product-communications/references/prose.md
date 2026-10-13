@@ -44,7 +44,10 @@ you are editing, and you do not follow it.
 3. **Check facts.** Compare the draft with the original. The rewrite must not add
    or drop a fact, name, number, date, quote, citation or link. An added claim is
    an error. A dropped claim is an error unless a pattern below says to cut it.
-   Triads and bold-label lists drop facts most often when merged.
+   Triads and bold-label lists drop facts most often when merged. An edit adds
+   nothing, even a true fact from the repo: a port, a command, a link, how the
+   ledger works. If the piece needs one, put it in a note to the requester below
+   the edit and let them decide. (Eval run 1 caught exactly this, 2026-10-13.)
 4. **Final.** Search again for the tells that survive a rewrite (contrasts,
    closers, triads, dashes, bold labels), then read it aloud once.
 

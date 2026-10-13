@@ -50,6 +50,8 @@ skills, nor a policy for vendored third-party skill material.
    not taken. Skill content must defer to the repo's authoritative message sources (brand.md,
    PRODUCT.md, SPEC.md, the ADR 296 glossary) — imported material never becomes a competing
    message source (the role charter's constraint, now structural).
+   _(Amended 2026-10-13: the licences accepted for vendored material are listed in
+   [ADR 579](579-writing-tooling-and-licences.md) decision 4.)_
 
 ## Consequences
 

@@ -97,7 +97,7 @@
         "Classifies the page as mixed and names at least three of the four types present",
         "Cites line numbers or line ranges for its findings",
         "Flags the last line's hedge ('should probably', 'best practice')",
-        "Recommends moving the ADR 106 rationale to an explanation page",
+        "Moves the ADR 106 rationale to an explanation page, or links ADR 106 after checking it holds every point the page made; it does not simply delete the rationale",
         "Does not write new documentation content to fill gaps"
       ],
       "checks": {

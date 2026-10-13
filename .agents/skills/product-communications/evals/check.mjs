@@ -85,6 +85,15 @@ function proseOf(text) {
     .replace(/<[^>]+>/g, ' ');
 }
 
+/**
+ * The answer itself: everything above a `---` line whose next line starts with "Note" or
+ * "Notes" (a note to the requester). A plain `---` inside the answer does not split it.
+ */
+function answerOf(text) {
+  const m = /^---\s*\n\s*(?:\*\*)?notes?\b/im.exec(text);
+  return m ? text.slice(0, m.index) : text;
+}
+
 function count(text, word) {
   const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\w*`, 'gi');
   return (text.match(re) ?? []).length;
@@ -162,9 +171,7 @@ function specific(evalCase, text) {
     );
   }
   if (c.max_words) {
-    // The answer is what sits above the first `---` line; notes for a reviewer below it do not count.
-    const answer = text.split(/^---\s*$/m)[0];
-    const n = proseOf(answer).split(/\s+/).filter(Boolean).length;
+    const n = proseOf(text).split(/\s+/).filter(Boolean).length;
     add(`at most ${c.max_words} words`, n <= c.max_words, `${n} words`);
   }
   return results;
@@ -184,7 +191,7 @@ for (const e of evals) {
   for (const config of readdirSync(dir).sort()) {
     const out = join(dir, config, 'output.md');
     if (!existsSync(out)) continue;
-    const text = readFileSync(out, 'utf8');
+    const text = answerOf(readFileSync(out, 'utf8'));
     const checks = specific(e, text);
     const u = universal(text, notWords);
     writeFileSync(

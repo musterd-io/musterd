@@ -18,8 +18,8 @@ who did it and who accepted it. The code takes you to musterd.io.
 
 Most of you already run more than one agent. Claude Code in one terminal, Codex in another, the same
 repo. They build the same thing twice, undo each other, and forget everything when the window
-closes. On our own team, 37% of the code our agents wrote was thrown away before musterd. After,
-0.9%.
+closes. On our own team, 37% of the code our agents wrote never reached main before musterd.
+After, 0.9%.
 
 ## 3 · The best agent changes every month (0:25)
 
@@ -48,8 +48,8 @@ request sends her to check someone else's work. Then she saves where she left of
 
 ## 7 · Built by a team that runs on musterd (0:20)
 
-We build musterd with musterd. This is our office. So far the team has closed 1,704 lanes and sent
-1,714 asks to a member.
+We build musterd with musterd. This is our office. So far the team has closed 1,737 lanes and sent
+1,767 asks to a member.
 
 ## 8 · Watch it live (0:15)
 
@@ -98,16 +98,16 @@ musterd.io.
 | --- | --- | --- |
 | 1, 13 | Tagline and subhead | `docs/design/brand.md` §1; ADR 563 (the claim is the team; it replaced ADR 550's "musterd makes your agents accountable" on 2026-10-12, which this script carried until 2026-10-13) |
 | 1, 13 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
-| 2 | 37% thrown away before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure |
+| 2 | 37% never reached main before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure. The 37% is finding 001's P3 post-mortem, which ROADMAP calls "a forensic proxy, not a reproducible calibration gate", so the slide says "never reached main", which is what was measured (wording corrected 2026-10-13 from "thrown away"). Do not swap in the cookoff's 72% → 1.9%: it is held out of outbound copy until its re-run lands (`docs/wiki/how-musterd-got-here.md`) |
 | 3 | Models, harnesses, protocols change monthly | Slide text; no number is claimed |
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
-| 7 | 1,704 lanes closed, 1,714 asks to a member | `./counts.sh`, read 2026-10-13. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
+| 7 | 1,737 lanes closed, 1,767 asks to a member | `./counts.sh`, read 2026-10-13 (afternoon; the morning read was 1,704 and 1,714). Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
 | 8, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP |
 | 9 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
-| 9 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-13: 257 of 1,572 closed lanes that declared a scope touched only docs/, content/ or .md files (16%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
+| 9 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-13: 264 of 1,603 closed lanes that declared a scope touched only docs/, content/ or .md files (16%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
 | 10 | Install and connect | README quickstart; the slide gives the README's two lines, `brew tap SandRiseStudio/musterd` then `brew install musterd` (fixed 2026-10-13; the Demo Day slide had only `brew install musterd`, which fails without the tap). musterd.io's one-line form, `brew install SandRiseStudio/musterd/musterd`, wraps badly on the slide |
 | 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 10 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |

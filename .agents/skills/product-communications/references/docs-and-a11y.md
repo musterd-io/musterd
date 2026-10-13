@@ -60,6 +60,11 @@ Missing: <type> for <reader>, and what that reader cannot do today
 Recommendations, highest impact first
 ```
 
+Rationale on a how-to or reference page moves to an explanation page; it is
+never deleted. If an ADR already holds it, link the ADR from the page, and first
+check the ADR holds every point the page made. Anything the ADR lacks (a rejected
+alternative, a measured cost) moves with the link.
+
 Report audit findings to the page's owner. An ADR or architecture doc keeps its
 implementer as author (SKILL.md, Charter).
 
