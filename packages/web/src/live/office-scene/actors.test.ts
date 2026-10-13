@@ -1544,3 +1544,61 @@ describe('pinning a finished lane on the board', () => {
     expect(reach).toBe(true);
   });
 });
+
+/**
+ * The aisle meet (nick, 2026-10-12): two idle desk members get up, meet between their desks, talk a
+ * few seconds facing each other, and go back. Ambient — a real act sends both home.
+ */
+describe('meeting in the aisle', () => {
+  const run = () => {
+    const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return { actors, homes: new Map([...actors.poses()].map(([n, p]) => [n, { lx: p.lx, ly: p.ly }])) };
+  };
+
+  it('both leave home, stand near each other, exchange gestures, and both come back', () => {
+    const { actors, homes } = run();
+    expect(actors.aisleMeet('Ada', 'Bo', () => 0.5)).toBe(true);
+    let closest = Infinity;
+    let bothOut = false;
+    let gestured = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 6000) {
+      actors.step(0.05);
+      const a = actors.poses().get('Ada')!;
+      const b = actors.poses().get('Bo')!;
+      const d = Math.hypot(a.lx - b.lx, a.ly - b.ly);
+      closest = Math.min(closest, d);
+      const ha = homes.get('Ada')!;
+      const hb = homes.get('Bo')!;
+      if (Math.hypot(a.lx - ha.lx, a.ly - ha.ly) > 10 && Math.hypot(b.lx - hb.lx, b.ly - hb.ly) > 10) bothOut = true;
+      if (a.gesture && b.gesture && d < 60) gestured = true;
+    }
+    expect(actors.active()).toBe(false);
+    expect(bothOut).toBe(true);
+    expect(closest).toBeLessThan(60);
+    expect(closest).toBeGreaterThan(4); // facing each other, not inside each other
+    expect(gestured).toBe(true);
+    for (const n of ['Ada', 'Bo']) {
+      seated(actors, n);
+      const p = actors.poses().get(n)!;
+      expect(p.lx).toBeCloseTo(homes.get(n)!.lx, 5);
+      expect(p.ly).toBeCloseTo(homes.get(n)!.ly, 5);
+    }
+  });
+
+  it('is ambient: a real act for either sends both home, and a busy member refuses', () => {
+    const { actors } = run();
+    expect(actors.aisleMeet('Ada', 'Ada')).toBe(false);
+    expect(actors.aisleMeet('Ada', 'Nobody')).toBe(false);
+    expect(actors.aisleMeet('Ada', 'Bo')).toBe(true);
+    expect(actors.aisleMeet('Ada', 'Cy')).toBe(false); // Ada is already on her way
+    for (let i = 0; i < 20; i++) actors.step(0.1);
+    expect(actors.ambientOnly()).toBe(true);
+    actors.cancelAmbient();
+    let guard = 0;
+    while (actors.active() && guard++ < 6000) actors.step(0.05);
+    expect(actors.ambientOnly()).toBe(false);
+  });
+});

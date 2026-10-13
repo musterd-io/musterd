@@ -788,7 +788,7 @@ function OfficePreviewPage() {
         </button>
         <button
           className="lc__pbtn"
-          title="Welcome Wagon: a human is added and never connects (Act 1 only — the polaroid when desks are full)"
+          title="Welcome Wagon: a human is added and never connects (Act 1 only)"
           onClick={() => welcome([`lin-${stamp()}`], 'human', null)}
         >
           🏷️

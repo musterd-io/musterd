@@ -193,7 +193,7 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
       const d = decideAmbient('revive', s, pool);
       if (d.kind === 'pet') pet++;
       else if (d.kind === 'pair') pair++;
-      else if (d.kind === 'member') member++;
+      else if (d.kind === 'member' || d.kind === 'meet') member++;
     }
     const fired = pet + pair + member;
     expect(pet / fired).toBeGreaterThan(0.31);
@@ -265,5 +265,28 @@ describe('ambientPool — a working member keeps their desk (ADR 464 §3.1, fals
     rested.set('ada', node('ada', 'active'));
     const pairs = ambientPool(placements, rested).pairs.map((p) => p.join('+'));
     expect(pairs.some((p) => p.includes('ada'))).toBe(true);
+  });
+});
+
+describe('decideAmbient — the aisle meet (nick, 2026-10-12)', () => {
+  const pool = { members: ['ada', 'bo', 'cy', 'dev'], pairs: [] as Array<[string, string]>, errands: ['ada', 'bo', 'cy'] };
+  it('picks two different errand-free members, ~18% of what is left after pet and pair', () => {
+    let meet = 0,
+      rest = 0;
+    for (let s = 0; s < 10_000; s++) {
+      const d = decideAmbient('revive', s, pool);
+      if (d.kind === 'meet') {
+        meet++;
+        expect(d.a).not.toBe(d.b);
+        expect(pool.errands).toContain(d.a);
+        expect(pool.errands).toContain(d.b);
+      } else if (d.kind === 'member') rest++;
+    }
+    expect(meet / (meet + rest)).toBeGreaterThan(0.14);
+    expect(meet / (meet + rest)).toBeLessThan(0.22);
+  });
+  it('needs two who are free — a lone errand-free member never meets', () => {
+    for (let s = 0; s < 2_000; s++)
+      expect(decideAmbient('revive', s, { ...pool, errands: ['ada'] }).kind).not.toBe('meet');
   });
 });
