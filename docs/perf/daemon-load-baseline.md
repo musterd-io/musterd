@@ -919,3 +919,51 @@ carries `code`, `reason`, `error` and `lived_ms`, the bench's viewers reconnect 
   the ten commits with two deploys (`dc09c35` + #2440 + #2452, then + #2473).
 - Follows-up: run 38, a matched repeat on `6fd7aca`, to separate the build from the noise; then the
   bisect above if it repeats (lane to open from this one's close).
+
+## 2026-10-13 — Cloud runs 38, 38b, 39: `6fd7aca` holds at p95 1.6–1.75 s; the database is not where the time goes, and the planned bisect cannot run (lane 01M4VJX4KBTMSAW2MS0NM9GZGB)
+
+Same app machine (one vCPU), Neon 1 CU, shape and `performance-4x` bench as run 37, on the same
+build — Fly confirmed `musterd-cloud:git-6fd7aca44986` (release v25) before and after. Fresh team
+per run (`lb-run38`, `lb-run38b`, `lb-run39`). Before 38b, `pg_stat_statements` was reset
+(22:07:57Z) so its numbers are that run's alone. During 39, the hub's `http_request` lines were
+captured in full (`~/.musterd/cloud/bench/out/run39-hub-http.log`, 63 872 in the load window).
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 37 | `6fd7aca` | 493 ms | 1 226 ms | 1 685 ms | 66 203 (50.9) | 3 | 477 ms |
+| 38 | `6fd7aca` | 516 ms | 1 668 ms | 2 145 ms | 64 043 (49.3) | 1 | 536 ms |
+| 38b | `6fd7aca` | 557 ms | 1 632 ms | 2 196 ms | 64 477 (49.6) | 4 | 600 ms |
+| 39 | `6fd7aca` | 560 ms | **1 754 ms** | 2 341 ms | 63 838 (49.1) | 3 | 663 ms |
+
+- **Run 37 was not noise, and it was the low one.** Three repeats agree at 1.6–1.75 s. Against runs
+  32/36 (~800 ms on `dc09c35`) that is a real regression, or a drift in the environment that started
+  at the same time — nothing below can tell those apart, because nothing below exists for `dc09c35`.
+- **The database is not the bottleneck.** Run 38b's statements spent 133 s executing in ~1 400 s:
+  about 2 ms of Postgres time per HTTP request against a 557 ms median. The hottest statement,
+  interrupt-check's window read, averages 1.5 ms. The cumulative `members` and `messages` seq-scan
+  counts that first suggested "every run's leftover team slows the next" were history: in 38b
+  `members` took 277 seq scans and `messages` none. The cross-tenant growth hypothesis is refuted.
+- **No request ever waits for a connection.** In run 39 `db_wait_ms` is 0 at p95 on every route; the
+  10-connection pool is not the queue.
+- **Two fifths of the bench's p95 is outside the handler.** The server measured p50 369 / p95 990 ms
+  where the bench measured 560 / 1 754 ms on the same requests. The difference is the edge
+  (Cloudflare → Fly proxy) plus whatever the Node process does before it emits `request`.
+- **Inside the handler, the time is round trips and the event loop, not SQL.** Median request:
+  6 transactions, connection held 163 ms, of which 54 ms was the driver waiting on queries — 8.7 ms
+  per transaction at p50 for statements Postgres runs in 1–2 ms. The rest of the hold is JavaScript
+  between awaits while the transaction is open. The heavy routes are heavy by transaction count:
+  interrupt-check runs 15 per call to return nothing, `GET /inbox` 23, `POST /claim` 28. At ~430
+  transactions/s, each with its `SET LOCAL ROLE` and `set_config` statements, the one vCPU sat at
+  ~45% user, 15–17% softirq (8–10 on `dc09c35` runs) and ~30% idle — busy, not pinned.
+- **The bisect as planned cannot run.** `6fd7aca` migrated the schema 92 → 94 (#2440, v93/v94) and a
+  server refuses to boot on a schema that is not exactly its own, so neither `dc09c35` nor the
+  `dc09c35` + #2440 + #2452 step can be deployed against this database. #2473 is excluded on the
+  code: it rings the sync push loop, and Cloud never starts `sync_push` (`cloud/loops.ts`
+  `NOT_ON_CLOUD`), so on the hub it walks an empty listener set.
+- Falsify: a run on a `dc09c35` build against a Neon branch taken before v25's migration lands
+  ~800 ms with this same `http_request` capture — then the regression is in the ten commits, and the
+  capture says which routes moved. Lands ~1.6 s — the environment moved, not the build.
+- Follows-up: lane 01M4VR3Y42VMAX57KJ1HNDCKYQ — run 40, that `dc09c35`-on-a-Neon-branch baseline with
+  the request capture, to settle build vs environment; lane 01M4VR41VE5MABHT8SYC9N6X8X — the
+  transaction count per request (interrupt-check's 15 for an empty answer), which costs the same on
+  either build.
