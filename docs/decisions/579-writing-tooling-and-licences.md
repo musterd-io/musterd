@@ -1,8 +1,7 @@
 # 579 — Writing tooling for the comms seat, and the licences we accept for vendored material
 
 - Status: accepted (2026-10-13, sloane, under nick's go-ahead for the comms-skill-v2 lanes: "do
-  all of this"). Decision 4's licence table is raised with nick separately, and nick can reverse it
-  with a superseding ADR.
+  all of this"). Decision 4's licence table was confirmed by nick the same day (see Consequences).
 - Date: 2026-10-13
 - Lane: `01M4V98KAW40FNJAR2J6SSCRF5` (goal `comms-skill-v2`, increment 4)
 - Amends: [ADR 299](299-committed-skill-home-and-vendoring.md) §3 (vendoring policy), by widening
@@ -154,6 +153,13 @@ dependencies are approved.
   `PseudoCleft`, `LabelAndExplain`) need a sample of their own before they join. To repeat the
   trial, run the packs listed in decision 1 over the same paths and draw 50 alerts per pack with
   seed 579.
+
+- _(2026-10-13)_ nick confirmed decision 4's licence table in session with sloane: "agree with
+  your license recommendation". The case made was that each accepted licence asks no more than MIT
+  does (keep the notice, credit the source, plus BSD-3's no-endorsement clause and CC BY's note of
+  changes), that the installed dependency tree already carries 122 ISC and 59 BSD-3 packages, and
+  that the reference-only list holds the licences with real risk (share-alike and copyleft terms
+  that would bind our files, and non-commercial terms that conflict with selling musterd).
 
 ## Observability & Evaluation
 
