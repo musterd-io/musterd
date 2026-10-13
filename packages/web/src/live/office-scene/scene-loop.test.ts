@@ -282,3 +282,15 @@ describe('micro-polish (spec 2026-10-13 L5)', () => {
     expect(fn).toContain('% 17) - 8) * 0.1');
   });
 });
+
+describe('the dog tags along to the cooler (spec 2026-10-13 L2)', () => {
+  it('a water errand is a seeded stroll that sometimes brings the dog, and never costs the member their errand', () => {
+    const fn = index.slice(index.indexOf('function waterStroll'), index.indexOf('function quiet()'));
+    expect(fn).toContain('if (!actors.errandWater(who)) return false;');
+    expect(fn).toContain("roll(teamName, slot, 'pet-follow-water') < 0.4");
+    expect(fn).toContain('petFollow(pet, COOLER_STAND');
+    expect(fn).toContain("slotRng(teamName, slot, 'pet-follow-water-walk')");
+    expect(fn).toContain('return true;');
+    expect(index).toContain('beats.push([8, () => waterStroll(who, slot)])');
+  });
+});

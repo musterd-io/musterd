@@ -42,6 +42,7 @@ import { fitBox, project, ROOM_BOX, type Fit, type Pt } from './iso';
 import {
   CHAIR_OFF,
   COFFEE_STAND,
+  COOLER_STAND,
   DESK_SLOTS,
   ENTRANCE,
   FWD,
@@ -2077,6 +2078,18 @@ export function mountOffice(
     return true;
   }
 
+  /**
+   * A water errand (spec L2), the coffee-stroll's sibling: the dog sometimes tags along to the cooler and
+   * sits with them while the bottle fills (~5 s). Seeded on the shared slot, so two viewers of the same team
+   * see the same dog make the same trip; the member's errand is what's reported back either way.
+   */
+  function waterStroll(who: string, slot: number): boolean {
+    if (!actors.errandWater(who)) return false;
+    if (roll(teamName, slot, 'pet-follow-water') < 0.4)
+      petFollow(pet, COOLER_STAND, slotRng(teamName, slot, 'pet-follow-water-walk'));
+    return true;
+  }
+
   function quiet(): boolean {
     return (
       !actors.active() &&
@@ -2213,7 +2226,7 @@ export function mountOffice(
           ] as Array<[number, () => boolean]>)
         : []),
     ];
-    if (water && mayErrand) beats.push([8, () => actors.errandWater(who)]);
+    if (water && mayErrand) beats.push([8, () => waterStroll(who, slot)]);
     if (mug) beats.push([14, () => actors.gestureBeat(who, GESTURE.sip)]);
     if (casters)
       beats.push(
