@@ -64,6 +64,21 @@ export function actToEvent(env: Envelope): OfficeEvent | null {
       : { kind: 'megaphone', from };
   }
 
+  // The acceptance ask (ADR 192) names the acceptor: the owner walks the card to THEIR desk (nick,
+  // 2026-10-12: "hand the card to the acceptor"). The daemon emits the `lane_state → awaiting_acceptance`
+  // note a beat before this ask, so the room's deliver replaces that pin walk (`actors.deliver`).
+  if (env.act === 'ask' && to.kind === 'member') {
+    const r = env.meta?.['lane_review'] as { lane?: unknown; title?: unknown } | undefined;
+    if (typeof r?.lane === 'string')
+      return {
+        kind: 'walk-deliver',
+        from,
+        to: to.name,
+        lane: r.lane,
+        title: typeof r.title === 'string' ? r.title : '',
+      };
+  }
+
   switch (env.act) {
     case 'status_update':
       return { kind: 'screen-pulse', who: from, tone };

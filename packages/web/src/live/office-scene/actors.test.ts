@@ -309,6 +309,53 @@ describe('walk choreography', () => {
   });
 });
 
+describe('the deliver walk (lane 01M4SPZB1V)', () => {
+  it('replaces the submit pin for the same card and carries it to the acceptor, who is approached', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const bo = actors.poses().get('Bo')!;
+    const home = actors.poses().get('Ada')!;
+
+    expect(actors.pin('Ada', 7, 'awaiting_acceptance')).toBe(true);
+    actors.step(0.2); // the pick-up at the desk has started
+    expect(actors.deliver('Ada', 'Bo', 7)).toBe(true);
+    // The card is off the cork while it travels, and the pin is gone with it.
+    expect(actors.takenSeeds()).toEqual([7]);
+    expect(actors.pinnedSeeds()).toEqual([]);
+
+    let nearest = Infinity;
+    let carried = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const p = actors.poses().get('Ada')!;
+      nearest = Math.min(nearest, Math.hypot(p.lx - bo.lx, p.ly - bo.ly));
+      if (p.carry === 'card') carried = true;
+      // Never at the board: the pin walk did not survive.
+      expect(Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly)).toBeGreaterThan(30);
+    }
+    expect(carried).toBe(true);
+    expect(nearest).toBeLessThan(80);
+    expect(actors.takenSeeds()).toEqual([]);
+    seated(actors, 'Ada');
+    const back = actors.poses().get('Ada')!;
+    expect(back.lx).toBeCloseTo(home.lx, 5);
+    expect(back.carry).toBeNull();
+  });
+
+  it('refuses when the acceptor is not in the room, leaving the pin walk to stand', () => {
+    const { placements, byName } = world([node('Ada')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    expect(actors.pin('Ada', 7, 'awaiting_acceptance')).toBe(true);
+    expect(actors.deliver('Ada', 'Bo', 7)).toBe(false);
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) actors.step(0.05);
+    expect(guard).toBeGreaterThan(1);
+  });
+});
+
 describe('locomotion smoothness', () => {
   /** Shortest signed arc between two angles — mirror of the actor system's wrap-aware turn. */
   const arc = (a: number, b: number): number => {

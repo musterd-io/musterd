@@ -20,7 +20,11 @@ export const REPLAY_MAX = 8;
 /** The replay's speed over the live walk speed. */
 export const REPLAY_TEMPO = 2;
 
-export type ReplayEvent = Extract<OfficeEvent, { kind: 'walk-claim' | 'walk-pin' | 'walk-handoff' }>;
+export type ReplayEvent = Extract<
+  OfficeEvent,
+  { kind: 'walk-claim' | 'walk-pin' | 'walk-handoff' | 'walk-deliver' }
+>;
+const REPLAYED = new Set<OfficeEvent['kind']>(['walk-claim', 'walk-pin', 'walk-handoff', 'walk-deliver']);
 
 export function replayEvents(
   envelopes: readonly Envelope[],
@@ -32,7 +36,7 @@ export function replayEvents(
   for (const e of [...envelopes].sort((a, b) => a.ts - b.ts)) {
     if (liveIds.has(e.id) || e.ts < since) continue;
     const ev = actToEvent(e);
-    if (ev && (ev.kind === 'walk-claim' || ev.kind === 'walk-pin' || ev.kind === 'walk-handoff')) out.push(ev);
+    if (ev && REPLAYED.has(ev.kind)) out.push(ev as ReplayEvent);
   }
   // The newest `max`, still oldest-first: what the room was doing just before you arrived.
   return out.slice(-REPLAY_MAX);
