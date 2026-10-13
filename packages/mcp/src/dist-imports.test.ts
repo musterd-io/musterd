@@ -37,6 +37,14 @@ function importsOf(js: string): string[] {
   return out;
 }
 
+/** Static `import`/`export … from` specifiers only — what loads before the module body runs. */
+function staticImportsOf(js: string): string[] {
+  return [
+    ...js.matchAll(/^\s*(?:import|export)[^'"]*?\bfrom\s*['"]([^'"]+)['"]/gm),
+    ...js.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm),
+  ].map((m) => m[1]!);
+}
+
 /** Bare specifiers only — relative paths resolve inside the tarball, builtins always exist. */
 function bareImportsOf(js: string): string[] {
   return importsOf(js).filter((s) => !s.startsWith('.') && !s.startsWith('/'));
@@ -89,12 +97,17 @@ describe('the published runtime graph', () => {
     expect(offenders, `declared in no dependency list:\n  ${offenders.join('\n  ')}`).toEqual([]);
   });
 
-  it('loads the bin entry without reaching a devDependency', () => {
+  // Two entries since ADR 574: the bin (`dist/index.js`, the bundle every harness launches) and the
+  // library (`main`, `dist/lib/index.js`, which the CLI imports). Each is a published runtime graph.
+  it.each([
+    ['bin', 'index.js'],
+    ['library', 'lib/index.js'],
+  ])('loads the %s entry without reaching a devDependency', (_name, entryPath) => {
     // THE guard — the exact thing 0.4.0 got wrong. Reachability from the entry is the property that
     // matters, not mere presence in the tarball: `surfaceMeasure.js` legitimately ships (the
-    // standing-context budget gate imports it straight out of `dist`) and legitimately pulls a dev
-    // dep, and that is harmless precisely as long as nothing the entry loads touches it.
-    const entry = join(dist, 'index.js');
+    // standing-context budget gate imports it straight out of `dist/lib`) and legitimately pulls a
+    // dev dep, and that is harmless precisely as long as nothing the entry loads touches it.
+    const entry = join(dist, entryPath);
     expect(existsSync(entry)).toBe(true);
 
     const seen = new Set<string>();
@@ -117,7 +130,28 @@ describe('the published runtime graph', () => {
     }
     expect(
       reachedDev,
-      `dist/index.js reaches dev-only packages:\n  ${reachedDev.join('\n  ')}`,
+      `dist/${entryPath} reaches dev-only packages:\n  ${reachedDev.join('\n  ')}`,
     ).toEqual([]);
+  });
+
+  it('starts the launched adapter without resolving a package', () => {
+    // ADR 574's point: what a harness launches never walks node_modules on the connect path. The
+    // static closure of dist/index.js may hold only Node builtins and the bundle's own chunks beside
+    // it (code it shares with the lazily loaded OTel SDK); a bare package specifier anywhere in it
+    // puts the module graph back on every connect.
+    const seen = new Set<string>();
+    const queue = [join(dist, 'index.js')];
+    const packages: string[] = [];
+    while (queue.length) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const spec of staticImportsOf(readFileSync(file, 'utf8'))) {
+        if (spec.startsWith('./')) queue.push(resolve(dirname(file), spec));
+        else if (!isBuiltin(spec)) packages.push(`${file.slice(PKG_DIR.length + 1)} → ${spec}`);
+      }
+    }
+    expect(packages, `the launched adapter resolves:\n  ${packages.join('\n  ')}`).toEqual([]);
+    for (const file of seen) expect(dirname(file)).toBe(dist);
   });
 });

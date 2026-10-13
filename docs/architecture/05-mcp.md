@@ -158,6 +158,20 @@ Phantom Presence now drops within the 45s reclaim grace instead of lingering. Th
 > [ADR 175](../decisions/175-mcp-spec-2026-07-28-readiness.md) for the executed checklist and the
 > 2026-08-12 Consequences notes.
 
+## Build layout (ADR 574)
+
+The adapter every external harness launches is `dist/index.js`, an esbuild bundle of `src/index.ts`
+written by `packages/mcp/build.mjs` after `tsc`. Its startup closure is that file plus the small
+chunks it shares with code reached only through dynamic `import()` (the off-by-default OTel SDK),
+all in `dist/`: it resolves no package through `node_modules` on connect. The path is unchanged, so
+harness configs written before the bundle keep launching it.
+
+The library the CLI imports (`buildMcpServer`, `MusterdClient`, `autojoin`, `withTraceContext`) is
+`tsc` output under `dist/lib/`, which `main` and `types` name, so the CLI shares one copy of
+`@musterd/protocol` and `zod` instead of loading the bundle's. `resolveMcpLaunch` resolves the deep
+path `@musterd/mcp/dist/index.js`. `dist-imports.test.ts` guards both graphs and fails if the bin's
+static closure ever names a package again.
+
 ## Cold-start bench
 
 `node scripts/mcp/bench.mjs --surface <harness>` times the stdio adapter the external harnesses
@@ -412,6 +426,7 @@ src/
   brand.ts        // canonical chip SVG + MCP serverInfo.icons data URI (ADR 154)
   workspace.ts    // provenance / driver / model / wake-lease resolvers for the attach; the "where" label itself (`resolveWorkspace`, ADR 014) lives in @musterd/protocol/project since 2026-09-04 and is re-exported here one epoch
   wakeLeaseFile.ts // reads the actuator-written wake lease (ADR 354) — consulted only when env is silent on BOTH provenance and lease, honoured only when spawner_pid is in our bounded ancestry and unexpired: an attestation with a source, never a default (ADR 236)
+  packageRoot.ts  // this package's root, found by walking up from import.meta.url — one module runs from src/, dist/lib/ and the dist/index.js bundle, so no fixed `..` count is right (ADR 574)
   processAncestry.ts // this process's ancestors via `ps -o ppid=`, nearest first, bounded — the wake-lease file names the pid the actuator spawned, and the `codex` launcher is a Node wrapper one generation above the native binary that launches us (ADR 354 correction, 2026-09-02)
   otel.ts         // cross-runtime trace-context propagation through the envelope (ADR 011)
   telemetry.ts    // boots the shared SDK as musterd-mcp + wraps every tool in a musterd.tool.call span (ADR 089)

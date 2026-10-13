@@ -100,8 +100,9 @@ export function markerGenerationOfEnv(
 export function resolveMcpLaunch(): { command: string; args: string[] } {
   let adapter: string;
   try {
-    // import.meta.resolve is sync + stable on Node 20+; returns a file:// URL.
-    adapter = fileURLToPath(import.meta.resolve('@musterd/mcp'));
+    // import.meta.resolve is sync + stable on Node 20+; returns a file:// URL. The launched
+    // adapter is the bundle at dist/index.js, not the package main (the dist/lib/ library, ADR 574).
+    adapter = fileURLToPath(import.meta.resolve('@musterd/mcp/dist/index.js'));
   } catch {
     // Dev fallback: packages/cli/dist/onboard/ -> packages/mcp/dist/index.js
     const here = fileURLToPath(new URL('.', import.meta.url));

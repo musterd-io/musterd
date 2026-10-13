@@ -12,6 +12,7 @@ import {
   type RosterSyncState,
 } from '@musterd/protocol';
 import { readBuildStamp } from '@musterd/protocol/build-stamp';
+import { packageRoot } from '../packageRoot.js';
 
 /**
  * The roster, rendered for an **agent** to read (`team_status` / `team_members`).
@@ -619,11 +620,13 @@ export async function buildSkewOf(
 }
 
 /** This adapter's dist as it is on disk NOW (not the stamp it booted with), and the checkout it
- *  lives in — `tools/` sits four levels below the repo root in both `src/` and `dist/`. */
+ *  lives in — two levels above the package root (`packages/mcp`), found by walking up, since this
+ *  module runs from `src/tools/`, `dist/lib/tools/` and the `dist/index.js` bundle (ADR 574). */
 function adapterOnDisk(): { build: string | undefined; checkout: string } {
+  const root = packageRoot(import.meta.url) ?? resolve(fileURLToPath(import.meta.url), '../../..');
   return {
     build: readBuildStamp(import.meta.url),
-    checkout: resolve(fileURLToPath(import.meta.url), '../../../../..'),
+    checkout: resolve(root, '../..'),
   };
 }
 
