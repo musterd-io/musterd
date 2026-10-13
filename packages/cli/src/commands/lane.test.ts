@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { loadConfig } from '../config.js';
 import { laneCommand, lanesCommand, renderLane } from './lane.js';
+import { claimSeams } from './laneClaims.js';
 import { teamCommand } from './team.js';
 
 describe('lane commands', () => {
@@ -23,6 +24,8 @@ describe('lane commands', () => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-lane-'));
     process.env['MUSTERD_CONFIG'] = join(dir, 'config.json');
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    // ADR 585: the rail's checkers shell out to git and gh; the temp dir is no clone.
+    claimSeams.check = async () => [];
     // `team create` mints nick as creator-admin and auto-binds this folder, so lane commands
     // resolve nick from the binding without an explicit --as (the acting-identity requirement).
     await capture(() => teamCommand(parseArgs(['create', 'dawn', '--member', 'nick'])));
@@ -215,6 +218,42 @@ describe('lane commands', () => {
   // the lane over and was the one edge that could not name the branch — so a lane opened before the
   // branch existed (the common order: open, then cut the branch) reached its acceptor pointing at
   // nothing. Measured 2026-08-05: 184 of 362 terminal-or-awaiting lanes carried branch=null.
+  // ADR 585: the verification rail at submit.
+  it('files the claims this clone checked, the daemon stamps the checker, and the report shows them', async () => {
+    claimSeams.check = async (refs, _cwd, by) => [
+      {
+        kind: 'commit_landed',
+        ref: refs.sha!,
+        verdict: 'confirmed',
+        checked_by: 'forged',
+        checked_at: 1,
+        evidence: 'reachable from origin/main',
+      },
+      {
+        kind: 'pr_merged',
+        ref: String(refs.pr),
+        verdict: 'unverifiable',
+        checked_by: by,
+        checked_at: 1,
+        evidence: 'gh unavailable',
+      },
+    ];
+    const { out: opened } = await capture(() => laneCommand(parseArgs(['open', 'rail'])));
+    const id = /\b(01[0-9A-Z]{24})\b/.exec(opened)![1]!;
+    await capture(() => laneCommand(parseArgs(['claim', id])));
+    const submitted = await capture(() =>
+      laneCommand(parseArgs(['submit', id, '--pr', '7', '--sha', 'deadbeef'])),
+    );
+    expect(submitted.out).toContain('claims: commit_landed ✓ · pr_merged ?');
+    expect(submitted.out).toContain('(checked by nick)');
+    const { out: json } = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const lane = (JSON.parse(json) as { lanes: Lane[] }).lanes.find((l) => l.id === id)!;
+    expect(lane.claims?.map((c) => [c.kind, c.verdict, c.checked_by])).toEqual([
+      ['commit_landed', 'confirmed', 'nick'],
+      ['pr_merged', 'unverifiable', 'nick'],
+    ]);
+  });
+
   it('submit records the branch the work landed on, for a lane opened without one', async () => {
     const id = await openLane(['no branch at open', '--claim']);
     const submitted = await capture(() =>

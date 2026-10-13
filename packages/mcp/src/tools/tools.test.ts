@@ -1679,7 +1679,14 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
     // Worker self-close. A counterpart omits these fields (ADR 305); the server ignores them if sent.
     const updateLane = vi.fn(async () => ({ lane: lane({ branch: 'feat/x' }), warnings: [] }));
     const handlers = captureAll(
-      (s: any, c: any) => registerLanes(s, c, async () => 'ancestor' as any),
+      (s: any, c: any) =>
+        registerLanes(
+          s,
+          c,
+          async () => 'ancestor' as any,
+          undefined,
+          async () => ({}),
+        ),
       { updateLane } as Partial<MusterdClient>,
     );
     await handlers['lane_resolve']!({
@@ -1691,6 +1698,7 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
     expect(updateLane).toHaveBeenCalledWith('lane1', {
       state: 'done',
       merged: { pr: 167, sha: 'abc123f', authorized_by: 'nick', verification: 'ancestor' },
+      claims: expect.any(Array),
     });
   });
 
@@ -2001,9 +2009,19 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
 
   function submitWith(tier: string) {
     const updateLane = vi.fn(async () => ({ lane: submittedLane, warnings: [] }));
-    const handlers = captureAll((s: any, c: any) => registerLanes(s, c, async () => tier as any), {
-      updateLane,
-    } as Partial<MusterdClient>);
+    const handlers = captureAll(
+      (s: any, c: any) =>
+        registerLanes(
+          s,
+          c,
+          async () => tier as any,
+          undefined,
+          async () => ({}),
+        ),
+      {
+        updateLane,
+      } as Partial<MusterdClient>,
+    );
     return { submit: handlers['lane_submit']!, updateLane };
   }
 
@@ -2036,6 +2054,7 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
     expect(updateLane).toHaveBeenCalledWith('L1', {
       state: 'awaiting_acceptance',
       merged: { pr: 42, sha: 'abc123f', verification: 'ancestor' },
+      claims: expect.any(Array),
     });
   });
 
@@ -2045,6 +2064,7 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
     expect(updateLane).toHaveBeenCalledWith('L1', {
       state: 'awaiting_acceptance',
       merged: { sha: 'abc123f', verification: 'fetch_failed' },
+      claims: expect.any(Array),
     });
   });
 
@@ -2084,9 +2104,19 @@ describe('lane_resolve merge verification (done means landed — the #997/#998 a
 
   function resolveWith(tier: string) {
     const updateLane = vi.fn(async () => ({ lane: doneLane, warnings: [] }));
-    const handlers = captureAll((s: any, c: any) => registerLanes(s, c, async () => tier as any), {
-      updateLane,
-    } as Partial<MusterdClient>);
+    const handlers = captureAll(
+      (s: any, c: any) =>
+        registerLanes(
+          s,
+          c,
+          async () => tier as any,
+          undefined,
+          async () => ({}),
+        ),
+      {
+        updateLane,
+      } as Partial<MusterdClient>,
+    );
     return { resolve: handlers['lane_resolve']!, updateLane };
   }
 
@@ -2117,6 +2147,7 @@ describe('lane_resolve merge verification (done means landed — the #997/#998 a
     expect(updateLane).toHaveBeenCalledWith('L1', {
       state: 'done',
       merged: { pr: 42, sha: 'abc123f', verification: 'ancestor' },
+      claims: expect.any(Array),
     });
   });
 
@@ -2126,6 +2157,7 @@ describe('lane_resolve merge verification (done means landed — the #997/#998 a
     expect(updateLane).toHaveBeenCalledWith('L1', {
       state: 'done',
       merged: { sha: 'abc123f', verification: 'fetch_failed' },
+      claims: expect.any(Array),
     });
   });
 

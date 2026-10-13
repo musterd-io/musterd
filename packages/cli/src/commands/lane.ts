@@ -17,6 +17,7 @@ import { CliError } from '../errors.js';
 import { plainTerminalText } from '../render/plainText.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
+import { claimSeams, renderClaims } from './laneClaims.js';
 
 /**
  * `musterd lane <open|claim|release|park|unpark|handoff|update|resolve>` + `musterd lanes` — the CLI half of the lane
@@ -218,6 +219,19 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
     };
     const submit = sub === 'submit';
+    // ADR 585: the verification rail. What this seat attests (SHA, PR, branch) is checked in this
+    // clone before it is sent, and the claims ride the patch; the daemon stamps the checker from
+    // the authenticated sender. The CLI's submit carried no verification at all before this.
+    const branchFlag = flagStr(parsed.flags, 'branch');
+    const claimRefs = {
+      ...(merged.sha !== undefined ? { sha: merged.sha } : {}),
+      ...(merged.pr !== undefined ? { pr: merged.pr } : {}),
+      ...(branchFlag !== undefined ? { branch: branchFlag } : {}),
+    };
+    const claims =
+      sub !== 'claim' && Object.keys(claimRefs).length > 0
+        ? await claimSeams.check(claimRefs, process.cwd(), identity.name)
+        : [];
     const res = await http.updateLane(
       team,
       id,
@@ -232,6 +246,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {
             state: submit ? 'awaiting_acceptance' : 'done',
             ...(Object.keys(merged).length ? { merged } : {}),
+            ...(claims.length > 0 ? { claims } : {}),
             // The acceptor needs to know where the work IS (ADR 083). Submit was the one lane edge
             // that could not say so, while `branch` is valid on open/handoff/update — so seats
             // reached for it here and were bounced.
@@ -252,6 +267,8 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     );
     const label = sub === 'claim' ? 'claimed' : submit ? 'submitted for acceptance' : 'done';
     process.stdout.write(`${theme.ok('✓')} lane ${label}\n${renderLane(res.lane)}\n`);
+    const claimsText = renderClaims(res.lane.claims);
+    if (claimsText) process.stdout.write(`${claimsText}\n`);
     renderWarnings(res.warnings);
     // ADR 505 §6: on a claim, what this lane builds on — same lines as the MCP reply. `?? []` for
     // an older daemon.

@@ -227,6 +227,132 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
     // count, not a sentence, and the room could not tell he was being spoken to. The headline is
     // chosen by CLASS (steer > urgent > huddle > acceptance) and recency only breaks ties inside a
     // class; the plural tail names the mix so the rest of the queue is legible too.
+    it('ADR 585: the submitter files claims, the acceptor re-checks them, and the lane carries both readings', async () => {
+      const { nickTok, ada, gee } = await setup();
+      const lane = await post(
+        '/teams/dawn/lanes',
+        { title: 'rail the store', branch: 'ada/rail', claim: true },
+        ada,
+      );
+      const laneId = lane.json.lane.id as string;
+      const filed = [
+        {
+          kind: 'commit_landed',
+          ref: 'abc123',
+          verdict: 'confirmed',
+          checked_by: 'forged',
+          checked_at: 1,
+          evidence: 'reachable',
+        },
+        {
+          kind: 'ci_green',
+          ref: '42',
+          verdict: 'unverifiable',
+          checked_by: 'forged',
+          checked_at: 1,
+          evidence: 'gh unavailable',
+        },
+      ];
+      const ready = await patchLane(
+        laneId,
+        { state: 'awaiting_acceptance', merged: { pr: 42, sha: 'abc123' }, claims: filed },
+        ada,
+      );
+      expect(ready.status, JSON.stringify(ready.json)).toBe(200);
+      // The checker is the authenticated sender, whatever the body said.
+      expect(ready.json.lane.claims.map((c: { checked_by: string }) => c.checked_by)).toEqual([
+        'ada',
+        'ada',
+      ]);
+      const filedRows = await auditRows(nickTok, 'lane.claims_filed');
+      expect(filedRows).toHaveLength(1);
+      expect(filedRows[0].detail).toMatchObject({
+        lane: laneId,
+        by: 'ada',
+        confirmed: 1,
+        unverifiable: 1,
+        unconfirmed: 0,
+      });
+      const readyRows = await auditRows(nickTok, 'lane.ready_for_review');
+      expect(readyRows[0].detail.claims).toMatchObject({ confirmed: 1, unverifiable: 1 });
+
+      const inbox = await get('/teams/dawn/inbox?unread=1', gee);
+      const ask = inbox.json.messages.find(
+        (m: { act: string; meta?: { lane_review?: unknown } }) =>
+          m.act === 'ask' && m.meta?.lane_review,
+      );
+      expect(ask).toBeDefined();
+      // gee's accept carries gee's own re-check: a confirmed CI read, and a REFUTED commit claim.
+      const accept = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: {
+            v: 'musterd/0.3',
+            id: 'railaccept000000000000000',
+            team: 'dawn',
+            from: 'gee',
+            to: { kind: 'member', name: 'ada' },
+            act: 'accept',
+            body: 'looks landed',
+            ts: Date.now(),
+            meta: {
+              in_reply_to: ask.id,
+              claims: [
+                {
+                  kind: 'commit_landed',
+                  ref: 'abc123',
+                  verdict: 'unconfirmed',
+                  checked_by: 'forged',
+                  checked_at: 2,
+                  evidence: 'not reachable here',
+                },
+                {
+                  kind: 'ci_green',
+                  ref: '42',
+                  verdict: 'confirmed',
+                  checked_by: 'forged',
+                  checked_at: 2,
+                  evidence: 'every required check succeeded',
+                },
+              ],
+            },
+          },
+        },
+        gee,
+      );
+      expect(accept.status, JSON.stringify(accept.json)).toBe(201);
+      const board = await get('/teams/dawn/lanes', nickTok);
+      const afterLane = board.json.lanes.find((l: { id: string }) => l.id === laneId);
+      expect(afterLane.state).toBe('done');
+      const claims = afterLane.claims as {
+        kind: string;
+        verdict: string;
+        checked_by: string;
+      }[];
+      expect(claims.map((c) => [c.kind, c.checked_by, c.verdict])).toEqual([
+        ['commit_landed', 'ada', 'confirmed'],
+        ['commit_landed', 'gee', 'unconfirmed'],
+        ['ci_green', 'ada', 'unverifiable'],
+        ['ci_green', 'gee', 'confirmed'],
+      ]);
+      const verifiedRows = await auditRows(nickTok, 'lane.claims_verified');
+      expect(verifiedRows).toHaveLength(1);
+      expect(verifiedRows[0].detail).toMatchObject({
+        lane: laneId,
+        by: 'gee',
+        confirmed: 1,
+        unconfirmed: 1,
+      });
+      const closed = await auditRows(nickTok, 'lane.closed');
+      expect(closed[0].detail.verified).toBe(true);
+      expect(closed[0].detail.claims).toMatchObject({
+        confirmed: 2,
+        unconfirmed: 1,
+        unverifiable: 1,
+        checkers: ['ada', 'gee'],
+      });
+    });
+
     it('interrupt line headlines by class, not recency: a huddle turn outranks a newer routed acceptance', async () => {
       const { nickTok, ada, gee } = await setup();
 

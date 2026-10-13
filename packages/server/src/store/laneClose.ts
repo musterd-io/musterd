@@ -1,4 +1,4 @@
-import { type Lane, isAwaitingAcceptance, reviewGrade } from '@musterd/protocol';
+import { summariseClaims, type Lane, isAwaitingAcceptance, reviewGrade } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { appendAudit, appendLaneEventRequired, peerReviewGradeOf, reviewRouting } from './audit.js';
 import { memberIsHuman, memberModelByName, workerFamily } from './review.js';
@@ -246,6 +246,10 @@ export async function recordLaneClose(
       ...(!verified && mergedFromPatch?.authorized_by !== undefined
         ? { authorization_claimed: mergedFromPatch.authorized_by }
         : {}),
+      // ADR 585: what the rail recorded about this lane's claims by the time it closed — the
+      // submitter's checks and, on a verified close, the acceptor's independent re-check. Counts
+      // only; the claims themselves stay on the lane row.
+      ...(lane.claims && lane.claims.length > 0 ? { claims: summariseClaims(lane.claims) } : {}),
       worker_family: ownerAtClose ? await workerFamily(db, teamId, ownerAtClose) : null,
       ...(verified ? { reviewer_family: await workerFamily(db, teamId, closer.name) } : {}),
       // ADR 188 two-stage: which peer review a RISKY lane actually got — the newest
