@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeLightEnv } from './lighting';
+import {
+  sunBeam, computeLightEnv } from './lighting';
 
 /** The office lighting model: natural light follows the PST clock, overhead follows occupancy, desk lamps
  * follow the dark. These lock the behaviour the render/CSS wiring depends on. */
@@ -119,5 +120,30 @@ describe('computeLightEnv', () => {
     it('daylight still carries an off-shift office — the sun ignores the schedule', () => {
       expect(computeLightEnv(12, true, false).veilAlpha).toBeLessThan(0.15);
     });
+  });
+});
+
+describe('sunBeam — the window light shafts follow the sun (lane 01M4VR902N)', () => {
+  it('throws long when the sun is low and shorter at noon', () => {
+    const dawn = sunBeam(7.5).len;
+    const dusk = sunBeam(17.5).len;
+    const noon = sunBeam(12.75).len;
+    expect(dawn).toBeGreaterThan(noon * 1.4);
+    expect(dusk).toBeGreaterThan(noon * 1.4);
+    expect(noon).toBeLessThan(150); // shorter than the old fixed throw
+  });
+  it('leans one way in the morning, the other in the evening, and stands straight at noon', () => {
+    expect(sunBeam(7.5).shear).toBeGreaterThan(30);
+    expect(sunBeam(17.5).shear).toBeLessThan(-30);
+    expect(Math.abs(sunBeam(12.75).shear)).toBeLessThan(1);
+  });
+  it('is mirror-symmetric about the office noon and stays inside sane bounds all day', () => {
+    expect(sunBeam(12.75 - 4).shear).toBeCloseTo(-sunBeam(12.75 + 4).shear, 5);
+    for (let h = 0; h <= 24; h += 0.25) {
+      const b = sunBeam(h);
+      expect(b.len).toBeGreaterThanOrEqual(100);
+      expect(b.len).toBeLessThanOrEqual(250);
+      expect(Math.abs(b.shear)).toBeLessThanOrEqual(46 * 1.4 + 1e-9);
+    }
   });
 });

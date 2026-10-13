@@ -801,7 +801,7 @@ export function mountOffice(
    * Fixed sets — only repositioned on rebake/resize. Each element gets a stable stagger so the field
    * shimmers out of phase instead of pulsing in lockstep. */
   function syncMagic() {
-    const { motes, bulbs } = magicAnchors(fit);
+    const { motes, bulbs } = magicAnchors(fit, lightEnv.hours);
     syncAnchorPool(moteEls, motes, 'lc-amb-mote', '<i></i>', 'translate(-50%, -50%)');
     syncAnchorPool(twinkleEls, bulbs, 'lc-amb-twinkle', '<i></i>', 'translate(-50%, -50%)');
     moteEls.forEach((el, i) => {
@@ -2166,6 +2166,7 @@ export function mountOffice(
         // night, occasionally a working member's side) and curls back up.
         const played = petBeat(pet, {
           daylight: lightEnv.daylight,
+          hours: lightEnv.hours,
           workSpots: workingSideSpots(),
           rng: slotRng(teamName, slot, 'pet-beat'),
         });

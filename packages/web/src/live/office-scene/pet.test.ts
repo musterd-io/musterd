@@ -46,7 +46,10 @@ import {
   MEETING,
   NOOK,
   WAGON_PICKUP,
+  WINDOWS,
 } from './layout';
+import { FLOOR } from './iso';
+import { sunBeam } from './lighting';
 import { walkable } from './nav';
 
 /** A tiny deterministic LCG so behaviour tests never depend on Math.random. */
@@ -542,5 +545,22 @@ describe('the welcome errand runs at an eager trot (lane 01M3F81DD9)', () => {
     expect(pet.errand?.stage).toBe('deliver');
     expect(pet.speed).toBe(PET_ERRAND_SPEED);
     expect(PET_ERRAND_SPEED).toBeGreaterThan(PET_SPEED * 2);
+  });
+});
+
+describe('napSpots follow the sun (lane 01M4VR902N)', () => {
+  it('lean with the hour: the morning and evening pools sit on opposite sides of their window', () => {
+    const am = sunBeam(7.5);
+    const pm = sunBeam(17.5);
+    const want = (b: { len: number; shear: number }) => (60 / b.len) * b.shear;
+    const near = (hours: number, target: number) =>
+      napSpots(1, hours)
+        .filter((s) => s.lx === 60)
+        .every((s) => WINDOWS.some((w) => Math.abs(s.ly - ((w.t0 + w.t1) / 2) * FLOOR - target) < 1e-6));
+    expect(want(am)).toBeGreaterThan(0);
+    expect(want(pm)).toBeLessThan(0);
+    expect(near(7.5, want(am))).toBe(true);
+    expect(near(17.5, want(pm))).toBe(true);
+    expect(napSpots(1, 7.5).filter((s) => s.lx === 60).length).toBeGreaterThan(0);
   });
 });
