@@ -1,5 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
+  claimsFromEvidence,
+  claimsLine,
+  type ClaimEvidence,
+  type LaneClaim,
   BUILD_ON_CHECK,
   builtOnLine,
   claimCheckLines,
@@ -22,7 +26,7 @@ import { resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { reconcileLanded, type Landed } from '../landed.js';
-import { SHA_FORMAT, verifyMerge } from '../mergeVerify.js';
+import { gatherClaimEvidence, SHA_FORMAT, verifyMerge } from '../mergeVerify.js';
 import { errorResult, textResult } from './format.js';
 
 /**
@@ -116,7 +120,37 @@ export function registerLanes(
   client: MusterdClient,
   verify: typeof verifyMerge = verifyMerge,
   reconcile: typeof reconcileLanded = reconcileLanded,
+  /** ADR 585: the rail's other checkers (branch on origin, PR merged, CI green); `verify` is the
+   *  SHA's. Injected apart from `verify` so the merge-verification suite stays hermetic. */
+  gather: typeof gatherClaimEvidence = gatherClaimEvidence,
 ): void {
+  // ADR 585: the claims this seat files, judged by the one rule in @musterd/protocol from the SHA
+  // tier `verify` produced plus whatever `gather` could read. The daemon stamps `checked_by`.
+  const fileClaims = async (refs: {
+    sha?: string | undefined;
+    pr?: number | undefined;
+    branch?: string | undefined;
+    verification?: string | undefined;
+  }): Promise<LaneClaim[]> => {
+    const extra = await gather(
+      {
+        ...(refs.pr !== undefined ? { pr: refs.pr } : {}),
+        ...(refs.branch !== undefined ? { branch: refs.branch } : {}),
+      },
+      process.cwd(),
+    );
+    const ancestry = refs.verification as ClaimEvidence['ancestry'];
+    return claimsFromEvidence(
+      {
+        ...(refs.sha !== undefined ? { sha: refs.sha } : {}),
+        ...(refs.pr !== undefined ? { pr: refs.pr } : {}),
+        ...(refs.branch !== undefined ? { branch: refs.branch } : {}),
+      },
+      { ...extra, ...(ancestry !== undefined ? { ancestry } : {}) },
+      client.member ?? 'self',
+      Date.now(),
+    );
+  };
   server.registerTool(
     'lane_open',
     {
@@ -400,9 +434,16 @@ export function registerLanes(
         ...(args.authorized_by !== undefined ? { authorized_by: args.authorized_by } : {}),
         verification,
       };
+      const claims = await fileClaims({
+        sha: args.sha,
+        pr: args.pr,
+        branch: args.branch,
+        verification,
+      });
       const { lane, warnings, review } = await client.updateLane(args.id, {
         state: 'awaiting_acceptance',
         merged,
+        ...(claims.length > 0 ? { claims } : {}),
         // ADR 083's argument for `branch` is that work should reach the next person as an ARTIFACT
         // rather than a description — and submit, which hands the lane to an acceptor, is the moment
         // that matters most. It was the one lane edge that could not set it: `branch` is valid on
@@ -479,7 +520,9 @@ export function registerLanes(
                   : `\n\nacceptance asked of ${review.reviewer} (${review.route}) — wait ≤${reviewWaitMinutes(review.wait_ms)}m; ` +
                     `accept closes the lane, reject resumes it; on silence, lane_resolve yourself ` +
                     `(recorded unconfirmed). Acceptor judges intent/principles/usable/feel — not the diff.`;
-      return laneResult('lane submitted for acceptance', lane, warnings, hint);
+      const claimsText =
+        lane.claims && lane.claims.length > 0 ? `\n\nclaims: ${claimsLine(lane.claims)}` : '';
+      return laneResult('lane submitted for acceptance', lane, warnings, claimsText + hint);
     } catch (err) {
       return errorResult(err);
     }
@@ -580,9 +623,13 @@ export function registerLanes(
         const merged = Object.keys(attested).length
           ? { ...attested, verification: verification ?? ('unattested' as const) }
           : {};
+        const claims = Object.keys(attested).length
+          ? await fileClaims({ sha: args.sha, pr: args.pr, verification })
+          : [];
         const { lane, warnings, notices, closed } = await client.updateLane(args.id, {
           state: 'done',
           ...(Object.keys(merged).length ? { merged } : {}),
+          ...(claims.length > 0 ? { claims } : {}),
           ...followsUpPatch(args.follows_up),
         });
         // ADR 192 advisory nudge: closing your own lane is an unconfirmed close — legal, honest,

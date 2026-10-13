@@ -1,5 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
+  claimsLine,
+  type LaneClaim,
   type Act,
   ACTS,
   type AskTier,
@@ -27,6 +29,7 @@ import { ulid } from 'ulid';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import type { McpConfig } from '../config.js';
+import { checkClaims } from '../mergeVerify.js';
 import { withTraceContext } from '../otel.js';
 import { errorResult, notReadyMessage, repairHint, textResult } from './format.js';
 
@@ -172,7 +175,20 @@ function isAskTier(tier: unknown): tier is AskTier {
   return AskTierSchema.safeParse(tier).success;
 }
 
-export function registerSend(server: McpServer, client: MusterdClient, config: McpConfig): void {
+/** The slice of a lane_review ask's meta the re-check reads (composed server-side, http.ts). */
+interface LaneReviewMeta {
+  lane?: string;
+  branch?: string | null;
+  merged?: { pr?: number; sha?: string } | null;
+}
+
+export function registerSend(
+  server: McpServer,
+  client: MusterdClient,
+  config: McpConfig,
+  /** ADR 585: the acceptor's re-check of a lane's claims, run in this clone; injectable. */
+  check: typeof checkClaims = checkClaims,
+): void {
   server.registerTool(
     'team_send',
     {
@@ -233,6 +249,36 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         const target = decision.target as Envelope;
         meta['in_reply_to'] = target.id;
         thread ??= target.thread ?? target.id;
+      }
+
+      // ADR 585: an accept answering a lane_review ask is the verdict that closes the lane (ADR
+      // 202), so it carries this seat's INDEPENDENT re-check of what the submitter claimed — the
+      // same SHA/PR/branch, checked in this clone, judged by the same rule. The daemon stamps the
+      // checker and records the two readings side by side. Best-effort: a failure to read the ask
+      // or run a checker sends the accept without claims, never blocks it.
+      let acceptorClaims: LaneClaim[] | undefined;
+      if (
+        args.act === 'accept' &&
+        typeof meta['in_reply_to'] === 'string' &&
+        meta['claims'] === undefined &&
+        typeof client.readMessages === 'function'
+      ) {
+        try {
+          const { found } = await client.readMessages([meta['in_reply_to']]);
+          const review = (found[0]?.meta as { lane_review?: LaneReviewMeta } | null | undefined)
+            ?.lane_review;
+          const refs = {
+            ...(review?.merged?.sha !== undefined ? { sha: review.merged.sha } : {}),
+            ...(review?.merged?.pr !== undefined ? { pr: review.merged.pr } : {}),
+            ...(review?.branch ? { branch: review.branch } : {}),
+          };
+          if (review && Object.keys(refs).length > 0) {
+            acceptorClaims = await check(refs, process.cwd(), config.member ?? 'self');
+            if (acceptorClaims.length > 0) meta['claims'] = acceptorClaims;
+          }
+        } catch {
+          acceptorClaims = undefined;
+        }
       }
 
       // Ride the adapter's active trace context along as meta.otel (ADR 011) so a handoff links the
@@ -300,6 +346,10 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           ? laneVerdictAck(ackBody.lane_verdict)
           : undefined;
         const verdictGuidance = laneVerdict ? ` ${laneVerdict.guidance}` : '';
+        const claimsGuidance =
+          laneVerdict && acceptorClaims && acceptorClaims.length > 0
+            ? ` Your re-check recorded: ${claimsLine(acceptorClaims)}.`
+            : '';
         // Lane 01M2P2E2H6: the other half — a `wait` that TOOK an acceptance ask without deciding
         // it. Said on the spot for the mirror-image reason: the sender must learn that this one did
         // NOT move the lane, or "acknowledged" and "accepted" stay indistinguishable from outside.
@@ -349,6 +399,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             : `sent ${args.act} to ${toLabel} (id=${envelope.id})`) +
           handoffGuidance +
           verdictGuidance +
+          claimsGuidance +
           escalationGuidance +
           supersededGuidance +
           ackGuidance +

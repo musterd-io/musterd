@@ -242,6 +242,19 @@ export const LADDER: PortableMigration[] = [
       await d.exec(WAKE_LEASES_ONE_LIVE_SQL);
     },
   },
+  {
+    // v95 — ADR 585: the verification rail. One nullable JSON column beside `merged_json` holding the
+    // claims a seat filed at submit and the acceptor's re-check at accept, each with its verdict and
+    // checker. No backfill: a lane submitted before the rail has no claims, and absence reads as such.
+    version: 95,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('claims_json')) db.exec('ALTER TABLE lanes ADD COLUMN claims_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS claims_json TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

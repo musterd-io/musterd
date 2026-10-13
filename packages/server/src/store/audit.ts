@@ -203,6 +203,11 @@ export type AuditAction =
   // `lane.review_sent_back` is the review catch — a counterpart returned a
   // ready_for_review lane to a live state (detail: { lane, reviewer, owner }).
   | 'lane.ready_for_review'
+  // ADR 585: the verification rail. `lane.claims_filed` — the submitter's claims and their verdicts
+  // (detail: { lane, by, confirmed, unconfirmed, unverifiable, claims }); `lane.claims_verified` —
+  // the acceptor's independent re-check of the same claims from its own clone (same detail shape).
+  | 'lane.claims_filed'
+  | 'lane.claims_verified'
   | 'lane.closed'
   | 'lane.review_sent_back'
   | 'lane.review_peer_confirmed'
@@ -656,6 +661,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'presence.reattested': 'actor',
   'git.pr_merged': 'actor',
   'lane.ready_for_review': 'actor',
+  'lane.claims_filed': 'actor',
+  'lane.claims_verified': 'actor',
   'lane.closed': 'actor',
   'lane.review_sent_back': 'actor',
   'lane.review_peer_confirmed': 'actor',

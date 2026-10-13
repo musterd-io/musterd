@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClaimCheckSchema } from './claimCheck.js';
+import { LaneClaimsSchema } from './claims.js';
 import { GoalSchema } from './goals.js';
 import { HoldSchema } from './holds.js';
 import {
@@ -509,6 +510,9 @@ export const LaneSchema = z.object({
   source_ref: z.string().nullable().optional(),
   /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
   unfinished_todos: LaneTodosSchema.nullable().optional(),
+  /** ADR 585: the claims filed at submit and re-checked at accept, each with its verdict and the
+   *  seat whose clone checked it. Absent on lanes submitted before the rail (skew posture). */
+  claims: LaneClaimsSchema.optional(),
   /**
    * Board-projection annotation (ADR 169/191), never stored: for a `done` lane, whether the close
    * was a counterpart *acceptance* (derived from the `lane.closed` audit row's closer vs
@@ -705,6 +709,10 @@ export const UpdateLaneSchema = z.object({
    * named lane must exist; one with no goal is attached to this lane's goal.
    */
   follows_up: LaneFollowsUpSchema.optional(),
+  /** ADR 585: claims the sender checked in its own clone. The daemon stamps `checked_by` from the
+   *  authenticated sender and MERGES into the lane's standing claims (a seat's fresh reading of a
+   *  kind+ref replaces its own earlier one; other seats' readings stay). */
+  claims: LaneClaimsSchema.optional(),
   /**
    * ADR 487: why this lane is dropped — on the move into `abandoned`, or later on an abandoned lane.
    * Mirrors `park_reason`. Required on an abandoned lane named in another lane's `follows_up`.

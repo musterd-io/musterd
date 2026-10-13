@@ -1,5 +1,4 @@
-import type { McpConfig } from '@musterd/protocol';
-import type { MemberSummary } from '@musterd/protocol';
+import type { McpConfig, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import type { MusterdClient } from '../client.js';
 import { registerInboxCheck } from './inboxCheck.js';

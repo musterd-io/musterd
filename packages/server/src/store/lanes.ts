@@ -1,4 +1,5 @@
 import {
+  mergeClaims,
   ACCEPTANCE_STALE_MS,
   compareGoals,
   DEFAULT_PROJECT,
@@ -64,6 +65,8 @@ interface LaneRow {
   unfinished_todos_json: string | null;
   /** The issue this lane came from (ADR 561, v91); null = none. */
   source_ref: string | null;
+  /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
+  claims_json: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -106,6 +109,7 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
       ? { unfinished_todos: JSON.parse(row.unfinished_todos_json) as Lane['unfinished_todos'] }
       : {}),
     ...(row.source_ref ? { source_ref: row.source_ref } : {}),
+    ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -270,6 +274,7 @@ export async function openLane(
     follows_up_json: null,
     abandon_reason: null,
     unfinished_todos_json: null,
+    claims_json: null,
     source_ref: input.source_ref ?? null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
@@ -573,6 +578,14 @@ async function updateLaneInTx(
       : patch.unfinished_todos.length === 0
         ? null
         : { items: patch.unfinished_todos, at: now };
+  // ADR 585: a checker's fresh claims merge into the standing list — its own earlier reading of a
+  // (kind, ref) is replaced, other seats' readings stay — so an acceptor's re-check sits beside the
+  // submitter's, never over it. `checked_by` was stamped by the transport from the authenticated
+  // sender before this write; the store trusts the patch it is handed.
+  const claims =
+    patch.claims !== undefined
+      ? mergeClaims(existing.claims ?? [], patch.claims)
+      : (existing.claims ?? null);
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -598,6 +611,7 @@ async function updateLaneInTx(
     merged_json: merged ? JSON.stringify(merged) : null,
     parked_json: parked ? JSON.stringify(parked) : null,
     follows_up_json: followsUp !== null ? JSON.stringify(followsUp) : null,
+    claims_json: claims && claims.length > 0 ? JSON.stringify(claims) : null,
     abandon_reason: abandonReason,
     unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
     source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
@@ -655,6 +669,7 @@ async function updateLaneInTx(
     'abandon_reason',
     'unfinished_todos_json',
     'source_ref',
+    'claims_json',
     'state',
     'claimed_at',
     'resolved_at',

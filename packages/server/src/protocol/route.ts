@@ -1,4 +1,6 @@
 import {
+  LaneClaimsSchema,
+  summariseClaims,
   blockedByOf,
   DeferUntilSchema,
   eligibleOf,
@@ -617,7 +619,15 @@ async function routeEnvelopeInner(
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
         if (!escalatedToHuman && !laneSuperseded)
-          laneVerdict = await applyAcceptanceVerdict(ctx, team, sender, ref, env.act, env.body);
+          laneVerdict = await applyAcceptanceVerdict(
+            ctx,
+            team,
+            sender,
+            ref,
+            env.act,
+            env.body,
+            env.meta,
+          );
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
       }
@@ -1454,6 +1464,7 @@ async function applyAcceptanceVerdict(
   repliedToId: string,
   act: 'accept' | 'decline',
   body: string,
+  meta?: Record<string, unknown> | null,
 ): Promise<RouteResult['lane_verdict']> {
   const replied = await ctx.db.get<{ meta: string | null }>(
     'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
@@ -1483,6 +1494,14 @@ async function applyAcceptanceVerdict(
     return;
   }
 
+  // ADR 585: the acceptor's independent re-check of the submitter's claims, run in the acceptor's
+  // own clone and carried on the verdict act as `meta.claims`. Stamped with the decider's name
+  // (never the body's), merged beside the submitter's reading, and written in the same guarded
+  // transaction as the verdict so a claim row cannot exist without the close it belongs to.
+  const checked = LaneClaimsSchema.safeParse(meta?.['claims']);
+  const acceptorClaims = checked.success
+    ? checked.data.map((c) => ({ ...c, checked_by: decider.name }))
+    : undefined;
   // Guarded write: two verdicts racing on one lane (two acceptors, accept vs decline, or a board
   // PATCH) both pass the state check above; only the first may move the lane. The loser reads the
   // conflict as "already decided" — the same outcome the synchronous store gave it by ordering.
@@ -1493,7 +1512,10 @@ async function applyAcceptanceVerdict(
       team.id,
       laneId,
       team.slug,
-      { state: act === 'accept' ? 'done' : 'active' },
+      {
+        state: act === 'accept' ? 'done' : 'active',
+        ...(acceptorClaims && acceptorClaims.length > 0 ? { claims: acceptorClaims } : {}),
+      },
       Date.now(),
       { state: before.state, owner_seat: before.owner_seat },
       { actor: decider.name },
@@ -1506,6 +1528,19 @@ async function applyAcceptanceVerdict(
     throw err;
   }
   if (!lane) return;
+  if (acceptorClaims && acceptorClaims.length > 0)
+    await appendAudit(ctx.db, team.id, {
+      actor: decider.name,
+      action: 'lane.claims_verified',
+      target: lane.id,
+      result: 'allow',
+      detail: {
+        lane: lane.id,
+        by: decider.name,
+        ...summariseClaims(acceptorClaims),
+        claims: acceptorClaims.map(({ kind, ref, verdict }) => ({ kind, ref, verdict })),
+      },
+    });
 
   if (act === 'accept') {
     await recordLaneClose(ctx.db, team.id, decider, before, lane);

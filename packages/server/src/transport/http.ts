@@ -4,6 +4,7 @@ import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import {
+  summariseClaims,
   ReviewPromisesQuerySchema,
   ReviewPromisesResponseSchema,
   WorkspaceRepairBodySchema,
@@ -6977,6 +6978,10 @@ export async function handleHttp(
         if (body.depends_on) body.depends_on = await lanesNamedIn(ctx, team.id, body.depends_on);
         if (Array.isArray(body.follows_up))
           body.follows_up = await lanesNamedIn(ctx, team.id, body.follows_up);
+        // ADR 585: a claim's checker is the authenticated sender, whatever the body said — a seat
+        // cannot file a reading under another seat's name. Stamped here so the hub's arbitration
+        // (which trusts the joiner's forwarded body the way it trusts `merged`) stores the same.
+        if (body.claims) body.claims = body.claims.map((c) => ({ ...c, checked_by: member.name }));
         const before = await getLane(ctx.db, team.id, laneId, team.slug);
         if (!before) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
         // The policy before the write — service seats, the live-incumbent rule, the ADR 305
@@ -7339,6 +7344,21 @@ export async function handleHttp(
               : 'standard';
           const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
           // A lane transition: the replicated, required form (lane-replication spec §Hole 3).
+          // ADR 585: the submitter's claims and their verdicts, as the rail's first reading. A
+          // separate row from the ready edge so the Eval can count filed vs verified per lane.
+          if (body.claims && body.claims.length > 0)
+            await appendAudit(ctx.db, team.id, {
+              actor: member.name,
+              action: 'lane.claims_filed',
+              target: lane.id,
+              result: 'allow',
+              detail: {
+                lane: lane.id,
+                by: member.name,
+                ...summariseClaims(body.claims),
+                claims: body.claims.map(({ kind, ref, verdict }) => ({ kind, ref, verdict })),
+              },
+            });
           await appendLaneEventRequired(ctx.db, team.id, {
             actor: member.name,
             action: 'lane.ready_for_review',
@@ -7347,6 +7367,9 @@ export async function handleHttp(
             detail: {
               lane: lane.id,
               owner: lane.owner_seat,
+              ...(body.claims && body.claims.length > 0
+                ? { claims: summariseClaims(body.claims) }
+                : {}),
               // ADR 234 increment 1 — the LABEL. Recorded unconditionally (never omitted when
               // 'normal') because the Eval has to split the answer rate by declared tier, and a
               // field that disappears on the default value makes the largest bucket the one you
