@@ -32,6 +32,9 @@ export interface WallBoardColumn {
   count: number;
   /** At most STICKY_CAP notes, board order preserved. */
   stickies: WallSticky[];
+  /** How many slots in this column a card has ever held, as this viewer has seen the board (`withHeld`):
+   *  the cork keeps a tack hole in each of those slots that is now empty. Absent = none yet. */
+  held?: number;
 }
 
 export type WallBoard = WallBoardColumn[];
@@ -153,4 +156,32 @@ export const STICKY_SWAY_S = 1.1;
 export function stickySway(age: number | undefined): number {
   if (age === undefined || age < 0 || age >= STICKY_SWAY_S) return 0;
   return Math.sin(age * 14) * Math.exp(-age * 2.8) * 5.5;
+}
+
+/** Per-column high-water marks: the most cards (up to `STICKY_CAP`) this viewer has seen hanging in a column. */
+export type HeldMarks = Partial<Record<LaneState, number>>;
+
+/**
+ * Fold what the board shows now into the viewer's marks and stamp each column with its mark (lane
+ * 01M4VP3V99, "pin holes remember where cards hung"). A mark only ever rises: a slot that held a card
+ * keeps its hole after the card moves on. Viewer-local history by design — nothing is stored on the
+ * server — so a first-time viewer starts with a clean cork. Pure; `changed` says whether to save.
+ */
+export function withHeld(
+  board: WallBoard | null,
+  marks: HeldMarks,
+): { board: WallBoard | null; marks: HeldMarks; changed: boolean } {
+  if (!board) return { board, marks, changed: false };
+  const next: HeldMarks = { ...marks };
+  let changed = false;
+  const out = board.map((col) => {
+    const seen = Math.min(col.count, STICKY_CAP);
+    const held = Math.max(next[col.key] ?? 0, seen);
+    if (held !== (next[col.key] ?? 0)) {
+      next[col.key] = held;
+      changed = true;
+    }
+    return held > 0 ? { ...col, held } : col;
+  });
+  return { board: out, marks: changed ? next : marks, changed };
 }

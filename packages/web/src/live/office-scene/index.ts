@@ -83,8 +83,9 @@ import {
 } from './render';
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
+import { loadHeld, saveHeld } from './boardHoles';
 import { createLaneOwners } from './laneOwners';
-import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
+import { laneSeed, WALL_COLUMNS, withHeld, withPinned, withTaken, type HeldMarks, type PinnedCard, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -563,6 +564,8 @@ export function mountOffice(
   let teamName = 'revive';
   let teamWorkingHours: OfficeData['teamWorkingHours'] = null;
   let wallBoard: WallBoard | null = null; // the wall's agile board (bake-time data)
+  let heldTeam = ''; // the team `heldMarks` was loaded for
+  let heldMarks: HeldMarks = {}; // this viewer's pin-hole history (boardHoles.ts)
   /** Cards in someone's hand, and for a while after: a claimed lane's slot stays empty until the board's
    *  own refresh has moved it to "claimed" (or 12s pass), so the card does not pop back onto the wall
    *  between the walker sitting down and the board catching up. `laneSeed` → expiry (ms). */
@@ -2301,7 +2304,16 @@ export function mountOffice(
     onlineNames = nextOnline;
     teamName = next.teamName ?? 'revive';
     teamWorkingHours = next.teamWorkingHours ?? null;
-    wallBoard = next.wallBoard ?? null;
+    // The wall keeps a tack hole where a card has hung (lane 01M4VP3V99): fold what the board shows into
+    // this viewer's high-water marks, loaded once per team and saved only when one rises.
+    if (heldTeam !== teamName) {
+      heldTeam = teamName;
+      heldMarks = loadHeld(teamName);
+    }
+    const heldNow = withHeld(next.wallBoard ?? null, heldMarks);
+    heldMarks = heldNow.marks;
+    if (heldNow.changed) saveHeld(teamName, heldMarks);
+    wallBoard = heldNow.board;
     placements = assignSeats(next.nodes, new Set(next.gathered ?? []));
     const byName = new Map(next.nodes.map((n) => [n.name, n]));
     syncAsks(next.asks ?? [], byName);

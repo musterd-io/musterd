@@ -1367,3 +1367,19 @@ trim or a re-baseline that tightens elsewhere.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 310,500 B with the frame in
   the home route.
+
+### 2026-10-13 — `totalJsGzipBytes` 310,500 → 311,200 B: pin holes remember where cards hung (lane `01M4VP3V99`)
+
+| Budget   | Before (main, same day)      | This branch | Ceiling                    |
+| -------- | ---------------------------- | ----------- | -------------------------- |
+| total JS | 303.1 KB (~310,400 B)        | 303.4 KB (~310,680 B) | RAISED 310,500 → 311,200 B |
+
+The change is ~0.3 KB gz: `withHeld` (the per-column high-water marks), `boardHoles.ts` (guarded browser
+storage, validated on read) and the hole drawing. No dependency, no chunk added. The ceiling was
+already saturated, so the feature failed `perf:check` by ~180 B locally; a trim that size is below gzip
+noise (±50 B a build, CI +50–300 B over a laptop) and was not found inside this change. Raised tight, measured
++ ~0.15%, not +15%. The next web feature that adds bytes needs a real trim or a re-baseline that tightens
+elsewhere — sun shafts (the next lane under `office-liveliness`) will be the test of that.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
+

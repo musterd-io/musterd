@@ -934,10 +934,9 @@ function wallLaneBoard(
       rect(mid - tw / 2 + ja, top - 1.6, mid + tw / 2 + ja, top + 1.6, faded ? tone.fadedTape : tone.tape);
       rect(mid - tw / 2 + ja, top + 1, mid + tw / 2 + ja, top + 1.6, PINBOARD.tapeSheen);
     }
-    // The cork keeps its tack holes: every slot with no card on it shows the small dark hole its card
-    // left, so a board that has been used reads as used (L5, "pin holes stay"). Where a card WAS is not
-    // tracked — the slots are what persist — and a column's top slot is always its first card's place.
-    for (let s = col.stickies.length; s < STICKY_CAP; s++) {
+    // The cork keeps its tack holes: every slot a card has held (`held`, this viewer's high-water mark)
+    // and that has no card on it now shows the small dark hole its card left — "pin holes stay" (L5).
+    for (let s = col.stickies.length; s < (col.held ?? 0); s++) {
       const top = H / 2 - M - 6 - s * (noteH + 2.5);
       rect(mid - 0.9, top - 1.4, mid + 0.9, top + 0.4, PINBOARD.hole);
     }
