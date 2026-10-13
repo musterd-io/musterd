@@ -96,6 +96,13 @@ export const GLOSSARY: GlossaryTerm[] = [
     not: ['worktree (as a synonym for workspace)'],
   },
   {
+    term: 'office',
+    status: 'canonical',
+    definition:
+      "Everything a team shares, as one place: its board, its members' inboxes, its memory and its record. The office scene at /live draws it as a room you can watch. A workspace is one seat's; the office is the team's (ADR 578).",
+    not: ['the team itself (the office is where a team works, not who is on it)', 'the daemon, MCP or the hub (plumbing; copy never names it as the office)'],
+  },
+  {
     term: 'harness',
     status: 'canonical',
     definition: 'The agent runtime family: Claude Code, Cursor, Codex.',
