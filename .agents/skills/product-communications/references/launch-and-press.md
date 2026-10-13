@@ -110,11 +110,11 @@ capabilities as the way there, and evidence that it works
 ([Raskin, Medium](https://medium.com/the-mission/the-greatest-sales-deck-ive-ever-seen-4f4ef3391ba0)).
 Nancy Duarte's alternative moves between what is and what could be.
 
-Both lean on before and after. Show it as scenes: the two agents that undid each
-other, then the same work with a lane. The sentence-level ban in brand.md §4
-still holds inside every scene. Whether
-narrative-level contrast is allowed is a brand.md decision that has not been
-made; until it is, use scenes.
+Both lean on before and after, which brand.md §4 allows as story structure
+(nick, 2026-10-13) on two conditions: the "before" is specific and true (the
+reader's situation or our measured past), and it is shown as a scene. The
+sentence-level ban still holds inside every scene. The standing deck's slide 2
+is the pattern.
 
 ## Social posts (provisional)
 
