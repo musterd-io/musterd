@@ -1,7 +1,7 @@
 # /broadcast at a steady 30 fps on the CPU box — design
 
-**Status:** design approved in chat 2026-10-13 (nick, miley), section by section; the written spec is
-awaiting review. Lane `01M4VR55VNTPDMCCBBEM2G70TB`. Goal: `launch`.
+**Status:** approved 2026-10-13: the design in chat section by section, and the written spec by nick.
+Plan: [`2026-10-13-broadcast-smooth-capture.md`](../plans/2026-10-13-broadcast-smooth-capture.md). Lane `01M4VR55VNTPDMCCBBEM2G70TB`. Goal: `launch`.
 
 ## What nick asked for (2026-10-13)
 
@@ -119,21 +119,20 @@ so the fallback is known, not planned.
 
 ## Increments
 
-All four are under goal `launch`. The plan splits each into its own lane. Until then, each cites the
-design lane.
+All four are under goal `launch`. Each has its own lane; the design lane is `01M4VR55VNTPDMCCBBEM2G70TB`.
 
 1. **Measure lever 1 (no production code).** On a Fly bench box (`broadcast-bench.Dockerfile` plus
    Xvfb), run the harness at 1080p30 with screencast, then with x11grab, using an ad-hoc ffmpeg
    invocation. Record both rows and the frame-gap p95. **Stop rule:** if x11grab frees less than a
-   core, stop and rethink before building it. Lane `01M4VR55VNTPDMCCBBEM2G70TB`.
+   core, stop and rethink before building it. Lane `01M4VS17JXV4G9AVFPB7W7A6ZW`.
 2. **Build `--capture x11`.** This covers the CLI capture mode, the hosted image's Xvfb, the
    draw-counter watchdog, relaunch and audio, with unit tests for the ffmpeg argv and the watchdog. The
-   default stays screencast. Lane `01M4VR55VNTPDMCCBBEM2G70TB`.
+   default stays screencast. Lane `01M4VS1F2V95QF8KX4YAZKJCEJ`.
 3. **Dirty-rect repaint on /broadcast**, with the pixel-identity test and the repainted-area metric.
-   Lane `01M4VR55VNTPDMCCBBEM2G70TB`.
+   Lane `01M4VS1SJQP5362ZHPRCX9F9RK`.
 4. **Measure against the bar, on the bench and then on the live stream.** If it passes, write the ADR
    that flips the default to `x11` and set the hosted stream to 30 fps. If it does not, open lever 3
-   as its own brainstorm. Lane `01M4VR55VNTPDMCCBBEM2G70TB`.
+   as its own brainstorm. Lane `01M4VS22F19WBSG5Y82Z4MYW69`.
 
 ## Fallback
 
