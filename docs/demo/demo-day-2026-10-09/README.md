@@ -1,5 +1,8 @@
 # Demo Day, 2026-10-09
 
+> This folder is the record of that day's deck as shown. The standing pitch deck grew from it and
+> lives in [`../pitch/`](../pitch/README.md) (2026-10-13); change that one for the next event.
+
 Six-minute pitch to investors, founders and media. The organizers' upload folder is
 `musterd_DemoDay` with four files; this folder holds the sources for them.
 

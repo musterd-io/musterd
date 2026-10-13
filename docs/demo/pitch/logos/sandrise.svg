@@ -1,0 +1,34 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fbg" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#20362B"/>
+      <stop offset="100%" stop-color="#111E18"/>
+    </linearGradient>
+    <radialGradient id="fsun" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#FFEFCF"/>
+      <stop offset="45%" stop-color="#FBC46A"/>
+      <stop offset="100%" stop-color="#ED963A"/>
+    </radialGradient>
+    <linearGradient id="fback" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#5F3A22"/><stop offset="100%" stop-color="#9A6A3E"/>
+    </linearGradient>
+    <linearGradient id="flit" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#CFA268"/><stop offset="100%" stop-color="#FBEBCF"/>
+    </linearGradient>
+    <linearGradient id="fshadow" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#7E5330"/><stop offset="100%" stop-color="#B98A54"/>
+    </linearGradient>
+    <clipPath id="fcard"><rect width="64" height="64" rx="16"/></clipPath>
+    <clipPath id="fground"><rect x="0" y="0" width="64" height="46"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#fbg)"/>
+  <g clip-path="url(#fcard)">
+    <g clip-path="url(#fground)">
+      <circle cx="30" cy="31" r="13" fill="url(#fsun)"/>
+      <path d="M 4 46 L 22 24 L 39 46 Z" fill="url(#fback)"/>
+      <path d="M 24 46 L 40 13 L 40 46 Z" fill="url(#flit)"/>
+      <path d="M 40 13 L 40 46 L 62 46 Z" fill="url(#fshadow)"/>
+    </g>
+    <rect x="10" y="45" width="44" height="3" rx="1.5" fill="#3E8F63"/>
+  </g>
+</svg>
