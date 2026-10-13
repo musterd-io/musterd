@@ -106,6 +106,15 @@ interface ConnState {
   /** ADR 558: the last `hearing` this connection's heartbeat carried, so only a change writes the
    *  `presence.hearing` row — a reconnect re-reports once, a steady state writes nothing. */
   hearing?: Hearing;
+  /** When the socket opened, so `ws_close` can say how long it lived. */
+  openedAt: number;
+  /** What the `close` event carried, read back by the `ws_close` line (lane 01M4VAWG30). A 1006
+   *  here means the TCP stream ended with no close frame — the proxy or the network, not either
+   *  peer's `close()`; a code either peer sent names that peer. Runs 35/36 lost 23–46 viewer
+   *  sockets to bursts of 1006 and the hub's log could not say which side had closed. */
+  closeCode?: number;
+  closeReason?: string;
+  closeError?: string;
 }
 
 /**
@@ -242,7 +251,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
     // Cloud (spec §5.3): the team this connection's host names; a claim may name no other.
     const cloudSuffix = rootCtx.config.cloud?.hostSuffix ?? null;
     const hostTeamName = cloudSuffix ? hostTeam(upgrade.headers.host, cloudSuffix) : null;
-    const state: ConnState = { connId: ulid(), authenticated: false };
+    const state: ConnState = { connId: ulid(), authenticated: false, openedAt: Date.now() };
     // The connection's ctx: operator until the claim names a team, that team's from then on.
     let ctx: Ctx = opCtx;
 
@@ -1245,7 +1254,15 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
       ) {
         emitPresence(ctx, conn, 'offline');
       }
-      log.info({ msg: 'ws_close', member: conn.memberName, conn: conn.connId });
+      log.info({
+        msg: 'ws_close',
+        member: conn.memberName,
+        conn: conn.connId,
+        code: state.closeCode ?? null,
+        reason: state.closeReason || null,
+        error: state.closeError ?? null,
+        lived_ms: Date.now() - state.openedAt,
+      });
     };
 
     // Behind the frame chain: a frame still in flight must settle before the row is released.
@@ -1259,8 +1276,15 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           log.warn({ msg: 'ws_cleanup_failed', conn: state.connId, err: String(err) }),
         );
     };
-    ws.on('close', closeAfterFrames);
-    ws.on('error', closeAfterFrames);
+    ws.on('close', (code, reason) => {
+      state.closeCode = code;
+      state.closeReason = reason.toString('utf8').slice(0, 120);
+      closeAfterFrames();
+    });
+    ws.on('error', (err) => {
+      state.closeError = String(err instanceof Error ? err.message : err).slice(0, 200);
+      closeAfterFrames();
+    });
   });
 
   return wss;

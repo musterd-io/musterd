@@ -20,15 +20,24 @@
  *
  * Env: BENCH_APP (musterd-loadbench), BENCH_SIZE (performance-2x), BENCH_MEMORY_MB (4096),
  * BENCH_REGION (iad), BENCH_WAIT_MIN (180). Exits with the command's exit code.
+ *
+ * BENCH_HUB_APP=<fly app> also tails THAT app's log for the whole run and keeps its socket lines
+ * (`ws_close`, `ws_cleanup_failed`, `ws_heartbeat_reaped`) in BENCH_HUB_LOG (default
+ * ~/.musterd/cloud/bench/out/hub-<label>-<time>.log). Run 36 could not say who closed 23 viewer
+ * sockets because `fly logs --no-tail` had rolled past the burst windows by the time anyone looked
+ * (lane 01M4VAWG30); the hub's line now carries the close code, and this keeps it.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 
 const APP = process.env.BENCH_APP ?? 'musterd-loadbench';
 const SIZE = process.env.BENCH_SIZE ?? 'performance-2x';
 const MEMORY_MB = Number(process.env.BENCH_MEMORY_MB ?? 4096);
 const REGION = process.env.BENCH_REGION ?? 'iad';
 const WAIT_MIN = Number(process.env.BENCH_WAIT_MIN ?? 180);
+const HUB_APP = process.env.BENCH_HUB_APP ?? null;
+const HUB_LINE = /ws_close|ws_cleanup_failed|ws_heartbeat_reaped/;
 const CONFIG = 'scripts/perf/loadbench.fly.toml';
 const REGISTRY = 'https://registry.fly.io/v2';
 
@@ -110,6 +119,30 @@ async function createMachine(token, image, cmd) {
   return body.id;
 }
 
+/** Tail the hub app's log for the run, keeping only its socket lines, to a file and the console. */
+function tailHub(label) {
+  if (!HUB_APP) return null;
+  const path =
+    process.env.BENCH_HUB_LOG ??
+    `${homedir()}/.musterd/cloud/bench/out/hub-${label}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+  mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+  const file = createWriteStream(path, { flags: 'a' });
+  const child = spawn('fly', ['logs', '--app', HUB_APP], { stdio: ['ignore', 'pipe', 'inherit'] });
+  let rest = '';
+  child.stdout.on('data', (chunk) => {
+    rest += chunk.toString('utf8');
+    const lines = rest.split('\n');
+    rest = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!HUB_LINE.test(line)) continue;
+      file.write(`${line}\n`);
+      console.log(`[hub] ${line}`);
+    }
+  });
+  console.log(`hub log (${HUB_APP}, socket lines) → ${path}`);
+  return { kill: () => child.kill(), end: () => file.end() };
+}
+
 function machine(id) {
   const all = JSON.parse(
     run('fly', ['machines', 'list', '--app', APP, '--json'], { capture: true }),
@@ -154,6 +187,7 @@ try {
   const id = await createMachine(token, image, cmd);
   console.log(`bench machine ${id}`);
   const tail = spawn('fly', ['logs', '--app', APP, '--machine', id], { stdio: 'inherit' });
+  const hub = tailHub(label);
   let code = null;
   try {
     const deadline = Date.now() + WAIT_MIN * 60_000;
@@ -186,6 +220,8 @@ try {
     await new Promise((r) => setTimeout(r, 8_000));
   } finally {
     tail.kill();
+    hub?.kill();
+    hub?.end();
     run('fly', ['machine', 'destroy', id, '--app', APP, '--force'], { capture: true });
     console.log(`── 4. destroyed ${id}`);
   }
