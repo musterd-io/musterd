@@ -567,6 +567,12 @@ async function drive() {
 
   // Viewers: /live on the humans' phones.
   const sockets = [];
+  /** Every viewer socket that closed before the run stopped: when, how long it lived, whether it had
+   *  been claimed (so its roster reads were counted) — run 35 lost 46 of 75 to `1006` with only a
+   *  count to show for it, and a closed viewer never reconnects, so each one lightens the roster rail
+   *  for the rest of the run (lane 01M4V72T1V). */
+  const wsCloses = [];
+  const railT0 = Date.now();
   let presenceFrames = 0;
   let laneFrames = 0;
   ready.humans.slice(0, VIEWERS).forEach((h, i) =>
@@ -608,6 +614,8 @@ async function drive() {
       const ws = new WebSocket(wsUrl);
       sockets.push(ws);
       let hb;
+      const openedAt = Date.now();
+      let claimed = false;
       ws.on('open', () =>
         ws.send(
           JSON.stringify({
@@ -629,6 +637,7 @@ async function drive() {
           return;
         }
         if (f.type === 'occupied') {
+          claimed = true;
           ws.send(JSON.stringify({ type: 'subscribe', scope: 'team-all' }));
           hb = setInterval(() => ws.send(JSON.stringify({ type: 'heartbeat' })), 15_000);
         } else if (f.type === 'presence' && !stopping) {
@@ -645,7 +654,9 @@ async function drive() {
       });
       ws.on('close', (code) => {
         clearInterval(hb);
-        if (!stopping) fail('WS /ws (viewer)', `close ${code}`);
+        if (stopping) return;
+        fail('WS /ws (viewer)', `close ${code}`);
+        wsCloses.push({ at: Date.now() - railT0, lived: Date.now() - openedAt, code, claimed });
       });
       ws.on('error', () => fail('WS /ws (viewer)', 'error'));
     }),
@@ -674,6 +685,7 @@ async function drive() {
   const windowEnd = new Date();
   child?.send({ type: 'stop', cpu0: started.cpu0, t0: started.t0 });
   const stats = child ? await next('stats') : null;
+  const liveAtStop = sockets.filter((w) => w.readyState === 1).length;
   for (const ws of sockets) ws.terminate();
 
   // ── report ──
@@ -706,6 +718,18 @@ async function drive() {
       `presence frames ${presenceFrames}  lane frames ${laneFrames}`,
   );
   for (const [k, v] of errorsByRoute) console.log(`  error ${k}: ${v}`);
+  if (wsCloses.length) {
+    const sec = (ms) => (ms / 1000).toFixed(0);
+    console.log(
+      `  viewer sockets closed ${wsCloses.length} of ${sockets.length} (${liveAtStop} live at stop); ` +
+        `first at +${sec(wsCloses[0].at)}s, last at +${sec(wsCloses[wsCloses.length - 1].at)}s; ` +
+        `no reconnect — each one stops reading the roster`,
+    );
+    for (const c of wsCloses)
+      console.log(
+        `    +${sec(c.at)}s close ${c.code} after ${sec(c.lived)}s ${c.claimed ? 'claimed' : 'unclaimed'}`,
+      );
+  }
   console.log(`  ${'route'.padEnd(34)} calls    p50    p95    p99    max  max body`);
   const rows = [...samples.entries()].sort((a, b) => pct(b[1].ms, 0.95) - pct(a[1].ms, 0.95));
   for (const [k, s] of rows)
