@@ -1050,21 +1050,24 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       const kinds = l2.json.warnings.map((w: { kind: string }) => w.kind).sort();
       expect(kinds).toEqual(['surface_overlap', 'unmet_dependency']);
 
-      // nick (the affected owner) got directed [lane] wakes — plus bo's lane-open broadcast to the
-      // team (ADR 083 §4 extended: open/resolve are board-shape changes, unlike warnings which stay
-      // directed). nick's own l1 open never appears here — the inbox excludes the sender's own acts.
+      // nick (the affected owner) got a directed [lane] wake for the dependency only — plus bo's
+      // lane-open broadcast to the team (ADR 083 §4 extended: open/resolve are board-shape changes).
+      // The overlap stays inline and on the board (ADR 575). nick's own l1 open never appears here —
+      // the inbox excludes the sender's own acts.
       const inbox = await get('/teams/dawn/inbox?unread=1', nickTok);
       const laneMsgs = inbox.json.messages.filter((m: { body: string }) =>
         m.body.startsWith('[lane]'),
       );
-      expect(laneMsgs).toHaveLength(3);
-      // Order-independent: the three [lane] messages are emitted in one request and can share a
-      // millisecond `ts`, so their inbox order falls to the ulid-`id` tiebreak (non-deterministic under
-      // load — this assertion was flaky by fixed index). Assert the multiset instead: two directed
-      // warnings to nick + one lane-open broadcast.
+      expect(laneMsgs).toHaveLength(2);
+      // Order-independent: the [lane] messages are emitted in one request and can share a millisecond
+      // `ts`, so their inbox order falls to the ulid-`id` tiebreak (non-deterministic under load).
+      // Assert the multiset instead: one directed dependency warning to nick + one lane-open broadcast.
+      const directed = laneMsgs.filter(
+        (m: { meta: { lane_warning?: { kind: string } } }) => m.meta.lane_warning,
+      );
       expect(
-        laneMsgs.filter((m: { meta: Record<string, unknown> }) => m.meta.lane_warning),
-      ).toHaveLength(2);
+        directed.map((m: { meta: { lane_warning: { kind: string } } }) => m.meta.lane_warning.kind),
+      ).toEqual(['unmet_dependency']);
       expect(
         laneMsgs.filter((m: { meta: Record<string, unknown> }) => m.meta.lane_open),
       ).toHaveLength(1);
@@ -1079,7 +1082,7 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       const inbox2 = await get('/teams/dawn/inbox?unread=1', nickTok);
       expect(
         inbox2.json.messages.filter((m: { body: string }) => m.body.startsWith('[lane]')),
-      ).toHaveLength(3);
+      ).toHaveLength(2);
 
       // Board: both lanes, the pair of warnings annotated (overlap deduped to one).
       const board = await get('/teams/dawn/lanes?project=musterd', boTok);
@@ -1231,21 +1234,45 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       expect(got.meta.lane_handoff.lane).toBe(handedLane.json.lane.id);
     });
 
-    it('a surface-overlap warning stays a plain message — advisories must never spend a wake', async () => {
+    it('a surface overlap is not sent to the other owner (ADR 575)', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const nickTok = team.json.human_credential;
       const bo = await post('/teams/dawn/members', { name: 'bo', kind: 'human' }, nickTok);
       const boTok = bo.json.human_credential;
-
-      // nick claims a surface; bo claims one that overlaps it → nick gets the advisory.
       await post(
         '/teams/dawn/lanes',
         { title: 'store', scope: ['packages/server/src/store/**'], claim: true },
         nickTok,
       );
-      await post(
+      const opened = await post(
         '/teams/dawn/lanes',
         { title: 'store too', scope: ['packages/server/src/store/delivery.ts'], claim: true },
+        boTok,
+      );
+      // The actor still sees it inline, and the board still shows it.
+      expect(opened.json.warnings.map((w: { kind: string }) => w.kind)).toContain(
+        'surface_overlap',
+      );
+      const inbox = await get('/teams/dawn/inbox?unread=1', nickTok);
+      expect(
+        inbox.json.messages.filter(
+          (m: { meta?: { lane_warning?: { kind?: string } } }) =>
+            m.meta?.lane_warning?.kind === 'surface_overlap',
+        ),
+      ).toHaveLength(0);
+    });
+
+    it('a directed lane warning stays a plain message — advisories must never spend a wake', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      const bo = await post('/teams/dawn/members', { name: 'bo', kind: 'human' }, nickTok);
+      const boTok = bo.json.human_credential;
+
+      // nick claims a lane; bo claims one that builds on it → nick gets the dependency advisory.
+      const base = await post('/teams/dawn/lanes', { title: 'store', claim: true }, nickTok);
+      await post(
+        '/teams/dawn/lanes',
+        { title: 'store too', depends_on: [base.json.lane.id], claim: true },
         boTok,
       );
 
@@ -1256,7 +1283,7 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       expect(warn).toBeDefined();
       // The regression guard for the two-caller trap: `deliverLaneAct` serves both the handoff and this
       // advisory. Naming the act on the shared helper instead of at the handoff call site would make
-      // "your lane overlaps someone's" wake offline seats — strictly worse than the bug it fixes.
+      // "someone builds on your lane" wake offline seats — strictly worse than the bug it fixes.
       expect(warn.act).toBe('message');
       const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
       expect((await openDirectedLedger(h.server.store, teamId)).map((d) => d.id)).not.toContain(

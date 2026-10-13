@@ -64,7 +64,7 @@ withDrivers('lanes', (o) => {
     });
   }
 
-  describe('globsOverlap (cheap prefix intersection, ADR 083)', () => {
+  describe('globsOverlap (segment intersection, ADR 083 / ADR 575)', () => {
     it('overlaps on shared path prefixes, either direction', () => {
       expect(globsOverlap('packages/server/src/store/**', 'packages/server/**')).toBe(true);
       expect(globsOverlap('packages/server/**', 'packages/server/src/store/migrations.ts')).toBe(
@@ -75,6 +75,19 @@ withDrivers('lanes', (o) => {
     it('does not overlap disjoint paths', () => {
       expect(globsOverlap('packages/server/**', 'packages/cli/**')).toBe(false);
       expect(globsOverlap('packages/serverless/**', 'packages/server/**')).toBe(false); // no partial-segment match
+    });
+    // ADR 575: the old matcher compared only the literal text before the first wildcard, so
+    // `packages/*/package.json` read as `packages` and overlapped every file in every package.
+    it('matches segment by segment, wildcards included', () => {
+      expect(globsOverlap('packages/*/package.json', 'packages/server/src/http.ts')).toBe(false);
+      expect(globsOverlap('packages/*/package.json', 'packages/cli/package.json')).toBe(true);
+      expect(globsOverlap('docs/decisions/575-*.md', 'docs/decisions/492-pglite.md')).toBe(false);
+      expect(globsOverlap('docs/decisions/575-*.md', 'docs/decisions/**')).toBe(true);
+      expect(globsOverlap('packages/*/src/**', 'packages/server/src/store/lanes.ts')).toBe(true);
+      expect(globsOverlap('packages/server/src/*.test.ts', 'packages/server/src/http.ts')).toBe(
+        false,
+      );
+      expect(globsOverlap('docs/decisions', 'docs/decisions/575-x.md')).toBe(true); // a bare directory
     });
   });
 
