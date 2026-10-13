@@ -83,8 +83,8 @@
      surface-3, the darkest chrome a ring lands on, and ~4:1 on the paper family. */
   --lc-focus: #966d06;
   --lc-info: #5b7fa6;
-  --lc-handoff: #8a5fd6; /* violet — handoff (a distinct act tone, dark enough for cream) */
-  --lc-lane: #5a52c9; /* indigo — lane transitions (ADR 102), handoff's family so the cluster reads as one */
+  --lc-handoff: #2f8fa3; /* sea blue — handoff. Was violet #8a5fd6 until 2026-10-12 (nick: too much purple on /live); the lane/handoff family is now blue, not indigo */
+  --lc-lane: #3f74c4; /* cornflower blue — lane transitions (ADR 102), handoff's family so the cluster reads as one (indigo #5a52c9 until 2026-10-12) */
   --lc-steer: #c9418f; /* magenta-rose — steer (ADR 103): interrupt-class redirect, the loudest steering act */
   --lc-challenge: #2f8fb3; /* cyan — challenge (ADR 103): the epistemic "justify this or reconsider" */
   --lc-agent: #1a9e88;
@@ -114,8 +114,8 @@
   --lc-agent-ink: #0c6354; /* 4.61:1 */
   --lc-danger-ink: #93362a; /* 4.61:1 */
   --lc-info-ink: #3e5874; /* 4.60:1 */
-  --lc-handoff-ink: #62429a; /* 4.61:1 */
-  --lc-lane-ink: #4b44a9; /* 4.60:1 */
+  --lc-handoff-ink: #2a5a72; /* 5.28:1 on the darkest paper (surface-3), 6.13 on ground */
+  --lc-lane-ink: #2f5aa0; /* 4.79:1 on surface-3, 5.56 on ground */
   --lc-steer-ink: #8e2b64; /* 4.60:1 */
   --lc-challenge-ink: #1b5c75; /* 4.61:1 */
   --lc-human-ink: #903651; /* 4.61:1 */
@@ -1459,7 +1459,7 @@
      codex came out 4.43 against a 4.5 requirement — a shipped AA failure — and opencode 4.54, which
      passes by 0.04 and would not survive any paper tweak. Both moved; cursor and grok already cleared
      it on the real paper and are untouched. The gate now measures all four (`?plates-open`). */
-  --lc-hz-codex-ink: #0e6249; /* 5.02:1 on the plate — was #0f6b52, 4.43:1, below AA */
+  --lc-hz-codex-ink: #0b553f; /* 5.38:1 on the plate at its 88% stock (2026-10-12: #0e6249 measured 4.48 once the paper thinned and more room showed through); was #0f6b52, 4.43 */
   --lc-hz-cursor-ink: #4f46b8; /* 4.95:1 */
   --lc-hz-grok-ink: #8e2a7d; /* 5.17:1 — magenta, the one hue the other three leave free */
   --lc-hz-opencode-ink: #963900; /* 4.99:1 on the plate — was #a03d00, 4.54:1, passing by 0.04 */
@@ -1557,13 +1557,11 @@
       rgba(255, 255, 255, 0.12) 42%,
       rgba(255, 255, 255, 0) 68%
     ),
-    color-mix(in srgb, var(--lc-paper-2) 96%, transparent);
-  /* nick, 2026-10-12: "slightly more transparent". The whole plate at 82% — ink included — rather
-     than thinning the stock further: at 96% → 80% stock alone the specular band stayed at full
-     strength and the plate read as a lit chip over a see-through card, which is odder than a plate
-     that is simply a little lighter. The mono name still clears AA on the darkest paper it lands on
-     (paper-ink 10.99 on paper-2, ×0.82 is well above 7). */
-  opacity: 0.82;
+    color-mix(in srgb, var(--lc-paper-2) 88%, transparent);
+  /* nick, 2026-10-12, twice: "slightly more transparent", then — at a whole-plate opacity of 82% —
+     "too light, they look greyed out / idle". The ink was the tell: a dimmed name reads as a dimmed
+     member, because that is what the dot and the dozing plate already mean. So the stock thins
+     (96% → 88%) and the name stays full ink. */
   /* THE RIM IS THE MEMBER'S, not the house mustard. Every plate used to wear the same
      `--lc-accent` edge, so on a floor of twelve the only thing saying WHO was the 5px dot — and the
      dot is spent on posture (working / idle / away / offline), which is a different question. The

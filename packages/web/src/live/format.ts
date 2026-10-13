@@ -39,7 +39,7 @@ export function actTone(act: string): ActTone {
       return 'info';
     // Lane transitions in flight (ADR 102) share a distinct lane accent so they read as one "work
     // moving" family, above status chatter. Resolve keeps success (done is green); handoff keeps its
-    // violet — same family, so the cluster still reads together.
+    // sea blue — same family, so the cluster still reads together.
     case 'lane_open':
     case 'lane_claim':
     case 'lane_state':

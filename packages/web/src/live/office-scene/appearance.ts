@@ -75,7 +75,7 @@ function pickContrasting(palette: readonly string[], name: string, salt: number,
 }
 
 /**
- * Skin, from deep browns through to mint and lavender. Deliberately **not** a "realistic" ramp: these are
+ * Skin, from deep browns through to mint and peach. Deliberately **not** a "realistic" ramp: these are
  * stylised block people in a stylised office, and a floor where everyone is a slightly different beige is
  * both duller and a worse look than one where people are plainly, cheerfully different. The natural tones
  * and the fantastical ones sit in one list on purpose, so no member is ever "the odd one out".
@@ -93,8 +93,8 @@ const SKINS = [
   '#9fd8b8', // mint
   '#8ed1c9', // seafoam
   '#a9c6f0', // periwinkle
-  '#c9b6f5', // lavender
-  '#e8a8d8', // orchid
+  '#e6c8a4', // sand (lavender until 2026-10-12 — nick: too much purple on the floor)
+  '#f2c4a0', // peach (was orchid)
   '#f2a6a6', // coral
   '#f5cf6e', // gold
   '#9db8c9', // slate
@@ -112,8 +112,8 @@ const HAIR_COLORS = [
   '#8a3a2e', // red
   '#3f6fa8', // blue
   '#2f8f7a', // teal
-  '#a8478f', // magenta
-  '#6b4ea8', // violet
+  '#b5603a', // copper (was magenta)
+  '#4a6a8f', // steel blue (was violet)
   '#4f8a3a', // green
   '#e07a3f', // orange
 ] as const;
@@ -153,7 +153,7 @@ const MASC_HAIR: readonly HairStyle[] = ['buzz', 'short', 'side', 'bald', 'short
 export type Hat = 'none' | 'cap' | 'beanie' | 'band';
 /** Hats are the rarest thing on the floor, so they stay a small delight rather than a uniform. */
 const HATS: readonly Hat[] = ['none', 'none', 'none', 'none', 'none', 'cap', 'beanie', 'band'];
-const HAT_COLORS = ['#d1503f', '#2f7f6a', '#3f6fa8', '#e1ad01', '#8a5fd6', '#2a2118', '#e8dcc8', '#e07a3f'] as const;
+const HAT_COLORS = ['#d1503f', '#2f7f6a', '#3f6fa8', '#e1ad01', '#2f8fa3', '#2a2118', '#e8dcc8', '#e07a3f'] as const;
 
 /**
  * The cut of the top. `sleeves` is the one that does real visual work: a short sleeve leaves the forearm
@@ -187,7 +187,7 @@ const ACCESSORIES: readonly Accessory[] = ['none', 'none', 'none', 'none', 'none
 const AGENT_ACCESSORIES: readonly Accessory[] = ['none', 'none', 'none', 'none', 'none', 'headphones', 'headphones', 'scarf'];
 /** Cosy, saturated accessory tones (scarf wool / headphone shells) — a warm set, deliberately off the
  * identity hue so the accessory reads as *a thing they own*, not part of their colour signature. */
-const ACCESSORY_COLORS = ['#d1503f', '#e08a43', '#e1ad01', '#2f8f7a', '#3f6fa8', '#8a5fd6', '#c85a7a', '#4f8a3a'] as const;
+const ACCESSORY_COLORS = ['#d1503f', '#e08a43', '#e1ad01', '#2f8f7a', '#3f6fa8', '#2f8fa3', '#c86a3a', '#4f8a3a'] as const;
 
 /** Neutral presentation stops at stubble — a full beard reads as a definite choice, and `neutral`
  *  is deliberately the option that does not make one. */

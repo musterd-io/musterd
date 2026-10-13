@@ -316,7 +316,7 @@ describe('the wall agile board', () => {
     renderScene(textCtx(paints, []), fit, new Map(), roster(nodes), new Map(), 0, 'revive', undefined, null, undefined, null, wallData());
     expect(paints).toContain('#C98F52'); // the cork face
     expect(paints).toContain('#DCBF8E'); // the pale oak frame
-    expect(paints).toContain('#5A52C9'); // the active cap — --lc-lane's hex twin
+    expect(paints).toContain('#3F74C4'); // the active cap — --lc-lane's hex twin
     expect(paints).toContain('#D1503F'); // the blocked cap
     expect(paints).toContain('#EFE8D8'); // an open sticky's paper wash
     expect(paints).toContain('rgba(180, 168, 143, 0.75)'); // its washi tab, at the cap's tone
@@ -327,7 +327,7 @@ describe('the wall agile board', () => {
     const paints: string[] = [];
     scene(textCtx(paints, []), null);
     expect(paints).toContain('#C98F52'); // cork
-    expect(paints).toContain('#5A52C9'); // caps announce their column even bare
+    expect(paints).toContain('#3F74C4'); // caps announce their column even bare
     expect(paints).not.toContain('#EFE8D8'); // …but no sticky paper hangs under them
     expect(paints).not.toContain('#D8D4F3');
     expect(paints).not.toContain('rgba(180, 168, 143, 0.75)'); // and no tape holding nothing

@@ -2392,7 +2392,7 @@ export function mountOffice(
         if (actors.walk(ev.from, { kind: 'handoff', to: ev.to, urgent: false })) {
           walkTags.set(ev.from, walkTag('handoff', ev.to));
         } else {
-          pushCue(ev.from, '#c6a3ff', '↦');
+          pushCue(ev.from, '#7fc8d8', '↦');
         }
         break;
       case 'walk-claim':
@@ -2401,7 +2401,7 @@ export function mountOffice(
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
           walkTags.set(ev.who, walkTag('claim', t || null));
         } else {
-          pushCue(ev.who, '#948DDE', '');
+          pushCue(ev.who, '#8fb0e6', '');
         }
         break;
       case 'walk-pin':

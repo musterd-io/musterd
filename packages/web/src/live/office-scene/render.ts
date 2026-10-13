@@ -151,9 +151,9 @@ export function toneColor(tone: string): string {
     case 'info':
       return '#88a9cf';
     case 'handoff':
-      return '#c6a3ff';
+      return '#7fc8d8'; // sea blue (mirrors --lc-handoff) — violet until 2026-10-12
     case 'lane':
-      return '#8b84ff'; // indigo (mirrors --lc-lane) — lane transitions + defer's plan mutation
+      return '#7fa6e6'; // cornflower (mirrors --lc-lane) — lane transitions + defer's plan mutation
     case 'status':
       return '#2ad6bb';
     case 'steer':
@@ -941,14 +941,14 @@ function wallLaneBoard(
 const WALLBOARD_TONES: ReadonlyArray<{ cap: string; note: string; tape: string }> = [
   // open — warm unbleached paper
   { cap: '#B4A88F', note: '#EFE8D8', tape: 'rgba(180, 168, 143, 0.75)' },
-  // claimed — lane indigo, lightened: picked up, not yet moving
-  { cap: '#948DDE', note: '#E6E3F8', tape: 'rgba(148, 141, 222, 0.75)' },
+  // claimed — lane blue, lightened: picked up, not yet moving
+  { cap: '#8FB0E6', note: '#E2EBF8', tape: 'rgba(143, 176, 230, 0.75)' },
   // active — the lane tone itself (--lc-lane)
-  { cap: '#5A52C9', note: '#D8D4F3', tape: 'rgba(90, 82, 201, 0.75)' },
+  { cap: '#3F74C4', note: '#D6E2F4', tape: 'rgba(63, 116, 196, 0.75)' },
   // blocked — --lc-danger
   { cap: '#D1503F', note: '#F5DAD4', tape: 'rgba(209, 80, 63, 0.75)' },
-  // awaiting acceptance — indigo leaning patient
-  { cap: '#7A72D6', note: '#DFDCF6', tape: 'rgba(122, 114, 214, 0.75)' },
+  // awaiting acceptance — blue leaning patient
+  { cap: '#6A93D4', note: '#DDE6F6', tape: 'rgba(106, 147, 212, 0.75)' },
   // done — --lc-success
   { cap: '#2F9E6A', note: '#D5ECDF', tape: 'rgba(47, 158, 106, 0.75)' },
 ];
@@ -5344,8 +5344,8 @@ export interface Cue {
 }
 
 /** The celebration palette — the cue-family literals the scene already speaks (accept green, the
- * accent mustard, handoff violet, danger coral), cycled per particle. */
-const CONFETTI_COLORS = ['#5cd49a', '#f4cf52', '#c6a3ff', '#f3776a'] as const;
+ * accent mustard, handoff sea blue, danger coral), cycled per particle. */
+const CONFETTI_COLORS = ['#5cd49a', '#f4cf52', '#7fc8d8', '#f3776a'] as const;
 const CONFETTI_COUNT = 18;
 
 /**
