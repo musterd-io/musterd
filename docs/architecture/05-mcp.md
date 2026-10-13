@@ -331,23 +331,29 @@ Drops Presence (`client.leave()`). The seat is held ~45s (the reclaim grace) so 
 
 Maps `to` → Recipient (`@team`/`@broadcast`/name), builds an Envelope (`from`=the claimed member), validates with `@musterd/protocol`, `POST …/messages` (or live WS). Returns the stored message id + a one-line confirmation. **Refuses until ready** — _pending_ (no seat → claim one) or _dormant_ (claimed, not joined → `team_join`), via `notReadyMessage` (ADR 032/033).
 
+**Reply size (lane 01M4S53FQT).** The confirmation plus any contract line the act carries (an ask's tier, a lane verdict, a superseded notice). Measured 2026-10-13 over 384 sends on one machine: median 84 characters, max 471. No cap is needed; a reply past 1,000 characters would be a regression.
+
 ### `team_inbox_check`
 
 ```json
 {
   "name": "team_inbox_check",
-  "description": "Check unread messages addressed to you or the team, marking them read. Call at task start, task end, and after heads-down work — directed asks and replies only surface when you check.",
+  "description": "Check unread addressed to you or the team, marking them read. Call at task start, task end, and after heads-down work. Past `limit` nothing is marked read. `ids` reads named acts in full; `full` returns a longer reply.",
   "inputSchema": {
     "type": "object",
     "properties": {
       "unread_only": { "type": "boolean", "default": true },
-      "limit": { "type": "number", "default": 50 }
+      "limit": { "type": "number", "default": 50 },
+      "ids": { "type": "array", "items": { "type": "string" } },
+      "full": { "type": "boolean" }
     }
   }
 }
 ```
 
 Drains the in-memory buffer + `GET /inbox?unread=1`, advances the cursor, returns rows as structured `{from, act, body, ts, thread, meta}` plus a compact text rendering. Dedupes by envelope id (at-least-once). **Refuses until ready** (pending → claim a seat; dormant → `team_join`) — a session that hasn't joined cannot drain the shared inbox cursor.
+
+**Reply size (lane 01M4S53FQT).** The default reply stays under 12,000 characters, about 3k tokens, and clips each body at 600 characters. `full: true` raises that to 30,000 and 1,200, the ceiling set after a harness refused a larger reply (lane 01M2JZYTAH). `ids` returns named acts whole, with their stored meta. A row is costed as the larger of its text line and its structured row, because the harness shows the model one or the other (Claude Code shows the structured content). The rendered meta leaves out `otel` and `model_source`, which the reader never acts on. Measured before the change, over 241 checks on one machine: median 4,169 characters, p90 17,284, max 25,176. In the large replies, bodies were half the size and meta 18%. The native host builds the same server in process, so it gets the same default.
 
 ### `team_status`
 
@@ -360,6 +366,8 @@ Drains the in-memory buffer + `GET /inbox?unread=1`, advances the cursor, return
 ```
 
 `GET /teams/:slug/members` → roster with presence summary.
+
+**Reply size (lane 01M4S53FQT).** One line per member, each status clipped at 180 characters, so a line is at most about 260. The reply grows with the roster and has no total cap: cutting members would hide who is on the team. Measured 2026-10-13 on a 33-member team: about 2,000 characters.
 
 ### `team_members`
 

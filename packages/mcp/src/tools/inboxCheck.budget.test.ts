@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { formatMessage } from './format.js';
 import {
   BODY_CAP,
+  DEFAULT_BODY_CAP,
+  DEFAULT_REPLY,
+  DEFAULT_RESULT_BUDGET,
   RESULT_BUDGET,
   capBody,
   formatDigestLine,
   planInboxCheck,
+  structuredRow,
 } from './inboxCheck.js';
 
 /**
@@ -132,5 +136,51 @@ describe('capBody — one act cannot starve the rest, and nothing is lost', () =
     const capped = capBody(env('01M2ABC', 1, 'x'.repeat(BODY_CAP * 2)));
     expect(capped.body).toContain('01M2ABC');
     expect(capped.body).toMatch(/ids/);
+  });
+});
+
+/**
+ * The DEFAULT reply is short (lane 01M4S53FQT): an ordinary check renders at most
+ * DEFAULT_RESULT_BUDGET, measured on whichever form the harness shows the model — the text, or the
+ * structured content Claude Code shows instead. `full: true` is the RESULT_BUDGET plan above.
+ */
+describe('planInboxCheck — the default reply is short', () => {
+  const OTEL = { traceparent: '00-' + 'a'.repeat(32) + '-' + 'b'.repeat(16) + '-01' };
+  /** Real-shaped acts: bodies past the default cap, and the meta a large reply carried. */
+  const heavy = (n: number) =>
+    backlog(n, 2000).map((e) => ({
+      ...e,
+      meta: { otel: OTEL, model: 'claude-opus-5-5', model_source: 'observed' },
+    }));
+  const structuredSize = (plan: ReturnType<typeof planInboxCheck>) =>
+    plan.shown.map((m) => JSON.stringify(structuredRow(m))).join(',').length +
+    plan.digested.map(formatDigestLine).join('\n').length;
+
+  it('holds DEFAULT_RESULT_BUDGET in both the text and the structured form', () => {
+    const plan = planInboxCheck(heavy(300), 50, 0, [], [], new Set(), DEFAULT_REPLY);
+    expect(replySize(plan)).toBeLessThanOrEqual(DEFAULT_RESULT_BUDGET);
+    expect(structuredSize(plan)).toBeLessThanOrEqual(DEFAULT_RESULT_BUDGET);
+    expect(plan.shown.length).toBeGreaterThan(0);
+  });
+
+  it('clips bodies at DEFAULT_BODY_CAP and names the re-read', () => {
+    const plan = planInboxCheck(heavy(3), 50, 0, [], [], new Set(), DEFAULT_REPLY);
+    for (const m of plan.shown) {
+      expect(m.body.length).toBeLessThan(DEFAULT_BODY_CAP + 120);
+      expect(m.body).toContain(`team_inbox_check {ids: ["${m.id}"]}`);
+    }
+  });
+
+  it('drops the trace context and model_source from the rendered meta, keeps the rest', () => {
+    const plan = planInboxCheck(heavy(1), 50, 0, [], [], new Set(), DEFAULT_REPLY);
+    expect(structuredRow(plan.shown[0]!).meta).toEqual({ model: 'claude-opus-5-5' });
+  });
+
+  it('full renders more than the default on the same inbox', () => {
+    const inbox = heavy(300);
+    const short = planInboxCheck(inbox, 50, 0, [], [], new Set(), DEFAULT_REPLY);
+    const full = planInboxCheck(inbox, 50);
+    expect(replySize(full)).toBeGreaterThan(replySize(short));
+    expect(replySize(full)).toBeLessThanOrEqual(RESULT_BUDGET);
   });
 });
