@@ -76,12 +76,15 @@ The bar for shipping the goal (approved by nick, 2026-10-13), measured with `scr
 - the daemon's answer replaces them **≤ 3.0 s** after navigation when the daemon is under its
   ordinary load (the hub's weekday afternoon), and the lanes fetch is no longer the slowest read.
 
-The third line is where the goal is not yet met: the lanes read carries every lane ever (227 KB on
-revive) when the page needs open lanes plus the viewer's tour lane.
+The third line is where the goal is not yet met: the lanes read was 227 KB on revive. Counted on
+2026-10-13, that is not "every lane ever" — ADR 534 already windows closed lanes to 14 days — but the
+~500 lanes done inside the window carrying their `detail` text (315 KB raw of title + detail), which
+no surface on `/live` shows. So the cut is the text, not the rows: dropping rows would break the done
+counts and the shipped list, or force a second fetch to restore them.
 
 | # | Lane | What | Done when |
 | --- | --- | --- | --- |
-| 1 | `01M4RNCZVB` | the lanes fetch carries open lanes and the viewer's tour lane, not every lane ever; the board overlay and the Now card's done counts fetch the rest on use | the /live lanes response on revive is under 40 KB; the Now card's "d of n done" and the wall board's done column still agree with `/board` |
+| 1 | `01M4RNCZVB` | `GET /teams/:slug/lanes?brief=1` leaves every row's `detail` out (opt-in; the schema already allows null, so no protocol change); `/live` fetches brief and every state but `abandoned` through the existing repeatable `?state=`; the rows, counts, warnings and annotations are otherwise unchanged. Built 2026-10-13 instead of the row cut first written here | the /live lanes response on revive measured before and after in `web-live-baseline.md`; the Now card's "d of n done", the shipped list and the wall board's done column still agree with `/board` |
 | 2 | opened at increment 1's close | the bar above measured on the hub and recorded as a dated note in `web-live-baseline.md`; the goal outcome written from it | five-reload medians for the three lines, with the daemon's load noted; the goal ships if all three hold, or this section says which did not and why |
 
 Increment 2 is a measurement lane, not a build; it exists so the goal closes on a number rather than on
@@ -104,4 +107,5 @@ path, not the page, and belongs under `live-loads-fast` with its own measurement
 - The 1.4 s claim: `curl -s localhost:4849/live?team=revive | head -c 300` shows the /live page, not
   the root shell's homepage preloads. If it shows the homepage, #2387 regressed.
 - The 227 KB claim: the /live lanes response on revive, from the browser's network panel, before
-  increment 1. After it, under 40 KB.
+  increment 1; after it, the number the baseline log records for `brief=1`, and `detail` is null on
+  every row.

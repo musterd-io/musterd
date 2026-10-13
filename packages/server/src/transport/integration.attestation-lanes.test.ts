@@ -1485,6 +1485,40 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       expect(bad.status).toBe(400);
       expect(bad.json.error.message).toMatch(/forever/);
     });
+
+    // live-loads-fast inc 1 (lane 01M4RNCZVB): on revive the /live lanes read was ~227 KB because
+    // ~500 recently-done lanes carried their detail text. `brief=1` leaves detail out; everything
+    // else on the row — counts, columns, warnings, annotations — is unchanged.
+    it("board ?brief=1 omits every lane's detail and scope and nothing else; accepts only `1`", async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
+      const mine = await post(
+        '/teams/dawn/lanes',
+        {
+          title: 'the lighter fetch',
+          detail: 'a long explanation nobody reads on the wall',
+          scope: ['packages/web/**'],
+          claim: true,
+        },
+        ada,
+      );
+      const full = await get('/teams/dawn/lanes', ada);
+      expect(full.json.lanes[0].detail).toBe('a long explanation nobody reads on the wall');
+      const brief = await get('/teams/dawn/lanes?brief=1', ada);
+      expect(brief.json.lanes).toHaveLength(1);
+      expect(brief.json.lanes[0].id).toBe(mine.json.lane.id);
+      expect(brief.json.lanes[0].detail).toBeNull();
+      expect(full.json.lanes[0].scope).toEqual(['packages/web/**']);
+      expect(brief.json.lanes[0].scope).toEqual([]);
+      const { detail: _d, scope: _s, ...fullRest } = full.json.lanes[0];
+      const { detail: _b, scope: _t, ...briefRest } = brief.json.lanes[0];
+      expect(briefRest).toEqual(fullRest);
+      expect(brief.json.warnings).toEqual(full.json.warnings);
+      const bad = await get('/teams/dawn/lanes?brief=yes', ada);
+      expect(bad.status).toBe(400);
+      expect(bad.json.error.message).toMatch(/yes/);
+    });
   });
 
   describe('source_ref (ADR 561)', () => {

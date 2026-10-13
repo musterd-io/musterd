@@ -1324,3 +1324,28 @@ that grows fastest and a 15% loosening would hide the next 40 KB of it.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 310,000 B with replay in the
   office chunk.
+
+### 2026-10-13 — the /live lanes read: `brief=1` drops `detail` and `scope` (lane `01M4RNCZVBHY3ZRYEF6825ZD8E`)
+
+The live-loads-fast spec's third bar line (the daemon's answer ≤ 3.0 s) has the lanes read as the slowest
+request. Counted from the hub's store on 2026-10-13, revive's windowed board (ADR 534) was 668 rows, 949 KB
+raw, 254 KB gzip; by field, `detail` 343 KB, `title` 89 KB, `scope` 82 KB, `merged` 60 KB. Nothing on
+`/live` reads `detail` or `scope` (the board overlay shows a branch chip, the briefing reads `depends_on`),
+so `GET /lanes?brief=1` returns the same rows with those two blank, and `/live` asks for every state but
+`abandoned`.
+
+| Read (revive, 2026-10-13 21:09Z)                  | Rows | Raw    | Gzip   |
+| ------------------------------------------------- | ---- | ------ | ------ |
+| full, observed on the wire from the dev preview   | 645  | 853 KB | 247 KB (br 236 KB) |
+| `brief=1`, the same body with the two fields blank | 645  | 473 KB | 102 KB |
+
+The full row is the page's own request through the dev proxy to the running daemon; `detail` was 317 KB of
+it and `scope` 74 KB. The brief row is that body transformed as the server does, since the running daemon
+predated the flag: a daemon that does not know `brief` ignores it and answers with full rows (200, `detail`
+present), so the page is correct against either build, and the 400 fallback covers a daemon that rejects
+it. The wire number for brief lands with the spec's measurement increment. No JS budget moves (one option
+object on the client; +~120 B).
+
+- Falsify: on a daemon at or past this commit, `/live`'s lanes request carries `brief=1`, every row's
+  `detail` is null, and the response is under 110 KB gzip on revive's board; the Now card's "d of n done"
+  equals `/board`'s done count per goal.
