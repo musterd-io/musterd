@@ -315,10 +315,7 @@ describe('amendment markers on a Decision that already has one', () => {
   ].join('\n');
 
   it('accepts a second marker', () => {
-    const after = before.replace(
-      'its errand.',
-      'its errand. _(Amended 2026-10-12: see ADR 576.)_',
-    );
+    const after = before.replace('its errand.', 'its errand. _(Amended 2026-10-12: see ADR 576.)_');
     expect(isAppendOnlyAmendment(before, after)).toBe(true);
   });
 
