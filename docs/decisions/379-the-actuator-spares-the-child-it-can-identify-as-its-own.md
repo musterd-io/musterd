@@ -117,3 +117,9 @@ Decided (nick, 2026-09-04, lane 01M1ND626Y): `resolveWorkspace` moves to
 `@musterd/mcp` re-exports it for one FEATURE_EPOCH; the four CLI call sites import from protocol.
 No behaviour change. Falsifier: `grep -rn "from '@musterd/mcp'" packages/cli/src` naming
 `resolveWorkspace` — should be empty.
+
+> **Note 2026-10-12 (TJ, lane 01M4S9SCT5):** `resolveWorkspace`'s git lookup now asks
+> `rev-parse --show-toplevel --abbrev-ref HEAD` in one spawn instead of two, falling back to the
+> toplevel alone for an unborn HEAD. It runs on the MCP adapter's startup path (`loadMcpConfig`),
+> which went from three git spawns to two. The label ladder and every label value are unchanged: no
+> contract change, recorded here because this ADR owns where the resolver lives.
