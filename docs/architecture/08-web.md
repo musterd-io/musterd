@@ -220,6 +220,7 @@ live/
     types.ts                    // OfficeEvent / OfficeNode / Pose / OfficeHandle
     render.ts                   // canvas drawing primitives + toneColor + Cue
     replay.ts                   // replay on open (nick, 2026-10-12): the last ten minutes' lane walks (claim / pin / handoff) from backfill, oldest first, capped — the handle plays them at REPLAY_TEMPO× then settles to live
+    domCadence.ts               // broadcast only: the page's DOM animations (steam, motes, twinkles, fan, banner) are paused and advanced per drawn frame — the box's software compositor was composing 60 frames/s over a 15 fps canvas (lane 01M4S96VAW, 2026-10-13)
     actors.ts / nav.ts / seating.ts / layout.ts / iso.ts   // placement, walk routing, iso projection
     skeleton.ts                 // THE character animation: 3D joints, renderer-free (walk/sit/type) — ADR 133
     appearance.ts               // THE character identity: skin/hair/hats/clothes, name-seeded, pure — ADR 142
