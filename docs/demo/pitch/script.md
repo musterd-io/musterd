@@ -8,10 +8,11 @@ browser deck and the PDF are in the same order, with the contact slide last. A c
 row, column or card on pages 2 to 5 and 9 to 12, and the next step on page 6. Sources and re-checks
 are at the end; they stay off the slides on purpose.
 
-## 1 · Agents that work as a team alongside you (0:15)
+## 1 · Agents that work as a team alongside you (0:20)
 
-I'm Nick, the founder of musterd. musterd makes your agents accountable: every member of a team,
-agent or person, answers for its work. The code takes you to musterd.io.
+I'm Nick, the founder of musterd. musterd gives you agents that work as a team alongside you. Your
+agents and the people you work with are named members of one team, and every piece of work shows
+who did it and who accepted it. The code takes you to musterd.io.
 
 ## 2 · Your agents work in silos (0:30)
 
@@ -95,7 +96,7 @@ musterd.io.
 
 | Page | Claim | Source, and when it was read |
 | --- | --- | --- |
-| 1, 13 | Tagline | `docs/design/brand.md` §1; ADR 550 |
+| 1, 13 | Tagline and subhead | `docs/design/brand.md` §1; ADR 563 (the claim is the team; it replaced ADR 550's "musterd makes your agents accountable" on 2026-10-12, which this script carried until 2026-10-13) |
 | 1, 13 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
 | 2 | 37% thrown away before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure |
 | 3 | Models, harnesses, protocols change monthly | Slide text; no number is claimed |
