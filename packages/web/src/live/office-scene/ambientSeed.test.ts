@@ -7,6 +7,8 @@ import {
   AMBIENT_SLOT_MS,
   ambientFireP,
   ambientPool,
+  type AmbientPool,
+  COVERAGE_WINDOW_SLOTS,
   decideAmbient,
   roll,
   slotAt,
@@ -288,5 +290,65 @@ describe('decideAmbient — the aisle meet (nick, 2026-10-12)', () => {
   it('needs two who are free — a lone errand-free member never meets', () => {
     for (let s = 0; s < 2_000; s++)
       expect(decideAmbient('revive', s, { ...pool, errands: ['ada'] }).kind).not.toBe('meet');
+  });
+});
+
+describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)', () => {
+  const names = (n: number) => Array.from({ length: n }, (_, i) => `m${String(i).padStart(2, '0')}`);
+  const poolOf = (n: number): AmbientPool => ({ members: names(n), errands: names(n), pairs: [] });
+
+  /** The member decisions of one coverage window, in slot order. */
+  function memberRun(team: string, n: number, w: number): string[] {
+    const out: string[] = [];
+    for (let s = w * COVERAGE_WINDOW_SLOTS; s < (w + 1) * COVERAGE_WINDOW_SLOTS; s++) {
+      const d = decideAmbient(team, s, poolOf(n));
+      if (d.kind === 'member') out.push(d.who);
+    }
+    return out;
+  }
+
+  it('a lap is a permutation: every member before anyone repeats', () => {
+    for (const team of ['revive', 'a', 'b', 'c']) {
+      const run = memberRun(team, 6, 3);
+      expect(run.length).toBeGreaterThanOrEqual(6);
+      expect(new Set(run.slice(0, 6)).size).toBe(6);
+    }
+  });
+
+  it('never picks the same member twice in a row', () => {
+    for (const team of ['revive', 'a', 'b', 'c', 'd', 'e', 'f', 'g']) {
+      for (const n of [2, 3, 6, 12]) {
+        const run = memberRun(team, n, 5);
+        for (let i = 1; i < run.length; i++) expect(run[i]).not.toBe(run[i - 1]);
+      }
+    }
+  });
+
+  it('keeps two viewers in step: the rotation is a pure replay, nobody remembers anything', () => {
+    const log = (team: string) =>
+      Array.from({ length: 180 }, (_, s) => JSON.stringify(decideAmbient(team, s, poolOf(8))));
+    expect(log('revive')).toEqual(log('revive'));
+  });
+
+  /** A room-quiet model: a played beat holds the room for one or two slots, and a slot landing in it
+   *  never reaches the decision (ADR 086). Returns the share of members with no single-member beat in 10 min. */
+  function frozenShare(team: string, n: number): number {
+    const gestured = new Set<string>();
+    let busyUntil = -1;
+    for (let s = 0; s < COVERAGE_WINDOW_SLOTS; s++) {
+      if (s < busyUntil) continue;
+      const d = decideAmbient(team, s, poolOf(n));
+      if (d.kind === 'none') continue;
+      busyUntil = s + 1 + Math.floor(roll(team, s, 'len') * 2);
+      if (d.kind === 'member') gestured.add(d.who);
+    }
+    return 1 - gestured.size / n;
+  }
+  const teams = ['revive', 'a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  const mean = (n: number) => teams.reduce((acc, t) => acc + frozenShare(t, n), 0) / teams.length;
+
+  it('leaves few desks frozen for ten minutes (a uniform draw left 22% of six and 35% of twelve)', () => {
+    expect(mean(6)).toBeLessThan(0.15);
+    expect(mean(12)).toBeLessThan(0.2);
   });
 });

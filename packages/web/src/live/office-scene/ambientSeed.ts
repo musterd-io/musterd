@@ -168,13 +168,15 @@ export function ambientFireP(members: number): number {
   return AMBIENT_P_QUIET + t * (AMBIENT_P_FULL - AMBIENT_P_QUIET);
 }
 
+/** Slots in one coverage window — ten minutes at `AMBIENT_SLOT_MS`. */
+export const COVERAGE_WINDOW_SLOTS = 60;
+
 /**
- * The whole per-slot decision: fire?, whose beat is it, which pair/member. Pure over
- * (team, slot, pool) — and the pool is canonicalized here (sorted members, ordered pairs) so a
- * caller's array order can never leak into the pick.
+ * The per-slot roll, before the single-member beats are made fair (see `decideAmbient`). Pure over
+ * (team, slot, pool); the actor of a `member` decision here is the uniform draw, which `decideAmbient`
+ * replaces.
  */
-export function decideAmbient(team: string, slot: number, pool: AmbientPool): AmbientDecision {
-  const members = [...pool.members].sort();
+function rollDecision(team: string, slot: number, pool: AmbientPool, members: string[]): AmbientDecision {
   if (members.length === 0) return { kind: 'none' };
   // Occupancy comes from the canonical pool, so the probability is as roster-derived as the pick it
   // gates: two viewers of the same team draw the same fire decision as well as the same beat.
@@ -197,4 +199,37 @@ export function decideAmbient(team: string, slot: number, pool: AmbientPool): Am
     return { kind: 'meet', a: free[i]!, b: free[j]! };
   }
   return { kind: 'member', who: members[Math.floor(roll(team, slot, 'actor') * members.length)]! };
+}
+
+/**
+ * The whole per-slot decision: fire?, whose beat is it, which pair/member. Pure over
+ * (team, slot, pool) — and the pool is canonicalized here (sorted members, ordered pairs) so a
+ * caller's array order can never leak into the pick.
+ *
+ * **Who fidgets is a rotation, not a draw** (lane 01M4V9VNMY, spec 2026-10-13 L1). A uniform draw per
+ * single-member beat left a third of a twelve-person room without one gesture in ten minutes
+ * (35% simulated, 22% at six; the room-quiet gate caps delivered beats near three a minute, so the
+ * draw's variance, not its rate, was what froze desks). The actor now walks a seeded permutation of
+ * the pool, advancing on each `member` decision of the current coverage window — a pure replay of the
+ * earlier slots, so every viewer lands on the same member without anyone remembering anything.
+ * Each lap reshuffles, and a lap never opens on the member the last one ended on.
+ */
+export function decideAmbient(team: string, slot: number, pool: AmbientPool): AmbientDecision {
+  const members = [...pool.members].sort();
+  const d = rollDecision(team, slot, pool, members);
+  if (d.kind !== 'member' || members.length < 2) return d;
+  const w0 = Math.floor(slot / COVERAGE_WINDOW_SLOTS) * COVERAGE_WINDOW_SLOTS;
+  let count = 0;
+  for (let t = w0; t < slot; t++) if (rollDecision(team, t, pool, members).kind === 'member') count++;
+  const n = members.length;
+  // A lap's order, after the guard: it never opens on the member the previous lap (as played) ended on.
+  const order = (lap: number): string[] => {
+    const o = [...members].sort(
+      (a, b) => roll(team, w0 + lap * 7919, `lap:${a}`) - roll(team, w0 + lap * 7919, `lap:${b}`),
+    );
+    if (lap > 0 && o[0] === order(lap - 1)[n - 1]) [o[0], o[1]] = [o[1]!, o[0]!];
+    return o;
+  };
+  const mine = order(Math.floor(count / n));
+  return { kind: 'member', who: mine[count % n]! };
 }
