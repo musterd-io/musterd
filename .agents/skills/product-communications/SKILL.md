@@ -33,6 +33,14 @@ to open. Read the reference before doing that craft's work, every time.
    (SandRise Studio is the maker, never the product brand) and the field.
 8. `docs/demo/pitch/` — the standing deck. Its `script.md` sources table is the
    **numbers ledger** (hard rule 4).
+9. **What is held back, and what changed.** Before a number, a link or an
+   install command goes out, check its current state, never your memory of it:
+   the held-out list in `docs/wiki/how-musterd-got-here.md` ("What was tried and
+   reversed"; the cookoff multiplier is there), the newest dated note on the
+   relevant section of `docs/design/homepage-copy-spec.md`, and the newest ADR on
+   the subject (ADR 568, 2026-10-12, ended the private preview and put the npm
+   and brew install on musterd.io). A true figure that is on hold is still off
+   limits.
 
 **The positioning decision is not yours.** It is made in ADRs and approved by
 nick. You draft proposals and keep every surface telling the decided story.
@@ -131,7 +139,11 @@ Run them in order on any public copy. After each sweep, re-check the earlier one
 - [ ] The reference for this craft was opened and followed
 - [ ] Six sweeps run, in order
 - [ ] Glossary terms exact; no synonyms introduced
+- [ ] An edit or rewrite adds no fact its source did not hold; suggestions go in a
+      note below it
 - [ ] Every claim links its PR, doc or ADR; every number has a ledger row, re-read today
+      (re-run `docs/demo/pitch/counts.sh` for the team's counts), and none is on hold
+      (source 9)
 - [ ] No hard rule broken; roadmap marked "not yet"
 - [ ] Charts rendered and looked at in both themes and at phone width
 - [ ] `pnpm format:check` passes if the copy lives in the repo

@@ -21,11 +21,13 @@ A run compares the skill with a baseline that has no skill.
    It writes `checks.json` beside each output and `checks-summary.json` at the
    top, and prints a table. Per case, it checks the facts that must survive, the
    patterns that must be absent or present, numbers that appear in no source, and
-   word limits (counted above the first `---` line, so reviewer notes below it
-   are free). On every output, it counts contrast frames, hype words, dated
+   word limits. On every output, it counts contrast frames, hype words, dated
    words, the four banned words and dashes per paragraph, and reports them as
    tells per 100 words. Glossary Not-column words are reported and never fail a
    run, because several of them ("session", "user") have legitimate uses.
+   All checks read only the answer: a note to the requester below a `---` line
+   that starts with "Note" is left out, so a run can flag a fact it chose not to
+   add.
 3. Grade each case's `expectations` by reading the output (skill-creator's grader
    does this). The checks catch the mechanical part; the expectations catch
    judgment, such as declining to draft a Show HN post.

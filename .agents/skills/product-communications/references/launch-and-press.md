@@ -80,12 +80,17 @@ For a Show HN you write a **source pack**, and nick writes the post from it:
 
 1. What it is, in one sentence.
 2. The try-it command, with no signup on the way ([Show HN rules](https://news.ycombinator.com/showhn.html)).
-3. Backstory as questions for nick to answer in his own words (why he built it,
-   what broke first). Never draft the answers.
+3. Backstory as questions for nick to answer in their own words (why they built
+   it, what broke first). Never draft the answers.
 4. What is different, each point linked to its PR or ADR.
 5. Known limits, plainly.
 6. Likely questions with true, short answers (reuse `docs/demo/pitch/script.md`'s
    questions to expect).
+
+Before the pack goes to nick, re-read today's state of everything it points at:
+the install path (ADR 568), the repo's visibility (ADR 565), and every figure
+against SKILL.md source 9's holds. Eval run 1's pack listed the cookoff
+multiplier, which is held out of outbound copy until its re-run lands.
 
 Treat Lobsters and developer subreddits the same way by default. No primary rule
 was found for them; the caution is ours.
