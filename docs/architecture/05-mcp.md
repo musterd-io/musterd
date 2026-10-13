@@ -192,27 +192,34 @@ actually runs), then a repo `packages/mcp/dist/index.js`. `--entry` and `MUSTERD
 `--surface` supplies the launch marker the process needs in order to boot.
 
 The bench measures one machine on demand. Every real launch also measures itself (ADR 584): the
-adapter sends process uptime at the harness's `initialized` notification and at its first
-`tools/list`, once per session, and `musterd report tools` shows p50/p90 per harness over 7 days.
+adapter sends process uptime when the handshake is answered (the `initialized` notification on
+the 2025 wire, its `server/discover` reply on 2026-07-28) and at its first `tools/list`, once per
+session, and `musterd report tools` shows p50/p90 per harness over 7 days.
 A launch reports only after a tool call gives it a seat, so a probe sends nothing.
 
-`tools_list_has_ttl` is false on this bench. The bench speaks `initialize`, which is the wire
-every current harness opens with, and the cache hints ride the 2026-07-28 era only.
+`tools_list_has_ttl` is false on this bench, because the bench speaks `initialize` and the cache
+hints ride the 2026-07-28 era only.
 
-That is deliberate, not a gap (lane 01M4S53C40, 2026-10-13). The 2025-era wire does not define
+Claude Code does not speak `initialize`. One launch of Claude Code 2.1.296, captured on the wire
+on 2026-10-13 (lane 01M4VSF497), opened with `server/discover` on 2026-07-28, then sent
+`subscriptions/listen`, a second `server/discover` and `tools/list`, and never `initialize`. It
+fell back to `initialize` on 2025-11-25 only when the adapter exited after the first discover.
+So Claude Code already receives the hint, and the bench does not show its wire.
+
+Keeping the hints off the 2025 wire is deliberate (lane 01M4S53C40, 2026-10-13). The 2025-era wire does not define
 `ttlMs`/`cacheScope`, and no installed harness was found to read them there. The search covered
 each harness's installed binary or bundle. It was not a live run.
 
 | Harness                         | What reads `ttlMs`/`cacheScope`                                                                                  |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| claude-code 2.1.296             | Only its bundled SDK's 2026-07-28 codec. Its discovery cache uses its own TTL, `MCP_DISCOVERY_CACHE_TTL_S`.      |
+| claude-code 2.1.296             | Its 2026-07-28 codec, the era it negotiates by default. Its discovery cache uses its own TTL, `MCP_DISCOVERY_CACHE_TTL_S`. |
 | cursor (agent 2026.10.01, app)  | Nothing. It has no 2026-07-28 support, and the app ships `@modelcontextprotocol/sdk` 1.25.1.                     |
 | codex 0.162.1, grok             | Only the 2026-07-28 types (`DiscoverResult` and similar). Whether either caches on them is not visible in a Rust binary. |
 | opencode 2.0.28                 | Only its 2026-07-28 list-result schemas and its own server's defaults. No client cache on a server's hint was found. |
 
-So the SDK is not patched to add the fields on the old wire. A harness that speaks 2026-07-28
-already gets the hint, with no change here; Claude Code can be switched to it with
-`MCP_PROTOCOL_NEGOTIATION`. Revisit if a harness is shown to cache `tools/list` on a server's
+So the SDK is not patched to add the fields on the old wire. A harness that speaks 2026-07-28,
+Claude Code included, already gets the hint; `MCP_PROTOCOL_NEGOTIATION=legacy` sends Claude Code
+back to `initialize`. Revisit if a harness is shown to cache `tools/list` on a server's
 `ttlMs` over `initialize`.
 
 ## The core tools (JSON schemas — verbatim contract)
