@@ -385,3 +385,24 @@ export function enqueueSpeech<T>(q: T[], next: T, max = SPEECH_QUEUE_MAX): T[] {
   while (q.length > max) q.shift();
   return q;
 }
+
+/** A screen rectangle: left, top, width, height. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Would a bubble anchored over `head` (its foot `lift` above the head, centred on it, `size` big) cover
+ * any of the board face? A bubble follows its speaker, so a member at the wall board — claiming, pinning,
+ * delivering — carries their sentence across the card they came to hang (lane 01M4VMFE3A). The cheap
+ * head test comes first so a frame with nobody near the board pays a comparison, not a measurement.
+ */
+export function bubbleCoversBoard(head: { x: number; y: number }, size: { w: number; h: number }, lift: number, board: Box): boolean {
+  if (head.y <= board.y || head.x <= board.x - 190 || head.x >= board.x + board.w + 190) return false;
+  const left = head.x - size.w / 2;
+  const foot = head.y - lift;
+  return left < board.x + board.w && left + size.w > board.x && foot > board.y && foot - size.h < board.y + board.h;
+}

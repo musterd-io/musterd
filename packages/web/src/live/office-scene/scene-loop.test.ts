@@ -294,3 +294,14 @@ describe('the dog tags along to the cooler (spec 2026-10-13 L2)', () => {
     expect(index).toContain('beats.push([8, () => waterStroll(who, slot)])');
   });
 });
+
+describe('a bubble steps aside while it would cover the wall board (lane 01M4VMFE3A)', () => {
+  it('positionSpeech asks bubbleCoversBoard, hides with opacity, and never catches the board click', () => {
+    const fn = index.slice(index.indexOf('function positionSpeech'), index.indexOf('function clearSpeech'));
+    expect(fn).toContain('bubbleCoversBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board)');
+    expect(fn).toContain("outer.style.opacity = over ? '0' : '';");
+    expect(fn).toContain("outer.style.pointerEvents = over ? 'none' : 'auto';");
+    // the board anchor is read once per pass, and only when a bubble is up
+    expect(fn).toContain('const board = speeches.size ? boardAnchor(fit) : undefined;');
+  });
+});
