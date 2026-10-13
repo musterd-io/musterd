@@ -170,6 +170,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
 
   packages/mobile:
     dependencies:
@@ -8433,7 +8436,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.28.1
       '@esbuild/win32-ia32': 0.28.1
       '@esbuild/win32-x64': 0.28.1
-    optional: true
 
   escalade@3.2.0: {}
 
