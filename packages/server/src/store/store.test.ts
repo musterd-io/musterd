@@ -47,6 +47,7 @@ import {
   recordUnattestedOccupancy,
   release,
   touchAmbientPresence,
+  touchAmbientPresenceRows,
 } from './presence.js';
 import { hasValidSessionLease, mintSessionLease } from './session-leases.js';
 import {
@@ -1035,6 +1036,53 @@ withDrivers('store', (o) => {
       expect(
         await db.get("SELECT COUNT(*) AS n FROM audit WHERE action = 'presence.attached'"),
       ).toEqual({ n: 1 });
+    });
+
+    it('an ambient touch reports the row before and after exactly as a read-back would (lane 01M4VR41VE)', async () => {
+      const { db, team } = await freshTeam();
+      const cy = await addMember(db, team, { name: 'Cy', kind: 'agent' });
+      const readBack = () =>
+        db.get<{ id: string; model: string | null }>(
+          'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+          [cy.row.id],
+        );
+      // First touch attaches: nothing before, the new row after, and the seat flips online.
+      const first = await touchAmbientPresenceRows(db, cy.row.id, 'cli', 45_000, {});
+      expect(first.before).toBeNull();
+      expect(first.after).toEqual(await readBack());
+      expect(first.flipped).toBe(true);
+      // A model header installs the model on the same row.
+      const attested = await touchAmbientPresenceRows(db, cy.row.id, 'cli', 45_000, {
+        model: 'claude-opus-5-5',
+      });
+      expect(attested.before).toEqual({ id: first.after!.id, model: null });
+      expect(attested.after).toEqual(await readBack());
+      expect(attested.after).toEqual({ id: first.after!.id, model: 'claude-opus-5-5' });
+      expect(attested.flipped).toBe(false);
+      // A touch with no model keeps it (sticky, ADR 101).
+      const plain = await touchAmbientPresenceRows(db, cy.row.id, 'cli', 45_000, {});
+      expect(plain.after).toEqual(await readBack());
+      expect(plain.after?.model).toBe('claude-opus-5-5');
+      // Under a live socket the touch writes nothing, and after is before.
+      await attach(db, cy.row.id, 'claude-code', 'sock-1');
+      const ambientNow = (await readBack()) ?? null;
+      const resident = await touchAmbientPresenceRows(db, cy.row.id, 'cli', 45_000, {
+        model: 'other-model',
+      });
+      expect(resident).toEqual({ flipped: false, before: ambientNow, after: ambientNow });
+      expect((await readBack()) ?? null).toEqual(ambientNow);
+    });
+
+    it('a refreshing ambient touch is three statements: one read of the row, one liveness read, one write (lane 01M4VR41VE)', async () => {
+      const { db, team } = await freshTeam();
+      const cy = await addMember(db, team, { name: 'Cy', kind: 'agent' });
+      await touchAmbientPresence(db, cy.row.id, 'cli', 45_000, {});
+      const seen: string[] = [];
+      const counted = db as Driver & { onStatement(l: (sql: string) => void): () => void };
+      const stop = counted.onStatement((sql) => seen.push(sql));
+      await touchAmbientPresenceRows(db, cy.row.id, 'cli', 45_000, {});
+      stop();
+      expect(seen).toHaveLength(3);
     });
 
     it('a remote row is never the subject of a locally emitted transition', async () => {

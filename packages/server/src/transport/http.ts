@@ -350,7 +350,7 @@ import {
   listReclaimableMemberIds,
   recordClaimAttestation,
   recordUnattestedOccupancy,
-  touchAmbientPresence,
+  touchAmbientPresenceRows,
   describeDisplaced,
   type DisplacedSession,
   supersededMessage,
@@ -1347,15 +1347,12 @@ async function authTouch(
       ? ((await settleProvenance(ctx.db, auth.member, provenanceHeader(req), wakeLease)) ??
         undefined)
       : undefined;
-  // Snapshot the ambient row before the touch so a real model change can audit (source: ambient).
+  // The ambient row before and after the touch, so a real model change can audit (source: ambient).
   // ADR 246: taken UNCONDITIONALLY now. It used to be read only when a model header was present,
   // which made the one case that mattered invisible — a touch carrying NO model that attaches a
   // brand-new row is exactly the born-unattested occupancy, and there was nothing to compare it to.
-  const before = await ctx.db.get<{ id: string; model: string | null }>(
-    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
-    [auth.member.id],
-  );
-  const flipped = await touchAmbientPresence(
+  // The touch reports both rows itself rather than this re-reading them (lane 01M4VR41VE).
+  const { flipped, before, after } = await touchAmbientPresenceRows(
     ctx.db,
     auth.member.id,
     surface,
@@ -1367,10 +1364,6 @@ async function authTouch(
       ...(provenance !== undefined ? { provenance } : {}),
       ...(wakeLease !== undefined ? { wake_lease: wakeLease } : {}),
     },
-  );
-  const after = await ctx.db.get<{ id: string; model: string | null }>(
-    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
-    [auth.member.id],
   );
   // ADR 246: a touch that attached a NEW row attesting nothing is a de-attestation, and it is the
   // one transition the old model-gated branch below could never see. Gated on the row being new
