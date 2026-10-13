@@ -73,7 +73,17 @@
 .dl__elab {
   font-family: var(--font-mono);
   font-size: 14px;
-  fill: var(--text-faint);
+  /* Ink via `color` so SVG text is measured like any other text: the contrast gate blanks glyphs with
+   * `color: transparent` and reads `color` as the ink — a bare `fill` is invisible to both (gate red on
+   * main 2026-10-13, lane 01M4V4P538). */
+  color: var(--text-faint);
+  fill: currentColor;
+  /* A paper knockout under the glyphs: under reduced motion every edge is shown and two labels sit on
+   * their own arc stroke, which is what the reader (and the gate) saw behind them. */
+  stroke: var(--surface-solid);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
   opacity: 0;
   transition: opacity 0.4s 0.35s;
 }
