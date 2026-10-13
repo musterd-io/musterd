@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   computeSiteGap,
   nextAction,
   siteGapAskBody,
   siteGapLine,
+  sitePathspecs,
   SITE_PATHS,
   type GitReader,
   type SiteGap,
@@ -66,6 +71,81 @@ describe('computeSiteGap', () => {
     const gap = computeSiteGap({ ref: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' }, TIP, git([]));
     expect(gap.status).toBe('unknown_ref');
     expect(siteGapLine(gap, 'https://musterd.io')).toMatch(/does not have/);
+  });
+});
+
+/**
+ * The exclusion is git's pathspec semantics, so a fake reader cannot prove it — this one runs real
+ * `git log` in a throwaway repo with the same pathspecs the service passes (lane 01M4VA7NQG).
+ * The list mirrors the shape `stage-allowlist.mjs` `DAEMON_ONLY_SOURCES` gives; the CLI reads the
+ * real one at run time.
+ */
+describe('daemon-only web sources are not site-affecting', () => {
+  const DAEMON_ONLY = ['src/live', 'src/routes/live.*', 'src/routes/board.*'];
+  const repo = mkdtempSync(join(tmpdir(), 'musterd-site-gap-'));
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+  const run = (...args: string[]) => {
+    const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commit = (subject: string, files: string[]) => {
+    for (const f of files) {
+      mkdirSync(join(repo, dirname(f)), { recursive: true });
+      writeFileSync(join(repo, f), `${subject}\n`);
+    }
+    run('add', '-A');
+    run('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', subject);
+    return run('rev-parse', 'HEAD');
+  };
+  const reader: GitReader = {
+    hasCommit: (ref) =>
+      spawnSync('git', ['cat-file', '-e', `${ref}^{commit}`], { cwd: repo }).status === 0,
+    logRange: (from, to, paths) =>
+      run('log', '--format=%h%x09%s', `${from}..${to}`, '--', ...paths)
+        .split('\n')
+        .filter((l) => l.length > 0),
+  };
+
+  run('init', '-q');
+  const base = commit('base', ['packages/web/src/components/site/Hero.tsx', 'README.md']);
+  commit('live only', ['packages/web/src/live/NowCard.tsx']);
+  commit('board route only', ['packages/web/src/routes/board.tsx']);
+  commit('live and site', [
+    'packages/web/src/live/NowCard.tsx',
+    'packages/web/src/components/site/Hero.tsx',
+  ]);
+  commit('public route', ['packages/web/src/routes/watch.tsx']);
+  commit('outside web', ['README.md']);
+  const tip = run('rev-parse', 'HEAD');
+
+  it('maps each daemon-only source to an exclude under packages/web', () => {
+    expect(sitePathspecs(['src/live', 'src/routes/live.*'])).toEqual([
+      'packages/web',
+      ':(exclude)packages/web/src/live',
+      ':(exclude)packages/web/src/routes/live.*',
+    ]);
+    expect(sitePathspecs([])).toEqual([...SITE_PATHS]);
+  });
+
+  it('does not count a commit that touches only src/live or a daemon route', () => {
+    const gap = computeSiteGap({ ref: base }, tip, reader, DAEMON_ONLY);
+    expect(gap.behind.map((c) => c.subject)).toEqual(['public route', 'live and site']);
+  });
+
+  it('counts everything under packages/web when the list is empty — the conservative fallback', () => {
+    const gap = computeSiteGap({ ref: base }, tip, reader, []);
+    expect(gap.behind.map((c) => c.subject)).toEqual([
+      'public route',
+      'live and site',
+      'board route only',
+      'live only',
+    ]);
+  });
+
+  it('reads current when only daemon-only commits landed since the deploy', () => {
+    const live = commit('live again', ['packages/web/src/live/Other.tsx']);
+    expect(computeSiteGap({ ref: tip }, live, reader, DAEMON_ONLY).status).toBe('current');
   });
 });
 

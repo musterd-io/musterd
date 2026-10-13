@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { cpus, homedir, loadavg, platform as osPlatform } from 'node:os';
 import { dirname, join, resolve as resolvePath } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   activeHoldFor,
   describeHoldLine,
@@ -1000,6 +1001,26 @@ function siteGitReader(cwd: string): GitReader {
   };
 }
 
+/**
+ * `DAEMON_ONLY_SOURCES` from the checkout being measured — the deploy's own list of web sources no
+ * public page is built from (lane 01M4VA7NQG). Read at run time from the same tree `git log` walks,
+ * because the CLI imports nothing from `@musterd/web`. `null` when it cannot be read; the gap then
+ * counts every `packages/web` commit, as it always did.
+ */
+async function loadDaemonOnlySources(cwd: string): Promise<string[] | null> {
+  const top = gitAt(cwd, ['rev-parse', '--show-toplevel']);
+  if (!top) return null;
+  try {
+    const mod = (await import(
+      pathToFileURL(join(top, 'packages/web/scripts/stage-allowlist.mjs')).href
+    )) as { DAEMON_ONLY_SOURCES?: unknown };
+    const list = mod.DAEMON_ONLY_SOURCES;
+    return Array.isArray(list) && list.every((p) => typeof p === 'string') ? list : null;
+  } catch {
+    return null;
+  }
+}
+
 function readSiteGapStamp(path: string): SiteGapStamp | null {
   try {
     const j = JSON.parse(readFileSync(path, 'utf8')) as Partial<SiteGapStamp>;
@@ -1035,7 +1056,12 @@ async function runSiteGap(parsed: Parsed): Promise<number> {
     out(`${origin} unreachable (${(err as Error).message}) — landed-versus-live not measured`);
     return 0;
   }
-  const gap = computeSiteGap(marker, tip, siteGitReader(cwd));
+  const daemonOnly = await loadDaemonOnlySources(cwd);
+  if (!daemonOnly)
+    out(
+      'daemon-only web sources unreadable (stage-allowlist.mjs) — counting every packages/web commit',
+    );
+  const gap = computeSiteGap(marker, tip, siteGitReader(cwd), daemonOnly ?? []);
   out(siteGapLine(gap, origin));
   for (const c of gap.behind) out(`  ${c.sha} ${c.subject}`);
 

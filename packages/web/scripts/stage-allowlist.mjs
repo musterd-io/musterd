@@ -65,3 +65,17 @@ export const DAEMON_ROUTES = [
   'character-sheet',
   'office-preview',
 ];
+
+/**
+ * The web SOURCES only the daemon surfaces above are built from, relative to `packages/web`: the
+ * `src/live` tree and each daemon route's own files. `musterd service site-gap` excludes them when
+ * it asks whether the public site is behind `main` — a commit that touches only these changes
+ * nothing the public origin serves, since staging withholds every route that renders them. Derived
+ * from DAEMON_ROUTES so the deploy decision and the gap instrument cannot drift (lane 01M4VA7NQG,
+ * 2026-10-13: #2480 and #2485, both src/live only, each asked nick for a deploy that changed nothing
+ * public). `site-routes.test.ts` pins the other half: no public route reaches `src/live`.
+ */
+export const DAEMON_ONLY_SOURCES = [
+  'src/live',
+  ...DAEMON_ROUTES.map((route) => `src/routes/${route}.*`),
+];

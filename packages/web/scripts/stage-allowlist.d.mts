@@ -9,3 +9,4 @@
  */
 export declare const PUBLIC_ALLOW: string[];
 export declare const DAEMON_ROUTES: string[];
+export declare const DAEMON_ONLY_SOURCES: string[];
