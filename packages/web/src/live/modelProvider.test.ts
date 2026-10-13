@@ -49,6 +49,15 @@ describe('modelProvider', () => {
     expect(modelProvider('unknown').id).toBe('unknown');
     expect(modelProvider('').id).toBe('unknown');
   });
+
+  it('maps CatJam models to a cat mark (not unknown)', () => {
+    const p = modelProvider('cat-jam-free');
+    expect(p.id).toBe('catjam');
+    expect(p.border).toBe('#7C3AED');
+    const html = providerIconHtml(p);
+    expect(html).toContain('<svg');
+    expect(html).toContain('#7C3AED');
+  });
 });
 
 describe('providerIconHtml', () => {
