@@ -567,6 +567,8 @@ export function mountOffice(
   /** Cards pinned back on the wall by a resolve/submit walk, and for a while after — the counterpart of
    *  `takenUntil`: the card hangs under its new column until the board's own refresh agrees (or 12s). */
   const pinnedUntil = new Map<number, { state: PinnedCard['state']; until: number }>();
+  /** When (scene clock, seconds) each pinned card landed — it swings on its tape for the first second (L5). */
+  const pinLanded = new Map<number, number>();
   function wallBoardNow(): WallBoard | null {
     const now = performance.now();
     for (const seed of actors.takenSeeds()) takenUntil.set(seed, now + 12_000);
@@ -575,7 +577,13 @@ export function mountOffice(
     for (const [seed, p] of pinnedUntil) if (p.until < now) pinnedUntil.delete(seed);
     let wb = takenUntil.size ? withTaken(wallBoard, [...takenUntil.keys()]) : wallBoard;
     if (pinnedUntil.size)
-      wb = withPinned(wb, [...pinnedUntil].map(([seed, p]) => ({ seed, state: p.state })));
+      wb = withPinned(
+        wb,
+        [...pinnedUntil].map(([seed, p]) => {
+          const landed = pinLanded.get(seed);
+          return landed === undefined ? { seed, state: p.state } : { seed, state: p.state, age: clock - landed };
+        }),
+      );
     return wb;
   }
   let heads = new Map<string, Pt>(); // home head anchors — where in-place cues sit
@@ -1291,7 +1299,8 @@ export function mountOffice(
       // walking head exactly. The step off home rides `translate`, which `.lc-gl-label` transitions:
       // a plate that has to move glides there instead of snapping (nick, 2026-10-06).
       const homeX = width > size.w + 4 ? Math.min(Math.max(head.x, half), width - half) : head.x;
-      el.style.transform = `translate(-50%, -100%) translate(${homeX}px, ${head.y}px)`;
+      // Hung by hand, not by a ruler: each plate sits a hair off true (±0.8°, seeded by the name so it never shivers).
+      el.style.transform = `translate(-50%, -100%) translate(${homeX}px, ${head.y}px) rotate(${plateTilt(name)}deg)`;
       el.style.translate = `${(at.x - homeX).toFixed(1)}px ${(at.y - head.y).toFixed(1)}px`;
       el.classList.toggle('is-displaced', at.displaced);
       if (at.displaced) {
@@ -2333,10 +2342,12 @@ export function mountOffice(
    *  pinned this frame. Skipped while a replay is landing — a replayed cue would celebrate old news. */
   function flourishFreshPins(): void {
     const now = new Set<number>();
+    for (const [seed, at] of pinLanded) if (clock - at > 2) pinLanded.delete(seed);
     for (const p of actors.pinnedSeeds()) {
-      if (p.state !== 'done') continue;
       now.add(p.seed);
-      if (!prevPinned.has(p.seed) && acceptedPins.delete(p.seed) && tempo === 1) pushBoardConfetti();
+      if (prevPinned.has(p.seed)) continue;
+      pinLanded.set(p.seed, clock); // every card that lands swings once
+      if (p.state === 'done' && acceptedPins.delete(p.seed) && tempo === 1) pushBoardConfetti();
     }
     prevPinned = now;
   }
@@ -2384,6 +2395,11 @@ export function mountOffice(
       kind: 'thread',
       source: from,
     });
+  }
+
+  /** A nameplate's resting tilt in degrees: stable per name, within ±0.8°. */
+  function plateTilt(name: string): number {
+    return +((((laneSeed(name) >>> 3) % 17) - 8) * 0.1).toFixed(1);
   }
 
   /** The entrance glows as a member walks in or out. */

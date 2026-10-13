@@ -19,6 +19,8 @@ export interface WallSticky {
   state: LaneState;
   /** Someone is walking off with this card (a claim in flight): its slot stays, its paper does not. */
   taken?: true;
+  /** Seconds since a pin walk landed this card (L5): it swings on its tape for a moment, then hangs still. */
+  age?: number;
 }
 
 export interface WallBoardColumn {
@@ -76,6 +78,8 @@ export function withTaken(board: WallBoard | null, taken: readonly number[]): Wa
 export interface PinnedCard {
   seed: number;
   state: LaneState;
+  /** Seconds since the card landed, when it did this session (see `WallSticky.age`). */
+  age?: number;
 }
 
 /**
@@ -87,12 +91,16 @@ export interface PinnedCard {
 export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[]): WallBoard | null {
   if (!board || pinned.length === 0) return board;
   const moved = new Map(pinned.map((p) => [p.seed, p.state]));
+  const ages = new Map(pinned.filter((p) => p.age !== undefined).map((p) => [p.seed, p.age!]));
   return board.map((col) => {
     const stickies = [
-      ...col.stickies.filter((s) => !moved.has(s.seed) || moved.get(s.seed) === col.key),
+      // A card the board already shows here still swings if it only just landed (`age`).
+      ...col.stickies
+        .filter((s) => !moved.has(s.seed) || moved.get(s.seed) === col.key)
+        .map((s) => (ages.has(s.seed) ? { ...s, age: ages.get(s.seed)! } : s)),
       ...pinned
         .filter((p) => p.state === col.key && !col.stickies.some((s) => s.seed === p.seed))
-        .map((p) => ({ seed: p.seed, state: p.state })),
+        .map((p) => ({ seed: p.seed, state: p.state, ...(p.age !== undefined ? { age: p.age } : {}) })),
     ];
     const same =
       stickies.length === col.stickies.length && stickies.every((s, i) => s === col.stickies[i]);

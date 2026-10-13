@@ -900,7 +900,6 @@ function wallLaneBoard(
     for (let s = 0; s < col.stickies.length; s++) {
       // A card in someone's hand (a claim in flight) leaves its slot empty — the cork shows through
       // exactly where the paper was, which is the whole read of "taken".
-      if (col.stickies[s]!.taken) continue;
       const seed = col.stickies[s]!.seed;
       // Seeded jitter, ±1.5 units across and ±0.8 up — pinned by a hand, stable across repaints.
       const ja = (((seed >>> (s * 3)) % 7) - 3) * 0.5;
@@ -908,9 +907,17 @@ function wallLaneBoard(
       const top = H / 2 - M - 6 - s * (noteH + 2.5) + jb;
       const l = mid - noteW / 2 + ja;
       const r = mid + noteW / 2 + ja;
+      if (col.stickies[s]!.taken) {
+        // The tape took the paper with it, but the tack stays: one dark pin hole where the card hung.
+        rect(mid + ja - 0.5, top - 0.9, mid + ja + 0.5, top + 0.1, PINBOARD.inner);
+        continue;
+      }
+      // A card that just landed swings on its tape: the bottom edge sways, the top stays put (L5).
+      const age = col.stickies[s]!.age;
+      const sw = age !== undefined && age < 1.1 ? Math.sin(age * 20) * Math.exp(-age * 4.2) * 2.4 : 0;
       // Shadow first, offset down-right: paper held a hair off the cork rather than printed on it.
-      rect(l + 0.8, top - noteH - 0.8, r + 0.8, top - 0.8, PINBOARD.noteCast);
-      rect(l, top - noteH, r, top, tone.note);
+      quad(ctx, [p(l + 0.8, top - 0.8), p(r + 0.8, top - 0.8), p(r + 0.8 + sw, top - noteH - 0.8), p(l + 0.8 + sw, top - noteH - 0.8)], PINBOARD.noteCast);
+      quad(ctx, [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)], tone.note);
       // The washi tab, straddling the note's top edge onto the cork — the tape is doing the holding,
       // so it has to overlap both. Its own sheen line is what stops it reading as a painted stripe.
       const tw = 8;
@@ -5437,6 +5444,12 @@ export function drawCue(ctx: CanvasRenderingContext2D, cue: Cue, scale: number):
     ctx.globalAlpha = Math.sin(Math.min(1, t) * Math.PI) * 0.5;
     ctx.fillStyle = color;
     roundRect(ctx, at.x - w / 2, at.y - h, w, h, 6 * scale, color);
+    // The leaves part a crack down the middle as they let someone through, then close (L5): the light
+    // spills out of a slit, not a slab.
+    const crack = Math.sin(Math.min(1, t) * Math.PI);
+    ctx.globalAlpha = Math.min(1, crack * 1.4);
+    ctx.fillStyle = '#fff6d6';
+    ctx.fillRect(at.x - crack * 1.6 * scale, at.y - h + 4 * scale, crack * 3.2 * scale, h - 8 * scale);
     ctx.globalAlpha = 1;
     return;
   }

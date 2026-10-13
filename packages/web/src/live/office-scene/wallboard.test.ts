@@ -119,6 +119,16 @@ describe('withPinned — a card someone has just pinned back on the wall', () =>
     expect(caught.find((c) => c.key === 'done')).toBe(out.find((c) => c.key === 'done'));
   });
 
+  it('carries a card\'s age to the wall, whether it arrives or the board already shows it (L5 wobble)', () => {
+    const wb = projectWallBoard(board([lane({ id: 'A', state: 'active' }), lane({ id: 'C', state: 'done' })]))!;
+    const arriving = withPinned(wb, [{ seed: laneSeed('A'), state: 'done', age: 0.2 }])!;
+    expect(arriving.find((c) => c.key === 'done')!.stickies.find((s) => s.seed === laneSeed('A'))!.age).toBe(0.2);
+    const caught = withPinned(arriving, [{ seed: laneSeed('A'), state: 'done', age: 0.5 }])!;
+    expect(caught.find((c) => c.key === 'done')!.stickies.find((s) => s.seed === laneSeed('A'))!.age).toBe(0.5);
+    // a card with no age stays a plain sticky
+    expect(withPinned(wb, [{ seed: laneSeed('A'), state: 'done' }])!.find((c) => c.key === 'done')!.stickies.every((s) => s.age === undefined)).toBe(true);
+  });
+
   it('returns the board untouched when nothing is pinned', () => {
     const wb = projectWallBoard(board([lane({ id: 'A' })]));
     expect(withPinned(wb, [])).toBe(wb);

@@ -261,8 +261,24 @@ describe('the accept flourish at the board (spec 2026-10-13 L3)', () => {
     expect(body).toContain('acceptedPins.add(seed)');
     expect(body).toContain('accepted && tempo === 1');
     const fn = index.slice(index.indexOf('function flourishFreshPins'), index.indexOf('function nearestNeighbors'));
-    expect(fn).toContain("p.state !== 'done'");
-    expect(fn).toContain('!prevPinned.has(p.seed) && acceptedPins.delete(p.seed) && tempo === 1');
+    expect(fn).toContain('if (prevPinned.has(p.seed)) continue;');
+    expect(fn).toContain("p.state === 'done' && acceptedPins.delete(p.seed) && tempo === 1");
     expect(index).toMatch(/actors\.step\(dt \* tempo\);\s*flourishFreshPins\(\);/);
+  });
+});
+
+describe('micro-polish (spec 2026-10-13 L5)', () => {
+  it('a card that lands swings on its tape: the landing time reaches the wall as an age', () => {
+    const fn = index.slice(index.indexOf('function flourishFreshPins'), index.indexOf('function nearestNeighbors'));
+    expect(fn).toContain('pinLanded.set(p.seed, clock)');
+    expect(index).toContain('age: clock - landed');
+  });
+
+  it('every nameplate sits a hair off true, stable per name and within a degree', () => {
+    expect(index).toMatch(/rotate\(\$\{plateTilt\(name\)\}deg\)/);
+    const fn = index.slice(index.indexOf('function plateTilt'), index.indexOf('function pushDoorCue'));
+    expect(fn).toContain('laneSeed(name)');
+    // (seed % 17 - 8) * 0.1 spans -0.8 .. +0.8
+    expect(fn).toContain('% 17) - 8) * 0.1');
   });
 });
