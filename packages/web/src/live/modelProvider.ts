@@ -11,6 +11,7 @@ export type ModelProviderId =
   | 'minimax'
   | 'glm'
   | 'nova'
+  | 'catjam'
   | 'unknown';
 
 export type ModelProvider = {
@@ -34,6 +35,7 @@ const CHIPS: Record<ModelProviderId, Omit<ModelProvider, 'id'>> = {
   minimax: { border: '#E11D48', fill: '#FDE8EF', ink: '#9F1239' },
   glm: { border: '#E11D48', fill: '#FDE8EF', ink: '#9F1239' },
   nova: { border: '#FF9900', fill: '#FFF4E5', ink: '#9A5C00' },
+  catjam: { border: '#7C3AED', fill: '#F3E8FF', ink: '#5B21B6' },
   unknown: { border: 'transparent', fill: 'transparent', ink: 'currentColor' },
 };
 
@@ -65,5 +67,8 @@ export function modelProvider(model: string | null | undefined): ModelProvider {
   if (lower.includes('minimax')) return chip('minimax');
   if (/\bglm\b/.test(lower) || lower.includes('zai')) return chip('glm');
   if (lower.includes('nova')) return chip('nova');
+  // CatJam models run on opencode (e.g. cat-jam-free) and their own seat attests them —
+  // match before the fallback so the plate gets a mark instead of "?".
+  if (lower.includes('cat-jam') || lower.includes('catjam') || lower.includes('litterbox')) return chip('catjam');
   return chip('unknown');
 }
