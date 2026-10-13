@@ -1,0 +1,22 @@
+# Eval input. FICTIONAL measurements written for this eval; they are not musterd data.
+run,variant,ms
+1,before,412
+2,before,388
+3,before,455
+4,before,1210
+5,before,401
+6,before,397
+7,before,430
+8,before,1350
+9,before,419
+10,before,405
+1,after,201
+2,after,195
+3,after,240
+4,after,980
+5,after,210
+6,after,188
+7,after,205
+8,after,1105
+9,after,199
+10,after,214

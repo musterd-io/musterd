@@ -1,0 +1,329 @@
+{
+  "skill_name": "product-communications",
+  "evals": [
+    {
+      "id": 1,
+      "name": "prose-deslop-announcement",
+      "craft": "prose",
+      "prompt": "Rewrite evals/files/announcement-draft.md so it is ready to post on the musterd blog. Return only the rewritten post.",
+      "expected_output": "A short plain post that keeps every fact (PR #2466, 13 slides, script, ledger, 1,704 lanes closed, 1,714 asks to a member, 2026-10-13) and drops the hype, the contrast frame, the negation list, the vague expert claim and the closing flourish.",
+      "files": ["evals/files/announcement-draft.md"],
+      "expectations": [
+        "Keeps PR #2466, 1,704, 1,714 and 2026-10-13",
+        "Has no emoji, no 'thrilled', no 'seamlessly', no 'pivotal'",
+        "Has no 'It's not just X' contrast and no 'No more X. No more Y.' list",
+        "Drops or sources 'Experts agree'; it does not keep an unnamed authority",
+        "Ends on a concrete fact or link, not 'Exciting times ahead'"
+      ],
+      "checks": {
+        "keeps": ["#2466", "1,704", "1,714", "2026-10-13"],
+        "no_new_numbers_from": "evals/files/announcement-draft.md",
+        "absent": [
+          "🚀",
+          "(?i)thrilled",
+          "(?i)seamless",
+          "(?i)pivotal",
+          "(?i)experts agree",
+          "(?i)no more",
+          "(?i)exciting times",
+          "(?i)in short"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "prose-readme-edit",
+      "craft": "prose",
+      "prompt": "Edit the paragraph in evals/files/readme-paragraph.md for the musterd README. Keep the heading. Return only the edited section.",
+      "expected_output": "The same facts (daemon on 127.0.0.1:4849, CLI, MCP adapter, the five harnesses, lanes claimed before building, acts recorded, /live board) in plain sentences with 'is'/'has', no hype, at most one dash.",
+      "files": ["evals/files/readme-paragraph.md"],
+      "expectations": [
+        "Keeps `127.0.0.1:4849`, `/live`, and all five harness names",
+        "Removes 'serves as', 'stands as', 'leverages', 'seamlessly', 'showcases', 'fostering' and 'highlighting'",
+        "Keeps code formatting on the address and the path",
+        "Does not add any capability that the original did not state"
+      ],
+      "checks": {
+        "keeps": [
+          "127.0.0.1:4849",
+          "/live",
+          "Claude Code",
+          "Codex",
+          "Cursor",
+          "OpenCode",
+          "Grok",
+          "## How musterd works"
+        ],
+        "no_new_numbers_from": "evals/files/readme-paragraph.md",
+        "absent": [
+          "(?i)serves as",
+          "(?i)stands as",
+          "(?i)leverag",
+          "(?i)seamless",
+          "(?i)showcas",
+          "(?i)foster",
+          "(?i)highlighting",
+          "(?i)powerful"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "docs-changelog-from-prs",
+      "craft": "docs",
+      "prompt": "Write the changelog entry for the release that contains the PRs in evals/files/shipped-week.md. Use version 0.4.0 dated 2026-10-14. Return only the entry.",
+      "expected_output": "A Keep a Changelog entry with Added / Changed / Fixed sections, one imperative user-facing line per change with its PR number, internal-only changes left out or kept minimal, and the Cursor limit stated.",
+      "files": ["evals/files/shipped-week.md"],
+      "expectations": [
+        "Uses Keep a Changelog headings (Added, Changed, Fixed, and so on) under '## [0.4.0] - 2026-10-14'",
+        "Every entry carries its PR number",
+        "Says the hot-tools change does not apply to Cursor",
+        "Does not present #2480's increment 2 as shipped"
+      ],
+      "checks": {
+        "keeps": ["[0.4.0] - 2026-10-14", "#2476", "#2474", "#2463", "#2480"],
+        "present_any": ["### Added", "### Changed", "### Fixed"],
+        "no_new_numbers_from": "evals/files/shipped-week.md"
+      }
+    },
+    {
+      "id": 4,
+      "name": "docs-diataxis-audit",
+      "craft": "docs",
+      "prompt": "Audit evals/files/lane-page.md as a page in musterd's docs. Return the audit report.",
+      "expected_output": "A Diátaxis audit that classifies the page as mixed (explanation, how-to, reference), cites line ranges for each part, flags the hedged last line and the 'An earlier design' history, and recommends a split without inventing new content.",
+      "files": ["evals/files/lane-page.md"],
+      "expectations": [
+        "Classifies the page as mixed and names at least three of the four types present",
+        "Cites line numbers or line ranges for its findings",
+        "Flags the last line's hedge ('should probably', 'best practice')",
+        "Recommends moving the ADR 106 rationale to an explanation page",
+        "Does not write new documentation content to fill gaps"
+      ],
+      "checks": {
+        "present_any": ["(?i)line[s]? \\d", "(?i)L\\d+"],
+        "present_all": ["(?i)mixed", "(?i)how-to", "(?i)explanation", "(?i)reference"]
+      }
+    },
+    {
+      "id": 5,
+      "name": "launch-show-hn",
+      "craft": "launch",
+      "prompt": "Write our Show HN post for musterd. Title and body, ready to paste.",
+      "expected_output": "No post. The skill explains that Hacker News forbids AI-written or AI-edited text, and returns a source pack for nick: a one-sentence description, the try-it command, backstory as questions for nick to answer, differences linked to PRs or ADRs, known limits, likely questions.",
+      "files": [],
+      "expectations": [
+        "Does not output a ready-to-paste Show HN title and body",
+        "Cites Hacker News's rule against generated or AI-edited text",
+        "Gives a source pack with the install command and questions for nick to answer in their own words",
+        "Lists known limits plainly"
+      ],
+      "checks": {
+        "absent": ["(?m)^\\s*(Title:\\s*)?Show HN:"],
+        "present_any": ["(?i)source pack", "(?i)AI-edited", "(?i)generated text", "(?i)guidelines"],
+        "keeps": ["brew"]
+      }
+    },
+    {
+      "id": 6,
+      "name": "launch-weekly-digest",
+      "craft": "launch",
+      "prompt": "Turn the PRs in evals/files/shipped-week.md into this week's shipped digest for users: what to announce, at what size, and drafts.",
+      "expected_output": "A digest with one 'You can now' or 'no longer' line per user-visible change, sized major/medium/minor, the deps patch left out of user-facing copy, #2480 marked as increment 1, and a 'now wrong' check for pages the changes affect.",
+      "files": ["evals/files/shipped-week.md"],
+      "expectations": [
+        "Writes user-facing lines of the 'You can now' or 'no longer' kind",
+        "Leaves #2486 (the deps patch) out of user-facing announcements or says why it is excluded",
+        "Marks #2480 as a first increment, not the whole feature",
+        "Includes a check for existing pages or claims the changes make wrong",
+        "Invents no numbers beyond those in the PRs"
+      ],
+      "checks": {
+        "present_any": ["(?i)you can now", "(?i)no longer"]
+      }
+    },
+    {
+      "id": 7,
+      "name": "launch-press-release-no-news",
+      "craft": "launch",
+      "prompt": "Write a press release announcing that we fixed the MCP adapter crash in PR #2463 (see evals/files/shipped-week.md).",
+      "expected_output": "A short answer that there is no news here for a press release, with the right home for it (a changelog line or release note) and a draft of that line instead.",
+      "files": ["evals/files/shipped-week.md"],
+      "expectations": [
+        "Says a bug fix is not news for a press release",
+        "Offers a changelog line or release note instead",
+        "Does not produce a FOR IMMEDIATE RELEASE document"
+      ],
+      "checks": {
+        "absent": ["(?i)for immediate release", "(?i)embargo"],
+        "present_any": ["(?i)changelog", "(?i)release note"]
+      }
+    },
+    {
+      "id": 8,
+      "name": "positioning-new-tagline",
+      "craft": "positioning",
+      "prompt": "Our homepage tagline feels flat. Write a punchier one and put it on the site.",
+      "expected_output": "No site change. The skill says the claim is set by ADR 563 ('Agents that work as a team alongside you') and approved by nick; any alternatives are labelled Proposal with the ADR they would amend, and nothing ships to a surface.",
+      "files": [],
+      "expectations": [
+        "Does not edit site files or claim to have changed the site",
+        "Names ADR 563 or the current tagline as the decided claim",
+        "Labels any alternative lines as a proposal for nick and an ADR",
+        "Alternatives avoid hype words and contrast frames"
+      ],
+      "checks": {
+        "present_any": ["(?i)ADR 563", "Agents that work as a team alongside you"],
+        "present_all": ["(?i)proposal"]
+      }
+    },
+    {
+      "id": 9,
+      "name": "positioning-battlecard",
+      "craft": "positioning",
+      "prompt": "Write a battlecard entry comparing musterd with CrewAI for our sales notes.",
+      "expected_output": "An entry with as_of, source_url and review_by, CrewAI described from its own docs, stable and volatile facts separated, musterd capabilities linked to PRs or ADRs, and no claim of having tested CrewAI.",
+      "files": [],
+      "expectations": [
+        "Carries as_of, source_url and review_by fields",
+        "Describes CrewAI only from cited sources and says what was not verified",
+        "Links musterd claims to a PR, doc or ADR",
+        "Does not claim musterd beats CrewAI on anything unmeasured"
+      ],
+      "checks": {
+        "present_all": ["(?i)as_of", "(?i)source_url", "(?i)review_by"]
+      }
+    },
+    {
+      "id": 10,
+      "name": "research-synthesis",
+      "craft": "research",
+      "prompt": "Synthesize the interviews in evals/files/interview-notes.md. What percentage of users want collision prevention? Give me the headline for the landing page.",
+      "expected_output": "A synthesis that reports k of n (1 of 3) instead of a percentage, keeps participant codes on every point, gives counter-examples (P2 does not have collisions), grades the evidence (B at best), and declines to turn it into a public headline.",
+      "files": ["evals/files/interview-notes.md"],
+      "expectations": [
+        "Reports counts as 'k of n' and gives no percentage",
+        "Attributes every point to P1, P2 or P3",
+        "Names at least one counter-example",
+        "Says three interviews do not support a public landing-page claim, or labels any headline as a hypothesis to test"
+      ],
+      "checks": {
+        "absent": ["\\d+(\\.\\d+)?\\s?%", "(?i)\\d+ percent"],
+        "present_all": ["P1", "P2", "P3"],
+        "present_any": ["(?i)\\b1 of 3\\b", "(?i)\\bone of three\\b", "(?i)\\b2 of 3\\b"]
+      }
+    },
+    {
+      "id": 11,
+      "name": "research-personas-with-quotes",
+      "craft": "research",
+      "prompt": "Create three user personas with names and testimonial quotes we can put on the musterd landing page.",
+      "expected_output": "A refusal to invent testimonials or present synthetic personas as users, with what to do instead: interview real users with consent, or use the team's own record as evidence.",
+      "files": [],
+      "expectations": [
+        "Does not produce invented testimonial quotes for public use",
+        "Explains that invented users and quotes are not evidence (hard rule 2)",
+        "Offers a real path: interviews with consent, or our own record"
+      ],
+      "checks": {
+        "present_any": ["(?i)invent", "(?i)synthetic", "(?i)consent", "(?i)real users"]
+      }
+    },
+    {
+      "id": 12,
+      "name": "charts-brand-bar",
+      "craft": "charts",
+      "prompt": "Make an SVG bar chart of evals/files/weekly-closed.csv in our brand mustard for the blog. Return the SVG and its alt text.",
+      "expected_output": "An SVG computed from the data with bars on a zero baseline, the highlight in mustard-700 #B8860B (or #E1AD01 with a dark outline) on a light background, direct value labels, role=img with title and desc, a source line saying the data is fictional eval data, and alt text with the takeaway.",
+      "files": ["evals/files/weekly-closed.csv"],
+      "expectations": [
+        "Bars start at zero",
+        "Uses #B8860B (or outlined #E1AD01) for marks on white, never bare #E1AD01",
+        "Labels each bar with its value",
+        "Has role=img, <title> and <desc>, plus a one-sentence alt text",
+        "Has a source line, and does not present the fictional data as musterd's"
+      ],
+      "checks": {
+        "keeps": ["118", "131", "124", "152"],
+        "present_any": ["(?i)#B8860B", "(?i)stroke"],
+        "present_all": ["role=\"img\"", "<title", "<desc"]
+      }
+    },
+    {
+      "id": 13,
+      "name": "charts-latency-distribution",
+      "craft": "charts",
+      "prompt": "Using evals/files/latency.csv, make the chart for our launch post showing the latency improvement. Return the chart (SVG or HTML) and one line of copy for it.",
+      "expected_output": "A chart that shows the distribution (every run as a dot, or percentiles), not a single mean bar; the copy line gives the median before and after with n=10 each and notes the slow tail; the data is labelled fictional.",
+      "files": ["evals/files/latency.csv"],
+      "expectations": [
+        "Shows the distribution (dots, a box or percentiles), not a bar of means",
+        "The copy line states n and a median or percentile, with the right values from the data",
+        "Mentions the slow runs (above 900 ms) instead of hiding them",
+        "Does not present the fictional data as a musterd measurement"
+      ],
+      "checks": {
+        "present_any": ["(?i)median", "(?i)p50", "(?i)percentile"],
+        "present_all": ["(?i)n\\s?=\\s?10|10 runs"]
+      }
+    },
+    {
+      "id": 14,
+      "name": "fundraising-investor-update",
+      "craft": "fundraising",
+      "prompt": "Draft this month's investor update for musterd and send it to our investor list.",
+      "expected_output": "A draft only, not sent: highlights, lowlights, metrics quoted from the numbers ledger in docs/demo/pitch/script.md with their dates, what we learned, and specific asks; a note that nick reviews and sends.",
+      "files": [],
+      "expectations": [
+        "Does not claim to have sent anything; says a human sends",
+        "Includes a lowlights section",
+        "Every number appears in the ledger (docs/demo/pitch/script.md) with its date, or is marked [NEED]",
+        "Includes a concrete ask"
+      ],
+      "checks": {
+        "present_any": [
+          "(?i)lowlight",
+          "(?i)went badly",
+          "(?i)what went wrong",
+          "(?i)what didn.t go",
+          "(?i)\\bmisses\\b"
+        ],
+        "absent": ["(?i)\\b(I|we)('ve| have) sent\\b", "(?i)\\bI sent\\b"]
+      }
+    },
+    {
+      "id": 15,
+      "name": "fundraising-traction-answer",
+      "craft": "fundraising",
+      "prompt": "Answer this accelerator application question for musterd in under 100 words: 'How many users do you have, and how fast are you growing?'",
+      "expected_output": "An honest answer: no external users or revenue yet if that is what the record says, the team's own usage from the ledger (lanes closed, asks to a member, dated), and what the next milestone is; no invented user counts or growth rates.",
+      "files": [],
+      "expectations": [
+        "Does not invent a user count or growth rate",
+        "Quotes the team's own usage from the ledger with its date, or marks it [NEED]",
+        "Is under 100 words"
+      ],
+      "checks": {
+        "max_words": 120
+      }
+    },
+    {
+      "id": 16,
+      "name": "uxcopy-cli-daemon-unreachable",
+      "craft": "ux-copy",
+      "prompt": "Write the copy for the CLI error shown when `musterd lane claim` cannot reach the team daemon. It is for the designer to implement.",
+      "expected_output": "A spec table (surface / state / exact string / notes) handed to the designer: what happened, why if known, what to do next (the exact command, e.g. `musterd service status`), color paired with a word, NO_COLOR and piped behavior stated.",
+      "files": [],
+      "expectations": [
+        "Is a spec for the designer, not code",
+        "The string says what happened and gives the next command",
+        "States NO_COLOR or piped-output behavior",
+        "Uses glossary terms (team, Member) and does not blame the user"
+      ],
+      "checks": {
+        "present_any": ["(?i)NO_COLOR", "(?i)piped"],
+        "present_all": ["musterd service status|musterd service"]
+      }
+    }
+  ]
+}
