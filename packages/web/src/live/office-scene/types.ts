@@ -229,6 +229,10 @@ export type OfficeEvent =
   /** A lane finished (resolved) or submitted: its owner carries the card back to the wall board and
    *  pins it in its new column — the claim walk, reversed (nick, 2026-10-12). */
   | { kind: 'walk-pin'; who: string; lane: string; title: string; state: 'done' | 'awaiting_acceptance' }
+  /** A lane submitted to a named acceptor (the daemon's `lane_review` ask): the owner carries the card to
+   *  the acceptor's desk and hands it over, instead of pinning it on the board (nick, 2026-10-12). The
+   *  acceptor's `accept` then plays the pin walk — the card goes up under done in their hand. */
+  | { kind: 'walk-deliver'; from: string; to: string; lane: string; title: string }
   | { kind: 'megaphone'; from: string }
   /** `of`: whose work was accepted (the act's recipient) — the celebration lands on THEM, not the
    *  acceptor. Null/absent for team-addressed accepts, where there is no single celebrant. */

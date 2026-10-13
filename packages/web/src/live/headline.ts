@@ -8,10 +8,13 @@
  * about a moment the room still says.
  */
 export function walkTag(
-  kind: 'handoff' | 'help' | 'steer' | 'claim' | 'pin' | 'submit',
+  kind: 'handoff' | 'help' | 'steer' | 'claim' | 'pin' | 'submit' | 'deliver',
   to: string | null,
 ): string {
   switch (kind) {
+    case 'deliver':
+      // `to` is the acceptor: the submitted lane's card is on its way to their desk.
+      return to ? `submitting → ${to}` : 'submitting a lane';
     case 'pin':
       // `to` is the lane's title: what they are carrying back to the board as finished.
       return to ? `finished ${to}` : 'finished a lane';

@@ -2451,6 +2451,15 @@ export function mountOffice(
           pushCue(ev.who, '#5cd49a', '✓');
         }
         break;
+      case 'walk-deliver':
+        // Submitted to a named acceptor (nick, 2026-10-12): the owner carries the card to the acceptor's
+        // desk and hands it over; this replaces the submit's board pin when both play. When either of
+        // them is out of the room the pin walk (already queued) stands, so only a thread is drawn.
+        pushThread(ev.from, ev.to, toneColor('handoff'));
+        if (actors.deliver(ev.from, ev.to, laneSeed(ev.lane))) {
+          walkTags.set(ev.from, walkTag('deliver', ev.to));
+        }
+        break;
       case 'megaphone':
         // Broadcast staging: the announcer raises a megaphone, a wave sweeps the room, and every other
         // present member gets a brief "heard it" pulse.

@@ -8,6 +8,8 @@ describe('walkTag — the verb over a walker (ADR 464 §3.2)', () => {
   });
   it.each([
     ['handoff', 'dolly', 'handing off → dolly'],
+    ['deliver', 'dreamy', 'submitting → dreamy'],
+    ['deliver', null, 'submitting a lane'],
     ['help', 'izzo', 'asking for help'],
     ['steer', 'izzo', 'redirecting izzo'],
     ['steer', null, 'redirecting'],

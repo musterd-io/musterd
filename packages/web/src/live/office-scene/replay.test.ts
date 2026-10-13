@@ -27,11 +27,12 @@ describe('replayEvents — the walks of the last ten minutes, oldest first', () 
         env({ meta: { lane_resolve: { lane: '01L', title: 'Rotate keys', state: 'done' } }, ts: NOW - 20_000 }),
         env({ act: 'handoff', to: { kind: 'member', name: 'ada' } as Recipient, meta: { lane_handoff: { lane: '01L' } }, ts: NOW - 10_000 }),
         claim({ ts: NOW - 90_000 }),
+        env({ act: 'ask', to: { kind: 'member', name: 'ada' } as Recipient, meta: { lane_review: { lane: '01L' } }, ts: NOW - 5_000 }),
       ],
       new Set(),
       NOW,
     );
-    expect(evs.map((e) => e.kind)).toEqual(['walk-claim', 'walk-claim', 'walk-pin', 'walk-handoff']);
+    expect(evs.map((e) => e.kind)).toEqual(['walk-claim', 'walk-claim', 'walk-pin', 'walk-handoff', 'walk-deliver']);
   });
 
   it('leaves out live acts (they already played), acts older than the window, and non-walks', () => {

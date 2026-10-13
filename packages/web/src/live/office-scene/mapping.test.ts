@@ -334,4 +334,20 @@ describe('finishing a lane (nick, 2026-10-12)', () => {
   it('an abandon stays the in-place ✓ — nothing was finished', () => {
     expect(actToEvent(laneAct('lane_resolve', 'abandoned'))).toEqual({ kind: 'resolve', who: 'izzo' });
   });
+  it('the acceptance ask to a named acceptor walks the card to their desk', () => {
+    const ask = env('ask', {
+      from: 'izzo',
+      to: { kind: 'member', name: 'dreamy' } as Recipient,
+      meta: { species: 'approve', tier: 'standard', lane_review: { lane: '01LANE', title: 'Rotate the leaked keys' } },
+    });
+    expect(actToEvent(ask)).toEqual({
+      kind: 'walk-deliver',
+      from: 'izzo',
+      to: 'dreamy',
+      lane: '01LANE',
+      title: 'Rotate the leaked keys',
+    });
+    // An ordinary ask (no lane_review) is not a walk.
+    expect(actToEvent(env('ask', { meta: { species: 'approve', tier: 'standard' } }))).toBeNull();
+  });
 });
