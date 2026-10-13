@@ -86,9 +86,11 @@ say when the moment happens, never which harness's hook fires it.
 Edge labels on the graph, as in the deck: `answers, keeps building`, `checks inbox`, `review
 request`, `back to inbox`, `nothing waiting`, `next session, any agent`.
 
-Motion and reach are ADR 571 decision 3: the walk runs only on screen and only while the visitor is
-not hovering or focused in it; reduced motion shows everything and moves nothing; every node is a
-button and the card has previous/next.
+Motion and reach are ADR 571 decision 3 as amended on 2026-10-12 (nick: continuous, not a step
+jump): a walker carrying miley's mark travels the edges without stopping, nodes pop and the card
+swaps as it arrives, the loop edge takes it home while the graph fades; it runs whenever the section
+is on screen, hovering does not hold it, a click or arrow key holds it for eight seconds; reduced
+motion shows everything and moves nothing; every node is a button and the card has previous/next.
 
 What goes: the four stops, the board-card capture and its caption, the lead `One lane from our own
 board, as the board recorded it.` The two mechanisms the old stop 2 and stop 4 carried ("which

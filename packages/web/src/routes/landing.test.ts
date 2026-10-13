@@ -222,8 +222,8 @@ describe('the 2026-10-12 cut', () => {
     expect(start).toContain("'musterd tour'");
     expect(start).toContain('Read the source on GitHub');
     expect(start).not.toMatch(/private preview|early access|Not yet|EARLY_ACCESS/i);
-    // `aria-live` is an attribute, not a state claim; the prose guard skips it.
-    for (const code of [day.replace(/\/\*[\s\S]*?\*\//g, '').replace(/aria-live/g, ''), start]) {
+    // `aria-live` is an attribute and `Date.now` and `performance.now` are clocks, not state claims; the prose guard skips them.
+    for (const code of [day.replace(/\/\*[\s\S]*?\*\//g, '').replace(/aria-live|Date\.now|performance\.now/g, ''), start]) {
       expect(code).not.toMatch(/\b(live|now|currently)\b/i);
     }
   });
