@@ -8,7 +8,7 @@ import { addMember } from '../store/members.js';
 import { createTeam, getTeamBySlug } from '../store/teams.js';
 import { HELD_HEAD_AUDIT_SQL, HELD_PAIR_AUDIT_SQL } from '../sync/fold.js';
 import { UNPUSHED_AUDIT_SQL } from '../sync/push.js';
-import { MIGRATIONS, runMigrations } from './migrations.js';
+import { analyzeTablesMissingIndexStats, MIGRATIONS, runMigrations } from './migrations.js';
 import { openDb } from './open.js';
 import { seedDawn } from './seed.js';
 import { sqliteDriver } from './sqliteDriver.js';
@@ -1099,5 +1099,70 @@ describe('v91 — lane source_ref (ADR 561)', () => {
       .all();
     expect(idx).toContain('idx_lanes_team_source_ref');
     await db.close();
+  });
+});
+
+describe('planner statistics cover every index of an analyzed table (lane 01M4VGRX57)', () => {
+  // The "answered by anyone" clause of `undischargedSql`, as the open-directed ledger runs it.
+  const ANSWERED_PLAN = `EXPLAIN QUERY PLAN SELECT m.id FROM messages m WHERE m.team_id = 't'
+      AND m.act IN ('request_help','handoff')
+      AND NOT EXISTS (SELECT 1 FROM messages dr WHERE dr.team_id = m.team_id
+                        AND dr.act IN ('accept','decline') AND dr.in_reply_to = m.id)`;
+  const answeredPlan = (db: Database.Database): string =>
+    (db.prepare(ANSWERED_PLAN).all() as { detail: string }[]).map((r) => r.detail).join(' | ');
+
+  it('re-analyzes a table its stats predate an index of, and the ledger seeks again', () => {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    // The revive hub's sqlite_stat1 for `messages` on 2026-10-13: last analyzed at 17,207 rows,
+    // before v90 and v93 added their indexes. Loaded as-is, it reproduces the hub's plan.
+    db.exec(`
+      INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t', 'alpha', 1, 1);
+      INSERT INTO members (id, team_id, name, kind, role, lifecycle, observer, created_at, updated_at)
+        VALUES ('a', 't', 'ann', 'agent', '', 'forever', 0, 1, 1);
+      INSERT INTO messages (id, team_id, from_member, to_kind, to_member, act, body, meta, ts, created_at, origin_seq)
+        VALUES ('m1', 't', 'a', 'team', NULL, 'request_help', 'x', NULL, 1, 1, 1);
+      ANALYZE messages;
+      DELETE FROM sqlite_stat1 WHERE tbl = 'messages';
+      INSERT INTO sqlite_stat1 (tbl, idx, stat) VALUES
+        ('messages', 'idx_messages_from_act_ts', '17207 638 96 1 1'),
+        ('messages', 'idx_messages_thread_act', '17207 4302 717 50'),
+        ('messages', 'idx_messages_thread_from', '17207 4302 62 50 1'),
+        ('messages', 'idx_messages_from_reply', '17207 4302 638 15'),
+        ('messages', 'idx_messages_in_reply_to', '17207 4302 16'),
+        ('messages', 'idx_messages_team_created', '17207 4302 1'),
+        ('messages', 'idx_messages_to_member', '17207 638'),
+        ('messages', 'idx_messages_thread', '17207 63'),
+        ('messages', 'idx_messages_team_ts', '17207 4302 1'),
+        ('messages', 'sqlite_autoindex_messages_1', '17207 1');
+      ANALYZE sqlite_schema;
+    `);
+    expect(answeredPlan(db)).toContain('dr USING INDEX idx_messages_thread_act_ts');
+
+    expect(analyzeTablesMissingIndexStats(db)).toEqual(['messages']);
+    // Measured stats now (one row here, so the planner may scan; the hub seeks the in_reply_to index).
+    expect(
+      db.prepare("SELECT stat FROM sqlite_stat1 WHERE idx = 'idx_messages_thread_act_ts'").get(),
+    ).toBeDefined();
+    expect(answeredPlan(db)).not.toContain('dr USING INDEX idx_messages_thread_act_ts');
+    // Nothing is missing now, so the next run reads and does nothing.
+    expect(analyzeTablesMissingIndexStats(db)).toEqual([]);
+    db.close();
+  });
+
+  it('runs after every ladder run, and leaves a table with no statistics alone', () => {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    expect(analyzeTablesMissingIndexStats(db)).toEqual([]);
+    db.exec(`
+      INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t', 'alpha', 1, 1);
+      ANALYZE teams;
+      CREATE INDEX idx_teams_test ON teams(updated_at);
+    `);
+    runMigrations(db);
+    expect(
+      db.prepare("SELECT stat FROM sqlite_stat1 WHERE idx = 'idx_teams_test'").pluck().get(),
+    ).toBeDefined();
+    db.close();
   });
 });
