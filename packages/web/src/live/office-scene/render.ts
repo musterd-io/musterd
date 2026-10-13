@@ -50,7 +50,7 @@ import {
   type DeskSlot,
   type Rug,
 } from './layout';
-import { STICKY_CAP, type WallBoard } from './wallboard';
+import { STICKY_CAP, stickySway, type WallBoard } from './wallboard';
 import { DAY_ENV, type LightEnv } from './lighting';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
@@ -914,7 +914,7 @@ function wallLaneBoard(
       }
       // A card that just landed swings on its tape: the bottom edge sways, the top stays put (L5).
       const age = col.stickies[s]!.age;
-      const sw = age !== undefined && age < 1.1 ? Math.sin(age * 20) * Math.exp(-age * 4.2) * 2.4 : 0;
+      const sw = stickySway(age);
       // Shadow first, offset down-right: paper held a hair off the cork rather than printed on it.
       quad(ctx, [p(l + 0.8, top - 0.8), p(r + 0.8, top - 0.8), p(r + 0.8 + sw, top - noteH - 0.8), p(l + 0.8 + sw, top - noteH - 0.8)], PINBOARD.noteCast);
       // A stopped plan's card (lane 01M4V9YKMG) is the same paper sun-bleached: the wash pulled toward

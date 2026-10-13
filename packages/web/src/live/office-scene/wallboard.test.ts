@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
+import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -165,5 +165,31 @@ describe('projectWallBoard — stopped goals (lane 01M4V9YKMG)', () => {
     const wb = projectWallBoard(board([lane({ id: 'a' }), lane({ id: 'b' })]), new Set())!;
     expect(wb[0]!.stickies.map((s) => s.seed)).toEqual([laneSeed('a'), laneSeed('b')]);
     expect(wb[0]!.stickies.some((s) => 'faded' in s)).toBe(false);
+  });
+});
+
+describe('stickySway — a landed card swings where a viewer can see it (L5 follow-up)', () => {
+  const peak = (from: number, to: number) => {
+    let m = 0;
+    for (let a = from; a < to; a += 0.005) m = Math.max(m, Math.abs(stickySway(a)));
+    return m;
+  };
+  it('peaks at 3+ board units (a 17-unit card: ~2 px at 1280 wide; the first cut peaked at 1.7)', () => {
+    expect(peak(0, STICKY_SWAY_S)).toBeGreaterThanOrEqual(3);
+  });
+  it('swings twice, not once: the second swing is the opposite way and still visible', () => {
+    expect(peak(0.25, 0.5)).toBeGreaterThan(1);
+    const early = stickySway(0.11);
+    const later = stickySway(0.33);
+    expect(Math.sign(early)).toBe(-Math.sign(later));
+  });
+  it('hangs still before it landed and after the sway is over', () => {
+    expect(stickySway(undefined)).toBe(0);
+    expect(stickySway(-1)).toBe(0);
+    expect(stickySway(STICKY_SWAY_S)).toBe(0);
+    expect(stickySway(5)).toBe(0);
+  });
+  it('is small enough to settle: by the end the swing is under half a unit', () => {
+    expect(Math.abs(stickySway(STICKY_SWAY_S - 0.01))).toBeLessThan(0.5);
   });
 });
