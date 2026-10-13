@@ -25,6 +25,7 @@ import { clearPendingMarker, readAndConsumeResolution, writePendingMarker } from
 import { instrumentToolRepair } from './repair.js';
 import { scopeToolSurface } from './scope.js';
 import { instrumentTools, recordAdapterInitialization, startMcpTelemetry } from './telemetry.js';
+import { HOT_TOOLS } from './toolNames.js';
 import { registerAvailability } from './tools/availability.js';
 import { registerGoals } from './tools/goals.js';
 import { registerInboxCheck } from './tools/inboxCheck.js';
@@ -121,7 +122,7 @@ export function primerInstructions(config: McpConfig): string {
 
 /** The canonical registered-tool names (ADR 085) — kept in a dependency-free module so the guidance
  * drift check can import it without the MCP SDK; re-exported here for normal consumers. */
-export { TOOL_NAMES } from './toolNames.js';
+export { HOT_TOOLS, TOOL_NAMES } from './toolNames.js';
 
 /* `measureToolSurface` is deliberately NOT re-exported here. It lives in `surfaceMeasure.ts`, which
  * imports `@modelcontextprotocol/client` — a devDependency, because measuring the surface means
@@ -198,6 +199,23 @@ function armAutojoinOnFirstToolCall(
             return cb(...args);
           }),
     );
+}
+
+/** Claude Code's per-tool deferral override, read from a `tools/list` entry's `_meta`: `true`
+ *  keeps the schema in the prompt instead of behind ToolSearch (Claude Code 2.1.296, lane
+ *  01M4S53E79). A server-side key, so it needs no setting in the user's MCP config. */
+export const ALWAYS_LOAD_META_KEY = 'anthropic/alwaysLoad';
+
+function markHotTools(server: McpServer): void {
+  const hot = new Set<string>(HOT_TOOLS);
+  const original = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
+  (server as { registerTool: unknown }).registerTool = (...args: unknown[]) => {
+    const [name, config] = args as [string, { _meta?: Record<string, unknown> } | undefined];
+    if (hot.has(name)) {
+      args[1] = { ...config, _meta: { ...config?._meta, [ALWAYS_LOAD_META_KEY]: true } };
+    }
+    return original(...args);
+  };
 }
 
 /** MCP tool calls running in this adapter right now — the idle-wake core's first idle test
@@ -279,6 +297,10 @@ export function buildMcpServer(
     server as unknown as Parameters<typeof scopeToolSurface>[0],
     config.capabilities,
   );
+  // Lane 01M4S53E79: ask a deferring harness to load the hot tools' schemas up front. Only touches
+  // the listing's `_meta`, so its place among the patches does not matter; a harness that does not
+  // know the key ignores it.
+  markHotTools(server);
   registerJoin(server, client, config);
   registerLeave(server, client, config);
   registerSend(server, client, config);

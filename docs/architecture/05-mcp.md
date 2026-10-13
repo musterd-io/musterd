@@ -208,6 +208,19 @@ goals, memory, insight) and `lane_*` (the work-board sub-surface). The split is 
 drift (MCP spec #2808's namespacing direction favors several small namespaces over one flat
 prefix); the full statement lives in `toolNames.ts`.
 
+### Hot tools load without a schema search (lane 01M4S53E79)
+
+`team_join`, `team_inbox_check`, `team_send` and `team_status` (`HOT_TOOLS` in `toolNames.ts`) carry
+`_meta: {"anthropic/alwaysLoad": true}` on their `tools/list` entries. Claude Code defers MCP tools
+behind ToolSearch by default and reads this key per tool, so these four are in the prompt from the
+first turn and the rest stay deferred (code.claude.com/docs/en/mcp, "Mark a tool to load upfront or
+stay deferred"). It needs no user config, and a user's server-level `"alwaysLoad": false` still
+overrides it. The four schemas are about 3 KB (~750 tokens) of standing context per turn, which is
+why the set is pinned by `hotTools.test.ts` rather than left to grow. Cursor documents no
+per-tool or per-server loading control (cursor.com/docs/context/mcp, 2026-10-13); its dynamic-tool
+discovery step (`GetDynamicTools`, [the Cursor eval](../wiki/cursor-agent-live-doorbell-eval.md))
+is unchanged by this key.
+
 ### Shared Seed tools (ADR 319)
 
 Three `team_seed_*` tools expose the same Shared Seed lifecycle as the CLI over HTTP:
@@ -412,7 +425,7 @@ src/
                   //   autojoin(): claim+join on launch when a default claim exists (ADR 032);
                   //   when unclaimed: writes a pending marker (ADR 033) + startResolutionWatcher (ADR 034)
   launch.ts       // the bundle's entry (dist/index.js): enables Node's compile cache, then imports index.ts and calls runAdapter() when launched (ADR 577)
-  toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085)
+  toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085); HOT_TOOLS: the four marked anthropic/alwaysLoad
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
   client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);
                   //   setIdentity() (late claim); addMember() (tokenless mint); buffers live while joined;

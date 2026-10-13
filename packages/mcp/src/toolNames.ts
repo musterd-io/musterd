@@ -47,3 +47,17 @@ export const TOOL_NAMES = [
   'team_insight_save',
   'team_insight_search',
 ] as const;
+
+/**
+ * The tools a session needs before it can do anything else (lane 01M4S53E79): join the team, read
+ * what waits, say what it is doing, see the room. A harness that defers MCP tools behind a schema
+ * search (Claude Code's ToolSearch) is asked to load these four up front, via `_meta`
+ * `anthropic/alwaysLoad` on their `tools/list` entries, so the first call of a session is the call
+ * itself. The rest stay deferred: every always-loaded schema is standing context in every turn.
+ */
+export const HOT_TOOLS = [
+  'team_join',
+  'team_inbox_check',
+  'team_send',
+  'team_status',
+] as const satisfies readonly (typeof TOOL_NAMES)[number][];
