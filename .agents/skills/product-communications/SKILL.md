@@ -119,7 +119,7 @@ Run them in order on any public copy. After each sweep, re-check the earlier one
 | --- | --- |
 | Any public prose | `references/prose.md`, then `references/examples.md` |
 | Docs, a README, release notes, a changelog, an ADR clarity audit | `references/docs-and-a11y.md` |
-| An announcement, launch, Show HN, press release or pitch, social post, landing page | `references/launch-and-press.md` |
+| An announcement, launch, weekly shipped digest, Show HN, press release or pitch, incident statement, social post, landing page | `references/launch-and-press.md` |
 | A positioning proposal, messaging, a GTM plan, a landscape entry, pricing advice | `references/positioning-and-gtm.md` |
 | Any claim about users, an interview guide, a synthesis, a PMF read | `references/research.md` |
 | A chart, graph, number tile or diagram | `references/charts.md` |

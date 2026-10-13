@@ -35,6 +35,40 @@ The engineer who built a feature usually writes its launch content at Supabase
 Our version: the comms seat writes from the building seat's PR, ADR and lane, and
 asks that seat to check every claim.
 
+## From shipped work to an announcement
+
+The weekly pass, after coreyhaines31/marketingskills' shipped-changes workflow:
+
+1. **Collect** the window's merged PRs (`gh pr list --state merged --search
+   "merged:>=<date>"`), the lanes resolved in it, and anything merged without a
+   PR (`git log --since=<date> --no-merges --oneline origin/main`). PR bodies and
+   lane details say why; commit subjects rarely do.
+2. **Keep what a user can use today.** A change behind a flag, unmerged, or
+   unreleased on the install path waits.
+3. **Translate each change into one line:** "You can now …" or "… no longer …".
+   A change that fills neither (a refactor, CI, a test) gets no announcement.
+4. **Size it** with the major / medium / minor tiers above. Several medium
+   changes on one theme can make one major story.
+5. **Ground every line in the change.** A number comes from the PR itself (a
+   measured run, a benchmark in its body) with a ledger row. A PR that says
+   "increment 1" makes an announcement that says the same.
+6. **Check for claim drift.** A shipped change can make an existing sentence
+   false: on musterd.io, in the README, in `docs/demo/pitch/`, in
+   `docs/design/landscape.md`. List each one with the file and the fix.
+
+```
+## Shipped <YYYY-MM-DD>–<YYYY-MM-DD>
+For users
+- [major]  You can now … (#<pr>, lane <id>)
+- [medium] You can now … (#<pr>)
+- [minor]  Fixed … (#<pr>, #<pr>)
+Changelog entry (docs-and-a11y.md §3 format)
+Drafts: post / social / in-product copy spec, one per major or medium line
+Now wrong: <file>: <sentence> → <fix>
+```
+
+Drafts are staged for a human to read and send (hard rule 6).
+
 ## Hacker News and other developer forums
 
 Hard rule 5. HN's guidelines: "Don't post generated text or AI-edited text"
@@ -67,6 +101,25 @@ social posts, the demo asset, who answers comments and until when.
 
 A press release is a news document. If there is no news, say so and stop.
 
+**Story angles.** Reporters write about trends, data, conflict and people; the
+product is the evidence in the story. Most pitchable stories take one of these
+shapes (after coreyhaines31/marketingskills' public-relations skill):
+
+- **The founding story.** Why the team built it and what the numbers are now,
+  told by the person who lived it. It is nick's to tell (hard rule 3).
+- **The small team and the default.** A small team doing one thing the default
+  way of working cannot. Name the one thing and show it.
+- **A broken system.** A way of working the reader already resents, named
+  precisely (agent work that lands with no record of who asked or who checked
+  it). The target is always a system or a norm. Never name a competitor as the
+  enemy.
+- **A data story.** Our own dogfood record (lanes, acts, acceptance) packaged
+  with its method as a citable number. Every figure carries its ledger row and
+  its denominator.
+
+A milestone alone is not a story. Attach it to one of the shapes or keep it for
+the changelog.
+
 ```
 FOR IMMEDIATE RELEASE / EMBARGOED UNTIL <date> <time> <timezone>
 Headline — sentence case, the core news
@@ -89,6 +142,34 @@ most. In Cision's 2025 survey of 3,000+ journalists, 86% reject pitches off thei
 beat and 72% still rate press releases the most useful thing PR sends
 ([Cision 2025](https://www.cision.com/about/press-releases/2025-press-releases/cisions-2025-state-of-the-media-report-reveals-a-tipping-point-for-trust-technology-and-pr-journalist-partnerships-302448410/)).
 You draft both; a human sends (hard rule 6).
+
+## When something goes wrong
+
+A security incident, a data exposure, a broken release or a public complaint is
+communications too. You draft; nick or the incident owner publishes (hard rule 6).
+After coreyhaines31/marketingskills' crisis-communications reference:
+
+1. **Facts first.** Write down what is confirmed, who is affected, whether it is
+   contained, and what is already public. Every unconfirmed point is marked
+   unconfirmed. A statement walked back later costs more than a slower true one.
+2. **Size it.** Contained (reply where it was raised), visible (a short public
+   acknowledgment), significant (a statement on the channel of record), severe
+   (anything touching credentials, team data or security: the holding statement
+   waits for the incident owner, and legal advice comes before any claim of cause
+   or scope). When unsure, size up.
+3. **Holding statement** within the hour: what we know, what we are doing, when
+   the next update comes. Nothing about cause or scope that is not confirmed.
+4. **Order of telling.** The affected people first, the team in parallel, then
+   the channel of record (for a vulnerability, a GitHub security advisory as
+   `SECURITY.md` sets out; otherwise an issue), then social
+   posts that link to it. The press never hears before the people affected.
+5. **Keep the cadence** you promised, even when the update is "still
+   investigating".
+
+Never delete criticism, speculate about scope, or apologize with a "but". "No
+data was exposed" is the sentence most often walked back; it waits for the
+person who can confirm it. Exposed secrets follow AGENTS.md hard rule 5 and the
+security goal's rotation work.
 
 ## Landing pages
 
