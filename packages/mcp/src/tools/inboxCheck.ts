@@ -30,8 +30,8 @@ import { renderRoom, roomStructured, roomsFor, type RoomContext } from './huddle
 // reasoning lives in ADR 287; the runtime notice carries the detail at the moment it matters.
 const DESCRIPTION =
   'Check unread addressed to you or the team, marking them read. Call at task start, ' +
-  'task end, and after heads-down work. Past `limit` nothing is marked read; the reply ' +
-  'says how many remain. `ids` reads named acts back in full, clipped bodies included.';
+  'task end, and after heads-down work. Past `limit` nothing is marked read. `ids` reads ' +
+  'named acts in full; `full` returns a longer reply.';
 
 /**
  * How far back the room fold reads (ADR 378). Matches the CLI's room view deliberately: a huddle is
@@ -85,13 +85,22 @@ const DIGEST_ROWS = 250;
 export const RESULT_BUDGET = 30_000;
 
 /**
+ * The default reply: about 3k tokens, so an ordinary check is cheap in every turn that makes one
+ * (lane 01M4S53FQT). Measured 2026-10-13 over 241 checks on one machine: median 4,169 chars,
+ * p90 17,284, p99 24,553 — the large ones spent half their size on bodies and 18% on meta.
+ * `full: true` restores RESULT_BUDGET for the call that wants the backlog in one read; `ids`
+ * still returns any act whole.
+ */
+export const DEFAULT_RESULT_BUDGET = 12_000;
+
+/**
  * How much of the budget the full rows may take before the digest gets the rest.
  *
  * Without this split a backlog of large acts spends the entire budget on `shown` and digests
  * nothing — which is the lane 01M2GT874Y treadmill returning by another door, this time for seats
  * whose teammates write long. The drain must always get room to walk the cursor.
  */
-const SHOWN_BUDGET = Math.round(RESULT_BUDGET * 0.7);
+const SHOWN_SHARE = 0.7;
 
 /**
  * The most body one act may spend of a shared reply.
@@ -103,6 +112,32 @@ const SHOWN_BUDGET = Math.round(RESULT_BUDGET * 0.7);
  * already treats as seen.
  */
 export const BODY_CAP = 1_200;
+
+/** The default body cap: the median act (~592 chars) still fits whole (lane 01M4S53FQT). */
+export const DEFAULT_BODY_CAP = 600;
+
+/** One reply's size: the whole-reply budget and the per-act body cap. */
+export interface ReplySize {
+  result: number;
+  body: number;
+}
+export const FULL_REPLY: ReplySize = { result: RESULT_BUDGET, body: BODY_CAP };
+export const DEFAULT_REPLY: ReplySize = { result: DEFAULT_RESULT_BUDGET, body: DEFAULT_BODY_CAP };
+
+/**
+ * Meta keys the reader never acts on: the OTel trace context and how the sender's model was
+ * learned. Dropped from the rendered row only (lane 01M4S53FQT); the stored act and an `ids`
+ * re-read keep them.
+ */
+const UNREAD_META_KEYS = new Set(['otel', 'model_source']);
+
+export function readerMeta(meta: Envelope['meta']): Record<string, unknown> | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const kept = Object.entries(meta as Record<string, unknown>).filter(
+    ([k]) => !UNREAD_META_KEYS.has(k),
+  );
+  return kept.length > 0 ? Object.fromEntries(kept) : null;
+}
 
 /** What one `team_inbox_check` should display, and how far the read cursor may move (ADR 287). */
 export interface InboxCheckPlan {
@@ -161,20 +196,37 @@ export interface InboxCheckPlan {
  * limit and since — nothing else). So the clip names the call that returns the whole act, and that
  * call is the `ids` input added alongside it.
  */
-export function capBody(env: Envelope): Envelope {
-  if (env.body.length <= BODY_CAP) return env;
-  const dropped = env.body.length - BODY_CAP;
+export function capBody(env: Envelope, cap: number = BODY_CAP): Envelope {
+  if (env.body.length <= cap) return env;
+  const dropped = env.body.length - cap;
   return {
     ...env,
     body:
-      `${env.body.slice(0, BODY_CAP)}…\n  [+${dropped} chars clipped — ` +
+      `${env.body.slice(0, cap)}…\n  [+${dropped} chars clipped — ` +
       `team_inbox_check {ids: ["${env.id}"]} for the whole act]`,
   };
 }
 
-/** What one rendered row costs the reply, as the tool will actually render it. */
+/**
+ * What one rendered row costs the reply, as the tool will actually render it. A harness shows the
+ * model the text OR the structured content (Claude Code shows the structured), so a row costs
+ * whichever is larger and the budget holds for either (lane 01M4S53FQT).
+ */
 function rowCost(env: Envelope): number {
-  return formatMessage(env).length + 1;
+  return Math.max(formatMessage(env).length, JSON.stringify(structuredRow(env)).length) + 1;
+}
+
+/** The structured-content form of one shown act. */
+export function structuredRow(m: Envelope) {
+  return {
+    id: m.id,
+    from: m.from,
+    act: m.act,
+    body: m.body,
+    ts: m.ts,
+    thread: m.thread ?? null,
+    meta: readerMeta(m.meta),
+  };
 }
 
 /**
@@ -282,7 +334,10 @@ export function planInboxCheck(
    * plus its meta.
    */
   ownedLanes: ReadonlySet<string> = new Set(),
+  /** The reply's size: DEFAULT_REPLY for an ordinary check, FULL_REPLY for `full: true`. */
+  size: ReplySize = FULL_REPLY,
 ): InboxCheckPlan {
+  const shownBudget = Math.round(size.result * SHOWN_SHARE);
   const closedSet = new Set(closed);
   const pinned = ordered.filter((e) => isPinnedNeed(e) && !closedSet.has(e.id));
   const rest = ordered.filter((e) => !isPinnedNeed(e) || closedSet.has(e.id));
@@ -307,9 +362,9 @@ export function planInboxCheck(
   let spent = 0;
   for (const e of priority) {
     if (byId.has(e.id)) continue;
-    const capped = capBody(e);
+    const capped = capBody(e, size.body);
     const cost = rowCost(capped);
-    if (spent + cost > SHOWN_BUDGET && byId.size > 0) continue;
+    if (spent + cost > shownBudget && byId.size > 0) continue;
     byId.set(e.id, capped);
     spent += cost;
   }
@@ -326,7 +381,7 @@ export function planInboxCheck(
   for (const e of [...ambient].reverse()) {
     if (byId.has(e.id)) continue;
     const cost = formatDigestLine(e).length + 1;
-    if (spent + cost > RESULT_BUDGET) break;
+    if (spent + cost > size.result) break;
     folded.push(e);
     foldedIds.add(e.id);
     spent += cost;
@@ -357,7 +412,7 @@ export function planInboxCheck(
     if (!shownIds.has(e.id) && !foldedIds.has(e.id)) {
       if (digested.length >= DIGEST_ROWS) break;
       const cost = formatDigestLine(e).length + 1;
-      if (spent + cost > RESULT_BUDGET) break;
+      if (spent + cost > size.result) break;
       digested.push(e);
       spent += cost;
     }
@@ -404,6 +459,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // no cursor floor, no bounds, and the cursor does not move — the caller is re-reading
         // something it was already shown.
         ids: z.array(z.string()).optional(),
+        full: z.boolean().optional(),
       },
     },
     async (args) => {
@@ -530,6 +586,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           closed,
           head,
           ownedLanes,
+          args.full ? FULL_REPLY : DEFAULT_REPLY,
         );
         const messages = plan.shown;
 
@@ -633,7 +690,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         const byBudget = plan.shown.length < Math.min(ordered.length, args.limit ?? 50);
         const notice =
           plan.elided > 0
-            ? `⚠ ${plan.elided} older unread not shown (${byBudget ? `reply size — a bigger limit will not help; use ids: [...] to read named acts` : `limit ${args.limit ?? 50}`}). ` +
+            ? `⚠ ${plan.elided} older unread not shown (${byBudget ? `reply size — a bigger limit will not help; pass full: true for a longer reply, or ids: [...] to read named acts` : `limit ${args.limit ?? 50}`}). ` +
               (plan.digested.length > 0
                 ? `The ${plan.digested.length} oldest are digested below and marked read; the rest ` +
                   `are still waiting — check again to keep draining, or pass limit: ` +
@@ -712,13 +769,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
             // The ambient rows folded to a line (ADR 433) — ids only, same as the digest.
             ...(plan.folded.length > 0 ? { folded_ambient: plan.folded.map((m) => m.id) } : {}),
             messages: messages.map((m) => ({
-              id: m.id,
-              from: m.from,
-              act: m.act,
-              body: m.body,
-              ts: m.ts,
-              thread: m.thread ?? null,
-              meta: m.meta ?? null,
+              ...structuredRow(m),
               // The topic on the message itself, so a structured reader can tell a turn from a
               // loose DM without joining against `huddles` by hand.
               ...(m.thread && context.topics.has(m.thread)
