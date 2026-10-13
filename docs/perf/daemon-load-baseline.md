@@ -841,3 +841,35 @@ Same build (`dc09c35`), app machine (`performance-1x` / 2 GB), Neon 1 CU and sha
   439 ms was the light load, and the budget margin on one app core is thin after all.
 - Follows-up: run 36 as above, with the bench logging each WS `1006` close with a timestamp and the
   viewer's reconnect outcome.
+
+## 2026-10-13 — Cloud run 36: p95 809 ms on a matched repeat of run 32; the viewer-socket drops come in bursts late in the run (lane 01M4V72T1VENBVAV65CQN07Q9C)
+
+Same build (`dc09c35`), app machine, Neon 1 CU, shape and `performance-4x` bench as runs 32 and 35,
+team `lb-run36b` (the first `lb-run36` attempt was destroyed a minute in by the launcher itself: one
+transient Machines API `EOF` on its status poll threw, and its cleanup ran — the poll now rides out five
+misses). The bench now logs every viewer socket close with its offset, lifetime and claim state.
+
+| run | p50 | p95 | p99 | requests (req/s) | errors | viewer closes | `GET /teams` calls / p95 | `/health` p95 / max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 | 355 ms | 791 ms | 1 203 ms | 66 306 (51.0) | 1 | 0 | 30 481 / 794 ms | 231 ms / 983 ms |
+| 35 | 247 ms | 439 ms | 566 ms | 47 474 (36.5) | 79 | 46 | 17 090 / 454 ms | 209 ms / 7.4 s |
+| 36 | 365 ms | **809 ms** | 1 105 ms | 61 596 (47.4) | 27 | 23 | 27 337 / 816 ms | 275 ms / 1.5 s |
+
+- **Run 35's 439 ms was the light load.** With the roster rail at 27 337 reads (90% of run 32's),
+  p95 is 809 ms against run 32's 791: inside the spread. Two matched runs now say the one-core app on
+  `dc09c35` meets the 1 000 ms budget at 75/75/75 with about 200 ms to spare. That is the headroom
+  number this series was after, and it is small: the next audience step needs the second machine
+  (lane 01M3Z4EMH3) or another app-side cut, not more runs at this size.
+- **The 23 closes all landed after +810 s, in bursts.** None before the plateau; then clusters of
+  5–8 sockets within 2–3 s at about +895, +1 088 and +1 216 s, with lifetimes from 60 s to 1 204 s.
+  All had claimed. A client-side cause would scatter them across the ramp; a burst that takes
+  sockets of every age at once is the hub or the edge closing a batch. Fly's `--no-tail` log window
+  had rolled past those minutes by the time I looked, so this run does not say which.
+- **The bench's viewers never reconnect.** Every close lightens the roster rail for the rest of the
+  run, so a run with early closes understates load (run 35) and one with late closes barely does
+  (this one). A real `/live` viewer reconnects. Teaching the bench to do the same would make the
+  load honest and make the closes a latency blip instead of a load change.
+- Falsify: hub logs (`ws_close` lines, or the edge's) for a run 37's burst windows show the closes
+  initiated by the bench process, not the hub or edge.
+- Follows-up: a run that captures the hub's `ws_close` reasons live during the burst windows, with the
+  bench reconnecting a closed viewer (lane 01M4VAWG302W0MYD45DW583ZS5).

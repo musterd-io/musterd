@@ -685,6 +685,7 @@ async function drive() {
   const windowEnd = new Date();
   child?.send({ type: 'stop', cpu0: started.cpu0, t0: started.t0 });
   const stats = child ? await next('stats') : null;
+  const liveAtStop = sockets.filter((w) => w.readyState === 1).length;
   for (const ws of sockets) ws.terminate();
 
   // ── report ──
@@ -719,9 +720,8 @@ async function drive() {
   for (const [k, v] of errorsByRoute) console.log(`  error ${k}: ${v}`);
   if (wsCloses.length) {
     const sec = (ms) => (ms / 1000).toFixed(0);
-    const live = sockets.filter((w) => w.readyState === 1).length;
     console.log(
-      `  viewer sockets closed ${wsCloses.length} of ${sockets.length} (${live} live at stop); ` +
+      `  viewer sockets closed ${wsCloses.length} of ${sockets.length} (${liveAtStop} live at stop); ` +
         `first at +${sec(wsCloses[0].at)}s, last at +${sec(wsCloses[wsCloses.length - 1].at)}s; ` +
         `no reconnect — each one stops reading the roster`,
     );
