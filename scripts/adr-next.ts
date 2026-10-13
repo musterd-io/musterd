@@ -183,6 +183,30 @@ function openPrNumbers(): { numbers: number[]; consulted: boolean; byPr: string[
   }
 }
 
+/**
+ * The sections every new ADR needs, in order — printed beside the number so the skeleton is in front
+ * of the author at the moment they start. `obs-evals:check` refuses an ADR from 060 on without the
+ * last one (ADR 052), and on 2026-10-13 three of four red PR runs were exactly that (ADRs 578–580):
+ * the instructions authors followed listed only the first four. The template in
+ * `docs/architecture/07-conventions.md` is the source; `tests/adr-next.test.ts` pins the two together.
+ */
+export const ADR_SECTIONS = [
+  'Context',
+  'Problem',
+  'Decision',
+  'Consequences',
+  'Observability & Evaluation',
+] as const;
+
+export function adrSkeleton(padded: string): string {
+  return (
+    `# ${padded} — <title>\n\n- Status: accepted\n- Date: YYYY-MM-DD\n\n` +
+    ADR_SECTIONS.map((s) => `## ${s}\n`).join('\n') +
+    `\n(Observability & Evaluation answers Traces, Eval and Experiment — or says \`n/a — <reason>\`` +
+    ` for a non-agent-facing change. Required from ADR 060 on; obs-evals:check enforces it.)\n`
+  );
+}
+
 function run(): void {
   const quiet = process.argv.includes('--quiet');
   const local = localNumbers();
@@ -228,6 +252,9 @@ function run(): void {
         `seat (ADR 223) — and include a one-line stub at that path in the reservation push:\n` +
         `  git commit --allow-empty-message -m "reserve ADR ${padded}" docs/decisions/${padded}-<slug>.md\n` +
         `The title should name it too (\`ADR ${padded}: <slug>\`); both are read.\n`,
+    );
+    process.stdout.write(
+      `\nSkeleton (docs/architecture/07-conventions.md):\n\n${adrSkeleton(padded)}`,
     );
   }
 
