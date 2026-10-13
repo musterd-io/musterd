@@ -1037,7 +1037,7 @@ export async function decideFollowsUp(
       throw new MusterdError(
         'bad_request',
         `follows_up names "${id}", which is no lane on this team — lane_open it first, then ` +
-          `name its full id`,
+          `name its id (in full, or a unique prefix of 8+ characters)`,
       );
     if (lane.state === 'abandoned' && !lane.abandon_reason)
       throw new MusterdError(

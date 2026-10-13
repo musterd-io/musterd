@@ -125,8 +125,29 @@ export async function archaeologyCommand(
     // Merged history is the whole point here, so it asks past the 14-day window (ADR 534).
     lanes = (await http.laneBoard(team, { history: true })).lanes;
     if (laneId !== undefined) {
-      lane = lanes.find((l) => l.id === laneId || l.id.startsWith(laneId));
-      if (!lane) throw new CliError(`no lane ${laneId} on ${team}`, 1);
+      // The ADR 582 rule, the same one the daemon applies to `/lanes/:id`: an exact id, or a unique
+      // prefix of 8+ characters — an ambiguous one is refused with its candidates, never guessed.
+      const ref = laneId.toUpperCase();
+      const exact = lanes.find((l) => l.id === laneId);
+      const hits = exact
+        ? [exact]
+        : ref.length >= 8
+          ? lanes.filter((l) => l.id.startsWith(ref))
+          : [];
+      if (hits.length > 1)
+        throw new CliError(
+          `lane id ${laneId} matches ${hits.length} lanes — give more of it: ` +
+            hits.map((l) => `${l.id} "${l.title}"`).join(', '),
+          1,
+        );
+      lane = hits[0];
+      if (!lane)
+        throw new CliError(
+          ref.length < 8 && !exact
+            ? `lane id ${laneId} is too short — give the full id or a prefix of at least 8 characters`
+            : `no lane ${laneId} on ${team}`,
+          1,
+        );
       if (lane.merged?.pr == null) {
         throw new CliError(
           `lane ${lane.id} has no merge attestation naming a PR — nothing to measure`,

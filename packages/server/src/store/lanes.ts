@@ -382,6 +382,47 @@ export async function getLane(
   return row ? rowToLane(row, teamSlug) : null;
 }
 
+/** ADR 582 §2: the shortest prefix that names a lane. A ULID's first 10 characters are its millisecond
+ *  timestamp; 8 still separates lanes opened a second apart, and refusing shorter keeps a typo from
+ *  landing on whichever lane happens to share two characters. */
+export const LANE_ID_PREFIX_MIN = 8;
+
+export type LaneRefResolution =
+  | { kind: 'found'; id: string }
+  | { kind: 'none' }
+  | { kind: 'too_short' }
+  | { kind: 'ambiguous'; candidates: { id: string; title: string }[] };
+
+/**
+ * Resolve what a seat typed to one lane id (ADR 582 §2). A full id is returned as it is; a unique
+ * prefix of at least {@link LANE_ID_PREFIX_MIN} characters resolves to its lane; two or more matches
+ * are refused with every candidate named, never guessed. Seats type what acts, `report` and the
+ * launcher print — the 10-character form — so `lane_claim 01M4VA7NQG` said `no lane` until this
+ * (2026-10-13). For the request boundary only: callers holding a stored id use {@link getLane}.
+ */
+export async function resolveLaneRef(
+  db: Driver,
+  teamId: string,
+  ref: string,
+): Promise<LaneRefResolution> {
+  const exact = await db.get<{ id: string }>('SELECT id FROM lanes WHERE team_id = ? AND id = ?', [
+    teamId,
+    ref,
+  ]);
+  if (exact) return { kind: 'found', id: exact.id };
+  // Only a ULID-shaped ref is a prefix query: no wildcard or quote ever reaches the comparison.
+  const prefix = ref.toUpperCase();
+  if (!/^[0-9A-HJKMNP-TV-Z]+$/.test(prefix) || prefix.length > 26) return { kind: 'none' };
+  if (prefix.length < LANE_ID_PREFIX_MIN) return { kind: 'too_short' };
+  const rows = await db.all<{ id: string; title: string }>(
+    'SELECT id, title FROM lanes WHERE team_id = ? AND substr(id, 1, ?) = ? ORDER BY id LIMIT 6',
+    [teamId, prefix.length, prefix],
+  );
+  if (rows.length === 0) return { kind: 'none' };
+  if (rows.length === 1) return { kind: 'found', id: rows[0]!.id };
+  return { kind: 'ambiguous', candidates: rows };
+}
+
 /**
  * The caller's expectation about a lane at write time (ADR 325 prereq). A claim decision is made
  * against a read; the write refuses if the lane no longer matches, instead of blindly overwriting
