@@ -27,6 +27,8 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
+import { log } from '../log.js';
+import { readNodeState } from '../node/state.js';
 import { type AuditEntry, appendAudit } from './audit.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
@@ -1687,7 +1689,9 @@ interface SeatPass {
     | { kind: 'dream' }
     | null;
   /** `once`: an attempt-cap row, written only while the act is not already exhausted (one terminal
-   *  row per act). The edge-breaker rows are written on every pass that reaches them, as before. */
+   *  row per act). An edge-breaker or continuation-cap row (`once: false`) is one per
+   *  (seat, act, edge) trip: written again only after a newer `woke` or `wake_failed` on that
+   *  lane and edge. */
   exhausted: { entry: AuditEntry; once: boolean }[];
 }
 
@@ -1718,6 +1722,148 @@ async function insertLease(t: Driver, lease: WakeLeaseRow): Promise<boolean> {
 }
 
 /**
+ * An edge-breaker or continuation-cap row already stands for this trip: this seat has one for the
+ * same act and edge, and nothing has `woke` or `wake_failed` on that lane and edge since. A newer
+ * spend opens the next trip, which gets its own row. Counts are the rows this machine minted, the
+ * same pin as the breaker itself (ADR 365 §3).
+ */
+async function edgeTripAlreadyRecorded(
+  db: Driver,
+  teamId: string,
+  entry: AuditEntry,
+): Promise<boolean> {
+  const detail = entry.detail ?? {};
+  const act = String(detail.act ?? '');
+  const edge = String(detail.edge ?? '');
+  const kind = detail.breaker === true ? 'breaker' : 'cap';
+  const recorded = await db.get<{ ts: number | null }>(
+    `SELECT MAX(ts) AS ts FROM audit
+      WHERE team_id = ? AND action = 'residency.wake_exhausted' AND target = ?
+        AND json_extract(detail, '$.act') = ?
+        AND json_extract(detail, '$.edge') = ?
+        AND ((? = 'breaker' AND json_extract(detail, '$.breaker') = 1)
+             OR (? = 'cap' AND json_extract(detail, '$.reason') = 'continuation_cap'))
+        ${MINTED_HERE}`,
+    [teamId, entry.target, act, edge, kind, kind],
+  );
+  if (recorded?.ts == null) return false;
+  const spend = await db.get<{ ts: number | null }>(
+    `SELECT MAX(ts) AS ts FROM audit
+      WHERE team_id = ? AND action IN ('residency.woke', 'residency.wake_failed')
+        AND json_extract(detail, '$.lane_id') = ?
+        AND json_extract(detail, '$.edge') = ?
+        ${MINTED_HERE}`,
+    [teamId, String(detail.lane_id ?? ''), edge],
+  );
+  return recorded.ts >= (spend?.ts ?? 0);
+}
+
+/** One process prunes once. A failed attempt is forgotten so the next poll tries again. */
+let edgeExhaustionPrune: Promise<void> | null = null;
+
+function scheduleEdgeExhaustionPrune(db: Driver): Promise<void> {
+  if (!edgeExhaustionPrune) {
+    edgeExhaustionPrune = pruneRepeatedEdgeExhaustion(db)
+      .then(() => undefined)
+      .catch((err) => {
+        edgeExhaustionPrune = null;
+        log.warn({ msg: 'edge_exhaustion_prune_failed', err: String(err) });
+      });
+  }
+  return edgeExhaustionPrune;
+}
+
+/**
+ * Delete repeated edge-breaker and continuation-cap rows, keeping the earliest of each
+ * (team, seat, act, edge, kind). A row that holds its node's high-water `origin_seq`, or that an
+ * enrolled joiner has not pushed yet, stays — deleting either punches a hole the sync push cannot
+ * cross (lane 01M3ZBT9VY). `sync_log` is not touched.
+ */
+export async function pruneRepeatedEdgeExhaustion(db: Driver): Promise<number> {
+  const rows = await db.all<{
+    id: string;
+    team_id: string;
+    target: string | null;
+    ts: number;
+    origin_node: string;
+    origin_seq: number;
+    detail: string | null;
+  }>(
+    `SELECT id, team_id, target, ts, origin_node, origin_seq, detail FROM audit
+      WHERE action = 'residency.wake_exhausted'
+        AND (json_extract(detail, '$.breaker') = 1
+             OR json_extract(detail, '$.reason') = 'continuation_cap')`,
+  );
+  const hwm = new Set(
+    (
+      await db.all<{ id: string }>(
+        `SELECT a.id AS id FROM audit a
+          JOIN (SELECT origin_node, MAX(origin_seq) AS seq FROM audit
+                 WHERE origin_seq > 0 GROUP BY origin_node) h
+            ON a.origin_node = h.origin_node AND a.origin_seq = h.seq`,
+      )
+    ).map((r) => r.id),
+  );
+  const floors = await unpushedOriginFloors(db);
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    let parsed: { act?: unknown; edge?: unknown; breaker?: unknown; reason?: unknown } = {};
+    try {
+      parsed = JSON.parse(row.detail ?? '{}') as typeof parsed;
+    } catch {
+      continue;
+    }
+    const kind =
+      parsed.breaker === true ? 'breaker' : parsed.reason === 'continuation_cap' ? 'cap' : '';
+    if (!kind) continue;
+    const key = [
+      row.team_id,
+      row.target ?? '',
+      String(parsed.act ?? ''),
+      String(parsed.edge ?? ''),
+      kind,
+    ].join('\0');
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+  const drop: string[] = [];
+  for (const list of groups.values()) {
+    list.sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
+    for (const row of list.slice(1)) {
+      if (hwm.has(row.id)) continue;
+      const floor = floors.get(row.origin_node);
+      if (floor !== undefined && row.origin_seq > floor) continue;
+      drop.push(row.id);
+    }
+  }
+  const batch = 500;
+  for (let i = 0; i < drop.length; i += batch) {
+    const ids = drop.slice(i, i + batch);
+    await db.tx(async (t) => {
+      for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
+    });
+  }
+  return drop.length;
+}
+
+/** Enrolled joiners only: `[origin_node, last acked seq]`. A hub keeps nothing extra for this. */
+async function unpushedOriginFloors(db: Driver): Promise<Map<string, number>> {
+  const enrolled = readNodeState().nodes;
+  const locals = await db.all<{ slug: string; node_id: string; last_seq: number | null }>(
+    `SELECT t.slug AS slug, l.node_id AS node_id, c.last_seq AS last_seq FROM local_node l
+       JOIN teams t ON t.id = l.team_id
+       LEFT JOIN sync_push_cursor c ON c.team_id = l.team_id AND c.node_id = l.node_id`,
+  );
+  const floors = new Map<string, number>();
+  for (const row of locals) {
+    if (enrolled[row.slug]?.node_id !== row.node_id) continue;
+    floors.set(row.node_id, row.last_seq ?? 0);
+  }
+  return floors;
+}
+
+/**
  * The host's poll (ADR 131 §4 as amended by ADR 576). Each enrolled seat's wake is worked out with
  * plain reads, outside any transaction, and then each seat that has one is rechecked and written in
  * its own short transaction. On a large team the derivation is hundreds of awaited statements, and
@@ -1732,6 +1878,9 @@ export async function claimWakeLeases(
   now = Date.now(),
   scope: HostScope = TEAM_WIDE_HOST,
 ): Promise<WakeOrder[]> {
+  // Lane 01M4VJNEX2: the backlog is rows already written, one per poll. Drop the repeats once
+  // per process, before this poll's scans. A failure here must not stop the poll.
+  await scheduleEdgeExhaustionPrune(db);
   const passes = await deriveSeatPasses(db, teamId, teamSlug, host, presenceTimeoutMs, now, scope);
   const orders: WakeOrder[] = [];
   for (const pass of passes) {
@@ -1992,6 +2141,7 @@ async function writeSeatPass(
     .tx(async (t): Promise<WakeOrder | null> => {
       for (const { entry, once } of pass.exhausted) {
         if (once && (await isExhausted(t, teamId, String(entry.detail?.act)))) continue;
+        if (!once && (await edgeTripAlreadyRecorded(t, teamId, entry))) continue;
         await appendAudit(t, teamId, entry);
       }
       if (plan === null) return null;

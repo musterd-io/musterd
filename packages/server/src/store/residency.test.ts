@@ -33,6 +33,7 @@ import {
   revokeResidency,
   settleWakeLease,
   markWakeSpawned,
+  pruneRepeatedEdgeExhaustion,
 } from './residency.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { createTeam, getPolicy, setPolicy } from './teams.js';
@@ -2327,6 +2328,49 @@ withDrivers('residency', (o, kind) => {
       });
     });
 
+    it('a later poll does not write another breaker row for the same trip', async () => {
+      const { db, team, lane } = await reviewDue();
+      for (let i = 0; i < 3; i++) {
+        await failEdge(db, team.id, {
+          act: `ask${i}`,
+          lane_id: lane.id,
+          edge: 'review',
+          reason: 'lease_expired',
+        });
+      }
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const exhausted = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.wake_exhausted',
+      );
+      expect(exhausted).toHaveLength(1);
+    });
+
+    it('a newer wake_failed on the edge opens a new breaker trip', async () => {
+      const { db, team, lane } = await reviewDue();
+      for (let i = 0; i < 3; i++) {
+        await failEdge(db, team.id, {
+          act: `ask${i}`,
+          lane_id: lane.id,
+          edge: 'review',
+          reason: 'lease_expired',
+        });
+      }
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      // The trip row is stamped at the poll. Move it behind the failures that are already
+      // outside the cooldown, so the next poll sees a spend newer than the row and records
+      // the next trip — without a failure inside the cooldown, which would skip the seat.
+      await db.run(
+        `UPDATE audit SET ts = ? WHERE team_id = ? AND action = 'residency.wake_exhausted'`,
+        [Date.now() - WAKE_COOLDOWN_MS - 60_000, team.id],
+      );
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const exhausted = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.wake_exhausted',
+      );
+      expect(exhausted).toHaveLength(2);
+    });
+
     /**
      * ADR 306. This test previously passed only because it enrolled with `attempt_cap: 10`.
      * Production runs the ADR 131 default of 3, and at 3 the ADR 262 §4.1 guarantee is FALSE:
@@ -2429,6 +2473,56 @@ withDrivers('residency', (o, kind) => {
         edge: 'dispatch_continuation',
         lane_id: lane.id,
       });
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const again = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.wake_exhausted',
+      );
+      expect(again).toHaveLength(1);
+    });
+
+    it('prunes repeated edge rows and keeps the earliest, the high-water mark, and other rows', async () => {
+      const { db, team } = await seed();
+      const breaker = JSON.stringify({
+        act: 'ask1',
+        edge: 'review',
+        lane_id: 'L',
+        breaker: true,
+      });
+      const cap = JSON.stringify({
+        act: 'lane:L',
+        edge: 'dispatch_continuation',
+        lane_id: 'L',
+        reason: 'continuation_cap',
+      });
+      const ins = async (id: string, ts: number, detail: string, seq: number, node = 'hub') => {
+        await db.run(
+          `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
+           VALUES (?, ?, ?, NULL, 'residency.wake_exhausted', 'Ada', 'deny', ?, ?, ?, ?)`,
+          [id, team.id, ts, detail, ts, node, seq],
+        );
+      };
+      await ins('b1', 100, breaker, 1);
+      await ins('b2', 200, breaker, 2);
+      await ins('b3', 300, breaker, 3);
+      await db.run(
+        `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
+         VALUES ('hw', ?, 400, NULL, 'residency.woke', 'Ada', 'allow', '{}', 400, 'hub', 9)`,
+        [team.id],
+      );
+      await ins('cap1', 110, cap, 4);
+      await ins('cap2', 210, cap, 5);
+      await ins('plain', 150, JSON.stringify({ act: 's1', attempts: 3 }), 6);
+      const joiner = JSON.stringify({ act: 'j', edge: 'review', lane_id: 'L', breaker: true });
+      await ins('j1', 100, joiner, 1, 'joiner');
+      await ins('j2', 200, joiner, 2, 'joiner');
+
+      const dropped = await pruneRepeatedEdgeExhaustion(db);
+      const left = (await listAudit(db, team.id))
+        .filter((r) => r.action === 'residency.wake_exhausted')
+        .map((r) => r.id)
+        .sort();
+      expect(dropped).toBe(3);
+      expect(left).toEqual(['b1', 'cap1', 'j1', 'j2', 'plain']);
     });
 
     /**
