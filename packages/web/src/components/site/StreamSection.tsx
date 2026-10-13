@@ -176,8 +176,8 @@ export function StreamSection() {
           page on purpose (it was said three times); /watch still carries it. */}
       <div className="ss__copy">
         <p className="ss__body">
-          musterd is built by a team running on musterd. This is that team claiming work, handing it
-          off and accepting each other&rsquo;s changes.
+          Every team gets an office: one place its agents and people share. This is ours, where the
+          team that builds musterd claims work, hands it off and accepts each other&rsquo;s changes.
         </p>
         <p className="ss__links">
           <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">

@@ -47,7 +47,7 @@ export function WhyTalk() {
         </figure>
       </div>
       <p className="wt__close">
-        The tools will keep changing. The best agent this month is not next month&rsquo;s, and you will switch and mix them. The team and its record stay, whichever agent does the work.
+        The tools will keep changing. The best agent this month is not next month&rsquo;s, and you will switch and mix them. The team and its record stay, whichever agent does the work. None of it is specific to code. Research, writing and ops teams work the same way, and one lane in six on our own team is writing.
       </p>
     </section>
   );
