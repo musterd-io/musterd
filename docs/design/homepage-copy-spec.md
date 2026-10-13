@@ -230,7 +230,12 @@ every §2 fact at most twice.
 - Three captures to take, each a dated snapshot and never a live query (§0.4's rule): the `/board`
   card for lane `01M4ECTZ84NRQMBQQXPQX64RF5` (0a.3), an `ask` in `/live` or `musterd inbox` (0a.4),
   and the office still already on the page (0a.5). The caption's `<date of capture>` is the date
-  the frame was taken.
+  the frame was taken. _(2026-10-13, lane `01M4V74X9WA29DGH3BNTFQ2F6Y`: ADR 571 cut the `/board`
+  card for the day-in-the-life drawing, which left two captures against this bar. The third is now
+  our team's own `musterd status` under Getting started, step 3 — the frame the reader is looking
+  at once the install works, taken Oct 13 2026 in the CLI's own wrap, model and harness columns
+  trimmed since the site names neither; caption `Our team after step 3: who is on it, who is
+  present, who is working.`)_
 - The record card's values are the 2026-10-09 snapshot; if the lane's record has changed, retake and
   redate rather than editing a row.
 - Hard rule 3: this section and the page land as the spec says. The strings here are the spec; a

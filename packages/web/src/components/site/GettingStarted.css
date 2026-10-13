@@ -101,6 +101,12 @@
   overflow-wrap: anywhere;
 }
 
+/* The status capture under the steps (lane 01M4V74X9W): the frame itself is WhyTalk's `.wt__term`. */
+.gs__shot {
+  margin: 1.1rem 0 0;
+  max-width: 40rem;
+}
+
 .gs__more {
   display: flex;
   flex-wrap: wrap;
