@@ -9,6 +9,7 @@ import {
   deriveGoalStatus,
   deriveHandoffLane,
   getLane,
+  insertLaneSnapshot,
   globsOverlap,
   LaneConflictError,
   laneFieldDiff,
@@ -18,6 +19,7 @@ import {
   openLane,
   releaseDepartedSeatClaims,
   releaseInFlightClaimsForSeat,
+  resolveLaneRef,
   staleAcceptanceWarning,
   updateLane,
   withinHistoryWindow,
@@ -1452,6 +1454,61 @@ withDrivers('lanes', (o) => {
       const patched = await updateLane(db, team.id, lane.id, 'bravo', {});
       expect(await titleWriteCount(db)).toBe(0);
       expect(patched?.updated_at).toBeGreaterThan(before.updated_at);
+    });
+  });
+
+  /** ADR 582 §2: a unique prefix of at least 8 characters names a lane; anything else says why not. */
+  describe('resolveLaneRef — short lane ids (ADR 582)', () => {
+    async function twins() {
+      const { db, team } = await seed();
+      const base = await openLane(db, team.id, 'bravo', 'June', { title: 'base' });
+      // Two lanes sharing a 10-character prefix: what a ULID minted in the same millisecond looks like.
+      const a = { ...base, id: '01AAAAAAAAB000000000000000', title: 'twin a' };
+      const b = { ...base, id: '01AAAAAAAAC000000000000000', title: 'twin b' };
+      await insertLaneSnapshot(db, team.id, a);
+      await insertLaneSnapshot(db, team.id, b);
+      return { db, team, base };
+    }
+
+    it('returns a full id unchanged, and resolves a unique prefix to it', async () => {
+      const { db, team, base } = await twins();
+      expect(await resolveLaneRef(db, team.id, base.id)).toEqual({ kind: 'found', id: base.id });
+      expect(await resolveLaneRef(db, team.id, base.id.slice(0, 10))).toEqual({
+        kind: 'found',
+        id: base.id,
+      });
+      // Seats type what they read; ULIDs are upper-case Crockford.
+      expect(await resolveLaneRef(db, team.id, base.id.slice(0, 10).toLowerCase())).toEqual({
+        kind: 'found',
+        id: base.id,
+      });
+    });
+
+    it('refuses an ambiguous prefix and names every candidate', async () => {
+      const { db, team } = await twins();
+      const r = await resolveLaneRef(db, team.id, '01AAAAAAAA');
+      expect(r.kind).toBe('ambiguous');
+      if (r.kind !== 'ambiguous') return;
+      expect(r.candidates.map((c) => c.title).sort()).toEqual(['twin a', 'twin b']);
+      // One more character settles it.
+      expect(await resolveLaneRef(db, team.id, '01AAAAAAAAB')).toEqual({
+        kind: 'found',
+        id: '01AAAAAAAAB000000000000000',
+      });
+    });
+
+    it('refuses a prefix under 8 characters, and reports a miss as none', async () => {
+      const { db, team, base } = await twins();
+      expect(await resolveLaneRef(db, team.id, base.id.slice(0, 7))).toEqual({ kind: 'too_short' });
+      expect(await resolveLaneRef(db, team.id, 'ZZZZZZZZZZ')).toEqual({ kind: 'none' });
+      // A ref that is not ULID-shaped is never a prefix query.
+      expect(await resolveLaneRef(db, team.id, "01AAAAAA%'")).toEqual({ kind: 'none' });
+    });
+
+    it('never resolves across teams', async () => {
+      const { db, base } = await twins();
+      const other = await createTeam(db, { slug: 'charlie' });
+      expect(await resolveLaneRef(db, other.id, base.id.slice(0, 10))).toEqual({ kind: 'none' });
     });
   });
 });

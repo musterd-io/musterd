@@ -266,6 +266,8 @@ import {
   countLanesBefore,
   deriveGoalStatus,
   getLane,
+  LANE_ID_PREFIX_MIN,
+  resolveLaneRef,
   LaneConflictError,
   laneWarnings,
   lanesForGoal,
@@ -1970,6 +1972,43 @@ function requireLocalPeer(
     `${action} only works on the machine running the daemon — a sign-in link carries a member ` +
       'identity, so it is deliberately not redeemable from another device. Sign in with your ' +
       'credential on that device instead.',
+  );
+}
+
+/**
+ * A lane id as a seat typed it → the full id, or the reason it names none (ADR 582 §2). The one
+ * boundary every caller-supplied lane id passes through: the `/lanes/:id` path and the lane ids a
+ * body names (`depends_on`, `follows_up`). An ambiguous prefix is refused with its candidates, never
+ * guessed; a too-short one says how long it must be.
+ */
+async function laneIdFromRef(ctx: Ctx, teamId: string, ref: string, slug: string): Promise<string> {
+  const r = await resolveLaneRef(ctx.db, teamId, ref);
+  if (r.kind === 'found') return r.id;
+  if (r.kind === 'too_short')
+    throw new MusterdError(
+      'bad_request',
+      `lane id "${ref}" is too short — give the full id or a prefix of at least ${LANE_ID_PREFIX_MIN} characters`,
+    );
+  if (r.kind === 'ambiguous')
+    throw new MusterdError(
+      'conflict',
+      `lane id "${ref}" matches ${r.candidates.length} lanes — give more of it: ` +
+        r.candidates.map((c) => `${c.id} "${c.title}"`).join(', '),
+    );
+  throw new MusterdError('not_found', `no lane "${ref}" on ${slug}`);
+}
+
+/** Lane ids a body names, resolved where they name exactly one lane and left as written otherwise:
+ *  an unknown or short `depends_on` id is the contention check's to warn about, and an unknown
+ *  `follows_up` id gets its own refusal from the close path — neither is this one's to refuse. Only an
+ *  ambiguous prefix is refused here, because storing it as written would let it name two lanes. */
+async function lanesNamedIn(ctx: Ctx, teamId: string, refs: string[]): Promise<string[]> {
+  return Promise.all(
+    refs.map(async (ref) => {
+      const r = await resolveLaneRef(ctx.db, teamId, ref);
+      if (r.kind === 'ambiguous') return laneIdFromRef(ctx, teamId, ref, ''); // throws, naming them
+      return r.kind === 'found' ? r.id : ref;
+    }),
   );
 }
 
@@ -6907,6 +6946,7 @@ export async function handleHttp(
             `"${member.name}" is a service seat — ledger seats never open or hold lanes (ADR 232)`,
           );
         const body = parseOrBadRequest(OpenLaneSchema, await readJson(req));
+        if (body.depends_on) body.depends_on = await lanesNamedIn(ctx, team.id, body.depends_on);
         // The `lane.opened` birth row and the `lane.claimed at_open` row (ADR 203's third
         // acquisition edge) are written by the store inside the insert's transaction, as the
         // creator (lane-replication spec §Hole 3, Finding 4).
@@ -6928,8 +6968,11 @@ export async function handleHttp(
       const laneMatch = rest.match(/^\/lanes\/([^/]+)$/);
       if (method === 'PATCH' && laneMatch) {
         const { team, member } = await authTouch(ctx, slug, req);
-        const laneId = decodeURIComponent(laneMatch[1]!);
+        const laneId = await laneIdFromRef(ctx, team.id, decodeURIComponent(laneMatch[1]!), slug);
         const body = parseOrBadRequest(UpdateLaneSchema, await readJson(req));
+        if (body.depends_on) body.depends_on = await lanesNamedIn(ctx, team.id, body.depends_on);
+        if (Array.isArray(body.follows_up))
+          body.follows_up = await lanesNamedIn(ctx, team.id, body.follows_up);
         const before = await getLane(ctx.db, team.id, laneId, team.slug);
         if (!before) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
         // The policy before the write — service seats, the live-incumbent rule, the ADR 305
