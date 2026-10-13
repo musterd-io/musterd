@@ -13,6 +13,9 @@ export interface LaneOwners {
   note(lane: string, who: string): void;
   /** The lane's owner as the room knows it, else `fallback` (the ask's sender — the pre-fix behavior). */
   carrier(lane: string, fallback: string): string;
+  /** `who` resolved the lane and is NOT its known owner — an acceptance, not a self-close. A lane the
+   *  room never saw owned counts as accepted: the flourish costs a puff of paper if that is wrong. */
+  closedByOther(lane: string, who: string): boolean;
 }
 
 export function createLaneOwners(): LaneOwners {
@@ -29,6 +32,9 @@ export function createLaneOwners(): LaneOwners {
     },
     carrier(lane, fallback) {
       return owners.get(lane) ?? fallback;
+    },
+    closedByOther(lane, who) {
+      return owners.get(lane) !== who;
     },
   };
 }

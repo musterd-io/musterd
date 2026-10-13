@@ -82,7 +82,7 @@ import {
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
 import { createLaneOwners } from './laneOwners';
-import { laneSeed, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
+import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -1826,6 +1826,7 @@ export function mountOffice(
     // else in the room (pet, lights, bubbles) keeps real time, so only the catch-up is fast.
     drainReplay();
     const walking = actors.step(dt * tempo);
+    flourishFreshPins();
     if (tempo !== 1 && !actors.active()) tempo = 1;
     if (walking) noticePassersBy(); // a sleeping dog wakes to watch whoever is walking past it
     const petActive = stepPet(pet, dt); // false once it's asleep — the pet never keeps the room awake
@@ -2309,6 +2310,37 @@ export function mountOffice(
     });
   }
 
+  /** Seeds of lanes an acceptor just closed (their done-pin is an acceptance, not a self-close). */
+  const acceptedPins = new Set<number>();
+  /** The cards the pin walks had pinned on the previous frame — a seed that is new this frame was
+   *  pinned this frame, which is the instant the flourish plays. */
+  let prevPinned = new Set<number>();
+  /** The accept flourish (spec 2026-10-13 L3): a puff of paper over the "done" column as the card lands.
+   *  The board's done column is the last of six equal slices of its face. */
+  function pushBoardConfetti() {
+    const a = boardAnchor(fit);
+    const col = (WALL_COLUMNS.indexOf('done') + 0.5) / WALL_COLUMNS.length;
+    cues.push({
+      at: { x: a.x + a.w * col, y: a.y + a.h * 0.7 },
+      color: '#5cd49a',
+      glyph: '',
+      t: 0,
+      urgent: false,
+      kind: 'confetti',
+    });
+  }
+  /** Called once a frame after the walkers step: plays the flourish for each accepted card that was
+   *  pinned this frame. Skipped while a replay is landing — a replayed cue would celebrate old news. */
+  function flourishFreshPins(): void {
+    const now = new Set<number>();
+    for (const p of actors.pinnedSeeds()) {
+      if (p.state !== 'done') continue;
+      now.add(p.seed);
+      if (!prevPinned.has(p.seed) && acceptedPins.delete(p.seed) && tempo === 1) pushBoardConfetti();
+    }
+    prevPinned = now;
+  }
+
   /** The `count` nearest drawn members to `name` (excluding them) within one pod's reach — the desk
    * neighbors who plausibly noticed. Head positions are already screen-space, so plain distance works. */
   function nearestNeighbors(name: string, count: number, from?: Pt | null): string[] {
@@ -2448,12 +2480,22 @@ export function mountOffice(
         // A lane finished or submitted (nick, 2026-10-12): the owner carries the card back to the wall
         // board and pins it under its new column. Falls back to the in-place ✓ when they are not in the
         // room to make the trip.
-        laneOwners.note(ev.lane, ev.who);
-        if (actors.pin(ev.who, laneSeed(ev.lane), ev.state)) {
-          const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
-          walkTags.set(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
-        } else {
-          pushCue(ev.who, '#5cd49a', '✓');
+        {
+          // Who resolves a lane is not always who owns it: the acceptor's accept closes it, and the daemon
+          // sends the resolve as THEM (spec 2026-10-13 §3). So only a submit names the owner, and a done
+          // pin by anyone but the known owner is an acceptance — it earns the flourish at the board (L3).
+          const accepted = ev.state === 'done' && laneOwners.closedByOther(ev.lane, ev.who);
+          if (ev.state === 'awaiting_acceptance') laneOwners.note(ev.lane, ev.who);
+          const seed = laneSeed(ev.lane);
+          if (actors.pin(ev.who, seed, ev.state)) {
+            if (accepted) acceptedPins.add(seed); // the flourish waits for the card to land (`flourishFreshPins`)
+            const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
+            walkTags.set(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
+          } else {
+            pushCue(ev.who, '#5cd49a', '✓');
+            // No walk to wait for: flourish at once so an acceptor out of the room does not lose the cue.
+            if (accepted && tempo === 1) pushBoardConfetti();
+          }
         }
         break;
       case 'walk-deliver': {

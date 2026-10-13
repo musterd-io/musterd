@@ -26,4 +26,12 @@ describe('lane owners (lane 01M4V774MK)', () => {
     expect(owners.carrier('L0', 'nick')).toBe('nick');
     expect(owners.carrier('L299', 'nick')).toBe('slippy');
   });
+
+  it('tells an acceptance from a self-close', () => {
+    const owners = createLaneOwners();
+    owners.note('L1', 'slippy');
+    expect(owners.closedByOther('L1', 'nick')).toBe(true); // the acceptor resolved it
+    expect(owners.closedByOther('L1', 'slippy')).toBe(false); // the owner closed their own lane
+    expect(owners.closedByOther('L9', 'nick')).toBe(true); // never saw it owned: celebrate
+  });
 });
