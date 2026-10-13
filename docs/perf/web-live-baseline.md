@@ -1370,7 +1370,7 @@ trim or a re-baseline that tightens elsewhere.
 
 ### 2026-10-13 — `totalJsGzipBytes` 310,500 → 311,200 B: pin holes remember where cards hung (lane `01M4VP3V99`)
 
-| Budget   | Before (main `c0e2de0e`-era) | This branch | Ceiling                    |
+| Budget   | Before (main, same day)      | This branch | Ceiling                    |
 | -------- | ---------------------------- | ----------- | -------------------------- |
 | total JS | 303.1 KB (~310,400 B)        | 303.4 KB (~310,680 B) | RAISED 310,500 → 311,200 B |
 
