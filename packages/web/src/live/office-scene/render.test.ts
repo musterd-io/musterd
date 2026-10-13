@@ -1496,6 +1496,21 @@ describe('background layer (sprite cache)', () => {
     expect(fmtOps(live1.ops)).not.toEqual(fmtOps(live2.ops)); // the clock hands moved
   });
 
+  it('a card that just landed sways on its tape, a taken one leaves a pin hole, and both settle (L5)', () => {
+    const draw = (w: WallBoard) => {
+      const r = recordingCtx();
+      drawWalls(r.ctx, fit, env, schedule, w, 3, 'live');
+      return fmtOps(r.ops);
+    };
+    const plain = board();
+    const withAge = (age: number): WallBoard =>
+      plain.map((c) => ({ ...c, stickies: c.stickies.map((s) => ({ ...s, age })) }));
+    expect(draw(withAge(0.15))).not.toEqual(draw(plain)); // mid-swing: the bottom edge has moved
+    expect(draw(withAge(1.5))).toEqual(draw(plain)); // settled: hangs still, like any card
+    const taken: WallBoard = plain.map((c) => ({ ...c, stickies: c.stickies.map((s) => ({ ...s, taken: true as const })) }));
+    expect(draw(taken)).not.toEqual(draw(plain));
+  });
+
   it('the live slice paints the clock, the sign and the board and nothing else', () => {
     const live = recordingCtx();
     drawWalls(live.ctx, fit, env, schedule, board(), 3, 'live');
