@@ -26,6 +26,16 @@ import { askIsLoud, type AskView } from './asks';
 
 /** A lane that reached `done` inside this window counts as shipped TODAY (the headline's number). */
 export const SHIPPED_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The protocol's `GOAL_STALE_DAYS` and `LANE_TERMINAL_STATES`, copied rather than imported: a value
+ * import of `@musterd/protocol` drags its zod schemas into `/live`'s eager graph (measured 2026-10-13:
+ * this chunk 1.9 → 35.7 KB gzip, initial JS 138 → 171 KB, past the budget). The web type-imports the
+ * protocol everywhere for that reason. `briefing.test.ts` pins these to the protocol's values, so the
+ * two cannot drift apart silently.
+ */
+export const GOAL_STALE_DAYS = 7;
+export const LANE_TERMINAL_STATES: ReadonlySet<string> = new Set(['done', 'abandoned']);
 const SHOWN_TITLE = 90;
 
 /**
@@ -121,6 +131,30 @@ export interface GoalMotion {
   latest: number;
 }
 
+/**
+ * One row under "Stopped" on the Now card (lane 01M4V754ZD, nick 2026-10-13): a plan whose later
+ * increments nobody is building. Two signals, both past {@link GOAL_STALE_DAYS}: **quiet** is the
+ * server's `stale_goals` rule (ADR 487 §5.4 — every live, unparked lane untouched), and **orphans**
+ * counts open, unowned lanes gone that long while the rest of the goal may still move. A goal can
+ * be in motion and stalled at once; the two rows say different things.
+ */
+export interface GoalStalled {
+  key: string;
+  goalId: string;
+  name: string;
+  title: string;
+  done: number;
+  total: number;
+  /** True when no live lane has been touched inside the threshold. */
+  quiet: boolean;
+  /** How long since any live lane moved. */
+  idleMs: number;
+  /** Open, unowned lanes untouched past the threshold. */
+  orphans: number;
+  /** The lane to start from: the oldest untouched live lane. */
+  oldest: { title: string; idleMs: number } | null;
+}
+
 export interface ShippedGroup {
   who: string;
   items: ShippedItem[];
@@ -138,6 +172,8 @@ export interface Briefing {
   byGoal: GoalGroup[];
   /** Goals with something working, in review or blocked — newest first, "No goal" last. */
   goalsInMotion: GoalMotion[];
+  /** Goals with a stopped plan — quiet, or with orphaned lanes — the longest idle first. */
+  goalsStalled: GoalStalled[];
   inReview: WorkItem[];
   /** Lanes done since `shippedSince` (default: the last 24 h). */
   shipped: ShippedItem[];
@@ -339,6 +375,36 @@ export function briefing(input: {
     (a, b) => Number(a.goalId === null) - Number(b.goalId === null) || b.latest - a.latest,
   );
 
+  // Stopped plans. Live = not done/abandoned and not parked (a parked lane is a decision, not
+  // neglect). The threshold is the protocol's, so this row and `team_next`'s warning agree.
+  const staleCutoff = now - GOAL_STALE_DAYS * 86_400_000;
+  const goalsStalled: GoalStalled[] = [];
+  for (const [key, { goalId, lanes: ls }] of motion) {
+    if (goalId === null) continue;
+    const live = ls.filter((l) => !LANE_TERMINAL_STATES.has(l.state) && l.state !== 'parked');
+    if (live.length === 0) continue;
+    const quiet = live.every((l) => l.updated_at <= staleCutoff);
+    const orphaned = live.filter(
+      (l) => l.state === 'open' && l.owner_seat === null && l.updated_at <= staleCutoff,
+    );
+    if (!quiet && orphaned.length === 0) continue;
+    const oldest = live.reduce((a, l) => (l.updated_at < a.updated_at ? l : a));
+    const newest = live.reduce((a, l) => (l.updated_at > a.updated_at ? l : a));
+    goalsStalled.push({
+      key: `stalled:${key}`,
+      goalId,
+      name: goalName.get(goalId) ?? goalId,
+      title: goalTitle.get(goalId) ?? goalId,
+      done: ls.filter((l) => l.state === 'done').length,
+      total: ls.length,
+      quiet,
+      idleMs: now - newest.updated_at,
+      orphans: orphaned.length,
+      oldest: { title: oldest.title, idleMs: now - oldest.updated_at },
+    });
+  }
+  goalsStalled.sort((a, b) => b.oldest!.idleMs - a.oldest!.idleMs);
+
   const shippers = new Map<string, ShippedItem[]>();
   for (const s of shipped) {
     const who = s.by ?? 'someone';
@@ -366,6 +432,7 @@ export function briefing(input: {
     inProgress,
     byGoal,
     goalsInMotion,
+    goalsStalled,
     inReview,
     shipped,
     shippedBy,
