@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { MusterdClient } from './client.js';
 import type { McpConfig } from './config.js';
-import { BOUNCE_RE } from './toolTelemetry.js';
+import { BOUNCE_RE, ToolCallRecorder } from './toolTelemetry.js';
 import { ADAPTER_VERSION } from './version.js';
 import { installShutdownHandlers, startStdioEntry } from './index.js';
 
@@ -198,4 +198,37 @@ describe('serveStdio entry (ADR 175 part b)', () => {
     expect(close).toHaveBeenCalledTimes(1);
     await entry.close();
   });
+});
+
+describe('startup marks on both eras (ADR 584, lane 01M4VSF497)', () => {
+  for (const modern of [false, true]) {
+    it(`marks the handshake and the first listing on a ${modern ? '2026-07-28' : '2025'} connection`, async () => {
+      let now = 100;
+      const recorder = new ToolCallRecorder({
+        surface: 'claude-code',
+        uptimeMs: () => (now += 10),
+      });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const entry = startStdioEntry(fakeClient, config, { transport: serverTransport, recorder });
+      const harness = new Client(
+        { name: 'canary-harness', version: '0.0.0' },
+        modern ? { versionNegotiation: { mode: { pin: MODERN } } } : {},
+      );
+      await harness.connect(clientTransport);
+      await harness.listTools();
+      await new Promise((r) => setTimeout(r, 20));
+      const marks = recorder as unknown as {
+        initializedMs: number | null;
+        toolsListMs: number | null;
+      };
+      try {
+        expect(marks.initializedMs).not.toBeNull();
+        expect(marks.toolsListMs).not.toBeNull();
+        expect(marks.initializedMs!).toBeLessThan(marks.toolsListMs!);
+      } finally {
+        await harness.close().catch(() => {});
+        await entry.close();
+      }
+    });
+  }
 });

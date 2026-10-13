@@ -27,12 +27,15 @@ harnesses, after a change lands.
 
 1. The adapter measures its own launch: milliseconds of `process.uptime()` when the harness's
    `initialized` notification arrives, and when the first `tools/list` the harness asked for is
-   answered. The first mark of each wins. The recorder's own `tools/list` call, which it makes to
+   answered. The first mark of each wins. _(Amended 2026-10-13: the handshake mark is also taken
+   when this server answers `server/discover`, the 2026-07-28 handshake, which never sends
+   `initialized`. See Consequences.)_ The recorder's own `tools/list` call, which it makes to
    weigh the surface (ADR 144), goes through the raw handler and never counts.
 2. `@musterd/protocol` gains `AdapterStartupSchema` `{ surface, initialize_ms, tools_list_ms }`. It
    rides the existing telemetry flush as an optional `startup` field, sent once per adapter session
    like `surface`. `initialize_ms` is null for a client that opens with `server/discover` and never
-   initializes.
+   initializes. _(Amended 2026-10-13: no longer null for that client; its `server/discover` reply is
+   the mark. Null now means neither handshake was seen.)_
 3. The daemon stores each launch as one append-only `mcp.startup_measured` audit row, replicated
    like `mcp.surface_rendered`. It is not in the churn class (ADR 478): those rows are kept for
    5 days, and the history is the measurement.
@@ -49,6 +52,12 @@ harnesses, after a change lands.
   musterd controls.
 - About 60 launches a day report on this team today (counted from `mcp.surface_rendered`), so about
   22,000 small rows a year.
+- _(2026-10-13, lane 01M4VSF497)_ The first three real Claude Code launches recorded
+  `initialize_ms` null. A wire capture showed why: Claude Code 2.1.296 negotiates 2026-07-28 and
+  opens with `server/discover`, so it never sends `initialized`. The handshake mark now also fires
+  when `server/discover` is answered, and `initialize_ms` means "handshake answered" on either era.
+  The schema is unchanged. A harness's rows come from one era in practice, so its percentile does
+  not mix the two.
 - The protocol change is additive: an older daemon ignores `startup` because the field is optional,
   and an older client reads a report without it.
 

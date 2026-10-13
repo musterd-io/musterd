@@ -82,7 +82,11 @@ export class ToolCallRecorder {
     return Math.round(this.opts.uptimeMs?.() ?? process.uptime() * 1000);
   }
 
-  /** The harness's `initialized` notification arrived (legacy era only — 2026-07-28 never sends it). */
+  /**
+   * The handshake was answered: the harness's `initialized` notification (2025 era) or this
+   * server's `server/discover` reply (2026-07-28, which never initializes — lane 01M4VSF497).
+   * Whichever comes first, once; `initialize_ms` on the wire.
+   */
   markInitialized(): void {
     this.initializedMs ??= this.uptime();
   }
@@ -231,6 +235,16 @@ export function instrumentToolTransport(server: McpServer, recorder: ToolCallRec
     const method = methodOf(args[0]);
     const handler = args[args.length - 1] as RequestHandler;
     if (typeof handler !== 'function') return original(...args);
+    if (method === 'server/discover') {
+      // Installed by serveStdio when it serves a connection, after this patch (ADR 584 amendment,
+      // lane 01M4VSF497): the 2026-07-28 handshake, the era Claude Code 2.1 negotiates by default.
+      const timed: RequestHandler = async (request, extra) => {
+        const result = await handler(request, extra);
+        recorder.markInitialized();
+        return result;
+      };
+      return original(...args.slice(0, -1), timed);
+    }
     if (method === 'tools/list') {
       // The recorder's own surface measurement calls the RAW handler, so it never marks startup;
       // only a listing the harness asked for over the transport does (ADR 584).
