@@ -140,3 +140,17 @@ export function projectWallBoard(
   }
   return WALL_COLUMNS.map((key) => byState.get(key)!);
 }
+
+/** How long a landed card swings before it hangs still, in seconds. */
+export const STICKY_SWAY_S = 1.1;
+
+/**
+ * The bottom-edge shear of a card that just landed, in board units (the top edge stays on its tape). Two
+ * swings that die away over about a second: the peak is ~4 units on a 17-unit card, which is ~2.7 px at
+ * a 1280-wide stage — the first cut peaked at 1.7 units (~1 px, gone in 0.3 s) and could not be seen.
+ * `undefined` (never landed this session) and anything past `STICKY_SWAY_S` are zero.
+ */
+export function stickySway(age: number | undefined): number {
+  if (age === undefined || age < 0 || age >= STICKY_SWAY_S) return 0;
+  return Math.sin(age * 14) * Math.exp(-age * 2.8) * 5.5;
+}
