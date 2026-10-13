@@ -776,3 +776,36 @@ machine, 75/75/75, no profiler, team `lb-run32`.
   run at a larger audience, is what says how much headroom there is.
 - **The second machine (lane 01M3Z4EMH3) is not needed to meet this budget at this audience.** It
   stays a capacity decision for a larger demo, not a latency fix. Nick decides that lane.
+
+## 2026-10-13 — Cloud runs 33–34: two repeats of run 32 miss the budget, on a half-size bench machine (lane 01M4SEH1NYRVQH1T3G91DKPDYH)
+
+Same staging build as run 32 (`dc09c35`, [ADR 573](../decisions/573-roster-base-shared-reads.md)),
+same app machine, Neon 1 CU, 75/75/75, no profiler, teams `lb-run33` and `lb-run34`. One difference
+the launcher did not flag: both runs drove the load from a `performance-2x` bench machine, where run 32
+used `performance-4x`.
+
+| run | bench machine | seed | p50 | p95 | p99 | requests (req/s) | errors | `GET /teams` p95 | `GET /teams` max | `/health` p95 / max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 | `performance-4x` | 37 s | 355 ms | **791 ms** | 1 203 ms | 66 306 (51.0) | 1 | 794 ms | 2.5 s | 231 ms / 983 ms |
+| 33 | `performance-2x` | 151 s | 175 ms | 1 341 ms | 7 081 ms | 54 594 (42.0) | 55 | 2 883 ms | 159 s | 199 ms / 14.8 s |
+| 34 | `performance-2x` | 37 s | 212 ms | 2 861 ms | 9 443 ms | 57 556 (44.3) | 45 | 4 778 ms | 115 s | 192 ms / 29.4 s |
+
+- **Headroom is not measured; the repeats are not comparable to run 32.** p50 fell (355 → 175 / 212 ms)
+  while p95 and p99 rose several times over and the maxima reached minutes. A saturated server raises
+  the median with the tail; a median that drops while the tail explodes is a client or path that
+  stalls between bursts. The halved bench machine is the one known change, and the ~45 errors per run
+  are mostly `net` and WS `1006` closes on the viewer rail, with a handful of edge `520`s — none are
+  app errors, and the app machine never restarted.
+- **`/health` max 14.8 s and 29.4 s with p95 under 200 ms.** The prober is the smallest request on
+  the path; a 30 s outlier on it with a flat p95 is a stall somewhere on the path, not a slow query.
+  Neon's logs for the window are empty and `pg_stat_statements` is not enabled, so the database side
+  cannot be ruled in or out from here.
+- **Run 33's seed took 151 s against 37 s** for the same 1 200 lanes; run 34's seed was back to 37 s
+  and its tail was worse. The two do not point the same way, which is what noise looks like.
+- **What run 32 still says.** The ADR 573 win is a 58% p95 drop on a matched machine, outside the
+  spread; nothing here contradicts it. What these runs withdraw is the "200 ms to spare" reading —
+  the budget margin is unmeasured until a repeat on a `performance-4x` bench machine.
+- Falsify: run 35 on `performance-4x`, same build and shape, lands a p95 above 1 000 ms. Then the
+  bench machine was not the cause and the app's tail under this load needs a profile.
+- Follows-up: a `performance-4x` repeat (run 35), and the launcher should print the bench machine size
+  in the run header so a size change is never silent again.
