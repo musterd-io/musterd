@@ -299,6 +299,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   // ── Save desire BEFORE reconciliation (ADR 282): a stop right after this leaves honest intent. ──
   const converted = saveLocalState(ctx, { workspace, binding, provisioning }, desired);
   out(`${theme.ok('✓')} desired harnesses: ${desired.length > 0 ? desired.join(', ') : '(none)'}`);
+  out(pc.dim(`  ${deltaLine(current, desired)}`));
 
   const report = await reconcileHarnesses(ctx, desired, {
     legacyRepair: true, // the ONE caller allowed to: the human just confirmed the complete set
@@ -308,6 +309,18 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
   if (report.ok) out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);
   return report.ok ? 0 : 1;
+}
+
+/** What this save changed against the prior set — so an Enter that toggled nothing (the picker only
+ *  toggles on space) is visible as `no change`, not mistaken for the selection the human meant. */
+export function deltaLine(before: string[], after: string[]): string {
+  const added = after.filter((id) => !before.includes(id));
+  const removed = before.filter((id) => !after.includes(id));
+  if (added.length === 0 && removed.length === 0) return 'no change from the previous set';
+  return [
+    ...(added.length > 0 ? [`added ${added.join(', ')}`] : []),
+    ...(removed.length > 0 ? [`removed ${removed.join(', ')}`] : []),
+  ].join(' · ');
 }
 
 function renderResult(r: ReconcileResult): string {
@@ -345,7 +358,8 @@ async function promptSelection(
   current: string[],
 ): Promise<string[] | null> {
   const picked = await p.multiselect({
-    message: "Which harnesses should launch this worktree's member?",
+    message:
+      "Which harnesses should launch this worktree's member? (space toggles, enter confirms)",
     options: registry.map((a) => {
       const avail = availability.get(a.id);
       return {
