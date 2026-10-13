@@ -809,3 +809,35 @@ used `performance-4x`.
   bench machine was not the cause and the app's tail under this load needs a profile.
 - Follows-up: a `performance-4x` repeat (run 35), and the launcher should print the bench machine size
   in the run header so a size change is never silent again.
+
+## 2026-10-13 — Cloud run 35: the half-size bench machine was the tail; p95 439 ms on `performance-4x`, under a lighter viewer load (lane 01M4V58WNBXVK272FN6KQ6Y9JD)
+
+Same build (`dc09c35`), app machine (`performance-1x` / 2 GB), Neon 1 CU and shape (75/75/75, ramp
+1 000 s, duration 1 300 s) as runs 32–34; the bench machine back on `performance-4x` / 8 GB, team
+`lb-run35`.
+
+| run | bench machine | p50 | p95 | p99 | requests (req/s) | errors | `GET /teams` calls / p95 / max | `/health` p95 / max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 | `performance-4x` | 355 ms | 791 ms | 1 203 ms | 66 306 (51.0) | 1 | 30 481 / 794 ms / 2.5 s | 231 ms / 983 ms |
+| 33 | `performance-2x` | 175 ms | 1 341 ms | 7 081 ms | 54 594 (42.0) | 55 | 21 031 / 2 883 ms / 159 s | 199 ms / 14.8 s |
+| 34 | `performance-2x` | 212 ms | 2 861 ms | 9 443 ms | 57 556 (44.3) | 45 | 22 731 / 4 778 ms / 115 s | 192 ms / 29.4 s |
+| 35 | `performance-4x` | 247 ms | **439 ms** | 566 ms | 47 474 (36.5) | 79 | 17 090 / 454 ms / 7.7 s | 209 ms / 7.4 s |
+
+- **The minute-long tails were the bench machine.** On `performance-4x` the maxima drop from 115–159 s
+  to under 8 s on every route but one (`interrupt-check` max 40 s, a single request), and p99 is 566 ms
+  against 7–9 s. Runs 33–34's falsifier did not fire: the app's tail under this load does not need a
+  profile on this evidence.
+- **Not a clean repeat of run 32, and not a headroom number.** Run 35 carried 28% fewer requests
+  (36.5 req/s against 51.0) because 46 viewer sockets closed with `1006` during the run and 21 roster
+  reads failed at the network, so the roster rail did 17 090 reads against 30 481. The 79 errors are
+  all `net` / WS close plus two `401`s; none are app errors and the app machine did not restart. A
+  lighter roster load is the likeliest reason p95 sits at 439 ms rather than ~790 ms, so the
+  honest reading is "under the budget on both 4x runs", not "350 ms to spare".
+- **The viewer-socket drops are now the open question.** Runs 32 and 35 ran the same bench size and
+  shape; run 32 lost one request, run 35 lost 46 sockets. Nothing in the app changed between them.
+  That points at the edge (Cloudflare → Fly) or the bench's own WS client, and it is worth a run that
+  records *when* the closes happened rather than only how many.
+- Falsify: a run 36 on `performance-4x` with 0–5 WS closes lands a p95 above 850 ms. Then run 35's
+  439 ms was the light load, and the budget margin on one app core is thin after all.
+- Follows-up: run 36 as above, with the bench logging each WS `1006` close with a timestamp and the
+  viewer's reconnect outcome.
