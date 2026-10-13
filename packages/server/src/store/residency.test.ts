@@ -441,6 +441,77 @@ withDrivers('residency', (o, kind) => {
       );
     });
 
+    /**
+     * ADR 576: the derivation runs outside any transaction, so the guarantee is the per-seat recheck
+     * plus `idx_wake_leases_one_live`. Two polls started together must still lease a seat once.
+     */
+    it('two polls started together lease the seat once between them', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+
+      const [a, b] = await Promise.all([
+        claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS),
+        claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS),
+      ]);
+      expect(a.length + b.length).toBe(1);
+      const live = await db.all<{ id: string }>(
+        "SELECT id FROM wake_leases WHERE member_id = ? AND status = 'leased'",
+        [ada.id],
+      );
+      expect(live).toHaveLength(1);
+    });
+
+    it('the schema refuses a second live lease for one seat (ADR 576 §3)', async () => {
+      const { db, team, ada } = await seed();
+      const insert = (id: string, status: string) =>
+        db.run(
+          `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+           VALUES (?, ?, ?, NULL, NULL, ?, 'immediate', ?, 1, 2, NULL, NULL)`,
+          [id, team.id, ada.id, HOST, status],
+        );
+      await insert('l1', 'leased');
+      await insert('l2', 'reported');
+      await expect(insert('l3', 'leased')).rejects.toThrow();
+    });
+
+    it('holds a transaction only for a seat it writes, a few statements long (ADR 576 §2)', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await enroll(db, team, ada);
+      await enroll(db, team, bob);
+      await msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+      await msg(db, team, nick, bob, 'request_help', 'rh1', 1_000);
+
+      const txStatements: number[] = [];
+      const realTx = db.tx.bind(db);
+      db.tx = (<T>(fn: (t: Driver) => Promise<T>) =>
+        realTx((t) => {
+          let n = 0;
+          const counted = new Proxy(t, {
+            get(target, key, recv) {
+              const v = Reflect.get(target, key, recv) as unknown;
+              if (key === 'get' || key === 'all' || key === 'run')
+                return (...args: unknown[]) => {
+                  n++;
+                  return (v as (...a: unknown[]) => unknown).apply(target, args);
+                };
+              return typeof v === 'function' ? (v as () => unknown).bind(target) : v;
+            },
+          });
+          return fn(counted).finally(() => txStatements.push(n));
+        })) as Driver['tx'];
+
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.map((o) => o.seat).sort()).toEqual(['Ada', 'bob']);
+      // One transaction per seat that got an order; each is the recheck, the insert and its audit.
+      expect(txStatements).toHaveLength(2);
+      for (const n of txStatements) expect(n).toBeLessThanOrEqual(8);
+    });
+
     it('derives nothing for a host the seat is not enrolled to (last-enrolled-wins)', async () => {
       const { db, team, nick, ada } = await seed();
       await enroll(db, team, ada, 'host-a');
@@ -1891,6 +1962,9 @@ withDrivers('residency', (o, kind) => {
 
       // Past the horizon the wake is not eligible — so the thread id is not sent either.
       const late = REPLY_TS + WAKE_POLICY_DEFAULTS.resume_eligible_ms + 1;
+      // The first lease is long expired; the reaper marks it so before the seat can be leased again
+      // (ADR 576 §3: an expired lease holds the seat's one live slot until it is reaped).
+      await expireWakeLeases(db, late);
       const [stale] = await claimWakeLeases(
         db,
         team.id,

@@ -1,6 +1,6 @@
 # 576 — The wake-lease claim derives outside the transaction and writes in a short one
 
-- Status: proposed
+- Status: accepted (2026-10-12, nick, in chat: "yes")
 - Date: 2026-10-12
 - Deciders: nick, wallow
 - Lane: `01M4SDYXKC1X36W3SXBFK1YTAB`
@@ -65,7 +65,7 @@ fixed by #2440 (lane 01M4S0ZAG8); this is what remains on a large team.
    on SQLite and Postgres alike. The insert in decision 2 uses `ON CONFLICT DO NOTHING` and drops
    the seat's order if no row was inserted. A lease past its expiry but not yet reaped still holds
    the slot until the reaper's next pass marks it `expired`, which delays that seat's next wake by
-   at most one reaper interval; it never allows two.
+   at most one reaper interval (`REAPER_INTERVAL_MS`, 15 s); it never allows two.
 
 ## Consequences
 
@@ -76,9 +76,10 @@ fixed by #2440 (lane 01M4S0ZAG8); this is what remains on a large team.
 - The derivation sees no single snapshot across seats. That is safe because each seat's plan
   depends only on that seat's rows and team-wide settings, and the per-seat recheck covers the
   rows that matter for exclusion.
-- The migration fails if a store already holds two `leased` rows for one member. Before it creates
-  the index it marks every such row but the newest `expired`; the reaper's `wake_failed` path never
-  sees those, so the rows are recorded by one `residency.lease_deduped` audit row each.
+- The index cannot be built while a store holds two `leased` rows for one member, so the migration
+  first marks every such row but the newest `expired`. Those rows bypass the reaper, so they write
+  no `residency.wake_failed` and spend no rate budget; at worst one act gets one retry more. The
+  hub's store had none on 2026-10-12.
 - ADR 131 §4's claim that "two hosts, a crash mid-spawn, or a re-poll race can never double-spawn
   a seat" held on SQLite and did not hold on Postgres; the ledger entry is
   `docs/claims/entries/2026-10-12-one-transaction-prevents-double-spawn.md`. No double spawn has
