@@ -62,7 +62,8 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   **procedural jointed skeleton** (ADR 133 — `skeleton.ts` solves the joints, `character.ts` paints them):
   a distance-driven walk cycle, a seated pose with the hands typing on the desk, and eased sit/stride
   blends. ADR 086 layers ambient life (idle strolls, gestures) on top — since ADR 464 lane 4 a
-  `working` member keeps their desk (micro-gestures only; errands and desk chats go to members
+  `working` member keeps their desk (micro-gestures only; errands, desk chats and the aisle meet — two
+  idle members get up, meet between their desks, talk and go back (nick, 2026-10-12) — go to members
   between tasks, `ambientSeed.ts` `ambientPool`), a purposeful walk wears its verb over the plate
   (`headline.ts` `walkTag`: "handing off → dolly"), and `live/OfficeKey.tsx` says how to read the
   room in one closable corner card; the scene idle-parks to 0 rAF/sec

@@ -114,6 +114,10 @@ export type AmbientDecision =
   | { kind: 'none' }
   | { kind: 'pet' }
   | { kind: 'pair'; a: string; b: string }
+  /** Two idle members meet in the aisle for a word and go back (nick, 2026-10-12: the room should
+   *  read as a team, not parallel solo workers). Both come from `errands` — a working member's
+   *  screen is the point. */
+  | { kind: 'meet'; a: string; b: string }
   | { kind: 'member'; who: string };
 
 /**
@@ -183,6 +187,14 @@ export function decideAmbient(team: string, slot: number, pool: AmbientPool): Am
   if (pairs.length && roll(team, slot, 'pair') < 0.22) {
     const [a, b] = pairs[Math.floor(roll(team, slot, 'pair-pick') * pairs.length)]!;
     return { kind: 'pair', a, b };
+  }
+  // The aisle meet: two of the errand-free, picked without replacement. 0.18 among what is left so
+  // the single-member beats still carry the room.
+  const free = [...(pool.errands ?? members)].sort();
+  if (free.length >= 2 && roll(team, slot, 'meet') < 0.18) {
+    const i = Math.floor(roll(team, slot, 'meet-a') * free.length);
+    const j = (i + 1 + Math.floor(roll(team, slot, 'meet-b') * (free.length - 1))) % free.length;
+    return { kind: 'meet', a: free[i]!, b: free[j]! };
   }
   return { kind: 'member', who: members[Math.floor(roll(team, slot, 'actor') * members.length)]! };
 }

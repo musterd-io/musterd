@@ -530,6 +530,9 @@ export interface Actors {
    * members, free, and actually next to each other.
    */
   deskChat(a: string, b: string, rng?: () => number): boolean;
+  /** Two idle desk members get up, meet in the aisle between their desks, talk a few seconds, and
+   *  go back (nick, 2026-10-12). Ambient — yields to any real act. False if either is not free. */
+  aisleMeet(a: string, b: string, rng?: () => number): boolean;
   /** Pairs of seated, free desk members sitting side by side in the same pod row — the candidates for
    * `deskChat`. Empty when nobody has a neighbour to turn to. */
   deskNeighbours(): Array<[string, string]>;
@@ -1469,6 +1472,63 @@ export function createActors(): Actors {
       };
       walks.set(a, { legs: turn(ha, hb, true), i: 0, t: 0, small: false, ambient: true });
       walks.set(b, { legs: turn(hb, ha, false), i: 0, t: 0, small: false, ambient: true });
+      return true;
+    },
+    aisleMeet(a, b, rng = Math.random) {
+      const ta = errandStart(a);
+      const tb = errandStart(b);
+      if (!ta || !tb || a === b || gestures.has(a) || gestures.has(b)) return false;
+      const ha = ta.home;
+      const hb = tb.home;
+      // Where they meet: the walkable end of a's route toward the midpoint, which the nav grid nudges
+      // into the aisle when the midpoint lands in a desk. b stops one body short of a, so they stand
+      // facing each other with air between — not inside each other.
+      const mid = { lx: (ha.lx + hb.lx) / 2, ly: (ha.ly + hb.ly) / 2 };
+      const avoid = othersAt(a).filter((p) => p.lx !== hb.lx || p.ly !== hb.ly);
+      const outA = legsAlong(findPath({ lx: ha.lx, ly: ha.ly }, mid, avoid), ERRAND_SPEED, 1.2, 5, null);
+      const standA = outA.length ? endOf(outA) : { lx: ha.lx, ly: ha.ly };
+      const pathB = findPath({ lx: hb.lx, ly: hb.ly }, standA, avoid);
+      if (pathB.length > 1) pathB.pop(); // the last cell is a's spot — stop short of it
+      const outB = legsAlong(pathB, ERRAND_SPEED, 1.2, 5, null);
+      const standB = outB.length ? endOf(outB) : { lx: hb.lx, ly: hb.ly };
+      if (Math.hypot(standA.lx - standB.lx, standA.ly - standB.ly) > 60) return false; // never met
+      const dur = CHAT_S[0] + rng() * (CHAT_S[1] - CHAT_S[0]);
+      const [first, second] = EXCHANGES[Math.floor(rng() * EXCHANGES.length)] ?? EXCHANGES[0]!;
+      const faceA = travelDir(standA.lx, standA.ly, standB.lx, standB.ly);
+      const faceB = travelDir(standB.lx, standB.ly, standA.lx, standA.ly);
+      // b arrives later (a longer route, usually); a waits facing the way b comes. Then the same
+      // alternating exchanges the desk chat uses, and both walk home.
+      const tA = outA.reduce((s, l) => s + l.dur, 0);
+      const tB = outB.reduce((s, l) => s + l.dur, 0);
+      const wait = Math.max(0, tB - tA);
+      const backA = legsAlong(findPath(standA, { lx: ha.lx, ly: ha.ly }, avoid), ERRAND_SPEED, 1.2, 5, null);
+      const backB = legsAlong(findPath(standB, { lx: hb.lx, ly: hb.ly }, avoid), ERRAND_SPEED, 1.2, 5, null);
+      walks.set(a, {
+        legs: [
+          ...outA,
+          hold(standA, faceA, wait + 0.2, {}),
+          hold(standA, faceA, dur * 0.45, { overlay: first }),
+          hold(standA, faceA, dur * 0.55, { overlay: second }),
+          ...backA,
+        ],
+        i: 0,
+        t: 0,
+        small: false,
+        ambient: true,
+      });
+      walks.set(b, {
+        legs: [
+          ...outB,
+          hold(standB, faceB, Math.max(0, tA - tB) + 0.2, {}),
+          hold(standB, faceB, dur * 0.45, { overlay: second }),
+          hold(standB, faceB, dur * 0.55, { overlay: first }),
+          ...backB,
+        ],
+        i: 0,
+        t: 0,
+        small: false,
+        ambient: true,
+      });
       return true;
     },
     gestureBeat(from, kind) {

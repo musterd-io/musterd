@@ -369,7 +369,7 @@ export interface OfficeHandle {
 /** @see OfficeHandle.ambientLog */
 export interface AmbientLogEntry {
   slot: number;
-  kind: 'pet' | 'pair' | 'member';
+  kind: 'pet' | 'pair' | 'meet' | 'member';
   who?: string;
   pair?: [string, string];
   /** Whether THIS browser's local guards let the beat run — the one honest per-viewer field. */

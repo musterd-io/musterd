@@ -2115,6 +2115,12 @@ export function mountOffice(
         const played = actors.deskChat(decision.a, decision.b, slotRng(teamName, slot, 'chat'));
         logAmbient({ slot, kind: 'pair', pair: [decision.a, decision.b], played });
         if (played) ensureLoop();
+      } else if (decision.kind === 'meet') {
+        // The aisle meet (nick, 2026-10-12): two idle members get up, meet between their desks, talk,
+        // and go back — the room reading as a team rather than parallel solo workers.
+        const played = actors.aisleMeet(decision.a, decision.b, slotRng(teamName, slot, 'meet'));
+        logAmbient({ slot, kind: 'meet', pair: [decision.a, decision.b], played });
+        if (played) ensureLoop();
       } else if (decision.kind === 'member') {
         const played = playAmbientBeat(
           decision.who,
