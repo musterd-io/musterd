@@ -585,8 +585,8 @@ export async function arbitrateClaim(
 /**
  * Joiner side, every ownership/state edge. Returns the hub's lane on success — and, on a terminal
  * edge, the close verdict the hub recorded. Throws
- * `ClaimRefusedError` on a 409 with the hub's holder/state, `SeatBoundElsewhereError` on a 403,
- * the hub's own `MusterdError` on a 400/422 (it judged the caller's patch), `HubUnreachableError`
+ * `ClaimRefusedError` on a 409 with the hub's holder/state, `SeatBoundElsewhereError` on a 403
+ * naming the node, the hub's own `MusterdError` on a 400/403/422 (it judged the caller's patch), `HubUnreachableError`
  * when no answer came, and a plain Error for anything the hub answered that is none of those — an
  * upgrade skew, say — so it surfaces as a fault, not a refusal.
  */
@@ -628,10 +628,12 @@ export async function patchAtHub(
       );
     }
   }
-  if (res.status === 400 || res.status === 422) {
+  if (res.status === 400 || res.status === 403 || res.status === 422) {
     // The hub judged the patch itself — the caller's own input, forwarded unchanged — and its
     // sentence carries the repair (ADR 487's follows_up, a missing goal). Relayed as-is; as a plain
-    // Error it reached the caller as a bare 500 (lane 01M4S1GJJ6).
+    // Error it reached the caller as a bare 500 (lane 01M4S1GJJ6). A 403 that is not the
+    // bound-elsewhere refusal above is the hub's `forbidden` — ADR 466's "only a human may park",
+    // whose sentence points an agent at `blocked` (lane 01M4VC3EPZ).
     const refusal = ErrorBodySchema.safeParse(body);
     if (refusal.success && ERROR_HTTP_STATUS[refusal.data.error.code] === res.status) {
       throw new MusterdError(refusal.data.error.code, refusal.data.error.message);

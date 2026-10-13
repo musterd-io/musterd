@@ -1,4 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
@@ -16,6 +18,7 @@ import { touchAmbientPresence } from '../store/presence.js';
 import { claimWakeLeases, enrollResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
+import { patchAtHub } from './claim.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
 
@@ -937,5 +940,28 @@ withDrivers('claim', (_o, kind) => {
         (await openDirectedLedger(hub.store, (await hubTeam()).id)).map((d) => d.id),
       ).not.toContain(handoffId);
     });
+  });
+});
+
+describe("patchAtHub relays the hub's forbidden refusal (lane 01M4VC3EPZ)", () => {
+  it('a 403 forbidden reaches the caller as that refusal, not a 500', async () => {
+    // slippy on Air 2, 2026-10-13: an agent's park came back "internal server error" while the hub
+    // had answered 403 with ADR 466's repair (set it `blocked`).
+    const message = 'only a human may park lane "L1" — set it `blocked` and say why in its detail';
+    const stub = createHttpServer((_req, res) => {
+      res.writeHead(403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 'forbidden', message } }));
+    });
+    await new Promise<void>((r) => stub.listen(0, '127.0.0.1', r));
+    try {
+      const hubUrl = `http://127.0.0.1:${(stub.address() as AddressInfo).port}`;
+      const err = await patchAtHub({ hub_url: hubUrl, credential: 'msnode_test' }, 'bravo', {
+        lane: 'L1',
+        seat: 'slippy',
+      } as unknown as Parameters<typeof patchAtHub>[2]).catch((e: unknown) => e);
+      expect(err).toMatchObject({ code: 'forbidden', message });
+    } finally {
+      await new Promise<void>((r) => stub.close(() => r()));
+    }
   });
 });
