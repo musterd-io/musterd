@@ -21,7 +21,7 @@ import {
 import { IdleWake } from './idleWake/decider.js';
 import { injectAdapterFor } from './idleWake/inject.js';
 import { markersFor, readIdleWakeState } from './idleWake/state.js';
-import { readAndConsumeResolution, writePendingMarker } from './pending.js';
+import { clearPendingMarker, readAndConsumeResolution, writePendingMarker } from './pending.js';
 import { instrumentToolRepair } from './repair.js';
 import { scopeToolSurface } from './scope.js';
 import { instrumentTools, recordAdapterInitialization, startMcpTelemetry } from './telemetry.js';
@@ -429,7 +429,13 @@ async function main(): Promise<void> {
   // Off by default: a no-op unless the operator set an OTLP endpoint (ADR 089 / ADR 015 posture).
   const telemetry = await startMcpTelemetry(config);
   const client = new MusterdClient(config);
-  await bind(client); // dormant: reachability only, no presence claimed
+  // Dormant: reachability only, no presence claimed. Lane 01M4S9SFDR: the round trip runs beside the
+  // transport instead of in front of it — awaited before this function returns, so an unreachable
+  // daemon still fails the start, but `initialize` and `tools/list` no longer wait 70–190 ms on the
+  // network. Nothing they serve depends on it; every tool reaches the daemon on its own call.
+  const bound = bind(client);
+  // Settled at the end of main(); this only keeps an early rejection from reading as unhandled.
+  bound.catch(() => {});
   // A session that starts unclaimed is a pending presence — drop a marker so `musterd claim` can
   // find it (ADR 033) and watch for an external claim that brings it online live (ADR 034).
   let stopWatcher: (() => void) | undefined;
@@ -504,6 +510,16 @@ async function main(): Promise<void> {
   // A no-op when the cache is off. Absent before Node 22.10, hence the default import: a named import
   // of a missing builtin export fails at link time and the adapter would never start.
   nodeModule.flushCompileCache?.();
+
+  try {
+    await bound;
+  } catch (err) {
+    // The marker went down before the check settled; a start that fails must not leave a pending
+    // session behind for `musterd claim` to offer.
+    stopWatcher?.();
+    clearPendingMarker(config);
+    throw err;
+  }
 }
 
 /** Start the stdio adapter. The bundle's launcher (`launch.ts`, ADR 577) calls this. */

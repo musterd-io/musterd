@@ -1,6 +1,8 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { isBuiltin } from 'node:module';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,4 +190,58 @@ describe('the published runtime graph', () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it('answers initialize while the daemon reachability check is still in flight (lane 01M4S9SFDR)', async () => {
+    // main() used to await bind() — one GET /health — before the transport started, so every
+    // harness's `initialize` waited 70–190 ms on the network. A daemon that never answers /health
+    // makes the old order hang outright; the new one must answer anyway.
+    const held: import('node:http').ServerResponse[] = [];
+    const daemon = createServer((_req, res) => void held.push(res));
+    await new Promise<void>((r) => daemon.listen(0, '127.0.0.1', r));
+    const port = (daemon.address() as AddressInfo).port;
+    const home = mkdtempSync(join(tmpdir(), 'musterd-mcp-bind-'));
+    const child = spawn(process.execPath, [join(dist, 'index.js')], {
+      cwd: home,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        PATH: process.env['PATH'] ?? '',
+        HOME: home,
+        MUSTERD_CONFIG: join(home, 'config.json'),
+        MUSTERD_TEAM: 't',
+        MUSTERD_SERVER: `http://127.0.0.1:${port}`,
+        MUSTERD_LAUNCH_SURFACE: 'claude-code',
+      },
+    });
+    try {
+      const reply = new Promise<string>((resolveReply, reject) => {
+        let out = '';
+        child.stdout.on('data', (b: Buffer) => {
+          out += b.toString();
+          if (out.includes('\n')) resolveReply(out);
+        });
+        child.on('exit', (code) => reject(new Error(`adapter exited ${code} before replying`)));
+      });
+      child.stdin.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'bind-test', version: '0' },
+          },
+        }) + '\n',
+      );
+      const line = JSON.parse((await reply).split('\n')[0]!) as { id: number; result?: unknown };
+      expect(line.id).toBe(1);
+      // The daemon never answered /health (the client sets no timeout on it), so bind was pending.
+      expect(line.result).toBeDefined();
+    } finally {
+      child.kill();
+      for (const res of held) res.destroy();
+      await new Promise<void>((r) => daemon.close(() => r()));
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 20_000);
 });

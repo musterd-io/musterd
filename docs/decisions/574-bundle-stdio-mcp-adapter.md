@@ -105,6 +105,11 @@ nor what the CLI imports.
     generation. Follows-up: 01M4S9SCT5AZ1QADVAXB8S425A
   - `bind()` holds the stdio transport until a daemon round trip returns.
     Follows-up: 01M4S9SFDR6E94Y623V3MC3K2A
+  - _(2026-10-13)_ Done in lane 01M4S9SFDR: `bind()` runs beside the transport and is awaited at
+    the end of `main()`, so an unreachable daemon still fails the start. The saving is one
+    `/health` round trip. On a local daemon that is about 15 ms: spawn → `initialize` median 461 →
+    445 ms, 10 interleaved runs, load 32 on 8 cores. The 70–190 ms above was measured under load
+    65–105, and the saving is larger against a remote hub.
   - `module.enableCompileCache()` measured a further ~100 ms off the bundle, but it writes a cache
     directory and needs its own decision. Follows-up: 01M4S9SJJPTD1J6SM2RG8R5DH7
   - _(2026-10-12)_ Decided in ADR 577: enabled. Remeasured on a quiet machine the saving is about
