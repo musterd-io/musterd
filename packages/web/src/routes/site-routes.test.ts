@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { blogEntries, llmsTxt, siteUrls } from '../../scripts/site-files';
-import { DAEMON_ROUTES, PUBLIC_ALLOW } from '../../scripts/stage-allowlist.mjs';
+import { DAEMON_ONLY_SOURCES, DAEMON_ROUTES, PUBLIC_ALLOW } from '../../scripts/stage-allowlist.mjs';
 import { WATCH_COPY } from '../components/site/watchCopy';
 import { SITE_ORIGIN, absoluteUrl } from '../brand/siteMeta';
 
@@ -222,5 +223,56 @@ describe('one spelling of a URL returns 200, and it is the one we publish', () =
     // would return 200 and the shell would boot — an unbounded supply of duplicates for every page,
     // which is the ADR 132 daemon-route leak and this canonical problem at the same time.
     expect(wrangler).toMatch(/"not_found_handling":\s*"none"/);
+  });
+});
+
+/**
+ * `musterd service site-gap` does not count a commit that touches only DAEMON_ONLY_SOURCES (lane
+ * 01M4VA7NQG). That is only true while no page the public origin can serve is built from them, so
+ * this walks the import graph from every route file that is not a daemon route (plus `__root`) and
+ * fails on the first path into `src/live` or a daemon route. A homepage that imports an office
+ * component is welcome — and this test is the line that makes it say "then site-gap must count it".
+ */
+describe('no public route is built from a daemon-only source', () => {
+  const SRC = fileURLToPath(new URL('..', import.meta.url));
+  const WEB = dirname(SRC);
+  const routesDir = join(SRC, 'routes');
+  const isDaemonRoute = (f: string) => DAEMON_ROUTES.some((r) => f.startsWith(`${r}.`));
+  const daemonOnly = (abs: string) => {
+    const rel = relative(WEB, abs);
+    return DAEMON_ONLY_SOURCES.some((p) =>
+      p.endsWith('.*') ? rel.startsWith(p.slice(0, -1)) : rel === p || rel.startsWith(`${p}/`),
+    );
+  };
+  const resolveImport = (from: string, spec: string): string | null => {
+    const base = join(dirname(from), spec);
+    for (const c of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')])
+      if (existsSync(c) && statSync(c).isFile()) return c;
+    return null;
+  };
+  const IMPORT = /(?:from\s+|import\s*\(\s*|^\s*import\s+)['"](\.{1,2}\/[^'"]+)['"]/gm;
+
+  it('derives one exclusion per daemon route, plus src/live', () => {
+    expect(DAEMON_ONLY_SOURCES).toEqual(['src/live', ...DAEMON_ROUTES.map((r) => `src/routes/${r}.*`)]);
+  });
+
+  const entries = readdirSync(routesDir).filter(
+    (f) => /\.tsx?$/.test(f) && !f.includes('.test.') && !isDaemonRoute(f),
+  );
+  it.each(entries)('%s reaches no daemon-only source', (entry) => {
+    const seen = new Set<string>();
+    const queue: [string, string[]][] = [[join(routesDir, entry), [entry]]];
+    while (queue.length) {
+      const [file, trail] = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const m of readFileSync(file, 'utf8').matchAll(IMPORT)) {
+        const next = resolveImport(file, m[1]!);
+        if (!next) continue;
+        const step = [...trail, relative(SRC, next)];
+        expect(daemonOnly(next), `public route reaches daemon-only code: ${step.join(' → ')}`).toBe(false);
+        queue.push([next, step]);
+      }
+    }
   });
 });

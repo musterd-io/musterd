@@ -43,12 +43,27 @@ export interface SiteGap {
 
 /**
  * The paths whose commits count as "the site changed". `packages/web` is the whole public artifact
- * — routes, content, the docs manifest and the site-files plugin all live under it — and the
- * daemon-only routes share the same package, so a `/live`-only commit is counted too. That is the
- * conservative side: a false "behind" costs miley one glance at the list; a false "current" is the
+ * — routes, content, the docs manifest and the site-files plugin all live under it. The conservative
+ * side still holds: a false "behind" costs miley one glance at the list; a false "current" is the
  * exact defect this instrument exists to end.
+ *
+ * _(2026-10-13, lane 01M4VA7NQG)_ The daemon-only sources inside it are excluded — see
+ * {@link sitePathspecs}. Counting them asked nick for two deploys that changed nothing public
+ * (#2480, #2485: `src/live` only). They are excluded by a list the deploy itself decides
+ * (`stage-allowlist.mjs` `DAEMON_ONLY_SOURCES`), never one written here, so a false "current" can
+ * only come from a public page importing daemon code, which `site-routes.test.ts` refuses.
  */
 export const SITE_PATHS = ['packages/web'] as const;
+
+/**
+ * The `git log` pathspecs: {@link SITE_PATHS}, minus each daemon-only source (relative to
+ * `packages/web`, as `DAEMON_ONLY_SOURCES` gives them). A commit that also touches anything
+ * outside those still counts. An empty list — the allowlist could not be read — counts everything,
+ * which is the old, conservative answer.
+ */
+export function sitePathspecs(daemonOnly: readonly string[]): string[] {
+  return [...SITE_PATHS, ...daemonOnly.map((p) => `:(exclude)packages/web/${p}`)];
+}
 
 export interface GitReader {
   /** Does this ref resolve to a commit in the local object store? */
@@ -61,13 +76,14 @@ export function computeSiteGap(
   marker: DeployedMarker | null,
   tip: string,
   git: GitReader,
+  daemonOnly: readonly string[] = [],
 ): SiteGap {
   if (!marker || !marker.ref) return { status: 'no_marker', deployed: null, tip, behind: [] };
   const deployed = marker.ref;
   const sha = deployed.replace(/-dirty$/, '');
   if (!git.hasCommit(sha)) return { status: 'unknown_ref', deployed, tip, behind: [] };
   const behind = git
-    .logRange(sha, tip, SITE_PATHS)
+    .logRange(sha, tip, sitePathspecs(daemonOnly))
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
     .map((l) => {
