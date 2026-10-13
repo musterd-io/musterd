@@ -1369,8 +1369,9 @@ async function applyAcceptanceAck(
 
 /**
  * ADR 545 — the reply answered a `lane_review` ask that a re-route (named, departed or reaped)
- * already superseded, on a lane still awaiting acceptance: what it answered and which ask binds now.
- * `undefined` for anything else, including a live ask — the verdict path handles those.
+ * already superseded, or that a newer review ask on the lane replaced (lane 01M4VH00A8), on a lane
+ * still awaiting acceptance: what it answered and which ask binds now. `undefined` for anything
+ * else, including the live ask — the verdict path handles those.
  */
 async function supersededLaneReview(
   ctx: Ctx,
@@ -1391,7 +1392,16 @@ async function supersededLaneReview(
   if (!laneId) return;
   const lane = await getLane(ctx.db, team.id, laneId, team.slug);
   if (!lane || !isAwaitingAcceptance(lane.state)) return;
-  if (!(await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId)) return;
+  // Two ways an ask stops being the one that binds: a re-route closed it, or a newer review ask
+  // was minted on the lane (a resubmit, or the stage-two human ask). Lane 01M4VH00A8: a second
+  // decline on an ask already answered before a resubmit sent the resubmitted lane back to active,
+  // and the reviewer's accept on the live ask 4 s later then moved nothing (lane 01M4V95YGT,
+  // 2026-10-13).
+  if (
+    !(await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId) &&
+    (await newestLaneReviewAsk(ctx, team, laneId)) === repliedToId
+  )
+    return;
   const current = await openAcceptanceAsk(ctx.db, team.id, laneId);
   log.info({ msg: 'acceptance_reply_on_superseded_ask', lane: laneId, ask: repliedToId });
   return {
@@ -1399,6 +1409,21 @@ async function supersededLaneReview(
     ask: repliedToId,
     current: current ? { ask: current.id, reviewer: current.to } : null,
   };
+}
+
+/** The lane's most recent `lane_review` ask, answered or not — the only one a verdict can bind to. */
+async function newestLaneReviewAsk(
+  ctx: Ctx,
+  team: TeamRow,
+  laneId: string,
+): Promise<string | undefined> {
+  const row = await ctx.db.get<{ id: string }>(
+    `SELECT id FROM messages
+        WHERE team_id = ? AND act = 'ask' AND json_extract(meta, '$.lane_review.lane') = ?
+        ORDER BY ts DESC, id DESC LIMIT 1`,
+    [team.id, laneId],
+  );
+  return row?.id;
 }
 
 /**
