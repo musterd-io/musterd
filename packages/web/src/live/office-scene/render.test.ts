@@ -1525,6 +1525,22 @@ describe('background layer (sprite cache)', () => {
     expect(draw(taken)).not.toEqual(draw(plain));
   });
 
+  it('empty slots keep their tack holes, so a used board reads as used (L5)', () => {
+    const draw = (w: WallBoard) => {
+      const r = recordingCtx();
+      drawWalls(r.ctx, fit, env, schedule, w, 3, 'live');
+      return fmtOps(r.ops);
+    };
+    const full = board();
+    const emptied: WallBoard = full.map((c) => ({ ...c, stickies: [] }));
+    // Taking every card off the wall must not leave a blank cork: each of the six columns shows STICKY_CAP
+    // holes, and a column with cards shows one fewer hole per card (the card hangs where the hole is).
+    const holeFills = (ops: string[]) => ops.filter((o) => o.includes('rgba(52, 28, 8, 0.75)')).length;
+    const cards = full.reduce((n, c) => n + c.stickies.length, 0);
+    expect(holeFills(draw(emptied))).toBeGreaterThanOrEqual(full.length * STICKY_CAP);
+    expect(holeFills(draw(emptied)) - holeFills(draw(full))).toBe(cards);
+  });
+
   it('the live slice paints the clock, the sign and the board and nothing else', () => {
     const live = recordingCtx();
     drawWalls(live.ctx, fit, env, schedule, board(), 3, 'live');

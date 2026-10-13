@@ -909,7 +909,7 @@ function wallLaneBoard(
       const r = mid + noteW / 2 + ja;
       if (col.stickies[s]!.taken) {
         // The tape took the paper with it, but the tack stays: one dark pin hole where the card hung.
-        rect(mid + ja - 0.5, top - 0.9, mid + ja + 0.5, top + 0.1, PINBOARD.inner);
+        rect(mid + ja - 0.9, top - 1.4, mid + ja + 0.9, top + 0.4, PINBOARD.hole);
         continue;
       }
       // A card that just landed swings on its tape: the bottom edge sways, the top stays put (L5).
@@ -933,6 +933,13 @@ function wallLaneBoard(
       const tw = 8;
       rect(mid - tw / 2 + ja, top - 1.6, mid + tw / 2 + ja, top + 1.6, faded ? tone.fadedTape : tone.tape);
       rect(mid - tw / 2 + ja, top + 1, mid + tw / 2 + ja, top + 1.6, PINBOARD.tapeSheen);
+    }
+    // The cork keeps its tack holes: every slot with no card on it shows the small dark hole its card
+    // left, so a board that has been used reads as used (L5, "pin holes stay"). Where a card WAS is not
+    // tracked — the slots are what persist — and a column's top slot is always its first card's place.
+    for (let s = col.stickies.length; s < STICKY_CAP; s++) {
+      const top = H / 2 - M - 6 - s * (noteH + 2.5);
+      rect(mid - 0.9, top - 1.4, mid + 0.9, top + 0.4, PINBOARD.hole);
     }
     // The overflow badge — the one piece of type, at the size that survives the downscale.
     if (col.count > STICKY_CAP) {
@@ -995,6 +1002,8 @@ const PINBOARD = {
   /** The frame's shadow falling onto the cork, along the inside of the top lip. */
   inner: 'rgba(80, 45, 15, 0.35)',
   cast: 'rgba(58, 34, 12, 0.16)',
+  /** A tack hole in the cork: dark and a little bigger than a freckle, or it vanishes at room zoom. */
+  hole: 'rgba(52, 28, 8, 0.75)',
   /** Under each note — paper held off the cork by its tape, not printed onto it. */
   noteCast: 'rgba(60, 35, 10, 0.26)',
   /** The washi tab's own highlight; without it the tape is just a painted stripe. */
