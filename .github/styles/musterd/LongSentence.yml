@@ -1,0 +1,9 @@
+# Plain.Sentence (jdkato/a11y) at 25 words was right on 15 of 32 sampled alerts in the ADR 579
+# trial; most misses were clear sentences of 26–30 words. 35 keeps the tangled ones.
+extends: occurrence
+message: "%d words in one sentence. Split it if it carries more than one idea."
+link: https://www.w3.org/WAI/WCAG22/Understanding/reading-level
+level: suggestion
+scope: sentence
+max: 35
+token: '\b\w+\b'

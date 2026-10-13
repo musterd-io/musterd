@@ -1,0 +1,10 @@
+# Plain.Grade (jdkato/a11y) at grade 9 was right on 4 of 15 sampled alerts in the ADR 579 trial;
+# the hits were stacked nouns and nested clauses. Grade 13 is a second-look trigger, never a target
+# (docs-and-a11y.md §4).
+extends: metric
+message: "This paragraph reads at grade %s. Look for stacked nouns and nested clauses."
+link: https://www.w3.org/WAI/WCAG22/Understanding/reading-level
+level: suggestion
+scope: paragraph
+formula: round(flesch_kincaid, 1)
+condition: "> 13"

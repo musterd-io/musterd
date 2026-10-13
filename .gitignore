@@ -133,3 +133,12 @@ packages/web/src/content/generated/
 *.squig.json.companion.json
 *.squig.json.companion.lock
 *.squig.json.lock
+# ADR 579: Vale's packages are synced from pinned release URLs into .github/styles by `vale sync`;
+# only our generated vocabulary is committed.
+.github/styles/*
+!.github/styles/config/
+.github/styles/config/*
+!.github/styles/config/vocabularies/
+.github/styles/config/vocabularies/*
+!.github/styles/config/vocabularies/musterd/
+!.github/styles/musterd/

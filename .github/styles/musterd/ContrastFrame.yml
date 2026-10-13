@@ -1,0 +1,15 @@
+# brand.md §4: no contrast frame. State the positive claim alone. The before/after allowance covers
+# a scene's structure in a talk or deck, never a sentence (brand.md §4, 2026-10-13).
+# ADR 579 trial: 22 of 50 sampled alerts were real frames. "instead of" was dropped (0 of 2; it
+# usually means "in place of"); "rather than" (8 of 17) stays because half its hits are frames.
+extends: existence
+message: "Contrast frame '%s' (brand.md §4). State the positive claim alone."
+link: https://github.com/musterd-io/musterd/blob/main/docs/design/brand.md
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - '\bnot (?:just|only|merely)\b'
+  - "\\b(?:it|this|that)(?:'s|’s| is) not\\b"
+  - ', not (?:a |an |the )?[\w-]+'
+  - '\brather than\b'
