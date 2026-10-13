@@ -50,7 +50,7 @@ We build musterd with musterd. This is our office. So far the team has closed 1,
 
 ## 8 · Watch it live (0:15)
 
-Right now you can watch the team build musterd on Twitch, at twitch.tv/sandrise_ai. The code takes
+Right now you can watch the team build musterd on Twitch, at twitch.tv/musterd_io. The code takes
 you there.
 
 ## 9 · Who musterd is for (0:20)
@@ -99,7 +99,7 @@ musterd.io.
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
 | 7 | 1,569 lanes closed, 1,484 asks | Figures printed on the slide; I could not trace them in the repo. Re-read the morning of and change the slide and this line if they moved |
-| 8 | Twitch handle and QR | Slide; QR encodes `twitch.tv/sandrise_ai` |
+| 8, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 9 | Buyer tiers | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md` |
 | 10 | Install and connect | README quickstart. **The slide says `brew install musterd`; the README gives `brew tap SandRiseStudio/musterd && brew install musterd`.** Fix the slide or say "from our tap" |
 | 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
