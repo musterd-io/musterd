@@ -3,7 +3,12 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { listAudit } from './audit.js';
 import { createTeam } from './teams.js';
-import { deriveToolCallMetrics, recordSurfaceRender, recordToolCalls } from './toolCalls.js';
+import {
+  deriveToolCallMetrics,
+  recordAdapterStartup,
+  recordSurfaceRender,
+  recordToolCalls,
+} from './toolCalls.js';
 
 let openStore: () => Promise<Driver>;
 
@@ -227,6 +232,48 @@ withDrivers('toolCalls', (o) => {
       const m = await deriveToolCallMetrics(db, team.id);
       expect(m.surface).toHaveLength(1);
       expect(m.surface[0]!.bytes).toBe(30_000);
+    });
+  });
+
+  describe('adapter startup (ADR 584)', async () => {
+    it('keeps one row per launch and reports nearest-rank p50/p90 per harness', async () => {
+      const { db, team } = await seed();
+      for (const ms of [300, 320, 340, 360, 380, 400, 420, 440, 460, 900]) {
+        await recordAdapterStartup(db, team.id, 'ada', {
+          surface: 'claude-code',
+          initialize_ms: ms - 20,
+          tools_list_ms: ms,
+        });
+      }
+      await recordAdapterStartup(db, team.id, 'bea', {
+        surface: 'grok',
+        initialize_ms: null,
+        tools_list_ms: 250,
+      });
+      const rows = (await listAudit(db, team.id)).filter(
+        (a) => a.action === 'mcp.startup_measured',
+      );
+      expect(rows).toHaveLength(11);
+
+      const { startup } = await deriveToolCallMetrics(db, team.id);
+      expect(startup).toEqual([
+        {
+          surface: 'claude-code',
+          launches: 10,
+          initialize_p50_ms: 360,
+          initialize_p90_ms: 440,
+          tools_list_p50_ms: 380,
+          tools_list_p90_ms: 460,
+        },
+        {
+          surface: 'grok',
+          launches: 1,
+          initialize_p50_ms: null,
+          initialize_p90_ms: null,
+          tools_list_p50_ms: 250,
+          tools_list_p90_ms: 250,
+        },
+      ]);
     });
   });
 });

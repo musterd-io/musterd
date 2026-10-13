@@ -556,6 +556,28 @@ async function toolsReport(parsed: Parsed): Promise<number> {
         `  ${theme.memberName(s.seat, 'agent')} — ${s.tools} tools · ${(s.bytes / 1024).toFixed(1)}KB ≈ ${s.est_tokens} tokens ${theme.meta(`(${ago(Date.now() - s.ts)} ago)`)}\n`,
       );
   }
+  // ADR 584: how long each harness's adapter took to serve it, per launch, over the window.
+  if (t.startup) {
+    w(
+      `\n${theme.accent('adapter startup')} ${theme.meta(`(per launch, last ${t.window_days}d)`)}:\n`,
+    );
+    if (t.startup.length === 0) {
+      w(
+        theme.meta('  none measured yet — a launch reports on its first flush after a tool call') +
+          '\n',
+      );
+    } else {
+      for (const s of t.startup) {
+        const init =
+          s.initialize_p50_ms === null
+            ? ''
+            : ` · initialize p50 ${s.initialize_p50_ms}ms / p90 ${s.initialize_p90_ms}ms`;
+        w(
+          `  ${s.surface} — ${s.launches} launch${s.launches === 1 ? '' : 'es'} · tools/list p50 ${s.tools_list_p50_ms}ms / p90 ${s.tools_list_p90_ms}ms${init}\n`,
+        );
+      }
+    }
+  }
   return 0;
 }
 

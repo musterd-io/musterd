@@ -102,6 +102,58 @@ describe('ToolCallRecorder', () => {
   });
 });
 
+describe('ToolCallRecorder — adapter startup (ADR 584)', () => {
+  const client = () =>
+    ({
+      member: 'ada',
+      reportToolTelemetry: vi.fn().mockResolvedValue(undefined),
+    }) as unknown as MusterdClient;
+  const clock = (...ticks: number[]) => {
+    const q = [...ticks];
+    return () => q.shift() ?? -1;
+  };
+
+  it('sends nothing until the harness has listed tools, then sends startup exactly once', async () => {
+    const recorder = new ToolCallRecorder({ surface: 'codex', uptimeMs: clock(120, 180, 999) });
+    const c = client();
+    recorder.markInitialized();
+    await recorder.flush(c);
+    expect(c.reportToolTelemetry).not.toHaveBeenCalled();
+
+    recorder.markToolsList();
+    recorder.markToolsList(); // a second listing does not move the first
+    await recorder.flush(c);
+    expect(vi.mocked(c.reportToolTelemetry).mock.calls[0]![0].startup).toEqual({
+      surface: 'codex',
+      initialize_ms: 120,
+      tools_list_ms: 180,
+    });
+    await recorder.flush(c);
+    expect(c.reportToolTelemetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a null initialize for a client that never sends initialized', async () => {
+    const recorder = new ToolCallRecorder({ surface: 'grok', uptimeMs: clock(250) });
+    const c = client();
+    recorder.markToolsList();
+    await recorder.flush(c);
+    expect(vi.mocked(c.reportToolTelemetry).mock.calls[0]![0].startup).toEqual({
+      surface: 'grok',
+      initialize_ms: null,
+      tools_list_ms: 250,
+    });
+  });
+
+  it('sends no startup when the launch surface is unknown', async () => {
+    const recorder = new ToolCallRecorder({ uptimeMs: clock(250) });
+    const c = client();
+    recorder.markToolsList();
+    recorder.record('team_status', 'ok', 5);
+    await recorder.flush(c);
+    expect(vi.mocked(c.reportToolTelemetry).mock.calls[0]![0].startup).toBeUndefined();
+  });
+});
+
 // End-to-end through the real SDK server (validation included) and a real daemon: the only seam
 // that sees an invalid-input bounce is the tools/call request handler this instruments.
 // SDK-seam canary (ADR 175): these three tests are part of the canary set `sdkSeams.test.ts`
@@ -210,6 +262,69 @@ describe('tool-call telemetry end-to-end (ADR 144 inc 1)', () => {
     const spy = vi.spyOn(musterd, 'reportToolTelemetry');
     await recorder.flush(musterd);
     expect(spy).not.toHaveBeenCalled();
+
+    await harness.close();
+  }, 15_000);
+
+  it('measures the launch from the harness side and the report shows it per harness (ADR 584)', async () => {
+    const musterd = new MusterdClient(config);
+    closers.push(() => musterd.close());
+    await musterd.join();
+
+    let now = 300;
+    const recorder = new ToolCallRecorder({ surface: 'claude-code', uptimeMs: () => (now += 10) });
+    const mcp = buildMcpServer(musterd, config, { recorder });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const harness = new Client({ name: 'test-harness', version: '0.0.0' });
+    await Promise.all([mcp.connect(serverTransport), harness.connect(clientTransport)]);
+    closers.push(() => mcp.close());
+
+    await harness.listTools();
+    await harness.callTool({ name: 'team_status', arguments: {} });
+    // The recorder's own surface measurement lists tools too, through the raw handler: it must not
+    // be what the startup records, so the flush after it still carries the harness's listing.
+    await recorder.flush(musterd);
+
+    const report = (await fetch(base + '/teams/dawn/report', {
+      headers: { authorization: `Bearer ${nickTok}` },
+    }).then((r) => r.json())) as {
+      tool_calls: {
+        startup: {
+          surface: string;
+          launches: number;
+          tools_list_p50_ms: number;
+          initialize_p50_ms: number | null;
+        }[];
+      };
+    };
+    expect(report.tool_calls.startup).toHaveLength(1);
+    const row = report.tool_calls.startup[0]!;
+    expect(row.surface).toBe('claude-code');
+    expect(row.launches).toBe(1);
+    expect(row.tools_list_p50_ms).toBeGreaterThan(300);
+    if (row.initialize_p50_ms !== null)
+      expect(row.initialize_p50_ms).toBeLessThan(row.tools_list_p50_ms);
+
+    await harness.close();
+  }, 15_000);
+
+  it("the recorder's own surface listing never counts as the harness's tools/list (ADR 584)", async () => {
+    const musterd = new MusterdClient(config);
+    closers.push(() => musterd.close());
+    await musterd.join();
+
+    const recorder = new ToolCallRecorder({ surface: 'claude-code', uptimeMs: () => 42 });
+    const mcp = buildMcpServer(musterd, config, { recorder });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const harness = new Client({ name: 'test-harness', version: '0.0.0' });
+    await Promise.all([mcp.connect(serverTransport), harness.connect(clientTransport)]);
+    closers.push(() => mcp.close());
+
+    await harness.callTool({ name: 'team_status', arguments: {} }); // no listTools first
+    const spy = vi.spyOn(musterd, 'reportToolTelemetry');
+    await recorder.flush(musterd);
+    expect(spy.mock.calls[0]![0].surface).toBeDefined(); // the raw listing did run
+    expect(spy.mock.calls[0]![0].startup).toBeUndefined();
 
     await harness.close();
   }, 15_000);

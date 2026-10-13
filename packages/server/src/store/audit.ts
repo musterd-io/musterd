@@ -400,6 +400,9 @@ export type AuditAction =
   // breakdown? }` (byte counts and tool names only, never content). Append-only like the model/
   // build attestations: the row history IS the before/after for the surface-redesign increments.
   | 'mcp.surface_rendered'
+  // ADR 584: one adapter launch's startup (`{ surface, initialize_ms, tools_list_ms }`, ms of
+  // process uptime), once per adapter session on its first telemetry flush. Timings only.
+  | 'mcp.startup_measured'
   // ADR 147 (human-ask-stream, on ADR 145 §3.1): the four lifecycle rows of a to-human `ask`. These
   // shapes only (species/tier/ask_ref/until and the risk/approach the *agent* authored), never bodies
   // (ADR 051). `raised` = an ask was sent (detail `{ species, tier }`); `deferred` = a human replied
@@ -710,6 +713,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'dream.packet_read': 'actor',
   'inbox.deferred': 'actor',
   'mcp.surface_rendered': 'actor',
+  'mcp.startup_measured': 'actor',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',
@@ -987,6 +991,8 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'residency.context_read',
   // ADR 371 §4 — a seat's attested surface weight (ADR 144), read by the report's surface block.
   'mcp.surface_rendered',
+  // ADR 584 — a launch's startup timing, read only by the report's startup block.
+  'mcp.startup_measured',
 ]);
 
 /** Insert an audit row and surface failure when the caller's transaction requires the evidence. */

@@ -267,6 +267,10 @@ export function buildMcpServer(
   // SDK's tools/call request handler — the only seam that sees invalid-input bounces. Installed
   // before the first registerTool (which is what makes the SDK install that handler).
   if (opts.recorder) instrumentToolTransport(server, opts.recorder);
+  // ADR 584: the legacy-era half of the startup measure. Chained, so the ADR 120 capture installed
+  // after this still runs.
+  const recorder = opts.recorder;
+  if (recorder) observeHarnessInitialization(server.server, () => recorder.markInitialized());
   // Repair hints on invalid-input bounces (ADR 144 inc 3) hook the same seam — the SDK bounces
   // before handlers run, so this is the only place a hint can be attached. Installed after the
   // telemetry patch, which makes telemetry the outer wrapper: it classifies the repaired result
@@ -470,7 +474,7 @@ async function main(): Promise<void> {
   // the boot-time claim is what let every `claude mcp get musterd` displace the live seat.
   // The tool-call recorder (ADR 144 inc 1) is probe-safe by the same construction: it only ever
   // sends after a real tool call gave the session a seat to attribute to.
-  const recorder = new ToolCallRecorder();
+  const recorder = new ToolCallRecorder({ surface: config.surface ?? null });
   // ADR 120 capture, both protocol eras (ADR 175 step 5): a legacy client still sends initialize
   // (`oninitialized` fires); a 2026-07-28 client never does — its clientInfo rides `_meta` on every
   // request and is read once at the tools/call seam (installed inside buildMcpServer, before the
