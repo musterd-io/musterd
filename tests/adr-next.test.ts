@@ -1,8 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  ADR_SECTIONS,
   adrNumbersInPaths,
+  adrSkeleton,
   adrNumbersInPrText,
   nextAdrNumber,
   prClaims,
@@ -179,5 +182,32 @@ describe('prClaims — what one open PR reserves, and on what evidence', () => {
         headRefName: 'miley/review-sheet',
       }),
     ).toEqual([]);
+  });
+});
+
+/**
+ * The skeleton `adr:next` prints is the one authors copy. On 2026-10-13 three of four red PR runs were
+ * an ADR missing `## Observability & Evaluation`, because the instructions listed four sections. Pin
+ * the printed skeleton to the 07-conventions template so the two cannot drift again.
+ */
+describe('the ADR skeleton adr:next prints', () => {
+  const conventions = readFileSync(
+    fileURLToPath(new URL('../docs/architecture/07-conventions.md', import.meta.url)),
+    'utf8',
+  );
+  const template = conventions.slice(conventions.indexOf('Template:'));
+  const templateSections = [...template.matchAll(/^## ([^#\n]+?)(?:[ \t]+#.*)?$/gm)]
+    .map((m) => m[1]!.trim())
+    .slice(0, ADR_SECTIONS.length);
+
+  it('names the same sections, in the same order, as the 07-conventions template', () => {
+    expect(templateSections).toEqual([...ADR_SECTIONS]);
+  });
+
+  it('prints every section as a heading, the number in the H1, and the n/a exemption', () => {
+    const s = adrSkeleton('581');
+    expect(s.startsWith('# 581 — ')).toBe(true);
+    for (const section of ADR_SECTIONS) expect(s).toContain(`\n## ${section}\n`);
+    expect(s).toContain('n/a — <reason>');
   });
 });

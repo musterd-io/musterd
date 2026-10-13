@@ -97,7 +97,7 @@ What your change needs depends entirely on _what you changed_:
 When you find an error, contradiction, missing field, or a better approach:
 
 1. **Do not silently deviate.**
-2. Write `docs/decisions/NNN-<slug>.md` — **get NNN from `pnpm adr:next`, never by reading `origin/main` yourself** (ADR 220: a number is free only if no _open PR_ claims it either), then **push the branch as a draft PR straight away, before you write the ADR** ([ADR 223](docs/decisions/223-adr-numbers-are-published-not-just-read.md): the number is contested from the moment you take it, and `adr:next` can only see what has been published — an unpushed branch is invisible to every other seat for your whole authoring session). Section skeleton in `07-conventions.md`: Context, Problem, Decision, Consequences.
+2. Write `docs/decisions/NNN-<slug>.md` — **get NNN from `pnpm adr:next`, never by reading `origin/main` yourself** (ADR 220: a number is free only if no _open PR_ claims it either), then **push the branch as a draft PR straight away, before you write the ADR** ([ADR 223](docs/decisions/223-adr-numbers-are-published-not-just-read.md): the number is contested from the moment you take it, and `adr:next` can only see what has been published — an unpushed branch is invisible to every other seat for your whole authoring session). Section skeleton in `07-conventions.md` (and printed by `pnpm adr:next`): Context, Problem, Decision, Consequences, **Observability & Evaluation** — the last one answers Traces / Eval / Experiment or says `n/a — <reason>`, and `obs-evals:check` refuses an ADR without it.
 3. Make the **smallest correct change**.
 4. Update the affected doc(s) **in the same commit**, referencing the ADR in the commit footer (`Refs ADR-00N`).
 

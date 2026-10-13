@@ -51,7 +51,7 @@ Do not start a package before the one above it passes its acceptance tests (`06-
 These docs are prescriptive but fallible. The contract:
 
 1. **Find a problem** (error, contradiction, a better way, a missing field). Do **not** silently deviate.
-2. **Write an ADR** in `docs/decisions/NNN-<slug>.md`: Context, Problem, Decision, Consequences. Number sequentially (`001`, `002`, …).
+2. **Write an ADR** in `docs/decisions/NNN-<slug>.md`: Context, Problem, Decision, Consequences, Observability & Evaluation (template in `07-conventions.md` §ADRs). Take the number from `pnpm adr:next`, which also prints the skeleton.
 3. **Make the smallest correct change.**
 4. **Update the affected doc(s) in the same commit.** Code and docs never disagree at the end of a commit.
 
