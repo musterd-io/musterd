@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   multiCalls: [] as { options: { value: string; hint?: string }[]; initialValues: string[] }[],
   recents: [] as { dir: string; harnesses: string[]; lastUsed: number }[],
   provision: null as unknown as ReturnType<typeof import('vitest').vi.fn>,
+  confirmQueue: [] as boolean[],
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -19,6 +20,7 @@ vi.mock('@clack/prompts', () => ({
   note: vi.fn(),
   log: { info: vi.fn(), warn: vi.fn(), step: vi.fn(), success: vi.fn(), message: vi.fn() },
   spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
+  confirm: vi.fn(async () => h.confirmQueue.shift()),
   multiselect: vi.fn(
     async (o: { options: { value: string; hint?: string }[]; initialValues: string[] }) => {
       h.multiCalls.push(o);
@@ -39,6 +41,8 @@ vi.mock('./harnesses/index.js', () => ({
     { id: 'musterd' },
   ],
 }));
+// The tour handoff — mocked so a "yes" is observable without making a workspace or starting it.
+vi.mock('./tourOffer.js', () => ({ startTourAsPerson: vi.fn(async () => 0) }));
 vi.mock('./recents.js', () => ({ recentRepos: () => h.recents }));
 vi.mock('./agentSeat.js', () => {
   h.provision = vi.fn();
@@ -70,7 +74,10 @@ const input = (cwd: string, home = '/nonexistent-home') => ({
 });
 const repo = () => realpathSync(mkdtempSync(join(tmpdir(), 'connect-run-')));
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { startTourAsPerson } = await import('./tourOffer.js');
+  vi.mocked(startTourAsPerson).mockClear();
+  h.confirmQueue.length = 0;
   h.multiQueue.length = 0;
   h.multiCalls.length = 0;
   h.provision.mockReset();
@@ -121,5 +128,38 @@ describe('runConnect', () => {
     const here = repo();
     h.multiQueue.push(['claude-code'], [here]);
     expect(await runConnect(input(here))).toBe(1);
+  });
+
+  it('offers the tour once a seat is connected, and starts it as the person on yes', async () => {
+    const { startTourAsPerson } = await import('./tourOffer.js');
+    h.recents = [];
+    const here = repo();
+    h.multiQueue.push(['claude-code'], [here]);
+    h.confirmQueue.push(true);
+    expect(await runConnect({ ...input(here), driver: 'nick' })).toBe(0);
+    expect(startTourAsPerson).toHaveBeenCalledWith('nick', 'revive');
+  });
+
+  it('declining the tour ends as before', async () => {
+    const { startTourAsPerson } = await import('./tourOffer.js');
+    h.recents = [];
+    const here = repo();
+    h.multiQueue.push(['claude-code'], [here]);
+    h.confirmQueue.push(false);
+    expect(await runConnect({ ...input(here), driver: 'nick' })).toBe(0);
+    expect(startTourAsPerson).not.toHaveBeenCalled();
+  });
+
+  it('no tour offer without a driver or with no seat connected', async () => {
+    const p = await import('@clack/prompts');
+    vi.mocked(p.confirm).mockClear();
+    h.recents = [];
+    const here = repo();
+    h.multiQueue.push(['claude-code'], [here]);
+    expect(await runConnect(input(here))).toBe(0);
+    h.provision.mockRejectedValueOnce(new Error('mint refused'));
+    h.multiQueue.push(['claude-code'], [here]);
+    expect(await runConnect({ ...input(here), driver: 'nick' })).toBe(1);
+    expect(p.confirm).not.toHaveBeenCalled();
   });
 });

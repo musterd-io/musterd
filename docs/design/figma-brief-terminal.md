@@ -467,6 +467,11 @@ so a box is never wider than the screen.
     2 seats on revive.
     ```
 
+    When init knows who is driving it and at least one seat connected, the same tour offer as the
+    **Add a new agent** path comes between the note and the last line: `Take the 5-minute tour?
+    (it makes you a workspace of your own first)`. Yes ends with `Starting the tour.` instead of the
+    seat count.
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

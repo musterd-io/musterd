@@ -71,6 +71,9 @@ What does "connect the agents you already have" produce, and how does one run re
 - The connect path ends without the tour offer. init offers the tour (lane `01M4FDBXPX`) only once
   the new agent is online, and this path waits for no agent; alfie owns whether and how it is
   offered here.
+  _(2026-10-13, lane 01M4V8SKRR: the connect path now offers it after the summary when at least one
+  seat connected and init knows the driver. It does not wait for an agent: the tour's own team step
+  waits and says how to start one.)_
 
 ## Observability & Evaluation
 
