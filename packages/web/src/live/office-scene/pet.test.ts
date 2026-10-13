@@ -40,6 +40,7 @@ import {
 } from './pet';
 import {
   COFFEE_STAND,
+  COOLER_STAND,
   DESK_SLOTS,
   ENTRANCE,
   MEETING,
@@ -374,6 +375,18 @@ describe('petGreet (someone came through the door)', () => {
   it('lets a stretch or a curl finish rather than snapping out of it', () => {
     const pet = wakePet(); // mid-stretch
     expect(petGreet(pet, lcg(2))).toBe(false);
+  });
+});
+
+describe('petFollow (tagging along on a water errand, spec L2)', () => {
+  it('trots to the cooler and settles beside it, on the floor and near enough to read as together', () => {
+    const pet = createPet(lcg(3));
+    expect(petFollow(pet, COOLER_STAND, lcg(4))).toBe(true);
+    const end = pet.path[pet.path.length - 1]!;
+    expect(walkable(end.lx, end.ly)).toBe(true);
+    const off = Math.hypot(end.lx - COOLER_STAND.lx, end.ly - COOLER_STAND.ly);
+    expect(off).toBeGreaterThan(0);
+    expect(off).toBeLessThan(70);
   });
 });
 
