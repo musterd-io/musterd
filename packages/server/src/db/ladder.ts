@@ -218,6 +218,15 @@ export const LADDER: PortableMigration[] = [
     version: 92,
     sql: 'CREATE INDEX IF NOT EXISTS idx_audit_team_action_target_ts ON audit(team_id, action, target, ts)',
   },
+  {
+    // v93 — lane 01M4S7GW7P: the open-directed ledger asks, per open act, for the earliest `resolve`
+    // in its thread (`threadResolve`: team_id, act, thread_id, ORDER BY ts LIMIT 1). With only
+    // `(team_id, act, thread_id)` indexed SQLite preferred the `(team_id, ts)` index to dodge the sort
+    // and walked every message of the team for each call: 305 calls × 23k rows, ~8.5 s of a cold
+    // `/report` on the Air. With `ts` in the key the same lookup is a seek.
+    version: 93,
+    sql: 'CREATE INDEX IF NOT EXISTS idx_messages_thread_act_ts ON messages(team_id, act, thread_id, ts)',
+  },
 ];
 
 const LANES_SOURCE_REF_INDEX_SQL =
