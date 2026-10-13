@@ -489,9 +489,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
+    margin-top: 0.5rem;
   }
 
-  .dl__node {
+  /* .is-shown / .is-cur outrank the bare class, so the reset names them too. */
+  .dl__node,
+  .dl__node.is-shown,
+  .dl__node.is-cur {
     position: static;
     transform: none;
     opacity: 1;
