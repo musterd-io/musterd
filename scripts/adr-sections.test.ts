@@ -302,3 +302,34 @@ describe('fenced code in a Decision is compared exactly', () => {
     expect(isAppendOnlyAmendment(before, after)).toBe(false);
   });
 });
+
+/*
+ * A Decision that already carries a marker (2026-10-12, lane 01M4SG8AV6). The old marker used to be
+ * stripped from the new side only, so it read as changed prose and no ADR could take a second one:
+ * ADR 131's marker for ADR 576 failed on #2452 because of its 2026-09-06 marker.
+ */
+describe('amendment markers on a Decision that already has one', () => {
+  const before = [
+    '1. **The ritual.** Handle tier 1. _(Amended 2026-09-06: tier 2 too.)_',
+    '2. **Wakes stay scoped.** A woken session gets its errand.',
+  ].join('\n');
+
+  it('accepts a second marker', () => {
+    const after = before.replace('its errand.', 'its errand. _(Amended 2026-10-12: see ADR 576.)_');
+    expect(isAppendOnlyAmendment(before, after)).toBe(true);
+  });
+
+  it('REFUSES an edit inside the existing marker', () => {
+    const after = before
+      .replace('tier 2 too.', 'tier 3 too.')
+      .replace('its errand.', 'its errand. _(Amended 2026-10-12: see ADR 576.)_');
+    expect(isAppendOnlyAmendment(before, after)).toBe(false);
+  });
+
+  it('REFUSES removing the existing marker while adding another', () => {
+    const after = before
+      .replace(' _(Amended 2026-09-06: tier 2 too.)_', '')
+      .replace('its errand.', 'its errand. _(Amended 2026-10-12: see ADR 576.)_');
+    expect(isAppendOnlyAmendment(before, after)).toBe(false);
+  });
+});
