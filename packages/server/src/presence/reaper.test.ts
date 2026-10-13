@@ -443,10 +443,14 @@ withDrivers('reaper', (o) => {
       db.close();
     });
 
-    async function laneHeldByADepartedSeat({ holderStale = true } = {}) {
+    async function laneHeldByADepartedSeat({
+      holderStale = true,
+      holderKind = 'agent' as 'agent' | 'human',
+      laneReview = {} as Record<string, unknown>,
+    } = {}) {
       const team = await createTeam(db, { slug: 'dawn' });
       const worker = (await addMember(db, team, { name: 'Kim', kind: 'agent' })).row;
-      const gone = (await addMember(db, team, { name: 'delta', kind: 'agent' })).row;
+      const gone = (await addMember(db, team, { name: 'delta', kind: holderKind })).row;
       const live = (await addMember(db, team, { name: 'Lin', kind: 'agent' })).row;
       // Lin is here and says what she is running; the picker routes on the live occupancy (ADR 101).
       const lin = await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
@@ -475,7 +479,11 @@ withDrivers('reaper', (o) => {
           to: { kind: 'member', name: 'delta' },
           act: 'ask',
           body: '[lane] acceptance requested',
-          meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
+          meta: {
+            species: 'approve',
+            tier: 'standard',
+            lane_review: { lane: lane.id, ...laneReview },
+          },
           ts: 1_000,
         }),
       );
@@ -512,6 +520,20 @@ withDrivers('reaper', (o) => {
       expect(detail.superseded_ask).toBe('ask-vanished');
       expect(detail.reviewer).toBe('Lin');
       expect(detail.route).toBe('reaped');
+    });
+
+    it('never re-routes the stage-two human ask: an offline human is waited on, not replaced (lane 01M4V6ACBP)', async () => {
+      // 2026-10-13, lane 01M4SPZB1V: the reaper moved nick's human ask to an agent as a fresh PEER
+      // ask; that agent's accept re-asked nick, and the loop never reached the human's verdict.
+      const { team, linPresence } = await laneHeldByADepartedSeat({
+        holderKind: 'human',
+        laneReview: { route: 'human_admin', grade: 'human', peer_confirmed_by: 'Lin' },
+      });
+
+      stop = startReaper(ctx);
+      await liveFor(config.presenceTimeoutMs + config.reaperIntervalMs * 2, linPresence);
+
+      expect(await rerouted(team.id)).toHaveLength(0);
     });
 
     it('re-routes a lane at most once, however many ticks pass', async () => {
