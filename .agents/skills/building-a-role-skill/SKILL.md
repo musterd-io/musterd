@@ -19,12 +19,17 @@ with a `.agents/skills/` folder.
 | Part | What it holds | Read |
 | --- | --- | --- |
 | `SKILL.md` | The core: frontmatter `name` and `description`, the sources the role defers to, the charter boundary, hard rules each with its reason, the checks that catch most mistakes, a routing table to the references, a definition of done. About 200 lines at most. | Always |
-| `references/` | One file per craft the role practices, each with its procedure, its rules and the sources behind them. | When the routing table points there |
+| `references/` | One file per craft the role practices, each with its procedure, its rules and the sources behind them. Written for any team. | When the routing table points there |
+| `references/` → `team.md` | This team's own layer: its systems, paths, commands, the decisions the role answers to, and the incidents behind its local rules. The only file that names your team's specifics. | Before the first piece of work in a session |
 | `evals/` | `evals.json` (cases), the inputs they name, a check script where one fits, `results.md` (every run). | When you change the skill |
 | `PROVENANCE.md`, `LICENSES/` | Every outside source adapted: repo, pinned commit, licence, what was taken. | When you adapt anything |
 
-`skeleton/` beside this file has a starting `SKILL.md` and `evals/`. `musterd role create <name>`
-copies it for a new role.
+Keeping the team's specifics in `team.md` is what lets one skill serve every team: the core and the
+craft references travel unchanged, and each team writes its own `team.md`. When a built-in role
+ships, its `team.md` ships as the skeleton's blank one.
+
+`skeleton/` beside this file has a starting `SKILL.md`, a blank `team.md` under its `references/`, and `evals/`.
+`musterd role create <name>` copies it for a new role.
 
 ## The method
 
