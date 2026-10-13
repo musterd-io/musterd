@@ -1648,6 +1648,65 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(rows[0].detail.reason).toBe('counterpart_confirm');
       });
 
+      it('a second verdict on an ask answered before a resubmit moves nothing (lane 01M4VH00A8)', async () => {
+        // 2026-10-13, lane 01M4V95YGT: a reviewer declined, the owner resubmitted, and the reviewer
+        // declined the OLD ask again — which sent the resubmitted lane back to active, so their
+        // accept on the new ask 4 s later moved nothing.
+        const { nickTok, ada, gee } = await setup();
+        const lane = await post(
+          '/teams/dawn/lanes',
+          { title: 'resubmit me', branch: 'ada/resubmit', claim: true },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        const submit = () =>
+          patchLane(
+            laneId,
+            {
+              state: 'ready_for_review',
+              acceptor: 'gee',
+              merged: { pr: 13, sha: 'cafe13', authorized_by: 'nick' },
+            },
+            ada,
+          );
+        const reviewAsks = async () =>
+          (await get('/teams/dawn/inbox?unread=0', gee)).json.messages.filter(
+            (m: { act: string; meta?: { lane_review?: { lane?: string } } }) =>
+              m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+          ) as { id: string }[];
+        const stateOf = async () =>
+          (
+            (await get('/teams/dawn/lanes', nickTok)).json.lanes as { id: string; state: string }[]
+          ).find((l) => l.id === laneId)!.state;
+
+        expect((await submit()).status).toBe(200);
+        const [oldAsk] = await reviewAsks();
+        expect((await verdict(gee, 'gee', oldAsk!.id, 'decline')).json.lane_verdict).toEqual({
+          lane: laneId,
+          state: 'active',
+        });
+
+        expect((await submit()).status).toBe(200);
+        const newAsk = (await reviewAsks()).find((a) => a.id !== oldAsk!.id);
+        expect(newAsk).toBeDefined();
+        expect(await stateOf()).toBe('awaiting_acceptance');
+
+        const stale = await verdict(gee, 'gee', oldAsk!.id, 'decline');
+        expect(stale.status).toBe(201);
+        expect(stale.json.lane_verdict).toBeUndefined();
+        expect(stale.json.lane_superseded).toEqual({
+          lane: laneId,
+          ask: oldAsk!.id,
+          current: { ask: newAsk!.id, reviewer: 'gee' },
+        });
+        expect(await stateOf()).toBe('awaiting_acceptance');
+
+        expect((await verdict(gee, 'gee', newAsk!.id, 'accept')).json.lane_verdict).toEqual({
+          lane: laneId,
+          state: 'done',
+        });
+      });
+
       it('a peer accept on a SUPERSEDED risky-lane ask fires no human ask and says where the ask went (ADR 545)', async () => {
         // Before ADR 545 the escalation hook never asked whether the ask was still live: a peer
         // answering an ask the reaper had already moved woke the human for a review nobody held.
