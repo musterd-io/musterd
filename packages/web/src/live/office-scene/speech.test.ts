@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bubbleCoversBoard,
+  bubbleShiftOffBoard,
   enqueueSpeech,
   speechHoldMs,
   SPEECH_HOLD_MS,
@@ -467,5 +468,45 @@ describe('bubbleCoversBoard — a bubble follows its speaker onto the board face
   it('clears once the bubble has moved off to the side', () => {
     expect(bubbleCoversBoard({ x: 600, y: 330 }, bubble, LIFT, board)).toBe(false); // right edge at 700, board starts at 800
     expect(bubbleCoversBoard({ x: 1130, y: 330 }, bubble, LIFT, board)).toBe(false); // left edge at 1030, board ends at 920
+  });
+});
+
+describe('bubbleShiftOffBoard — slide it clear, never hide it (lane 01M4VMFE3A)', () => {
+  const board = { x: 800, y: 200, w: 120, h: 90 };
+  const bubble = { w: 200, h: 60 };
+  const LIFT = 26;
+  it('is 0 wherever the bubble covers nothing', () => {
+    expect(bubbleShiftOffBoard({ x: 300, y: 330 }, bubble, LIFT, board)).toBe(0);
+    expect(bubbleShiftOffBoard({ x: 860, y: 190 }, bubble, LIFT, board)).toBe(0);
+  });
+  it('slides left, to just clear the board, for a speaker under or left of it', () => {
+    const dx = bubbleShiftOffBoard({ x: 860, y: 330 }, bubble, LIFT, board);
+    expect(dx).toBeLessThan(0);
+    // after the shift the bubble's right edge sits 10 px left of the board's left edge
+    expect(860 + dx + bubble.w / 2).toBeCloseTo(800 - 10, 6);
+    // and the shifted bubble no longer covers the board
+    expect(bubbleCoversBoard({ x: 860 + dx, y: 330 }, bubble, LIFT, board)).toBe(false);
+  });
+  it('slides right only for a speaker already beyond the board\'s far edge', () => {
+    const dx = bubbleShiftOffBoard({ x: 960, y: 330 }, bubble, LIFT, board);
+    expect(dx).toBeGreaterThan(0);
+    expect(960 + dx - bubble.w / 2).toBeCloseTo(920 + 10, 6);
+    // under the board — even right of its centre — stays on the left side, so no one's bubble flips mid-walk
+    expect(bubbleShiftOffBoard({ x: 900, y: 330 }, bubble, LIFT, board)).toBeLessThan(0);
+  });
+  it('eases out as the speaker walks in from the room: no more than a gap-sized step where it starts, then smooth', () => {
+    let last = 0;
+    let first = true;
+    for (let x = 560; x <= 900; x += 5) {
+      const dx = bubbleShiftOffBoard({ x, y: 330 }, bubble, LIFT, board);
+      if (first && dx !== 0) {
+        expect(Math.abs(dx)).toBeLessThanOrEqual(10 + 5); // the opening step is the 10 px gap, plus one stride
+        first = false;
+      }
+      expect(dx).toBeLessThanOrEqual(last); // only ever slides further left while they walk under it
+      expect(Math.abs(dx - last)).toBeLessThanOrEqual(15); // never a jump larger than a stride
+      last = dx;
+    }
+    expect(last).toBeLessThan(0);
   });
 });

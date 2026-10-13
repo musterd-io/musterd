@@ -89,7 +89,7 @@ import { laneSeed, WALL_COLUMNS, withHeld, withPinned, withTaken, type HeldMarks
 import {
   enqueueSpeech,
   shapeSpeech,
-  bubbleCoversBoard,
+  bubbleShiftOffBoard,
   speechHoldMs,
   speechLength,
   speechTokens,
@@ -1370,17 +1370,15 @@ export function mountOffice(
 
   // ── ephemeral speech: an act's body types out over the sender's head, then fades ───────────────────
   function positionSpeech(outer: HTMLDivElement, head: Pt, board?: { x: number; y: number; w: number; h: number }) {
-    outer.style.transform = `translate(-50%, -100%) translate(${head.x}px, ${head.y - SPEECH_LIFT}px)`;
     // A bubble follows its speaker, and a speaker at the wall board puts it across the board face for
-    // the whole landing — hiding the card, its sway and the flourish. While the bubble would cover
-    // the board it steps aside (a quick fade, kept in its timers), and it returns when the speaker
-    // walks off. Measured only when the head is near the board's span, so the common frame pays a
-    // comparison, not a layout read.
-    const over = board ? bubbleCoversBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board) : false;
-    outer.style.opacity = over ? '0' : '';
-    outer.style.transition = over ? 'opacity 0.2s' : '';
-    // A hidden bubble must not catch the click meant for the board behind it.
-    outer.style.pointerEvents = over ? 'none' : 'auto';
+    // the whole landing — hiding the card, its sway and the flourish. While it would cover the board it
+    // slides sideways to clear it (whole and readable — hiding it lost the sentence), and eases back
+    // as the speaker walks off. Measured only when the head is near the board's span, so the common
+    // frame pays a comparison, not a layout read.
+    const dx = board
+      ? bubbleShiftOffBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board)
+      : 0;
+    outer.style.transform = `translate(-50%, -100%) translate(${head.x + dx}px, ${head.y - SPEECH_LIFT}px)`;
   }
 
   /** Keep every live bubble anchored over its member (follows a walker; snaps after a reseat). */

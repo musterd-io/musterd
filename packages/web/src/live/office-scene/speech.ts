@@ -406,3 +406,24 @@ export function bubbleCoversBoard(head: { x: number; y: number }, size: { w: num
   const foot = head.y - lift;
   return left < board.x + board.w && left + size.w > board.x && foot > board.y && foot - size.h < board.y + board.h;
 }
+
+/**
+ * How far to slide a bubble sideways so it clears the board face instead of covering it (lane 01M4VMFE3A):
+ * left of the board for a speaker under or left of it, right of it for one beyond its far edge, 0 when it
+ * covers nothing. The bubble stays whole and readable — an earlier cut hid it while it overlapped, and the sentence
+ * was gone for the whole landing. A smooth function of the head's position, so it eases off as they walk away.
+ */
+export function bubbleShiftOffBoard(
+  head: { x: number; y: number },
+  size: { w: number; h: number },
+  lift: number,
+  board: Box,
+  gap = 10,
+): number {
+  if (!bubbleCoversBoard(head, size, lift, board)) return 0;
+  const toLeft = board.x - gap - (head.x + size.w / 2); // negative: the right edge to just left of the board
+  const toRight = board.x + board.w + gap - (head.x - size.w / 2); // positive: the left edge to just right of it
+  // Left unless the speaker is already right of the board's far edge: one side for everyone walking in from
+  // the room (which lies to the board's left), so the bubble eases out sideways instead of flipping sides.
+  return head.x <= board.x + board.w ? Math.min(0, toLeft) : Math.max(0, toRight);
+}
