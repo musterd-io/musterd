@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+import nodeModule from 'node:module';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { Transport } from '@modelcontextprotocol/server';
 import {
@@ -499,13 +499,21 @@ async function main(): Promise<void> {
   };
 
   installShutdownHandlers({ close: teardown, transport });
+  // ADR 577: write the compile cache now that the startup graph has loaded, rather than only at exit
+  // — a host that kills the adapter outright would otherwise leave the next launch to compile again.
+  // A no-op when the cache is off. Absent before Node 22.10, hence the default import: a named import
+  // of a missing builtin export fails at link time and the adapter would never start.
+  nodeModule.flushCompileCache?.();
 }
 
-// Run only when invoked directly (not when imported by tests).
-const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+/** Start the stdio adapter. The bundle's launcher (`launch.ts`, ADR 577) calls this. */
+export function runAdapter(): void {
   main().catch((err) => {
     process.stderr.write(`musterd MCP failed to start: ${(err as Error).message}\n`);
     process.exit(1);
   });
 }
+
+// Run when this file is invoked directly (`node dist/lib/index.js`, or from source), not imported.
+const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMain) runAdapter();

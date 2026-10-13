@@ -4,11 +4,12 @@
 // every harness config already written keeps working; it becomes one file instead of a module graph
 // Node resolves file by file through node_modules on every connect. Modules reached only through a
 // dynamic import() (the OTel SDK, which is off by default) split into chunks beside it and load only
-// when used.
+// when used. The entry is launch.ts, which turns on Node's compile cache before loading the adapter
+// (ADR 577); the adapter itself is the chunk it imports.
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: { index: 'src/index.ts' },
+  entryPoints: { index: 'src/launch.ts' },
   outdir: 'dist',
   bundle: true,
   splitting: true,
