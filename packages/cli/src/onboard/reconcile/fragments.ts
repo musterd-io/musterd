@@ -70,6 +70,8 @@ export interface HarnessAvailability {
 export interface InteractiveLaunch {
   /** A runnable binary: PATH first, then known install locations; null when absent. */
   resolveBin(): Promise<string | null>;
+  /** Where to get this harness when `resolveBin` finds none — shown in the launcher's not-installed error. */
+  installHint?: string;
   /** argv for a fresh session. */
   fresh(): string[];
   /** argv to resume: the recorded session id when there is one, else the harness's continue-latest form. */

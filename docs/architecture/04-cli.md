@@ -453,7 +453,10 @@ move it, `setup` points at the picker.
   conversation to resume.
 - When the harness exits: one receipt line on stderr, and the harness's exit code (128 + n on signal n).
 - Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
-  repair, a live seat without `--force`, or a harness that is not installed.
+  repair, a live seat without `--force`, or a harness that is not installed. That last error names the
+  adapter's `interactive.installHint` (when it declares one) and the way out — `--harness <name>`, or
+  `musterd harness configure` to change the seat's set; a harness can be *selected* without being installed
+  (ADR 281/282/286), so the miss surfaces only at launch.
 
 ### `musterd seats [--json]`
 

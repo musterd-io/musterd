@@ -18,18 +18,20 @@ const seat = (over: Partial<Seat> = {}): Seat => ({
   problem: null,
   ...over,
 });
-const adapter = (id: string, bin: string | null): HarnessAdapter =>
+const adapter = (id: string, bin: string | null, installHint?: string): HarnessAdapter =>
   ({
     id,
     interactive: {
       resolveBin: async () => bin,
+      ...(installHint ? { installHint } : {}),
       fresh: () => ['--fresh'],
       resume: (sid: string | undefined) => (sid ? ['--resume', sid] : ['--continue']),
     },
   }) as unknown as HarnessAdapter;
 const REGISTRY = [
   adapter('claude-code', '/bin/claude'),
-  adapter('codex', null),
+  adapter('codex', null, 'npm install -g @openai/codex'),
+  adapter('grok', null),
   { id: 'musterd', interactive: null } as unknown as HarnessAdapter,
 ];
 const base = {
@@ -79,6 +81,15 @@ describe('planLaunch (ADR 491)', () => {
     expect(
       (await planLaunch({ ...base, seat: seat(), mode: 'resume', session: other })).args,
     ).toEqual(['--continue']);
+  });
+
+  it('a missing binary names the install hint (when the adapter has one) and the way out', async () => {
+    const hinted = planLaunch({ ...base, seat: seat(), harness: 'codex' });
+    await expect(hinted).rejects.toThrow(/install: npm install -g @openai\/codex/);
+    await expect(hinted).rejects.toThrow(/musterd harness configure/);
+    const bare = planLaunch({ ...base, seat: seat(), harness: 'grok' });
+    await expect(bare).rejects.toThrow(/musterd harness configure/);
+    await expect(bare).rejects.not.toThrow(/install:/);
   });
 
   it('a human seat gets a login shell', async () => {

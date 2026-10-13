@@ -313,6 +313,7 @@ export const opencodeAdapter: HarnessAdapter = {
   adapterVersion: 1,
   interactive: {
     resolveBin: () => resolveOpencodeBin(),
+    installHint: 'npm install -g opencode-ai',
     fresh: () => [],
     resume: (id) => (id ? ['--session', id] : ['--continue']),
   },

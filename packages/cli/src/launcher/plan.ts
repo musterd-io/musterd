@@ -51,7 +51,13 @@ export async function planLaunch(input: PlanInput): Promise<LaunchPlan> {
   const bin = await adapter.interactive.resolveBin();
   if (!bin)
     throw new CliError(
-      `${harnessLabel(id)} is not installed (not on PATH or the usual install locations)`,
+      [
+        `${harnessLabel(id)} is not installed (not on PATH or the usual install locations)`,
+        ...(adapter.interactive.installHint
+          ? [`  install: ${adapter.interactive.installHint}`]
+          : []),
+        `  or pick another harness: musterd ${seat.member} --harness <name>, or \`musterd harness configure\` to change this seat's set`,
+      ].join('\n'),
       1,
     );
   const sessionId = input.session?.harness === id ? input.session.id : undefined;

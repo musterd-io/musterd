@@ -308,6 +308,7 @@ export const codexAdapter: HarnessAdapter = {
   adapterVersion: 2,
   interactive: {
     resolveBin: () => resolveCodexBin(),
+    installHint: 'npm install -g @openai/codex',
     fresh: () => [],
     resume: (id) => (id ? ['resume', id] : ['resume', '--last']),
   },
