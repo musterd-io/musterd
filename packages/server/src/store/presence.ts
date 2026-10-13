@@ -456,29 +456,62 @@ export async function touchAmbientPresence(
   timeoutMs: number,
   ctx: AttachContext = {},
 ): Promise<boolean> {
-  // A live resident session (real socket) already owns liveness — don't add a competing row.
-  if (await hasActivePresence(db, memberId)) return false;
+  return (await touchAmbientPresenceRows(db, memberId, surface, timeoutMs, ctx)).flipped;
+}
+
+/** The member's ambient row, as `touchAmbientPresenceRows` reports it on either side of the touch. */
+export interface AmbientRow {
+  id: string;
+  model: string | null;
+}
+
+/**
+ * `touchAmbientPresence`, also reporting the ambient row before and after the touch — what
+ * `authTouch` compares to audit a model change (ADR 246). `after` is DERIVED from the write rather
+ * than read back: an update keeps the row's id and COALESCEs the model, an attach returns its row,
+ * and a no-op leaves `before` standing. Every authenticated request runs this (lane 01M4VR41VE: it
+ * was 7 of interrupt-check's ~14 statements on Postgres, each its own three-round-trip transaction),
+ * so it reads the row once and asks the three liveness questions in one statement.
+ */
+export async function touchAmbientPresenceRows(
+  db: Driver,
+  memberId: string,
+  surface: Surface,
+  timeoutMs: number,
+  ctx: AttachContext = {},
+): Promise<{ flipped: boolean; before: AmbientRow | null; after: AmbientRow | null }> {
+  const before =
+    (await db.get<AmbientRow>(
+      'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+      [memberId],
+    )) ?? null;
+  const [liveLocal, liveRemote] = liveCutoffs(timeoutMs);
+  const now = await db.get<{ active: number | null; remote: number | null; live: number | null }>(
+    `SELECT
+       SUM(CASE WHEN p.held_until IS NULL AND p.conn_id IS NOT NULL THEN 1 ELSE 0 END) AS active,
+       SUM(CASE WHEN p.held_until IS NULL AND n.last_seen_at > ? THEN 1 ELSE 0 END) AS remote,
+       SUM(CASE WHEN ${LIVE_PRESENCE_SQL} THEN 1 ELSE 0 END) AS live
+     FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ?`,
+    [Date.now() - REMOTE_PRESENCE_TTL_MS, liveLocal, liveRemote, memberId],
+  );
+  const untouched = { flipped: false, before, after: before };
+  // A live resident session (real socket) already owns liveness — don't add a competing row
+  // (`hasActivePresence`).
+  if (Number(now?.active ?? 0) > 0) return untouched;
   // Nor under a live REMOTE row (joiner audit 2026-10-02, lane 01M3ZBTJKD): the member is present
   // on the machine its seat lives on. Writing a local row here would push a presence event the hub
   // refuses for a seat bound elsewhere (ADR 360), and the old pick below, which did not filter on
-  // `node`, overwrote the folded remote row's surface/driver/workspace instead.
-  const remote = await db.get<{ n: number }>(
-    // Live by its NODE's heartbeat, the rule every remote-row reader uses (presence replication §3).
-    `SELECT COUNT(*) AS n FROM presence p JOIN nodes n ON n.id = p.node
-      WHERE p.member_id = ? AND p.held_until IS NULL AND n.last_seen_at > ?`,
-    [memberId, Date.now() - REMOTE_PRESENCE_TTL_MS],
-  );
-  if ((remote?.n ?? 0) > 0) return false;
-  const wasLive = await hasLivePresence(db, memberId, timeoutMs);
+  // `node`, overwrote the folded remote row's surface/driver/workspace instead. Live by its NODE's
+  // heartbeat, the rule every remote-row reader uses (presence replication §3).
+  if (Number(now?.remote ?? 0) > 0) return untouched;
+  const wasLive = Number(now?.live ?? 0) > 0; // `hasLivePresence`
   // SPEC.md §"Attach context": provenance is a fact known only to the attaching client, and the
   // server MUST NOT guess it. This used to default to `session`, which made an unstated provenance
   // indistinguishable from a declared one — and it landed on humans every time, since `ambientTouch`
   // reads the header for agent seats only (ADR 121). Absence is not an assertion (ADR 236).
   const provenance: Provenance | null = ctx.provenance ?? null;
-  const existing = await db.get<{ id: string }>(
-    'SELECT id FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
-    [memberId],
-  );
+  const existing = before;
+  let after: AmbientRow;
   if (existing) {
     // Model attestation is **sticky** across ambient touches (ADR 101): an authenticated HTTP request
     // carries no model, so `COALESCE(?, model)` preserves the value attested at claim instead of
@@ -517,13 +550,16 @@ export async function touchAmbientPresence(
         existing.id,
       ],
     );
+    after = { id: existing.id, model: ctx.model ?? existing.model };
   } else {
-    await attach(db, memberId, surface, null, { ...ctx, provenance });
+    // `attach` clears `last_offline_reason` itself, so the update below is for the refresh path only.
+    const row = await attach(db, memberId, surface, null, { ...ctx, provenance });
+    after = { id: row.id, model: row.model };
   }
-  if (!wasLive) {
+  if (!wasLive && existing) {
     await db.run('UPDATE members SET last_offline_reason = NULL WHERE id = ?', [memberId]);
   }
-  return !wasLive;
+  return { flipped: !wasLive, before, after };
 }
 
 /** Does this member currently have any live presence (within timeout, not a release hold)? */
