@@ -57,6 +57,8 @@ a measured skill is written down only in one goal's lanes, where no seat or user
   where one fits, and `results.md` recording every run.
 - **`PROVENANCE.md` and `LICENSES/`** when anything is adapted from outside, under ADR 579's licence
   table.
+  _(Amended 2026-10-13: a team's specifics live in one file, `references/team.md`, so the rest of a
+  built-in role's skill ships unchanged. See Consequences, 2026-10-13.)_
 
 The skill points at the repo's authoritative sources (ADRs, design docs, the glossary) and never
 becomes a competing one (ADR 299).
@@ -139,6 +141,14 @@ it. The holder judges the landed skill against the job as they do it.
   (lane `01M4VPY8JV`). Follows-up: 01M4VPY8JVR3ZSSCD5X6W586YA
 - The practice skills in `musterd-io/skills` keep their current arrangement; this ADR does not
   reconcile their drift. Whoever next edits one there or here records which copy is the source.
+
+- _(2026-10-13, lane `01M4VPY15A`, the platform skill.)_ Building the first role skill for an
+  existing role showed decision 1 needed one more part. A built-in role's skill ships to teams whose
+  systems, commands and history are not ours, so everything specific to a team goes in one file,
+  `references/team.md`, and the core and the other references are written for any team. Our own
+  `team.md` stays in this repository; a team that installs the role gets the blank one from
+  `building-a-role-skill/skeleton/`. The product-communications skill predates this and names our
+  brand sources throughout; it is a team-specific skill until it is split the same way.
 
 ## Observability & Evaluation
 

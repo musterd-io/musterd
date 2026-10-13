@@ -13,7 +13,8 @@ Built with the `building-a-role-skill` method. Until step 5 has a recorded run i
 ## Sources (read before the work, never restated here)
 
 1. `roles/<role>.toml` — the charter and capabilities.
-2. <The decisions, style guides and glossary this role answers to, one per line, with paths.>
+2. `references/team.md` — this team's systems, commands, decisions and local rules.
+3. <The decisions, style guides and glossary this role answers to, one per line, with paths.>
 
 ## Charter boundary
 

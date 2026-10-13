@@ -26,6 +26,8 @@ Two per craft. Each case in `evals/evals.json`:
 - **Expectations are checkable by someone else.** "Keeps PR #2466 and 1,704" is checkable; "reads
   well" is not.
 - **Inputs are true, or say they are fictional** in their first line.
+- **A check fits the task.** "No numbers beyond the input" suits an edit; it does not suit a task
+  where reading the repository for more figures is the right move.
 - **Checks are deterministic**: strings that must survive, patterns that must not appear, numbers
   with no source. Test each check on a bad answer and a good one before you trust it. A model's
   note to the requester under a `---` line starting "Note" is not part of the answer.
@@ -36,7 +38,9 @@ musterd's `product-communications/evals/check.mjs` is a working example of a che
 
 Each case runs twice, each time in a fresh session that shares nothing with yours:
 
-- **with the skill**: told to read `.agents/skills/<skill>/SKILL.md` first and follow it.
+- **with the skill**: told to read `.agents/skills/<skill>/SKILL.md` first and follow it, and to
+  stay out of the skill's `evals/` folder apart from the input files the task names. The cases'
+  expectations live there, and a run that reads them is graded on a test it has seen.
 - **without**: told to stay out of `.agents/skills/` apart from the input files.
 
 Both may read the rest of the repository; that is the real baseline. Both are read-only and write
