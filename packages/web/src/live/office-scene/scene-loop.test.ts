@@ -305,3 +305,13 @@ describe('a bubble steps aside while it would cover the wall board (lane 01M4VMF
     expect(fn).toContain('const board = speeches.size ? boardAnchor(fit) : undefined;');
   });
 });
+
+describe('a plate drops its work chip rather than cover the wall board (lane 01M4VNDVF7)', () => {
+  it('judges the chip-included width, so hiding the chip cannot flip the verdict back', () => {
+    expect(index).toContain("if (!work || work.style.display !== 'none') plateFullW.set(name, w);");
+    const at = index.indexOf("el.classList.toggle('is-displaced', at.displaced);");
+    const body = index.slice(at, at + 900);
+    expect(body).toContain("plateCoversBoard(at, plateFullW.get(name) ?? size.w, size.h, boardRect)");
+    expect(body).toContain("work.style.display = over ? 'none' : '';");
+  });
+});

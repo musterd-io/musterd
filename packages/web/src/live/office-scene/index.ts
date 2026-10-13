@@ -11,7 +11,8 @@ import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
 import { createActors, type Actors } from './actors';
 import { solidHit, walkable } from './nav';
-import { layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
+import {
+  plateCoversBoard, layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
 import { REPLAY_TEMPO } from './replay';
 import { stepDomAnimations } from './domCadence';
@@ -865,6 +866,7 @@ export function mountOffice(
    * size here and the plates re-flow around it.
    */
   const plateSize = new Map<string, { w: number; h: number }>();
+  const plateFullW = new Map<string, number>();
   /** Each plate's slot and hold timers from the last layout — its hysteresis (plateLayout.ts). */
   let plateMemo = new Map<string, PlateMemo>();
   let lastHeads: Map<string, Pt> | null = null;
@@ -876,10 +878,12 @@ export function mountOffice(
             const name = (e.target as HTMLElement).dataset['plate'];
             if (!name) continue;
             const box = e.borderBoxSize?.[0];
-            plateSize.set(name, {
-              w: box ? box.inlineSize : e.contentRect.width,
-              h: box ? box.blockSize : e.contentRect.height,
-            });
+            const w = box ? box.inlineSize : e.contentRect.width;
+            plateSize.set(name, { w, h: box ? box.blockSize : e.contentRect.height });
+            // The width WITH its "working on" chip, remembered while the chip shows: the board test below
+            // judges that width, so hiding the chip (which narrows the plate) cannot flip the verdict back.
+            const work = (e.target as HTMLElement).querySelector<HTMLElement>('.lc-gl-label__work');
+            if (!work || work.style.display !== 'none') plateFullW.set(name, w);
           }
           // A plate that grew (expanded) or first measured re-flows the room even while it is parked.
           if (lastHeads) positionLabels(lastHeads);
@@ -1139,6 +1143,7 @@ export function mountOffice(
         plateExpand.delete(name);
         plateRO?.unobserve(el);
         plateSize.delete(name);
+        plateFullW.delete(name);
         el.remove();
         labels.delete(name);
       }
@@ -1284,6 +1289,7 @@ export function mountOffice(
       now: performance.now(),
     });
     plateMemo = laid.memo;
+    let boardRect: { x0: number; y0: number; x1: number; y1: number } | undefined;
     for (const [name, el] of labels) {
       const laidAt = laid.placements.get(name);
       const head = headMap.get(name);
@@ -1305,6 +1311,14 @@ export function mountOffice(
       el.style.transform = `translate(-50%, -100%) translate(${homeX}px, ${head.y}px) rotate(${plateTilt(name)}deg)`;
       el.style.translate = `${(at.x - homeX).toFixed(1)}px ${(at.y - head.y).toFixed(1)}px`;
       el.classList.toggle('is-displaced', at.displaced);
+      // A plate whose "working on" chip would run across the wall board drops the chip (the name stays,
+      // and the hover tip still carries the title) — it was hiding cards, lane 01M4VNDVF7.
+      const work = el.querySelector<HTMLElement>('.lc-gl-label__work');
+      if (work) {
+        boardRect ??= ((a) => ({ x0: a.x, y0: a.y, x1: a.x + a.w, y1: a.y + a.h }))(boardAnchor(fit));
+        const over = plateCoversBoard(at, plateFullW.get(name) ?? size.w, size.h, boardRect);
+        work.style.display = over ? 'none' : '';
+      }
       if (at.displaced) {
         // From the plate's nearest edge to just above the crown it belongs to, in the label's own
         // coordinates (its box is `translate(-50%, -100%)` from `at`).

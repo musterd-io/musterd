@@ -6,6 +6,7 @@ import {
   headBox,
   layoutPlates,
   leaderFrom,
+  plateCoversBoard,
   plateRect,
   type PlateBox,
   type PlateMemo,
@@ -219,5 +220,22 @@ describe('the head box is the head', () => {
   it('stops at the chin — clearing a neighbour’s shoulders is what sent plates five steps up', () => {
     const b = headBox({ x: 0, y: 0 }, 1);
     expect(b.y1).toBeLessThanOrEqual(34);
+  });
+});
+
+describe('plateCoversBoard — a wide plate must not hide the wall board (lane 01M4VNDVF7)', () => {
+  const board = { x0: 800, y0: 200, x1: 920, y1: 290 };
+  it('covers the board when a 350 px plate anchored to its left runs across the face', () => {
+    // anchored at x=700, 350 wide: spans 525..875, and sits at y 260..280 — over the board's lower-left
+    expect(plateCoversBoard({ x: 700, y: 280 }, 350, 20, board)).toBe(true);
+  });
+  it('is clear once the plate is narrow enough (the chip dropped) or anchored elsewhere', () => {
+    expect(plateCoversBoard({ x: 700, y: 280 }, 120, 20, board)).toBe(false); // 640..760
+    expect(plateCoversBoard({ x: 300, y: 280 }, 350, 20, board)).toBe(false); // far left
+    expect(plateCoversBoard({ x: 700, y: 340 }, 350, 20, board)).toBe(false); // below the board
+  });
+  it('lets a sliver go: a plate grazing the board edge is not a cover', () => {
+    // 4 px of horizontal overlap on a 20 px tall plate: well under the share of its own area
+    expect(plateCoversBoard({ x: 627, y: 280 }, 350, 20, board)).toBe(false); // right edge 802
   });
 });
