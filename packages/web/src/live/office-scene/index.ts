@@ -14,6 +14,7 @@ import { solidHit, walkable } from './nav';
 import { layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
 import { REPLAY_TEMPO } from './replay';
+import { stepDomAnimations } from './domCadence';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -1779,6 +1780,8 @@ export function mountOffice(
   // capture fps while `ticks` tracks rAF — the gap is the waste the draw-rate cap removes.
   let ticks = 0;
   let draws = 0;
+  // Broadcast only: the DOM animations this cadence has paused and now owns (./domCadence.ts).
+  const heldAnims = new WeakSet<object>();
   let beats = 0; // drift-heartbeat frames — the only counter that moves in a parked room
   const since = performance.now();
   function tick(now: number) {
@@ -1811,6 +1814,9 @@ export function mountOffice(
     }
     draws++;
     const dt = Math.min(0.05, acc / 1000);
+    // The DOM props (steam, motes, twinkles, fan, banner) advance by the wall time this frame covers
+    // and only now, so the software compositor composes one frame per draw, not sixty a second.
+    if (broadcast) stepDomAnimations(document.getAnimations(), acc, heldAnims);
     acc = 0;
     clock += dt;
     // Replay on open runs the walkers at tempo until the replayed walks have all landed; everything

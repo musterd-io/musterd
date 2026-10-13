@@ -114,6 +114,34 @@ longer-run draw rate is not yet measured; read the next `the office drew` line i
 comes, before calling the floor held. ffmpeg's `-stats` line arrives only when Fly flushes it, so
 `speed=` for this run is unread too.
 
+**2026-10-13 — the box's cost is the compositor, not the canvas; DOM animations now step at the draw cadence** (miley;
+lane 01M4S96VAWC5N3M5FGC4H6A75C; falsify: on a machine built from this lane, `top -H` on a live
+1080p15 stream shows the `VizCompositor` thread still near 90%, or the local A/B below no longer
+separates the arms). Nick asked which of the last two weeks' office changes made the room dear to
+draw. Canvas ops per draw on `/broadcast` at 1920×1080, same room, counted with a
+`CanvasRenderingContext2D.prototype` wrapper: 09-28 **33,640**, 09-30 (sprite cache, ADR 488)
+**16,827**, 10-12 **16,546**. DOM nodes 476 → 434, 57 running CSS animations at both ends. So the
+canvas got cheaper, not dearer, and the room was already under the 12/s floor on 09-30 (above). On
+the box, `top -H` named the cost: the GPU process main thread 94% and `VizCompositor` 88%, the
+renderer main (canvas + JS) 75%, browser + ThreadPool + DevTools (screencast) ~80%. The software
+compositor composes a frame whenever the page is damaged, and 55 forever-running CSS animations
+(18 steam wisps, 24 motes, 12 twinkles, fan, asks-breathe) damaged it at the display's 60Hz over a
+canvas that changes 15 times a second.
+
+A/B/A on this laptop, headless Chrome with `--disable-gpu` (software Viz like the box), the daemon's
+`/broadcast?fps=15`, 20 s windows, `ps` %CPU per Chrome process:
+
+| arm | GPU process | renderer | draws/s |
+| --- | --- | --- | --- |
+| main, animations running | 99%, 100% | 65%, 56% | 16.2, 15.6 |
+| main, `document.getAnimations().forEach(a => a.pause())` | 33% | 44% | 15.8 |
+| this lane (`office-scene/domCadence.ts`), animations stepped per draw | 50% | 47% | 15.4 |
+| this lane, animations forced back to free-running | 92% | 53% | 15.5 |
+
+The lane pauses every animation the page runs and advances `currentTime` by the wall time each drawn
+frame covers, right before the canvas draws, broadcast only. The props move at the rate the stream can
+show and the compositor gets one damage per draw. Box numbers after the image rebuild go here.
+
 **What the first row is expected to show,** from #369's spot measurement: delivered ~35 fps at
 ~181 KB/frame, canvas drawing at ~60, so **draws/delivered ≈ 1.7–2.0**. If that holds, the page is
 being painted roughly twice for every frame that reaches the encoder, and the plan's candidate #1 is
