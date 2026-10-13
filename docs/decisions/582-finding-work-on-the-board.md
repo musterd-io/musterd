@@ -1,6 +1,6 @@
 # 582 — Finding work on the board: one query string, short ids, derived areas
 
-- Status: proposed (2026-10-13, izzo; nick asked for the write-up in chat, "yes")
+- Status: accepted (2026-10-13, nick, in chat: "looks good")
 - Date: 2026-10-13
 - Goal: `find-work` · lanes `01M4VKRT87` (this ADR), `01M4VKRXEX` (query), `01M4VKS1T4` (short ids),
   `01M4VKSDJH` (areas), `01M4VKS6SF` (one lane in full)
