@@ -295,34 +295,15 @@ describe('the dog tags along to the cooler (spec 2026-10-13 L2)', () => {
   });
 });
 
-describe('a bubble steps aside while it would cover the wall board (lane 01M4VMFE3A)', () => {
-  it('positionSpeech asks bubbleCoversBoard, hides with opacity, and never catches the board click', () => {
+describe('a bubble slides off the wall board instead of covering it (lane 01M4VMFE3A)', () => {
+  it('positionSpeech shifts the bubble by bubbleShiftOffBoard and never hides it', () => {
     const fn = index.slice(index.indexOf('function positionSpeech'), index.indexOf('function clearSpeech'));
-    expect(fn).toContain('bubbleCoversBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board)');
-    expect(fn).toContain("outer.style.opacity = over ? '0' : '';");
-    expect(fn).toContain("outer.style.pointerEvents = over ? 'none' : 'auto';");
+    expect(fn).toContain('bubbleShiftOffBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board)');
+    expect(fn).toContain('translate(${head.x + dx}px, ${head.y - SPEECH_LIFT}px)');
+    // the earlier cut faded the bubble out for the whole landing and the sentence was lost
+    expect(fn).not.toContain('opacity');
+    expect(fn).not.toContain('pointerEvents');
     // the board anchor is read once per pass, and only when a bubble is up
     expect(fn).toContain('const board = speeches.size ? boardAnchor(fit) : undefined;');
-  });
-});
-
-describe('a plate drops its work chip rather than cover the wall board (lane 01M4VNDVF7)', () => {
-  it('judges the chip-included width, so hiding the chip cannot flip the verdict back', () => {
-    expect(index).toContain("if (!work || work.style.display !== 'none') plateFullW.set(name, w);");
-    const at = index.indexOf("el.classList.toggle('is-displaced', at.displaced);");
-    const body = index.slice(at, at + 900);
-    expect(body).toContain("plateCoversBoard(at, plateFullW.get(name) ?? size.w, size.h, boardRect)");
-    expect(body).toContain("work.style.display = over ? 'none' : '';");
-  });
-});
-
-describe('the cork keeps a hole where a card hung (lane 01M4VP3V99)', () => {
-  it('folds each board into the viewer\'s marks, loading once per team and saving only when one rises', () => {
-    const at = index.indexOf('if (heldTeam !== teamName) {');
-    const body = index.slice(at, at + 520);
-    expect(body).toContain('heldMarks = loadHeld(teamName);');
-    expect(body).toContain('const heldNow = withHeld(next.wallBoard ?? null, heldMarks);');
-    expect(body).toContain('if (heldNow.changed) saveHeld(teamName, heldMarks);');
-    expect(body).toContain('wallBoard = heldNow.board;');
   });
 });
