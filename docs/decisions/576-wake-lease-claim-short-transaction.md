@@ -54,6 +54,9 @@ fixed by #2440 (lane 01M4S0ZAG8); this is what remains on a large team.
      `UPDATE … SET first_wake_at = ? WHERE id = ? AND first_wake_at IS NULL`, and the wake is
      dropped if it changed no row;
    - a `residency.wake_exhausted` row is written only if `isExhausted` is still false.
+     _(Amended 2026-10-13: an edge-breaker or continuation-cap row is once per (seat, act, edge)
+     trip, written again only after a newer `woke` or `wake_failed` on that lane and edge —
+     lane 01M4VJNEX2.)_
 
    Rate counters (`wakesSince`, `attemptsForAct`, the edge counts) are not rechecked. They change
    only when a host reports or the reaper expires a lease, and either one needs a lease for this
@@ -84,6 +87,13 @@ fixed by #2440 (lane 01M4S0ZAG8); this is what remains on a large team.
   a seat" held on SQLite and did not hold on Postgres; the ledger entry is
   `docs/claims/entries/2026-10-12-one-transaction-prevents-double-spawn.md`. No double spawn has
   been observed: the hub's store, the largest, holds no member with two `leased` rows.
+- _(2026-10-13, lane 01M4VJNEX2.)_ The edge-breaker and continuation-cap rows were the exception
+  to the `isExhausted` check: `once: false` appended one on every poll that reached the gate.
+  The hub held 40,067 of those for 19 acts, and every `json_extract` scan over `audit`
+  (`isExhausted`, `attemptsForAct`) walked them. A trip now writes one row. The first poll of a
+  process deletes the repeats, keeping the earliest of each (team, seat, act, edge, kind), and
+  keeping a row that is its node's high-water `origin_seq` or that an enrolled joiner has not
+  pushed yet — the same two keeps as audit retention. `sync_log` is left as it is.
 
 ## Observability & Evaluation
 
