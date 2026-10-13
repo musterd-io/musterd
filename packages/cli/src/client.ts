@@ -18,6 +18,7 @@ import {
   type NodeList,
   GoalSchema,
   GrantMintSchema,
+  GrantSchema,
   GovernedLaunchAuthorizationIssueSchema,
   GovernedLaunchAuthorizationMintSchema,
   GovernedPolicySchema,
@@ -100,6 +101,7 @@ import {
   type GovernedPolicyResponse,
   type GovernedPolicyReadResponse,
   type GrantMint,
+  type Grant,
   type IssueGrant,
   type LaneBoard,
   type LaneResult,
@@ -1166,6 +1168,34 @@ export class HttpClient {
       throw new CliError('grant response did not match the protocol schema', 1);
     }
     return parsed.data;
+  }
+
+  /** Human-admin grant inventory (`GET /teams/:slug/grants`) — public metadata only. */
+  async grants(slug: string): Promise<Grant[]> {
+    const json: unknown = await this.request('GET', `/teams/${encodeURIComponent(slug)}/grants`);
+    const raw =
+      json && typeof json === 'object' && 'grants' in json
+        ? (json as { grants?: unknown }).grants
+        : undefined;
+    if (!Array.isArray(raw))
+      throw new CliError('grant list response did not match the protocol schema', 1);
+    const grants = raw.map((item) => GrantSchema.safeParse(item));
+    if (grants.some((item) => !item.success))
+      throw new CliError('grant list response did not match the protocol schema', 1);
+    return grants
+      .map((item) => (item.success ? item.data : null))
+      .filter((item): item is Grant => item !== null);
+  }
+
+  /** Human-admin revoke (`DELETE /teams/:slug/grants/:id`). */
+  async revokeGrant(slug: string, id: string): Promise<{ ok: true }> {
+    const json: unknown = await this.request(
+      'DELETE',
+      `/teams/${encodeURIComponent(slug)}/grants/${encodeURIComponent(id)}`,
+    );
+    if (!json || typeof json !== 'object' || !('ok' in json) || json.ok !== true)
+      throw new CliError('grant revoke response did not match the protocol schema', 1);
+    return { ok: true };
   }
 
   // ── Coordination lanes, Phase 1 (ADR 083). Mutations return { lane, warnings } — warn-only.

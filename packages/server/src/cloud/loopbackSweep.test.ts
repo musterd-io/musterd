@@ -11,7 +11,7 @@ import { bootCloud, hostRequest } from './testing.js';
  * answer 2xx. Each row carries the gate it exercises, and the table is checked against the source
  * — a new call site of a former shortcut without a row here fails the suite.
  */
-type Gate = 'requireLocalPeer' | 'authProvision' | 'tls' | 'console';
+type Gate = 'requireLocalPeer' | 'authProvision' | 'authAdmin' | 'tls' | 'console';
 interface Row {
   gate: Gate;
   method: 'GET' | 'POST';
@@ -42,7 +42,7 @@ const ROWS: Row[] = [
     want: 401,
   },
   {
-    gate: 'authProvision',
+    gate: 'authAdmin',
     method: 'POST',
     path: '/teams/revive/members/ada/credential/rotate',
     want: 401,
@@ -78,7 +78,7 @@ describe('loopback audit — behavioural (1C task 9, spec §8.3)', () => {
     const rows = (g: Gate) => ROWS.filter((r) => r.gate === g).length;
     // Call sites, not the definitions (`function requireLocalPeer(`, `function authProvision(`).
     expect(rows('requireLocalPeer')).toBe(calls(http, /(?<!function )requireLocalPeer\(\s*ctx/g));
-    expect(rows('authProvision')).toBe(calls(http, /await authProvision\(ctx, slug, req\)/g));
+    expect(rows('authProvision')).toBe(calls(http, /await authProvision\(ctx, slug, req,\s*\{/g));
     expect(rows('tls')).toBe(
       calls(src('oauth.ts'), /requireTlsPeer\(ctx, req,/g) +
         calls(src('mcpHttp.ts'), /isTlsPeer\(ctx, req\)/g),

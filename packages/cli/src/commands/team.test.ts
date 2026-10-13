@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import type { Binding } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
-import { saveBinding } from '../config.js';
+import { loadConfig, saveBinding } from '../config.js';
 import { teamCommand } from './team.js';
 
 /**
@@ -60,6 +61,46 @@ describe('team policy command', () => {
     expect(res.out).toContain('re-seat known agents: off');
     expect(res.out).toContain('review loop: off');
     expect(res.out).toContain('dispatch loop: off');
+  });
+
+  it('lists and revokes grants without printing the grant token or hash (ADR 580)', async () => {
+    const credential = loadConfig().identities['dawn']?.key;
+    expect(credential).toMatch(/^mscr_/);
+    const issued = await fetch(`${serverUrl}/teams/dawn/grants`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${credential}`,
+      },
+      body: JSON.stringify({ scope: 'role', target: 'worker', lifetime: 'standing' }),
+    });
+    expect(issued.status).toBe(201);
+    const { grant, token } = (await issued.json()) as {
+      grant: { id: string };
+      token: string;
+    };
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    const listed = await capture(() => teamCommand(parseArgs(['grant', 'list', '--json'])));
+    expect(listed.code).toBe(0);
+    expect(JSON.stringify(JSON.parse(listed.out).grants)).toContain(grant.id);
+    expect(listed.out).not.toContain(token);
+    expect(listed.out).not.toContain(tokenHash);
+
+    const revoked = await capture(() =>
+      teamCommand(parseArgs(['grant', 'revoke', grant.id, '--json'])),
+    );
+    expect(revoked.code).toBe(0);
+    expect(JSON.parse(revoked.out)).toMatchObject({ id: grant.id, ok: true });
+    expect(revoked.out).not.toContain(token);
+    expect(revoked.out).not.toContain(tokenHash);
+
+    const after = await capture(() => teamCommand(parseArgs(['grant', 'list', '--json'])));
+    expect(JSON.parse(after.out).grants).toEqual([
+      expect.objectContaining({ id: grant.id, revoked: true }),
+    ]);
+    expect(after.out).not.toContain(token);
+    expect(after.out).not.toContain(tokenHash);
   });
 
   it('--agent-connect sets who may start a member-created agent, and the view says which (ADR 456)', async () => {

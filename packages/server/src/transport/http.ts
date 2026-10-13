@@ -93,6 +93,9 @@ import {
   SubmitSeedBriefSchema,
   TeamMemorySearchResponseSchema,
   TOKEN_PREFIXES,
+  effectiveCapabilities,
+  mergeRoleDefaults,
+  seatRoles,
   BootstrapCutoverRequestSchema,
   BootstrapMigrationRequestSchema,
   NodeEnrollRequestSchema,
@@ -157,7 +160,7 @@ import {
 import { cloudHealth } from '../cloud/health.js';
 import { hostAllows } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
-import { checkUpgrade, readLocalIdentities, resolveRosterRoots } from '../config.js';
+import { checkUpgrade, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { schemaVersionOf } from '../db/migrations.js';
@@ -1694,6 +1697,18 @@ async function announceHold(
   );
 }
 
+/** Authenticate a human member for a self-scoped operation. Locality and agent keys are not enough. */
+async function authHuman(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+): Promise<{ team: TeamRow; member: MemberRow }> {
+  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+  if (auth.member.kind !== 'human')
+    throw new MusterdError('forbidden', 'this resource requires an authenticated human member');
+  return auth;
+}
+
 /** Authorize an **admin-only read** (e.g. the audit log). Strict `is_admin` — no empty-admin fallback,
  *  since there is no prior open behaviour to preserve for a v0.3-only endpoint. */
 async function authAdmin(
@@ -1702,8 +1717,11 @@ async function authAdmin(
   req: IncomingMessage,
 ): Promise<{ team: TeamRow; member: MemberRow }> {
   const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
-  if (!resolveCapabilities(auth.member).is_admin)
-    throw new MusterdError('forbidden', 'this resource is admin-only (visibility_level: admin)');
+  if (auth.member.kind !== 'human' || !resolveCapabilities(auth.member).is_admin)
+    throw new MusterdError(
+      'forbidden',
+      'this resource requires a human admin (visibility_level: admin)',
+    );
   return auth;
 }
 
@@ -1928,21 +1946,6 @@ async function authClaimedAgent(
 }
 
 /**
- * Authorize **seat provisioning** (`POST /members`).
- *
- * This route mints a seat and hands back its secret, and for `{observer: true}` that secret carries
- * full message visibility — the recipient-scoping in `GET /messages` and the firehose both exempt
- * observers (ADR 128). So an unauthenticated caller here can read every DM on the team.
- *
- * The route has always *described* itself as localhost-trust, but nothing enforced it: the server
- * never looked at the peer address, so "local" was an emergent property of the default 127.0.0.1
- * bind rather than a checked predicate. Under ADR 040's off-loopback bind (TLS or trust-proxy) that
- * left the endpoint open to anyone who could reach the port. This enforces the claim.
- *
- * Local peer ⇒ unauthenticated, exactly as before (the CLI and the daemon-served /live dashboard both
- * provision this way, and neither holds an admin credential). Anyone else ⇒ admin.
- */
-/**
  * Refuse anything that did not come from this machine (ADR 170, reusing ADR 134's predicate). Unlike
  * `authProvision` there is no admin escape hatch: the sign-in handoff moves a *member* credential,
  * and the whole reason it is safe to put a nonce in a URL is that the URL only works here. `onDeny`
@@ -2006,22 +2009,76 @@ async function lanesNamedIn(ctx: Ctx, teamId: string, refs: string[]): Promise<s
   );
 }
 
-async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Promise<void> {
-  if (trustsLocalPeer(ctx, req)) return;
+/**
+ * Authorize a provisioning operation. Locality may stand in for a caller only for ordinary agent
+ * seats. Observers can read team traffic, so they require a human admin even when their `kind` is
+ * `agent`. `humanAdminRequired` also covers human-seat additions and changes to the human-admin set
+ * found in a file-backed projection.
+ */
+async function authProvision(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  options: { humanAdminRequired: boolean },
+): Promise<void> {
+  const localPeer = trustsLocalPeer(ctx, req);
+  if (localPeer && !options.humanAdminRequired) return;
   try {
     await authAdmin(ctx, slug, req);
   } catch (e) {
-    // Re-frame the generic admin refusal: the caller's real problem is *where they are*, not their role.
+    // The caller needs an explicit human-admin identity when locality is not sufficient.
     if (e instanceof MusterdError && (e.code === 'unauthorized' || e.code === 'forbidden')) {
       throw new MusterdError(
         e.code,
-        'provisioning a seat from off this machine requires an admin credential — an observer seat ' +
-          "reads the team's directed messages, so it is not mintable anonymously over the network. " +
-          'Provision on the daemon host, or authenticate as an admin seat (is_admin).',
+        localPeer
+          ? 'provisioning a human seat, observer, or admin-capable roster change requires a human-admin credential; local trust authorizes ordinary agent-seat operations only'
+          : 'provisioning a human seat, observer, or admin-capable roster change from off this machine requires a human-admin credential',
       );
     }
     throw e;
   }
+}
+
+/**
+ * A file-backed member request reconciles the full roster, not only its named seat. Before a local
+ * peer may use the agent-seat shortcut, refuse the shortcut if that projection would add/revive a
+ * human seat or change which human seats are admins.
+ */
+async function rosterProjectionRequiresHumanAdmin(
+  ctx: Ctx,
+  team: TeamRow,
+  spec: NonNullable<ReturnType<typeof teamSpecForSlug>>,
+): Promise<boolean> {
+  const projectedHumanAdmins = new Set<string>();
+  for (const { name, seat } of spec.seats) {
+    if (seat.kind !== 'human') continue;
+    const current = await getMemberByName(ctx.db, team.id, name);
+    if (!current || current.left_at !== null || current.kind !== 'human') return true;
+
+    const roleDefaults = mergeRoleDefaults(
+      seatRoles(seat).map(
+        (roleName) =>
+          spec.roles.find((candidate) => candidate.name === roleName)?.role.capabilities ?? {},
+      ),
+    );
+    const nextIsAdmin = effectiveCapabilities(roleDefaults, seat.capabilities ?? {}).is_admin;
+    if (nextIsAdmin) projectedHumanAdmins.add(name);
+    if (nextIsAdmin !== resolveCapabilities(current).is_admin) return true;
+  }
+
+  // A removed or changed-kind human admin would disappear from the projected set, even though no
+  // human seat remains in the file list above to compare. Keep local trust from silently removing
+  // the last human authority as a side effect of an agent-only reconcile.
+  for (const current of await listMembers(ctx.db, team.id)) {
+    if (
+      current.kind === 'human' &&
+      current.left_at === null &&
+      resolveCapabilities(current).is_admin &&
+      !projectedHumanAdmins.has(current.name)
+    )
+      return true;
+  }
+  return false;
 }
 
 /**
@@ -2702,8 +2759,21 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/members') {
-        await authProvision(ctx, slug, req);
         const body = parseOrBadRequest(AddMemberBody, await readJson(req));
+        const provisioningTeam = await requireTeam(ctx.db, slug);
+        const roots = body.observer
+          ? []
+          : [...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])];
+        const spec = teamSpecForSlug(roots, slug);
+        const declaredSeat = spec?.seats.find((seat) => seat.name === body.name);
+        const targetKind = body.observer ? body.kind : (declaredSeat?.seat.kind ?? body.kind);
+        const projectionRequiresHumanAdmin = spec
+          ? await rosterProjectionRequiresHumanAdmin(ctx, provisioningTeam, spec)
+          : false;
+        await authProvision(ctx, slug, req, {
+          humanAdminRequired:
+            body.observer === true || targetKind === 'human' || projectionRequiresHumanAdmin,
+        });
         // ADR 058 project-and-return: for a *file-backed* team the file is the single writer — the CLI
         // has already written `seats/<name>.toml`; the daemon reconciles it and hands back the token,
         // never originating the seat. A *db-only* team (no roster root declares it) keeps the legacy
@@ -2717,10 +2787,6 @@ export async function handleHttp(
         // provisioning call is cheap; the boot/watch reconcile catch up on the next reload (SIGHUP).
         // Observers (ADR 063) are runtime watchers, not durable seat files — always provision them
         // db-only, even on a file-backed team, bypassing the seat-file projection below.
-        const roots = body.observer
-          ? []
-          : [...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])];
-        const spec = teamSpecForSlug(roots, slug);
         if (spec) {
           const result = await reconcileTeam(ctx.db, spec);
           const team = await requireTeam(ctx.db, slug);
@@ -2932,9 +2998,14 @@ export async function handleHttp(
         const team = await requireTeam(ctx.db, slug);
         requireLocalPeer(ctx, req, 'stage a sign-in handoff');
         const body = parseOrBadRequest(StageHandoffSchema, await readJson(req));
-        // The caller must already hold this member's credential: the relay moves an authority, it
-        // never issues one. A mismatch is the same `unauthorized` any bad credential gets.
-        const { member } = await authMember(ctx.db, slug, body.credential, body.member);
+        // An authenticated human authorizes their own transfer. The relay moves this credential; it
+        // never issues or selects another one. Agent credentials cannot stage a human identity.
+        const { member } = await authHuman(ctx, slug, req);
+        if (member.name !== body.member || bearer(req) !== body.credential)
+          throw new MusterdError(
+            'forbidden',
+            'a sign-in handoff can transfer only your own credential',
+          );
         const staged = stageHandoff({
           team: team.slug,
           member: member.name,
@@ -2959,10 +3030,9 @@ export async function handleHttp(
        * the browser asks the daemon directly there is no link to make inert, nothing to expire, and
        * nothing to leak into history.
        *
-       * `isLocalPeer` is the entire security boundary and is load-bearing rather than a hardening
-       * detail: this route returns a member CREDENTIAL, so off-machine it would hand a second admin
-       * the FIRST admin's identity. The refusal is counted as ADR 170's `off_machine` miss — the
-       * pre-registered signal that earns the bounded-credential work both ADRs declined to do.
+       * Locality keeps this machine-local route out of Cloud and records off-machine attempts. An
+       * authenticated human bearer is the authority: local peer status alone never returns a
+       * credential, and the response can name only the credential already presented.
        */
       if (method === 'GET' && rest === '/local-identity') {
         const team = await requireTeam(ctx.db, slug);
@@ -2979,36 +3049,16 @@ export async function handleHttp(
               detail: { reason: 'off_machine' },
             }),
         );
-        // Every human credential this machine holds for the team (ADR 557), kept only if it still
-        // authenticates as that member: the vault can name a seat this team has never heard of, a
-        // renamed seat, a rotated credential, or a seat that has left. Offering one of those would
-        // hand the page a button that cannot connect, and then blame the page for the failure.
-        // `authMember` is the same read-only check every authenticated request runs.
-        const offered: { as: string; credential: string }[] = [];
-        for (const local of readLocalIdentities(team.slug)) {
-          if (offered.some((o) => o.as === local.name)) continue;
-          try {
-            await authMember(ctx.db, team.slug, local.key, local.name);
-          } catch {
-            continue;
-          }
-          offered.push({ as: local.name, credential: local.key });
-        }
-        // **The successful offer is deliberately NOT audited.** ADR 170's rows record discrete human
-        // acts — running `musterd board`, redeeming a nonce once. This route is probed automatically
-        // on every page load of an ambient surface the founder leaves open, so a row here would not
-        // record an act at all: it would record *when the human had the office on screen*. That is
-        // precisely the human-activity trail ADR 155 refuses to create ("no new record of when the
-        // human was at their desk", surveillance-asymmetry, ADR 145). Measured in the exercise run:
-        // four rows from three page loads, nobody having done anything.
-        //
-        // Nothing is lost. The ADR's evaluation measure is the first ask ever ANSWERED from a
-        // browser, which is read off `accept`/`decline`/`wait` envelopes, not off this route. The
-        // refusal below stays audited because a refused cross-machine attempt is a security event
-        // about an action someone took, not a note about where a human was sitting.
-        if (offered.length === 0) return sendJson(res, 200, { available: false });
-        // `as`/`credential` stay the first offer, for a /live bundle published before ADR 557.
-        return sendJson(res, 200, { available: true, ...offered[0], identities: offered });
+        // Only an authenticated human can retrieve the identity already present on this request.
+        // There is no scan of the daemon's local credential vault or cross-identity disclosure.
+        const { member } = await authHuman(ctx, slug, req);
+        const credential = bearer(req);
+        return sendJson(res, 200, {
+          available: true,
+          as: member.name,
+          credential,
+          identities: [{ as: member.name, credential }],
+        });
       }
 
       const handoffMatch = rest.match(/^\/signin-handoff\/([^/]+)$/);
@@ -8783,13 +8833,8 @@ export async function handleHttp(
        * at the next claim (live sessions ride out — same as `key.rotate`). The two-credential schema
        * ADR 170 deferred stays deferred; "I lost it" is exactly what rotation serves.
        *
-       * The bar is `authProvision` (localhost unauthenticated, admin credential off-host — ADR 134),
-       * NOT admin-only, and that is the load-bearing call rather than a shortcut: the primary caller
-       * has lost the very credential admin auth would demand, so admin-only is circular precisely
-       * when the admin is the one locked out. Re-minting for an existing human is not a more powerful
-       * act than minting for a new one, which already sits at this bar. The residual risk — any local
-       * process can rotate any human's credential — is ADR 134's accepted boundary, and rotation is
-       * self-announcing: an audit row lands and the old secret stops working.
+       * The bar is a human-admin credential (ADR 580). Locality proves only that the caller shares
+       * this machine; it cannot authorize a replacement human identity.
        *
        * Humans only. An agent seat authenticates with the team agent key (ADR 069/075) and has no
        * credential to lose; minting one for it would manufacture exactly the human-seat authority the
@@ -8800,7 +8845,7 @@ export async function handleHttp(
       );
       if (method === 'POST' && agentCredentialRotateMatch) {
         const team = await requireTeam(ctx.db, slug);
-        await authProvision(ctx, slug, req);
+        await authProvision(ctx, slug, req, { humanAdminRequired: false });
         const targetName = decodeURIComponent(agentCredentialRotateMatch[1]!);
         const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
@@ -8834,7 +8879,7 @@ export async function handleHttp(
       const credentialRotateMatch = rest.match(/^\/members\/([^/]+)\/credential\/rotate$/);
       if (method === 'POST' && credentialRotateMatch) {
         const team = await requireTeam(ctx.db, slug);
-        await authProvision(ctx, slug, req);
+        const { member: actor } = await authAdmin(ctx, slug, req);
         const targetName = decodeURIComponent(credentialRotateMatch[1]!);
         const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null) {
@@ -8851,21 +8896,17 @@ export async function handleHttp(
         // ADR 446 §3: rotation kills the seat's phone sessions too — the old mscr_ is dead, so
         // every msat_/msrt_ chain minted under it dies with it (admin revoke-all rides this path).
         const oauthRevoked = await revokeAllForMember(ctx.db, team.id, target.id);
-        // Attribute honestly: an off-host caller is an authenticated admin (authProvision just proved
-        // it); a loopback caller is anonymous by design, so the actor is null and `via` says where the
-        // authority came from. `detail` never carries the secret or its hash.
+        // The actor is the authenticated human admin. `detail` never carries the secret or its hash.
         await appendAudit(ctx.db, team.id, {
-          actor: (await tryAuth(ctx, slug, req))?.name ?? null,
+          actor: actor.name,
           action: 'credential.rotate',
           target: target.name,
           result: 'allow',
-          detail: {
-            via: trustsLocalPeer(ctx, req) ? 'local' : 'admin',
-          },
+          detail: { via: 'admin' },
         });
         if (oauthRevoked > 0) {
           await appendAudit(ctx.db, team.id, {
-            actor: (await tryAuth(ctx, slug, req))?.name ?? null,
+            actor: actor.name,
             action: 'oauth.revoked',
             target: target.name,
             result: 'allow',

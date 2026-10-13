@@ -56,11 +56,15 @@ withDrivers('signin-handoff-http', (_o, kind) => {
   });
 
   describe('POST /signin-handoff — staging (ADR 170)', () => {
-    it('stages with the caller’s own credential and returns a nonce + the TTL it applied', async () => {
-      const res = await post('/teams/dawn/signin-handoff', {
-        member: 'nick',
-        credential: nickCred,
-      });
+    it('a human admin stages its own credential and gets a nonce + the TTL it applied', async () => {
+      const res = await post(
+        '/teams/dawn/signin-handoff',
+        {
+          member: 'nick',
+          credential: nickCred,
+        },
+        bearer(nickCred),
+      );
       expect(res.status).toBe(201);
       expect(typeof res.json.nonce).toBe('string');
       expect(res.json.nonce.length).toBeGreaterThanOrEqual(24);
@@ -70,29 +74,82 @@ withDrivers('signin-handoff-http', (_o, kind) => {
       expect(await audits('signin.handoff_staged')).toHaveLength(1);
     });
 
-    it('refuses to launder an identity — ada’s credential cannot stage a handoff for nick', async () => {
-      const res = await post('/teams/dawn/signin-handoff', {
-        member: 'nick',
-        credential: adaCred,
-      });
-      // 403, not 401: the credential authenticates fine, it simply may not act as another seat — the
-      // acting-seat check inside authByCredential is what makes this route a courier, not an issuer.
+    it('a non-admin human can stage only its own existing credential', async () => {
+      const res = await post(
+        '/teams/dawn/signin-handoff',
+        {
+          member: 'ada',
+          credential: adaCred,
+        },
+        bearer(adaCred),
+      );
+      expect(res.status).toBe(201);
+      expect(typeof res.json.nonce).toBe('string');
+      expect(await audits('signin.handoff_staged')).toHaveLength(1);
+    });
+
+    it('an admin cannot stage another human’s credential', async () => {
+      const res = await post(
+        '/teams/dawn/signin-handoff',
+        {
+          member: 'ada',
+          credential: adaCred,
+        },
+        bearer(nickCred),
+      );
       expect(res.status).toBe(403);
       expect(await audits('signin.handoff_staged')).toHaveLength(0);
     });
 
-    it('refuses an unknown credential outright', async () => {
-      const res = await post('/teams/dawn/signin-handoff', {
-        member: 'nick',
-        credential: 'mscr_not_a_real_credential',
+    it('a local agent cannot stage or retrieve a human identity', async () => {
+      const worker = await post('/teams/dawn/members', { name: 'worker', kind: 'agent' });
+      expect(worker.status).toBe(201);
+      const claim = await post('/teams/dawn/claim', {
+        key: worker.json.token,
+        target: { seat: 'worker' },
+        surface: 'cli',
       });
+      expect(claim.status).toBe(200);
+      const workerAuth = {
+        ...bearer(worker.json.token),
+        'x-musterd-seat': 'worker',
+        'x-musterd-session-lease': claim.json.session_lease,
+      };
+
+      const stage = await post(
+        '/teams/dawn/signin-handoff',
+        { member: 'nick', credential: nickCred },
+        workerAuth,
+      );
+      expect(stage.status).toBe(403);
+      expect(await audits('signin.handoff_staged')).toHaveLength(0);
+
+      const identity = await get('/teams/dawn/local-identity', workerAuth);
+      expect(identity.status).toBe(403);
+      expect(JSON.stringify(identity.json)).not.toContain(nickCred);
+    });
+
+    it('refuses an unknown credential outright', async () => {
+      const res = await post(
+        '/teams/dawn/signin-handoff',
+        {
+          member: 'nick',
+          credential: 'mscr_not_a_real_credential',
+        },
+        bearer('mscr_not_a_real_credential'),
+      );
       expect(res.status).toBe(401);
     });
   });
 
   describe('GET /signin-handoff/:nonce — redemption (ADR 170)', async () => {
     const stage = async (member = 'nick', credential = () => nickCred) => {
-      const res = await post('/teams/dawn/signin-handoff', { member, credential: credential() });
+      const token = credential();
+      const res = await post(
+        '/teams/dawn/signin-handoff',
+        { member, credential: token },
+        bearer(token),
+      );
       return res.json.nonce as string;
     };
 

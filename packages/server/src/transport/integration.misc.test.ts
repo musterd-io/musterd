@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION } from '@musterd/protocol';
@@ -420,16 +420,126 @@ withDrivers('integration · misc', (_o, kind) => {
       expect(res.status).toBe(403);
     });
 
-    it('the local dashboard is untouched: a loopback peer still provisions unauthenticated', async () => {
-      // `server` (the outer suite's) has no trustProxy — a real 127.0.0.1 peer, the /live case.
-      await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      const res = await post('/teams/dusk/members', {
+    it('loopback trust provisions agent seats, while human credentials require an admin', async () => {
+      const team = await post('/teams', {
+        slug: 'dusk',
+        creator: { name: 'nick', kind: 'human' },
+      });
+
+      const agent = await post('/teams/dusk/members', { name: 'worker', kind: 'agent' });
+      expect(agent.status).toBe(201);
+      expect(agent.json.human_credential).toBeUndefined();
+
+      const refusedHuman = await post('/teams/dusk/members', {
         name: 'web-1',
         kind: 'human',
         observer: true,
       });
-      expect(res.status).toBe(201);
-      expect(res.json.human_credential).toMatch(/^mscr_/);
+      expect(refusedHuman.status).toBe(401);
+      expect(refusedHuman.json.human_credential).toBeUndefined();
+
+      const refusedObserverAgent = await post('/teams/dusk/members', {
+        name: 'observer-agent',
+        kind: 'agent',
+        observer: true,
+      });
+      expect(refusedObserverAgent.status).toBe(401);
+      expect(refusedObserverAgent.json.token).toBeUndefined();
+
+      const human = await post(
+        '/teams/dusk/members',
+        { name: 'web-1', kind: 'human', observer: true },
+        team.json.human_credential,
+      );
+      expect(human.status).toBe(201);
+      expect(human.json.human_credential).toMatch(/^mscr_/);
+    });
+
+    it('local agent provisioning cannot add or demote a human admin through roster reconciliation', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'musterd-local-trust-roster-'));
+      const roster = join(root, '.musterd');
+      mkdirSync(join(roster, 'seats'), { recursive: true });
+      mkdirSync(join(roster, 'roles'), { recursive: true });
+      writeFileSync(join(roster, 'team.toml'), 'slug = "dawn"\n');
+      writeFileSync(join(roster, 'roles', 'admin.toml'), '[capabilities]\nis_admin = true\n');
+      writeFileSync(join(roster, 'seats', 'nick.toml'), 'kind = "human"\nrole = "admin"\n');
+      writeFileSync(join(roster, 'seats', 'worker.toml'), 'kind = "agent"\n');
+
+      const server = createServer({
+        db: await openTestDriver(kind),
+        port: 0,
+        rosterRoots: [root],
+      });
+      try {
+        const { port } = await server.listen();
+        const base = `http://127.0.0.1:${port}`;
+        const postRoster = async (body: unknown, credential?: string) => {
+          const res = await fetch(`${base}/teams/dawn/members`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              ...(credential ? { authorization: `Bearer ${credential}` } : {}),
+            },
+            body: JSON.stringify(body),
+          });
+          const text = await res.text();
+          return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
+        };
+        const rosterView = async (credential: string) => {
+          const res = await fetch(`${base}/teams/dawn/members`, {
+            headers: { authorization: `Bearer ${credential}` },
+          });
+          return (await res.json()) as any;
+        };
+
+        const created = await fetch(`${base}/teams`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ slug: 'dawn', creator: { name: 'nick', kind: 'human' } }),
+        });
+        expect(created.status).toBe(201);
+        const team = (await created.json()) as any;
+        const nickCred = team.human_credential as string;
+
+        const provisioned = await postRoster({ name: 'worker', kind: 'agent' });
+        expect(provisioned.status).toBe(201);
+
+        writeFileSync(join(roster, 'seats', 'intruder.toml'), 'kind = "human"\nrole = "admin"\n');
+        const addAdmin = await postRoster({ name: 'worker', kind: 'agent' });
+        expect(addAdmin.status).toBe(401);
+        expect(addAdmin.json.token).toBeUndefined();
+        expect(addAdmin.json.human_credential).toBeUndefined();
+        expect((await rosterView(nickCred)).members.some((m: any) => m.name === 'intruder')).toBe(
+          false,
+        );
+
+        rmSync(join(roster, 'seats', 'intruder.toml'));
+        rmSync(join(roster, 'seats', 'nick.toml'));
+        const removeAdmin = await postRoster({ name: 'worker', kind: 'agent' });
+        expect(removeAdmin.status).toBe(401);
+        expect(
+          (await rosterView(nickCred)).members.find((m: any) => m.name === 'nick').capabilities
+            .is_admin,
+        ).toBe(true);
+
+        writeFileSync(join(roster, 'roles', 'member.toml'), '[capabilities]\nis_admin = false\n');
+        writeFileSync(join(roster, 'seats', 'nick.toml'), 'kind = "human"\nrole = "member"\n');
+        const demoteAdmin = await postRoster({ name: 'worker', kind: 'agent' });
+        expect(demoteAdmin.status).toBe(401);
+        expect(
+          (await rosterView(nickCred)).members.find((m: any) => m.name === 'nick').capabilities
+            .is_admin,
+        ).toBe(true);
+
+        expect((await postRoster({ name: 'worker', kind: 'agent' }, nickCred)).status).toBe(201);
+        expect(
+          (await rosterView(nickCred)).members.find((m: any) => m.name === 'nick').capabilities
+            .is_admin,
+        ).toBe(false);
+      } finally {
+        await server.close();
+        rmSync(root, { recursive: true, force: true });
+      }
     });
   });
 
@@ -793,72 +903,40 @@ withDrivers('integration · misc', (_o, kind) => {
     });
   });
 
-  /**
-   * Human credential rotate-in-place — the recovery path for a lost `mscr_`.
-   *
-   * `credential_hash` is one column and `mintCredential` overwrites it, so before this route a human
-   * who lost their credential was unrecoverable short of DB surgery. That is not hypothetical: it is
-   * the state the founder's own dogfood team was in, which made ADR 170's premise ("the CLI already
-   * holds your credential") false on the machine it shipped from.
-   *
-   * The bar is `authProvision` — localhost unauthenticated, admin off-host (ADR 134) — and these tests
-   * pin that deliberately, because admin-only is circular exactly when the locked-out human IS the
-   * admin. The compensating control is the audit row, so it is tested as load-bearing, not decoration.
-   */
-  describe('human credential rotate-in-place', () => {
+  /** ADR 580: human credential rotation always needs an authenticated human admin. */
+  describe('human credential rotation', () => {
     const rotatePath = (slug: string, name: string) =>
       `/teams/${slug}/members/${encodeURIComponent(name)}/credential/rotate`;
 
-    it('a loopback caller with NO credential rotates a human seat, and the new secret authenticates', async () => {
+    it('loopback locality alone cannot rotate or receive a human credential', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
-      const lost = team.json.human_credential as string;
-
-      // The whole point: the caller presents nothing, because what they lost is the thing they'd present.
+      const current = team.json.human_credential as string;
       const res = await post(rotatePath('dawn', 'nick'), {});
+      expect(res.status).toBe(401);
+      expect(res.json.credential).toBeUndefined();
+      expect((await get('/teams/dawn/inbox', current)).status).toBe(200);
+    });
+
+    it('a human admin rotates a human seat and the old credential stops authenticating', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const current = team.json.human_credential as string;
+      const res = await post(rotatePath('dawn', 'nick'), {}, current);
       expect(res.status).toBe(200);
       expect(res.json.member).toBe('nick');
       expect(res.json.credential).toMatch(/^mscr_/);
-      expect(res.json.credential).not.toBe(lost);
+      expect(res.json.credential).not.toBe(current);
 
-      // The new credential is a working identity…
-      const ok = await get('/teams/dawn/inbox', res.json.credential as string);
-      expect(ok.status).toBe(200);
-      // …and it is still the admin seat it was (rotation re-issues, it never re-grades).
+      expect((await get('/teams/dawn/inbox', current)).status).toBe(401);
+      expect((await get('/teams/dawn/inbox', res.json.credential as string)).status).toBe(200);
       const roster = await get('/teams/dawn/members', res.json.credential as string);
       expect(roster.json.members.find((m: any) => m.name === 'nick').capabilities.is_admin).toBe(
         true,
       );
     });
 
-    it('the old credential is dead — including at the claim path', async () => {
-      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
-      const lost = team.json.human_credential as string;
-      const res = await post(rotatePath('dawn', 'nick'), {});
-      const fresh = res.json.credential as string;
-
-      expect((await get('/teams/dawn/inbox', lost)).status).toBe(401);
-      // At the claim path the dead secret is simply not a key any more: it matches neither the agent
-      // key nor any credential_hash, so it lands in the claim route's own "invalid key" refusal (403,
-      // `type: refused`) rather than the bearer 401 the request paths give.
-      const staleClaim = await post('/teams/dawn/claim', {
-        key: lost,
-        target: { seat: 'nick' },
-        surface: 'cli',
-      });
-      expect(staleClaim.status).toBe(403);
-      expect(staleClaim.json).toMatchObject({ type: 'refused', message: /invalid key/ });
-
-      const freshClaim = await post('/teams/dawn/claim', {
-        key: fresh,
-        target: { seat: 'nick' },
-        surface: 'cli',
-      });
-      expect(freshClaim.status).toBe(200);
-    });
-
     it('writes one `credential.rotate` audit row — and never the secret', async () => {
-      await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
-      const res = await post(rotatePath('dawn', 'nick'), {});
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const res = await post(rotatePath('dawn', 'nick'), {}, team.json.human_credential);
       const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
       const rows = (await listAudit(h.server.store, teamId)).filter(
         (r) => r.action === 'credential.rotate',
@@ -866,19 +944,18 @@ withDrivers('integration · misc', (_o, kind) => {
       expect(rows).toHaveLength(1);
       expect(rows[0]!.target).toBe('nick');
       expect(rows[0]!.result).toBe('allow');
-      // Loopback callers are anonymous by design — the row says where the authority came from instead.
-      expect(rows[0]!.actor).toBeNull();
-      expect(JSON.parse(rows[0]!.detail!)).toEqual({ via: 'local' });
+      expect(rows[0]!.actor).toBe('nick');
+      expect(JSON.parse(rows[0]!.detail!)).toEqual({ via: 'admin' });
       expect(rows[0]!.detail).not.toContain(res.json.credential);
       expect(JSON.stringify(rows[0])).not.toContain((res.json.credential as string).slice(5));
     });
 
-    it('refuses an AGENT seat — an agent has no per-seat credential to lose', async () => {
+    it('refuses to rotate an AGENT through the human credential route', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const tok = team.json.human_credential as string;
       await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, tok);
 
-      const res = await post(rotatePath('dawn', 'Ada'), {});
+      const res = await post(rotatePath('dawn', 'Ada'), {}, tok);
       expect(res.status).toBe(400);
       expect(res.json.error.message).toMatch(/agent seat/i);
       // Nothing was minted: Ada still has no credential, so nothing new authenticates as her.
@@ -900,12 +977,12 @@ withDrivers('integration · misc', (_o, kind) => {
       await post('/teams/dawn/members', { name: 'Lin', kind: 'human' }, tok);
       // The message matters: a bare route-miss 404 would pass a status-only assertion, so pin the
       // route's own refusal — it names the seat and the team.
-      const ghost = await post(rotatePath('dawn', 'ghost'), {});
+      const ghost = await post(rotatePath('dawn', 'ghost'), {}, tok);
       expect(ghost.status).toBe(404);
       expect(ghost.json.error.message).toBe('no member "ghost" in dawn');
 
       await post('/teams/dawn/members/Lin/remove', {}, tok);
-      const res = await post(rotatePath('dawn', 'Lin'), {});
+      const res = await post(rotatePath('dawn', 'Lin'), {}, tok);
       expect(res.status).toBe(404);
       expect(res.json.error.message).toBe('no member "Lin" in dawn');
     });
@@ -938,11 +1015,11 @@ withDrivers('integration · misc', (_o, kind) => {
       return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
     }
 
-    it('refuses an unauthenticated off-host caller — a lost credential is not a network-mintable one', async () => {
+    it('refuses an unauthenticated off-host caller', async () => {
       await ppost('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const res = await ppost('/teams/dawn/members/nick/credential/rotate', {});
       expect(res.status).toBe(401);
-      expect(res.json.error.message).toMatch(/off this machine|admin credential/i);
+      expect(res.json.credential).toBeUndefined();
     });
 
     it('refuses a non-admin member off-host, and allows an admin', async () => {
@@ -968,158 +1045,74 @@ withDrivers('integration · misc', (_o, kind) => {
         (r) => r.action === 'credential.rotate',
       );
       expect(rows).toHaveLength(1);
-      // Off-host, the actor is the admin who proved themselves — the local anonymity does not carry over.
+      // The audit names the human admin who proved authority; the secret never enters its detail.
       expect(rows[0]!.actor).toBe('nick');
       expect(JSON.parse(rows[0]!.detail!)).toEqual({ via: 'admin' });
     });
   });
 
-  /**
-   * ADR 222 — `GET /teams/:slug/local-identity`. The daemon hands a page on THIS machine the identity
-   * the CLI already holds, so signing into the office costs one click and no human ever handles a
-   * secret.
+  /** ADR 580: a local browser can receive only the authenticated human's own identity.
    *
-   * `isLocalPeer` is the entire security boundary here, and it is load-bearing rather than decorative:
-   * the route returns a member CREDENTIAL, so off-machine it would hand a second admin the first
-   * admin's identity. These tests bind on loopback and flip `trustProxy` to model the ADR 040
-   * off-loopback deployment, the same shape the observer-disclosure suite above uses.
+   * Locality still narrows the route to this daemon. The bearer is the authority, so the server never
+   * scans a machine-wide vault or exposes another human's credential.
    */
-  describe("local sign-in identity: this machine's CLI seat, and nobody else's (ADR 222)", () => {
-    const configPath = join(mkdtempSync(join(tmpdir(), 'musterd-localid-')), 'config.json');
-
-    beforeEach(() => {
-      process.env['MUSTERD_CONFIG'] = configPath;
-    });
-
-    it('offers nothing when this machine has no CLI identity for the team', async () => {
-      writeFileSync(configPath, JSON.stringify({ identities: {} }));
-      await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-
+  describe('local sign-in identity requires an authenticated human (ADR 580)', () => {
+    it('refuses a loopback caller without an admin credential and returns no identity', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
       const res = await get('/teams/dusk/local-identity');
-      // Not an error: a machine with no CLI identity is an ordinary machine, and the rail simply
-      // offers the credential form instead of a button that cannot work.
-      expect(res.status).toBe(200);
-      expect(res.json.available).toBe(false);
+
+      expect(res.status).toBe(401);
       expect(res.json.credential).toBeUndefined();
-    });
-
-    it('offers the identity when the vault has one for this team', async () => {
-      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({ identities: { dusk: { name: 'nick', key: team.json.human_credential } } }),
-      );
-
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.status).toBe(200);
-      expect(res.json.available).toBe(true);
-      expect(res.json.as).toBe('nick');
-      expect(res.json.credential).toBe(team.json.human_credential);
-    });
-
-    it('refuses a cross-origin browser request even from a loopback peer', async () => {
-      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({ identities: { dusk: { name: 'nick', key: team.json.human_credential } } }),
-      );
-
-      const res = await get('/teams/dusk/local-identity', undefined, {
-        origin: 'https://evil.example',
-      });
-      expect(res.status).toBe(403);
       expect(JSON.stringify(res.json)).not.toContain(team.json.human_credential);
     });
 
-    it('refuses an agent-keyed vault entry — an agent key is a harness fact, not a person', async () => {
-      await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({ identities: { dusk: { name: 'nick', key: 'mskey_notacredential' } } }),
-      );
-
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.json.available).toBe(false);
-    });
-
-    it('offers nothing for a member the team has never heard of (a stale or renamed vault entry)', async () => {
-      await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({ identities: { dusk: { name: 'ghost', key: 'mscr_whatever' } } }),
-      );
-
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.json.available).toBe(false);
-    });
-
-    // ADR 557: the vault, not just the one machine-wide slot.
-    it('finds the human in the vault when a seat has overwritten identities[team] with an agent key', async () => {
-      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({
-          identities: { dusk: { name: 'ryder', key: 'msac_aseatkey' } },
-          knownIdentities: [
-            { team: 'dusk', name: 'ryder', key: 'msac_aseatkey' },
-            { team: 'dusk', name: 'nick', key: team.json.human_credential },
-          ],
-        }),
-      );
-
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.json.available).toBe(true);
-      expect(res.json.as).toBe('nick');
-      expect(res.json.identities).toEqual([{ as: 'nick', credential: team.json.human_credential }]);
-    });
-
-    it('offers every human seat this machine holds a working credential for, and no other team’s', async () => {
+    it('returns only the caller identity, even when other human credentials exist', async () => {
       const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
       const nickCred = team.json.human_credential as string;
       const ada = await post('/teams/dusk/members', { name: 'Ada', kind: 'human' }, nickCred);
       const adaCred = ada.json.human_credential as string;
-      writeFileSync(
-        configPath,
-        JSON.stringify({
-          identities: { dusk: { name: 'nick', key: nickCred } },
-          knownIdentities: [
-            { team: 'dusk', name: 'nick', key: nickCred },
-            { team: 'dusk', name: 'Ada', key: adaCred },
-            { team: 'elsewhere', name: 'Bo', key: 'mscr_otherteam' },
-          ],
-        }),
-      );
 
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.json.identities.map((i: { as: string }) => i.as)).toEqual(['nick', 'Ada']);
+      const res = await get('/teams/dusk/local-identity', nickCred);
+      expect(res.status).toBe(200);
+      expect(res.json).toEqual({
+        available: true,
+        as: 'nick',
+        credential: nickCred,
+        identities: [{ as: 'nick', credential: nickCred }],
+      });
+      expect(JSON.stringify(res.json)).not.toContain(adaCred);
     });
 
-    it('skips a credential that no longer authenticates, and offers the working one behind it', async () => {
+    it('a non-admin human receives only its own identity, not another human credential', async () => {
       const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
-      writeFileSync(
-        configPath,
-        JSON.stringify({
-          knownIdentities: [
-            { team: 'dusk', name: 'nick', key: 'mscr_stalerotatedaway' },
-            { team: 'dusk', name: 'nick', key: team.json.human_credential },
-          ],
-        }),
-      );
+      const nickCred = team.json.human_credential as string;
+      const ada = await post('/teams/dusk/members', { name: 'Ada', kind: 'human' }, nickCred);
+      const adaCred = ada.json.human_credential as string;
 
-      // The stale key is tried first and refused; the working one behind it is still offered.
-      const res = await get('/teams/dusk/local-identity');
-      expect(res.json.identities).toEqual([{ as: 'nick', credential: team.json.human_credential }]);
-      expect(JSON.stringify(res.json)).not.toContain('mscr_stalerotatedaway');
+      const res = await get('/teams/dusk/local-identity', adaCred);
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ as: 'Ada', credential: adaCred });
+      expect(res.json.identities).toEqual([{ as: 'Ada', credential: adaCred }]);
+      expect(JSON.stringify(res.json)).not.toContain(nickCred);
+    });
+
+    it('refuses a cross-origin browser request even with an admin bearer', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
+      const nickCred = team.json.human_credential as string;
+
+      const res = await get('/teams/dusk/local-identity', nickCred, {
+        origin: 'https://evil.example',
+      });
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(res.json)).not.toContain(nickCred);
     });
   });
 
-  describe('local sign-in identity is refused off this machine (ADR 222)', () => {
+  describe('local sign-in identity is refused off this machine (ADR 580)', () => {
     let proxied: RunningServer;
     let pbase: string;
-    const configPath = join(mkdtempSync(join(tmpdir(), 'musterd-localid-off-')), 'config.json');
 
     beforeEach(async () => {
-      process.env['MUSTERD_CONFIG'] = configPath;
       proxied = createServer({ db: await openTestDriver(kind), port: 0, trustProxy: true });
       const { port } = await proxied.listen();
       pbase = `http://127.0.0.1:${port}`;
@@ -1128,21 +1121,16 @@ withDrivers('integration · misc', (_o, kind) => {
       await proxied.close();
     });
 
-    it('refuses, and records the off_machine miss that earns the cross-device thread', async () => {
+    it('refuses and records an off-machine attempt even with a human-admin bearer', async () => {
       const created = await fetch(`${pbase}/teams`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ slug: 'dusk', creator: { name: 'nick', kind: 'human' } }),
       });
       const team = (await created.json()) as any;
-      // A real, usable identity is present — so the ONLY thing standing between an off-machine caller
-      // and nick's credential is the peer check.
-      writeFileSync(
-        configPath,
-        JSON.stringify({ identities: { dusk: { name: 'nick', key: team.human_credential } } }),
-      );
-
-      const res = await fetch(`${pbase}/teams/dusk/local-identity`);
+      const res = await fetch(`${pbase}/teams/dusk/local-identity`, {
+        headers: { authorization: `Bearer ${team.human_credential}` },
+      });
       expect(res.status).toBe(403);
       const body = (await res.json()) as any;
       expect(JSON.stringify(body)).not.toContain(team.human_credential);
@@ -1154,34 +1142,6 @@ withDrivers('integration · misc', (_o, kind) => {
       const miss = rows.audit.find((r: any) => r.action === 'signin.handoff_missed');
       expect(miss.detail.reason).toBe('off_machine');
     });
-  });
-
-  /**
-   * A team slug is a lookup key into the CLI's identity vault, so inherited members of
-   * Object.prototype must never answer for one (ADR 222). `constructor` is the case that shows this is
-   * not theoretical: `Object.prototype.constructor.name` is the string `'Object'`, so a guard checking
-   * only `name` would accept it as an identity.
-   */
-  describe('the identity vault lookup cannot be answered by Object.prototype (ADR 222)', () => {
-    const configPath = join(mkdtempSync(join(tmpdir(), 'musterd-proto-')), 'config.json');
-
-    beforeEach(() => {
-      process.env['MUSTERD_CONFIG'] = configPath;
-      writeFileSync(configPath, JSON.stringify({ identities: {} }));
-    });
-
-    it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
-      'offers nothing for a team named %s, even with an empty vault',
-      async (slug) => {
-        const team = await post('/teams', { slug, creator: { name: 'nick', kind: 'human' } });
-        // Some of these may be refused as team slugs outright, which is also a correct answer — the
-        // point is that none of them ever yields a credential.
-        if (team.status !== 201) return;
-        const res = await get(`/teams/${encodeURIComponent(slug)}/local-identity`);
-        expect(res.json.available).toBe(false);
-        expect(res.json.credential).toBeUndefined();
-      },
-    );
   });
 
   /**

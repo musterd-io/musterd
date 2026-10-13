@@ -67,6 +67,7 @@ export async function teamCommand(parsed: Parsed): Promise<number> {
   if (sub === 'credential') return teamCredential(parsed);
   if (sub === 'agent-key') return teamAgentKey(parsed);
   if (sub === 'bootstrap') return teamBootstrap(parsed);
+  if (sub === 'grant') return teamGrant(parsed);
   if (sub === 'invite') return teamInvite(parsed);
   if (sub === 'remove') return teamRemove(parsed);
   if (sub === 'archive') return teamArchive(parsed);
@@ -77,7 +78,7 @@ export async function teamCommand(parsed: Parsed): Promise<number> {
   if (sub === 'policy') return teamPolicy(parsed);
   if (sub === 'hue') return teamHue(parsed);
   throw new CliError(
-    'usage: musterd team <create|add|observe|credential|agent-key|bootstrap|invite|remove|archive|export|policy|hue> ...',
+    'usage: musterd team <create|add|observe|credential|agent-key|bootstrap|grant|invite|remove|archive|export|policy|hue> ...',
     2,
   );
 }
@@ -432,6 +433,49 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
     'usage: musterd team bootstrap <mint|list|revoke|cutover> [--seat|--role|--host ...]',
     2,
   );
+}
+
+/** Human-admin inventory and revocation for seat grants (ADR 580). */
+async function teamGrant(parsed: Parsed): Promise<number> {
+  const action = parsed.positionals[1];
+  const { team, http } = resolve(parsed.flags);
+  const json = parsed.flags['json'] === true;
+
+  if (action === 'list') {
+    const grants = await http.grants(team);
+    if (json) {
+      process.stdout.write(JSON.stringify({ team, grants }) + '\n');
+      return 0;
+    }
+    if (grants.length === 0) {
+      process.stdout.write(theme.meta(`no grants on ${team}`) + '\n');
+      return 0;
+    }
+    for (const grant of grants) {
+      const state = grant.revoked
+        ? 'revoked'
+        : grant.expires_at !== null && grant.expires_at <= Date.now()
+          ? 'expired'
+          : 'active';
+      const expires =
+        grant.expires_at === null ? '' : ` · expires ${new Date(grant.expires_at).toISOString()}`;
+      process.stdout.write(
+        `${grant.id}  ${state}  ${grant.scope}:${grant.target}  ${grant.lifetime}${expires}\n`,
+      );
+    }
+    return 0;
+  }
+
+  if (action === 'revoke') {
+    const id = parsed.positionals[2];
+    if (!id) throw new CliError('usage: musterd team grant revoke <id>', 2);
+    const result = await http.revokeGrant(team, id);
+    if (json) process.stdout.write(JSON.stringify({ team, id, ...result }) + '\n');
+    else process.stdout.write(success(`revoked grant ${id} on ${team}`) + '\n');
+    return 0;
+  }
+
+  throw new CliError('usage: musterd team grant <list|revoke <id>>', 2);
 }
 
 /**
