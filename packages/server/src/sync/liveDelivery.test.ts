@@ -133,6 +133,25 @@ withDrivers('folded live delivery (latency step 2b)', (_o, kind) => {
     expect(publicWatch).toHaveLength(0); // ...and never a public watch-link
   });
 
+  it("the sender's own /live tab on this machine sees its folded act (lane 01M4V95YGT)", async () => {
+    // 2026-10-13: nick's accepts made on the hub replicated to Air 2, but nick's /live tab there
+    // never got them live, so the asks rail kept showing them pending until accepted again.
+    const { team, sender } = await folded('f-4', 'nick', 'ada');
+    const ada = (await getMemberByName(server.store, team.id, 'ada'))!;
+    const adaFrames: WSServerFrame[] = [];
+    const nickTab: WSServerFrame[] = [];
+    hub.add(conn(ada.id, 'ada', team.id, adaFrames));
+    const tab = { ...conn(sender.id, 'nick', team.id, nickTab, 'full'), connId: 'c-nick-live' };
+    hub.add(tab);
+    hub.subscribeFirehose(tab.connId);
+
+    await deliverFoldedLive(ctx, 'bravo', ['f-4']);
+
+    expect(adaFrames).toHaveLength(1);
+    expect(nickTab).toHaveLength(1);
+    expect((nickTab[0] as { envelope: { id: string } }).envelope.id).toBe('f-4');
+  });
+
   it('a seat that is not connected is a no-op, never an error', async () => {
     await folded('f-3', 'nick', null);
     await expect(deliverFoldedLive(ctx, 'bravo', ['f-3', 'does-not-exist'])).resolves.toBe(0);

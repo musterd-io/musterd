@@ -859,12 +859,15 @@ export async function deliverFoldedLive(
       for (const r of recipients) {
         delivered += ctx.hub.deliver(r.id, { type: 'deliver', envelope: env });
       }
-      const skip = new Set(recipients.map((r) => r.id));
-      skip.add(sender.id);
+      // Skip the recipients (delivered above) but NOT the sender: a folded act came from another
+      // machine, so no connection here got an ack for it. The sender's own /live tab on this
+      // machine is a firehose watcher like any other, the same rule the local path follows (lane
+      // 01M4H7YKS5). Skipping it kept a human's hub-side accepts off their joiner tab until they
+      // accepted again there (lane 01M4V95YGT, 2026-10-13).
       delivered += ctx.hub.broadcastFirehose(
         team.id,
         { type: 'deliver', envelope: env },
-        skip,
+        new Set(recipients.map((r) => r.id)),
         row.to_kind === 'member',
         confidentialAskSubject(env) !== null,
       );
