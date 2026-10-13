@@ -194,6 +194,22 @@ actually runs), then a repo `packages/mcp/dist/index.js`. `--entry` and `MUSTERD
 `tools_list_has_ttl` is false on this bench. The bench speaks `initialize`, which is the wire
 every current harness opens with, and the cache hints ride the 2026-07-28 era only.
 
+That is deliberate, not a gap (lane 01M4S53C40, 2026-10-13). The 2025-era wire does not define
+`ttlMs`/`cacheScope`, and no installed harness was found to read them there. The search covered
+each harness's installed binary or bundle. It was not a live run.
+
+| Harness                         | What reads `ttlMs`/`cacheScope`                                                                                  |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| claude-code 2.1.296             | Only its bundled SDK's 2026-07-28 codec. Its discovery cache uses its own TTL, `MCP_DISCOVERY_CACHE_TTL_S`.      |
+| cursor (agent 2026.10.01, app)  | Nothing. It has no 2026-07-28 support, and the app ships `@modelcontextprotocol/sdk` 1.25.1.                     |
+| codex 0.162.1, grok             | Only the 2026-07-28 types (`DiscoverResult` and similar). Whether either caches on them is not visible in a Rust binary. |
+| opencode 2.0.28                 | Only its 2026-07-28 list-result schemas and its own server's defaults. No client cache on a server's hint was found. |
+
+So the SDK is not patched to add the fields on the old wire. A harness that speaks 2026-07-28
+already gets the hint, with no change here; Claude Code can be switched to it with
+`MCP_PROTOCOL_NEGOTIATION`. Revisit if a harness is shown to cache `tools/list` on a server's
+`ttlMs` over `initialize`.
+
 ## The core tools (JSON schemas — verbatim contract)
 
 This section contracts the **six core team tools** verbatim; the lane, goal, seat-memory, and report
