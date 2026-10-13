@@ -1998,14 +1998,15 @@ async function laneIdFromRef(ctx: Ctx, teamId: string, ref: string, slug: string
   throw new MusterdError('not_found', `no lane "${ref}" on ${slug}`);
 }
 
-/** Lane ids a body names, resolved where they name a lane and left as written where they do not
- *  (an unknown `depends_on` id is the contention check's to warn about, not this one's to refuse). */
+/** Lane ids a body names, resolved where they name exactly one lane and left as written otherwise:
+ *  an unknown or short `depends_on` id is the contention check's to warn about, and an unknown
+ *  `follows_up` id gets its own refusal from the close path — neither is this one's to refuse. Only an
+ *  ambiguous prefix is refused here, because storing it as written would let it name two lanes. */
 async function lanesNamedIn(ctx: Ctx, teamId: string, refs: string[]): Promise<string[]> {
   return Promise.all(
     refs.map(async (ref) => {
       const r = await resolveLaneRef(ctx.db, teamId, ref);
-      if (r.kind === 'ambiguous' || r.kind === 'too_short')
-        return laneIdFromRef(ctx, teamId, ref, ''); // throws with the reason
+      if (r.kind === 'ambiguous') return laneIdFromRef(ctx, teamId, ref, ''); // throws, naming them
       return r.kind === 'found' ? r.id : ref;
     }),
   );

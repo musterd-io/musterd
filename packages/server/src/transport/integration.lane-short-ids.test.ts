@@ -105,10 +105,12 @@ withDrivers('integration · lane short ids', (_o, kind) => {
       const tok = await team('unknown');
       const opened = await post(
         '/teams/unknown/lanes',
-        { title: 'x', depends_on: ['NOTALANEID'] },
+        // 'a' is ULID-shaped and under 8 characters: a placeholder id, never a refusal here.
+        { title: 'x', depends_on: ['NOTALANEID', 'a'] },
         tok,
       );
-      expect(opened.json.lane.depends_on).toEqual(['NOTALANEID']);
+      expect(opened.status).toBe(201);
+      expect(opened.json.lane.depends_on).toEqual(['NOTALANEID', 'a']);
     });
   });
 });
