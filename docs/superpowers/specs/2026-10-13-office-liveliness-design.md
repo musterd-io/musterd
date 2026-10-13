@@ -97,18 +97,22 @@ These are what a new beat must keep. Each has bitten once.
 
 ## 6. What is still to build
 
-nick liked these when they were listed (recorded in this seat's 2026-10-13 handoff note). None is approved; each has a bar so it can be
+nick liked these when they were listed (recorded in this seat's 2026-10-13 handoff note). None is approved, and each has its own lane (ADR 487) so none can vanish into this document; each has a bar so it can be
 accepted or rejected, and a falsifier. Every one that adds bytes pays against ADR 151's budgets, and
 `docs/perf/web-live-baseline.md` is where the cost is logged.
 
-| # | Beat | What the viewer sees | Bar | Falsifier |
-| --- | --- | --- | --- | --- |
-| L1 | **More frequent desk micro-loops** | a seated member does small things between acts — a sip, a glance at a neighbour, a stretch — often enough that no desk is frozen for a minute | across ten minutes of a quiet team, every seated member plays at least one gesture, and no ambient beat plays twice in a row for the same member | the draw is already uniform and the room still reads as still: then the lever is the gesture set, not the rate |
-| L2 | **Errands and the pet** | the pet follows an errand; a member who gets up for water or lunch is sometimes joined | one new pet-and-member interaction, seeded, that two viewers see identically | two viewers of the same team see different pet positions at the same slot |
-| L3 | **Accept celebration at the board** | the acceptor walks to the wall, the card gets a small flourish as it moves to done | the acceptor's walk and the owner's pin do not collide, and the celebration plays once per accept | a lane accepted with the acceptor out of the room plays nothing and loses the cue |
-| L4 | **Lamp and window light** | the room's light follows the hour — a lamp comes on at dusk, a window warms | one light change across a day, drawn on the canvas, not in CSS | initial-JS headroom is under the cost; then it waits for the budget |
-| L5 | **Micro-polish** | the card wobbles as it is pinned, pin holes stay, a nameplate sits a degree off, a door opens a crack as someone arrives | each is one visible change at true stage size, checked against the ten slop tells | any of them reads as decoration (tell 3: a pulse that never turns off) |
-| L6 | **A stalled goal is visible in the room** | owned by miley as `01M4V754ZD` — listed so the two do not collide on `office-scene/**` | — | — |
+| # | Lane | Beat | What the viewer sees | Bar | Falsifier |
+| --- | --- | --- | --- | --- | --- |
+| L1 | `01M4V9VNMYRCDW59NF9B2NX69T` | **More frequent desk micro-loops** | a seated member does small things between acts — a sip, a glance at a neighbour, a stretch — often enough that no desk is frozen for a minute | across ten minutes of a quiet team, every seated member plays at least one gesture, and no ambient beat plays twice in a row for the same member | the draw is already uniform and the room still reads as still: then the lever is the gesture set, not the rate |
+| L2 | `01M4V9VQC8QG9KPEEEDJWCFZ40` | **Errands and the pet** | the pet follows an errand; a member who gets up for water or lunch is sometimes joined | one new pet-and-member interaction, seeded, that two viewers see identically | two viewers of the same team see different pet positions at the same slot |
+| L3 | `01M4V9VSAMHYRVBDMG0RK6248Q` | **Accept celebration at the board** | the acceptor walks to the wall, the card gets a small flourish as it moves to done | the acceptor's walk and the owner's pin do not collide, and the celebration plays once per accept | a lane accepted with the acceptor out of the room plays nothing and loses the cue |
+| L4 | `01M4V9VTX0Y84C5M7TQH2M2K9F` | **Lamp and window light** | the room's light follows the hour — a lamp comes on at dusk, a window warms | one light change across a day, drawn on the canvas, not in CSS | initial-JS headroom is under the cost; then it waits for the budget |
+| L5 | `01M4V9VWN914VH186VMMKXRR38` | **Micro-polish** | the card wobbles as it is pinned, pin holes stay, a nameplate sits a degree off, a door opens a crack as someone arrives | each is one visible change at true stage size, checked against the ten slop tells | any of them reads as decoration (tell 3: a pulse that never turns off) |
+| L6 | `01M4V754ZD` | **A stalled goal is visible in the room** | miley's lane — listed so the two do not collide on `office-scene/**` | — | — |
+
+L1–L5 were opened `open` on 2026-10-13: parking is a human's call (ADR 466), so until nick parks or
+claims them `team_next` offers them. That is the cost of not being approved yet, and the reason to answer
+the ordering question in §9 soon.
 
 Ordering: L3 first (it completes a promise already made), then L1 (cheapest, and the room's baseline
 liveliness), L5 as small independent lanes, L2 and L4 last because they move bytes.
