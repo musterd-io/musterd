@@ -118,8 +118,23 @@ const NOOP_HANDLE: TelemetryHandle = {
 let started: Promise<TelemetryHandle> | null = null;
 
 /**
+ * A lazily imported module's exports, however it arrived. Node gives a CommonJS package's named
+ * exports straight on the namespace, but a bundler that splits it into its own chunk (the MCP
+ * adapter's esbuild bundle, ADR 574) hands back only `default` — `module.exports` — so a bare
+ * `const { NodeSDK } = await import(…)` reads undefined there. Every OTel package but
+ * semantic-conventions is CommonJS. Unbundled, `default` is the same `module.exports`, so this is
+ * right in both; an ES module has no object `default` and is returned as-is.
+ */
+function interop<T extends object>(mod: T): T {
+  // `in` before the read: a module namespace with no `default` may throw on the read (a test mock's).
+  const d = 'default' in mod ? (mod as { default: unknown }).default : undefined;
+  return d !== null && typeof d === 'object' ? (d as T) : mod;
+}
+
+/**
  * Start the OTel NodeSDK if enabled, returning a handle with a bounded shutdown/flush. No-op +
- * instant resolve when disabled. Idempotent per process (the first caller's options win — a
+ * instant resolve when disabled, and the same no-op (plus one stderr line) if the SDK fails to boot
+ * — it never rejects. Idempotent per process (the first caller's options win — a
  * process has one service identity, which is why `serve` must not boot the CLI's SDK, ADR 089).
  */
 export function startTelemetry(opts: TelemetryOptions): Promise<TelemetryHandle> {
@@ -131,12 +146,14 @@ export function startTelemetry(opts: TelemetryOptions): Promise<TelemetryHandle>
     return started;
   }
   started = (async () => {
-    const { NodeSDK } = await import('@opentelemetry/sdk-node');
-    const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
-    const { OTLPMetricExporter } = await import('@opentelemetry/exporter-metrics-otlp-http');
-    const { PeriodicExportingMetricReader } = await import('@opentelemetry/sdk-metrics');
-    const { resourceFromAttributes } = await import('@opentelemetry/resources');
-    const { ATTR_SERVICE_NAME } = await import('@opentelemetry/semantic-conventions');
+    const { NodeSDK } = interop(await import('@opentelemetry/sdk-node'));
+    const { OTLPTraceExporter } = interop(await import('@opentelemetry/exporter-trace-otlp-http'));
+    const { OTLPMetricExporter } = interop(
+      await import('@opentelemetry/exporter-metrics-otlp-http'),
+    );
+    const { PeriodicExportingMetricReader } = interop(await import('@opentelemetry/sdk-metrics'));
+    const { resourceFromAttributes } = interop(await import('@opentelemetry/resources'));
+    const { ATTR_SERVICE_NAME } = interop(await import('@opentelemetry/semantic-conventions'));
 
     // From env, the exporters read the standard variables themselves (generic + per-signal). From
     // the config file there is no env to read, so the per-signal URLs are passed explicitly — the
@@ -175,7 +192,16 @@ export function startTelemetry(opts: TelemetryOptions): Promise<TelemetryHandle>
         await Promise.race([flush.catch(() => {}), cap]).finally(() => clearTimeout(timer));
       },
     };
-  })();
+  })().catch((err: unknown) => {
+    // Telemetry is best-effort, so a broken SDK boot must never take its host down with it. The
+    // MCP adapter boots this before it answers `initialize`; when the 2026-10-13 bundle turned
+    // every OTel import into undefined, a throw here closed the connection for every seat on a
+    // machine with an endpoint configured. Say so once, then run with telemetry off.
+    process.stderr.write(
+      `musterd telemetry: OTLP export is off — the SDK failed to start: ${(err as Error)?.message ?? String(err)}\n`,
+    );
+    return NOOP_HANDLE;
+  });
   return started;
 }
 

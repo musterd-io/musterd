@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -153,5 +155,37 @@ describe('the published runtime graph', () => {
     }
     expect(packages, `the launched adapter resolves:\n  ${packages.join('\n  ')}`).toEqual([]);
     for (const file of seen) expect(dirname(file)).toBe(dist);
+  });
+
+  it('boots the OTel SDK from the bundle when an OTLP endpoint is set', () => {
+    // The static checks above read import lines; they cannot see what a chunk *exports*. esbuild
+    // splits each lazily imported CommonJS OTel package into a chunk that exports only `default`,
+    // and on 2026-10-13 a named destructure of one closed every adapter on a machine with an
+    // endpoint configured. So run the real bundle with one set. Nothing listens on the daemon URL:
+    // startup gets past telemetry, then stops at the reachability probe — `fetch failed` is the
+    // proof it got that far, and the telemetry warning must not appear (a degraded boot is a
+    // silent loss of every adapter span).
+    const home = mkdtempSync(join(tmpdir(), 'musterd-mcp-bundle-'));
+    try {
+      const run = spawnSync(process.execPath, [join(dist, 'index.js')], {
+        cwd: home,
+        input: '',
+        timeout: 20_000,
+        encoding: 'utf8',
+        env: {
+          PATH: process.env['PATH'] ?? '',
+          HOME: home,
+          MUSTERD_CONFIG: join(home, 'config.json'),
+          MUSTERD_TEAM: 't',
+          MUSTERD_SERVER: 'http://127.0.0.1:9',
+          MUSTERD_LAUNCH_SURFACE: 'claude-code',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:9',
+        },
+      });
+      expect(run.stderr).not.toMatch(/musterd telemetry:|is not a function/);
+      expect(run.stderr).toMatch(/failed to start: fetch failed/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

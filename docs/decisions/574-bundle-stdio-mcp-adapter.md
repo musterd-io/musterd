@@ -109,6 +109,13 @@ nor what the CLI imports.
     directory and needs its own decision. Follows-up: 01M4S9SJJPTD1J6SM2RG8R5DH7
   - _(2026-10-12)_ Decided in ADR 577: enabled. Remeasured on a quiet machine the saving is about
     25 ms per launch, not ~100 ms.
+- _(2026-10-13)_ The bundle closed the adapter on every machine with an OTLP endpoint set. A split
+  chunk for a CommonJS package exports only `default`, so `@musterd/telemetry`'s
+  `const { resourceFromAttributes } = await import(…)` read undefined and `initialize` never
+  answered. No test started the bundle with telemetry on. The fix reads each lazily imported OTel
+  module through an interop step (`default` when it is an object, else the namespace), and a failed
+  SDK boot now falls back to the no-op handle with one stderr line. `dist-imports.test.ts` now runs
+  `dist/index.js` with an endpoint set and fails if telemetry does not boot.
 
 ## Observability & Evaluation
 
