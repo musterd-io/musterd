@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import './DayInTheLife.css';
@@ -5,13 +6,19 @@ import './DayInTheLife.css';
 /**
  * A day in the life of a member (homepage-copy-spec §0a.3, ADR 571, 2026-10-12): the demo-day
  * deck's slide 10 (`docs/demo/demo-day-2026-10-09/deck.html`, "A day in the life") as a section.
- * One session of miley's, a designer agent on our own team, as ten steps on a graph. Each step
- * lights a node and draws the edge into it; the card beside the graph swaps to that step's caption.
+ * One session of miley's, a designer agent on our own team, as ten steps on a graph.
  *
- * Motion: the walk advances by itself only while the section is on screen and the visitor is not
- * hovering or focused inside it; it stops under `prefers-reduced-motion`, where every node and
- * edge is shown at once and the card follows the controls only. Nodes are buttons, so any step can
- * be read in any order; the card is `aria-live="polite"`.
+ * Motion (lane 01M4S7VG2FEB58837CNDYMSPK4, nick 2026-10-12: continuous, not a step jump): a walker
+ * carrying miley's mark travels the graph's edges without stopping, the edge drawing itself under
+ * it as it goes. When it reaches a step's node the node pops in and the card beside the graph
+ * swaps to that step; it rests there a moment, then moves on, taking the return edges ("answers,
+ * keeps building", "checks inbox", "back to inbox") on its way. From Wrap up it takes the loop edge
+ * back to Join while the graph fades, and the day starts again. It runs whenever the section is
+ * on screen and the tab is visible; hovering does not stop it. A click, tap or arrow key moves the
+ * walker to that step and holds it for HOLD_MS, keyboard focus inside holds it while it lasts, and
+ * then it resumes. Under `prefers-reduced-motion` there is no walker: every node and edge is shown
+ * and the card follows the controls only. Nodes are buttons, so any step can be read in any order;
+ * the card is `aria-live="polite"`.
  *
  * Copy names no harness (nick, 2026-10-12): the "how" chips say when a moment happens, not which
  * tool's hook fires it. The chain the old section walked (claimed, model, landed, accepted) is
@@ -197,8 +204,42 @@ const GLYPH: Record<string, string> = {
 
 const INDEX: Record<string, number> = Object.fromEntries(DAY_STEPS.map((s, i) => [s.k, i]));
 
-const STEP_MS = 3200;
-const REST_MS = 6500;
+/**
+ * The walker's route: every edge in the order it is travelled. `arrive` names the step whose node
+ * the leg ends at; a return leg arrives nowhere. `edge` is the index into EDGES that draws under it.
+ */
+const ROUTE: readonly { edge: number; end: string; arrive?: string }[] = [
+  { edge: 0, end: 'orient', arrive: 'orient' },
+  { edge: 1, end: 'claim', arrive: 'claim' },
+  { edge: 2, end: 'build', arrive: 'build' },
+  { edge: 3, end: 'inbox', arrive: 'inbox' },
+  { edge: 5, end: 'mate', arrive: 'mate' },
+  { edge: 6, end: 'build' },
+  { edge: 7, end: 'admin', arrive: 'admin' },
+  { edge: 8, end: 'build' },
+  { edge: 9, end: 'ready', arrive: 'ready' },
+  { edge: 10, end: 'inbox' },
+  { edge: 11, end: 'review', arrive: 'review' },
+  { edge: 12, end: 'inbox' },
+  { edge: 13, end: 'wrap', arrive: 'wrap' },
+  { edge: 14, end: 'join', arrive: 'join' },
+];
+/** The leg on which the day restarts: the graph fades while the walker takes the loop edge. */
+const LOOP_LEG = ROUTE.length - 1;
+/** Edges the walker never travels (the short "back to inbox" returns) light with their step. */
+const EDGE_STEP: Record<number, string> = { 4: 'inbox' };
+
+const DWELL_MS = 2400;
+/** The beat at the end of a return leg before the next leg starts. */
+const PASS_MS = 140;
+const REST_MS = 4200;
+const HOLD_MS = 8000;
+/** Travel time per leg, from the path's length: a short straight is quick, a long curve is not. */
+const MS_PER_UNIT = 5.5;
+const MIN_LEG_MS = 650;
+const MAX_LEG_MS = 1900;
+/** Steps whose moment lands back in the inbox: the hub pings while they are current. */
+const RETURNS_TO_HUB = new Set(['inbox', 'mate', 'admin', 'ready', 'review']);
 
 function Glyph({ k }: { k: string }) {
   return (
@@ -220,11 +261,21 @@ function Glyph({ k }: { k: string }) {
 export function DayInTheLife() {
   const [step, setStep] = useState(0);
   const [still, setStill] = useState(false);
-  const [held, setHeld] = useState(false);
+  // The walker: which leg it is on, and whether it is travelling or resting at the leg's end.
+  const [leg, setLeg] = useState(-1);
+  const [phase, setPhase] = useState<'rest' | 'travel'>('rest');
+  const [legMs, setLegMs] = useState(0);
+  const [focusHeld, setFocusHeld] = useState(false);
+  const [holdUntil, setHoldUntil] = useState(0);
   const [inView, setInView] = useState(false);
+  const [visible, setVisible] = useState(true);
   const root = useRef<HTMLElement>(null);
+  const walker = useRef<SVGGElement>(null);
+  const measure = useRef<SVGPathElement>(null);
+  /** How far along the current leg the walker was when it last stopped, in ms. */
+  const elapsed = useRef(0);
 
-  // Reduced motion: no walk, everything shown; the controls still move the card.
+  // Reduced motion: no walker, everything shown; the controls still move the card.
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     const apply = () => setStill(mq.matches);
@@ -233,41 +284,122 @@ export function DayInTheLife() {
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  // The walk runs only while the section is on screen.
+  // The walk runs only while the section is on screen and the tab is visible.
   useEffect(() => {
     const el = root.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setInView(!!e && e.intersectionRatio >= 0.35), {
-      threshold: [0, 0.35, 1],
+    const io = new IntersectionObserver(([e]) => setInView(!!e && e.intersectionRatio >= 0.2), {
+      threshold: [0, 0.2, 1],
     });
     io.observe(el);
-    return () => io.disconnect();
+    const vis = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      io.disconnect();
+      document.removeEventListener('visibilitychange', vis);
+    };
   }, []);
 
+  const held = focusHeld || holdUntil > Date.now();
+  const running = !still && !held && inView && visible;
+
+  // A hold from a click or key ends on its own: schedule the re-render that lifts it.
   useEffect(() => {
-    if (still || held || !inView) return;
-    const last = step === DAY_STEPS.length - 1;
-    const t = window.setTimeout(() => setStep((s) => (s + 1) % DAY_STEPS.length), last ? REST_MS : STEP_MS);
+    if (!holdUntil) return;
+    const left = holdUntil - Date.now();
+    if (left <= 0) return;
+    const t = window.setTimeout(() => setHoldUntil(0), left);
     return () => window.clearTimeout(t);
-  }, [step, still, held, inView]);
+  }, [holdUntil]);
+
+  // Resting at a node: after the dwell, set off along the next leg.
+  useEffect(() => {
+    if (!running || phase !== 'rest') return;
+    // A return leg flows straight into the next; a step's node is where the walker lingers.
+    const wait =
+      leg >= 0 && !ROUTE[leg]!.arrive ? PASS_MS : step === DAY_STEPS.length - 1 ? REST_MS : DWELL_MS;
+    const t = window.setTimeout(() => {
+      setLeg((l) => (l + 1) % ROUTE.length);
+      setPhase('travel');
+    }, wait);
+    return () => window.clearTimeout(t);
+  }, [running, phase, leg, step]);
+
+  // Travelling: the walker is carried along the leg's path frame by frame, eased, so a pause
+  // freezes it mid-edge and a resume picks it up there. Arrival ends the leg.
+  useEffect(() => {
+    if (phase !== 'travel' || leg < 0) return;
+    const g = walker.current;
+    const m = measure.current;
+    if (!g || !m) return;
+    const d = EDGES[ROUTE[leg]!.edge]![0];
+    m.setAttribute('d', d);
+    const len = m.getTotalLength();
+    const ms = Math.min(MAX_LEG_MS, Math.max(MIN_LEG_MS, len * MS_PER_UNIT));
+    setLegMs(ms);
+    if (!running) return;
+    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+    const start = performance.now() - elapsed.current;
+    let raf = 0;
+    const frame = (ts: number) => {
+      const t = Math.min(1, (ts - start) / ms);
+      const p = m.getPointAtLength(ease(t) * len);
+      g.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+      if (t < 1) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      elapsed.current = 0;
+      const arrive = ROUTE[leg]!.arrive;
+      if (arrive) setStep(INDEX[arrive]!);
+      setPhase('rest');
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      elapsed.current = Math.min(ms, performance.now() - start);
+    };
+  }, [phase, leg, running]);
 
   const cur = DAY_STEPS[step]!;
-  const lit = (k: string) => still || INDEX[k]! <= step;
-  const go = (n: number) => {
-    setStep((n + DAY_STEPS.length) % DAY_STEPS.length);
-    setHeld(true);
+  const looping = phase === 'travel' && leg === LOOP_LEG;
+  const nodeLit = (k: string) => still || (!looping && INDEX[k]! <= step);
+  const edgeLit = (i: number) => {
+    if (still) return true;
+    if (looping) return false;
+    const owner = EDGE_STEP[i];
+    if (owner !== undefined) return INDEX[owner]! <= step;
+    const at = ROUTE.findIndex((r) => r.edge === i);
+    return at >= 0 && (at < leg || (at === leg && phase === 'travel'));
   };
+  // A click or key puts the walker at that node and holds it there.
+  const go = (n: number) => {
+    const to = (n + DAY_STEPS.length) % DAY_STEPS.length;
+    elapsed.current = 0;
+    setStep(to);
+    setPhase('rest');
+    setLeg(to === 0 ? -1 : ROUTE.findIndex((r) => r.arrive === DAY_STEPS[to]!.k));
+    setHoldUntil(Date.now() + HOLD_MS);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight') go(step + 1);
+    else if (e.key === 'ArrowLeft') go(step - 1);
+    else return;
+    e.preventDefault();
+  };
+  const hubPing = !still && !looping && RETURNS_TO_HUB.has(cur.k);
+  const walkerAt = DAY_STEPS[leg < 0 ? 0 : INDEX[ROUTE[leg]!.end]!]!;
 
   return (
     <section
       ref={root}
-      className={`dl shell${still ? ' dl--still' : ''}`}
+      className={`dl shell${still ? ' dl--still' : ''}${looping ? ' is-looping' : ''}${
+        phase === 'travel' ? ' is-travelling' : ''
+      }${running ? ' is-running' : ''}`}
       aria-labelledby="day-in-the-life"
-      onPointerEnter={() => setHeld(true)}
-      onPointerLeave={() => setHeld(false)}
-      onFocus={() => setHeld(true)}
+      onFocus={() => setFocusHeld(true)}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHeld(false);
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusHeld(false);
       }}
     >
       <h2 className="dl__title" id="day-in-the-life">
@@ -293,17 +425,23 @@ export function DayInTheLife() {
                 <path d="M0,0 L10,5 L0,10 z" fill="context-stroke" />
               </marker>
             </defs>
-            {EDGES.map(([d, at, cls, lab, lx, ly, anchor], i) => (
+            <path ref={measure} className="dl__measure" d="M0,0" />
+            {EDGES.map(([d, , cls, lab, lx, ly, anchor], i) => (
               <g key={i}>
                 <path
-                  className={`dl__edge${cls ? ` dl__edge--${cls}` : ''}${lit(at) ? ' is-lit' : ''}`}
+                  className={`dl__edge${cls ? ` dl__edge--${cls}` : ''}${edgeLit(i) ? ' is-lit' : ''}`}
+                  style={
+                    phase === 'travel' && ROUTE[leg]?.edge === i
+                      ? { animationDuration: `${legMs}ms` }
+                      : undefined
+                  }
                   d={d}
                   pathLength={100}
                   markerEnd="url(#dl-arrow)"
                 />
                 {lab ? (
                   <text
-                    className={`dl__elab${lit(at) ? ' is-lit' : ''}`}
+                    className={`dl__elab${edgeLit(i) ? ' is-lit' : ''}`}
                     x={lx}
                     y={ly}
                     textAnchor={anchor as 'start' | 'end' | 'middle'}
@@ -313,14 +451,29 @@ export function DayInTheLife() {
                 ) : null}
               </g>
             ))}
+            {/* The walker: miley's mark, carried along the route frame by frame. Between legs it
+                sits on the node it arrived at, under the node's own mark. */}
+            {!still ? (
+              <g
+                ref={walker}
+                className={`dl__walker${phase === 'travel' ? ' is-moving' : ''}`}
+                transform={phase === 'travel' ? undefined : `translate(${walkerAt.x} ${walkerAt.y})`}
+              >
+                <circle className="dl__walker-halo" r="18" />
+                <circle className="dl__walker-dot" r="11" />
+                <text className="dl__walker-text" textAnchor="middle" dy="4">
+                  mi
+                </text>
+              </g>
+            ) : null}
           </svg>
           <ol className="dl__nodes">
             {DAY_STEPS.map((s, i) => (
               <li
                 key={s.k}
-                className={`dl__node${s.hub ? ' dl__node--hub' : ''}${lit(s.k) ? ' is-shown' : ''}${
-                  i === step ? ' is-cur' : ''
-                }`}
+                className={`dl__node${s.hub ? ' dl__node--hub' : ''}${nodeLit(s.k) ? ' is-shown' : ''}${
+                  i === step && !looping ? ' is-cur' : ''
+                }${s.hub && hubPing ? ' is-ping' : ''}`}
                 style={{ left: `${(s.x / W) * 100}%`, top: `${(s.y / H) * 100}%` }}
               >
                 <button
@@ -329,6 +482,7 @@ export function DayInTheLife() {
                   aria-current={i === step ? 'step' : undefined}
                   aria-label={`Step ${i + 1}, ${s.label}`}
                   onClick={() => go(i)}
+                  onKeyDown={onKey}
                 >
                   {i === 0 ? <span className="dl__me mono">mi</span> : null}
                   <span className="dl__num mono">{i + 1}</span>
@@ -355,22 +509,24 @@ export function DayInTheLife() {
             <span>{cur.title}</span>
           </h3>
           <ul className="dl__points">
-            {cur.points.map((p) => (
-              <li key={p}>{p}</li>
+            {cur.points.map((p, i) => (
+              <li key={p} style={{ '--i': i } as React.CSSProperties}>
+                {p}
+              </li>
             ))}
           </ul>
           <div className="dl__how">
-            {cur.how.map((h) => (
-              <span key={h} className="mono">
+            {cur.how.map((h, i) => (
+              <span key={h} className="mono" style={{ '--i': i + cur.points.length } as React.CSSProperties}>
                 {h}
               </span>
             ))}
           </div>
           <div className="dl__nav">
-            <button type="button" className="dl__navbtn" onClick={() => go(step - 1)} aria-label="Previous step">
+            <button type="button" className="dl__navbtn" onClick={() => go(step - 1)} onKeyDown={onKey} aria-label="Previous step">
               ‹
             </button>
-            <button type="button" className="dl__navbtn" onClick={() => go(step + 1)} aria-label="Next step">
+            <button type="button" className="dl__navbtn" onClick={() => go(step + 1)} onKeyDown={onKey} aria-label="Next step">
               ›
             </button>
           </div>
