@@ -1,0 +1,15 @@
+{
+  "skill_name": "<role>",
+  "evals": [
+    {
+      "id": 1,
+      "name": "<short-kebab-name>",
+      "craft": "<which reference this exercises>",
+      "prompt": "<A request worded the way a teammate would send it.>",
+      "expected_output": "<What a good answer does, in a sentence or two a reviewer can judge.>",
+      "files": [],
+      "expectations": ["<One verifiable statement>", "<Another>"],
+      "checks": {}
+    }
+  ]
+}
