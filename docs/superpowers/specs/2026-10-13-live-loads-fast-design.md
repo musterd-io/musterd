@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-13
 **Seat:** miley
-**Status:** records what shipped 2026-10-12 → 2026-10-13 under goal `live-loads-fast`; §5 proposes the
-bar that lets the goal ship and the lanes still needed. The bar is proposed, not approved.
+**Status:** records what shipped 2026-10-12 → 2026-10-13 under goal `live-loads-fast`; §5 is the bar
+that lets the goal ship and the lanes still needed. nick approved the bar on 2026-10-13.
 **Lane:** `01M4V74C8G`
 
 ## 1. What this is for
@@ -68,7 +68,7 @@ still answers in seconds. The two clocks are improved by different lanes and mus
 
 ## 5. The bar, and what is still to build
 
-Proposed bar for shipping the goal, measured with `scripts/perf/live-baseline.mjs` against the hub
+The bar for shipping the goal (approved by nick, 2026-10-13), measured with `scripts/perf/live-baseline.mjs` against the hub
 (method at the top of `web-live-baseline.md`), five reloads, the median:
 
 - warm visit: the team column shows cards **≤ 1.0 s** after navigation (measured 0.6 s);
