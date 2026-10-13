@@ -70,10 +70,13 @@ export const PRESENCE_TIMEOUT_MS = 45_000;
 /**
  * How long a presence row folded from another machine stays live after its node's last sync
  * contact (presence replication, 2026-09-02): the origin's own reap window plus two chances to
- * push (`SYNC_PUSH_INTERVAL_MS` in sync/push.ts, 60 s — if that changes, change this). This is the
- * staleness ADR 325 §Consequences said the build must tolerate explicitly, not rediscover — a seat
- * on a machine that lost power is displaceable in under three minutes; a seat on a machine between
- * pushes is not. Named once; every reader of remote liveness uses it.
+ * make contact. The tick that makes contact when a machine is idle is the PULL (`SYNC_PULL_INTERVAL_MS`
+ * in sync/pull.ts, 60 s — if that changes, change this): an idle push has nothing to send, so it never
+ * reaches the hub. Presence CHANGES no longer wait on any tick (every replicated row rings the push
+ * loop at commit, step 4 of realtime-sync), so this bounds only how long a machine that went silent
+ * still looks present; a stream pong does not shorten it (ADR 552 §6). This is the staleness ADR 325
+ * §Consequences said the build must tolerate explicitly, not rediscover — a seat on a machine that
+ * lost power is displaceable in under three minutes; a seat on a machine between pulls is not. Named once; every reader of remote liveness uses it.
  */
 export const REMOTE_PRESENCE_TTL_MS = PRESENCE_TIMEOUT_MS + 2 * 60_000;
 /**

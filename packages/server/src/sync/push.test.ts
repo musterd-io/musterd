@@ -1009,6 +1009,35 @@ withDrivers('push', (_o, kind) => {
       // Measured 2026-10-08: 60 104 ms before the kick (the whole timer), 209 ms after.
       expect(ms).toBeLessThan(2_000);
     }, 100_000);
+
+    it('a presence attach on the joiner is staged on the hub without a message to carry it (step 4)', async () => {
+      await send(joiner, 'seed');
+      await enrollJoiner();
+      await addMember(joiner.store, await joinerTeam(), { name: 'ada', kind: 'agent' });
+      await addMember(hub.store, (await getTeamBySlug(hub.store, 'bravo'))!, {
+        name: 'ada',
+        kind: 'agent',
+      });
+      await pushTeam(joinerCtx, await joinerTeam());
+      const before = ((await stagedOnHub()) as { n: number }).n;
+      const adaId = (await joiner.store.get<{ id: string }>(
+        'SELECT id FROM members WHERE name = ?',
+        ['ada'],
+      ))!.id;
+      const attachedAt = Date.now();
+      // A seat attaching writes a `presence.attached` audit row and sends nothing, so before step 4
+      // nothing rang the push loop and the row waited out the 60 s timer.
+      await attach(joiner.store, adaId, 'codex', 'c1');
+      let staged = 0;
+      while (Date.now() - attachedAt < 90_000) {
+        staged = ((await stagedOnHub()) as { n: number }).n - before;
+        if (staged > 0) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const ms = Date.now() - attachedAt;
+      expect(staged).toBeGreaterThan(0);
+      expect(ms).toBeLessThan(2_000);
+    }, 100_000);
   });
 });
 
