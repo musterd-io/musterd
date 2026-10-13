@@ -1,6 +1,6 @@
 import type { Envelope, LaneBoard } from '@musterd/protocol';
 import { useEffect, useRef, useState } from 'react';
-import { fetchLaneBoard, type LiveConfig } from './client';
+import { fetchLiveLaneBoard, type LiveConfig } from './client';
 import { loadSnapshot } from './liveCache';
 import { lanesChangedSince } from './workingOn';
 
@@ -62,8 +62,8 @@ export function useLaneFed<T>(
   return value;
 }
 
-/** The lane board behind the overlay's working-on strap. */
+/** The lane board behind the overlay's working-on strap — the brief read (lane 01M4RNCZVB). */
 export function useWorkingOn(cfg: LiveConfig | null, envelopes: Envelope[]): LaneBoard | null {
   const initial = cfg ? (loadSnapshot(cfg.team, cfg.as)?.board ?? null) : null;
-  return useLaneFed(cfg, envelopes, fetchLaneBoard, initial);
+  return useLaneFed(cfg, envelopes, fetchLiveLaneBoard, initial);
 }

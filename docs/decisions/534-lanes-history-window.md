@@ -62,6 +62,16 @@ Bound the default response without breaking the callers that do want history. Th
 - Falsifier: if a caller that needs older closed lanes shows up without opting in (a "shipped"
   count that drops after 14 days, an archaeology report missing a PR), this default was too
   aggressive for it — pass `history=all` there, or revisit the window.
+- _(2026-10-13, lane `01M4RNCZVBHY3ZRYEF6825ZD8E`, live-loads-fast inc 1)_: the window was not
+  enough for `/live`'s first paint — revive's windowed board was 949 KB raw / 254 KB gzip, of which
+  `detail` was 343 KB and `scope` 82 KB, and nothing on `/live` reads either. A second opt-in flag,
+  `?brief=1`, returns every row with `detail: null` and `scope: []`; any other value is a 400 naming
+  it, like `history`. Same population, same warnings and annotations, so counts and columns agree
+  with the full read. `/live` fetches brief plus the repeatable `?state=` for every state but
+  `abandoned`, and falls back to the full read on a 400 while a daemon is a build behind the bundle.
+  Measured from the hub's store: 531 KB raw / 99 KB gzip. The rest is row count; fewer done rows is
+  the next increment, if the bar in `docs/superpowers/specs/2026-10-13-live-loads-fast-design.md`
+  still fails.
 
 ## Observability & Evaluation
 

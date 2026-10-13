@@ -6423,6 +6423,19 @@ export async function handleHttp(
             },
           });
         }
+        // live-loads-fast inc 1 (lane 01M4RNCZVB): `brief=1` leaves every lane's `detail` and `scope`
+        // out of the response (null and []). Measured on revive's board 2026-10-13: of a 949 KB raw
+        // window, detail was 343 KB and scope 82 KB, and nothing on /live reads either. Opt-in, so
+        // every other reader keeps the full row.
+        const brief = url.searchParams.get('brief');
+        if (brief !== null && brief !== '1') {
+          return sendJson(res, 400, {
+            error: {
+              code: 'bad_request',
+              message: `unknown brief ${JSON.stringify(brief)} — want brief=1, or omit it for the full rows`,
+            },
+          });
+        }
         // One board read per request (lane 01M3ANEQVR): the filtered view, the contention pass and
         // the staleness pass all derive from it. It used to be read 16 times here — 116 ms of the
         // endpoint's 267 ms on the live copy.
@@ -6470,7 +6483,11 @@ export async function handleHttp(
             ...(wait.route !== undefined ? { acceptance_route: wait.route } : {}),
           };
         });
-        return sendJson(res, 200, { lanes: annotated, warnings });
+        return sendJson(res, 200, {
+          lanes:
+            brief === '1' ? annotated.map((l) => ({ ...l, detail: null, scope: [] })) : annotated,
+          warnings,
+        });
       }
 
       // The brief's per-turn numbers (lane 01M2GTB0RA): what the statusline and the orient nudge

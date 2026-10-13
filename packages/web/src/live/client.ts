@@ -12,6 +12,7 @@ import type {
   Hold,
   HoldEffect,
   LaneBoard,
+  LaneState,
   LaneResult,
   MemberSummary,
   OpenLane,
@@ -226,18 +227,53 @@ export type { Request };
  */
 export async function fetchLaneBoard(
   cfg: LiveConfig,
-  opts: { project?: string; open?: boolean; goal?: string } = {},
+  opts: {
+    project?: string;
+    open?: boolean;
+    goal?: string;
+    /** `brief=1`: rows without `detail` or `scope` (live-loads-fast inc 1, lane 01M4RNCZVB). */
+    brief?: boolean;
+    /** The repeatable `?state=` filter; omitted = every state inside the history window. */
+    states?: readonly LaneState[];
+  } = {},
 ): Promise<LaneBoard> {
   const q = new URLSearchParams();
   if (opts.project) q.set('project', opts.project);
   if (opts.open) q.set('open', '1');
   if (opts.goal) q.set('goal', opts.goal);
+  if (opts.brief) q.set('brief', '1');
+  for (const s of opts.states ?? []) q.append('state', s);
   const qs = q.toString();
   const json = await apiGet<unknown>(
     cfg,
     `/teams/${encodeURIComponent(cfg.team)}/lanes${qs ? `?${qs}` : ''}`,
   );
   return readLaneBoard(json);
+}
+
+/**
+ * What /live asks the board for (live-loads-fast inc 1, lane 01M4RNCZVB): brief rows, since the page
+ * never shows a lane's `detail`, and every state but `abandoned`, which no surface on /live draws.
+ * For a minute after a merge the daemon can be a build behind this bundle (the publisher and the
+ * autorefresher run apart), so a 400 on `brief` falls back to the full read, never to an empty board.
+ */
+export const LIVE_BOARD_STATES: readonly LaneState[] = [
+  'open',
+  'claimed',
+  'active',
+  'blocked',
+  'awaiting_acceptance',
+  'ready_for_review',
+  'parked',
+  'done',
+];
+export async function fetchLiveLaneBoard(cfg: LiveConfig): Promise<LaneBoard> {
+  try {
+    return await fetchLaneBoard(cfg, { brief: true, states: LIVE_BOARD_STATES });
+  } catch (e) {
+    if (e instanceof LiveFetchError && e.status === 400) return fetchLaneBoard(cfg);
+    throw e;
+  }
 }
 
 /**

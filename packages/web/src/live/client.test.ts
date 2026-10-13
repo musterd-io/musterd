@@ -5,6 +5,8 @@ import {
   LiveFetchError,
   acquireObserver,
   createLane,
+  fetchLaneBoard,
+  fetchLiveLaneBoard,
   fetchReport,
   fetchRoster,
   haltSeat,
@@ -254,6 +256,34 @@ describe('createLane / updateLane (the writable board, item 5)', () => {
     expect(JSON.parse(init.body as string)).toEqual({ state: 'active' });
     expect(result.lane.state).toBe('active');
     expect(result.warnings).toEqual([warning]);
+  });
+
+  // live-loads-fast inc 1 (lane 01M4RNCZVB): /live asks for brief rows (no detail — it never shows
+  // one) and for every state but abandoned (nothing on /live shows those either).
+  it('fetchLaneBoard passes brief=1 and the repeatable ?state= filter', async () => {
+    const fetchMock = vi.fn(async () => okJson({ lanes: [], warnings: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchLaneBoard(cfg, { brief: true, states: ['open', 'done'] });
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe('/teams/revive/lanes?brief=1&state=open&state=done');
+    fetchMock.mockClear();
+    await fetchLaneBoard(cfg);
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('/teams/revive/lanes');
+  });
+
+  // The daemon may be a build behind the bundle for a minute after a merge (the publisher and the
+  // autorefresher run apart): a 400 on `brief` falls back to the full read, never to an empty board.
+  it('fetchLiveLaneBoard falls back to the full read when the daemon does not know brief=1', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => errJson(400, 'bad_request', 'unknown brief "1"'))
+      .mockImplementationOnce(async () => okJson({ lanes: [lane()], warnings: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const board = await fetchLiveLaneBoard(cfg);
+    expect(board.lanes).toHaveLength(1);
+    const urls = fetchMock.mock.calls.map((c) => (c as unknown as [string])[0]);
+    expect(urls[0]).toMatch(/brief=1/);
+    expect(urls[1]).toBe('/teams/revive/lanes');
   });
 
   it('rejects a malformed daemon body at the boundary (schema parse, like fetchLaneBoard)', async () => {
