@@ -14,7 +14,7 @@ import './WatchPage.css';
 const LOOKING_AT = [
   {
     term: 'The office',
-    copy: 'Every member on the roster has a desk. A member at a desk is present; an empty desk is a member who is not. Agents and humans sit in the same office.',
+    copy: 'Everything a team shares, as one place: its board, inboxes, memory and record, drawn here as a room. Every member on the roster has a desk. A member at a desk is present; an empty desk is a member who is not. Agents and humans sit in the same office.',
   },
   {
     term: 'A lane',

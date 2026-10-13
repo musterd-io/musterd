@@ -56,6 +56,21 @@ describe('the office slot in the stream section', () => {
     expect(rendered).not.toMatch(/alt="[^"]/);
   });
 
+  // §0b (ADR 578, 2026-10-13): the office is every team's shared place, named by what a reader
+  // recognizes (board, inboxes, memory, record, the room) — never the daemon, MCP or the hub.
+  it('says every team gets an office, and /watch defines it by what a reader recognizes', () => {
+    expect(rendered).toContain('Every team gets an office: one place its agents and people share.');
+    expect(rendered).not.toMatch(/built by a team running on musterd/);
+    const watch = readFileSync(
+      fileURLToPath(new URL('../components/site/WatchPage.tsx', import.meta.url)),
+      'utf8',
+    );
+    expect(watch).toContain(
+      'Everything a team shares, as one place: its board, inboxes, memory and record, drawn here as a room.',
+    );
+    expect(watch).not.toMatch(/daemon|MCP|the hub/);
+  });
+
   // A still and not the live canvas, because the scene costs ~51 ms/draw on a GPU-less box and a
   // marketing page must not charge that to a visitor (lane 01M2TM6C6XF6). If someone ever mounts
   // the scene here, this is the test that should stop them.
@@ -73,11 +88,11 @@ describe('the office slot in the stream section', () => {
     expect(rendered).not.toContain('loading="lazy"');
   });
 
-  // "Whose office is this?" — answered in the one paragraph left (homepage-copy-spec §0a.5): the team
-  // in the picture is the team that builds musterd. The desk-outlasts-the-session sentence left the
-  // page on purpose; /watch carries it.
+  // "Whose office is this?" — answered in the one paragraph left (homepage-copy-spec §0b, ADR 578):
+  // every team gets one, and the one in the picture is ours. The desk-outlasts-the-session sentence
+  // left the page on purpose; /watch carries it.
   it('says whose office this is, without a state word in the heading', () => {
-    expect(rendered.replace(/\s+/g, ' ')).toContain('This is that team claiming work');
+    expect(rendered.replace(/\s+/g, ' ')).toContain('This is ours, where the team that builds musterd claims work');
     expect(stream).toContain('Watch the team build it');
     expect(rendered).not.toMatch(/build it, live/);
     expect(stream).not.toContain('npx @musterd/cli init'); // the repo is private (2026-10-03)
@@ -187,6 +202,11 @@ describe('the 2026-10-12 cut', () => {
     expect(why).toContain('The ask waits in your inbox; nobody guesses.');
     expect(why).toContain('The tools will keep changing.');
     expect(why).toContain('The team and its record stay, whichever agent does the work.');
+    // §0b (ADR 578, 2026-10-13): knowledge work named as the expansion, in the close, as a floor —
+    // "one lane in six" is counts.sh's writing share, and the page says nothing stronger.
+    expect(why).toContain(
+      'None of it is specific to code. Research, writing and ops teams work the same way, and one lane in six on our own team is writing.',
+    );
     expect(why.indexOf('wt__lead')).toBeLessThan(why.indexOf('wt__pair'));
     expect(why.indexOf('wt__pair')).toBeLessThan(why.indexOf('wt__close'));
     // The frame shows an ask nobody has answered yet, so the caption says "waiting" (§0a.4).
