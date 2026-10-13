@@ -157,8 +157,22 @@ try {
   let code = null;
   try {
     const deadline = Date.now() + WAIT_MIN * 60_000;
+    let misses = 0;
     for (;;) {
-      const m = machine(id);
+      // One failed poll is not a dead machine: a transient Machines API `EOF` on 2026-10-13 threw
+      // here and the `finally` destroyed run 36 one minute in (lane 01M4V72T1V). Ride out a few.
+      let m;
+      try {
+        m = machine(id);
+        misses = 0;
+      } catch (e) {
+        if (++misses > 5) throw e;
+        console.log(
+          `   (poll ${misses}/5 failed: ${e instanceof Error ? e.message.split('\n')[0] : e})`,
+        );
+        await new Promise((r) => setTimeout(r, 30_000));
+        continue;
+      }
       if (m?.state === 'stopped' || m?.state === 'failed') {
         const exit = (m.events ?? []).find((ev) => ev?.type === 'exit');
         code = exit ? (exit.request?.exit_event?.exit_code ?? 0) : null;
