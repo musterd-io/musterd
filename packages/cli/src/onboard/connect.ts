@@ -253,20 +253,6 @@ export async function runConnect(input: RunConnectInput): Promise<number> {
       'Start any of them',
     );
   }
-  // The same offer as init's single-agent path. No presence wait here: none of these seats is
-  // running yet, and the tour's own team step waits for an agent and says how to start one.
-  if (up.length > 0 && input.driver) {
-    const tour = guard(
-      await p.confirm({
-        message: `Take the 5-minute tour? ${pc.dim('(it makes you a workspace of your own first)')}`,
-        initialValue: true,
-      }),
-    );
-    if (tour) {
-      p.outro(pc.yellow('Starting the tour.'));
-      return (await import('./tourOffer.js')).startTourAsPerson(input.driver, input.team);
-    }
-  }
   p.outro(pc.yellow(`${up.length} seat${up.length === 1 ? '' : 's'} on ${input.team}.`));
   return results.some((r) => r.status === 'failed') ? 1 : 0;
 }
