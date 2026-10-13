@@ -3,7 +3,6 @@ import {
   compareGoals,
   DEFAULT_PROJECT,
   emptyPoolFromCandidates,
-  globToRegExp,
   isAwaitingAcceptance,
   LANE_CONTENDING_STATES,
   LANE_TERMINAL_STATES,
@@ -1139,6 +1138,80 @@ function segmentMatches(pattern: string, text: string): boolean {
 }
 
 /**
+ * A glob that contains `**` does not match once the glob itself passes {@link PATH_GLOB_MAX}, or
+ * once the glob×path table would pass {@link PATH_GLOB_TABLE_MAX} cells. The matcher holds that
+ * table, and a member-supplied scope must not be able to allocate one of unbounded size. A short
+ * scope against a long repo path stays under the cell cap and still matches. A glob with no `**`
+ * never builds the table: it goes through {@link segmentMatches}, which is already bounded.
+ */
+const PATH_GLOB_MAX = 4096;
+const PATH_GLOB_TABLE_MAX = 1_048_576;
+
+function globHasDoubleStar(glob: string): boolean {
+  for (let i = 0; i < glob.length - 1; i++) {
+    if (glob[i] === '*' && glob[i + 1] === '*') return true;
+  }
+  return false;
+}
+
+/**
+ * Path-flavor glob match: the same language as `globToRegExp(glob, 'path')` (`*` stays inside one
+ * segment, `**` crosses `/`, a double-star slash is an optional prefix), without compiling a
+ * RegExp. A run of `*` against a long near-miss backtracks that regex without bound, and
+ * `laneCoveringPath` runs it on every edit-gate check (the same shape ADR 575 closed for
+ * `globsOverlap`). No `**` splits on `/` and uses {@link segmentMatches}. A `**` walks a glob×path
+ * table, each cell once.
+ */
+export function pathGlobMatches(glob: string, path: string): boolean {
+  if (!globHasDoubleStar(glob)) {
+    const gs = glob.split('/');
+    const ps = path.split('/');
+    if (gs.length !== ps.length) return false;
+    for (let i = 0; i < gs.length; i++) {
+      if (!segmentMatches(gs[i]!, ps[i]!)) return false;
+    }
+    return true;
+  }
+  if (glob.length > PATH_GLOB_MAX || (glob.length + 1) * (path.length + 1) > PATH_GLOB_TABLE_MAX) {
+    return false;
+  }
+  const G = glob.length;
+  const P = path.length;
+  const ok = new Uint8Array((G + 1) * (P + 1));
+  const at = (gi: number, pi: number) => gi * (P + 1) + pi;
+  ok[at(G, P)] = 1;
+  for (let gi = G - 1; gi >= 0; gi--) {
+    if (glob.startsWith('**/', gi)) {
+      let suffix = 0;
+      const slashFrom = new Uint8Array(P + 1);
+      for (let j = P - 1; j >= 0; j--) {
+        if (path[j] === '/' && ok[at(gi + 3, j + 1)] === 1) suffix = 1;
+        slashFrom[j] = suffix;
+      }
+      for (let pi = 0; pi <= P; pi++) {
+        if (ok[at(gi + 3, pi)] === 1 || slashFrom[pi] === 1) ok[at(gi, pi)] = 1;
+      }
+    } else if (glob.startsWith('**', gi)) {
+      for (let pi = P; pi >= 0; pi--) {
+        if (ok[at(gi + 2, pi)] === 1 || (pi < P && ok[at(gi, pi + 1)] === 1)) ok[at(gi, pi)] = 1;
+      }
+    } else if (glob[gi] === '*') {
+      for (let pi = P; pi >= 0; pi--) {
+        if (ok[at(gi + 1, pi)] === 1 || (pi < P && path[pi] !== '/' && ok[at(gi, pi + 1)] === 1)) {
+          ok[at(gi, pi)] = 1;
+        }
+      }
+    } else {
+      const ch = glob[gi];
+      for (let pi = 0; pi < P; pi++) {
+        if (path[pi] === ch && ok[at(gi + 1, pi + 1)] === 1) ok[at(gi, pi)] = 1;
+      }
+    }
+  }
+  return ok[at(0, 0)] === 1;
+}
+
+/**
  * Glob-vs-glob surface intersection, segment by segment (ADR 083; ADR 575). Two declared surfaces
  * overlap when every segment they both have can name the same thing: equal, one a wildcard segment
  * matching the other's literal, or both wildcards. A `**` absorbs the rest, and a surface that runs
@@ -1168,11 +1241,11 @@ export function globsOverlap(a: string, b: string): boolean {
 
 /**
  * The first **contending** lane (claimed/active/blocked) whose declared `scope` covers the given
- * concrete path — path-vs-glob (a real match of one file against the lane's globs, `globToRegExp` in
- * `path` flavor), NOT the cheap glob-vs-glob prefix `globsOverlap` uses. This is the read behind ADR 150
- * Gate A: "does <seat> own a claimed lane covering this edit?" (pass `owner`), and its blocked cousin
- * "is any seat's lane covering it?" (omit `owner`, for the denial's "owned by X" vs "claim one" copy).
- * The path must arrive repo-relative (the hook normalizes it), matching how lanes declare their globs.
+ * concrete path — path-vs-glob via {@link pathGlobMatches}, NOT the cheap glob-vs-glob prefix
+ * `globsOverlap` uses. This is the read behind ADR 150 Gate A: "does <seat> own a claimed lane
+ * covering this edit?" (pass `owner`), and its blocked cousin "is any seat's lane covering it?"
+ * (omit `owner`, for the denial's "owned by X" vs "claim one" copy). The path must arrive
+ * repo-relative (the hook normalizes it), matching how lanes declare their globs.
  */
 export async function laneCoveringPath(
   db: Driver,
@@ -1188,7 +1261,7 @@ export async function laneCoveringPath(
   ).filter((l) => CONTENDING.has(l.state));
   for (const lane of lanes) {
     for (const glob of lane.scope) {
-      if (globToRegExp(glob, 'path').test(path)) return lane;
+      if (pathGlobMatches(glob, path)) return lane;
     }
   }
   return null;

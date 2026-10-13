@@ -1,4 +1,4 @@
-import { ACCEPTANCE_STALE_MS, makeEnvelope, type Lane } from '@musterd/protocol';
+import { ACCEPTANCE_STALE_MS, globToRegExp, makeEnvelope, type Lane } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Driver, Params } from '../db/driver.js';
 import { openDb } from '../db/open.js';
@@ -12,11 +12,13 @@ import {
   insertLaneSnapshot,
   globsOverlap,
   LaneConflictError,
+  laneCoveringPath,
   laneFieldDiff,
   laneWarnings,
   lanesForGoal,
   listLanes,
   openLane,
+  pathGlobMatches,
   releaseDepartedSeatClaims,
   releaseInFlightClaimsForSeat,
   resolveLaneRef,
@@ -101,6 +103,94 @@ withDrivers('lanes', (o) => {
       expect(globsOverlap('x/' + '*a'.repeat(12) + 'b', 'x/' + 'a'.repeat(200))).toBe(false);
       expect(performance.now() - t0).toBeLessThan(50);
     });
+  });
+
+  describe('pathGlobMatches (Gate A path glob, no backtracking regex)', () => {
+    // Same language as globToRegExp(_, 'path'). A drift here changes who Gate A says owns an edit.
+    const samples: [string, string][] = [
+      ['src/*.ts', 'src/tariff.ts'],
+      ['src/*.ts', 'src/nested/tariff.ts'],
+      ['src/**', 'src/a'],
+      ['src/**', 'src'],
+      ['**/config.ts', 'config.ts'],
+      ['**/config.ts', 'packages/server/config.ts'],
+      ['packages/server/**', 'packages/server/src/store/lanes.ts'],
+      ['packages/server/**', 'packages/server'],
+      ['packages/*/package.json', 'packages/cli/package.json'],
+      ['packages/*/src/**', 'packages/server/src/http.ts'],
+      ['a/**/b', 'a/b'],
+      ['a/**/b', 'a/x/y/b'],
+      ['a/**/b', 'a/b/c'],
+      ['**', ''],
+      ['**', 'a/b'],
+      ['*', ''],
+      ['*', 'a/b'],
+      ['foo**bar', 'foo/bar'],
+      ['foo**bar', 'foobar'],
+      ['**foo', 'xfoo'],
+      ['a/**', 'a/b'],
+      ['a/**', 'a'],
+      ['src/**/*.ts', 'src/nested/tariff.ts'],
+      ['src/**/*.ts', 'src/tariff.ts'],
+      ['**/src/**', 'packages/server/src/http.ts'],
+      ['docs/decisions/575-*.md', 'docs/decisions/575-x.md'],
+      ['a?b', 'a?b'],
+      ['a?b', 'axb'],
+      ['', ''],
+      ['a/b/c', 'a/b/c'],
+    ];
+    it('agrees with the path-flavor regex on the globs lanes declare', () => {
+      for (const [glob, path] of samples) {
+        expect(pathGlobMatches(glob, path), `${glob} <= ${path}`).toBe(
+          globToRegExp(glob, 'path').test(path),
+        );
+      }
+    });
+    // The subject is a repo path; the glob is member-supplied. A star run against a long near-miss
+    // used to compile to nested `[^/]*` and hold the event loop (the #2443 shape, on this call).
+    it('stays fast on a pathological wildcard segment', () => {
+      const pattern = 'x/' + '*a'.repeat(30) + 'b';
+      const text = 'x/' + 'a'.repeat(5_000);
+      const t0 = performance.now();
+      expect(pathGlobMatches(pattern, text)).toBe(false);
+      expect(pathGlobMatches('x/' + '*a'.repeat(12) + 'b', 'x/' + 'a'.repeat(200))).toBe(false);
+      expect(pathGlobMatches('*'.repeat(30), 'a'.repeat(5_000))).toBe(true);
+      expect(performance.now() - t0).toBeLessThan(50);
+    });
+    it('a scope past the table cap does not match, and does not build the table', () => {
+      const glob = '**' + 'a'.repeat(5_000);
+      const t0 = performance.now();
+      expect(pathGlobMatches(glob, 'a'.repeat(100))).toBe(false);
+      // A short `**` glob still matches a long path. Only the table's cell count is capped, so a
+      // path that would allocate one does not match and is not scanned.
+      expect(pathGlobMatches('**', 'a'.repeat(100))).toBe(true);
+      expect(pathGlobMatches('**', 'a'.repeat(2_000_000))).toBe(false);
+      expect(performance.now() - t0).toBeLessThan(50);
+    });
+  });
+
+  it('laneCoveringPath reads a pathological scope without hanging the edit gate', async () => {
+    const { db, team } = await seed();
+    await openLane(db, team.id, 'bravo', 'June', {
+      title: 'star bomb',
+      scope: ['x/' + '*a'.repeat(30) + 'b'],
+      claim: true,
+    });
+    const real = await openLane(db, team.id, 'bravo', 'June', {
+      title: 'the store',
+      scope: ['packages/server/**'],
+      claim: true,
+    });
+    // Speed lives on pathGlobMatches above. This is the gate read: the bomb does not cover the
+    // near-miss, and a real scope still names its owner.
+    expect(await laneCoveringPath(db, team.id, 'bravo', 'x/' + 'a'.repeat(5_000))).toBeNull();
+    const covered = await laneCoveringPath(
+      db,
+      team.id,
+      'bravo',
+      'packages/server/src/store/lanes.ts',
+    );
+    expect(covered?.id).toBe(real.id);
   });
 
   /**
