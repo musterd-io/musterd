@@ -166,6 +166,13 @@ chunks it shares with code reached only through dynamic `import()` (the off-by-d
 all in `dist/`: it resolves no package through `node_modules` on connect. The path is unchanged, so
 harness configs written before the bundle keep launching it.
 
+The bundle's entry is `src/launch.ts` (ADR 577). It turns on Node's module compile cache
+(`module.enableCompileCache()`, default directory `os.tmpdir()/node-compile-cache`) and then imports
+the adapter, so each launch after the first on a build reuses compiled code. `main()` flushes the
+cache once startup has loaded. `NODE_DISABLE_COMPILE_CACHE=1` turns it off. The launcher calls
+`runAdapter()` only when it is the main module, so importing the bin (as the bench does) starts no
+server.
+
 The library the CLI imports (`buildMcpServer`, `MusterdClient`, `autojoin`, `withTraceContext`) is
 `tsc` output under `dist/lib/`, which `main` and `types` name, so the CLI shares one copy of
 `@musterd/protocol` and `zod` instead of loading the bundle's. `resolveMcpLaunch` resolves the deep
@@ -404,6 +411,7 @@ src/
                   //   installShutdownHandlers (drop presence + exit on host teardown);
                   //   autojoin(): claim+join on launch when a default claim exists (ADR 032);
                   //   when unclaimed: writes a pending marker (ADR 033) + startResolutionWatcher (ADR 034)
+  launch.ts       // the bundle's entry (dist/index.js): enables Node's compile cache, then imports index.ts and calls runAdapter() when launched (ADR 577)
   toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085)
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
   client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);

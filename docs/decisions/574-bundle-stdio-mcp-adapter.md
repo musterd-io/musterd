@@ -107,6 +107,8 @@ nor what the CLI imports.
     Follows-up: 01M4S9SFDR6E94Y623V3MC3K2A
   - `module.enableCompileCache()` measured a further ~100 ms off the bundle, but it writes a cache
     directory and needs its own decision. Follows-up: 01M4S9SJJPTD1J6SM2RG8R5DH7
+  - _(2026-10-12)_ Decided in ADR 577: enabled. Remeasured on a quiet machine the saving is about
+    25 ms per launch, not ~100 ms.
 
 ## Observability & Evaluation
 
