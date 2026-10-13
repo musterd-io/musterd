@@ -91,8 +91,8 @@ function segments(text: string): { fenced: boolean; text: string }[] {
  * a restoration check that by construction cannot pass text that never existed. So the convention and
  * the gate contradicted each other, and the gate won: the correct fix was unwritable.
  *
- * The allowance is the narrowest thing that closes it. **Strip the marker spans from the new
- * Decision; the remaining words must be identical to the old one's.** Append-only by construction
+ * The allowance is the narrowest thing that closes it. **Strip the marker spans from both
+ * Decisions; the remaining words must be identical, and every old marker must survive word for word.** Append-only by construction
  * rather than by promise:
  *
  *   - a reworded sentence changes the remainder → refused;
@@ -128,13 +128,32 @@ export function isAppendOnlyAmendment(before: string, after: string): boolean {
       if (a.text !== b.text) return false;
       continue;
     }
-    let stripped = b.text;
-    for (const span of MARKER_SPANS) {
-      if (span.test(stripped)) addedMarker = true;
-      span.lastIndex = 0;
-      stripped = stripped.replace(span, ' ');
+    // Markers already on the old side are stripped too, and must survive word for word: without that,
+    // a Decision that already carried one could never take a second (ADR 131 on #2452), since the old
+    // marker read as changed prose on one side only.
+    const was_ = stripMarkers(a.text);
+    const now_ = stripMarkers(b.text);
+    if (words(now_.rest) !== words(was_.rest)) return false;
+    const unmatched = [...now_.markers];
+    for (const m of was_.markers) {
+      const at = unmatched.indexOf(m);
+      if (at === -1) return false; // an existing marker was edited or removed
+      unmatched.splice(at, 1);
     }
-    if (words(stripped) !== words(a.text)) return false;
+    if (unmatched.length > 0) addedMarker = true;
   }
   return addedMarker;
+}
+
+/** The text with every marker span replaced by a space, and the markers themselves (as words). */
+function stripMarkers(text: string): { rest: string; markers: string[] } {
+  const markers: string[] = [];
+  let rest = text;
+  for (const span of MARKER_SPANS) {
+    rest = rest.replace(span, (m) => {
+      markers.push(words(m));
+      return ' ';
+    });
+  }
+  return { rest, markers };
 }
