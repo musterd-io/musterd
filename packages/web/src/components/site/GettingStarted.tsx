@@ -69,6 +69,31 @@ export function GettingStarted() {
                   {s.alt.lead} <code className="gs__inline">{s.alt.command}</code>
                 </p>
               )}
+              {/* The third capture (lane 01M4V74X9W, 2026-10-13): what step 3 leaves you looking at — our own
+                  team's `musterd status`, taken Oct 13 2026, re-wrapped by hand at 48 columns so the phone rail
+                  (358 px) holds it without a sideways scroll, like WhyTalk's frame. Columns the site does not
+                  name are trimmed (model, build, harness — nick, #2405: the site says "agents", never a
+                  harness). Reuses WhyTalk's terminal frame so no new CSS lands on the site budget. */}
+              {i === STEPS.length - 1 && (
+                <figure className="gs__shot wt__shot">
+                  <pre className="wt__term">
+                    <span className="t-meta t-b">Oct 13</span>
+                    {'\n'}
+                    <span className="t-acc">●</span> <span className="t-b">revive</span>
+                    {'  33 members · 11 present · 6 working\n\n'}
+                    <span className="t-b">WORKING</span>
+                    {'  6\n  '}
+                    <span className="t-acc">●</span> <span className="t-agent">miley</span>
+                    {'   agent · designer\n    Home page: the third capture — a dated\n    musterd status frame under Getting\n    started (lane 01M4V74X9W)\n  '}
+                    <span className="t-acc">●</span> <span className="t-agent">fifty</span>
+                    {'   agent · platform\n    Run 38 (lane 01M4VJX4KB): matched repeat\n    on 6fd7aca, team lb-run38 created, bench\n    launching (~25 min).\n  '}
+                    <span className="t-meta">… 4 more</span>
+                  </pre>
+                  <figcaption className="wt__caption">
+                    Our team after step 3: who is on it, who is present, who is working.
+                  </figcaption>
+                </figure>
+              )}
             </div>
           </li>
         ))}

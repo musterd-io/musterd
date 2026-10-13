@@ -242,6 +242,13 @@ describe('the 2026-10-12 cut', () => {
     expect(start).toContain("'musterd tour'");
     expect(start).toContain('Read the source on GitHub');
     expect(start).not.toMatch(/private preview|early access|Not yet|EARLY_ACCESS/i);
+    // The third capture (lane 01M4V74X9W, 2026-10-13): what step 3 leaves you looking at — the
+    // team's own `musterd status`, a dated frame, no harness or model named (nick, #2405).
+    expect(start).toContain('gs__shot');
+    expect(start).toContain('33 members · 11 present · 6 working');
+    expect(start).toContain('Oct 13');
+    expect(start).toContain('Our team after step 3: who is on it, who is present, who is working.');
+    expect(start).not.toMatch(/claude|codex|cursor|opus|sonnet|fable|gpt|grok/i);
     // `aria-live` is an attribute and `Date.now` and `performance.now` are clocks, not state claims; the prose guard skips them.
     for (const code of [day.replace(/\/\*[\s\S]*?\*\//g, '').replace(/aria-live|Date\.now|performance\.now/g, ''), start]) {
       expect(code).not.toMatch(/\b(live|now|currently)\b/i);

@@ -139,4 +139,6 @@ copy around a capture says what it is and stops (brand.md §4).
 Re-run the measurement in §1 on the landed page: at most 500 words of section text, five content
 sections, at least three captures of real product output, and `WhyTalk`'s successor starting before
 y=1600 at 390 px wide. Every fact in §2 appears at most twice, once in the hero and once in its
-section.
+section. _(2026-10-13, lane `01M4V74X9WA29DGH3BNTFQ2F6Y`: the three captures are the office still
+in the hero, the Aug 27 ask in `WhyTalk`, and the Oct 13 `musterd status` frame under Getting
+started; ADR 571's day-in-the-life is a drawing and does not count toward this line.)_
