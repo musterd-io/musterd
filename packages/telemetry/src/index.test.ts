@@ -97,6 +97,14 @@ describe('resolveOtlpEndpoint — machine-config fallback (ADR 445 R3)', () => {
     expect(resolveOtlpEndpoint({ MUSTERD_CONFIG: blank.path, VITEST: '1' })).toBeUndefined();
   });
 
+  it('never reads the real config under vitest, even through a synthetic env (ADR 190)', () => {
+    // The env a test passes need not carry VITEST — the process running it does. Before the guard
+    // read process.env too, this resolved the operator's real file and failed on any machine whose
+    // ~/.musterd/config.json sets telemetry.otlp_endpoint.
+    expect(process.env['VITEST']).toBeTruthy();
+    expect(resolveOtlpEndpoint({})).toBeUndefined();
+  });
+
   it('never reads the operator’s real ~/.musterd/config.json under vitest (ADR 190)', () => {
     // No MUSTERD_CONFIG override + VITEST set ⇒ the file path is not consulted at all.
     expect(resolveOtlpEndpoint({ VITEST: '1' })).toBeUndefined();

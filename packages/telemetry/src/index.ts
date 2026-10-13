@@ -37,8 +37,10 @@ function machineConfigPath(env: NodeJS.ProcessEnv): string | undefined {
   const override = env['MUSTERD_CONFIG'];
   if (override) return override;
   // ADR 190: under vitest the override is mandatory — never touch the operator's real config from a
-  // test. The CLI throws here; a telemetry probe just stays off.
-  if (env['VITEST']) return undefined;
+  // test. The CLI throws here; a telemetry probe just stays off. The process env is checked as well
+  // as the one passed in: a test that hands over a synthetic env (`{}`) is still under vitest, and
+  // until 2026-10-13 that fell through to the real file and failed on any machine with an endpoint.
+  if (env['VITEST'] || process.env['VITEST']) return undefined;
   return join(homedir(), '.musterd', 'config.json');
 }
 
