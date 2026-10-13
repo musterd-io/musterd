@@ -53,9 +53,13 @@ because nothing names those as off limits.
     levels.
   - jdkato/a11y **v0.1.0** and jdkato/diataxis **v0.1.0**, at `suggestion` only. They were created
     on 2026-09-24 and have no record yet.
+  _(Amended 2026-10-13: the trial turned most of these packs off; only jdkato/a11y's structural
+  rules and a musterd style remain. See Consequences, 2026-10-13.)_
 - The vocabulary is generated from `docs/glossary/terms.ts`. Canonical terms go in `accept.txt` and
   the Not column goes in `reject.txt`. That covers the whole Not column, which `pnpm vocab:check`
   does not. `vocab:check` stays the gate for the four banned words.
+  _(Amended 2026-10-13: `reject.txt` carries the banned terms only; the Not column was 1 of 50
+  right as a word list. See Consequences, 2026-10-13.)_
 - It runs locally through `pnpm prose:lint <paths>`. A machine without Vale gets an install hint and
   exit 0, so a missing binary never blocks a commit.
 - Whether CI runs it (advisory, gating, or not at all) is decided from a measured trial: alerts per
@@ -121,6 +125,35 @@ dependencies are approved.
 - ADR 299's policy reads more widely. Every row already in `PROVENANCE.md` is MIT and unaffected.
 - The skill gains a check it can run on its own output, local to each seat, before any CI cost is
   paid.
+- _(2026-10-13, lane `01M4VEYYMP`, the trial decision 1 called for.)_ Vale 3.24.0 with every pack
+  above ran over `README.md`, `docs/wiki` and `docs/design`: 190 files, 283,625 words by a
+  code-stripped count, 68,140 alerts, **240 per 1,000 words**. Fifty alerts per pack, drawn at
+  random (seed 579), were graded by read-only seats against brand.md §4–§5 and the comms skill:
+
+  | Pack | Alerts per 1,000 words | Right in the sample | Rules that earned their place |
+  | --- | --- | --- | --- |
+  | Google | 92.2 | 2 of 50 | `Semicolons` 2 of 7, too weak to keep |
+  | Readability | 58.2 | 1 of 50 | none |
+  | tbhb/vale-ai-tells | 46.0 | 8 of 50 | a few with one sample each; not enough to judge |
+  | jdkato/a11y (with Inclusive, Plain) | 21.2 | 19 of 50 | `Plain.Sentence` 15 of 32, `Plain.Grade` 4 of 15 |
+  | Vale spelling | 14.3 | 1 of 50 | none: handles, product names and jargon |
+  | Not column as `reject.txt` | 8.0 | 1 of 50 | none: the words are wrong in one sense only |
+  | jdkato/diataxis | 0.3 | 3 of 50 | none |
+
+  The stock rules mostly fought conventions the repo keeps on purpose (dated wiki claim headings,
+  spaced dashes, `ADR` as a term of art). They also missed the contrast frame, brand.md §4's main
+  ban. So the set is replaced with a committed `musterd` style of three rules, graded the same way:
+  `ContrastFrame` 22 of 50, `LongSentence` (over 35 words) 27 of 50, `HardParagraph` (grade
+  over 13) 19 of 50. jdkato/a11y's alt-text, link and heading-structure rules stay on: they fired
+  fewer than ten times, so they were not sampled. The new set runs at 14.1 alerts per 1,000 words.
+
+  **CI does not run Vale.** At best half of the remaining alerts are right, so a gate would block on
+  noise and an advisory comment would be ignored. `pnpm prose:lint` stays a local second look, and
+  the comms skill runs it before handing copy over. `prose-vocab:check` (in `format:check`) keeps
+  the vocabulary in step with the glossary. The candidate ai-tells rules (`ContrastiveNegation`,
+  `PseudoCleft`, `LabelAndExplain`) need a sample of their own before they join. To repeat the
+  trial, run the packs listed in decision 1 over the same paths and draw 50 alerts per pack with
+  seed 579.
 
 ## Observability & Evaluation
 

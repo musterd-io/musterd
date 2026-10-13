@@ -34,12 +34,12 @@ to open. Read the reference before doing that craft's work, every time.
 8. `docs/demo/pitch/` — the standing deck. Its `script.md` sources table is the
    **numbers ledger** (hard rule 4).
 9. **What is held back, and what changed.** Before a number, a link or an
-   install command goes out, check its current state, never your memory of it:
-   the held-out list in `docs/wiki/how-musterd-got-here.md` ("What was tried and
-   reversed"; the cookoff multiplier is there), the newest dated note on the
-   relevant section of `docs/design/homepage-copy-spec.md`, and the newest ADR on
-   the subject (ADR 568, 2026-10-12, ended the private preview and put the npm
-   and brew install on musterd.io). A true figure that is on hold is still off
+   install command goes out, check where it stands today. Three places say: the
+   held-out list in `docs/wiki/how-musterd-got-here.md` ("What was tried and
+   reversed", where the cookoff multiplier is held), the newest dated note on that
+   section of `docs/design/homepage-copy-spec.md`, and the newest ADR on the
+   subject. ADR 568 (2026-10-12), for one, ended the private preview and put the
+   npm and brew install on musterd.io. A true figure that is on hold is still off
    limits.
 
 **The positioning decision is not yours.** It is made in ADRs and approved by
@@ -84,8 +84,9 @@ Each one exists because breaking it once costs more than any piece of copy earns
    prices, raise size, caps or terms. You draft; a human sends.
 7. **Charts are drawn from source data in code, rendered and looked at** before
    they ship (`references/charts.md`).
-8. **New tools come by ADR.** Vale, prose scorers and chart libraries are proposals
-   until an ADR accepts them.
+8. **New tools come by ADR.** ADR 579 accepted Vale (`pnpm prose:lint`), the
+   skill's own eval checks as the tell scorer, and Observable Plot for charts when
+   one is needed. Anything else is a proposal until an ADR accepts it.
 
 ## Voice, operationally
 
@@ -138,6 +139,7 @@ Run them in order on any public copy. After each sweep, re-check the earlier one
 
 - [ ] The reference for this craft was opened and followed
 - [ ] Six sweeps run, in order
+- [ ] `pnpm prose:lint` run on the files, and each alert read (`docs-and-a11y.md` §5)
 - [ ] Glossary terms exact; no synonyms introduced
 - [ ] An edit or rewrite adds no fact its source did not hold; suggestions go in a
       note below it

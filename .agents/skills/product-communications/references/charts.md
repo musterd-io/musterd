@@ -77,8 +77,10 @@ two-part pattern is W3C's for complex images
 ([W3C complex images](https://www.w3.org/WAI/tutorials/images/complex/)).
 In SVG, give the figure `role="img"` with `<title>` and `<desc>`.
 
-## Not yet
+## Libraries
 
-A chart library (Observable Plot or Vega-Lite) and a color library (culori) wait
-for the comms-skill-v2 tooling ADR (lane `01M4V98KAW`). Until then, hand-written
-SVG or HTML from computed data, as `docs/demo/pitch/deck.html` does.
+ADR 579 decision 3: hand-written SVG or HTML from computed data stays the default,
+as `docs/demo/pitch/deck.html` does. When a chart needs real axes, scales or more
+than two series, the library is Observable Plot, pinned and rendered to static SVG
+at build time; the first PR that adds it cites ADR 579 as its dependency ADR.
+Compute contrast with the WCAG formula in a few lines of code; no color library.

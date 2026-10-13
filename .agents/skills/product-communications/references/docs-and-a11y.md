@@ -203,9 +203,13 @@ Readers get what they need (relevant), can find it (findable), can understand it
 Report audit findings to the implementer as a list keyed to those four; the
 implementer keeps authorship.
 
-## 5. Not yet
+## 5. Lint with Vale before you hand it over
 
-Prose linting with Vale (Google, Microsoft, Readability, A11y and Diátaxis packs,
-plus a vocabulary generated from `docs/glossary/terms.ts`) would automate most of
-sections 2 and 4. It is a new tool and waits for the comms-skill-v2 tooling ADR
-(lane `01M4V98KAW`).
+Run `pnpm prose:lint <paths>` on anything you wrote or edited (ADR 579; Vale is a
+per-machine install, `brew install vale`, and the command says so when it is
+missing). It checks the few rules that were right often enough on our own docs:
+brand.md §4's contrast frame, sentences over 35 words, paragraphs above grade 13, the
+accessibility rules for alt text, links and headings, the four banned words, and
+`musterd` in lowercase. About half its alerts are real. Treat each alert as a second look, never as the verdict; the trial
+behind this set, and why the stock Google, Readability and spelling packs are off,
+is in ADR 579's Consequences. CI does not run it.
