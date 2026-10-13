@@ -2222,11 +2222,9 @@ export function mountOffice(
    */
   let replayPending: readonly OfficeEvent[] | null = null;
   function drainReplay(): void {
-    if (!replayPending) return;
-    if (actors.poses().size === 0) return; // nobody placed yet — the roster is still on its way
+    if (!replayPending || actors.poses().size === 0) return; // nobody placed yet — the roster is still on its way
     const evs = replayPending;
     replayPending = null;
-    if (reduced || STILL || evs.length === 0) return;
     tempo = REPLAY_TEMPO;
     for (const ev of evs) {
       try {

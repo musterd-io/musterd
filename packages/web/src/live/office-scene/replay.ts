@@ -26,16 +26,14 @@ export function replayEvents(
   envelopes: readonly Envelope[],
   liveIds: ReadonlySet<string>,
   now: number,
-  windowMs = REPLAY_WINDOW_MS,
-  max = REPLAY_MAX,
 ): ReplayEvent[] {
   const out: ReplayEvent[] = [];
-  const since = now - windowMs;
-  const sorted = [...envelopes].filter((e) => !liveIds.has(e.id) && e.ts >= since).sort((a, b) => a.ts - b.ts);
-  for (const e of sorted) {
+  const since = now - REPLAY_WINDOW_MS;
+  for (const e of [...envelopes].sort((a, b) => a.ts - b.ts)) {
+    if (liveIds.has(e.id) || e.ts < since) continue;
     const ev = actToEvent(e);
     if (ev && (ev.kind === 'walk-claim' || ev.kind === 'walk-pin' || ev.kind === 'walk-handoff')) out.push(ev);
   }
   // The newest `max`, still oldest-first: what the room was doing just before you arrived.
-  return out.length > max ? out.slice(out.length - max) : out;
+  return out.slice(-REPLAY_MAX);
 }
