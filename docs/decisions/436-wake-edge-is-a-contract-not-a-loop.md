@@ -129,6 +129,16 @@ fix five contract holes.
   are settled in the script, not here. The floor is the reply wake's whole-life prompt tokens,
   normalised per harness, with board work orders excluded. "Before first act" starts at the lease.
 
+- **2026-10-13 — the trigger read early, and the Decision 5 ADR is written.** Eight days before
+  the binding read, `pnpm wake:rail` showed both clauses holding: Grok 0/37, Codex 0/38, OpenCode
+  0/32 settled wakes priced, and Grok's median floor 12.2× Claude Code's. The research readout
+  [own model, native harness, or neither](../design/2026-10-13-own-model-vs-native-harness.md)
+  measured the "one engine per provider" option against the field and the daemon's state, and
+  [ADR 583](583-metering-gateway-not-a-loop.md) answers the trigger the other way: a loopback
+  metering gateway on each harness's base-URL variable prices every call and measures the floor
+  from usage, and enforces `budget_usd` before the next call; the engine-per-provider option is
+  reversed. Decision 2 stands unchanged: the native backend remains the reference row.
+
 ## Observability & Evaluation
 
 - **Traces:** per wake, the existing `residency.woke` / `residency.wake_cost` / `session_captured`
