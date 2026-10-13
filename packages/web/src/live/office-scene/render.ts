@@ -7,8 +7,6 @@ import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
 import {
-  BEAM_LEN,
-  BEAM_SHEAR,
   ART,
   BOOKSHELVES,
   CHAIR_LIFT,
@@ -51,7 +49,7 @@ import {
   type Rug,
 } from './layout';
 import { STICKY_CAP, stickySway, type WallBoard } from './wallboard';
-import { DAY_ENV, type LightEnv } from './lighting';
+import { DAY_ENV, sunBeam, type LightEnv } from './lighting';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
@@ -1457,7 +1455,8 @@ export function boardAnchor(fit: Fit): {
  * canvas draws — the beams (`drawWindowBeams`) and the cable (`cablePts`) — so the overlay sits exactly
  * on the painted light. Positions are hash-deterministic: rebakes reposition, never reshuffle.
  */
-export function magicAnchors(fit: Fit): { motes: Pt[]; bulbs: Pt[] } {
+export function magicAnchors(fit: Fit, hours = 12.75): { motes: Pt[]; bulbs: Pt[] } {
+  const sun = sunBeam(hours);
   const motes: Pt[] = [];
   const bulbs: Pt[] = [];
   WALL_EDGES.forEach((edge, wi) => {
@@ -1472,8 +1471,8 @@ export function magicAnchors(fit: Fit): { motes: Pt[]; bulbs: Pt[] } {
       for (let k = 0; k < 6; k++) {
         const n = wi * 100 + ci * 10 + k;
         const t = w.t0 + (0.15 + 0.7 * magicRnd(n)) * (w.t1 - w.t0);
-        const d = 14 + magicRnd(n + 1) * BEAM_LEN * 0.72;
-        const shear = (d / BEAM_LEN) * BEAM_SHEAR;
+        const d = 14 + magicRnd(n + 1) * sun.len * 0.72;
+        const shear = (d / sun.len) * sun.shear;
         const [ex, ey] = edge(t);
         const p = wi === 0 ? project(d, ey + shear, fit) : project(ex + shear, d, fit);
         motes.push({ x: p.x, y: p.y - (6 + magicRnd(n + 2) * 40) * fit.scale });
@@ -1491,14 +1490,15 @@ export function magicAnchors(fit: Fit): { motes: Pt[]; bulbs: Pt[] } {
  */
 function drawWindowBeams(ctx: CanvasRenderingContext2D, fit: Fit, env: LightEnv): void {
   if (env.skyStrength < 0.02) return;
+  const { len, shear } = sunBeam(env.hours); // a low sun throws long and leans; noon is short and straight
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const beam = (base: (t: number) => [number, number], into: (l: [number, number], d: number) => [number, number]): void => {
     for (const w of WINDOWS) {
       const a = base(w.t0);
       const b = base(w.t1);
-      const far0 = into(a, BEAM_LEN);
-      const far1 = into(b, BEAM_LEN);
+      const far0 = into(a, len);
+      const far1 = into(b, len);
       const pa = project(a[0], a[1], fit);
       const pb = project(b[0], b[1], fit);
       const pf0 = project(far0[0], far0[1], fit);
@@ -1521,9 +1521,9 @@ function drawWindowBeams(ctx: CanvasRenderingContext2D, fit: Fit, env: LightEnv)
     }
   };
   // back-left wall (lx=0): beam throws into +lx, sheared along +ly.
-  beam((t) => [0, t * FLOOR], (l, d) => [d, l[1] + (d / BEAM_LEN) * BEAM_SHEAR]);
+  beam((t) => [0, t * FLOOR], (l, d) => [d, l[1] + (d / len) * shear]);
   // back-right wall (ly=0): beam throws into +ly, sheared along +lx.
-  beam((t) => [t * FLOOR, 0], (l, d) => [l[0] + (d / BEAM_LEN) * BEAM_SHEAR, d]);
+  beam((t) => [t * FLOOR, 0], (l, d) => [l[0] + (d / len) * shear, d]);
   ctx.restore();
 }
 

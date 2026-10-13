@@ -1,3 +1,5 @@
+import { BEAM_LEN, BEAM_SHEAR } from './layout';
+
 /**
  * The office lighting model — one source of truth for how the room is lit, derived from real-world PST
  * time-of-day and whether anyone's in. The scene had three *decoupled* notions of light (baked per-face
@@ -139,3 +141,16 @@ export function computeLightEnv(pstHours: number, occupied: boolean, inShift: bo
 
 /** A fully-lit daytime env — the safe default for any renderer that hasn't wired the clock yet. */
 export const DAY_ENV: LightEnv = computeLightEnv(12, true);
+
+/**
+ * Where the sun is, as the window light shafts see it (lane 01M4VR902N): how far a window's beam reaches
+ * onto the floor and how far its far end leans sideways, in logical units. A low sun throws long and leans
+ * hard; noon is shorter and straight; the lean flips sides across the day (positive in the morning). Pure
+ * over the office hour, so the painted beams, the dust motes in them and the dog's sunbeam nap spots all read
+ * the same sun. The beams were constants (150, 46) — 7 am and noon differed only in tint and strength.
+ */
+export function sunBeam(hours: number): { len: number; shear: number } {
+  const height = Math.max(0, Math.sin((Math.PI * (hours - 6.5)) / 12.5)); // 0 at the horizon … 1 at noon
+  const side = Math.max(-1, Math.min(1, (12.75 - hours) / 6.25)); // + morning … − evening
+  return { len: BEAM_LEN * (0.8 + 0.8 * (1 - height)), shear: BEAM_SHEAR * 1.4 * side };
+}

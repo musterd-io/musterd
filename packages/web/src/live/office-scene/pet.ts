@@ -1,7 +1,5 @@
 import { FLOOR, KX, KY } from './iso';
 import {
-  BEAM_LEN,
-  BEAM_SHEAR,
   DESK_D,
   DESK_SLOTS,
   DESK_W,
@@ -12,6 +10,7 @@ import {
   RECEPTION,
   WINDOWS,
 } from './layout';
+import { sunBeam } from './lighting';
 import { findPath, walkable, type P } from './nav';
 
 /**
@@ -170,11 +169,12 @@ const BEAM_NAP_IN = 60;
  * estate while the sun is up), and the rugs (always good, best at night). Every candidate is checked
  * against the nav grid so the pet never beds down inside furniture.
  */
-export function napSpots(daylight: number): PetSpot[] {
+export function napSpots(daylight: number, hours = 12.75): PetSpot[] {
   const sunny = daylight > 0.3;
   const beamW = sunny ? 3 : 0.15;
   const rugW = sunny ? 1 : 2;
-  const shear = (BEAM_NAP_IN / BEAM_LEN) * BEAM_SHEAR;
+  const sun = sunBeam(hours); // the pools lean with the sun, so the dog beds down where the light actually is
+  const shear = (BEAM_NAP_IN / sun.len) * sun.shear;
   const out: PetSpot[] = [];
   for (const win of WINDOWS) {
     const tC = ((win.t0 + win.t1) / 2) * FLOOR;
@@ -247,6 +247,8 @@ export function createPet(rng: () => number = Math.random): PetState {
 export interface PetBeatOpts {
   /** Current natural-light level (see lighting.ts) — steers day naps into the sunbeams. */
   daylight: number;
+  /** The office hour (lighting.ts) — where the beams fall, so day naps follow the light. Noon when absent. */
+  hours?: number;
   /** Floor spots beside members currently working — the pet sometimes sits with them, supervising. */
   workSpots?: P[];
   rng?: () => number;
@@ -276,7 +278,7 @@ export function petBeat(pet: PetState, opts: PetBeatOpts): boolean {
     plan = 'sit-then-nap';
     pet.sitFor = 8 + rng() * 6;
   } else {
-    const spots = napSpots(opts.daylight);
+    const spots = napSpots(opts.daylight, opts.hours);
     let total = 0;
     for (const s of spots) total += s.w;
     let pick = rng() * total;
