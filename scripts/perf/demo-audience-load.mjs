@@ -565,12 +565,15 @@ async function drive() {
     }),
   );
 
-  // Viewers: /live on the humans' phones.
-  const sockets = [];
+  // Viewers: /live on the humans' phones. One holder per viewer; `holder.ws` is its CURRENT socket,
+  // replaced on every reconnect.
+  const viewers = [];
   /** Every viewer socket that closed before the run stopped: when, how long it lived, whether it had
-   *  been claimed (so its roster reads were counted) — run 35 lost 46 of 75 to `1006` with only a
-   *  count to show for it, and a closed viewer never reconnects, so each one lightens the roster rail
-   *  for the rest of the run (lane 01M4V72T1V). */
+   *  been claimed (so its roster reads were counted), and how the reconnect went — run 35 lost 46 of
+   *  75 to `1006` with only a count to show for it, and until run 37 a closed viewer never came
+   *  back, so each close lightened the roster rail for the rest of the run (lanes 01M4V72T1V,
+   *  01M4VAWG30). `reconnected` is ms from the close to the next `occupied`, or null if the run
+   *  stopped first. */
   const wsCloses = [];
   const railT0 = Date.now();
   let presenceFrames = 0;
@@ -611,54 +614,85 @@ async function drive() {
           if (!inFlight) schedule();
         } else startFetch();
       };
-      const ws = new WebSocket(wsUrl);
-      sockets.push(ws);
-      let hb;
-      const openedAt = Date.now();
-      let claimed = false;
-      ws.on('open', () =>
-        ws.send(
-          JSON.stringify({
-            type: 'claim',
-            v: PROTOCOL_VERSION,
-            team: ready.team,
-            key: h.token,
-            target: { seat: h.name },
-            surface: 'web',
-            provenance: 'session',
-          }),
-        ),
-      );
-      ws.on('message', (data) => {
-        let f;
-        try {
-          f = JSON.parse(String(data));
-        } catch {
-          return;
-        }
-        if (f.type === 'occupied') {
-          claimed = true;
-          ws.send(JSON.stringify({ type: 'subscribe', scope: 'team-all' }));
-          hb = setInterval(() => ws.send(JSON.stringify({ type: 'heartbeat' })), 15_000);
-        } else if (f.type === 'presence' && !stopping) {
-          presenceFrames++;
-          if (ROSTER === 'every') void req('GET /teams/:slug (viewer)', T, { headers });
-          else rosterRefetch();
-        } else if (f.type === 'deliver' && !stopping) {
-          const meta = f.envelope?.meta ?? {};
-          if (Object.keys(meta).some((k) => k.startsWith('lane_'))) {
-            laneFrames++;
-            void req('GET /report (viewer)', `${T}/report`, { headers });
+      // Reconnect like the page does (packages/web/src/live/client.ts): backoff 1 s doubling to
+      // 15 s, reset by a clean handshake. A close is then a latency blip, not a load change.
+      const holder = { ws: null };
+      viewers.push(holder);
+      let backoff = 1000;
+      const connect = () => {
+        const ws = new WebSocket(wsUrl);
+        holder.ws = ws;
+        let hb;
+        const openedAt = Date.now();
+        let claimed = false;
+        ws.on('open', () =>
+          ws.send(
+            JSON.stringify({
+              type: 'claim',
+              v: PROTOCOL_VERSION,
+              team: ready.team,
+              key: h.token,
+              target: { seat: h.name },
+              surface: 'web',
+              provenance: 'session',
+            }),
+          ),
+        );
+        ws.on('message', (data) => {
+          let f;
+          try {
+            f = JSON.parse(String(data));
+          } catch {
+            return;
           }
-        }
-      });
-      ws.on('close', (code) => {
-        clearInterval(hb);
-        if (stopping) return;
-        fail('WS /ws (viewer)', `close ${code}`);
-        wsCloses.push({ at: Date.now() - railT0, lived: Date.now() - openedAt, code, claimed });
-      });
-      ws.on('error', () => fail('WS /ws (viewer)', 'error'));
+          if (f.type === 'occupied') {
+            claimed = true;
+            ws.send(JSON.stringify({ type: 'subscribe', scope: 'team-all' }));
+            hb = setInterval(() => ws.send(JSON.stringify({ type: 'heartbeat' })), 15_000);
+          } else if (f.type === 'subscribed') {
+            backoff = 1000;
+            if (holder.pendingClose) {
+              holder.pendingClose.reconnected = Date.now() - holder.pendingClose.closedAt;
+              holder.pendingClose = null;
+            }
+          } else if (f.type === 'presence' && !stopping) {
+            presenceFrames++;
+            if (ROSTER === 'every') void req('GET /teams/:slug (viewer)', T, { headers });
+            else rosterRefetch();
+          } else if (f.type === 'deliver' && !stopping) {
+            const meta = f.envelope?.meta ?? {};
+            if (Object.keys(meta).some((k) => k.startsWith('lane_'))) {
+              laneFrames++;
+              void req('GET /report (viewer)', `${T}/report`, { headers });
+            }
+          }
+        });
+        ws.on('close', (code, reason) => {
+          clearInterval(hb);
+          if (stopping) return;
+          fail('WS /ws (viewer)', `close ${code}`);
+          const entry = {
+            at: Date.now() - railT0,
+            lived: Date.now() - openedAt,
+            code,
+            reason: String(reason ?? '').slice(0, 80),
+            claimed,
+            closedAt: Date.now(),
+            reconnected: null,
+          };
+          wsCloses.push(entry);
+          holder.pendingClose = entry;
+          const delay = Math.min(backoff, 15_000);
+          backoff = Math.min(backoff * 2, 15_000);
+          timers.add(
+            setTimeout(() => {
+              if (!stopping) connect();
+            }, delay),
+          );
+        });
+        ws.on('error', () => fail('WS /ws (viewer)', 'error'));
+      };
+      connect();
     }),
   );
 
@@ -685,8 +719,8 @@ async function drive() {
   const windowEnd = new Date();
   child?.send({ type: 'stop', cpu0: started.cpu0, t0: started.t0 });
   const stats = child ? await next('stats') : null;
-  const liveAtStop = sockets.filter((w) => w.readyState === 1).length;
-  for (const ws of sockets) ws.terminate();
+  const liveAtStop = viewers.filter((v) => v.ws?.readyState === 1).length;
+  for (const v of viewers) v.ws?.terminate();
 
   // ── report ──
   const pct = (xs, q) => {
@@ -720,14 +754,25 @@ async function drive() {
   for (const [k, v] of errorsByRoute) console.log(`  error ${k}: ${v}`);
   if (wsCloses.length) {
     const sec = (ms) => (ms / 1000).toFixed(0);
+    const back = wsCloses.filter((c) => c.reconnected !== null);
     console.log(
-      `  viewer sockets closed ${wsCloses.length} of ${sockets.length} (${liveAtStop} live at stop); ` +
+      `  viewer sockets closed ${wsCloses.length} across ${viewers.length} viewers (${liveAtStop} live at stop); ` +
         `first at +${sec(wsCloses[0].at)}s, last at +${sec(wsCloses[wsCloses.length - 1].at)}s; ` +
-        `no reconnect — each one stops reading the roster`,
+        `${back.length} reconnected` +
+        (back.length
+          ? ` (median ${sec(
+              pct(
+                back.map((c) => c.reconnected),
+                0.5,
+              ),
+            )}s, max ${sec(Math.max(...back.map((c) => c.reconnected)))}s)`
+          : ''),
     );
     for (const c of wsCloses)
       console.log(
-        `    +${sec(c.at)}s close ${c.code} after ${sec(c.lived)}s ${c.claimed ? 'claimed' : 'unclaimed'}`,
+        `    +${sec(c.at)}s close ${c.code}${c.reason ? ` "${c.reason}"` : ''} after ${sec(c.lived)}s ` +
+          `${c.claimed ? 'claimed' : 'unclaimed'}; ` +
+          (c.reconnected === null ? 'not back before stop' : `back in ${sec(c.reconnected)}s`),
       );
   }
   console.log(`  ${'route'.padEnd(34)} calls    p50    p95    p99    max  max body`);
