@@ -43,10 +43,35 @@ Lint every guide before it goes out. Rewrite any question that:
 These are The Mom Test's rules, from summaries of Rob Fitzpatrick's book: talk
 about their life, ask about specifics in the past, and treat compliments as noise.
 
+The rest of the Mom Test, as wondelai/skills lays it out:
+
+- **Three kinds of bad data.** Compliments ("this looks great"), fluff ("I
+  usually", "I always", "I would"), and feature ideas with no instance behind
+  them. The guide's follow-ups turn each back to a fact: "When did that last
+  happen?", "What did you do instead?", "Why do you want that?"
+- **Every conversation ends with an ask.** Know the smallest commitment that
+  would show this is real before the conversation starts. The currencies are
+  time (a second session, a trial on their repo), reputation (an introduction,
+  agreement to be named) and money. A pleasant call with no commitment is a
+  zombie lead; record it as one. A clear "no" is worth more than a "maybe".
+- **The interviewer talks least.** Aim for the participant speaking most of the
+  time. A guide with more than a few questions per topic is a pitch in disguise.
+
+You draft the guide and the ask; a human holds the conversation (hard rule 6).
+
 For switching stories, use the four forces from Jobs to be Done: what pushed them
 off the old way, what pulled them to the new one, what made them anxious, and what
-habit held them back ([jobstobedone.org](https://jobstobedone.org/)). Walk the
-timeline from the first struggle to the decision.
+habit held them back ([jobstobedone.org](https://jobstobedone.org/)). A switch
+happens when push and pull outweigh anxiety and habit, so a story with only pull
+in it is missing half the forces. Walk the timeline from the first struggle to
+the decision.
+
+Write each job as a **job statement** with no product in it: "When <circumstance>,
+I want to <progress>, so I can <outcome>." A job has functional, emotional and
+social sides; wanting to sign off on the agents' work in front of your own team
+would be a social side. Fill each side from what the participant said. Two hiring moments differ: the first install is the
+big hire, and each later choice to open musterd over the old way is the little
+hire. Retention lives in the little hire.
 
 ## Synthesis
 
@@ -60,6 +85,25 @@ timeline from the first struggle to the decision.
    enough.
 4. LLM-assisted synthesis inflates minority patterns and misquotes. Check every
    quote against its source before it leaves the doc.
+5. Keep facts (what they said and did) apart from interpretation (what we think
+   it means). After each batch, write down what changed in the three beliefs:
+   the problem, who has it, and what would solve it.
+
+One summary per interview, before any synthesis (after phuryn/pm-skills'
+interview summary). Write "-" where the interview gave nothing; never fill a
+field from inference.
+
+```
+Date / participant code / interviewer
+Context: their team, their work, the agents and tools they use today
+Current way: how they do the job now
+Works for them: <job, outcome wanted, how important, how satisfied>
+Hurts: <job, outcome wanted, how important, how satisfied>
+Forces: push / pull / anxiety / habit, each with a verbatim
+Verbatims worth keeping: "<exact words>" (timestamp or note line)
+Commitment asked / given: <what, or "none">
+Follow-ups: <date, owner, action>
+```
 
 ## From research to copy
 

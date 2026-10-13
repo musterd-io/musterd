@@ -26,6 +26,42 @@ Rules that follow from the type:
   answers differently from its page belongs on another page.
 - Docs never announce upcoming features ([Google highlights](https://developers.google.com/style/highlights));
   ROADMAP.md is the only forward-looking home.
+- Steps alone do not make a tutorial. A tutorial states what the reader will
+  learn and what they will have at the end; numbered steps without those are a
+  how-to.
+- A landing or index page holds links. Any instruction or explanation on it
+  belongs on a typed page.
+- Reference is for consulting. If a reader would read it top to bottom, part of
+  it is explanation.
+
+### Auditing a set of docs
+
+1. **Inventory.** List each page with the type it seems to target.
+2. **Classify.** Run the compass questions on each page, then on each section.
+   A section that answers differently from its page is **mixed**.
+3. **Red flags** for each type:
+
+   | Type | Red flags |
+   | --- | --- |
+   | Tutorial | Explains before acting; offers choices; assumes knowledge of musterd; ends without a result the reader can check |
+   | How-to | Teaches from scratch; explains theory; the goal is not in the title or first line |
+   | Reference | Contains steps; narrative tone; coverage uneven between entries; opinions or recommendations |
+   | Explanation | A list of bare facts; contains steps; never reaches the why or the trade-off |
+
+4. **Gaps.** Which type is missing for this reader? No tutorial means no guided
+   first run; no reference means a reader cannot look up a flag.
+5. **Report** in this shape. Cite the file and line range for every finding. A
+   split plan moves what exists; it never invents content to fill a gap.
+
+```
+| Page | Intended type | Actual type(s) | Finding (file:lines) |
+Mixed content: <page> lines N–M are <type> inside <type> → move to <page>
+Missing: <type> for <reader>, and what that reader cannot do today
+Recommendations, highest impact first
+```
+
+Report audit findings to the page's owner. An ADR or architecture doc keeps its
+implementer as author (SKILL.md, Charter).
 
 ## 2. Write to checkable rules
 
@@ -47,6 +83,33 @@ where they agree:
 - Bias-free terms: primary/subordinate, allowlist/denylist, they for an unknown person
   ([Microsoft bias-free communication](https://learn.microsoft.com/en-us/style-guide/bias-free-communication)).
 - One term per concept, the glossary's (SKILL.md, Voice).
+
+Plain-language limits, as working proxies (GaZmagik/iso-24495's, from public
+plain-language practice; following them is never a claim of ISO conformance):
+
+- Sentences average 15–20 words, one main idea each; Google's 26 is the cap.
+- Paragraphs of five sentences or fewer, one topic each, main point first.
+- Keep the subject next to its verb; never park a clause between them.
+- Trim filler: "to" for "in order to", "because" for "due to the fact that",
+  "if" for "in the event that".
+- Say how ideas relate with "because", "so", "if", "before" and "after".
+- Say what to do. Phrase a warning as a warning only when the warning is the point.
+- Passive is fine when the actor is unknown or beside the point ("the act is
+  recorded").
+- Code, commands, logs and quotes are exempt from all of these. Accuracy wins
+  any conflict.
+
+**Explaining how something works** (an architecture page, a design note, a
+technical post) goes in this order:
+
+1. What it is for, in one sentence.
+2. How the parts relate, as a table or a diagram with a prose equivalent beside
+   it. Skip this for a single mechanism or a plain sequence of steps.
+3. The implementation, with exact file and line citations
+   (`packages/server/src/store/lanes.ts:<line>`).
+
+A runbook or an ADR omits the stages it has no content for and keeps the order of
+the rest.
 
 ## 3. Formats
 
@@ -93,6 +156,30 @@ The WCAG 2.2 criteria that written content meets or fails:
 - **Reading level (3.1.5).** WCAG names no formula and leaves it to judgment
   ([W3C](https://www.w3.org/WAI/WCAG22/Understanding/reading-level.html)). A
   readability score is a tripwire for a second look, never a target.
+
+Markdown, checked in this priority order (after github/awesome-copilot's
+markdown-accessibility instructions):
+
+1. **Images.** Every meaningful image has alt text. Flag empty alt on a
+   meaningful image, a filename or "screenshot" as alt, and an "image of" prefix
+   (screen readers already announce it). Include text that appears in the image.
+2. **Headings.** One `#` per file; no skipped levels; no bold line standing in
+   for a heading.
+3. **Links.** Link text makes sense read alone, because assistive technology lists
+   links out of context. Flag "here", "this", "read more", bare URLs in prose,
+   and the same link text pointing at two destinations.
+4. **Lists and emoji.** Real list markup, never emoji as bullets. No runs of
+   emoji (each is read aloud by name). No meaning carried by an emoji alone.
+5. **Plain language** (section 2).
+6. **Media.** Captions on video, a transcript for audio, no autoplay.
+7. **Other.** Tables hold data, never layout. Meaning never rides on bold or
+   italics alone. Describe UI paths in words ("open Settings, then Members"),
+   with any icon name as a parenthetical extra.
+
+For each finding, say who it affects (screen-reader users, people reading in a
+second language, people with cognitive disabilities). Offer alt text and
+plain-language rewrites as suggestions for the author to accept, because only the
+author knows what the image or sentence is for. Keep the writer's voice.
 
 Terminal output and diagrams, where developer docs fail most:
 
