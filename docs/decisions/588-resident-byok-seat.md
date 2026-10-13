@@ -70,7 +70,9 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
 2. **What it is not.** Not a harness for a person's own session. No TUI, no `musterd chat`, no
    replacement for Claude Code, Codex, Cursor, OpenCode or Grok as the thing a human sits in front
    of. A human who wants a seat of their own keeps their harness and musterd stays the layer.
-3. **The engine is pi, embedded behind the seam ADR 251 named.** A second `AgentLoopEngine`
+3. **The engine is pi, embedded behind the seam ADR 251 named.** _(Amended 2026-10-13: the
+   dependency narrows to `pi-agent-core` + `pi-ai`; `pi-durable` is not taken. See the amendment
+   below.)_ A second `AgentLoopEngine`
    implementation wraps `@earendil-works/pi-durable` with `@earendil-works/pi-ai` providers. musterd's
    MCP tool surface is injected as a pi extension exactly as the phase-1 bridge does today; pi's
    `CodingTools` are the working tools. No loop code of musterd's own: the native backend keeps
@@ -88,7 +90,8 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
    the summed `wake_turns` rows. Submits file ADR 585 claims through the same bridge every seat
    uses. Every turn posts a `wake_turns` row; pi-durable's SQLite storage lives in the seat's
    workspace as the resume substrate (`resume()` on host start), with the daemon's rows as the
-   record of what ran. Model per wake through the ADR 101 ladder, so a coordination wake can run
+   record of what ran. _(Amended 2026-10-13: the daemon's rows are the resume substrate, not
+   pi-durable's storage. See the amendment below.)_ Model per wake through the ADR 101 ladder, so a coordination wake can run
    on Haiku and a lane on Opus under one seat.
 6. **Reach is in-process.** The resident engine subscribes to the seat's inbox (the ADR 552 poke)
    and delivers a directed act into the running loop through pi's steering queue between tool
@@ -122,6 +125,28 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
+
+- _Amendment (dated, 2026-10-13, same day, lane `01M4VTS0720NZWKGJ3K9Y0Z13R`)._ nick asked for alternatives to pi
+  and for the seat to be "extremely bleeding edge and unique". The assessment: uniqueness is not in
+  the loop — every loop in the field converged on one shape and the eleven-harness study ships it
+  as a 90-line scaffold. The two things nobody has are **cross-vendor replay** (wake N on one model,
+  wake N+1 on another, from a transcript musterd owns) and **claim-gated continuation** (the daemon
+  funds the next wake only after the previous wake's ADR 585 claims verify). Both need the
+  transcript format and the chain to be the daemon's, not a library's. So Decision 3 narrows:
+  the dependency is `@earendil-works/pi-agent-core` and `@earendil-works/pi-ai` — the turn and the
+  providers, where tracking the vendors' tool shapes is worth outsourcing — and **`pi-durable` is
+  not taken**. Decision 5 changes accordingly: the daemon's `wake_turns` rows are the canonical,
+  provider-neutral transcript and the resume substrate; whichever engine runs the next wake is
+  rehydrated from them. The loop is a swappable executor behind the seam, which is what ADR 251
+  §3 built the seam for. Alternatives weighed and set aside: Claude Managed Agents and the Claude
+  Agent SDK (Claude-only, transcript held by the vendor — both unique features die), the OpenAI
+  Agents SDK with Temporal (OpenAI tool shapes, durability in Temporal rather than the ledger,
+  heavy for a laptop daemon), Hermes Agent (a Python product, not a library; its sandbox backends
+  are worth copying for Cloud), Cloudflare Agents on Durable Objects (the right shape for hosted
+  seats later; a different runtime and a Cloudflare tie), Letta / LangGraph / Mastra (a framework
+  layer no serious harness uses), and a loop of our own (full control, the co-training tax and the
+  maintenance stream the readout measured). Decision 6's in-process doorbell now uses
+  `pi-agent-core`'s own steering queue (`agent.steer`), which needs no pi-durable.
 
 ## Observability & Evaluation
 
