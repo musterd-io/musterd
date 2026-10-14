@@ -102,8 +102,8 @@ withDrivers('digest', (o) => {
         { headline: 'mint bucket cap' },
         nightStart + 2_000,
       );
-      // One answered ask (excluded from unanswered, still owed in waitingOn — only a
-      // resolve closes a thread there), one open ask to dana (waiting + unanswered).
+      // One answered ask (excluded from unanswered and from waitingOn — the accept naming it
+      // discharges it, ADR 590), one open ask to dana (waiting + unanswered).
       // Ask acts require meta.species + meta.tier (protocol).
       const askMeta = { species: 'approve', tier: 'standard' };
       const answered = await send(
@@ -134,11 +134,10 @@ withDrivers('digest', (o) => {
         'the tunnel drops idle peers',
         'mint bucket cap',
       ]);
-      // waitingOn counts every directed act whose thread carries no resolve — the answered
-      // ask still names dana, and the accept itself names nick.
+      // ADR 590: only the open ask is owed. The answered ask is discharged by dana's accept, and
+      // the accept itself owes nick nothing.
       expect(digest.waiting).toEqual([
-        { member: 'dana', threads: 2, oldest_age_ms: now - (nightStart + 3_000) },
-        { member: 'nick', threads: 1, oldest_age_ms: now - (nightStart + 4_000) },
+        { member: 'dana', threads: 1, oldest_age_ms: now - (nightStart + 5_000) },
       ]);
       expect(digest.unanswered).toHaveLength(1);
       expect(digest.unanswered[0]).toMatchObject({ from: 'nick', to: 'dana' });
@@ -163,7 +162,7 @@ withDrivers('digest', (o) => {
           team: 'dawn',
           from: nick.name,
           to: { kind: 'member', name: dana.name },
-          act: 'message',
+          act: 'request_help',
           body: 'can you look at this?',
           ts: receivedAt - 10 * 86_400_000,
         }),

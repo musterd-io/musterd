@@ -1,5 +1,6 @@
 import {
   LANE_CONTENDING_STATES,
+  LANE_TERMINAL_STATES,
   type BlockedLane,
   type CoordinationDensity,
   type PeerDemand,
@@ -23,6 +24,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { actAnswered, openDirectedLedger } from './delivery.js';
+import { undischargedSql } from './discharge.js';
 import { listGoals } from './goals.js';
 import { rowsToEnvelopes } from './hydrate.js';
 import { listBlockedLanes } from './lanes.js';
@@ -147,18 +149,36 @@ export async function goalFlowMetrics(
     .sort((a, b) => (b.flow.oldest_wip_age_ms ?? -1) - (a.flow.oldest_wip_age_ms ?? -1));
 }
 
-interface DirectedRow {
+interface OwedThreadRow {
   recipient: string;
   thread_key: string;
   ts: number;
 }
 
 /**
- * The waiting-on view (ADR 050 Part 6): unresolved directed asks aggregated by the member they target,
- * oldest-first. This is `openActionNeeded` (ADR 024/025) lifted server-side and grouped by recipient —
- * a directed act (to a specific member, not `resolve`) whose thread carries no `resolve` means that
- * member still owes. request_help (to `@team`, no single owner) is intentionally excluded — this names
- * *who* is the bottleneck. Counts distinct threads, never messages (no reward for re-pinging).
+ * The acts that leave their recipient owing an answer (ADR 590). Everything else a member is sent —
+ * an `accept`, a `status_update`, a `message` — is information, not an obligation, and counting it
+ * is what made this view report 7,730 open threads on the revive hub (2026-10-13).
+ */
+const OWED_ACTS = ['ask', 'request_help', 'handoff', 'steer', 'challenge'] as const;
+
+/** A lane a handoff names is out of play here: submitted for acceptance (both spellings, ADR 192)
+ *  or terminal — `handoffNamedLaneOutOfPlay`'s structured-lane rule, as SQL. */
+const HANDOFF_LANE_OUT_OF_PLAY = [
+  'awaiting_acceptance',
+  'ready_for_review',
+  ...LANE_TERMINAL_STATES,
+];
+
+/**
+ * The waiting-on view (ADR 050 Part 6, as ADR 590 defines "owed"): open obligations aggregated by
+ * the member they are addressed to, oldest first. An act is owed when it is one of {@link OWED_ACTS}
+ * or flagged urgent, is addressed to one member, and is not yet discharged by the one predicate
+ * every other reader uses (`discharge.ts`, ADR 434): an accept/decline naming it, a resolve on its
+ * thread, or the recipient's own reply to it or later in its thread. A handoff is also discharged
+ * when the lane it names has left play (submitted or terminal), the ledger's `laneHandoffDischarged`
+ * rule. Team-addressed request_help has no single owner and stays out — this names *who* is the
+ * bottleneck. Counts distinct threads, never messages (no reward for re-pinging).
  */
 export async function waitingOn(
   db: Driver,
@@ -170,52 +190,41 @@ export async function waitingOn(
   opts: {
     clock?: 'origin' | 'receipt';
     /** Only threads whose oldest open act is at or after this stamp, on the chosen clock (the
-     *  digest's week window, ADR 502). Omitted, every unresolved thread counts. */
+     *  digest's week window, ADR 502). Omitted, every open thread counts. */
     since?: number;
   } = {},
 ): Promise<WaitingOnEntry[]> {
   const stamp = opts.clock === 'receipt' ? 'm.created_at' : 'm.ts';
-  const resolved = new Set(
-    (
-      await db.all<{ thread_id: string }>(
-        `SELECT DISTINCT thread_id FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id IS NOT NULL`,
-        [teamId],
-      )
-    ).map((r) => r.thread_id),
-  );
-
-  // Directed, action-needy acts: to a specific member, not a resolve. thread_key = thread_id or own id.
-  const rows = await db.all<DirectedRow>(
-    `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, ${stamp} AS ts
+  const threads = await db.all<OwedThreadRow>(
+    `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, MIN(${stamp}) AS ts
          FROM messages m
          JOIN members mt ON mt.id = m.to_member
-        WHERE m.team_id = ? AND m.to_kind = 'member' AND m.act != 'resolve'`,
-    [teamId],
+        WHERE m.team_id = ? AND m.to_kind = 'member'
+          AND (m.act IN (${OWED_ACTS.map(() => '?').join(', ')})
+               OR json_extract(m.meta, '$.urgent') = 1)
+          ${undischargedSql('m', 'm.to_member')}
+          AND NOT (m.act = 'handoff' AND EXISTS (
+                SELECT 1 FROM lanes l
+                 WHERE l.team_id = m.team_id
+                   AND l.id = json_extract(m.meta, '$.lane_handoff.lane')
+                   AND l.state IN (${HANDOFF_LANE_OUT_OF_PLAY.map(() => '?').join(', ')})))
+        GROUP BY mt.name, COALESCE(m.thread_id, m.id)`,
+    [teamId, ...OWED_ACTS, ...HANDOFF_LANE_OUT_OF_PLAY],
   );
 
-  // Per recipient → distinct unresolved threads, with the oldest ask's ts.
-  const byMember = new Map<string, Map<string, number>>();
-  for (const row of rows) {
-    if (resolved.has(row.thread_key)) continue;
-    let threads = byMember.get(row.recipient);
-    if (!threads) byMember.set(row.recipient, (threads = new Map()));
-    const prev = threads.get(row.thread_key);
-    if (prev === undefined || row.ts < prev) threads.set(row.thread_key, row.ts);
-  }
-
-  if (opts.since !== undefined) {
-    const since = opts.since;
-    for (const [member, threads] of byMember) {
-      for (const [key, ts] of threads) if (ts < since) threads.delete(key);
-      if (threads.size === 0) byMember.delete(member);
-    }
+  const byMember = new Map<string, number[]>();
+  for (const t of threads) {
+    if (opts.since !== undefined && t.ts < opts.since) continue;
+    const ages = byMember.get(t.recipient) ?? [];
+    ages.push(t.ts);
+    byMember.set(t.recipient, ages);
   }
 
   return [...byMember.entries()]
-    .map(([member, threads]) => ({
+    .map(([member, stamps]) => ({
       member,
-      threads: threads.size,
-      oldest_age_ms: Math.max(0, now - Math.min(...threads.values())),
+      threads: stamps.length,
+      oldest_age_ms: Math.max(0, now - Math.min(...stamps)),
     }))
     .sort((a, b) => b.oldest_age_ms - a.oldest_age_ms);
 }
