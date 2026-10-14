@@ -8,6 +8,9 @@ coverage-blobs/
 # ADR 058: the durable seat roster (.musterd/team.toml + seats/) is committed; only the
 # secret-bearing binding token is ignored — in any folder (** covers root + nested).
 **/.musterd/binding.json
+# ADR 354/546: the wake lease and the native wake's watch spool are per-run host state beside the binding
+**/.musterd/wake-lease.json
+**/.musterd/wake-watch.jsonl
 # ADR 080's committed launch spec is a *downstream-repo* feature (a fresh clone self-wires from it).
 # In musterd's OWN dogfood repo it's per-worktree launch config (team + seat) that every agent
 # re-stamps to its own identity — a perpetual uncommitted drift — so we ignore it here. The self-wire

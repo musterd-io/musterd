@@ -339,6 +339,39 @@ describe('nativeBackend.wake', () => {
     expect(reply.lastSpec?.tools).toEqual([]);
   });
 
+  it('ADR 395: the capture rail rides the host-scoped key when the binding has one, else agent_key', async () => {
+    const seen: string[] = [];
+    const { deps } = makeDeps({
+      readBinding: () => ({ ...(binding as object), host_key: 'mskey_host' }) as never,
+      telemetry: (_server: string, key: string) => {
+        seen.push(key);
+        return {
+          wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
+          wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
+        };
+      },
+    });
+    await nativeBackend(deps).wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(seen).toEqual(['mskey_host']);
+    const { deps: legacy } = makeDeps({
+      telemetry: (_server: string, key: string) => {
+        seen.push(key);
+        return {
+          wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
+          wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
+        };
+      },
+    });
+    await nativeBackend(legacy).wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(seen).toEqual(['mskey_host', 'mskey_test']);
+  });
+
   it('ADR 588: a key_env that is unset on this host defers the wake, naming the variable, never a value', async () => {
     const engine = scriptedEngine({});
     const { deps } = makeDeps({ engine, env: { OTHER: 'x' } });
