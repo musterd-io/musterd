@@ -38,11 +38,11 @@ Single accent philosophy: **one mustard accent** carries the entire identity rig
 | `mustard-50`  | `#FBF3D5` | faint tint backgrounds (web)           |
 | `mustard-100` | `#F6E4A8` | hover tint                             |
 | `mustard-300` | `#EFC94C` | secondary accent / highlights          |
-| `mustard-500` | `#E1AD01` | **primary accent** (canonical mustard) |
-| `mustard-700` | `#B8860B` | accent pressed / dark-mode accent text |
-| `mustard-900` | `#7A5A06` | accent on light, high-contrast text    |
+| `mustard-500` | `#E1AD01` | **primary accent** (canonical mustard); text only on dark (8.6:1 on zinc-900) |
+| `mustard-700` | `#B8860B` | accent pressed / dark-mode accent text; marks on light (3.3:1) |
+| `mustard-900` | `#7A5A06` | accent text and links on light (6.4:1) |
 
-Primary accent is **`#E1AD01`**. When a single color value is needed (badge, link, banner), use this.
+Primary accent is **`#E1AD01`**. When a single color value is needed for a fill (badge, banner, chip), use this. On a light background it is a fill only: as text it reads 2.06:1 on white. Text and links on light use `mustard-900`, the same fill/ink split the web tokens hold (`--accent` / `--accent-ink` in `packages/web/src/styles/tokens.css`, #723).
 
 ### Neutrals — Zinc ramp
 
@@ -51,8 +51,8 @@ Primary accent is **`#E1AD01`**. When a single color value is needed (badge, lin
 | `zinc-50`  | `#FAFAFA` | web light bg          |
 | `zinc-100` | `#F4F4F5` | light surface         |
 | `zinc-200` | `#E4E4E7` | borders (light)       |
-| `zinc-400` | `#A1A1AA` | muted text            |
-| `zinc-500` | `#71717A` | secondary text        |
+| `zinc-400` | `#A1A1AA` | muted text on dark (6.9:1 on zinc-900; 2.5:1 on light, so not there) |
+| `zinc-500` | `#71717A` | secondary text on light (4.6:1 on zinc-50; 3.7:1 on zinc-900, so not there) |
 | `zinc-700` | `#3F3F46` | borders (dark)        |
 | `zinc-800` | `#27272A` | dark surface          |
 | `zinc-900` | `#18181B` | dark bg / terminal bg |
@@ -68,6 +68,8 @@ Primary accent is **`#E1AD01`**. When a single color value is needed (badge, lin
 | info    | `#1D4ED8` | `#60A5FA` | blue            |
 | accent  | `#E1AD01` | `#EFC94C` | yellow (bold)   |
 | muted   | `#71717A` | `#A1A1AA` | bright black    |
+
+The light accent is a fill. Accent text on light is `mustard-900` (`#7A5A06`); see the mustard ramp above.
 
 ### ANSI color mapping (terminal — load-bearing, the CLI must obey)
 
