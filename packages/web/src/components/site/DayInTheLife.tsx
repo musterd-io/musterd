@@ -170,15 +170,20 @@ export const DAY_STEPS: readonly Step[] = [
 ];
 
 /** [path, step it appears with, class, label, label x, label y, text-anchor] */
+/**
+ * Each edge starts and ends ~6 units outside its pills, fitted to the pill boxes as they measure in
+ * viewBox units (constant between the font clamps, since the pills scale with the graph's width).
+ * The deck's coordinates ran some arrowheads under the next pill and stopped others short of it.
+ */
 const EDGES: readonly (readonly [string, string, string?, string?, number?, number?, string?])[] = [
-  ['M146,80 L202,80', 'orient'],
-  ['M314,80 L378,80', 'claim'],
-  ['M472,80 L542,80', 'build'],
-  ['M585,104 L585,272', 'inbox'],
-  ['M605,274 L605,106', 'inbox', 'back'],
-  ['M655,300 L765,300', 'mate'],
+  ['M155,80 L187,80', 'orient'],
+  ['M329,80 L358,80', 'claim'],
+  ['M492,80 L530,80', 'build'],
+  ['M585,110 L585,270', 'inbox'],
+  ['M605,270 L605,110', 'inbox', 'back'],
+  ['M663,300 L737,300', 'mate'],
   [
-    'M835,276 C800,200 720,130 650,100',
+    'M835,270 C800,200 730,135 662,108',
     'mate',
     'back',
     'answers, keeps building',
@@ -186,14 +191,14 @@ const EDGES: readonly (readonly [string, string, string?, string?, number?, numb
     190,
     'start',
   ],
-  ['M650,72 L740,72', 'admin'],
-  ['M740,90 L650,90', 'admin', 'back'],
-  ['M548,100 C500,140 460,170 420,186', 'ready'],
-  ['M400,228 C450,262 500,290 532,296', 'ready', '', 'checks inbox', 462, 300, 'end'],
-  ['M585,326 L585,454', 'review', '', 'review request', 616, 380, 'start'],
-  ['M605,454 L605,326', 'review', 'back', 'back to inbox', 616, 404, 'start'],
-  ['M535,318 C460,350 380,400 320,440', 'wrap', '', 'nothing waiting', 418, 358, 'end'],
-  ['M188,458 C80,458 40,280 66,106', 'wrap', 'loop', 'next session, any agent', 150, 520, 'middle'],
+  ['M660,72 L760,72', 'admin'],
+  ['M760,90 L660,90', 'admin', 'back'],
+  ['M548,110 C510,140 470,160 440,175', 'ready'],
+  ['M400,235 C450,265 495,290 526,298', 'ready', '', 'checks inbox', 462, 300, 'end'],
+  ['M585,330 L585,450', 'review', '', 'review request', 616, 380, 'start'],
+  ['M605,450 L605,330', 'review', 'back', 'back to inbox', 616, 404, 'start'],
+  ['M528,322 C460,350 390,395 332,426', 'wrap', '', 'nothing waiting', 418, 358, 'end'],
+  ['M170,455 C80,455 40,280 66,110', 'wrap', 'loop', 'next session, any agent', 150, 520, 'middle'],
 ];
 
 /* The deck's glyphs (deck.html GLYPH), one per step, in currentColor. */
@@ -245,6 +250,7 @@ const LOOP_LEG = ROUTE.length - 1;
 const EDGE_STEP: Record<number, string> = { 4: 'inbox' };
 export const DAY_ROUTE_LENGTH = ROUTE.length;
 export const DAY_EDGE_COUNT = EDGES.length;
+export const DAY_EDGE_PATHS = EDGES.map((e) => e[0]);
 
 /**
  * Where the route stands once a leg has arrived. The loop leg arrives at Join, which is the start
@@ -416,7 +422,11 @@ export function DayInTheLife() {
     const g = walker.current;
     const m = measure.current;
     if (!g || !m) return;
-    const d = EDGES[ROUTE[leg]!.edge]![0];
+    // The walker goes centre to centre: the edge, extended into both nodes, so it slides in under
+    // the pill it leaves and the one it reaches instead of snapping across the gap.
+    const from = DAY_STEPS[INDEX[leg > 0 ? ROUTE[leg - 1]!.end : 'join']!]!;
+    const to = DAY_STEPS[INDEX[ROUTE[leg]!.end]!]!;
+    const d = `M${from.x},${from.y} L${EDGES[ROUTE[leg]!.edge]![0].slice(1)} L${to.x},${to.y}`;
     m.setAttribute('d', d);
     const len = m.getTotalLength();
     const ms = Math.min(MAX_LEG_MS, Math.max(MIN_LEG_MS, len * MS_PER_UNIT));
