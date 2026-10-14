@@ -1,12 +1,10 @@
 # 581 — Model attribution: daemon-attested, not a commit trailer
 
-- Status: accepted
+- Status: accepted (amended 2026-10-13 — izzo declined #2509 with three concrete problems; amended per docs/wiki/amending-an-adr.md; authorized_by: nick, on record in chat)
 - Date: 2026-10-13
 - Builds on: ADR 101 (attested, not verified), ADR 106 (unified git workflow), ADR 109 (seat-level git attribution)
 
 ## Context
-
-Clone the PR diff body into this ADR's Context and Decision rather than retelling the story.
 
 The lane that raised this (01M4BVZV0KZ4F2WN0F668EBHGW, originally sloane's finding, 2026-10-07) noticed that `git log` can't
 tally models: Claude-family seats carry a `Co-authored-by: Claude <model>` trailer (the harness adds one); every other
@@ -33,7 +31,7 @@ attested seat without such a line fails.
 
 1. **The seat trailer (ADR 109 §2) is identity only.** `Co-authored-by: <seat> <seat@<team>.musterd>` answers
    "which seat". Harnesses *may* add their own model line alongside it; musterd does not require, parse, or verify it.
-2. **Model attestation is daemon-side.** `occupancy.model_attested` (ADR 101, ADR 158, ADR 246) is the single
+2. **Model attestation is daemon-side.** `occupancy.model_attested` _(Amended 2026-10-13: no `occupancy` table and no `model_attested` column exist in packages/server; the correct, live homes are `presence.model` / `presence.model_source`, `audit.actor_model` / `audit.actor_model_source`, and the act stamp `meta.model` / `meta.model_source` — see the Consequences amendment below)_ (ADR 101, ADR 158, ADR 246) is the single
    home for "which model did seat X run". Every readout, tally, or report that needs model attribution — including any
    "model share" or percentage number published anywhere — reads from the attestation table or the snapshot tooling,
    never from `git log`.
@@ -53,9 +51,25 @@ attested seat without such a line fails.
 - The optional follow-up — a `musterd report` readout or dedicated command that produces the "model share of work" number
   from attestation — is out of scope for this ADR.
 
+### Amendment 2026-10-13 — correction of the attestation source name (izzo, decline of #2509)
+
+The original text of Decision 2 named `occupancy.model_attested` as the single home for model attestation. There is
+no `occupancy` table in packages/server and no `model_attested` column; the event family is itself recorded under
+the audit action label `occupancy.model_attested`, which is a *log entry*, not a table. The live and ride-along homes are:
+
+- `presence.model` / `presence.model_source` (the attested model id and the tier that produced it, per ADR 101/158/246);
+- `audit.actor_model` / `audit.actor_model_source` (the model recorded on each audited act, per ADR 101 audit-row attribution);
+- the act stamp's `meta.model` / `meta.model_source` (the model attested on the sending occupancy at act time, per ADR 101/301).
+
+Decision 2's wording in `## Decision` is frozen and is annotated in place with a dated marker rather than rewritten; the substance of the correction lives here and in the amended AGENTS.md line. No runtime, schema, or test change is implied by this correction — it names the columns readers should already be using.
+
+### Authority
+
+The decline reversed an agent-authored lane that descoped the lane's own acceptance criteria and changed an AGENTS.md norm, so it carries a human's yes: nick, on the record in chat (this amendment records it; the merge is re-attested `authorized_by: nick`). Izzo accepted the reasoning in Problems 1–3 and the call of "no hook, no gate."
+
 ## Observability & Evaluation
 
-- Traces — `occupancy.model_attested` rows and the audit log remain the observable; no new rows.
+- Traces — attestation rows remain the observable: `presence.model` / `presence.model_source`, `audit.actor_model` / `audit.actor_model_source`, and the act stamp `meta.model` / `meta.model_source`; no new rows (`occupancy.model_attested` is the audit action label that names this event family, not a table or column).
 - Eval — the invariant being protected: **zero** places in musterd (product or docs) cite a commit trailer as the
   authority for model attribution. Check by grep: no retired/legacy sources should name it; homepage-copy-spec §0.4 is
   the canonical note, and AGENTS.md gains a one-liner.
