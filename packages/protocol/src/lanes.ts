@@ -374,7 +374,10 @@ export type LaneTodos = z.infer<typeof LaneTodosSchema>;
  * Deliberately broad: a false positive costs one `follows_up: "none"`; a miss costs the plan.
  */
 const PART_SIGNALS: readonly RegExp[] = [
-  /\b\d+\s+of\s+\d+\b/i,
+  // `N of M` is a part only when nothing but punctuation, the end, or a part noun follows it, and never
+  // inside a grouped number. 2026-10-13 (lane 01M4VY3DQ2): "3 of 4 red PRs" is a count, and
+  // "1,127 of 1,232 rows" matched as "127 of 1" because `\b` falls at the comma in a digit group.
+  /(?<![\d,.])\b\d+\s+of\s+\d+(?![,.]?\d)(?=\s*(?:$|[^\w\s]|(?:parts?|increments?|phases?|steps?|lanes?)\b))/i,
   /(?<![\d/.-])\b\d{1,2}\/\d{1,2}\b(?![\d/.-])/,
   /\bincrements?\s+\d+/i,
   /\bphases?\s+\d+/i,

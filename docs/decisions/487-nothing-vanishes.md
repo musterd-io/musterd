@@ -136,6 +136,15 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   bullet now carries it (+57 B, within the 35-line cap); the skill keeps only the mechanics
   (`follows_up`, `abandon_reason`, parking), so the rule lives in one layer.
 
+- _(2026-10-13, lane 01M4VY3DQ2.)_ **The `N of M` signal read counts as parts.** Across all 1,988 lanes on
+  the live store, the §5.1 pattern matched 73 times in a title or detail; 57 of those were counts in
+  evidence ("8 of 11 seat worktrees", "20 of 20 acceptors"), and some were not even the numbers
+  written: `\b` falls inside a grouped number, so "1,127 of 1,232" read as "127 of 1" and
+  "9,393 of 22,496" as "393 of 22". Two of izzo's closes were refused on 2026-10-13. `N of M` now signals
+  only outside a grouped number and when nothing follows it but punctuation, the end, or a part noun
+  (part, increment, phase, step, lane): 16 matches remain and no plan part was lost. The other signals
+  are unchanged, and a false positive still costs one `follows_up: "none"`.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace. The reads are the lane store (`follows_up`, `abandon_reason`,
