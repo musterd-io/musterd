@@ -30,21 +30,25 @@ const SERVER = flag('server', 'http://127.0.0.1:4877');
 const TEAM = flag('team', 'bench');
 const CHROME = process.env.CHROME_BIN ?? '/usr/bin/chromium';
 const WARMUP_MS = 8000;
+// The page's observer (ADR 594): since ADR 580 /broadcast cannot mint one over loopback, so
+// capture-ab.sh mints it as the fixture's human admin. Arm S's `musterd broadcast` reads the same env.
+const SEAT = JSON.parse(process.env.MUSTERD_BROADCAST_SEAT ?? 'null');
+if (!SEAT) throw new Error('MUSTERD_BROADCAST_SEAT is unset — run via scripts/perf/capture-ab.sh');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── CDP, the connectCdp pattern from broadcast.ts ────────────────────────────────────────────────
-async function cdpPage(port) {
+async function cdpPage(port, urlPart = '/broadcast') {
   let target;
   for (let i = 0; i < 100 && !target; i++) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-      target = list.find((t) => t.type === 'page' && t.url.includes('/broadcast'));
+      target = list.find((t) => t.type === 'page' && t.url.includes(urlPart));
     } catch {
       // the debug port is not up yet; retry
     }
     if (!target) await sleep(300);
   }
-  if (!target) throw new Error(`no /broadcast page target on :${port}`);
+  if (!target) throw new Error(`no ${urlPart} page target on :${port}`);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => ((ws.onopen = res), (ws.onerror = rej)));
   let id = 0;
@@ -54,19 +58,15 @@ async function cdpPage(port) {
     if (m.id && pending.has(m.id)) pending.get(m.id)(m);
     pending.delete(m.id);
   };
-  const evaluate = (expression) =>
+  const send = (method, params = {}) =>
     new Promise((res) => {
       const n = ++id;
-      pending.set(n, (m) => res(m.result?.result?.value));
-      ws.send(
-        JSON.stringify({
-          id: n,
-          method: 'Runtime.evaluate',
-          params: { expression, returnByValue: true },
-        }),
-      );
+      pending.set(n, (m) => res(m.result));
+      ws.send(JSON.stringify({ id: n, method, params }));
     });
-  return { evaluate, close: () => ws.close() };
+  const evaluate = async (expression) =>
+    (await send('Runtime.evaluate', { expression, returnByValue: true }))?.result?.value;
+  return { send, evaluate, close: () => ws.close() };
 }
 
 const PROBE = `(() => {
@@ -234,14 +234,19 @@ async function armX11(label) {
       '--remote-debugging-port=9333',
       '--disable-infobars',
       '--noerrdialogs',
-      `${SERVER}/broadcast?team=${TEAM}&fps=30`,
+      // Blank first: the seat is injected over CDP before /broadcast loads (ADR 594), never in argv.
+      'about:blank',
     ],
     { env: { ...process.env, DISPLAY }, stdio: 'ignore' },
   );
   const out = join(mkdtempSync(join(tmpdir(), 'cab-x-')), 'x.mp4');
   let ffmpeg;
   try {
-    const page = await cdpPage(9333);
+    const page = await cdpPage(9333, 'about:blank');
+    await page.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
+    });
+    await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30` });
     if (!(await waitForRoom(page))) return { arm: label, invalid: 'empty room (no posed actors)' };
     ffmpeg = spawn(
       'ffmpeg',

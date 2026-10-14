@@ -1,6 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseArgs } from '../args.js';
 import { writeCaptureImage } from '../broadcast/hosted.js';
@@ -63,6 +71,7 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ({ code: 0, output: '' }),
       sendAsk: async () => {},
+      mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
     };
   });
 
@@ -206,6 +215,7 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ((launches += 1), { code: 0, output: '' }),
       sendAsk: async (body: string) => void asks.push(body),
+      mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
       ...over,
     });
 
@@ -376,6 +386,38 @@ describe('musterd stream', () => {
         }),
       ).toBe(0);
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
+    });
+
+    // ADR 594: since ADR 580 the page cannot mint its own observer, so start mints one and hands it
+    // to the box as machine env; the supervisor's relaunch reuses the 0600 copy beside the state.
+    it('start hands the box a minted observer seat and keeps a 0600 copy for relaunch', async () => {
+      withImage();
+      let flyArgs: string[] = [];
+      expect(
+        await run(['start'], {
+          ...sup(),
+          launch: (args) => ((flyArgs = args), (launches += 1), { code: 0, output: '' }),
+        }),
+      ).toBe(0);
+      const seat = { team: 'revive', name: 'broadcast-test', token: 'mscr_test' };
+      expect(flyArgs).toContain(`MUSTERD_BROADCAST_SEAT=${JSON.stringify(seat)}`);
+      const file = join(dirname(statePath), 'broadcast-seat.json');
+      expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(seat);
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+    });
+
+    it('a refused seat mint records no live intent for the supervisor to relaunch seatless', async () => {
+      withImage();
+      await expect(
+        run(['start'], {
+          ...sup(),
+          mintSeat: async () => {
+            throw new Error('minting one takes a human admin (ADR 580)');
+          },
+        }),
+      ).rejects.toThrow(/human admin/);
+      expect(launches).toBe(0);
+      expect(readStreamState(statePath)).toBeNull();
     });
 
     it('start records desired live with provenance before launching', async () => {

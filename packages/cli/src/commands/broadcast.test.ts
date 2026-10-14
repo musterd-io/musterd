@@ -14,6 +14,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { CliError } from '../errors.js';
 import {
   broadcastUrl,
+  seatFromEnv,
+  seatInjection,
   screencastEveryNthFrame,
   clearRunState,
   RESTART_EXIT_CODE,
@@ -1237,5 +1239,35 @@ describe('parseOfficeStats (what the page hands back, and what it does not)', ()
 
   it('refuses a reading with a counter missing', () => {
     expect(parseOfficeStats('{"ticks":10,"draws":9}')).toBeUndefined();
+  });
+});
+
+// ADR 594: since ADR 580 the page cannot mint its own observer, so the capturer hands it one.
+describe('the broadcast seat', () => {
+  const seat = { team: 'revive', name: 'broadcast-ab12cd', token: 'mscr_secret' };
+
+  it('takes a pre-minted seat from MUSTERD_BROADCAST_SEAT', () => {
+    expect(seatFromEnv('revive', { MUSTERD_BROADCAST_SEAT: JSON.stringify(seat) })).toEqual(seat);
+    expect(seatFromEnv('revive', {})).toBeNull();
+  });
+
+  it('refuses a seat minted for another team, or one that is not a seat', () => {
+    expect(() => seatFromEnv('bench', { MUSTERD_BROADCAST_SEAT: JSON.stringify(seat) })).toThrow(
+      /for team "revive", not "bench"/,
+    );
+    expect(() => seatFromEnv('revive', { MUSTERD_BROADCAST_SEAT: 'mscr_bare' })).toThrow(
+      /not JSON/,
+    );
+    expect(() => seatFromEnv('revive', { MUSTERD_BROADCAST_SEAT: '{"team":"revive"}' })).toThrow(
+      /needs \{team, name, token\}/,
+    );
+  });
+
+  it('injects the seat as a page global, and keeps it out of the URL', () => {
+    const src = seatInjection(seat);
+    const win: { __musterdBroadcastSeat?: unknown } = {};
+    new Function('window', src)(win);
+    expect(win.__musterdBroadcastSeat).toEqual(seat);
+    expect(broadcastUrl('http://127.0.0.1:4849', 'revive')).not.toContain('mscr_');
   });
 });

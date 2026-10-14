@@ -17,7 +17,7 @@
  * failure modes, different preconditions, so a different verb.
  */
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -49,6 +49,12 @@ import { CliError } from '../errors.js';
 import { probeUpgradeHost, parseTailscaleSelf } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
+import {
+  BroadcastSeatSchema,
+  mintBroadcastSeat,
+  seatFromEnv,
+  type BroadcastSeat,
+} from './broadcast.js';
 import { resolveRead } from './helpers.js';
 
 const USAGE =
@@ -73,6 +79,8 @@ export interface StreamDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Raise the stand-down ask to the team (streamwatch service seat; ADR 293). */
   sendAsk?: (body: string) => Promise<void>;
+  /** Mint the stream's public-grade observer (ADR 594). Injected so tests never reach a daemon. */
+  mintSeat?: (team: string) => Promise<BroadcastSeat>;
 }
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
@@ -105,7 +113,10 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
   const launch = deps.launch ?? realLaunch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const sendAsk = deps.sendAsk ?? defaultSendAsk;
-  const sup = { statePath, now, who, launch, sleep, sendAsk };
+  const mintSeat =
+    deps.mintSeat ??
+    (async (team: string) => seatFromEnv(team) ?? (await mintBroadcastSeat(parsed.flags, team)));
+  const sup = { statePath, now, who, launch, sleep, sendAsk, mintSeat };
 
   switch (sub) {
     case 'doctor':
@@ -288,6 +299,29 @@ interface Sup {
   launch: (flyArgs: string[]) => LaunchResult | Promise<LaunchResult>;
   sleep: (ms: number) => Promise<void>;
   sendAsk: (body: string) => Promise<void>;
+  mintSeat: (team: string) => Promise<BroadcastSeat>;
+}
+
+/** The stream's observer seat, beside the desired-state file so the supervisor's relaunch hands the
+ * box the same one (ADR 594): streamwatch's own seat is an agent and cannot mint another. 0600 —
+ * it is a credential (hard rule 5). */
+function seatPath(statePath: string): string {
+  return join(dirname(statePath), 'broadcast-seat.json');
+}
+function saveStreamSeat(statePath: string, seat: BroadcastSeat): void {
+  const p = seatPath(statePath);
+  writeFileSync(p, JSON.stringify(seat) + '\n', { mode: 0o600 });
+  chmodSync(p, 0o600);
+}
+function loadStreamSeat(statePath: string, team: string): BroadcastSeat | undefined {
+  const p = seatPath(statePath);
+  if (!existsSync(p)) return undefined;
+  try {
+    const seat = BroadcastSeatSchema.parse(JSON.parse(readFileSync(p, 'utf8')));
+    return seat.team === team ? seat : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The `fly machine run` invocation, shared by `start` and the supervisor's relaunch. */
@@ -297,6 +331,9 @@ function launchArgs(a: {
   addr: string;
   team: string;
   extra?: string | undefined;
+  /** The page's observer (ADR 594). Machine env, not argv on the box: the box's `musterd broadcast`
+   * reads MUSTERD_BROADCAST_SEAT and injects it over CDP. */
+  seat?: BroadcastSeat | undefined;
 }): string[] {
   return [
     'machine',
@@ -319,6 +356,7 @@ function launchArgs(a: {
     '--env',
     `MUSTERD_TEAM=${a.team}`,
     ...(a.extra ? ['--env', `BROADCAST_ARGS=${a.extra}`] : []),
+    ...(a.seat ? ['--env', `MUSTERD_BROADCAST_SEAT=${JSON.stringify(a.seat)}`] : []),
   ];
 }
 
@@ -371,6 +409,11 @@ async function startVerb(
       ? a.parsed.flags['args']
       : process.env['BROADCAST_ARGS'];
 
+  // Minted on this machine, by the operator, before intent is recorded: the box has no identity of
+  // its own, and since ADR 580 the page cannot mint one over the tailnet's loopback forward. A refusal
+  // here must leave no "live" intent behind for the supervisor to relaunch seatless.
+  const seat = await a.mintSeat(team);
+
   // Intent is recorded BEFORE the launch (ADR 293): a start that fails at `fly` still says "this
   // stream should be live", and the supervisor's next tick retries it inside the flap budget. The
   // exception is `--once` — a deliberately unsupervised run records `stopped` so nothing ever
@@ -394,7 +437,8 @@ async function startVerb(
   a.out(
     `${theme.accent('stream')} ${theme.meta(`${team} · via ${addr} · ${VM_SIZE} ${REGION}`)}\n`,
   );
-  const args = launchArgs({ app: a.app, digest, addr, team, extra });
+  saveStreamSeat(a.statePath, seat);
+  const args = launchArgs({ app: a.app, digest, addr, team, extra, seat });
 
   /**
    * Did this attempt leave a machine behind, and did it come up?
@@ -726,7 +770,14 @@ async function ensureVerb(
       const digest = d.state.image ?? checkoutDigest;
       const team = d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive';
       const { code, output } = await a.launch(
-        launchArgs({ app: a.app, digest, addr, team, extra: d.state.args }),
+        launchArgs({
+          app: a.app,
+          digest,
+          addr,
+          team,
+          extra: d.state.args,
+          seat: loadStreamSeat(a.statePath, team),
+        }),
       );
       if (code !== 0) {
         a.err(`${theme.err('✗')} relaunch failed (fly exit ${code}) — next tick retries\n`);

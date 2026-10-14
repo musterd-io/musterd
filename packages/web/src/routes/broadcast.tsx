@@ -5,7 +5,7 @@ import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { StreamAskBanner } from '../live/StreamAskBanner';
 import { OfficeScene } from '../live/OfficeScene';
-import { acquireObserver, forgetObserver, type LiveConfig } from '../live/client';
+import { acquireObserver, forgetObserver, handedObserver, type LiveConfig } from '../live/client';
 import { firehoseSound, roomTone } from '../live/sound';
 import type { OfficeHandle } from '../live/office-scene';
 import { applyTierClock, deriveAsks } from '../live/asks';
@@ -213,7 +213,8 @@ interface BroadcastWindow {
  *
  * Two properties this route holds by construction rather than by care:
  *
- * - **Presence-safe.** It only ever takes the observer path (`acquireObserver`). There is no
+ * - **Presence-safe.** It only ever takes the observer path — the seat its capturer handed it
+ *   (`handedObserver`, ADR 594), else `acquireObserver`. There is no
  *   advanced-seat branch here at all, so streaming can never attach a *human* presence row and put a
  *   phantom person on the roster (ADR 155).
  * - **Perf-contract-safe.** It is a separate lazy route, so the "loops stop when unseen" rule that
@@ -258,6 +259,12 @@ function BroadcastPage() {
   const recoverObserver = useCallback(() => {
     const slug = cfg?.team;
     if (!slug || recovering.current) return;
+    // A handed seat is the capturer's to replace (ADR 594): the page cannot mint one since ADR 580,
+    // so say so on screen and let the capturer's ready/stall watchdogs relaunch with a fresh seat.
+    if (handedObserver(slug)) {
+      setError('the observer seat this capture was handed was refused — restart the capture');
+      return;
+    }
     recovering.current = true;
     forgetObserver(slug);
     void (async () => {
@@ -296,7 +303,7 @@ function BroadcastPage() {
     setTeam(slug);
     void (async () => {
       try {
-        setCfg(await acquireObserver(slug));
+        setCfg(handedObserver(slug) ?? (await acquireObserver(slug)));
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
