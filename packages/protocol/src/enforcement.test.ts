@@ -219,6 +219,50 @@ describe('isWriteShaped (ADR 163)', () => {
     expect(isWriteShaped({ tool: 'Bash', command: 'grep -rn foo src/' })).toBe(false);
   });
 
+  it('reads an Explore agent actually runs are not writes (2026-10-13: 1,127 of 1,232 rows were these)', () => {
+    // Field data, not a synthetic corpus: read-only Explore agents logged 91% of all subagent "writes"
+    // because a harmless redirect or a keyword inside a quoted argument matched (lane 01M4VTQVKV).
+    const reads = [
+      'grep -rn "foo" packages/ 2>/dev/null',
+      'ls packages/*/src 2>/dev/null | head',
+      'cat package.json 2>&1 | head -20',
+      'git log --oneline -5 2>/dev/null',
+      'echo "done" >&2',
+      'find . -name "*.ts" 2>/dev/null | wc -l',
+      'grep -n "install" package.json',
+      'grep -rn "rm -rf" scripts/',
+      "rg 'git commit' docs/",
+      'grep -n "\\bpatch\\b" src/x.ts',
+      'sed -n 1,40p src/x.ts',
+      'git show HEAD:src/x.ts 2>/dev/null | grep -n "mv"',
+      'node -e "console.log(1)" &>/dev/null',
+      'grep -c "> out" notes.md',
+    ];
+    for (const command of reads) {
+      expect(isWriteShaped({ tool: 'Bash', command }), command).toBe(false);
+    }
+  });
+
+  it('a write still counts when the read noise is stripped around it', () => {
+    const writes = [
+      'grep -n foo src/x.ts > hits.txt 2>/dev/null',
+      'cat a 2>&1 >> log.txt',
+      'cd /tmp && rm -rf build',
+      'ls | xargs touch',
+      'find . -name "*.bak" -exec rm {} +',
+      'git status && git commit -m "rm the old patch"',
+      'sudo chmod 600 key.pem',
+      // A quoted string a shell runs is a command, not an argument to blank.
+      'sh -c "echo x > wrapped.txt"',
+      "bash -lc 'rm -rf build'",
+      'ssh host "rm -rf /tmp/x"',
+      'docker run -v $PWD:/w img sh -c "echo x > /w/f"',
+    ];
+    for (const command of writes) {
+      expect(isWriteShaped({ tool: 'Bash', command }), command).toBe(true);
+    }
+  });
+
   it('catches the obvious Bash write shapes', () => {
     const writes = [
       'echo hi > out.txt',
@@ -242,7 +286,7 @@ describe('isWriteShaped (ADR 163)', () => {
 
   it('MISSES writes through indirection — the MEASURED recall gap, not a bug to fix here', () => {
     // Each of these really does write, and produces no row. This is why ADR 163's headline is a LOWER
-    // BOUND. The error bar is now measured: recall 21/31 = 68%, 0 false positives, finding 008
+    // BOUND. The error bar is now measured: recall 21/31 = 68%, 0/23 false positives since the 2026-10-13 correction (8/23 before it), finding 008
     // (`docs/research/008-subagent-write-detector-recall.md`, reproduce with
     // `node scripts/research/adr-163-recall.ts`). If a future change makes one of these pass,
     // RE-RUN THAT HARNESS and update the number rather than deleting the case — the count is cited

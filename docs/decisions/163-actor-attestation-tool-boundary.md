@@ -284,6 +284,16 @@ count**, never a headline number alone.
   docs must not let a ledger read as a guardrail; the CLAUDE.md rule remains the only thing asking
   anyone not to do this.
 
+- _(2026-10-13, lane 01M4VTQVKV.)_ **The write count was mostly reads.** 1,127 of the 1,232
+  `actor.subagent_write` rows in the live audit log came from read-only `Explore` agents: `isWriteShaped`
+  read `2>/dev/null`, `2>&1` and `>&2` as file redirects, and command words inside quoted arguments
+  (`grep -n "install"`) as commands. It now strips redirects that write no file and blanks quoted
+  arguments before matching, anchors command words at command position, and classifies a quoted string a
+  shell runs (`sh -c`, `ssh host`, `eval`) as its own command. Finding 008's corpus, extended with
+  eight field-shaped reads: false positives 8/23 → 0/23, recall unchanged at 27/40. The ledger before
+  this date is read noise, not a count of writes (finding 008's correction; claims ledger entry
+  2026-10-13).
+
 ## Related
 
 Lane `01KYB0N38K9CWTB6YS2D0FGQGS` (opened by izzo, 2026-07-24). Gate this extends:

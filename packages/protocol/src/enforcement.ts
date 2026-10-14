@@ -450,16 +450,38 @@ const WRITE_SHAPED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'
  * not a rate**, and why a separate recall arm exists to put an error bar on it. Do not add cleverness
  * to this list expecting completeness; add it, then re-measure recall.
  */
+/** Where a command word stands: the start, after a separator, or after a wrapper that runs one. */
+const AT_COMMAND = String.raw`(?:^|[;&|(\n]|\$\(|\bxargs\s+(?:-\S+\s+)*|\bsudo\s+|\benv\s+|-exec\s+|-execdir\s+)\s*(?:\w+=\S*\s+)*`;
+
 const BASH_WRITE_PATTERNS: RegExp[] = [
-  /(^|[^>])>>?[^>]/, //  shell redirection into a file (`… > f`, `… >> f`)
-  /\btee\b/,
-  /\bsed\b[^|]*\s-i\b/,
-  /\b(rm|mv|cp|mkdir|touch|truncate|install|chmod|chown|ln)\b/,
-  /\bgit\s+(commit|push|merge|rebase|apply|checkout|switch|restore|reset|clean|rm|mv|tag)\b/,
-  /\b(npm|pnpm|yarn)\s+(install|add|remove|link|publish)\b/,
-  /\bdd\b/,
-  /\bpatch\b/,
+  /(^|[^>&0-9])\d*>>?\s*[^\s>&]/, //  shell redirection into a file (`… > f`, `… >> f`) — see stripBashNoise
+  new RegExp(`${AT_COMMAND}tee\\b`),
+  new RegExp(`${AT_COMMAND}sed\\b[^|;&]*\\s-i\\b`),
+  new RegExp(`${AT_COMMAND}(rm|mv|cp|mkdir|touch|truncate|install|chmod|chown|ln)\\b`),
+  new RegExp(
+    `${AT_COMMAND}git\\s+(commit|push|merge|rebase|apply|checkout|switch|restore|reset|clean|rm|mv|tag)\\b`,
+  ),
+  new RegExp(`${AT_COMMAND}(npm|pnpm|yarn)\\s+(install|add|remove|link|publish)\\b`),
+  new RegExp(`${AT_COMMAND}dd\\b`),
+  new RegExp(`${AT_COMMAND}patch\\b`),
 ];
+
+/**
+ * What a Bash command looks like with the read noise taken out, before the patterns run (lane
+ * 01M4VTQVKV, 2026-10-13): 1,127 of 1,232 `actor.subagent_write` rows came from read-only `Explore`
+ * agents. Two shapes did it. A redirect that writes no file — `2>/dev/null`, `2>&1`, `>&2`,
+ * `&>/dev/null` — matched the redirection pattern; and a command word inside a quoted argument —
+ * `grep -n "install"`, `rg 'git commit'` — matched a keyword. Quoted text is blanked and those
+ * redirects are dropped; the keyword patterns also anchor at {@link AT_COMMAND}, so an unquoted
+ * argument (`grep -n mv f`) no longer reads as running `mv`.
+ */
+function stripBashNoise(command: string): string {
+  return command
+    .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
+    .replace(/&>>?\s*\/dev\/null\b/g, ' ')
+    .replace(/\d*>>?\s*\/dev\/null\b/g, ' ')
+    .replace(/\d*>&\s*\d+/g, ' ');
+}
 
 /**
  * Is this call write-shaped (ADR 163)? Reads must never fire — nick's read/write asymmetry blesses
@@ -471,5 +493,20 @@ export function isWriteShaped(call: GateToolCall): boolean {
   if (call.tool !== 'Bash') return false;
   const command = call.command?.trim();
   if (!command) return false;
-  return BASH_WRITE_PATTERNS.some((re) => re.test(command));
+  return bashWrites(command, 0);
+}
+
+/** A quoted string handed to something that runs it as a command — `sh -c "…"`, `bash -lc '…'`,
+ *  `ssh host "…"`, `eval "…"` — is classified as a command of its own, not blanked as an argument:
+ *  `ssh host "rm -rf /tmp/x"` writes, and blanking every quote missed it (finding 008's corpus). */
+const SHELL_RUNNER_ARG =
+  /(?:\b(?:ba|z|da)?sh\s+(?:-\w+\s+)*-\w*c\w*|\bssh\s+(?:-\S+\s+)*\S+|\beval)\s+(['"])((?:(?!\1)[^\\]|\\.)*)\1/g;
+
+function bashWrites(command: string, depth: number): boolean {
+  if (depth < 3) {
+    for (const m of command.matchAll(SHELL_RUNNER_ARG))
+      if (bashWrites(m[2]!, depth + 1)) return true;
+  }
+  const bare = stripBashNoise(command);
+  return BASH_WRITE_PATTERNS.some((re) => re.test(bare));
 }
