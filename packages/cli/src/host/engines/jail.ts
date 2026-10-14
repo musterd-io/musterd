@@ -10,9 +10,18 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
  *   file that does not exist yet (a write) is judged by where it would land.
  * - {@link bashAllowed}: a bash line is split at its operators and every segment's parsed command
  *   head must be on the allowlist — the repo's declared scripts under `pnpm`, `pnpm exec` of the
- *   three toolchain binaries, a git subset bounded to the current non-main branch, `gh pr`, and
- *   read-only coreutils. Shell features that smuggle a second command (substitution, redirects,
- *   backgrounding) are refused outright rather than parsed.
+ *   toolchain binaries, a git subset bounded to the current non-main branch, `gh pr`, the seat
+ *   half of `musterd`, and read-only coreutils. Every ARGUMENT is confined too (nothing absolute,
+ *   `~`, `..`, `.musterd/`, `.git/`, or resolving outside through a symlink), and the flags that
+ *   turn a reader into a writer or an executor (`rg --pre`, `sort -o`, `find -fprint*`, `git -c`,
+ *   `sed` scripts beyond a line-range print, …) are denied per binary — the findings wallow, fifty
+ *   and miley filed on #2554. Shell features that smuggle a second command (substitution, any `$`,
+ *   redirects, backgrounding) are refused outright rather than parsed.
+ *
+ *   This is a filesystem and process boundary for the SHELL. Code the seat writes into its
+ *   workspace and then runs under `pnpm test` executes as the host user by design — that is the
+ *   job of a worker seat — and the durable answer to that is an OS sandbox around the bash child,
+ *   which is a follow-up lane under the security goal, not this allowlist.
  *
  * Denials are reasons, never throws — the caller turns a reason into a blocked tool call the
  * model sees and the `wake_turns` row records.
@@ -79,12 +88,17 @@ export function jailPath(
 export interface BashPolicy {
   /** The repo's declared `package.json` scripts — the one source of what `pnpm <x>` may run. */
   scripts: ReadonlySet<string>;
+  /** The filesystem half of the argument check: for a token that names an EXISTING path relative
+   *  to the workspace, whether it resolves (through symlinks) inside the workspace. `undefined`
+   *  means "not a path here" and the token is judged on its text alone. Absent ⇒ text only. */
+  pathOk?: (token: string) => boolean | undefined;
 }
 
 export type BashVerdict = { ok: true } | { ok: false; reason: string };
 
 const READERS = new Set([
   'cat',
+  'printenv',
   'cut',
   'date',
   'diff',
@@ -138,6 +152,41 @@ const GIT = new Set([
   'status',
   'switch',
 ]);
+/** The seat-shaped half of the musterd CLI — never service, residency, team, host or human admin. */
+const MUSTERD = new Set([
+  'board',
+  'claim',
+  'goal',
+  'help',
+  'inbox',
+  'insight',
+  'lane',
+  'memory',
+  'next',
+  'report',
+  'send',
+  'session',
+  'standup',
+  'status',
+  'whoami',
+]);
+/** Flags that make a reader execute or write (wallow, fifty, miley on #2554). */
+const FLAG_DENIED: Record<string, RegExp> = {
+  rg: /^--pre|^--hostname-bin|^-f$|^--file(=|$)/,
+  grep: /^-f$|^--file(=|$)/,
+  sort: /^-o$|^--output(=|$)|^-o./,
+  find: /^-f(print|print0|printf|ls)$|^-(exec|execdir|ok|okdir|delete)$|^-D$/,
+  diff: /^--output(=|$)|^--to-file(=|$)|^--from-file(=|$)/,
+  tail: /^--pid(=|$)/,
+  stat: /^--printf(=|$)|^-c$/,
+  gh: /^--admin$|^--hostname(=|$)/,
+  pnpm: /^-C$|^--dir(=|$)|^--config(=|$)|^--store-dir(=|$)|^--workspace-root$/,
+};
+/** git options that execute, reconfigure, or retarget the repository — anywhere on the line. */
+const GIT_DENIED =
+  /^-c$|^-c=|^-C$|^-x$|^--exec(=|$)|^--exec-path|^--upload-pack|^--receive-pack|^--ext-diff|^--textconv|^--config-env|^--git-dir|^--work-tree|^--output(=|$)|^--namespace|^--super-prefix|^-p$|^--paginate/;
+/** The sed scripts a reader may run: line-address prints only (`sed -n 1,20p`). */
+const SED_SCRIPT = /^[0-9]+(,([0-9]+|\$))?p$|^\$p$/;
 const GH_PR = new Set([
   'checks',
   'comment',
@@ -154,8 +203,7 @@ const PROTECTED_BRANCHES = new Set(['main', 'master']);
 /** Shell features that carry a second command or a write the allowlist cannot see. */
 const SMUGGLERS: [RegExp, string][] = [
   [/`/, 'backticks'],
-  [/\$\(/, 'command substitution'],
-  [/\$\{/, 'parameter expansion'],
+  [/\$/, 'variable expansion'],
   [/[<>]/, 'redirection'],
   [/[\r\n]/, 'newlines'],
   [/(^|[^&])&([^&]|$)/, 'backgrounding'],
@@ -199,10 +247,12 @@ function denyGit(words: string[]): string | undefined {
   const sub = words[1];
   if (sub === undefined || !GIT.has(sub)) return `git ${sub ?? ''} is not on the allowlist`.trim();
   const rest = words.slice(2);
+  const bad = words.slice(1).find((w) => GIT_DENIED.test(w));
+  if (bad) return `git ${bad} executes, reconfigures or retargets the repository`;
   if (sub === 'push') {
     if (rest.some((w) => w === '--force' || w === '-f' || /^-[a-zA-Z]*f/.test(w)))
       return 'git push --force is never allowed (use --force-with-lease)';
-    if (rest.some((w) => PROTECTED_BRANCHES.has(w) || /:(main|master)$/.test(w)))
+    if (rest.some((w) => /(^|[/:])(main|master)$/.test(w)))
       return 'git push to main is never allowed';
   }
   if (sub === 'checkout' || sub === 'switch' || sub === 'branch') {
@@ -240,33 +290,65 @@ function denyPnpm(words: string[], policy: BashPolicy): string | undefined {
   return `pnpm ${sub} is not a declared script`;
 }
 
+/**
+ * Every argument is confined, whatever the command: nothing absolute, nothing under `~`, no `..`
+ * segment, nothing under `.musterd/` or `.git/` (the seat's credentials and git's own state are
+ * the tools' business, not the shell's), and — when the policy can look — nothing that exists and
+ * resolves outside the workspace through a symlink. Flags are text; `--flag=value` values are
+ * judged too.
+ */
+function denyArgument(token: string, policy: BashPolicy): string | undefined {
+  const value =
+    token.startsWith('--') && token.includes('=') ? token.slice(token.indexOf('=') + 1) : token;
+  if (value.startsWith('-') && value === token) return undefined;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return undefined; // a URL, not a path
+  if (value.startsWith('/') || value.startsWith('~')) return `${token} leaves the workspace`;
+  const segments = value.split(/[\\/]/);
+  if (segments.includes('..')) return `${token} leaves the workspace`;
+  if (segments.includes('.musterd')) return `${token} is under .musterd/ (the seat's own state)`;
+  if (segments.includes('.git') && segments.length > 1) return `${token} is under .git/`;
+  if (policy.pathOk && policy.pathOk(value) === false)
+    return `${token} resolves outside the workspace`;
+  return undefined;
+}
+
 function denySegment(words: string[], policy: BashPolicy): string | undefined {
   const head = words[0];
   if (head === undefined) return 'empty command';
+  for (const w of words.slice(1)) {
+    const reason = denyArgument(w, policy);
+    if (reason) return reason;
+  }
+  const flagRule = FLAG_DENIED[head];
+  if (flagRule) {
+    const bad = words.slice(1).find((w) => flagRule.test(w));
+    if (bad) return `${head} ${bad} executes or writes; not allowed`;
+  }
   if (head === 'cd') {
-    const target = words[1];
-    if (target === undefined || isAbsolute(target) || target.split(/[\\/]/).includes('..'))
-      return 'cd may only descend inside the workspace';
+    if (words[1] === undefined) return 'cd needs a path inside the workspace';
     return undefined;
   }
   if (head === 'sed') {
-    if (words.some((w) => w === '-i' || w.startsWith('-i') || w === '--in-place'))
-      return 'sed -i writes in place; use the edit tool';
+    const args = words.slice(1);
+    const scripts = args.filter((w) => !w.startsWith('-') && SED_SCRIPT.test(w));
+    const flags = args.filter((w) => w.startsWith('-'));
+    const files = args.filter((w) => !w.startsWith('-') && !SED_SCRIPT.test(w));
+    if (scripts.length !== 1 || flags.some((f) => f !== '-n') || files.length === 0)
+      return 'sed may only print a line range (`sed -n 1,20p <file>`); use the read/edit tools otherwise';
     return undefined;
   }
-  if (head === 'find') {
-    if (words.some((w) => w === '-delete' || w === '-exec' || w === '-execdir' || w === '-ok'))
-      return 'find may not delete or exec';
+  if (READERS.has(head) || head === 'find') return undefined;
+  if (head === 'musterd') {
+    const sub = words[1];
+    if (sub === undefined || !MUSTERD.has(sub))
+      return `musterd ${sub ?? ''} is not a seat command`.trim();
     return undefined;
   }
-  if (READERS.has(head)) return undefined;
-  if (head === 'musterd') return undefined;
   if (head === 'pnpm') return denyPnpm(words, policy);
   if (head === 'git') return denyGit(words);
   if (head === 'gh') {
     if (words[1] !== 'pr' || words[2] === undefined || !GH_PR.has(words[2]))
       return `gh ${words.slice(1, 3).join(' ')} is not on the allowlist`.trim();
-    if (words.includes('--admin')) return 'gh pr merge --admin bypasses the gates';
     return undefined;
   }
   return `${head} is not on the allowlist`;
