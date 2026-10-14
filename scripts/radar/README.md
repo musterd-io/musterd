@@ -14,6 +14,7 @@ Sources: arXiv, HF Papers, and the Exploring Next public feed (`exn`, read-only 
 hand-curated items feed the radar, never the reverse). The scheduled full-text path retrieves the
 complete article through Exa and every attached Exploring Next episode script before triage.
 Known Hugging Face paper and arXiv abstract/HTML links resolve to the original arXiv PDF
+and request fresh extraction (`maxAgeHours: 0`, [ADR 566](../../docs/decisions/566-radar-fresh-paper-text.md))
 ([ADR 564](../../docs/decisions/564-radar-original-paper-targets.md)); a redirect back to a
 landing page is a failed read. The read manifest records the PDF URL, while candidate links keep
 their existing identities. It

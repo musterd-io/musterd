@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { fetchArticleText, isPublicHttpsUrl } from './content.ts';
 
+it('requests fresh extraction rather than cached page text', async () => {
+  let requestInit: RequestInit | undefined;
+  const fetchFn = async (_url: string, init?: RequestInit) => {
+    requestInit = init;
+    return Response.json({
+      results: [{ url: 'https://arxiv.org/pdf/2609.37226v1', text: 'Full paper body' }],
+      statuses: [{ id: 'https://arxiv.org/pdf/2609.37226v1', status: 'success' }],
+    });
+  };
+  await fetchArticleText('https://arxiv.org/html/2609.37226v1', 'test-key', fetchFn);
+  const body = JSON.parse(String(requestInit?.body));
+  expect(body.maxAgeHours).toBe(0);
+});
+
 describe('isPublicHttpsUrl', () => {
   it('accepts public HTTPS URLs and rejects unsafe schemes, credentials, and private hosts', () => {
     expect(isPublicHttpsUrl('https://example.org/paper')).toBe(true);
@@ -45,6 +59,7 @@ describe('fetchArticleText', () => {
     expect(JSON.parse(String(requestInit?.body))).toEqual({
       urls: [requestedUrl],
       text: true,
+      maxAgeHours: 0,
     });
     expect(result).toEqual({ url: requestedUrl, text: 'Full article text.' });
   });
@@ -118,7 +133,11 @@ describe('fetchArticleText', () => {
     ['https://export.arxiv.org/abs/math.GT/0301234v2', 'https://arxiv.org/pdf/math.GT/0301234v2'],
   ])('reads the original paper for %s, retaining its extraction URL', async (landing, target) => {
     const result = await fetchArticleText(landing, 'key', async (_url, init) => {
-      expect(JSON.parse(String(init?.body))).toEqual({ urls: [target], text: true });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        urls: [target],
+        text: true,
+        maxAgeHours: 0,
+      });
       return new Response(
         JSON.stringify({
           results: [{ url: target, text: 'Paper body, methods and results.' }],
