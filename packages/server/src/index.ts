@@ -261,6 +261,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         (run.timing.queryMs > 0 || ms >= SLOW_REQUEST_MS)
           ? {
               db_tx: run.timing.tx,
+              db_stmt: run.timing.stmt,
               db_wait_ms: Math.round(run.timing.waitMs),
               db_hold_ms: Math.round(run.timing.holdMs),
               db_query_ms: Math.round(run.timing.queryMs),
