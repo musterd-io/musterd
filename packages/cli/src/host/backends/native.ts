@@ -188,7 +188,15 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         };
       }
 
-      const telemetry = (deps.telemetry ?? defaultTelemetry)(spec.server, binding.agent_key);
+      // ADR 395: the residency wake routes authenticate the HOST, so the capture rail and the
+      // transcript read ride the host-scoped credential `residency on` minted — the same key the
+      // loop polls with. `agent_key` is the seat's claim credential and those routes refuse it
+      // (measured on the first resident wake, 2026-10-13: every wake-turn post 401, no rows, no
+      // cost, no rehydration). Fallback for a binding enrolled before ADR 395.
+      const telemetry = (deps.telemetry ?? defaultTelemetry)(
+        spec.server,
+        binding.host_key ?? binding.agent_key,
+      );
       const startedAt = Date.now();
       const controller = new AbortController();
       // ADR 546: findable by `musterd <seat>` like every other wake — but the loop runs in THIS
