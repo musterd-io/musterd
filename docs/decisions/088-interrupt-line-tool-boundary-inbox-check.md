@@ -1,6 +1,6 @@
 # 088 — The interrupt line: a tool-boundary inbox check reaches a busy agent
 
-- Status: accepted — increment 1 shipped 2026-07-05 (PR #109); the arc continued in ADR 103 (inc2) + ADR 111 (inc3); amended 4× (latest 2026-09-16, lane 01M2P69FHZ)
+- Status: accepted — increment 1 shipped 2026-07-05 (PR #109); the arc continued in ADR 103 (inc2) + ADR 111 (inc3); amended 5× (latest 2026-10-14, lane 01M4W5VFABSBRH6Q7TA0Y2B5N1)
 - Date: 2026-07-03
 
 ## Context
@@ -40,6 +40,7 @@ for this seat?*
 - **Yes** → exactly **one line** to stdout and exit 0, e.g.
   `⚡ musterd: urgent from june (handoff) — run 'musterd inbox' to read it.`
   _(Amended 2026-09-16: the tail now names the act id and a by-id read. See the amendment below.)_
+  _(Amended 2026-10-14: when the headline is an acceptance, that read stays and the tail also names accept or decline with reply-to that id. A steer stays a read. See Amendment 5.)_
 
 It reuses the waiting-act predicate ADR 046 built for the per-command nudge — this extends that nudge
 from "musterd commands only" to "every tool call the agent makes." No SPEC bump, no new wire frames.
@@ -185,6 +186,27 @@ Still inside §4: an act id is a structured field, never `env.body`.
 
 Falsify: a seat with >1000 unread receives a steer and its next tool call after the line is anything
 other than a by-id read of the named act.
+
+## Amendment 5 — an acceptance headline names the verdict (2026-10-14, lane 01M4W5VFABSBRH6Q7TA0Y2B5N1)
+
+Amendment 4 froze the follow-up as a by-id read for every class except a huddle, which already
+keeps its own answer verb. That read is the right follow-up for a steer: the body stays off the
+line, and seeing the act is what the line is for. An acceptance ask is different.
+`team_inbox_check {ids:[…]}` and `musterd inbox --id` do not answer it, so a seat that obeys the
+line re-reads it, the turn ends, and the next `end_turn` blocks again. Watched 2026-10-13 on
+lazara: nine acceptance asks were open, and both the Stop hook and the PreToolUse hook repeated
+the read-only tail.
+
+**Decided:** when the headline class is `acceptance`, the tail keeps both read spellings and adds
+the verdict — accept or decline, reply-to that same id — in both spellings,
+`team_send {act:'accept'|'decline', reply_to:'<id>'}` and
+`musterd send --act accept|decline --reply-to <id>`. The line must name both verbs. A line that
+says only accept is how a seat stamps a queue without looking. Steer, urgent, and every other
+class stay a by-id read only. The huddle line keeps its `musterd huddle say` verb and does not
+grow a lane verdict. The act body stays off the line.
+
+Falsify: an acceptance headline tells a seat to accept and leaves decline out, or a steer headline
+grows a verdict verb.
 
 ## Observability & Evaluation
 

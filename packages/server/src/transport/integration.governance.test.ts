@@ -370,6 +370,13 @@ withDrivers('integration · governance', (_o, kind) => {
       expect(raised.json.act).toMatchObject({ id: 'st-1', act: 'steer' });
       expect(raised.json.line).toContain('steer'); // raise class named on the line
       expect(raised.json.line).not.toContain('v2 schema'); // §4: never the raw body
+      // Lane 01M4W5VFAB: a steer has no verdict. The acceptance tail must not
+      // leak onto it, or a seat obeys a verb the act does not have.
+      expect(raised.json.line).toContain('team_inbox_check {ids:["st-1"]}');
+      expect(raised.json.line).toContain('musterd inbox --id st-1');
+      expect(raised.json.line).not.toContain('accept or decline');
+      expect(raised.json.line).not.toContain('reply_to');
+      expect(raised.json.line).not.toContain('--reply-to');
 
       // Audited with the steer raise class, not a hardcoded 'urgent'.
       const audit = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
@@ -578,6 +585,48 @@ withDrivers('integration · governance', (_o, kind) => {
       expect(line).toContain('team_inbox_check {ids:["hh-turn"]}');
       expect(line).not.toContain("read it with 'musterd inbox'");
       expect(line).not.toContain('nobody should have to poll'); // never the body
+      // A huddle already has its answer verb. It does not grow a lane verdict.
+      expect(line).not.toContain('accept or decline');
+    });
+
+    it('interrupt line (lane 01M4W5VFAB): an acceptance headline keeps both reads and names accept or decline', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+      await post('/teams/dawn/members', { name: 'Bob', kind: 'agent' }, nickTok);
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      const bob = { key: team.json.agent_key, seat: 'Bob' };
+
+      // The real path: a client-supplied lane_review is stripped, so the ask has
+      // to be the one the daemon composes when the lane enters awaiting acceptance.
+      const lane = await post('/teams/dawn/lanes', { title: 'landed thing', claim: true }, ada);
+      expect(lane.status).toBe(201);
+      const laneId = lane.json.lane.id as string;
+      const submitted = await req(
+        'PATCH',
+        `/teams/dawn/lanes/${laneId}`,
+        { state: 'awaiting_acceptance', acceptor: 'Bob' },
+        ada,
+      );
+      expect(submitted.status, JSON.stringify(submitted.json)).toBe(200);
+
+      const raised = await get('/teams/dawn/inbox/interrupt-check', bob, {
+        'x-musterd-no-touch': '1',
+      });
+      expect(raised.json.raised).toBe(true);
+      expect(raised.json.act.act).toBe('ask');
+      const askId = raised.json.act.id as string;
+      const line = raised.json.line as string;
+      expect(line).toContain('acceptance');
+      expect(line).toContain(`team_inbox_check {ids:["${askId}"]}`);
+      expect(line).toContain(`musterd inbox --id ${askId}`);
+      expect(line).toContain(`team_send {act:'accept', reply_to:'${askId}'}`);
+      expect(line).toContain(`team_send {act:'decline', reply_to:'${askId}'}`);
+      expect(line).toContain(`musterd send --act accept --reply-to ${askId}`);
+      expect(line).toContain(`musterd send --act decline --reply-to ${askId}`);
+      // The body stays off the line, and the tail does not say only accept.
+      expect(line).not.toContain('landed thing');
+      expect(line).toContain('accept or decline');
     });
 
     it('defer act (ADR 111, inc3): re-sequences the Goal, bumps its epoch, and wakes the stale lane owner', async () => {
