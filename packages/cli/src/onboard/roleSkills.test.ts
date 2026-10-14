@@ -14,6 +14,7 @@ import {
   applyRoleSkill,
   CLAUDE_BRIDGE,
   CURSOR_BRIDGE,
+  GROK_BRIDGE,
   missingSkillLine,
   observeRoleSkill,
   resolveSeatRoleSkills,
@@ -114,6 +115,14 @@ describe('role-skill bridges as reconciler fragments (ADR 586 §4)', () => {
     expect(text).toMatch(/^---\nname: platform\ndescription: The platform role\.\n---\n/);
     expect(text).toContain('`.agents/skills/platform/SKILL.md`');
     expect(text).toMatch(/<!-- musterd:content v\d+ sha256:/);
+  });
+
+  it('the Grok bridge sits where Grok catalogs skills, with the Claude frontmatter', () => {
+    const [intent] = roleSkillFragments(ctx(), 'grok', GROK_BRIDGE, 'g');
+    applyRoleSkill(ctx().fs, worktree, intent!, GROK_BRIDGE, 'write');
+    const text = readFileSync(join(worktree, '.grok', 'skills', 'platform', 'SKILL.md'), 'utf8');
+    expect(text).toMatch(/^---\nname: platform\ndescription: The platform role\.\n---\n/);
+    expect(text).toContain('`.agents/skills/platform/SKILL.md`');
   });
 
   it('a written bridge observes as its intent, and a payload-less release observes the same', () => {
