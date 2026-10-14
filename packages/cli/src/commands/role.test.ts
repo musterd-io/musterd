@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseRoleFile } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CliError } from '../errors.js';
 import { userToolkitsDir } from '../onboard/toolkit.js';
+import { bundledSkillsRoot, METHOD_SKILL } from '../roster-roles/skills.js';
 import { roleCommand } from './role.js';
 
 let cwd: string;
@@ -289,6 +290,69 @@ describe('role create in a roster home (registry thin slice)', () => {
     const written = JSON.parse(readFileSync(join(userToolkitsDir(cwd), 'qa.json'), 'utf8'));
     expect(written.toolkit).toBe('qa');
     expect(() => readFileSync(join(cwd, '.musterd', 'roles', 'qa.toml'), 'utf8')).toThrow();
+  });
+
+  it('--from a built-in copies its skill, with the team file blank (ADR 586 §4)', async () => {
+    const m = writeRosterHome();
+    expect(await roleCommand(parsed(['create', 'watcher'], { from: 'observer' }))).toBe(0);
+    const skill = join(cwd, '.agents', 'skills', 'observer');
+    expect(readFileSync(join(skill, 'SKILL.md'), 'utf8')).toMatch(/^---\nname: observer/);
+    expect(existsSync(join(skill, 'evals', 'results.md'))).toBe(true);
+    // Our own team layer stays in our repo; the user gets the skeleton's blank one.
+    expect(readFileSync(join(skill, 'references', 'team.md'), 'utf8')).toBe(
+      readFileSync(
+        join(bundledSkillsRoot(), METHOD_SKILL, 'skeleton', 'references', 'team.md'),
+        'utf8',
+      ),
+    );
+    // A renamed copy names the built-in skill it uses.
+    expect(parseRoleFile(readFileSync(join(m, 'roles', 'watcher.toml'), 'utf8')).skill).toBe(
+      'observer',
+    );
+  });
+
+  it('never overwrites a skill the user has edited, and says how to compare', async () => {
+    writeRosterHome();
+    await roleCommand(parsed(['create', 'planner'], { from: 'planner' }));
+    const core = join(cwd, '.agents', 'skills', 'planner', 'SKILL.md');
+    writeFileSync(core, readFileSync(core, 'utf8') + '\nOur own rule.\n');
+    out = '';
+    expect(await roleCommand(parsed(['create', 'planner'], { from: 'planner', force: true }))).toBe(
+      0,
+    );
+    expect(readFileSync(core, 'utf8')).toContain('Our own rule.');
+    expect(out).toMatch(/kept your .*planner/);
+    expect(out).toContain('diff -r ');
+    // An untouched copy is recognised as the built-in, not reported as kept.
+    rmSync(join(cwd, '.agents'), { recursive: true });
+    await roleCommand(parsed(['create', 'planner'], { from: 'planner', force: true }));
+    out = '';
+    await roleCommand(parsed(['create', 'planner'], { from: 'planner', force: true }));
+    expect(out).toMatch(/already the built-in skill/);
+  });
+
+  it('a built-in that ships no skill writes none and says so', async () => {
+    writeRosterHome();
+    await roleCommand(parsed(['create', 'admin'], { from: 'admin' }));
+    expect(existsSync(join(cwd, '.agents'))).toBe(false);
+    expect(out).toMatch(/no skill ships with "admin"/);
+  });
+
+  it('a custom role gets the skeleton with its name filled in, and the method skill (ADR 586 §5)', async () => {
+    writeRosterHome();
+    await roleCommand(parsed(['create', 'qa']));
+    const skills = join(cwd, '.agents', 'skills');
+    const core = readFileSync(join(skills, 'qa', 'SKILL.md'), 'utf8');
+    expect(core).toMatch(/^---\nname: qa\n/);
+    expect(core).not.toContain('<role>');
+    expect(
+      JSON.parse(readFileSync(join(skills, 'qa', 'evals', 'evals.json'), 'utf8')),
+    ).toMatchObject({ skill_name: 'qa' });
+    expect(existsSync(join(skills, METHOD_SKILL, 'SKILL.md'))).toBe(true);
+    // The role file names no skill: its own name is the default.
+    expect(
+      parseRoleFile(readFileSync(join(cwd, '.musterd', 'roles', 'qa.toml'), 'utf8')).skill,
+    ).toBeUndefined();
   });
 
   it('points at assign + commit as the next step — the file is the single writer', async () => {
