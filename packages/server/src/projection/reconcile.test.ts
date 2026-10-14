@@ -18,7 +18,7 @@ import {
   setMemberGovernance,
 } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
-import { listRoleNames, roleSummariesMap } from '../store/roles.js';
+import { getRoleSkill, listRoleNames, roleSummariesMap } from '../store/roles.js';
 import { toMember } from '../store/rows.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { loadTeamSpec } from './load.js';
@@ -676,6 +676,20 @@ end = "12:00"
       expect((await roleSummariesMap(db, team.id)).get('designer')).toBe(
         'Owns the design surfaces',
       );
+    });
+
+    it('projects the skill a role names, and the name stands in when it names none (ADR 586 §3)', async () => {
+      await writeRole('designer', 'summary = "Draws"\nskill = "brand-design"\n');
+      await writeRole('planner', 'summary = "Plans"\n');
+      await writeRoster('slug = "alpha"\n', { miley: 'kind = "agent"\nrole = "designer"\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      expect(await getRoleSkill(db, team.id, 'designer')).toBe('brand-design');
+      expect(await getRoleSkill(db, team.id, 'planner')).toBe('planner');
+
+      await writeRole('designer', 'summary = "Draws"\n');
+      await reconcile();
+      expect(await getRoleSkill(db, team.id, 'designer')).toBe('designer');
     });
 
     it('an agent reaching admin through ANY held role is clamped, multi-role included (ADR 172)', async () => {

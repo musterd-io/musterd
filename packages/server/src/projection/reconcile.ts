@@ -101,6 +101,7 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
       role.capabilities ?? {},
       role.charter ?? null,
       role.summary ?? null,
+      role.skill ?? null,
     );
   }
   await deleteRoles(

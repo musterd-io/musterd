@@ -5,6 +5,7 @@ import {
   parseSeatFile,
   parseTeamFile,
   type RoleFile,
+  roleSkillName,
   seatNameFromPath,
   seatRoles,
   serializeRole,
@@ -134,6 +135,27 @@ describe('table headers sit under a blank line — the form hand-authors write',
     expect(serializeRole(parseRoleFile(role))).toBe(role);
     // …and idempotent on that shape.
     expect(serializeRole(parseRoleFile(serializeRole(parseRoleFile(role))))).toBe(role);
+  });
+});
+
+describe('a role names its skill (ADR 586 §3)', () => {
+  it('keeps `skill` through serialize, between the charter and the capabilities table', () => {
+    const text =
+      'summary = "Ships"\ncharter = "lead"\nskill = "platform-ops"\n\n[capabilities]\nis_admin = false\n';
+    expect(serializeRole(parseRoleFile(text))).toBe(text);
+  });
+
+  it("defaults to the role's own name when the file names none", () => {
+    expect(roleSkillName('designer', parseRoleFile('summary = "Draws"\n'))).toBe('designer');
+    expect(roleSkillName('designer', parseRoleFile('skill = "brand-design"\n'))).toBe(
+      'brand-design',
+    );
+  });
+
+  it('refuses a skill that is not a directory name skills:check would accept', () => {
+    for (const bad of ['../etc', 'Platform', 'a b', '-lead', 'x'.repeat(65)])
+      expect(() => parseRoleFile(`skill = "${bad}"\n`)).toThrow();
+    expect(parseRoleFile(`skill = "${'x'.repeat(64)}"\n`).skill).toHaveLength(64);
   });
 });
 

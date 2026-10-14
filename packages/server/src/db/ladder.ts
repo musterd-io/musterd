@@ -255,6 +255,18 @@ export const LADDER: PortableMigration[] = [
       await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS claims_json TEXT');
     },
   },
+  {
+    // v96 — ADR 586 §3: the skill a role names, projected from `roles/<name>.toml`'s `skill`. NULL
+    // when the file names none, which reads as the role's own name. No backfill.
+    version: 96,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('roles')").pluck().all();
+      if (!cols.includes('skill')) db.exec('ALTER TABLE roles ADD COLUMN skill TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE roles ADD COLUMN IF NOT EXISTS skill TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

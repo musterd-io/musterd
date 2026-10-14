@@ -77,6 +77,14 @@ export const SeatFileSchema = z
   });
 export type SeatFile = z.infer<typeof SeatFileSchema>;
 
+/** A skill directory name, as `pnpm skills:check` holds `.agents/skills/` to it (ADR 586). */
+export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** The skill a role names (ADR 586 §3): its `skill`, else the role's own name. */
+export function roleSkillName(roleName: string, role: Pick<RoleFile, 'skill'>): string {
+  return role.skill ?? roleName;
+}
+
 /**
  * `roles/<name>.toml` — one per role (ADR 070). The filename stem is the role name (like seats); the
  * body carries the role's **default capabilities** (a partial — unset fields fall back to generalist)
@@ -88,6 +96,12 @@ export const RoleFileSchema = z.object({
   summary: z.string().optional(),
   capabilities: PartialCapabilitiesSchema.default({}),
   charter: z.string().optional(),
+  /** The role's skill: a directory name under the repo's `.agents/skills/` (ADR 586 §3). Absent, it
+   *  is the role's own name, so a role file written before the field stays valid. */
+  skill: z
+    .string()
+    .regex(SKILL_NAME_RE, 'a skill name is lowercase letters, digits and hyphens, at most 64')
+    .optional(),
 });
 export type RoleFile = z.infer<typeof RoleFileSchema>;
 
@@ -326,7 +340,7 @@ export function serializeSeat(seat: SeatFile): string {
 }
 
 /**
- * Canonical `roles/<name>.toml`. Key order: `summary`, `charter` (top-level) then the
+ * Canonical `roles/<name>.toml`. Key order: `summary`, `charter`, `skill` (top-level) then the
  * `[capabilities]` table.
  * An empty role (no charter, no caps) serializes to the empty string — the minimal form; the role
  * still exists by virtue of its filename.
@@ -335,6 +349,7 @@ export function serializeRole(role: RoleFile): string {
   let out = '';
   if (role.summary) out += line('summary', role.summary);
   if (role.charter) out += line('charter', role.charter);
+  if (role.skill) out += line('skill', role.skill);
   const body = serializeCapabilities(role.capabilities ?? {});
   if (body) out += tableHeader('capabilities', out) + body;
   return out;

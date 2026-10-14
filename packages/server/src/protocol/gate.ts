@@ -15,6 +15,7 @@ import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import { laneCoveringPath } from '../store/lanes.js';
 import { listMembers } from '../store/members.js';
 import { unblockerReachable } from '../store/reachability.js';
+import { getRoleSkill } from '../store/roles.js';
 import { type MemberRow, type TeamRow, toMember } from '../store/rows.js';
 import { getPolicy } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
@@ -289,8 +290,9 @@ async function gateRoute(ctx: GateContext): Promise<{ decision: GateDecision; ro
   const who = holders.length
     ? `${holders.join(', ')} ${holders.length === 1 ? 'holds' : 'hold'} ${role}`
     : `no seat holds ${role} yet — ask a human to assign it`;
+  const skill = await getRoleSkill(db, ctx.team.id, role);
   const ask = holders.length
-    ? ` Send request_help to ${holders.length === 1 ? holders[0] : 'one of them'} naming what, from, to and why (.agents/skills/${role}/SKILL.md).`
+    ? ` Send request_help to ${holders.length === 1 ? holders[0] : 'one of them'} naming what, from, to and why (.agents/skills/${skill}/SKILL.md).`
     : '';
   if (cls.posture === 'warn')
     return {
