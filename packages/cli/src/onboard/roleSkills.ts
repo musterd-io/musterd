@@ -7,8 +7,10 @@ import {
   parseSeatFile,
   roleSkillName,
   seatRoles,
+  SKILL_NAME_RE,
 } from '@musterd/protocol';
 import { loadConfig, readBindingAt } from '../config.js';
+import { staysInside } from '../roster-roles/skills.js';
 import { applyFileMap, observeFileMap, stamped } from './guidance.js';
 import type { FsSeam, HarnessContext } from './reconcile/context.js';
 import {
@@ -80,6 +82,11 @@ export function resolveSeatRoleSkills(
   const out: SeatRoleSkills = { seat, bridges: [], missing: [] };
   for (const role of roles) {
     const skill = roleSkillName(role, readRole(home, role));
+    // A role name is any string in a seat file; only a skill directory name becomes a path.
+    if (!SKILL_NAME_RE.test(skill)) {
+      out.missing.push({ role, skill });
+      continue;
+    }
     const core = join(worktreeRoot, '.agents', 'skills', skill, 'SKILL.md');
     const description = existsSync(core) ? skillDescription(readFileSync(core, 'utf8')) : null;
     if (description === null) out.missing.push({ role, skill });
@@ -188,7 +195,9 @@ export function isRoleSkillFragment(fragmentKey: string): boolean {
 function filesOf(intent: FragmentIntent, shape: BridgeShape): Record<string, string> {
   const payload = intent.payload as Record<string, string> | undefined;
   if (payload) return payload;
-  return { [shape.path(intent.fragmentKey.slice(FRAGMENT_PREFIX.length))]: '' };
+  const skill = intent.fragmentKey.slice(FRAGMENT_PREFIX.length);
+  if (!SKILL_NAME_RE.test(skill)) throw new Error(`"${skill}" is not a skill directory name`);
+  return { [shape.path(skill)]: '' };
 }
 
 export function observeRoleSkill(
@@ -207,5 +216,10 @@ export function applyRoleSkill(
   shape: BridgeShape,
   kind: 'write' | 'remove',
 ): void {
-  applyFileMap(fs, root, filesOf(intent, shape), kind);
+  const files = filesOf(intent, shape);
+  for (const rel of Object.keys(files)) {
+    if (!staysInside(root, join(root, rel)))
+      throw new Error(`${rel} resolves outside ${root} (a symlink?) — not touching it`);
+  }
+  applyFileMap(fs, root, files, kind);
 }

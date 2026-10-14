@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -68,6 +75,13 @@ describe("resolving the seat's role skills (ADR 586 §3)", () => {
     );
   });
 
+  it('a role name that is not a skill directory name becomes no path', () => {
+    seat('roles = ["../../escape"]\n');
+    const r = resolveSeatRoleSkills(worktree, 'alpha', { alpha: home })!;
+    expect(r.bridges).toEqual([]);
+    expect(r.missing).toEqual([{ role: '../../escape', skill: '../../escape' }]);
+  });
+
   it('says nothing without a seat binding, a roster home, or a seat file', () => {
     seat('');
     expect(resolveSeatRoleSkills(worktree, 'alpha', {})).toBeUndefined();
@@ -113,6 +127,17 @@ describe('role-skill bridges as reconciler fragments (ADR 586 §4)', () => {
     expect(observeRoleSkill(c.fs, worktree, release, CURSOR_BRIDGE)).toEqual(observed);
     applyRoleSkill(c.fs, worktree, release, CURSOR_BRIDGE, 'remove');
     expect(existsSync(join(worktree, '.cursor', 'rules', 'platform.mdc'))).toBe(false);
+  });
+
+  it('never writes a bridge through a symlink out of the worktree', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'musterd-roleskill-out-'));
+    mkdirSync(join(worktree, '.claude'));
+    symlinkSync(outside, join(worktree, '.claude', 'skills'));
+    const [intent] = roleSkillFragments(ctx(), 'claude-code', CLAUDE_BRIDGE, 'c');
+    expect(() => applyRoleSkill(ctx().fs, worktree, intent!, CLAUDE_BRIDGE, 'write')).toThrow(
+      /outside/,
+    );
+    expect(existsSync(join(outside, 'platform'))).toBe(false);
   });
 
   it('a context with no resolved roles desires no bridge', () => {
