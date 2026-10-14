@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
       ffmpeg \
       sqlite3 \
+      xvfb \
+      xauth \
       ca-certificates \
       curl \
       procps \
@@ -41,6 +43,6 @@ RUN corepack enable \
   && pnpm install --frozen-lockfile \
   && pnpm build
 
-# Idle. Every run is driven interactively over `fly ssh console`, because deciding what to measure
-# next depends on what the last run said.
-CMD ["sleep", "infinity"]
+# The default run is the capture A/B (smooth-capture spec, increment 1): it stands the fixture up,
+# prints `CAPTURE_AB` lines to the log, then idles so a human can still `fly ssh console` in.
+CMD ["bash", "scripts/perf/capture-ab.sh"]
