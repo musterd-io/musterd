@@ -20,7 +20,12 @@ import type {
 } from '../backend.js';
 import type { AgentLoopEngine, EngineTool, EngineTurn } from '../engine.js';
 import { piEngine } from '../engines/pi.js';
-import { declaredScripts, preflightWorkingTool, workingTools } from '../engines/workingTools.js';
+import {
+  bashPathOk,
+  declaredScripts,
+  preflightWorkingTool,
+  workingTools,
+} from '../engines/workingTools.js';
 import { expectedProvenance } from '../pinnedBin.js';
 import { holdWakeLease, peekYieldFile, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { openWakeWatchSpool, type WakeWatchSpool } from '../wakeWatchSpool.js';
@@ -262,7 +267,10 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       const working = spec.order.tool_policy === 'seat-policy';
       const jail = {
         workspace: spec.workspace,
-        policy: { scripts: declaredScripts(spec.workspace) },
+        policy: {
+          scripts: declaredScripts(spec.workspace),
+          pathOk: bashPathOk(spec.workspace),
+        },
       };
       const runTools: EngineTool[] = working
         ? [

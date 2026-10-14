@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import type { EngineTool } from '../engine.js';
 import { bashAllowed, jailPath, scrubEnv, type BashPolicy, type JailFsDeps } from './jail.js';
 
@@ -45,6 +45,18 @@ function clip(text: string, max = WORKING_TOOL_OUTPUT_MAX_BYTES): string {
  * The jail's verdict for one working-tool call, or undefined when the call may run. Musterd's own
  * tools are never judged here — they are the seat's coordination surface and carry no path.
  */
+/** The policy's filesystem half: an existing relative path must realpath inside the workspace. */
+export function bashPathOk(
+  workspace: string,
+  fs: JailFsDeps = {},
+): (token: string) => boolean | undefined {
+  const exists = fs.exists ?? existsSync;
+  return (token) => {
+    if (!exists(resolve(workspace, token))) return undefined;
+    return jailPath(workspace, token, {}, fs).ok;
+  };
+}
+
 export function preflightWorkingTool(
   opts: Pick<WorkingToolOptions, 'workspace' | 'policy' | 'fs'>,
   name: string,

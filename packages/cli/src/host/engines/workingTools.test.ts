@@ -78,9 +78,7 @@ describe('workingTools', () => {
   });
 
   it('bash runs an allowed command in the workspace with the key scrubbed from its env', async () => {
-    const out = await tools['bash']!.run({ command: 'pwd && echo "$SEAT_KEY" && cat a.txt' });
-    // `$SEAT_KEY` is parameter expansion the shell performs, not `${}` — allowed by the policy, and
-    // the scrub is what keeps it empty.
+    const out = await tools['bash']!.run({ command: 'pwd && printenv && cat a.txt' });
     expect(out).toMatch(/^exit 0\n/);
     expect(out).toContain(ws);
     expect(out).not.toContain('sk-secret');

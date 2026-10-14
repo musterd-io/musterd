@@ -107,19 +107,24 @@ describe('bashAllowed', () => {
       'grep -rn "foo" src ; wc -l src/a.ts',
       'cd packages/cli && pnpm test',
       'sed -n 1,20p src/a.ts',
+      'musterd inbox',
+      'find src -name "*.ts"',
+      'printenv PATH',
+      'gh pr create --title "x" --body "see https://github.com/x/y"',
     ]) {
       expect(bashAllowed(cmd, policy)).toEqual({ ok: true });
     }
   });
 
   it('refuses every smuggler: substitution, redirection, backgrounding, newlines', () => {
-    expect(deny('echo $(cat /etc/passwd)')).toMatch(/substitution/);
+    expect(deny('echo $(cat /etc/passwd)')).toMatch(/expansion/);
     expect(deny('echo `id`')).toMatch(/backticks/);
     expect(deny('cat a > b')).toMatch(/redirection/);
     expect(deny('cat < a')).toMatch(/redirection/);
     expect(deny('sleep 10 &')).toMatch(/backgrounding/);
     expect(deny('ls\nrm -rf /')).toMatch(/newlines/);
     expect(deny('echo ${HOME}')).toMatch(/expansion/);
+    expect(deny('cat $HOME/.musterd/binding.json')).toMatch(/expansion/);
   });
 
   it('judges every segment of a pipeline, not just the first', () => {
@@ -138,6 +143,73 @@ describe('bashAllowed', () => {
     expect(deny('git reset --hard')).toMatch(/not on the allowlist/);
     expect(deny('git stash')).toMatch(/not on the allowlist/);
     expect(deny('git merge main')).toMatch(/not on the allowlist/);
+    expect(deny('git push origin HEAD:refs/heads/main')).toMatch(/main/);
+  });
+
+  it('refuses the git options that execute, reconfigure or retarget — anywhere on the line (miley)', () => {
+    expect(deny('git -c core.pager=cat log')).toMatch(/not on the allowlist/);
+    expect(deny('git log -c')).toMatch(/executes, reconfigures/);
+    expect(deny('git fetch --upload-pack=evil origin')).toMatch(/executes/);
+    expect(deny('git push --receive-pack=evil origin x')).toMatch(/executes/);
+    expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
+    expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
+    expect(deny('git diff --ext-diff')).toMatch(/executes/);
+    expect(deny('git --git-dir=/tmp/x status')).toMatch(/leaves the workspace/);
+    expect(deny('git --git-dir=x status')).toMatch(/not on the allowlist/);
+    expect(deny('git log --output=/tmp/x')).toMatch(/leaves the workspace|executes/);
+  });
+
+  it('confines every argument: absolute, ~, .., .musterd/, .git/ (wallow, fifty)', () => {
+    expect(deny('cat ~/.musterd/binding.json')).toMatch(/leaves the workspace/);
+    expect(deny('cat /etc/passwd')).toMatch(/leaves the workspace/);
+    expect(deny('cat ../../other/.env')).toMatch(/leaves the workspace/);
+    expect(deny('cat .musterd/binding.json')).toMatch(/\.musterd/);
+    expect(deny('cat .git/config')).toMatch(/\.git/);
+    expect(deny('ls --color=auto /tmp')).toMatch(/leaves the workspace/);
+    expect(deny('gh pr create --body-file /tmp/body.md')).toMatch(/leaves the workspace/);
+    expect(deny('pnpm exec vitest run --config /tmp/v.ts')).toMatch(/leaves the workspace/);
+    expect(bashAllowed('cat README.md .gitignore packages/cli/src/a.ts', policy)).toEqual({
+      ok: true,
+    });
+  });
+
+  it('asks the filesystem about existing paths and refuses one that resolves outside', () => {
+    const fsPolicy = {
+      ...policy,
+      pathOk: (t: string) => (t === 'escape' ? false : t === 'src' ? true : undefined),
+    };
+    expect(bashAllowed('cat escape/secret', fsPolicy).ok).toBe(true); // only the exact token is asked
+    expect(bashAllowed('ls escape', fsPolicy)).toEqual({
+      ok: false,
+      reason: 'escape resolves outside the workspace',
+    });
+    expect(bashAllowed('ls src', fsPolicy)).toEqual({ ok: true });
+  });
+
+  it('denies the flags that turn a reader into an executor or a writer (fifty, miley)', () => {
+    expect(deny('rg --pre evil pattern src')).toMatch(/executes or writes/);
+    expect(deny('rg --pre-glob=* pattern')).toMatch(/executes or writes/);
+    expect(deny('sort -o out.txt a.txt')).toMatch(/executes or writes/);
+    expect(deny('find . -fprint out.txt')).toMatch(/executes or writes/);
+    expect(deny('find . -fls out.txt')).toMatch(/executes or writes/);
+    expect(deny('diff --output=o a b')).toMatch(/executes or writes/);
+    expect(deny("sed 'e id' a.txt")).toMatch(/line range/);
+    expect(deny("sed 'w out.txt' a.txt")).toMatch(/line range/);
+    expect(deny("sed -n '1,5p;w out' a.txt")).toMatch(/line range/);
+    expect(deny('sed -E s/a/b/ a.txt')).toMatch(/line range/);
+    expect(deny('sed -n 1,20p')).toMatch(/line range/);
+    expect(bashAllowed('sed -n 1,20p a.txt', policy)).toEqual({ ok: true });
+    expect(bashAllowed('sed -n 3p a.txt', policy)).toEqual({ ok: true });
+  });
+
+  it('keeps musterd to the seat half of the CLI', () => {
+    expect(deny('musterd residency on --harness musterd')).toMatch(/not a seat command/);
+    expect(deny('musterd team grant list')).toMatch(/not a seat command/);
+    expect(deny('musterd service refresh')).toMatch(/not a seat command/);
+    expect(deny('musterd')).toMatch(/not a seat command/);
+    expect(
+      bashAllowed('musterd lane submit --pr 12 && musterd send --act status_update x', policy),
+    ).toEqual({ ok: true });
   });
 
   it('allows pnpm only for declared scripts and the toolchain binaries', () => {
@@ -147,7 +219,8 @@ describe('bashAllowed', () => {
     expect(deny('pnpm run deploy')).toMatch(/not a declared script/);
     expect(deny('pnpm deploy')).toMatch(/not a declared script/);
     expect(deny('pnpm exec node -e 1')).toMatch(/not on the allowlist/);
-    expect(deny('pnpm -C /tmp test')).toMatch(/changes directory/);
+    expect(deny('pnpm -C /tmp test')).toMatch(/leaves the workspace/);
+    expect(deny('pnpm -C packages/cli test')).toMatch(/executes or writes/);
     expect(deny('pnpm')).toMatch(/needs a script/);
   });
 
@@ -158,10 +231,11 @@ describe('bashAllowed', () => {
   });
 
   it('refuses in-place sed, destructive find, cd out of the tree, and unknown heads', () => {
-    expect(deny('sed -i s/a/b/ src/a.ts')).toMatch(/edit tool/);
-    expect(deny('find . -name "*.log" -delete')).toMatch(/delete/);
-    expect(deny('cd ../other')).toMatch(/inside the workspace/);
-    expect(deny('cd /tmp')).toMatch(/inside the workspace/);
+    expect(deny('sed -i s/a/b/ src/a.ts')).toMatch(/line range/);
+    expect(deny('find . -name "*.log" -delete')).toMatch(/executes or writes/);
+    expect(deny('cd ../other')).toMatch(/leaves the workspace/);
+    expect(deny('cd /tmp')).toMatch(/leaves the workspace/);
+    expect(deny('cd')).toMatch(/needs a path/);
     expect(deny('node -e 1')).toMatch(/node is not on the allowlist/);
     expect(deny('rm -rf .')).toMatch(/rm is not on the allowlist/);
     expect(deny('   ')).toMatch(/non-empty/);

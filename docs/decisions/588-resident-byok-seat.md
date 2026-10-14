@@ -138,6 +138,19 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   engine both post a `wake_turns` row per turn (same lease, same index — the row is an overwrite);
   the engine's row carries the transcript and lands last on every path measured, but the two
   writers should become one when the doorbell lane touches the row.
+- _2026-10-13 (same lane, second increment)._ Three seats (wallow, fifty, miley) filed findings on
+  #2554 against `engines/jail.ts`: the bash allowlist judged only the command head, so a reader
+  could leave the workspace by argument (`cat ~/.musterd/…`), a flag could turn a reader into an
+  executor or a writer (`rg --pre`, `sort -o`, `find -fprint*`, `sed 'e …'`/`'w …'`), git's own
+  options could execute or retarget (`-c`, `--upload-pack`, `--exec`, `--git-dir`), and `musterd`
+  passed with any subcommand. Decision 4 is now enforced per argument and per binary: every token is
+  confined (nothing absolute, `~`, `..`, `.musterd/`, `.git/`, or an existing path that resolves
+  outside through a symlink), any `$` is refused, the flags above are denied by binary, `sed` is a
+  line-range print only, git's execute/reconfigure options are denied anywhere on the line, and
+  `musterd` is the seat half of the CLI. What the allowlist cannot be is a sandbox for code the seat
+  writes and then runs under `pnpm test` — that executes as the host user by the nature of a worker
+  seat, and the durable boundary is an OS sandbox around the bash child.
+  Follows-up: lane `01M4VYT6JWHYG6E8ZZ9J55AS9X` (security goal) — sandbox-exec / bubblewrap around the child, workspace-only, gateway-only network.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
