@@ -1,0 +1,105 @@
+{
+  "skill_name": "planner",
+  "evals": [
+    {
+      "id": 1,
+      "name": "shaping-leaderboard-pitch",
+      "craft": "shaping",
+      "prompt": "Pitch from nick, from his phone: 'let's add a leaderboard to /live so people can see who's shipping the most'. You're the planner, go.",
+      "expected_output": "Picks it up with one status line, then asks two to four questions one at a time, each answerable in a sentence and each with a recommended answer (who it is for and what it is for; what done looks like; what is out; the appetite). Surfaces that ranking members by output is a decision for humans (it can mislead and be gamed; agents and humans leave different trails) and offers a team-level alternative as the recommended default. Opens no goal or lanes yet.",
+      "files": [],
+      "expectations": [
+        "Asks no more than four questions, one at a time, each with a recommended answer or default",
+        "Raises ranking people by output as a concern or a decision for a human, with a team-level alternative",
+        "Does not declare a goal, open lanes or hand off anything before a plan is accepted",
+        "Asks about or proposes what done looks like as a check"
+      ],
+      "checks": {
+        "present_all": ["(?i)recommend|default|suggest", "(?i)accept"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "shaping-clear-pitch",
+      "craft": "shaping",
+      "prompt": "Pitch: add a 'copy lane id' button to each card on /board. Done when clicking it copies the lane id and a toast says 'Copied'. Out: a keyboard shortcut. Appetite: one lane, today.",
+      "expected_output": "Asks nothing or at most one question, since the pitch already settles who, done, out and appetite; posts a one-lane plan readable in a minute with done-when, the owner kind (an agent), a review by a human or designer, and what is out; waits for an accept. Notes the lane touches packages/web so it must declare risk at open, and that the toast copy goes to the voice owner if the team has one.",
+      "files": [],
+      "expectations": [
+        "Asks zero or one question",
+        "Posts a one-lane plan with a done-when check and waits for an accept",
+        "Notes the lane must declare risk at open because it touches packages/web, or names another team rule that applies at open"
+      ],
+      "checks": {
+        "present_all": ["(?i)done when", "(?i)accept"]
+      }
+    },
+    {
+      "id": 3,
+      "name": "breakdown-review-draft",
+      "craft": "breakdown",
+      "prompt": "Can you check my plan before I post it? evals/files/draft-plan.md",
+      "expected_output": "Sends it back with specific fixes: lanes are layers (database, API, UI) rather than vertical slices; no lane has a done-when; the OAuth-app vs GitHub-App choice is a decision buried in a build lane and should be a human decide lane before the build lanes; lanes 3 and 4 touch the same file and should merge or run in order; 'review everything' by an agent breaks reviewer-is-not-builder and should go to a human; 'Out: nothing' should name what is out (e.g. other providers, account linking). Offers a rewritten plan.",
+      "files": ["evals/files/draft-plan.md"],
+      "expectations": [
+        "Says the lanes are layers and proposes vertical slices",
+        "Pulls the OAuth-app vs GitHub-App choice out into a human decide lane before the build",
+        "Flags lanes 3 and 4 touching the same file",
+        "Flags the missing done-when checks and the agent review lane"
+      ],
+      "checks": {
+        "present_all": ["(?i)slice", "(?i)decide|decision", "(?i)board\\.tsx|same file", "(?i)done when"]
+      }
+    },
+    {
+      "id": 4,
+      "name": "breakdown-too-big",
+      "craft": "breakdown",
+      "prompt": "Pitch: rewrite the whole musterd CLI in Rust. Appetite: one week. We have two agents free.",
+      "expected_output": "Does not plan the whole rewrite: the plan does not fit the appetite, so it cuts scope (e.g. a measured spike or one command) and says what was dropped; the language change is a hard-to-undo decision for humans (and needs a decision record and a dependency review here) placed as a decide lane before any build; asks what problem the rewrite solves before planning.",
+      "files": [],
+      "expectations": [
+        "Says the full rewrite does not fit the appetite and cuts scope, saying what was dropped",
+        "Makes the language choice a human decision (decide lane or ADR) before any build lane",
+        "Asks or proposes what problem the rewrite is for"
+      ],
+      "checks": {
+        "present_all": ["(?i)appetite|week", "(?i)decide|decision|ADR"]
+      }
+    },
+    {
+      "id": 5,
+      "name": "routing-not-enough-agents",
+      "craft": "routing",
+      "prompt": "The team accepted your plan: goal 'board-filters', six build lanes and one review lane. team_members shows two agents present (izzo, ryder), one wakeable (dreamy), and nick. Set up the board.",
+      "expected_output": "Declares the goal, opens all seven lanes at once in plan order with done-when and depends_on; hands build lanes to agents only, spread across izzo, ryder and the wakeable dreamy; leaves the remaining build lanes open and says how many more agents the plan needs; gives the review lane to nick (never to a builder); does not create agents; posts one status line that the board is up.",
+      "files": [],
+      "expectations": [
+        "Opens every lane now, including those without an owner yet",
+        "Gives build lanes only to agents and the review lane to nick",
+        "Says how many more agents are needed and leaves the extra lanes open instead of creating agents",
+        "Posts one status line when the board is up"
+      ],
+      "checks": {
+        "present_all": ["(?i)nick", "(?i)more agents|need .* agents|agents short", "(?i)status"]
+      }
+    },
+    {
+      "id": 6,
+      "name": "team-lane-open-fields",
+      "craft": "team",
+      "prompt": "Plan accepted. Open the lanes: (1) 'filter chips on /board' touching packages/web/src/routes/board.tsx, done when chips filter by state; (2) 'filter state in the URL', same file, done when reload keeps the filter; (3) 'docs: filters on /board' touching docs/guides/board.md, after (1). Give me the exact lane_open calls.",
+      "expected_output": "Gives lane_open calls with goal_id, title, scope, detail 'done when …', depends_on; declares risk (tags or none) on the two web lanes because scope reaches packages/web/** (ADR 530); sets stakes; notices lanes 1 and 2 touch the same file and chains 2 after 1 (or merges them); docs lane depends on 1; declares the goal first.",
+      "files": [],
+      "expectations": [
+        "Includes risk on the lanes whose scope is under packages/web",
+        "Chains or merges lanes 1 and 2 because they touch the same file",
+        "Declares the goal before the lanes and passes goal_id and depends_on",
+        "Puts a done-when in each lane's detail"
+      ],
+      "checks": {
+        "present_all": ["(?i)risk", "(?i)depends_on", "(?i)goal_id|team_goal_declare"]
+      }
+    }
+  ]
+}
