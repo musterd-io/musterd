@@ -1059,6 +1059,53 @@ export async function reviewLoopBounceCount(
   return row?.n ?? 0;
 }
 
+/**
+ * ADR 595: after this many automatic re-routes of one submission's acceptance, the sweep stops
+ * moving it between agents and hands it to a human. Measured 2026-10-07..14 (peer hops only, after
+ * #2194): 34 submissions re-routed once, 16 twice, 7 three times, 3 more (4, 5, 6) — so 3 caps the
+ * tail and leaves the ordinary one- and two-hop recoveries alone.
+ */
+export const REROUTE_HOP_CAP = 3;
+
+/** The automatic routes ADR 595 counts: a holder that left, said goodbye or not. */
+const AUTOMATIC_REROUTES = new Set(['reaped', 'departed']);
+
+/**
+ * ADR 595: the automatic re-routes of this lane's acceptance since its newest `lane.ready_for_review`
+ * — one submission's hops, so a decline-and-resubmit starts the count again. `holders` is each seat
+ * the ask left, oldest first. A hand re-route (`named`), a tiebreak and a cap are not hops: each is a
+ * decision about who should judge, not a seat going missing.
+ */
+export async function automaticRerouteHops(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<{ hops: number; holders: string[] }> {
+  const ready = await db.get<{ ts: number }>(
+    `SELECT ts FROM audit WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
+      ORDER BY ts DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  const rows = await db.all<{ detail: string | null }>(
+    `SELECT detail FROM audit
+        WHERE team_id = ? AND action = 'lane.review_rerouted' AND target = ? AND ts >= ?
+      ORDER BY ts ASC, id ASC`,
+    [teamId, laneId, ready?.ts ?? 0],
+  );
+  const holders: string[] = [];
+  for (const r of rows) {
+    if (!r.detail) continue;
+    try {
+      const d = JSON.parse(r.detail) as { route?: unknown; from_reviewer?: unknown };
+      if (typeof d.route === 'string' && AUTOMATIC_REROUTES.has(d.route))
+        holders.push(typeof d.from_reviewer === 'string' ? d.from_reviewer : '?');
+    } catch {
+      /* an unparseable row is no hop */
+    }
+  }
+  return { hops: holders.length, holders };
+}
+
 /** One acceptance ask a seat still owes a verdict on — {@link heldAcceptances}. */
 export interface HeldAcceptance {
   lane: string;

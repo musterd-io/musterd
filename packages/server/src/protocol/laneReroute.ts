@@ -14,8 +14,11 @@ import { getMemberByName } from '../store/members.js';
 import {
   type HeldAcceptance,
   abandonedAcceptances,
+  REROUTE_HOP_CAP,
+  automaticRerouteHops,
   heldAcceptances,
   openAcceptanceAsk,
+  pickHumanReviewer,
   selectReviewCounterpart,
 } from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
@@ -198,6 +201,18 @@ export async function deliverLaneAskSuperseded(
 export type DepartureRoute = 'departed' | 'reaped';
 
 /**
+ * ADR 595: what the human reads on a capped acceptance — why it reached them rather than a peer.
+ * Names every seat the ask left, so the human can see it was absence, not refusal.
+ */
+export function rerouteCapNotice(holders: string[]): string {
+  return (
+    ` NOTE — this acceptance has been held by ${holders.length} seats in turn (${holders.join(' → ')}), ` +
+    'each gone before judging it, so it comes to you instead of another agent. ' +
+    'Your accept or decline closes the question; it will not be moved again while you are away.'
+  );
+}
+
+/**
  * Re-route one seat's held acceptances to freshly picked reviewers.
  *
  * Reuses the hand re-route's machinery exactly (`lane.review_rerouted` + a superseded notice + a
@@ -208,6 +223,11 @@ export type DepartureRoute = 'departed' | 'reaped';
  * No wake is leased, matching the named path: the ask waits in an inbox, as it does at submit.
  * If the picker finds nobody, nothing is minted and the lane keeps the ask it has — a re-route with
  * no destination would strand the acceptance worse than leaving it for `staleAcceptanceWarning`.
+ *
+ * ADR 595: once a submission has been re-routed {@link REROUTE_HOP_CAP} times this way, the next
+ * move goes to a live human (`route: 'capped'`, graded `human`), never a further agent. With no
+ * human live it moves nowhere, and the sweep tries again next tick — the first human to come live
+ * gets it. The capped ask is graded `human`, so {@link isHumanStageAsk} keeps it with them.
  */
 export async function rerouteAcceptances(
   ctx: Ctx,
@@ -227,12 +247,24 @@ export async function rerouteAcceptances(
     // not an abandonment; the ask waits for them.
     if (await isHumanStageAsk(ctx.db, team.id, one.ask)) continue;
     const worker = lane.owner_seat ?? gone.name;
-    const pick = (
-      await selectReviewCounterpart(ctx.db, team.id, lane, worker, ctx.config.presenceTimeoutMs, {
-        departing: gone.name,
-      })
-    ).pick;
+    const { hops, holders } = await automaticRerouteHops(ctx.db, team.id, lane.id);
+    const capped = hops >= REROUTE_HOP_CAP;
+    const pick = capped
+      ? await pickHumanReviewer(ctx.db, team.id, worker, ctx.config.presenceTimeoutMs)
+      : (
+          await selectReviewCounterpart(
+            ctx.db,
+            team.id,
+            lane,
+            worker,
+            ctx.config.presenceTimeoutMs,
+            {
+              departing: gone.name,
+            },
+          )
+        ).pick;
     if (!pick || pick.reviewer === gone.name) continue;
+    const moveRoute = capped ? 'capped' : route;
     const humanRequired = lane.risk.length > 0;
     const acceptanceTier: AskTier = 'standard';
     const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
@@ -248,13 +280,14 @@ export async function rerouteAcceptances(
         stakes_provenance: lane.stakes_provenance,
         ...(lane.merged ? { merged: lane.merged } : {}),
         reviewer: pick.reviewer,
-        route,
+        route: moveRoute,
         review_grade: pick.grade,
         from_reviewer: gone.name,
         superseded_ask: one.ask,
         human_required: humanRequired,
         ask_tier: acceptanceTier,
         ask_timeout_ms: acceptanceWaitMs,
+        ...(capped ? { hops, holders: [...holders, gone.name] } : {}),
       },
     });
     await deliverLaneAskSuperseded(ctx, team, gone, gone.name, one.ask, lane, pick.reviewer);
@@ -268,7 +301,7 @@ export async function rerouteAcceptances(
         overlapNotice: priorOwnerNotice(pick.reviewer, priorOwners),
         noGoalNotice: noGoalNotice(lane.goal_id),
         followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
-      }),
+      }) + (capped ? rerouteCapNotice([...holders, gone.name]) : ''),
       {
         species: 'approve',
         tier: acceptanceTier,
@@ -278,7 +311,7 @@ export async function rerouteAcceptances(
           title: lane.title,
           branch: lane.branch,
           ...(lane.merged ? { merged: lane.merged } : {}),
-          route,
+          route: moveRoute,
           grade: pick.grade,
         },
       },
@@ -288,7 +321,10 @@ export async function rerouteAcceptances(
   return out;
 }
 
-/** The ask is ADR 172's stage-two human acceptance (`lane_review.grade: 'human'`), not a peer one. */
+/**
+ * The ask is graded `human` — ADR 172's stage-two acceptance, or an ADR 595 capped one — not a peer
+ * ask. Either way the human is waited on, never replaced by an agent.
+ */
 async function isHumanStageAsk(db: Driver, teamId: string, askId: string): Promise<boolean> {
   const row = await db.get<{ grade: string | null }>(
     `SELECT json_extract(meta, '$.lane_review.grade') AS grade FROM messages WHERE team_id = ? AND id = ?`,
