@@ -182,6 +182,12 @@ the act id and a by-id read in both spellings (`team_inbox_check {ids:["<id>"]}`
 `musterd inbox --id <id>`), so the follow-up is one call at any inbox size. ADR 088 Amendment 4.
 Not a new clause: what a notice should POINT AT sits inside (6), and this document arms nothing.
 
+_(2026-10-14, lane 01M4W5VFABSBRH6Q7TA0Y2B5N1.)_ A by-id read answers a steer and does not answer
+an acceptance ask, so a seat that obeys the read-only tail re-reads the ask and the next end of
+turn blocks again. When the headline class is acceptance, the tail keeps both reads and also names
+accept or decline, reply-to that id, in both the MCP and CLI spellings. It names both verbs. A
+steer headline stays a read. ADR 088 Amendment 5.
+
 ## What the room would change — the clauses reworded
 
 Stated as obligations, not mechanisms (ryder's framing, which the codex and native rows require: a

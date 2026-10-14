@@ -1045,9 +1045,14 @@ function composeInterruptLine(
       `${read}; answer with 'musterd huddle say ${latest.thread}'.`
     );
   }
+  // ADR 088 Amendment 5 (lane 01M4W5VFAB): a by-id read does not answer a
+  // lane_review ask, so an acceptance headline names both verdicts beside the
+  // read. Every other class stays a read. The tail follows the headline only —
+  // a steer ranked ahead of an acceptance is not given a verdict verb.
+  const verdict = noun === 'acceptance' ? `; ${verdictTail(latest.id)}` : '';
   return count > 1
-    ? `${prefix} ${count} acts waiting (${noun} from ${head}, +${count - 1} more${mix}) — ${read}.`
-    : `${prefix} ${noun} from ${head} — ${read}.`;
+    ? `${prefix} ${count} acts waiting (${noun} from ${head}, +${count - 1} more${mix}) — ${read}${verdict}.`
+    : `${prefix} ${noun} from ${head} — ${read}${verdict}.`;
 }
 
 /** A field the idle seam may put on a line that becomes a user turn (ADR 558): a short identifier
@@ -1079,6 +1084,21 @@ function byIdRead(id: string): string {
   return (
     `read exactly it: team_inbox_check {ids:["${id}"]} or 'musterd inbox --id ${id}' ` +
     `(orienting? your plain inbox read or wake packet already carries it — do one, not both)`
+  );
+}
+
+/**
+ * The verdict half of an acceptance headline (ADR 088 Amendment 5, lane
+ * 01M4W5VFAB). The by-id read stays — the body is still not on the line — and
+ * the tail adds accept or decline, reply-to that same id, in both spellings.
+ * Naming accept alone is how a seat stamps a queue without looking. An id is a
+ * structured field, so this stays inside ADR 088 §4: never `env.body`.
+ */
+function verdictTail(id: string): string {
+  return (
+    `then accept or decline it, reply-to that id: ` +
+    `team_send {act:'accept', reply_to:'${id}'} or team_send {act:'decline', reply_to:'${id}'}, ` +
+    `or 'musterd send --act accept --reply-to ${id}' or 'musterd send --act decline --reply-to ${id}'`
   );
 }
 
