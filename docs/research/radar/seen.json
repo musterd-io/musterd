@@ -28,10 +28,7 @@
     "2610.07967",
     "2610.13947"
   ],
-  "exn": [
-    "2609.37226",
-    "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
-  ],
+  "exn": [],
   "pending": [
     {
       "sourceIds": [
@@ -160,6 +157,24 @@
       "firstAttempt": "2026-10-12",
       "lastAttempt": "2026-10-12",
       "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "exn",
+          "id": "2609.37226"
+        }
+      ],
+      "canonicalId": "2609.37226",
+      "title": "Follow the Entities: A Corpus Map for Agentic Search",
+      "url": "https://arxiv.org/html/2609.37226v1",
+      "published": "2026-10-06",
+      "episodeIds": [
+        "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
+      ],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "article_retrieval"
     }
   ]
 }
