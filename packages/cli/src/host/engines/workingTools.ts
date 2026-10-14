@@ -180,17 +180,33 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
       const timeoutMs = Math.min(requested ?? ceiling, ceiling);
       const env = scrubEnv(opts.env, opts.secretEnvNames ?? []);
       return await new Promise<string>((resolveRun) => {
+        // Its own process group, so the kill below reaches what the shell forked (a `tail -f`
+        // under dash keeps the pipe open after the shell dies, and `close` never fires).
         const child = spawn('/bin/sh', ['-c', command], {
           cwd: opts.workspace,
           env,
           stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
         });
         let out = '';
         let err = '';
         let killed = false;
+        let settled = false;
+        const finish = (status: string): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          const body = [clip(out), err ? `stderr:\n${clip(err)}` : ''].filter(Boolean).join('\n');
+          resolveRun(`${status}\n${body}`);
+        };
         const timer = setTimeout(() => {
           killed = true;
-          child.kill('SIGKILL');
+          try {
+            if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
+            else child.kill('SIGKILL');
+          } catch {
+            child.kill('SIGKILL');
+          }
         }, timeoutMs);
         child.stdout.on('data', (d: Buffer) => {
           if (out.length < WORKING_TOOL_OUTPUT_MAX_BYTES) out += d.toString('utf8');
@@ -200,15 +216,21 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
         });
         child.on('error', (e) => {
           clearTimeout(timer);
-          resolveRun(`spawn failed: ${e.message}`);
+          if (!settled) {
+            settled = true;
+            resolveRun(`spawn failed: ${e.message}`);
+          }
+        });
+        // A killed group settles on `exit`: an orphan holding the pipe must not hold the wake.
+        child.on('exit', () => {
+          if (killed) finish(`killed after ${String(timeoutMs)}ms`);
         });
         child.on('close', (code, signal) => {
-          clearTimeout(timer);
-          const status = killed
-            ? `killed after ${String(timeoutMs)}ms`
-            : `exit ${String(code ?? signal ?? '?')}`;
-          const body = [clip(out), err ? `stderr:\n${clip(err)}` : ''].filter(Boolean).join('\n');
-          resolveRun(`${status}\n${body}`);
+          finish(
+            killed
+              ? `killed after ${String(timeoutMs)}ms`
+              : `exit ${String(code ?? signal ?? '?')}`,
+          );
         });
       });
     },
