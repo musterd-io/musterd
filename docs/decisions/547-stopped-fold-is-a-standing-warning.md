@@ -77,6 +77,13 @@ visible and their frequency is known.
   (`provisionOnce`) needs none: it writes no seat file, and ADR 463 §4.2 keeps sponsored agents off
   file-backed rosters.
 
+- **2026-10-13 — the other end, [ADR 591](591-a-held-stream-is-visible-at-both-ends.md).** The same stop
+  happened on the HUB and this warning reached nobody who could act: the hub's roster said `pull_stopped`
+  on a machine nobody was looking at, while the joiner whose seat caused it (`resident`, minted on Air 2
+  with its seat file never committed) saw its pushes accepted and its lanes refused as "not yet
+  replicated — retry after the next sync" for 100 minutes. ADR 591 puts the hub's stop on every push
+  and pull answer, on the joiner's roster as `sync.hub_stopped`, and in the lane refusal itself.
+
 ## Observability & Evaluation
 
 - **Traces:** n/a — this changes what a roster read says, not an agent's tool path.

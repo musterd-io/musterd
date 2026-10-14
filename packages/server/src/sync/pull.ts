@@ -15,6 +15,7 @@ import { getMemberById, haltedSentence } from '../store/members.js';
 import { replaceSeatBindings } from '../store/nodes.js';
 import { listActiveTeams } from '../store/teams.js';
 import { foldBatch, foldNodeLiveness, readPullCursor, type FoldStop } from './fold.js';
+import { noteHubStop } from './hubStop.js';
 import { hasEnrolledJoiners, laneGenesis, readStaged } from './log.js';
 
 /**
@@ -114,6 +115,15 @@ export async function readPullStop(
 ): Promise<SyncPullStop | null> {
   const stop = pullStopsByConfig.get(config)?.get(teamId);
   return stop && now - stop.since >= SYNC_STOP_WARN_AFTER_MS ? stop : null;
+}
+
+/**
+ * ADR 591: the same stop with no grace — what the hub puts on every push and pull answer so a
+ * joiner learns at once that its events are accepted but held. The joiner applies the grace from
+ * the stop's own `since` before it warns (`sync/hubStop.ts`).
+ */
+export function peekPullStop(config: Ctx['config'], teamId: string): SyncPullStop | null {
+  return pullStopsByConfig.get(config)?.get(teamId) ?? null;
 }
 
 async function localNodeId(ctx: Ctx, teamId: string): Promise<string | null> {
@@ -422,7 +432,7 @@ export async function pullPage(
   // same table the events came from — either way it describes the log being folded, not this daemon.
   const page: Pick<
     SyncPullResponse,
-    'events' | 'nodes' | 'seat_nodes' | 'lane_genesis' | 'pre_genesis_lanes'
+    'events' | 'nodes' | 'seat_nodes' | 'lane_genesis' | 'pre_genesis_lanes' | 'fold_stopped'
   > = enrollment
     ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
     : {
@@ -431,7 +441,11 @@ export async function pullPage(
         seat_nodes: [],
         lane_genesis: await laneGenesis(ctx.db, team.id),
         pre_genesis_lanes: 0,
+        fold_stopped: null,
       };
+  // ADR 591: what the hub says about its own fold, on every page — a quiet joiner still pulls, so
+  // a hub held on a seat this machine minted is loud here within one tick, not only on the hub.
+  if (enrollment) noteHubStop(ctx, team.id, page.fold_stopped);
   // ADR 544: a joiner adopts the lanes the log can never carry. Best-effort — a failed snapshot
   // must not stop the page from folding; the next page re-compares and asks again.
   if (enrollment) {

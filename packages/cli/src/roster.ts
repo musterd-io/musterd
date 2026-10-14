@@ -114,6 +114,31 @@ export function seatFileUnpublished(home: string, name: string): SeatFilePublica
  * (`team add`, `musterd agent`): what is wrong, then the commands that fix it. One wording, so the
  * paths cannot drift apart.
  */
+/**
+ * ADR 591: the lines a seat-enrolling command prints when the seat will not reach the hub — no seat
+ * file under the roster home at all (the seat was minted straight into the daemon, as a failed
+ * `musterd agent` or a hand-written binding leaves it), or a file that never left this machine.
+ * Null when the file is committed and pushed, or when this machine keeps no roster home.
+ */
+export function seatReachLines(
+  name: string,
+  home: string | undefined,
+  kind: 'agent' | 'human' = 'agent',
+  role?: string,
+): [warning: string, how: string] | null {
+  if (!home) return null;
+  if (!seatFileExists(home, name)) {
+    const roleFlag = role ? ` --role ${role}` : '';
+    return [
+      `${name} has no seat file under ${home} — the hub and every other machine stop at the first event naming it`,
+      `write it, then publish it: musterd team add ${name} --kind ${kind}${roleFlag} (from a folder bound to you), ` +
+        `then git -C ${home} add .musterd/seats/${name}.toml && git -C ${home} commit -m "add ${name}" && git -C ${home} push`,
+    ];
+  }
+  const state = seatFileUnpublished(home, name);
+  return state ? unpublishedSeatLines(name, home, state) : null;
+}
+
 export function unpublishedSeatLines(
   name: string,
   home: string,

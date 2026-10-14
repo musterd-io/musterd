@@ -7,7 +7,7 @@ import { provisionAgentSeat } from '../onboard/agentSeat.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
-import { seatFilePath, unpublishedSeatLines } from '../roster.js';
+import { seatFilePath, seatReachLines, unpublishedSeatLines } from '../roster.js';
 import { resolve, resolveRead } from './helpers.js';
 
 /**
@@ -85,26 +85,40 @@ export async function agentCommand(
   // Member declaration, credential, grant, binding, permissions, spec, desired set and wiring are one
   // shared sequence (`provisionAgentSeat`), so this command and the launcher cannot drift.
   const rosterHome = loadConfig().rosterHome[team];
-  const r = await provisionAgentSeat({
-    name,
-    team,
-    server: config.server,
-    http,
-    harnesses,
-    toolkit,
-    // A re-run (the documented grant repair) that names no --harness / --profile keeps what the
-    // Workspace already records, so it never unwires a harness `init` or `harness configure` added.
-    keepDesired: flagStr(parsed.flags, 'harness') === undefined,
-    keepToolkit: flagStr(parsed.flags, 'profile') === undefined,
-    sourceDir: process.cwd(),
-    rosterHome,
-    role,
-    hue,
-    model,
-    driver,
-    here: parsed.flags['here'] === true,
-    path: flagStr(parsed.flags, 'path'),
-  });
+  let r: Awaited<ReturnType<typeof provisionAgentSeat>>;
+  try {
+    r = await provisionAgentSeat({
+      name,
+      team,
+      server: config.server,
+      http,
+      harnesses,
+      toolkit,
+      // A re-run (the documented grant repair) that names no --harness / --profile keeps what the
+      // Workspace already records, so it never unwires a harness `init` or `harness configure` added.
+      keepDesired: flagStr(parsed.flags, 'harness') === undefined,
+      keepToolkit: flagStr(parsed.flags, 'profile') === undefined,
+      sourceDir: process.cwd(),
+      rosterHome,
+      role,
+      hue,
+      model,
+      driver,
+      here: parsed.flags['here'] === true,
+      path: flagStr(parsed.flags, 'path'),
+    });
+  } catch (err) {
+    // ADR 591: the seat file is written first (ADR 058 §5), so a failure past it — the credential
+    // mint refused, the worktree not cut — leaves a file nobody was told to publish. On 2026-10-13
+    // that file sat uncommitted for 100 minutes and held the hub's fold on every later event.
+    const reach = seatReachLines(name, rosterHome, 'agent', role);
+    if (reach) {
+      process.stderr.write(
+        `${theme.warn(sym.warn)} ${theme.warn(reach[0])}\n${theme.meta(`  ${reach[1]}`)}\n`,
+      );
+    }
+    throw err;
+  }
   const ws = r.workspace;
 
   if (parsed.flags['json']) {

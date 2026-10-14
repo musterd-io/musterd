@@ -22,6 +22,7 @@ import {
   type SyncStyleRequest,
   type SyncTrustRequest,
   type UpdateLane,
+  describeSyncPullStop,
 } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Ctx } from '../context.js';
@@ -43,6 +44,7 @@ import { localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode, seatBinding, seatBindings, trustNodeForSeat } from '../store/nodes.js';
 import { hasLivePresence } from '../store/presence.js';
 import { resolveCapabilities } from '../store/rows.js';
+import { peekPullStop } from './pull.js';
 
 /**
  * Federation increment 3c: the hub-authoritative claim (ADR 325 §Authority split, residence 1).
@@ -497,9 +499,14 @@ export async function arbitrateLanePatch(
   await assertSeatResident(ctx.db, team.id, seat, node, now);
   const before = await getLane(ctx.db, team.id, req.lane, team.slug);
   if (!before) {
+    // ADR 591: when the hub's own fold is held, say so and on what — "retry after the next sync"
+    // was the whole message for 100 minutes on 2026-10-13 while the next sync could never fold it.
+    const held = peekPullStop(ctx.config, team.id);
     throw new ClaimRefusedError(
       `lane "${req.lane}" is not yet replicated to the hub — its birth has not folded here; ` +
-        'retry after the next sync',
+        (held
+          ? `the hub's fold is held, so no retry will: ${describeSyncPullStop(held, now, 'hub')}`
+          : 'retry after the next sync'),
       null,
       'unknown',
     );

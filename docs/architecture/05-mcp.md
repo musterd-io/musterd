@@ -513,7 +513,7 @@ src/
     teamMemory.ts // team_insight_save + team_insight_search — findings for the whole team, pull-only retrieval (ADR 327)
     goals.ts      // team_goals / team_goal_declare — the declared-outcome layer above lanes (ADR 048/084)
     insights.ts   // team_report — the insight report at ic/team/exec altitudes (ADR 050/084/125)
-    format.ts     // compact text rendering of a message for an agent to read; buildSkewWarning (ADR 135); tracedLine (ADR 445 §4); the ToolWarning union — build_skew, sync_wedge and provisioningDriftOf's provisioning_drift (ADR 408 inc 4), which READS `.musterd/drift.json` from client.workspaceDir (the seat's folder, not process.cwd() — a shared workspace-family entry runs from the family's primary checkout) and never imports @musterd/cli
+    format.ts     // compact text rendering of a message for an agent to read; buildSkewWarning (ADR 135); tracedLine (ADR 445 §4); the ToolWarning union — build_skew, sync_wedge and provisioningDriftOf's provisioning_drift (ADR 408 inc 4), which READS `.musterd/drift.json` from client.workspaceDir (the seat's folder, not process.cwd() — a shared workspace-family entry runs from the family's primary checkout) and never imports @musterd/cli; syncWedgeWarning also reads `sync.hub_stopped` (ADR 591)
   bind.ts         // reachability check only (GET /health) — claims no presence
 ```
 

@@ -8,6 +8,7 @@ import {
   seatFileExists,
   seatFilePath,
   seatFileUnpublished,
+  seatReachLines,
   unpublishedSeatLines,
   writeSeatFile,
 } from './roster.js';
@@ -85,6 +86,22 @@ describe('seatFileUnpublished — a seat other machines cannot resolve yet (ADR 
     git(home, 'remote', 'add', 'origin', remote);
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('seatReachLines (ADR 591): no file → the team-add fix; unpublished → the git fix; published → null; no home → null', () => {
+    expect(seatReachLines('resident', undefined)).toBeNull();
+    const none = seatReachLines('resident', home, 'agent', 'worker');
+    expect(none?.[0]).toContain('no seat file');
+    expect(none?.[1]).toContain('musterd team add resident --kind agent --role worker');
+    expect(none?.[1]).toContain('.musterd/seats/resident.toml');
+    writeSeatFile(home, 'resident', { kind: 'agent' });
+    const uncommitted = seatReachLines('resident', home);
+    expect(uncommitted?.[0]).toContain('cannot resolve resident');
+    expect(uncommitted?.[1]).toContain('git -C');
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'add resident');
+    git(home, 'push', '-q', '-u', 'origin', 'main');
+    expect(seatReachLines('resident', home)).toBeNull();
+  });
 
   it('is null outside a git repo — nothing to publish through', () => {
     const plain = mkdtempSync(join(tmpdir(), 'musterd-nogit-'));

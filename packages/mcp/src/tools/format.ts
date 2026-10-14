@@ -642,9 +642,12 @@ export function syncWedgeWarning(
 ): string {
   const w = roster?.sync?.wedged;
   const stopped = roster?.sync?.pull_stopped;
+  // ADR 591: the hub's stop, as this machine heard it — the one holding every lane claim.
+  const hub = roster?.sync?.hub_stopped;
   return (
     (w ? `\n${describeSyncWedge(w, now)}` : '') +
-    (stopped ? `\n${describeSyncPullStop(stopped, now)}` : '')
+    (stopped ? `\n${describeSyncPullStop(stopped, now)}` : '') +
+    (hub ? `\n${describeSyncPullStop(hub, now, 'hub')}` : '')
   );
 }
 

@@ -14,7 +14,7 @@ import {
 import { flagStr, fmtBytes, fmtDurationMs, parseDurationMs, type Parsed } from '../args.js';
 import { resolveClaudeBin } from '../claudeBin.js';
 import { codexCapability, resolveCodexBin } from '../codexBin.js';
-import { findBinding, saveBinding } from '../config.js';
+import { findBinding, loadConfig, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import {
   type HostRegistryEntry,
@@ -26,6 +26,7 @@ import {
 import { opencodeCapability } from '../opencodeBin.js';
 import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
+import { seatReachLines } from '../roster.js';
 import { findWorkspaceDir, resolve, resolveRead } from './helpers.js';
 
 /**
@@ -491,6 +492,14 @@ async function onCommand(parsed: Parsed): Promise<number> {
         ) + '\n',
       );
     }
+  }
+  // ADR 591: an enrolled seat the hub cannot resolve holds the whole team's lane traffic from this
+  // machine — say so here, on the command that makes the seat wakeable, with the one fix.
+  const reach = seatReachLines(seat, loadConfig().rosterHome[team], 'agent');
+  if (reach) {
+    process.stdout.write(
+      theme.warn(`  ! ${reach[0]}`) + '\n' + theme.meta(`    ${reach[1]}`) + '\n',
+    );
   }
   if (res.residency.policy && Object.keys(res.residency.policy).length > 0) {
     process.stdout.write(

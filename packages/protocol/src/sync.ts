@@ -3,6 +3,7 @@ import { AuditEntrySchema } from './audit.js';
 import { PolicyOverrideSchema } from './credentials.js';
 import { EnvelopeSchema } from './envelope.js';
 import { LaneSchema, UpdateLaneSchema } from './lanes.js';
+import { SyncPullStopSchema } from './nodes.js';
 import { StylePrefsSchema } from './style.js';
 
 /**
@@ -239,6 +240,9 @@ export type SyncPushRequest = z.infer<typeof SyncPushRequestSchema>;
 export const SyncPushResponseSchema = z.object({
   accepted: z.number().int().nonnegative(),
   hub_seq_high: z.number().int().nonnegative(),
+  /** ADR 591: the hub's standing fold stop, so the pusher learns that what it sent is accepted
+   *  but not applied — and what holds it. Absent from an older hub; null when the hub is folding. */
+  fold_stopped: SyncPullStopSchema.nullable().optional(),
 });
 export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
 
@@ -446,6 +450,8 @@ export const SyncPullResponseSchema = z.object({
   events: z.array(SyncPullEventSchema).max(SYNC_PULL_MAX_BATCH),
   /** The hub's head, so a puller can compute lag (`hub_head − cursor`) without a second call. */
   hub_seq_high: z.number().int().nonnegative(),
+  /** ADR 591: the hub's standing fold stop, on every page (a quiet joiner still pulls). */
+  fold_stopped: SyncPullStopSchema.nullable().optional(),
   /**
    * Every node of the team with the hub's liveness stamp (presence replication §3). A remote
    * presence row is live while its node is; this is how a joiner learns that. Defaults to empty
