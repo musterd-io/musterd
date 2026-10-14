@@ -362,7 +362,8 @@ export type ActorAttestationKind = (typeof ACTOR_ATTESTATION_KINDS)[number];
 export const ActorAttestationSchema = z.object({
   kind: z.enum(ACTOR_ATTESTATION_KINDS),
   tool: z.string().min(1),
-  /** Subagent identity — present on `subagent-write`, absent on `subagent-spawn` (the spawn call has none). */
+  /** Subagent identity — present on `subagent-write`; on `subagent-spawn`, the spawned agent's id when the
+   *  PostToolUse hook has it (the PreToolUse spawn call has none), so a spawn joins its writes. */
   actorId: z.string().min(1).optional(),
   actorType: z.string().min(1).optional(),
   /** Path or normalized command the write targeted. */

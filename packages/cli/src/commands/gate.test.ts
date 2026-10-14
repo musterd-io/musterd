@@ -15,6 +15,7 @@ import {
   parseToolCall,
   repoRelativePath,
   sessionReachReason,
+  spawnAttestation,
   workingTreeWarning,
 } from './gate.js';
 import { recordSubagent } from './subagentLedger.js';
@@ -589,5 +590,56 @@ describe('haltDenyReason (ADR 501 — the gate denies a halted seat)', () => {
     ).toBeNull();
     expect(haltDenyReason(new CliError('fetch failed', 1), 'Ada')).toBeNull();
     expect(haltDenyReason(new Error('halted by nick: x'), 'Ada')).toBeNull();
+  });
+});
+
+/**
+ * Lane 01M4VTP73W, 2026-10-13: zero `actor.subagent_spawn` rows had ever been written. `attest` records
+ * a spawn from `gate check`, but Claude Code's PreToolUse gate matcher never includes `Agent`; the
+ * hook that does fire on Agent is PostToolUse `record-subagent`. The spawn is built from that payload.
+ */
+describe('spawnAttestation — the spawn row from the PostToolUse Agent payload', () => {
+  const measured = (input: Record<string, unknown>) =>
+    JSON.stringify({
+      session_id: 's1',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Agent',
+      tool_input: { description: 'map code', prompt: 'never sent', ...input },
+      tool_response:
+        "Async agent launched successfully.\nagentId: a1d089450115fa8d2 (internal ID — Use SendMessage with to: 'a1d089450115fa8d2')",
+    });
+
+  it('carries the requested type, the model override and the spawned id', () => {
+    expect(spawnAttestation(measured({ subagent_type: 'Explore', model: 'haiku' }))).toEqual({
+      kind: 'subagent-spawn',
+      tool: 'Agent',
+      spawnType: 'Explore',
+      spawnModel: 'haiku',
+      actorId: 'a1d089450115fa8d2',
+    });
+  });
+
+  it('omits the model when none was asked for — absent means inherited, never guessed', () => {
+    const att = spawnAttestation(measured({ subagent_type: 'Plan' }));
+    expect(att?.spawnType).toBe('Plan');
+    expect(att).not.toHaveProperty('spawnModel');
+  });
+
+  it('records a spawn with no declared type (the default agent) rather than dropping it', () => {
+    expect(spawnAttestation(measured({}))).toEqual({
+      kind: 'subagent-spawn',
+      tool: 'Agent',
+      actorId: 'a1d089450115fa8d2',
+    });
+  });
+
+  it('never carries the prompt, and is null for anything but an Agent call', () => {
+    expect(JSON.stringify(spawnAttestation(measured({ subagent_type: 'Explore' })))).not.toContain(
+      'never sent',
+    );
+    expect(
+      spawnAttestation(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } })),
+    ).toBeNull();
+    expect(spawnAttestation('not json')).toBeNull();
   });
 });

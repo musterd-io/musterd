@@ -293,6 +293,13 @@ count**, never a headline number alone.
   eight field-shaped reads: false positives 8/23 → 0/23, recall unchanged at 27/40. The ledger before
   this date is read noise, not a count of writes (finding 008's correction; claims ledger entry
   2026-10-13).
+- _(2026-10-13, lane 01M4VTP73W.)_ **No spawn row had ever been written.** `attest` records a spawn from
+  `gate check`, but Claude Code's PreToolUse gate matcher names only `Edit|Write|MultiEdit|NotebookEdit|Bash`,
+  so a Claude Code `Agent` call never reached it: 0 `actor.subagent_spawn` rows against 1,232 write rows.
+  The PostToolUse `record-subagent` hook, the one that does fire on `Agent`, now sends the spawn row
+  (`spawnAttestation`): the requested type, the `model:` override when given, and the spawned agent's id
+  from the tool response, so a spawn joins its writes. Cursor and Grok route `Task`/`Agent` through
+  `gate check`, where `attest` still records it, so no harness counts a spawn twice.
 
 ## Related
 
