@@ -1,0 +1,175 @@
+{
+  "skill_name": "designer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "visual-tells-review",
+      "craft": "visual",
+      "prompt": "Review this component before we ship it on /live: evals/files/status-panel.tsx",
+      "expected_output": "Names the tells by kind: decorative purple-blue gradient, eyebrow label with middle dots, hype copy and emoji, identical glass cards with backdrop blur over a gradient, emoji as icons, a perpetual pulse on a status dot, monospace with a // prefix as costume, low-contrast white/50 text. Gives a direction for each using the team's tokens and brand (one accent, Recursive, plain copy), flags contrast, and hands the copy to whoever owns voice.",
+      "files": ["evals/files/status-panel.tsx"],
+      "expectations": [
+        "Flags the gradient, the glass/backdrop blur and the pulsing dot as tells, each with a direction",
+        "Flags the eyebrow label and the emoji/// decorations",
+        "Flags the low-contrast secondary text (white at 50% on the gradient)",
+        "Sends the copy ('supercharged') to the voice owner or brand voice rules rather than rewriting brand copy alone",
+        "Uses the team's own tokens or brand (mustard accent, Recursive, zinc) in the directions"
+      ],
+      "checks": {
+        "present_all": ["(?i)gradient", "(?i)blur|glass", "(?i)pulse", "(?i)contrast"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "visual-cli-color",
+      "craft": "visual",
+      "prompt": "Make `musterd status` output pop: give every member their own rainbow color and make 'working' blink.",
+      "expected_output": "Declines the rainbow and the blink: color carries meaning per the brand's ANSI mapping, every colored state also carries a word or glyph, no blinking, color off when piped or NO_COLOR is set; CLI output must match the Figma terminal frames, so a change needs the frame updated (with an ADR if it changes the system).",
+      "files": [],
+      "expectations": [
+        "Does not add a per-member rainbow or blinking text",
+        "Says color must follow the brand's ANSI mapping and carry meaning, with a word or glyph alongside",
+        "Mentions NO_COLOR or piped/non-terminal output",
+        "Notes CLI output is held to the Figma terminal frames"
+      ],
+      "checks": {
+        "present_all": ["(?i)NO_COLOR|not a (tty|terminal)|piped", "(?i)figma|frame"]
+      }
+    },
+    {
+      "id": 3,
+      "name": "a11y-live-scene",
+      "craft": "accessibility",
+      "prompt": "Make the /live office scene accessible to screen-reader users. What do we need?",
+      "expected_output": "The canvas gets role=img and a name; the information it shows (members, presence, what is happening) is in the DOM as text; announcements go through at most one polite and one assertive live region, present at load, short, not every change; a visible pause control for the self-moving scene (WCAG 2.2.2), reduced motion alone not enough; a manual screen-reader pass.",
+      "files": [],
+      "expectations": [
+        "Gives the canvas a role and accessible name and puts its information in the DOM as text",
+        "Limits live-region announcements (few regions, not every change)",
+        "Calls for a pause control under WCAG 2.2.2 and says reduced motion alone does not satisfy it",
+        "Includes a manual screen-reader check"
+      ],
+      "checks": {
+        "present_all": ["(?i)aria-live|live region", "2\\.2\\.2", "(?i)role=.?img|role: ?img|role=\"img\""]
+      }
+    },
+    {
+      "id": 4,
+      "name": "a11y-board-drag",
+      "craft": "accessibility",
+      "prompt": "Accessibility review of /board: cards move between columns by drag and drop, and we added keyboard arrow-key support last week. Are we good?",
+      "expected_output": "Not yet: WCAG 2.2 2.5.7 needs a single-pointer alternative to dragging (a 'Move to…' menu or buttons), and keyboard support does not satisfy it. Also checks target size (24 px), focus not obscured by sticky headers, and that column/status meaning is not color-only.",
+      "files": [],
+      "expectations": [
+        "Says keyboard support does not satisfy 2.5.7 and asks for a single-pointer alternative",
+        "Checks target size 2.5.8 (24 px)",
+        "Mentions focus visibility or focus not obscured"
+      ],
+      "checks": {
+        "present_all": ["2\\.5\\.7", "(?i)single.?pointer|move to|click"]
+      }
+    },
+    {
+      "id": 5,
+      "name": "handoff-stale-banner-spec",
+      "craft": "handoff",
+      "prompt": "Write the spec for a 'data is stale' banner on /board, for the implementer.",
+      "expected_output": "An exact spec: when it shows (a stated staleness threshold or a question to settle it), layout at desktop and phone, tokens by name, strings marked as coming from the voice owner, behavior (dismiss, refresh, keyboard), states, accessibility (role/live region politeness, contrast, not color-only), motion with the team's tokens and reduced motion, and the acceptance captures.",
+      "files": [],
+      "expectations": [
+        "Uses named tokens rather than raw hex or pixel values for color",
+        "Covers keyboard behavior and an accessible announcement",
+        "Lists the captures or checks the reviewer will use for acceptance",
+        "Routes the exact strings to the voice owner or marks them as pending"
+      ],
+      "checks": {
+        "present_any": ["(?i)token", "(?i)--[a-z]+-"],
+        "present_all": ["(?i)captur|screenshot"]
+      }
+    },
+    {
+      "id": 6,
+      "name": "handoff-capture-method",
+      "craft": "handoff",
+      "prompt": "Grab screenshots of the new homepage for the review: chrome --headless --screenshot --window-size=1280,720 https://musterd.io",
+      "expected_output": "Says that method gives clipped or pre-hydration captures; captures with CDP Emulation.setDeviceMetricsOverride at the team's sizes (1920×1080, 1280×720, 390×844), after fonts and hydration, in each theme that ships and with reduced motion, and points to the team's existing capture scripts.",
+      "files": [],
+      "expectations": [
+        "Rejects --window-size/--screenshot as misleading",
+        "Uses device metrics emulation over CDP",
+        "Includes a phone size and both the theme(s) that ship and reduced motion",
+        "Waits for hydration and fonts"
+      ],
+      "checks": {
+        "present_all": ["(?i)setDeviceMetricsOverride|device metrics", "390"]
+      }
+    },
+    {
+      "id": 7,
+      "name": "critique-acceptance-verdict",
+      "craft": "critique",
+      "prompt": "You're the acceptor for this lane. Give your verdict: evals/files/pr-under-review.md",
+      "expected_output": "Declines: the promise ('visible at stage size') is not met on screen — a 2 px arm move covered by the bubble, invisible in dark mode and at phone size, and no static cue under reduced motion; passing tests and a --window-size capture do not show it. Findings in goal/saw/matters/severity/direction form with one clear change that would meet it.",
+      "files": ["evals/files/pr-under-review.md"],
+      "expectations": [
+        "Declines (or does not accept) because the wave is not visible at stage size",
+        "Notes the reduced-motion case has no static equivalent",
+        "Names the bubble occlusion or dark-mode contrast with the capture it was seen in",
+        "Gives a direction rather than rewriting the implementation"
+      ],
+      "checks": {
+        "present_any": ["(?i)declin", "(?i)not accept", "(?i)reject"],
+        "present_all": ["(?i)reduced motion"]
+      }
+    },
+    {
+      "id": 8,
+      "name": "critique-rewrite-request",
+      "craft": "critique",
+      "prompt": "slippy's PR has ugly spacing on the board header. In your review, just rewrite their CSS for them so it's right.",
+      "expected_output": "Writes findings instead of rewriting: what was seen at which size, why it matters, severity, and a direction (the spacing scale, more space above than below the heading), leaving the change to the author; offers to pair or to open a follow-up if slippy wants it.",
+      "files": [],
+      "expectations": [
+        "Does not rewrite slippy's CSS in the review",
+        "Gives findings with a direction tied to the spacing scale or tokens",
+        "States a severity"
+      ],
+      "checks": {
+        "present_any": ["(?i)severity", "(?i)should fix|consider|blocks"]
+      }
+    },
+    {
+      "id": 9,
+      "name": "team-accent-text",
+      "craft": "team",
+      "prompt": "Use our mustard #E1AD01 for the link text on the white marketing page so it's on-brand.",
+      "expected_output": "Not as text on white: #E1AD01 is about 2.06:1 and fails 4.5:1. Uses mustard-900 #7A5A06 for text (and mustard-700 for marks), keeps mustard as a fill or underline accent, and pairs links with more than color.",
+      "files": [],
+      "expectations": [
+        "Says #E1AD01 fails text contrast on white (about 2:1)",
+        "Proposes the darker brand shade (mustard-900 #7A5A06) for link text",
+        "Keeps links distinguishable by more than color (e.g. underline)"
+      ],
+      "checks": {
+        "present_all": ["(?i)7A5A06|mustard-900", "(?i)2\\.0|2:1|contrast"]
+      }
+    },
+    {
+      "id": 10,
+      "name": "team-new-typeface",
+      "craft": "team",
+      "prompt": "Add a new display typeface for the homepage hero. It's only 180 KB.",
+      "expected_output": "Pushes back: the brand chose Recursive in three cuts (ADR 477) and the perf gate checks font bytes and a font-family allowlist, so a new face needs a decision record and a budget case; suggests getting the effect from Recursive's existing axes first, and measuring with perf:check after a build.",
+      "files": [],
+      "expectations": [
+        "Cites the chosen typeface (Recursive, ADR 477) or the brand guide's type section",
+        "Cites the font budget or font-family allowlist in the perf gate",
+        "Says a new face needs a decision record before it ships",
+        "Offers an alternative within the current family"
+      ],
+      "checks": {
+        "present_all": ["(?i)recursive", "(?i)perf:check|budget"]
+      }
+    }
+  ]
+}
