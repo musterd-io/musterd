@@ -104,6 +104,34 @@ are not `withDrivers` blocks and keep running under every setting.
 - 2026-10-12 — **The compute objection no longer applies.** The repo is public again (ADR 565),
   where GitHub-hosted minutes are free (ADR 569). [ADR 572](572-sqlite-prs-shard-coverage.md) shards
   SQLite-only PR coverage two ways for wall time. The driver scoping above is unchanged.
+- 2026-10-14 — **Final eval reading: met (fifty, lane `01M3Z1QPV5`).** The filter decided PR
+  drivers by itself only from #1937 (2026-10-01 21:11Z) to ADR 498's sharding (2026-10-03
+  04:20Z). After that the `coverage` leaf ran as shards, and from 2026-10-05 ADR 510 replaced the
+  filter, so the week the Eval named never ran on one job layout. The reading uses that first
+  window: 96 completed `coverage` jobs, the driver line read from each job's log, three TEMP runs
+  left out.
+
+  The runners changed speed inside the window, when the repo went private at about 17:40Z on
+  2026-10-02. So each group is compared only with runs on the same runners:
+
+  | Runners | PRs on `sqlite` | PRs on `both` | `main` on `both` |
+  | --- | --- | --- | --- |
+  | before 10-02 17:40Z | 4m58s (17 PRs) | 9m42s (6) | 12m47s (7) |
+  | after | 9m39s (28) | 19m46s (28) | 26m09s (6) |
+
+  These are job medians. Against PRs that ran `both` on the same runners, a filtered PR saved
+  4m44s and then 10m07s: the PGlite half itself, since the test step alone fell by 4m52s and 9m41s.
+  Against the 14-min baseline, the pre-slowdown median of 4m58s is 9 minutes lower. The Pass
+  condition, a drop of at least the PGlite half, holds both ways. `main` runs took 3–6 min longer
+  than PRs that also ran `both`, so the interim note's pairing with `main` overstates the saving;
+  the PR-to-PR figures above are the like-for-like ones.
+
+  The falsifier did not fire. Four `main` runs went red while the filter decided PR drivers
+  (to 2026-10-05). None of them failed a test on either engine:
+  - a typecheck (2026-10-01);
+  - an a11y tap-target sweep (2026-10-03);
+  - a `gates` roll-up whose every leaf passed (2026-10-03);
+  - `coverage-merge` after all four shards passed (2026-10-04, #2057), whose log has expired.
 
 
 _Note, 2026-10-05 (izzo, lane 01M46EH1FA)._ **The PR half of the filter is replaced.**
