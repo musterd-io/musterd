@@ -4,6 +4,7 @@ import { saveBinding, saveWorkspaceSpec } from '../config.js';
 import { loadProvisioning, saveProvisioning } from './manifest.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses, type ReconcileReport } from './reconcile/engine.js';
+import { withRoleSkills } from './roleSkills.js';
 import type { Workspace } from './workspace.js';
 
 /**
@@ -128,7 +129,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     // Claude Code's `claude mcp` local scope is keyed by the process cwd, not ctx.worktreeRoot.
     process.chdir(ws.dir);
     wiring = await (input.wiring.reconcile ?? reconcileHarnesses)(
-      defaultHarnessContext(ws.dir, process.env, { team }),
+      withRoleSkills(defaultHarnessContext(ws.dir, process.env, { team })),
       desired,
       { legacyRepair: false },
     );

@@ -33,6 +33,13 @@ import {
   repoSharedResourceKey,
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
+import {
+  applyRoleSkill,
+  CLAUDE_BRIDGE,
+  isRoleSkillFragment,
+  observeRoleSkill,
+  roleSkillFragments,
+} from '../roleSkills.js';
 import { BUILTIN_TOOLKITS, parseToolkit, toolkitHomes, type Toolkit } from '../toolkit.js';
 
 const exec = promisify(execFile);
@@ -1465,6 +1472,12 @@ export const claudeCodeAdapter: HarnessAdapter = {
         fingerprint: canonicalFingerprint(guidancePayload),
         payload: guidancePayload,
       },
+      ...roleSkillFragments(
+        ctx,
+        'claude-code',
+        CLAUDE_BRIDGE,
+        `folder ${ctx.worktreeRoot} claude-code-role-skills`,
+      ),
     ];
   },
 
@@ -1545,6 +1558,8 @@ export const claudeCodeAdapter: HarnessAdapter = {
             guidanceFileMap(claudeCode.guidance!, ctx.team ?? ''),
         );
       default:
+        if (isRoleSkillFragment(intent.fragmentKey))
+          return observeRoleSkill(ctx.fs, ctx.worktreeRoot, intent, CLAUDE_BRIDGE);
         return { state: 'absent' };
     }
   },
@@ -1649,6 +1664,16 @@ export const claudeCodeAdapter: HarnessAdapter = {
         );
         return;
       default:
+        if (isRoleSkillFragment(intent.fragmentKey)) {
+          applyRoleSkill(
+            ctx.fs,
+            ctx.worktreeRoot,
+            intent,
+            CLAUDE_BRIDGE,
+            mutation.kind === 'remove' ? 'remove' : 'write',
+          );
+          return;
+        }
         throw new Error(`unknown claude-code fragment ${intent.fragmentKey}`);
     }
   },

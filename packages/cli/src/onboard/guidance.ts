@@ -84,7 +84,7 @@ export function contentHash(renderable: string): string {
  * {@link strippedBody} — which also normalizes to a trailing newline. Hashing the raw `renderable`
  * instead would false-flag an untouched file whenever the renderable lacked a final newline (the
  * `join('\n')` renderers in `@musterd/protocol` do). */
-function stamped(renderable: string): string {
+export function stamped(renderable: string): string {
   const body = renderable.endsWith('\n') ? renderable : renderable + '\n';
   return `${body}${renderContentStamp(GUIDANCE_CONTENT_VERSION, contentHash(body))}\n`;
 }

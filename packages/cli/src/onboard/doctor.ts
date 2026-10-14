@@ -47,6 +47,7 @@ import { classifyPrimerTarget } from './primer.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
 import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
+import { roleSkillNotes } from './roleSkills.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -1542,6 +1543,8 @@ export async function runInitDoctor(json: boolean, cwd: string = process.cwd()):
   report.notes.push(...(await inspectCensus({ cwd })));
   // A lost local record of the team agent key — warn-only, and only when it is recoverable here.
   report.notes.push(...agentKeyNotes(loadConfig(), findBinding(cwd)?.team ?? loadConfig().current));
+  // ADR 586 §3 (amended): a role the seat holds names a skill this repo lacks — warn-only.
+  report.notes.push(...roleSkillNotes(cwd, findBinding(cwd)?.team));
   // The binary a WAKE would resolve is a different question from the one this shell resolves, and
   // nothing asked it until a poisoned shim went a day unnoticed. Warn-only for the same reason as
   // the skew notes: it is a fact about the machine, not this folder's provisioning.

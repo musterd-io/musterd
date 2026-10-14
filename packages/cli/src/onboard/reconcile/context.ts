@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { machineConfigRoot } from '../../machinePaths.js';
+import type { RoleSkillBridge } from '../roleSkills.js';
 
 /**
  * The injected seams the multi-harness reconciler runs on (ADR 282). Every adapter and store
@@ -75,6 +76,9 @@ export interface HarnessContext {
   exec?: ExecSeam;
   /** The workspace's team slug (from the valid v2 spec), for guidance rendering. */
   team?: string;
+  /** The skills the bound seat's roles name, found in this worktree — one bridge each on harnesses
+   *  that catalog skills (ADR 586 §4). Absent: the caller resolved none, and no bridge is desired. */
+  roleSkills?: RoleSkillBridge[];
 }
 
 /** The real filesystem seam. */
