@@ -202,6 +202,15 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   seat answered PONG 14.1 s after the send — the moment the tool it was running returned, which is
   the "between tool calls" the amendment chose over interrupting a tool. Delivery is sub-second;
   answer latency is bounded by the running tool, and the pilot measures the distribution.
+- _2026-10-14 (pilot lane `01M4VTAEJZYTYACT224Y8T309F`, manifest)._ Decision 7's manifest is
+  [docs/research/resident-seat-pilot-manifest.md](../research/resident-seat-pilot-manifest.md),
+  written before the worker seat exists: arms A (`resident`, Haiku 5.5), B (a new worker seat, Opus
+  5.5) and C (the Claude Code seats already enrolled with residency, read over the same week); an
+  in-class lane rule the `lanes` rows decide; daily alternating handoff; six measures derived from
+  `messages`, `audit`, `wake_leases`, `wake_turns` and `lanes`; the kill criterion on dollars per
+  accepted lane with a readability floor of 8 in-class lanes handed to B and 4 verdicts, extendable
+  once. Spend ceilings $15 (A) and $100 (B) for the week. The week starts at B's first wake; the
+  verdict lands here as a dated note with finding 015.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
