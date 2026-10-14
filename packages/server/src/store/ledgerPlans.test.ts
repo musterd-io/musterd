@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
+import { WAKE_AUDIT_SQL } from './insights.js';
 
 /**
  * The open-directed ledger's thread lookups must seek, not scan (lane 01M4S7GW7P). On the Air's 23k
@@ -19,4 +20,14 @@ withDrivers('ledger lookup plans', (open, kind) => {
       expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_messages_thread_act_ts');
     },
   );
+});
+
+withDrivers('report wake-metrics plan', (open, kind) => {
+  // Lane 01M4VYH20W: with `ORDER BY ts` SQLite walked `(team_id, ts)` and read every audit row of the
+  // team in the 7-day window — 163,001 on the hub to keep 5,428, 1.4 s cold — on every cold /report.
+  it.skipIf(kind !== 'sqlite')('the wake-metrics audit read seeks (team, action, ts)', async () => {
+    const db = await open();
+    const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${WAKE_AUDIT_SQL}`, ['t', 0]);
+    expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_action_ts');
+  });
 });
