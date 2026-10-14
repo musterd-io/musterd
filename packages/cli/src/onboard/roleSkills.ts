@@ -114,14 +114,23 @@ function safeRosterHomes(): Record<string, string> {
 
 /** The context, with the seat's role-skill bridges resolved for the adapters that write them. */
 export function withRoleSkills(ctx: HarnessContext): HarnessContext {
-  const resolved = resolveSeatRoleSkills(ctx.worktreeRoot, ctx.team);
+  const resolved = safeResolve(ctx.worktreeRoot, ctx.team);
   return resolved ? { ...ctx, roleSkills: resolved.bridges } : ctx;
+}
+
+/** Bridges are a convenience: a failure to resolve them never fails the wiring around them. */
+function safeResolve(worktreeRoot: string, team: string | undefined): SeatRoleSkills | undefined {
+  try {
+    return resolveSeatRoleSkills(worktreeRoot, team);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The missing-skill lines for the seat bound to `worktreeRoot` (ADR 586 §3, amended: the CLI
  *  warns, where the repo is known, rather than reconcile). */
 export function roleSkillNotes(worktreeRoot: string, team: string | undefined): string[] {
-  return (resolveSeatRoleSkills(worktreeRoot, team)?.missing ?? []).map(missingSkillLine);
+  return (safeResolve(worktreeRoot, team)?.missing ?? []).map(missingSkillLine);
 }
 
 /** The line `wire`, `init` and `doctor` print for each role whose skill this repo does not have. */
