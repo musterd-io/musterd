@@ -155,6 +155,114 @@ export function unpublishedSeatLines(
   ];
 }
 
+/**
+ * ADR 592: publish a seat file — add, commit and push it from the roster home — so the seat reaches
+ * every other machine without a human git step. The three lines ADR 547/591 print are the fallback,
+ * not the plan: on 2026-10-13 they were printed, nobody ran them for 100 minutes, and the hub held
+ * every lane from every machine behind the seat they named.
+ *
+ * Narrow on purpose: only the seat's own file is added and committed (`git commit -- <file>`), so a
+ * dirty roster home contributes nothing else to the commit. A push the remote refuses as behind is
+ * retried once after `git pull --rebase --autostash`; anything past that is the person's call, and
+ * the outcome carries git's first line so they can make it.
+ *
+ *  - `published` — the file is on the remote now (this call pushed it).
+ *  - `already` — nothing to do: the file was committed and pushed before this call.
+ *  - `skipped` — not a git checkout, or no upstream to push to; `detail` says which.
+ *  - `failed` — git refused somewhere; `detail` is what it said. The file stays as it was written.
+ */
+export interface SeatPublishOutcome {
+  state: 'published' | 'already' | 'skipped' | 'failed';
+  detail?: string;
+}
+
+export function publishSeatFile(home: string, name: string): SeatPublishOutcome {
+  const rel = join('.musterd', 'seats', `${name}.toml`);
+  const git = (...args: string[]): string =>
+    execFileSync('git', ['-C', home, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim();
+  const said = (err: unknown): string => {
+    const e = err as { stderr?: unknown; message?: unknown };
+    const text =
+      typeof e.stderr === 'string' && e.stderr.trim() !== ''
+        ? e.stderr
+        : typeof e.message === 'string'
+          ? e.message
+          : String(err);
+    return text.trim().split('\n')[0] ?? '';
+  };
+  try {
+    if (git('rev-parse', '--is-inside-work-tree') !== 'true')
+      return { state: 'skipped', detail: 'not a git checkout' };
+  } catch {
+    return { state: 'skipped', detail: 'not a git checkout' };
+  }
+  try {
+    git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}');
+  } catch {
+    return { state: 'skipped', detail: 'no upstream branch to push to' };
+  }
+  const state = seatFileUnpublished(home, name);
+  if (state === null) return { state: 'already' };
+  if (state === 'uncommitted') {
+    try {
+      git('add', '--', rel);
+      git('commit', '--quiet', '-m', `roster: add ${name}`, '--', rel);
+    } catch (err) {
+      return { state: 'failed', detail: said(err) };
+    }
+  }
+  try {
+    git('push', '--quiet');
+  } catch (first) {
+    // Behind the remote (another machine published a seat first): catch up once, then push again.
+    try {
+      git('pull', '--rebase', '--autostash', '--quiet');
+      git('push', '--quiet');
+    } catch (err) {
+      return { state: 'failed', detail: said(err) || said(first) };
+    }
+  }
+  return { state: 'published' };
+}
+
+/**
+ * The line a seat-making command prints for a publish outcome: one sentence for success, the ADR
+ * 591 warning + fix when the file still has not reached the remote. Null when there is nothing to
+ * say (`already`: the file was published before; a db-only team never gets here).
+ */
+export function seatPublishLines(
+  name: string,
+  home: string,
+  outcome: SeatPublishOutcome,
+  /** `seatFileUnpublished(home, name)` as the caller read it after the publish attempt. */
+  unpublished: SeatFilePublication | null,
+): { ok?: string; warn?: [warning: string, how: string] } | null {
+  const rel = `.musterd/seats/${name}.toml`;
+  switch (outcome.state) {
+    case 'published':
+      return { ok: `published ${rel} — every other machine can resolve ${name} on its next pull` };
+    case 'already':
+      return null;
+    case 'skipped':
+    case 'failed': {
+      const lines = unpublished
+        ? unpublishedSeatLines(name, home, unpublished)
+        : (seatReachLines(name, home) ?? null);
+      if (!lines) return null;
+      return {
+        warn: [
+          `could not publish ${rel} (${outcome.detail ?? outcome.state}) — ${lines[0]}`,
+          lines[1],
+        ],
+      };
+    }
+  }
+}
+
 /** Every seat file under a roster home, parsed, keyed by seat name. */
 export function readSeatFiles(home: string): Record<string, SeatFile> {
   const dir = seatsDir(home);

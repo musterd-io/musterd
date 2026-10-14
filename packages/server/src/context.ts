@@ -12,6 +12,13 @@ export interface Ctx {
   /** Durable roster roots (ADR 058). Empty ⇒ no file-backed teams; the legacy db-authoritative
    * provisioning path stays in force (per-team cutover, migration-bootstrap.md). */
   rosterRoots: string[];
+  /**
+   * ADR 592: what the pull loop does when its fold stops on a seat this roster does not hold —
+   * pull the roster roots from git and reconcile (`sync/rosterRefresh.ts`). Resolves `true` when
+   * something arrived and the page should be folded again now. Absent (tests, a daemon with no
+   * roster roots) the stop stands until the next tick, as before.
+   */
+  onUnresolvedSeat?: (team: { id: string; slug: string }, seat: string) => Promise<boolean>;
 }
 
 /**

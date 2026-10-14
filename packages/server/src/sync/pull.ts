@@ -415,6 +415,7 @@ export async function pullPage(
   ctx: Ctx,
   team: { id: string; slug: string },
   now: number = Date.now(),
+  afterRefresh = false,
 ): Promise<PullPage> {
   const none: PullPage = { applied: 0, full: false };
   const nodeId = await localNodeId(ctx, team.id);
@@ -485,6 +486,19 @@ export async function pullPage(
     });
   }
   if (result.stop) {
+    // ADR 592: an unknown seat is usually a seat file one `git pull` away. Pull it ourselves, once
+    // per page, and fold again in the same tick when something arrived — the stop below is the
+    // outcome only when the roster still lacks the seat after that. Everything before the stop has
+    // already committed, so the second pass is the next page from the advanced cursor.
+    if (result.stop.kind === 'unresolved_seat' && ctx.onUnresolvedSeat && !afterRefresh) {
+      let moved = false;
+      try {
+        moved = await ctx.onUnresolvedSeat(team, result.stop.seat);
+      } catch (err) {
+        log.warn({ msg: 'sync_roster_refresh_failed', team: team.slug, err: String(err) });
+      }
+      if (moved) return pullPage(ctx, team, now, true);
+    }
     reportStop(ctx, team.slug, result.stop);
     notePullStop(ctx, team.id, result.stop, now);
   } else {

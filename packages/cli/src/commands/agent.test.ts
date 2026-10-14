@@ -25,6 +25,14 @@ const h = vi.hoisted(() => ({
   rosterHome: {} as Record<string, string>,
   // What `seatFileUnpublished` answers for the roster home (ADR 547): null = published / not git.
   unpublished: null as 'uncommitted' | 'unpushed' | null,
+  // What `publishSeatFile` answers (ADR 592); the mock below returns it.
+  publish: { state: 'skipped', detail: 'test' } as {
+    state: 'published' | 'already' | 'skipped' | 'failed';
+    detail?: string;
+  },
+  publishSeatFile: vi.fn(
+    (): { state: 'published' | 'already' | 'skipped' | 'failed'; detail?: string } => h.publish,
+  ),
   // Mutable so a test can model the machine that has LOST the team agent key (the empty
   // `agentKeys` map an interrupted config prune leaves behind) — see the preflight suite.
   agentKeys: {} as Record<string, string>,
@@ -52,6 +60,7 @@ vi.mock('../roster.js', async (importOriginal) => ({
   writeSeatFile: h.writeSeatFile,
   seatFileExists: () => false,
   seatFileUnpublished: () => h.unpublished,
+  publishSeatFile: h.publishSeatFile,
 }));
 vi.mock('../onboard/harnesses/index.js', () => ({
   harnessAdapters: () =>
@@ -68,6 +77,7 @@ describe('musterd agent <name>', () => {
     vi.clearAllMocks();
     h.rosterHome = {};
     h.unpublished = null;
+    h.publish = { state: 'skipped', detail: 'test' };
     h.agentKeys = { ritual: 'mskey_team' };
     delete process.env['MUSTERD_AGENT_KEY'];
     h.workspace.dir = mkdtempSync(join(tmpdir(), 'magent-'));
@@ -336,6 +346,21 @@ describe('musterd agent <name>', () => {
       expect(text).toContain('other machines cannot resolve June');
       expect(text).toContain('.musterd/seats/June.toml');
       expect(text).toContain('git -C /home/ritual/.musterd add .musterd/seats/June.toml');
+    });
+
+    it('ADR 592: publishes the seat file itself and says so; --no-publish prints the lines instead', async () => {
+      h.rosterHome = { ritual: '/home/ritual/.musterd' };
+      h.unpublished = 'uncommitted';
+      h.publish = { state: 'published' };
+      const text = await out(['June']);
+      expect(h.publishSeatFile).toHaveBeenCalledWith('/home/ritual/.musterd', 'June');
+      expect(text).toContain('published .musterd/seats/June.toml');
+      expect(text).not.toContain('other machines cannot resolve June');
+      h.publishSeatFile.mockClear();
+      const kept = await out(['June', '--no-publish']);
+      expect(h.publishSeatFile).not.toHaveBeenCalled();
+      expect(kept).toContain('other machines cannot resolve June');
+      expect(kept).toContain('git -C /home/ritual/.musterd add .musterd/seats/June.toml');
     });
 
     it('carries the same fact in --json', async () => {

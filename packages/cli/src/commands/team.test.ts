@@ -495,6 +495,40 @@ describe('team policy command', () => {
       expect(res.out).toContain('push');
     });
 
+    it('ADR 592: with an upstream it publishes the seat file itself — add, commit, push — and says so; --no-publish keeps the lines', async () => {
+      const home = fileBackedHome(true);
+      const remote = mkdtempSync(join(dir, 'remote-'));
+      execFileSync('git', ['init', '--quiet', '--bare', '-b', 'main', remote]);
+      const git = (...args: string[]) =>
+        execFileSync('git', ['-C', home, ...args], { encoding: 'utf8' }).trim();
+      git('config', 'user.email', 't@t');
+      git('config', 'user.name', 't');
+      git('remote', 'add', 'origin', remote);
+      git('commit', '-q', '--allow-empty', '-m', 'team');
+      git('push', '-q', '-u', 'origin', 'main');
+      const res = await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      expect(res.code).toBe(0);
+      expect(res.out).toContain('published .musterd/seats/Ada.toml');
+      expect(res.out).not.toContain('other machines cannot resolve Ada');
+      expect(git('log', '-1', '--format=%s')).toBe('roster: add Ada');
+      expect(
+        execFileSync('git', ['-C', remote, 'log', '-1', '--format=%s'], {
+          encoding: 'utf8',
+        }).trim(),
+      ).toBe('roster: add Ada');
+      const kept = await capture(() =>
+        teamCommand(parseArgs(['add', 'Bea', '--kind', 'agent', '--no-publish'])),
+      );
+      expect(kept.out).toContain('other machines cannot resolve Bea');
+      expect(git('status', '--porcelain')).toContain('Bea.toml');
+      const body = JSON.parse(
+        (await capture(() => teamCommand(parseArgs(['add', 'Cy', '--kind', 'agent', '--json']))))
+          .out,
+      );
+      expect(body.seat_file_published).toEqual({ state: 'published' });
+      expect(body.seat_file_unpublished).toBeUndefined();
+    });
+
     it('carries the same fact in --json without touching the credential fields', async () => {
       const home = fileBackedHome(true);
       const body = JSON.parse(

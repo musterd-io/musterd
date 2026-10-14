@@ -47,10 +47,13 @@ import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { hint, success, sym } from '../render/ui.js';
 import {
+  publishSeatFile,
   readSeatFiles,
   readSeatHues,
   seatFilePath,
   seatFileUnpublished,
+  seatPublishLines,
+  type SeatPublishOutcome,
   seatReachLines,
   setSeatHue,
   unpublishedSeatLines,
@@ -1320,14 +1323,20 @@ async function teamAdd(parsed: Parsed): Promise<number> {
           label: `team-add:${name}`,
         })
       : undefined;
+  // ADR 592: the file is published here, after the daemon accepted the member, so a refused add never
+  // pushes a stray seat. `--no-publish` leaves it to the person (the ADR 547 lines then say how).
+  const published: SeatPublishOutcome | null =
+    home && unpublished && parsed.flags['no-publish'] !== true ? publishSeatFile(home, name) : null;
+  const stillUnpublished = home ? seatFileUnpublished(home, name) : null;
 
   if (parsed.flags['json']) {
     process.stdout.write(
       JSON.stringify({
         member: res.member,
-        ...(home && unpublished
-          ? { seat_file_unpublished: { path: seatFilePath(home, name), state: unpublished } }
+        ...(home && stillUnpublished
+          ? { seat_file_unpublished: { path: seatFilePath(home, name), state: stillUnpublished } }
           : {}),
+        ...(published ? { seat_file_published: published } : {}),
         ...(res.human_credential ? { human_credential: res.human_credential } : {}),
         ...(bootstrap
           ? {
@@ -1344,8 +1353,13 @@ async function teamAdd(parsed: Parsed): Promise<number> {
       `added ${theme.memberName(name, kind)} ${theme.meta(`(${kind}${role ? `, ${role}` : ''})`)} to ${team}`,
     ) + '\n',
   );
-  if (home && unpublished) {
-    const [warning, how] = unpublishedSeatLines(name, home, unpublished);
+  if (home && published) {
+    const lines = seatPublishLines(name, home, published, stillUnpublished);
+    if (lines?.ok) process.stdout.write(`  ${theme.ok(lines.ok)}\n`);
+    if (lines?.warn)
+      process.stdout.write(`  ${theme.warn(lines.warn[0])}\n${theme.meta(`  ${lines.warn[1]}`)}\n`);
+  } else if (home && stillUnpublished) {
+    const [warning, how] = unpublishedSeatLines(name, home, stillUnpublished);
     process.stdout.write(`  ${theme.warn(warning)}\n${theme.meta(`  ${how}`)}\n`);
   }
   // ADR 374 Decision 4: past a full wheel the colour is shared, and it is said out loud.

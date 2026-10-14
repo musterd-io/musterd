@@ -55,6 +55,7 @@ const BOOLEAN_FLAGS = new Set([
   'tailscale',
   'no-provision',
   'clone',
+  'no-publish',
 ]);
 
 export function parseArgs(argv: string[]): Parsed {
