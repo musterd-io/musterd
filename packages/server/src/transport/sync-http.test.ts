@@ -102,7 +102,8 @@ withDrivers('sync-http', (_o, kind) => {
       const res = await push([await ev('node-remote', 1), await ev('node-remote', 2)], credential);
 
       expect(res.status).toBe(200);
-      expect(res.json).toEqual({ accepted: 2, hub_seq_high: 2 });
+      // ADR 591: the hub says on every answer whether its fold is held — null when it is moving.
+      expect(res.json).toEqual({ accepted: 2, hub_seq_high: 2, fold_stopped: null });
     });
 
     it('acks a replayed batch without staging it twice', async () => {
@@ -112,7 +113,7 @@ withDrivers('sync-http', (_o, kind) => {
       // A lost ack is the realistic failure; the pusher resends. The hub must ack, not refuse.
       const replay = await push([await ev('node-remote', 1)], credential);
       expect(replay.status).toBe(200);
-      expect(replay.json).toEqual({ accepted: 0, hub_seq_high: 1 });
+      expect(replay.json).toEqual({ accepted: 0, hub_seq_high: 1, fold_stopped: null });
     });
 
     it('refuses a seat credential — msnode_ admits this surface, nothing else does', async () => {
