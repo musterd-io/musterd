@@ -17,9 +17,6 @@ ADRs are in `docs/decisions/`. miley and slippy hold the designer role; only mil
 5. Copy specs, owned by product-communications: `homepage-copy-spec.md`, `watch-page-copy-spec.md`,
    `join-page-copy.md`, `tour-web-copy.md`.
 
-Stale, and to be fixed when next touched: the root `DESIGN.md` (still Inter and a dusk palette)
-and brand.md §7's mention of WebGL (removed by ADR 094).
-
 ## The surfaces
 
 | Surface | Code | Decisions and specs |
@@ -47,7 +44,7 @@ for motion: five durations in whole 25 fps frames (120, 200, 280, 400, 600 ms) a
 
 | Gate | Command | Notes |
 | --- | --- | --- |
-| Performance budgets | `pnpm build` then `pnpm perf:check` | `docs/perf/budgets.json`; build first, the check reads `dist` (`docs/wiki/perf-gate-blind-spots.md`). Raises are logged in `docs/perf/web-live-baseline.md` and may only follow ADR 183's ritual |
+| Performance budgets | `pnpm build` then `pnpm perf:check` | `docs/perf/budgets.json`; build first, the check reads `dist` (`docs/wiki/perf-gate-blind-spots.md`). Raises are logged in `docs/perf/web-live-baseline.md` and may only follow ADR 183's ritual. CI's gzip lands 50–300 B above a laptop's (`budgets.json` `$comment`), so a laptop pass within that margin is not a pass. A value import of `@musterd/protocol` in web pulls zod onto the eager graph; import types only (the 2026-09-02 entry) |
 | Contrast on painted pixels | `pnpm a11y:check`; ad hoc `pnpm a11y:contrast <url>` | CI sweeps every prerendered route and `/board`, `/live` on a fixture team; `docs/a11y/contrast.md` |
 | Target size | `pnpm a11y:targets:check` | 2.5.8 at 390×844 and the 24 px floor; `docs/a11y/target-size.md` |
 | Motion tokens | `pnpm tokens:check` (in `format:check`) | Fails on drift from `motion.ts` |
@@ -64,7 +61,15 @@ pause control on `/live`'s self-moving scene.
 Headless Chrome over CDP with `Emulation.setDeviceMetricsOverride` at 1920×1080, 1280×720 and
 390×844. Working code: `scripts/a11y/target-size-sweep.mjs`, `scripts/perf/scene-pixel-check.mjs`,
 the broadcast capturer. Traps: `docs/wiki/browser-verification.md`,
-`docs/wiki/measuring-a-moving-page.md`.
+`docs/wiki/measuring-a-moving-page.md`, and these:
+
+- The Claude-in-Chrome extension cannot open `localhost`. Use the chrome-devtools MCP, whose resize
+  floors at ~500 px wide, or drive your own headless Chrome over CDP. The MCP's browser profile is one
+  per machine, so another session can be holding it; your own CDP script never collides.
+- The idle office is baked to an offscreen buffer (`office-scene/index.ts`). After a `render.ts` edit,
+  reload the page before judging it; a hot update can leave the old bake on screen.
+- A `Page.captureScreenshot` clip is in page coordinates. Add `scrollY` to a `getBoundingClientRect`, or
+  you capture the wrong band of the page.
 
 ## Local rules, each from an incident
 

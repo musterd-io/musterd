@@ -70,6 +70,9 @@ Primary accent is **`#E1AD01`**. When a single color value is needed for a fill 
 | muted   | `#71717A` | `#A1A1AA` | bright black    |
 
 The light accent is a fill. Accent text on light is `mustard-900` (`#7A5A06`); see the mustard ramp above.
+The web's warm paper palette (`:root[data-theme="light"]` in `tokens.css`) carries the same split with
+its own pair, measured on the painted paper rather than white: the fill is `mustard-700` (`--accent`)
+and text is `#7a5a12` (`--accent-ink`).
 
 ### ANSI color mapping (terminal — load-bearing, the CLI must obey)
 
@@ -168,4 +171,4 @@ This entire identity is intentionally small: one name, one accent color, one wor
 
 ## 7. Web surface (carve-out)
 
-The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — immersive WebGL, gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, Recursive (§3) is still the only type family, the wordmark is still lowercase JetBrains Mono, and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`.
+The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — an immersive scene (Canvas2D since ADR 094 removed WebGL), gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, Recursive (§3) is still the only type family, the wordmark is still lowercase JetBrains Mono, and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`.
