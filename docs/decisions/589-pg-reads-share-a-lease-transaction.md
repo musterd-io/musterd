@@ -127,6 +127,25 @@ Cut the round trips a request spends on reads, without changing:
 - **`db_tx` changes meaning.** It counts transactions opened, so it falls. Comparing it across this
   change is not a like-for-like comparison. The implementation adds `db_stmt` (statements sent) to
   the `http_request` line, so a request's work and its transactions can be told apart.
+- 2026-10-14 — **the snapshot premise above was wrong; the effect it guarded against did not show.**
+  During run 40 (`1311808`, #2556), `pg_stat_activity` showed `idle in transaction` backends after a
+  plain `SELECT` with a non-null `backend_xmin`. That was 5 of 7 such backends across four samples,
+  in transactions 3–18 ms old. An open read run does pin the vacuum horizon for its length. Two
+  things bound it in practice:
+  - the run is capped at 250 ms idle and 1 s of age;
+  - in the same run `presence`, the table that churns hardest, was autovacuumed to 0 dead rows.
+
+  Experiment 2's first clause fired; its second, vacuum falling behind, did not. So runs stay as
+  decided, and the vacuum check moves into every load run's readout. Ledger:
+  `docs/claims/entries/2026-10-14-read-run-holds-no-snapshot.md`.
+- 2026-10-14 — **the Eval met, by more than asked.** Run 40 against run 39, server-side:
+  - median `db_hold_ms` fell from 163 to 51 ms;
+  - interrupt-check's median hold fell from 247 to 55 ms, with 4 transactions for 11 statements;
+  - the bench's p95 fell from 1 754 to 537 ms.
+
+  #2543 shipped in the same deploy, so the run measures both changes together. Experiment 1's
+  falsifier, hold falling while the p95 did not, did not fire: the p95 fell with it. The detail is in
+  `docs/perf/daemon-load-baseline.md`, run 40.
 - Follows-up: lane 01M4VVMNEX2CQB9TYSKA6CNGD4 builds it in `pgDriver.ts` with choreography tests on
   the injected fake pool, adds `db_stmt`, and measures it with a cloud run.
 
