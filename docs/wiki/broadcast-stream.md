@@ -320,6 +320,24 @@ Each bundle's own two runs disagree by as much as the bundles disagree with each
 
 **So the open question is a budget, not a bug:** cheaper scene (the ~39 ms fixed cost is the static room re-rastered every frame — caching that layer is the obvious cut), a bigger box, or a smaller stage. The stage is **not** a flag: ADR 157 fixes it at 1920x1080, and a capture launched with `--window-size=1280,720` merely clips the viewport while the canvas stays 1080p (measured: 99.9 % blocked, gapP50 95.6 — the signature of a clipped 1080p canvas, not a cheaper one).
 
+## The ~15 draws/s wall is the room's single-threaded draw, not the capture path or the host (2026-10-13; falsify: re-run `scripts/perf/capture-ab.mjs` on a Fly performance-4x — the x11grab arm at 25+ draws/s, or the box under 10 % idle while it holds ~15 draws/s, means the wall is total CPU or capture after all) <!-- claim: other -->
+
+Seen twice, on two nights. The claim above (2026-09-17) found the real page at 15.35 draws/s on an idle
+box, with nothing capturing. On 2026-10-13 two experiments took the capture path and then the host
+out of the way, and the rate stayed about the same. Both are recorded in full in
+`docs/perf/broadcast-baseline.md`.
+
+- **Capture path changed (lane `01M4VS17JX`, #2548).** Xvfb `x11grab` in place of
+  screencast→JPEG on the same performance-4x: 15.4 draws/s against 13.7–13.8, pipeline CPU 265 %
+  against ~323 %, gap p95 89 ms against ~130 ms. The box sat **27 % idle** at 15 draws/s, so the
+  limit is one thread, not total CPU.
+- **Host changed (lane `01M4VPAP85`, #2532).** A GCP L4 GPU box doubled draws (11.0 → 19.6/s with
+  GPU render) but delivered only 16.3 fps at 1080p30, and 1080p60 tripped the encoder watchdog.
+
+So neither a cheaper capture nor a bigger box clears 30 fps. The cut is to the draw itself: the
+sprite cache measuring each cached item once instead of every frame (#2568, not yet measured on the
+bench), then dirty-rect repaint (lane `01M4VS1SJQ`). The spec is `docs/superpowers/specs/2026-10-13-broadcast-smooth-capture-design.md` (#2539).
+
 ## Every health signal the capture had measured the encoder, and the encoder is downstream of the freeze (2026-09-16; falsify: `Page.stopScreencast` mid-run and watch ffmpeg keep reporting a healthy rate) <!-- claim: defect -->
 
 A frozen source keeps ffmpeg perfectly fed, because the pump re-emits `latest` by design. So every
