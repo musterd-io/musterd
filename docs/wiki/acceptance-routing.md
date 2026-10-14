@@ -158,6 +158,12 @@ Measured on #1541 (lane `01M2RKFG60`). A 414 reap-reroute superseded wanderer's 
 - **Why the brief and not the inbox mattered.** The `resolve` is one act with no interrupt weight, on inboxes that on this team run thousands deep. The seat orients from `next`, and `next` kept saying the review was theirs.
 - **Fix (lane `01M2TNWK0K`).** Both reads exclude asks in the superseded set — one predicate, three readers. Test: the same reroute leaves the lane in B's brief and summary and out of A's; dropping either exclusion turns exactly that test red.
 
+## A re-route chain can hold an ask for hours, and the submitter is never told who holds it now (2026-10-12; falsify: count `resolve`-then-`ask` pairs on lane `01M4Q7PMAP` in the acts log — anything but 3 hops, or the third hop not ~1h44m after the second, and this is wrong) <!-- claim: defect -->
+
+Seen on two nights. 2026-10-07 (insight `01M4D34ZD1`): two hops in under 2 minutes, and the submitter posted "awaiting nick" 19 minutes after the ask had reached miley. 2026-10-12, lane `01M4Q7PMAP`: resubmitted 12:47:57, re-routed gptbot → ghost at 12:52:44, ghost → lazara at 12:52:51, lazara → wallow at 14:37:13, resolved by wallow at 14:39:13. Total 1h51m; the seat that decided took 2 minutes, and 1h44m was one holder sitting on the ask before passing it on.
+
+Each hop delivers a `resolve` to the old holder and a new `ask` to the next. Nothing goes to the submitter. Before reporting "awaiting <name>", read the newest `[lane] acceptance requested` act on the lane and use its addressee, not the name you passed to `lane_submit`. The relieved-acceptor side of the same gap is the section above.
+
 ## A re-reviewed lane can still close inside sixty seconds (2026-10-13; falsify: a lane whose second acceptance ask takes more than 60s despite every earlier decline being answered on the named references; read the acts-table timestamps) <!-- claim: other -->
 
 Measured twice on adjacent nights, on live lanes that had been declined once and then re-submitted with each concrete item the reviewer named corrected:
