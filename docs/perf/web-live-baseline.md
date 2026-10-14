@@ -1383,3 +1383,17 @@ elsewhere — sun shafts (the next lane under `office-liveliness`) will be the t
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
+### 2026-10-13 — `totalJsGzipBytes` 311,200 → 311,700 B: the sprite cache measures each item once (lane `01M4W0JB4M`)
+
+| Budget   | Before (main, same day)   | This branch (CI)                | Ceiling                    |
+| -------- | ------------------------- | ------------------------------- | -------------------------- |
+| total JS | ≤ 311,200 B (green)       | 303.9 KB (311,143–311,245 B)    | RAISED 311,200 → 311,700 B |
+
+`blitSprite` ran `measureBounds(draw)` before every cache lookup, so every cached office item replayed
+its full draw through a Proxy on every `/broadcast` frame. The fix moves the box into the cache
+(`SpriteCache.box()`, one LRU entry per key for box and sprite), ~100 B gz. It is a perf fix to the
+draw that holds the stream at ~15 draws/s, so it is not a trade against a feature. The ceiling was
+saturated by the pin-holes raise above, and a trim this size is under gzip noise. Raised tight: CI upper bound + ~0.15%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
+
