@@ -179,6 +179,16 @@ describe('syncWedgeWarning — a stopped pull reads where a wedged push does (AD
 
   it('is silent when the fold is moving, and on a daemon that predates the field', () => {
     expect(syncWedgeWarning({ sync: { wedged: null, pull_stopped: null } })).toBe('');
+    // ADR 591: the hub's stop, as this joiner heard it, reads beside the other two.
+    const hubHeld = syncWedgeWarning({
+      sync: {
+        wedged: null,
+        pull_stopped: null,
+        hub_stopped: { kind: 'unresolved_seat', subject: 'resident', hub_seq: 28897, since: 0 },
+      },
+    });
+    expect(hubHeld).toContain("the hub's sync is stopped");
+    expect(hubHeld).toContain('resident');
     expect(syncWedgeWarning({ sync: { wedged: null } })).toBe('');
     expect(syncWedgeWarning(undefined)).toBe('');
   });

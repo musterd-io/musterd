@@ -51,6 +51,7 @@ import {
   readSeatHues,
   seatFilePath,
   seatFileUnpublished,
+  seatReachLines,
   setSeatHue,
   unpublishedSeatLines,
   writeSeatFile,
@@ -298,6 +299,14 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
         success(`minted a seat bootstrap credential for ${target} and installed it`) + '\n',
       );
       process.stdout.write(`  ${written}\n`);
+      // ADR 591: a credential installed for a seat the hub cannot resolve is a seat whose every
+      // event will hold the hub — the install is where that is cheapest to say.
+      const reach = seatReachLines(target, loadConfig().rosterHome[team], 'agent');
+      if (reach) {
+        process.stdout.write(
+          theme.warn(`  ! ${reach[0]}`) + '\n' + theme.meta(`    ${reach[1]}`) + '\n',
+        );
+      }
       process.stdout.write(
         theme.meta('written straight to the binding and not printed — nothing to copy.') + '\n',
       );

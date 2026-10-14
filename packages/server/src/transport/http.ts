@@ -508,6 +508,7 @@ import {
   trustAtHub,
   TrustRefusedError,
 } from '../sync/claim.js';
+import { readHubStop } from '../sync/hubStop.js';
 import {
   hasEnrolledJoiners,
   hubHead,
@@ -519,7 +520,7 @@ import {
   SyncOriginError,
   SyncResidenceError,
 } from '../sync/log.js';
-import { kickSyncPull, pullTeam, readPullStop } from '../sync/pull.js';
+import { kickSyncPull, peekPullStop, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
 import { kickSyncStream } from '../sync/streamJoiner.js';
 import {
@@ -2983,6 +2984,9 @@ export async function handleHttp(
           sync: {
             wedged: await readPushRefusal(ctx.db, team.id),
             pull_stopped: await readPullStop(ctx.config, team.id),
+            // ADR 591: and the HUB's stop as this joiner last heard it — the one that holds every
+            // lane claim from every machine. Null on the hub and on a machine without one.
+            hub_stopped: readHubStop(ctx.config, team.id),
           },
         });
       }
@@ -6231,7 +6235,16 @@ export async function handleHttp(
           // The hub's own seats read `messages`, which only the fold fills: fold now, not at the
           // hub's next 60 s tick.
           if (result.accepted > 0) kickSyncPull(ctx);
-          return sendJson(res, 200, SyncPushResponseSchema.parse(result));
+          // ADR 591: accepted is not applied — the pusher hears on the same answer whether this
+          // hub's fold is held, and on what, so the seat that can clear it reads it where it is.
+          return sendJson(
+            res,
+            200,
+            SyncPushResponseSchema.parse({
+              ...result,
+              fold_stopped: peekPullStop(ctx.config, team.id),
+            }),
+          );
         } catch (err) {
           if (err instanceof SyncResidenceError) {
             // ADR 328 §4 at ingest: the same 403 shape the claim route hands back, plus the seat,
@@ -6328,6 +6341,8 @@ export async function handleHttp(
             lane_genesis: genesis,
             // ADR 544: how many lanes predate this log — a joiner holding fewer asks /sync/lanes.
             pre_genesis_lanes: genesis ? await countLanesBefore(ctx.db, team.id, genesis) : 0,
+            // ADR 591: this hub's own standing fold stop, on every page.
+            fold_stopped: peekPullStop(ctx.config, team.id),
           }),
         );
       }

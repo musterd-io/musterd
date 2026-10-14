@@ -15,6 +15,7 @@ import { REPLICATED_LEDGER_VERBS, type AuditRow } from '../store/audit.js';
 import { onReplicatedCommit, rowToEnvelope } from '../store/messages.js';
 import type { MessageRow } from '../store/rows.js';
 import { listActiveTeams, restateUnstampedPolicy } from '../store/teams.js';
+import { noteHubStop } from './hubStop.js';
 import { hasEnrolledJoiners, ingestBatch, SyncGapError } from './log.js';
 
 /**
@@ -456,6 +457,9 @@ export async function pushTeam(
   if (!res.ok) throw new Error(`hub responded ${res.status}`);
 
   const ack = SyncPushResponseSchema.parse(await res.json());
+  // ADR 591: accepted is not applied. The hub says on the same answer whether its fold is held, and
+  // on what — recorded here so this machine's roster can name the seat whose file never arrived.
+  noteHubStop(ctx, team.id, ack.fold_stopped);
   // Only now, and only as far as the batch we actually sent. `accepted` counts what was NEW to the
   // hub — a replay acks 0 — so the cursor follows the batch, not the count.
   await advanceCursor(ctx, team.id, originId, pending[pending.length - 1]!.row.origin_seq, now);

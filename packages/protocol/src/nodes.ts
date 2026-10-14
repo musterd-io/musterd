@@ -154,19 +154,34 @@ export function sanitizeStopSubject(subject: string | null): string | null {
   return subject.replace(/[^\p{L}\p{N}._:@/-]/gu, '?').slice(0, 64);
 }
 
-/** One wording for every surface that shows a stopped pull — the roster, `status`, the inbox. */
-export function describeSyncPullStop(s: SyncPullStop, now: number = Date.now()): string {
+/**
+ * One wording for every surface that shows a stopped fold — the roster, `status`, the inbox.
+ * `where` says whose fold: this machine's (ADR 547) or the hub's as this joiner learned it from
+ * the hub's own push/pull answers (ADR 591). A hub stop is the one that matters to a joiner: every
+ * lane claim, handoff and submit from every machine is arbitrated on the hub and waits behind it.
+ */
+export function describeSyncPullStop(
+  s: SyncPullStop,
+  now: number = Date.now(),
+  where: 'here' | 'hub' = 'here',
+): string {
   const mins = Math.max(0, Math.round((now - s.since) / 60_000));
   const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
   const subject = sanitizeStopSubject(s.subject) ?? 'something';
+  const roster = where === 'hub' ? "the hub's roster" : "this machine's roster";
   let cause: string;
   let fix: string;
   switch (s.kind) {
     case 'unresolved_seat':
-      cause = `it names seat "${subject}", which this machine's roster does not hold`;
+      cause = `it names seat "${subject}", which ${roster} does not hold`;
       fix =
-        'The seat file arrives by git, not by sync: `git pull` the team roster repo on this machine ' +
-        '(and if the seat was only just added, check it was pushed from the machine that added it).';
+        where === 'hub'
+          ? 'The seat file arrives by git, not by sync: on the machine that added the seat, commit and ' +
+            `push \`.musterd/seats/${subject}.toml\` and \`git pull\` the roster repo on the hub — or run ` +
+            `\`musterd team add ${subject}\` on the hub. Until then every lane claim, handoff and ` +
+            'submit from every machine waits behind it.'
+          : 'The seat file arrives by git, not by sync: `git pull` the team roster repo on this machine ' +
+            '(and if the seat was only just added, check it was pushed from the machine that added it).';
       break;
     case 'unknown_act':
     case 'unknown_lane_event':
@@ -186,10 +201,17 @@ export function describeSyncPullStop(s: SyncPullStop, now: number = Date.now()):
       break;
     default:
       cause = s.subject
-        ? `it names "${subject}", which this machine cannot resolve yet`
-        : 'this machine cannot resolve it yet';
+        ? `it names "${subject}", which ${where === 'hub' ? 'the hub' : 'this machine'} cannot resolve yet`
+        : `${where === 'hub' ? 'the hub' : 'this machine'} cannot resolve it yet`;
       fix =
         'It is retried every minute; if it holds, ask an operator to read the daemon log for `sync_fold_`.';
+  }
+  if (where === 'hub') {
+    return (
+      `⚠ the hub's sync is stopped: it cannot apply event ${s.hub_seq} (${cause}), since ${ago}. ` +
+      `Nothing this machine sends reaches the team's board until it clears — lanes opened here stay ` +
+      `"not yet replicated to the hub", and claims and submits are refused. ${fix}`
+    );
   }
   return (
     `⚠ this machine's sync is stopped: it cannot apply the hub's event ${s.hub_seq} (${cause}), ` +
@@ -202,6 +224,10 @@ export function describeSyncPullStop(s: SyncPullStop, now: number = Date.now()):
 export interface RosterSyncState {
   wedged: SyncWedge | null;
   pull_stopped?: SyncPullStop | null;
+  /** ADR 591: the HUB's standing fold stop as this joiner last heard it on a push or pull answer —
+   *  the stop that holds every lane claim from every machine. Absent from an older daemon; null on
+   *  the hub itself and on a joiner whose hub is folding. */
+  hub_stopped?: SyncPullStop | null;
 }
 
 export const NodeListSchema = z.object({

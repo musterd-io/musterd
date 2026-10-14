@@ -121,6 +121,19 @@ describe('a stopped pull fold, as the roster says it (ADR 547)', () => {
     );
   });
 
+  it("as the HUB's stop, heard by a joiner (ADR 591): names the hub's roster, the lane consequence, and the two fixes", () => {
+    const text = describeSyncPullStop(stop({ subject: 'resident', hub_seq: 28897 }), NOW, 'hub');
+    expect(text).toContain("the hub's sync is stopped");
+    expect(text).toContain('seat "resident"');
+    expect(text).toContain("the hub's roster does not hold");
+    expect(text).toContain('28897');
+    expect(text).toContain('not yet replicated to the hub');
+    expect(text).toContain('.musterd/seats/resident.toml');
+    expect(text).toContain('musterd team add resident');
+    // The default wording is unchanged for every caller that did not say where.
+    expect(describeSyncPullStop(stop(), NOW)).toContain("this machine's sync is stopped");
+  });
+
   it('still reads for a kind a newer daemon added', () => {
     const text = describeSyncPullStop(stop({ kind: 'brand_new_kind', subject: null }), NOW);
     expect(text).toContain('sync is stopped');

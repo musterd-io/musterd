@@ -15,6 +15,7 @@ import { bindSeatToNode } from '../store/nodes.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
+import { HUB_STOP_WARN_AFTER_MS, readHubStop } from './hubStop.js';
 import {
   drainTeam,
   isStaleSocket,
@@ -39,6 +40,7 @@ withDrivers('pull', (_o, kind) => {
   let hubBase: string;
   let joinerBase: string;
   let nickCredential: string;
+  let nickOnJoiner: string;
   let dir: string;
   /** The joiner's own context — pushTeam runs inside the joiner daemon, not the hub. */
   let joinerCtx: Ctx;
@@ -155,7 +157,11 @@ withDrivers('pull', (_o, kind) => {
       creator: { name: 'nick', kind: 'human' },
     });
     nickCredential = created.json.human_credential;
-    await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } });
+    const onJoiner = await post(joinerBase, '/teams', {
+      slug: 'bravo',
+      creator: { name: 'nick', kind: 'human' },
+    });
+    nickOnJoiner = onJoiner.json.human_credential;
   });
 
   afterEach(async () => {
@@ -396,6 +402,100 @@ withDrivers('pull', (_o, kind) => {
       expect(await readPullStop(hub.config, team.id, t0 + 2 * SYNC_STOP_WARN_AFTER_MS)).toBeNull();
       const cleared = await get(hubBase, '/teams/bravo/members', nickCredential);
       expect(cleared.json.sync.pull_stopped).toBeNull();
+    });
+
+    it("the hub's stop reaches the joiner whose events it holds: on the push answer, the pull page, the joiner's roster, and the lane refusal (ADR 591)", async () => {
+      await send(joiner, 'j-0');
+      await enrollJoiner();
+      // A seat minted on the joiner, with no seat file the hub could have: the 2026-10-13 shape.
+      const late = await addSeat(joiner, 'late');
+      await insertMessage(
+        joiner.store,
+        (await joinerTeam()).id,
+        late.id,
+        null,
+        makeEnvelope({
+          id: 'l-1',
+          team: 'bravo',
+          from: 'late',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hi',
+          ts: 1,
+        }),
+      );
+      const joinerOwn = () => ({
+        db: joiner.store,
+        hub: new Hub(),
+        config: joiner.config,
+        rosterRoots: [],
+      });
+      const jt = await joinerTeam();
+      const t0 = 1_000_000_000_000;
+      await pushTeam(joinerOwn(), jt, t0);
+      await pullTeam(hubCtx(), await hubTeam(), t0); // the hub stops on `late`
+
+      // The hub's next answers carry its stop: a push (accepted, not applied) …
+      const pushed = await post(
+        hubBase,
+        '/teams/bravo/sync/push',
+        { events: [] },
+        joinerCredential(),
+      );
+      expect(pushed.status).toBe(200);
+      expect(pushed.json.fold_stopped).toMatchObject({ kind: 'unresolved_seat', subject: 'late' });
+      // … and a pull page.
+      const page = await get(hubBase, '/teams/bravo/sync/pull?after=0', joinerCredential());
+      expect(page.json.fold_stopped).toMatchObject({ kind: 'unresolved_seat', subject: 'late' });
+
+      // The joiner records what it heard — a quiet joiner has nothing to push, so it is the pull page
+      // that tells it — quiet inside the grace, a warning after it.
+      await pullTeam(joinerOwn(), jt, t0 + 1_000);
+      expect(readHubStop(joiner.config, jt.id, t0 + 1_000)).toBeNull();
+      expect(readHubStop(joiner.config, jt.id, t0 + HUB_STOP_WARN_AFTER_MS)).toMatchObject({
+        kind: 'unresolved_seat',
+        subject: 'late',
+        since: t0,
+      });
+      // On the roster every seat session on the joiner reads (the route uses the real clock).
+      const roster = await get(joinerBase, '/teams/bravo/members', nickOnJoiner);
+      expect(roster.json.sync.hub_stopped).toMatchObject({
+        kind: 'unresolved_seat',
+        subject: 'late',
+      });
+      // The hub itself names no hub stop: it has no hub.
+      const hubRoster = await get(hubBase, '/teams/bravo/members', nickCredential);
+      expect(hubRoster.json.sync.hub_stopped).toBeNull();
+
+      // A lane born on the joiner behind the stop: its patch is refused on the hub, and the refusal
+      // names the stop and the fix instead of "retry after the next sync".
+      const opened = await post(
+        joinerBase,
+        '/teams/bravo/lanes',
+        { title: 'born behind the stop', scope: ['docs/**'] },
+        nickOnJoiner,
+      );
+      expect(opened.status).toBe(201);
+      await pushTeam(joinerOwn(), jt, t0 + 2_000);
+      const patched = await fetch(`${joinerBase}/teams/bravo/lanes/${opened.json.lane.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${nickOnJoiner}` },
+        // Ownership is what the hub arbitrates (ADR 355) — the claim that was refused for 100 minutes.
+        body: JSON.stringify({ owner_seat: 'nick', state: 'claimed' }),
+      });
+      const refusal = (await patched.json()) as { error?: { message?: string } };
+      expect(patched.status).toBeGreaterThanOrEqual(400);
+      expect(refusal.error?.message).toContain('not yet replicated to the hub');
+      expect(refusal.error?.message).toContain("the hub's sync is stopped");
+      expect(refusal.error?.message).toContain('seat "late"');
+
+      // The seat reaches the hub; the next pull folds past it and the joiner hears the all-clear.
+      await addSeat(hub, 'late');
+      await pullTeam(hubCtx(), await hubTeam(), t0 + 3_000);
+      await pushTeam(joinerOwn(), jt, t0 + 4_000);
+      // Nothing left to push ⇒ no answer to hear; a pull page carries the cleared stop.
+      await pullTeam(joinerOwn(), jt, t0 + 5_000);
+      expect(readHubStop(joiner.config, jt.id, t0 + 2 * HUB_STOP_WARN_AFTER_MS)).toBeNull();
     });
 
     /**

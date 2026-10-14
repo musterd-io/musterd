@@ -85,6 +85,11 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   // ADR 547: and a pull whose fold has sat stopped for minutes — the other half of "my sync is stuck".
   if (res.sync?.pull_stopped)
     process.stdout.write('\n' + theme.warn(describeSyncPullStop(res.sync.pull_stopped)) + '\n');
+  // ADR 591: and the hub's own stop as this joiner heard it — what holds every lane claim from here.
+  if (res.sync?.hub_stopped)
+    process.stdout.write(
+      '\n' + theme.warn(describeSyncPullStop(res.sync.hub_stopped, Date.now(), 'hub')) + '\n',
+    );
   // ADR 516: the Team's active holds — what is paused, by whom, until when. Seat-authed and
   // best-effort like `pending` above: an ambient identity or an older daemon prints nothing.
   const holds =
