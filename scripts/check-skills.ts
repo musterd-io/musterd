@@ -6,7 +6,7 @@
  *
  * Every skill: SKILL.md opens with frontmatter whose `name` is the directory name (lowercase,
  * digits, hyphens, at most 64 characters) and whose `description` is present and at most 1,024
- * characters (the Agent Skills limits); relative links and routed `references/…` paths resolve;
+ * characters (the Agent Skills limits) and is valid as unquoted YAML; relative links and routed `references/…` paths resolve;
  * LICENSES/ never appears without PROVENANCE.md.
  *
  * Role skills (ROLE_SKILLS below): SKILL.md at most 250 lines; at least one reference;
@@ -36,7 +36,6 @@ const ROLE_SKILLS = [
 
 /** Roles whose rebuild by the ADR 586 method is still owed, with the lane that owes it. */
 const PENDING: Record<string, string> = {
-  security: '01M4VPY3M7YY7WE44ZN5DZ2WTB',
   courier: '01M4VPY4VCFHE0X231JT40HY36',
   planner: '01M4VPY6NTXKPAZM6TEVWXYHW1',
   steward: '01M4VPY6NTXKPAZM6TEVWXYHW1',
@@ -84,6 +83,11 @@ export function checkSkill(name: string): string[] {
     if (!fm.description) errs.push(`${name}: frontmatter has no description`);
     else if (fm.description.length > 1024)
       errs.push(`${name}: description is ${fm.description.length} characters (limit 1,024)`);
+    // An unquoted YAML value may not contain ": " — a real YAML parser rejects the whole
+    // frontmatter, and the harness then never loads the skill (caught by prose:lint on security).
+    const raw = /^description:\s*(.*)$/m.exec(text)?.[1] ?? '';
+    if (!/^["']/.test(raw) && raw.includes(': '))
+      errs.push(`${name}: description contains ": " unquoted, which is invalid YAML`);
   }
 
   for (const file of markdownFiles(dir)) {

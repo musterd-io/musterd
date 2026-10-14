@@ -1,0 +1,14 @@
+FICTIONAL scanner output for an eval. Package names and versions are invented.
+
+# pnpm audit --prod=false
+14 vulnerabilities found
+Severity: 9 high | 5 moderate
+
+high      ReDoS in glob-pattern-lite            dev: eslint-plugin-foo > glob-pattern-lite@2.1.0
+high      ReDoS in glob-pattern-lite            dev: eslint-plugin-bar > glob-pattern-lite@2.1.0
+high      Arbitrary file read in devserver-x    dev: vite-plugin-preview > devserver-x@0.9.3
+high      Prototype pollution in deep-merge-y   prod: packages/server > config-loader > deep-merge-y@1.4.0
+high      ReDoS in semver-ish                   dev: changeset-tool > semver-ish@5.0.1
+... (9 more, all under dev dependencies of build and lint tools)
+
+Run `pnpm audit --fix` to apply available fixes.
