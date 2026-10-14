@@ -657,6 +657,15 @@ interface WakeAuditRow {
   };
 }
 
+/** The wake rows `deriveWakeMetrics` reads. No ORDER BY, so SQLite seeks `(team_id, action, ts)`;
+ *  exported for the plan test (`ledgerPlans.test.ts`). */
+export const WAKE_AUDIT_SQL = `SELECT action, target, ts, detail FROM audit
+        WHERE team_id = ?
+          AND action IN ('residency.woke','residency.wake_failed','residency.wake_deferred',
+                         'residency.wake_exhausted','residency.wake_cost',
+                         'residency.wake_report_rejected')
+          AND ts > ?`;
+
 /**
  * Wake metrics (ADR 131 O&E, increment 5) — derived from `residency.*` audit rows joined to the
  * message log, the `deriveSteeringMetrics` shape. The headline pair:
@@ -678,26 +687,26 @@ export async function deriveWakeMetrics(
   now: number = Date.now(),
 ): Promise<WakeMetrics> {
   const since = now - WAKE_WINDOW_MS;
+  // No ORDER BY in the SQL (lane 01M4VYH20W): with one, SQLite walks `(team_id, ts)` to skip the
+  // sort and reads every audit row the team wrote in the window — 163,001 rows on the hub
+  // (2026-10-13) to keep 5,428, 1.4 s with a cold cache. Without it, it seeks
+  // `(team_id, action, ts)` once per action (0.07 s). The rows are put in ts order here instead.
   const rows: WakeAuditRow[] = (
     await db.all<{ action: string; target: string; ts: number; detail: string | null }>(
-      `SELECT action, target, ts, detail FROM audit
-        WHERE team_id = ?
-          AND action IN ('residency.woke','residency.wake_failed','residency.wake_deferred',
-                         'residency.wake_exhausted','residency.wake_cost',
-                         'residency.wake_report_rejected')
-          AND ts > ?
-        ORDER BY ts ASC`,
+      WAKE_AUDIT_SQL,
       [teamId, since],
     )
-  ).map((r) => {
-    let detail: WakeAuditRow['detail'] = {};
-    try {
-      detail = r.detail ? (JSON.parse(r.detail) as WakeAuditRow['detail']) : {};
-    } catch {
-      /* best-effort rows stay countable */
-    }
-    return { action: r.action, target: r.target, ts: r.ts, detail };
-  });
+  )
+    .sort((a, b) => a.ts - b.ts)
+    .map((r) => {
+      let detail: WakeAuditRow['detail'] = {};
+      try {
+        detail = r.detail ? (JSON.parse(r.detail) as WakeAuditRow['detail']) : {};
+      } catch {
+        /* best-effort rows stay countable */
+      }
+      return { action: r.action, target: r.target, ts: r.ts, detail };
+    });
 
   // ADR 273: reports the daemon REFUSED. Not a wake outcome — a wake whose outcome never got
   // recorded, which is worse, because the lease then expires and reads as "the host never
