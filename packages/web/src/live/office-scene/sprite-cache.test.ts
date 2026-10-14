@@ -108,6 +108,47 @@ describe('makeSpriteCache', () => {
     cache.clear();
     expect(cache.size()).toBe(0);
   });
+  it('box() measures once per key — a hit never replays the draw', () => {
+    const { createCanvas } = fakeCanvasFactory();
+    const cache = makeSpriteCache({ dpr: 2, createCanvas });
+    let runs = 0;
+    const draw = (c: CanvasRenderingContext2D) => {
+      runs++;
+      c.fillRect(10, 20, 30, 40);
+    };
+    const first = cache.box('k', draw);
+    expect(first).toEqual(deviceBox({ x0: 10, y0: 20, x1: 40, y1: 60 }, 2));
+    for (let frame = 0; frame < 5; frame++) expect(cache.box('k', draw)).toBe(first);
+    expect(runs).toBe(1);
+  });
+  it('box() remembers that a key draws nothing', () => {
+    const cache = makeSpriteCache({ dpr: 1, createCanvas: fakeCanvasFactory().createCanvas });
+    let runs = 0;
+    const draw = () => {
+      runs++;
+    };
+    expect(cache.box('empty', draw)).toBeNull();
+    expect(cache.box('empty', draw)).toBeNull();
+    expect(runs).toBe(1);
+  });
+  it('a key keeps its box and sprite together, and loses both to eviction or clear()', () => {
+    const { made, createCanvas } = fakeCanvasFactory();
+    const cache = makeSpriteCache({ dpr: 1, max: 1, createCanvas });
+    let runs = 0;
+    const draw = (c: CanvasRenderingContext2D) => {
+      runs++;
+      c.fillRect(0, 0, 1, 1);
+    };
+    const b = cache.box('a', draw)!;
+    cache.get('a', b, draw);
+    expect([runs, made.length, cache.size()]).toEqual([2, 1, 1]); // one measure, one raster, one entry
+    cache.box('z', draw); // evicts a, box and sprite both
+    cache.get('a', cache.box('a', draw)!, draw);
+    expect([runs, made.length]).toEqual([5, 2]);
+    cache.clear();
+    cache.box('a', draw);
+    expect(runs).toBe(6);
+  });
 });
 
 describe('resetCtxState', () => {
