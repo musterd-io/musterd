@@ -71,8 +71,9 @@
     "bump-brew-formula": "node --disable-warning=ExperimentalWarning scripts/bump-brew-formula.ts",
     "arch-trees:check": "node --disable-warning=ExperimentalWarning scripts/check-arch-trees.ts --check",
     "obs-evals:check": "node --disable-warning=ExperimentalWarning scripts/check-obs-evals.ts --check",
-    "test": "vitest run",
-    "coverage": "vitest run --coverage",
+    "test:query-decoder": "node --test patches/decode-uri-component.test.mjs",
+    "test": "pnpm test:query-decoder && vitest run",
+    "coverage": "pnpm test:query-decoder && vitest run --coverage",
     "coverage:merge": "vitest run --merge-reports=coverage-blobs --coverage",
     "test:scenarios": "vitest run tests/scenarios",
     "test:codex-cli-real": "vitest run tests/codex-cli.acceptance.test.ts",
@@ -119,7 +120,8 @@
     },
     "patchedDependencies": {
       "node-forge@1.4.0": "patches/node-forge@1.4.0.patch",
-      "braces@3.0.3": "patches/braces@3.0.3.patch"
+      "braces@3.0.3": "patches/braces@3.0.3.patch",
+      "decode-uri-component@0.2.2": "patches/decode-uri-component@0.2.2.patch"
     }
   }
 }
