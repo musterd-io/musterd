@@ -125,6 +125,23 @@ const LEASE_MAX_MS = 1_000;
 /** ADR 507: a lease idle this long returns its client, so a stalled request cannot pin one. */
 const LEASE_IDLE_MS = 250;
 
+/** Leading whitespace and SQL comments, skipped before a statement's first keyword. */
+const LEADING = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
+/** A row-locking clause: a SELECT that takes one is not a read for ADR 589. */
+const LOCKING = /\bFOR\s+(?:NO\s+KEY\s+UPDATE|UPDATE|KEY\s+SHARE|SHARE)\b/i;
+
+/**
+ * ADR 589 decision 1: a read is a plain `SELECT` — decided by its text, not its method, because the
+ * store sends `UPDATE … RETURNING` through `get` too. A row lock disqualifies it; so, conservatively,
+ * does the phrase appearing anywhere in the text.
+ */
+export function isPlainRead(sql: string): boolean {
+  const text = sql.replace(LEADING, '');
+  return /^SELECT\b/i.test(text) && !LOCKING.test(text);
+}
+
+const scopeKey = (s: Scope): string => `${s.role}:${s.team ?? ''}`;
+
 export function pgDriver(opts: PgDriverOptions): PgDriver {
   const make: PoolFactory = opts.pools ?? pgPoolFactory(opts);
   const pools: Partial<Record<Scope['role'], PoolLike>> = {};
@@ -177,6 +194,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     try {
       const t = requestTiming();
       if (!t) return await c.query(text, params as unknown[]);
+      t.stmt++;
       const t0 = performance.now();
       try {
         return await c.query(text, params as unknown[]);
@@ -201,13 +219,15 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     c: Client,
     s: Scope,
     body: (c: Client) => Promise<T>,
+    commitFirst = false,
   ): Promise<{ ok: true; r: T } | { ok: false; e: unknown }> => {
     // Request timing (requestTiming.ts): how long this client is held, BEGIN to COMMIT/ROLLBACK.
     const timing = requestTiming();
     const held = performance.now();
     if (timing) timing.tx++;
     try {
-      await c.query(opening(s));
+      // ADR 589 decision 3: a read run left open on a lease commits in this same round trip.
+      await c.query(commitFirst ? `COMMIT; ${opening(s)}` : opening(s));
       const r = await body(c);
       await c.query('COMMIT');
       return { ok: true, r };
@@ -224,11 +244,71 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   };
 
   /**
+   * ADR 589 decision 2: a read on a lease. It joins the read transaction the lease left open when the
+   * scope matches (one round trip: the statement); otherwise it commits that one and opens its own in
+   * one trip, and leaves it open for the next read. On failure the run rolls back — it held only
+   * reads — and the caller discards the client, as for any failed transaction (ADR 507 §6).
+   */
+  const onLeasedRead = async <T>(
+    c: Client,
+    s: Scope,
+    lease: Lease,
+    body: (c: Client) => Promise<T>,
+  ): Promise<{ ok: true; r: T } | { ok: false; e: unknown }> => {
+    const timing = requestTiming();
+    const held = performance.now();
+    const key = scopeKey(s);
+    try {
+      if (lease.open !== key) {
+        if (timing) timing.tx++;
+        await c.query(lease.open ? `COMMIT; ${opening(s)}` : opening(s));
+        lease.open = key;
+      }
+      return { ok: true, r: await body(c) };
+    } catch (e) {
+      lease.open = null;
+      try {
+        await c.query('ROLLBACK');
+      } catch {
+        // the connection is gone; release(err) discards it from the pool
+      }
+      return { ok: false, e };
+    } finally {
+      if (timing) timing.holdMs += performance.now() - held;
+    }
+  };
+
+  /**
+   * Give a lease's client back (ADR 507 §4–5), committing the read run it left open first (ADR 589
+   * decision 4). The lease lets go of the client before the commit is awaited, so work arriving
+   * meanwhile leases afresh rather than racing the commit.
+   */
+  const closeLease = async (lease: Lease): Promise<void> => {
+    const c = lease.client as Client | null;
+    const open = lease.open;
+    lease.client = null;
+    lease.open = null;
+    if (!c) return;
+    if (!open) return c.release();
+    try {
+      await c.query('COMMIT');
+      c.release();
+    } catch (e) {
+      c.release(e);
+    }
+  };
+
+  /**
    * One transaction. Inside an HTTP request scope (ADR 507) it runs on the request's leased client
    * for this pool — one checkout per request, not per statement — one transaction at a time;
    * anywhere else, and re-entrantly inside a leased transaction, it checks a client out for itself.
    */
-  const inTransaction = async <T>(s: Scope, body: (c: Client) => Promise<T>): Promise<T> => {
+  const inTransaction = async <T>(
+    s: Scope,
+    body: (c: Client) => Promise<T>,
+    /** ADR 589: a bare plain-`SELECT` statement, which may join the lease's open read run. */
+    read = false,
+  ): Promise<T> => {
     const scope = requestTiming();
     // Keyed by this driver AND pool: the coordination and trace stores are two drivers on two
     // databases sharing one request, and neither may run on the other's client.
@@ -239,6 +319,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         since: 0,
         idle: null,
         tail: Promise.resolve(),
+        open: null,
       });
       if (lease.idle) clearTimeout(lease.idle);
       lease.idle = null;
@@ -254,18 +335,23 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
           }
           const c = lease.client as Client;
           const held = new Set(holding.getStore() ?? []).add(key);
-          const out = await holding.run(held, () => onClient(c, s, body));
+          let out: { ok: true; r: T } | { ok: false; e: unknown };
+          if (read) {
+            out = await holding.run(held, () => onLeasedRead(c, s, lease, body));
+          } else {
+            const commitFirst = lease.open !== null;
+            lease.open = null;
+            out = await holding.run(held, () => onClient(c, s, body, commitFirst));
+          }
           if (!out.ok) {
             lease.client = null;
+            lease.open = null;
             c.release(out.e);
             throw isUnreachable(out.e) ? unavailable(out.e) : out.e;
           }
           // A long-lived response (an MCP stream) must not pin a client: past LEASE_MAX_MS the
           // client goes back after this transaction and the next statement leases afresh.
-          if (performance.now() - lease.since > LEASE_MAX_MS) {
-            lease.client = null;
-            c.release();
-          }
+          if (performance.now() - lease.since > LEASE_MAX_MS) await closeLease(lease);
           return out.r;
         }
       } finally {
@@ -295,8 +381,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       lease.idle = null;
       void lease.tail.then(() => {
         if (lease.idle) return; // new work arrived and re-armed it
-        lease.client?.release();
-        lease.client = null;
+        return closeLease(lease);
       });
     }, LEASE_IDLE_MS);
     lease.idle.unref?.();
@@ -315,8 +400,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
           if (lease!.idle) clearTimeout(lease!.idle);
           lease!.idle = null;
           await lease!.tail;
-          lease!.client?.release();
-          lease!.client = null;
+          await closeLease(lease!);
         }),
     );
   };
@@ -339,9 +423,13 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     const h: PgDriver = {
       dialect: 'postgres',
       get: async <R>(sql: string, params: Params = []) =>
-        inTransaction(s, async (c) => (await query(c, sql, params)).rows[0] as R | undefined),
+        inTransaction(
+          s,
+          async (c) => (await query(c, sql, params)).rows[0] as R | undefined,
+          isPlainRead(sql),
+        ),
       all: async <R>(sql: string, params: Params = []) =>
-        inTransaction(s, async (c) => (await query(c, sql, params)).rows as R[]),
+        inTransaction(s, async (c) => (await query(c, sql, params)).rows as R[], isPlainRead(sql)),
       run: async (sql, params = []) =>
         inTransaction(s, async (c) => ({ changes: (await query(c, sql, params)).rowCount ?? 0 })),
       exec: async (sql) => {

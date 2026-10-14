@@ -9,7 +9,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * - `waitMs`  — summed time waiting to check a client out of the pool;
  * - `holdMs`  — summed time a checked-out client was held (BEGIN … COMMIT), awaits included;
  * - `queryMs` — summed time inside `client.query` (the database's answer plus the wire);
- * - `tx`      — transactions opened (a bare statement is one).
+ * - `tx`      — transactions opened (a bare statement is one; ADR 589: a run of reads is one);
+ * - `stmt`    — store statements sent, so a request's work and its transactions can be told apart.
  *
  * `holdMs - queryMs` is time a client sat idle in transaction waiting on this process. Recorded by
  * the pg driver only; SQLite and the PGlite double leave it empty, and a request that touched no
@@ -20,6 +21,7 @@ export interface RequestTiming {
   holdMs: number;
   queryMs: number;
   tx: number;
+  stmt: number;
   /**
    * ADR 507: the client this request leased per pool, and the queue that runs its transactions
    * one at a time. Owned by the pg driver; empty on every other engine.
@@ -37,6 +39,11 @@ export interface Lease {
   /** Pending idle release (LEASE_IDLE_MS); cleared when new work arrives. */
   idle: ReturnType<typeof setTimeout> | null;
   tail: Promise<void>;
+  /**
+   * ADR 589: the scope (role and tenant) of a read transaction this lease left open on `client`, or
+   * null. The next read of that scope runs inside it; anything else commits it first.
+   */
+  open: string | null;
 }
 
 /** The drivers that hold leases register how to end a request; `endRequestTiming` calls them. */
@@ -57,6 +64,7 @@ export function withRequestTiming<T>(fn: () => T): { timing: RequestTiming; resu
     holdMs: 0,
     queryMs: 0,
     tx: 0,
+    stmt: 0,
     leases: {},
     ended: false,
   };

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { pgDriver, pgPoolFactory } from './pgDriver.js';
+import { isPlainRead, pgDriver, pgPoolFactory } from './pgDriver.js';
 import { endRequestTiming, requestTiming, withRequestTiming } from './requestTiming.js';
 
 /**
@@ -394,5 +394,150 @@ describe('request leases (ADR 507)', () => {
     await endRequestTiming(timing);
     expect([f1.busy(), f2.busy()]).toEqual([0, 0]);
     expect(requestTiming()).toBeUndefined();
+  });
+});
+
+describe('read runs on a lease (ADR 589)', () => {
+  const open = (team: string) =>
+    `BEGIN; SET LOCAL ROLE musterd_app; SELECT set_config('app.team_id', '${team}', true)`;
+
+  it('consecutive reads of one scope share one transaction: the second read is one round trip', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await d.forTeam('A').all('  -- a comment\n select 2');
+    });
+    await result;
+    expect(f.log).toEqual([`app: ${open('A')}`, 'app: SELECT 1', 'app:   -- a comment\n select 2']);
+    await endRequestTiming(timing);
+    expect(f.log.slice(-2)).toEqual(['app: COMMIT', 'app: release']); // the run commits before release
+    expect([timing.tx, timing.stmt]).toEqual([1, 2]);
+  });
+
+  it('a write commits the open run in the same trip as its own opening, and is never left open', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await d.forTeam('A').run('UPDATE x SET y = 1');
+      await d.forTeam('A').tx(async (t) => void (await t.run('UPDATE x SET y = 2')));
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.log).toEqual([
+      `app: ${open('A')}`,
+      'app: SELECT 1',
+      `app: COMMIT; ${open('A')}`,
+      'app: UPDATE x SET y = 1',
+      'app: COMMIT',
+      `app: ${open('A')}`,
+      'app: UPDATE x SET y = 2',
+      'app: COMMIT',
+      'app: release', // nothing open: no extra COMMIT at the end
+    ]);
+    expect(timing.tx).toBe(3);
+  });
+
+  it('a read in another scope commits the run and opens its own; it never joins another tenant', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await d.forTeam('B').get('SELECT 2');
+      await d.forTeam('B').get('SELECT 3');
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.log).toEqual([
+      `app: ${open('A')}`,
+      'app: SELECT 1',
+      `app: COMMIT; ${open('B')}`,
+      'app: SELECT 2',
+      'app: SELECT 3',
+      'app: COMMIT',
+      'app: release',
+    ]);
+  });
+
+  it('a get that writes (UPDATE … RETURNING) or locks rows (FOR UPDATE) is a write, not a read', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('UPDATE nodes SET next_seq = next_seq + 1 RETURNING next_seq');
+      await d.forTeam('A').get('SELECT * FROM lanes WHERE id = ? FOR UPDATE', ['L']);
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.log).toEqual([
+      `app: ${open('A')}`,
+      'app: UPDATE nodes SET next_seq = next_seq + 1 RETURNING next_seq',
+      'app: COMMIT',
+      `app: ${open('A')}`,
+      'app: SELECT * FROM lanes WHERE id = $1 FOR UPDATE ["L"]',
+      'app: COMMIT',
+      'app: release',
+    ]);
+  });
+
+  it('a failed read rolls the run back and discards the client; the next read leases afresh', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      f.fail('SELECT boom');
+      await expect(d.forTeam('A').get('SELECT boom')).rejects.toThrow(/boom/);
+      await d.forTeam('A').get('SELECT after');
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.log.slice(0, 5)).toEqual([
+      `app: ${open('A')}`,
+      'app: SELECT 1',
+      'app: SELECT boom',
+      'app: ROLLBACK',
+      'app: release(err)',
+    ]);
+    expect(f.log.slice(5)).toEqual([
+      `app: ${open('A')}`,
+      'app: SELECT after',
+      'app: COMMIT',
+      'app: release',
+    ]);
+    expect(f.connects()).toBe(2);
+    expect(f.busy()).toBe(0);
+  });
+
+  it('a lease that idles out commits its open run before the client goes back', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await new Promise((r) => setTimeout(r, 400));
+      expect(f.busy()).toBe(0);
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.log).toEqual([`app: ${open('A')}`, 'app: SELECT 1', 'app: COMMIT', 'app: release']);
+  });
+
+  it('outside a request a read is still its own transaction', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    await d.forTeam('A').get('SELECT 1');
+    await d.forTeam('A').get('SELECT 2');
+    expect(f.log.filter((l) => l === 'app: COMMIT')).toHaveLength(2);
+    expect(f.busy()).toBe(0);
+  });
+
+  it('isPlainRead reads the text: leading comments and case are skipped; writes and locks are not reads', () => {
+    expect(isPlainRead('SELECT 1')).toBe(true);
+    expect(isPlainRead('\n  /* why */ -- note\n  select * from x')).toBe(true);
+    expect(isPlainRead('UPDATE x SET y = 1 RETURNING y')).toBe(false);
+    expect(isPlainRead('INSERT INTO x VALUES (1) RETURNING id')).toBe(false);
+    expect(isPlainRead('WITH d AS (DELETE FROM x RETURNING *) SELECT * FROM d')).toBe(false);
+    expect(isPlainRead('SELECT * FROM x FOR SHARE')).toBe(false);
+    expect(isPlainRead('SELECT * FROM x FOR NO KEY UPDATE')).toBe(false);
+    expect(isPlainRead('SELECTED')).toBe(false);
   });
 });
