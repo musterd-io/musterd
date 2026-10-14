@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildSeat,
+  publishSeatFile,
   seatFileExists,
   seatFilePath,
   seatFileUnpublished,
+  seatPublishLines,
   seatReachLines,
   unpublishedSeatLines,
   writeSeatFile,
@@ -160,5 +162,105 @@ describe('unpublishedSeatLines — the one sentence for a seat file that has not
     expect(warn).toContain('until .musterd/seats/alfie.toml is pushed');
     expect(how).not.toContain(' add ');
     expect(how).toContain('git -C /r push');
+  });
+});
+
+describe('publishSeatFile — a seat-making command pushes the seat file itself (ADR 592)', () => {
+  let root: string;
+  let home: string;
+  let other: string;
+  let remote: string;
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  const identify = (cwd: string) => {
+    git(cwd, 'config', 'user.email', 't@t');
+    git(cwd, 'config', 'user.name', 't');
+  };
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-seatpublish-'));
+    remote = join(root, 'remote.git');
+    home = join(root, 'home');
+    other = join(root, 'other');
+    execFileSync('git', ['init', '--quiet', '--bare', '-b', 'main', remote]);
+    execFileSync('git', ['clone', '--quiet', remote, home]);
+    identify(home);
+    writeFileSync(join(home, 'team.toml'), 'slug = "bravo"\n');
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'team');
+    git(home, 'push', '-q', '-u', 'origin', 'main');
+    execFileSync('git', ['clone', '--quiet', remote, other]);
+    identify(other);
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('adds, commits and pushes an uncommitted seat file — and only that file', () => {
+    writeSeatFile(home, 'resident', { kind: 'agent' });
+    writeFileSync(join(home, 'scratch.txt'), 'not a seat\n');
+    expect(publishSeatFile(home, 'resident')).toEqual({ state: 'published' });
+    expect(seatFileUnpublished(home, 'resident')).toBeNull();
+    expect(git(home, 'log', '-1', '--format=%s')).toBe('roster: add resident');
+    expect(git(home, 'show', '--stat', '--format=', 'HEAD')).toContain('resident.toml');
+    expect(git(home, 'show', '--stat', '--format=', 'HEAD')).not.toContain('scratch.txt');
+    expect(git(home, 'status', '--porcelain')).toContain('scratch.txt');
+    // The other clone sees it on a plain pull.
+    git(other, 'pull', '-q');
+    expect(seatFileExists(other, 'resident')).toBe(true);
+  });
+
+  it('pushes a committed-but-unpushed file, and is a no-op on a published one', () => {
+    writeSeatFile(home, 'resident', { kind: 'agent' });
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'add resident by hand');
+    expect(publishSeatFile(home, 'resident')).toEqual({ state: 'published' });
+    expect(git(home, 'log', '-1', '--format=%s')).toBe('add resident by hand');
+    expect(publishSeatFile(home, 'resident')).toEqual({ state: 'already' });
+  });
+
+  it('catches up once when the remote moved first — two machines adding seats the same evening', () => {
+    writeSeatFile(other, 'alfie', { kind: 'agent' });
+    git(other, 'add', '.');
+    git(other, 'commit', '-q', '-m', 'roster: add alfie');
+    git(other, 'push', '-q');
+    writeSeatFile(home, 'resident', { kind: 'agent' });
+    expect(publishSeatFile(home, 'resident')).toEqual({ state: 'published' });
+    expect(seatFileExists(home, 'alfie')).toBe(true);
+    git(other, 'pull', '-q');
+    expect(seatFileExists(other, 'resident')).toBe(true);
+  });
+
+  it('skipped outside git or without an upstream; failed carries what git said', () => {
+    const plain = mkdtempSync(join(tmpdir(), 'musterd-nogit-'));
+    try {
+      writeSeatFile(plain, 'resident', { kind: 'agent' });
+      expect(publishSeatFile(plain, 'resident')).toMatchObject({ state: 'skipped' });
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
+    const lone = join(root, 'lone');
+    execFileSync('git', ['init', '--quiet', '-b', 'main', lone]);
+    writeSeatFile(lone, 'resident', { kind: 'agent' });
+    expect(publishSeatFile(lone, 'resident')).toMatchObject({
+      state: 'skipped',
+      detail: 'no upstream branch to push to',
+    });
+    // The same seat committed on both machines with different content: the rebase conflicts, and
+    // the daemon's rule holds here too — report, never resolve.
+    writeSeatFile(other, 'resident', { kind: 'agent', role: 'a' });
+    git(other, 'add', '.');
+    git(other, 'commit', '-q', '-m', 'add resident on other');
+    git(other, 'push', '-q');
+    writeSeatFile(home, 'resident', { kind: 'agent', role: 'b' });
+    const r = publishSeatFile(home, 'resident');
+    expect(r.state).toBe('failed');
+    expect(r.detail).toBeTruthy();
+    git(home, 'rebase', '--abort');
+    const lines = seatPublishLines('resident', home, r, seatFileUnpublished(home, 'resident'));
+    expect(lines?.warn?.[0]).toContain('could not publish');
+    expect(lines?.warn?.[1]).toContain('git -C');
   });
 });

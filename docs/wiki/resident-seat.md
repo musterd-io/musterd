@@ -15,5 +15,6 @@ A resident seat is a Member enrolled with harness `musterd`, run in-process by `
 - **No checkout, no seat.** A folder that is not a git checkout looks enrolled and then fails at the first wake. Check `git -C <folder> status` first.
 - **Never a printed key.** Printing the minted key into a terminal or a file puts it in scrollback and logs. Let `--install --into` write it.
 - **The key lives in launchd's env, and the host must restart to see it.** Setting the variable in a shell does nothing to a running host. Kickstart after every key change.
+- **The seat file must reach the roster remote, or every other machine's sync stops at the seat's first event.** `musterd agent` and `team add` push `.musterd/seats/<seat>.toml` themselves now (ADR 592) and print one line saying so; if they print a warning instead, run the commands in it before enrolling. A hub whose fold stopped on the seat pulls the roster repo on its own once the file is pushed — a stop that lasts longer than a minute names a root a person must `git pull` by hand (the hub's log, `sync_roster_refresh_failed`). On 2026-10-13 the file sat uncommitted for 100 minutes and held every lane on the team (ADR 591).
 
 Source: ADR 588 (`docs/decisions/588-resident-byok-seat.md`); lane `01M4W041S2Q9D55PKWWF4NTT7P`.

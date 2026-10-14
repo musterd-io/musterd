@@ -19,6 +19,7 @@ import { HUB_STOP_WARN_AFTER_MS, readHubStop } from './hubStop.js';
 import {
   drainTeam,
   isStaleSocket,
+  peekPullStop,
   pullTeam,
   readPullStop,
   SYNC_STOP_WARN_AFTER_MS,
@@ -496,6 +497,66 @@ withDrivers('pull', (_o, kind) => {
       // Nothing left to push ⇒ no answer to hear; a pull page carries the cleared stop.
       await pullTeam(joinerOwn(), jt, t0 + 5_000);
       expect(readHubStop(joiner.config, jt.id, t0 + 2 * HUB_STOP_WARN_AFTER_MS)).toBeNull();
+    });
+
+    it('ADR 592: a fold stopped on an unknown seat asks the roster hook, and folds past in the same tick when the seat arrives', async () => {
+      await send(joiner, 'j-0');
+      await enrollJoiner();
+      const late = await addSeat(joiner, 'late');
+      await insertMessage(
+        joiner.store,
+        (await joinerTeam()).id,
+        late.id,
+        null,
+        makeEnvelope({
+          id: 'l-592',
+          team: 'bravo',
+          from: 'late',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hi',
+          ts: 1,
+        }),
+      );
+      const jt = await joinerTeam();
+      const t0 = 1_000_000_000_000;
+      await pushTeam(joinerCtx, jt, t0);
+
+      // A hook that cannot help: the stop stands, exactly as before this ADR.
+      const asked: string[] = [];
+      const standing = {
+        ...hubCtx(),
+        onUnresolvedSeat: async (_team: { id: string; slug: string }, seat: string) => {
+          asked.push(seat);
+          return false;
+        },
+      };
+      // j-0 folds (it is before the stop); the page stops at l-592.
+      expect(await pullTeam(standing, await hubTeam(), t0)).toBe(1);
+      expect(asked).toEqual(['late']);
+      expect(peekPullStop(hub.config, (await hubTeam()).id)).toMatchObject({
+        kind: 'unresolved_seat',
+        subject: 'late',
+      });
+
+      // The hook that pulled the roster repo and found the seat: one call, and the same tick folds
+      // the act — no second tick, no human `git pull` on the hub.
+      const resolving = {
+        ...hubCtx(),
+        onUnresolvedSeat: async (_team: { id: string; slug: string }, seat: string) => {
+          asked.push(`resolve:${seat}`);
+          await addSeat(hub, seat);
+          return true;
+        },
+      };
+      expect(await pullTeam(resolving, await hubTeam(), t0 + 1_000)).toBe(1);
+      expect(asked).toEqual(['late', 'resolve:late']);
+      expect(peekPullStop(hub.config, (await hubTeam()).id)).toBeNull();
+      const folded = await hub.store.get<{ body: string }>(
+        'SELECT body FROM messages WHERE id = ?',
+        ['l-592'],
+      );
+      expect(folded?.body).toBe('hi');
     });
 
     /**

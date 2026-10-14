@@ -42,6 +42,7 @@ import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
+import { makeUnresolvedSeatHook } from './sync/rosterRefresh.js';
 import { attachSyncStream } from './sync/streamHub.js';
 import { startSyncStream } from './sync/streamJoiner.js';
 import { startTracePush } from './sync/tracePush.js';
@@ -203,6 +204,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // operator. On SQLite these are the same handles.
   const opCtx = operatorCtx(ctx);
   const opDb = opCtx.db;
+  // ADR 592: a fold stopped on an unknown seat pulls the roster roots itself and reconciles —
+  // wired on the operator ctx the sync loops run under, because reconcile is about every team.
+  // A test that passes `rosterRoots: []` gets a hook that answers false at once.
+  opCtx.onUnresolvedSeat = makeUnresolvedSeatHook(opCtx);
   // ADR 533: how the policy review ask is stored and delivered — the daemon's route, daemon-composed.
   const policyReviewSend = async (from: MemberRow, env: Envelope) => {
     const team = (await getTeamBySlug(opDb, env.team))!;

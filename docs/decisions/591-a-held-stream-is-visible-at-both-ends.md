@@ -96,6 +96,11 @@ the existing design visible and self-explaining at the point of failure.
 - Air 2's uncommitted `resident.toml` and the hub's copy written by `team add` are two files for one
   seat; the hub's wins on the next reconcile, and `seatReachLines` would have named the first one at
   18:21.
+- **2026-10-13, later — [ADR 592](592-unknown-seat-parks-not-stalls.md) runs the commands this ADR
+  prints.** `team add` and `musterd agent` publish the seat file themselves (`publishSeatFile`), and
+  a daemon stopped on an unknown seat pulls its roster roots and folds again in the same tick. The
+  lines in decision 5 stay as the fallback when a publish fails or `--no-publish` was passed. Still
+  not decided: the daemon writing seat files, or members as a sync kind.
 
 ## Observability & Evaluation
 

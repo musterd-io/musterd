@@ -83,6 +83,11 @@ visible and their frequency is known.
   with its seat file never committed) saw its pushes accepted and its lanes refused as "not yet
   replicated — retry after the next sync" for 100 minutes. ADR 591 puts the hub's stop on every push
   and pull answer, on the joiner's roster as `sync.hub_stopped`, and in the lane refusal itself.
+- **2026-10-13 — the open question, answered by [ADR 592](592-unknown-seat-parks-not-stalls.md).** The
+  stop stays (ADR 393); what ends it is no longer a person. A seat-making command publishes the seat
+  file it wrote, and a daemon whose fold stops on an unknown seat pulls its roster roots itself and
+  folds again in the same tick. The warning here remains for the case where that pull cannot
+  fast-forward or the file was never pushed.
 
 ## Observability & Evaluation
 
