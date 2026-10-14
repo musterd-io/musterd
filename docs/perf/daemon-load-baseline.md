@@ -967,3 +967,53 @@ captured in full (`~/.musterd/cloud/bench/out/run39-hub-http.log`, 63 872 in the
   the request capture, to settle build vs environment; lane 01M4VR41VE5MABHT8SYC9N6X8X — the
   transaction count per request (interrupt-check's 15 for an empty answer), which costs the same on
   either build.
+
+## 2026-10-14 — Cloud run 40: p95 537 ms on `1311808` — the ambient-touch cut (#2543) and shared read transactions (ADR 589, #2556) take a third off every request's database time (lane 01M4VVMNEX2CQB9TYSKA6CNGD4)
+
+Same app machine (one vCPU), Neon 1 CU, shape and `performance-4x` bench as runs 37–39, team
+`lb-run40`, on main `1311808` (Fly release after `6fd7aca`). The deploy carries two changes over run
+39's build:
+
+- #2543: the ambient touch every authenticated request runs is 4 statements shorter;
+- #2556: consecutive same-scope `SELECT`s on a request's leased client share one transaction.
+
+`pg_stat_statements` was reset at 01:00:18Z. The hub's `http_request` lines were captured as in run
+39 (`run40-hub-http.log`, 66 922 in the load window).
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 | `dc09c35` | 355 ms | 791 ms | 1 203 ms | 66 306 (51.0) | 1 | 231 ms |
+| 39 | `6fd7aca` | 560 ms | 1 754 ms | 2 341 ms | 63 838 (49.1) | 3 | 663 ms |
+| 40 | `1311808` | **229 ms** | **537 ms** | 671 ms | 67 160 (51.7) | 1 | 235 ms |
+
+The server's own timings, medians (p95 where marked):
+
+| route | run 39 ms (p95) | run 40 ms (p95) | hold 39 → 40 | tx 39 → 40 | statements 40 |
+| --- | --- | --- | --- | --- | --- |
+| all | 369 (990) | 107 (427) | 163 → 51 | 6 → 2 | 5 |
+| `GET /teams/:slug` | 466 (979) | 300 (455) | 116 → 42 | 4 → 2 | 4 |
+| interrupt-check | 251 (972) | 56 (286) | 247 → 55 | 15 → 4 | 11 |
+| `GET /report` | 178 (584) | 48 (126) | 177 → 47 | 6 → 2 | 5 |
+| `GET /inbox` | 465 (1 563) | 107 (416) | 456 → 103 | 23 → 4 | 19 |
+| `POST /claim` | 658 (2 060) | 244 (648) | 654 → 238 | 28 → 15 | 39 |
+| `POST /messages` | 332 (1 242) | 88 (369) | 319 → 84 | 16 → 6 | 16 |
+
+- **Round trips were the cost.** Statements per request barely moved: interrupt-check sends 11, about
+  what #2543 left. Transactions per request fell 3–6×, and connection hold fell with them, while
+  query time fell less (interrupt-check 82 → 38 ms). The hold that left was the BEGIN and COMMIT
+  round trips around each read.
+- **Most of the outside-the-handler gap closed too.** Run 39's bench p95 sat 760 ms above the
+  server's; run 40's sits 110 ms above (537 against 427). `/health`, which touches the database once,
+  went from p95 663 to 235 ms. Shorter requests hold the one event loop and their client for less
+  time, so less queues behind them. Run 39's gap was mostly that queue, not the edge.
+- **This passes the budget and beats the `dc09c35` baseline** (run 32's 791 ms). Whether `6fd7aca`
+  regressed against `dc09c35` is now moot for capacity. Lane `01M4VR3Y42` (call it run 41, on a
+  pre-migration Neon branch) would still answer it, if anyone needs the answer.
+- **ADR 589's snapshot premise was wrong; vacuum kept up.** Sampled four times around +12 min,
+  `idle in transaction` backends after a plain `SELECT` showed `backend_xmin` in 5 of 7 cases, in
+  transactions 3–18 ms old. After the run, `presence` (655 autovacuums, the hottest churn) was at
+  0 dead rows, vacuumed at 01:25Z. `messages` was at 13.9% dead, short of its 20% trigger and level
+  with before the change. ADR 589 Consequences records the correction; the ledger entry is
+  `docs/claims/entries/2026-10-14-read-run-holds-no-snapshot.md`.
+- Falsify: a matched repeat on `1311808` lands p95 above 800 ms. Then run 40 was a low draw, as run
+  37 turned out to be, and the gain is smaller than the table says.
