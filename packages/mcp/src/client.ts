@@ -244,6 +244,9 @@ export class MusterdClient {
   /** A fixed hearing attestation for a holder with no idle-wake core: a resident seat hears
    *  in-process, so it is `idle` (pushable) for as long as it holds the seat. */
   private fixedHearing: { hearing: Hearing; reason?: string } | null = null;
+  /** ADR 588 §6: the holder IS the session (a native loop) and vouches for it — the ADR 164 ladder
+   *  is not consulted on its heartbeat. See {@link vouchSession}. */
+  private sessionVouched = false;
   private ws: WebSocket | null = null;
   private heartbeat: NodeJS.Timeout | null = null;
   /** The ADR 164 session ladder, created lazily on the first heartbeat tick. */
@@ -420,6 +423,19 @@ export class MusterdClient {
   /** ADR 558: attach the idle-wake core. Deliveries and (re)connects feed it from here on. */
   attachIdleWake(iw: IdleWake): void {
     this.idleWake = iw;
+  }
+
+  /**
+   * ADR 588 §6: this holder is the session. The ADR 164 ladder judges a harness session from the
+   * outside — its parent process, its transcript — and an in-process native loop has neither: the
+   * wake actuator is a LaunchAgent (launchd is its parent, so the `ppid` rung reads "re-parented,
+   * exit") and it writes no transcript. Measured 2026-10-13 on every resident wake: the first
+   * heartbeat (15 s) released presence and closed the socket, the next tool call re-joined, and a
+   * steer sent in the gap could not be delivered in-process. A vouched holder keeps presence for as
+   * long as it holds the seat; `close()` at settle is what drops it (ADR 251 §5).
+   */
+  vouchSession(): void {
+    this.sessionVouched = true;
   }
 
   /**
@@ -1317,6 +1333,9 @@ export class MusterdClient {
    * down. Never throws: any failure to judge leaves the heartbeat alone.
    */
   private attestSession(): boolean {
+    // ADR 588 §6: a holder that is the session vouches for it — nothing outside the loop can know
+    // better, and the ladder's `ppid` rung is wrong about a LaunchAgent by construction.
+    if (this.sessionVouched) return false;
     let verdict;
     try {
       verdict = this.sessionLadder().check();

@@ -169,8 +169,12 @@ export async function openNativeBridge(config: McpConfig): Promise<NativeBridge>
   // is raised, and the answer rides out on the tool result. `interruptCheck` is silent until the
   // first tool call has autojoined (`holdsSeat` is false before it), which is exactly right — an
   // occupancy that does not exist yet has no inbox to interrupt.
-  // ADR 588 §6: the holder of this seat is never idle — it hears in-process — so it attests a
-  // fixed `hearing` on every heartbeat (the roster column is idle-wake increment 5).
+  // ADR 588 §6: the holder of this seat IS the session — the loop, in this process — so it vouches
+  // for it (the ADR 164 ladder would read the LaunchAgent's launchd parent as "exit" and release
+  // presence at the first heartbeat, as every resident wake did on 2026-10-13), and it is never idle:
+  // it hears in-process, so it attests a fixed `hearing` on every heartbeat (the roster column is
+  // idle-wake increment 5). `close()` at settle is what drops presence.
+  musterd.vouchSession();
   musterd.attestHearing('idle', 'resident: in-process steer');
   // Lines already steered into the loop, so the tool-result probe does not ring them again.
   const steered = new Map<string, number>();

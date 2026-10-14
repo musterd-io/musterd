@@ -170,6 +170,29 @@ describe('the client feeds the idle-wake core (ADR 558)', () => {
     client.close();
   });
 
+  it('ADR 588 §6: a holder that vouches for its session is never released by the ladder — a LaunchAgent parent is not an exit', async () => {
+    const { client } = await daemon();
+    await client.join(3000);
+    type Ladder = { session?: { check(): unknown }; attestSession(): boolean };
+    const inner = client as unknown as Ladder;
+    // The ladder a native loop meets: re-parented to pid 1 (launchd), which reads as `exit`.
+    inner.session = { check: () => ({ verdict: 'exit', rung: 'ppid' }) };
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(inner.attestSession()).toBe(true); // an ordinary adapter releases
+      expect(client.joined).toBe(false);
+    } finally {
+      stderr.mockRestore();
+    }
+    const { client: resident } = await daemon();
+    resident.vouchSession();
+    await resident.join(3000);
+    (resident as unknown as Ladder).session = { check: () => ({ verdict: 'exit', rung: 'ppid' }) };
+    expect((resident as unknown as Ladder).attestSession()).toBe(false); // vouched: heartbeats on
+    expect(resident.joined).toBe(true);
+    resident.close();
+  });
+
   it('without a core the heartbeat carries no hearing at all', async () => {
     const { client } = await daemon();
     await client.join(3000);

@@ -188,6 +188,13 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   `hearing: idle` ("resident: in-process steer") on every heartbeat; the roster column that renders it
   is idle-wake increment 5 (lane `01M4M6QP2J`), not this lane. ADR 558 §6's "native is exempt" carries
   the dated marker. The directed-act → first-answer measurement is the pilot's (Decision 7).
+- _2026-10-13 (doorbell lane, the live probe)._ The first mid-turn steer did not arrive in-process:
+  every resident occupancy had been losing its socket 15 s after it opened, because the ADR 164
+  ladder's `ppid` rung reads the wake actuator's launchd parent as "re-parented, exit" and released
+  presence at the first heartbeat; the next tool call re-joined, so the tool-result path masked it
+  (the probe's steer still landed that way and was answered in 3 s). A native holder now vouches for
+  its own session (`MusterdClient.vouchSession`, set by the bridge): presence lives for the run and
+  `close()` at settle drops it. Decision 1's "always on" needed this to be literally true.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
