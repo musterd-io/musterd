@@ -399,10 +399,17 @@ export type SeatNodeTrusted = z.infer<typeof SeatNodeTrustedSchema>;
  * the joiner, and the seat that chose it. The hub re-authorizes the actor against its OWN roster —
  * a node credential proves the machine, never that the person behind the request is an admin there.
  * `policy` carries replace semantics all the way through (ADR 185): what the wire omits is unset.
+ *
+ * `base` (ADR 587) is the stored override the forwarding machine held when it took the request —
+ * the document the admin's client read and merged into. The hub refuses the change (`conflict`)
+ * when `base` is not its own stored override, because then `policy` was built on a copy the hub has
+ * since moved past and replacing with it would unset what that copy lacked. Optional so a joiner on
+ * an older build still reaches the hub; the hub accepts such a request as before.
  */
 export const SyncPolicyRequestSchema = z.object({
   actor: z.string().min(1),
   policy: PolicyOverrideSchema,
+  base: PolicyOverrideSchema.optional(),
 });
 export type SyncPolicyRequest = z.infer<typeof SyncPolicyRequestSchema>;
 

@@ -3769,10 +3769,17 @@ export async function handleHttp(
             answer = await policyAtHub(enrollment, team.slug, {
               actor: member.name,
               policy: stored,
+              // ADR 587: the copy the admin's client read and merged into is this machine's stored
+              // doc. The hub refuses the change if that copy is behind its own.
+              base: await getStoredPolicy(ctx.db, team.id),
             });
           } catch (err) {
             if (err instanceof HubUnreachableError)
               throw new MusterdError('hub_unreachable', err.message);
+            // Stale copy: pull now, so the admin's retry reads and merges into the hub's doc.
+            if (err instanceof MusterdError && err.code === 'conflict') {
+              await pullTeam(ctx, team).catch(() => undefined);
+            }
             throw err;
           }
           // Best effort, as on the lane path: pull the hub's decision now so the admin's next read
@@ -5798,7 +5805,15 @@ export async function handleHttp(
         if (!resolveCapabilities(actor).is_admin) {
           throw new MusterdError('forbidden', `"${body.actor}" is not an admin on ${slug}`);
         }
-        const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy);
+        // ADR 587: a joiner names the stored doc its change was built on, and a stale one is refused
+        // inside the write. One that names none is a pre-587 build: accepted as before, and logged so
+        // the last such forwarder can be found before this is ever made required.
+        if (body.base === undefined) {
+          log.warn({ msg: 'sync_policy_without_base', team: slug, node: node.id });
+        }
+        const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy, {
+          ...(body.base !== undefined ? { base: body.base } : {}),
+        });
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, applied);
       }

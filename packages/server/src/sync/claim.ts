@@ -746,12 +746,14 @@ export async function policyAtHub(
     const b = body as { error?: { code?: string; message?: string } } | null;
     // The hub's refusal is the answer, relayed with its code — `forbidden` for an actor who is no
     // admin there, `not_found` for a seat its roster lacks, `bound_elsewhere` for a seat that does
-    // not live on this machine (gptbot's review of #1228). Anything else is a fault, not a verdict:
-    // a 500 here would tell the admin the hub is broken when it has in fact answered them.
+    // not live on this machine (gptbot's review of #1228), `conflict` for a change built on a copy
+    // of the policy the hub has moved past (ADR 587). Anything else is a fault, not a verdict: a 500
+    // here would tell the admin the hub is broken when it has in fact answered them.
     if (
       b?.error?.code === 'forbidden' ||
       b?.error?.code === 'not_found' ||
-      b?.error?.code === 'bound_elsewhere'
+      b?.error?.code === 'bound_elsewhere' ||
+      b?.error?.code === 'conflict'
     ) {
       throw new MusterdError(
         b.error.code === 'bound_elsewhere' ? 'forbidden' : b.error.code,

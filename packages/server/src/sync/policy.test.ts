@@ -280,6 +280,50 @@ withDrivers('policy', (_o, kind) => {
       );
     });
 
+    it('a change built on a joiner copy the hub has moved past is refused, and the retry merges into the hub doc (ADR 587)', async () => {
+      // 2026-09-06 on revive: a joiner whose copy of the policy was empty forwarded the CLI's
+      // read-merge-write of `--dispatch on` — `{loops:{dispatch:true}}` — and the hub stored it as
+      // given, turning off its review and sweep loops and dropping its seeds relay.
+      await residentOnJoiner();
+      const hubDoc = {
+        loops: { review: true, sweep: true },
+        standing_reseat_known_agents: true,
+      };
+      expect((await post(hubBase, '/teams/bravo/policy', hubDoc, nickOnHub)).status).toBe(200);
+      const hubStored = await getStoredPolicy(hub.store, (await hubTeam()).id);
+      // No round trip: the joiner has not folded the hub's change, so its copy is still empty.
+      expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual({});
+
+      const stale = await post(
+        joinerBase,
+        '/teams/bravo/policy',
+        { loops: { dispatch: true } },
+        nickOnJoiner,
+      );
+      expect(stale.status).toBe(409);
+      expect(stale.json.error.code).toBe('conflict');
+      expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(hubStored);
+
+      // The refusal pulled, so the admin's retry reads the hub's doc and merges into it.
+      const copy = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
+      expect(copy).toEqual(hubStored);
+      const retry = await post(
+        joinerBase,
+        '/teams/bravo/policy',
+        { ...copy, loops: { ...copy.loops, dispatch: true } },
+        nickOnJoiner,
+      );
+      expect(retry.status).toBe(200);
+      expect((await getPolicy(hub.store, (await hubTeam()).id)).loops).toEqual({
+        review: true,
+        sweep: true,
+        dispatch: true,
+      });
+      expect(
+        (await getStoredPolicy(hub.store, (await hubTeam()).id)).standing_reseat_known_agents,
+      ).toBe(true);
+    });
+
     it('a joiner-side change with the hub down REFUSES hub_unreachable and changes nothing', async () => {
       const before = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
       await hub.close();
