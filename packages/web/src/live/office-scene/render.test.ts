@@ -65,8 +65,14 @@ import { assignSeats } from './seating';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
 import { projectWallBoard, STICKY_CAP, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
-import type { SpriteCache } from './sprite-cache';
+import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import type { Lane, LaneState, WorkingHours } from '@musterd/protocol';
+
+/** The real cache's measuring rule, unmemoized — a test double that skips an item drawing nothing. */
+const measuredBox: SpriteCache['box'] = (_key, draw) => {
+  const b = measureBounds(draw);
+  return b ? deviceBox(b, 1) : null;
+};
 
 /** A minimal lane for wall-board fixtures — only id and state matter to the wall. */
 function laneFix(id: string, state: LaneState): Lane {
@@ -1273,6 +1279,7 @@ describe('desk props stand on the desk', () => {
  */
 function passthroughCache(ctx: CanvasRenderingContext2D): SpriteCache {
   return {
+    box: measuredBox,
     get: (_key, _box, draw) => {
       draw(ctx);
       return {} as CanvasImageSource;
@@ -1435,6 +1442,7 @@ describe('static furniture sprites', () => {
     const { placements, byName, poses } = fullRoom();
     const keys: string[] = [];
     const census: SpriteCache = {
+      box: measuredBox,
       get: (key, _box, draw) => {
         keys.push(key);
         draw(recordingCtx().ctx);

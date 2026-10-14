@@ -3,7 +3,7 @@ import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { drawCharacter } from './character';
 import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type FitBox, type Pt } from './iso';
-import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
+import type { SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
 import {
@@ -4751,15 +4751,14 @@ export function seatedArmsDepth(slot: { lx: number; ly: number }): number {
 }
 
 /**
- * Rasterize `draw` once for `key` (measuring its own box) and blit it at integer device coordinates
- * under the identity transform — a straight copy, no resampling. Shared by the background layer and
- * the depth-sorted loop.
+ * Rasterize `draw` once for `key` (its box measured once too, by the cache) and blit it at integer
+ * device coordinates under the identity transform — a straight copy, no resampling. Shared by the
+ * background layer and the depth-sorted loop.
  */
 function blitSprite(
   ctx: CanvasRenderingContext2D,
   cache: SpriteCache,
   key: string,
-  dpr: number,
   draw: (c: CanvasRenderingContext2D) => void,
   only?: string | undefined,
 ): void {
@@ -4767,9 +4766,8 @@ function blitSprite(
     draw(ctx); // excluded from this pass — paint it live, exactly as an uncached scene would
     return;
   }
-  const bounds = measureBounds(draw);
-  if (!bounds) return; // drew nothing — nothing to blit
-  const box = deviceBox(bounds, dpr);
+  const box = cache.box(key, draw);
+  if (!box) return; // drew nothing — nothing to blit
   const sprite = cache.get(key, box, draw);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -4893,13 +4891,13 @@ export function renderScene(
   }
   if (cache) {
     const bg = backgroundKey(fit, env, dpr);
-    blitSprite(ctx, cache, bg, dpr, shell, opts.spriteOnly);
+    blitSprite(ctx, cache, bg, shell, opts.spriteOnly);
     // On the stage, in their existing order: three fixtures that are not static, then the right
     // wall's additive strand, then the additive daylight beams. See `WallSlice`.
     drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live');
     drawWindowBeams(ctx, fit, env);
     // Source-over floor paint, so it caches cleanly on top of the beams it is painted over.
-    blitSprite(ctx, cache, `${bg}·rugs`, dpr, rugs, opts.spriteOnly);
+    blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly);
   } else {
     shell(ctx);
   }
@@ -5036,7 +5034,7 @@ export function renderScene(
         part.draw();
         continue;
       }
-      blitSprite(ctx, cache, part.key, dpr, part.draw, opts.spriteOnly);
+      blitSprite(ctx, cache, part.key, part.draw, opts.spriteOnly);
     }
   }
 

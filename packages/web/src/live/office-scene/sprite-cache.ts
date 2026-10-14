@@ -32,6 +32,12 @@ export interface CssBounds {
 }
 
 export interface SpriteCache {
+  /**
+   * Measure `draw` once for `key` and return its padded device box, or null when it draws nothing.
+   * A hit costs a map lookup: the dry run replays the item's whole draw through a Proxy, and doing
+   * that on every frame cost more than the blit it sizes.
+   */
+  box(key: string, draw: (ctx: CanvasRenderingContext2D) => void): SpriteBox | null;
   /** Rasterize `draw` once for `key` at device box `box`; return the sprite to blit at `(box.x, box.y)`. */
   get(key: string, box: SpriteBox, draw: (ctx: CanvasRenderingContext2D) => void): CanvasImageSource;
   size(): number;
@@ -92,15 +98,28 @@ export function makeSpriteCache(opts: {
   const max = opts.max ?? 128;
   const create = opts.createCanvas ?? domCanvas;
   // Map preserves insertion order; delete+set on a hit moves the key to the back, so the front is LRU.
-  const entries = new Map<string, HTMLCanvasElement>();
+  // One entry per key holds both the measured box and the sprite, so they are evicted together.
+  const entries = new Map<string, { box?: SpriteBox | null; sprite?: HTMLCanvasElement }>();
+  const touch = (key: string) => {
+    const hit = entries.get(key);
+    if (hit) entries.delete(key);
+    const entry = hit ?? {};
+    entries.set(key, entry);
+    if (entries.size > max) entries.delete(entries.keys().next().value as string);
+    return entry;
+  };
   return {
-    get(key, box, draw) {
-      const hit = entries.get(key);
-      if (hit) {
-        entries.delete(key);
-        entries.set(key, hit);
-        return hit;
+    box(key, draw) {
+      const entry = touch(key);
+      if (entry.box === undefined) {
+        const bounds = measureBounds(draw);
+        entry.box = bounds ? deviceBox(bounds, opts.dpr) : null;
       }
+      return entry.box;
+    },
+    get(key, box, draw) {
+      const entry = touch(key);
+      if (entry.sprite) return entry.sprite;
       const canvas = create(box.w, box.h);
       const ctx = canvas.getContext('2d')!;
       // Same pixel grid as the stage: a CSS coordinate c lands at c*dpr - box.x device px, keeping
@@ -108,8 +127,7 @@ export function makeSpriteCache(opts: {
       ctx.setTransform(opts.dpr, 0, 0, opts.dpr, -box.x, -box.y);
       resetCtxState(ctx);
       draw(ctx);
-      entries.set(key, canvas);
-      if (entries.size > max) entries.delete(entries.keys().next().value as string);
+      entry.sprite = canvas;
       return canvas;
     },
     size: () => entries.size,
