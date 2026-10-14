@@ -240,6 +240,33 @@ the page, and a hardware encoder. That is a design question for the stream, not 
 quota grant (`GPUS_ALL_REGIONS` = 1 on `izzocam`) stays in place for a re-run once the path has
 changed.
 
+## Capture A/B — screencast vs Xvfb `x11grab` (Fly `performance-4x`, sjc, 2026-10-13)
+
+Increment 1 of the smooth-capture spec (lane `01M4VS17JXV4G9AVFPB7W7A6ZW`;
+`scripts/perf/capture-ab.mjs`, self-driving on the bench image; falsify: a re-run of the same script
+on the same machine size separates the arms by under 30 percentage points of pipeline CPU). It was
+1080p at `fps=30` on the synthetic fixture, with 7 seats online, 60 s windows, run in the order S, X, S.
+Draws and gaps come from one in-page probe, and CPU from `/proc` utime+stime deltas per process tree.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| screencast#1 | 13.7 | 65.4 | 132.3 | 221.4 | 94.6 | — | 7.8 | 323.8 | 11.8 |
+| x11grab | 15.4 | 61.4 | 88.8 | 175.7 | 83.3 | 6.2 | — | 265.2 | 27.1 |
+| screencast#2 | 13.8 | 66.4 | 126.9 | 221.9 | 92.3 | — | 8.1 | 322.3 | 12.3 |
+
+Readings:
+
+- **x11grab freed ~58 percentage points of pipeline CPU** (323 → 265) and tightened the p95 gap from
+  ~130 to 89 ms. That is under the spec's one-core stop rule, so lever 1 alone does not clear the
+  bar.
+- **The room's draw is the wall.** With x11grab the box sat 27% idle, yet draws held at ~15/s. The
+  limit is now a single thread (the renderer's main thread, or the compositor), not total CPU. That
+  makes the spec's lever 2 (dirty-rect repaint) the first lever, not the second.
+- The eye-check frame from the x11 arm was clean: no browser chrome, infobar or restore bubble in
+  frame.
+
+Per the stop rule, the next move is a rethink with nick (2026-10-14), not increment 2.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
