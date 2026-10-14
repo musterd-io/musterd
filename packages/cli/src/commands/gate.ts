@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative } from 'node:path';
 import {
+  type ActorAttestation,
   CCD_SEND_MESSAGE_TOOL,
   extractUlid,
   type GateToolCall,
@@ -231,10 +232,39 @@ async function recordSubagentCommand(): Promise<number> {
     const sessionId = parseEnvelopeSessionId(stdin);
     const agentId = spawnedAgentId(stdin);
     if (sessionId && agentId) recordSubagent(stateDir(), sessionId, agentId);
+    // ADR 163's spawn row, from the one hook that sees a Claude Code spawn (lane 01M4VTP73W). Awaited:
+    // this is a one-shot process, and a floated request dies with it. Hook one-shot, so never reclaim.
+    const att = spawnAttestation(stdin);
+    if (att) {
+      const { http, team, identity, explicit } = resolveRead({}, { claimSeatPerRequest: false });
+      if (explicit && identity) await http.recordActor(team, att);
+    }
   } catch {
     // Always exit 0.
   }
   return 0;
+}
+
+/**
+ * The `actor.subagent_spawn` attestation for an Agent PostToolUse payload, or null for anything else
+ * (ADR 163). Lane 01M4VTP73W, 2026-10-13: zero spawn rows had ever been written — {@link attest}
+ * records one from `gate check`, but Claude Code's PreToolUse gate matcher never names `Agent`, so
+ * only this PostToolUse hook sees a Claude Code spawn. Here the spawned id is known too (the tool
+ * response carries it), so a spawn joins the write rows its agent later makes. Shapes only: the
+ * requested type and `model:` override when given (absent means inherited, never guessed), never the
+ * prompt. A spawn with no declared type is still a spawn.
+ */
+export function spawnAttestation(raw: string): ActorAttestation | null {
+  const call = parseToolCall(raw);
+  if (!call || call.tool !== 'Agent') return null;
+  const actorId = spawnedAgentId(raw);
+  return {
+    kind: 'subagent-spawn',
+    tool: 'Agent',
+    ...(call.spawnType ? { spawnType: call.spawnType } : {}),
+    ...(call.spawnModel ? { spawnModel: call.spawnModel } : {}),
+    ...(actorId ? { actorId } : {}),
+  };
 }
 
 /**
