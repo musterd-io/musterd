@@ -10,6 +10,7 @@ import { loadProvisioning } from '../onboard/manifest.js';
 import { defaultHarnessContext, type HarnessContext } from '../onboard/reconcile/context.js';
 import { reconcileHarnesses, type ReconcileResult } from '../onboard/reconcile/engine.js';
 import type { HarnessAdapter } from '../onboard/reconcile/fragments.js';
+import { roleSkillNotes, withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
 
 /**
@@ -168,7 +169,8 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
   saveBinding(cwd, binding);
 
   // ── Reconcile actual state to the SAVED desire. Never `legacyRepair` from here. ───────────────
-  const report = await reconcileHarnesses(ctx, desired, {
+  // The seat comes from the binding just saved, so role-skill bridges resolve after it (ADR 586 §4).
+  const report = await reconcileHarnesses(deps?.ctx ? ctx : withRoleSkills(ctx), desired, {
     legacyRepair: false,
     ...(deps?.registry ? { registry: deps.registry } : {}),
   });
@@ -190,6 +192,8 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
   }
 
   for (const r of report.results) process.stdout.write(`${renderWireResult(r)}\n`);
+  for (const line of roleSkillNotes(ctx.worktreeRoot, team))
+    process.stdout.write(`${theme.warn('⚠')} ${line}\n`);
   if (report.ok) {
     process.stdout.write(
       `${theme.ok('✓')} wired this worktree's harness set ${theme.meta(`(team ${team}${desired.length > 0 ? `, ${desired.join(', ')}` : ', empty selection'})`)}\n`,

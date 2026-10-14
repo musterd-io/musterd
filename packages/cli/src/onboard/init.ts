@@ -35,6 +35,7 @@ import { installSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget, renderRepositoryPrimer, upsertPrimer } from './primer.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses } from './reconcile/engine.js';
+import { roleSkillNotes, withRoleSkills } from './roleSkills.js';
 import { GENERALIST, isBuiltin, listToolkitNames, loadToolkit, type Toolkit } from './toolkit.js';
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -939,13 +940,14 @@ export async function runInit(): Promise<number> {
 
   const sc = p.spinner();
   sc.start(`Wiring ${selectionLabel}`);
-  const reconcileCtx = defaultHarnessContext(process.cwd(), process.env, { team });
+  const reconcileCtx = withRoleSkills(defaultHarnessContext(process.cwd(), process.env, { team }));
   const report = await reconcileHarnesses(reconcileCtx, desired, { legacyRepair: false });
   sc.stop(
     report.ok
       ? `Harness set wired ${pc.dim(`(${selectionLabel})`)}`
       : pc.yellow('Wired with warnings — `musterd harness status` has the detail'),
   );
+  for (const line of roleSkillNotes(reconcileCtx.worktreeRoot, team)) p.log.warn(pc.yellow(line));
   for (const r of report.results) {
     if (
       r.result !== 'applied' &&

@@ -22,6 +22,13 @@ import {
   folderResourceKey,
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
+import {
+  applyRoleSkill,
+  CURSOR_BRIDGE,
+  isRoleSkillFragment,
+  observeRoleSkill,
+  roleSkillFragments,
+} from '../roleSkills.js';
 
 interface CursorConfig {
   mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
@@ -580,6 +587,12 @@ export const cursorAdapter: HarnessAdapter = {
         fingerprint: canonicalFingerprint(guidancePayload),
         payload: guidancePayload,
       },
+      ...roleSkillFragments(
+        ctx,
+        'cursor',
+        CURSOR_BRIDGE,
+        `folder ${ctx.worktreeRoot} cursor-role-skills`,
+      ),
     ];
   },
 
@@ -645,6 +658,8 @@ export const cursorAdapter: HarnessAdapter = {
             guidanceFileMap(cursor.guidance!, ctx.team ?? ''),
         );
       default:
+        if (isRoleSkillFragment(intent.fragmentKey))
+          return observeRoleSkill(ctx.fs, ctx.worktreeRoot, intent, CURSOR_BRIDGE);
         return { state: 'absent' };
     }
   },
@@ -733,6 +748,16 @@ export const cursorAdapter: HarnessAdapter = {
         );
         return;
       default:
+        if (isRoleSkillFragment(intent.fragmentKey)) {
+          applyRoleSkill(
+            ctx.fs,
+            ctx.worktreeRoot,
+            intent,
+            CURSOR_BRIDGE,
+            mutation.kind === 'remove' ? 'remove' : 'write',
+          );
+          return;
+        }
         throw new Error(`unknown cursor fragment ${intent.fragmentKey}`);
     }
   },
