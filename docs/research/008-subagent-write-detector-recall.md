@@ -16,11 +16,11 @@ direction. This is that measurement.
 | **Recall, executed corpus**                  | **21/31 = 67.7%** |
 | Recall, inspected-only corpus (not run)      | 6/9 = 66.7%       |
 | **Recall, combined**                         | **27/40 = 67.5%** |
-| **False positives** (non-write scored write) | **0/15**          |
+| **False positives** (non-write scored write) | ~~**0/15**~~ — CORRECTED 2026-10-13: **8/23** on the corpus below once it carries the reads agents actually run; **0/23** after the fix (lane 01M4VTQVKV) |
 
 So the ADR's lower bound is loose by roughly a third: **a reported count of N implies on the order of
 1.5 N actual write-shaped subagent calls**, on this corpus. The detector is _conservative but not
-noisy_ — it never cried wolf once across 15 true reads, including reads by the very same binaries whose
+noisy_ — ~~it never cried wolf once across 15 true reads~~ (CORRECTED 2026-10-13: it cried wolf on nearly every read a real agent runs; see the correction below), across 15 true reads, including reads by the very same binaries whose
 writes it catches (`awk` with and without a redirect, `sort` with and without `-o`, `python3` reading
 vs writing). That asymmetry is the right one to have: the count can be trusted as far as it goes.
 
@@ -145,3 +145,24 @@ sharpening this arm adds: a near-zero compliance count should now be read agains
 blind spot rather than a diffuse one — if the team's subagent writes happen to run through scripts,
 builds, or interpreters, a zero is close to uninformative, and the honest next move would be closing the
 four groups rather than reading the zero.
+
+## Correction — 2026-10-13: the detector was noisy in the field (lane 01M4VTQVKV)
+
+The 15 true reads above never carried a harmless redirect or a command word inside a quoted
+argument, and those are most of what a read-only agent runs. In the live audit log on 2026-10-13,
+**1,127 of 1,232** `actor.subagent_write` rows (91%) came from read-only `Explore` agents, across 134
+of them. Adding eight reads of that shape to the corpus (`2>/dev/null`, `2>&1`, `>&2`, `&>/dev/null`,
+`grep -n "install"`, `grep -rn 'rm -rf'`, `grep -c "git commit"`) scored **8 of 8 as writes**.
+
+The fix strips redirects that write no file and blanks quoted arguments before matching, anchors the
+command words at command position, and classifies a quoted string a shell runs (`sh -c`, `ssh host`,
+`eval`) as a command of its own. On the extended corpus: false positives **8/23 → 0/23**; recall
+unchanged at **27/40 = 67.5%** (the first cut blanked `ssh host "rm -rf …"` and dropped to 24/40,
+which is why runner arguments are classified, not blanked).
+
+So the headline above holds for recall and was wrong about precision: the ledger before 2026-10-13
+is dominated by read noise and cannot be read as a count of writes. Reproduce with
+`pnpm --filter @musterd/protocol build && node scripts/research/adr-163-recall.ts` — the script
+imported protocol source before this, which plain `node` cannot resolve, so the command above had
+stopped working.
+

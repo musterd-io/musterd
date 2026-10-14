@@ -10,7 +10,9 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { isWriteShaped } from '../../packages/protocol/src/enforcement.ts';
+// The built package, so plain `node` runs this (`pnpm --filter @musterd/protocol build` first): the
+// source import it used to have needs a `.js`→`.ts` resolver Node does not have (2026-10-13).
+import { isWriteShaped } from '@musterd/protocol';
 
 type Entry = { command: string; note?: string };
 
@@ -67,6 +69,17 @@ const EXECUTED: Entry[] = [
   { command: 'git status' },
   { command: 'git log --oneline' },
   { command: 'git diff' },
+  // 2026-10-13 (lane 01M4VTQVKV): the reads read-only Explore agents actually run. The 15 above never
+  // carried a harmless redirect or a keyword in a quoted argument, and 1,127 of 1,232 live
+  // `actor.subagent_write` rows turned out to be exactly those shapes.
+  { command: 'grep -rn hello . 2>/dev/null', note: 'stderr to /dev/null' },
+  { command: 'cat seed.txt 2>&1 | head -5', note: 'fd dup' },
+  { command: 'ls -la 2>/dev/null | wc -l' },
+  { command: 'echo done >&2', note: 'stdout to stderr' },
+  { command: 'grep -n "install" seed.txt || true', note: 'keyword inside a quoted argument' },
+  { command: "grep -rn 'rm -rf' . || true", note: 'keyword inside a quoted argument' },
+  { command: 'grep -c "git commit" seed.txt || true', note: 'keyword inside a quoted argument' },
+  { command: "node -e 'console.log(1)' &>/dev/null", note: 'both streams to /dev/null' },
 ];
 
 /** NOT executed: outward-facing or environment-mutating. Labelled by inspection, reported separately. */
