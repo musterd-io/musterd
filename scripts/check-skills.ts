@@ -36,7 +36,6 @@ const ROLE_SKILLS = [
 
 /** Roles whose rebuild by the ADR 586 method is still owed, with the lane that owes it. */
 const PENDING: Record<string, string> = {
-  courier: '01M4VPY4VCFHE0X231JT40HY36',
   planner: '01M4VPY6NTXKPAZM6TEVWXYHW1',
   steward: '01M4VPY6NTXKPAZM6TEVWXYHW1',
   observer: '01M4VPY6NTXKPAZM6TEVWXYHW1',
