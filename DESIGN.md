@@ -1,16 +1,16 @@
 # Design
 
 > Visual system for the musterd web surface. Derives from `docs/design/brand.md` +
-> `packages/web/src/styles/tokens.css` (mustard accent, Inter + JetBrains Mono) and extends them into
+> `packages/web/src/styles/tokens.css` (mustard accent, Recursive in three cuts — ADR 477) and extends them into
 > one language across every page (`/`, `/live`, `/approvals`, `/audit`). Reference feel: a **warm
 > isometric office at dusk** — a co-work floor you look down into, where agents and humans share desks,
 > a lounge, and huddle spaces. Rendered as a living Canvas2D scene; the rest of the app is the
 > same building's other rooms. (Supersedes the prior "dusk observatory / three.js constellation" system.)
 
-> **Status (2026-07-06):** the two-theme token layer is in place (`tokens.css`), but **dark is still the
-> active default** — light is opt-in via `:root[data-theme="light"]` until the office scene and landing
-> hero are light-mode-ready. Light becomes the default at that point. Light token values below are
-> provisional pending a contrast pass.
+> **Status (corrected 2026-10-13):** light is the default. `__root.tsx` sets `data-theme="light"` on
+> `<html>`, which selects `:root[data-theme="light"]` in `tokens.css`; the bare `:root` values are the
+> dusk palette, reachable by setting `data-theme` to anything else. The July note here had it the other
+> way round. Where this file and `docs/design/brand.md` or an ADR disagree, they win.
 
 ## Theme
 
@@ -57,15 +57,19 @@ so jade=agent / rose=human reads identically in both. Light values are provision
 
 ## Typography
 
-Two-family pairing on a contrast axis (mono "wire" vs humanist body):
+One family, **Recursive**, in three committed cuts (ADR 477; `budgets.json` allowlists only it):
 
-- **JetBrains Mono** — the _wire_: timestamps, handles, act labels, wordmark, captions, counts.
-- **Inter** — what's _said_: message bodies, headings, buttons.
-- Fixed rem scale: 11 / 12 / 13 / 14 / 15px; headings 15–22px. No clamp.
+- **Recursive Casual** (`--font-display`) — headings, member names, chyron and canvas labels.
+- **Recursive** linear (`--font-sans`) — what's _said_: message bodies, buttons, prose.
+- **Recursive Mono** (`--font-mono`) — the _wire_: timestamps, handles, ids, act labels, the CLI mirror.
+- The wordmark stays lowercase JetBrains Mono, as drawn (ADR 477 §5). Canvas painters read type through
+  `src/live/canvasFont.ts`, never a hard-coded family.
 
 ## Motion
 
-- **Chrome + stream (product discipline):** 140–240ms, ease-out-expo (`cubic-bezier(.16,1,.3,1)`).
+- **Chrome + stream (product discipline):** the motion tokens in `src/live/office-scene/motion.ts`
+  (ADR 329) — five durations in whole 25 fps frames (120, 200, 280, 400, 600 ms) and three easings;
+  `pnpm tokens:check` fails on drift.
   Row arrival, hover, focus, panel crossfade. No bounce/elastic.
 - **The office scene (ambient — the exception):** a living Canvas2D floor. People **sit down** at their
   desks and type, breathe, and blink; they **walk** on a real jointed gait (arms counter-swinging the legs,
