@@ -139,8 +139,18 @@ export function nativeMcpConfig(opts: {
 
 export interface NativeBridge {
   tools: EngineTool[];
+  /**
+   * ADR 588 §6, the in-process doorbell: be handed the daemon-composed line for an act raised at the
+   * seat while the loop runs, with the act's id, the moment the socket delivers it — so the engine
+   * can queue it as the next user turn instead of waiting for the next musterd tool call to carry
+   * it. The same line is suppressed on the tool-result path for a minute, so one act rings once.
+   */
+  onRaised(deliver: (line: string, actId: string) => void): () => void;
   close(): Promise<void>;
 }
+
+/** How long a steered line is kept out of the tool-result path — one act, one ring (clause 7). */
+export const STEERED_SUPPRESS_MS = 60_000;
 
 /**
  * Stand the full in-process bridge up: adapter server + linked in-memory client, autojoin armed on
@@ -159,9 +169,37 @@ export async function openNativeBridge(config: McpConfig): Promise<NativeBridge>
   // is raised, and the answer rides out on the tool result. `interruptCheck` is silent until the
   // first tool call has autojoined (`holdsSeat` is false before it), which is exactly right — an
   // occupancy that does not exist yet has no inbox to interrupt.
-  const tools = await bridgeTools(harness, () => musterd.interruptCheck());
+  // ADR 588 §6: the holder of this seat is never idle — it hears in-process — so it attests a
+  // fixed `hearing` on every heartbeat (the roster column is idle-wake increment 5).
+  musterd.attestHearing('idle', 'resident: in-process steer');
+  // Lines already steered into the loop, so the tool-result probe does not ring them again.
+  const steered = new Map<string, number>();
+  const probe = async (): Promise<string | null> => {
+    const line = await musterd.interruptCheck();
+    if (!line) return null;
+    const at = steered.get(line);
+    if (at !== undefined && Date.now() - at < STEERED_SUPPRESS_MS) return null;
+    return line;
+  };
+  const tools = await bridgeTools(harness, probe);
   return {
     tools,
+    onRaised: (deliver) =>
+      musterd.onDirected((env) => {
+        // The daemon composes the line (ADR 088: structured fields, never a body) and discharges the
+        // act on the seat's next read; asking here is what makes a steer provable from its side.
+        void musterd.interruptCheck().then((line) => {
+          if (!line) return;
+          const at = steered.get(line);
+          if (at !== undefined && Date.now() - at < STEERED_SUPPRESS_MS) return;
+          steered.set(line, Date.now());
+          try {
+            deliver(line, env.id);
+          } catch {
+            // the engine's problem, never the socket's
+          }
+        });
+      }),
     close: async () => {
       // Ordered teardown: transport first, then the presence-holding client — `close()` drops
       // presence and stops the reconnect loop, so a settled run never leaves a zombie occupancy.

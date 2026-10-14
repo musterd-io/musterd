@@ -463,7 +463,7 @@ src/
   launch.ts       // the bundle's entry (dist/index.js): enables Node's compile cache, then imports index.ts and calls runAdapter() when launched (ADR 577)
   toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085); HOT_TOOLS: the four marked anthropic/alwaysLoad
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
-  client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);
+  client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);; ADR 588 §6: `onDirected(listener)` fires on a delivered act addressed to the held seat (member `to` or eligible set) and `attestHearing()` sets a fixed heartbeat hearing for a holder with no idle-wake core
                   //   setIdentity() (late claim); addMember() (tokenless mint); buffers live while joined;
                   //   stale-grant refuse → drop grant + one bare retry (ADR 193);
                   //   claim + heartbeat run reconcileCursorCapture then refreshAttestation (ADR 270);

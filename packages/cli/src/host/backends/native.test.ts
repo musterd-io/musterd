@@ -1,4 +1,4 @@
-import type { WakeLeaseFile, WakeTurnBody } from '@musterd/protocol';
+import type { ResidencySteeredBody, WakeLeaseFile, WakeTurnBody } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { BackendContext, WakeSpec } from '../backend.js';
 import type { AgentLoopEngine, EngineRunResult, EngineRunSpec, EngineTurn } from '../engine.js';
@@ -104,11 +104,13 @@ const turn = (cost: number): Omit<EngineTurn, 'index'> => ({
 function makeDeps(overrides: Partial<NativeDeps> = {}): {
   deps: NativeDeps;
   posted: WakeTurnBody[];
+  steered: ResidencySteeredBody[];
   closed: { count: number };
   leases: { written: WakeLeaseFile[]; cleared: string[] };
   spooled: { turns: unknown[]; ends: boolean[] };
 } {
   const posted: WakeTurnBody[] = [];
+  const steered: ResidencySteeredBody[] = [];
   const closed = { count: 0 };
   const leases = { written: [] as WakeLeaseFile[], cleared: [] as string[] };
   const spooled = { turns: [] as unknown[], ends: [] as boolean[] };
@@ -118,6 +120,7 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
     readSession: () => ({ state: 'none', source: 'slot' }) as never,
     openBridge: async () => ({
       tools: [],
+      onRaised: () => () => undefined,
       close: async () => {
         closed.count += 1;
       },
@@ -128,6 +131,10 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
         return { ok: true, turn: body.turn };
       },
       wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
+      residencySteered: async (_t: string, body: ResidencySteeredBody) => {
+        steered.push(body);
+        return { ok: true };
+      },
     }),
     env: {},
     finalReadDelayMs: 0,
@@ -145,7 +152,7 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
     yieldPollMs: 5,
     ...overrides,
   };
-  return { deps, posted, closed, leases, spooled };
+  return { deps, posted, steered, closed, leases, spooled };
 }
 
 function ctx(verify: BackendContext['verifyOccupied'], log: string[] = []): BackendContext {
@@ -312,6 +319,9 @@ describe('nativeBackend.wake', () => {
         wakeTranscript: async () => {
           throw new Error('daemon unreachable');
         },
+        residencySteered: async () => {
+          throw new Error('daemon unreachable');
+        },
       }),
     });
     const actuation = await nativeBackend(deps).wake(
@@ -348,6 +358,7 @@ describe('nativeBackend.wake', () => {
         return {
           wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
           wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
+          residencySteered: async () => ({ ok: true }),
         };
       },
     });
@@ -362,6 +373,7 @@ describe('nativeBackend.wake', () => {
         return {
           wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
           wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
+          residencySteered: async () => ({ ok: true }),
         };
       },
     });
@@ -370,6 +382,38 @@ describe('nativeBackend.wake', () => {
       ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
     );
     expect(seen).toEqual(['mskey_host', 'mskey_test']);
+  });
+
+  it('ADR 588 §6: a raised act reaches the engine through the run spec’s steer source and posts a residency.steered receipt', async () => {
+    let raised: ((line: string, actId: string) => void) | undefined;
+    const engine = scriptedEngine({});
+    const { deps, steered } = makeDeps({
+      engine,
+      openBridge: async () => ({
+        tools: [],
+        onRaised: (deliver) => {
+          raised = deliver;
+          return () => undefined;
+        },
+        close: async () => undefined,
+      }),
+    });
+    const log: string[] = [];
+    await nativeBackend(deps).wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true }), log),
+    );
+    const heard: string[] = [];
+    const unsubscribe = engine.lastSpec?.steer?.subscribe((line) => heard.push(line));
+    expect(raised).toBeDefined();
+    raised!('⚡ musterd [revive]: steer from nick (steer) — read exactly it', 'ACT1');
+    await new Promise((r) => setTimeout(r, 5));
+    expect(heard).toEqual(['⚡ musterd [revive]: steer from nick (steer) — read exactly it']);
+    expect(steered).toEqual([
+      expect.objectContaining({ lease_id: 'L1', act_id: 'ACT1', delivered_at: expect.any(Number) }),
+    ]);
+    expect(log.some((l) => l.includes('steered izzo: act ACT1'))).toBe(true);
+    unsubscribe?.();
   });
 
   it('ADR 588: a key_env that is unset on this host defers the wake, naming the variable, never a value', async () => {
@@ -389,6 +433,7 @@ describe('nativeBackend.wake', () => {
     const { deps } = makeDeps({
       telemetry: () => ({
         wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
+        residencySteered: async () => ({ ok: true }),
         wakeTranscript: async () => ({
           seat: 'izzo',
           leases: [
@@ -511,6 +556,7 @@ describe('nativeBackend.wake — take-over and watch (ADR 546, lane 6/6)', () =>
             run: () => new Promise<string>((r) => (finishTool = r)),
           },
         ],
+        onRaised: () => () => undefined,
         close: async () => undefined,
       }),
       yieldRequested: () => marker,

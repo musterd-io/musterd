@@ -110,7 +110,7 @@ hostile same-user process.
 | claude-code | `Notification` → `musterd inbox --waiting` | **no** — Notification stdout never enters model context. The machine-wide `UserPromptSubmit` nudge reaches the model, but only after the human has typed | deaf |
 | opencode | `session.idle` → `promptAsync` (synthetic, capped at 4) | half-measured — silent-with-live-lease confirmed live (no spurious prompt); deaf lease rings a deaf notice *as a turn* by code reading; raised-while-idle still unmeasured, inherits the #21524 race (ghost, 2026-09-14, eval §9b) | unmeasured |
 | codex | none | none | deaf |
-| native | **no idle state** | — | cannot occur: a native occupancy runs from the composed line to `end`, `settled` closes the bridge and drops presence. The rail is a **new wake** (ADR 131), which is the actuator's job |
+| native | **no idle state** | — | cannot occur: a native occupancy runs from the composed line to `end`, `settled` closes the bridge and drops presence. The rail is a **new wake** (ADR 131), which is the actuator's job. **2026-10-13 (ADR 588 §6, lane 01M4VTA7Y6):** while the loop RUNS, a directed act is steered into it as the next user turn from the seat's own socket (`NativeBridge.onRaised` → `EngineRunSpec.steer`), each delivery a `residency.steered` row, and the tool-result copy of the same line is suppressed for a minute — mid-turn reach without a hook or a spawn |
 
 **No harness in the room covers idle-at-prompt-waiting-on-a-human without an external wake
 actuator.** Unanimous. Native is the only row where that gap is structurally absent, and only

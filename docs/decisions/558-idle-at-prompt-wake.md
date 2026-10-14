@@ -135,6 +135,9 @@ Each harness gets one module in `@musterd/mcp` with two calls: `probe()` and `in
 - **Every other harness is deaf until its increment lands:** opencode (a ring file the ADR 392
   plugin watches), codex (`codex queue`), grok (a spike). Cursor stays deaf, because no Cursor hook
   starts a turn from idle. Native is exempt: a native occupancy has no idle state.
+  _(Amended 2026-10-13: exempt from the idle seam, not from reach — a resident native seat (ADR 588
+  §6) hears a directed act mid-turn through its engine's steering queue, with no idle state to wait
+  for; it attests `hearing: idle` on its heartbeat and each delivery is a `residency.steered` row.)_
 - **Terminal injection** (tmux `send-keys`, TIOCSTI) is refused for every harness. It races the
   human's keystrokes, can submit a half-typed draft or answer an open dialog, and carries no
   identity.

@@ -134,6 +134,36 @@ describe('rehydrate', () => {
     expect(r.messages[0]).toMatchObject({ content: expect.stringMatching(/prompt not recorded/) });
   });
 
+  it('replays a steered line as the user turn it was, where it ran (ADR 588 §6)', () => {
+    const r = rehydrate([
+      lease('L1', [
+        row(1, {
+          v: 1,
+          engine: 'pi',
+          prompt: 'p',
+          assistant: assistant('working', [{ id: 'c1', name: 'team_next' }]),
+          tool_results: [result('c1', 'team_next')],
+        }),
+        row(2, {
+          v: 1,
+          engine: 'pi',
+          steered: ['⚡ musterd [revive]: steer from nick (steer) — read exactly it'],
+          assistant: assistant('heard'),
+          tool_results: [],
+        }),
+      ]),
+    ]);
+    expect(
+      r.messages.map((m) => (m.role === 'user' ? `user:${String(m.content)}` : m.role)),
+    ).toEqual([
+      'user:p',
+      'assistant',
+      'toolResult',
+      'user:⚡ musterd [revive]: steer from nick (steer) — read exactly it',
+      'assistant',
+    ]);
+  });
+
   it('is empty for no leases', () => {
     expect(rehydrate([])).toEqual({ messages: [], replayed: 0, skipped: 0, patched: 0 });
   });

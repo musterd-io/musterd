@@ -130,6 +130,46 @@ describe('the client feeds the idle-wake core (ADR 558)', () => {
     client.close();
   });
 
+  it('ADR 588 §6: onDirected fires once for an act addressed to the held seat, not for team traffic; attestHearing rides the heartbeat without a core', async () => {
+    const { client, sockets } = await daemon();
+    client.attestHearing('idle', 'resident: in-process steer');
+    const heard: string[] = [];
+    const off = client.onDirected((env) => heard.push(env.id));
+    await client.join(3000);
+    const toAda = {
+      v: 1,
+      id: 'D1',
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'member', name: 'Ada' },
+      act: 'steer',
+      body: 'x',
+      thread: null,
+      meta: null,
+      ts: 1,
+    };
+    const toTeam = { ...toAda, id: 'D2', to: { kind: 'team' }, act: 'message' };
+    const eligible = {
+      ...toAda,
+      id: 'D3',
+      to: { kind: 'team' },
+      act: 'request_help',
+      meta: { eligible: ['Ada', 'bob'] },
+    };
+    for (const env of [toAda, toAda, toTeam, eligible])
+      sockets[0]!.send(JSON.stringify({ type: 'deliver', envelope: env }));
+    await vi.waitFor(() => expect(heard).toEqual(['D1', 'D3']));
+    expect((client as unknown as Peek).heartbeatFrame()).toMatchObject({
+      hearing: 'idle',
+      hearing_reason: 'resident: in-process steer',
+    });
+    off();
+    sockets[0]!.send(JSON.stringify({ type: 'deliver', envelope: { ...toAda, id: 'D4' } }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(heard).toEqual(['D1', 'D3']);
+    client.close();
+  });
+
   it('without a core the heartbeat carries no hearing at all', async () => {
     const { client } = await daemon();
     await client.join(3000);

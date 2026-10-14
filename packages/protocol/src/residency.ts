@@ -302,6 +302,21 @@ export const LoopEdgeSchema = z.enum(LOOP_EDGES);
 export const WakeProgressBodySchema = z.object({ lease_id: z.string().min(1) }).strict();
 export type WakeProgressBody = z.infer<typeof WakeProgressBodySchema>;
 
+/**
+ * ADR 588 §6 — `POST /teams/:slug/residency/steered`: the host says a raised act was delivered INTO
+ * a running native loop as a user turn (the in-process doorbell), naming the act and when. The
+ * daemon writes `residency.steered`. Structured fields only — the line itself is already on the
+ * `interrupt.raised` row the daemon wrote when it composed it.
+ */
+export const ResidencySteeredBodySchema = z
+  .object({
+    lease_id: z.string().min(1),
+    act_id: z.string().min(1).max(64),
+    delivered_at: z.number().int().positive(),
+  })
+  .strict();
+export type ResidencySteeredBody = z.infer<typeof ResidencySteeredBodySchema>;
+
 /** ADR 209: whether durable, fetchable context is enough, or active dialogue is required. */
 export const CONTINUITY_REQUIREMENTS = ['portable', 'transcript_required'] as const;
 export type ContinuityRequirement = (typeof CONTINUITY_REQUIREMENTS)[number];
