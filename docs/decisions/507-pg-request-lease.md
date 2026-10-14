@@ -41,7 +41,7 @@ without changing what a statement means.
    pool (app or operator role) inside that scope checks a client out; every later statement on that
    pool in the same request reuses it. The scope's end — the response's `finish` or `close` — returns
    the clients.
-2. **Each statement is still its own stamped transaction.** On the leased client, a bare statement
+2. **Each statement is still its own stamped transaction.** _(Amended 2026-10-13: consecutive reads of one scope on a lease now share one — [ADR 589](589-pg-reads-share-a-lease-transaction.md).)_ On the leased client, a bare statement
    is the same `BEGIN; SET LOCAL ROLE …; set_config(…)` / statement / `COMMIT` as today, and a `tx`
    body is the same one transaction. A failed statement rolls back only itself; a write commits when
    its statement or `tx` does, visible to other requests at once. Tenant scope stays per statement
@@ -77,6 +77,11 @@ without changing what a statement means.
   requests until the response, and a long request would hold row locks for its whole life.
   **Raising the pool alone** — run 5b took the pool from 10 to 40 and p95 from 14 s to 2.8 s, but
   the checkout count is unchanged and Neon's connection cap bounds it.
+
+- 2026-10-13: [ADR 589](589-pg-reads-share-a-lease-transaction.md) narrows decision 2 for reads.
+  With no request waiting on the pool any more (run 39: `db_wait_ms` 0 at p95), the cost this ADR
+  moved off the queue had become three round trips per statement. Consecutive `SELECT`s of one scope
+  on a lease now run in one open transaction; writes and `tx` bodies keep decision 2 unchanged.
 
 ## Observability & Evaluation
 
