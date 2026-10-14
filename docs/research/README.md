@@ -25,6 +25,11 @@ DoD conditions. The export path is `pnpm dataset:export` (reads a corpus snapsho
 `--authorized-by` required). Flywheel product boundary is [ADR 194](../decisions/194-flywheel-practice-not-batond.md);
 do not cite superseded ADR 051 for the dataset gate.
 
+## Standing manifests
+
+- [Resident seat pilot manifest](./resident-seat-pilot-manifest.md) (2026-10-14, pre-registered, not yet run) — ADR 588 Decision 7: one Haiku 5.5 coordination seat and one Opus 5.5 worker seat on `musterd` for a week against the Claude Code wake backend on the same lane class; six measures from rows, a kill criterion on dollars per accepted lane with a readability floor (≥8 in-class lanes handed to the worker, ≥4 verdicts). Produces finding 015.
+- [Frontier cadence manifest](./frontier-cadence-manifest.md) — Track A, deferred 2026-09-05 (finding 011).
+
 ## How to add a finding
 
 One file per experiment/finding, `NNN-<slug>.md`: question · setup (the pinned experiment manifest) · baseline · result · honest-N caveat · what it changes (link any ADR/roadmap item it graduates to). Keep the Goodhart / human-vs-agent-measurement cautions (`../design/human-agent-dynamics.md` §4) in force — diagnostic instruments, never Member rankings.
