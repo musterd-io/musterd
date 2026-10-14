@@ -15,6 +15,16 @@ import { installSeatPermissions, liftSeatPermissions } from '../onboard/permissi
 import { isBuiltin, loadToolkit, toolkitHomes, type Toolkit } from '../onboard/toolkit.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
+import {
+  BUILTIN_ROLE_SKILLS,
+  bundledSkillsRoot,
+  installSkill,
+  METHOD_SKILL,
+  shippedSkillFiles,
+  type SkillInstall,
+  skeletonFiles,
+  skillsDirFor,
+} from '../roster-roles/skills.js';
 import { BUILTIN_ROLE_TEMPLATES, listRoleTemplateNames } from '../roster-roles/templates.js';
 import { resolveRead } from './helpers.js';
 import { toolkitCreate } from './toolkit.js';
@@ -402,6 +412,8 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
       );
     }
     role = structuredClone(template);
+    // A renamed copy still uses the built-in's skill, so it names it (ADR 586 §3).
+    if (name !== from && BUILTIN_ROLE_SKILLS.includes(from)) role.skill = from;
   } else {
     role = {
       summary: `TODO: one line the roster surfaces for ${name}.`,
@@ -412,9 +424,12 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
 
   mkdirSync(rolesDir, { recursive: true });
   writeFileSync(path, serializeRole(role), 'utf8');
+  const skills = installRoleSkills(dir, name, from);
 
   if (parsed.flags['json']) {
-    process.stdout.write(JSON.stringify({ path, from: from ?? null, kind: 'team-role' }) + '\n');
+    process.stdout.write(
+      JSON.stringify({ path, from: from ?? null, kind: 'team-role', skills }) + '\n',
+    );
     return 0;
   }
   process.stdout.write(
@@ -422,6 +437,7 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
       next: `edit it, then musterd role assign <seat> ${name}`,
     }) + '\n',
   );
+  for (const line of skillLines(skills, from)) process.stdout.write(line + '\n');
   process.stdout.write(
     theme.meta('commit both files — the daemon reconciles the roster on merge (ADR 058)') + '\n',
   );
@@ -432,6 +448,38 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
     theme.meta(`equipping a workspace instead? that is ${TOOLKIT_CREATE} ${name}`) + '\n',
   );
   return 0;
+}
+
+/**
+ * The role's skill beside its file (ADR 586 §4–5). `--from` a built-in that ships one copies it; a
+ * custom role gets the method's skeleton with its name filled in, plus the method skill to build it
+ * by. A built-in without a skill (admin, product-communications) gets none. Nothing the user already
+ * has is overwritten.
+ */
+function installRoleSkills(rosterHome: string, name: string, from?: string): SkillInstall[] {
+  const root = bundledSkillsRoot();
+  const dir = skillsDirFor(rosterHome);
+  if (from) {
+    if (!BUILTIN_ROLE_SKILLS.includes(from)) return [];
+    return [installSkill(dir, from, shippedSkillFiles(root, from))];
+  }
+  return [
+    installSkill(dir, name, skeletonFiles(root, name)),
+    installSkill(dir, METHOD_SKILL, shippedSkillFiles(root, METHOD_SKILL)),
+  ];
+}
+
+function skillLines(skills: SkillInstall[], from?: string): string[] {
+  if (from && skills.length === 0) return [theme.meta(`no skill ships with "${from}"`)];
+  const root = bundledSkillsRoot();
+  return skills.map((s) => {
+    if (s.status === 'written') return `${sym.ok} wrote ${theme.accent(s.path)}`;
+    if (s.status === 'same') return theme.meta(`${s.path} is already the built-in skill`);
+    return (
+      `${sym.warn} kept your ${theme.accent(s.path)} — it differs from the one musterd ships; ` +
+      `compare: diff -r ${join(root, s.skill)} ${s.path}`
+    );
+  });
 }
 
 /**

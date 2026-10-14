@@ -36,7 +36,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ../../scripts/stamp-build.mjs",
+    "build": "tsc -p tsconfig.json && node ../../scripts/bundle-role-skills.mjs && node ../../scripts/stamp-build.mjs",
     "test": "vitest run"
   },
   "dependencies": {
