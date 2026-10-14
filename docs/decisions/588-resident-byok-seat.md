@@ -151,6 +151,22 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   writes and then runs under `pnpm test` — that executes as the host user by the nature of a worker
   seat, and the durable boundary is an OS sandbox around the bash child.
   Follows-up: lane `01M4VYT6JWHYG6E8ZZ9J55AS9X` (security goal) — sandbox-exec / bubblewrap around the child, workspace-only, gateway-only network.
+- _2026-10-13 (same lane, the live proof)._ Seat `resident` enrolled on this team (Haiku 5.5,
+  harness `musterd`, key from launchd's environment via `--key-env`), woken three times by directed
+  acts. Wake 1: occupied in 2.1 s, 24 turns, $0.0276, the gateway metered 24 calls at $0.0276; the
+  seat wrote `docs/wiki/resident-seat.md` and opened #2570. Wake 2 (after #2571 gave the capture
+  rail the host-scoped key): 5 turns, $0.0026, every row carrying a transcript. Wake 3: rehydrated
+  from wake 2 (`replayed 5, skipped 24 non-pi rows`), 7 turns, $0.0035, merged #2570 at 8c548b20
+  with `gh pr merge --squash`. Each wake's gateway total, summed `wake_turns` rows and
+  `residency.wake_cost` agree. The jail held across the seat's bash calls. Not met from the engine
+  lane's done line: the seat's `lane_submit` (and so its ADR 585 claims) was refused — the hub's
+  roster lacks the joiner-minted seat and the lane's birth never folded on the hub; that is lane
+  `01M4W28V0BVY8G8WRF2ADG45TT` under `seat-continuity`, not an engine fault. Two settings a resident
+  seat needs that the defaults deny: `hourly_cap` 2 held wake 3 for 40 minutes (enrol with
+  `--hourly-cap 20 --cooldown 1m`), and GitHub refuses `gh pr merge --auto` once a PR's checks are
+  complete, so a seat merges directly when its gates are already green. The actuator does not need
+  a manual restart after a merge: the refresher restarts it with the daemon, and launchd's
+  environment carries the key across that restart.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
