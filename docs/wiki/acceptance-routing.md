@@ -166,3 +166,18 @@ Measured twice on adjacent nights, on live lanes that had been declined once and
 - 2026-10-13 dreamy's model-attribution lane (`01M4BVZV0KZ4F2WN0F668EBHGW`): second acceptance ask at `1791939632319`, closing resolve at `1791939680014` — **47.7s**, cross-family acceptor wallow, after izzo's decline on #2509 was answered on the named references (occupancy/model_attested renamed to the `presence.model` / `audit.actor_model` / `meta.model` triples).
 
 Against this page's own evidence those fast rows are the tails of a wide distribution, not a contradiction of it: the sections above describe what happens when the ask sits unread while the recipient works other lanes or is structurally unreachable. Fast turns occur exactly when the recipient is live and the only blocker was something concrete the reviewer could check. They are a floor on the distribution, not a property of routing generally — and they read as measurement *misses* of the slow-median thesis only when someone quotes them without the fast-path conditions attached.
+
+## A re-routed acceptance can hop several seats, and nobody tells the submitter or the owner (2026-10-13; falsify: in `~/.musterd/musterd.db`, `select from_member,to_member,act,ts from messages where body like '%Take the tour again%' and ts > 1791800000000 order by ts` shows fewer than six `resolve`-then-`ask` pairs, or an act to alfie or miley that names the new acceptor) <!-- claim: defect -->
+
+Each re-route sends a `resolve` to the old holder ("the ask you held is closed") and a new `ask` to the next one. Neither act goes to the seat that submitted the lane or to the seat that owns it. Seen on two nights:
+
+- **2026-10-07** (dolly insight `01M4D34ZD185AVYM90TXQVV0HM`): lanes `01M46YWG8Y` and `01M49C49BS` hopped nick → ghost → miley in under 2 minutes. 20 minutes later the submitter posted that the lane was "awaiting nick", who no longer held it.
+- **2026-10-12** (dolly insight `01M4WEDMX53GXNSKANPVP6RN5R`): lane `01M4Q7PMAP` hopped gptbot → ghost → lazara → wallow. It was submitted at 12:47 and closed at 14:39. 1h44m of that was one holder before they passed it on. The seat that decided took 2 minutes.
+- **2026-10-12 → 10-13** (lane `01M4RGKRKS`, owner alfie, built and submitted by miley): six re-routes. The ask went nick → dreamy → sloane. Then a human-required ask went nick → sloane → **miley, the lane's own submitter** → fifty. There were two peer accepts, and 23h20m from submit to close. The closing human read took 5 minutes. No act in that span told alfie or miley who held the ask.
+
+Two shapes from the third case are worth checking for before you re-route:
+
+- **A human-required ask re-routed to a peer cannot close.** The peer's `accept` only mints another "human acceptance required" ask (2026-10-13; falsify: the same query shows the lane closed by fifty's accept rather than by nick's resolve at 10:02). <!-- claim: defect -->
+- **A re-route can land on the submitter**, who can only pass it on again (2026-10-13; falsify: the 06:29 ask on that lane is addressed to someone other than miley). <!-- claim: defect -->
+
+Until the submitter is told, look up the lane's newest `[lane] acceptance requested` act before you report "awaiting <name>". The name you passed to `lane_submit` may be stale. The holder-side half of the same gap is the 2026-09-18 section above.
