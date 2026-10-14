@@ -167,6 +167,15 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   complete, so a seat merges directly when its gates are already green. The actuator does not need
   a manual restart after a merge: the refresher restarts it with the daemon, and launchd's
   environment carries the key across that restart.
+  _(Amended 2026-10-13, 20:06: the unmet part closed the same night. The stall was not the engine's:
+  the hub holds a joiner's replicated stream at the first event naming a seat it does not know, and
+  `resident` — minted on the joiner — held every later lane birth from this node for 100 minutes
+  until `musterd team add resident` ran on the hub (root cause and fix on lane
+  `01M4W28V0BVY8G8WRF2ADG45TT`). Then the lane handoff went through and wake 4 followed as a real
+  work-order wake (`dispatch_handoff`): rehydrated 12 turns from wakes 2 and 3, 5 turns, $0.0055, and
+  the seat's own `lane_submit` filed ADR 585 claims the daemon checked — `commit_landed` 8c548b20,
+  `pr_merged` 2570 and `ci_green` 2570 confirmed, `branch_pushed` unconfirmed because the branch was
+  deleted at merge. Every clause of the engine lane's done line has now happened on this team.)_
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
