@@ -6010,6 +6010,7 @@
 .lc__identity-out {
   border: 0;
   background: none;
+  min-height: 24px;
   padding: var(--lc-1) var(--lc-2);
   font-family: var(--font-mono, monospace);
   font-size: 10.5px;
