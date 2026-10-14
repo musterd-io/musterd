@@ -144,12 +144,16 @@ withDrivers('tracePush', (_o, kind) => {
       db: await openTestDriver(kind),
       traceDb: await openTestDriver(kind, { store: 'trace' }),
       port: 0,
+      syncLoops: false,
     });
     hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
     joiner = createServer({
       db: await openTestDriver(kind, { instance: 'b' }),
       traceDb: await openTestDriver(kind, { store: 'trace', instance: 'b' }),
       port: 0,
+      // The test drives pushTeam and pushTraceTeam by hand; a loop's 60 s tick landing between two
+      // of its pushes (a slow cold-boot PGlite runner reaches it) would bind nick behind its back.
+      syncLoops: false,
     });
     joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
     joinerCtx = {

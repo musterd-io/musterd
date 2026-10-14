@@ -15,6 +15,8 @@ export interface RoleRow {
   charter: string | null;
   /** One-line summary the roster surfaces (ADR 227). NULL on pre-227 role files. */
   summary: string | null;
+  /** The skill the role names (ADR 586 §3). NULL reads as the role's own name. */
+  skill: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -27,15 +29,16 @@ export async function upsertRole(
   capabilities: PartialCapabilities,
   charter: string | null,
   summary: string | null = null,
+  skill: string | null = null,
 ): Promise<void> {
   const now = Date.now();
   await db.run(
-    `INSERT INTO roles (team_id, name, capabilities, charter, summary, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO roles (team_id, name, capabilities, charter, summary, skill, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(team_id, name) DO UPDATE SET
        capabilities = excluded.capabilities, charter = excluded.charter, summary = excluded.summary,
-       updated_at = excluded.updated_at`,
-    [teamId, name, JSON.stringify(capabilities), charter, summary, now, now],
+       skill = excluded.skill, updated_at = excluded.updated_at`,
+    [teamId, name, JSON.stringify(capabilities), charter, summary, skill, now, now],
   );
 }
 
@@ -73,6 +76,19 @@ export async function listRoles(
       teamId,
     ])
   ).map((r) => ({ ...r, capabilities: r.capabilities ? JSON.parse(r.capabilities) : {} }));
+}
+
+/** The skill a role names (ADR 586 §3): its stored `skill`, else the role's own name — also for a
+ *  role the store does not know, since the convention is the name. */
+export async function getRoleSkill(db: Driver, teamId: string, role: string): Promise<string> {
+  return (
+    (
+      await db.get<{ skill: string | null }>(
+        'SELECT skill FROM roles WHERE team_id = ? AND name = ?',
+        [teamId, role],
+      )
+    )?.skill ?? role
+  );
 }
 
 /** The authenticated occupancy charter for a Member's Team Role, when that role declares one. */

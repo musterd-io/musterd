@@ -114,7 +114,9 @@ export const SeatFileSchema = z
 Determinism comes from fixing every free choice:
 
 - **Key order** — `team.toml`: `slug, display, lifecycle`. `seats/*.toml`: `kind, role, lifecycle,
-  until`. (Schema order, so the serializer just walks the schema.)
+  until`. `roles/*.toml`: `summary, charter, skill`, then the `[capabilities]` table. (Schema order,
+  so the serializer just walks the schema.) A role's `skill` names a directory under the repo's
+  `.agents/skills/`; absent, it is the role's own name (ADR 586 §3).
 - **Emission** — always emit `kind` and `role`; emit `lifecycle`/`until` **only when `lifecycle !=
   "forever"`** (a forever seat is the common case and stays a 2-line file). Omit `display` when
   empty. This makes "minimal" well-defined without consulting the team default at serialize time.

@@ -4,6 +4,7 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { openLane } from '../store/lanes.js';
+import { upsertRole } from '../store/roles.js';
 import { getTeamBySlug, setPolicy } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
@@ -457,6 +458,7 @@ withDrivers('gate-http', (_o, kind) => {
       expect(r.json.reason).toMatch(/taildrop/);
       expect(r.json.reason).toMatch(/Dolly holds courier/);
       expect(r.json.reason).toMatch(/request_help/);
+      expect(r.json.reason).toContain('.agents/skills/courier/SKILL.md');
       const rows = await audits('action.gate');
       expect(rows).toHaveLength(1);
       expect(rows[0]!.result).toBe('deny');
@@ -466,6 +468,14 @@ withDrivers('gate-http', (_o, kind) => {
         role: 'courier',
       });
       expect(JSON.stringify(rows)).not.toContain('data.jsonl');
+    });
+
+    it('the deny points at the skill the role names, not its name (ADR 586 §3)', async () => {
+      await withRoute('block');
+      const team = await getTeamBySlug(server.store, 'dawn');
+      await upsertRole(server.store, team!.id, 'courier', {}, null, null, 'file-moves');
+      const r = await post('/teams/dawn/gate', routeReq('block'), seatHeaders('Ada'));
+      expect(r.json.reason).toContain('.agents/skills/file-moves/SKILL.md');
     });
 
     it('the holder runs the route → quiet allow', async () => {

@@ -90,7 +90,8 @@ decision 1. Follows-up: 01M4VPXMER1MDXVPT7N7881JJZ
 
 `RoleFileSchema` gains an optional `skill`: the directory name under `.agents/skills/`. Absent, it
 defaults to the role's name, which is today's convention, so every existing role file stays valid.
-Reconcile warns when a role names a skill the repo does not have. The ADR 513 gate message reads
+Reconcile warns when a role names a skill the repo does not have. _(Amended 2026-10-14: the CLI warns, not reconcile. See
+Consequences, 2026-10-14.)_ The ADR 513 gate message reads
 the field. This is the protocol change AGENTS.md hard rule 1 requires an ADR for.
 Follows-up: 01M4VPXR1XZ4BG30SFPEC9RQ9R
 
@@ -149,6 +150,15 @@ it. The holder judges the landed skill against the job as they do it.
   `team.md` stays in this repository; a team that installs the role gets the blank one from
   `building-a-role-skill/skeleton/`. The product-communications skill predates this and names our
   brand sources throughout; it is a team-specific skill until it is split the same way.
+
+- _(2026-10-14, lane `01M4VPXR1X`, nick chose the placement.)_ **The missing-skill warning moves
+  to the CLI.** Reconcile reads the roster home, and the roster home need not be the code repo: on
+  this team it is `~/musterd/revive`, outside every seat's checkout, so a check there would look for
+  `.agents/skills/` in the wrong place. `musterd init`, `musterd wire` and `musterd doctor` run in
+  the repo and say when a role the seat holds names a skill the repo lacks (lane `01M4W7HTD2`). The
+  field itself, its projection into `roles.skill` (migration v96) and the gate message's use of it
+  landed as decided.
+  Follows-up: 01M4W7HTD27HQ7Q7H98JWWGGXN
 
 ## Observability & Evaluation
 
