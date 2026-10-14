@@ -361,6 +361,72 @@ withDrivers('insights', (o) => {
       const w = await waitingOn(db, team.id, now);
       expect(w).toEqual([{ member: 'ada', threads: 1, oldest_age_ms: 2 * 86_400_000 }]);
     });
+
+    // ADR 590 (lane 01M4VZ5Y31): the view used to count every directed act until a resolve, so the
+    // revive hub reported 7,730 open threads — every accept and status_update anyone was sent.
+    const send = async (
+      db: ReturnType<typeof seed>['db'],
+      teamId: string,
+      from: { id: string; name: string },
+      to: { id: string; name: string },
+      id: string,
+      act: Act,
+      ts: number,
+      meta?: Record<string, unknown>,
+    ) =>
+      await insertMessage(
+        db,
+        teamId,
+        from.id,
+        to.id,
+        makeEnvelope({
+          id,
+          team: 'revive',
+          from: from.name,
+          to: { kind: 'member', name: to.name },
+          act,
+          body: 'x',
+          ts,
+          ...(meta ? { meta } : {}),
+        }),
+      );
+
+    it('an act that asks nothing of its recipient is not owed (ADR 590)', async () => {
+      const { db, team, nick, ada } = await seed();
+      const now = 40 * 86_400_000;
+      await send(db, team.id, nick, ada, 'm1', 'message', now - 86_400_000);
+      await send(db, team.id, nick, ada, 'm2', 'status_update', now - 86_400_000);
+      await send(db, team.id, nick, ada, 'm3', 'accept', now - 86_400_000, { in_reply_to: 'zz' });
+      expect(await waitingOn(db, team.id, now)).toEqual([]);
+      // …unless the sender flagged it urgent.
+      await send(db, team.id, nick, ada, 'm4', 'message', now - 86_400_000, {
+        urgent: true,
+        urgent_reason: 'blocking the release',
+      });
+      expect(await waitingOn(db, team.id, now)).toEqual([
+        { member: 'ada', threads: 1, oldest_age_ms: 86_400_000 },
+      ]);
+    });
+
+    it("the recipient's own reply discharges an owed act, like every other reader (ADR 434)", async () => {
+      const { db, team, nick, ada } = await seed();
+      const now = 40 * 86_400_000;
+      await ask(db, team.id, nick.id, 'ada', ada.id, 'q1', now - 86_400_000);
+      await send(db, team.id, ada, nick, 'r1', 'message', now - 1_000, { in_reply_to: 'q1' });
+      expect(await waitingOn(db, team.id, now)).toEqual([]);
+    });
+
+    it('a handoff whose lane has left play is discharged', async () => {
+      const { db, team, nick, ada } = await seed();
+      const now = 40 * 86_400_000;
+      const lane = await openLane(db, team.id, 'revive', 'ada', { title: 'l', claim: true }, 1);
+      await send(db, team.id, nick, ada, 'h1', 'handoff', now - 86_400_000, {
+        lane_handoff: { lane: lane.id },
+      });
+      expect(await waitingOn(db, team.id, now)).toHaveLength(1);
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'done' }, 2);
+      expect(await waitingOn(db, team.id, now)).toEqual([]);
+    });
   });
 
   describe("peerDemand (ADR 320 §5b, read from the human's side)", async () => {
