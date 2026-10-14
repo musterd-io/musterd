@@ -195,6 +195,13 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   (the probe's steer still landed that way and was answered in 3 s). A native holder now vouches for
   its own session (`MusterdClient.vouchSession`, set by the bridge): presence lives for the run and
   `close()` at settle drops it. Decision 1's "always on" needed this to be literally true.
+- _2026-10-13, 22:10 (doorbell lane, probe 2, after the vouch fix)._ `resident` woken by a request
+  that runs `pnpm format:check`; a `steer` sent 20 s in. The daemon raised it 387 ms after the send,
+  the host delivered it into the running loop 3 ms later (`residency.steered`, `delivered_at` on the
+  row), the socket lived the whole 37 s run, the line rode turn 3's transcript as `steered`, and the
+  seat answered PONG 14.1 s after the send — the moment the tool it was running returned, which is
+  the "between tool calls" the amendment chose over interrupting a tool. Delivery is sub-second;
+  answer latency is bounded by the running tool, and the pilot measures the distribution.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.
