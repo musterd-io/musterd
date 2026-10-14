@@ -61,6 +61,29 @@ describe('leftoverSignal — S2, a lane that declares itself one part of several
     ])
       expect(leftoverSignal({ title, detail: null }), title).toBeNull();
   });
+
+  it('reads a count as a count, not a part (2026-10-13: two closes refused)', () => {
+    for (const title of [
+      // lane 01M4VJG3BX — a count of PRs, not "part 3 of 4"
+      'ADR skeleton names all five sections — 3 of 4 red PRs on 2026-10-13 were a missing section',
+      // lane 01M4VTQVKV — matched as "127 of 1": `\b` fell at the comma inside a digit group
+      'write-shaped Bash stops counting reads — 1,127 of 1,232 subagent_write rows are Explore',
+      'recall 21 of 31 writes caught',
+      'p95 of 1.5 of 2.0 s budget',
+    ])
+      expect(leftoverSignal({ title, detail: null }), title).toBeNull();
+  });
+
+  it('still reads a part however it is punctuated or named', () => {
+    for (const title of [
+      'find-work 1 of 4',
+      'part 2 of 3: the gate',
+      'sync latency (2 of 3)',
+      'role-skills 3 of 5 lanes',
+      'board loops 1 of 4 increments — gate',
+    ])
+      expect(leftoverSignal({ title, detail: null }), title).not.toBeNull();
+  });
 });
 
 withDrivers('follows_up', (o) => {
