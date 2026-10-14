@@ -44,7 +44,8 @@ deliberate unset from a stale base, and it does not record how far each joiner h
    retry reads and merges into the hub's doc.
 4. A forward with no `base` comes from a joiner on an older build. The hub accepts it as before and
    logs `sync_policy_without_base` with the node id, so the last such forwarder can be found before
-   `base` is ever made required.
+   `base` is ever made required. _(Amended 2026-10-14: made required at once — a forward with no
+   `base` is refused with `conflict`; [ADR 593](593-policy-forward-requires-base.md).)_
 5. Replace semantics are unchanged. A merge on the hub was rejected because leaving a key out is how
    an admin unsets it (ADR 185): a hub that merged could not tell an unset from a stale base either.
 

@@ -11,6 +11,7 @@ import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, getStoredPolicy, getTeamBySlug, setPolicy } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
+import { joinerEnrollment } from './claim.js';
 import { foldBatch } from './fold.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
@@ -322,6 +323,29 @@ withDrivers('policy', (_o, kind) => {
       expect(
         (await getStoredPolicy(hub.store, (await hubTeam()).id)).standing_reseat_known_agents,
       ).toBe(true);
+    });
+
+    it('a forward that names no base is refused and changes nothing — a pre-587 joiner cannot replace the doc (ADR 593)', async () => {
+      // lazara's review of #2540: with the missing base only logged, an older joiner's stale whole
+      // doc still landed as given — the 2026-09-06 write, unchanged.
+      await residentOnJoiner();
+      const hubDoc = { loops: { review: true, sweep: true } };
+      expect((await post(hubBase, '/teams/bravo/policy', hubDoc, nickOnHub)).status).toBe(200);
+      const before = await getStoredPolicy(hub.store, (await hubTeam()).id);
+
+      const jt = await joinerTeam();
+      const enrollment = (await joinerEnrollment(joiner.store, jt.id, 'bravo'))!;
+      const res = await post(
+        hubBase,
+        '/teams/bravo/sync/policy',
+        { actor: 'nick', policy: { loops: { dispatch: true } } },
+        enrollment.credential,
+      );
+
+      expect(res.status).toBe(409);
+      expect(res.json.error.code).toBe('conflict');
+      expect(res.json.error.message).toMatch(/too old/);
+      expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(before);
     });
 
     it('a joiner-side change with the hub down REFUSES hub_unreachable and changes nothing', async () => {

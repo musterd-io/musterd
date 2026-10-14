@@ -5931,13 +5931,21 @@ export async function handleHttp(
           throw new MusterdError('forbidden', `"${body.actor}" is not an admin on ${slug}`);
         }
         // ADR 587: a joiner names the stored doc its change was built on, and a stale one is refused
-        // inside the write. One that names none is a pre-587 build: accepted as before, and logged so
-        // the last such forwarder can be found before this is ever made required.
+        // inside the write. ADR 593: one that names none is a pre-587 build, and its whole doc is
+        // exactly the 2026-09-06 write that unset the hub's loops — so it is refused too. `conflict`
+        // because a pre-587 joiner relays that code and no other of ours; the schema keeps `base`
+        // optional so that build reaches this message rather than a parse error.
         if (body.base === undefined) {
           log.warn({ msg: 'sync_policy_without_base', team: slug, node: node.id });
+          throw new MusterdError(
+            'conflict',
+            "this machine's musterd is too old to say which copy of the team's policy its change " +
+              'was built on, so the hub cannot tell an unset from a stale copy; nothing was changed ' +
+              '— update musterd on this machine and run the command again',
+          );
         }
         const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy, {
-          ...(body.base !== undefined ? { base: body.base } : {}),
+          base: body.base,
         });
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, applied);
