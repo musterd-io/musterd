@@ -3,7 +3,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope, PROTOCOL_VERSION, type WSServerFrame } from '@musterd/protocol';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
@@ -152,13 +152,21 @@ withDrivers('push', (_o, kind) => {
       ])
     )?.last_seq ?? 0;
 
+  // A describe that drives pushTeam by hand turns the daemons' loops off (`syncLoops: false`): the
+  // push loop's own tick, landing between two hand pushes on a slow runner, takes the batch first.
+  let loopsOn = true;
+
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-push-'));
     process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-    hub = createServer({ db: await openTestDriver(kind), port: 0 });
+    hub = createServer({ db: await openTestDriver(kind), port: 0, syncLoops: loopsOn });
     hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-    joiner = createServer({ db: await openTestDriver(kind, { instance: 'b' }), port: 0 });
+    joiner = createServer({
+      db: await openTestDriver(kind, { instance: 'b' }),
+      port: 0,
+      syncLoops: loopsOn,
+    });
     joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
     joinerCtx = {
       db: joiner.store,
@@ -596,6 +604,12 @@ withDrivers('push', (_o, kind) => {
   });
 
   describe('a wedged push says so where the seat is (ADR 360 follow-on)', async () => {
+    beforeAll(() => {
+      loopsOn = false;
+    });
+    afterAll(() => {
+      loopsOn = true;
+    });
     const hubTeam = async () => (await getTeamBySlug(hub.store, 'bravo'))!;
     const memberId = async (server: RunningServer, name: string) =>
       (await server.store.get('SELECT id FROM members WHERE team_id = ? AND name = ?', [
