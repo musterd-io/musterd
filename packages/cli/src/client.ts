@@ -80,6 +80,9 @@ import {
   type WakeLeasesResponse,
   type WakeReportBody,
   type WakeTurnBody,
+  type WakeTranscriptQuery,
+  type WakeTranscriptResponse,
+  WakeTranscriptResponseSchema,
   type WorkspaceRepairBody,
   type WakeContextPacket,
   type WakeContextRequest,
@@ -1621,6 +1624,19 @@ export class HttpClient {
       ok: boolean;
       turn: number;
     };
+  }
+
+  /** The resume substrate read (ADR 588 amendment) — `POST /teams/:slug/residency/wake-transcript`:
+   *  the seat's earlier captured turns, oldest lease first, bounded by bytes and lease count, so
+   *  the wake named by `lease_id` is rehydrated from the daemon's rows. Parsed here: a drifted
+   *  daemon must not hand the engine an unvetted transcript shape. */
+  async wakeTranscript(slug: string, body: WakeTranscriptQuery): Promise<WakeTranscriptResponse> {
+    const json = await this.request('POST', `/teams/${slug}/residency/wake-transcript`, body);
+    const parsed = WakeTranscriptResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new CliError('wake-transcript response did not match the protocol schema', 1);
+    }
+    return parsed.data;
   }
 
   /**

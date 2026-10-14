@@ -15,6 +15,9 @@ import {
   WakeProgressBodySchema,
   WakeReportBodySchema,
   WakeTurnBodySchema,
+  WakeTranscriptQuerySchema,
+  WakeTranscriptResponseSchema,
+  WAKE_TRANSCRIPT_MAX_BYTES_CEILING,
   WakeOrderSchema,
   dreamBlocker,
   isDreamDue,
@@ -237,6 +240,47 @@ describe('WakeTurnBodySchema (ADR 251 §7 — per-turn telemetry + transcript ca
     expect(() =>
       WakeTurnBodySchema.parse({ ...turn, transcript: { blob: 'x'.repeat(300_000) } }),
     ).toThrow();
+  });
+});
+
+describe('WakeTranscriptQuerySchema / WakeTranscriptResponseSchema (ADR 588 — the resume substrate read)', () => {
+  it('accepts a lease-keyed query with optional budgets, and bounds the byte ceiling', () => {
+    expect(WakeTranscriptQuerySchema.parse({ lease_id: 'L2' }).max_bytes).toBeUndefined();
+    expect(
+      WakeTranscriptQuerySchema.parse({ lease_id: 'L2', max_bytes: 1024, max_leases: 2 }).max_bytes,
+    ).toBe(1024);
+    expect(() => WakeTranscriptQuerySchema.parse({ lease_id: '' })).toThrow();
+    expect(() =>
+      WakeTranscriptQuerySchema.parse({
+        lease_id: 'L2',
+        max_bytes: WAKE_TRANSCRIPT_MAX_BYTES_CEILING + 1,
+      }),
+    ).toThrow();
+  });
+
+  it('round-trips a response: oldest lease first, turns deserialized, omitted count', () => {
+    const res = WakeTranscriptResponseSchema.parse({
+      seat: 'ada',
+      leases: [
+        {
+          lease_id: 'L1',
+          created_at: 1,
+          turns: [
+            {
+              turn: 1,
+              usage: { input_tokens: 10, output_tokens: 2 },
+              cost_usd: null,
+              stop_reason: 'toolUse',
+              transcript: { v: 1, engine: 'pi' },
+              created_at: 2,
+            },
+          ],
+        },
+      ],
+      omitted_leases: 3,
+    });
+    expect(res.leases[0]!.turns[0]!.transcript).toEqual({ v: 1, engine: 'pi' });
+    expect(res.omitted_leases).toBe(3);
   });
 });
 

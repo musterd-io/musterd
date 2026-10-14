@@ -50,6 +50,9 @@ import {
   WakeReportBodySchema,
   type WakeReportBody,
   WakeTurnBodySchema,
+  WakeTranscriptQuerySchema,
+  WAKE_TRANSCRIPT_DEFAULT_MAX_BYTES,
+  WAKE_TRANSCRIPT_DEFAULT_MAX_LEASES,
   WakeContextRequestSchema,
   WakeContextResponseSchema,
   ToolTelemetryReportSchema,
@@ -368,6 +371,7 @@ import { createRequest, decideRequest, getRequest, listRequests } from '../store
 import {
   appendWakeTurn,
   claimWakeLeases,
+  listWakeTranscript,
   type HostScope,
   hostMayServe,
   TEAM_WIDE_HOST,
@@ -4521,6 +4525,45 @@ export async function handleHttp(
         if (!appended)
           throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
         return sendJson(res, 200, { ok: true, lease_id: body.lease_id, turn: body.turn });
+      }
+
+      // The resume substrate read (ADR 588 amendment): the seat's earlier captured turns, so the
+      // wake named by `lease_id` is rehydrated from the daemon's rows whichever engine runs it.
+      // Same auth as `wake-turn` (host from the lease, lease in scope). One audit row per read
+      // recording sizes and counts — never a transcript body (the ADR 430 posture).
+      if (method === 'POST' && rest === '/residency/wake-transcript') {
+        const body = parseOrBadRequest(WakeTranscriptQuerySchema, await readJson(req));
+        const team = await requireTeam(ctx.db, slug);
+        const readHost = await hostForWakeLease(ctx, team.id, body.lease_id);
+        const { scope: readScope } = await authAgentKeyOnly(ctx, slug, req, readHost);
+        await assertLeaseInScope(ctx, team.id, body.lease_id, readScope);
+        if (readHost) await recordHostSeen(ctx.db, team.id, readHost, Date.now());
+        const transcript = await listWakeTranscript(ctx.db, team.id, body.lease_id, {
+          maxBytes: body.max_bytes ?? WAKE_TRANSCRIPT_DEFAULT_MAX_BYTES,
+          maxLeases: body.max_leases ?? WAKE_TRANSCRIPT_DEFAULT_MAX_LEASES,
+        });
+        if (!transcript)
+          throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
+        const seat = await getMemberById(ctx.db, transcript.member_id);
+        const turns = transcript.leases.reduce((n, l) => n + l.turns.length, 0);
+        await appendAudit(ctx.db, team.id, {
+          actor: null,
+          action: 'residency.transcript_read',
+          target: seat?.name ?? transcript.member_id,
+          result: 'allow',
+          detail: {
+            lease_id: body.lease_id,
+            leases: transcript.leases.length,
+            turns,
+            bytes: JSON.stringify(transcript.leases).length,
+            omitted_leases: transcript.omitted,
+          },
+        });
+        return sendJson(res, 200, {
+          seat: seat?.name ?? transcript.member_id,
+          leases: transcript.leases,
+          omitted_leases: transcript.omitted,
+        });
       }
 
       if (method === 'POST' && rest === '/residency/wake-progress') {

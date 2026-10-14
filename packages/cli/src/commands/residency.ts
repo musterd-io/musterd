@@ -177,7 +177,8 @@ export async function residencyCommand(parsed: Parsed): Promise<number> {
   throw new CliError(
     'usage: musterd residency on | off | status | policy  ' +
       '(--seat <agent> = what gets enrolled, default this workspace’s seat; --as <admin> = who ' +
-      `authorizes). Knobs, on \`on\` (this seat) or \`policy\` (team defaults): ${POLICY_FLAGS_USAGE}`,
+      `authorizes; --harness musterd --key-env <VAR> = a resident seat on your own key, ADR 588). ` +
+      `Knobs, on \`on\` (this seat) or \`policy\` (team defaults): ${POLICY_FLAGS_USAGE}`,
     2,
   );
 }
@@ -381,6 +382,27 @@ async function onCommand(parsed: Parsed): Promise<number> {
       );
     }
   }
+  // ADR 588 §1: a resident seat runs on the operator's own key, named by its environment variable.
+  // Only the NAME is taken and stored (host registry); the value is read by `musterd host` at
+  // spawn, never here, never in any file.
+  const keyEnv = flagStr(parsed.flags, 'key-env');
+  if (harness === 'musterd') {
+    if (!keyEnv) {
+      throw new CliError(
+        '--harness musterd needs --key-env <VAR>: the environment variable holding the API key the ' +
+          'resident seat runs on (e.g. ANTHROPIC_API_KEY) — the name, never the key (ADR 588)',
+        2,
+      );
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(keyEnv) || /^(sk-|xai-|mskey_|msgr_|mscr_)/.test(keyEnv)) {
+      throw new CliError(
+        `--key-env takes a variable NAME (like ANTHROPIC_API_KEY), not a value — nothing was stored`,
+        2,
+      );
+    }
+  } else if (keyEnv) {
+    throw new CliError('--key-env applies only to --harness musterd (ADR 588)', 2);
+  }
   const host = flagStr(parsed.flags, 'host') ?? hostname();
   const policy = collectPolicyFlags(parsed);
 
@@ -432,6 +454,7 @@ async function onCommand(parsed: Parsed): Promise<number> {
       workspace: dir,
       harness: res.residency.harness,
       host: res.residency.host,
+      ...(keyEnv !== undefined ? { key_env: keyEnv } : {}),
     });
     registered = true;
   }
@@ -450,6 +473,25 @@ async function onCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(
     theme.meta(`  harness ${res.residency.harness} · host ${res.residency.host}`) + '\n',
   );
+  if (keyEnv !== undefined) {
+    process.stdout.write(
+      theme.meta(`  key env ${keyEnv} — read by \`musterd host\` at spawn, never stored`) + '\n',
+    );
+    if (!process.env[keyEnv]) {
+      process.stdout.write(
+        theme.warn(
+          `  ! ${keyEnv} is unset in this shell — if \`musterd host\` runs here, every wake of "${seat}" defers until it is set`,
+        ) + '\n',
+      );
+    }
+    if (!(binding?.model ?? process.env['MUSTERD_MODEL'])) {
+      process.stdout.write(
+        theme.warn(
+          '  ! no model declared (binding.model or MUSTERD_MODEL) — a native wake never defaults one (ADR 101) and will defer',
+        ) + '\n',
+      );
+    }
+  }
   if (res.residency.policy && Object.keys(res.residency.policy).length > 0) {
     process.stdout.write(
       theme.meta(`  seat overrides: ${JSON.stringify(res.residency.policy)}`) + '\n',

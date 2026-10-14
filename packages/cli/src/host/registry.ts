@@ -27,6 +27,10 @@ export const HostRegistryEntrySchema = z.object({
    *  the enrolled label — `hostname()` drifts across networks (mac.lan vs mac.local) and a drifted
    *  label would silently derive nothing. */
   host: z.string(),
+  /** ADR 588 §1: for a resident seat (`harness: musterd`), the NAME of the environment variable
+   *  holding the operator's API key. The key itself is read from the host's environment at spawn
+   *  and never stored or logged — only its variable name lives here. */
+  key_env: z.string().optional(),
   updated_at: z.number().int(),
 });
 export type HostRegistryEntry = z.infer<typeof HostRegistryEntrySchema>;

@@ -826,3 +826,52 @@ export const WakeTurnBodySchema = z.object({
     }),
 });
 export type WakeTurnBody = z.infer<typeof WakeTurnBodySchema>;
+
+/** Default serialized-byte budget for a rehydration read (ADR 588 amendment): the host asks for
+ *  the seat's most recent captured turns, newest lease first, until the budget is spent; the
+ *  ceiling bounds what one request may pull. Whole leases are kept or dropped, never split. */
+export const WAKE_TRANSCRIPT_DEFAULT_MAX_BYTES = 196_608;
+export const WAKE_TRANSCRIPT_MAX_BYTES_CEILING = 1_048_576;
+export const WAKE_TRANSCRIPT_DEFAULT_MAX_LEASES = 8;
+
+/**
+ * Body of `POST /teams/:slug/residency/wake-transcript` (ADR 588 amendment): the resume substrate
+ * read. The daemon's `wake_turns` rows are the canonical, provider-neutral transcript, and the
+ * wake named by `lease_id` is rehydrated from the seat's EARLIER leases — the lease itself and
+ * anything newer are excluded, so a concurrent wake never sees a half-written transcript. The
+ * seat and host come from the lease (agent-key auth exactly like `wake-turn`).
+ */
+export const WakeTranscriptQuerySchema = z.object({
+  lease_id: z.string().min(1),
+  max_bytes: z.number().int().positive().max(WAKE_TRANSCRIPT_MAX_BYTES_CEILING).optional(),
+  max_leases: z.number().int().positive().max(50).optional(),
+});
+export type WakeTranscriptQuery = z.infer<typeof WakeTranscriptQuerySchema>;
+
+/** One captured turn as the read returns it — the `wake-turn` row, deserialized. */
+export const WakeTranscriptTurnSchema = z.object({
+  turn: z.number().int().positive(),
+  usage: WakeTurnBodySchema.shape.usage,
+  cost_usd: z.number().nonnegative().nullable(),
+  stop_reason: z.string().nullable(),
+  transcript: z.unknown(),
+  created_at: z.number().int(),
+});
+export type WakeTranscriptTurn = z.infer<typeof WakeTranscriptTurnSchema>;
+
+export const WakeTranscriptLeaseSchema = z.object({
+  lease_id: z.string(),
+  created_at: z.number().int(),
+  /** Turn order. */
+  turns: z.array(WakeTranscriptTurnSchema),
+});
+export type WakeTranscriptLease = z.infer<typeof WakeTranscriptLeaseSchema>;
+
+export const WakeTranscriptResponseSchema = z.object({
+  seat: z.string(),
+  /** Oldest lease first — the order a transcript replays in. */
+  leases: z.array(WakeTranscriptLeaseSchema),
+  /** Earlier leases with captured turns that fell outside the byte/lease budget. */
+  omitted_leases: z.number().int().nonnegative(),
+});
+export type WakeTranscriptResponse = z.infer<typeof WakeTranscriptResponseSchema>;

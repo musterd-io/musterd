@@ -127,6 +127,7 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
         posted.push(body);
         return { ok: true, turn: body.turn };
       },
+      wakeTranscript: async () => ({ seat: 'izzo', leases: [], omitted_leases: 0 }),
     }),
     env: {},
     finalReadDelayMs: 0,
@@ -308,6 +309,9 @@ describe('nativeBackend.wake', () => {
         wakeTurn: async () => {
           throw new Error('daemon unreachable');
         },
+        wakeTranscript: async () => {
+          throw new Error('daemon unreachable');
+        },
       }),
     });
     const actuation = await nativeBackend(deps).wake(
@@ -316,6 +320,71 @@ describe('nativeBackend.wake', () => {
     );
     expect(actuation.outcome.occupied).toBe(true);
     await actuation.settled;
+  });
+
+  it('ADR 588: a seat-policy wake carries the four jailed working tools; a reply wake does not', async () => {
+    const working = scriptedEngine({});
+    const { deps } = makeDeps({ engine: working });
+    await nativeBackend(deps).wake(
+      spec({ tool_policy: 'seat-policy' } as never),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(working.lastSpec?.tools.map((t) => t.name)).toEqual(['read', 'write', 'edit', 'bash']);
+    const reply = scriptedEngine({});
+    const { deps: replyDeps } = makeDeps({ engine: reply });
+    await nativeBackend(replyDeps).wake(
+      spec({ tool_policy: 'reply-only' } as never),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(reply.lastSpec?.tools).toEqual([]);
+  });
+
+  it('ADR 588: a key_env that is unset on this host defers the wake, naming the variable, never a value', async () => {
+    const engine = scriptedEngine({});
+    const { deps } = makeDeps({ engine, env: { OTHER: 'x' } });
+    const actuation = await nativeBackend(deps).wake(
+      { ...spec(), key_env: 'SEAT_KEY' },
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(actuation.outcome).toMatchObject({ occupied: false, deferred: true });
+    expect(actuation.outcome.reason).toContain('SEAT_KEY');
+    expect(engine.lastSpec).toBeUndefined();
+  });
+
+  it('ADR 588: the rehydration read is best-effort and its tally is one narrator line', async () => {
+    const log: string[] = [];
+    const { deps } = makeDeps({
+      telemetry: () => ({
+        wakeTurn: async (_t: string, body: WakeTurnBody) => ({ ok: true, turn: body.turn }),
+        wakeTranscript: async () => ({
+          seat: 'izzo',
+          leases: [
+            {
+              lease_id: 'L0',
+              created_at: 1,
+              turns: [
+                {
+                  turn: 1,
+                  usage: { input_tokens: 1, output_tokens: 1 },
+                  cost_usd: null,
+                  stop_reason: null,
+                  transcript: null,
+                  created_at: 2,
+                },
+              ],
+            },
+          ],
+          omitted_leases: 2,
+        }),
+      }),
+    });
+    await nativeBackend(deps).wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true }), log),
+    );
+    expect(log.find((l) => l.includes('rehydrate'))).toMatch(
+      /1 earlier wake\(s\), 1 turn\(s\), 2 older omitted/,
+    );
   });
 
   it('flags an occupancy that attests a provenance other than wake', async () => {

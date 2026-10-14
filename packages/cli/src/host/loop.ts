@@ -611,6 +611,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
               : {}),
           },
           ...(gateway ? { gateway: { env: gateway.env } } : {}),
+          ...(entry.key_env !== undefined ? { key_env: entry.key_env } : {}),
         },
         {
           verifyOccupied: (seat, windowMs, sinceTs) =>

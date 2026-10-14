@@ -3,6 +3,8 @@ import {
   WAKE_TURN_TRANSCRIPT_MAX_BYTES,
   type AttestationSource,
   type Binding,
+  type WakeTranscriptQuery,
+  type WakeTranscriptResponse,
   type WakeTurnBody,
 } from '@musterd/protocol';
 import { resolveWorkspaceKey } from '@musterd/protocol/project';
@@ -16,8 +18,9 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
-import type { AgentLoopEngine, EngineTurn } from '../engine.js';
-import { anthropicEngine } from '../engines/anthropic.js';
+import type { AgentLoopEngine, EngineTool, EngineTurn } from '../engine.js';
+import { piEngine } from '../engines/pi.js';
+import { declaredScripts, preflightWorkingTool, workingTools } from '../engines/workingTools.js';
 import { expectedProvenance } from '../pinnedBin.js';
 import { holdWakeLease, peekYieldFile, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { openWakeWatchSpool, type WakeWatchSpool } from '../wakeWatchSpool.js';
@@ -41,9 +44,25 @@ import { nativeMcpConfig, openNativeBridge, type NativeBridge } from './nativeBr
  *   than self-reported by a child.
  *
  * Two substrate rails ride every run (§7): each turn posts a `wake-turn` row (usage + transcript)
- * through the daemon — best-effort, a dead rail never aborts the loop. Phase 1 is fresh-only
- * (`session: 'fresh'`); resume replays these capture rows in phase 2.
+ * through the daemon — best-effort, a dead rail never aborts the loop. Since ADR 588 (amended)
+ * those rows are also the resume substrate: before the loop starts, the seat's earlier captured
+ * turns are read back and replayed into the engine's context, so a wake continues the seat's
+ * record on whichever model this wake runs. The session axis stays `fresh` — no harness session
+ * is resumed; the daemon's rows are.
  */
+
+/** The resident seat's standing instruction (ADR 588 §1–§2): who it is and where it may work. The
+ *  wake line that follows is the daemon's and carries the ask; this never does. */
+export function residentSystemPrompt(seat: string, workspace: string, working: boolean): string {
+  return [
+    `You are ${seat}, a resident musterd seat: an always-on agent on this team, run by musterd itself (ADR 588).`,
+    `Your musterd tools (team_*, lane_*) are your coordination surface — check your inbox first and report with status_update.`,
+    working
+      ? `Your working tools (read, write, edit, bash) act only inside your workspace at ${workspace}; anything outside it, any install, force-push or push to main is denied and the denial is recorded.`
+      : `This wake is coordination-only: answer through your musterd tools; no working tools are available.`,
+    `Keep messages short; use the acts, do not narrate.`,
+  ].join('\n');
+}
 
 /** Beat before the post-run final roster read — presence lands async after the last tool call. */
 const FINAL_READ_DELAY_MS = 2_000;
@@ -74,6 +93,8 @@ export function boundTranscript(transcript: unknown): unknown {
 /** The telemetry slice the backend posts through — injectable so tests never open a socket. */
 export interface TurnTelemetry {
   wakeTurn(team: string, body: WakeTurnBody): Promise<{ ok: boolean; turn: number }>;
+  /** ADR 588 amendment: the resume substrate read — the seat's earlier captured turns. */
+  wakeTranscript(team: string, body: WakeTranscriptQuery): Promise<WakeTranscriptResponse>;
 }
 
 /** Injectables so the scripted suite drives every path without a model, daemon, or socket. */
@@ -119,6 +140,14 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       if (model === undefined) {
         return deferred(
           'no model declared for the native loop (ADR 101: set MUSTERD_MODEL or binding.model) — never defaulted',
+        );
+      }
+      // ADR 588 §1: the operator's key, read from the NAMED variable at spawn. Only the name is
+      // ever written anywhere (registry, this log line); the value goes to pi and the gateway.
+      const apiKey = spec.key_env !== undefined ? env[spec.key_env] : undefined;
+      if (spec.key_env !== undefined && !apiKey) {
+        return deferred(
+          `API key variable ${spec.key_env} is unset on this host — the resident seat cannot run (ADR 588)`,
         );
       }
       // The local-session guard, re-checked defensively like every backend: an in-process loop
@@ -227,11 +256,68 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
           });
       };
 
-      const engine = deps.engine ?? anthropicEngine();
+      // ADR 588 §3–§4: a work order (`seat-policy`) gets the four jailed working tools beside the
+      // seat's own surface; a reply wake stays coordination-only. The jail reads the repo's
+      // declared scripts once per wake — what `pnpm <x>` may run is what package.json says.
+      const working = spec.order.tool_policy === 'seat-policy';
+      const jail = {
+        workspace: spec.workspace,
+        policy: { scripts: declaredScripts(spec.workspace) },
+      };
+      const runTools: EngineTool[] = working
+        ? [
+            ...tools,
+            ...workingTools({
+              ...jail,
+              env,
+              secretEnvNames: spec.key_env !== undefined ? [spec.key_env] : [],
+            }),
+          ]
+        : tools;
+
+      // ADR 588 amendment: the next wake is rehydrated from the daemon's rows — the seat's earlier
+      // captured turns, bounded server-side. A failed read is a fresh start, said once, never a
+      // failed wake.
+      let history: WakeTranscriptResponse['leases'] = [];
+      try {
+        const transcript = await telemetry.wakeTranscript(spec.team, {
+          lease_id: spec.order.lease_id,
+        });
+        history = transcript.leases;
+        if (history.length > 0 || transcript.omitted_leases > 0) {
+          ctx.log(
+            `native rehydrate for ${seat}: ${String(history.length)} earlier wake(s), ` +
+              `${String(history.reduce((n, l) => n + l.turns.length, 0))} turn(s)` +
+              (transcript.omitted_leases > 0
+                ? `, ${String(transcript.omitted_leases)} older omitted (budget)`
+                : ''),
+          );
+        }
+      } catch (err) {
+        ctx.log(
+          `! wake-transcript read failed for ${seat}: ${(err as Error).message} — fresh context`,
+        );
+      }
+
+      const engine =
+        deps.engine ??
+        piEngine({
+          apiKey,
+          gatewayEnv: spec.gateway?.env,
+          history,
+          systemPrompt: residentSystemPrompt(seat, spec.workspace, working),
+          preflight: working ? (name, args) => preflightWorkingTool(jail, name, args) : undefined,
+          onRehydrate: (t) => {
+            if (t.skipped > 0 || t.patched > 0)
+              ctx.log(
+                `native rehydrate for ${seat}: replayed ${String(t.replayed)}, skipped ${String(t.skipped)} non-pi row(s), patched ${String(t.patched)} missing result(s)`,
+              );
+          },
+        });
       const runPromise = engine.run({
         model,
         prompt: spec.order.composed_line,
-        tools,
+        tools: runTools,
         maxTurns: spec.bounds.max_turns,
         signal: controller.signal,
         onTurn: postTurn,

@@ -1186,6 +1186,90 @@ withDrivers('residency-http', (_o, kind) => {
       expect(rows[0]!.transcript).toMatchObject({ assistant: [{ type: 'text', text: 'turn 1' }] });
     });
 
+    it('ADR 588: wake-transcript replays the seat’s EARLIER leases, whole leases within budget, audited by size', async () => {
+      const first = await leaseForUrgentAct();
+      await post('/teams/dawn/residency/wake-turn', turnBody(first, 1, 0.01), agentKey);
+      await post('/teams/dawn/residency/wake-turn', turnBody(first, 2, 0.01), agentKey);
+      const settle = await post(
+        '/teams/dawn/residency/wake-report',
+        { lease_id: first, occupied: true },
+        agentKey,
+      );
+      expect(settle.status).toBe(200);
+      // A second urgent act → a second lease for the same seat: the wake being rehydrated.
+      const again = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'u10',
+            team: 'dawn',
+            from: 'nick',
+            to: { kind: 'member', name: 'Ada' },
+            act: 'message',
+            body: 'and again',
+            meta: { urgent: true, urgent_reason: 'wake me' },
+          }),
+        },
+        nickCred,
+      );
+      expect(again.status).toBe(201);
+      const leases = await post(
+        '/teams/dawn/residency/wake-leases',
+        { host: 'laptop.local' },
+        agentKey,
+      );
+      expect(leases.json.orders).toHaveLength(1);
+      const second = leases.json.orders[0].lease_id as string;
+      expect(second).not.toBe(first);
+
+      const read = await post(
+        '/teams/dawn/residency/wake-transcript',
+        { lease_id: second },
+        agentKey,
+      );
+      expect(read.status).toBe(200);
+      expect(read.json.seat).toBe('Ada');
+      expect(read.json.omitted_leases).toBe(0);
+      expect(read.json.leases).toHaveLength(1);
+      expect(read.json.leases[0].lease_id).toBe(first);
+      expect(read.json.leases[0].turns.map((t: { turn: number }) => t.turn)).toEqual([1, 2]);
+      expect(read.json.leases[0].turns[0].transcript).toMatchObject({
+        assistant: [{ type: 'text', text: 'turn 1' }],
+      });
+      // The current lease never sees itself.
+      const self = await post(
+        '/teams/dawn/residency/wake-transcript',
+        { lease_id: first },
+        agentKey,
+      );
+      expect(self.json.leases).toEqual([]);
+
+      // A budget the lease does not fit in omits it whole — never a dangling tool call.
+      const tight = await post(
+        '/teams/dawn/residency/wake-transcript',
+        { lease_id: second, max_bytes: 16 },
+        agentKey,
+      );
+      expect(tight.status).toBe(200);
+      expect(tight.json).toMatchObject({ leases: [], omitted_leases: 1 });
+
+      const missing = await post(
+        '/teams/dawn/residency/wake-transcript',
+        { lease_id: 'nope' },
+        agentKey,
+      );
+      expect(missing.status).toBe(404);
+
+      const rows = await audits('residency.transcript_read');
+      expect(rows.length).toBeGreaterThanOrEqual(3);
+      const details = rows.map((r) => JSON.parse(r.detail as string));
+      const full = details.find((d) => d.leases === 1);
+      expect(full).toMatchObject({ lease_id: second, turns: 2, omitted_leases: 0 });
+      expect(full.bytes).toBeGreaterThan(0);
+      expect(details.find((d) => d.omitted_leases === 1)).toMatchObject({ leases: 0, turns: 0 });
+      expect(JSON.stringify(details)).not.toContain('turn 1');
+    });
+
     it('accepts turns after the lease settled — outcome resolves at verify, the loop runs on', async () => {
       const leaseId = await leaseForUrgentAct();
       const settle = await post(
