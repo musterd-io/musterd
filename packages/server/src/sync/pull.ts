@@ -351,6 +351,11 @@ export async function drainTeam(
     pages += 1;
     applied += page.applied;
     if (!page.full || stopped()) return { pages, applied };
+    // The fold is synchronous, so without this the next page's fetch went out in the same
+    // macrotask as the last COMMIT: undici reused a pooled socket the hub had already closed before
+    // it could read the FIN (why #1989's retry exists — it stays as the belt). One turn of the loop
+    // lets the FIN land, and lets the requests queued behind a long drain run between pages.
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
 }
 

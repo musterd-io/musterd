@@ -533,6 +533,23 @@ describe('drainTeam — a full page is followed by the next one now, not next ti
     expect(await drainTeam(ctx, team, { pull: p.pull })).toEqual({ pages: 2, applied: 517 });
   });
 
+  it('yields a turn of the event loop between full pages (lane 01M3ZGSXFS)', async () => {
+    // The fold is synchronous; without a yield the next fetch shares the last COMMIT's macrotask,
+    // and a socket close the hub already sent is not seen before the pooled socket is reused.
+    const order: string[] = [];
+    const p = pages([
+      { applied: 500, full: true },
+      { applied: 1, full: false },
+    ]);
+    const pull = async () => {
+      order.push(`pull ${p.calls.length}`);
+      if (p.calls.length === 0) setImmediate(() => order.push('macrotask'));
+      return p.pull();
+    };
+    await drainTeam(ctx, team, { pull });
+    expect(order).toEqual(['pull 0', 'macrotask', 'pull 1']);
+  });
+
   it('stop ends the drain after the page in flight', async () => {
     let stopped = false;
     const p = pages([

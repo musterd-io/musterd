@@ -20,7 +20,7 @@ neither much.
 | physical footprint | 225 MB (peak 335 MB; 89 MB resident at read time) | whole process |
 | V8 heap (`Memory Tag 255`) | ~155 MB | the daemon's JS objects |
 | malloc zone | ~85 MB | SQLite + Node native buffers |
-| SQLite page cache | `cache_size = -2000` → ~2 MB per connection | already the default |
+| SQLite page cache | ~~`cache_size = -2000` → ~2 MB per connection~~ `cache_size = -16000` → up to ~16 MB per connection (corrected 2026-10-13, lane 01M3ZGSXFS: `better-sqlite3` is compiled with that default, not SQLite's -2000; falsify: `pragma cache_size` on a fresh `new Database(':memory:')`) | already the default |
 
 A copy of the daemon on the same database, **idle with no connections**, has a 118 MB footprint
 (81 MB V8, 23 MB malloc). So roughly 100 MB of the live footprint is load- and uptime-driven
