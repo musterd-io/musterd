@@ -1017,3 +1017,43 @@ The server's own timings, medians (p95 where marked):
   `docs/claims/entries/2026-10-14-read-run-holds-no-snapshot.md`.
 - Falsify: a matched repeat on `1311808` lands p95 above 800 ms. Then run 40 was a low draw, as run
   37 turned out to be, and the gain is smaller than the table says.
+
+## 2026-10-14 — Cloud run 41: p95 509 ms, a matched repeat of run 40 on `1311808` — the gain is the build, not a low draw (lane 01M4WAP0DVSSDFWM6J8WNMX4WG)
+
+Same build as run 40 (staging still on `1311808`, no deploy), same app machine, Neon 1 CU, shape
+(75/75/75, ramp 1 000 s, duration 1 300 s) and `performance-4x` bench, on a fresh team `lb-run41`.
+`pg_stat_statements` was reset at 04:28:25Z; load ran 04:31–04:53Z. The hub's `http_request` lines
+were captured as in runs 39–40 (`run41-hub-http.log`).
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 40 | `1311808` | 229 ms | 537 ms | 671 ms | 67 160 (51.7) | 1 | 235 ms |
+| 41 | `1311808` | **214 ms** | **509 ms** | 654 ms | 66 107 (50.9) | 100 | 213 ms |
+
+The server's own timings, from the hub's lines after the first minute:
+
+| | run 40 | run 41 |
+| --- | --- | --- |
+| request p50 / p95 | 108 / 426 ms | 111 / 433 ms |
+| `db_hold_ms` p50 | 51 ms | 51 ms |
+| `db_wait_ms` p95 | 0 | 0 |
+| interrupt-check p50 / p95, hold, tx, statements | 56 / 286 ms, 55 ms, 4, 11 | 57 / 290 ms, 55 ms, 4, 11 |
+| `GET /teams/:slug` p50 / p95, hold | 300 / 455 ms, 42 ms | 308 / 465 ms, 41 ms |
+
+- **Run 40's falsifier did not fire.** The repeat landed at 509 ms, under run 40's 537 ms, and the
+  server's per-route numbers match it within a few milliseconds. The p95 gain from #2543 and
+  ADR 589 is the build.
+- **The 100 errors are one edge blip, not the app.** 50 viewer sockets closed 1006 in the same
+  second (+659 s, 04:42:16Z) and all 50 were back within 3 s; 47 viewer `GET /teams/:slug` and 3
+  interrupt-checks failed at the network layer in the same window. The hub logged no `ws_close`
+  then (its six mid-run closes are at 04:48–04:52Z) and no 4xx or 5xx at all; its request rate dipped
+  from 70–90/s to 10–28/s for 04:42:14–18Z and recovered. That is the pattern runs 36–37 traced to
+  the path between the bench and the app, not to the server.
+- **Vacuum kept up** (the check runs 40 added to every readout). At +13 min, 5 backends were
+  `idle in transaction`, 4–5 of them holding a `backend_xmin`, the oldest 136 ms. After the run,
+  `presence` (680 autovacuums) was at 0 dead rows, vacuumed at 04:54Z. `messages` was at 18.2% dead
+  (13.9% after run 40), still short of its 20% trigger; it grows by about 2% a run and its next
+  autovacuum is due.
+- Falsify: the next readout shows `messages` past 20% dead with no autovacuum since 2026-10-13
+  18:22Z. Then autovacuum is not reaching it under this load, and ADR 589's open read runs are the
+  first suspect.
