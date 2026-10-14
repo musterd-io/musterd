@@ -177,7 +177,15 @@ const EDGES: readonly (readonly [string, string, string?, string?, number?, numb
   ['M585,104 L585,272', 'inbox'],
   ['M605,274 L605,106', 'inbox', 'back'],
   ['M655,300 L765,300', 'mate'],
-  ['M835,276 C800,200 720,130 650,100', 'mate', 'back', 'answers, keeps building', 780, 190, 'start'],
+  [
+    'M835,276 C800,200 720,130 650,100',
+    'mate',
+    'back',
+    'answers, keeps building',
+    780,
+    190,
+    'start',
+  ],
   ['M650,72 L740,72', 'admin'],
   ['M740,90 L650,90', 'admin', 'back'],
   ['M548,100 C500,140 460,170 420,186', 'ready'],
@@ -191,14 +199,21 @@ const EDGES: readonly (readonly [string, string, string?, string?, number?, numb
 /* The deck's glyphs (deck.html GLYPH), one per step, in currentColor. */
 const GLYPH: Record<string, string> = {
   join: '<path d="M4 21h13"/><path d="M6 21V4.6A1.6 1.6 0 0 1 7.6 3h6.8A1.6 1.6 0 0 1 16 4.6V21"/><path d="M6 3.4l6.2 1.9v16.1L6 21z" fill="currentColor" fill-opacity=".4"/><circle cx="10.4" cy="12.6" r=".95" fill="currentColor" stroke="none"/><path d="M20 4.6l.65 1.5 1.5.65-1.5.65-.65 1.5-.65-1.5-1.5-.65 1.5-.65z" fill="currentColor" stroke="none"/>',
-  orient: '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2.2 5-5 2.2 2.2-5z" fill="currentColor" fill-opacity=".4"/><path d="M15.6 8.4l-2.2 5-2.8-2.8z" fill="currentColor" stroke="none"/><path d="M12 1.8v1.8M12 20.4v1.8M1.8 12h1.8M20.4 12h1.8" stroke-opacity=".75"/>',
-  claim: '<path d="M5.5 21.5V3"/><path d="M5.5 4h12l-2.6 4.2 2.6 4.3h-12" fill="currentColor" fill-opacity=".4"/><path d="M3 21.5h5"/><path d="M20.2 15.2l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" fill="currentColor" stroke="none"/>',
-  build: '<path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 2.8l8 4.6-8 4.6-8-4.6z" fill="currentColor" fill-opacity=".42" stroke="none"/><path d="M4 7.4l8 4.6 8-4.6"/><path d="M12 12v9.2"/>',
-  inbox: '<path d="M3 13.5h5l1.6 2.6h4.8l1.6-2.6h5v5a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.5z" fill="currentColor" fill-opacity=".4"/><path d="M3 13.5l2.4-5.6a1.8 1.8 0 0 1 1.7-1.1h1.2M21 13.5l-2.4-5.6a1.8 1.8 0 0 0-1.7-1.1h-1.2"/><path d="M12 2.5v8.6M8.8 8l3.2 3.2L15.2 8"/>',
+  orient:
+    '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2.2 5-5 2.2 2.2-5z" fill="currentColor" fill-opacity=".4"/><path d="M15.6 8.4l-2.2 5-2.8-2.8z" fill="currentColor" stroke="none"/><path d="M12 1.8v1.8M12 20.4v1.8M1.8 12h1.8M20.4 12h1.8" stroke-opacity=".75"/>',
+  claim:
+    '<path d="M5.5 21.5V3"/><path d="M5.5 4h12l-2.6 4.2 2.6 4.3h-12" fill="currentColor" fill-opacity=".4"/><path d="M3 21.5h5"/><path d="M20.2 15.2l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" fill="currentColor" stroke="none"/>',
+  build:
+    '<path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 2.8l8 4.6-8 4.6-8-4.6z" fill="currentColor" fill-opacity=".42" stroke="none"/><path d="M4 7.4l8 4.6 8-4.6"/><path d="M12 12v9.2"/>',
+  inbox:
+    '<path d="M3 13.5h5l1.6 2.6h4.8l1.6-2.6h5v5a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.5z" fill="currentColor" fill-opacity=".4"/><path d="M3 13.5l2.4-5.6a1.8 1.8 0 0 1 1.7-1.1h1.2M21 13.5l-2.4-5.6a1.8 1.8 0 0 0-1.7-1.1h-1.2"/><path d="M12 2.5v8.6M8.8 8l3.2 3.2L15.2 8"/>',
   mate: '<path d="M9 8V5.6a2.1 2.1 0 0 1 2.1-2.1h7.8A2.1 2.1 0 0 1 21 5.6v5.3a2.1 2.1 0 0 1-2.1 2.1H18v2.8l-2.2-2.4" stroke-opacity=".8"/><path d="M3 10.2A2.2 2.2 0 0 1 5.2 8h8.6a2.2 2.2 0 0 1 2.2 2.2v5.6a2.2 2.2 0 0 1-2.2 2.2H8.3L4.6 21v-3A2.2 2.2 0 0 1 3 15.8z" fill="currentColor" fill-opacity=".4"/><circle cx="7.2" cy="13" r=".95" fill="currentColor" stroke="none"/><circle cx="9.5" cy="13" r=".95" fill="currentColor" stroke="none"/><circle cx="11.8" cy="13" r=".95" fill="currentColor" stroke="none"/>',
-  admin: '<path d="M12 3a8.6 8.6 0 0 1 7.5 12.8L20.8 21l-5.2-1.2A8.6 8.6 0 1 1 12 3z" fill="currentColor" fill-opacity=".32"/><path d="M9.5 9.6a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8"/><circle cx="12" cy="17" r="1.1" fill="currentColor" stroke="none"/>',
-  ready: '<circle cx="6" cy="5.5" r="2.3" fill="currentColor" fill-opacity=".4"/><circle cx="6" cy="18.5" r="2.3" fill="currentColor" fill-opacity=".4"/><circle cx="18" cy="18.5" r="2.3" fill="currentColor" fill-opacity=".4"/><path d="M6 7.8v8.4"/><path d="M18 16.2V9.5a3 3 0 0 0-3-3h-3.5"/><path d="M13.8 4l-2.5 2.5 2.5 2.5"/>',
-  review: '<circle cx="10.5" cy="10.5" r="7" fill="currentColor" fill-opacity=".32"/><path d="M15.6 15.6l5 5"/><path d="M7.6 10.7l2 2 3.8-3.9"/>',
+  admin:
+    '<path d="M12 3a8.6 8.6 0 0 1 7.5 12.8L20.8 21l-5.2-1.2A8.6 8.6 0 1 1 12 3z" fill="currentColor" fill-opacity=".32"/><path d="M9.5 9.6a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8"/><circle cx="12" cy="17" r="1.1" fill="currentColor" stroke="none"/>',
+  ready:
+    '<circle cx="6" cy="5.5" r="2.3" fill="currentColor" fill-opacity=".4"/><circle cx="6" cy="18.5" r="2.3" fill="currentColor" fill-opacity=".4"/><circle cx="18" cy="18.5" r="2.3" fill="currentColor" fill-opacity=".4"/><path d="M6 7.8v8.4"/><path d="M18 16.2V9.5a3 3 0 0 0-3-3h-3.5"/><path d="M13.8 4l-2.5 2.5 2.5 2.5"/>',
+  review:
+    '<circle cx="10.5" cy="10.5" r="7" fill="currentColor" fill-opacity=".32"/><path d="M15.6 15.6l5 5"/><path d="M7.6 10.7l2 2 3.8-3.9"/>',
   wrap: '<path d="M19.5 14.6A8 8 0 1 1 9.4 4.5a6.4 6.4 0 0 0 10.1 10.1z" fill="currentColor" fill-opacity=".36"/><path d="M17.5 2.8l.55 1.3 1.3.55-1.3.55-.55 1.3-.55-1.3-1.3-.55 1.3-.55z" fill="currentColor" stroke="none"/><path d="M21.2 8.4l.35.85.85.35-.85.35-.35.85-.35-.85-.85-.35.85-.35z" fill="currentColor" stroke="none"/>',
 };
 
@@ -228,6 +243,30 @@ const ROUTE: readonly { edge: number; end: string; arrive?: string }[] = [
 const LOOP_LEG = ROUTE.length - 1;
 /** Edges the walker never travels (the short "back to inbox" returns) light with their step. */
 const EDGE_STEP: Record<number, string> = { 4: 'inbox' };
+export const DAY_ROUTE_LENGTH = ROUTE.length;
+export const DAY_EDGE_COUNT = EDGES.length;
+
+/**
+ * Where the route stands once a leg has arrived. The loop leg arrives at Join, which is the start
+ * of the day, so the route resets to before its first leg. Left at LOOP_LEG, every edge earlier on
+ * the route read as walked, and the whole graph redrew itself over an empty room for the rest at
+ * Join (nick, 2026-10-13: "very messed up").
+ */
+export const legAfterArrival = (leg: number): number => (leg === LOOP_LEG ? -1 : leg);
+
+export function edgeLitFor(
+  i: number,
+  w: { still: boolean; looping: boolean; step: number; leg: number },
+): boolean {
+  if (w.still) return true;
+  if (w.looping) return false;
+  const owner = EDGE_STEP[i];
+  if (owner !== undefined) return INDEX[owner]! <= w.step;
+  // Walked, or being walked. The leg just arrived on stays drawn: lit only while travelling, it
+  // vanished on arrival and redrew from nothing when the walker set off again.
+  const at = ROUTE.findIndex((r) => r.edge === i);
+  return at >= 0 && at <= w.leg;
+}
 
 const DWELL_MS = 2400;
 /** The beat at the end of a return leg before the next leg starts. */
@@ -255,6 +294,47 @@ function Glyph({ k }: { k: string }) {
         dangerouslySetInnerHTML={{ __html: GLYPH[k] ?? '' }}
       />
     </svg>
+  );
+}
+
+/** One step's card body: who, the title, the points and when it happens. */
+function CardBody({ s, n }: { s: Step; n: number }) {
+  return (
+    <>
+      <div className="dl__who">
+        <span className="dl__av mono" aria-hidden="true">
+          mi
+        </span>
+        <span>
+          <b>miley</b> · designer
+        </span>
+        <span className="dl__stepn mono">
+          step {n + 1} of {DAY_STEPS.length}
+        </span>
+      </div>
+      <h3 className="dl__h3">
+        <Glyph k={s.k} />
+        <span>{s.title}</span>
+      </h3>
+      <ul className="dl__points">
+        {s.points.map((p, i) => (
+          <li key={p} style={{ '--i': i } as React.CSSProperties}>
+            {p}
+          </li>
+        ))}
+      </ul>
+      <div className="dl__how">
+        {s.how.map((h, i) => (
+          <span
+            key={h}
+            className="mono"
+            style={{ '--i': i + s.points.length } as React.CSSProperties}
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -317,7 +397,11 @@ export function DayInTheLife() {
     if (!running || phase !== 'rest') return;
     // A return leg flows straight into the next; a step's node is where the walker lingers.
     const wait =
-      leg >= 0 && !ROUTE[leg]!.arrive ? PASS_MS : step === DAY_STEPS.length - 1 ? REST_MS : DWELL_MS;
+      leg >= 0 && !ROUTE[leg]!.arrive
+        ? PASS_MS
+        : step === DAY_STEPS.length - 1
+          ? REST_MS
+          : DWELL_MS;
     const t = window.setTimeout(() => {
       setLeg((l) => (l + 1) % ROUTE.length);
       setPhase('travel');
@@ -352,6 +436,7 @@ export function DayInTheLife() {
       elapsed.current = 0;
       const arrive = ROUTE[leg]!.arrive;
       if (arrive) setStep(INDEX[arrive]!);
+      setLeg(legAfterArrival(leg));
       setPhase('rest');
     };
     raf = requestAnimationFrame(frame);
@@ -364,14 +449,7 @@ export function DayInTheLife() {
   const cur = DAY_STEPS[step]!;
   const looping = phase === 'travel' && leg === LOOP_LEG;
   const nodeLit = (k: string) => still || (!looping && INDEX[k]! <= step);
-  const edgeLit = (i: number) => {
-    if (still) return true;
-    if (looping) return false;
-    const owner = EDGE_STEP[i];
-    if (owner !== undefined) return INDEX[owner]! <= step;
-    const at = ROUTE.findIndex((r) => r.edge === i);
-    return at >= 0 && (at < leg || (at === leg && phase === 'travel'));
-  };
+  const edgeLit = (i: number) => edgeLitFor(i, { still, looping, step, leg });
   // A click or key puts the walker at that node and holds it there.
   const go = (n: number) => {
     const to = (n + DAY_STEPS.length) % DAY_STEPS.length;
@@ -457,7 +535,9 @@ export function DayInTheLife() {
               <g
                 ref={walker}
                 className={`dl__walker${phase === 'travel' ? ' is-moving' : ''}`}
-                transform={phase === 'travel' ? undefined : `translate(${walkerAt.x} ${walkerAt.y})`}
+                transform={
+                  phase === 'travel' ? undefined : `translate(${walkerAt.x} ${walkerAt.y})`
+                }
               >
                 <circle className="dl__walker-halo" r="18" />
                 <circle className="dl__walker-dot" r="11" />
@@ -492,43 +572,40 @@ export function DayInTheLife() {
             ))}
           </ol>
         </div>
-        <div className="dl__card" key={step} aria-live="polite">
-          <div className="dl__who">
-            <span className="dl__av mono" aria-hidden="true">
-              mi
-            </span>
-            <span>
-              <b>miley</b> · designer
-            </span>
-            <span className="dl__stepn mono">
-              step {step + 1} of {DAY_STEPS.length}
-            </span>
-          </div>
-          <h3 className="dl__h3">
-            <Glyph k={cur.k} />
-            <span>{cur.title}</span>
-          </h3>
-          <ul className="dl__points">
-            {cur.points.map((p, i) => (
-              <li key={p} style={{ '--i': i } as React.CSSProperties}>
-                {p}
-              </li>
-            ))}
-          </ul>
-          <div className="dl__how">
-            {cur.how.map((h, i) => (
-              <span key={h} className="mono" style={{ '--i': i + cur.points.length } as React.CSSProperties}>
-                {h}
-              </span>
-            ))}
-          </div>
-          <div className="dl__nav">
-            <button type="button" className="dl__navbtn" onClick={() => go(step - 1)} onKeyDown={onKey} aria-label="Previous step">
-              ‹
-            </button>
-            <button type="button" className="dl__navbtn" onClick={() => go(step + 1)} onKeyDown={onKey} aria-label="Next step">
-              ›
-            </button>
+        {/* Every step's card, invisible, in the same grid cell as the live one: the cell is as tall as
+            the tallest step, so the section keeps one height and the page below it never jumps when
+            the card swaps (nick 2026-10-13). */}
+        <div className="dl__cards">
+          {DAY_STEPS.map((s, n) => (
+            <div key={s.k} className="dl__card dl__card--sizer" aria-hidden="true">
+              <CardBody s={s} n={n} />
+              <div className="dl__nav">
+                <span className="dl__navbtn" />
+              </div>
+            </div>
+          ))}
+          <div className="dl__card" key={step} aria-live="polite">
+            <CardBody s={cur} n={step} />
+            <div className="dl__nav">
+              <button
+                type="button"
+                className="dl__navbtn"
+                onClick={() => go(step - 1)}
+                onKeyDown={onKey}
+                aria-label="Previous step"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="dl__navbtn"
+                onClick={() => go(step + 1)}
+                onKeyDown={onKey}
+                aria-label="Next step"
+              >
+                ›
+              </button>
+            </div>
           </div>
         </div>
       </div>
