@@ -2,7 +2,12 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { buildMcpServer, TOOL_NAMES, type MusterdClient } from '@musterd/mcp';
 import { describe, expect, it } from 'vitest';
-import { bridgeTools, contentToText, nativeMcpConfig } from './nativeBridge.js';
+import {
+  bridgeTools,
+  contentToText,
+  nativeMcpConfig,
+  STEERED_SUPPRESS_MS,
+} from './nativeBridge.js';
 
 /**
  * The MCP bridge (ADR 251 §4): the loop's tool set is the seat's own rendered surface, bridged
@@ -148,5 +153,11 @@ describe('contentToText', () => {
     expect(contentToText([{ type: 'resource_link', uri: 'x://y' }])).toContain('resource_link');
     expect(contentToText([])).toBe('');
     expect(contentToText(undefined)).toBe('');
+  });
+});
+
+describe('STEERED_SUPPRESS_MS (ADR 588 §6 — one act, one ring)', () => {
+  it('is a minute: long enough to outlast the next tool call, short enough that a re-raise rings again', () => {
+    expect(STEERED_SUPPRESS_MS).toBe(60_000);
   });
 });

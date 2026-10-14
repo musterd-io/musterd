@@ -193,6 +193,63 @@ describe('piEngine.run', () => {
     expect(tally).toEqual([{ replayed: 1, skipped: 0, patched: 0 }]);
   });
 
+  it('ADR 588 §6: a steered line becomes the next user turn, between tool calls, and rides the turn transcript', async () => {
+    const { models, handle } = faux();
+    let deliver: ((line: string) => void) | undefined;
+    let unsubscribed = 0;
+    const roles: string[][] = [];
+    handle.setResponses([
+      fauxAssistantMessage([fauxToolCall('team_next', {}, { id: 'c1' })], {
+        stopReason: 'toolUse',
+      }),
+      (context) => {
+        roles.push(
+          context.messages
+            .filter((m) => m.role !== 'system') // pi declares the tools in a leading system message
+            .map((m) =>
+              m.role === 'user'
+                ? `user:${typeof m.content === 'string' ? m.content : m.content.map((c) => ('text' in c ? c.text : '')).join('')}`
+                : m.role,
+            ),
+        );
+        return fauxAssistantMessage('heard you');
+      },
+    ]);
+    const turns: EngineTurn[] = [];
+    const result = await piEngine({ models }).run({
+      model: 'claude-faux',
+      prompt: 'p',
+      tools: [
+        tool('team_next', async () => {
+          // Raised while the tool runs: pi drains the steer after this batch, before the next request.
+          deliver?.('⚡ musterd [revive]: steer from nick (steer) — read exactly it');
+          return 'next — as izzo';
+        }),
+      ],
+      steer: {
+        subscribe: (d) => {
+          deliver = d;
+          return () => void (unsubscribed += 1);
+        },
+      },
+      onTurn: (t) => turns.push(t),
+    });
+    expect(result.end).toBe('completed');
+    // The second request saw: system?, user prompt, assistant(tool call), toolResult, then the steer.
+    expect(roles[0]).toEqual([
+      'user:p',
+      'assistant',
+      'toolResult',
+      'user:⚡ musterd [revive]: steer from nick (steer) — read exactly it',
+    ]);
+    // The line is on the transcript of the turn it preceded, so a replay puts it where it ran.
+    expect((turns[1]!.transcript as { steered?: string[] }).steered).toEqual([
+      '⚡ musterd [revive]: steer from nick (steer) — read exactly it',
+    ]);
+    expect((turns[0]!.transcript as { steered?: string[] }).steered).toBeUndefined();
+    expect(unsubscribed).toBe(1);
+  });
+
   it('stops at the turn cap and reports max_turns when the model still wanted tools', async () => {
     const { models, handle } = faux();
     const wantsTool = () =>

@@ -20,6 +20,8 @@ export interface PiTurnTranscript {
   engine: 'pi';
   /** The daemon-composed wake line — on the lease's first turn only. */
   prompt?: string;
+  /** ADR 588 §6: the daemon-composed lines steered into the loop ahead of this turn's request. */
+  steered?: string[];
   assistant: AssistantMessage;
   tool_results: ToolResultMessage[];
 }
@@ -76,10 +78,15 @@ export function rehydrate(leases: readonly WakeTranscriptLease[]): Rehydrated {
             ? { role: 'user', content: t.prompt, timestamp: lease.created_at }
             : note(`wake ${lease.lease_id}: prompt not recorded`, lease.created_at),
         );
-      } else if (lastRole() === 'assistant') {
+      } else if (lastRole() === 'assistant' && !(t.steered && t.steered.length > 0)) {
         messages.push(note('continued', row.created_at));
       }
       first = false;
+      // A steered line was a user turn when it ran; replay it as one, where it ran.
+      for (const line of t.steered ?? []) {
+        if (typeof line === 'string' && line.length > 0)
+          messages.push({ role: 'user', content: line, timestamp: row.created_at });
+      }
       const assistant: AssistantMessage = {
         ...t.assistant,
         timestamp: t.assistant.timestamp ?? row.created_at,

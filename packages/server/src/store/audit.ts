@@ -378,6 +378,9 @@ export type AuditAction =
   // the rate/attempt derivations (one actuation must not count twice); the wake metrics dedupe
   // cost by lease_id, preferring this row over the primary's.
   | 'residency.wake_cost'
+  // ADR 588 §6: a raised act was delivered into a running native loop as a user turn (the in-process
+  // doorbell). Detail: lease, act, delivered_at — never the line (it is on `interrupt.raised`).
+  | 'residency.steered'
   // ADR 273: the daemon REFUSED a wake report. This row exists because its absence was the bug.
   // A wake report is not a request that can be retried — it is the receipt for a session that has
   // already spawned and already cost money, and for ~3 weeks (ADR 269) 48 of them were rejected on
@@ -718,6 +721,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'calendar.entry_deleted': 'actor',
   'nudge.decision': 'actor',
   'residency.wake_cost': 'none',
+  'residency.steered': 'none',
   'residency.wake_report_rejected': 'none',
   'residency.context_read': 'actor',
   'residency.transcript_read': 'none',
@@ -990,6 +994,7 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'residency.wake_deferred',
   'residency.wake_exhausted',
   'residency.wake_cost',
+  'residency.steered',
   'residency.wake_report_rejected',
   // ADR 371 §4 — the residence ledger's own birth rows, the lease, the capture, the suspension.
   'residency.enrolled',

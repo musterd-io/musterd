@@ -244,10 +244,27 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         },
       });
 
+      // ADR 588 §6: a raised act becomes the next user turn, delivered between tool calls — pi's
+      // steering queue drains after the current assistant turn's tools finish. Lines queued since
+      // the last turn ride that turn's transcript, so a replay puts them where they ran.
+      let steeredSinceLastTurn: string[] = [];
+      // The lines pi drained ahead of the turn now running — snapshotted at `turn_start`, so a line
+      // raised while turn N's tools ran lands on turn N+1, the request it actually preceded.
+      let steeredForCurrentTurn: string[] = [];
+      const unsubscribeSteer = spec.steer?.subscribe((line) => {
+        steeredSinceLastTurn.push(line);
+        agent.steer({ role: 'user', content: line, timestamp: Date.now() });
+      });
+
       let costTotal: number | undefined;
       let lastStop: string | undefined;
       let lastError: string | undefined;
       agent.subscribe((event) => {
+        if (event.type === 'turn_start') {
+          steeredForCurrentTurn = steeredSinceLastTurn;
+          steeredSinceLastTurn = [];
+          return;
+        }
         if (event.type !== 'turn_end' || event.message.role !== 'assistant') return;
         const message = event.message;
         const usage = toEngineUsage(message.usage);
@@ -259,10 +276,13 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         if (cost !== undefined) costTotal = (costTotal ?? 0) + cost;
         lastStop = message.stopReason;
         lastError = message.errorMessage;
+        const steered = steeredForCurrentTurn;
+        steeredForCurrentTurn = [];
         const transcript: PiTurnTranscript = {
           v: 1,
           engine: 'pi',
           ...(turnsSeen === 1 ? { prompt: spec.prompt } : {}),
+          ...(steered.length > 0 ? { steered } : {}),
           assistant: message,
           tool_results: event.toolResults,
         };
@@ -280,7 +300,10 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         }
       });
 
-      if (spec.signal?.aborted) return { turns: 0, end: 'aborted', usage: totals };
+      if (spec.signal?.aborted) {
+        unsubscribeSteer?.();
+        return { turns: 0, end: 'aborted', usage: totals };
+      }
       const onAbort = (): void => agent.abort();
       spec.signal?.addEventListener('abort', onAbort, { once: true });
       let thrown: unknown;
@@ -290,6 +313,8 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         thrown = err;
       } finally {
         spec.signal?.removeEventListener('abort', onAbort);
+        // The run is over: a line raised now belongs to the NEXT wake (ADR 131), not this loop.
+        unsubscribeSteer?.();
       }
 
       const result = (end: EngineRunResult['end'], reason?: string): EngineRunResult => ({

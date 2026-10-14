@@ -42,6 +42,17 @@ export interface EngineTurn {
  *  the machine, not of the work (the same posture as a missing CLI binary, ADR 221). */
 export type EngineEndReason = 'completed' | 'max_turns' | 'aborted' | 'auth' | 'error';
 
+/**
+ * ADR 588 §6, the in-process doorbell: a source of daemon-composed lines for acts raised at the seat
+ * while the loop runs. The engine subscribes for the run and queues each line as the next user turn,
+ * delivered between tool calls; it unsubscribes when the run ends. The lines are the same ones the
+ * tool-result path appends (`appendInterrupt`), so the seat hears an act whether or not it is calling
+ * a musterd tool right now. The backend builds the source; the engine knows nothing about musterd.
+ */
+export interface SteerSource {
+  subscribe(deliver: (line: string) => void): () => void;
+}
+
 export interface EngineRunSpec {
   /** Resolved via the ADR 101 env > binding ladder by the backend — the engine never defaults it. */
   model: string;
@@ -54,6 +65,8 @@ export interface EngineRunSpec {
   signal?: AbortSignal | undefined;
   /** Per-turn observer (capture + telemetry). Best-effort: a throwing observer never kills the loop. */
   onTurn?: ((turn: EngineTurn) => void) | undefined;
+  /** ADR 588 §6: raised acts, delivered into the running loop between tool calls. */
+  steer?: SteerSource | undefined;
 }
 
 /**
@@ -63,8 +76,9 @@ export interface EngineRunSpec {
  * `backends/nativeBridge.ts`), not through an inbound hook on this interface: the tool boundary is
  * the same place every hooked harness delivers at, and keeping the injection in the bridge keeps it
  * where it belongs — the engine still knows nothing about musterd, and every engine inherits the
- * doorbell for free. The in-process steer (ADR 588 §6, lane 01M4VTA7Y6) is an engine-side addition
- * on top of this, not a replacement for it.
+ * doorbell for free. The in-process steer (ADR 588 §6, `steer` on the run spec) is an addition on
+ * top of this, not a replacement: it reaches a loop that is not calling a musterd tool right now, and
+ * the bridge suppresses the tool-result copy of a line it has already steered.
  */
 
 export interface EngineRunResult {

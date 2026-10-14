@@ -51,6 +51,7 @@ import {
   type WakeReportBody,
   WakeTurnBodySchema,
   WakeTranscriptQuerySchema,
+  ResidencySteeredBodySchema,
   WAKE_TRANSCRIPT_DEFAULT_MAX_BYTES,
   WAKE_TRANSCRIPT_DEFAULT_MAX_LEASES,
   WakeContextRequestSchema,
@@ -4625,6 +4626,33 @@ export async function handleHttp(
           leases: transcript.leases,
           omitted_leases: transcript.omitted,
         });
+      }
+
+      // ADR 588 §6: the in-process doorbell's receipt — the host delivered a raised act into the
+      // running loop. One audit row per delivery, host-authenticated like the sibling wake routes;
+      // the line itself is on the `interrupt.raised` row, so this carries ids and a clock only.
+      if (method === 'POST' && rest === '/residency/steered') {
+        const body = parseOrBadRequest(ResidencySteeredBodySchema, await readJson(req));
+        const team = await requireTeam(ctx.db, slug);
+        const steeredHost = await hostForWakeLease(ctx, team.id, body.lease_id);
+        const { scope: steeredScope } = await authAgentKeyOnly(ctx, slug, req, steeredHost);
+        await assertLeaseInScope(ctx, team.id, body.lease_id, steeredScope);
+        if (steeredHost) await recordHostSeen(ctx.db, team.id, steeredHost, Date.now());
+        const steeredLease = await ctx.db.get<{ member_id: string }>(
+          'SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?',
+          [team.id, body.lease_id],
+        );
+        if (!steeredLease)
+          throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
+        const steeredSeat = await getMemberById(ctx.db, steeredLease.member_id);
+        await appendAudit(ctx.db, team.id, {
+          actor: null,
+          action: 'residency.steered',
+          target: steeredSeat?.name ?? steeredLease.member_id,
+          result: 'allow',
+          detail: { lease_id: body.lease_id, act: body.act_id, delivered_at: body.delivered_at },
+        });
+        return sendJson(res, 200, { ok: true });
       }
 
       if (method === 'POST' && rest === '/residency/wake-progress') {

@@ -176,6 +176,18 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   the seat's own `lane_submit` filed ADR 585 claims the daemon checked — `commit_landed` 8c548b20,
   `pr_merged` 2570 and `ci_green` 2570 confirmed, `branch_pushed` unconfirmed because the branch was
   deleted at merge. Every clause of the engine lane's done line has now happened on this team.)_
+- _2026-10-13 (doorbell lane `01M4VTA7Y6S500YTY504RT4RCV`)._ Decision 6 landed as amended: the
+  engine seam gained `steer` (a source of daemon-composed lines the engine queues as the next user
+  turn, drained between tool calls by pi-agent-core's steering queue), the bridge delivers it from the
+  seat's own socket the moment a directed act lands (`MusterdClient.onDirected` → `interruptCheck` →
+  the line), and the tool-result path suppresses a line already steered for a minute so one act rings
+  once. Each delivery posts `POST /residency/steered` and the daemon writes `residency.steered`
+  `{lease_id, act, delivered_at}`; `answered_at` is not recorded — it is derivable from the seat's
+  reply in the thread and was left out rather than guessed. Steered lines ride the turn's
+  `wake_turns` transcript (`steered`) and replay as the user turns they were. The seat attests
+  `hearing: idle` ("resident: in-process steer") on every heartbeat; the roster column that renders it
+  is idle-wake increment 5 (lane `01M4M6QP2J`), not this lane. ADR 558 §6's "native is exempt" carries
+  the dated marker. The directed-act → first-answer measurement is the pilot's (Decision 7).
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.

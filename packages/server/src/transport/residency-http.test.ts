@@ -1301,6 +1301,60 @@ withDrivers('residency-http', (_o, kind) => {
     });
   });
 
+  describe('POST /teams/:slug/residency/steered (ADR 588 §6 — the in-process doorbell receipt)', () => {
+    it('writes one residency.steered row naming the seat, the act and the clock; refuses an unknown lease and a body with the line in it', async () => {
+      await enrollAda();
+      const send = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'u11',
+            team: 'dawn',
+            from: 'nick',
+            to: { kind: 'member', name: 'Ada' },
+            act: 'message',
+            body: 'wake',
+            meta: { urgent: true, urgent_reason: 'steer test' },
+          }),
+        },
+        nickCred,
+      );
+      expect(send.status).toBe(201);
+      const leases = await post(
+        '/teams/dawn/residency/wake-leases',
+        { host: 'laptop.local' },
+        agentKey,
+      );
+      const leaseId = leases.json.orders[0].lease_id as string;
+      const ok = await post(
+        '/teams/dawn/residency/steered',
+        { lease_id: leaseId, act_id: 'u11', delivered_at: 1_700_000_000_000 },
+        agentKey,
+      );
+      expect(ok.status).toBe(200);
+      const rows = await audits('residency.steered');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.target).toBe('Ada');
+      expect(JSON.parse(rows[0]!.detail as string)).toEqual({
+        lease_id: leaseId,
+        act: 'u11',
+        delivered_at: 1_700_000_000_000,
+      });
+      const missing = await post(
+        '/teams/dawn/residency/steered',
+        { lease_id: 'nope', act_id: 'u11', delivered_at: 1 },
+        agentKey,
+      );
+      expect(missing.status).toBe(404);
+      const withLine = await post(
+        '/teams/dawn/residency/steered',
+        { lease_id: leaseId, act_id: 'u11', delivered_at: 1, line: '⚡ …' },
+        agentKey,
+      );
+      expect(withLine.status).toBe(400);
+    });
+  });
+
   describe('POST /teams/:slug/residency/wake-progress (ADR 262)', () => {
     async function leaseReviewOrder(): Promise<string> {
       const enroll = await post(

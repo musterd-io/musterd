@@ -82,6 +82,7 @@ import {
   type WakeReportBody,
   type WakeTurnBody,
   type WakeTranscriptQuery,
+  type ResidencySteeredBody,
   type WakeTranscriptResponse,
   WakeTranscriptResponseSchema,
   type WorkspaceRepairBody,
@@ -1653,6 +1654,14 @@ export class HttpClient {
     return (await this.request('POST', `/teams/${slug}/residency/wake-turn`, body)) as {
       ok: boolean;
       turn: number;
+    };
+  }
+
+  /** ADR 588 §6 — `POST /teams/:slug/residency/steered`: the in-process doorbell's receipt, one per
+   *  raised act delivered into a running native loop. Best-effort like the turn rail. */
+  async residencySteered(slug: string, body: ResidencySteeredBody): Promise<{ ok: boolean }> {
+    return (await this.request('POST', `/teams/${slug}/residency/steered`, body)) as {
+      ok: boolean;
     };
   }
 

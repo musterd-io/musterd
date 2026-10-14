@@ -16,6 +16,7 @@ import {
   WakeReportBodySchema,
   WakeTurnBodySchema,
   WakeTranscriptQuerySchema,
+  ResidencySteeredBodySchema,
   WakeTranscriptResponseSchema,
   WAKE_TRANSCRIPT_MAX_BYTES_CEILING,
   WakeOrderSchema,
@@ -281,6 +282,25 @@ describe('WakeTranscriptQuerySchema / WakeTranscriptResponseSchema (ADR 588 — 
     });
     expect(res.leases[0]!.turns[0]!.transcript).toEqual({ v: 1, engine: 'pi' });
     expect(res.omitted_leases).toBe(3);
+  });
+});
+
+describe('ResidencySteeredBodySchema (ADR 588 §6 — the in-process doorbell receipt)', () => {
+  it('takes lease, act and a clock, and nothing else — never the line', () => {
+    expect(
+      ResidencySteeredBodySchema.parse({ lease_id: 'L1', act_id: 'A1', delivered_at: 1 }).act_id,
+    ).toBe('A1');
+    expect(() =>
+      ResidencySteeredBodySchema.parse({
+        lease_id: 'L1',
+        act_id: 'A1',
+        delivered_at: 1,
+        line: 'x',
+      }),
+    ).toThrow();
+    expect(() =>
+      ResidencySteeredBodySchema.parse({ lease_id: 'L1', act_id: '', delivered_at: 1 }),
+    ).toThrow();
   });
 });
 

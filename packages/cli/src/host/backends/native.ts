@@ -3,6 +3,7 @@ import {
   WAKE_TURN_TRANSCRIPT_MAX_BYTES,
   type AttestationSource,
   type Binding,
+  type ResidencySteeredBody,
   type WakeTranscriptQuery,
   type WakeTranscriptResponse,
   type WakeTurnBody,
@@ -100,6 +101,8 @@ export interface TurnTelemetry {
   wakeTurn(team: string, body: WakeTurnBody): Promise<{ ok: boolean; turn: number }>;
   /** ADR 588 amendment: the resume substrate read — the seat's earlier captured turns. */
   wakeTranscript(team: string, body: WakeTranscriptQuery): Promise<WakeTranscriptResponse>;
+  /** ADR 588 §6: the in-process doorbell's receipt, one per raised act steered into the loop. */
+  residencySteered(team: string, body: ResidencySteeredBody): Promise<{ ok: boolean }>;
 }
 
 /** Injectables so the scripted suite drives every path without a model, daemon, or socket. */
@@ -330,6 +333,28 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
               );
           },
         });
+      // ADR 588 §6: the in-process doorbell. A raised act reaches the loop as its next user turn
+      // through the bridge's socket, not only on a tool result; each delivery is a
+      // `residency.steered` row (best-effort, one narrator line on the first failure).
+      let steeredPostFailed = false;
+      const steer = {
+        subscribe: (deliver: (line: string) => void) =>
+          bridge.onRaised((line, actId) => {
+            deliver(line);
+            ctx.log(`⚡ steered ${seat}: act ${actId} delivered into the running loop`);
+            void telemetry
+              .residencySteered(spec.team, {
+                lease_id: spec.order.lease_id,
+                act_id: actId,
+                delivered_at: Date.now(),
+              })
+              .catch((err: Error) => {
+                if (!steeredPostFailed)
+                  ctx.log(`! steered post failed for ${seat}: ${err.message}`);
+                steeredPostFailed = true;
+              });
+          }),
+      };
       const runPromise = engine.run({
         model,
         prompt: spec.order.composed_line,
@@ -337,6 +362,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         maxTurns: spec.bounds.max_turns,
         signal: controller.signal,
         onTurn: postTurn,
+        steer,
       });
 
       // `settled` resolves when the runner finishes or the watchdog aborts it — the host awaits

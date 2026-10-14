@@ -39,6 +39,7 @@ import {
   type DisputeAnswerWire,
   type ClaimCheck,
   type IdleWakeReport,
+  type Hearing,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
@@ -238,6 +239,11 @@ export type JoinOutcome = 'occupied' | 'pending';
 export class MusterdClient {
   private buffer: Envelope[] = [];
   private seen = new Set<string>();
+  /** ADR 588 §6: who wants a directed act the moment it lands — the resident engine's steer. */
+  private readonly directedListeners = new Set<(env: Envelope) => void>();
+  /** A fixed hearing attestation for a holder with no idle-wake core: a resident seat hears
+   *  in-process, so it is `idle` (pushable) for as long as it holds the seat. */
+  private fixedHearing: { hearing: Hearing; reason?: string } | null = null;
   private ws: WebSocket | null = null;
   private heartbeat: NodeJS.Timeout | null = null;
   /** The ADR 164 session ladder, created lazily on the first heartbeat tick. */
@@ -398,7 +404,11 @@ export class MusterdClient {
   /** ADR 558: can this session be pushed while idle? Rides every heartbeat; the daemon writes a
    *  row only when it changes. Absent when no idle-wake core is attached. */
   private hearingAttestation(): Record<string, unknown> {
-    if (!this.idleWake) return {};
+    if (!this.idleWake) {
+      if (!this.fixedHearing) return {};
+      const { hearing, reason } = this.fixedHearing;
+      return { hearing, ...(reason ? { hearing_reason: reason.slice(0, 80) } : {}) };
+    }
     try {
       const { hearing, reason } = this.idleWake.hearing();
       return { hearing, ...(reason ? { hearing_reason: reason.slice(0, 80) } : {}) };
@@ -410,6 +420,41 @@ export class MusterdClient {
   /** ADR 558: attach the idle-wake core. Deliveries and (re)connects feed it from here on. */
   attachIdleWake(iw: IdleWake): void {
     this.idleWake = iw;
+  }
+
+  /**
+   * ADR 588 §6: attest a fixed `hearing` on every heartbeat for a holder that has no idle-wake core
+   * because it is never idle — the resident engine, which takes a directed act into its running
+   * loop. The daemon writes `presence.hearing` on change (ADR 558 §5); the roster column is idle-wake
+   * increment 5. Ignored while an idle-wake core is attached: that core knows better.
+   */
+  attestHearing(hearing: Hearing, reason?: string): void {
+    this.fixedHearing = { hearing, ...(reason ? { reason } : {}) };
+  }
+
+  /**
+   * ADR 588 §6: be told, the moment the socket delivers it, about an act addressed to the seat this
+   * client holds (a member-directed `to`, or an eligible set naming the seat). Team and broadcast
+   * traffic never fires it. Listeners run in registration order and never throw into the socket
+   * handler. Returns the unsubscribe.
+   */
+  onDirected(listener: (env: Envelope) => void): () => void {
+    this.directedListeners.add(listener);
+    return () => void this.directedListeners.delete(listener);
+  }
+
+  /** The seat this client is configured to hold, or null for a role claim / a chat folder. */
+  private configuredSeat(): string | null {
+    const claim = this.config.claim as { mode?: string; name?: string } | undefined;
+    return claim?.mode === 'seat' && typeof claim.name === 'string' ? claim.name : null;
+  }
+
+  private isDirectedToMe(env: Envelope): boolean {
+    const seat = this.configuredSeat();
+    if (!seat) return false;
+    if (env.to.kind === 'member' && env.to.name === seat) return true;
+    const eligible = (env.meta as { eligible?: unknown } | null | undefined)?.eligible;
+    return Array.isArray(eligible) && eligible.includes(seat);
   }
 
   /** The ADR 164 ladder, created on first use — the heartbeat and the idle-wake core share it. */
@@ -1720,6 +1765,15 @@ export class MusterdClient {
       this.idleWake?.onDeliver(env);
     } catch {
       // never let the idle core cost a delivery
+    }
+    if (this.directedListeners.size > 0 && this.isDirectedToMe(env)) {
+      for (const listener of this.directedListeners) {
+        try {
+          listener(env);
+        } catch {
+          // a listener's bug must never cost a delivery either
+        }
+      }
     }
   }
 
