@@ -280,6 +280,22 @@
 }
 
 /* The card: swaps with the step (keyed remount, so the entrance runs each time). */
+/* The live card and every step's invisible sizer share one cell, so the cell is as tall as the
+ * tallest step and the section never changes height as the card swaps. */
+.dl__cards {
+  display: grid;
+}
+
+.dl__cards > .dl__card {
+  grid-area: 1 / 1;
+}
+
+.dl__card--sizer,
+.dl__card--sizer * {
+  visibility: hidden;
+  animation: none;
+}
+
 .dl__card {
   position: relative;
   background: var(--surface-raised);
@@ -389,8 +405,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  /* Three lines' worth, so the card keeps its height as the captions change. */
-  min-height: 6.4rem;
 }
 
 .dl__points li {
@@ -429,7 +443,9 @@
 .dl__nav {
   display: flex;
   gap: 0.4rem;
-  margin-top: 0.2rem;
+  /* Pinned to the card's foot, so the buttons sit still while the text above them changes. */
+  margin-top: auto;
+  padding-top: 0.2rem;
 }
 
 .dl__navbtn {
