@@ -1,7 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SKILL_NAME_RE } from '@musterd/protocol';
 
 /**
  * Built-in role skills (ADR 586 §4–6). The repo's `.agents/skills/` is the one place a role skill is
@@ -89,6 +99,37 @@ function sameFiles(dir: string, files: Map<string, Buffer>): boolean {
   return have.every((rel) => files.get(rel)?.equals(readFileSync(join(dir, rel))) ?? false);
 }
 
+/**
+ * Whether writing `path` stays inside `root`: the nearest ancestor that exists (a symlink counts as
+ * existing, dangling or not) must resolve inside `root`'s real path. A symlinked `.agents` or skill
+ * directory — say, one committed in a cloned repo — would otherwise carry a write anywhere.
+ */
+export function staysInside(root: string, path: string): boolean {
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(root);
+  } catch {
+    return false;
+  }
+  let p = path;
+  for (;;) {
+    try {
+      lstatSync(p);
+      break;
+    } catch {
+      const up = dirname(p);
+      if (up === p) return false;
+      p = up;
+    }
+  }
+  try {
+    const real = realpathSync(p);
+    return real === realRoot || real.startsWith(realRoot + sep);
+  } catch {
+    return false; // a dangling symlink: where it points is not ours to create
+  }
+}
+
 /** What happened to one skill directory: written, already identical, or kept as the user has it. */
 export type SkillInstall = { skill: string; path: string; status: 'written' | 'same' | 'kept' };
 
@@ -101,7 +142,11 @@ export function installSkill(
   skill: string,
   files: Map<string, Buffer>,
 ): SkillInstall {
+  if (!SKILL_NAME_RE.test(skill)) throw new Error(`"${skill}" is not a skill directory name`);
   const path = join(skillsDir, skill);
+  const repo = dirname(dirname(skillsDir));
+  if (!staysInside(repo, path))
+    throw new Error(`${path} resolves outside ${repo} (a symlink?) — not writing a skill there`);
   if (existsSync(path) && statSync(path).isDirectory())
     return { skill, path, status: sameFiles(path, files) ? 'same' : 'kept' };
   writeFiles(path, files);

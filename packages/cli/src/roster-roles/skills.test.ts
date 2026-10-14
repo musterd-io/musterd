@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -6,8 +6,10 @@ import {
   BUILTIN_ROLE_SKILLS,
   bundledSkillsRoot,
   bundleRoleSkills,
+  installSkill,
   METHOD_SKILL,
   shippedSkillFiles,
+  staysInside,
 } from './skills.js';
 import { BUILTIN_ROLE_TEMPLATES } from './templates.js';
 
@@ -46,5 +48,31 @@ describe('built-in role skills (ADR 586 §4–6)', () => {
       for (const [rel, body] of shippedSkillFiles(root, skill))
         expect(readFileSync(join(dest, skill, rel)).equals(body), `${skill}/${rel}`).toBe(true);
     }
+  });
+});
+
+describe('installing a skill stays inside the repo', () => {
+  it('refuses a skill directory reached through a symlink out of the repo', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'musterd-skill-repo-'));
+    const outside = mkdtempSync(join(tmpdir(), 'musterd-skill-out-'));
+    mkdirSync(join(repo, '.agents'));
+    symlinkSync(outside, join(repo, '.agents', 'skills'));
+    const files = shippedSkillFiles(root, 'observer');
+    expect(() => installSkill(join(repo, '.agents', 'skills'), 'observer', files)).toThrow(
+      /outside/,
+    );
+    expect(existsSync(join(outside, 'observer'))).toBe(false);
+  });
+
+  it('refuses a name that is not a skill directory', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'musterd-skill-repo-'));
+    expect(() => installSkill(join(repo, '.agents', 'skills'), '../x', new Map())).toThrow();
+  });
+
+  it('a plain path under the root stays inside; a dangling symlink does not', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'musterd-skill-repo-'));
+    expect(staysInside(repo, join(repo, '.agents', 'skills', 'x', 'SKILL.md'))).toBe(true);
+    symlinkSync(join(repo, 'nowhere'), join(repo, '.agents-link'));
+    expect(staysInside(repo, join(repo, '.agents-link', 'x'))).toBe(false);
   });
 });

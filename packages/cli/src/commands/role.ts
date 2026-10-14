@@ -424,7 +424,12 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
 
   mkdirSync(rolesDir, { recursive: true });
   writeFileSync(path, serializeRole(role), 'utf8');
-  const skills = installRoleSkills(dir, name, from);
+  let skills: SkillInstall[];
+  try {
+    skills = installRoleSkills(dir, name, from);
+  } catch (err) {
+    throw new CliError(`wrote ${path}, but not its skill: ${(err as Error).message}`, 1);
+  }
 
   if (parsed.flags['json']) {
     process.stdout.write(
