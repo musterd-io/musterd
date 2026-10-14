@@ -23,6 +23,13 @@ import {
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
 import {
+  applyRoleSkill,
+  GROK_BRIDGE,
+  isRoleSkillFragment,
+  observeRoleSkill,
+  roleSkillFragments,
+} from '../roleSkills.js';
+import {
   hasServer,
   readServer,
   readServerEnv,
@@ -576,10 +583,18 @@ export const grokAdapter: HarnessAdapter = {
         fingerprint: canonicalFingerprint(payload),
         payload,
       },
+      ...roleSkillFragments(
+        ctx,
+        'grok',
+        GROK_BRIDGE,
+        `folder ${ctx.worktreeRoot} grok-role-skills`,
+      ),
     ];
   },
 
   async observe(ctx, intent) {
+    if (isRoleSkillFragment(intent.fragmentKey))
+      return observeRoleSkill(ctx.fs, ctx.worktreeRoot, intent, GROK_BRIDGE);
     if (intent.fragmentKey !== 'mcp.musterd') return { state: 'absent' };
     const toml = ctx.fs.readFile(join(ctx.worktreeRoot, '.grok', 'config.toml'));
     if (toml === null) return { state: 'absent' };
@@ -594,6 +609,16 @@ export const grokAdapter: HarnessAdapter = {
   },
 
   async apply(ctx, mutation) {
+    if (isRoleSkillFragment(mutation.intent.fragmentKey)) {
+      applyRoleSkill(
+        ctx.fs,
+        ctx.worktreeRoot,
+        mutation.intent,
+        GROK_BRIDGE,
+        mutation.kind === 'remove' ? 'remove' : 'write',
+      );
+      return;
+    }
     if (mutation.intent.fragmentKey !== 'mcp.musterd') {
       throw new Error(`unknown grok fragment ${mutation.intent.fragmentKey}`);
     }

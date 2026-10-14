@@ -31,6 +31,17 @@ describe('grokAdapter — managed fragments', () => {
     expect(payload.env).toEqual({ MUSTERD_LAUNCH_SURFACE: 'grok' });
   });
 
+  it('desires one stamped role-skill bridge per skill the seat holds, at .grok/skills (ADR 586 §4)', async () => {
+    const ctx = { ...ctxOf(memoryFs()), roleSkills: [{ skill: 'platform', description: 'P.' }] };
+    const intents = await intentsOf(ctx);
+    expect(intents.map((i) => i.fragmentKey)).toEqual(['mcp.musterd', 'role-skill.platform']);
+    const bridge = intents[1]!;
+    expect(Object.keys(bridge.payload as Record<string, string>)).toEqual([
+      '.grok/skills/platform/SKILL.md',
+    ]);
+    expect(await grokAdapter.observe(ctx, bridge)).toEqual({ state: 'absent' });
+  });
+
   it('observe fingerprints command+args+env so a write observes as itself', async () => {
     const fs = memoryFs();
     fs.writeFile(CFG, '[mcp_servers.other]\ncommand = "npx"\nargs = ["other-mcp"]\n', 0o600);

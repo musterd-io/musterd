@@ -154,6 +154,13 @@ export const CLAUDE_BRIDGE: BridgeShape = {
   frontmatter: (b) => `---\nname: ${b.skill}\ndescription: ${b.description}\n---`,
 };
 
+/** Grok catalogs `.grok/skills/<name>/SKILL.md` with Claude's frontmatter — the same home its
+ *  musterd guidance skills use (`grok.guidance`). */
+export const GROK_BRIDGE: BridgeShape = {
+  path: (skill) => join('.grok', 'skills', skill, 'SKILL.md'),
+  frontmatter: CLAUDE_BRIDGE.frontmatter,
+};
+
 export const CURSOR_BRIDGE: BridgeShape = {
   path: (skill) => join('.cursor', 'rules', `${skill}.mdc`),
   frontmatter: (b) => `---\ndescription: ${b.description}\nalwaysApply: false\n---`,
