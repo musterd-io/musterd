@@ -33,6 +33,10 @@ export interface WakeSpec {
    *  harness's environment last (after the backend's own allowlist). Absent when the loop runs
    *  without a gateway (tests, `--no-gateway`). */
   gateway?: { env: Record<string, string> };
+  /** ADR 588 §1: the name of the environment variable holding a resident seat's API key, from
+   *  the host registry. The native backend reads the key at spawn and never logs it; absent means
+   *  the engine's ambient credential resolution applies. */
+  key_env?: string;
 }
 
 /** What one actuation produced — the `wake-report` body minus the lease id (the loop owns leases).

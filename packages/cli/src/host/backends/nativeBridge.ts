@@ -56,14 +56,9 @@ export type InterruptProbe = () => Promise<string | null>;
  * system_reminder, opencode's plugin fence) and the only place on this row where delivery is
  * guaranteed rather than probable.
  *
- * It is deliberately NOT an `onBeforeTurn` message push, which is the shape the contract sketched.
- * `BetaToolRunner.pushMessages` routes through `setMessagesParams`, which sets the runner's private
- * `#mutated` flag; the iterator reads that flag after the yield and **skips appending the assistant
- * message** when it is set. So pushing a user message from inside the `for await` body silently
- * drops the turn the model just took, and the tool response is then computed against our injected
- * message instead of the assistant's `tool_use` — no tool runs, and the loop re-requests without the
- * assistant turn. Measured against @anthropic-ai/sdk 0.116.0 (`BetaToolRunner.mjs`, the
- * `if (!this.#mutated)` branch); `nativeInterrupt.test.ts` pins it as a regression fixture.
+ * It is deliberately NOT a message push into the engine's loop: a push is engine-specific (the
+ * phase-1 SDK runner silently dropped the assistant turn on one, pinned until ADR 588 retired it),
+ * while a tool result is a shape every engine behind the seam already carries.
  *
  * A tool result is plain text, so appending here cannot make the conversation malformed, and the
  * daemon can prove delivery from its own side: the line is in the `wake_turns` capture row.

@@ -393,6 +393,9 @@ export type AuditAction =
   // never Act/memory/source bodies (Observability §). Deny detail: `{ reason:'forbidden',
   // target_kind }` only — same verb so probes are visible without disclosing target existence.
   | 'residency.context_read'
+  // ADR 588 amendment: the host read a seat's captured turns to rehydrate its next wake. Detail is
+  // lease id, lease/turn counts and bytes — never a transcript body.
+  | 'residency.transcript_read'
   // Goal dreaming: a seat read its own dream packet. Detail is sizes and counts only — never a body.
   | 'dream.packet_read'
   // ADR 211: a recipient postponed one directed act with a deferring `wait`. Detail is the condition
@@ -717,6 +720,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',
   'residency.context_read': 'actor',
+  'residency.transcript_read': 'none',
   'dream.packet_read': 'actor',
   'inbox.deferred': 'actor',
   'mcp.surface_rendered': 'actor',
@@ -996,6 +1000,7 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'residency.session_ended',
   'presence.session_ended',
   'residency.context_read',
+  'residency.transcript_read',
   // ADR 371 §4 — a seat's attested surface weight (ADR 144), read by the report's surface block.
   'mcp.surface_rendered',
   // ADR 584 — a launch's startup timing, read only by the report's startup block.

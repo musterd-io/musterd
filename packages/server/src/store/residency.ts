@@ -2446,6 +2446,63 @@ export async function listWakeTurns(
   }));
 }
 
+/** One lease's captured turns, as the resume-substrate read returns them (ADR 588 amendment). */
+export interface WakeTranscriptLeaseRows {
+  lease_id: string;
+  created_at: number;
+  turns: Omit<WakeTurnRow, 'lease_id' | 'member_id'>[];
+}
+
+/**
+ * The resume substrate read (ADR 588 amendment): the seat's captured turns from leases EARLIER
+ * than `beforeLeaseId`, newest lease first until `maxBytes` of serialized turns or `maxLeases`
+ * are spent, returned oldest-first for replay. Whole leases are kept or dropped — a transcript
+ * cut mid-lease would hand the next wake a tool call with no result. `omitted` counts the earlier
+ * leases with turns that did not fit. Unknown lease ⇒ null (the route 404s).
+ */
+export async function listWakeTranscript(
+  db: Driver,
+  teamId: string,
+  beforeLeaseId: string,
+  budget: { maxBytes: number; maxLeases: number },
+): Promise<{ member_id: string; leases: WakeTranscriptLeaseRows[]; omitted: number } | null> {
+  const before = await db.get<{ member_id: string; created_at: number }>(
+    'SELECT member_id, created_at FROM wake_leases WHERE team_id = ? AND id = ?',
+    [teamId, beforeLeaseId],
+  );
+  if (!before) return null;
+  const candidates = await db.all<{ id: string; created_at: number }>(
+    `SELECT l.id, l.created_at FROM wake_leases l
+      WHERE l.team_id = ? AND l.member_id = ? AND l.id != ?
+        AND (l.created_at < ? OR (l.created_at = ? AND l.id < ?))
+        AND EXISTS (SELECT 1 FROM wake_turns t WHERE t.team_id = l.team_id AND t.lease_id = l.id)
+      ORDER BY l.created_at DESC, l.id DESC`,
+    [teamId, before.member_id, beforeLeaseId, before.created_at, before.created_at, beforeLeaseId],
+  );
+  const kept: WakeTranscriptLeaseRows[] = [];
+  let bytes = 0;
+  let omitted = 0;
+  for (const lease of candidates) {
+    if (kept.length >= budget.maxLeases) {
+      omitted += 1;
+      continue;
+    }
+    const rows = await listWakeTurns(db, teamId, lease.id);
+    const turns = rows.map(({ lease_id: _l, member_id: _m, ...turn }) => turn);
+    const size = JSON.stringify(turns).length;
+    if (bytes + size > budget.maxBytes) {
+      omitted += 1;
+      // Newest-first: once one lease does not fit, no older one is taken either, so the replayed
+      // history is always a contiguous suffix of the seat's record.
+      budget = { ...budget, maxLeases: 0 };
+      continue;
+    }
+    bytes += size;
+    kept.push({ lease_id: lease.id, created_at: lease.created_at, turns });
+  }
+  return { member_id: before.member_id, leases: kept.reverse(), omitted };
+}
+
 /**
  * Expire live leases past `expires_at` (the reaper, mirroring `expireRequests`). Returns the expired
  * rows so the reaper can CLASSIFY each one (ADR 236): a host that was up and did not report burns

@@ -122,6 +122,22 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   volume a Haiku seat is on the order of $20–30 a month; a worker seat on Opus is priced per lane
   by the gateway and the pilot reports it. A subscription seat on Claude Code stays cheaper for a
   human's own session, which is why Decision 2 holds.
+- _2026-10-13 (engine lane `01M4VTA1K7DNKWE94DTJFPXAQC`)._ Landed as amended: `packages/cli`
+  depends on `@earendil-works/pi-agent-core` 1.2.0 and `@earendil-works/pi-ai` 1.2.0 (this ADR is
+  the hard-rule-6 record; `pi-durable` is not taken) and no longer on `@anthropic-ai/sdk` — the
+  phase-1 engine, its pricing re-export and the SDK tool-runner regression fixture are removed with
+  this note. `engines/pi.ts` is the one engine every native wake runs on; `engines/jail.ts` and
+  `engines/workingTools.ts` are Decision 4 (our own `read`/`write`/`edit`/`bash`, since pi's
+  `CodingTools` ride pi-durable); `engines/rehydrate.ts` is the amended Decision 5. The resume
+  substrate read is a new route, `POST /teams/:slug/residency/wake-transcript`, with its query and
+  response schemas added to `@musterd/protocol` under this ADR (the amendment makes the daemon's
+  rows the substrate, which needs a read path; nothing existing changed). Working tools ride only a
+  `seat-policy` wake (a work order); a reply wake stays coordination-only. `musterd residency on
+  --harness musterd --key-env <VAR>` stores the variable NAME in the host registry; the host reads
+  the key at spawn and defers, naming the variable, when it is unset. Known gap: the gateway and the
+  engine both post a `wake_turns` row per turn (same lease, same index — the row is an overwrite);
+  the engine's row carries the transcript and lands last on every path measured, but the two
+  writers should become one when the doorbell lane touches the row.
 - pi's embedding API is at 1.2.0 and moves; the engine file is the one place it is touched (the
   ADR 251 blast-radius rule), and a breaking pi release is an engine-lane fix, never a protocol
   change.

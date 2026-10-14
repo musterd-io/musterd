@@ -1,10 +1,10 @@
 /**
  * The loop-engine seam (ADR 251 §3): the native backend drives this interface and knows nothing
- * about which provider thinks inside it. Exactly one implementation ships (`anthropicEngine`,
- * `engines/anthropic.ts`); the seam exists because ADR 101 made model a variable and Track B
- * (ADR 110) keeps a local-model line open — the day a second provider is a real requirement, this
- * is the named insertion point. Provider-specific code (model ids, pricing, refusal handling)
- * lives only inside the engine file, never here and never in the backend.
+ * about which provider thinks inside it. The shipping implementation is `engines/pi.ts` (ADR 588:
+ * pi-agent-core runs the turn, pi-ai speaks to the vendors); the phase-1 SDK runner it replaced was
+ * the seam's first proof that the backend never has to change when the engine does. Provider- and
+ * library-specific code (model ids, event shapes, error classification) lives only inside the
+ * engine file, never here and never in the backend.
  */
 
 /** Token usage for one turn, or summed for a run — provider-neutral field names. */
@@ -60,12 +60,11 @@ export interface EngineRunSpec {
  * The seam is deliberately output-only, and the doorbell contract's clause 1 does NOT change that.
  *
  * A raised act reaches the native loop's model through the **tool result** (`appendInterrupt` in
- * `backends/nativeBridge.ts`), not through an inbound `onBeforeTurn` on this interface. Two reasons,
- * both recorded there: the tool boundary is the same place every hooked harness delivers at, and the
- * message-push alternative is unsafe against the shipping runner (pushing mid-iteration drops the
- * assistant turn — `@anthropic-ai/sdk` 0.116.0, pinned by `nativeInterrupt.test.ts`). Keeping the
- * injection in the bridge also keeps it where it belongs: the engine still knows nothing about
- * musterd, and a second provider inherits the doorbell for free.
+ * `backends/nativeBridge.ts`), not through an inbound hook on this interface: the tool boundary is
+ * the same place every hooked harness delivers at, and keeping the injection in the bridge keeps it
+ * where it belongs — the engine still knows nothing about musterd, and every engine inherits the
+ * doorbell for free. The in-process steer (ADR 588 §6, lane 01M4VTA7Y6) is an engine-side addition
+ * on top of this, not a replacement for it.
  */
 
 export interface EngineRunResult {
