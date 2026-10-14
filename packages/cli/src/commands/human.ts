@@ -3,7 +3,6 @@ import * as p from '@clack/prompts';
 import { type Binding, type MemberSummary } from '@musterd/protocol';
 import { gitToplevel } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
-import { HttpClient } from '../client.js';
 import {
   defaultTeamHome,
   excludeCredentialFromGit,
@@ -20,6 +19,7 @@ import { bindingRefusal } from '../onboard/guard.js';
 import { provisionWorkspace } from '../onboard/workspace.js';
 import { theme } from '../render/theme.js';
 import { hint, success, sym } from '../render/ui.js';
+import { resolve } from './helpers.js';
 
 /**
  * `musterd human <name>` — the deliberate mirror of `musterd agent <name>` (install-topology §5).
@@ -67,11 +67,9 @@ export async function humanCommand(parsed: Parsed): Promise<number> {
   }
   const role = flagStr(parsed.flags, 'role');
 
-  // Deliberately identity-free, exactly like `team credential` (ADR 174): both member-add and
-  // credential-rotate sit at the daemon's provisioning bar (localhost unauthenticated, admin
-  // credential off-host — ADR 134). Demanding an active identity would be circular for the very
-  // person this command exists to serve: their problem *is* that they have no floor to act from.
-  const http = new HttpClient({ server, surface: 'cli' });
+  // Human-seat creation and credential rotation require a human admin, even on loopback (ADR 580).
+  // Resolve the caller from this Workspace; the server checks that credential's authority.
+  const { http } = resolve({ ...parsed.flags, team });
 
   const home = resolveHome(config, team, name, flagStr(parsed.flags, 'home'));
 

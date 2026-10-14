@@ -38,6 +38,7 @@ Make the claim true: enforce localhost-trust at the provisioning route.
 - **`POST /members` is gated on it.** A local peer provisions unauthenticated, exactly as before.
   Anyone else must present an **admin** credential (`is_admin`), with a refusal that names the real
   problem — where you are calling from, not your role.
+  _(Amended 2026-10-13: ADR 580 limits the local-peer bypass to ordinary agent-seat operations; observers and human/admin roster changes require a human admin.)_
 
 Two properties of the peer check are load-bearing, and both are the kind that make a naive version
 _worse than none_:
@@ -69,6 +70,10 @@ A missing peer address fails closed.
   same two single-bit decisions. Next increment on this lane.
 - `POST /teams` remains unauthenticated. Creating a team discloses nothing and mints no reader; left
   alone deliberately rather than swept up.
+- **2026-10-13 — Amended by [ADR 580](580-human-credentials-require-human-admin.md).** Local-peer
+  trust no longer authorizes human-seat or observer provisioning, human credential mint/rotation, or
+  admin changes. The initial human admin is created only as part of team bootstrap; later human
+  authority changes require a human-admin credential.
 
 ## Observability & Evaluation
 

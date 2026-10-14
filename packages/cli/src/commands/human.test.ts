@@ -247,7 +247,11 @@ describe('human command', () => {
     // required to move it: creating a team no longer claims an ESTABLISHED machine default on its
     // own (lane 01KZVKF3H0R81XEA818G2QBRZC — that silent fleet-wide write is the bug). `musterd
     // human` still asserts `current` unconditionally, which is exactly what this test covers.
+    const dawnBinding = readFileSync(join(dir, '.musterd', 'binding.json'), 'utf8');
     await capture(() => teamCommand(parseArgs(['create', 'dusk', '--member', 'ada', '--switch'])));
+    // Keep the active Workspace as dawn while the machine-global default is dusk: privileged
+    // human-seat creation must use the bound human admin, even on loopback (ADR 580).
+    writeFileSync(join(dir, '.musterd', 'binding.json'), dawnBinding);
     expect(readConfig().current).toBe('dusk');
 
     const res = await run(['lin', '--team', 'dawn', '--home', home]);

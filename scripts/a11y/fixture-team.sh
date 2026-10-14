@@ -180,6 +180,16 @@ up() {
   preflight
 
   as_admin team create "$TEAM" --member ada >/dev/null
+  # The connected /board and /live contrast sweeps use this synthetic human admin in their isolated
+  # Chrome profile. Keep the credential in a private fixture file, never a URL or a log.
+  node -e '
+    const fs = require("node:fs");
+    const [input, team, output] = process.argv.slice(1);
+    const id = JSON.parse(fs.readFileSync(input, "utf8")).identities?.[team];
+    if (!id?.name || !id.key?.startsWith("mscr_")) process.exit(2);
+    fs.writeFileSync(output, JSON.stringify({ as: id.name, token: id.key }), { mode: 0o600 });
+  ' "$ADMIN/config.json" "$TEAM" "$FIX/browser-identity.json"
+  chmod 600 "$FIX/browser-identity.json"
 
   # Roster. Names are chosen to spread the seat-identity hue band (memberAvatar derives colour from
   # the name), because the avatar chips are text on those colours and that pairing is measurable

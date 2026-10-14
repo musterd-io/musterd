@@ -124,30 +124,40 @@ describe('fetchLocalIdentities — never throws, because every failure means the
   });
 
   it('returns null on the off-machine refusal rather than surfacing an error', async () => {
+    stubStorage();
+    saveMemberIdentity('revive', { as: 'nick', token: 'mscr_nick' });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 403 })));
     await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 
   it('returns null when the daemon is unreachable', async () => {
+    stubStorage();
+    saveMemberIdentity('revive', { as: 'nick', token: 'mscr_nick' });
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
     await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 
   it('reads a pre-ADR-557 daemon’s single identity', async () => {
+    stubStorage();
+    saveMemberIdentity('revive', { as: 'nick', token: 'mscr_x' });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ available: true, as: 'nick', credential: 'mscr_x' }), {
+        status: 200,
+      }),
+    );
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ available: true, as: 'nick', credential: 'mscr_x' }), {
-            status: 200,
-          }),
-        ),
+      fetchMock,
     );
     await expect(fetchLocalIdentities('revive')).resolves.toEqual([{ as: 'nick', credential: 'mscr_x' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/teams/revive/local-identity', {
+      headers: { authorization: 'Bearer mscr_x' },
+    });
   });
 
-  it('hands back every human seat this machine holds (ADR 557)', async () => {
+  it('offers only the stored identity if an older daemon returns the whole vault (ADR 580)', async () => {
+    stubStorage();
+    saveMemberIdentity('revive', { as: 'nick', token: 'mscr_n' });
     const identities = [
       { as: 'nick', credential: 'mscr_n' },
       { as: 'Ada', credential: 'mscr_a' },
@@ -158,10 +168,12 @@ describe('fetchLocalIdentities — never throws, because every failure means the
         new Response(JSON.stringify({ available: true, ...identities[0], identities }), { status: 200 }),
       ),
     );
-    await expect(fetchLocalIdentities('revive')).resolves.toEqual(identities);
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([identities[0]]);
   });
 
   it('treats a half-shaped answer as no identity — available without a credential is not an identity', async () => {
+    stubStorage();
+    saveMemberIdentity('revive', { as: 'nick', token: 'mscr_n' });
     vi.stubGlobal(
       'fetch',
       vi

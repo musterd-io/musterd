@@ -1324,11 +1324,15 @@ withDrivers('oauth-http', (_o, kind) => {
   describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
     /** A human on `dawn` (optionally expiring) and their credential. */
     async function human(name: string, until?: number): Promise<string> {
-      const r = await postJson('/teams/dawn/members', {
-        name,
-        kind: 'human',
-        ...(until ? { lifecycle: 'until', lifecycle_until: until } : {}),
-      });
+      const r = await postJson(
+        '/teams/dawn/members',
+        {
+          name,
+          kind: 'human',
+          ...(until ? { lifecycle: 'until', lifecycle_until: until } : {}),
+        },
+        { authorization: 'Bearer ' + nickCred },
+      );
       return r.json.human_credential as string;
     }
 

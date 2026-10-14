@@ -69,20 +69,22 @@ export function forgetMemberIdentity(team: string): void {
 }
 
 /**
- * Ask the daemon which human seats THIS machine can sign in as for the team (ADR 222; every one of
- * them since ADR 557, not just the CLI's current identity). Empty when there are none.
+ * Reconfirm the human admin identity this browser already stores for the team (ADR 580). The
+ * daemon no longer scans its local credential vault or offers other human identities to an
+ * unauthenticated browser.
  *
- * **Never throws.** "No CLI identity here", "you are not on this machine" (the localhost gate, which
- * must refuse — the route returns credentials) and "the daemon is unreachable" are three different
- * causes with one meaning for the caller: there is no one-click path, offer the credential form
- * instead. An error banner for any of them would be noise about a button that was never promised.
- * A daemon from before ADR 557 answers with one `as`/`credential` and no list; that still reads.
+ * **Never throws.** No stored credential, a non-admin identity, and an unreachable daemon all mean
+ * there is no one-click path, so the caller offers the credential form instead.
  */
 export async function fetchLocalIdentities(
   team: string,
 ): Promise<{ as: string; credential: string }[]> {
   try {
-    const res = await fetch(`/teams/${encodeURIComponent(team)}/local-identity`);
+    const current = loadMemberIdentity(team);
+    if (!current) return [];
+    const res = await fetch(`/teams/${encodeURIComponent(team)}/local-identity`, {
+      headers: { authorization: `Bearer ${current.token}` },
+    });
     if (!res.ok) return [];
     const json = (await res.json()) as {
       available?: boolean;
@@ -92,11 +94,11 @@ export async function fetchLocalIdentities(
     };
     if (!json.available) return [];
     const list = Array.isArray(json.identities) ? json.identities : [json];
-    return list.flatMap((i) =>
-      typeof i.as === 'string' && typeof i.credential === 'string' && i.as && i.credential
-        ? [{ as: i.as, credential: i.credential }]
-        : [],
-    );
+    // A daemon on this machine may still serve the pre-ADR-580 route, which scanned its whole
+    // credential vault. Even then, this browser may offer only the identity it already holds.
+    return list.some((i) => i.as === current.as && i.credential === current.token)
+      ? [{ as: current.as, credential: current.token }]
+      : [];
   } catch {
     return [];
   }
