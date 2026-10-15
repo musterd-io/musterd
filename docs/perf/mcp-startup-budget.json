@@ -1,0 +1,9 @@
+{
+  "note": "Startup CPU budget for the stdio MCP adapter bundle (lane 01M4VNTQFW, `pnpm mcp:startup:check`, docs/architecture/05-mcp.md §Cold-start bench). startupCpuMedianMs is the median, over 15 warm launches of packages/mcp/dist/index.js, of the adapter's own CPU time (user + system, Node bootstrap included) from process start to its tools/list reply. Seeded from the CI runner, not a laptop. Raising it requires replacing `justification`; the check refuses a raise that keeps origin/main's.",
+  "items": {
+    "startupCpuMedianMs": {
+      "budget": 1000,
+      "justification": "SEEDING — replaced with the CI-measured number before merge."
+    }
+  }
+}

@@ -6,8 +6,9 @@
  *   node scripts/mcp/bench.mjs --surface codex --entry "$HOME/.musterd/runtime/packages/mcp/dist/index.js"
  *
  * Prints one JSON line: module-import time, then spawn → legacy `initialize`, then spawn →
- * `tools/list`. Speaks the wire current harnesses speak (`initialize`), never a tool call, so it
- * does not claim a seat. The native musterd host has no stdio entry; this bench is not for it.
+ * `tools/list`, and the adapter's own CPU time up to that reply (`handshake.mjs`). Speaks the wire
+ * current harnesses speak (`initialize`), never a tool call, so it does not claim a seat. The native
+ * musterd host has no stdio entry; this bench is not for it. `check-startup.mjs` is the CI gate.
  *
  * stdout is the JSON line. Diagnostics go to stderr. A credential-shaped token is redacted.
  */
@@ -16,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { handshake, scrub } from './handshake.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoEntry = join(here, '../../packages/mcp/dist/index.js');
@@ -37,10 +39,6 @@ function entryPath() {
 
 function surfaceName() {
   return flag('--surface') || process.env.MUSTERD_LAUNCH_SURFACE || '';
-}
-
-function scrub(text) {
-  return text.replace(/ms(?:key|gr|cr|ac)_[A-Za-z0-9_-]+/g, '[redacted]');
 }
 
 function run(cmd, args, opts) {
@@ -100,95 +98,11 @@ function bootEnv(surface) {
   return env;
 }
 
-function handshake(entry, surface) {
-  const env = bootEnv(surface);
-  const started = performance.now();
-  const child = spawn(process.execPath, [entry], {
-    env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  let stderr = '';
-  child.stderr.on('data', (d) => {
-    stderr += d;
-  });
-  const send = (msg) => child.stdin.write(`${JSON.stringify(msg)}\n`);
-  send({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'initialize',
-    params: {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'musterd-mcp-bench', version: '0' },
-    },
-  });
-
-  return new Promise((resolveHs, rejectHs) => {
-    let buf = '';
-    let initMs = null;
-    let settled = false;
-    const finish = (fn) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.kill('SIGTERM');
-      fn();
-    };
-    const timer = setTimeout(() => {
-      finish(() => rejectHs(new Error(`timed out: ${scrub(stderr).slice(-400)}`)));
-    }, 20_000);
-    child.on('error', (err) => finish(() => rejectHs(err)));
-    child.stdout.on('data', (chunk) => {
-      buf += chunk.toString('utf8');
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line.trim()) continue;
-        let msg;
-        try {
-          msg = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        if (msg.id === 1) {
-          initMs = performance.now() - started;
-          if (msg.error) {
-            finish(() =>
-              rejectHs(new Error(scrub(String(msg.error.message ?? 'initialize failed')))),
-            );
-            return;
-          }
-          send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-          send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
-        } else if (msg.id === 2) {
-          const listed = msg.result;
-          if (!listed || !Array.isArray(listed.tools)) {
-            finish(() => rejectHs(new Error(`no tools/list result: ${scrub(stderr).slice(-400)}`)));
-            return;
-          }
-          const listMs = performance.now() - started;
-          finish(() =>
-            resolveHs({
-              surface: env.MUSTERD_LAUNCH_SURFACE,
-              spawn_to_initialize_ms: Math.round(initMs * 10) / 10,
-              spawn_to_tools_list_ms: Math.round(listMs * 10) / 10,
-              tools: listed.tools.length,
-              tools_list_bytes: Buffer.byteLength(JSON.stringify(listed.tools)),
-              tools_list_has_ttl: typeof listed.ttlMs === 'number',
-            }),
-          );
-        }
-      }
-    });
-  });
-}
-
 const entry = entryPath();
 const surface = surfaceName();
 try {
   const imported = await importMs(entry);
-  const listed = await handshake(entry, surface);
+  const listed = await handshake(entry, { env: bootEnv(surface) });
   process.stdout.write(
     `${JSON.stringify({
       entry,

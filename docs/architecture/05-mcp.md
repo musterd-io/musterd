@@ -183,8 +183,8 @@ static closure ever names a package again.
 
 `node scripts/mcp/bench.mjs --surface <harness>` times the stdio adapter the external harnesses
 launch (claude-code, cursor, codex, opencode, grok). One JSON line: module-import milliseconds,
-then spawn → legacy `initialize`, then spawn → `tools/list`, plus the list's byte size and whether
-`ttlMs` was on that result. It never calls a tool, so it does not claim a seat. The native musterd
+then spawn → legacy `initialize`, then spawn → `tools/list`, the adapter's own CPU time up to that
+reply (`cpu_ms`), plus the list's byte size and whether `ttlMs` was on that result. It never calls a tool, so it does not claim a seat. The native musterd
 host has no stdio entry and is not part of this bench.
 
 The default entry is `~/.musterd/runtime/packages/mcp/dist/index.js` (the adapter a harness
@@ -196,6 +196,15 @@ adapter sends process uptime when the handshake is answered (the `initialized` n
 the 2025 wire, its `server/discover` reply on 2026-07-28) and at its first `tools/list`, once per
 session, and `musterd report tools` shows p50/p90 per harness over 7 days.
 A launch reports only after a tool call gives it a seat, so a probe sends nothing.
+
+CI gates the same startup (lane 01M4VNTQFW). `pnpm mcp:startup:check` launches the built bundle
+once to warm the compile cache, then 15 more times, and fails when the median `cpu_ms` is over
+`startupCpuMedianMs` in `docs/perf/mcp-startup-budget.json`. It budgets CPU time, not wall time,
+because wall time swings 2–4x on a shared runner (ADR 574). A stub answers `/health`, the one
+daemon call the adapter makes before it serves, and each run gets a scratch HOME, config and cwd.
+The `static` job runs it when plan sees `packages/mcp`, `packages/protocol`, `packages/telemetry`,
+`scripts/mcp`, the budget, `.github` or the workspace manifests change. A raise needs a new
+`justification`; the check fails a higher budget whose justification matches `origin/main`'s.
 
 `tools_list_has_ttl` is false on this bench, because the bench speaks `initialize` and the cache
 hints ride the 2026-07-28 era only.

@@ -103,6 +103,7 @@ jobs:
       suite: ${{ steps.pick.outputs.suite }}
       coverage: ${{ steps.pick.outputs.coverage }}
       a11y: ${{ steps.pick.outputs.a11y }}
+      mcp: ${{ steps.pick.outputs.mcp }}
       docs: ${{ steps.pick.outputs.docs }}
       fullcheck: ${{ steps.pick.outputs.fullcheck }}
       shard_count: ${{ steps.pick.outputs.count }}
@@ -121,7 +122,7 @@ jobs:
           PROBE: ${{ github.event_name == 'schedule' || inputs.probe == true }}
           PGLITE_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'pglite') }}
         run: |
-          suite=true; a11y=true; kinds=both; docs=true; why="no parent to diff — everything runs"
+          suite=true; a11y=true; mcp=true; kinds=both; docs=true; why="no parent to diff — everything runs"
           # ADR 512/515: the last FULL main check is the newest `full-main-check` artifact from a main
           # run; only the full check uploads it (below).
           full=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=full-main-check&per_page=50" \
@@ -148,7 +149,7 @@ jobs:
             if [ -n "$full_sha" ] && [ "$full_sha" != null ] && changed=$(git diff --name-only "$full_sha" HEAD 2>/dev/null) \
               && { [ -z "$changed" ] || ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; }; then moved=false; fi
             if [ "$PROBE" = true ] && { [ "$moved" = false ] || [ "$full_age" -lt 14400 ] || [ "$inflight" = true ]; }; then
-              suite=false; a11y=false; docs=false; kinds=sqlite
+              suite=false; a11y=false; mcp=false; docs=false; kinds=sqlite
               why="probe: no code moved since the last full check ($full_sha), it is under 4h old (${full_age}s), or one is in flight (ADR 535)"
             else
               why="$EVENT on ${GITHUB_REF_NAME} — the full main check (ADR 508)"
@@ -156,9 +157,11 @@ jobs:
           elif git rev-parse -q --verify HEAD^1 >/dev/null; then
             changed=$(git diff --name-only HEAD^1 HEAD)
             if [ -n "$changed" ] && ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; then
-              suite=false; a11y=false; kinds=sqlite; why="every changed path is docs/ or a root *.md — the docs gates run alone"
+              suite=false; a11y=false; mcp=false; kinds=sqlite; why="every changed path is docs/ or a root *.md — the docs gates run alone"
             else
               if echo "$changed" | grep -q -E '^(packages/web/|scripts/a11y/|\.github/|package\.json$|pnpm-lock\.yaml$)'; then a11y=true; else a11y=false; fi
+              # Lane 01M4VNTQFW: the adapter bundle's startup budget, when the bundle or what it bundles changed.
+              if echo "$changed" | grep -q -E '^(packages/(mcp|protocol|telemetry)/|scripts/mcp/|docs/perf/mcp-startup-budget\.json$|\.github/|package\.json$|pnpm-lock\.yaml$)'; then mcp=true; else mcp=false; fi
               if [ "$EVENT" = pull_request ]; then
                 if [ "$PGLITE_LABEL" = true ]; then why="the PR carries the pglite label (ADR 510)"
                 else kinds=sqlite; why="a PR runs SQLite only; PGlite runs on the 4-hourly main check (ADR 510)"; fi
@@ -183,11 +186,11 @@ jobs:
           if [ "$GITHUB_REF" = refs/heads/main ] && [ "$coverage" = true ] && [ "$kinds" = both ]; then fullcheck=true; fi
           {
             echo "kinds=$kinds"; echo "suite=$suite"; echo "coverage=$coverage"
-            echo "a11y=$a11y"; echo "docs=$docs"; echo "fullcheck=$fullcheck"
+            echo "a11y=$a11y"; echo "mcp=$mcp"; echo "docs=$docs"; echo "fullcheck=$fullcheck"
             echo "count=$count"; echo "shards=$shards"
           } >> "$GITHUB_OUTPUT"
           {
-            echo "plan: suite=$suite coverage=$coverage a11y=$a11y docs=$docs full=$fullcheck — $why"
+            echo "plan: suite=$suite coverage=$coverage a11y=$a11y mcp=$mcp docs=$docs full=$fullcheck — $why"
             echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492, ADR 510); coverage in $count shard(s) (ADR 570)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -226,6 +229,12 @@ jobs:
       # Standing-context byte budgets (spec 2026-08-03).
       - name: Context budgets
         run: pnpm context:check
+      # Startup CPU budget for the stdio adapter bundle (lane 01M4VNTQFW): median of the adapter's own
+      # CPU time to its tools/list reply, against docs/perf/mcp-startup-budget.json. Only when plan
+      # saw the bundle or its inputs change.
+      - name: MCP startup budget
+        if: needs.plan.outputs.mcp == 'true'
+        run: pnpm mcp:startup:check
       # Runs after Build: the import resolver follows workspace packages to their ./dist.
       - name: Lint
         run: pnpm lint
