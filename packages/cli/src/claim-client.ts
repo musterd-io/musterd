@@ -71,6 +71,14 @@ export function buildClaimFrame(input: {
   /** What ANIMATES this session (ADR 131 §6) — `wake` for an actuator-spawned harness, `session`
    *  for a person's own. Not identity: the seat is who, this is what caused it to be here. */
   provenance?: Provenance;
+  /**
+   * The wake lease that spawned this session (ADR 241), from `MUSTERD_WAKE_LEASE`. Presenting it
+   * on the claim frame lets the server's lease-window displacement (ADR 609) recognize a dream or
+   * wake that is succeeding this seat's own residency lease: a live attended row that attached
+   * *after* the lease mint is displaced instead of refusing the claim. Absent — never a placeholder
+   * (ADR 236) — the claim opens no window and an attended session keeps the seat exactly as before.
+   */
+  wake_lease?: string;
 }): ClaimFrame {
   return ClaimFrame.parse({
     type: 'claim',
@@ -102,6 +110,10 @@ export function buildClaimFrame(input: {
     // Provenance (ADR 131 §6) — the wake actuators read it back to tell their own spawned child
     // from a stranger holding the seat, so a claim that drops it costs the actuator that judgement.
     ...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
+    // The wake lease (ADR 241) — the correlation token the server matches against the lease it
+    // minted for this seat, which is what lets ADR 609 displace a session that snuck into the
+    // spawn window instead of refusing a wake that presents its own lease.
+    ...(input.wake_lease !== undefined ? { wake_lease: input.wake_lease } : {}),
     // Guidance attestation (ADR 417) — the stamp in THIS workspace's guidance files. Conditional,
     // unlike `epoch` below: that is a compiled-in constant and therefore always known, while this is
     // a filesystem read that legitimately answers "nothing here" for an unstamped or unprovisioned
