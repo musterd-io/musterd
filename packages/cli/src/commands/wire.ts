@@ -223,7 +223,8 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
 }
 
 function renderWireResult(r: ReconcileResult): string {
-  const head = `  ${r.harness.padEnd(13)} ${r.action === 'none' ? '' : `(${r.action}) `}`;
+  const target = r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
+  const head = `  ${target.padEnd(13)} ${r.action === 'none' ? '' : `(${r.action}) `}`;
   if (r.result === 'applied' || r.result === 'unchanged')
     return `${head}${theme.ok('✓')} ${r.result}`;
   if (r.result === 'satisfied-unmanaged') return `${head}${theme.ok('✓')} satisfied (unmanaged)`;

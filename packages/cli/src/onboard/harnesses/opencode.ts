@@ -18,11 +18,14 @@ import {
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
 import {
+  OPENCODE_PLUGIN_GENERATION,
   OPENCODE_PLUGIN_SURFACE,
   inspectOpencodePluginDrift,
   installMusterdOpencodePlugin,
+  installedPluginGeneration,
   opencodePluginPresent,
   removeMusterdOpencodePlugin,
+  renderOpencodePlugin,
 } from './opencodePlugin.js';
 
 /**
@@ -307,6 +310,26 @@ function readJsonSeam(fs: FsSeam, path: string): OpencodeConfig | null | undefin
   }
 }
 
+function isPluginDeclined(fs: FsSeam, worktreeRoot: string): boolean {
+  const raw = fs.readFile(join(worktreeRoot, '.musterd', 'declined.json'));
+  if (raw === null) return false;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return false;
+    const list = (parsed as { declined?: unknown }).declined;
+    if (!Array.isArray(list)) return false;
+    return list.some(
+      (t) =>
+        typeof t === 'object' &&
+        t !== null &&
+        (t as { surface?: unknown }).surface === OPENCODE_PLUGIN_SURFACE &&
+        typeof (t as { at?: unknown }).at === 'string',
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const opencodeAdapter: HarnessAdapter = {
   id: 'opencode',
   surface: OPENCODE_SURFACE,
@@ -336,6 +359,11 @@ export const opencodeAdapter: HarnessAdapter = {
           scope: 'folder',
           handle: 'mcp',
         },
+        {
+          containerKey: `folder ${ctx.worktreeRoot} .opencode/plugins/musterd.js`,
+          scope: 'folder',
+          handle: 'plugin',
+        },
       ],
     };
   },
@@ -348,6 +376,7 @@ export const opencodeAdapter: HarnessAdapter = {
       enabled: true,
       environment: launchEntryEnv(OPENCODE_SURFACE),
     };
+    const pluginPayload = renderOpencodePlugin();
     return [
       {
         harness: 'opencode',
@@ -358,10 +387,29 @@ export const opencodeAdapter: HarnessAdapter = {
         fingerprint: canonicalFingerprint(mcpPayload),
         payload: mcpPayload,
       },
+      ...(isPluginDeclined(ctx.fs, ctx.worktreeRoot)
+        ? []
+        : [
+            {
+              harness: 'opencode' as const,
+              resourceKey: folderResourceKey(ctx.worktreeRoot, 'opencode', 'plugin'),
+              containerKey: `folder ${ctx.worktreeRoot} .opencode/plugins/musterd.js`,
+              fragmentKey: 'plugin',
+              scope: 'folder' as const,
+              fingerprint: canonicalFingerprint(pluginPayload),
+              payload: pluginPayload,
+            },
+          ]),
     ];
   },
 
   async observe(ctx, intent) {
+    if (intent.fragmentKey === 'plugin') {
+      const path = join(ctx.worktreeRoot, '.opencode', 'plugins', 'musterd.js');
+      const raw = ctx.fs.readFile(path);
+      if (raw === null) return { state: 'absent' };
+      return { state: 'present', fingerprint: canonicalFingerprint(raw) };
+    }
     if (intent.fragmentKey !== 'mcp.musterd') return { state: 'absent' };
     const path = join(ctx.worktreeRoot, '.opencode', 'opencode.json');
     const cfg = readJsonSeam(ctx.fs, path);
@@ -385,6 +433,25 @@ export const opencodeAdapter: HarnessAdapter = {
   },
 
   async apply(ctx, mutation) {
+    if (mutation.intent.fragmentKey === 'plugin') {
+      const path = join(ctx.worktreeRoot, '.opencode', 'plugins', 'musterd.js');
+      if (mutation.kind === 'remove') {
+        const existing = ctx.fs.readFile(path);
+        if (existing !== null && installedPluginGeneration(existing) !== undefined) {
+          ctx.fs.rm(path);
+        }
+        return;
+      }
+      const existing = ctx.fs.readFile(path);
+      if (existing !== null) {
+        const theirs = installedPluginGeneration(existing);
+        if (theirs === undefined || theirs > OPENCODE_PLUGIN_GENERATION) return;
+      }
+      const payload = (mutation.intent.payload as string | undefined) ?? renderOpencodePlugin();
+      ctx.fs.mkdirp(dirname(path));
+      ctx.fs.writeFile(path, payload, 0o644);
+      return;
+    }
     if (mutation.intent.fragmentKey !== 'mcp.musterd') {
       throw new Error(`unknown opencode fragment ${mutation.intent.fragmentKey}`);
     }

@@ -307,7 +307,13 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   });
   for (const r of report.results) out(renderResult(r));
   if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
-  if (report.ok) out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);
+  if (report.ok) {
+    out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);
+  } else {
+    out(
+      `${theme.warn('⚠')} some fragments need attention — \`musterd harness status\` for the detail`,
+    );
+  }
   return report.ok ? 0 : 1;
 }
 
@@ -324,7 +330,8 @@ export function deltaLine(before: string[], after: string[]): string {
 }
 
 function renderResult(r: ReconcileResult): string {
-  const label = `${r.harness}${r.resourceKey ? '' : ''}  ${r.action === 'none' ? '' : `(${r.action}) `}`;
+  const target = r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
+  const label = `${target}  ${r.action === 'none' ? '' : `(${r.action}) `}`;
   const verdictText =
     r.result === 'applied'
       ? `${theme.ok('✓')} applied`

@@ -193,12 +193,28 @@ describe('musterd harness configure', () => {
     });
     expect(code).toBe(0);
     expect(out).toContain('desired harnesses: fake-a');
-    expect(out).toContain('✓ applied');
+    expect(out).toContain('fake-a (entry)  (create) ✓ applied');
     expect(out).toContain('worktree configured');
     expect(a.state.applied[0]?.kind).toBe('write');
     expect(b.state.applied).toEqual([]);
     const prov = loadProvisioning(cwd);
     expect(prov.kind === 'valid' && prov.value.desired).toEqual(['fake-a']);
+  });
+
+  it('surfaces the fragment key, conflict detail, and status hint when a fragment conflicts', async () => {
+    writeV2Identity();
+    const a = fakeAdapter('fake-a', {
+      observed: { state: 'present', fingerprint: 'f'.repeat(64) },
+    });
+    const { code, out } = await run(['configure'], {
+      ctx: ctxOf(),
+      registry: [a],
+      select: ['fake-a'],
+    });
+    expect(code).toBe(1);
+    expect(out).toContain("fake-a (entry)  ✗ conflict — not musterd's to overwrite");
+    expect(out).toContain('musterd harness status');
+    expect(out).not.toContain('worktree configured');
   });
 
   it('echoes the delta against the prior set, so an Enter that toggled nothing is visible', async () => {
