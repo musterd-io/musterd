@@ -94,7 +94,8 @@ speaker described becomes something an admin can grant and the team can read.
 4. Named follow-up (`01M4SB4CJPTCSCYK3X8KGY2W33`, not this arc): approvals for costly acts
    above a threshold.
 5. Named follow-up (`01M4SB4D7RTW21W62NKCPDV816`): the unpriced floor (bound what isn't
-   priced, or decide to block unpriced harnesses explicitly).
+   priced, or decide to block unpriced harnesses explicitly). Options and the decision asked:
+   [2026-10-15-spend-unpriced-floor-design.md](2026-10-15-spend-unpriced-floor-design.md).
 
 ## Testing
 
