@@ -1,7 +1,9 @@
 # 163 — Actor attestation at the tool boundary: attributing subagent writes
 
-- Status: **draft** — 2026-07-26. Authored by stanley (lane `01KYB0N38K9CWTB6YS2D0FGQGS`, opened by
-  izzo 2026-07-24). Number **163 pinned** — verified free on `origin/main` (highest is 162), 2026-07-26.
+- Status: accepted — 2026-10-15, by nick in session ("yes" on lane `01M4VTSPYRWHDHT2GAH78T3PNC`).
+  Authored by stanley 2026-07-26 (lane `01KYB0N38K9CWTB6YS2D0FGQGS`, opened by izzo 2026-07-24);
+  shipped in increment 1 and brought to working order by goal `subagent-instruments` (lanes 1–3,
+  2026-10-13–15 — see Consequences).
 - Date: 2026-07-26
 - Builds on: [ADR 150](150-structural-inducement-pretooluse-gates.md) (the PreToolUse gate whose
   payload parsing this extends, and whose declared-class boundary this ADR amends — see §Boundary),
@@ -119,7 +121,11 @@ Three changes, all client-side except the ingest:
    hundreds of reads cost nothing, per nick's read/write asymmetry.
 3. **Spawn call → one `actor.subagent_spawn` row**: declared `subagent_type` and the `model` override
    if present. Fires regardless of whether the subagent goes on to write — the spawn is the only
-   place the model is ever visible.
+   place the model is ever visible. _(Amended 2026-10-15: on Claude Code the PreToolUse gate matcher
+   excludes `Agent`, so the spawn row is emitted from the PostToolUse `gate record-subagent` hook via
+   `spawnAttestation`, which also reads the spawned `actorId` from the tool response so the spawn row
+   joins the subagent's write rows directly; Cursor and Grok route `Task`/`Agent` through `gate check`
+   where `attest` records it. See Consequences.)_
 
 Rows post through the same member-authed daemon ingest the `lane.gate` / `action.gate` rows use, and
 carry **shapes only** (ADR 051) — never file content, never the subagent's prompt.
@@ -300,6 +306,31 @@ count**, never a headline number alone.
   (`spawnAttestation`): the requested type, the `model:` override when given, and the spawned agent's id
   from the tool response, so a spawn joins its writes. Cursor and Grok route `Task`/`Agent` through
   `gate check`, where `attest` still records it, so no harness counts a spawn twice.
+- _(2026-10-15, lane 01M4VTRMXYZ, PR #2628.)_ **Subagent turns were missing from agent traces.**
+  [ADR 445](445-agent-traces-captured-local-first.md) captured `SubagentStart`/`SubagentStop` and
+  subagent tool hooks (`agent_id` on `PreToolUse`/`PostToolUse`), but a subagent's turns live in a
+  separate sidechain transcript (`<parent>/subagents/agent-<agent_id>.jsonl`) that the R2 tail never
+  read, so `traceCoverage` and `traceReport` left subagent calls out of the coverage ratio. On
+  `SubagentStop`, `tailAfterHook` now reads the subagent's sidechain transcript under a per-subagent
+  cursor (`<digest>:<agent_id>`) into the parent session's trace with `agent_id` set (under ADR 445's
+  local-first, credential-scrub and retention gates), `trace show` renders `<agent_type> (<agent_id>)`
+  on subagent events, and `traceCoverage` counts subagent calls in the ratio once a session carries
+  subagent R2 `usage` rows.
+- _(2026-10-15, lane 01M4VTSPYRW.)_ **What shipped and why this ADR is accepted now.** Increment 1
+  shipped across `packages/protocol/src/enforcement.ts` (`ActorAttestationSchema`, `isWriteShaped`),
+  `packages/cli/src/commands/gate.ts` (`parseToolCall`, `attest` on `gate check`, `spawnAttestation` on
+  `gate record-subagent`), and `packages/server/src/protocol/gate.ts` (`POST /teams/:slug/actor` →
+  `actor.subagent_write` and `actor.subagent_spawn`, path in the clear and `Bash` command reduced to a
+  16-hex sha256 `command_fingerprint`), provisioned by `musterd init`. Because `spawnAttestation` on
+  Claude Code now captures `actor_id` from the `Agent` PostToolUse response alongside `spawn_type` and
+  `spawn_model`, `actor.subagent_spawn` and `actor.subagent_write` join directly by `actor_id` on
+  Claude Code without the heuristic `(session, agent_type)` spawn-order join sketched in §Increment 2.
+  With all three `subagent-instruments` fixes live (spawns recorded, read noise stripped from
+  `isWriteShaped`, and sidechain turns tailed into `trace_events`), the instruments tell the truth; a
+  decision on whether a subagent may write inside a lane its parent seat has claimed waits on a week of
+  evidence from these instruments (Follows-up: deferred — after 7 days of clean `actor.subagent_*` and
+  sidechain trace data on `revive`, nick decides whether to open an ADR allowing subagent writes inside
+  a parent's claimed lane (2026-10-22)).
 
 ## Related
 
