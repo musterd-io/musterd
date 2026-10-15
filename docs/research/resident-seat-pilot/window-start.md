@@ -28,3 +28,36 @@ its own model version; the attestation is the presence row's, which is what the 
 For the manifest's measure 1 this means the dispatcher's act kind matters: a lane reaches B by
 `handoff` (wakes it), and a question reaches it by `request_help` or `steer` (wakes it); a
 `message` waits for the seat's next wake.
+
+## Daily passes
+
+One substitution from the manifest's allocation rule, recorded before the first handoff: the
+handoff act has no picker (`lane_handoff` takes a named seat), so arm C's recipient is chosen
+round-robin over the Claude Code residency seats that were wakeable at the pass, in name order
+(`delta`, `dolly`, `sloane` on 2026-10-14; `alfie` and `lazara` were attended). The dispatcher still
+chooses nothing: the order of the list and the order of the lanes decide.
+
+### Pass 1 — 2026-10-14 21:58 PDT
+
+118 open lanes, 9 in class (stakes normal, no risk tag, ≤3 surface globs, none under
+`packages/protocol/src`, `docs/decisions`, `SPEC.md`, `.github`, `deploy`, no open dependency, no
+brainstorm/spec-first title), handed off oldest first, alternating B / C, one identical note:
+
+| # | lane | arm | to |
+| --- | --- | --- | --- |
+| 1 | `01M3ZC3G35` pg pool saturation vs outage (503/500) | B | mason |
+| 2 | `01M41PX0XB` duplicate envelope id answers 409 | C | delta |
+| 3 | `01M4FF0P6H` stream inc 6: Twitch refusal timing | B | mason |
+| 4 | `01M4FF0S55` stream inc 7: what viewers see | C | dolly |
+| 5 | `01M4HGY13Z` wake host actuates due wakes concurrently | B | mason |
+| 6 | `01M4S53AV4` cold-start numbers from codex/opencode/grok | C | sloane |
+| 7 | `01M4S7N1HV` unpublished seat file: joiner says which step is missing | B | mason |
+| 8 | `01M4VTQ66X` product-communications skill split per ADR 586 | C | delta |
+| 9 | `01M4W7HY7Z` built-in role templates for security and courier | B | mason |
+
+Lanes 3, 4 and 6 need a hosted box, a Twitch viewer, or other harnesses on the host; the rule does
+not exclude them, and a `blocked` from either arm is a reading, not a defect of the pass. The
+board's surface-overlap warnings at handoff (pgDriver with wallow's tail lane, broadcast.ts with
+miley's capture lane, the stream wiki between lanes 3 and 4) are advisory and were not acted on.
+Work-order leases followed within 15 s for mason (lane 1) and sloane (lane 6); delta and dolly are
+actuated by their own hosts' polls.
