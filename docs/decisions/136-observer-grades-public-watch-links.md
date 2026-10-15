@@ -80,6 +80,12 @@ still an observer for presence and displacement whatever it may read. Conflating
 - **Not closed:** a `public` link still reveals _who is on the team_ and their team-level traffic. It is
   a read-only public window, not an anonymizer. Whoever you hand it to sees the team working.
 
+- **2026-10-15 — a fourth grade, `broadcast`** ([ADR 601](601-broadcast-visibility-grade.md)). The
+  stream's seat sees everything `full` sees except DMs between two human members, with recognisable
+  credentials masked. `full` and `public` keep the meanings above. The same ADR closes a `public`
+  leak: a member's roster status line was their latest `status_update` whatever it was addressed
+  to, so a human-to-human DM could show through a watch link.
+
 ## Observability & Evaluation
 
 **Traces** — n/a. Like ADR 128, this removes rows from a response rather than producing an event; a
