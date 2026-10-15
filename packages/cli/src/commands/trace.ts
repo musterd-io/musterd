@@ -9,7 +9,7 @@ import { sessionDigest } from '../session/digest.js';
 import { snapshotTodos } from '../todos/snapshot.js';
 import { tapHook } from '../trace/hook.js';
 import { tailOpencodeSession } from '../trace/opencode.js';
-import { tailTranscript } from '../trace/tail.js';
+import { subagentTranscriptPathFor, tailTranscript } from '../trace/tail.js';
 import { findWorkspaceDir, resolveRead } from './helpers.js';
 
 /**
@@ -92,7 +92,8 @@ export function noteTurnMarker(raw: string, dir: string, now = Date.now()): void
 
 /**
  * Rail R2 rides the turn-boundary hooks: after the tap, a `Stop` or `SessionEnd` payload that
- * names a transcript runs the delta read. Bounded and silent like the tap itself.
+ * names a transcript runs the delta read, and a `SubagentStop` payload reads that subagent's
+ * sidechain transcript (lane 01M4VTRMXYZ). Bounded and silent like the tap itself.
  */
 async function tailAfterHook(
   raw: string,
@@ -107,18 +108,54 @@ async function tailAfterHook(
     const o: unknown = JSON.parse(raw);
     if (typeof o !== 'object' || o === null) return;
     const payload = o as Record<string, unknown>;
-    const kind = opts.kind ?? payload['hook_event_name'];
+    const rawKind = opts.kind ?? payload['hook_event_name'] ?? payload['hookEventName'];
+    const kind = rawKind === 'subagentStop' ? 'SubagentStop' : rawKind;
+    const sessionId =
+      typeof payload['session_id'] === 'string' && payload['session_id']
+        ? payload['session_id']
+        : typeof payload['sessionId'] === 'string' && payload['sessionId']
+          ? payload['sessionId']
+          : typeof payload['conversation_id'] === 'string' && payload['conversation_id']
+            ? payload['conversation_id']
+            : undefined;
+    if (kind === 'SubagentStop') {
+      if (!sessionId) return;
+      const sub = subagentTranscriptPathFor({
+        ...(typeof payload['agent_id'] === 'string' ? { agent_id: payload['agent_id'] } : {}),
+        ...(typeof payload['subagent_id'] === 'string'
+          ? { subagent_id: payload['subagent_id'] }
+          : {}),
+        ...(typeof payload['agent_transcript_path'] === 'string'
+          ? { agent_transcript_path: payload['agent_transcript_path'] }
+          : {}),
+        ...(typeof payload['subagent_transcript_path'] === 'string'
+          ? { subagent_transcript_path: payload['subagent_transcript_path'] }
+          : {}),
+        ...(typeof payload['transcript_path'] === 'string'
+          ? { transcript_path: payload['transcript_path'] }
+          : {}),
+      });
+      if (!sub) return;
+      await tailTranscript({
+        binding: opts.binding,
+        dir: opts.dir,
+        harness: opts.harness,
+        sessionId,
+        transcriptPath: sub.transcriptPath,
+        agentId: sub.agentId,
+      });
+      return;
+    }
     if (kind !== 'Stop' && kind !== 'SessionEnd') return;
-    const sessionId = payload['session_id'];
     // OpenCode keeps no transcript file; its R2 reads the session store instead (opencode.ts).
     if (opts.harness === 'opencode') {
-      if (typeof sessionId === 'string' && sessionId) {
+      if (sessionId) {
         await tailOpencodeSession({ binding: opts.binding, dir: opts.dir, sessionId });
       }
       return;
     }
     const transcriptPath = payload['transcript_path'];
-    if (typeof sessionId !== 'string' || !sessionId) return;
+    if (!sessionId) return;
     if (typeof transcriptPath !== 'string' || !transcriptPath) return;
     await tailTranscript({
       binding: opts.binding,
@@ -190,6 +227,7 @@ const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : und
 /** One row's right-hand cell: what happened, in the kind's own vocabulary. */
 export function traceEventSummary(e: TraceSessionEvent): string {
   const d = e.detail ?? {};
+  const agentTag = subagentSummaryTag(e.agent_id, d['agent_type']);
   if (e.kind === 'usage') {
     const parts: string[] = [];
     const inTok = num(d['input_tokens']);
@@ -199,18 +237,20 @@ export function traceEventSummary(e: TraceSessionEvent): string {
     if (cache !== undefined && cache > 0) parts.push(`cache ${cache}`);
     if (outTok !== undefined) parts.push(`out ${outTok}`);
     const model = typeof d['model'] === 'string' ? d['model'] : undefined;
-    return [parts.join(' · '), model].filter(Boolean).join('  ');
+    return [parts.join(' · '), model, agentTag].filter(Boolean).join('  ');
   }
   if (e.kind === 'reasoning' || e.kind === 'assistant_text') {
     const text = preview(e.content?.[e.kind === 'reasoning' ? 'reasoning' : 'assistant']);
-    if (text) return text;
+    if (text) return [text, agentTag].filter(Boolean).join(' · ');
     const size = num(d[e.kind === 'reasoning' ? 'reasoning_bytes' : 'assistant_bytes']);
     const why = typeof e.content_pruned_at === 'number' ? 'content pruned' : 'structural';
-    return size !== undefined
-      ? `${size} bytes (${why})`
-      : typeof e.content_pruned_at === 'number'
-        ? '(content pruned)'
-        : '';
+    const base =
+      size !== undefined
+        ? `${size} bytes (${why})`
+        : typeof e.content_pruned_at === 'number'
+          ? '(content pruned)'
+          : '';
+    return [base, agentTag].filter(Boolean).join(' · ');
   }
   if (e.kind === 'unknown') {
     const type = typeof d['type'] === 'string' ? d['type'] : 'unparsed';
@@ -224,7 +264,16 @@ export function traceEventSummary(e: TraceSessionEvent): string {
   if (e.tool_name) bits.push(e.tool_name);
   if (typeof e.duration_ms === 'number') bits.push(`${e.duration_ms}ms`);
   if (e.outcome && e.outcome !== 'ok') bits.push(e.outcome);
+  if (agentTag) bits.push(agentTag);
   return bits.join(' · ');
+}
+
+function subagentSummaryTag(agentId: string | null | undefined, agentType: unknown): string {
+  const type = typeof agentType === 'string' && agentType ? agentType : undefined;
+  if (type && agentId) return `${type} (${agentId})`;
+  if (type) return type;
+  if (agentId) return `agent ${agentId}`;
+  return '';
 }
 
 /** The whole-session render: a header, then one line per event in sequence order. */

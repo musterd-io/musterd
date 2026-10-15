@@ -227,6 +227,10 @@ export function parseTraceHook(
     const v = str(o[field]);
     if (v) detail[field] = v.slice(0, 64);
   }
+  if (detail['agent_type'] === undefined) {
+    const subType = str(o['subagent_type']) ?? str(o['subagentType']);
+    if (subType) detail['agent_type'] = subType.slice(0, 64);
+  }
   if (typeof o['stop_hook_active'] === 'boolean')
     detail['stop_hook_active'] = o['stop_hook_active'];
   if (sourceEvent && sourceEvent !== k) detail['hook_event'] = sourceEvent.slice(0, 64);

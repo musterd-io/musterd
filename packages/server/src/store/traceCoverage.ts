@@ -4,8 +4,11 @@ import type { Driver } from '../db/driver.js';
  * ADR 445 §Observability: "a session below [0.98 tool coverage] is audited as
  * `trace.coverage_low`". Coverage is rail R1's count of tool calls that ended (`PostToolUse` +
  * `PostToolUseFailure`) over rail R2's transcript tool count (the `usage` rows' `tool_uses`), per
- * session — the same ratio `report trace` shows per harness. A subagent's calls (rows with an
- * `agent_id`) are left out: their transcript is a sidechain file R2 does not read.
+ * session — the same ratio `report trace` shows per harness. On `SubagentStop` the tail reads the
+ * subagent's sidechain transcript into the parent session with `agent_id` set (lane 01M4VTRMXYZ),
+ * so subagent calls count in both rails once a subagent's R2 has landed, while a session whose R1
+ * carries subagent calls from before this tap (no subagent `usage` rows) still counts only the
+ * main loop in the ratio.
  *
  * What still reads low on Claude Code (measured 2026-09-28, 5 of 7 flagged sessions) is not a tap
  * miss: a call refused before it ran (a permission check, a blocked command) fires no Post hook,
@@ -30,10 +33,10 @@ export const TRACE_COVERAGE_INTERVAL_MS = 60 * 60 * 1000;
 export const TRACE_COVERAGE_FIRST_DELAY_MS = 2 * 60 * 1000;
 
 /**
- * Rail R1's count of a session's main-loop tool calls, as a SQL aggregate over its rows: one call
- * is one call. Cursor fires `afterShellExecution` / `afterMCPExecution` BESIDE `postToolUse` for the
- * same call (on cursor-agent too — wanderer's 0e58c84e read 86 + 91 hook rows for 92 shell calls,
- * lane 01M3N78KVY) and the tap records all three as `PostToolUse`, with the source in
+ * Rail R1's count of a session's tool calls, as a SQL aggregate over its rows: one call is one
+ * call. Cursor fires `afterShellExecution` / `afterMCPExecution` BESIDE `postToolUse` for the same
+ * call (on cursor-agent too — wanderer's 0e58c84e read 86 + 91 hook rows for 92 shell calls, lane
+ * 01M3N78KVY) and the tap records all three as `PostToolUse`, with the source in
  * `detail.hook_event`. So the after-rows count only when the session has no `postToolUse` spelling
  * at all — then they are its whole record. Other harnesses carry no `hook_event` and count as is.
  *
@@ -41,6 +44,11 @@ export const TRACE_COVERAGE_FIRST_DELAY_MS = 2 * 60 * 1000;
  * a call it is still on (wanderer's 0e58c84e: one Read fired 26 times — 144 Read rows over 106
  * ids, lane 01M3N8GF8D). A row with no `tool_use_id` (older taps, harnesses that send none) is its
  * own call, so the count never drops below what such rows would have read before.
+ *
+ * Subagent calls (`agent_id IS NOT NULL`) count in the ratio's numerator once the session also has
+ * subagent R2 `usage` rows (tailed on `SubagentStop`, lane 01M4VTRMXYZ); sessions from before the
+ * sidechain tail have no subagent `usage` rows and keep counting main-loop calls only, so legacy
+ * sessions do not inflate above 100%.
  */
 // Grok's R1 row per call is its PreToolUse probe (ADR 445, 2026-09-28: the probe has no matcher,
 // so it records every call; the gate posts only its HookOutcome). Grok's PostToolUse is never
@@ -50,12 +58,27 @@ export const CALL_ROW = `(kind IN ('PostToolUse', 'PostToolUseFailure')
 const MAIN_POST = `${CALL_ROW} AND agent_id IS NULL`;
 const PRIMARY_SPELLING = `COALESCE(json_extract(detail, '$.hook_event'), '')
                           NOT IN ('afterShellExecution', 'afterMCPExecution')`;
-export const POST_TOOL_USE_ONCE = `
+const HAS_SUBAGENT_R2 = `SUM(CASE WHEN kind = 'usage' AND agent_id IS NOT NULL
+                                   AND json_extract(detail, '$.tool_uses') IS NOT NULL
+                             THEN 1 ELSE 0 END) > 0`;
+const ALL_POST_ONCE = `
+  CASE WHEN SUM(CASE WHEN ${CALL_ROW} AND ${PRIMARY_SPELLING} THEN 1 ELSE 0 END) > 0
+       THEN COUNT(DISTINCT CASE WHEN ${CALL_ROW} AND ${PRIMARY_SPELLING}
+                                THEN COALESCE(tool_use_id, id) END)
+       ELSE COUNT(DISTINCT CASE WHEN ${CALL_ROW} THEN COALESCE(tool_use_id, id) END)
+  END`;
+const MAIN_POST_ONCE = `
   CASE WHEN SUM(CASE WHEN ${MAIN_POST} AND ${PRIMARY_SPELLING} THEN 1 ELSE 0 END) > 0
        THEN COUNT(DISTINCT CASE WHEN ${MAIN_POST} AND ${PRIMARY_SPELLING}
                                 THEN COALESCE(tool_use_id, id) END)
        ELSE COUNT(DISTINCT CASE WHEN ${MAIN_POST} THEN COALESCE(tool_use_id, id) END)
   END`;
+export const POST_TOOL_USE_ONCE = `
+  CASE WHEN ${HAS_SUBAGENT_R2}
+       THEN ${ALL_POST_ONCE}
+       ELSE ${MAIN_POST_ONCE}
+  END`;
+export const POST_TOOL_USE_ALL = ALL_POST_ONCE;
 
 export interface LowCoverageSession {
   team_id: string;

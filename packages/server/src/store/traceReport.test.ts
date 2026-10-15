@@ -102,6 +102,35 @@ withDrivers('traceReport', (o, kind) => {
       ]);
     });
 
+    it('coverage: counts subagent calls in the ratio once the sidechain has posted usage rows (lane 01M4VTRMXYZ)', async () => {
+      const { db, traceDb, team } = await fixture();
+      await ingestTraceEvents(traceDb, team.id, 'ryder', [
+        ev({ tool_name: 'Bash', tool_use_id: 'm1' }),
+        ev({ tool_name: 'Read', tool_use_id: 'm2' }),
+        ev({ tool_name: 'Grep', tool_use_id: 's1', agent_id: 'sub-1' }),
+        ev({ tool_name: 'Glob', tool_use_id: 's2', agent_id: 'sub-1' }),
+        usage('ryder', NOW - H, { tool_uses: 2, input_tokens: 10, output_tokens: 5 }),
+        ev({
+          kind: 'usage',
+          ts: NOW - H,
+          agent_id: 'sub-1',
+          detail: { parser: 'claude-code@1', tool_uses: 2, input_tokens: 20, output_tokens: 8 },
+        }),
+      ]);
+      const r = await deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+      expect(r.coverage).toEqual([
+        {
+          harness: 'claude-code',
+          sessions: 1,
+          sessions_with_r2: 1,
+          post_tool_use: 4,
+          post_tool_use_r2: 4,
+          r2_tool_uses: 4,
+          coverage: 1,
+        },
+      ]);
+    });
+
     // Lane 01M3N78KVY: cursor fires `afterShellExecution` / `afterMCPExecution` BESIDE `postToolUse`
     // for one call (cursor-agent too — wanderer 0e58c84e: 86 + 91 hook rows for 92 shell calls), and
     // the tap records all three as PostToolUse. One call is one call: the after-rows count only when
