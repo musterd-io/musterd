@@ -89,9 +89,14 @@ These are what a new beat must keep. Each has bitten once.
 - **Replay is bounded by the history fetch.** `/live` backfills the newest 200 envelopes
   (`fetchHistory`, `limit: 200`); replay can only play what is inside that. A quiet team has ten minutes
   inside it; a very busy one may not.
-- **Replay's tempo and cap are checked by eye.** The foreground check on 2026-10-13 saw the room fill by
-  ~4 s and walks reach the board and a desk. It did not time the 2× or count to eight. There is no
-  automated check of either (the unit tests cover the selection in `replay.ts`, not the playback).
+- ~~**Replay's tempo and cap are checked by eye.**~~ _Checked 2026-10-15 (lane `01M50TZA8X`):_
+  `actors.test.ts` times a claim walk at `REPLAY_TEMPO` against the live walk (half the frames, within
+  5%), `replay.test.ts` already counted the cap of eight, and `scene-loop.test.ts` pins that the drain
+  sets the tempo. The playback in a real browser is still checked by eye.
+- **A replayed walk wears its age** (nick, 2026-10-15, lane `01M50TZA8X`). The walk tag reads
+  "claiming X · 4m ago" ("just now" under a minute), so a viewer does not read a nine-minute-old claim
+  as happening now. On a long verb the verb ellipsizes and the age stays whole. The window stays ten
+  minutes; nick considered 30 and kept 10. `/office-preview?replay=1` shows it without a daemon.
 - **Acceptance is inferred, not told.** The resolve carries no flag, so the room calls a done pin an
   acceptance when the resolver is not the lane's owner. Since 2026-10-15 (lane `01M50TZDDM`) the owner
   comes from the board as well as the walks, so a self-close of a lane claimed before the viewer arrived
@@ -147,8 +152,8 @@ ceiling, so a further beat that moves bytes needs a measured ADR 183 raise or a 
 
 ## 9. Open questions
 
-1. Is ten minutes / eight walks the right replay sample? A team that opens `/live` after an hour away
-   sees a still room by design. Say if that should change; it is one constant.
+1. ~~Is ten minutes / eight walks the right replay sample?~~ Answered 2026-10-15 (nick): keep ten
+   minutes and eight walks, and label each replayed walk with its age (§5).
 2. ~~Should the carrier fix go all the way to an `owner` on `meta.lane_review` (an ADR)?~~ Answered
    2026-10-15 (nick): no. The board's `owner_seat` covers it without a protocol change (§5).
 3. L3 before L1, as ordered above?

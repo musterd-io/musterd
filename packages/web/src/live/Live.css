@@ -1803,6 +1803,22 @@
   color: var(--lc-handoff-ink);
   white-space: nowrap;
 }
+/* A replayed walk's age (lane 01M50TZA8X): "claiming X · 4m ago". It's set quieter by weight, not
+   by opacity or a lighter ink, so it keeps the verb's measured contrast on the plate's paper. */
+.lc-gl-label__walk.has-age {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.lc-gl-label__verb {
+  overflow: hidden; /* also lets the flex item shrink below its text: min-width resolves to 0 */
+  text-overflow: ellipsis;
+}
+.lc-gl-label__ago {
+  flex: none;
+  font-weight: 400;
+  white-space: pre;
+}
 .lc-gl-label__woken {
   --lc-woken-fill: #4b43b8;
   flex: none;

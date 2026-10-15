@@ -20,10 +20,11 @@ export const REPLAY_MAX = 8;
 /** The replay's speed over the live walk speed. */
 export const REPLAY_TEMPO = 2;
 
+/** A replayed walk, stamped with when its act was sent: the walker wears that age (lane 01M50TZA8X). */
 export type ReplayEvent = Extract<
   OfficeEvent,
   { kind: 'walk-claim' | 'walk-pin' | 'walk-handoff' | 'walk-deliver' }
->;
+> & { at: number };
 const REPLAYED = new Set<OfficeEvent['kind']>(['walk-claim', 'walk-pin', 'walk-handoff', 'walk-deliver']);
 
 export function replayEvents(
@@ -36,8 +37,17 @@ export function replayEvents(
   for (const e of [...envelopes].sort((a, b) => a.ts - b.ts)) {
     if (liveIds.has(e.id) || e.ts < since) continue;
     const ev = actToEvent(e);
-    if (ev && REPLAYED.has(ev.kind)) out.push(ev as ReplayEvent);
+    if (ev && REPLAYED.has(ev.kind)) out.push({ ...ev, at: e.ts } as ReplayEvent);
   }
   // The newest `max`, still oldest-first: what the room was doing just before you arrived.
   return out.slice(-REPLAY_MAX);
+}
+
+/**
+ * The age a replayed walker wears beside its verb (nick, 2026-10-15): a replay is old news played
+ * fast, and without the age a viewer reads a claim from nine minutes ago as happening now. Whole
+ * minutes, floored; under a minute (or a clock running ahead of the daemon's) is "just now".
+ */
+export function replayAge(ms: number): string {
+  return ms < 60_000 ? 'just now' : `${Math.floor(ms / 60_000)}m ago`;
 }

@@ -1398,6 +1398,29 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-15 — `liveCssGzipBytes` 21,600 → 21,700 B: the replay age tag's rules (lane `01M50TZA8X`)
+
+CI read live CSS at 21.1 KB, just over the 21,600 B cap, for the three rules that let an aged walk tag
+ellipsize its verb and keep its age whole inside the plate's 18rem cap. Trimmed twice first: the
+` · ` separator moved from `::before` into the text, and a letter-spacing reset and a redundant
+`min-width` were dropped. Raised by 100 B to cover the remainder and CI's drift.
+
+- Falsify: `pnpm perf:check` after a build reports live CSS at or under 21,600 B with this change in.
+
+### 2026-10-15 — `totalJsGzipBytes` 312,400 → 312,700 B: a replayed walk wears its age (lane `01M50TZA8X`)
+
+| Budget   | Before (main)   | This branch (CI, before rebase) | Ceiling                    |
+| -------- | --------------- | ------------------------------- | -------------------------- |
+| total JS | ≤ 304.8 KB      | 305.0 KB                        | RAISED 312,400 → 312,700 B |
+
+Replay on open now labels each replayed walker with its age ("claiming X · 4m ago"), so a viewer does
+not read old news as happening now. That is ~150–250 B gz: `replayAge`, the `at` stamp on replayed
+events, `setWalkTag` in place of six direct sets, and the aged walk-tag DOM. The CSS was trimmed first:
+the separator moved into the text and a letter-spacing reset was dropped. Lazy-loading cannot move total
+(ADR 183), and the ceiling was saturated by the raise just below.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 312,400 B with this change in.
+
 ### 2026-10-15 — `totalJsGzipBytes` 312,100 → 312,400 B: the office reads lane owners from the board (lane `01M50TZDDM`)
 
 | Budget   | Before (main)  | This branch (CI)            | Ceiling                    |

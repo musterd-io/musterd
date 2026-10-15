@@ -10,6 +10,7 @@ import {
 import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, NOOK, NOOK_RUG_R, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import { LEISURE_SPOTS } from './layout';
+import { REPLAY_TEMPO } from './replay';
 import { assignSeats } from './seating';
 import type { OfficeNode } from './types';
 import { slotRng } from './ambientSeed';
@@ -1481,6 +1482,23 @@ describe('claiming a lane at the board', () => {
     expect(back.lx).toBeCloseTo(home.lx, 5);
     expect(back.ly).toBeCloseTo(home.ly, 5);
     expect(back.carry).not.toBe('card');
+  });
+
+  it('plays at REPLAY_TEMPO: a replayed claim lands in half the frames (lane 01M50TZA8X)', () => {
+    const frames = (tempo: number) => {
+      const { actors } = run();
+      actors.claim('Ada', SEED);
+      let n = 0;
+      while (actors.active() && n < 8000) {
+        actors.step(0.05 * tempo); // the frame loop's `actors.step(dt * tempo)`
+        n++;
+      }
+      return n;
+    };
+    const live = frames(1);
+    const replayed = frames(REPLAY_TEMPO);
+    expect(REPLAY_TEMPO).toBe(2);
+    expect(Math.abs(live / replayed - REPLAY_TEMPO)).toBeLessThan(0.1);
   });
 
   it('reports the card as taken from the reach until the walk ends', () => {

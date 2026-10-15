@@ -1,6 +1,6 @@
 import type { Envelope, Recipient } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { REPLAY_MAX, replayEvents } from './replay';
+import { REPLAY_MAX, replayAge, replayEvents } from './replay';
 
 const NOW = 100 * 60_000;
 let n = 0;
@@ -59,5 +59,24 @@ describe('replayEvents — the walks of the last ten minutes, oldest first', () 
     // the four oldest fell off: the first survivor is the 5th-oldest
     expect((evs[0] as { lane: string }).lane).toBe('01L');
     expect(replayEvents([], new Set(), NOW)).toEqual([]);
+  });
+});
+
+describe('the age a replayed walk wears (lane 01M50TZA8X)', () => {
+  it('stamps each replayed walk with the time its act was sent', () => {
+    const evs = replayEvents([claim({ ts: NOW - 4 * 60_000 })], new Set(), NOW);
+    expect(evs.map((e) => e.at)).toEqual([NOW - 4 * 60_000]);
+  });
+
+  it('says "just now" under a minute, then whole minutes', () => {
+    expect(replayAge(0)).toBe('just now');
+    expect(replayAge(59_999)).toBe('just now');
+    expect(replayAge(60_000)).toBe('1m ago');
+    expect(replayAge(4 * 60_000 + 30_000)).toBe('4m ago');
+    expect(replayAge(9 * 60_000 + 59_000)).toBe('9m ago');
+  });
+
+  it('never shows a negative age when the clocks disagree', () => {
+    expect(replayAge(-5_000)).toBe('just now');
   });
 });

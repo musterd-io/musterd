@@ -14,7 +14,7 @@ import { solidHit, walkable } from './nav';
 import {
   plateCoversBoard, layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
-import { REPLAY_TEMPO } from './replay';
+import { REPLAY_TEMPO, replayAge } from './replay';
 import { stepDomAnimations } from './domCadence';
 import {
   ambientFrameBudgetMs,
@@ -606,6 +606,15 @@ export function mountOffice(
   /** The verb over a walker (ADR 464 §3.2): set when an act walk starts, worn while
    *  `actors.actWalkingFor(name)`, dropped after — an ambient stroll never wears one. */
   const walkTags = new Map<string, string>();
+  /** A replayed walker's age beside its verb ("4m ago"), set only while a replay emits (lane 01M50TZA8X). */
+  const walkAges = new Map<string, string>();
+  /** The send time of the replayed act being emitted, else null (live). */
+  let replayAt: number | null = null;
+  function setWalkTag(name: string, verb: string): void {
+    walkTags.set(name, verb);
+    if (replayAt !== null) walkAges.set(name, replayAge(Date.now() - replayAt));
+    else walkAges.delete(name);
+  }
   /** Who owns each lane the room has watched (lane 01M4V774MK): the deliver walk's carrier. */
   const laneOwners = createLaneOwners();
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
@@ -1262,11 +1271,26 @@ export function mountOffice(
       if (show && !tag) {
         const span = document.createElement('span');
         span.className = 'lc-gl-label__walk';
-        span.textContent = verb;
+        // A replayed walk says how old it is, so nobody reads old news as happening now. On a long verb
+        // the plate's 18rem cap clips its right edge, so the verb ellipsizes and the age stays whole.
+        const age = walkAges.get(name);
+        if (age === undefined) {
+          span.textContent = verb;
+        } else {
+          span.classList.add('has-age');
+          const v = document.createElement('span');
+          v.className = 'lc-gl-label__verb';
+          v.textContent = verb;
+          const ago = document.createElement('span');
+          ago.className = 'lc-gl-label__ago';
+          ago.textContent = ` · ${age}`;
+          span.append(v, ago);
+        }
         plate.appendChild(span);
       } else if (!show && tag) {
         tag.remove();
         if (verb !== undefined) walkTags.delete(name);
+        walkAges.delete(name);
       }
     }
   }
@@ -2303,7 +2327,7 @@ export function mountOffice(
    * (2026-10-12). The first frame after the roster is placed drains this; each walk is emitted in
    * its own try so one bad event can only lose itself, not the room.
    */
-  let replayPending: readonly OfficeEvent[] | null = null;
+  let replayPending: readonly (OfficeEvent & { at?: number })[] | null = null;
   function drainReplay(): void {
     if (!replayPending || actors.poses().size === 0) return; // nobody placed yet — the roster is still on its way
     const evs = replayPending;
@@ -2311,6 +2335,7 @@ export function mountOffice(
     tempo = REPLAY_TEMPO;
     replaying = true;
     for (const ev of evs) {
+      replayAt = ev.at ?? null;
       try {
         emit(ev);
       } catch (err) {
@@ -2318,6 +2343,7 @@ export function mountOffice(
       }
     }
     replaying = false;
+    replayAt = null;
     if (!actors.active()) tempo = 1; // nobody of theirs is in the room — nothing to catch up on
   }
   function update(next: OfficeData) {
@@ -2549,7 +2575,7 @@ export function mountOffice(
           pushThread(ev.from, req.to);
           if (actors.walk(ev.from, req)) walked = true;
         }
-        if (walked) walkTags.set(ev.from, walkTag('help', null));
+        if (walked) setWalkTag(ev.from, walkTag('help', null));
         if (!walked) {
           pushCue(ev.from, '#f4cf52', ev.tier === 'urgent' ? '!' : '', ev.tier === 'urgent');
         }
@@ -2558,7 +2584,7 @@ export function mountOffice(
       case 'walk-handoff':
         pushThread(ev.from, ev.to, toneColor('handoff'));
         if (actors.walk(ev.from, { kind: 'handoff', to: ev.to, urgent: false })) {
-          walkTags.set(ev.from, walkTag('handoff', ev.to));
+          setWalkTag(ev.from, walkTag('handoff', ev.to));
         } else {
           pushCue(ev.from, '#7fc8d8', '↦');
         }
@@ -2568,7 +2594,7 @@ export function mountOffice(
         if (!replaying) laneOwners.note(ev.lane, ev.who);
         if (actors.claim(ev.who, laneSeed(ev.lane))) {
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
-          walkTags.set(ev.who, walkTag('claim', t || null));
+          setWalkTag(ev.who, walkTag('claim', t || null));
         } else {
           pushCue(ev.who, '#8fb0e6', '');
         }
@@ -2587,7 +2613,7 @@ export function mountOffice(
           if (actors.pin(ev.who, seed, ev.state)) {
             if (accepted) acceptedPins.add(seed); // the flourish waits for the card to land (`flourishFreshPins`)
             const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
-            walkTags.set(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
+            setWalkTag(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
           } else {
             pushCue(ev.who, '#5cd49a', '✓');
             // No walk to wait for: flourish at once so an acceptor out of the room does not lose the cue.
@@ -2604,7 +2630,7 @@ export function mountOffice(
         const carrier = laneOwners.carrier(ev.lane, ev.from);
         pushThread(carrier, ev.to, toneColor('handoff'));
         if (actors.deliver(carrier, ev.to, laneSeed(ev.lane))) {
-          walkTags.set(carrier, walkTag('deliver', ev.to));
+          setWalkTag(carrier, walkTag('deliver', ev.to));
         }
         break;
       }
@@ -2646,7 +2672,7 @@ export function mountOffice(
         const col = toneColor('steer');
         pushWave(ev.from, col);
         if (ev.to && actors.walk(ev.from, { kind: 'help', to: ev.to, urgent: true })) {
-          walkTags.set(ev.from, walkTag('steer', ev.to));
+          setWalkTag(ev.from, walkTag('steer', ev.to));
         } else {
           pushCue(ev.from, col, '↪', true);
         }
