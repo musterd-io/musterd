@@ -1414,6 +1414,159 @@ describe('pollHostOnce — stopping mid-poll hands back what it has not started'
   });
 });
 
+/** A backend whose wakes hold (spawned, verifying) until released; it records the peak in flight. */
+function gatedBackend(): {
+  backend: ActuatorBackend;
+  started: string[];
+  peak: () => number;
+  releaseAll: () => void;
+} {
+  const started: string[] = [];
+  const gates: (() => void)[] = [];
+  let inFlight = 0;
+  let peak = 0;
+  let open = false;
+  return {
+    started,
+    peak: () => peak,
+    releaseAll: () => {
+      open = true;
+      for (const g of gates.splice(0)) g();
+    },
+    backend: {
+      harness: 'claude-code',
+      wake: async (spec) => {
+        started.push(spec.order.lease_id);
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        if (!open) await new Promise<void>((r) => gates.push(r));
+        inFlight -= 1;
+        return {
+          outcome: { occupied: true, session: 'fresh' },
+          settled: Promise.resolve(undefined),
+        };
+      },
+    },
+  };
+}
+
+async function until(cond: () => boolean, ms = 2_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error('condition not met in time');
+    await new Promise((r) => setTimeout(r, 2));
+  }
+}
+
+const cast = ['scout', 'ghost', 'dolly', 'wanderer'];
+
+describe('pollHostOnce — a poll starts its due wakes together, bounded (lane 01M4HGY13Z)', () => {
+  it("four seats' wakes are all spawned before any of them has verified", async () => {
+    const { client, calls } = fakeClient(
+      cast.map((seat, i) => order({ seat, lease_id: `L${String(i + 1)}` })),
+    );
+    const gated = gatedBackend();
+    const poll = pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', gated.backend]]),
+        loadRegistry: () => ({
+          entries: cast.map((seat) => entryOf({ seat, workspace: `/ws/${seat}` })),
+        }),
+        clientFor: () => client,
+      }),
+    );
+    // One at a time, the second wake would wait out the first's verification: this never holds.
+    await until(() => gated.started.length === 4);
+    expect(gated.started).toEqual(['L1', 'L2', 'L3', 'L4']); // spawned in lease order
+    gated.releaseAll();
+    const result = await poll;
+    await Promise.all(result.settled);
+    expect(result.orders).toBe(4);
+    expect(gated.peak()).toBe(4);
+    // Each lease gets exactly one primary report (supplements carry no `session`).
+    const primaries = calls.reports.filter((r) => r.session === 'fresh').map((r) => r.lease_id);
+    expect(primaries.sort()).toEqual(['L1', 'L2', 'L3', 'L4']);
+  });
+
+  it('never has more wakes in flight than the bound', async () => {
+    const { client } = fakeClient(
+      cast.map((seat, i) => order({ seat, lease_id: `L${String(i)}` })),
+    );
+    const gated = gatedBackend();
+    const poll = pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', gated.backend]]),
+        loadRegistry: () => ({
+          entries: cast.map((seat) => entryOf({ seat, workspace: `/ws/${seat}` })),
+        }),
+        clientFor: () => client,
+        maxConcurrentWakes: 2,
+      }),
+    );
+    await until(() => gated.started.length === 2);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(gated.started).toHaveLength(2); // the other two wait for a slot
+    gated.releaseAll();
+    await poll;
+    expect(gated.started).toHaveLength(4);
+    expect(gated.peak()).toBe(2);
+  });
+
+  it("two orders for one workspace stay serial: the second waits for the first's outcome", async () => {
+    const { client, calls } = fakeClient([
+      order({ lease_id: 'L1', seat: 'scout' }),
+      order({ lease_id: 'L2', seat: 'scout' }),
+    ]);
+    const gated = gatedBackend();
+    const poll = pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', gated.backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+      }),
+    );
+    await until(() => gated.started.length === 1);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(gated.started).toEqual(['L1']);
+    gated.releaseAll();
+    await poll;
+    expect(gated.started).toEqual(['L1', 'L2']);
+    const primaries = calls.reports.filter((r) => r.session === 'fresh').map((r) => r.lease_id);
+    expect(primaries).toEqual(['L1', 'L2']);
+  });
+
+  it("a second host-label group is polled and woken while the first group's wake verifies", async () => {
+    const { client, calls } = fakeClient([]);
+    client.wakeLeases = async (team, host) => {
+      calls.leases.push({ team, host });
+      return {
+        orders: [
+          host === 'mac.lan'
+            ? order({ lease_id: 'L1', seat: 'scout' })
+            : order({ lease_id: 'L2', seat: 'kai' }),
+        ],
+      };
+    };
+    const gated = gatedBackend();
+    const poll = pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', gated.backend]]),
+        loadRegistry: () => ({
+          entries: [entryOf(), entryOf({ seat: 'kai', host: 'mac.local', workspace: '/ws/kai' })],
+        }),
+        clientFor: () => client,
+      }),
+    );
+    await until(() => gated.started.length === 2);
+    expect(calls.leases).toEqual([
+      { team: 'dawn', host: 'mac.lan' },
+      { team: 'dawn', host: 'mac.local' },
+    ]);
+    gated.releaseAll();
+    await poll;
+  });
+});
+
 describe('the metering gateway rides every wake (ADR 583)', () => {
   function fakeGateway(summary: Partial<GatewaySummary>, calls: MeteredCall[] = []) {
     const started: { leaseId: string; budgetUsd: number | undefined }[] = [];

@@ -10,10 +10,10 @@ Source runs: three one-sentence requests to the same four enrolled members, the 
 - **The slowest member improved from 4:58 to 2:19 once every member had a recorded session to resume** (observed 2026-10-09). Run 1 had two failed resumes and one cold start. The live run had none. Falsify: wake a member whose session record is stale and check `session=resumed` in `~/.musterd/host.log`; a fast resume from a stale record disproves it.
 - **A 3-minute slot cannot hold a send-and-wait demo that starts at the half-way point** (observed 2026-10-09, when the slot shrank from 6 minutes to 3). Send the request in the first 20 seconds and keep talking while members arrive. Falsify: a request that is fully answered inside 90 seconds on this laptop.
 
-## Members start one at a time
+## Members started one at a time (fixed after Demo Day)
 
-- **The wake host actuates due wakes serially, and polls each host-label group after the previous group's wakes verify** (read from `packages/cli/src/host/loop.ts`, 2026-10-09; the file's own comment says "Orders are actuated one at a time"). Two members were claimed 1.5 seconds after the send and two 45 seconds after, and members appeared on the office floor one after another. Falsify: send one huddle to four enrolled members and decode the lease ids as ULIDs; four timestamps within 2 seconds of each other disprove it.
-- Lane `01M4HGY13ZZY0SZ6XBF0K0R1KH` proposes bounded concurrency. The reason for the serial design is not stated in the code that was read.
+- **Until lane `01M4HGY13ZZY0SZ6XBF0K0R1KH`, the wake host actuated due wakes serially, and polled each host-label group after the previous group's wakes verified** (read from `packages/cli/src/host/loop.ts`, 2026-10-09; the file's own comment said "Orders are actuated one at a time"). Two members were claimed 1.5 seconds after the send and two 45 seconds after, and members appeared on the office floor one after another.
+- **Since that lane, every group is polled at once and a poll's due wakes spawn together, at most 4 at a time** (`HOST_WAKE_CONCURRENCY`, read from the code 2026-10-15; not yet measured live). The preparation before each spawn (guards, heal, mirror, dream checkout) still runs one order at a time, for milliseconds, because worktrees of one repo share a `.git`; two orders for one workspace still run one after the other. Falsify: send one huddle to four enrolled members and decode the lease ids as ULIDs, then read the `wake due` lines in `~/.musterd/host.log`; spawns spread over more than one verify time (~15 s or more) disprove it.
 
 ## Replies can arrive without a thread
 
