@@ -47,7 +47,8 @@ public-grade stream.
    comes from their latest `status_update` that is not a human-to-human DM.
 6. **The broadcast mints `broadcast`.** `musterd broadcast` and `musterd stream start` ask for it;
    minting stays human-admin only (ADR 580). This replaces ADR 594 decision 2 for the broadcast seat.
-   The `/live` watch link stays `public` and the dashboard stays `full`.
+   The `/live` watch link stays `public` and the dashboard stays `full`. _(Amended 2026-10-15: a watch link may now be
+   shared at `broadcast` grade, `public` staying the default — ADR 616; see Consequences.)_
 7. **`/broadcast` never mints for itself.** With no handed seat it shows the refusal and loads
    nothing, instead of falling back to a `full` seat.
 8. **Unknown or missing grades read as `public`.** _(Amended 2026-10-15: "missing" means a connection with no grade at the fan-out; a NULL `observer_scope` stays `full` per ADR 136 — see Consequences.)_
@@ -72,6 +73,11 @@ public-grade stream.
   to `public` wherever a grade is resolved (`resolveObserverScope`, feeding history, roster and
   masking), and a live connection with no grade is `public` at the fan-out. A NULL column stays
   `full`.
+
+- **2026-10-15 — ADR 616 widens decision 6.** nick asked for demo audiences to see what the stream
+  sees. A `/live` watch link now takes a grade when shared, `public` by default or `broadcast`, with
+  one cached seat per grade; members with the guest role read at `broadcast` too. The stream's own
+  seat and the dashboard are unchanged.
 
 ## Observability & Evaluation
 
