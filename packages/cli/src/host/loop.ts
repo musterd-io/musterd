@@ -2,6 +2,7 @@ import {
   wakeabilityFromFacts,
   type MemberSummary,
   type WakeLeasesResponse,
+  type WakeOrder,
   type WakeReportBody,
   type WakeTurnBody,
   type WakeUsage,
@@ -140,13 +141,57 @@ export interface HostPollDeps {
   verifyPollMs?: number;
   /**
    * Lane 01M3QRYZM2: aborted when the actuator is told to stop (SIGTERM from `launchctl kickstart
-   * -k`, SIGINT). Orders are actuated one at a time, so a stop mid-poll used to strand every order
-   * behind the one being verified: never spawned, never reported, expiring at the lease TTL and
-   * then snoozing its seat. On abort each order not yet started is handed back at once as a
-   * budget-neutral deferral (`actuator_restart`, which the daemon does not snooze on); the order in
-   * progress is left to finish and report as usual.
+   * -k`, SIGINT). A stop mid-poll used to strand every order queued behind the ones being
+   * verified: never spawned, never reported, expiring at the lease TTL and then snoozing its seat.
+   * On abort each order not yet started is handed back at once as a budget-neutral deferral
+   * (`actuator_restart`, which the daemon does not snooze on); orders in progress are left to
+   * finish and report as usual.
    */
   signal?: AbortSignal;
+  /** Lane 01M4HGY13Z: how many wakes one poll may have spawning and verifying at once (default
+   *  {@link HOST_WAKE_CONCURRENCY}). 1 restores the old one-at-a-time actuation. */
+  maxConcurrentWakes?: number;
+}
+
+/**
+ * Lane 01M4HGY13Z: a poll's due wakes start together, at most this many at a time. Actuated one at
+ * a time, nick's one message to four seats (2026-10-09) started them one after another over about
+ * a minute: each wake held the loop through its spawn and roster verification (~13-40 s for a
+ * resumed session), and a second host-label group was not even polled until the first group's
+ * wakes had verified. Four covers the cast on one machine without letting a burst of orders spawn
+ * an unbounded number of harnesses at once.
+ */
+export const HOST_WAKE_CONCURRENCY = 4;
+
+/** A FIFO counting semaphore. `acquire` resolves to a release that is safe to call twice. */
+export function semaphore(slots: number): { acquire(): Promise<() => void> } {
+  let free = Math.max(1, Math.floor(slots));
+  const waiters: (() => void)[] = [];
+  const release = () => {
+    const next = waiters.shift();
+    if (next) next();
+    else free += 1;
+  };
+  return {
+    async acquire() {
+      if (free > 0) free -= 1;
+      else await new Promise<void>((resolve) => waiters.push(resolve));
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        release();
+      };
+    },
+  };
+}
+
+/** Await every task, then rethrow the first failure — a concurrent poll fails as the serial one
+ *  did, but never while a sibling wake is still spawning or reporting. */
+async function settleAll(tasks: Promise<void>[]): Promise<void> {
+  const results = await Promise.allSettled(tasks);
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
 }
 
 /** The deferral reason an actuator sends for an order it was stopped before starting. */
@@ -314,15 +359,20 @@ function ownWorkspaceLabel(workspacePath: string): string | undefined {
   }
 }
 
+/** The registry entries one lease poll covers: one (server, team, host-label) tuple. */
+export interface PollGroup {
+  server: string;
+  team: string;
+  host: string;
+  entries: HostRegistryEntry[];
+}
+
 /** Group registry entries by the (server, team, host-label) tuple one lease poll covers. */
 export function pollGroups(
   entries: HostRegistryEntry[],
   hostLabel?: string,
-): Map<string, { server: string; team: string; host: string; entries: HostRegistryEntry[] }> {
-  const groups = new Map<
-    string,
-    { server: string; team: string; host: string; entries: HostRegistryEntry[] }
-  >();
+): Map<string, PollGroup> {
+  const groups = new Map<string, PollGroup>();
   for (const entry of entries) {
     const host = hostLabel ?? entry.host;
     // Lane 01M1J2V4EJ: group on the DAEMON, not on the spelling a binding happened to carry.
@@ -338,16 +388,31 @@ export function pollGroups(
   return groups;
 }
 
-/** One poll tick: lease → actuate → report, per group. Best-effort throughout — a failed group
- *  (unreachable daemon, missing key) is logged and skipped, never fatal to the resident loop. */
+/**
+ * One poll tick: lease → actuate → report, per group. Best-effort throughout — a failed group
+ * (unreachable daemon, missing key) is logged and skipped, never fatal to the resident loop.
+ *
+ * Lane 01M4HGY13Z: every group is polled at once, and the due wakes of all groups share
+ * {@link HOST_WAKE_CONCURRENCY} slots, so N seats cost about one spawn-to-roster time, not N.
+ * Three things stay serial on purpose:
+ * - the preparation before a spawn (guards, heal, mirror, dream checkout, gateway), one order at a
+ *   time in lease order: worktrees of one repo share a `.git`, and two dream checkouts fetching at
+ *   once can fail on its ref locks. The lock is released once the backend has spawned, so it costs
+ *   milliseconds, never a verify window.
+ * - two orders for one workspace: the second waits for the first's verified outcome, so its
+ *   local-session guard sees the session the first one started, exactly as the serial loop did.
+ * - each order's own lease → progress → report sequence, and its verification, unchanged.
+ */
 export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> {
   const registry = (deps.loadRegistry ?? loadHostRegistry)();
   const readAgentKey = deps.readAgentKey ?? defaultReadAgentKey;
   const clientFor = deps.clientFor ?? defaultClientFor;
   const settled: Promise<void>[] = [];
   let orders = 0;
+  const wakeSlots = semaphore(deps.maxConcurrentWakes ?? HOST_WAKE_CONCURRENCY);
+  const prepLock = semaphore(1);
 
-  for (const group of pollGroups(registry.entries, deps.hostLabel).values()) {
+  const pollGroup = async (group: PollGroup): Promise<void> => {
     const keyed = group.entries
       .map((e) => ({ entry: e, key: readAgentKey(e.workspace) }))
       .filter((e): e is { entry: HostRegistryEntry; key: string } => e.key !== undefined);
@@ -362,7 +427,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         `! no agent key readable for ${group.team} on ${group.server} — ` +
           `re-run \`musterd residency on\` in a seat's workspace`,
       );
-      continue;
+      return;
     }
     const client = clientFor(group.server, keyed[0]!.key);
 
@@ -371,7 +436,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       response = await client.wakeLeases(group.team, group.host);
     } catch (err) {
       deps.log(`! wake-lease poll failed for ${group.team}: ${(err as Error).message}`);
-      continue;
+      return;
     }
 
     // Orders this poll has not started yet. On a stop, whatever is still here is handed back.
@@ -400,8 +465,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
     if (deps.signal?.aborted) handBack();
     else deps.signal?.addEventListener('abort', handBack, { once: true });
 
-    for (const order of response.orders) {
-      if (!pending.delete(order)) continue; // already handed back by a stop
+    // One order, start to report. `releasePrep` frees the preparation lock for the next order; it
+    // is called once this order's backend has spawned (or once it settles without one).
+    const actuateOrder = async (order: WakeOrder, releasePrep: () => void): Promise<void> => {
+      if (!pending.delete(order)) return; // already handed back by a stop
       orders += 1;
       deps.log(
         `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'} ` +
@@ -453,7 +520,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         // deferrals by design — that silence is for the local-session guard, not for this).
         deps.log(`wake deferred: ${order.seat} — ${reason}`);
         await report({ occupied: false, deferred: true, wakeability, reason });
-        continue;
+        return;
       }
       const backend = deps.backends.get(entry.harness);
       if (!backend) {
@@ -461,7 +528,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           occupied: false,
           reason: `no "${entry.harness}" backend on this host (increment 3 ships claude-code)`,
         });
-        continue;
+        return;
       }
 
       // The resident-loop telemetry carve-out (ADR 131 O&E): one `musterd.residency.wake` span per
@@ -497,7 +564,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         span.setStatus({ code: SpanStatusCode.OK });
         await report({ occupied: false, deferred: true, reason: 'local-session-live' });
         span.end();
-        continue;
+        return;
       }
       // ADR 444 backstop: the transcript guard cannot see a session that is open but idle — its
       // person stepped away, so nothing is being written. 2026-09-22: that session had also lost its
@@ -517,7 +584,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         span.setStatus({ code: SpanStatusCode.OK });
         await report({ occupied: false, deferred: true, reason: 'attended-session-open' });
         span.end();
-        continue;
+        return;
       }
       // ADR 408 self-heal, run by the host before it spawns (lane 01M3NMZ94D). The SessionStart
       // probe heals from INSIDE the harness's own hooks, so it cannot reach a harness that has no
@@ -597,7 +664,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
               );
               return undefined;
             });
-      const actuation = await backend.wake(
+      const spawning = backend.wake(
         {
           order,
           team: group.team,
@@ -632,6 +699,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           log: deps.log,
         },
       );
+      // The backend has spawned (its synchronous start has run); the next order may prepare while
+      // this one waits out its verification.
+      releasePrep();
+      const actuation = await spawning;
       span.setAttribute('musterd.occupied', actuation.outcome.occupied);
       if (actuation.outcome.reason) span.setAttribute('musterd.reason', actuation.outcome.reason);
       span.setStatus({
@@ -734,9 +805,37 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             );
         }),
       );
-    }
-    deps.signal?.removeEventListener('abort', handBack);
-  }
+    };
 
+    // Start every order now: each waits, in lease order, for its workspace's previous order, then a
+    // wake slot, then the preparation lock. An order still waiting when a stop lands is in
+    // `pending` and is handed back unstarted.
+    const workspaceTail = new Map<string, Promise<void>>();
+    const tasks = response.orders.map((order) => {
+      const key = spawnable.get(order.seat)?.workspace ?? `seat:${order.seat}`;
+      const task = (workspaceTail.get(key) ?? Promise.resolve()).then(async () => {
+        const releaseSlot = await wakeSlots.acquire();
+        const releasePrep = await prepLock.acquire();
+        try {
+          await actuateOrder(order, releasePrep);
+        } finally {
+          releasePrep();
+          releaseSlot();
+        }
+      });
+      workspaceTail.set(
+        key,
+        task.catch(() => undefined),
+      );
+      return task;
+    });
+    try {
+      await settleAll(tasks);
+    } finally {
+      deps.signal?.removeEventListener('abort', handBack);
+    }
+  };
+
+  await settleAll([...pollGroups(registry.entries, deps.hostLabel).values()].map(pollGroup));
   return { registered: registry.entries.length, orders, settled };
 }
