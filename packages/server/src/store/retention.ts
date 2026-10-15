@@ -216,7 +216,12 @@ export async function pruneAuditChurn(
       archivedBytes += done.bytes;
     } else {
       archivedBytes += archiveRows(opts.archiveDir!, rows);
-      await db.tx((t) => deleteAll(t, rows.map((r) => r.id)));
+      await db.tx((t) =>
+        deleteAll(
+          t,
+          rows.map((r) => r.id),
+        ),
+      );
     }
     for (const r of taken) perTeam[r.team_id] = (perTeam[r.team_id] ?? 0) + 1;
     pruned += taken.length;
