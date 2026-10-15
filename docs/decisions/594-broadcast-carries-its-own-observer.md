@@ -31,7 +31,7 @@ broadcast` on the laptop and `musterd stream start` take the same path, so they 
    Chrome starts: from `MUSTERD_BROADCAST_SEAT` (JSON `{team, name, token}`) if set, else it mints
    one with the identity of the folder it runs in. That identity must be a human admin, as ADR 580
    requires. If it is not, the CLI says so and names both ways out.
-2. **The seat is public-grade.** A stream shows its audience team traffic. It never needs DMs, so
+2. **The seat is public-grade.** _(Amended 2026-10-15: replaced by the `broadcast` grade, [ADR 601](601-broadcast-visibility-grade.md).)_ A stream shows its audience team traffic. It never needs DMs, so
    the CLI never mints a full-grade seat for one.
 3. **The seat goes in over CDP, never in the URL or argv.** `Page.addScriptToEvaluateOnNewDocument`
    sets `window.__musterdBroadcastSeat` before the page's own code runs. The page uses that seat
@@ -70,6 +70,13 @@ broadcast` on the laptop and `musterd stream start` take the same path, so they 
   with a signed-in human's credential: "copy watch link" uses it and is offered only signed in, and
   an admin's sign-out uses the outgoing one. A browser with no cached observer and no sign-in gets
   the sign-in fields and the `musterd live` / `musterd board` hint, not a refused request.
+
+- **2026-10-15 — the broadcast seat's grade changes** ([ADR 601](601-broadcast-visibility-grade.md)).
+  Decision 2 no longer holds: nick asked for the stream to show the team's DMs. The capturer mints a
+  `broadcast`-grade seat, which sees every DM except human to human, with recognisable credentials
+  masked by the daemon. Decision 3's fallback to `acquireObserver` is dropped for `/broadcast`: with
+  no handed seat the page loads nothing. Both land with lane `01M50C1ZZMJFRG409G6TC4S303`; until
+  then the stream keeps its public-grade seat.
 
 ## Observability & Evaluation
 
