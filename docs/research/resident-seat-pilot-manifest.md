@@ -6,6 +6,10 @@
 > `docs/research/015-resident-seat-pilot.md`; its verdict is recorded as a dated note in ADR 588
 > Consequences either way. Nothing below changes after the worker seat's first wake; a change after
 > that is a new manifest with a note here saying why.
+>
+> **2026-10-15:** amended once, mid-window, at nick's direction. The lane class gains a
+> doable-from-a-workspace term for both arms from pass 3. Why and how it is read:
+> [amendment 1](resident-seat-pilot/amendment-1-doable-class.md). Everything else below stands.
 
 ## Question
 
