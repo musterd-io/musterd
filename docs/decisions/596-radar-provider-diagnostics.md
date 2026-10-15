@@ -22,6 +22,14 @@ The diagnostic job has read-only repository permissions, no publication step, an
 
 The probe pays for at most ten pending source reads and one sampled article retrieval. No source bodies become artifacts and no digest or ledger is modified. This record retains the question and observed result; diagnostic tooling is temporary.
 
+### Observed 2026-10-15
+
+[Diagnostic run 38683612326](https://github.com/musterd-io/musterd/actions/runs/38683612326) completed in 2m57s. All ten pending candidates had successful source reads, and tier-2 returned ten results with no warnings. Its one tier-2 request used 10,846 input tokens and 4,127 output tokens against the unchanged 8,192-token budget; the response parsed as valid JSON. The earlier failure did not reproduce. These observations establish that this account and the configured model can complete this batch; they do not establish the cause of the earlier failures. No production model, budget or parsing change follows from this probe.
+
+The same run retrieved 81,716 characters from the original CorpusMap PDF. The extracted text contained the introduction, references, appendix mentions, and both the rendering-stage prompt and final sentence on the original PDF's final page. The independent [original-PDF inspection](https://arxiv.org/pdf/2609.37226v1) counted 29 pages. The generic related-work regex was false, so that boolean is not counted as coverage evidence. This sampled comparison reaches the final page and replaces the earlier abstract-only 1,920-character observation; it is not a guarantee about every future provider extraction.
+
+The diagnostic publication job was skipped. The script and workflow input/job were removed before this record was submitted for merge. The unreviewed weekly draft remains subject to its normal review and retry guards.
+
 Follows-up: `01M4YDWAJVZR5ADW5FYJZVNS12`
 
 ## Observability & Evaluation
