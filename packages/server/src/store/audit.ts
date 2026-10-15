@@ -1,4 +1,4 @@
-import { isWireAttestationSource } from '@musterd/protocol';
+import { isWireAttestationSource, type LaneEvent } from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
@@ -1392,6 +1392,57 @@ export async function peerReviewGradeOf(
  * an empty history. That is an honest absence — it under-reports, and the failure mode of
  * under-reporting here is the status quo, never a false accusation.
  */
+/** How many of a lane's edges {@link laneHistory} returns — the newest, oldest first. */
+export const LANE_HISTORY_MAX = 200;
+
+/**
+ * One lane's recorded life (ADR 582 §4): its `lane.*` audit rows, oldest first, each reduced to the
+ * fields a reviewer reads ({@link LaneEvent}). Rides `idx_audit_team_action_target_ts`. Legacy-blind
+ * the same way {@link laneOwnerHistory} is: edges from before a row was written for them are absent.
+ * A malformed detail keeps its row with `ts`/`action`/`actor` only.
+ */
+export async function laneHistory(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<LaneEvent[]> {
+  const rows = await db.all<{
+    ts: number;
+    action: string;
+    actor: string | null;
+    detail: string | null;
+  }>(
+    `SELECT ts, action, actor, detail FROM audit
+         WHERE team_id = ? AND action LIKE 'lane.%' AND target = ?
+       ORDER BY ts DESC, id DESC LIMIT ?`,
+    [teamId, laneId, LANE_HISTORY_MAX],
+  );
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+  return rows.reverse().map((r) => {
+    let d: Record<string, unknown> = {};
+    try {
+      if (r.detail) d = JSON.parse(r.detail) as Record<string, unknown>;
+    } catch {
+      /* the row still says what happened and when */
+    }
+    const e: LaneEvent = { ts: Number(r.ts), action: r.action, actor: r.actor ?? null };
+    // `lane.released` names the owner it dropped as `owner_before`; `lane.closed` its final state as `state`.
+    const owner = str(d['owner']) ?? str(d['owner_before']);
+    if (owner !== undefined) e.owner = owner;
+    if (str(d['previous_owner']) !== undefined) e.previous_owner = str(d['previous_owner']);
+    if (str(d['kind']) !== undefined) e.kind = str(d['kind']);
+    if (str(d['from']) !== undefined) e.from = str(d['from']);
+    const to = str(d['to']) ?? (r.action === 'lane.closed' ? str(d['state']) : undefined);
+    if (to !== undefined) e.to = to;
+    if (Array.isArray(d['fields']))
+      e.fields = d['fields'].filter((f): f is string => typeof f === 'string');
+    if (typeof d['verified'] === 'boolean') e.verified = d['verified'];
+    if (str(d['reason']) !== undefined) e.reason = str(d['reason']);
+    if (str(d['reviewer']) !== undefined) e.reviewer = str(d['reviewer']);
+    return e;
+  });
+}
+
 export async function laneOwnerHistory(
   db: Driver,
   teamId: string,

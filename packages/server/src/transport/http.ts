@@ -72,6 +72,7 @@ import {
   eligibleOf,
   emptyPoolFromCandidates,
   LANE_TERMINAL_STATES,
+  LaneDetailSchema,
   LaneStateSchema,
   isAwaitingAcceptance,
   makeEnvelope,
@@ -199,6 +200,7 @@ import {
   hasInterruptRaised,
   listRenderedActs,
   hasRecentInterruptRefusal,
+  laneHistory,
   laneOwnerHistory,
   listAudit,
   reviewRouting,
@@ -7149,6 +7151,43 @@ export async function handleHttp(
       }
 
       const laneMatch = rest.match(/^\/lanes\/([^/]+)$/);
+      // ADR 582 §4: one lane in full — what a reviewer reads the DB for today. The lane is annotated
+      // exactly as the board annotates it, its warnings are the board's for it (contention needs the
+      // whole board), and the standing acceptance ask comes with its id so `reply_to` needs no lookup.
+      if (method === 'GET' && laneMatch) {
+        const { team } = await authTouch(ctx, slug, req);
+        const laneId = await laneIdFromRef(ctx, team.id, decodeURIComponent(laneMatch[1]!), slug);
+        const board = await listLanes(ctx.db, team.id, team.slug);
+        const found = board.find((l) => l.id === laneId);
+        if (!found) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
+        let lane = found;
+        if (lane.state === 'done') {
+          lane = annotateClose(lane, (await closeVerdicts(ctx.db, team.id)).get(lane.id));
+        } else {
+          const wait = (await acceptanceWaits(ctx.db, team.id)).get(lane.id);
+          if (wait?.reviewer !== undefined) lane = { ...lane, acceptance_reviewer: wait.reviewer };
+          if (wait?.route !== undefined) lane = { ...lane, acceptance_route: wait.route };
+        }
+        const warnings = [
+          ...(await boardWarnings(ctx.db, team.id, team.slug, [lane], board)),
+          ...(await staleLaneWarnings(ctx.db, team.id, team.slug, undefined, board)).filter(
+            (w) => w.subject === lane.id,
+          ),
+        ];
+        const acceptance_ask = isAwaitingAcceptance(lane.state)
+          ? await openAcceptanceAsk(ctx.db, team.id, lane.id)
+          : null;
+        return sendJson(
+          res,
+          200,
+          LaneDetailSchema.parse({
+            lane,
+            warnings,
+            history: await laneHistory(ctx.db, team.id, lane.id),
+            acceptance_ask,
+          }),
+        );
+      }
       if (method === 'PATCH' && laneMatch) {
         const { team, member } = await authTouch(ctx, slug, req);
         const laneId = await laneIdFromRef(ctx, team.id, decodeURIComponent(laneMatch[1]!), slug);

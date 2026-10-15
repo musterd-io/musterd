@@ -2,6 +2,7 @@ import {
   BUILD_ON_CHECK,
   builtOnLine,
   emptyPoolHint,
+  laneDetailLines,
   LaneStakesSchema,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -14,19 +15,20 @@ import { resolveProject } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
-import { plainTerminalText } from '../render/plainText.js';
+import { plainTerminalLines, plainTerminalText } from '../render/plainText.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
 import { claimSeams, renderClaims } from './laneClaims.js';
 
 /**
- * `musterd lane <open|claim|release|park|unpark|handoff|update|resolve>` + `musterd lanes` — the CLI half of the lane
+ * `musterd lane <show|open|claim|release|park|unpark|handoff|update|resolve>` + `musterd lanes` — the CLI half of the lane
  * dual-surface (ADR 083, parity with the `lane_*` MCP tools). Every mutation prints the lane and any
  * contention warnings inline (warn-only; the verb never fails on contention).
  */
 
 const USAGE =
   'usage:\n' +
+  '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
   '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id>\n' +
@@ -145,6 +147,29 @@ function renderBranchCleanup(branch: string | null): void {
 export async function laneCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0];
   const { team, identity, http } = resolve(parsed.flags);
+
+  // ADR 582 §4: one lane in full — what reviewing a lane meant reading the DB for. The lines under
+  // the board line are the protocol's, shared with the MCP `lane_board {q}` render.
+  if (sub === 'show') {
+    const id = parsed.positionals[1];
+    if (!id) throw new CliError(USAGE, 2);
+    const d = await http.laneShow(team, id);
+    if (parsed.flags['json']) {
+      process.stdout.write(JSON.stringify(d) + '\n');
+      return 0;
+    }
+    process.stdout.write(renderLane(d.lane) + '\n');
+    // Stripped: the brief and the history name text other seats wrote (a fold stores what another
+    // daemon sent), so no escape sequence reaches the terminal.
+    for (const line of laneDetailLines(d)) {
+      const text = plainTerminalLines(line);
+      process.stdout.write(
+        (line.startsWith('  ') || line === 'history:' ? theme.meta(text) : text) + '\n',
+      );
+    }
+    renderWarnings(d.warnings);
+    return 0;
+  }
 
   if (sub === 'open') {
     const title = parsed.positionals[1];
