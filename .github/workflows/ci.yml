@@ -229,12 +229,13 @@ jobs:
       # Standing-context byte budgets (spec 2026-08-03).
       - name: Context budgets
         run: pnpm context:check
-      # Startup CPU budget for the stdio adapter bundle (lane 01M4VNTQFW): median of the adapter's own
-      # CPU time to its tools/list reply, against docs/perf/mcp-startup-budget.json. Only when plan
-      # saw the bundle or its inputs change.
+      # Startup CPU of the stdio adapter bundle (lane 01M4VNTQFW): this build against HEAD^1's (the
+      # PR's base, or main's previous commit), interleaved on this runner, so the runner's CPU model
+      # cancels out. Budget in docs/perf/mcp-startup-budget.json. Only when plan saw the bundle or
+      # its inputs change.
       - name: MCP startup budget
         if: needs.plan.outputs.mcp == 'true'
-        run: pnpm mcp:startup:check
+        run: pnpm mcp:startup:check --base HEAD^1
       # Runs after Build: the import resolver follows workspace packages to their ./dist.
       - name: Lint
         run: pnpm lint
