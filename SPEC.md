@@ -230,7 +230,7 @@ Rules:
 - **No grant** → `pending`: the server opens a **claim request** (A.5) routed to admins. On approval the server emits `occupied` (or `refused` on deny/timeout). If an admin is co-present in the same session, approval MAY be immediate.
 - `observe: true` requires a **human credential** whose seat role permits observing; agents MUST be refused (`forbidden`).
 - An **agent** seat MUST have at most one live occupant; a **human** seat MAY have multiple concurrent occupant Presences (kind-scoped single-active, ADR 042).
-- A claim carrying `provenance: "wake"` MUST NOT displace a live occupant whose provenance is not `wake`; it is refused `claim_conflict` with no side effects (ADR 444). An attended claim still displaces a wake.
+- A claim carrying `provenance: "wake"` (or `"dream"`, ADR 494) MUST NOT displace a live occupant whose provenance is not `wake`/`dream`, EXCEPT inside ADR 609's lease window: a claim presenting its own daemon-minted lease displaces an occupant row that attached after that lease was minted (`presence.created_at > wake_leases.created_at`), with the `superseded` frame and a `claim.superseded` audit row as the notice. Outside the window it is refused `claim_conflict` with no side effects (ADR 444). An attended claim still displaces a wake.
 - The Team agent key (`mskey_`) is bootstrap-only: it authenticates a claim handshake but is never
   routine Member HTTP authority. An agent's routine HTTP request MUST present its self-identifying
   `msac_` seat credential and the fresh `msls_` lease bound to its claimed Presence. Servers MUST
