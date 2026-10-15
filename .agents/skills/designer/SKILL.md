@@ -48,7 +48,9 @@ Each exists because breaking it once cost more than following it ever does.
    a text equivalent for any canvas or animated scene; a pause control for anything that moves or
    updates by itself next to other content. (`references/accessibility.md`)
 4. **The accent means something.** One accent, used where it carries meaning. An accent that fails
-   contrast on a background gets a darker ink shade for text and marks there.
+   contrast on a background gets a darker ink shade for text and marks there. If the team has not
+   recorded that shade, compute one of the same hue that passes, give its value and ratio, and
+   label it a proposal to add as a token.
 5. **Motion carries meaning and can stop.** It shows a real change, uses the team's duration and
    easing tokens, respects reduced motion, and never loops forever on a state that never changes.
 6. **Every state is designed.** Empty, loading, error, partial, stale and very long content, on

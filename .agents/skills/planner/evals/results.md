@@ -182,3 +182,26 @@ against it ("Never a leaderboard of Members"; a pitch that ranks people is a dec
 in our `references/team.md`, so the shipped skill does not carry it. In `team-lane-open-fields`
 and `shaping-clear-pitch` the skill run also read the blank team file as "no rules apply at open"
 rather than "the rules are not recorded here". Both are fixes for the core, not for the team file.
+
+## Run 6 — 2026-10-15, after the blank-team fixes (lane `01M50TPMMA`)
+
+- **Fix:** hard rule 9 (a plan never ranks people) moved into the core from `team.md`, and the plan
+  template's "At open" line says a blank team file means "not recorded", never "none". The
+  method's skeleton `team.md` now says the same for every role.
+- **Runs:** the three cases that lost in the run above, `with_skill` only, set up the same way (scratch
+  repository, shipped form with the blank `team.md`, Opus 5.5, read-only). The baseline is that
+  run's `without_skill` answers, unchanged.
+- **Grading:** one grader blind to which answer was which (seed 20261016), against the same
+  expectations.
+
+| Case | Before: craft (+team) · readiness · preferred | After: craft (+team) · readiness · preferred |
+| --- | --- | --- |
+| shaping-leaderboard-pitch | 3/4 · 4 · without skill | 4/4 · 8 · with skill |
+| shaping-clear-pitch | 2/2 (+0/1) · 7 · with skill | 2/2 (+1/1) · 8 · with skill |
+| team-lane-open-fields | 3/3 (+0/1) · 5 · without skill | 3/3 (+1/1) · 8 · with skill |
+
+The leaderboard pitch now becomes a decide lane with a goal-level alternative, in one question.
+Both lane-open cases propose risk on the user-facing surface and label it a proposal. The grader
+again charged "team.md records no rule" as an error on two answers; with the blank file it is
+true, so those are not counted. One error stands: `team-lane-open-fields` uses unchecked field
+names (it says so).

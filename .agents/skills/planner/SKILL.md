@@ -57,6 +57,11 @@ Each exists because breaking it once cost more than following it ever does.
    say how many more the plan needs and leave the rest open. (`references/routing.md`)
 8. **Cut scope, not checks.** When the plan is bigger than the appetite, drop lanes and say what
    was dropped. Never drop the check from a lane to make it fit.
+9. **A plan never ranks people.** A pitch to rank members by output (a leaderboard, a count per
+   person) becomes a decide lane for a human, and the alternative you recommend is at team or
+   goal level: what shipped under each goal, flow per goal, what waits on a human. A list of
+   members with a count each is still a ranking. Counts per person measure the trail, not the
+   work, and an agent and a human doing the same work leave very different trails.
 
 ## Before you post the plan
 
@@ -69,7 +74,9 @@ Decisions: <what only a human can decide, each as a decide lane>
 Out:       <what this plan leaves out on purpose>
 Lanes:     <title — who — done when — depends on>
 At open:   <the team's rules these lanes meet when opened, and why: risk, stakes, vocabulary.
-            Your statement, never a question; the rules are in references/team.md>
+            Your statement, never a question; the rules are in references/team.md. If it
+            records none yet, say they are not recorded and name the ones you would expect
+            (risk on a user-facing surface, for one); never write that none apply>
 ```
 
 ## Routing

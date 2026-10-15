@@ -8,12 +8,8 @@ session. A team adopting this skill replaces this file with its own.
 - **Role file**: `observer` in the team home: "Read-only watcher — roster, board, goals, reports;
   holds no lanes, sends no acts". Capabilities `can_message: none`, `can_flag_urgent: false`.
   Unheld today, so the acceptor of this skill is a human.
-- **Two different "observers" exist**; know which you are:
-  - **The observer role** (this skill): an ordinary roster seat with messaging turned off. It sees
-    what any member sees (ADR 407).
-  - **An observer flag** (`musterd team observe <name>`, or the `/live` dashboard): a hidden
-    watcher that emits no presence, graded full or public (ADR 136). A public grade sees only
-    team-wide traffic.
+- **The observer role sees what any member sees** (ADR 407). The watcher for an audience is in
+  the core's charter boundary.
 
 ## What you can read
 

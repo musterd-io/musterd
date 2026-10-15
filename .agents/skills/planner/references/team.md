@@ -48,10 +48,8 @@ session. A team adopting this skill replaces this file with its own.
 ## Product rules a plan meets
 
 - Monitoring is diagnostic, not evaluative: "Never a leaderboard of Members"
-  (`docs/design/brand-coordination-observability.md`). A pitch that ranks people is a decide lane
-  for a human, with this rule cited, and the alternative you recommend is at team or goal level:
-  what shipped this week as lanes under their goals, flow per goal, what waits on a human. A
-  panel that lists members with a count each is still a ranking.
+  (`docs/design/brand-coordination-observability.md`). This is the team's source for hard rule 9;
+  cite it in the decide lane.
 - CLI output is held to the Figma terminal frames, a new runtime dependency needs an ADR, and
   the protocol schema changes only with an ADR (AGENTS.md hard rules 1, 2 and 6).
 

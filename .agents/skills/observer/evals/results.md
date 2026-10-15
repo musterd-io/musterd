@@ -112,3 +112,17 @@ facts about lanes it was not shown (the baseline carried izzo's stalled lane int
 Where it lost: `team-which-observer`. Neither answer named the public watcher (a watch link or a
 public-grade observer); the skill run said team.md should list it and stopped. That is musterd
 product knowledge, not a team fact, so it belongs in the core or a reference.
+
+## Run 4 — 2026-10-15, after the blank-team fixes (lane `01M50TPMMA`)
+
+- **Fix:** the charter boundary says an audience is not a seat and names the public watcher (a watch
+  link or `musterd team observe`, graded public, ADR 136); `team.md` no longer holds it.
+- **Runs:** the one case that lost in the run above, `with_skill` only, set up the same way (scratch
+  repository, shipped form with the blank `team.md`, Opus 5.5, read-only). The baseline is that
+  run's `without_skill` answers, unchanged.
+- **Grading:** one grader blind to which answer was which (seed 20261016), against the same
+  expectations.
+
+| Case | Before: craft · readiness · preferred | After: craft · readiness · preferred |
+| --- | --- | --- |
+| team-which-observer | 2/3 · 5 · without skill | 3/3 · 8 · with skill |

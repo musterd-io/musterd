@@ -183,3 +183,23 @@ Where it lost:
 - `prose-deslop-announcement`, `prose-readme-edit`: equal on expectations, lower on readiness,
   because the skill run appended a note to a request that said "return only the post".
 - `fundraising-traction-answer`: all placeholders, where the baseline kept our dated usage line.
+
+## Run 5 — 2026-10-15, after the blank-team fixes (lane `01M50TPMMA`)
+
+- **Fix:** `references/charts.md` §4: when the session cannot run code, deliver the SVG with the
+  arithmetic shown, marked "not rendered", and leave rendering to the requester; with no palette
+  in `team.md`, use neutral grey marks and say the brand shade is still to choose.
+- **Runs:** the two chart cases that lost in the run above, `with_skill` only, set up the same way (scratch
+  repository, shipped form with the blank `team.md`, Opus 5.5, read-only). The baseline is that
+  run's `without_skill` answers, unchanged.
+- **Grading:** one grader blind to which answer was which (seed 20261016), against the same
+  expectations.
+
+| Case | Before: craft (+team) · readiness · preferred | After: craft (+team) · readiness · preferred |
+| --- | --- | --- |
+| charts-brand-bar | 0/4 (+0/1) · 2 · without skill | 4/4 (+0/1) · 6 · with skill |
+| charts-latency-distribution | 2/4 · 3 · without skill | 4/4 · 7 · with skill |
+
+Both charts now ship as SVG with n, min, max and sum checked, a source line naming the data as
+fictional, `role="img"` with title and desc, and dark-theme styles. One factual error: it put
+`#E1AD01` on white at 2.3:1 (it is 2.06:1); the conclusion that it fails 3:1 stands.
