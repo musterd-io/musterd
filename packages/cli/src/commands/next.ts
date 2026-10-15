@@ -47,8 +47,9 @@ export function upNextCountCopy(brief: {
 
 function laneLine(l: Lane, tail = ''): string {
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
+  const areas = l.areas?.length ? theme.meta(` · ${l.areas.join(', ')}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
-  return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${branch}${tail}`;
+  return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${areas}${branch}${tail}`;
 }
 
 /**

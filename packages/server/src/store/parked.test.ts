@@ -34,6 +34,7 @@ function lane(state: Lane['state'], extra: Partial<Lane> = {}): Lane {
     owner_seat: state === 'open' || state === 'parked' ? null : 'fifty',
     role: null,
     scope: [],
+    areas: [],
     depends_on: [],
     branch: null,
     goal_id: null,

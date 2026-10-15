@@ -460,6 +460,11 @@ function LaneCard({
           </span>
         )}
         {lane.goal_id && <span className="lc-card__chip lc-card__chip--goal">{lane.goal_id}</span>}
+        {(lane.areas ?? []).map((area) => (
+          <span key={area} className="lc-card__chip">
+            {area}
+          </span>
+        ))}
         {lane.source_ref && (
           <SourceChip sourceRef={lane.source_ref} href={sourceRefHref(lane.detail)} />
         )}

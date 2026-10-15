@@ -287,6 +287,18 @@ export const LADDER: PortableMigration[] = [
 );
 CREATE INDEX IF NOT EXISTS idx_audit_archive_team_month ON audit_archive(team_id, month)`,
   },
+  {
+    // v98 — ADR 582 §3 (lane 01M4VKSDJH): explicit area override on a lane (`areas_json`: JSON array
+    // of area names; null means use the areas derived at read time from `surface_globs`).
+    version: 98,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('areas_json')) db.exec('ALTER TABLE lanes ADD COLUMN areas_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS areas_json TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

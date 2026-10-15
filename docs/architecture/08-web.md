@@ -211,8 +211,8 @@ live/
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
   OfficeKey.tsx                 // "how to read the office" — the four postures in a closable corner card (ADR 464 §3.4), /live only
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
-  TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
-  teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
+  TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
+  teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
   briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
   NowOverlay.tsx                // the Now card's shell (lazy chunk): overlay / full screen, docked into the topbar's "Now" chip (portalled); opens itself once per period (nowWhen.ts)

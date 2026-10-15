@@ -491,6 +491,35 @@ describe('lane commands', () => {
     expect(l2.find((l) => l.id === id)?.stakes).toBe('high');
   });
 
+  it('derives areas from --surface and supports declared --area overrides and clearing (ADR 582 §3)', async () => {
+    const id = await openLane(['derived', '--surface', 'packages/server/src/store/lanes.ts']);
+    const b1 = JSON.parse((await capture(() => lanesCommand(parseArgs(['--json'])))).out) as {
+      lanes: { id: string; areas: string[]; declared_areas?: string[] }[];
+    };
+    const l1 = b1.lanes.find((l) => l.id === id)!;
+    expect(l1.areas).toEqual(['server']);
+    expect(l1.declared_areas).toBeUndefined();
+
+    // Declared override replaces derived areas
+    const upd = await capture(() => laneCommand(parseArgs(['update', id, '--area', 'ui,docs'])));
+    expect(upd.out).toContain('· ui, docs');
+    const b2 = JSON.parse((await capture(() => lanesCommand(parseArgs(['--json'])))).out) as {
+      lanes: { id: string; areas: string[]; declared_areas?: string[] }[];
+    };
+    const l2 = b2.lanes.find((l) => l.id === id)!;
+    expect(l2.areas).toEqual(['ui', 'docs']);
+    expect(l2.declared_areas).toEqual(['ui', 'docs']);
+
+    // Clearing with `--area none` restores derived areas
+    await capture(() => laneCommand(parseArgs(['update', id, '--area', 'none'])));
+    const b3 = JSON.parse((await capture(() => lanesCommand(parseArgs(['--json'])))).out) as {
+      lanes: { id: string; areas: string[]; declared_areas?: string[] }[];
+    };
+    const l3 = b3.lanes.find((l) => l.id === id)!;
+    expect(l3.areas).toEqual(['server']);
+    expect(l3.declared_areas).toBeUndefined();
+  });
+
   it('rejects malformed subcommands and missing args with usage', async () => {
     await expect(laneCommand(parseArgs([]))).rejects.toThrow(/usage/);
     await expect(laneCommand(parseArgs(['open']))).rejects.toThrow(/usage/);

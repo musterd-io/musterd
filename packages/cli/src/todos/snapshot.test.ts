@@ -16,6 +16,7 @@ function lane(id: string, state: Lane['state'], updated_at: number, owner = 'dol
     owner_seat: owner,
     role: null,
     scope: [],
+    areas: [],
     depends_on: [],
     branch: null,
     goal_id: null,

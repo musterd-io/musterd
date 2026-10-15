@@ -85,6 +85,7 @@ function laneFix(id: string, state: LaneState): Lane {
     owner_seat: null,
     role: null,
     scope: [],
+    areas: [],
     depends_on: [],
     branch: null,
     goal_id: null,

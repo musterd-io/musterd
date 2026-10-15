@@ -29,13 +29,13 @@ import { claimSeams, renderClaims } from './laneClaims.js';
 const USAGE =
   'usage:\n' +
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id>\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--clear-merged] [--abandon-reason "<why>"]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
@@ -99,6 +99,7 @@ export function renderLane(l: Lane): string {
   const deps = l.depends_on.length ? theme.meta(` deps:${l.depends_on.length}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
+  const areas = l.areas?.length ? theme.meta(` · ${l.areas.join(', ')}`) : '';
   // ADR 561: the issue the lane came from.
   // Stripped: a fold stores what another daemon sent, and a ref names text from outside the team.
   const src = l.source_ref ? theme.meta(` ⌁ ${plainTerminalText(l.source_ref)}`) : '';
@@ -111,7 +112,7 @@ export function renderLane(l: Lane): string {
             : ''),
       )
     : '';
-  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${src}${surface}${deps}${branch}${parked}`;
+  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${areas}${src}${surface}${deps}${branch}${parked}`;
 }
 
 function renderWarnings(warnings: LaneWarning[]): void {
@@ -211,6 +212,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
         : {}),
+      ...(list(parsed.flags, 'area') !== undefined ? { areas: list(parsed.flags, 'area')! } : {}),
       ...(riskRaw !== undefined ? { risk: parseRisks(riskRaw) } : {}),
       ...(list(parsed.flags, 'depends') !== undefined
         ? { depends_on: list(parsed.flags, 'depends')! }
@@ -410,6 +412,14 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
+        : {}),
+      ...(list(parsed.flags, 'area') !== undefined
+        ? {
+            areas:
+              list(parsed.flags, 'area')!.length === 1 && list(parsed.flags, 'area')![0] === 'none'
+                ? null
+                : list(parsed.flags, 'area')!,
+          }
         : {}),
       ...(list(parsed.flags, 'depends') !== undefined
         ? { depends_on: list(parsed.flags, 'depends')! }

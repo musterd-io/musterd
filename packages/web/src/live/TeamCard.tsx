@@ -43,7 +43,13 @@ export function TeamCard({
   const [open, setOpen] = useState(false);
   const badge = modelBadge(card.member);
   const age = elapsed(card.since, now);
-  const meta = [card.goal ? `for ${card.goal}` : null, age].filter(Boolean).join(' · ');
+  const meta = [
+    card.goal ? `for ${card.goal}` : null,
+    card.areas?.length ? card.areas.join(', ') : null,
+    age,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const showLogo = badge.source !== 'human' && badge.source !== 'service';
   // Feature-skew (ADR 148): the one actionable skew, carried over from the roster row's name line.
   const m = card.member;

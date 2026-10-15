@@ -3,6 +3,7 @@ import {
   ACCEPTANCE_STALE_MS,
   compareGoals,
   DEFAULT_PROJECT,
+  deriveLaneAreas,
   emptyPoolFromCandidates,
   isAwaitingAcceptance,
   LANE_CONTENDING_STATES,
@@ -67,6 +68,8 @@ interface LaneRow {
   source_ref: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
+  /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
+  areas_json: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -75,7 +78,15 @@ interface LaneRow {
   updated_at: number;
 }
 
+function normalizeDeclaredAreas(areas: readonly string[] | null | undefined): string[] | null {
+  if (!areas || areas.length === 0) return null;
+  const out = deriveLaneAreas([], areas);
+  return out.length > 0 ? out : null;
+}
+
 function rowToLane(row: LaneRow, teamSlug: string): Lane {
+  const scope = JSON.parse(row.surface_globs) as string[];
+  const declaredAreas = row.areas_json ? (JSON.parse(row.areas_json) as string[]) : undefined;
   return {
     id: row.id,
     team: teamSlug,
@@ -88,7 +99,9 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
     role: row.role,
     // The DB column keeps its historical `surface_globs` name (internal, ADR 296 tier 3); the
     // epoch-14 wire mirror of that key dropped at epoch 16.
-    scope: JSON.parse(row.surface_globs) as string[],
+    scope,
+    areas: deriveLaneAreas(scope, declaredAreas),
+    ...(declaredAreas && declaredAreas.length > 0 ? { declared_areas: declaredAreas } : {}),
     depends_on: JSON.parse(row.depends_on) as string[],
     branch: row.branch,
     goal_id: row.goal_id,
@@ -247,6 +260,7 @@ export async function openLane(
       ? resolveStakesDefault((await getPolicy(db, teamId)).stakes_defaults, surfaces)
       : undefined;
   const stakes = input.stakes ?? rule?.stakes ?? 'normal';
+  const declaredAreas = normalizeDeclaredAreas(input.areas);
   const row: LaneRow = {
     id: ulid(),
     team_id: teamId,
@@ -275,6 +289,7 @@ export async function openLane(
     abandon_reason: null,
     unfinished_todos_json: null,
     claims_json: null,
+    areas_json: declaredAreas ? JSON.stringify(declaredAreas) : null,
     source_ref: input.source_ref ?? null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
@@ -283,8 +298,8 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
@@ -304,6 +319,7 @@ export async function openLane(
       row.stakes,
       row.stakes_provenance,
       row.merged_json,
+      row.areas_json,
       row.source_ref,
       row.state,
       row.created_by,
@@ -323,6 +339,7 @@ export async function openLane(
       kind: row.kind,
       role: row.role,
       scope: input.scope ?? [],
+      ...(declaredAreas ? { declared_areas: declaredAreas } : {}),
       depends_on: input.depends_on ?? [],
       branch: row.branch,
       goal_id: row.goal_id,
@@ -586,6 +603,10 @@ async function updateLaneInTx(
     patch.claims !== undefined
       ? mergeClaims(existing.claims ?? [], patch.claims)
       : (existing.claims ?? null);
+  const declaredAreas =
+    patch.areas !== undefined
+      ? normalizeDeclaredAreas(patch.areas)
+      : (existing.declared_areas ?? null);
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -612,6 +633,7 @@ async function updateLaneInTx(
     parked_json: parked ? JSON.stringify(parked) : null,
     follows_up_json: followsUp !== null ? JSON.stringify(followsUp) : null,
     claims_json: claims && claims.length > 0 ? JSON.stringify(claims) : null,
+    areas_json: declaredAreas ? JSON.stringify(declaredAreas) : null,
     abandon_reason: abandonReason,
     unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
     source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
@@ -670,6 +692,7 @@ async function updateLaneInTx(
     'unfinished_todos_json',
     'source_ref',
     'claims_json',
+    'areas_json',
     'state',
     'claimed_at',
     'resolved_at',
@@ -716,6 +739,7 @@ const AUDITED_LANE_FIELDS = [
   'branch',
   'goal_id',
   'scope',
+  'declared_areas',
   'depends_on',
   'risk',
   'stakes',
@@ -840,8 +864,8 @@ export async function countLanesBefore(
  */
 export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane): Promise<boolean> {
   const r = await db.run(
-    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, areas_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`,
     [
       lane.id,
@@ -864,6 +888,9 @@ export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane)
       lane.follows_up !== undefined ? JSON.stringify(lane.follows_up) : null,
       lane.abandon_reason ?? null,
       lane.unfinished_todos ? JSON.stringify(lane.unfinished_todos) : null,
+      lane.declared_areas && lane.declared_areas.length > 0
+        ? JSON.stringify(lane.declared_areas)
+        : null,
       lane.source_ref ?? null,
       lane.state,
       lane.created_by,

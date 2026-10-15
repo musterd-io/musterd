@@ -26,6 +26,8 @@ export interface TeamCard {
   source: 'lane' | 'status' | null;
   /** The shown lane's goal title, when it names one. */
   goal: string | null;
+  /** The shown lane's derived or declared areas (ADR 582 §3). */
+  areas: readonly string[];
   /** `claimed_at` (else `updated_at`) of the shown lane — what `elapsed` ages against. */
   since: number | null;
   /** Other in-flight lanes this member owns, beyond the one shown. */
@@ -111,6 +113,7 @@ export function teamCards(
       title: lane ? lane.title : status,
       source: lane ? 'lane' : status ? 'status' : null,
       goal: lane?.goal_id ? (goalTitle.get(lane.goal_id) ?? null) : null,
+      areas: lane?.areas ?? [],
       since: lane ? recency(lane) : null,
       moreLanes: Math.max(0, lanes.length - 1),
     };

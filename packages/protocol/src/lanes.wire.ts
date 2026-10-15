@@ -35,6 +35,96 @@ export const LANE_STAKES_PROVENANCE = ['declared', 'defaulted'] as const;
 export type LaneStakesProvenance = (typeof LANE_STAKES_PROVENANCE)[number];
 
 /**
+ * Canonical area names (ADR 582 §3) and the path segments that derive them from a lane's `scope`
+ * globs. Kept here in `lanes.wire.ts` so the derivation is validator-free and shared by the daemon,
+ * the CLI, the MCP adapter, and the web board.
+ */
+export const LANE_AREAS = [
+  'ui',
+  'server',
+  'cli',
+  'mcp',
+  'protocol',
+  'docs',
+  'ci',
+  'tests',
+] as const;
+export type LaneArea = (typeof LANE_AREAS)[number];
+
+/**
+ * Which path segments name each area (ADR 582 §3). Ordered by {@link LANE_AREAS} so derived areas
+ * always appear in one deterministic order across a lane's globs.
+ */
+export const AREA_PATH_SEGMENTS: Readonly<Record<LaneArea, readonly string[]>> = {
+  ui: ['web', 'ui', 'frontend', 'client', 'components', 'styles', 'site', 'console', 'mobile'],
+  server: ['server', 'api', 'backend', 'whiteboard'],
+  cli: ['cli'],
+  mcp: ['mcp'],
+  protocol: ['protocol', 'telemetry'],
+  docs: ['docs', 'content', '.agents', '.claude', '.cursor', '.grok', '.opencode'],
+  ci: ['.github', 'ci', 'scripts', 'deploy'],
+  tests: ['test', 'tests', 'e2e'],
+};
+
+const SEGMENT_TO_AREA: ReadonlyMap<string, LaneArea> = (() => {
+  const m = new Map<string, LaneArea>();
+  for (const area of LANE_AREAS) {
+    for (const seg of AREA_PATH_SEGMENTS[area]) m.set(seg.toLowerCase(), area);
+  }
+  return m;
+})();
+
+/**
+ * Derive a lane's areas from its `scope` globs, or return its `declaredAreas` override when one was
+ * set (ADR 582 §3: "Declared areas replace the derived ones; they do not add to them").
+ *
+ * A brace expansion (`{render.ts, render.test.ts}`) is stripped to its inner tokens before matching
+ * so a brace-grouped test file still derives `tests` and a top-level `*.md` derives `docs`.
+ */
+export function deriveLaneAreas(
+  scope: readonly string[] | undefined,
+  declaredAreas?: readonly string[] | null,
+): string[] {
+  if (declaredAreas && declaredAreas.length > 0) {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of declaredAreas) {
+      const a = raw.trim().toLowerCase();
+      if (a && !seen.has(a)) {
+        seen.add(a);
+        out.push(a);
+      }
+    }
+    return out;
+  }
+  if (!scope || scope.length === 0) return [];
+  const found = new Set<LaneArea>();
+  for (const glob of scope) {
+    const clean = glob.trim().replace(/^\/+/, '');
+    if (!clean) continue;
+    const rawSegs = clean.split('/').filter(Boolean);
+    if (rawSegs.length === 1 && /\.mdx?$/i.test(rawSegs[0]!.replace(/[{}]/g, ''))) {
+      found.add('docs');
+    }
+    for (const rawSeg of rawSegs) {
+      // Split brace-grouped tokens (`{a,b}`) so each token is checked on its own.
+      const tokens = rawSeg
+        .replace(/[{}]/g, ',')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      for (const tok of tokens) {
+        const lower = tok.toLowerCase();
+        const direct = SEGMENT_TO_AREA.get(lower);
+        if (direct) found.add(direct);
+        if (/\.(?:test|spec|e2e)\.[a-z0-9]+$/i.test(lower)) found.add('tests');
+      }
+    }
+  }
+  return LANE_AREAS.filter((a) => found.has(a));
+}
+
+/**
  * The two spellings of the post-merge acceptance stage (ADR 192). Read through this rather than
  * comparing against either name: `ready_for_review` is the ADR 169 spelling still on the wire.
  */

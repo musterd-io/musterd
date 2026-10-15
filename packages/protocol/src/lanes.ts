@@ -44,6 +44,9 @@ export const DEFAULT_PROJECT = 'default';
 export {
   ACCEPTANCE_MOVES_NOTICE,
   ACCEPTANCE_STALE_MS,
+  AREA_PATH_SEGMENTS,
+  deriveLaneAreas,
+  LANE_AREAS,
   LANE_STAKES,
   LANE_STAKES_PROVENANCE,
   LANE_STATES,
@@ -57,6 +60,7 @@ export {
   laneSupersededAck,
   laneVerdictAck,
   type EmptyPool,
+  type LaneArea,
   type LaneEscalationAck,
   type LaneEscalationWire,
   type LaneSupersededAck,
@@ -426,6 +430,17 @@ export const LaneSchema = z.object({
   /** Declared scope, e.g. ["packages/server/src/store/**"] — the paths this lane touches, and the
    *  overlap-check input. Canonical token (ADR 296; was `surface_globs`). */
   scope: z.array(z.string()),
+  /**
+   * Effective areas for this lane (ADR 582 §3): the declared override when `declared_areas` is set,
+   * else derived at read time from `scope` (`deriveLaneAreas`). Defaulted to `[]` so an older
+   * daemon's response or a minimal test fixture still parses.
+   */
+  areas: z.array(z.string()).default([]),
+  /**
+   * Explicit area override (ADR 582 §3): when set, replaces the areas derived from `scope`.
+   * Omitted when the lane uses derived areas.
+   */
+  declared_areas: z.array(z.string()).optional(),
   /** Lane ids this lane builds on. The unmet-dependency-check input. */
   depends_on: z.array(z.string()),
   /** The git branch/artifact carrying the work — what `lane_handoff` transfers. */
@@ -598,6 +613,8 @@ export const OpenLaneSchema = z.object({
   role: z.string().optional(),
   /** The paths this lane touches (ADR 296). */
   scope: z.array(z.string()).optional(),
+  /** Explicit area override (ADR 582 §3) — replaces the areas derived from `scope`. */
+  areas: z.array(z.string().min(1).max(32)).max(16).optional(),
   depends_on: z.array(z.string()).optional(),
   branch: z.string().optional(),
   /** Link this lane to a Goal at open (ADR 084) — the id `musterd next` groups + derives status by. */
@@ -634,6 +651,8 @@ export const UpdateLaneSchema = z.object({
   project: z.string().optional(),
   /** Re-declare the paths this lane touches (ADR 296). */
   scope: z.array(z.string()).optional(),
+  /** Set or clear (with `null` or `[]`) the explicit area override (ADR 582 §3). */
+  areas: z.array(z.string().min(1).max(32)).max(16).nullable().optional(),
   depends_on: z.array(z.string()).optional(),
   branch: z.string().optional(),
   /** Re-link (or clear, with null) this lane's Goal (ADR 084). */
@@ -1236,6 +1255,12 @@ export function laneDetailLines(d: LaneDetail): string[] {
   const l = d.lane;
   const out: string[] = [];
   if (l.detail) out.push(`brief: ${l.detail}`);
+  const areas = l.areas ?? [];
+  if (areas.length > 0) {
+    out.push(
+      `areas: ${areas.join(', ')}${l.declared_areas && l.declared_areas.length > 0 ? ' (declared)' : ''}`,
+    );
+  }
   if (l.merged) {
     const m = l.merged;
     const parts = [
