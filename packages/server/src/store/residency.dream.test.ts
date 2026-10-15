@@ -213,4 +213,27 @@ withDrivers('residency — the dream lease (ADR 494)', (o) => {
     expect(await claim(db, team.id, NIGHT)).toEqual([]);
     expect(nick.name).toBe('nick');
   });
+
+  it('holds a dream at the cap and does not spend the night (ADR 611)', async () => {
+    const { db, team } = await seed();
+    vi.setSystemTime(NIGHT);
+    const held = await claimWakeLeases(
+      db,
+      team.id,
+      'revive',
+      HOST,
+      PRESENCE_TIMEOUT_MS,
+      NIGHT,
+      { creatorId: null, teamWide: true },
+      { capUsd: 1, totalUsd: 1, windowDays: 7 },
+    );
+    expect(held).toEqual([]);
+    const gates = (await listAudit(db, team.id)).filter((r) => r.action === 'action.gate');
+    expect(gates).toHaveLength(1);
+    expect(JSON.parse(String(gates[0]!.detail))).toMatchObject({
+      cause: 'spend_cap',
+      outcome: 'denied_held',
+    });
+    expect(await claim(db, team.id, NIGHT)).toHaveLength(1);
+  });
 });

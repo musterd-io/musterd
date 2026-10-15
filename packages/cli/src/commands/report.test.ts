@@ -163,12 +163,15 @@ describe('report command', () => {
     expect(under.out).toContain('cap $20.00');
     expect(under.out).toContain('under');
     expect(under.out).not.toContain('OVER');
+    expect(under.out).not.toContain('agent wakes held');
     expect(under.out).not.toContain('no priced spend');
 
     await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '12'])));
     const exact = await capture(() => reportCommand(parseArgs(['residency'])));
     expect(exact.out).toContain('cap $12.00');
     expect(exact.out).toContain('OVER');
+    expect(exact.out).toContain('agent wakes held');
+    expect(exact.out).toContain('window 7d');
   });
 
   it('rejects an unknown altitude', async () => {

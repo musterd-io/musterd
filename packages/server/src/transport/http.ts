@@ -183,7 +183,7 @@ import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
-import { adjudicateGate, recordActorAttestation } from '../protocol/gate.js';
+import { adjudicateGate, readSpendCapBreach, recordActorAttestation } from '../protocol/gate.js';
 import {
   acceptanceAskBody,
   deliverLaneAskAct,
@@ -4434,15 +4434,19 @@ export async function handleHttp(
         // ADR 357: this poll is the host's heartbeat. Recorded before the lease claim so a host
         // that polls and gets nothing still counts as alive — the roster's `enrolled_host_stale`
         // is derived from it.
-        await recordHostSeen(ctx.db, team.id, body.host, Date.now(), scope.creatorId);
+        const now = Date.now();
+        await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        // ADR 611. One read per poll. A throw inside the reader allows the poll.
+        const breach = await readSpendCapBreach(ctx.db, team.id, now);
         const orders = await claimWakeLeases(
           ctx.db,
           team.id,
           team.slug,
           body.host,
           ctx.config.presenceTimeoutMs,
-          Date.now(),
+          now,
           scope,
+          breach,
         );
         return sendJson(res, 200, { orders });
       }

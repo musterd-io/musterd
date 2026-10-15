@@ -273,7 +273,9 @@ const SPEND_CAP_NOTE = 'measured wake cost, not payments';
 function spendCapBound(k: NonNullable<Report['wake']>): string {
   if (k.spend_cap_usd === undefined || k.cost_usd_total === null) return '';
   const state = k.spend_over_cap ? theme.warn('OVER') : theme.ok('under');
-  return ` · cap $${k.spend_cap_usd.toFixed(2)} ${state} ${theme.meta(`· ${SPEND_CAP_NOTE}`)}`;
+  // ADR 611. Under stays the ADR 602 line. Over names the hold and the window.
+  const held = k.spend_over_cap ? theme.meta(` · agent wakes held · window ${k.window_days}d`) : '';
+  return ` · cap $${k.spend_cap_usd.toFixed(2)} ${state}${held} ${theme.meta(`· ${SPEND_CAP_NOTE}`)}`;
 }
 
 /** The cap with no priced total. Not a warn, and not the word "under". */

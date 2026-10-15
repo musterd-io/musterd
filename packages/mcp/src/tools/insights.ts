@@ -125,10 +125,11 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       );
       if (k.cost_usd_total !== null) {
         // ADR 602. Empty unless a cap is set, so an unset team keeps today's line.
+        const held = k.spend_over_cap ? ` · agent wakes held · window ${k.window_days}d` : '';
         const bound =
           k.spend_cap_usd === undefined
             ? ''
-            : ` · cap $${k.spend_cap_usd.toFixed(2)} ${k.spend_over_cap ? 'OVER' : 'under'} · measured wake cost, not payments`;
+            : ` · cap $${k.spend_cap_usd.toFixed(2)} ${k.spend_over_cap ? 'OVER' : 'under'}${held} · measured wake cost, not payments`;
         lines.push(
           `  cost $${k.cost_usd_total.toFixed(2)} total · $${k.cost_usd_per_wake!.toFixed(2)}/wake ` +
             `(${k.cost_reported} of ${k.wakes} reported)${bound}`,

@@ -156,7 +156,9 @@ describe('team policy command', () => {
     const set = await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '12.5'])));
     expect(set.code).toBe(0);
     expect(set.out).toContain('spend cap: $12.50 of measured wake cost, 7d');
-    expect(set.out).toContain('nothing is denied');
+    expect(set.out).toContain('agent wakes are held when the 7-day total reaches the cap');
+    expect(set.out).toContain('a human still passes');
+    expect(set.out).not.toContain('nothing is denied');
     const view = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
     expect(view).toContain('spend cap: $12.50 of measured wake cost, 7d');
     expect(view.split('\n').find((line) => line.includes('spend cap:'))).not.toContain('default');

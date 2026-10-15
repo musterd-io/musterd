@@ -10,14 +10,17 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
+import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
+import { pricedWakeCostUsd, WAKE_WINDOW_DAYS } from '../store/insights.js';
 import { laneCoveringPath } from '../store/lanes.js';
 import { listMembers } from '../store/members.js';
 import { unblockerReachable } from '../store/reachability.js';
 import { getRoleSkill } from '../store/roles.js';
 import { type MemberRow, type TeamRow, toMember } from '../store/rows.js';
-import { getPolicy } from '../store/teams.js';
+import { getPolicy, spendCapUsd } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -396,4 +399,36 @@ export async function recordActorAttestation(
           : { target: att.target }),
     },
   });
+}
+
+/** ADR 611. What one wake poll found when the 7-day priced total is at or over the cap. */
+export interface SpendCapBreach {
+  capUsd: number;
+  totalUsd: number;
+  windowDays: number;
+}
+
+/**
+ * ADR 611. Null when the cap is unset, the priced total is null, or the total is under the cap.
+ * Equality is over. A throw is a failed read: log it and let the poll proceed.
+ */
+export async function readSpendCapBreach(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<SpendCapBreach | null> {
+  try {
+    const cap = spendCapUsd(await getPolicy(db, teamId));
+    if (cap === null) return null;
+    const total = await pricedWakeCostUsd(db, teamId, now);
+    if (total === null || total < cap) return null;
+    return { capUsd: cap, totalUsd: total, windowDays: WAKE_WINDOW_DAYS };
+  } catch (err) {
+    log.warn({
+      msg: 'spend cap read failed open',
+      team: teamId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }

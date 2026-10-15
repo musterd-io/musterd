@@ -515,8 +515,9 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * any teammate issue a member-created agent's connect link (team agents); `sponsor` (the default)
  * keeps it to the sponsor or an admin; the daemon accepts `any_member` only with
  * `--invite-requires-expiry on` (ADR 463 §4.3), so both may ride one call. ADR 459 (on ADR 449 §3): `--sponsored-agent-cap <n>`
- * tunes live member-created agents per sponsor (default 3). ADR 602: `--spend-cap <usd>` sets the team's
- * 7-day measured-wake-cost cap (`off` clears it; unset is unbounded). The report shows it. Nothing is denied.
+ * tunes live member-created agents per sponsor (default 3). ADR 602 / ADR 611: `--spend-cap <usd>` sets the team's
+ * 7-day measured-wake-cost cap (`off` clears it; unset is unbounded). At the cap, new agent wakes are held
+ * and a human still passes.
  * ADR 506: `--acceptance-review-window <min>`
  * sets how long a lane-review ask waits before its owner may self-close on silence (default 20). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
@@ -872,7 +873,7 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
         hint(
           updated.spend_cap_usd === undefined
             ? 'spend cap off — measured wake cost is unbounded (ADR 602)'
-            : `spend cap: $${updated.spend_cap_usd.toFixed(2)} of measured wake cost, 7d — shown on the report, nothing is denied (ADR 602)`,
+            : `spend cap: $${updated.spend_cap_usd.toFixed(2)} of measured wake cost, 7d — agent wakes are held when the 7-day total reaches the cap; a human still passes`,
         ) + '\n',
       );
     if (reviewWindow !== undefined)

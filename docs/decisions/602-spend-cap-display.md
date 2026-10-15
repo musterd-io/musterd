@@ -29,13 +29,13 @@ Without a stored key, the team cannot see a cap, and lane `01M4SB4BZBQDHWFWH4RXB
 
 4. `deriveWakeMetrics` does not read the cap. The per-seat `over_budget` flag is unchanged. It still means a wake passed the seat's own `budget_usd` report bound, and it still stops nothing.
 
-5. The CLI report prints the cap beside the 7-day total. At or over the cap: `OVER`. Below it: `under`. A null total: `no priced spend`, which is not a warn. The line says the figure is measured wake cost, not payments. A quiet window with a cap set keeps the existing "no wakes" line and adds the cap line after it. A quiet window with no cap stays that one line. `musterd report residency` uses the same renderer. The MCP report digest prints the same words, without color, and adds nothing when the cap is unset.
+5. The CLI report prints the cap beside the 7-day total. At or over the cap: `OVER`. Below it: `under`. A null total: `no priced spend`, which is not a warn. The line says the figure is measured wake cost, not payments. A quiet window with a cap set keeps the existing "no wakes" line and adds the cap line after it. A quiet window with no cap stays that one line. `musterd report residency` uses the same renderer. The MCP report digest prints the same words, without color, and adds nothing when the cap is unset. _(Amended 2026-10-15: when the line says OVER, [ADR 611](611-spend-cap-holds-wakes.md) also prints `agent wakes held` and names the window. Under, unset, and `no priced spend` stay as written here.)_
 
 6. `musterd team policy --spend-cap <usd|off>` is the human write path, the same read-merge-write `POST /policy` as the other knobs. `off` deletes the key. The policy view says `unset (unbounded)` or `$N of measured wake cost, 7d`. It does not say `default`: absence is not a shipped number.
 
 7. No feature-epoch bump. The fields are optional. An older client strips them. An older daemon omits them, and the newer client renders the report it already rendered.
 
-8. Nothing is denied. No gate reads this key.
+8. Nothing is denied. No gate reads this key. _(Amended 2026-10-15: [ADR 611](611-spend-cap-holds-wakes.md) is the gate. This point stands for the key and the display shipped here.)_
 
 ## Consequences
 
@@ -43,6 +43,7 @@ Without a stored key, the team cannot see a cap, and lane `01M4SB4BZBQDHWFWH4RXB
 - Unpriced wakes stay outside the total. The existing unpriced line is that statement. The cap line does not invent a dollar figure for them.
 - Cost that arrives after the wakes that spent it can sit under the cap until the report lands. The spec accepts that overshoot. This record does not close it.
 - The policy view gains one line on every team, including a team with no cap. The report text and the report JSON do not, until a cap is set.
+- _(2026-10-15)_ [ADR 611](611-spend-cap-holds-wakes.md) holds new agent wakes while the 7-day priced total is at or over the cap. The over line names that hold. Humans still pass. Unset still denies nothing.
 - Files past the lane's listed three: `packages/protocol/src/insights.ts` (the report fields), `packages/server/src/store/insights.ts` (attach them in `deriveReport`), `packages/cli/src/commands/team.ts` (the flag), `packages/mcp/src/tools/insights.ts` (the same words on the digest). The report is where a non-admin reads the cap. The flag is how a human sets it.
 
 ## Observability & Evaluation
