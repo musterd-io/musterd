@@ -218,6 +218,8 @@ export const EMPTY_POOL_LIVE_EXCLUSIONS = [
   'unknown_grade',
   'same_model',
   'worker_unattested',
+  // ADR 606: a live dream presence — fenced, so a verdict routed to it can never be answered.
+  'dreaming',
 ] as const;
 export type EmptyPoolLiveExclusion = (typeof EMPTY_POOL_LIVE_EXCLUSIONS)[number];
 

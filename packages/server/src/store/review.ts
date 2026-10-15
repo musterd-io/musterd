@@ -15,6 +15,7 @@ import {
   type Lane,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { isDreaming } from './dream.js';
 import { getMemberByName, listMembers } from './members.js';
 import { hasLivePresence, teamOccupancy } from './presence.js';
 import {
@@ -105,6 +106,11 @@ export type ReviewSelectionExclusion =
   | 'departing'
   | 'service_or_observer'
   | 'no_live_presence'
+  /** Live, and dreaming (ADR 494/606): a dream is fenced to insights/wiki/its own note, so a
+   *  `lane_review` ask routed to it is read and cannot be verdicted — it parks until the reaper
+   *  moves it. The seat is live-but-ineligible, like `busy`, but unlike `busy` there is no point
+   *  asking it at all tonight. */
+  | 'dreaming'
   | 'not_agent'
   | 'busy'
   /** The WORKER's live occupancy attests nothing, so no candidate can be graded against it. This is
@@ -628,6 +634,12 @@ export async function selectReviewCounterpart(
     }
     if (!(await hasLivePresence(db, member.id, presenceTimeoutMs))) {
       candidate.exclusion = 'no_live_presence';
+      continue;
+    }
+    // ADR 606: never route a verdict to a dream — the fence (ADR 494) refuses accept/decline/wait,
+    // so the ask only parks until the reaper moves it (docs/wiki/dream-cannot-verdict-acceptance.md).
+    if (await isDreaming(db, member.id)) {
+      candidate.exclusion = 'dreaming';
       continue;
     }
     // Live peer review is agents-only (ADR 253). Human escalation is a distinct transport path.
