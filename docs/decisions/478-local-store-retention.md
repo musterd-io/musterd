@@ -70,7 +70,9 @@ where a `VACUUM` that needs a second copy of the file is itself a hazard.
   is a second `settings` key beside `content_captured_through`, written by `snapshot.ts` from
   `MAX(ts)` of the captured `audit`.
 - Before deletion the batch is **appended to `~/.musterd/archive/audit-YYYY-MM.jsonl.gz`** (one
-  row per line, the full row). The archive is the local copy of what the corpus already holds;
+  row per line, the full row). _(Amended 2026-10-15: on Cloud the batch goes to the `audit_archive`
+  table instead, in the same transaction as the delete — see the Cloud amendment below, lane
+  01M3W6GWVN.)_ The archive is the local copy of what the corpus already holds;
   it is not read by the daemon and is not a source of truth (`musterd store archive ls` lists it).
 - Rows kept whatever their age, because a daemon read depends on them being there:
   - for each `origin_node`, the row holding `MAX(origin_seq)` — `sync/fold.ts:770` reads it as
