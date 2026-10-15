@@ -1811,8 +1811,7 @@
   min-width: 0;
 }
 .lc-gl-label__verb {
-  min-width: 0;
-  overflow: hidden;
+  overflow: hidden; /* also lets the flex item shrink below its text: min-width resolves to 0 */
   text-overflow: ellipsis;
 }
 .lc-gl-label__ago {
