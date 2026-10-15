@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events';
+import { createServer as createNetServer, type AddressInfo, type Socket } from 'node:net';
 import { describe, expect, it } from 'vitest';
-import { isPlainRead, pgDriver, pgPoolFactory } from './pgDriver.js';
+import { DriverError } from './driver.js';
+import { isPlainRead, PG_POOL_ACQUIRE_TIMEOUT, pgDriver, pgPoolFactory } from './pgDriver.js';
 import { endRequestTiming, requestTiming, withRequestTiming } from './requestTiming.js';
 
 /**
@@ -159,6 +161,53 @@ describe('pgDriver choreography (spec §12.1)', () => {
       code: 'unavailable',
       message: expect.stringContaining('database unreachable'),
     });
+  });
+
+  it('a pool with no client free in time is DriverError("saturated"), not "database unreachable" (lane 01M3ZC3G35)', async () => {
+    const d = pgDriver({
+      ...urls,
+      pools: () => ({
+        async connect() {
+          throw new Error(PG_POOL_ACQUIRE_TIMEOUT);
+        },
+        async end() {},
+      }),
+    });
+    const team = d.forTeam('A');
+    const err = await team.get('SELECT 1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DriverError);
+    expect(err).toMatchObject({ code: 'saturated' });
+    expect((err as Error).message).toMatch(/^database pool exhausted: /);
+    expect((err as Error).message).not.toContain('database unreachable');
+  });
+
+  it('the real pg pool tells the two apart: a full pool is saturated, a connect that times out is unreachable', async () => {
+    // A "database" that accepts TCP and never answers the startup message: the first checkout opens
+    // a connection that times out connecting; the second finds the pool (of one) full and waits in
+    // pg-pool's queue until its own timer fires. Pins the message `isPoolExhausted` matches.
+    const sockets = new Set<Socket>();
+    const silent = createNetServer((sock) => {
+      sockets.add(sock);
+      sock.on('error', () => {});
+      sock.on('close', () => sockets.delete(sock));
+    });
+    await new Promise<void>((r) => silent.listen(0, '127.0.0.1', r));
+    const port = (silent.address() as AddressInfo).port;
+    const url = `postgres://u:p@127.0.0.1:${port}/db`;
+    const d = pgDriver({ appUrl: url, operatorUrl: url, poolSize: 1, acquireTimeoutMs: 150 });
+    try {
+      const first = d.get('SELECT 1').catch((e: unknown) => e);
+      const second = d.get('SELECT 1').catch((e: unknown) => e);
+      const [connecting, queued] = await Promise.all([first, second]);
+      expect(connecting).toMatchObject({ code: 'unavailable' });
+      expect((connecting as Error).message).toMatch(/^database unreachable: /);
+      expect(queued).toMatchObject({ code: 'saturated' });
+      expect((queued as Error).message).toBe(`database pool exhausted: ${PG_POOL_ACQUIRE_TIMEOUT}`);
+    } finally {
+      await d.close();
+      for (const sock of sockets) sock.destroy();
+      await new Promise<void>((r) => silent.close(() => r()));
+    }
   });
 
   it('a statement error carries the SQL, and a dropped connection mid-statement is unavailable too', async () => {

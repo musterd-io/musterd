@@ -1,5 +1,5 @@
 import { ERROR_HTTP_STATUS, type ErrorBody, type ErrorCode } from '@musterd/protocol';
-import { DATABASE_UNREACHABLE_SENTENCE, DriverError } from './db/driver.js';
+import { unavailableSentence } from './db/driver.js';
 
 /** The single server error type. Carries a protocol error code; transports serialize it. */
 export class MusterdError extends Error {
@@ -25,10 +25,10 @@ export class MusterdError extends Error {
 
 /**
  * The server cannot serve right now, for a reason that is one of a small set of STABLE SENTENCES
- * (cloud spec §5.5 / §7: "database unreachable", "console unreachable") — a probe or a banner
- * matches the message, so it is never free text. HTTP 503. The wire `code` is `server_error`: the
- * protocol has no unavailable code, and adding one is an ADR (hard rule 1); the status and the
- * sentence carry the meaning.
+ * (cloud spec §5.5 / §7: "database unreachable", "database pool exhausted", "console
+ * unreachable") — a probe or a banner matches the message, so it is never free text. HTTP 503. The
+ * wire `code` is `server_error`: the protocol has no unavailable code, and adding one is an ADR
+ * (hard rule 1); the status and the sentence carry the meaning.
  */
 export class ServiceUnavailable extends MusterdError {
   constructor(sentence: string) {
@@ -91,10 +91,10 @@ export class SessionLeaseRefused extends MusterdError {
 /** Coerce any thrown value into a MusterdError (unknown errors become server_error). */
 export function asMusterdError(err: unknown): MusterdError {
   if (err instanceof MusterdError) return err;
-  // An unreachable store is an honest 503 with the stable sentence (cloud spec §7) — never a 500
-  // carrying the driver's socket error, which would leak a host and match no probe.
-  if (err instanceof DriverError && err.code === 'unavailable')
-    return new ServiceUnavailable(DATABASE_UNREACHABLE_SENTENCE);
+  // An unreachable or saturated store is an honest 503 with its stable sentence (cloud spec §7) —
+  // never a 500 carrying the driver's socket error, which would leak a host and match no probe.
+  const sentence = unavailableSentence(err);
+  if (sentence) return new ServiceUnavailable(sentence);
   const message = err instanceof Error ? err.message : String(err);
   return new MusterdError('server_error', message);
 }
@@ -102,7 +102,7 @@ export function asMusterdError(err: unknown): MusterdError {
 /** Sanitize errors at the REST and remote MCP response boundaries. */
 export function asMusterdHttpError(err: unknown): MusterdError {
   if (err instanceof MusterdError) return err;
-  if (err instanceof DriverError && err.code === 'unavailable')
-    return new ServiceUnavailable(DATABASE_UNREACHABLE_SENTENCE);
+  const sentence = unavailableSentence(err);
+  if (sentence) return new ServiceUnavailable(sentence);
   return new MusterdError('server_error', INTERNAL_SERVER_ERROR_SENTENCE);
 }

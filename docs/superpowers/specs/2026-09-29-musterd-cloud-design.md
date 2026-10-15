@@ -399,7 +399,8 @@ what make that widening defensible; ADR 475's Consequences name it.
    every credential is minted for exactly one team; RLS is the last line.
 4. **Per-team rate limits and quotas**, at the edge and in the server.
 5. **`/health` says ok or not**, nothing else. A 503's reason (§7) is one of a small set of
-   **stable sentences** ("database unreachable", "schema newer than this build"), so a probe or a
+   **stable sentences** ("database unreachable", "database pool exhausted", "schema newer than this
+   build"), so a probe or a
    banner can match it; it is not free text.
 6. **Schema version guard** (§6): refuse to start if the schema is newer than the binary knows.
 
@@ -453,6 +454,14 @@ booting race) and stop-the-world (every change is downtime for every team).
   shows a banner; recovery is automatic. No serving
   of stale reads as if current, no local write queues — both create a reconciliation problem
   after the outage that is worse than the outage.
+- **Pool exhausted is not unreachable** *(2026-10-14, lane 01M3ZC3G35)*. Two causes, two stable
+  sentences, both a 503 on every surface (REST, OAuth, `/mcp`, `/health`, the `/live` banner):
+  **"database unreachable"** — a connection could not be made or was lost (refused, reset, DNS, a
+  new connection timing out, Postgres not serving); **"database pool exhausted"** — the database is
+  reachable but every pooled client was checked out and none came back within the acquire timeout,
+  so the fault is this server's load, not the database. The 2026-10-02 load test answered 3,565
+  requests "database unreachable" while Neon served throughout (a starved vCPU held every
+  connection); an operator reading it would have chased an outage that was not there.
 - **Observability.** OpenTelemetry traces (the server already emits `traceparent`s) and error
   tracking to a vendor; Neon's metrics; a public status page fed by a **synthetic probe** every
   minute that performs a real sign-in and inbox read. *(review)* The probe signs in as a
@@ -665,8 +674,10 @@ become Postgres's history by accident).
 
 ### 12.4 Errors and dependencies
 
-An unreachable database or an exhausted pool (after a bounded wait) surfaces as
-`DriverError('unavailable')` with the stable sentence "database unreachable", for 1C's 503 to match. A
+An unreachable database surfaces as `DriverError('unavailable')` with the stable sentence "database
+unreachable", for 1C's 503 to match; an exhausted pool (after a bounded wait) as
+`DriverError('saturated')` with "database pool exhausted" — the same 503, its own sentence (§7,
+amended 2026-10-14, lane 01M3ZC3G35). A
 failed `SET LOCAL` fails its transaction; it is never retried on another client. Postgres errors carry
 the translated statement, as PGlite's already do.
 

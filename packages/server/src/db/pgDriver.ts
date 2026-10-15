@@ -8,6 +8,7 @@ import {
   DATABASE_UNREACHABLE_SENTENCE,
   DriverError,
   noTransaction,
+  POOL_EXHAUSTED_SENTENCE,
   type Driver,
   type Params,
 } from './driver.js';
@@ -74,6 +75,23 @@ const unavailable = (e: unknown) =>
   new DriverError(
     `${DATABASE_UNREACHABLE_SENTENCE}: ${e instanceof Error ? e.message : String(e)}`,
     'unavailable',
+  );
+
+/**
+ * pg-pool's refusal when every client is checked out and none came back within
+ * `connectionTimeoutMillis` (its queued-waiter timer, pg-pool 3.x). Not a network failure: the
+ * database is reachable; THIS server holds every connection. A NEW connection that times out
+ * connecting is a different message ("Connection terminated due to connection timeout") and stays
+ * unreachable. Pinned against the real pool in pgDriver.test.ts, so a pg upgrade that rewords it
+ * fails there, not in production.
+ */
+export const PG_POOL_ACQUIRE_TIMEOUT = 'timeout exceeded when trying to connect';
+const isPoolExhausted = (e: unknown) => e instanceof Error && e.message === PG_POOL_ACQUIRE_TIMEOUT;
+/** Lane 01M3ZC3G35: the pool, not the database — its own code and stable sentence. */
+const saturated = (e: unknown) =>
+  new DriverError(
+    `${POOL_EXHAUSTED_SENTENCE}: ${e instanceof Error ? e.message : String(e)}`,
+    'saturated',
   );
 const isUnreachable = (e: unknown) => {
   const code = (e as { code?: string } | null)?.code;
@@ -184,7 +202,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         t.waitMs += performance.now() - t0;
       }
     } catch (e) {
-      throw unavailable(e);
+      throw isPoolExhausted(e) ? saturated(e) : unavailable(e);
     }
   };
   // Postgres names the column, never the statement: the SQL rides on the error (as in the double).
