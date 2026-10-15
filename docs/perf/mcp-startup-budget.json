@@ -1,0 +1,9 @@
+{
+  "note": "Startup CPU budget for the stdio MCP adapter bundle (lane 01M4VNTQFW, `pnpm mcp:startup:check`, docs/architecture/05-mcp.md §Cold-start bench). startupCpuRegressionPct is how far this build's median CPU time (user + system, Node bootstrap included, process start to its tools/list reply, 15 warm launches) may exceed the base ref's, both measured interleaved on the same machine. Relative because ubuntu-latest's pool mixes CPU generations: one bundle measured 203 ms (EPYC 9V45) and 323 ms (EPYC 7763) on consecutive runs. Raising it requires replacing `justification`; the check refuses a raise that keeps the base ref's.",
+  "items": {
+    "startupCpuRegressionPct": {
+      "budget": 10,
+      "justification": "2026-10-15 seed (+10%, lane 01M4VNTQFW, PR #2621). Same code on both sides measured -1.3% on an Apple M3 (15 interleaved launches each, medians 224.4 vs 227.4 ms). A 25 ms busy loop injected into the head bundle read +11% and failed; 60 ms read +28.4%. So +10% catches a ~25 ms startup regression and sits several times above the A/A spread. Falsifier: a CI run with no change under packages/mcp, protocol or telemetry that reads beyond +/-5% -> the noise is too wide for +10%; raise the runs before raising the budget."
+    }
+  }
+}

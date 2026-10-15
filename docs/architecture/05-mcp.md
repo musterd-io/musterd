@@ -183,8 +183,8 @@ static closure ever names a package again.
 
 `node scripts/mcp/bench.mjs --surface <harness>` times the stdio adapter the external harnesses
 launch (claude-code, cursor, codex, opencode, grok). One JSON line: module-import milliseconds,
-then spawn → legacy `initialize`, then spawn → `tools/list`, plus the list's byte size and whether
-`ttlMs` was on that result. It never calls a tool, so it does not claim a seat. The native musterd
+then spawn → legacy `initialize`, then spawn → `tools/list`, the adapter's own CPU time up to that
+reply (`cpu_ms`), plus the list's byte size and whether `ttlMs` was on that result. It never calls a tool, so it does not claim a seat. The native musterd
 host has no stdio entry and is not part of this bench.
 
 The default entry is `~/.musterd/runtime/packages/mcp/dist/index.js` (the adapter a harness
@@ -196,6 +196,19 @@ adapter sends process uptime when the handshake is answered (the `initialized` n
 the 2025 wire, its `server/discover` reply on 2026-07-28) and at its first `tools/list`, once per
 session, and `musterd report tools` shows p50/p90 per harness over 7 days.
 A launch reports only after a tool call gives it a seat, so a probe sends nothing.
+
+CI gates the same startup (lane 01M4VNTQFW). `pnpm mcp:startup:check --base HEAD^1` builds the
+base ref's bundle in a scratch checkout, then launches it and this build's bundle alternately on
+the same machine, 15 times each after one warm-up apiece. It fails when this build's median
+`cpu_ms` is more than `startupCpuRegressionPct` over the base's (`docs/perf/mcp-startup-budget.json`).
+The budget is relative because an absolute one did not hold: the same bundle measured a 203 ms
+median on one ubuntu-latest runner (EPYC 9V45) and 323 ms on the next (EPYC 7763). It budgets CPU
+time, not wall time, because wall time swings 2–4x on a shared runner (ADR 574). Relative means a
+creep of a few percent per PR passes each PR. A stub answers `/health`, the one daemon call the
+adapter makes before it serves, and each side gets a scratch HOME, config, cwd and compile cache.
+The `static` job runs it when plan sees `packages/mcp`, `packages/protocol`, `packages/telemetry`,
+`scripts/mcp`, the budget, `.github` or the workspace manifests change. A raise needs a new
+`justification`; the check fails a higher budget whose justification matches the base ref's.
 
 `tools_list_has_ttl` is false on this bench, because the bench speaks `initialize` and the cache
 hints ride the 2026-07-28 era only.
