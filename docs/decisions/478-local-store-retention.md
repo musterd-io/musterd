@@ -148,6 +148,22 @@ backends run the same SQL (ADR 475).
   `sync_push_cursor.last_seq`. Still open: a machine with 5+ days of standalone history that
   enrolls afterwards. Its pre-enrollment rows were pruned while it had no hub to keep them for.
 
+- **2026-10-15, Cloud (lane 01M3W6GWVN):** Cloud 1C turned the reaper off on Cloud. A Fly VM's
+  disk is ephemeral, so the `~/.musterd/archive/` file would not survive the machine, and pruning
+  without an archive loses rows. The Cloud `audit` table has grown without bound since then. The
+  lane offered two other homes: the spec §7 R2 backup pipeline, which is not built (lane
+  01M3Z42KWH is unowned and needs a human to create the account), or a decision that the nightly
+  `pg_dump` is the archive, which would only hold a pruned row for the dumps' 30 days anyway.
+  Neither exists today. Instead, on Cloud the batch is archived into a team-owned `audit_archive`
+  table (v97): one row per team and month per batch, holding the same gzipped JSONL as a local
+  archive member, base64 as text. It is inserted in the same transaction as the delete, so a
+  failed insert prunes nothing. The rows leave the indexed `audit` table and live on, compressed,
+  in the database. Neon's point-in-time recovery covers them, and so will the per-team dump once
+  it exists. `store.pruned` names `audit_archive` as its `archive`. Locally nothing changes: the
+  file stays, and the table is empty. Open: the archive bytes still sit in the database. When the
+  R2 dumps land, moving archive rows older than the dump's retention out to R2 (or dropping them,
+  if the dump is judged enough) is that lane's call, not this one's.
+
 ## Observability & Evaluation
 
 - **Traces:** each reaper run writes one decision-class `audit` row `store.pruned`

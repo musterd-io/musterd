@@ -34,7 +34,7 @@ import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
 import { policyReviewTick, startPolicyReviewSweep } from './store/policyReview.js';
 import { closeReportService } from './store/reportCache.js';
-import { defaultArchiveDir, startAuditRetention } from './store/retention.js';
+import { AUDIT_ARCHIVE_TABLE, defaultArchiveDir, startAuditRetention } from './store/retention.js';
 import type { MemberRow } from './store/rows.js';
 import { revokeExpiredMember } from './store/sponsoredCascade.js';
 import { getTeamBySlug } from './store/teams.js';
@@ -443,11 +443,16 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
             );
           // ADR 478 §1/§5: churn-class audit rows past their window are archived, then pruned, daily;
           // an in-memory store has no archive dir and is skipped. One `store.pruned` row per team.
+          // Cloud archives into the `audit_archive` table instead (ADR 478 amendment, 2026-10-15):
+          // the VM's disk is ephemeral, the database is not.
+          const archiveTable = config.mode === 'cloud';
+          const archive = archiveTable ? AUDIT_ARCHIVE_TABLE : defaultArchiveDir(config.dbPath);
           if (loops.has('audit_retention'))
             stopAuditRetention = startAuditRetention(
               opDb,
               {
                 archiveDir: defaultArchiveDir(config.dbPath),
+                archiveTable,
                 maxAgeMs: config.auditChurnRetentionMs,
               },
               async (r) => {
@@ -468,7 +473,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                       class: 'audit_churn',
                       rows,
                       bytes: r.archivedBytes,
-                      archive: defaultArchiveDir(config.dbPath),
+                      archive,
                     },
                   });
                 }

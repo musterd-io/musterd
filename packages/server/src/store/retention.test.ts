@@ -188,6 +188,82 @@ withDrivers('retention', (o, kind) => {
       expect(await rows(db)).toEqual([['presence.attached', 'dolly', 35]]);
     });
 
+    it('archiveTable (Cloud): archives into audit_archive per team and month, then prunes', async () => {
+      const { db, teamId, put } = await seeded();
+      const other = await createTeam(db, { slug: 'other' });
+      await put('presence.attached', 40, 'dolly');
+      await put('bootstrap_credential.used', 35, null);
+      await put('lane.claimed', 80, 'dolly'); // decision class: never pruned
+      await put('presence.detached', 3, 'dolly'); // churn, inside the window
+      await appendAudit(db, other.id, {
+        actor: 'kimi',
+        action: 'presence.attached',
+        target: 'kimi',
+        result: 'allow',
+        detail: { ageDays: 50 },
+      });
+      await db.run('UPDATE audit SET ts = ? WHERE team_id = ?', [NOW - 50 * DAY, other.id]);
+
+      // No archive dir: Cloud has no disk to archive beside, and the table is where the rows go.
+      const r = await pruneAuditChurn(db, { now: NOW, archiveDir: null, archiveTable: true });
+      expect(r).toMatchObject({ pruned: 3, perTeam: { [teamId]: 2, [other.id]: 1 } });
+      expect(r.skipped).toBeUndefined();
+      expect(r.archivedBytes).toBeGreaterThan(0);
+      expect(await rows(db)).toEqual([
+        ['lane.claimed', 'dolly', 80],
+        ['presence.detached', 'dolly', 3],
+      ]);
+
+      // One archive row per (team, month); its body is base64 of the same gzipped JSONL a local
+      // archive member holds.
+      const archived = await db.all<{
+        team_id: string;
+        month: string;
+        row_count: number;
+        from_ts: number;
+        to_ts: number;
+        body: string;
+      }>('SELECT team_id, month, row_count, from_ts, to_ts, body FROM audit_archive');
+      expect(archived).toHaveLength(2);
+      const byTeam = new Map(archived.map((a) => [a.team_id, a]));
+      const mine = byTeam.get(teamId)!;
+      expect(mine).toMatchObject({ month: '2026-08' });
+      expect(Number(mine.row_count)).toBe(2);
+      expect(Number(mine.from_ts)).toBe(NOW - 40 * DAY);
+      expect(Number(mine.to_ts)).toBe(NOW - 35 * DAY);
+      const lines = gunzipSync(Buffer.from(mine.body, 'base64'))
+        .toString('utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l) as { action: string; team_id: string });
+      expect(lines.map((l) => l.action).sort()).toEqual([
+        'bootstrap_credential.used',
+        'presence.attached',
+      ]);
+      expect(lines.every((l) => l.team_id === teamId)).toBe(true);
+      expect(Number(byTeam.get(other.id)!.row_count)).toBe(1);
+
+      // idempotent
+      const again = await pruneAuditChurn(db, { now: NOW, archiveDir: null, archiveTable: true });
+      expect(again.pruned).toBe(0);
+      expect(await db.all('SELECT id FROM audit_archive')).toHaveLength(2);
+    });
+
+    it('archiveTable: a failed archive insert prunes nothing (one transaction)', async () => {
+      const { db, put } = await seeded();
+      await put('presence.attached', 40, 'dolly');
+      // The table missing makes the insert throw; the delete beside it must roll back with it.
+      await db.exec('ALTER TABLE audit_archive RENAME TO audit_archive_away');
+      try {
+        await expect(
+          pruneAuditChurn(db, { now: NOW, archiveDir: null, archiveTable: true }),
+        ).rejects.toThrow();
+      } finally {
+        await db.exec('ALTER TABLE audit_archive_away RENAME TO audit_archive');
+      }
+      expect(await rows(db)).toHaveLength(1);
+    });
+
     it('with no archive dir (in-memory store) it prunes nothing and says so', async () => {
       const { db, put } = await seeded();
       await put('presence.attached', 40, 'dolly');

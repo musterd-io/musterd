@@ -11,6 +11,8 @@ describe('which background loops a server runs (1C task 8)', () => {
       [
         'reaper',
         'trace_prune',
+        // ADR 478 on Cloud (lane 01M3W6GWVN): it archives into `audit_archive`, not beside a file.
+        'audit_retention',
         'trace_coverage',
         'expired_member_sweep',
         'provision_sweep',
@@ -26,7 +28,6 @@ describe('which background loops a server runs (1C task 8)', () => {
     'sync_push',
     'sync_pull',
     'trace_push',
-    'audit_retention',
     // Review M4: an admin-set relay URL is fetched with no public-host check — not on a fleet.
     'seeds_ingest',
   ])('cloud does not run %s', (loop) => {
