@@ -3,9 +3,11 @@ import type { Lane } from '@musterd/protocol';
 import {
   AuditFetchError,
   LiveFetchError,
+  BroadcastSeatMissing,
   ObserverSignInRequired,
   acquireObserver,
   acquireWatchLinkObserver,
+  broadcastSeat,
   createLane,
   fetchLaneBoard,
   fetchLiveLaneBoard,
@@ -99,6 +101,50 @@ describe('isStaleCredential', () => {
  * *human* presence row and put a phantom person on the roster for as long as the stream runs (ADR 155).
  * So: it reads the observer key and nothing else, whatever else the browser has stored.
  */
+/**
+ * ADR 601 decision 7: /broadcast only ever watches with the seat its capturer handed it. The
+ * fallback it used to have, `acquireObserver`, returns this browser's cached observer, which is
+ * full-grade (every DM, unmasked). A stream must never run on that.
+ */
+describe('broadcastSeat (ADR 601: the handed seat or nothing)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const browser = (globals: Record<string, unknown>) =>
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (k: string) =>
+          k === 'musterd.live.observer.v2.revive'
+            ? JSON.stringify({ name: 'web-full01', token: 'mscr_full' })
+            : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+      ...globals,
+    });
+
+  it('returns the seat the capturer handed over', () => {
+    browser({ __musterdBroadcastSeat: { team: 'revive', name: 'broadcast-ab12cd', token: 'mscr_b' } });
+    expect(broadcastSeat('revive')).toEqual({
+      team: 'revive',
+      as: 'broadcast-ab12cd',
+      token: 'mscr_b',
+    });
+  });
+
+  it('refuses without a handed seat, even with a cached full-grade observer, and sends nothing', () => {
+    browser({});
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    expect(() => broadcastSeat('revive')).toThrow(BroadcastSeatMissing);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a seat handed over for another team', () => {
+    browser({ __musterdBroadcastSeat: { team: 'bench', name: 'broadcast-x', token: 'mscr_x' } });
+    expect(() => broadcastSeat('revive')).toThrow(BroadcastSeatMissing);
+  });
+});
+
 describe('acquireObserver (the observer-only path broadcast mode relies on)', () => {
   const store = (entries: Record<string, string>) => {
     const map = new Map(Object.entries(entries));

@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import broadcastCss from '../live/Broadcast.css?url';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { StreamAskBanner } from '../live/StreamAskBanner';
 import { OfficeScene } from '../live/OfficeScene';
-import { acquireObserver, forgetObserver, handedObserver, type LiveConfig } from '../live/client';
+import { broadcastSeat, type LiveConfig } from '../live/client';
 import { firehoseSound, roomTone } from '../live/sound';
 import type { OfficeHandle } from '../live/office-scene';
 import { applyTierClock, deriveAsks } from '../live/asks';
@@ -213,10 +213,10 @@ interface BroadcastWindow {
  *
  * Two properties this route holds by construction rather than by care:
  *
- * - **Presence-safe.** It only ever takes the observer path — the seat its capturer handed it
- *   (`handedObserver`, ADR 594), else `acquireObserver`. There is no
- *   advanced-seat branch here at all, so streaming can never attach a *human* presence row and put a
- *   phantom person on the roster (ADR 155).
+ * - **Presence-safe.** It only ever takes the seat its capturer handed it (`broadcastSeat`, ADR
+ *   594), a broadcast-grade observer (ADR 601). There is no advanced-seat branch and no fallback to
+ *   this browser's cached observer, which is full-grade, so streaming can never attach a *human*
+ *   presence row (ADR 155) or show a DM the broadcast grade withholds.
  * - **Perf-contract-safe.** It is a separate lazy route, so the "loops stop when unseen" rule that
  *   every /live viewer relies on is untouched — the always-animate carve-out reaches only pages a
  *   human deliberately opened to stream from (packages/web/AGENTS.md, ADR 151).
@@ -252,32 +252,12 @@ function BroadcastPage() {
     roomTone.enableForBroadcast();
   }, []);
 
-  // A stream has no operator to click "reconnect": if the observer credential goes stale (daemon reset,
-  // 24h observer TTL — ADR 064), drop it and mint a fresh one. `recovering` is a one-at-a-time guard,
-  // not a give-up counter — an unattended capture should keep trying rather than dead-end on screen.
-  const recovering = useRef(false);
+  // A refused seat is the capturer's to replace (ADR 594): the page cannot mint one (ADR 580) and
+  // must not fall back to a cached one (ADR 601), so it says so on screen and the capturer's
+  // ready/stall watchdogs relaunch with a fresh seat.
   const recoverObserver = useCallback(() => {
-    const slug = cfg?.team;
-    if (!slug || recovering.current) return;
-    // A handed seat is the capturer's to replace (ADR 594): the page cannot mint one since ADR 580,
-    // so say so on screen and let the capturer's ready/stall watchdogs relaunch with a fresh seat.
-    if (handedObserver(slug)) {
-      setError('the observer seat this capture was handed was refused — restart the capture');
-      return;
-    }
-    recovering.current = true;
-    forgetObserver(slug);
-    void (async () => {
-      try {
-        setCfg(await acquireObserver(slug));
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        recovering.current = false;
-      }
-    })();
-  }, [cfg?.team]);
+    setError('the observer seat this capture was handed was refused — restart the capture');
+  }, []);
 
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
@@ -301,13 +281,11 @@ function BroadcastPage() {
     const slug = new URLSearchParams(window.location.search).get('team')?.trim();
     if (!slug) return;
     setTeam(slug);
-    void (async () => {
-      try {
-        setCfg(handedObserver(slug) ?? (await acquireObserver(slug)));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    try {
+      setCfg(broadcastSeat(slug));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }, []);
 
   // Fit the fixed stage into whatever window we were opened at. `transform: scale()` doesn't change

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { CliError } from '../errors.js';
 import {
+  broadcastSeatRequest,
   broadcastUrl,
   seatFromEnv,
   seatInjection,
@@ -1261,6 +1262,17 @@ describe('the broadcast seat', () => {
     expect(() => seatFromEnv('revive', { MUSTERD_BROADCAST_SEAT: '{"team":"revive"}' })).toThrow(
       /needs \{team, name, token\}/,
     );
+  });
+
+  // ADR 601: the stream's seat sees every DM except human to human, masked by the daemon — not
+  // public (team traffic only, ADR 594 decision 2) and never full.
+  it('mints a broadcast-grade observer, never public or full', () => {
+    expect(broadcastSeatRequest('broadcast-ab12cd')).toEqual({
+      name: 'broadcast-ab12cd',
+      kind: 'human',
+      observer: true,
+      observer_scope: 'broadcast',
+    });
   });
 
   it('injects the seat as a page global, and keeps it out of the URL', () => {

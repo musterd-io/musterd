@@ -636,3 +636,16 @@ The check only knew that an image existed. `stream build` now records the commit
 commits on the paths the box runs (`CAPTURE_PATHS` in `packages/cli/src/broadcast/hosted.ts`), when
 the record predates the commit field, or when git cannot compare. `stream start` prints the same
 finding as a warning and launches anyway. `origin/main` is as this checkout last fetched it.
+
+## The stream's seat is broadcast-grade: every DM except human to human, credentials masked (2026-10-15; falsify: on a live stream, send a DM between two human members and a `status_update` carrying `mscr_` plus 20 characters — either on screen falsifies this) <!-- claim: other -->
+
+[ADR 601](../decisions/601-broadcast-visibility-grade.md). `musterd broadcast` and `musterd stream
+start` mint the page's observer with `observer_scope: 'broadcast'`, not `public`. The daemon sends
+that seat every DM except one whose two ends are human, non-observer members, and runs
+`scrubCredentials` over every string it gets: message bodies and `meta`, roster status lines, lanes,
+goals and the report (#2632). A secret written as prose is not masked. `/broadcast` uses only the
+handed seat and never this browser's cached observer, which is full-grade.
+
+A stream started before this keeps its `public` seat until the next `musterd stream start`, which
+mints a fresh seat each time. A `MUSTERD_BROADCAST_SEAT` passed in by hand keeps the grade it was
+minted with.
