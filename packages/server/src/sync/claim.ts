@@ -273,7 +273,17 @@ export async function assertSeatResident(
 /** The hub could not be asked. Distinct from a refusal by construction, never folded into one. */
 export class HubUnreachableError extends Error {
   constructor(hubUrl: string, cause: string) {
-    super(`the hub at ${hubUrl} could not be reached to arbitrate this claim (${cause})`);
+    // ADR 598: the sentence carries what ADR 355's refusal left the caller to guess — nothing was
+    // recorded here, what still works offline, and (on a timeout only) that the hub may have heard.
+    const timedOut = /timeout/i.test(cause);
+    super(
+      `the hub at ${hubUrl} ${timedOut ? 'did not answer in time' : 'could not be reached'} (${cause}), ` +
+        `so nothing was recorded here: claim, handoff, release, submit and close wait for the hub. ` +
+        `Messages, inbox, opening and editing lanes, and memory keep working and sync when it returns.` +
+        (timedOut
+          ? ` The hub may have received this before the timeout — read the board before retrying.`
+          : ``),
+    );
     this.name = 'HubUnreachableError';
   }
 }
