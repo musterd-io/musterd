@@ -513,24 +513,32 @@ export function broadcastSeat(team: string): LiveConfig {
   return seat;
 }
 
-/* ─── the shared watch-link seat (ADR 136) ────────────────────────────────────────────────────────
+/* ─── the shared watch-link seats (ADR 136, ADR 616) ──────────────────────────────────────────────
  * A watch link used to carry `acquireObserver`'s credential — the operator's own **full-grade** seat —
- * so handing someone a link handed them every DM on the team. A link now gets its own **public-grade**
- * observer: a distinct seat that sees team/broadcast traffic only. Cached per team so the link is
- * stable (repeated copies hand out the same URL rather than littering seats; idle ones are reaped at
- * the 24h observer TTL, ADR 064). */
-const watchLinkKey = (team: string) => `musterd.live.watchlink.v1.${team}`;
+ * so handing someone a link handed them every DM on the team. A link now gets its own observer, never
+ * `full`: **public** (team/broadcast traffic only, the default) or **broadcast** (ADR 616: everything
+ * but a DM between two humans, keys masked — what a demo room is shown). One seat per grade, cached
+ * per team so the link is stable (repeated copies hand out the same URL rather than littering seats;
+ * idle ones are reaped at the 24h observer TTL, ADR 064). Separate seats mean a public link never
+ * carries the broadcast seat's credential. The public key keeps its pre-616 name so links already
+ * shared keep working. */
+export type WatchGrade = 'public' | 'broadcast';
+const watchLinkKey = (team: string, grade: WatchGrade) =>
+  grade === 'public'
+    ? `musterd.live.watchlink.v1.${team}`
+    : `musterd.live.watchlink.${grade}.v1.${team}`;
 
-/** The team's shared public-grade watch-link seat — cached, or minted on first share.
+/** The team's shared watch-link seat for `grade` — cached, or minted on first share.
  *
  * Minting requires a human admin's credential (ADR 580), so `bearer` is the signed-in member's. With
  * none and nothing cached it throws {@link ObserverSignInRequired} without a request. */
 export async function acquireWatchLinkObserver(
   team: string,
   bearer: string | null,
+  grade: WatchGrade = 'public',
 ): Promise<ObserverCreds> {
   try {
-    const raw = window.localStorage.getItem(watchLinkKey(team));
+    const raw = window.localStorage.getItem(watchLinkKey(team, grade));
     if (raw) {
       const creds = JSON.parse(raw) as ObserverCreds;
       if (creds && creds.token) return creds;
@@ -539,17 +547,17 @@ export async function acquireWatchLinkObserver(
     // fall through and mint
   }
   if (!bearer) throw new ObserverSignInRequired();
-  const name = 'watch-' + Math.random().toString(36).slice(2, 8);
-  const token = await provisionObserver(team, name, 'public', bearer);
+  const name = (grade === 'public' ? 'watch-' : 'demo-') + Math.random().toString(36).slice(2, 8);
+  const token = await provisionObserver(team, name, grade, bearer);
   const creds = { name, token };
-  window.localStorage.setItem(watchLinkKey(team), JSON.stringify(creds));
+  window.localStorage.setItem(watchLinkKey(team, grade), JSON.stringify(creds));
   return creds;
 }
 
-/** Drop the cached watch-link seat — the link stops working on the next mint (the old seat lingers
- *  until the observer TTL reaps it). */
-export function forgetWatchLinkObserver(team: string) {
-  window.localStorage.removeItem(watchLinkKey(team));
+/** Drop the cached watch-link seat for `grade` — its link stops working on the next mint (the old
+ *  seat lingers until the observer TTL reaps it). The other grade's seat is untouched. */
+export function forgetWatchLinkObserver(team: string, grade: WatchGrade = 'public') {
+  window.localStorage.removeItem(watchLinkKey(team, grade));
 }
 
 /**
@@ -761,12 +769,13 @@ export async function decideRequest(
  *
  * `scope` is the observer's grade (ADR 136): `'full'` (default) is the operator's own dashboard on
  * their own machine and sees the whole timeline; `'public'` sees team/broadcast traffic only and is
- * what a **shared watch-link** gets — see {@link acquireWatchLinkObserver}.
+ * what a **shared watch-link** gets by default; `'broadcast'` (ADR 601/616) is a watch link shared for a
+ * demo — see {@link acquireWatchLinkObserver}.
  */
 export async function provisionObserver(
   team: string,
   name: string,
-  scope: 'full' | 'public',
+  scope: 'full' | WatchGrade,
   bearer: string,
 ): Promise<string> {
   const res = await fetch(`/teams/${encodeURIComponent(team)}/members`, {

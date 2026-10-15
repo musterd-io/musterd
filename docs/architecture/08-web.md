@@ -54,9 +54,14 @@ Two design commitments follow from "read-only projection":
 
 A shared read-only **watch link** (`/live?team=<slug>&as=<observer>#w=<credential>`, ADR 063) lets a team
 hand someone a spectator view without provisioning them a real seat.
-The watch link mints a public-grade observer (ADR 136) with the signed-in admin's credential, so
-"copy watch link" is offered only to a signed-in member: it sees Team-broadcast Acts, not directed
-traffic. It is a scoped observer, not anonymous access; roster handles and Presence remain visible.
+The watch link mints an observer with the signed-in admin's credential, so the share button is
+offered only to a signed-in member. The sharer picks its grade (ADR 616): a **public link** (the
+default, ADR 136) sees Team-broadcast Acts and no directed traffic; a **demo link** is `broadcast`
+grade (ADR 601), so it also sees agent DMs and asks, never a DM between two humans, with keys masked.
+Each grade has its own cached seat (`acquireWatchLinkObserver`), so a public link never carries the
+demo seat's credential. A demo link adds `&grade=broadcast` so the viewer's page can label itself;
+the daemon, not the label, decides what the seat reads. Either is a scoped observer, not anonymous
+access; roster handles and Presence remain visible.
 
 > **Known limitation (2026-07-07):** the HTTP backfill is capped (200) and returns the oldest of an
 > over-cap history, so on a busy team the newest acts arrive only via the live socket, not the backfill.

@@ -32,6 +32,7 @@ import {
   forgetObserver,
   acquireObserver,
   acquireWatchLinkObserver,
+  type WatchGrade,
   loadObserver,
   ObserverSignInRequired,
   redeemSignin,
@@ -159,6 +160,9 @@ function LivePage() {
   const [signedIn, setSignedIn] = useState(false);
   /** Connected via an explicit watch link — read-only by the team's choice, not by accident. */
   const [watchLink, setWatchLink] = useState(false);
+  /** The grade the sharer chose for that link (ADR 616), read from `&grade=` — a label for the viewer,
+   *  never an authority: the daemon decides what the seat reads. */
+  const [watchGrade, setWatchGrade] = useState<WatchGrade>('public');
   const [provisioning, setProvisioning] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Collapsed>(NO_COLLAPSE);
@@ -495,6 +499,7 @@ function LivePage() {
         /* private mode */
       }
       setWatchLink(true);
+      setWatchGrade(params.get('grade') === 'broadcast' ? 'broadcast' : 'public');
       // A watch link outranks a stored member identity (ADR 222) and is explicitly NOT you: handing
       // the office to someone else must never hand them whoever last signed in on this browser.
       setSignedIn(false);
@@ -605,6 +610,11 @@ function LivePage() {
             loading={loading}
             refreshing={refreshing}
           />
+        )}
+        {connected && watchLink && (
+          <span className="lc-watchgrade" title={WATCH_GRADES.find((g) => g.grade === watchGrade)!.says}>
+            {watchGrade === 'broadcast' ? 'demo view · agent DMs shown' : 'watching · team-wide only'}
+          </span>
         )}
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
         {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
@@ -798,27 +808,45 @@ function LivePage() {
   );
 }
 
+/** What each watch-link grade shows, in the words the share control uses (ADR 616). */
+const WATCH_GRADES: { grade: WatchGrade; label: string; says: string }[] = [
+  { grade: 'public', label: 'public link', says: 'Team-wide messages only. No DMs, no account.' },
+  {
+    grade: 'broadcast',
+    label: 'demo link',
+    says: 'Agent DMs and asks too. Never a DM between two humans; keys masked.',
+  },
+];
+
 /**
  * Copy a shareable, read-only **watch link** — an observer credential in the URL fragment (`#w=…`, so
  * it never hits the server). Anyone the team hands it to opens the office as that observer: read-only
  * by construction (ADR 063), fans out to any number of viewers, no account and no per-viewer seat.
  *
- * The link carries a **public-grade** seat of its own (ADR 136), minted on first share — *not* this
- * dashboard's credential. It used to be `cfg.token`, which is the operator's own full-grade seat, so
- * sharing a link shared every DM on the team. A viewer now sees team/broadcast traffic and nothing
- * directed.
+ * The link carries a seat of its own, minted on first share at the grade chosen here (ADR 136, ADR
+ * 616): **public** by default, or **broadcast** for a demo room. Never `full` and never this
+ * dashboard's credential — that used to be `cfg.token`, the operator's own full-grade seat, so sharing
+ * a link shared every DM on the team. The link names its grade (`&grade=broadcast`) so the viewer's
+ * page can say what it shows; the daemon, not the label, decides what the seat reads.
  *
  * Minting it takes a human admin's credential (ADR 580), so the button is only offered signed in, and
  * `cfg.token` is the member's own — used to mint, never put in the link.
  */
 function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
-  const [copied, setCopied] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [copied, setCopied] = useState<WatchGrade | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const copy = async () => {
+  const firstChoice = useRef<HTMLButtonElement>(null);
+  // Opening the choice moves focus to it, so a keyboard user lands on the options they just asked for.
+  useEffect(() => {
+    if (choosing) firstChoice.current?.focus();
+  }, [choosing]);
+  const copy = async (grade: WatchGrade) => {
+    setChoosing(false);
     const { origin } = window.location;
     let creds;
     try {
-      creds = await acquireWatchLinkObserver(cfg.team, cfg.token);
+      creds = await acquireWatchLinkObserver(cfg.team, cfg.token, grade);
     } catch (e) {
       // Minting failed — do NOT fall back to cfg.token. That fallback is the whole bug: it would
       // silently hand out a full-visibility credential at the exact moment we meant to withhold one.
@@ -832,14 +860,16 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
     }
     const url =
       `${origin}/live?team=${encodeURIComponent(cfg.team)}&as=${encodeURIComponent(creds.name)}` +
+      (grade === 'public' ? '' : `&grade=${grade}`) +
       `#w=${encodeURIComponent(creds.token)}`;
+    const label = WATCH_GRADES.find((g) => g.grade === grade)!.label;
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      window.prompt('Copy this read-only watch link (public traffic only):', url);
+      window.prompt(`Copy this read-only ${label}:`, url);
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setCopied(grade);
+    window.setTimeout(() => setCopied(null), 1600);
   };
   // The outcome is a checkmark or a changed tooltip, neither of which a screen reader speaks. The
   // status sits beside the button, not in it, so the button's name stays the same while it speaks;
@@ -847,15 +877,34 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   return (
     <>
       <span className="lc-sr" role="status">
-        {failed ?? (copied ? 'Watch link copied' : '')}
+        {failed ?? (copied ? `${WATCH_GRADES.find((g) => g.grade === copied)!.label} copied` : '')}
       </span>
+      {choosing && (
+        <span className="lc-share" role="group" aria-label="Share a read-only watch link">
+          {WATCH_GRADES.map(({ grade, label, says }, i) => (
+            <button
+              key={grade}
+              ref={i === 0 ? firstChoice : undefined}
+              type="button"
+              className="lc-share__btn"
+              title={says}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setChoosing(false);
+              }}
+              onClick={() => void copy(grade)}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
+      )}
       <button
         type="button"
-        className={`lc__pbtn${copied ? ' lc__pbtn--on' : ''}`}
-        onClick={() => void copy()}
-        title={
-          failed ?? 'Copy a shareable read-only watch link (public traffic only — no DMs, no account)'
-        }
+        className={`lc__pbtn${copied || choosing ? ' lc__pbtn--on' : ''}`}
+        onClick={() => setChoosing((c) => !c)}
+        aria-expanded={choosing}
+        aria-label="Share a read-only watch link"
+        title={failed ?? 'Share a read-only watch link: public, or a demo link that also shows agent DMs'}
       >
         {copied ? (
           <svg viewBox="0 0 16 16" aria-hidden="true">
