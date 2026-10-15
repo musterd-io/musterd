@@ -280,6 +280,7 @@ export async function applyDisputeAnswer(
     owner,
     pick.reviewer,
     acceptanceAskBody(lane.title, {
+      change: lane.merged,
       overlapNotice: priorOwnerNotice(pick.reviewer, priorOwners),
       noGoalNotice: noGoalNotice(lane.goal_id),
       followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),

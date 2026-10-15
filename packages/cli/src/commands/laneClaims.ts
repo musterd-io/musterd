@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import {
+  classifyChange,
   claimsFromEvidence,
+  type ChangeLabel,
   claimsLine,
   type ClaimEvidence,
   type ClaimRefs,
@@ -125,6 +127,30 @@ export function renderClaims(claims: readonly LaneClaim[] | undefined): string {
   return [line, ...why].join('\n');
 }
 
+/**
+ * ADR 612: the change class of a landed squash commit, read from this clone — the same label the
+ * MCP adapter derives (`classifyChange` in `@musterd/protocol`). The caller asks only once the
+ * commit verified as landed; an unreadable diff abstains (`null`) and no class is sent.
+ */
+export async function readChangeLabel(
+  sha: string,
+  cwd: string,
+  execOut: ExecOut = defaultExecOut,
+): Promise<ChangeLabel | null> {
+  try {
+    const r = await execOut('git', ['diff', '--name-only', '--no-renames', `${sha}^`, sha], {
+      cwd,
+      timeoutMs: 15_000,
+    });
+    return r.code === 0 ? classifyChange(r.stdout.split('\n')) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Injectable for the command tests, which run against an in-process daemon in a temp dir that is
  *  no git clone and must not shell out to `gh`. */
-export const claimSeams: { check: typeof checkClaims } = { check: checkClaims };
+export const claimSeams: { check: typeof checkClaims; label: typeof readChangeLabel } = {
+  check: checkClaims,
+  label: readChangeLabel,
+};

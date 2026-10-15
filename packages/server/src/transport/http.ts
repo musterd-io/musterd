@@ -7722,6 +7722,16 @@ export async function handleHttp(
               // was built on top of.
               stakes_provenance: lane.stakes_provenance,
               ...(lane.merged ? { merged: lane.merged } : {}),
+              // ADR 612 — the change class, top-level beside `stakes` so the Eval splits on it
+              // without unpacking `merged`. Recorded whenever the seat sent it, `code` included
+              // (the common value is the bucket you most need to count); a pre-612 seat or a
+              // cross-repo lane sent none, and the row records none.
+              ...(lane.merged?.change_class
+                ? {
+                    change_class: lane.merged.change_class,
+                    ...(lane.merged.changed ? { changed: lane.merged.changed } : {}),
+                  }
+                : {}),
               // ADR 303: preserve the evidence the picker actually saw, not a reconstruction from
               // today's roster. The terminal outcome is explicit because a peer miss can lead to a
               // human fallback or a queued wake; neither should masquerade as a peer selection.
@@ -7823,6 +7833,7 @@ export async function handleHttp(
               member,
               pick.reviewer,
               acceptanceAskBody(lane.title, {
+                change: lane.merged,
                 overlapNotice,
                 noGoalNotice: noGoalNotice(lane.goal_id),
                 followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
@@ -8003,6 +8014,7 @@ export async function handleHttp(
               member,
               named.reviewer,
               acceptanceAskBody(lane.title, {
+                change: lane.merged,
                 overlapNotice: priorOwnerNotice(named.reviewer, priorOwners),
                 noGoalNotice: noGoalNotice(lane.goal_id),
                 followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),

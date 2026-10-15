@@ -8,6 +8,7 @@ import {
   type DisputeAnswerWire,
   type Envelope,
   ACCEPTANCE_MOVES_NOTICE,
+  changeLabelText,
   isAwaitingAcceptance,
   type Lane,
   type LaneSupersededWire,
@@ -1272,6 +1273,8 @@ async function sendHumanStageAsk(
   humanLive: boolean,
 ): Promise<void> {
   const findings = peerFindings.length > 500 ? `${peerFindings.slice(0, 500)}…` : peerFindings;
+  // ADR 612: the human sees what kind of landing it is before the peer's findings.
+  const humanKind = lane.merged ? changeLabelText(lane.merged) : null;
   const checklist =
     'Judge the LANDED OUTCOME (not a code review): ' +
     '(1) Intent — matches the lane brief? ' +
@@ -1287,7 +1290,7 @@ async function sendHumanStageAsk(
     to: { kind: 'member', name: human },
     act: 'ask',
     body:
-      `[lane] human acceptance required: "${lane.title}" — peer ${peerName} accepted with: ` +
+      `[lane] human acceptance required${humanKind ? ` (${humanKind})` : ''}: "${lane.title}" — peer ${peerName} accepted with: ` +
       `"${findings}". ${checklist}`,
     meta: {
       species: 'approve',

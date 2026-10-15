@@ -76,6 +76,13 @@ export {
   type MergeVerification,
 } from './lanes.wire.js';
 
+/** ADR 612: the three counts a submit sends beside its change class. */
+export const ChangedCountsSchema = z.object({
+  docs: z.number().int().nonnegative(),
+  tests: z.number().int().nonnegative(),
+  code: z.number().int().nonnegative(),
+});
+
 /**
  * Declared stakes for acceptance (ADR 234) — an ordered ladder, cheapest first.
  *
@@ -510,6 +517,15 @@ export const LaneSchema = z.object({
        * {@link MERGE_VERIFICATION_TIERS} and say nothing on values they don't know.
        */
       verification: z.string().optional(),
+      /**
+       * ADR 612: what kind of landing this is, derived by the submitting seat from the squash
+       * commit's paths (`classifyChange`). Absent from a pre-612 seat and from a cross-repo lane.
+       * A z.string for the same skew reason as `verification`; compare against
+       * {@link CHANGE_CLASSES}. A label only — nothing routes on it (ADR 612 §3).
+       */
+      change_class: z.string().max(32).optional(),
+      /** ADR 612: docs / tests / code file counts beside the class — never the path list. */
+      changed: ChangedCountsSchema.optional(),
     })
     .nullable()
     .default(null),
@@ -693,6 +709,9 @@ export const UpdateLaneSchema = z.object({
       authorized_by: z.string().optional(),
       /** Seat-side verification tier — see the field's doc on {@link LaneSchema}. */
       verification: z.string().optional(),
+      /** ADR 612 change class — see the field's doc on {@link LaneSchema}. */
+      change_class: z.string().max(32).optional(),
+      changed: ChangedCountsSchema.optional(),
     })
     // `null` CLEARS a standing attestation (ADR 305 amendment 2, lane 01M2GR0434). The store always
     // honoured it; the wire refused it, so a lane that acquired a wrong stamp — delta's, closed

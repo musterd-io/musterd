@@ -1,6 +1,7 @@
 import {
   ACCEPTANCE_MOVES_NOTICE,
   type AskTier,
+  changeLabelText,
   type Lane,
   leftoverSignal,
   makeEnvelope,
@@ -53,6 +54,8 @@ export function acceptanceAskBody(
     overlapNotice?: string;
     noGoalNotice?: string;
     followsUpNotice?: string;
+    /** ADR 612: the lane's merge attestation; its change class opens the ask when present. */
+    change?: Lane['merged'] | undefined;
   } = {},
 ): string {
   const checklist =
@@ -74,7 +77,8 @@ export function acceptanceAskBody(
       overlap
     );
   }
-  return `[lane] acceptance requested: "${title}" — ${checklist}${overlap}`;
+  const kind = opts.change ? changeLabelText(opts.change) : null;
+  return `[lane] acceptance requested${kind ? ` (${kind})` : ''}: "${title}" — ${checklist}${overlap}`;
 }
 
 /**
@@ -298,6 +302,7 @@ export async function rerouteAcceptances(
       gone,
       pick.reviewer,
       acceptanceAskBody(lane.title, {
+        change: lane.merged,
         overlapNotice: priorOwnerNotice(pick.reviewer, priorOwners),
         noGoalNotice: noGoalNotice(lane.goal_id),
         followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),

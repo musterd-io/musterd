@@ -259,6 +259,14 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       sub !== 'claim' && Object.keys(claimRefs).length > 0
         ? await claimSeams.check(claimRefs, process.cwd(), identity.name)
         : [];
+    // ADR 612: a submit whose SHA this clone confirmed on origin/main carries the landed diff's
+    // change class, so the acceptance ask opens with what kind of landing it is. Label only.
+    const landed = claims.some((c) => c.kind === 'commit_landed' && c.verdict === 'confirmed');
+    const changeLabel =
+      submit && landed && merged.sha !== undefined
+        ? await claimSeams.label(merged.sha, process.cwd())
+        : null;
+    if (changeLabel) Object.assign(merged, changeLabel);
     const res = await http.updateLane(
       team,
       id,

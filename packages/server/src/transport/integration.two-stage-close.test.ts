@@ -222,6 +222,69 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       expect(shown.acceptance_route).toBe('peer_selected');
     });
 
+    it('ADR 612: the change class rides the attestation, the ready row and the ask — and routes nothing', async () => {
+      const { nickTok, ada, gee } = await setup();
+      const lane = await post(
+        '/teams/dawn/lanes',
+        { title: 'docs only', branch: 'ada/docs', claim: true },
+        ada,
+      );
+      const laneId = lane.json.lane.id as string;
+      const merged = {
+        pr: 9,
+        sha: 'abc129',
+        verification: 'ancestor',
+        change_class: 'docs',
+        changed: { docs: 3, tests: 0, code: 0 },
+      };
+      const ready = await patchLane(laneId, { state: 'awaiting_acceptance', merged }, ada);
+      expect(ready.status).toBe(200);
+      expect(ready.json.lane.merged).toEqual(merged);
+      // Routes nothing: a docs-only lane draws the same cross-family acceptor as any other.
+      expect(ready.json.review.reviewer).toBe('gee');
+      expect(ready.json.review.route).toBe('cross_family');
+
+      const inbox = await get('/teams/dawn/inbox?unread=1', gee);
+      const ask = inbox.json.messages.find(
+        (m: { act: string; meta?: { lane_review?: { lane?: string } } }) =>
+          m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+      );
+      expect(ask.body).toMatch(
+        /^\[lane\] acceptance requested \(docs-only, 3 files\): "docs only"/,
+      );
+      expect(ask.meta.lane_review.merged.change_class).toBe('docs');
+
+      const rows = (await auditRows(nickTok, 'lane.ready_for_review')) as unknown as {
+        target: string;
+        detail: Record<string, unknown>;
+      }[];
+      const row = rows.find((r) => r.target === laneId)!;
+      expect(row.detail.change_class).toBe('docs');
+      expect(row.detail.changed).toEqual({ docs: 3, tests: 0, code: 0 });
+    });
+
+    it('ADR 612: a pre-612 submit carries no class, and the row and ask say nothing about one', async () => {
+      const { nickTok, ada, gee } = await setup();
+      const lane = await post('/teams/dawn/lanes', { title: 'old seat', claim: true }, ada);
+      const laneId = lane.json.lane.id as string;
+      await patchLane(
+        laneId,
+        { state: 'awaiting_acceptance', merged: { pr: 10, sha: 'abc12a' } },
+        ada,
+      );
+      const inbox = await get('/teams/dawn/inbox?unread=1', gee);
+      const ask = inbox.json.messages.find(
+        (m: { act: string; meta?: { lane_review?: { lane?: string } } }) =>
+          m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+      );
+      expect(ask.body).toMatch(/^\[lane\] acceptance requested: "old seat"/);
+      const rows = (await auditRows(nickTok, 'lane.ready_for_review')) as unknown as {
+        target: string;
+        detail: Record<string, unknown>;
+      }[];
+      expect(rows.find((r) => r.target === laneId)!.detail).not.toHaveProperty('change_class');
+    });
+
     // Lane 01M1T42SBS (ADR 225 amendment, 2026-09-06). The line headlined by RECENCY: with six
     // pending and a routed acceptance the newest, stanley's huddle turn was "+5 more waiting" — a
     // count, not a sentence, and the room could not tell he was being spoken to. The headline is

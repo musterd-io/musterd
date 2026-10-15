@@ -1,6 +1,6 @@
 # 612 — The change class is labelled at submit and shown to the acceptor; it routes nothing yet
 
-- Status: proposed
+- Status: accepted (2026-10-15, nick, in chat: "go ahead with 612")
 - Date: 2026-10-15
 - Deciders: nick (asked for "acceptance tiering by diff shape" on 2026-10-15; this ADR is the form
   that request can take without reversing ADR 234)
@@ -86,6 +86,12 @@ acceptance goes — cannot be asked, because nothing records the kind.
   reads as "does the text say what the code does", which is what acceptors already do by hand.
 - The eval has a dataset from the day this lands. The second ADR has a decision rule before anyone
   wants it to say yes. Follows-up: none — the routing ADR is opened only if the eval meets its rule.
+- 2026-10-15, implemented (lane `01M50SM9X9`): `classifyChange` and `changeLabelText` in
+  `packages/protocol/src/changeClass.ts`, called by both submit doors (`readChangeLabel` in the MCP
+  adapter's `mergeVerify.ts` and the CLI's `laneClaims.ts`). One reading the §1 list leaves open is
+  settled there: `docs` and `tests` are exclusive classes, so a test-only diff is `tests` even when
+  every test lives under `packages/server/src/`, and a diff of docs plus tests (nothing else) is
+  `code`. The stage-two human ask opens with the class too, not only the peer ask.
 
 ## Observability & Evaluation
 

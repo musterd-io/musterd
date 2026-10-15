@@ -26,6 +26,7 @@ describe('lane commands', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
     // ADR 585: the rail's checkers shell out to git and gh; the temp dir is no clone.
     claimSeams.check = async () => [];
+    claimSeams.label = async () => null;
     // `team create` mints nick as creator-admin and auto-binds this folder, so lane commands
     // resolve nick from the binding without an explicit --as (the acting-identity requirement).
     await capture(() => teamCommand(parseArgs(['create', 'dawn', '--member', 'nick'])));
@@ -253,12 +254,19 @@ describe('lane commands', () => {
         evidence: 'gh unavailable',
       },
     ];
+    // ADR 612: the commit verified as landed, so the submit carries its change class.
+    const labelled: string[] = [];
+    claimSeams.label = async (sha) => {
+      labelled.push(sha);
+      return { change_class: 'server', changed: { docs: 1, tests: 2, code: 3 } };
+    };
     const { out: opened } = await capture(() => laneCommand(parseArgs(['open', 'rail'])));
     const id = /\b(01[0-9A-Z]{24})\b/.exec(opened)![1]!;
     await capture(() => laneCommand(parseArgs(['claim', id])));
     const submitted = await capture(() =>
       laneCommand(parseArgs(['submit', id, '--pr', '7', '--sha', 'deadbeef'])),
     );
+    expect(labelled).toEqual(['deadbeef']);
     expect(submitted.out).toContain('claims: commit_landed ✓ · pr_merged ?');
     expect(submitted.out).toContain('(checked by nick)');
     const { out: json } = await capture(() => lanesCommand(parseArgs(['--json'])));
@@ -267,6 +275,10 @@ describe('lane commands', () => {
       ['commit_landed', 'confirmed', 'nick'],
       ['pr_merged', 'unverifiable', 'nick'],
     ]);
+    expect(lane.merged).toMatchObject({
+      change_class: 'server',
+      changed: { docs: 1, tests: 2, code: 3 },
+    });
   });
 
   it('submit records the branch the work landed on, for a lane opened without one', async () => {
