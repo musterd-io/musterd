@@ -96,6 +96,16 @@ seeing that person, and every guard downstream reads the seat as empty.
   open. That is intended, because a person has the seat and the act waits in the inbox they are
   looking at.
 
+- **2026-10-15, amended by ADR 609 (lane `01M50C7QK0`).** The protection this Decision gives an
+  attended session is now bounded by the lease window: a wake or dream claim presenting **its own
+  daemon-minted lease** displaces a live attended row that attached **after** that lease was minted
+  (`presence.created_at > wake_leases.created_at`) — the row snuck into the spawn window between
+  the daemon's idle observation and the claim, so it was never a session the daemon saw and chose
+  to spare (lazara's dream wakes, refused twice by this gate to a zombie adapter that attached 12s
+  after the mint). Everything else in this Decision stands: a row that predates the mint is
+  protected absolutely, a claim presenting no lease of the seat's opens no window, and the
+  displaced side rides the existing superseded/audit machinery. Read ADR 609 for the full rule.
+
 ## Observability & Evaluation
 
 - Traces: `claim.refused` rows with `reason: 'attended_session'` count how often the rule fires:

@@ -5,6 +5,7 @@ import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
+import { getMemberByName } from '../store/members.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { integrationHarness } from './integration.helpers.js';
 
@@ -180,6 +181,232 @@ withDrivers('integration · ws-supersede', (_o, kind) => {
         wake1.close();
         wake2.close();
         attended.close();
+      });
+    });
+
+    describe('a wake displaces only what snuck into its lease window (ADR 609)', async () => {
+      beforeEach(async () => {
+        await h.server.close();
+        h.server = createServer({ db: await openTestDriver(kind), port: 0 });
+        const { port } = await h.server.listen();
+        h.base = `http://127.0.0.1:${port}`;
+        h.wsUrl = `ws://127.0.0.1:${port}/ws`;
+      });
+
+      async function seatAdaWithStore() {
+        const team = await post('/teams', {
+          slug: 'dawn',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        await post(
+          '/teams/dawn/members',
+          { name: 'Ada', kind: 'agent' },
+          team.json.human_credential,
+        );
+        const grant = await standingGrant(team.json.human_credential, 'Ada');
+        const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
+        const ada = (await getMemberByName(h.server.store, teamId, 'Ada'))!;
+        return { team, grant, teamId, ada };
+      }
+
+      async function mintLease(
+        teamId: string,
+        memberId: string,
+        id: string,
+        createdAt: number,
+        derivation?: 'dream',
+      ) {
+        await h.server.store.run(
+          `INSERT INTO wake_leases (id, team_id, member_id, act_id, host, lane, status, created_at, expires_at)
+           VALUES (?, ?, ?, NULL, 'laptop.local', 'batched', 'leased', ?, ?)`,
+          [id, teamId, memberId, createdAt, createdAt + 300_000],
+        );
+        if (derivation === 'dream') {
+          await h.server.store.run(
+            `INSERT INTO audit (id, team_id, actor, action, target, result, ts, created_at, detail)
+             VALUES (?, ?, 'dream', 'residency.wake_leased', NULL, 'allow', ?, ?, ?)`,
+            [
+              `aud-${id}`,
+              teamId,
+              createdAt,
+              createdAt,
+              JSON.stringify({ lease_id: id, derivation: 'dream' }),
+            ],
+          );
+        }
+      }
+
+      function leaseClaimFrame(
+        agentKey: string,
+        grant: string,
+        workspace: string,
+        provenance: 'wake' | 'dream',
+        leaseId: string,
+      ) {
+        return {
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: agentKey,
+          target: { seat: 'Ada' },
+          grant,
+          surface: 'claude-code',
+          workspace,
+          provenance,
+          wake_lease: leaseId,
+        };
+      }
+
+      it('displaces a session that attached after the lease was minted — even in the same workspace', async () => {
+        const { team, grant, teamId, ada } = await seatAdaWithStore();
+        // The lease was minted against an idle seat; the "attended" row attaches 5s LATER — the
+        // resident/zombie adapter that snuck the spawn window (lazara, 2026-10-08/10-12).
+        await mintLease(teamId, ada.id, 'L-609', Date.now() - 5_000);
+
+        const sneak = new TestWs();
+        await sneak.open();
+        sneak.send({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: team.json.agent_key,
+          target: { seat: 'Ada' },
+          grant,
+          surface: 'cursor',
+          workspace: 'repo@main',
+          provenance: 'session',
+        });
+        await sneak.waitFor('occupied');
+
+        const wake = new TestWs();
+        await wake.open();
+        wake.send(leaseClaimFrame(team.json.agent_key, grant, 'repo@main', 'wake', 'L-609'));
+        await wake.waitFor('occupied');
+
+        expect(await sneak.waitFor('error')).toMatchObject({ code: 'superseded' });
+        const rows = (await listAudit(h.server.store, teamId))
+          .filter((r) => r.action === 'claim.superseded')
+          .map((r) => JSON.parse(String(r.detail)) as Record<string, unknown>);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ successor_provenance: 'wake' });
+        expect(rows[0]!['displaced']).toEqual([
+          expect.objectContaining({ provenance: 'session', surface: 'cursor' }),
+        ]);
+        sneak.close();
+        wake.close();
+      });
+
+      it('a DREAM claim displaces the sneak and the audit names dream as the successor', async () => {
+        const { team, grant, teamId, ada } = await seatAdaWithStore();
+        await mintLease(teamId, ada.id, 'L-dream-609', Date.now() - 5_000, 'dream');
+
+        const sneak = new TestWs();
+        await sneak.open();
+        sneak.send({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: team.json.agent_key,
+          target: { seat: 'Ada' },
+          grant,
+          surface: 'cursor',
+          workspace: 'repo@main',
+          provenance: 'session',
+        });
+        await sneak.waitFor('occupied');
+
+        const dream = new TestWs();
+        await dream.open();
+        dream.send(
+          leaseClaimFrame(team.json.agent_key, grant, 'repo@main', 'dream', 'L-dream-609'),
+        );
+        await dream.waitFor('occupied');
+
+        expect(await sneak.waitFor('error')).toMatchObject({ code: 'superseded' });
+        const rows = (await listAudit(h.server.store, teamId))
+          .filter((r) => r.action === 'claim.superseded')
+          .map((r) => JSON.parse(String(r.detail)) as Record<string, unknown>);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ successor_provenance: 'dream' });
+        sneak.close();
+        dream.close();
+      });
+
+      it('still refuses when the attended session attached BEFORE the lease was minted', async () => {
+        const { team, grant, teamId, ada } = await seatAdaWithStore();
+
+        const attended = new TestWs();
+        await attended.open();
+        attended.send({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: team.json.agent_key,
+          target: { seat: 'Ada' },
+          grant,
+          surface: 'claude-code',
+          workspace: 'repo@main',
+          provenance: 'session',
+        });
+        await attended.waitFor('occupied');
+
+        // The daemon mints the lease AFTER this session attached — it saw the session and must not
+        // displace it (ADR 444 absolute outside the window).
+        await mintLease(teamId, ada.id, 'L-609-late', Date.now());
+
+        const wake = new TestWs();
+        await wake.open();
+        wake.send(leaseClaimFrame(team.json.agent_key, grant, 'repo@main', 'wake', 'L-609-late'));
+        expect(await wake.waitFor('refused')).toMatchObject({ code: 'claim_conflict' });
+        await expect(attended.waitFor('error', 300)).rejects.toThrow(/timeout/);
+        const rows = (await listAudit(h.server.store, teamId)).filter(
+          (r) => r.action === 'claim.refused',
+        );
+        expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
+          code: 'claim_conflict',
+          reason: 'attended_predates_lease',
+        });
+        attended.close();
+        wake.close();
+      });
+
+      it('POST /claim applies the same window with x-musterd-wake-lease', async () => {
+        const { team, grant, teamId, ada } = await seatAdaWithStore();
+        await mintLease(teamId, ada.id, 'L-609-http', Date.now() - 5_000);
+
+        const sneak = new TestWs();
+        await sneak.open();
+        sneak.send({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: team.json.agent_key,
+          target: { seat: 'Ada' },
+          grant,
+          surface: 'cursor',
+          workspace: 'repo@main',
+          provenance: 'session',
+        });
+        await sneak.waitFor('occupied');
+
+        const res = await fetch(h.base + '/teams/dawn/claim', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-musterd-wake-lease': 'L-609-http',
+          },
+          body: JSON.stringify({
+            key: team.json.agent_key,
+            target: { seat: 'Ada' },
+            grant: await standingGrant(team.json.human_credential, 'Ada'),
+            surface: 'cli',
+            workspace: 'repo@main',
+            provenance: 'wake',
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(await sneak.waitFor('error')).toMatchObject({ code: 'superseded' });
+        sneak.close();
       });
     });
 

@@ -233,7 +233,7 @@ import {
   memberDoorbellPrefs,
   setDoorbellPrefs,
 } from '../store/doorbell.js';
-import { buildDreamPacket, settleProvenance } from '../store/dream.js';
+import { buildDreamPacket, ownLeaseCreatedAt, settleProvenance } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
 import {
@@ -352,10 +352,10 @@ import { deriveNext, deriveNextSummary, deriveTeamReviewPromises } from '../stor
 import {
   currentBuild,
   attach,
+  attendedSessionRows,
   clearOrphanPresence,
   clearMemberPresence,
   clearPresenceById,
-  heldByAttendedSession,
   countLivePresences,
   hasLivePresence,
   listLiveDrivers,
@@ -5190,6 +5190,9 @@ export async function handleHttp(
         // ADR 444: a wake never displaces an attended session — the WS `hello` refuses at the same
         // point. Before every occupy branch, so no grant is consumed and nothing is displaced.
         // ADR 494 §4: the claim's provenance, settled against the session's lease token.
+        // ADR 609: the refusal protects only what attached at or before the lease mint; a row that
+        // attached after — into the spawn window — is displaced at occupy (`leaseWindowSneaks`),
+        // and a claim presenting no lease of this seat's opens no window at all.
         const claimProvenance =
           targetMember.kind === 'agent'
             ? ((await settleProvenance(
@@ -5199,29 +5202,44 @@ export async function handleHttp(
                 wakeLeaseHeader(req),
               )) ?? null)
             : null;
+        const leaseWindowSneaks = new Set<string>();
         if (
           targetMember.kind === 'agent' &&
           targetMember.observer === 0 &&
-          (claimProvenance === 'wake' || claimProvenance === 'dream') &&
-          (await heldByAttendedSession(
+          (claimProvenance === 'wake' || claimProvenance === 'dream')
+        ) {
+          const attended = await attendedSessionRows(
             ctx.db,
             ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
-          ))
-        ) {
-          await appendAudit(ctx.db, team.id, {
-            actor: null,
-            action: 'claim.refused',
-            target: targetMember.name,
-            result: 'deny',
-            detail: { code: 'claim_conflict', reason: 'attended_session' },
-          });
-          return sendJson(res, 409, {
-            type: 'refused',
-            code: 'claim_conflict',
-            message: `seat "${targetMember.name}" is held by an attended session — a wake does not displace it`,
-            claimable: [],
-            hint: 'the act stays due; the wake is retried once the seat is idle',
-          });
+          );
+          if (attended.length > 0) {
+            const leaseId = wakeLeaseHeader(req);
+            const minted = leaseId
+              ? await ownLeaseCreatedAt(ctx.db, targetMember.id, leaseId)
+              : null;
+            const protectedRows =
+              minted === null ? attended : attended.filter((r) => r.created_at <= minted);
+            if (protectedRows.length > 0) {
+              await appendAudit(ctx.db, team.id, {
+                actor: null,
+                action: 'claim.refused',
+                target: targetMember.name,
+                result: 'deny',
+                detail: {
+                  code: 'claim_conflict',
+                  reason: minted === null ? 'attended_session' : 'attended_predates_lease',
+                },
+              });
+              return sendJson(res, 409, {
+                type: 'refused',
+                code: 'claim_conflict',
+                message: `seat "${targetMember.name}" is held by an attended session — a wake does not displace it`,
+                claimable: [],
+                hint: 'the act stays due; the wake is retried once the seat is idle',
+              });
+            }
+            for (const r of attended) leaseWindowSneaks.add(r.presenceId);
+          }
         }
 
         // What every occupy branch below records on its row. Written once, deliberately: the
@@ -5290,8 +5308,9 @@ export async function handleHttp(
           for (const old of liveConns) {
             // ADR 068/092: a same-workspace successor does not evict its predecessor — it is the
             // same folder reconnecting, and evicting there points two sessions at one working tree
-            // (or, on `claim --detach`, kills the session that just asked to stay).
-            if (sameWorkspaceAsClaim(old)) {
+            // (or, on `claim --detach`, kills the session that just asked to stay). ADR 609: a
+            // lease-window sneak is not that predecessor — it is displaced like any other.
+            if (sameWorkspaceAsClaim(old) && !leaseWindowSneaks.has(old.presenceId)) {
               sparedSameWorkspace++;
               continue;
             }
