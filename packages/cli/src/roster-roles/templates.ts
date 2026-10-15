@@ -74,6 +74,33 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
       'with the designer role: you supply exact copy specs and hand implementation over.',
     capabilities: {},
   },
+  // Security and courier carry no structural capability: security's charter is that the role grants
+  // no admin or infrastructure access, and a courier route's authority is compiled from its toolkit
+  // (ADR 261) and enforced by the team's role-route policy (ADR 513), never by the role file.
+  security: {
+    summary:
+      "Owns the team's security evidence — threat models, authorized scans, validated findings, private disclosure",
+    charter:
+      "You own the team's security evidence: what was checked, what was found, how sure you are, " +
+      'and what was done about it. Teammates route threat models, security reviews, findings, ' +
+      'leaked secrets and dependency questions to you. The role grants no admin, infrastructure or ' +
+      'production access: scan only inside an authorized lane, and hand a finding on running ' +
+      'services to the platform role. A weakness stays private until its fix ships; disclosure ' +
+      'timing belongs to the human who owns the project.',
+    capabilities: {},
+  },
+  courier: {
+    summary:
+      "Moves team material between the team's machines when git and sync are the wrong carrier",
+    charter:
+      "You move team material between the team's machines and networks when git and the team's " +
+      'own sync are the wrong carrier: datasets, built artifacts, research outputs that must stay ' +
+      'off public hosts. Carry only the files a teammate named, over the routes the team has ' +
+      'declared, verify they arrived intact, and leave one record of each transfer. Credentials ' +
+      "never travel by courier, and personal or licensed material moves only with a human's yes " +
+      'for that move. If a route refuses, stop and ask; never route around it.',
+    capabilities: {},
+  },
 };
 
 export function listRoleTemplateNames(): string[] {
