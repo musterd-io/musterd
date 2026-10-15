@@ -61,3 +61,40 @@ board's surface-overlap warnings at handoff (pgDriver with wallow's tail lane, b
 miley's capture lane, the stream wiki between lanes 3 and 4) are advisory and were not acted on.
 Work-order leases followed within 15 s for mason (lane 1) and sloane (lane 6); delta and dolly are
 actuated by their own hosts' polls.
+
+### Pass 2 — 2026-10-15 10:59 PDT
+
+107 open lanes, 8 in class, handed off oldest first, alternating B / C, starting at B, with pass
+1's note (`pass 2 (2026-10-15)` in place of `pass 1`):
+
+| # | lane | arm | to |
+| --- | --- | --- | --- |
+| 1 | `01M3AMY549` demo inc 4b: ChatGPT Business rehearsal | B | mason |
+| 2 | `01M3W3EQ67` Cloud per-team rate limits and quotas | C | alfie |
+| 3 | `01M3W6GWVN` Cloud audit churn retention without a local archive | B | mason |
+| 4 | `01M3W815KR` Cloud seeds relay fetch gets the public-host rule | C | delta |
+| 5 | `01M4RX7NE2` idle-wake: Claude Code deaf after `/mcp` reload | B | mason |
+| 6 | `01M4SB4CJP` spend controls: approvals above a threshold | C | alfie |
+| 7 | `01M4SB4D7R` spend controls: the unpriced floor | B | mason |
+| 8 | `01M4VPY8JV` role-skills 9: user guide | C | delta |
+
+**Pass 1 under-counted the class.** All eight lanes have dependencies, and every one of those
+dependencies was `done` before pass 1 (the latest, `01M4VPXR1X`, on 2026-10-13 21:15). The
+manifest's term is "no *open* dependency". Pass 1 dropped every lane with any dependency, so these
+eight were in class on 2026-10-14 and were not offered. Pass 1's nine handoffs stand. The eight
+reach the arms a day late, which shortens their time in the window. Of the 13 lanes that passed
+every other term today, 5 still wait on an open dependency (`01M3Z4408C`, `01M3Z44EMJ`,
+`01M3Z44TD7`, `01M3Z44YMT`, `01M4SB4BZB`).
+
+**Arm C's pool changed between attempts.** A first send at about 10:45 timed out on all eight: the
+hub at `100.100.246.14` did not answer health or ping, and no lane changed owner. On the retry,
+dolly and sloane were attended, so the round-robin ran over the wakeable seats `alfie` and `delta`
+in name order. The board's surface-overlap warnings are advisory and were not acted on:
+`cloud/loops.ts` is now held by mason (lane 3), alfie (lane 2, `cloud/**`) and delta (lane 4);
+`docs/superpowers/specs/**` is held by alfie (lane 6) and mason (lane 7); and `docs/wiki/**` by
+lane 8 and the stream lanes.
+
+**Spend at the pass**, read from this joiner's replica: mason $12.81 across 36
+`residency.wake_cost` rows (gateway-priced) against the $100 ceiling, resident $0.013 against $15.
+The replica's `wake_turns` for mason sum to $14.68 across 40 leases. That gap of four leases and
+$1.87 is measure 5's question, and the finding reads it from the hub.
