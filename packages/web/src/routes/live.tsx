@@ -839,25 +839,33 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
+  // The outcome is a checkmark or a changed tooltip, neither of which a screen reader speaks. The
+  // status sits beside the button, not in it, so the button's name stays the same while it speaks;
+  // it is always mounted because a live region that appears with its text is often not announced.
   return (
-    <button
-      type="button"
-      className={`lc__pbtn${copied ? ' lc__pbtn--on' : ''}`}
-      onClick={() => void copy()}
-      title={
-        failed ?? 'Copy a shareable read-only watch link (public traffic only — no DMs, no account)'
-      }
-    >
-      {copied ? (
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M3.5 8.5 6.5 11.5 12.5 5" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M6.5 9.5 9.5 6.5M7 4.5 8.4 3a2.6 2.6 0 0 1 3.7 3.7L10.6 8.2M9 11.5 7.6 13a2.6 2.6 0 0 1-3.7-3.7L5.4 7.8" />
-        </svg>
-      )}
-    </button>
+    <>
+      <span className="lc-sr" role="status">
+        {failed ?? (copied ? 'Watch link copied' : '')}
+      </span>
+      <button
+        type="button"
+        className={`lc__pbtn${copied ? ' lc__pbtn--on' : ''}`}
+        onClick={() => void copy()}
+        title={
+          failed ?? 'Copy a shareable read-only watch link (public traffic only — no DMs, no account)'
+        }
+      >
+        {copied ? (
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.5 8.5 6.5 11.5 12.5 5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6.5 9.5 9.5 6.5M7 4.5 8.4 3a2.6 2.6 0 0 1 3.7 3.7L10.6 8.2M9 11.5 7.6 13a2.6 2.6 0 0 1-3.7-3.7L5.4 7.8" />
+          </svg>
+        )}
+      </button>
+    </>
   );
 }
 
