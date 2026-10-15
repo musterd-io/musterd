@@ -19,6 +19,7 @@ import {
   wagonTrail,
   actorSortAnchor,
   animatedDeskAnchors,
+  deskHasProp,
   boardAnchor,
   BOOK_COLORS,
   CLOCK_NUMERALS,
@@ -217,6 +218,21 @@ describe('animatedDeskAnchors', () => {
     const minusOne = new Set(allSlots);
     minusOne.delete(fanSlot!.id);
     expect(animatedDeskAnchors(fit, minusOne).fans.length).toBe(full - 1);
+  });
+
+  it('gives every occupied desk at least one moving prop — no desk sits still (lane 01M50X1WRW)', () => {
+    for (const slot of DESK_SLOTS) {
+      const { fans, coffees } = animatedDeskAnchors(fit, new Set([slot.id]));
+      expect(fans.length + coffees.length, `desk ${slot.id}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('fills a bare desk with a fan or a mug, and not the same one everywhere', () => {
+    for (const slot of DESK_SLOTS)
+      expect(deskHasProp(slot.id, 'fan') || deskHasProp(slot.id, 'coffee'), `desk ${slot.id}`).toBe(true);
+    const fans = DESK_SLOTS.filter((s) => deskHasProp(s.id, 'fan')).length;
+    expect(fans).toBeGreaterThan(1);
+    expect(fans).toBeLessThan(DESK_SLOTS.length);
   });
 
   it('drops a mug steam the moment its desk empties (empty desk → empty, un-steaming mug)', () => {

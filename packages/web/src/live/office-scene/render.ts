@@ -3799,8 +3799,15 @@ export const PROP_SPEC: Record<
 };
 /** Whether a given desk carries a given prop — a stable per-desk hash, independent of who's seated.
  * Exported for the ambient scheduler: a sip beat needs a mug on that member's desk to sip from. */
+const rolledProp = (id: number, kind: PropKind): boolean => deskRnd(id, PROP_SPEC[kind].salt) < PROP_SPEC[kind].prob;
 export function deskHasProp(id: number, kind: PropKind): boolean {
-  return deskRnd(id, PROP_SPEC[kind].salt) < PROP_SPEC[kind].prob;
+  if (rolledProp(id, kind)) return true;
+  // Every desk carries something that moves once someone sits at it (lane 01M50X1WRW): a desk the hash
+  // gave neither a fan nor a mug gets one of the two, picked by its own hash so the room still varies.
+  // Decided here, so the baked prop, the sip mug and the Tier-A overlay all agree.
+  if ((kind === 'fan' || kind === 'coffee') && !rolledProp(id, 'fan') && !rolledProp(id, 'coffee'))
+    return (deskRnd(id, 23) < 0.5) === (kind === 'fan');
+  return false;
 }
 /** The mug colour a desk's coffee cup uses — one hash shared by the desk prop and the in-hand sip mug. */
 function deskMugColor(id: number): string {
