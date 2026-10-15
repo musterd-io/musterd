@@ -439,6 +439,48 @@ withDrivers('review', (o) => {
         }),
       ).toBeNull();
     });
+
+    it('a dreaming seat is excluded `dreaming` and the ladder falls through (ADR 606)', async () => {
+      const { openLane } = await import('./lanes.js');
+      const { selectReviewCounterpart } = await import('./review.js');
+      const { db, team } = await seed();
+      await agent(db, team, 'worker', 'claude-opus-5');
+      // Would win at cross_family, but its live presence is a dream — fenced, so an ask routed
+      // to it could never be verdicted (docs/wiki/dream-cannot-verdict-acceptance.md).
+      const { row: grokbot } = await addMember(db, team, {
+        kind: 'agent',
+        name: 'grokbot',
+        role: '',
+      });
+      await attach(db, grokbot.id, 'claude-code', 'conn-grokbot', {
+        model: 'gpt-5.6-sol',
+        provenance: 'dream',
+      });
+      await agent(db, team, 'dolly', 'claude-opus-4-8');
+      const lane = await openLane(db, team.id, 'dawn', 'worker', {
+        title: 'a change',
+        claim: true,
+      });
+      const p = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+      expect(p.pick).toMatchObject({ reviewer: 'dolly', grade: 'cross_model' });
+      expect(p.snapshot.candidates).toEqual(
+        expect.arrayContaining([
+          { member: 'grokbot', family: 'gpt', eligible: false, exclusion: 'dreaming' },
+        ]),
+      );
+    });
+
+    it('a dream-only pool routes no verdict — the ask escalates, it does not park (ADR 606)', async () => {
+      expect(
+        await pick(async ({ db, team }) => {
+          const { row } = await addMember(db, team, { kind: 'agent', name: 'grokbot', role: '' });
+          await attach(db, row.id, 'claude-code', 'conn-grokbot', {
+            model: 'gpt-5.6-sol',
+            provenance: 'dream',
+          });
+        }),
+      ).toBeNull();
+    });
   });
 
   describe('selectReviewCounterpart — decision-time audit snapshot (ADR 303)', () => {
