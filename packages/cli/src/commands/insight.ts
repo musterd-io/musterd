@@ -29,6 +29,9 @@ export async function insightCommand(parsed: Parsed): Promise<number> {
     if (Buffer.byteLength(body, 'utf8') > 2048) {
       throw new CliError('insight body is limited to 2048 bytes', 2);
     }
+    if (body.trim().length === 0) {
+      throw new CliError('insight body must not be empty — the finding, not just the subject', 2);
+    }
     const tags = flagStr(parsed.flags, 'tags')
       ?.split(',')
       .map((t) => t.trim())

@@ -34,7 +34,7 @@ export function registerTeamMemory(
       description: SAVE_DESCRIPTION,
       inputSchema: {
         headline: z.string().min(1).max(120).describe('one-line subject (≤120 chars)'),
-        body: z.string().max(2048).describe('the finding (≤2048 bytes)'),
+        body: z.string().min(1).max(2048).describe('the finding (≤2048 bytes)'),
         tags: z.array(z.string()).max(8).optional().describe('up to 8 short tags'),
         repo: z.string().optional().describe('repo slug, when bound to one'),
         // ADR 526: ids this finding replaces. Undescribed to keep the per-turn tool list inside its

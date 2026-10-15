@@ -296,9 +296,14 @@ async function routeEnvelopeInner(
   }
   // ADR 327: an insight's finding text is capped at 2048 bytes — server-enforced here on the one
   // validate→persist→deliver path, like seat memory's blob cap (ADR 093), because actMetaRules
-  // sees only {act, thread, meta}, never the body.
+  // sees only {act, thread, meta}, never the body. The floor below (lane 01M50C7QWJ): empty rows
+  // passed every layer until 2026-10-15 (docs/wiki/dream-empty-insight-bodies.md) — an insight
+  // with no finding is noise the dreams then carry night after night.
   if (env.act === 'insight' && Buffer.byteLength(env.body, 'utf8') > 2048) {
     throw new MusterdError('validation', 'act "insight" body is limited to 2048 bytes');
+  }
+  if (env.act === 'insight' && env.body.trim().length === 0) {
+    throw new MusterdError('validation', 'act "insight" body must not be empty');
   }
   // ADR 516 increment 3: a hold proposal is checked when it is SENT, so the proposer learns now that
   // a 20h freeze or an effect outside the list will never activate — not when a human accepts it.
