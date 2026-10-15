@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  deriveLaneAreas,
+  LANE_AREAS,
   laneDetailLines,
   LaneDetailSchema,
   laneEventLine,
@@ -170,5 +172,42 @@ describe('laneDetailLines', () => {
     expect(
       laneDetailLines(detail({ lane: { state: 'abandoned', abandon_reason: 'superseded' } })),
     ).toEqual(['abandoned: superseded']);
+    expect(
+      laneDetailLines(detail({ lane: { areas: ['ui', 'docs'], declared_areas: ['ui', 'docs'] } })),
+    ).toEqual(['areas: ui, docs (declared)']);
+  });
+});
+
+describe('deriveLaneAreas (ADR 582 §3)', () => {
+  it('derives areas from path segments in canonical order, including brace expansions and top-level markdown', () => {
+    expect(deriveLaneAreas([])).toEqual([]);
+    expect(deriveLaneAreas(['packages/web/src/live/Board.tsx'])).toEqual(['ui']);
+    expect(
+      deriveLaneAreas(['packages/server/src/store/lanes.ts', 'packages/protocol/src/lanes.ts']),
+    ).toEqual(['server', 'protocol']);
+    expect(
+      deriveLaneAreas(['packages/cli/src/commands/lane.ts', 'packages/mcp/src/tools/lanes.ts']),
+    ).toEqual(['cli', 'mcp']);
+    expect(
+      deriveLaneAreas([
+        'docs/decisions/582-finding-work.md',
+        '.github/workflows/ci.yml',
+        'scripts/perf/check.ts',
+      ]),
+    ).toEqual(['docs', 'ci']);
+    expect(deriveLaneAreas(['AGENTS.md'])).toEqual(['docs']);
+    expect(
+      deriveLaneAreas(['packages/web/src/live/office-scene/{render.ts, render.test.ts}']),
+    ).toEqual(['ui', 'tests']);
+    expect(deriveLaneAreas(['tests/scenarios/flagship.e2e.ts'])).toEqual(['tests']);
+    expect(LANE_AREAS).toEqual(['ui', 'server', 'cli', 'mcp', 'protocol', 'docs', 'ci', 'tests']);
+  });
+
+  it('declared areas replace derived ones instead of adding to them', () => {
+    expect(
+      deriveLaneAreas(['packages/web/src/live/Board.tsx'], ['server', ' CLI ', 'server']),
+    ).toEqual(['server', 'cli']);
+    expect(deriveLaneAreas(['packages/web/src/live/Board.tsx'], [])).toEqual(['ui']);
+    expect(deriveLaneAreas(['packages/web/src/live/Board.tsx'], null)).toEqual(['ui']);
   });
 });

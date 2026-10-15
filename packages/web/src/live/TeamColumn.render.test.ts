@@ -32,6 +32,7 @@ const board = {
       claimed_at: 0,
       updated_at: 0,
       goal_id: 'launch',
+      areas: ['ui'],
     },
   ],
 } as unknown as LaneBoard;
@@ -57,7 +58,7 @@ describe('TeamColumn', () => {
     expect(html).toContain('Opus 5.5');
     expect(html).toContain('working on');
     expect(html).toContain('Trace coverage for every harness');
-    expect(html).toContain('for Launch · 42m');
+    expect(html).toContain('for Launch · ui · 42m');
     expect(html).toContain('<svg'); // the provider logo, not just a tint
   });
 

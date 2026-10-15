@@ -74,7 +74,7 @@ withDrivers('containment', (_o, kind) => {
         // Rewind past v50 and replay the migration tail. v51–v53 add independent tables and an index;
         // v54 adds the origin index and the pull cursor, and touches no row; v55 adds guarded columns; v56 re-issues v54.
         await db.run("UPDATE schema_meta SET value = '49' WHERE key = 'schema_version'");
-        expect(runMigrations((db as SqliteDriver).raw)).toBe(97);
+        expect(runMigrations((db as SqliteDriver).raw)).toBe(98);
 
         expect(await snapshot(db)).toEqual(before);
         // …and the replay did not drop what was already staged-adjacent: the tables survive it.

@@ -147,15 +147,16 @@ async function projectLaneEvent(
     // `id_collision` keeps the message we hold — and say nothing, since the audit row is kept.
     if (held) return 'applied';
     const scope = Array.isArray(d['scope']) ? d['scope'] : [];
+    const declaredAreas = Array.isArray(d['declared_areas']) ? d['declared_areas'] : [];
     const dependsOn = Array.isArray(d['depends_on']) ? d['depends_on'] : [];
     const risk = Array.isArray(d['risk']) ? d['risk'] : [];
     const stakes = typeof d['stakes'] === 'string' ? d['stakes'] : 'normal';
     const provenance = typeof d['stakes_provenance'] === 'string' ? d['stakes_provenance'] : null;
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
-                          depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, source_ref,
+                          depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
                           state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'open', ?, ?, NULL, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -171,6 +172,7 @@ async function projectLaneEvent(
         risk.length > 0 ? JSON.stringify(risk) : null,
         stakes !== 'normal' ? stakes : null,
         provenance === 'defaulted' ? 'defaulted' : null,
+        declaredAreas.length > 0 ? JSON.stringify(declaredAreas) : null,
         // ADR 561: carried, never judged — the fold applies history, so a ref another live lane
         // already holds lands anyway (each daemon refuses at its own write; re-sync names the rest).
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
@@ -265,6 +267,7 @@ async function projectLaneEvent(
         follows_up: 'follows_up_json',
         abandon_reason: 'abandon_reason',
         unfinished_todos: 'unfinished_todos_json',
+        declared_areas: 'areas_json',
         source_ref: 'source_ref',
       };
       for (const [field, change] of Object.entries(changes)) {
@@ -272,7 +275,7 @@ async function projectLaneEvent(
         if (!col) continue;
         let value: unknown = change.to ?? null;
         if (field === 'scope' || field === 'depends_on') value = JSON.stringify(value ?? []);
-        else if (field === 'risk')
+        else if (field === 'risk' || field === 'declared_areas')
           value = Array.isArray(value) && value.length > 0 ? JSON.stringify(value) : null;
         else if (field === 'stakes') value = value === 'normal' ? null : value;
         else if (

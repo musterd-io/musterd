@@ -46,13 +46,14 @@ function fmtLane(l: Lane): string {
   const deps = l.depends_on.length ? ` deps=[${l.depends_on.join(', ')}]` : '';
   const branch = l.branch ? ` branch=${l.branch}` : '';
   const goal = l.goal_id ? ` goal=${l.goal_id}` : '';
+  const areas = l.areas?.length ? ` areas=[${l.areas.join(', ')}]` : '';
   const src = l.source_ref ? ` src=${l.source_ref}` : '';
   // ADR 466: a parked lane says who shelved it and why, in place of an owner.
   const parked = l.parked
     ? ` parked by ${l.parked.by}: "${l.parked.reason}"` +
       (l.parked.until ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})` : '')
     : '';
-  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${src}${scope}${deps}${branch}${parked}`;
+  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${areas}${src}${scope}${deps}${branch}${parked}`;
 }
 
 function fmtWarnings(warnings: LaneWarning[]): string {
@@ -169,6 +170,10 @@ export function registerLanes(
           .array(z.string())
           .optional()
           .describe('paths this lane touches, e.g. ["packages/server/src/store/**"]'),
+        areas: z
+          .array(z.string())
+          .optional()
+          .describe('declared areas; replace those derived from scope (ADR 582)'),
         depends_on: z.array(z.string()).optional().describe('lane ids this lane builds on'),
         branch: z.string().optional().describe('git branch carrying the work'),
         goal_id: z
@@ -367,6 +372,11 @@ export function registerLanes(
         title: z.string().min(1).optional().describe('correct a mis-stated title'),
         detail: z.string().optional(),
         scope: z.array(z.string()).optional(),
+        areas: z
+          .array(z.string())
+          .nullable()
+          .optional()
+          .describe('set declared areas, or null to clear them and derive from scope'),
         stakes: z
           .enum(['low', 'normal', 'high'])
           .optional()

@@ -304,6 +304,7 @@ describe('createLane / updateLane (the writable board, item 5)', () => {
     owner_seat: 'nick',
     role: null,
     scope: [],
+    areas: [],
     depends_on: [],
     branch: null,
     goal_id: null,

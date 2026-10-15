@@ -120,6 +120,18 @@ and `pnpm context:check` refuses a raise without a stated rent and falsifier.
   than read as a search. That lane extends the same argument. The `q` argument cost 62 B of tool list,
   recorded in `docs/perf/context-budgets.json`. The lines under a lane's board line come from one
   protocol function, `laneDetailLines`, which both surfaces render.
+- 2026-10-15, lane `01M4VKSDJH`: derived areas and declared overrides shipped. `LANE_AREAS`,
+  `AREA_PATH_SEGMENTS` and `deriveLaneAreas(scope, declaredAreas)` live in `lanes.wire.ts` (validator-free,
+  re-exported by `lanes.ts`). Portable migration v98 adds nullable `lanes.areas_json`, written from
+  `areas` on `lane_open` / `lane_update` (`musterd lane open/update --area <areas>|none`) and replicated
+  as `declared_areas` in `lane.opened` / `lane.updated`. Beyond the Decision table, the mapping also names
+  `console` and `mobile` as ui, `whiteboard` as server, `telemetry` as protocol, `content` and the
+  dot-dirs `.agents` `.claude` `.cursor` `.grok` `.opencode` as docs, and `deploy` as ci. A brace
+  group is split into segments, and a filename matching `*.test.*`, `*.spec.*` or `*.e2e.*` derives
+  `tests`. Every lane on the wire carries `areas: string[]`
+  (and `declared_areas` when overridden), rendered on the board, `musterd lanes`, `musterd next` /
+  `team_next`, `/board` cards and `/live` team cards. `GET /lanes?brief=1` computes `areas` before
+  stripping `scope`, so `/live` keeps them.
 
 ## Observability & Evaluation
 

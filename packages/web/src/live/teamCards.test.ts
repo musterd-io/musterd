@@ -92,7 +92,16 @@ describe('teamCards', () => {
     const { cards } = teamCards([m('a')], board(lane('a', { goal_id: 'launch', claimed_at: 5 })), [
       { id: 'launch', title: 'Launch' },
     ]);
-    expect(cards[0]).toMatchObject({ goal: 'Launch', since: 5 });
+    expect(cards[0]).toMatchObject({ goal: 'Launch', since: 5, areas: [] });
+  });
+
+  it('carries the shown lane areas next to the goal (ADR 582 §3)', () => {
+    const { cards } = teamCards(
+      [m('a')],
+      board(lane('a', { goal_id: 'launch', areas: ['ui', 'docs'] })),
+      [{ id: 'launch', title: 'Launch' }],
+    );
+    expect(cards[0]).toMatchObject({ goal: 'Launch', areas: ['ui', 'docs'] });
   });
 
   it('names the goal by its NAME, not its whole story (slop tell 8)', () => {
