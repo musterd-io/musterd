@@ -14,14 +14,19 @@
  *   node scripts/cloud/deploy.mjs            (from a clean checkout of the commit to ship)
  *
  * Env: FLY_APP (musterd-cloud), FLY_MIGRATE_APP (musterd-cloud-migrate), CLOUD_PROBE_HOST
- * (health.musterd.dev), CLOUD_DEPLOY_STRATEGY (bluegreen | rolling, see STRATEGY). Prints Fly's own progress and the migrate log — never a URL or secret.
+ * (health.musterd.dev), CLOUD_DEPLOY_STRATEGY (bluegreen | rolling, see STRATEGY), CLOUD_FLY_CONFIG
+ * (deploy/cloud/fly.toml) and CLOUD_MIGRATE_CMD (`node scripts/cloud/migrate.mjs`, space-split) —
+ * the last two let the console (ADR 615) ride the same pipeline: see docs/guides/cloud-ops.md. Prints Fly's own progress and the migrate log — never a URL or secret.
  */
 import { spawnSync } from 'node:child_process';
 
 const APP = process.env.FLY_APP ?? 'musterd-cloud';
 const MIGRATE_APP = process.env.FLY_MIGRATE_APP ?? 'musterd-cloud-migrate';
 const PROBE = process.env.CLOUD_PROBE_HOST ?? 'health.musterd.dev';
-const CONFIG = 'deploy/cloud/fly.toml';
+const CONFIG = process.env.CLOUD_FLY_CONFIG ?? 'deploy/cloud/fly.toml';
+const MIGRATE_CMD = (process.env.CLOUD_MIGRATE_CMD ?? 'node scripts/cloud/migrate.mjs').split(
+  /\s+/,
+);
 /**
  * `bluegreen` on one machine (the shape since 2026-10-02: start the new one, gate on /health,
  * retire the old). `rolling` once the app runs N ≥ 2 (ADR 608 makes that safe): machines are
@@ -84,7 +89,7 @@ async function createMigrateMachine(token, image) {
       region: 'iad',
       config: {
         image,
-        init: { cmd: ['node', 'scripts/cloud/migrate.mjs'] },
+        init: { cmd: MIGRATE_CMD },
         restart: { policy: 'no' },
         guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 512 },
         metadata: { purpose: 'migrate' },
