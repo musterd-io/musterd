@@ -209,9 +209,9 @@ describe('motion means something (ADR 464, lane 4)', () => {
   });
 
   it('a purposeful walk wears its verb, from headline.ts, only while the act walk is in flight', () => {
-    expect(index).toContain("walkTags.set(ev.from, walkTag('help', null))");
-    expect(index).toContain("walkTags.set(ev.from, walkTag('handoff', ev.to))");
-    expect(index).toContain("walkTags.set(ev.from, walkTag('steer', ev.to))");
+    expect(index).toContain("setWalkTag(ev.from, walkTag('help', null))");
+    expect(index).toContain("setWalkTag(ev.from, walkTag('handoff', ev.to))");
+    expect(index).toContain("setWalkTag(ev.from, walkTag('steer', ev.to))");
     // Per frame, not per bake: a tag that arrived or left on a bake re-centred the plate between
     // the sweep's measure and its shutter (found by the contrast gate on /office-preview).
     const sync = body('syncWalkTags');
@@ -326,3 +326,17 @@ describe('a human plate and the viewer\'s own plate (lane 01M50CD7SN)', () => {
     expect(body('syncLabels')).toMatch(/name === you[\s\S]*?'lc-gl-label__you'/);
   });
 });
+
+describe('a replayed walk wears its age (lane 01M50TZA8X)', () => {
+  it('runs the replay at REPLAY_TEMPO and stamps each replayed walk tag with its age, never a live one', () => {
+    const drain = index.slice(index.indexOf('function drainReplay'), index.indexOf('function update('));
+    expect(drain).toContain('tempo = REPLAY_TEMPO');
+    expect(drain).toContain('replayAt = ev.at ?? null');
+    expect(drain).toContain('replayAt = null');
+    // Every walk tag goes through setWalkTag, which adds the age only while a replay emits.
+    expect(index).not.toMatch(/walkTags\.set\((?!name, verb\))/);
+    expect(index).toContain('if (replayAt !== null) walkAges.set(name, replayAge(Date.now() - replayAt))');
+    expect(index).toContain("ago.className = 'lc-gl-label__ago'");
+  });
+});
+

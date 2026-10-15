@@ -313,7 +313,8 @@ export interface OfficeHandle {
   /** Replay on open (nick, 2026-10-12): play these lane walks once, in order, at REPLAY_TEMPO× — the
    * last ten minutes the viewer missed. Queued and drained by the frame loop once someone is placed —
    * never played inside update() (#2429's fault); a no-op under reduced motion and in still mode. */
-  replay: (evs: readonly OfficeEvent[]) => void;
+  /** `at` (the act's send time) makes the walker wear its age while it walks (lane 01M50TZA8X). */
+  replay: (evs: readonly (OfficeEvent & { at?: number })[]) => void;
   dispose: () => void;
   /** Park/resume the render loop while the panel is collapsed (canvas stays mounted at opacity 0).
    * Suspended: no rAF, no ambient beats — zero draw cost for invisible pixels. Resuming re-bakes and

@@ -603,6 +603,21 @@ function OfficePreviewPage() {
           timers.push(setTimeout(poke, 600));
           loop ??= setInterval(poke, 30000);
         }
+        // `?replay=1` hands the scene a replay on open: a claim from 4 min ago and a finish from just
+        // now, so the walkers' age tags (lane 01M50TZA8X) can be seen headlessly, without a daemon.
+        if (search.get('replay')) {
+          const now = Date.now();
+          timers.push(
+            setTimeout(
+              () =>
+                handleRef.current?.replay([
+                  { kind: 'walk-claim', who: 'Dev', lane: 'preview-a', title: 'Rotate the leaked keys', at: now - 4 * 60_000 },
+                  { kind: 'walk-pin', who: 'Ada', lane: 'preview-b', title: 'Ship the tour', state: 'done', at: now - 20_000 },
+                ]),
+              600,
+            ),
+          );
+        }
       })
       .catch(() => {});
 
