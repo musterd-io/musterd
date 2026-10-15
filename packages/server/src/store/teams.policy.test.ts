@@ -102,6 +102,31 @@ withDrivers('teams.policy', (o) => {
     });
   });
 
+  describe('spend_cap_usd (ADR 602)', () => {
+    it('stores only the cap, reads it back, and clears it by omission', async () => {
+      const { db, team } = await seed();
+      expect((await getPolicy(db, team.id)).spend_cap_usd).toBeUndefined();
+      const fresh = await storedRaw(db, team.id);
+      if (fresh && typeof fresh === 'object') expect(fresh).not.toHaveProperty('spend_cap_usd');
+
+      await setPolicy(db, team.id, { spend_cap_usd: 12.5 });
+      expect(await storedRaw(db, team.id)).toEqual({ spend_cap_usd: 12.5 });
+      expect((await getPolicy(db, team.id)).spend_cap_usd).toBe(12.5);
+
+      await setPolicy(db, team.id, {});
+      expect(await storedRaw(db, team.id)).toEqual({});
+      expect((await getPolicy(db, team.id)).spend_cap_usd).toBeUndefined();
+    });
+
+    it('rejects zero, a negative, and a value past the ceiling', async () => {
+      const { db, team } = await seed();
+      await expect(setPolicy(db, team.id, { spend_cap_usd: 0 })).rejects.toThrow();
+      await expect(setPolicy(db, team.id, { spend_cap_usd: -5 })).rejects.toThrow();
+      await expect(setPolicy(db, team.id, { spend_cap_usd: 1_000_000.01 })).rejects.toThrow();
+      expect((await getPolicy(db, team.id)).spend_cap_usd).toBeUndefined();
+    });
+  });
+
   /**
    * The v26 data rewrite. The input below is the REAL `revive` row as it stood on 2026-07-30 — the one
    * non-NULL policy in the live fleet, and the whole population this migration has to be right about.

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SPEND_CAP_USD_MAX } from './credentials.js';
 import { GoalSchema } from './goals.js';
 import { FAMILY_POSTURE_STATES, WAKEABILITIES, type FamilyPosture } from './model.js';
 import { DisputeReadoutSchema } from './sycophancy.js';
@@ -436,6 +437,14 @@ export const WakeMetricsSchema = z.object({
   cost_usd_per_wake: z.number().nullable(),
   /** How many woke acts carried a cost — the honesty denominator for the averages. */
   cost_reported: z.number().int(),
+  /**
+   * ADR 602. Copied from team policy so the report can show the cap without an admin policy read.
+   * Omitted when unset. Absent is unbounded — this field has no default, and 0 is not a stand-in.
+   * Display only. Nothing is denied.
+   */
+  spend_cap_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
+  /** Priced `cost_usd_total` is at or above `spend_cap_usd`. Omitted together with the cap. */
+  spend_over_cap: z.boolean().optional(),
   /**
    * ADR 252: wakes that PAID for a session and left no price. `residency.wake_cost` is written only
    * when a host reports, so a lease that spawned a session and then expired unreported contributes

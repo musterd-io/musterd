@@ -1,4 +1,4 @@
-import type { FlowMetrics, GoalFlow, Report } from '@musterd/protocol';
+import type { FlowMetrics, GoalFlow, Report, WakeMetrics } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { fmtReport } from './insights.js';
 
@@ -99,5 +99,84 @@ describe('fmtReport — per-goal flow (ADR 295)', () => {
   it('says nothing at all when no lane names a goal', () => {
     const out = fmtReport(report({ goal_flow: [] }), 'team');
     expect(out).not.toContain('per goal:');
+  });
+});
+
+function wake(over: Partial<WakeMetrics> = {}): WakeMetrics {
+  return {
+    window_days: 7,
+    wakes: 0,
+    resumed: 0,
+    failed: 0,
+    deferred: 0,
+    exhausted: 0,
+    answered: 0,
+    answer_rate: null,
+    latency_median_ms: null,
+    latency_p95_ms: null,
+    cost_usd_total: null,
+    cost_usd_per_wake: null,
+    cost_reported: 0,
+    delivery: { fresh: 0, resumed: 0, fresh_fallback: 0 },
+    exact_match: { bound: 0, missing: 0, mismatched: 0, stale: 0 },
+    delivery_measured: 0,
+    exact_match_measured: 0,
+    by_seat: [],
+    ...over,
+  };
+}
+
+describe('fmtReport — spend cap (ADR 602)', () => {
+  it('says nothing about a cap that was never set', () => {
+    const quiet = fmtReport(report({ wake: wake() }), 'team');
+    expect(quiet).not.toContain('cap $');
+    const active = fmtReport(
+      report({
+        wake: wake({ wakes: 1, cost_usd_total: 4, cost_usd_per_wake: 4, cost_reported: 1 }),
+      }),
+      'team',
+    );
+    expect(active).toContain('cost $4.00');
+    expect(active).not.toContain('cap $');
+  });
+
+  it('prints the cap beside priced spend, and a quiet line when nothing was priced', () => {
+    const under = fmtReport(
+      report({
+        wake: wake({
+          wakes: 1,
+          cost_usd_total: 4,
+          cost_usd_per_wake: 4,
+          cost_reported: 1,
+          spend_cap_usd: 10,
+          spend_over_cap: false,
+        }),
+      }),
+      'team',
+    );
+    expect(under).toContain('cap $10.00 under · measured wake cost, not payments');
+    expect(under).not.toContain('OVER');
+
+    const over = fmtReport(
+      report({
+        wake: wake({
+          wakes: 1,
+          cost_usd_total: 12,
+          cost_usd_per_wake: 12,
+          cost_reported: 1,
+          spend_cap_usd: 10,
+          spend_over_cap: true,
+        }),
+      }),
+      'team',
+    );
+    expect(over).toContain('cap $10.00 OVER · measured wake cost, not payments');
+
+    const quiet = fmtReport(
+      report({ wake: wake({ spend_cap_usd: 10, spend_over_cap: false }) }),
+      'team',
+    );
+    expect(quiet).toContain('cap $10.00 no priced spend · measured wake cost, not payments');
+    expect(quiet).not.toContain('OVER');
   });
 });
