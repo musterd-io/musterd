@@ -391,6 +391,55 @@ withDrivers('record', (_o, kind) => {
       expect(thread[0]).toMatchObject({ kind: 'clarification', by: 'ada' });
       expect(await projectHeldThreads(hub.store, ht.id, seedH)).toBe(0);
     });
+
+    it('a held entry projects only onto the seed its relay_id names — target alone is not trusted (lane 01M400A31W)', async () => {
+      const ht = await hubTeam();
+      // The fold decides "held" from detail.relay_id; the heal used to select on audit.target alone,
+      // and hub ingest never checks the two agree. A push with target = RELAY and relay_id = another
+      // seed is held (that seed is unborn here) and must NOT land on RELAY's thread when RELAY is born.
+      // A null target with the right relay_id must still project.
+      const entry = (
+        hubSeq: number,
+        originSeq: number,
+        id: string,
+        target: string | null,
+        relayId: string,
+      ) => ({
+        kind: 'record' as const,
+        team: 'bravo',
+        hub_seq: hubSeq,
+        origin_node: 'node-forged',
+        origin_seq: originSeq,
+        event: {
+          id,
+          ts: Date.now(),
+          actor: 'ada',
+          action: 'record.seed_thread',
+          target,
+          result: 'allow',
+          detail: {
+            entry_id: id,
+            relay_id: relayId,
+            kind: 'clarification',
+            body: `(${id})`,
+            by: 'ada',
+            created_at: Date.now(),
+          },
+        },
+      });
+      const held = await foldBatch(hub.store, ht.id, [
+        entry(998_001, 1, 'entry-mismatch', RELAY.id, 'relay-someone-else'),
+        entry(998_002, 2, 'entry-null-target', null, RELAY.id),
+      ]);
+      expect(held.stop).toBeNull();
+      expect(held.held_seed_threads.map((h) => h.relay_id).sort()).toEqual(
+        [RELAY.id, 'relay-someone-else'].sort(),
+      );
+
+      const seedH = await createSeedFromRelay(hub.store, ht.id, RELAY);
+      const thread = (await getSeed(hub.store, ht.id, seedH.id))!.thread;
+      expect(thread.map((e) => e.id)).toEqual(['entry-null-target']);
+    });
   });
 
   describe('record.incident_report — the pool is the hub’s (ADR 371 §2)', () => {

@@ -10,6 +10,7 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
+import { log } from '../log.js';
 import { appendReplicatedEvent } from './audit.js';
 import { openLane } from './lanes.js';
 import { getMemberByName } from './members.js';
@@ -400,11 +401,15 @@ export async function applySeedCapture(
  * same row as projecting it on time. This is the other half of that bargain, and it runs on every
  * local birth: a folded capture, a relay ingest, a repo capture.
  *
- * Keyed on `audit.target`, which `applyThread` sets to the seed's `relay_id` (no JSON operator, so
- * both drivers read it alike). `INSERT OR IGNORE` on the entry id makes it a no-op for every entry
- * already projected — on a hub, that is all of them. A writer whose name no longer resolves here is
- * left in `audit` rather than guessed at; the fold resolved it once, so this is a roster change, not
- * a hole.
+ * Selected on `audit.target`, which `applyThread` sets to the seed's `relay_id` (no JSON operator,
+ * so both drivers read it alike), and then REQUIRED to name this seed in `detail.relay_id` too: the
+ * fold decides "held" from `detail.relay_id`, and hub ingest never checks the two agree, so a push
+ * with `target` Y and `relay_id` X would be held on a node lacking X and then projected onto Y
+ * (lane 01M400A31W, the #2011 review). A null `target` is selected as well, so an entry the fold held
+ * on its `relay_id` is not stranded for want of the column. `INSERT OR IGNORE` on the entry id makes
+ * it a no-op for every entry already projected — on a hub, that is all of them. A writer whose name
+ * no longer resolves here is left in `audit` rather than guessed at — the fold resolved it once, so
+ * this is a roster change, not a hole — and logged, so the skip is not silent.
  */
 export async function projectHeldThreads(
   db: Driver,
@@ -412,7 +417,8 @@ export async function projectHeldThreads(
   seed: { id: string; relay_id: string },
 ): Promise<number> {
   const held = await db.all<{ actor: string | null; ts: number; detail: string | null }>(
-    `SELECT actor, ts, detail FROM audit WHERE team_id = ? AND action = 'record.seed_thread' AND target = ?`,
+    `SELECT actor, ts, detail FROM audit
+      WHERE team_id = ? AND action = 'record.seed_thread' AND (target = ? OR target IS NULL)`,
     [teamId, seed.relay_id],
   );
   let projected = 0;
@@ -425,8 +431,20 @@ export async function projectHeldThreads(
     if (typeof entryId !== 'string' || typeof kind !== 'string' || typeof body !== 'string') {
       continue;
     }
+    // The entry must name THIS seed where the fold read it, not only in the column we selected on.
+    if (d['relay_id'] !== seed.relay_id) continue;
     const member = await getMemberByName(db, teamId, name);
-    if (!member) continue;
+    if (!member) {
+      log.warn({
+        msg: 'seed_thread_projection_skipped',
+        team: teamId,
+        relay_id: seed.relay_id,
+        entry_id: entryId,
+        writer: name,
+        reason: 'writer_unresolved',
+      });
+      continue;
+    }
     const { changes } = await db.run(
       `INSERT OR IGNORE INTO seed_thread_entries (id, seed_id, team_id, kind, body, member_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

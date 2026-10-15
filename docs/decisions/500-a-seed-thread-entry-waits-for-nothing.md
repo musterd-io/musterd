@@ -55,6 +55,8 @@ birth projects it.**
 2. **The birth projects what was held.** Every local birth of a seed — a folded `seed.captured`, a
    relay ingest, a repo capture — then projects the held entries for that `relay_id` from `audit`
    (`projectHeldThreads`, keyed on `audit.target`, which the stamp already sets to the relay id).
+   _(Amended 2026-10-15: the entry must also name the seed in `detail.relay_id` — see
+   Consequences.)_
    `INSERT OR IGNORE` on the entry's own id makes it a no-op for everything already projected.
 
 3. **Held stays findable.** `foldBatch` reports the entries it held, and the pull logs one
@@ -95,6 +97,14 @@ no longer takes every later event down with it.
   this team today). On a hub it projects nothing, because every entry is already projected.
 - `record.seed_thread` is not churn (`store/retention.ts`), so a held entry is not pruned before
   its seed can arrive.
+- 2026-10-15, lane `01M400A31W` (the #2011 review finding): the fold decides "held" from
+  `detail.relay_id`, but the projection selected on `audit.target` alone, and hub ingest never
+  checks the two agree. A push with `target` Y and `relay_id` X was held on a node lacking X and then
+  projected onto Y; one with a null `target` never projected. `projectHeldThreads` now selects
+  `target = <relay> OR target IS NULL` and projects only an entry whose `detail.relay_id` is this
+  seed's, and a writer that no longer resolves is logged (`seed_thread_projection_skipped`) instead of
+  dropped silently. Eval: `sync/record.test.ts` ("lane 01M400A31W") — a mismatched entry stays off the
+  seed and a null-target one lands; on the pre-fix code it fails both ways.
 
 ## Observability & Evaluation
 
