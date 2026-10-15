@@ -2577,6 +2577,10 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       }))!;
       await reattestAgentModel('quiet', ada, 'claude-opus-5');
       await reattestAgentModel('quiet', gee, 'gpt-5.2-codex');
+      // ADR 607: the stage-two ask now fires to an offline human too, so the pending state only
+      // arises on a team with NO askable human seat. Rebuilt as that: boss is an observer until
+      // the retry step below, which is the "a human seat appears later" case ADR 539 §5 keeps.
+      await h.server.store.run(`UPDATE members SET observer = 1 WHERE name = 'boss'`);
       const lane = await post(
         '/teams/quiet/lanes',
         { title: 'nameplates stop jumping', risk: ['user-facing'], claim: true },
@@ -2620,6 +2624,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         lane: laneId,
         peer: 'gee',
         human_ask_fired: false,
+        human_live: false,
         peer_accept: acceptId,
       });
       expect(await auditRowsFor(bossTok, 'quiet', 'lane.review_human_asked')).toHaveLength(0);
@@ -2633,7 +2638,11 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
           (m: any) => m.act === 'ask' && m.meta?.lane_review,
         );
       expect(await bossAsks()).toHaveLength(0);
-      // That read just made boss live. (3) The retry asks the first human who comes live.
+      // boss becomes an askable human seat and touches the daemon — an observer's read leaves no
+      // presence (ADR 063), so this read is the one that makes boss live.
+      await h.server.store.run(`UPDATE members SET observer = 0 WHERE name = 'boss'`);
+      await get('/teams/quiet/inbox?unread=0', bossTok);
+      // (3) The retry asks the first human who comes live.
       const teamRow = (await getTeamBySlug(h.server.store, 'quiet'))!;
       const ctx = { db: h.server.store, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
       expect(await retryPendingHumanAsks(ctx, teamRow)).toEqual([{ lane: laneId, human: 'boss' }]);
@@ -2650,6 +2659,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         peer: 'gee',
         ask: asks[0].id,
         retried: true,
+        human_live: true,
       });
       // Asked once: a second tick asks nothing more, and the brief no longer says pending.
       expect(await retryPendingHumanAsks(ctx, teamRow)).toEqual([]);
@@ -2749,7 +2759,8 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
           },
           gee,
         );
-        expect(sent.json.lane_escalation).toEqual({ lane: laneId, human: null });
+        // ADR 607: boss has never touched presence, and is asked anyway.
+        expect(sent.json.lane_escalation).toEqual({ lane: laneId, human: 'boss' });
         return laneId;
       };
 
@@ -2759,7 +2770,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       const refused = await patch(a, { state: 'done' }, ada);
       expect(refused.status).toBe(409);
       expect(refused.json.error.message).toMatch(/gee/);
-      expect(refused.json.error.message).toMatch(/human/);
+      expect(refused.json.error.message).toMatch(/with boss/);
       expect(refused.json.error.message).toMatch(/ADR 603/);
       expect(
         (await get('/teams/early/lanes', ada)).json.lanes.find((l: any) => l.id === a).state,
@@ -2784,10 +2795,112 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         human_review_missed: true,
       });
 
-      // (3) A human's close from the board is the human stage — allowed inside the window. Last,
-      // because boss touching the board makes boss live, and the next peer accept would ask them.
+      // (3) A human's close from the board is the human stage — allowed inside the window.
       const b = await peerConfirm('watch-link a11y name');
       expect((await patch(b, { state: 'done' }, bossTok)).status).toBe(200);
+    });
+
+    it('ADR 607: a peer accept with no live human still fires the stage-two ask — to the offline admin — and that ask is what the rail shows and the human answers', async () => {
+      // lane 01M50CD7SN, 2026-10-15: wanderer accepted at 18:49, nobody live, nothing on the rail
+      // for six minutes until nick opened /live and the reaper asked him. Now the ask exists at 18:49.
+      const team = await post('/teams', {
+        slug: 'rail',
+        creator: { name: 'boss', kind: 'human' },
+      });
+      const bossTok = team.json.human_credential as string;
+      for (const name of ['ada', 'gee']) {
+        await fetch(h.base + '/teams/rail/members', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${bossTok}`,
+            'x-musterd-no-touch': '1',
+          },
+          body: JSON.stringify({ name, kind: 'agent' }),
+        });
+      }
+      const ada = (await resolveAuth('/teams/rail/inbox', {
+        key: team.json.agent_key,
+        seat: 'ada',
+      }))!;
+      const gee = (await resolveAuth('/teams/rail/inbox', {
+        key: team.json.agent_key,
+        seat: 'gee',
+      }))!;
+      await reattestAgentModel('rail', ada, 'claude-opus-5');
+      await reattestAgentModel('rail', gee, 'gpt-5.2-codex');
+      const lane = await post(
+        '/teams/rail/lanes',
+        { title: 'person glyph', risk: ['user-facing'], claim: true },
+        ada,
+      );
+      const laneId = lane.json.lane.id as string;
+      await fetch(h.base + `/teams/rail/lanes/${laneId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', ...authHeaders(ada) },
+        body: JSON.stringify({ state: 'ready_for_review' }),
+      });
+      const peerAsk = (await get('/teams/rail/inbox?unread=1', gee)).json.messages.find(
+        (m: any) => m.act === 'ask' && m.meta?.lane_review,
+      );
+      const sent = await post(
+        '/teams/rail/messages',
+        {
+          envelope: {
+            v: PROTOCOL_VERSION,
+            id: ulid(),
+            team: 'rail',
+            from: 'gee',
+            to: { kind: 'member', name: 'ada' },
+            act: 'accept',
+            body: 'glyph renders; 3/3 tests',
+            meta: { in_reply_to: peerAsk.id },
+            ts: Date.now(),
+          },
+        },
+        gee,
+      );
+      // The ack names the human asked; the ledger says they were not live.
+      expect(sent.json.lane_verdict).toBeUndefined();
+      expect(sent.json.lane_escalation).toEqual({ lane: laneId, human: 'boss' });
+      const confirmed = await auditRowsFor(bossTok, 'rail', 'lane.review_peer_confirmed');
+      expect(confirmed[0].detail).toMatchObject({ human_ask_fired: true, human_live: false });
+      const askedRows = await auditRowsFor(bossTok, 'rail', 'lane.review_human_asked');
+      expect(askedRows[0].detail).toMatchObject({
+        human: 'boss',
+        retried: false,
+        human_live: false,
+      });
+      // No pending state: the brief has nothing to retry, and the retry asks nothing more.
+      const teamRow = (await getTeamBySlug(h.server.store, 'rail'))!;
+      const ctx = { db: h.server.store, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+      expect(await retryPendingHumanAsks(ctx, teamRow)).toEqual([]);
+      // The ask is in boss's inbox — the same blocking ask the rails render.
+      const asks = (await get('/teams/rail/inbox?unread=0', bossTok)).json.messages.filter(
+        (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+      );
+      expect(asks).toHaveLength(1);
+      expect(asks[0].meta.tier).toBe('blocking');
+      expect(asks[0].meta.lane_review.peer_confirmed_by).toBe('gee');
+      // boss's accept on it is the verdict.
+      const closed = await post(
+        '/teams/rail/messages',
+        {
+          envelope: {
+            v: PROTOCOL_VERSION,
+            id: ulid(),
+            team: 'rail',
+            from: 'boss',
+            to: { kind: 'member', name: 'ada' },
+            act: 'accept',
+            body: 'ship it',
+            meta: { in_reply_to: asks[0].id },
+            ts: Date.now(),
+          },
+        },
+        bossTok,
+      );
+      expect(closed.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
     });
 
     it('risky with NO peer candidate: the human ask fires immediately at blocking (ADR 188)', async () => {

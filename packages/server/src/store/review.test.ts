@@ -379,6 +379,46 @@ withDrivers('review', (o) => {
     });
   });
 
+  describe('humanReviewerFor — the stage-two human, live or not (ADR 607)', () => {
+    it('prefers a live human; otherwise the admin, then the most recently seen; never the worker, an observer, or an agent', async () => {
+      const { setMemberGovernance } = await import('./members.js');
+      const { humanReviewerFor } = await import('./review.js');
+      const { db, team } = await seed();
+      await agent(db, team, 'ada', 'claude-opus-5'); // the worker
+      const { row: boss } = await addMember(db, team, { kind: 'human', name: 'boss', role: '' });
+      await setMemberGovernance(
+        db,
+        boss.id,
+        null,
+        JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      );
+      const { row: pat } = await addMember(db, team, { kind: 'human', name: 'pat', role: '' });
+      const { row: obs } = await addMember(db, team, { kind: 'human', name: 'obs', role: '' });
+      await db.run('UPDATE members SET observer = 1 WHERE id = ?', [obs.id]);
+      // Nobody live: the admin, offline.
+      expect(await humanReviewerFor(db, team.id, 'ada', TIMEOUT)).toMatchObject({
+        reviewer: 'boss',
+        grade: 'human',
+        live: false,
+      });
+      // pat comes live: rule 1.1 wins over the offline admin.
+      await attach(db, pat.id, 'web', 'conn-pat');
+      expect(await humanReviewerFor(db, team.id, 'ada', TIMEOUT)).toMatchObject({
+        reviewer: 'pat',
+        live: true,
+      });
+      // The admin is the worker: the other human, by recency, even offline.
+      await db.run('UPDATE presence SET last_seen_at = 0 WHERE member_id = ?', [pat.id]);
+      expect(await humanReviewerFor(db, team.id, 'boss', TIMEOUT * 0)).toMatchObject({
+        reviewer: 'pat',
+        live: false,
+      });
+      // Only the worker and an observer remain: null — the one case human_ask_fired stays false.
+      await db.run('UPDATE members SET observer = 1 WHERE id = ?', [pat.id]);
+      expect(await humanReviewerFor(db, team.id, 'boss', TIMEOUT)).toBeNull();
+    });
+  });
+
   describe('pickReviewCounterpart — graded ladder (ADR 188)', async () => {
     async function pick(
       setup: (h: Awaited<ReturnType<typeof seed>>) => void | Promise<void>,

@@ -43,7 +43,7 @@ import { getMemberByName } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode, seatBinding, seatBindings, trustNodeForSeat } from '../store/nodes.js';
 import { hasLivePresence } from '../store/presence.js';
-import { peerConfirmedPending } from '../store/review.js';
+import { humanAskOutstanding, peerConfirmedPending } from '../store/review.js';
 import { type MemberRow, resolveCapabilities } from '../store/rows.js';
 import { peekPullStop } from './pull.js';
 
@@ -1002,18 +1002,25 @@ export async function decideRiskyClosePendingHuman(
   if (body.state !== 'done') return;
   if (!isAwaitingAcceptance(before.state) || before.risk.length === 0) return;
   if (member.name !== before.owner_seat || member.kind === 'human') return;
+  // Two shapes of "a human's verdict is owed": no human was askable yet (ADR 539's pending state,
+  // now only on teams with no human seat), or the stage-two ask is out and unanswered (ADR 607 —
+  // the ask fires to an offline human, so this is the common shape).
   const pending = await peerConfirmedPending(db, teamId, before.id);
-  if (!pending) return;
+  const outstanding = pending ? null : await humanAskOutstanding(db, teamId, before.id);
+  if (!pending && !outstanding) return;
   const { promised_ms } = await reviewRouting(db, teamId, before.id);
   if (promised_ms === undefined) return;
   const inReviewMs = Date.now() - before.updated_at;
   if (inReviewMs >= promised_ms) return;
   const leftMin = Math.max(1, Math.ceil((promised_ms - inReviewMs) / 60_000));
+  const peer = pending?.peer ?? outstanding?.peer ?? 'a peer';
+  const who = outstanding
+    ? `The human ask is with ${outstanding.human} (${outstanding.ask}), unanswered.`
+    : `No human seat could be asked when ${peer} accepted; the daemon asks the first human who comes live (ADR 539).`;
   throw new MusterdError(
     'conflict',
-    `lane "${before.id}" is peer-confirmed by ${pending.peer} and still owed a human review — it ` +
-      `carries a risk tag, so a human's accept closes it, not yours (ADR 188). No human was live ` +
-      `when ${pending.peer} accepted; the daemon asks the first human who comes live (ADR 539). ` +
+    `lane "${before.id}" is peer-confirmed by ${peer} and still owed a human review — it ` +
+      `carries a risk tag, so a human's accept closes it, not yours (ADR 188). ${who} ` +
       `The promised review window has ~${leftMin}m left: wait, or ask a human. A human may close ` +
       `it from the board now; after the window your self-close is recorded unconfirmed as before ` +
       `(ADR 603).`,
