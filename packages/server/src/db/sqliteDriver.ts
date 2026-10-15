@@ -18,6 +18,31 @@ import { requestTiming } from './requestTiming.js';
  */
 const SLOW_TX_MS = 1_000;
 
+/**
+ * One statement this long is logged with its SQL (lane 01M4YY5Z38). better-sqlite3 runs it on the
+ * main thread, so for its whole duration nothing else in the daemon moves — the wake-lease polls of
+ * 2026-10-14 waited 1–5 s with nothing else finishing either, and no transaction was slow. A bare
+ * statement from a loop or sweep (no request, no tx) was invisible until this.
+ */
+const SLOW_STMT_MS = 200;
+
+/** Run one synchronous step, and log it when it held the main thread past SLOW_STMT_MS. */
+function timed<R>(sql: string, inTx: boolean, run: () => R): R {
+  const t0 = performance.now();
+  try {
+    return run();
+  } finally {
+    const ms = performance.now() - t0;
+    if (ms >= SLOW_STMT_MS)
+      log.warn({
+        msg: 'sqlite_stmt_slow',
+        ms: Math.round(ms),
+        in_tx: inTx,
+        sql: sql.replace(/\s+/g, ' ').trim().slice(0, 160),
+      });
+  }
+}
+
 /** The first few frames outside this file, paths cut to the package — enough to name the caller. */
 function callSite(site: Error): string {
   return (site.stack ?? '')
@@ -119,7 +144,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
       if (timing) timing.waitMs += performance.now() - asked;
       assertOpen();
       notify(sql);
-      return run();
+      return timed(sql, false, run);
     });
   };
   // A tx handle belongs to ONE transaction: it never waits on the queue, and once its transaction
@@ -130,7 +155,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
     assertOpen();
     notify(sql);
     try {
-      return Promise.resolve(run());
+      return Promise.resolve(timed(sql, true, run));
     } catch (e) {
       return Promise.reject(e);
     }
@@ -222,7 +247,8 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           try {
             const root: CommitQueue = [];
             const r = await inBody.run(mine, () => bodyThenCommitQueue(make(mine, root), root, fn));
-            raw.exec('COMMIT');
+            // Timed apart from the body: SQLite's automatic WAL checkpoint runs inside COMMIT.
+            timed('COMMIT', true, () => raw.exec('COMMIT'));
             return r;
           } catch (e) {
             // SQLite may already have rolled back on its own (SQLITE_FULL/IOERR on COMMIT); a

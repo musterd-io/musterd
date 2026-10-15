@@ -56,6 +56,27 @@ import { attachWsServer } from './transport/ws.js';
 /** A request at least this slow logs its connection fields (lane 01M4S0ZAG8). */
 const SLOW_REQUEST_MS = 1_000;
 
+/**
+ * The main thread blocked this long is logged (lane 01M4YY5Z38): a timer that fires late by more
+ * than this means nothing in the daemon ran — no request, no socket, no loop. On 2026-10-14
+ * wake-lease polls waited 1–5 s with no other request finishing in the same window, and no log line
+ * said so. The line lands when the stall ends, next to whatever `sqlite_stmt_slow` caused it.
+ */
+const STALL_TICK_MS = 250;
+const STALL_LOG_MS = 500;
+
+function watchEventLoop(): () => void {
+  let last = performance.now();
+  const timer = setInterval(() => {
+    const now = performance.now();
+    const stall = now - last - STALL_TICK_MS;
+    last = now;
+    if (stall >= STALL_LOG_MS) log.warn({ msg: 'event_loop_stall', stall_ms: Math.round(stall) });
+  }, STALL_TICK_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 export interface ServerOptions {
   port?: number;
   host?: string;
@@ -297,6 +318,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // the daemon on 2026-07-27 — see the close() comment below.
   const wss = attachWsServer(ctx, http);
   const syncStream = attachSyncStream(ctx, http);
+  const stopLoopWatch = watchEventLoop();
   let stopReaper: (() => void) | null = null;
   let stopSeeds: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
@@ -549,6 +571,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     close() {
       if (closing) return closing;
       closing = new Promise((resolve) => {
+        stopLoopWatch();
         stopReaper?.();
         stopSeeds?.();
         stopDigest?.();
