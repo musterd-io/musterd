@@ -112,6 +112,36 @@ describe('HttpClient.claim — the workspace identity reaches the wire (ADR 368,
   });
 });
 
+describe('HttpClient.claim — the wake lease reaches the wire (ADR 241 / ADR 609)', () => {
+  it('sends x-musterd-wake-lease as a header when the session was spawned by a wake', async () => {
+    vi.stubEnv('MUSTERD_WAKE_LEASE', '01M50C7QK004WDW4TFV7MHBGZ7');
+    const fetchFn = stubFetch(200, {
+      type: 'occupied',
+      seat,
+      presence_id: '01J',
+      server_time: 7,
+      memory: null,
+    });
+    await new HttpClient({ server: 'http://x' }).claim('dawn', input);
+    const headers = fetchFn.mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(headers['x-musterd-wake-lease']).toBe('01M50C7QK004WDW4TFV7MHBGZ7');
+  });
+
+  it('omits the header for an ordinary session — absence is not an assertion', async () => {
+    vi.stubEnv('MUSTERD_WAKE_LEASE', undefined);
+    const fetchFn = stubFetch(200, {
+      type: 'occupied',
+      seat,
+      presence_id: '01J',
+      server_time: 7,
+      memory: null,
+    });
+    await new HttpClient({ server: 'http://x' }).claim('dawn', input);
+    const headers = fetchFn.mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(headers['x-musterd-wake-lease']).toBeUndefined();
+  });
+});
+
 describe('HttpClient.claim (SPEC A.7, ADR 075/077) — status dispatch', () => {
   it('200 → occupied outcome', async () => {
     stubFetch(200, { type: 'occupied', seat, presence_id: '01J', server_time: 7, memory: null });

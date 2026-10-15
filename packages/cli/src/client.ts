@@ -1950,6 +1950,9 @@ export class HttpClient {
     const claimProvenance = input.key.startsWith(TOKEN_PREFIXES.credential)
       ? undefined
       : resolveAttestedProvenance(process.env);
+    // The wake lease (ADR 241) — the server matches it against the lease it minted for this seat,
+    // opening the ADR 609 lease-window displacement for a dream/wake claim. Never defaulted.
+    const wakeLease = resolveAttestedWakeLease(process.env);
     if (process.env['MUSTERD_DEBUG_ATTEST']) {
       console.error(
         `[musterd debug] HttpClient.claim model: opts=${this.opts.model ?? 'none'} env=${resolveAttestedModel(process.env) ?? 'none'} => ${model ?? 'none'}`,
@@ -2008,6 +2011,9 @@ export class HttpClient {
         headers: {
           'content-type': 'application/json',
           ...(this.opts.surface ? { 'x-musterd-surface': this.opts.surface } : {}),
+          // ADR 609: the server matches `x-musterd-wake-lease` against the lease it minted for
+          // this seat to open the lease-window displacement for a dream/wake claim.
+          ...(wakeLease !== undefined ? { 'x-musterd-wake-lease': wakeLease } : {}),
         },
         body: JSON.stringify(body),
       });
@@ -2191,6 +2197,10 @@ export function watchClaim(opts: WatchClaimOpts): { close: () => void } {
   const attestedProvenance = opts.key.startsWith(TOKEN_PREFIXES.credential)
     ? undefined
     : resolveAttestedProvenance(process.env);
+  // The wake lease (ADR 241): when this session was spawned by a wake, its own lease rides the
+  // claim frame so ADR 609 can displace a session that snuck into the spawn window instead of
+  // refusing the wake. Absent for an ordinary session; never defaulted.
+  const attestedWakeLease = resolveAttestedWakeLease(process.env);
   let heartbeat: NodeJS.Timeout | undefined;
   let subscribed = false;
   let terminal = false;
@@ -2248,6 +2258,9 @@ export function watchClaim(opts: WatchClaimOpts): { close: () => void } {
             : {}),
           // Provenance (ADR 131 §6) — the server applies the authoritative agent-only gate.
           ...(attestedProvenance !== undefined ? { provenance: attestedProvenance } : {}),
+          // The wake lease (ADR 241) — the correlation token ADR 609 matches against the lease it
+          // minted for this seat, opening the lease-window displacement for a dream/wake claim.
+          ...(attestedWakeLease !== undefined ? { wake_lease: attestedWakeLease } : {}),
         }),
       ),
     );

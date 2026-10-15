@@ -92,6 +92,27 @@ describe('buildClaimFrame (SPEC A.3, ADR 078)', () => {
     });
     expect(bare.provenance).toBeUndefined();
   });
+  it('carries the wake lease when supplied (ADR 241 / ADR 609), omits it otherwise', () => {
+    const lease = '01M50C7QK004WDW4TFV7MHBGZ7';
+    const f = buildClaimFrame({
+      team: 'dawn',
+      key: 'mskey_x',
+      target: { seat: 'Ada' },
+      surface: 'cli',
+      provenance: 'dream',
+      wake_lease: lease,
+    });
+    expect(f.wake_lease).toBe(lease);
+    const bare = buildClaimFrame({
+      team: 'dawn',
+      key: 'mskey_x',
+      target: { seat: 'Ada' },
+      surface: 'cli',
+      provenance: 'dream',
+    });
+    expect(bare.wake_lease).toBeUndefined();
+    expect('wake_lease' in bare).toBe(false);
+  });
   /**
    * ADR 301 / lane 01M2RTF2D0. `ClaimFrame` has carried `model_source` since ADR 301 and the daemon
    * reads it off the claim on both transports (`ws.ts` `frame.model ? frame.model_source : null`).
