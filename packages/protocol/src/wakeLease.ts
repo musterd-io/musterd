@@ -38,8 +38,9 @@ export const WakeLeaseFileSchema = z.object({
   provenance: z.enum(['wake', 'dream']),
   /** Which backend wrote it — for the audit, and so a mismatched harness can refuse it. */
   harness: z.string().min(1).max(32),
-  /** The pid of the harness process the actuator spawned; the adapter honours the file only when
-   *  this is its own parent. */
+  /** The pid the adapter's ancestry must include: the harness process the actuator spawned — or,
+   *  on OpenCode, the persistent `opencode serve` daemon the spawned run delegates to, since the
+   *  adapter is serve's child, never the run's (ADR 613). */
   spawner_pid: z.number().int().positive(),
   started_at: z.number().int().nonnegative(),
   /** Past this the file is dead even if nothing cleared it. */

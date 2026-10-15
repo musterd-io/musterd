@@ -1,4 +1,8 @@
-import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
+import {
+  execFile as nodeExecFile,
+  spawn as nodeSpawn,
+  type ChildProcess,
+} from 'node:child_process';
 import type { WakeUsage } from '@musterd/protocol';
 import { z } from 'zod';
 import { findBinding, saveBinding } from '../../config.js';
@@ -154,6 +158,42 @@ export interface OpencodeDeps {
   resumeVerifyWindowMs?: number;
   /** Injectable pinned-shim write; wake PATH must resolve this actuator's CLI before Homebrew. */
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
+  /** Injectable process-table scan for {@link opencodeServePid} (ADR 613): `ps -ax -o pid=,uid=,args=`. */
+  ps?: () => Promise<string>;
+}
+
+/**
+ * The pid of the persistent `opencode serve` daemon the wake's `opencode run` delegates to — the
+ * pid the MCP adapter's ancestry actually includes, since the adapter is serve's child, not the
+ * run's (ADR 613; docs/wiki/dream-opencode-session-provenance.md has the measured tree). Exactly
+ * one serve daemon owned by this user, or undefined (unreadable table, none, or several): the
+ * caller falls back to the run child's pid — the pre-ADR-613 behavior, never worse.
+ */
+async function opencodeServePid(deps: { ps?: () => Promise<string> }): Promise<number | undefined> {
+  const ps =
+    deps.ps ??
+    (() =>
+      new Promise<string>((resolve, reject) => {
+        nodeExecFile(
+          'ps',
+          ['-ax', '-o', 'pid=,uid=,args='],
+          { maxBuffer: 4 * 1024 * 1024 },
+          (err, stdout) => (err ? reject(err) : resolve(stdout)),
+        );
+      }));
+  let table: string;
+  try {
+    table = await ps();
+  } catch {
+    return undefined;
+  }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  const pids = new Set<number>();
+  for (const line of table.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+\S*opencode(?:\.exe)?\s+serve\b/.exec(line);
+    if (m !== null && (uid === undefined || Number(m[2]) === uid)) pids.add(Number(m[1]));
+  }
+  return pids.size === 1 ? [...pids][0] : undefined;
 }
 
 function recordFreshSession(workspace: string, id: string, startedAt: number): void {
@@ -211,7 +251,9 @@ async function attempt(
     };
   }
   // ADR 546: the lease file, so `musterd <seat>` finds this wake; rewritten when the session id
-  // is learned from stdout (a resumed run knows it already).
+  // is learned from stdout (a resumed run knows it already). ADR 613: the pid that reaches the
+  // adapter is the serve daemon's — the adapter is serve's child, never the run's.
+  const servePid = child.pid !== undefined ? await opencodeServePid(deps) : undefined;
   const lease =
     child.pid !== undefined
       ? holdWakeLease(
@@ -219,7 +261,7 @@ async function attempt(
           {
             lease_id: spec.order.lease_id,
             harness: 'opencode',
-            pid: child.pid,
+            pid: servePid ?? child.pid,
             startedAt,
             timeoutMs,
             session_id: expectedId,
