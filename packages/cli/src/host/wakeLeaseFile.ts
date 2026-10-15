@@ -10,7 +10,9 @@ import {
 
 /**
  * The actuator's half of the wake-lease file channel (ADR 354): written beside `binding.json` right
- * after a harness child is spawned, naming that child's pid, and cleared when the run settles. The
+ * after a harness child is spawned, naming the pid the adapter must descend from (that child; on
+ * OpenCode, the persistent serve daemon the child delegates to — ADR 613), and cleared when the run
+ * settles. The
  * adapter's half (`packages/mcp/src/wakeLeaseFile.ts`) honours it only from a process whose parent
  * is that pid, and only while unexpired — so the write here is safe to make before verification
  * concludes, and a crash that leaves the file behind is bounded by `expires_at`.

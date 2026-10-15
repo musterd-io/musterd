@@ -98,6 +98,13 @@ Rejected:
 
 ## Consequences
 
+- _(Amended 2026-10-15 by ADR 613): `spawner_pid`'s invariant is "the pid the adapter's ancestry
+  must include", not literally "the harness process the actuator spawned". On OpenCode the adapter
+  is a child of the persistent `opencode serve` daemon, never of the spawned `opencode run`, so the
+  opencode backend writes serve's pid — else the file is undeliverable by construction and every
+  opencode dream wake attests `session` (docs/wiki/dream-opencode-session-provenance.md). The
+  ancestry check, the expiry bound, and the workspace binding are unchanged._
+
 - A codex wake is credited to its lease again: `residency.woke` with `lease_matched: true`, no kill,
   and the priced rail (lane `01M1G310Y7`) sees it.
 - The lease file is a new artefact in `.musterd/`. It is `0600`, contains no secret (a lease id is a

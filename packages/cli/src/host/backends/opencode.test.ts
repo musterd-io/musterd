@@ -145,6 +145,7 @@ describe('opencodeBackend', () => {
       resolveBin: async () => '/opencode',
       recordFreshSession: () => undefined,
       spawn: (() => child) as never,
+      ps: async () => '', // no serve daemon here — the run child's pid is what lands (ADR 613 fallback)
       lease: {
         write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
         clear: (_ws, id) => clears.push(id),
@@ -152,7 +153,7 @@ describe('opencodeBackend', () => {
       },
     });
     const wake = backend.wake(spec, ctx);
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     expect(writes[0]).toMatchObject({ harness: 'opencode', spawner_pid: 4242 });
     expect(writes[0]).not.toHaveProperty('session_id');
     child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
@@ -171,6 +172,7 @@ describe('opencodeBackend', () => {
       resolveBin: async () => '/opencode',
       recordFreshSession: () => undefined,
       spawn: (() => child) as never,
+      ps: async () => '',
       lease: {
         write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
         clear: () => {},
@@ -178,12 +180,95 @@ describe('opencodeBackend', () => {
       },
     });
     const wake = backend.wake({ ...spec, order: { ...spec.order, derivation: 'dream' } }, ctx);
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     expect(writes[0]).toMatchObject({ provenance: 'dream' });
     child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
     const result = await wake;
     child.exit();
     await result.settled;
+  });
+
+  describe('the lease file names the serve daemon the adapter descends from (ADR 613)', () => {
+    const uid = typeof process.getuid === 'function' ? process.getuid() : 501;
+    // The serve-pid lookup awaits between spawn and the lease write — flush past it.
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const table = (serves: number[]) =>
+      [
+        `  35892  ${uid}  /usr/local/bin/opencode run --format json`,
+        ...serves.map((pid) => `  ${pid}  ${uid}  /usr/local/bin/opencode serve --service`),
+        `  79436  0  /usr/local/bin/opencode serve --service`, // another user's — never ours
+        `    999  ${uid}  /bin/zsh -l`,
+      ].join('\n');
+    const backend = (
+      child: Child,
+      writes: Array<Record<string, unknown>>,
+      ps: () => Promise<string>,
+    ) =>
+      opencodeBackend({
+        resolveBin: async () => '/opencode',
+        recordFreshSession: () => undefined,
+        spawn: (() => child) as never,
+        ps,
+        lease: {
+          write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
+          clear: () => {},
+          takeYield: () => false,
+        },
+      });
+
+    it('one serve daemon owned by this user → spawner_pid is the daemon, not the run child', async () => {
+      const child = new Child();
+      child.pid = 4242;
+      const writes: Array<Record<string, unknown>> = [];
+      const wake = backend(child, writes, async () => table([79437])).wake(spec, ctx);
+      await flush();
+      expect(writes[0]).toMatchObject({ spawner_pid: 79437 });
+      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      const result = await wake;
+      child.exit();
+      await result.settled;
+    });
+
+    it('no serve daemon → the run child pid (the pre-ADR-613 behavior)', async () => {
+      const child = new Child();
+      child.pid = 4242;
+      const writes: Array<Record<string, unknown>> = [];
+      const wake = backend(child, writes, async () => table([])).wake(spec, ctx);
+      await flush();
+      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
+      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      const result = await wake;
+      child.exit();
+      await result.settled;
+    });
+
+    it('several serve daemons → ambiguous, keep the run child pid', async () => {
+      const child = new Child();
+      child.pid = 4242;
+      const writes: Array<Record<string, unknown>> = [];
+      const wake = backend(child, writes, async () => table([79437, 79438])).wake(spec, ctx);
+      await flush();
+      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
+      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      const result = await wake;
+      child.exit();
+      await result.settled;
+    });
+
+    it('an unreadable process table → keep the run child pid', async () => {
+      const child = new Child();
+      child.pid = 4242;
+      const writes: Array<Record<string, unknown>> = [];
+      const wake = backend(child, writes, async () => {
+        throw new Error('ps failed');
+      }).wake(spec, ctx);
+      await flush();
+      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
+      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      const result = await wake;
+      child.exit();
+      await result.settled;
+    });
   });
 
   it('a seat held by a non-wake session DEFERS — it does not burn the act (ADR 238)', async () => {
