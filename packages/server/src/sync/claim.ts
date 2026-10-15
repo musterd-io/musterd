@@ -30,7 +30,7 @@ import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
-import { appendAudit } from '../store/audit.js';
+import { appendAudit, reviewRouting } from '../store/audit.js';
 import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
   getLane,
@@ -43,6 +43,7 @@ import { getMemberByName } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode, seatBinding, seatBindings, trustNodeForSeat } from '../store/nodes.js';
 import { hasLivePresence } from '../store/presence.js';
+import { peerConfirmedPending } from '../store/review.js';
 import { type MemberRow, resolveCapabilities } from '../store/rows.js';
 import { peekPullStop } from './pull.js';
 
@@ -382,6 +383,7 @@ export async function decideLanePatch(
       );
   }
   decideParkPatch(member, before, body);
+  await decideRiskyClosePendingHuman(db, teamId, member, before, body);
   await decideFollowsUp(db, teamId, member, before, body);
   // A CLAIM is distinguishable from a HANDOFF by who the new owner is: taking it for yourself is
   // a claim; naming someone else is a deliberate give-away that must keep working. Only a
@@ -965,6 +967,59 @@ const PARKABLE_FROM: ReadonlySet<string> = new Set(['open', 'claimed', 'active',
  * outright (the one hard refusal on the board): the park is a decision already recorded against
  * the lane, and a claim that overrode it would be the silent undo the state exists to prevent.
  */
+/**
+ * ADR 603: a risky lane's owner cannot close it `done` while its human review is still owed and
+ * the window the acceptor was promised is still running.
+ *
+ * ADR 188 made a risky lane's acceptance two-staged — a peer's accept, then a human's — and ADR 539
+ * asks the human the moment one comes live when none was at peer time. Between those two moments
+ * the lane sits `awaiting_acceptance` with nothing on `musterd lanes` saying why, and the owner's
+ * self-close was allowed and merely LABELLED (`review_cut_short` + `human_review_missed`). miley
+ * closed two such lanes on 2026-10-15, the second 226 s before the human came live. A gate the
+ * owner can walk through on a misread is not a gate, so this one refuses — narrowly:
+ *
+ *   - only `done` (abandoning is not shipping past the review; the owner may still give up);
+ *   - only the owner's own close — a human's close from the board IS the human stage, and an admin
+ *     is a human too;
+ *   - only while `peerConfirmedPending` holds (risk tag, peer confirmed, no human ever asked —
+ *     once the stage-two ask is out, the ask's own answer closes the lane and ADR 235's contract
+ *     governs the wait);
+ *   - only inside the promised window (`reviewRouting.promised_ms` against `updated_at`, the same
+ *     approximation the close edge grades `review_cut_short` by). A row that recorded no promise
+ *     abstains — the ADR 217 discipline — and the close stays the labelled self-close it was.
+ *
+ * The refusal says who confirmed, that a human is owed, how long the window has left, and that the
+ * daemon will ask a human itself when one is live — so the owner is told to wait, not to work
+ * around it.
+ */
+export async function decideRiskyClosePendingHuman(
+  db: Driver,
+  teamId: string,
+  member: { name: string; kind: string },
+  before: Lane,
+  body: UpdateLane,
+): Promise<void> {
+  if (body.state !== 'done') return;
+  if (!isAwaitingAcceptance(before.state) || before.risk.length === 0) return;
+  if (member.name !== before.owner_seat || member.kind === 'human') return;
+  const pending = await peerConfirmedPending(db, teamId, before.id);
+  if (!pending) return;
+  const { promised_ms } = await reviewRouting(db, teamId, before.id);
+  if (promised_ms === undefined) return;
+  const inReviewMs = Date.now() - before.updated_at;
+  if (inReviewMs >= promised_ms) return;
+  const leftMin = Math.max(1, Math.ceil((promised_ms - inReviewMs) / 60_000));
+  throw new MusterdError(
+    'conflict',
+    `lane "${before.id}" is peer-confirmed by ${pending.peer} and still owed a human review — it ` +
+      `carries a risk tag, so a human's accept closes it, not yours (ADR 188). No human was live ` +
+      `when ${pending.peer} accepted; the daemon asks the first human who comes live (ADR 539). ` +
+      `The promised review window has ~${leftMin}m left: wait, or ask a human. A human may close ` +
+      `it from the board now; after the window your self-close is recorded unconfirmed as before ` +
+      `(ADR 603).`,
+  );
+}
+
 export function decideParkPatch(
   member: { name: string; kind: string },
   before: Lane,

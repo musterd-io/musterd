@@ -2678,6 +2678,118 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       expect(closed.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
     });
 
+    it('ADR 603: the owner cannot close a risky lane past its pending human review inside the promised window; a human can, and the owner can once the window has run', async () => {
+      // miley, 2026-10-15: two risky lanes peer-confirmed with no human live, both self-closed by
+      // the owner inside the promised 20m window — the second 226 s before nick came live and the
+      // ADR 539 retry would have asked him. The ledger said `review_cut_short` +
+      // `human_review_missed`; nothing refused the close.
+      const team = await post('/teams', {
+        slug: 'early',
+        creator: { name: 'boss', kind: 'human' },
+      });
+      const bossTok = team.json.human_credential as string;
+      for (const name of ['ada', 'gee']) {
+        await fetch(h.base + '/teams/early/members', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${bossTok}`,
+            'x-musterd-no-touch': '1',
+          },
+          body: JSON.stringify({ name, kind: 'agent' }),
+        });
+      }
+      const ada = (await resolveAuth('/teams/early/inbox', {
+        key: team.json.agent_key,
+        seat: 'ada',
+      }))!;
+      const gee = (await resolveAuth('/teams/early/inbox', {
+        key: team.json.agent_key,
+        seat: 'gee',
+      }))!;
+      await reattestAgentModel('early', ada, 'claude-opus-5');
+      await reattestAgentModel('early', gee, 'gpt-5.2-codex');
+      const patch = async (laneId: string, body: unknown, auth: Auth | string) => {
+        const r = await fetch(h.base + `/teams/early/lanes/${laneId}`, {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            ...(typeof auth === 'string' ? { authorization: `Bearer ${auth}` } : authHeaders(auth)),
+          },
+          body: JSON.stringify(body),
+        });
+        return { status: r.status, json: (await r.json()) as Record<string, any> };
+      };
+      const peerConfirm = async (title: string) => {
+        const lane = await post(
+          '/teams/early/lanes',
+          { title, risk: ['user-facing'], claim: true },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        expect((await patch(laneId, { state: 'ready_for_review' }, ada)).status).toBe(200);
+        const peerAsk = (await get('/teams/early/inbox?unread=1', gee)).json.messages.find(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+        expect(peerAsk).toBeDefined();
+        const sent = await post(
+          '/teams/early/messages',
+          {
+            envelope: {
+              v: PROTOCOL_VERSION,
+              id: ulid(),
+              team: 'early',
+              from: 'gee',
+              to: { kind: 'member', name: 'ada' },
+              act: 'accept',
+              body: 'peer: fine',
+              meta: { in_reply_to: peerAsk.id },
+              ts: Date.now(),
+            },
+          },
+          gee,
+        );
+        expect(sent.json.lane_escalation).toEqual({ lane: laneId, human: null });
+        return laneId;
+      };
+
+      // (1) Inside the window the owner's close is refused, and the reply says who confirmed,
+      // that a human is owed, and that the retry will ask one.
+      const a = await peerConfirm('hide the dead-end toggle');
+      const refused = await patch(a, { state: 'done' }, ada);
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.message).toMatch(/gee/);
+      expect(refused.json.error.message).toMatch(/human/);
+      expect(refused.json.error.message).toMatch(/ADR 603/);
+      expect(
+        (await get('/teams/early/lanes', ada)).json.lanes.find((l: any) => l.id === a).state,
+      ).toBe('awaiting_acceptance');
+      // Abandoning is not shipping past the review: still the owner's call.
+      expect((await patch(a, { state: 'abandoned' }, ada)).status).toBe(200);
+
+      // (2) Once the promised window has run, the owner's close is the ADR 235 self-close again,
+      // recorded `review_unanswered` + `human_review_missed` exactly as before.
+      const c = await peerConfirm('observer view after 580');
+      expect((await patch(c, { state: 'done' }, ada)).status).toBe(409);
+      await h.server.store.run('UPDATE lanes SET updated_at = ? WHERE id = ?', [
+        Date.now() - 2 * 60 * 60 * 1000,
+        c,
+      ]);
+      const late = await patch(c, { state: 'done' }, ada);
+      expect(late.status).toBe(200);
+      expect(late.json.closed).toMatchObject({ verified: false, reason: 'review_unanswered' });
+      const closedRows = await auditRowsFor(bossTok, 'early', 'lane.closed');
+      expect((closedRows as any[]).find((r) => r.target === c)?.detail).toMatchObject({
+        reason: 'review_unanswered',
+        human_review_missed: true,
+      });
+
+      // (3) A human's close from the board is the human stage — allowed inside the window. Last,
+      // because boss touching the board makes boss live, and the next peer accept would ask them.
+      const b = await peerConfirm('watch-link a11y name');
+      expect((await patch(b, { state: 'done' }, bossTok)).status).toBe(200);
+    });
+
     it('risky with NO peer candidate: the human ask fires immediately at blocking (ADR 188)', async () => {
       const { nickTok, ada } = await setup();
       // gee exists but we make the lane while only ada (worker) + nick (human) matter: use a lane
