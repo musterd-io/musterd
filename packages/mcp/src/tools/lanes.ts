@@ -29,7 +29,7 @@ import { resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { reconcileLanded, type Landed } from '../landed.js';
-import { gatherClaimEvidence, SHA_FORMAT, verifyMerge } from '../mergeVerify.js';
+import { gatherClaimEvidence, readChangeLabel, SHA_FORMAT, verifyMerge } from '../mergeVerify.js';
 import { errorResult, textResult } from './format.js';
 
 /**
@@ -127,6 +127,8 @@ export function registerLanes(
   /** ADR 585: the rail's other checkers (branch on origin, PR merged, CI green); `verify` is the
    *  SHA's. Injected apart from `verify` so the merge-verification suite stays hermetic. */
   gather: typeof gatherClaimEvidence = gatherClaimEvidence,
+  /** ADR 612: the landed diff's change class; injected so the submit suites stay hermetic. */
+  changeLabel: typeof readChangeLabel = readChangeLabel,
 ): void {
   // ADR 585: the claims this seat files, judged by the one rule in @musterd/protocol from the SHA
   // tier `verify` produced plus whatever `gather` could read. The daemon stamps `checked_by`.
@@ -462,11 +464,18 @@ export function registerLanes(
             `landed somewhere else on purpose, that flow needs a design, not a workaround.`,
         );
       }
+      // ADR 612: label what landed so the acceptor's ask opens with it. Only a verified landing
+      // is classified; a cross-repo or offline submit sends no class.
+      const label =
+        verification === 'ancestor' && args.sha !== undefined
+          ? await changeLabel({ sha: args.sha, cwd: process.cwd() })
+          : null;
       const merged = {
         ...(args.pr !== undefined ? { pr: args.pr } : {}),
         ...(args.sha !== undefined ? { sha: args.sha } : {}),
         ...(args.authorized_by !== undefined ? { authorized_by: args.authorized_by } : {}),
         verification,
+        ...(label ?? {}),
       };
       const claims = await fileClaims({
         sha: args.sha,

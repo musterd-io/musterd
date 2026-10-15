@@ -52,6 +52,7 @@ export * from './goals.js';
 export * from './insights.js';
 export * from './sycophancy.js';
 export * from './dispute.js';
+export * from './changeClass.js';
 export * from './claims.js';
 export * from './lanes.js';
 export * from './seeds.js';

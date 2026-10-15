@@ -4,6 +4,7 @@ import { join as pathJoin } from 'node:path';
 import {
   makeEnvelope,
   nextRoleHandle,
+  type ChangeLabel,
   type Envelope,
   type Lane,
   type MemberSummary,
@@ -2009,8 +2010,9 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
     updated_at: 0,
   };
 
-  function submitWith(tier: string) {
+  function submitWith(tier: string, label: ChangeLabel | null = null) {
     const updateLane = vi.fn(async () => ({ lane: submittedLane, warnings: [] }));
+    const changeLabel = vi.fn(async () => label);
     const handlers = captureAll(
       (s: any, c: any) =>
         registerLanes(
@@ -2019,13 +2021,35 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
           async () => tier as any,
           undefined,
           async () => ({}),
+          changeLabel,
         ),
       {
         updateLane,
       } as Partial<MusterdClient>,
     );
-    return { submit: handlers['lane_submit']!, updateLane };
+    return { submit: handlers['lane_submit']!, updateLane, changeLabel };
   }
+
+  it('labels a verified landing with its change class and counts (ADR 612)', async () => {
+    const label: ChangeLabel = { change_class: 'docs', changed: { docs: 2, tests: 0, code: 0 } };
+    const { submit, updateLane, changeLabel } = submitWith('ancestor', label);
+    await submit({ id: 'L1', pr: 42, sha: 'abc123f' });
+    expect(changeLabel).toHaveBeenCalledWith({ sha: 'abc123f', cwd: process.cwd() });
+    expect(updateLane).toHaveBeenCalledWith('L1', {
+      state: 'awaiting_acceptance',
+      merged: { pr: 42, sha: 'abc123f', verification: 'ancestor', ...label },
+      claims: expect.any(Array),
+    });
+  });
+
+  it('sends no class when the SHA did not verify as landed here (ADR 612)', async () => {
+    const { submit, changeLabel } = submitWith('unknown_object', {
+      change_class: 'code',
+      changed: { docs: 0, tests: 0, code: 1 },
+    });
+    await submit({ id: 'L1', sha: 'abc123f' });
+    expect(changeLabel).not.toHaveBeenCalled();
+  });
 
   it('refuses pr without sha — an open PR is not a landed artifact', async () => {
     const { submit, updateLane } = submitWith('ancestor');

@@ -6,7 +6,9 @@
  */
 import { execFile } from 'node:child_process';
 import {
+  classifyChange,
   claimsFromEvidence,
+  type ChangeLabel,
   type ClaimEvidence,
   type ClaimRefs,
   type LaneClaim,
@@ -58,6 +60,27 @@ export async function verifyMerge(
   if (ancestry === 0) return 'ancestor';
   if (ancestry === 1 && fetched) return 'not_ancestor';
   return 'fetch_failed';
+}
+
+/**
+ * ADR 612: the change class of a landed squash commit, read from this clone. Called only once the
+ * SHA verified `ancestor` — a cross-repo lane's commit is not here, and an unreadable diff abstains
+ * (`null`, no class sent) rather than guessing a label.
+ */
+export async function readChangeLabel(
+  input: { sha: string; cwd: string },
+  execOut: ExecOut = defaultExecOut,
+): Promise<ChangeLabel | null> {
+  try {
+    const r = await execOut(
+      'git',
+      ['diff', '--name-only', '--no-renames', `${input.sha}^`, input.sha],
+      { cwd: input.cwd, timeoutMs: 15_000 },
+    );
+    return r.code === 0 ? classifyChange(r.stdout.split('\n')) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
