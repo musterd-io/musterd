@@ -1094,3 +1094,60 @@ is 4096. Runs on this size set it.
   archived project, wakes it.
 - Falsify: a later run whose pre-run readout shows `messages` above 20% dead with a last autovacuum
   older than the previous run's start. Then the mid-run vacuum here was luck, not a rate that keeps up.
+
+## 2026-10-15 — Cloud run 43: p95 645 ms on `60cf546`, the first new build since `1311808` — the server itself got faster (request p95 433 → 252 ms); the 100+ ms the bench saw was added outside the app (lane 01M50AWR5J413JRVYDVP57S40F)
+
+Staging deployed from `60cf546b2e2d` (`origin/main` d498a2f plus the bench-run change below) at
+17:52Z, which replaced the app machine: `8de50dfe952498` (`performance-1x`, 2 GB, iad) instead of
+runs 40–42's `82dd559c7051e8`. Neon 1 CU, shape 75/75/75, ramp 1 000 s, duration 1 300 s,
+`performance-4x` bench on a fresh team `lb-run43`. `pg_stat_statements` reset at 17:53:44Z; load
+ran 17:56–18:18Z. `bench-run.mjs` now keeps EVERY hub log line, not only the socket lines (run 42
+could not name its 502 or rebuild the server table), so this run has the per-route server timings
+back: `~/.musterd/cloud/bench/out/hub-git-60cf546b2e2d-2026-10-15T17-55-16-816Z.log`, 66 751
+`http_request` lines.
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 41 | `1311808` | 214 ms | 509 ms | 654 ms | 66 107 (50.9) | 100 | 213 ms |
+| 42 | `1311808` | 216 ms | 524 ms | 679 ms | 65 948 (50.7) | 4 | 217 ms |
+| 43 | `60cf546` | **354 ms** | **645 ms** | 849 ms | 65 303 (50.2) | 56 | **493 ms** |
+
+The server's own timings, from the hub's lines after the first minute:
+
+| | run 41 | run 43 |
+| --- | --- | --- |
+| request p50 / p95 | 111 / 433 ms | **62 / 252 ms** |
+| `db_hold_ms` p50 / p95 | 51 ms / — | 53 / 170 ms |
+| `db_wait_ms` p95 | 0 | 0 |
+| interrupt-check p50 / p95, hold | 57 / 290 ms, 55 ms | 57 / 174 ms, 56 ms |
+| `GET /teams/:slug` p50 / p95, hold | 308 / 465 ms, 41 ms | 73 / 285 ms, 39 ms |
+| `GET /report` p50 / p95, hold | — | 43 / 122 ms, 43 ms |
+| `POST /claim` p50 / p95, hold | — | 227 / 496 ms, 223 ms |
+
+- **The lane's falsifier fired (p95 above 600 ms), and the build is not what fired it.** Inside the
+  app every route got faster or stayed put: the roster read's p50 fell from 308 to 73 ms with its
+  database hold unchanged at ~40 ms, so the 16 server commits between `1311808` and `60cf546` took
+  CPU off the request path, not database time. The bench's view moved the other way on every route
+  at once, `/health` included — one database touch, p95 213 → 493 ms. The gap between what the
+  server measures and what the bench measures was ~100 ms at p50 in run 41 (111 → 214) and is
+  ~290 ms here (62 → 354). That gap is the network between the bench machine and the app's process:
+  Cloudflare, Fly's proxy, the app host. The deploy moved the app to a new machine on a new host;
+  nothing else on that path changed.
+- **No server-side error.** The hub logged 64 448 × 200, 2 229 × 201, 75 × 302, and no 4xx or 5xx.
+  Of the bench's 56 errors, 32 are viewer sockets closed 1006 in two bursts (+262–277 s, 12 sockets;
+  +1 115–1 136 s, 14 sockets), each back in 2–3 s; 20 are viewer `GET /teams/:slug` that failed at
+  the network layer, 2 interrupt-checks, 1 `inbox-full`, 1 `/report`. The hub's own `ws_close` lines
+  (89) are all 18:16–18:18Z, the bench shutting down; it logged no close in either burst, which is
+  the run 41 pattern: the path between bench and app, not the server. No `event_loop_stall`,
+  `sqlite_stmt_slow` or pool line in the whole log.
+- **Database:** top statement by total time is the interrupt-check's inbox read, 18 104 calls at
+  1.23 ms mean (22.3 s); the roster's status read is 582 calls at 10.9 ms mean (its new
+  `UNION ALL` from ADR 601 is not in this build). The credential lookup ran 63 068 times at 0.11 ms.
+- **Vacuum kept up.** `messages` 0.2% → 2.4% dead over the run (2 903 of 118 740), no autovacuum
+  needed; `presence` vacuumed at 18:20Z (729 in all); `audit` at 10.0%, last vacuum still
+  2026-10-13 19:10Z.
+- **Next:** run 44, a matched repeat on `60cf546` on the SAME machine `8de50dfe952498`. Falsify: the
+  bench's p95 stays near 645 ms with the server's request p95 near 252 ms — then the host or the
+  edge path owns the ~300 ms and the lane for it is a Fly machine move or a bench-side traceroute,
+  not a server change. If instead the bench's p95 returns to the 510–540 ms band with the server at
+  252 ms, run 43's gap was a one-run edge draw and `60cf546` is the new, faster baseline.
