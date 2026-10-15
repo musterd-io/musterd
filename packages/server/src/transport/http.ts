@@ -7182,7 +7182,7 @@ export async function handleHttp(
       // exactly as the board annotates it, its warnings are the board's for it (contention needs the
       // whole board), and the standing acceptance ask comes with its id so `reply_to` needs no lookup.
       if (method === 'GET' && laneMatch) {
-        const { team } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const laneId = await laneIdFromRef(ctx, team.id, decodeURIComponent(laneMatch[1]!), slug);
         const board = await listLanes(ctx.db, team.id, team.slug);
         const found = board.find((l) => l.id === laneId);
@@ -7204,15 +7204,20 @@ export async function handleHttp(
         const acceptance_ask = isAwaitingAcceptance(lane.state)
           ? await openAcceptanceAsk(ctx.db, team.id, lane.id)
           : null;
+        // ADR 601 decision 3: a lane's history carries ask bodies, so a `broadcast` reader's copy is
+        // scrubbed like the board's.
         return sendJson(
           res,
           200,
-          LaneDetailSchema.parse({
-            lane,
-            warnings,
-            history: await laneHistory(ctx.db, team.id, lane.id),
-            acceptance_ask,
-          }),
+          scrubForReader(
+            messageVisibilityOf(member),
+            LaneDetailSchema.parse({
+              lane,
+              warnings,
+              history: await laneHistory(ctx.db, team.id, lane.id),
+              acceptance_ask,
+            }),
+          ),
         );
       }
       if (method === 'PATCH' && laneMatch) {
