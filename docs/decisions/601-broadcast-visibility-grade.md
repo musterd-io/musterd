@@ -79,6 +79,14 @@ public-grade stream.
   one cached seat per grade; members with the guest role read at `broadcast` too. The stream's own
   seat and the dashboard are unchanged.
 
+- **2026-10-15 — the end-to-end check ran, and passed** (lane `01M50Y0VE2`; #2644 had said it
+  was not run). Build `09f89e3`, against an isolated bench fixture on `:4893` with a scratch DB: two
+  humans and two agents, a seeder repeating a human-to-human DM, an agent-to-human DM and a status
+  line carrying a planted `sk-ant-…` and `mscr_…`. A 30 s `musterd broadcast --out` minted a seat with
+  `observer_scope = 'broadcast'`. OCR over one 2×-upscaled frame per second: the agent-to-human DM in
+  16 frames and `<redacted:…>` in 25 (the controls: OCR can read the bubbles), the human pair's DM in
+  0 and either planted key in clear in 0. Method: [broadcast-stream wiki](../wiki/broadcast-stream.md).
+
 ## Observability & Evaluation
 
 - **Traces:** n/a — no agent-facing behaviour changes; this is a read filter on an observer seat.

@@ -243,6 +243,27 @@ Fixed by ADR 548: the build poll and its restart are gone.
 viewers saw was longer, and the player does not always recover on its own. Failure restarts (Chrome
 socket loss, frozen picture) still drop the ingest — lane `01M4EC5X8M`, inc 2.
 
+## The broadcast grade holds on screen: no human-pair DM and no planted key in 30 s of frames (2026-10-15; falsify: rerun the recipe below on a later build — any frame with the human pair's text or a planted key in clear, or a minted seat whose `observer_scope` is not `broadcast`, falsifies this) <!-- claim: other -->
+
+ADR 601's end-to-end check, run on build `09f89e3` (lane `01M50Y0VE2`). Recipe, all against a scratch
+daemon and never the live one:
+
+1. `BENCH_ROOT=<scratch> BENCH_PORT=4893 BENCH_TEAM=e2e BENCH_SEATS=2 scripts/perf/broadcast-bench-fixture.sh up`
+   gives a daemon on a scratch DB, asserted on `/health` before anything is written. It also gives
+   an admin human (`driver`) and two bound agents. Add a second human with `team add nina --kind human`.
+2. A seeder repeats three acts every 5 s: `driver → nina` (`--act message`, the human pair),
+   `s1 → driver` (agent to human), and an `s2` status line carrying a fake `sk-ant-…` and `mscr_…`.
+   `musterd send` needs `--act`; without it nothing is sent.
+3. As the admin, run `musterd broadcast --team e2e --out e2e.mp4 --duration 30 --server http://127.0.0.1:4893`.
+   The CLI and web `dist` must be fresh: a stale `packages/web/dist` predates the page guard.
+4. Run `ffmpeg -vf "fps=1,scale=3840:-1"`, then `tesseract` each frame, and count each string.
+   Upscaling matters: at 1× OCR missed bubbles that were plainly legible. The controls are what make
+   a zero mean anything.
+
+Result: the agent-to-human DM appeared in 16 frames and `<redacted:…>` in 25. The human pair's DM
+appeared in 0 frames, and the planted keys in clear in 0. The seat the run minted had
+`observer_scope = 'broadcast'`. Tear down with the fixture's `down`, which kills the recorded pids only.
+
 ## Two claims the evidence killed (measured 2026-07-29; falsify: read entrypoint.sh + re-measure bitrate)
 
 1. ~~"The hosted stream runs 1080p30 and delivers 10 fps"~~ — wrong: `scripts/broadcast/entrypoint.sh` pins 720p25; the 1080p30 row in docs/perf/broadcast-baseline.md is the REJECTED arm. Read the entrypoint, not just the bench. ~~720p25 (2026-07-29)~~ SUPERSEDED 2026-09-15: the entrypoint now pins **1080p20**, measured at speed 0.998x on the same box (1080p15 sustains a clean 1.00x and is the fallback rung) — 1080p30 stays rejected, but 1080p was never the problem at a lower frame rate and nobody had checked. SUPERSEDED 2026-09-30: the entrypoint pins **1080p15**. 20 was never delivered: the office draws 9-11 frames/s on the box, so half of each 20 fps second was repeats (docs/perf/broadcast-baseline.md, dated note).
