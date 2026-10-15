@@ -523,7 +523,7 @@ export const LaneSchema = z.object({
        * A z.string for the same skew reason as `verification`; compare against
        * {@link CHANGE_CLASSES}. A label only — nothing routes on it (ADR 612 §3).
        */
-      change_class: z.string().optional(),
+      change_class: z.string().max(32).optional(),
       /** ADR 612: docs / tests / code file counts beside the class — never the path list. */
       changed: ChangedCountsSchema.optional(),
     })
@@ -710,7 +710,7 @@ export const UpdateLaneSchema = z.object({
       /** Seat-side verification tier — see the field's doc on {@link LaneSchema}. */
       verification: z.string().optional(),
       /** ADR 612 change class — see the field's doc on {@link LaneSchema}. */
-      change_class: z.string().optional(),
+      change_class: z.string().max(32).optional(),
       changed: ChangedCountsSchema.optional(),
     })
     // `null` CLEARS a standing attestation (ADR 305 amendment 2, lane 01M2GR0434). The store always

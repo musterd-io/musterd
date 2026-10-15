@@ -70,12 +70,15 @@ export function changeLabelText(label: {
   change_class?: string | undefined;
   changed?: Partial<ChangedCounts> | undefined;
 }): string | null {
-  if (!label.change_class) return null;
+  // The class is the submitting seat's attestation and this text lands in another seat's ask:
+  // print only a class this build knows, never the raw string.
+  if (!(CHANGE_CLASSES as readonly string[]).includes(label.change_class ?? '')) return null;
   const kind =
     label.change_class === 'docs' || label.change_class === 'tests'
       ? `${label.change_class}-only`
       : label.change_class;
   const c = label.changed;
   const n = c ? (c.docs ?? 0) + (c.tests ?? 0) + (c.code ?? 0) : 0;
+  if (!Number.isSafeInteger(n) || n < 0) return kind;
   return n > 0 ? `${kind}, ${n} file${n === 1 ? '' : 's'}` : kind;
 }
