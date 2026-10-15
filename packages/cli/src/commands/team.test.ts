@@ -147,6 +147,37 @@ describe('team policy command', () => {
     ).rejects.toThrow(/--sponsored-agent-cap <1–100>/);
   });
 
+  it('--spend-cap sets the measured-wake cap, and off clears it (ADR 602)', async () => {
+    const unset = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(unset).toContain('spend cap: unset (unbounded)');
+    const unsetLine = unset.split('\n').find((line) => line.includes('spend cap:'));
+    expect(unsetLine).not.toContain('default');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '12.5'])));
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('spend cap: $12.50 of measured wake cost, 7d');
+    expect(set.out).toContain('nothing is denied');
+    const view = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(view).toContain('spend cap: $12.50 of measured wake cost, 7d');
+    expect(view.split('\n').find((line) => line.includes('spend cap:'))).not.toContain('default');
+
+    const off = await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', 'off'])));
+    expect(off.out).toContain('spend cap off — measured wake cost is unbounded');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'spend cap: unset (unbounded)',
+    );
+
+    await expect(teamCommand(parseArgs(['policy', '--spend-cap', '0']))).rejects.toThrow(
+      /--spend-cap/,
+    );
+    await expect(teamCommand(parseArgs(['policy', '--spend-cap', '-1']))).rejects.toThrow(
+      /--spend-cap/,
+    );
+    await expect(teamCommand(parseArgs(['policy', '--spend-cap', '1000001']))).rejects.toThrow(
+      /--spend-cap/,
+    );
+  });
+
   it('--acceptance-review-window sets the lane-review wait in minutes, and the view says how long (ADR 506)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'acceptance review window: 20m',

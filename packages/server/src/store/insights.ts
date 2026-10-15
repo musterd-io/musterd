@@ -34,7 +34,7 @@ import { listTeamMessages, longDeferred } from './messages.js';
 import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
 import { teamFamilyPosture } from './review.js';
 import type { MessageRow } from './rows.js';
-import { getPolicy } from './teams.js';
+import { getPolicy, spendCapUsd } from './teams.js';
 import { deriveToolCallMetrics } from './toolCalls.js';
 
 /** Matches the inbox/wake reads' bound (ADR 211 §3). */
@@ -939,6 +939,19 @@ export async function deriveReport(
   presenceTimeoutMs?: number,
 ): Promise<Report> {
   const blocked: BlockedLane[] = await listBlockedLanes(db, teamId);
+  // ADR 602: the cap rides the report, not a second policy fetch at render time. GET /policy is
+  // admin-only; the report is how the rest of the team reads the number. Omitted when unset so a
+  // team that never chose a cap keeps today's report bytes. Never coerced to 0.
+  const wakeMetrics = await deriveWakeMetrics(db, teamId, now);
+  const cap = spendCapUsd(await getPolicy(db, teamId));
+  const wake =
+    cap === null
+      ? wakeMetrics
+      : {
+          ...wakeMetrics,
+          spend_cap_usd: cap,
+          spend_over_cap: wakeMetrics.cost_usd_total !== null && wakeMetrics.cost_usd_total >= cap,
+        };
 
   return {
     team: teamSlug,
@@ -953,7 +966,7 @@ export async function deriveReport(
     open_directed: await openDirectedLedger(db, teamId, now),
     mast: await deriveMast(db, teamId, now),
     steering: await deriveSteeringMetrics(db, teamId, now),
-    wake: await deriveWakeMetrics(db, teamId, now),
+    wake,
     tool_calls: await deriveToolCallMetrics(db, teamId, now),
     review: await deriveReviewMetrics(db, teamId, now),
     long_deferred: await deriveLongDeferred(db, teamId, teamSlug, now),

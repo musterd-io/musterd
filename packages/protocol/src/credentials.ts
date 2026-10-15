@@ -117,6 +117,13 @@ export const AgentHostPolicySchema = z.object({
 });
 export type AgentHostPolicy = z.infer<typeof AgentHostPolicySchema>;
 
+/**
+ * ADR 602. Fat-finger ceiling on a team spend cap, in USD. The cap is optional and has no default:
+ * unset is unbounded. Zero is refused — a stored 0 would read as "deny every wake" to a reader that
+ * treats the number as a bound. Cents are allowed; the field is not an integer.
+ */
+export const SPEND_CAP_USD_MAX = 1_000_000;
+
 export const PolicySchema = z.object({
   allow_pre_issued_grants: z.boolean().default(false),
   /**
@@ -222,6 +229,12 @@ export const PolicySchema = z.object({
    * from becoming surprise load. Admin-set through the policy route, audited `policy.change`.
    */
   sponsored_agent_cap: z.number().int().min(1).max(100).default(3),
+  /**
+   * ADR 602. Team cap in USD over the report's 7-day priced wake cost (`cost_usd_total`). No default:
+   * absent is unbounded, and 0 is not a stand-in for absent. Display only — nothing is denied on it.
+   * Finite, greater than 0, at most {@link SPEND_CAP_USD_MAX}.
+   */
+  spend_cap_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
   /**
    * Sponsor-hosted agents (ADR 463 §2). `max_per_host` bounds live enrolled sponsored seats per
    * host label; `policy` is the residency override every provisioned seat enrolls with. `budget_usd`

@@ -5,6 +5,7 @@ import {
   containsMusterdCredential,
   PolicyOverrideSchema,
   PolicySchema,
+  SPEND_CAP_USD_MAX,
   sparsifyPolicy,
 } from './credentials.js';
 import { StylePolicySchema } from './style.js';
@@ -134,5 +135,30 @@ describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
     expect(sparsifyPolicy({ agent_host: { max_per_host: 5, policy: { budget_usd: 3 } } })).toEqual({
       agent_host: { policy: { budget_usd: 3 } },
     });
+  });
+});
+
+describe('PolicySchema.spend_cap_usd (ADR 602)', () => {
+  it('is unset on an empty policy — absent, not zero', () => {
+    expect(PolicySchema.parse({}).spend_cap_usd).toBeUndefined();
+    expect(PolicyOverrideSchema.parse({}).spend_cap_usd).toBeUndefined();
+  });
+
+  it('accepts a positive finite amount up to the ceiling, including cents', () => {
+    expect(PolicySchema.parse({ spend_cap_usd: 12.5 }).spend_cap_usd).toBe(12.5);
+    expect(PolicySchema.parse({ spend_cap_usd: SPEND_CAP_USD_MAX }).spend_cap_usd).toBe(
+      SPEND_CAP_USD_MAX,
+    );
+  });
+
+  it('rejects zero, negatives, non-finite values, and a fat-finger past the ceiling', () => {
+    for (const bad of [0, -1, Number.POSITIVE_INFINITY, Number.NaN, SPEND_CAP_USD_MAX + 0.01]) {
+      expect(PolicySchema.safeParse({ spend_cap_usd: bad }).success).toBe(false);
+      expect(PolicyOverrideSchema.safeParse({ spend_cap_usd: bad }).success).toBe(false);
+    }
+  });
+
+  it('sparsifyPolicy keeps a chosen cap — the key has no schema default to collapse into', () => {
+    expect(sparsifyPolicy({ spend_cap_usd: 12.5 })).toEqual({ spend_cap_usd: 12.5 });
   });
 });

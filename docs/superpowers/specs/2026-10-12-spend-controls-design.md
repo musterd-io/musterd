@@ -88,6 +88,7 @@ speaker described becomes something an admin can grant and the team can read.
 2. Increment 1 (`01M4S0WNZ5CM73HHKV4VAMTAQ3`): `spend_cap_usd` policy key (read path,
    defaults, validation range), report display (cap beside the team total, warn state),
    no enforcement. Proves the number is real before anything denies on it.
+   Range, report fields, and the display-only bound: [ADR 602](../../decisions/602-spend-cap-display.md).
 3. Increment 2 (`01M4SB4BZBQDHWFWH4RXBNR7CQ`, depends on increment 1): gate enforcement —
    deny agent actuation at/over cap, humans pass, notice surface, audit rows. The bound.
 4. Named follow-up (`01M4SB4CJPTCSCYK3X8KGY2W33`, not this arc): approvals for costly acts

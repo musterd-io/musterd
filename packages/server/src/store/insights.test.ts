@@ -25,7 +25,7 @@ import { openLane, updateLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import { enrollResidency } from './residency.js';
-import { createTeam } from './teams.js';
+import { createTeam, setPolicy } from './teams.js';
 
 let openStore: () => Promise<Driver>;
 
@@ -1105,6 +1105,8 @@ withDrivers('insights', (o) => {
         cost_reported: 0,
         by_seat: [],
       });
+      expect(k).not.toHaveProperty('spend_cap_usd');
+      expect(k).not.toHaveProperty('spend_over_cap');
     });
 
     it('latency = trigger ts → seat first act; attempts dedupe to one sample per act', async () => {
@@ -1315,6 +1317,38 @@ withDrivers('insights', (o) => {
       const report = await deriveReport(db, team.id, 'revive', NOW);
       expect(report.wake).toBeDefined();
       expect(report.wake!.window_days).toBe(7);
+    });
+
+    it('deriveReport carries the spend cap only when set, and warns at the priced total (ADR 602)', async () => {
+      const { db, team, nick, ada } = await wakeSeed();
+      const unset = await deriveReport(db, team.id, 'revive', NOW);
+      expect(unset.wake).not.toHaveProperty('spend_cap_usd');
+      expect(unset.wake).not.toHaveProperty('spend_over_cap');
+
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+      const quiet = await deriveReport(db, team.id, 'revive', NOW);
+      expect(quiet.wake?.spend_cap_usd).toBe(10);
+      expect(quiet.wake?.spend_over_cap).toBe(false);
+      // The metric function stays free of the cap, so its callers do not grow a field.
+      expect(await deriveWakeMetrics(db, team.id, NOW)).not.toHaveProperty('spend_cap_usd');
+
+      await directed(db, team, nick, ada, 'handoff', 'h1', NOW - 60 * 60_000);
+      await residencyRow(
+        db,
+        team.id,
+        'residency.woke',
+        'ada',
+        { act: 'h1', lease_id: 'L1', cost_usd: 10 },
+        NOW - 50 * 60_000,
+      );
+      const atCap = await deriveReport(db, team.id, 'revive', NOW);
+      expect(atCap.wake?.cost_usd_total).toBeCloseTo(10);
+      expect(atCap.wake?.spend_over_cap).toBe(true);
+
+      await setPolicy(db, team.id, { spend_cap_usd: 10.01 });
+      const under = await deriveReport(db, team.id, 'revive', NOW);
+      expect(under.wake?.spend_cap_usd).toBe(10.01);
+      expect(under.wake?.spend_over_cap).toBe(false);
     });
 
     // The ADR 209/210 Eval split. The property that matters is NOT the counts — it is that an

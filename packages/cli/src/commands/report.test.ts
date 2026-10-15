@@ -124,6 +124,53 @@ describe('report command', () => {
     expect(Array.isArray(report.goals)).toBe(true);
   });
 
+  it('shows a spend cap beside the 7-day total, and says nothing when it is unset (ADR 602)', async () => {
+    const quiet = await capture(() => reportCommand(parseArgs([])));
+    expect(quiet.out).not.toContain('cap $');
+    const before = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake?: Record<string, unknown>;
+    };
+    expect(before.wake).not.toHaveProperty('spend_cap_usd');
+    expect(before.wake).not.toHaveProperty('spend_over_cap');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '10'])));
+    expect(set.code).toBe(0);
+    const capped = await capture(() => reportCommand(parseArgs([])));
+    expect(capped.out).toContain('no wakes');
+    expect(capped.out).toContain('cap $10.00');
+    expect(capped.out).toContain('no priced spend');
+    expect(capped.out).toContain('measured wake cost, not payments');
+    expect(capped.out).not.toContain('OVER');
+
+    const after = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake: { spend_cap_usd: number; spend_over_cap: boolean };
+    };
+    expect(after.wake.spend_cap_usd).toBe(10);
+    expect(after.wake.spend_over_cap).toBe(false);
+
+    const team = await server.store.get<{ id: string }>('SELECT id FROM teams WHERE slug = ?', [
+      'dawn',
+    ]);
+    const now = Date.now();
+    await server.store.run(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
+       VALUES (?, ?, ?, NULL, 'residency.woke', 'nick', 'allow', ?, ?)`,
+      [ulid(), team!.id, now, JSON.stringify({ act: 'h1', lease_id: 'L1', cost_usd: 12 }), now],
+    );
+    await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '20'])));
+    const under = await capture(() => reportCommand(parseArgs([])));
+    expect(under.out).toContain('cost $12.00');
+    expect(under.out).toContain('cap $20.00');
+    expect(under.out).toContain('under');
+    expect(under.out).not.toContain('OVER');
+    expect(under.out).not.toContain('no priced spend');
+
+    await capture(() => teamCommand(parseArgs(['policy', '--spend-cap', '12'])));
+    const exact = await capture(() => reportCommand(parseArgs(['residency'])));
+    expect(exact.out).toContain('cap $12.00');
+    expect(exact.out).toContain('OVER');
+  });
+
   it('rejects an unknown altitude', async () => {
     await expect(reportCommand(parseArgs(['--altitude', 'bogus']))).rejects.toThrow(/usage/);
   });
