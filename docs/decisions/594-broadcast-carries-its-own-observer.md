@@ -42,19 +42,23 @@ broadcast` on the laptop and `musterd stream start` take the same path, so they 
 5. **`musterd broadcast --mint-seat --team <slug>`** prints one seat as JSON, once, on stdout. It is
    for a capturer that is not `musterd broadcast` itself, such as the bench's x11 arm.
 6. **`musterd stream start` mints on the operator's machine.** The box has no identity of its own.
-   The seat goes to the machine as `MUSTERD_BROADCAST_SEAT` and is saved 0600 beside the stream's
-   state file, so the supervisor's relaunch (streamwatch, an agent seat that cannot mint) hands over
-   the same one. The mint happens before the "live" intent is recorded, so a refused mint leaves
-   nothing for the supervisor to relaunch.
+   The seat is staged as the app's `MUSTERD_BROADCAST_SEAT` Fly secret with `fly secrets import
+   --stage`, through stdin. It never goes on an argv, where `ps` shows it, or in `--env`, where the
+   machine config shows it. The supervisor's relaunch (streamwatch, an agent seat that cannot mint)
+   gets the same secret from the app. The mint and the staging both happen before the "live" intent
+   is recorded, so a refusal leaves nothing for the supervisor to relaunch.
+7. **A seat a run minted, the run removes.** When `musterd broadcast` ends normally it removes the
+   seat it minted, best effort. A seat it was handed belongs to whoever minted it.
 
 ## Consequences
 
 - ADR 580 stays whole. No loopback path mints an observer again.
 - Running `musterd broadcast` now takes a human admin's folder or a pre-minted seat. On this team
   that is nick's folder. An agent seat that runs it gets the refusal and the hint.
-- The hosted seat can be read in the Fly machine's config by anyone in the Fly org. It is
-  public-grade, and the stream already publishes what it can read to Twitch, so that exposure is
-  accepted, not hidden.
+- The hosted seat sits in the app's Fly secrets until the next `stream start` replaces it. A stopped
+  stream's seat stays valid until the reaper takes it.
+- A forced stop (a signal that reaches `process.exit()`) skips the removal, because nothing async
+  runs in an exit handler. The 24h observer reaper (ADR 064) removes those seats.
 - An observer idle for 24h is reaped (ADR 064). A streaming page keeps its seat active. A stream
   relaunched after a long gap can find its saved seat gone, show the refusal, and need a new
   `stream start`.
@@ -69,6 +73,7 @@ broadcast` on the laptop and `musterd stream start` take the same path, so they 
   daemon already audits it.
 - **Eval:** the Fly capture bench (`scripts/perf/capture-ab.sh`) is the end-to-end check. It
   printed `CAPTURE_AB_FAILED 13` before this change and must print three `CAPTURE_AB` arm lines
-  after it. Unit tests pin env parsing, the team match, injection, the 0600 seat file and no-intent
-  on a refused mint (`broadcast.test.ts`, `stream.test.ts`).
+  after it. Unit tests pin env parsing, the team match, injection, staging as a secret and no intent
+  on a refused mint, and keep the seat off the `fly machine run` argv (`broadcast.test.ts`,
+  `stream.test.ts`).
 - **Experiment:** n/a — a fix to a regression, not a tuning choice.

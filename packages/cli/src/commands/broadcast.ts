@@ -247,6 +247,22 @@ export async function mintBroadcastSeat(
   }
 }
 
+/** Remove a seat this run minted. Best effort: the run is over either way, and an observer left
+ * behind is reaped at the 24h TTL (ADR 064) — so a failure is said, never thrown. */
+export async function revokeBroadcastSeat(
+  flags: Record<string, string | boolean>,
+  seat: BroadcastSeat,
+): Promise<void> {
+  try {
+    const { http } = resolve({ ...flags, team: seat.team });
+    await http.removeMember(seat.team, seat.name);
+  } catch (e) {
+    process.stderr.write(
+      `${theme.warn('!')} could not remove observer ${seat.name} (${e instanceof Error ? e.message : String(e)}) — the 24h reaper will\n`,
+    );
+  }
+}
+
 /** The script that hands the page its seat before any of the page's own code runs. Injected over CDP,
  * never put in the URL or Chrome's argv, where `ps` and logs would show the credential. */
 export function seatInjection(seat: BroadcastSeat): string {
@@ -1416,7 +1432,8 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   if (!opts.team) throw new CliError('which team? — pass --team <slug>', 2);
   const sink = await resolveSink(opts, keychainLookup);
   // One seat for the whole run: every Chrome relaunch (ADR 551) is handed the same one.
-  const seat = seatFromEnv(opts.team) ?? (await mintBroadcastSeat(parsed.flags, opts.team));
+  const handed = seatFromEnv(opts.team);
+  const seat = handed ?? (await mintBroadcastSeat(parsed.flags, opts.team));
   const url = broadcastUrl(opts.server, opts.team, opts.resolution, opts.fps);
   const stage = stagePixels(opts.resolution);
 
@@ -1892,6 +1909,9 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   } finally {
     cleanup();
   }
+  // A seat this run minted dies with it. A handed seat belongs to whoever minted it. Forced stops
+  // reach process.exit() with no async teardown; the 24h observer reaper (ADR 064) ends those.
+  if (!handed) await revokeBroadcastSeat(parsed.flags, seat);
   if (exitCode === 0) process.stdout.write(`${theme.ok('✓')} broadcast ended cleanly\n`);
   // ffmpeg ending on its own after the stream was live is the sink dying, not the end of the run
   // (ADR 553): under a supervisor that is a restart inside the machine, not the machine's end.

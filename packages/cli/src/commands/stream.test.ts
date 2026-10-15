@@ -1,14 +1,6 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseArgs } from '../args.js';
 import { writeCaptureImage } from '../broadcast/hosted.js';
@@ -72,6 +64,7 @@ describe('musterd stream', () => {
       launch: () => ({ code: 0, output: '' }),
       sendAsk: async () => {},
       mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
+      stageSeat: () => ({ code: 0, output: '' }),
     };
   });
 
@@ -216,6 +209,7 @@ describe('musterd stream', () => {
       launch: () => ((launches += 1), { code: 0, output: '' }),
       sendAsk: async (body: string) => void asks.push(body),
       mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
+      stageSeat: () => ({ code: 0, output: '' }),
       ...over,
     });
 
@@ -388,22 +382,34 @@ describe('musterd stream', () => {
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
     });
 
-    // ADR 594: since ADR 580 the page cannot mint its own observer, so start mints one and hands it
-    // to the box as machine env; the supervisor's relaunch reuses the 0600 copy beside the state.
-    it('start hands the box a minted observer seat and keeps a 0600 copy for relaunch', async () => {
+    // ADR 594: since ADR 580 the page cannot mint its own observer, so start mints one and stages it
+    // as a Fly secret — never on the `fly machine run` argv, where `ps` and the machine config show it.
+    it('start stages a minted observer as a Fly secret and keeps it off the machine run argv', async () => {
       withImage();
       let flyArgs: string[] = [];
+      const staged: Array<{ app: string; seat: unknown }> = [];
       expect(
         await run(['start'], {
           ...sup(),
+          stageSeat: (app, seat) => (staged.push({ app, seat }), { code: 0, output: '' }),
           launch: (args) => ((flyArgs = args), (launches += 1), { code: 0, output: '' }),
         }),
       ).toBe(0);
-      const seat = { team: 'revive', name: 'broadcast-test', token: 'mscr_test' };
-      expect(flyArgs).toContain(`MUSTERD_BROADCAST_SEAT=${JSON.stringify(seat)}`);
-      const file = join(dirname(statePath), 'broadcast-seat.json');
-      expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(seat);
-      expect(statSync(file).mode & 0o777).toBe(0o600);
+      expect(staged).toEqual([
+        {
+          app: 'musterd-broadcast',
+          seat: { team: 'revive', name: 'broadcast-test', token: 'mscr_test' },
+        },
+      ]);
+      expect(flyArgs.join(' ')).not.toContain('mscr_test');
+    });
+
+    it('a seat that cannot be staged launches nothing', async () => {
+      withImage();
+      await expect(
+        run(['start'], { ...sup(), stageSeat: () => ({ code: 1, output: 'not authorized' }) }),
+      ).rejects.toThrow(/could not stage .* not authorized/);
+      expect(launches).toBe(0);
     });
 
     it('a refused seat mint records no live intent for the supervisor to relaunch seatless', async () => {
