@@ -114,3 +114,72 @@ starts with "Note" is left out. Run 1's totals are the same under this rule.
 
 Tells per 100 words: 0.12 mean. Each prompt said to open every source the core names, so this run
 shows the pointers resolve; it does not show a session finds `team.md` unprompted.
+
+## Run 4 — 2026-10-15, the skill as a new team receives it (blank `references/team.md`)
+
+- **Why:** every earlier run used our filled `references/team.md`. `musterd role` ships the skill
+  with the method's blank skeleton in its place (`shippedSkillFiles`), so no run had measured
+  what a new team gets. Lane `01M50SZECV`.
+- **Skill:** `3e61063f5` (unchanged on main since), copied as it ships: `evals/` left out,
+  `references/team.md` replaced by `building-a-role-skill/skeleton/references/team.md`. **Model:** Claude Opus 5.5 for
+  every run and grader.
+- **Runs:** 16 cases × 2 configs. One fresh read-only session per config answered every case, in a
+  scratch git repository outside musterd that held only a one-paragraph README ("this team
+  coordinates with musterd") and the case input files; with-skill runs also had the shipped skill.
+  Both were told to read nothing outside that folder, use no web and change nothing.
+- **Grading:** `check-evals.mjs`, then one grader blind to which answer was which (seed 20261015),
+  checking facts against the input files only.
+- **Team expectations, pre-registered:** before any run, the expectations that only our filled
+  team file can satisfy were listed: `launch-show-hn` #3; `positioning-new-tagline` #2; `positioning-battlecard` #3; `research-personas-with-quotes` #2; `charts-brand-bar` #2. They are scored but kept out of the craft
+  totals below.
+- **Caveats:** both configs inherited this workspace's `AGENTS.md`, which names some of musterd's
+  own operations (the auto-refresher, the runtime checkout), so the baseline knew more than a
+  stranger would; it helped both configs equally. With-skill answers often said "team.md is an
+  unfilled template", which tells a grader which answer had the skill.
+
+| | With skill | Without skill |
+| --- | --- | --- |
+| Craft expectations passed | 52 of 60 | 44 of 60 |
+| Team expectations passed | 3 of 5 | 0 of 5 |
+| Checks passed | 72 of 77 | 62 of 77 |
+| Mean readiness (1–10) | 6.6 | 6.3 |
+| Cases the grader preferred | 11 of 16 | 5 of 16 |
+| Factual errors found by the grader | 1 | 0 |
+
+| Case | With skill: craft (+team) · checks · readiness | Without skill: craft (+team) · checks · readiness | Grader preferred |
+| --- | --- | --- | --- |
+| prose-deslop-announcement | 5/5 · 13/13 · 6 | 5/5 · 13/13 · 9 | without skill |
+| prose-readme-edit | 4/4 · 17/17 · 7 | 4/4 · 17/17 · 9 | without skill |
+| docs-changelog-from-prs | 4/4 · 7/7 · 8 | 4/4 · 7/7 · 8 | with skill |
+| docs-diataxis-audit | 5/5 · 5/5 · 8 | 2/5 · 3/5 · 6 | with skill |
+| launch-show-hn | 3/3 (+1/1) · 2/3 · 8 | 0/3 (+0/1) · 0/3 · 2 | with skill |
+| launch-weekly-digest | 5/5 · 1/1 · 8 | 3/5 · 1/1 · 6 | with skill |
+| launch-press-release-no-news | 3/3 · 3/3 · 9 | 3/3 · 3/3 · 8 | with skill |
+| positioning-new-tagline | 3/3 (+0/1) · 1/2 · 7 | 2/3 (+0/1) · 0/2 · 5 | with skill |
+| positioning-battlecard | 3/3 (+1/1) · 3/3 · 5 | 1/3 (+0/1) · 0/3 · 4 | with skill |
+| research-synthesis | 4/4 · 6/6 · 9 | 4/4 · 5/6 · 8 | with skill |
+| research-personas-with-quotes | 2/2 (+1/1) · 1/1 · 8 | 2/2 (+0/1) · 0/1 · 8 | with skill |
+| charts-brand-bar | 0/4 (+0/1) · 7/8 · 2 | 3/4 (+0/1) · 8/8 · 5 | without skill |
+| charts-latency-distribution | 2/4 · 2/2 · 3 | 4/4 · 2/2 · 6 | without skill |
+| fundraising-investor-update | 3/4 · 3/3 · 5 | 2/4 · 3/3 · 5 | with skill |
+| fundraising-traction-answer | 3/3 · 0/1 · 4 | 3/3 · 0/1 · 5 | without skill |
+| uxcopy-cli-daemon-unreachable | 3/4 · 1/2 · 8 | 2/4 · 0/2 · 7 | with skill |
+
+**Verdict (ADR 586 §6, as shipped):** with the blank team file the skill beat no skill, graded blind
+(craft 52/60 vs 44/60; preferred 11 to 5). It stays a built-in.
+
+Where the skill made the difference: no ready-to-paste Show HN post (the baseline wrote one), a
+Diátaxis audit that classifies the page and checks ADR 106 before linking it, the increment marked
+as an increment, a battlecard with `as_of`, `source_url` and `review_by` and nothing about
+CrewAI from memory, and k-of-n with no percentage.
+
+Where it lost:
+- `charts-brand-bar` and `charts-latency-distribution`. The skill run made no chart at all: the
+  charts reference says to compute coordinates in code and render and look, the session could not
+  run code, and the blank team file has no palette, so it handed back a plan. The baseline computed
+  both charts correctly and flagged the fictional data. A read-only session should still deliver
+  the computed SVG, marked unrendered, rather than nothing. The read-only instruction in this run
+  made this worse than a normal session would.
+- `prose-deslop-announcement`, `prose-readme-edit`: equal on expectations, lower on readiness,
+  because the skill run appended a note to a request that said "return only the post".
+- `fundraising-traction-answer`: all placeholders, where the baseline kept our dated usage line.
