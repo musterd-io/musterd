@@ -45,7 +45,7 @@ SQLite cannot ALTER a CHECK. v57 follows the v39/v44 playbook: create-table-with
 `harnesses/grok.ts` implements `Harness`: id `grok`, label "Grok CLI", surface `grok`, `entryScope: 'folder'`. Detection is a `grok` binary on PATH or a `.grok/` directory. Configuration writes **only** project-local `.grok/config.toml`:
 
 - `[mcp_servers.musterd]` pointing at the same stdio command every other adapter writes, env **exactly** `{ MUSTERD_LAUNCH_SURFACE = "grok" }` (ADR 165/286). Prefer `grok mcp add --scope project` when the binary is present; otherwise upsert the `[mcp_servers.*]` tables with the existing Codex TOML helper (same shape; no new TOML dependency).
-- `[compat.cursor] hooks = false` so inherited Cursor hooks do not steal capture. Leave `[compat.cursor] mcps` on so other Cursor-registered servers still load; the native `musterd` name wins.
+- `[compat.cursor] hooks = false` so inherited Cursor hooks do not steal capture. Leave `[compat.cursor] mcps` on so other Cursor-registered servers still load; the native `musterd` name wins. _(Amended 2026-10-14: the same switch for Claude hooks, which Grok 1.0.52 delivers. See ADR 597.)_
 
 Never write `~/.grok/config.toml`. A musterd entry found only there is `registeredElsewhere` (ADR 168): inspect, never prescribe `wire`. Unprovision removes the `musterd` server tables only; it leaves the hooks-compat key (removing it would re-enable the double-fire).
 

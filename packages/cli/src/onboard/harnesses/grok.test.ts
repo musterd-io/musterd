@@ -139,6 +139,7 @@ describe('grok.unprovision', () => {
     expect(toml).toContain('[mcp_servers.musterd]');
     expect(toml).not.toContain('[mcp_servers.figma]');
     expect(toml).toMatch(/\[compat\.cursor\][\s\S]*hooks\s*=\s*false/);
+    expect(toml).toMatch(/\[compat\.claude\][\s\S]*hooks\s*=\s*false/);
   });
 });
 
@@ -165,6 +166,28 @@ describe('grok.refreshHooks', () => {
     expect(toml).toContain('MUSTERD_LAUNCH_SURFACE = "grok"');
     expect(toml).toContain('musterd-grok-statusline');
     expect(toml).toContain('[permission]');
+    expect(toml).toMatch(/\[compat\.cursor\][\s\S]*hooks\s*=\s*false/);
+    expect(toml).toMatch(/\[compat\.claude\][\s\S]*hooks\s*=\s*false/);
+  });
+
+  it('sets hooks = false inside an existing [compat.claude] table', () => {
+    mkdirSync(join(cwd, '.grok'), { recursive: true });
+    writeFileSync(
+      cfgPath(),
+      [
+        '[mcp_servers.musterd]',
+        'command = "/keep/node"',
+        '',
+        '[compat.claude]',
+        'skills = true',
+        '',
+      ].join('\n'),
+    );
+    grok.refreshHooks!.run(cwd);
+    const toml = readFileSync(cfgPath(), 'utf8');
+    const tables = toml.match(/\[compat\.claude\]/g) ?? [];
+    expect(tables).toHaveLength(1);
+    expect(toml).toMatch(/\[compat\.claude\]\s*hooks = false\s*skills = true/);
     expect(toml).toMatch(/\[compat\.cursor\][\s\S]*hooks\s*=\s*false/);
   });
 });

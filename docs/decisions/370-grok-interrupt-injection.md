@@ -56,6 +56,7 @@ No `list_sessions`, no `send_message`, no writing `updates.jsonl` or TTY stdin. 
 - ADR 352 Decision 8's PostToolUse wiring is marked in place; this ADR is the replacement. The Decision there is not rewritten.
 - `docs/wiki/driver-support-matrix.md` Grok hook-capture row is the observation, dated, with a falsifier.
 - Fail-open unchanged: missing `musterd`/`node`, a dead daemon, or a parse error prints nothing and exits 0.
+- _(2026-10-14.)_ Grok 1.0.52 delivers PostToolUse stdout. The native interrupt stays on PreToolUse. The second copy was Claude's hook file, which Grok was still scanning. [ADR 597](597-grok-stops-loading-claude-hooks.md) turns that scan off. This is not a move back onto PostToolUse.
 
 ## Observability & Evaluation
 

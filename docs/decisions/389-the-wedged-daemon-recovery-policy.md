@@ -271,6 +271,14 @@ this week's read and a human say so.
   Follows-up: none until the successor is read — a rule for `???` written now would be the
   `void_if` clause firing on itself (2026-09-14).
 
+- _Dated note (2026-10-15) — the thirty-day successor closed unread._
+  [The successor](../watches/2026-09-14-adr-389-sampled-read-successor.md) passed `revisit_by`
+  2026-10-14 with `status: open`, and `watch:check` (UTC date) failed the docs leaf. This seat
+  does not have `~/.musterd/guardian/guardian.log`, so the series was not read. The watch is
+  `void`, resolution the gate's unattended line: no verdict. The class is not armed and not
+  disarmed by this note. No successor is opened here.
+  Follows-up: none — a new window is a new watch, and this diff does not open one (2026-10-15).
+
 ## Amendment 1 — the load average separates starved from blocked (2026-09-14, lane `01M2GTB0RA`)
 
 §1 said only the sample can make `daemon_wedged`. Six raises on 2026-09-14 (20:02Z–21:23Z) show
