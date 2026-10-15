@@ -1151,3 +1151,44 @@ The server's own timings, from the hub's lines after the first minute:
   edge path owns the ~300 ms and the lane for it is a Fly machine move or a bench-side traceroute,
   not a server change. If instead the bench's p95 returns to the 510–540 ms band with the server at
   252 ms, run 43's gap was a one-run edge draw and `60cf546` is the new, faster baseline.
+
+## 2026-10-15 — Cloud run 44: p95 625 ms, a matched repeat of run 43 on `60cf546` and the same machine — the bench-side gap stays; the server table was lost to a stale checkout (lane 01M50DPNH301V2KS93HJPYFYCJ)
+
+No deploy: staging on `60cf546b2e2d`, app machine `8de50dfe952498`, Neon 1 CU, shape 75/75/75,
+ramp 1 000 s, duration 1 300 s, `performance-4x` bench on a fresh team `lb-run44`.
+`pg_stat_statements` reset at 18:38:15Z; load ran 18:40–19:02Z.
+
+| run | build | machine | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 41 | `1311808` | `82dd559c` | 214 ms | 509 ms | 654 ms | 66 107 (50.9) | 100 | 213 ms |
+| 43 | `60cf546` | `8de50dfe` | 354 ms | 645 ms | 849 ms | 65 303 (50.2) | 56 | 493 ms |
+| 44 | `60cf546` | `8de50dfe` | **353 ms** | **625 ms** | 819 ms | 67 347 (51.8) | 92 | **399 ms** |
+
+- **Run 43's falsifier held: the elevated bench view is a property of this machine or its path,
+  not a one-run draw.** p50 is identical (353 against 354 ms), p95 within 20 ms, and `/health`
+  — one database touch — is still ~180 ms above the `82dd559c` band at p95. Both runs on the new
+  machine sit 100–130 ms above both runs on the old one at every route.
+- **No server table for this run, and that is this seat's error.** The bench was launched from a
+  checkout fetched BEFORE #2633 merged, so the old `bench-run.mjs` ran and kept only `ws_close`
+  lines: the hub file (`hub-git-41fffd34d3e8-…`) holds 98 socket lines and nothing else. The
+  launch line reads `hub log (musterd-cloud, socket lines)`; the new script prints `every line;
+  socket lines echoed`. Check that line before walking away from a launch. Run 43's server numbers
+  (request p50 / p95 62 / 252 ms on this build) stand as the only server-side measurement of
+  `60cf546`.
+- **Errors, 92:** 48 viewer sockets closed 1006, 47 back in 2–4 s — one burst of 25 at
+  +1 188–1 229 s and a scatter of 23 across the run (+212 s to +1 019 s), more spread than run 43's
+  two bursts; 22 viewer `GET /teams/:slug`, 12 `GET /report`, 6 interrupt-checks and 3 others
+  failed at the network layer; one interrupt-check answered 502. The 502 cannot be traced here for
+  the reason above.
+- **Database, from `pg_stat_statements`:** the interrupt-check's inbox read is again the top
+  statement, 18 098 calls at 1.35 ms mean (24.5 s, run 43: 1.23 ms); the credential lookup 65 051
+  calls at 0.12 ms. Database time per request did not move between the two runs.
+- **Vacuum:** `audit` finally autovacuumed (19:02Z, 10.0% → 0.1% dead, its first since
+  2026-10-13 19:10Z); `messages` 2.4% → 4.4% (5 612 of 121 449), no vacuum needed; `presence`
+  vacuumed at 19:05Z (754 in all).
+- **Next:** move the app off `8de50dfe952498` — a no-change redeploy of `60cf546` lands a new
+  machine, usually on another host — and run 45 as a matched repeat WITH the new script's hub log.
+  Falsify: the bench's p95 stays in the 625–645 band and `/health` p95 above 350 ms on the new
+  machine — then the host is not the variable and the next lane is a traceroute from the bench
+  machine through Cloudflare to the app. If it returns to the 510–540 band with `/health` near
+  215 ms, the host was.
