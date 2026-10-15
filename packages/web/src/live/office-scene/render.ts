@@ -54,6 +54,7 @@ import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst } from './skeleton';
+import type { UnitHook } from './damage';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
@@ -1175,6 +1176,9 @@ export function drawWalls(
   wallBoard: WallBoard | null = null,
   t = 0,
   slice: WallSlice = 'all',
+  /** The paint-sequence hook (RenderOpts.units): each live fixture is its own unit, so the sign's
+   *  animation damages the sign and not the clock and the board beside it. */
+  run: (draw: () => void) => void = (draw) => draw(),
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1198,11 +1202,11 @@ export function drawWalls(
     }
     if (wallIndex === 1) {
       if (!wantsFixtures) return;
-      wallClock(ctx, fit, edge, 0.52, 0.62, env.hours); // dead centre, between the windows
-      if (teamWorkingHours) workingHoursSign(ctx, fit, edge, teamWorkingHours, t);
+      run(() => wallClock(ctx, fit, edge, 0.52, 0.62, env.hours)); // dead centre, between the windows
+      if (teamWorkingHours) run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
-      wallLaneBoard(ctx, fit, edge, wallBoard);
+      run(() => wallLaneBoard(ctx, fit, edge, wallBoard));
       return;
     }
     if (wantsStatic) wallHanger(ctx, fit, edge, 0.52, 0.76); // between the windows — where you'd really hang one
@@ -1217,7 +1221,7 @@ export function drawWalls(
     const pt = (t: number, u: number): Pt => wallPt(edge, t, u, fit);
     if (!want.shell) {
       if (want.dress) dress(edge, edge === WALL_EDGES[1] ? 1 : 0);
-      if (want.cable) cableStrand(ctx, fit, edge);
+      if (want.cable) run(() => cableStrand(ctx, fit, edge));
       return;
     }
     // the wall face
@@ -2004,6 +2008,12 @@ export interface RenderOpts {
   /** The Welcome Wagon's paint (lane 01M3F81DD9) — lanyards, label strips, the wall's new-arrivals
    *  corner and flip counter, hello screens, boot blinks. Absent → nothing of it is drawn. */
   welcome?: WelcomePaint | undefined;
+  /**
+   * Dirty-rect repaint (./damage.ts): every unit of the paint sequence — each depth item, each layer
+   * around the loop — goes through `units.run`, in order, so a caller can measure the units or skip
+   * the ones a partial frame cannot touch. Absent → every unit runs, exactly as before.
+   */
+  units?: UnitHook | undefined;
 }
 
 /** The break-nook lounge, as depth items: the rug flat on the floor, every solid piece self-sorted. */
@@ -4438,48 +4448,57 @@ function drawInteriorLight(
   /** The subset of `litLamps` at a dreaming seat's desk. The lamp is turned down low, the way you'd
    *  leave one on for someone asleep. */
   dreamLamps: ReadonlySet<number> = new Set(),
+  /** The paint-sequence hook (RenderOpts.units). The veil, the fixed lamps and each member's glow are
+   *  separate units, so a member walking at night damages their own pool, not the whole veiled room.
+   *  Each additive unit sets its own `lighter`, so the split paints what one pass painted. */
+  run: (draw: () => void) => void = (draw) => draw(),
 ): void {
   if (env.veilAlpha > 0.01) {
-    ctx.save();
-    ctx.globalAlpha = env.veilAlpha;
-    ctx.fillStyle = env.veilColor;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); // whole canvas (overshoots under DPR — harmless)
-    ctx.restore();
+    run(() => {
+      ctx.save();
+      ctx.globalAlpha = env.veilAlpha;
+      ctx.fillStyle = env.veilColor;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); // whole canvas (overshoots under DPR — harmless)
+      ctx.restore();
+    });
   }
   if (!env.lampsOn) return;
   // How deep the night is, 0..1 — the warm sources scale by it, so they fade in as dusk falls rather than
   // snapping on at the lamp threshold.
   const night = Math.min(1, env.veilAlpha / 0.55);
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter'; // additive: each pool *adds* light back over the veil
+  run(() => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter'; // additive: each pool *adds* light back over the veil
 
-  // The string lights emit: a warm pool cast down from each bulb onto the wall + floor beneath it. Tuned
-  // to actually read against the veil (a first pass was too faint to see) while staying a warm accent.
-  for (const b of magicAnchors(fit).bulbs) {
-    warmPool(ctx, { x: b.x, y: b.y + 24 * fit.scale }, 52 * fit.scale, 0.95, '255, 200, 120', 0.2 * night);
-  }
+    // The string lights emit: a warm pool cast down from each bulb onto the wall + floor beneath it. Tuned
+    // to actually read against the veil (a first pass was too faint to see) while staying a warm accent.
+    for (const b of magicAnchors(fit).bulbs) {
+      warmPool(ctx, { x: b.x, y: b.y + 24 * fit.scale }, 52 * fit.scale, 0.95, '255, 200, 120', 0.2 * night);
+    }
 
-  // Desk lamps emit, in two parts, and the order of them is the whole point. `litLamps` is the set of
-  // desks with a real sitter (never a bench seat, which has no lamp fixture, and never an offline
-  // owner's kept desk — nobody is there to have switched it on), which is exactly the set
-  // `drawWorkstation` drew a lit shade for.
-  for (const slot of DESK_SLOTS) {
-    if (!litLamps.has(slot.id)) continue;
-    const head = lampHeadPoint(slot, fit);
-    const low = dreamLamps.has(slot.id) ? DREAM_LAMP : 1;
-    // (a) The floor pool: light landing on the desk corner and the floor beside it, cast from under the
-    // shade rather than from the shade itself, so it reads as spill and not as a second bulb.
-    warmPool(ctx, { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale }, 74 * fit.scale * low, 0.6, '255, 194, 112', 0.3 * night * low);
-    // (b) The bulb: a small, bright, unmistakably warm core right at the shade, painted additively over
-    // the veil so the fixture reads as ON. Two stops — a tight near-white filament inside a warm halo —
-    // because a single soft blob at this size reads as a smudge, and what has to survive the veil is the
-    // sense that there is a *source* here. This is the half that was missing: the room had lamplight
-    // with no visible lamps in it.
-    // A dreaming lamp keeps its filament at full strength and loses its halo, so it still reads as ON.
-    warmPool(ctx, head, 26 * fit.scale, 0.85, '255, 186, 96', 0.5 * night * low);
-    warmPool(ctx, head, 10 * fit.scale, 0.8, '255, 238, 198', 0.72 * night);
-  }
+    // Desk lamps emit, in two parts, and the order of them is the whole point. `litLamps` is the set of
+    // desks with a real sitter (never a bench seat, which has no lamp fixture, and never an offline
+    // owner's kept desk — nobody is there to have switched it on), which is exactly the set
+    // `drawWorkstation` drew a lit shade for.
+    for (const slot of DESK_SLOTS) {
+      if (!litLamps.has(slot.id)) continue;
+      const head = lampHeadPoint(slot, fit);
+      const low = dreamLamps.has(slot.id) ? DREAM_LAMP : 1;
+      // (a) The floor pool: light landing on the desk corner and the floor beside it, cast from under the
+      // shade rather than from the shade itself, so it reads as spill and not as a second bulb.
+      warmPool(ctx, { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale }, 74 * fit.scale * low, 0.6, '255, 194, 112', 0.3 * night * low);
+      // (b) The bulb: a small, bright, unmistakably warm core right at the shade, painted additively over
+      // the veil so the fixture reads as ON. Two stops — a tight near-white filament inside a warm halo —
+      // because a single soft blob at this size reads as a smudge, and what has to survive the veil is the
+      // sense that there is a *source* here. This is the half that was missing: the room had lamplight
+      // with no visible lamps in it.
+      // A dreaming lamp keeps its filament at full strength and loses its halo, so it still reads as ON.
+      warmPool(ctx, head, 26 * fit.scale, 0.85, '255, 186, 96', 0.5 * night * low);
+      warmPool(ctx, head, 10 * fit.scale, 0.8, '255, 238, 198', 0.72 * night);
+    }
+    ctx.restore();
+  });
 
   // A personal glow travelling with each present (online) member. Still two layers — the glow stays, it
   // is how a member reads as *present* after dark (nick, 2026-09-03: "I don't want to get rid of the
@@ -4496,13 +4515,16 @@ function drawInteriorLight(
     if (!node || node.presence !== 'online') continue;
     const b = project(pose.lx, pose.ly, fit);
     const scale = pose.small ? 0.7 : 1;
-    // the halo: wide, flat, on the floor — it separates a body from the floor behind it.
-    warmPool(ctx, { x: b.x, y: b.y - 8 * fit.scale * scale }, 88 * fit.scale * scale, 0.6, '255, 206, 140', 0.1 * night);
-    // the core: the member's own presence, at a tenth of the alpha it used to bleach them with.
-    warmPool(ctx, { x: b.x, y: b.y - 16 * fit.scale * scale }, 50 * fit.scale * scale, 0.8, '255, 214, 158', 0.09 * night);
+    run(() => {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      // the halo: wide, flat, on the floor — it separates a body from the floor behind it.
+      warmPool(ctx, { x: b.x, y: b.y - 8 * fit.scale * scale }, 88 * fit.scale * scale, 0.6, '255, 206, 140', 0.1 * night);
+      // the core: the member's own presence, at a tenth of the alpha it used to bleach them with.
+      warmPool(ctx, { x: b.x, y: b.y - 16 * fit.scale * scale }, 50 * fit.scale * scale, 0.8, '255, 214, 158', 0.09 * night);
+      ctx.restore();
+    });
   }
-
-  ctx.restore();
 }
 
 /**
@@ -4830,6 +4852,10 @@ export function renderScene(
 ): SceneAnchors {
   const cache = opts.sprites;
   const dpr = opts.dpr ?? 1;
+  /* Every unit of the paint sequence goes through here (RenderOpts.units). */
+  const run = opts.units
+    ? (draw: () => void) => opts.units!.run(draw)
+    : (draw: () => void) => draw();
 
   // Desk-slot index → seat owner (for the monitor's working glow). Placement stores an index into
   // `DESK_SLOTS`; IDs are deliberately stable but sparse after pod sizes change, so they are not
@@ -4898,15 +4924,15 @@ export function renderScene(
   }
   if (cache) {
     const bg = backgroundKey(fit, env, dpr);
-    blitSprite(ctx, cache, bg, shell, opts.spriteOnly);
+    run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: three fixtures that are not static, then the right
     // wall's additive strand, then the additive daylight beams. See `WallSlice`.
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live');
-    drawWindowBeams(ctx, fit, env);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live', run);
+    run(() => drawWindowBeams(ctx, fit, env));
     // Source-over floor paint, so it caches cleanly on top of the beams it is painted over.
-    blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly);
+    run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {
-    shell(ctx);
+    run(() => shell(ctx));
   }
   items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => meetingTable(ctx, fit) });
   for (const c of MEETING.chairs) {
@@ -5033,32 +5059,33 @@ export function renderScene(
   items.sort((a, b) => a.d - b.d);
   for (const it of items) {
     if (!cache || !it.parts) {
-      it.fn();
+      run(it.fn);
       continue;
     }
+    // One unit per part: a working desk's monitor animates, and its sprite halves around it should
+    // not be damage because it does.
     for (const part of it.parts) {
-      if (part.kind === 'live') {
-        part.draw();
-        continue;
-      }
-      blitSprite(ctx, cache, part.key, part.draw, opts.spriteOnly);
+      if (part.kind === 'live') run(part.draw);
+      else run(() => blitSprite(ctx, cache, part.key, part.draw, opts.spriteOnly));
     }
   }
 
   // Lanyards in the air (lane 01M3F81DD9): over everything on the floor, under the night veil.
-  if (opts.welcome?.tosses.length) drawTosses(ctx, fit, opts.welcome.tosses, heads, t);
+  const tosses = opts.welcome?.tosses;
+  if (tosses?.length) run(() => drawTosses(ctx, fit, tosses, heads, t));
 
   // Interior lighting: veil the room to the night level, then let occupied desks' lamps glow through.
-  drawInteriorLight(ctx, fit, env, poses, byName, litLamps, dreamLamps);
+  drawInteriorLight(ctx, fit, env, poses, byName, litLamps, dreamLamps, run);
 
   // The Welcome Wagon's light-emitting bits (lane 01M3F81DD9) go over the night veil, like the lamps:
   // a monitor saying hello and an agent's status light are sources, not surfaces.
-  if (opts.welcome) drawWelcomeGlows(ctx, fit, opts.welcome, placements, heads, t);
+  const welcome = opts.welcome;
+  if (welcome) run(() => drawWelcomeGlows(ctx, fit, welcome, placements, heads, t));
 
   // Dream bubbles also go over the veil. A dream happens at night, and a bubble lost in the dark
   // would leave the dreamer looking like any other late worker.
   for (const [name, at] of heads) {
-    if (byName.get(name)?.dreaming) drawDreamBubble(ctx, fit, at, t);
+    if (byName.get(name)?.dreaming) run(() => drawDreamBubble(ctx, fit, at, t));
   }
 
   // Collapse any queue/nook members past the render cap into a single "+N" pill, so a very large roster
@@ -5078,15 +5105,15 @@ export function renderScene(
   }
   if (stripTotal - stripDrawn > 0) {
     const a = project(ENTRANCE.lx + 34, ENTRANCE.ly - 10, fit);
-    drawCountPill(ctx, { x: a.x, y: a.y - 66 * fit.scale }, `+${stripTotal - stripDrawn} waiting`, fit.scale);
+    run(() => drawCountPill(ctx, { x: a.x, y: a.y - 66 * fit.scale }, `+${stripTotal - stripDrawn} waiting`, fit.scale));
   }
   if (nookTotal - nookDrawn > 0) {
     const a = project(NOOK.lx, NOOK.ly, fit);
-    drawCountPill(ctx, { x: a.x, y: a.y - 52 * fit.scale }, `+${nookTotal - nookDrawn} away`, fit.scale);
+    run(() => drawCountPill(ctx, { x: a.x, y: a.y - 52 * fit.scale }, `+${nookTotal - nookDrawn} away`, fit.scale));
   }
 
   // Frame the whole diorama last — a soft edge vignette so the scene fades into the panel at the corners.
-  drawVignette(ctx);
+  run(() => drawVignette(ctx));
 
   return { heads, bases };
 }

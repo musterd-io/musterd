@@ -91,6 +91,15 @@ export function spritesFromUrl(search: string): boolean {
 }
 
 /**
+ * Dirty-rect repaint (smooth-capture spec 2026-10-13, lever 2): the room repaints only the rects that
+ * changed since the last frame. On for the stream; `&dirty=0` is the escape hatch and the A/B arm.
+ * It rides the sprite cache, so `&sprites=0` turns it off too.
+ */
+export function dirtyFromUrl(search: string): boolean {
+  return spritesFromUrl(search) && new URLSearchParams(search).get('dirty') !== '0';
+}
+
+/**
  * Where a viewer of the stream can find the team — a fact asserted on a public surface, so it is
  * written per team rather than derived (`<slug>@musterd.io` would claim a mailbox for every team
  * that ever streams). The address appears only where one exists; a team without a mailbox shows
@@ -241,6 +250,9 @@ function BroadcastPage() {
   const [sprites] = useState(() =>
     typeof window === 'undefined' ? false : spritesFromUrl(window.location.search),
   );
+  const [dirtyRects] = useState(() =>
+    typeof window === 'undefined' ? false : dirtyFromUrl(window.location.search),
+  );
 
   // Sound on, unless the URL says otherwise. Both engines default OFF and normally need a click;
   // a capture box never gets one, which is what `--autoplay-policy=no-user-gesture-required` and
@@ -324,6 +336,7 @@ function BroadcastPage() {
                 broadcast
                 captureFps={captureFps}
                 sprites={sprites}
+                dirtyRects={dirtyRects}
                 fit="furnished"
                 topSlot={<StreamAskBanner envelopes={envelopes} roster={roster} />}
                 cornerSlot={broadcastCorner(team, shipped)}
