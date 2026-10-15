@@ -32,8 +32,8 @@ export interface WallBoardColumn {
   count: number;
   /** At most STICKY_CAP notes, board order preserved. */
   stickies: WallSticky[];
-  /** How many slots in this column a card has ever held, as this viewer has seen the board (`withHeld`):
-   *  the cork keeps a tack hole in each of those slots that is now empty. Absent = none yet. */
+  /** How many slots in this column have held a card lately (`projectWallBoard`, lane 01M50WEBTC): the
+   *  cork keeps a tack hole in each of those slots that is now empty. Absent = none. */
   held?: number;
 }
 
@@ -114,9 +114,23 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
   });
 }
 
+/** How far back a lane that moved on still leaves its holes (lane 01M50WEBTC). */
+export const HOLES_WINDOW_MS = 7 * 86_400_000;
+/** Where a column sits on a lane's way through the board. `blocked` shares `active`'s place and is
+ *  never passed through: the board cannot tell which lanes were blocked before. */
+const RANK: Partial<Record<LaneState, number>> = {
+  open: 0,
+  claimed: 1,
+  active: 2,
+  blocked: 2,
+  awaiting_acceptance: 3,
+  done: 4,
+};
+
 export function projectWallBoard(
   board: LaneBoard | null,
   stalled: ReadonlySet<string> = new Set(),
+  now: number = Date.now(),
 ): WallBoard | null {
   if (!board) return null;
   const byState = new Map<LaneState, WallBoardColumn>(
@@ -128,10 +142,17 @@ export function projectWallBoard(
   const lanes = stalled.size
     ? [...board.lanes].sort((a, b) => Number(stalled.has(b.id)) - Number(stalled.has(a.id)))
     : board.lanes;
+  // Pin holes (lane 01M50WEBTC): a lane updated this week has hung in every column before its own, so
+  // those slots keep a hole once it moves on. Derived from the board alone, so every viewer sees the
+  // same cork; a quiet team's cork starts clean and wears in.
+  const passed = new Map<LaneState, number>();
   for (const lane of lanes) {
     const key = lane.state === 'ready_for_review' ? 'awaiting_acceptance' : lane.state;
     const col = byState.get(key);
     if (!col) continue; // abandoned — no column
+    if (lane.updated_at >= now - HOLES_WINDOW_MS)
+      for (const k of WALL_COLUMNS)
+        if (k !== 'blocked' && RANK[k]! < RANK[key]!) passed.set(k, (passed.get(k) ?? 0) + 1);
     col.count++;
     if (col.stickies.length < STICKY_CAP) {
       col.stickies.push({
@@ -141,7 +162,11 @@ export function projectWallBoard(
       });
     }
   }
-  return WALL_COLUMNS.map((key) => byState.get(key)!);
+  return WALL_COLUMNS.map((key) => {
+    const col = byState.get(key)!;
+    const held = Math.min(STICKY_CAP, col.count + (passed.get(key) ?? 0));
+    return held > 0 ? { ...col, held } : col;
+  });
 }
 
 /** How long a landed card swings before it hangs still, in seconds. */
@@ -158,30 +183,3 @@ export function stickySway(age: number | undefined): number {
   return Math.sin(age * 14) * Math.exp(-age * 2.8) * 5.5;
 }
 
-/** Per-column high-water marks: the most cards (up to `STICKY_CAP`) this viewer has seen hanging in a column. */
-export type HeldMarks = Partial<Record<LaneState, number>>;
-
-/**
- * Fold what the board shows now into the viewer's marks and stamp each column with its mark (lane
- * 01M4VP3V99, "pin holes remember where cards hung"). A mark only ever rises: a slot that held a card
- * keeps its hole after the card moves on. Viewer-local history by design — nothing is stored on the
- * server — so a first-time viewer starts with a clean cork. Pure; `changed` says whether to save.
- */
-export function withHeld(
-  board: WallBoard | null,
-  marks: HeldMarks,
-): { board: WallBoard | null; marks: HeldMarks; changed: boolean } {
-  if (!board) return { board, marks, changed: false };
-  const next: HeldMarks = { ...marks };
-  let changed = false;
-  const out = board.map((col) => {
-    const seen = Math.min(col.count, STICKY_CAP);
-    const held = Math.max(next[col.key] ?? 0, seen);
-    if (held !== (next[col.key] ?? 0)) {
-      next[col.key] = held;
-      changed = true;
-    }
-    return held > 0 ? { ...col, held } : col;
-  });
-  return { board: out, marks: changed ? next : marks, changed };
-}

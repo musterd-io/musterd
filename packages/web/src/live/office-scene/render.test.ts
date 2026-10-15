@@ -1542,7 +1542,8 @@ describe('background layer (sprite cache)', () => {
     };
     const holeFills = (ops: string[]) => ops.filter((o) => o.includes('rgba(52, 28, 8, 0.75)')).length;
     const full = board();
-    const emptied: WallBoard = full.map((c) => ({ ...c, stickies: [] }));
+    // `projectWallBoard` derives `held` from the board (lane 01M50WEBTC); strip it for a cork with no history.
+    const emptied: WallBoard = full.map((c) => ({ key: c.key, count: c.count, stickies: [] }));
     // never held: a cork with no history shows no holes at all
     expect(holeFills(draw(emptied))).toBe(0);
     // held 3 slots in the first column and 2 in the second, now empty: five holes

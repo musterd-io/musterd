@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withHeld, withPinned, withTaken } from './wallboard';
+import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -195,35 +195,42 @@ describe('stickySway — a landed card swings where a viewer can see it (L5 foll
   });
 });
 
-describe('withHeld — the cork remembers where cards hung (lane 01M4VP3V99)', () => {
-  const wb = (ids: Array<[string, Lane['state']]>) =>
-    projectWallBoard(board(ids.map(([id, state]) => lane({ id, state }))))!;
-  const heldOf = (b: ReturnType<typeof withHeld>['board'], key: string) => b!.find((c) => c.key === key)!.held;
+describe('pin holes, derived from the board (lane 01M50WEBTC)', () => {
+  const NOW = 100 * 86_400_000;
+  const DAY = 86_400_000;
+  const heldOf = (b: ReturnType<typeof projectWallBoard>, key: string) => b!.find((c) => c.key === key)!.held;
+  const wb = (lanes: Lane[]) => projectWallBoard(board(lanes), new Set(), NOW);
 
-  it('raises a column\'s mark to the cards seen hanging there, up to the sticky cap', () => {
-    const r = withHeld(wb([['A', 'active'], ['B', 'active']]), {});
-    expect(r.changed).toBe(true);
-    expect(r.marks.active).toBe(2);
-    expect(heldOf(r.board, 'active')).toBe(2);
-    const many = withHeld(wb(Array.from({ length: STICKY_CAP + 3 }, (_, i) => [`L${i}`, 'done'] as [string, Lane['state']])), {});
-    expect(many.marks.done).toBe(STICKY_CAP);
+  it('holds a slot for every card hanging now, up to the sticky cap', () => {
+    const b = wb([lane({ id: 'A', state: 'active' }), lane({ id: 'B', state: 'active' })]);
+    expect(heldOf(b, 'active')).toBe(2);
+    const many = wb(Array.from({ length: STICKY_CAP + 3 }, (_, i) => lane({ id: `L${i}`, state: 'done' })));
+    expect(heldOf(many, 'done')).toBe(STICKY_CAP);
   });
 
-  it('never lowers a mark: a card that moved on leaves its hole behind', () => {
-    const first = withHeld(wb([['A', 'active'], ['B', 'active']]), {});
-    const later = withHeld(wb([['A', 'active']]), first.marks); // B left
-    expect(later.changed).toBe(false);
-    expect(later.marks.active).toBe(2);
-    expect(heldOf(later.board, 'active')).toBe(2); // one card hanging, two slots held: one hole
+  it('keeps a hole where a recent lane hung before it moved on', () => {
+    // A finished this week, so it passed open, claimed, active and awaiting on its way to done.
+    const b = wb([lane({ id: 'A', state: 'done', updated_at: NOW - 2 * DAY })]);
+    for (const key of ['open', 'claimed', 'active', 'awaiting_acceptance', 'done']) expect(heldOf(b, key)).toBe(1);
+    expect(heldOf(b, 'blocked')).toBeUndefined();
   });
 
-  it('leaves a column that never held a card unmarked', () => {
-    const r = withHeld(wb([['A', 'active']]), {});
-    expect(heldOf(r.board, 'blocked')).toBeUndefined();
-    expect(r.marks.blocked).toBeUndefined();
+  it('forgets lanes that moved on more than seven days ago', () => {
+    const b = wb([lane({ id: 'A', state: 'done', updated_at: NOW - 8 * DAY })]);
+    expect(heldOf(b, 'active')).toBeUndefined();
+    expect(heldOf(b, 'done')).toBe(1); // it still hangs under done
   });
 
-  it('passes a missing board through', () => {
-    expect(withHeld(null, { done: 2 })).toEqual({ board: null, marks: { done: 2 }, changed: false });
+  it('counts blocked only for lanes blocked now; a blocked lane passed open and claimed', () => {
+    const b = wb([lane({ id: 'A', state: 'blocked', updated_at: NOW })]);
+    expect(heldOf(b, 'blocked')).toBe(1);
+    expect(heldOf(b, 'claimed')).toBe(1);
+    expect(heldOf(b, 'active')).toBeUndefined();
+  });
+
+  it('is the same cork for every viewer: a pure function of the board', () => {
+    const lanes = [lane({ id: 'A', state: 'awaiting_acceptance', updated_at: NOW - DAY }), lane({ id: 'B', state: 'open' })];
+    expect(wb(lanes)).toEqual(wb(lanes));
+    expect(heldOf(wb(lanes), 'open')).toBe(2);
   });
 });
