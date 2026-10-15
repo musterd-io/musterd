@@ -16,7 +16,7 @@ import { log } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope } from '../protocol/validate.js';
 import { appendAudit } from '../store/audit.js';
-import { settleProvenance } from '../store/dream.js';
+import { ownLeaseCreatedAt, settleProvenance } from '../store/dream.js';
 import { consumeGrant, refreshGrant, validateGrant } from '../store/grants.js';
 import {
   agentKeyMayOccupy,
@@ -33,11 +33,11 @@ import { memoryEnvelope } from '../store/memory.js';
 import {
   attach,
   recordClaimAttestation,
+  attendedSessionRows,
   clearOrphanPresence,
   clearPresenceById,
   hasLivePresence,
   heartbeat,
-  heldByAttendedSession,
   presenceById,
   reattestGuidanceEpoch,
   reattestStyleEpoch,
@@ -561,6 +561,10 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           // step so the claim has no side effects — no grant consumed, no request opened.
           // ADR 494 §4: provenance settled against the frame's lease token — `dream` only with a
           // dream lease of this seat's, and a dream lease cannot be shed.
+          // ADR 609: the refusal protects only what attached at or before the lease mint. A row
+          // that attached AFTER — into the spawn window between the daemon's idle observation and
+          // this claim — is displaced at OCCUPY instead (`leaseWindowSneaks`); and a claim settling
+          // to wake/dream without presenting this seat's own lease opens no window at all.
           const frameProvenance =
             targetMember && targetMember.kind === 'agent'
               ? ((await settleProvenance(
@@ -570,31 +574,45 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
                   frame.wake_lease,
                 )) ?? null)
               : null;
+          const leaseWindowSneaks = new Set<string>();
           if (
             targetMember &&
             targetMember.kind === 'agent' &&
             targetMember.observer === 0 &&
-            (frameProvenance === 'wake' || frameProvenance === 'dream') &&
-            (await heldByAttendedSession(
+            (frameProvenance === 'wake' || frameProvenance === 'dream')
+          ) {
+            const attended = await attendedSessionRows(
               ctx.db,
               ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
-            ))
-          ) {
-            send(ws, {
-              type: 'refused',
-              code: 'claim_conflict',
-              message: `seat "${targetMember.name}" is held by an attended session — a wake does not displace it`,
-              claimable: await claimableSeats(ctx, team.id),
-              hint: 'the act stays due; the wake is retried once the seat is idle',
-            });
-            await appendAudit(ctx.db, team.id, {
-              actor: null,
-              action: 'claim.refused',
-              target: targetMember.name,
-              result: 'deny',
-              detail: { code: 'claim_conflict', reason: 'attended_session' },
-            });
-            return;
+            );
+            if (attended.length > 0) {
+              const minted = frame.wake_lease
+                ? await ownLeaseCreatedAt(ctx.db, targetMember.id, frame.wake_lease)
+                : null;
+              const protectedRows =
+                minted === null ? attended : attended.filter((r) => r.created_at <= minted);
+              if (protectedRows.length > 0) {
+                send(ws, {
+                  type: 'refused',
+                  code: 'claim_conflict',
+                  message: `seat "${targetMember.name}" is held by an attended session — a wake does not displace it`,
+                  claimable: await claimableSeats(ctx, team.id),
+                  hint: 'the act stays due; the wake is retried once the seat is idle',
+                });
+                await appendAudit(ctx.db, team.id, {
+                  actor: null,
+                  action: 'claim.refused',
+                  target: targetMember.name,
+                  result: 'deny',
+                  detail: {
+                    code: 'claim_conflict',
+                    reason: minted === null ? 'attended_session' : 'attended_predates_lease',
+                  },
+                });
+                return;
+              }
+              for (const r of attended) leaseWindowSneaks.add(r.presenceId);
+            }
           }
 
           const sameWorkspacePredecessors: string[] = [];
@@ -805,7 +823,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             const displacedSessions: DisplacedSession[] = [];
             const successor = { provenance: frameProvenance, surface: frame.surface };
             for (const old of ctx.hub.connsForMember(targetMember.id)) {
-              if (sameWorkspace(old)) {
+              if (sameWorkspace(old) && !leaseWindowSneaks.has(old.presenceId)) {
                 // ADR 489: only a same-surface successor is a reload of `old`. A CLI wait or watch
                 // in an adapter's workspace is a second reader — neither reaped nor displaced.
                 if (isReloadOf(old, frame.surface)) sameWorkspacePredecessors.push(old.connId);

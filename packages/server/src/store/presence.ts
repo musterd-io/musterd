@@ -260,15 +260,36 @@ export async function heldByAttendedSession(
   db: Driver,
   presenceIds: readonly string[],
 ): Promise<boolean> {
+  return (await attendedSessionRows(db, presenceIds)).length > 0;
+}
+
+/** One live row a wake claim must reckon with (ADR 444/609): what it attests and WHEN it attached. */
+export interface AttendedSessionRow {
+  presenceId: string;
+  provenance: string | null;
+  created_at: number;
+}
+
+/**
+ * The live rows behind `presenceIds` that count as attended sessions — provenance not `wake` and
+ * not `dream` (a dream is daemon-spawned like a wake, ADR 494) — with the attachment time ADR 609's
+ * lease window compares against the lease mint.
+ */
+export async function attendedSessionRows(
+  db: Driver,
+  presenceIds: readonly string[],
+): Promise<AttendedSessionRow[]> {
+  const out: AttendedSessionRow[] = [];
   for (const id of presenceIds) {
-    const row = await db.get<{ provenance: string | null }>(
-      'SELECT provenance FROM presence WHERE id = ?',
+    const row = await db.get<{ provenance: string | null; created_at: number }>(
+      'SELECT provenance, created_at FROM presence WHERE id = ?',
       [id],
     );
-    // A dream is daemon-spawned like a wake (ADR 494), so it is not an attended session either.
-    if (row !== undefined && row.provenance !== 'wake' && row.provenance !== 'dream') return true;
+    if (row !== undefined && row.provenance !== 'wake' && row.provenance !== 'dream') {
+      out.push({ presenceId: id, provenance: row.provenance ?? null, created_at: row.created_at });
+    }
   }
-  return false;
+  return out;
 }
 
 /** Drop a single presence row by id — used to evict exactly a displaced connection (ADR 068). */

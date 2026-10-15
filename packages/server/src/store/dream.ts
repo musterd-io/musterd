@@ -342,11 +342,21 @@ export async function settleProvenance(
 }
 
 async function isOwnLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
-  const row = await db.get<{ n: number }>(
-    'SELECT COUNT(*) AS n FROM wake_leases WHERE id = ? AND member_id = ?',
+  return (await ownLeaseCreatedAt(db, memberId, leaseId)) !== null;
+}
+
+/** When this seat's own lease was minted, or null when the id is not this seat's lease at all
+ *  (ADR 609: the timestamp the lease window is measured from). */
+export async function ownLeaseCreatedAt(
+  db: Driver,
+  memberId: string,
+  leaseId: string,
+): Promise<number | null> {
+  const row = await db.get<{ created_at: number }>(
+    'SELECT created_at FROM wake_leases WHERE id = ? AND member_id = ?',
     [leaseId, memberId],
   );
-  return (row?.n ?? 0) > 0;
+  return row?.created_at ?? null;
 }
 
 async function isDreamLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
