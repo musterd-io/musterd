@@ -8,12 +8,10 @@ import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
 import {
-  publishSeatFile,
+  publishSeatFileReport,
   seatFilePath,
   seatFileUnpublished,
-  seatPublishLines,
   seatReachLines,
-  unpublishedSeatLines,
 } from '../roster.js';
 import { resolve, resolveRead } from './helpers.js';
 
@@ -127,6 +125,12 @@ export async function agentCommand(
     throw err;
   }
   const ws = r.workspace;
+  // ADR 547: the seat replicates over sync but its roster entry travels by git — so publish it now
+  // (ADR 592), once the seat and its workspace exist; `--no-publish` prints the lines instead. Before
+  // the --json branch, so a scripted `musterd agent --json` publishes too.
+  const publication = rosterHome
+    ? publishSeatFileReport(name, rosterHome, { publish: parsed.flags['no-publish'] !== true })
+    : null;
 
   if (parsed.flags['json']) {
     process.stdout.write(
@@ -140,11 +144,12 @@ export async function agentCommand(
         harnesses,
         mcpRegistered: r.wiringError === null,
         granted: r.granted,
-        ...(rosterHome && r.seatFileUnpublished
+        ...(publication?.outcome ? { seat_file_published: publication.outcome } : {}),
+        ...(rosterHome && seatFileUnpublished(rosterHome, name)
           ? {
               seat_file_unpublished: {
                 path: seatFilePath(rosterHome, name),
-                state: r.seatFileUnpublished,
+                state: seatFileUnpublished(rosterHome, name),
               },
             }
           : {}),
@@ -163,21 +168,11 @@ export async function agentCommand(
         ? 'folder'
         : 'this folder';
   process.stdout.write(`${theme.ok(sym.ok)} workspace ${ws.dir} ${theme.meta(`(${where})`)}\n`);
-  // ADR 547: the seat replicates over sync but its roster entry travels by git — so publish it now
-  // (ADR 592), once the seat and its workspace exist; `--no-publish` prints the lines instead.
-  if (rosterHome && r.seatFileUnpublished) {
-    const published =
-      parsed.flags['no-publish'] !== true ? publishSeatFile(rosterHome, name) : null;
-    const still = seatFileUnpublished(rosterHome, name);
-    const lines = published ? seatPublishLines(name, rosterHome, published, still) : null;
-    if (lines?.ok) process.stdout.write(`${theme.ok(sym.ok)} ${lines.ok}\n`);
-    const warn =
-      lines?.warn ?? (!published && still ? unpublishedSeatLines(name, rosterHome, still) : null);
-    if (warn)
-      process.stdout.write(
-        `${theme.warn(sym.warn)} ${theme.warn(warn[0])}\n${theme.meta(`  ${warn[1]}`)}\n`,
-      );
-  }
+  if (publication?.ok) process.stdout.write(`${theme.ok(sym.ok)} ${publication.ok}\n`);
+  if (publication?.warn)
+    process.stdout.write(
+      `${theme.warn(sym.warn)} ${theme.warn(publication.warn[0])}\n${theme.meta(`  ${publication.warn[1]}`)}\n`,
+    );
 
   if (r.wiringError === null) {
     process.stdout.write(

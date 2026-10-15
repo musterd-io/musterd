@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildSeat,
   publishSeatFile,
+  publishSeatFileReport,
   seatFileExists,
   seatFilePath,
   seatFileUnpublished,
@@ -231,6 +232,22 @@ describe('publishSeatFile — a seat-making command pushes the seat file itself 
     expect(seatFileExists(home, 'alfie')).toBe(true);
     git(other, 'pull', '-q');
     expect(seatFileExists(other, 'resident')).toBe(true);
+  });
+
+  it('publishSeatFileReport: publishes and says so, honours --no-publish, and is null with nothing to do', () => {
+    expect(publishSeatFileReport('resident', undefined)).toBeNull();
+    writeSeatFile(home, 'resident', { kind: 'agent' });
+    const held = publishSeatFileReport('resident', home, { publish: false });
+    expect(held?.outcome).toBeNull();
+    expect(held?.warn?.[0]).toContain('resident');
+    expect(seatFileUnpublished(home, 'resident')).toBe('uncommitted');
+    const r = publishSeatFileReport('resident', home);
+    expect(r?.outcome).toEqual({ state: 'published' });
+    expect(r?.ok).toContain('published .musterd/seats/resident.toml');
+    expect(r?.warn).toBeUndefined();
+    git(other, 'pull', '-q');
+    expect(seatFileExists(other, 'resident')).toBe(true);
+    expect(publishSeatFileReport('resident', home)).toBeNull();
   });
 
   it('skipped outside git or without an upstream; failed carries what git said', () => {

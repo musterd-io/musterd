@@ -5,6 +5,7 @@ import type { HttpClient } from '../client.js';
 import { excludeCredentialFromGit } from '../config.js';
 import { paint as pc } from '../render/theme.js';
 import { sym } from '../render/ui.js';
+import { publishSeatFileReport } from '../roster.js';
 import { provisionAgentSeat, type AgentSeatInput } from './agentSeat.js';
 import { bindingRefusal } from './guard.js';
 import { HARNESSES, harnessAdapters } from './harnesses/index.js';
@@ -69,6 +70,8 @@ export interface ConnectReposInput {
   driver?: string | undefined;
   model?: string | undefined;
   provision?: typeof provisionAgentSeat;
+  /** ADR 592: publish each new seat's file to the roster remote; tests stub it. */
+  publish?: typeof publishSeatFileReport;
   writePrimer?: (dir: string) => void;
   excludeCredential?: (dir: string) => boolean;
 }
@@ -77,6 +80,7 @@ const WIRED = new Set(['applied', 'unchanged', 'satisfied-unmanaged']);
 
 export async function connectRepos(input: ConnectReposInput): Promise<ConnectResult[]> {
   const provision = input.provision ?? provisionAgentSeat;
+  const publish = input.publish ?? publishSeatFileReport;
   const writePrimer =
     input.writePrimer ??
     ((dir: string) => void upsertPrimer(dir, renderRepositoryPrimer({ team: input.team })));
@@ -117,6 +121,11 @@ export async function connectRepos(input: ConnectReposInput): Promise<ConnectRes
       }
       if (!ignored)
         problems.push("couldn't add .musterd/binding.json to .gitignore — don't commit it");
+      // ADR 592 (lane 01M4Z6FN8W): the seat's file is in the roster home, not this repo — push it
+      // there now, or another machine's daemon refuses this seat as unknown. A success says nothing
+      // here (the summary line is the seat); a miss makes the row partial with git's reason and fix.
+      const published = publish(name, input.rosterHome);
+      if (published?.warn) problems.push(`${published.warn[0]} — ${published.warn[1]}`);
       const detail = r.wiringError ?? (problems.length ? problems.join('; ') : null);
       writePrimer(dir);
       out.push({ dir, name, status: detail ? 'partial' : 'ok', wired, detail });

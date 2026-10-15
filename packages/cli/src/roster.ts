@@ -263,6 +263,32 @@ export function seatPublishLines(
   }
 }
 
+/**
+ * What a seat-making path runs after the daemon accepted the member (ADR 592 §1): publish the seat
+ * file if it has not reached the remote, and say how it went. Null when there is nothing to do or
+ * say — the file was already published, or the team is db-only (no roster home). With `publish:
+ * false` (`--no-publish`) nothing runs and only the ADR 547 warning comes back. Shared by `musterd
+ * agent`, the launcher's new seat and both `musterd init` seat paths, so they print one thing.
+ */
+export function publishSeatFileReport(
+  name: string,
+  home: string | undefined,
+  opts: { publish?: boolean } = {},
+): {
+  outcome: SeatPublishOutcome | null;
+  ok?: string;
+  warn?: [warning: string, how: string];
+} | null {
+  if (!home || seatFileUnpublished(home, name) === null) return null;
+  if (opts.publish === false) {
+    const still = seatFileUnpublished(home, name);
+    return still ? { outcome: null, warn: unpublishedSeatLines(name, home, still) } : null;
+  }
+  const outcome = publishSeatFile(home, name);
+  const lines = seatPublishLines(name, home, outcome, seatFileUnpublished(home, name));
+  return { outcome, ...(lines ?? {}) };
+}
+
 /** Every seat file under a roster home, parsed, keyed by seat name. */
 export function readSeatFiles(home: string): Record<string, SeatFile> {
   const dir = seatsDir(home);

@@ -115,6 +115,38 @@ describe('connectRepos', () => {
     expect(got[0]!.wired).toEqual(['claude-code', 'cursor']);
   });
 
+  it('publishes each new seat file to the roster remote (ADR 592); a miss makes that row partial', async () => {
+    const publish = vi.fn((name: string) =>
+      name === 'web'
+        ? {
+            outcome: { state: 'failed' as const, detail: 'rejected' },
+            warn: [
+              'could not publish .musterd/seats/web.toml (rejected)',
+              'git -C /roster push',
+            ] as [string, string],
+          }
+        : { outcome: { state: 'published' as const }, ok: 'published .musterd/seats/api.toml' },
+    );
+    const got = await connectRepos({
+      ...base,
+      repos: ['/c/api', '/c/web'],
+      rosterHome: '/roster',
+      provision: okProvision(),
+      publish,
+      writePrimer: () => {},
+    });
+    expect(publish.mock.calls).toEqual([
+      ['api', '/roster'],
+      ['web', '/roster'],
+    ]);
+    expect(got.map((r) => [r.name, r.status])).toEqual([
+      ['api', 'ok'],
+      ['web', 'partial'],
+    ]);
+    expect(got[1]!.detail).toContain('could not publish .musterd/seats/web.toml (rejected)');
+    expect(got[1]!.detail).toContain('git -C /roster push');
+  });
+
   it('names two same-named repos web and web-2, around names already on the roster', async () => {
     const got = await connectRepos({
       ...base,
