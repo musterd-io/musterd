@@ -112,4 +112,5 @@ starts with "Note" is left out. Run 1's totals are the same under this rule.
 | charts-brand-bar | 8/8 | 5/5 | Took `#B8860B` for light marks and `#E1AD01` for dark from `team.md`'s palette table |
 | fundraising-traction-answer | 1/1 | 3/3 | Found the ledger and `counts.sh` through `team.md`; no invented users; dated counts |
 
-Tells per 100 words: 0.12 mean. Each run opened `team.md` from the core's source 2 without being told to.
+Tells per 100 words: 0.12 mean. Each prompt said to open every source the core names, so this run
+shows the pointers resolve; it does not show a session finds `team.md` unprompted.
