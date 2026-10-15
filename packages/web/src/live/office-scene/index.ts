@@ -608,6 +608,9 @@ export function mountOffice(
   const walkTags = new Map<string, string>();
   /** Who owns each lane the room has watched (lane 01M4V774MK): the deliver walk's carrier. */
   const laneOwners = createLaneOwners();
+  let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
+  /** True while `drainReplay` emits: a replayed walk is older than the board, so it never notes an owner. */
+  let replaying = false;
   let asksSeeded = false; // the first update seeds the open set silently — no hands go up for backfill
   const speeches = new Map<string, Speech>(); // one live speech bubble per member (name → bubble)
   const queued = new Map<string, Utterance[]>(); // acts waiting behind a member's live bubble
@@ -2306,6 +2309,7 @@ export function mountOffice(
     const evs = replayPending;
     replayPending = null;
     tempo = REPLAY_TEMPO;
+    replaying = true;
     for (const ev of evs) {
       try {
         emit(ev);
@@ -2313,6 +2317,7 @@ export function mountOffice(
         if (import.meta.env.DEV) console.error('office replay: event dropped', ev, err);
       }
     }
+    replaying = false;
     if (!actors.active()) tempo = 1; // nobody of theirs is in the room — nothing to catch up on
   }
   function update(next: OfficeData) {
@@ -2334,6 +2339,11 @@ export function mountOffice(
     heldMarks = heldNow.marks;
     if (heldNow.changed) saveHeld(teamName, heldMarks);
     wallBoard = heldNow.board;
+    // The board's owners are the base layer under what the room watches (lane 01M50TZDDM).
+    if (next.laneOwners && next.laneOwners !== seededOwners) {
+      seededOwners = next.laneOwners;
+      laneOwners.seed(next.laneOwners);
+    }
     placements = assignSeats(next.nodes, new Set(next.gathered ?? []));
     const byName = new Map(next.nodes.map((n) => [n.name, n]));
     syncAsks(next.asks ?? [], byName);
@@ -2555,7 +2565,7 @@ export function mountOffice(
         break;
       case 'walk-claim':
         // Claiming a lane (nick, 2026-10-09): to the wall board, think, take the card, carry it home.
-        laneOwners.note(ev.lane, ev.who);
+        if (!replaying) laneOwners.note(ev.lane, ev.who);
         if (actors.claim(ev.who, laneSeed(ev.lane))) {
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
           walkTags.set(ev.who, walkTag('claim', t || null));
@@ -2572,7 +2582,7 @@ export function mountOffice(
           // sends the resolve as THEM (spec 2026-10-13 §3). So only a submit names the owner, and a done
           // pin by anyone but the known owner is an acceptance — it earns the flourish at the board (L3).
           const accepted = ev.state === 'done' && laneOwners.closedByOther(ev.lane, ev.who);
-          if (ev.state === 'awaiting_acceptance') laneOwners.note(ev.lane, ev.who);
+          if (ev.state === 'awaiting_acceptance' && !replaying) laneOwners.note(ev.lane, ev.who);
           const seed = laneSeed(ev.lane);
           if (actors.pin(ev.who, seed, ev.state)) {
             if (accepted) acceptedPins.add(seed); // the flourish waits for the card to land (`flourishFreshPins`)

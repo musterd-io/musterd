@@ -79,10 +79,13 @@ These are what a new beat must keep. Each has bitten once.
 
 ## 5. Known edges (true today)
 
-- **Deliver carrier is learned, not told.** The room learns a lane's owner from the claim and pin walks
-  it plays. A lane claimed before the viewer opened the page, outside the replay window, still carries
-  as the ask's sender. The complete fix is an `owner` field on `meta.lane_review` — a protocol change,
-  so it needs an ADR (`AGENTS.md` hard rule 1). Not proposed here.
+- ~~**Deliver carrier is learned, not told.**~~ _Fixed 2026-10-15 (lane `01M50TZDDM`), without a
+  protocol change:_ the room reads each lane's `owner_seat` from the board `/live` already holds, as the
+  base layer under the walks it watches. A board refresh replaces what the room watched before it; a
+  walk watched after the refresh wins until the next one, since the board has not caught up; a replayed
+  walk never sets an owner. Remaining edge: an ask for a lane the board does not list, which the room
+  also never saw owned, still carries as the ask's sender. An `owner` on `meta.lane_review` would close
+  it and is still not proposed.
 - **Replay is bounded by the history fetch.** `/live` backfills the newest 200 envelopes
   (`fetchHistory`, `limit: 200`); replay can only play what is inside that. A quiet team has ten minutes
   inside it; a very busy one may not.
@@ -90,8 +93,9 @@ These are what a new beat must keep. Each has bitten once.
   ~4 s and walks reach the board and a desk. It did not time the 2× or count to eight. There is no
   automated check of either (the unit tests cover the selection in `replay.ts`, not the playback).
 - **Acceptance is inferred, not told.** The resolve carries no flag, so the room calls a done pin an
-  acceptance when the resolver is not the owner it saw claim or submit. A lane it never saw owned counts
-  as accepted, and a self-close of such a lane puffs too.
+  acceptance when the resolver is not the lane's owner. Since 2026-10-15 (lane `01M50TZDDM`) the owner
+  comes from the board as well as the walks, so a self-close of a lane claimed before the viewer arrived
+  no longer puffs. A lane neither the board nor the room has an owner for still counts as accepted.
 - **A viewer who is the sender sees nothing live from another machine.** Separate from the room, and
   filed as `01M4V95YGT` (a human's hub-origin accepts never reach their own joiner tab).
 
@@ -145,6 +149,6 @@ ceiling, so a further beat that moves bytes needs a measured ADR 183 raise or a 
 
 1. Is ten minutes / eight walks the right replay sample? A team that opens `/live` after an hour away
    sees a still room by design. Say if that should change; it is one constant.
-2. Should the carrier fix go all the way to an `owner` on `meta.lane_review` (an ADR), or is "the room
-   learns it from what it watched" good enough given the edge in §5?
+2. ~~Should the carrier fix go all the way to an `owner` on `meta.lane_review` (an ADR)?~~ Answered
+   2026-10-15 (nick): no. The board's `owner_seat` covers it without a protocol change (§5).
 3. L3 before L1, as ordered above?

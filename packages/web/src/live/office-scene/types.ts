@@ -108,6 +108,9 @@ export interface OfficeData {
   nodes: OfficeNode[];
   /** The lane board projected for the wall's agile board (wallboard.ts). Absent/null → empty board. */
   wallBoard?: WallBoard | null;
+  /** lane id → `owner_seat` for every owned lane on the board (lane 01M50TZDDM). The SAME reference
+   *  until the board itself changes: the scene re-seeds its lane owners only on a new one. */
+  laneOwners?: ReadonlyMap<string, string> | null;
   /** Members taking turns in an open huddle (ADR 378) — they gather at the meeting table. */
   gathered?: string[];
   /**
