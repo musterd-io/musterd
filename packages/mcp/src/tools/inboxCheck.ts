@@ -122,6 +122,10 @@ export interface ReplySize {
   body: number;
 }
 export const FULL_REPLY: ReplySize = { result: RESULT_BUDGET, body: BODY_CAP };
+/** An obligation unanswered this long is folded to a line with a count, never dropped (ADR 599). */
+export const STALE_OBLIGATION_DAYS = 7;
+export const STALE_OBLIGATION_MS = STALE_OBLIGATION_DAYS * 24 * 60 * 60 * 1000;
+
 export const DEFAULT_REPLY: ReplySize = { result: DEFAULT_RESULT_BUDGET, body: DEFAULT_BODY_CAP };
 
 /**
@@ -156,6 +160,12 @@ export interface InboxCheckPlan {
    * them; newest-first when the budget cuts, so the freshest ambient survives.
    */
   folded: Envelope[];
+  /**
+   * Obligations older than `STALE_OBLIGATION_MS` (ADR 599) — still owed, rendered one line each
+   * under their own heading with a count, never in full and never dropped. The cursor walks them
+   * like any rendered row.
+   */
+  stale: Envelope[];
   /** Unread this call rendered in no form. Non-zero means the cursor stops short of them. */
   elided: number;
   /**
@@ -336,10 +346,25 @@ export function planInboxCheck(
   ownedLanes: ReadonlySet<string> = new Set(),
   /** The reply's size: DEFAULT_REPLY for an ordinary check, FULL_REPLY for `full: true`. */
   size: ReplySize = FULL_REPLY,
+  /**
+   * The clock the stale rule reads (ADR 599). `null` switches the rule off — a caller that holds
+   * no clock gets the ADR 429 behaviour unchanged; the tool always passes one.
+   */
+  now: number | null = null,
 ): InboxCheckPlan {
   const shownBudget = Math.round(size.result * SHOWN_SHARE);
   const closedSet = new Set(closed);
-  const pinned = ordered.filter((e) => isPinnedNeed(e) && !closedSet.has(e.id));
+  const owed = ordered.filter((e) => isPinnedNeed(e) && !closedSet.has(e.id));
+  // The stale fold (ADR 599). An obligation nobody has answered in STALE_OBLIGATION_MS is still
+  // owed — nothing here expires it — but it has stopped being news: the same eight August asks sat
+  // at the top of one seat's every read for two months (alfie, 2026-10-14, 15.5k unread behind
+  // them) and buried whatever had arrived that day. A stale obligation is rendered as one line in
+  // its own counted group, below the fresh pins, and costed like a fold; the fresh set keeps the
+  // full-row budget. Age is read off `ts`, the sender's clock (ADR 335) — a week tolerates any skew
+  // a team actually has.
+  const isStale = (e: Envelope) => now !== null && now - e.ts > STALE_OBLIGATION_MS;
+  const pinned = owed.filter((e) => !isStale(e));
+  const staleOwed = owed.filter(isStale).sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
   const rest = ordered.filter((e) => !isPinnedNeed(e) || closedSet.has(e.id));
   // The tail's relationship rule (ADR 433): what the reader is owed in full, and what it is owed a
   // line of. Split BEFORE the newest-N so an ambient burst cannot push the reader's own rows out of
@@ -387,6 +412,17 @@ export function planInboxCheck(
     spent += cost;
   }
   folded.sort((a, b) => envelopePosition(a) - envelopePosition(b) || a.id.localeCompare(b.id));
+  // Stale obligations: one line each, oldest first (the one that has waited longest is the one a
+  // reader clearing the group should see first), costed against the budget like the fold.
+  const stale: Envelope[] = [];
+  for (const e of staleOwed) {
+    if (byId.has(e.id)) continue;
+    const cost = formatDigestLine(e).length + 1;
+    if (spent + cost > size.result) break;
+    stale.push(e);
+    foldedIds.add(e.id);
+    spent += cost;
+  }
   // The cursor may only walk a CONTIGUOUS prefix of the unread — the watermark is a single
   // position, so passing row k marks everything before k read whether or not it was rendered. With
   // a newest-N fill the rendered rows sit at the far end, so the prefix the cursor could walk was
@@ -421,11 +457,13 @@ export function planInboxCheck(
   // A digested row drawn from the prefix may not be in `ordered` at all — it is one of the rows the
   // tail fetch left behind, and so is already counted inside `unreachable`. Either way it is now
   // rendered, so subtracting it once from the total is right in both cases.
-  const elided = ordered.length - shown.length - folded.length - digested.length + unreachable;
+  const elided =
+    ordered.length - shown.length - folded.length - stale.length - digested.length + unreachable;
   return {
     shown,
     digested,
     folded,
+    stale,
     elided,
     drainLimit: ordered.length + unreachable,
     // `null` on an empty inbox and on a bounded fetch — there is no contiguous rendered prefix to
@@ -597,10 +635,16 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           head,
           ownedLanes,
           args.full ? FULL_REPLY : DEFAULT_REPLY,
+          Date.now(),
         );
         const messages = plan.shown;
 
-        if (messages.length === 0 && plan.folded.length === 0 && plan.elided === 0) {
+        if (
+          messages.length === 0 &&
+          plan.folded.length === 0 &&
+          plan.stale.length === 0 &&
+          plan.elided === 0
+        ) {
           // ADR 287 stopped the cursor consuming what a call never rendered. A message it DID
           // render is the other case: the cursor passes it legitimately, and the only way back is
           // `unread_only: false` — a flag whose existence nothing advertised, so a seat could not
@@ -717,11 +761,15 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // reader, one line each. Named for what it is — teammates' status and other seats' lane
         // transitions — so the reader knows why these are lines and where the full form lives.
         const fold =
-          plan.folded.length > 0
+          (plan.stale.length > 0
+            ? `\n\n— ${plan.stale.length} stale (owed to you for more than ${STALE_OBLIGATION_DAYS}d, ADR 599), one line each, oldest first; answer, or team_inbox_check {ids: [...]} to read one —\n` +
+              plan.stale.map(formatDigestLine).join('\n')
+            : '') +
+          (plan.folded.length > 0
             ? `\n\n— ${plan.folded.length} ambient (teammates' status, lanes you do not own), ` +
               `one line each, now read —\n` +
               plan.folded.map(formatDigestLine).join('\n')
-            : '';
+            : '');
         const digest =
           plan.digested.length > 0
             ? `\n\n— ${plan.digested.length} older unread, now read (oldest first) —\n` +
@@ -778,6 +826,8 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
               : {}),
             // The ambient rows folded to a line (ADR 433) — ids only, same as the digest.
             ...(plan.folded.length > 0 ? { folded_ambient: plan.folded.map(structuredLine) } : {}),
+            // Stale obligations folded to a line with their count (ADR 599) — still owed.
+            ...(plan.stale.length > 0 ? { stale_obligations: plan.stale.map(structuredLine) } : {}),
             messages: messages.map((m) => ({
               ...structuredRow(m),
               // The topic on the message itself, so a structured reader can tell a turn from a

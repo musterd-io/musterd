@@ -75,3 +75,35 @@ export function repliedByRecipientWhere(alias: string, recipient: string): strin
          )
        )`;
 }
+
+/**
+ * The fifth shape, for the two acts a lane's own lifecycle answers (lane 01M4YYQCAP):
+ *   5a. an acceptance `ask` (`meta.lane_review.lane`) whose lane has LEFT awaiting_acceptance — some
+ *       seat's accept/decline moved it, or it was reopened; either way this ask asks nothing now;
+ *   5b. a `handoff` (`meta.lane_handoff.lane`) whose lane is out of play — submitted or terminal.
+ *       A handoff is discharged by DOING THE WORK (`handoffNamedLaneOutOfPlay`), never by a reply.
+ *
+ * Both were already derived after load in the inbox handler (`discharged: lane_closed`), which is
+ * right for the rendered view and too late for the wire: the pinned set had already carried the
+ * row, so a closed acceptance ask re-entered every bounded read and ADR 287's cursor could not pass
+ * it. Measured 2026-10-14 (alfie): one seat's inbox showed the same eight months-old asks at the
+ * top of every read, 15.5k unread behind them.
+ *
+ * Same narrowness as the app-level twins: an UNKNOWN lane keeps the act owed (no row, no match),
+ * and a lane that returns to play makes it owed again on the next read — derived, never stored.
+ * Only the structured spelling is read here; a handoff naming its lane in prose stays with the
+ * handler's prose resolver.
+ */
+export function laneSettledSql(alias: string): string {
+  return `
+    AND NOT EXISTS (SELECT 1 FROM lanes ln
+      WHERE ln.team_id = ${alias}.team_id
+        AND (
+          (${alias}.act = 'ask'
+             AND ln.id = json_extract(${alias}.meta, '$.lane_review.lane')
+             AND ln.state NOT IN ('awaiting_acceptance','ready_for_review'))
+          OR (${alias}.act = 'handoff'
+             AND ln.id = json_extract(${alias}.meta, '$.lane_handoff.lane')
+             AND ln.state IN ('awaiting_acceptance','ready_for_review','done','abandoned'))
+        ))`;
+}

@@ -2,6 +2,7 @@ import { isObligationAct, makeEnvelope, type Act } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { openLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage, listInbox, PINNED_DEFAULT_LIMIT } from './messages.js';
 import { createTeam } from './teams.js';
@@ -213,6 +214,59 @@ withDrivers('inboxPinning', (o) => {
       const ask = await send('ask', { id: 'lonely' });
       for (let i = 0; i < 20; i++) await send('message');
       expect(await bounded(db, ada)).toContain(ask);
+    });
+  });
+
+  describe("lane 01M4YYQCAP: a lane's own lifecycle discharges the acts that asked about it", async () => {
+    const lane = async (db: Driver, state: string) => {
+      const l = await openLane(
+        db,
+        (await db.get<{ id: string }>('SELECT id FROM teams'))!.id,
+        'revive',
+        'nick',
+        {
+          title: 'x',
+        },
+      );
+      await db.run('UPDATE lanes SET state = ? WHERE id = ?', [state, l.id]);
+      return l.id;
+    };
+    const pad = async (send: Awaited<ReturnType<typeof seed>>['send']) => {
+      for (let i = 0; i < 20; i++) await send('message');
+    };
+
+    it('drops an acceptance ask whose lane has left awaiting_acceptance', async () => {
+      const { db, ada, send } = await seed();
+      const done = await lane(db, 'done');
+      const ask = await send('ask', { id: 'closed-ask', meta: { lane_review: { lane: done } } });
+      await pad(send);
+      expect(await bounded(db, ada)).not.toContain(ask);
+    });
+
+    it('keeps an acceptance ask whose lane is still awaiting acceptance, or unknown', async () => {
+      const { db, ada, send } = await seed();
+      const open = await lane(db, 'awaiting_acceptance');
+      const live = await send('ask', { id: 'live-ask', meta: { lane_review: { lane: open } } });
+      const ghost = await send('ask', { id: 'ghost-ask', meta: { lane_review: { lane: 'nope' } } });
+      await pad(send);
+      const got = await bounded(db, ada, 2);
+      expect(got).toContain(live);
+      expect(got).toContain(ghost);
+    });
+
+    it('drops a handoff whose named lane is out of play, keeps one whose lane is active', async () => {
+      const { db, ada, send } = await seed();
+      const shipped = await lane(db, 'awaiting_acceptance');
+      const active = await lane(db, 'claimed');
+      const settled = await send('handoff', {
+        id: 'settled',
+        meta: { lane_handoff: { lane: shipped } },
+      });
+      const owed = await send('handoff', { id: 'owed', meta: { lane_handoff: { lane: active } } });
+      await pad(send);
+      const got = await bounded(db, ada, 2);
+      expect(got).not.toContain(settled);
+      expect(got).toContain(owed);
     });
   });
 

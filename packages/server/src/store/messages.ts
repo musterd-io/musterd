@@ -12,7 +12,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
-import { undischargedSql } from './discharge.js';
+import { laneSettledSql, undischargedSql } from './discharge.js';
 import type { MessageRow, MessageVisibility } from './rows.js';
 
 /**
@@ -402,6 +402,7 @@ export async function listInbox(
                  AND json_extract(meta, '$.dispute.via') = ?)
            )
            ${undischargedSql('messages', '?')}
+           ${laneSettledSql('messages')}
          ORDER BY created_at ASC, id ASC
          LIMIT ?`,
       [
