@@ -14,6 +14,7 @@ import {
   buildTailEvent,
   readTailCursor,
   readTranscriptDelta,
+  subagentTranscriptPathFor,
   TAIL_LOCK_FILE,
   TAIL_LOCK_STALE_MS,
   TAIL_SESSION_CAP,
@@ -74,6 +75,49 @@ describe('transcriptPathFor', () => {
     expect(
       transcriptPathFor({ harness: 'grok', session_id: '../../etc', cwd: '/w' }, env),
     ).toBeUndefined();
+  });
+});
+
+describe('subagentTranscriptPathFor (lane 01M4VTRMXYZ)', () => {
+  it('uses an explicit sidechain path, else derives <parent>/subagents/agent-<id>.jsonl', () => {
+    expect(
+      subagentTranscriptPathFor({
+        agent_id: 'afa8c252971bdbc60',
+        agent_transcript_path: '/tmp/sidechain.jsonl',
+        transcript_path: '/Users/n/.claude/projects/p/sess-1.jsonl',
+      }),
+    ).toEqual({
+      agentId: 'afa8c252971bdbc60',
+      transcriptPath: '/tmp/sidechain.jsonl',
+    });
+    expect(
+      subagentTranscriptPathFor({
+        agent_id: 'afa8c252971bdbc60',
+        transcript_path: '/Users/n/.claude/projects/p/sess-1.jsonl',
+      }),
+    ).toEqual({
+      agentId: 'afa8c252971bdbc60',
+      transcriptPath: join(
+        '/Users/n/.claude/projects/p/sess-1',
+        'subagents',
+        'agent-afa8c252971bdbc60.jsonl',
+      ),
+    });
+    expect(
+      subagentTranscriptPathFor({
+        subagent_id: 'sub-9',
+        subagent_transcript_path: '/tmp/s9.jsonl',
+      }),
+    ).toEqual({ agentId: 'sub-9', transcriptPath: '/tmp/s9.jsonl' });
+    // refuses path-traversal agent_ids or missing paths
+    expect(
+      subagentTranscriptPathFor({
+        agent_id: '../etc/passwd',
+        transcript_path: '/Users/n/.claude/projects/p/sess-1.jsonl',
+      }),
+    ).toBeUndefined();
+    expect(subagentTranscriptPathFor({ agent_id: 'a1' })).toBeUndefined();
+    expect(subagentTranscriptPathFor({ transcript_path: '/tmp/s.jsonl' })).toBeUndefined();
   });
 });
 
@@ -268,6 +312,46 @@ describe('tailTranscript', () => {
     appendFileSync(transcript, claudeLine('m2', { type: 'text', text: 'y' }));
     expect(await run()).toBe(false);
     expect(posted()).toHaveLength(2);
+  });
+
+  it('tails a subagent sidechain with agent_id and a distinct cursor from the parent session', async () => {
+    vi.mocked(HttpClient.prototype.postTraceEvents).mockResolvedValue({
+      accepted: 1,
+      content: 'on',
+    });
+    const sidechain = join(dir, 'agent-a1.jsonl');
+    writeFileSync(transcript, claudeLine('m1', { type: 'text', text: 'parent turn' }));
+    writeFileSync(
+      sidechain,
+      claudeLine('m_sub_1', {
+        type: 'thinking',
+        thinking: 'sub thought with mskey_Zq7xK2mNvB9pLw4R',
+      }) + claudeLine('m_sub_1', { type: 'tool_use', id: 'toolu_sub_1', name: 'Grep' }),
+    );
+    expect(await run()).toBe(true); // parent post replies content: 'on', caching it
+    expect(
+      await tailTranscript({
+        binding,
+        dir,
+        harness: 'claude-code',
+        sessionId: 'sess-1',
+        transcriptPath: sidechain,
+        agentId: 'a1',
+        env: {},
+      }),
+    ).toBe(true);
+    expect(posted()).toHaveLength(2);
+    const subEvents = posted()[1]!;
+    expect(subEvents.map((e) => [e.kind, e.agent_id, e.tool_use_id])).toEqual([
+      ['reasoning', 'a1', 'toolu_sub_1'],
+      ['usage', 'a1', 'toolu_sub_1'],
+    ]);
+    expect(subEvents[0]!.session_digest).toBe(digest);
+    expect(subEvents[0]!.content!.reasoning).toContain('<redacted:agent_key>');
+    expect(subEvents[0]!.content!.reasoning).not.toContain('Zq7xK2mNvB9pLw4R');
+    expect(subEvents[1]!.detail).toMatchObject({ tool_uses: 1 });
+    expect(readTailCursor(dir, digest)?.path).toBe(transcript);
+    expect(readTailCursor(dir, `${digest}:a1`)?.path).toBe(sidechain);
   });
 
   it('traces nothing without a parser for the harness, a kill switch set, or no agent key', async () => {

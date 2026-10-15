@@ -5,7 +5,10 @@ import { setColorEnabled } from '../render/theme.js';
 import { tailTranscript } from '../trace/tail.js';
 import { renderTraceSession, traceCommand, traceEventSummary } from './trace.js';
 
-vi.mock('../trace/tail.js', () => ({ tailTranscript: vi.fn().mockResolvedValue(true) }));
+vi.mock('../trace/tail.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../trace/tail.js')>();
+  return { ...actual, tailTranscript: vi.fn().mockResolvedValue(true) };
+});
 vi.mock('../trace/hook.js', () => ({ tapHook: vi.fn().mockResolvedValue(true) }));
 vi.mock('../hookStdin.js', () => ({ readHookStdin: vi.fn() }));
 
@@ -57,6 +60,34 @@ describe('traceEventSummary', () => {
     expect(
       traceEventSummary(event({ kind: 'HookOutcome', outcome: 'ok', detail: { hook: 'gate' } })),
     ).toBe('gate · ok');
+    expect(
+      traceEventSummary(
+        event({
+          kind: 'PostToolUse',
+          tool_name: 'Grep',
+          agent_id: 'a1',
+          detail: { agent_type: 'Explore' },
+        }),
+      ),
+    ).toBe('Grep · Explore (a1)');
+    expect(
+      traceEventSummary(
+        event({
+          kind: 'SubagentStart',
+          agent_id: 'a1',
+          detail: { agent_type: 'Explore' },
+        }),
+      ),
+    ).toBe('Explore (a1)');
+    expect(
+      traceEventSummary(
+        event({
+          kind: 'usage',
+          agent_id: 'a1',
+          detail: { input_tokens: 4, output_tokens: 1, model: 'm-1' },
+        }),
+      ),
+    ).toBe('in 4 · out 1  m-1  agent a1');
   });
 });
 
@@ -100,5 +131,39 @@ describe('trace hook → the transcript tail (increment 2)', () => {
     vi.mocked(readHookStdin).mockResolvedValue(payload({ transcript_path: undefined }));
     await hook();
     expect(tailTranscript).toHaveBeenCalledTimes(1); // no path, nothing to tail — still exit 0
+  });
+
+  it('tails the subagent sidechain transcript on SubagentStop (lane 01M4VTRMXYZ)', async () => {
+    vi.mocked(readHookStdin).mockResolvedValue(
+      payload({
+        hook_event_name: 'SubagentStop',
+        agent_id: 'afa8c252971bdbc60',
+        agent_type: 'Explore',
+      }),
+    );
+    expect(await hook()).toBe(0);
+    expect(tailTranscript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'sess-1',
+        transcriptPath: '/tmp/t/subagents/agent-afa8c252971bdbc60.jsonl',
+        agentId: 'afa8c252971bdbc60',
+      }),
+    );
+
+    vi.mocked(readHookStdin).mockResolvedValue(
+      payload({
+        hook_event_name: 'SubagentStop',
+        agent_id: 'afa8c252971bdbc60',
+        agent_transcript_path: '/tmp/custom-sidechain.jsonl',
+      }),
+    );
+    expect(await hook()).toBe(0);
+    expect(tailTranscript).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: 'sess-1',
+        transcriptPath: '/tmp/custom-sidechain.jsonl',
+        agentId: 'afa8c252971bdbc60',
+      }),
+    );
   });
 });

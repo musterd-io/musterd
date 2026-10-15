@@ -196,7 +196,7 @@ function cutBytes(s: string, max: number): string {
  */
 export function buildTailEvent(
   record: TranscriptRecord,
-  opts: { harness: string; digest: string; content: boolean; now?: number },
+  opts: { harness: string; digest: string; content: boolean; agentId?: string; now?: number },
 ): TraceEvent | null {
   const field = record.kind === 'reasoning' ? 'reasoning' : 'assistant';
   let content: TraceEvent['content'];
@@ -220,6 +220,7 @@ export function buildTailEvent(
     ts: record.ts ?? opts.now ?? Date.now(),
     kind: record.kind,
     ...(record.tool_use_id ? { tool_use_id: record.tool_use_id.slice(0, 128) } : {}),
+    ...(opts.agentId ? { agent_id: opts.agentId.slice(0, 128) } : {}),
     detail: record.detail,
     ...(content ? { content } : {}),
   };
@@ -239,6 +240,7 @@ function downgradeEvent(
   digest: string,
   parser: string,
   reason: string,
+  agentId?: string,
 ): TraceEvent | null {
   const candidate = {
     harness,
@@ -246,6 +248,7 @@ function downgradeEvent(
     ts: Date.now(),
     kind: 'unknown' as const,
     outcome: 'error' as const,
+    ...(agentId ? { agent_id: agentId.slice(0, 128) } : {}),
     detail: { parser, downgraded: true, reason: reason.slice(0, 64) },
   };
   const ok = TraceEventSchema.safeParse(candidate);
@@ -271,9 +274,37 @@ export function transcriptPathFor(
 }
 
 /**
+ * The sidechain transcript a `SubagentStop` hook points the tail at (lane 01M4VTRMXYZ). Uses
+ * `agent_transcript_path` / `subagent_transcript_path` when the payload names one; otherwise
+ * derives `<parent transcript stem>/subagents/agent-<agent_id>.jsonl` from `transcript_path` +
+ * `agent_id` (`subagent_id`), which is where Claude Code writes a subagent's jsonl. Returns
+ * undefined when `agent_id` is missing or not a plain token (`[\w-]+`).
+ */
+export function subagentTranscriptPathFor(payload: {
+  agent_id?: string;
+  subagent_id?: string;
+  agent_transcript_path?: string;
+  subagent_transcript_path?: string;
+  transcript_path?: string;
+}): { agentId: string; transcriptPath: string } | undefined {
+  const agentId = payload.agent_id || payload.subagent_id;
+  if (!agentId || !/^[\w-]+$/.test(agentId)) return undefined;
+  const explicit = payload.agent_transcript_path || payload.subagent_transcript_path;
+  if (explicit) return { agentId, transcriptPath: explicit };
+  const parent = payload.transcript_path;
+  if (!parent || !parent.endsWith('.jsonl')) return undefined;
+  const stem = parent.slice(0, -'.jsonl'.length);
+  return { agentId, transcriptPath: join(stem, 'subagents', `agent-${agentId}.jsonl`) };
+}
+
+/**
  * The one-call form the hook sites use: cursor → delta → parse → build → post → advance. Never
  * throws; never reads past the byte bound; returns whether anything landed (for a caller's counter,
  * never control flow).
+ *
+ * When `agentId` is passed (a `SubagentStop` sidechain read), events still carry the parent
+ * session's `session_digest` and `agent_id = agentId`, while the cursor is keyed by
+ * `${digest}:${agentId}` so the sidechain's offset never collides with the parent transcript's.
  */
 export async function tailTranscript(opts: {
   binding: Binding | null;
@@ -281,6 +312,7 @@ export async function tailTranscript(opts: {
   harness: string;
   sessionId: string;
   transcriptPath: string;
+  agentId?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<boolean> {
   try {
@@ -303,12 +335,13 @@ export async function tailTranscript(opts: {
 }
 
 async function tailLocked(
-  opts: { dir: string; harness: string; transcriptPath: string },
+  opts: { dir: string; harness: string; transcriptPath: string; agentId?: string },
   binding: Binding,
   parse: (lines: readonly string[]) => TranscriptRecord[],
   digest: string,
 ): Promise<boolean> {
-  const cursor = readTailCursor(opts.dir, digest);
+  const cursorKey = opts.agentId ? `${digest}:${opts.agentId}` : digest;
+  const cursor = readTailCursor(opts.dir, cursorKey);
   if (cursor?.downgraded) return false;
   const offset = cursor && cursor.path === opts.transcriptPath ? cursor.offset : 0;
 
@@ -328,7 +361,7 @@ async function tailLocked(
     return false; // transient: transcript not on disk yet (SessionStart names it early)
   }
   if (size < offset) {
-    return await downgrade(opts, digest, 'transcript_truncated', post);
+    return await downgrade(opts, digest, cursorKey, 'transcript_truncated', post);
   }
 
   const delta = readTranscriptDelta(opts.transcriptPath, offset);
@@ -341,7 +374,7 @@ async function tailLocked(
   } catch {
     // The parsers are tolerant by construction; a throw is a defect, and the honest reading of
     // one is "this format is beyond this parser" — the downgrade contract, not a silent retry.
-    return await downgrade(opts, digest, 'parse_failure', post);
+    return await downgrade(opts, digest, cursorKey, 'parse_failure', post);
   }
 
   const { allLanded, events } = await postTailRecords(records, {
@@ -349,11 +382,12 @@ async function tailLocked(
     dir: opts.dir,
     harness: opts.harness,
     digest,
+    ...(opts.agentId ? { agentId: opts.agentId } : {}),
     post,
   });
   // Advance only when everything landed — a dropped delta is re-read by the next hook.
   if (allLanded || events === 0) {
-    writeTailCursor(opts.dir, digest, {
+    writeTailCursor(opts.dir, cursorKey, {
       path: opts.transcriptPath,
       offset: delta.nextOffset,
       updated_at: Date.now(),
@@ -375,13 +409,19 @@ export async function postTailRecords(
     dir: string;
     harness: string;
     digest: string;
+    agentId?: string;
     post: (events: readonly TraceEvent[]) => Promise<boolean>;
   },
 ): Promise<{ allLanded: boolean; events: number }> {
   const content = traceContentEnabled(opts.binding, opts.dir);
   const events: TraceEvent[] = [];
   for (const record of records) {
-    const event = buildTailEvent(record, { harness: opts.harness, digest: opts.digest, content });
+    const event = buildTailEvent(record, {
+      harness: opts.harness,
+      digest: opts.digest,
+      content,
+      ...(opts.agentId ? { agentId: opts.agentId } : {}),
+    });
     if (event) events.push(event);
   }
   for (let i = 0; i < events.length; i += TRACE_MAX_BATCH) {
@@ -393,12 +433,13 @@ export async function postTailRecords(
 }
 
 async function downgrade(
-  opts: { dir: string; harness: string; transcriptPath: string },
+  opts: { dir: string; harness: string; transcriptPath: string; agentId?: string },
   digest: string,
+  cursorKey: string,
   reason: string,
   post: (events: readonly TraceEvent[]) => Promise<boolean>,
 ): Promise<boolean> {
-  writeTailCursor(opts.dir, digest, {
+  writeTailCursor(opts.dir, cursorKey, {
     path: opts.transcriptPath,
     offset: 0,
     updated_at: Date.now(),
@@ -409,6 +450,7 @@ async function downgrade(
     digest,
     transcriptParserVersion(opts.harness),
     reason,
+    opts.agentId,
   );
   if (marker) await post([marker]);
   return false;

@@ -103,6 +103,24 @@ describe('parseTraceHook (ADR 445 R1 — structural only)', () => {
     });
     expect(
       parseTraceHook(
+        JSON.stringify({
+          session_id: 's',
+          hook_event_name: 'PostToolUse',
+          tool_name: 'Grep',
+          subagent_id: 'a1',
+          subagent_type: 'Explore',
+        }),
+      ),
+    ).toEqual({
+      kind: 'PostToolUse',
+      session_id: 's',
+      tool_name: 'Grep',
+      agent_id: 'a1',
+      outcome: 'ok',
+      detail: { agent_type: 'Explore' },
+    });
+    expect(
+      parseTraceHook(
         JSON.stringify({ session_id: 's', hook_event_name: 'Stop', stop_hook_active: false }),
       ),
     ).toEqual({ kind: 'Stop', session_id: 's', detail: { stop_hook_active: false } });

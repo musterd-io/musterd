@@ -684,6 +684,17 @@ ADR 184's publication gate; a spans backend.
   installed, so R2 counts them and R1 cannot. The row returns to ≈ 1.0 once 09-28 leaves the
   window (2026-10-05). Falsifier for this read: a Grok wake after 2026-09-30 whose own window
   reads outside 0.9–1.1.
+- **2026-10-15 — `SubagentStop` tails the subagent's sidechain transcript** (lane
+  `01M4VTRMXYZFWZ0Z4RJ22DPG07`). On `SubagentStop`, `tailAfterHook` resolves the subagent's
+  sidechain (`agent_transcript_path` when given, else `<parent stem>/subagents/agent-<agent_id>.jsonl`
+  when `agent_id` is present) and runs `tailTranscript` under a per-subagent cursor
+  (`${digest}:${agent_id}`), stamping every emitted R2 record (`reasoning`, `assistant_text`,
+  `usage`, `unknown`) with the parent session's `session_digest` and `agent_id` under the same
+  1b/3a local-first, credential-scrub and retention gates. `POST_TOOL_USE_ONCE` (`traceCoverage.ts`,
+  `traceReport.ts`) now counts subagent calls in the coverage numerator whenever the session also
+  carries subagent R2 `usage` rows, while sessions that predate the sidechain tail keep counting
+  main-loop calls only. Falsifier: a session spawning an `Explore` subagent on a build carrying
+  this whose `SubagentStop` leaves zero `usage` rows with `agent_id` set.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 

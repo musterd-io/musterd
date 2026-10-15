@@ -9,7 +9,7 @@ import {
 } from '@musterd/protocol';
 import type { z } from 'zod';
 import type { Driver } from '../db/driver.js';
-import { CALL_ROW, POST_TOOL_USE_ONCE } from './traceCoverage.js';
+import { CALL_ROW, POST_TOOL_USE_ALL, POST_TOOL_USE_ONCE } from './traceCoverage.js';
 
 /**
  * `musterd report trace` (ADR 445 increment 4): three views over `trace_events`' structural
@@ -53,7 +53,7 @@ export async function deriveTraceReport(
     session_digest: string;
     has_r2: number;
     post: number;
-    post_main: number;
+    post_r2: number;
   }>(
     `SELECT harness, session_digest,
               -- An R2 session is one whose transcript rail can COUNT calls. A rail that posted
@@ -61,9 +61,8 @@ export async function deriveTraceReport(
               -- the dogfood box, 11 of 11 sessions "with R2" over 1,289 calls (lane 01M3NMDWA9).
               MAX(CASE WHEN kind = 'usage' AND json_extract(detail, '$.tool_uses') IS NOT NULL
                        THEN 1 ELSE 0 END) AS has_r2,
-              SUM(CASE WHEN ${CALL_ROW} AND agent_id IS NOT NULL
-                       THEN 1 ELSE 0 END) + ${POST_TOOL_USE_ONCE} AS post,
-              ${POST_TOOL_USE_ONCE} AS post_main
+              ${POST_TOOL_USE_ALL} AS post,
+              ${POST_TOOL_USE_ONCE} AS post_r2
          FROM trace_events
         WHERE team_id = ? AND ts >= ? ${inSeats}
         GROUP BY harness, session_digest`,
@@ -92,12 +91,12 @@ export async function deriveTraceReport(
     // The ratio compares like with like: hook calls from the sessions the transcript rail also
     // covers. Counting every session's hook calls over only the R2-bearing sessions' transcript
     // calls read 124% on the live team (8 sessions, 2 with R2) — a number that meant nothing.
-    // A subagent's calls fire hooks in the parent session (with `agent_id`), but its transcript is
-    // a sidechain file the tail does not read — so they are left out of the ratio's numerator
-    // (307 of the 382 calls claude-code read OVER its R2 count, measured 2026-09-28).
+    // Subagent calls count in the numerator when the session also carries subagent R2 `usage` rows
+    // (tailed on `SubagentStop`, lane 01M4VTRMXYZ); sessions from before the sidechain tail have no
+    // subagent `usage` rows and keep counting main-loop calls only.
     if (s.has_r2) {
       row.sessions_with_r2++;
-      row.post_tool_use_r2 += s.post_main;
+      row.post_tool_use_r2 += s.post_r2;
     }
     cov.set(s.harness, row);
   }

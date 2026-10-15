@@ -173,5 +173,48 @@ withDrivers('traceCoverage', (o, kind) => {
       await ingestTraceEvents(traceDb, team.id, 'ryder', session('eeeeeeeeeeee', 1, 10, 1));
       expect(await findLowCoverageSessions(db, traceDb, Date.now() + 30 * 24 * H)).toEqual([]);
     });
+
+    it('counts subagent calls once the subagent sidechain has posted usage rows (lane 01M4VTRMXYZ)', async () => {
+      const { db, traceDb, team } = await fixture();
+      await ingestTraceEvents(traceDb, team.id, 'ryder', [
+        // 5 main calls + 5 subagent calls, with both main and subagent R2 usage rows (5 + 5 = 10)
+        ...Array.from({ length: 5 }, (_, i) => ({
+          harness: 'claude-code',
+          session_digest: 'aaaaaaaaaaaa',
+          ts: 1,
+          kind: 'PostToolUse' as const,
+          tool_name: 'Bash',
+          tool_use_id: `main-${i}`,
+        })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          harness: 'claude-code',
+          session_digest: 'aaaaaaaaaaaa',
+          ts: 1,
+          kind: 'PostToolUse' as const,
+          tool_name: 'Grep',
+          tool_use_id: `sub-${i}`,
+          agent_id: 'a1',
+        })),
+        {
+          harness: 'claude-code',
+          session_digest: 'aaaaaaaaaaaa',
+          ts: 1,
+          kind: 'usage',
+          detail: { parser: 'claude-code@1', tool_uses: 5 },
+        },
+        {
+          harness: 'claude-code',
+          session_digest: 'aaaaaaaaaaaa',
+          ts: 1,
+          kind: 'usage',
+          agent_id: 'a1',
+          detail: { parser: 'claude-code@1', tool_uses: 5 },
+        },
+      ]);
+      // 10 / 10 = 1.0 → not flagged
+      expect(
+        await findLowCoverageSessions(db, traceDb, Date.now() + TRACE_COVERAGE_QUIET_MS + 1000),
+      ).toEqual([]);
+    });
   });
 });
