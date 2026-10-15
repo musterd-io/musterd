@@ -3,7 +3,8 @@
 Lane `01M4SB4D7RTW21W62NKCPDV816`. This is the fifth named follow-up in
 [the spend-controls spec](2026-10-12-spend-controls-design.md). The gap it closes: leases that report
 no cost burn free under `spend_cap_usd`. The lane brief says the answer is a product decision, not a
-default, and has to be specced first. **Status: proposed. The decision below needs nick.**
+default, and has to be specced first. **Status: decided. nick accepted the recommendation (option C,
+and one notice naming both caps) on 2026-10-15, ask `01M50H0C2E`.**
 
 ## The gap, measured from the code (checked 2026-10-15, read-only)
 
@@ -61,20 +62,22 @@ kind of unpriced wake, including ones that never report. It adds no accounting: 
 window, the deny path and the audit shape that increment 2 (`01M4SB4BZBQDHWFWH4RXBNR7CQ`, lazara,
 active) is building.
 
-## Decision needed (nick)
+## Decision (nick, 2026-10-15)
 
-1. A, B, C or D?
-2. If C: should the deny notice name both caps when both trip, or only the first one hit? The
-   proposal is both: one notice listing each cap, its total and the window.
+The ask (`01M50H0C2E`) put two questions. nick accepted the recommendation on both:
 
-## Delivery, if C
+1. **C.** A separate `unpriced_wake_cap` count key. Unset keeps today's behaviour, and `0` blocks
+   unpriced harnesses explicitly.
+2. **One notice names both caps** when both trip, listing each cap, its total and the window.
+
+## Delivery
 
 1. This spec.
 2. The policy key `unpriced_wake_cap` (range 0..10000, unset by default). Report display next to the
    dollar cap, same warn state. No enforcement yet. Depends on spend-controls increment 1.
 3. Enforcement on the increment-2 deny path. Depends on increment 2 landing.
 
-## Testing, if C
+## Testing
 
 - Unset matches today byte-for-byte. `0` denies the first unpriced agent wake and lets humans
   through. N lets N through, then denies.
