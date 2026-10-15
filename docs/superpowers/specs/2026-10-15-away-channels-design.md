@@ -12,8 +12,9 @@ asks to reach him when he is away from it, over channels he can switch on and of
 push, in-app notifications, and later others), and to **answer from the channel**: approve, reject, reply.
 A notification that only says "go answer on /live" is not the goal.
 
-Success: with Slack enabled and paired, nick on his phone sees an ordinary ask, taps Approve, and the
-asking agent proceeds, with the record showing who authorized it and through which channel. A privileged
+Success: with Slack enabled and paired, nick on his phone sees an ask, taps Approve or Reject, and the
+asking agent receives the answer with the record showing who answered and through which channel. In v1 a
+Slack answer is advice to the agent, not authorization (see "Where the class comes from"). A privileged
 ask reaches him too, but says plainly that it needs a stronger surface.
 
 ## What exists (checked 2026-10-15, read-only)
@@ -57,8 +58,10 @@ has to sit outside the Cloudflare account.
 
 **Ordinary asks only.** Until A2 exists:
 
-- **Ordinary** asks (reversible workflow replies) may be answered with Approve or Reject on an A1 channel.
-  This trusts the relay and the provider for this class. The ADR states that as an accepted risk.
+- **Ordinary** asks may be answered with Approve or Reject on an A1 channel. In v1 the answer is **advisory**
+  to the asking agent and authorizes nothing; it can release work only for an operation class added later
+  under the rules below. This trusts the relay and the provider for that class. The ADR states that as an
+  accepted risk.
 - **Privileged** asks are **notify-only** on A1 channels: the message names the ask and says to answer on
   `/live` or the CLI. No buttons. Privileged means credential or grant issuance, rotation and recovery,
   membership or admin changes, export or delete, deploys, and irreversible external effects.
@@ -66,17 +69,41 @@ has to sit outside the Cloudflare account.
 Tier alone is not risk: a `blocking` ask can be harmless and a `standard` one can carry a privileged
 consequence. So the class comes from what the ask is, not how loud it is.
 
-### Where the class comes from
+### Where the class comes from, and what an A1 answer is worth
 
-The class is **derived by the daemon at raise time and stamped on the ask**. The agent cannot choose it.
+_(Amended 2026-10-15 on big-body's acceptance review of #2690: the first version derived the class from the
+ask's species and the absence of a gate or risk tag. That does not establish the security property. An agent
+chooses the species and the tags, so it can phrase a privileged approval as a `consult`. The rules below
+replace it.)_
 
-- An ask carrying `meta.gate` (a gate-raised ask, ADR 150) is **privileged**.
-- **v1 ordinary allowlist**, everything else is privileged (fail closed): species `consult` with no
-  `meta.gate`; and a `lane_review` acceptance ask for a lane with no risk tags (ADR 603 keeps a risky
-  lane human-first, which is a privileged path).
-- The allowlist is a table in protocol code with a test that pins it, so widening it is a reviewed change.
+1. **Species and the absence of a tag are not evidence that a consequence is reversible.** The daemon stamps
+   a class on the ask at raise time, but the stamp is only as trustworthy as its inputs. Nothing an agent
+   supplies (species, tier, tags, free text) may lower the class. **Unknown consequences are privileged**
+   (fail closed).
+2. **An A1 answer to a `consult` is advisory only.** The asking agent may read it as information. It is
+   never recorded as human authorization: it sets no `authorized_by`, releases no gate, satisfies no
+   acceptance, and is never sufficient for a deploy, export, delete, credential, grant or admin action, no
+   matter how the ask was worded.
+3. **An A1 answer may release work only for an operation class that has a trusted, operation-specific
+   classifier.** "Trusted" means the daemon derives the class from authoritative state it holds (the lane,
+   its recorded risk tags, the gate class), not from fields the asking agent set. At **redemption** the daemon
+   re-reads that state as it is *then*, not as it was at delivery. A lane that gained a risk tag, or an
+   action that became privileged, after the buttons were sent refuses the answer. In v1 this list is
+   **empty**; each class is added by a reviewed change to a table in protocol code, with a test that pins it.
+   Candidates for nick to decide on: a `lane_review` acceptance for a lane with no risk tags, once the
+   daemon (not the submitting seat) is the one classifying the diff (ADR 612 has the submitting seat label
+   it, which is not trusted for this).
+4. **Consumers enforce it, not only the buttons.** Every channel answer is recorded with its assurance level
+   (`A1` or `A2`). Every consumer that treats a human answer as authority refuses an `A1` answer for a
+   privileged or unlisted class: the gate release read (`gateAskHumanAnswer`, ADR 150), acceptance and
+   `request.decide`. **A1 cannot be laundered through the general human accept or gate path.** A channel
+   answer is never written as a plain human `accept` that those consumers would honour without checking
+   assurance. Hiding the button on a privileged ask is a courtesy, not the control.
+5. An ask carrying `meta.gate` is privileged and gets no buttons.
 
-nick confirms the v1 allowlist in [Open questions](#open-questions).
+nick's decision to answer ordinary asks from Slack stands, with this meaning: in v1 a Slack answer to a
+`consult` reaches the asking agent as advice, and the list of classes where a Slack answer can release work
+grows one reviewed class at a time. Which classes to add first is in [Open questions](#open-questions).
 
 ## Architecture
 
@@ -155,7 +182,7 @@ name. The relay cannot complete or change a binding alone.
 5. Binding, revoking and the kill switch are audited. There is no unbind or rebind from a button.
 
 A stolen unlocked phone or a taken-over provider account is an authority compromise for A1. The design does
-not claim number matching excludes it. The mitigation is the class split: A1 can only answer ordinary asks.
+not claim number matching excludes it. The mitigation is the class split: an A1 answer is advisory, or releases work only for a listed class.
 
 Enrolling a device key for A2 later is its own authenticated enrollment and recovery flow. The relay's
 assertions are never enough to enroll one.
@@ -199,8 +226,11 @@ still pass their existing server authorization; a channel never fabricates a gen
 
 Before anyone calls this secure, a suite must let a **malicious relay**: forge provider callbacks; swap one
 ask or action for another; replay after revoke; race both buttons; pair a different provider identity; and
-lie in the confirmation UI. It also states, in the ADR, **exactly which attacks remain excluded** by the
-trust assumptions (for A1: a compromised relay or provider forging an ordinary-class answer; a stolen
+lie in the confirmation UI. It also covers the class rules above: a privileged request **mislabeled as a
+`consult`**; a lane whose **risk tags are missing or were removed**; an action that **becomes privileged
+after delivery** (redemption must re-read current state); and an A1 answer **offered to the gate release
+read, acceptance and `request.decide`** (each must refuse it). It also states, in the ADR, **exactly which attacks remain excluded** by the
+trust assumptions (for A1: a compromised relay or provider forging an advisory or listed-class answer; a stolen
 unlocked phone; a provider workspace admin acting as the user).
 
 ## ADRs this needs
@@ -227,11 +257,11 @@ depends on the ones before it. Parking is a human choice, so dependencies carry 
 | 2 | `01M50XPWSQBHDNBG3M5XYWZCAP` | Daemon: action class derivation, bound ask token, atomic decision record, audit | 1 |
 | 3 | `01M50XPXWEFMHND3GABXDSNTVW` | Relay: Worker and Durable Object, daemon WebSocket client, reconcile on reconnect | 1, 2 |
 | 4 | `01M50XPYZ9877E494X2SV1EGTB` | Pairing: nonce, `/live` and CLI confirmation, binding store, revoke and kill switch | 2, 3 |
-| 5 | `01M50XQ04M8E3X5QHY173Q18X7` | Slack adapter: interactive messages, signature check, deliver and answer for ordinary asks | 3, 4 |
+| 5 | `01M50XQ04M8E3X5QHY173Q18X7` | Slack adapter: interactive messages, signature check, deliver and answer for advisory (and later listed-class) asks | 3, 4 |
 | 6 | `01M50XQ5YXXPJ8KVCV31KFB2N8` | Channel settings: CLI, `/live` panel, presence gating | 2 |
 | 7 | `01M50XQ1TGXNVXRF0481TCK4AA` | Mobile app as an ask client and A2 device-signed answers (own spec and ADR) | 1 to 6 |
 
-Increments 1 to 6 reach nick on Slack for ordinary asks. Increment 7 is what makes privileged asks
+Increments 1 to 6 reach nick on Slack with advisory answers. Increment 7 is what makes privileged asks
 answerable off the computer.
 
 ## Out of scope
@@ -243,8 +273,9 @@ answer. Changing the hold ceiling or `stranded` (ADR 153).
 
 ## Open questions
 
-1. **The v1 ordinary allowlist** above (species `consult` with no gate; `lane_review` on a lane with no
-   risk tags). nick to confirm or change.
+1. **Which operation classes an A1 answer may release work for, after v1.** v1 is advisory-only for
+   `consult` and the releasing list is empty (see "Where the class comes from"). nick decides what is added
+   first and when; each needs a daemon-side classifier and a redemption re-check.
 2. **Relay retention.** What is stored, for how long, and whether a pending ask's rendered message may sit
    in the Durable Object until delivery or only until expiry. big-body asks that this is set with nick.
 3. **Who owns the Cloudflare account and the Slack app**, and where the signing secret lives, given that
