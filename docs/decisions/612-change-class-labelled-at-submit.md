@@ -63,7 +63,7 @@ acceptance goes — cannot be asked, because nothing records the kind.
    class, and the ask body opens with it: `[lane] acceptance requested (docs-only, 3 files): …`. The
    picker, the grade, the tiers and the risk rule are untouched.
 3. **The routing decision is deferred to a second ADR, gated on the eval below.**
-   Follows-up: deferred — opened when the eval's 30-submit decision rule is met (2026-11-15).
+   Follows-up: deferred — opened when the eval's 30-submit decision rule is met (2026-11-15)
    Candidates that ADR would weigh, named now so they cannot be argued into existence later: `docs`
    lanes join the `stakes: low` 1-in-5 draw unless they carry a risk tag; `tests` lanes draw a
    same-family peer; `protocol` lanes draw cross-family as now. None of these is decided here.
