@@ -10,6 +10,7 @@ import {
 import {
   acquireObserver,
   forgetObserver,
+  loadObserver,
   ObserverSignInRequired,
   redeemSignin,
   type LiveConfig,
@@ -421,6 +422,7 @@ function BoardPage() {
               onAdvanced={setAdvanced}
               openLabel="Sign in as yourself — the room will know you're here"
               closeLabel="Just watch instead"
+              canWatch={loadObserver(team.trim()) != null}
             />
           </div>
         </div>

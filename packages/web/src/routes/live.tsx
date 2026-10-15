@@ -32,6 +32,7 @@ import {
   forgetObserver,
   acquireObserver,
   acquireWatchLinkObserver,
+  loadObserver,
   ObserverSignInRequired,
   redeemSignin,
 } from '../live/client';
@@ -996,6 +997,7 @@ function ConnectForm({
           onAdvanced={onAdvanced}
           openLabel="Sign in as yourself"
           closeLabel="Just watch instead"
+          canWatch={loadObserver(team.trim()) != null}
         />
       </div>
     </div>
