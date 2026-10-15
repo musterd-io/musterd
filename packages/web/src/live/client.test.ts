@@ -285,6 +285,30 @@ describe('acquireWatchLinkObserver (ADR 580: minted by a signed-in human, public
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer mscr_admin');
     expect(JSON.parse(init.body as string)).toMatchObject({ observer_scope: 'public' });
   });
+
+  // ADR 616: a demo link is its own broadcast-grade seat. A cached public seat must never answer for
+  // it, or a "demo" link would quietly show nothing directed; and the reverse would hand a casual
+  // public share the broadcast seat's credential.
+  it('mints a separate broadcast-grade seat for a demo link, ignoring the cached public one', async () => {
+    const map = store({
+      'musterd.live.watchlink.v1.revive': JSON.stringify({ name: 'watch-zz', token: 'mscr_pub' }),
+    });
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ human_credential: 'mscr_demo' }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const demo = await acquireWatchLinkObserver('revive', 'mscr_admin', 'broadcast');
+    expect(demo.token).toBe('mscr_demo');
+    const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ observer_scope: 'broadcast' });
+    expect(map.get('musterd.live.watchlink.v1.revive')).toContain('mscr_pub');
+    expect(map.get('musterd.live.watchlink.broadcast.v1.revive')).toContain('mscr_demo');
+    await expect(acquireWatchLinkObserver('revive', null)).resolves.toMatchObject({
+      token: 'mscr_pub',
+    });
+  });
 });
 
 /**

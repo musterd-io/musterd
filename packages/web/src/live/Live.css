@@ -7858,3 +7858,38 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Watch link grade (ADR 616): the share choice beside the link button, and the viewer's label. */
+.lc-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+.lc-share__btn {
+  font: inherit;
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc-text);
+  background: none;
+  border: 1px solid var(--lc-border);
+  border-radius: 999px;
+  padding: 0.1em 0.7em;
+  min-height: 24px;
+  cursor: pointer;
+}
+.lc-share__btn:hover,
+.lc-share__btn:focus-visible {
+  border-color: currentColor;
+}
+.lc-watchgrade {
+  flex: none;
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+  border: 1px solid var(--lc-border);
+  border-radius: 999px;
+  padding: 0.1em 0.7em;
+  white-space: nowrap;
+}
