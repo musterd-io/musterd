@@ -88,6 +88,8 @@ is down.
   closest stand-in and does not tell a rejected key from a dropped session.
 - How long Twitch shows the channel offline for each of those. Needs a watcher on Twitch's side.
 
+(2026-10-15: inc 7 measured the picture, and an outage of 5 min, while nick watched. See "What a viewer sees" below. Twitch rejecting the key is still open.)
+
 Inc 3 measured the reset case; the rest of the list above is still open. Inc 4 (ADR 553, lane
 `01M4F32MMP63ZF9AVNHWWF3N6A`) changes the reset case: ffmpeg ending after `◉ live` now exits 75 under a
 supervisor, so the broadcast restarts inside the machine instead of the machine ending.
@@ -129,6 +131,46 @@ rerun until six short runs have failed, then ends the machine and `ensure` takes
 relaunches: Twitch refused the first reconnect about 2 s after accepting the TCP session and took the
 second. One run, one reset: how long Twitch refuses a reconnect is still not known, and the cap of six is a guess.
 Picture and Twitch-side offline time were not watched.
+
+### What a viewer sees: a reset freezes the picture for about 15 s, and a 5 min daemon outage does not reach Twitch (2026-10-15; falsify: on a live hosted stream with someone watching the Twitch player, repeat the 3 s `tcp-reset` on outbound 443 and the 5 min `iptables -I OUTPUT -d <daemon tailnet ip> -j DROP` — an "offline" screen or a player that needs a reload after the reset, or any freeze, `relaunching` line or changed ffmpeg pid during the DROP, falsifies this) <!-- claim: other -->
+
+Inc 7, lane `01M4FF0S55`. Run on machine `807135a617de08`, image `2aa3052a82e8`, with nick watching the
+Twitch player. One run of each drill. The auto-refresher restarted the daemon onto `0db6771` at
+18:42:37Z, 25 s before the reset. That restart did not touch the box: ffmpeg had run for 725 s when
+the reset ended it.
+
+**Reset, 3 s `REJECT --reject-with tcp-reset` on outbound 443 (box times, Z):**
+
+| time (Z) | event |
+| --- | --- |
+| 18:43:02 | reset; `Connection reset by peer`; ffmpeg ends (`ran 725s`), relaunch on the same machine |
+| 18:43:04 | `◉ live` |
+| 18:43:07 | Twitch closes the session (`End of file`); ffmpeg ends |
+| 18:43:12 | relaunch (`ran 5s`) |
+| 18:43:14 | `◉ live` |
+| 18:43:16 | Twitch closes it again; ffmpeg ends |
+| 18:43:32 | relaunch (`ran 4s`) |
+| 18:43:34 | `◉ live`, and it held (same machine, ffmpeg pid 1684, still running at 18:55) |
+
+32 s from the reset to a live that held, after two refused reconnects (the 2026-10-09 run took 14 s
+and one). **Viewer side:** the picture froze and came back by itself after about 15 s, with no
+reload. That number is nick's estimate, not a stopwatch; the channel did not show "offline". The
+player's freeze was shorter than the box's 32 s, which suggests the player holds the last frame and
+then resumes on a session Twitch accepted, but one estimate does not settle that.
+
+**Daemon outage, 5 min `DROP` to `100.100.246.14` (18:49:09Z to 18:54:09Z):**
+
+- **Box:** ffmpeg pid 1684 ran through it. `fly logs` has no line at all between 18:44 and 18:55: no
+  watchdog, relaunch or `capture back` line.
+- **Daemon:** the broadcast seat's socket went quiet. The daemon marked the seat offline at 18:50:02,
+  53 s in (`reap_offline`). It closed the dead socket at 18:54:19 (`4410 presence reaped — re-claim`),
+  and the page claimed again at 18:54:20, 11 s after the rule came off. So the page's data reconnected
+  by itself.
+- **Viewer side:** nick saw no disruption at any point, including when the rule came off at 18:54.
+
+**Not seen:** whether the office on screen visibly stopped changing during the 5 min. The page received
+no team data in that window, so it showed the team as it was at 18:49. A viewer only sees that if
+something should have changed on screen in that window. A real laptop sleep is still longer than 5 min.
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
