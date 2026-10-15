@@ -8,6 +8,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import { replaySource } from '../cloud/affinity.js';
 import { hostTeam } from '../cloud/hostIsolation.js';
 import { checkUpgrade } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
@@ -244,6 +245,19 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
       socket.destroy();
       return;
     }
+    // ADR 608: the socket belongs on the team's owner. The upgrade is an HTTP request to the proxy
+    // like any other, so the same `fly-replay` answer moves it there.
+    if (rootCtx.config.cloud && rootCtx.affinity) {
+      const team = hostTeam(req.headers.host, rootCtx.config.cloud.hostSuffix);
+      const d = rootCtx.affinity.decide(team, replaySource(req.headers['fly-replay-src']));
+      if (!d.local && d.owner) {
+        socket.write(
+          `HTTP/1.1 307 Temporary Redirect\r\nfly-replay: instance=${d.owner}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`,
+        );
+        socket.destroy();
+        return;
+      }
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
@@ -283,6 +297,13 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           // Same refusal as an unknown team, so the host cannot probe which teams exist.
           if (cloudSuffix && hostTeamName !== frame.team.toLowerCase())
             throw new MusterdError('not_found', `no team "${frame.team}"`);
+          // ADR 608: a socket opened here before the team's owner changed claims against a team
+          // this server no longer owns. Close it (1012, service restart) so the client reconnects
+          // and the proxy replays the upgrade to the owner — never serve a team from two servers.
+          if (rootCtx.affinity && !rootCtx.affinity.decide(frame.team.toLowerCase(), false).local) {
+            ws.close(1012, 'team moved');
+            return;
+          }
           const team = await requireTeam(ctx.db, frame.team);
           ctx = teamCtx(rootCtx, team.id);
 

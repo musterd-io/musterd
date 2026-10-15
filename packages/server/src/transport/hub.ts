@@ -108,6 +108,26 @@ export class Hub {
     }
   }
 
+  /** The team ids with at least one live connection here (ADR 608: the set a list change is checked against). */
+  teamIds(): string[] {
+    return [...new Set([...this.byConn.values()].map((c) => c.teamId))];
+  }
+
+  /**
+   * ADR 608: this server stopped owning `teamId` — close every connection on it so the clients
+   * reconnect and the proxy replays them to the new owner. Returns how many were closed.
+   */
+  closeTeam(teamId: string): number {
+    let n = 0;
+    for (const conn of [...this.byConn.values()]) {
+      if (conn.teamId !== teamId) continue;
+      conn.close?.();
+      this.remove(conn.connId);
+      n++;
+    }
+    return n;
+  }
+
   connsForMember(memberId: string): Connection[] {
     return [...(this.byMember.get(memberId) ?? [])];
   }

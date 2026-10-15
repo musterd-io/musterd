@@ -3,6 +3,7 @@ import { createServer as createHttpServer, type Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import type { Envelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
+import { Affinity, affinityFromEnv, type AffinityOptions } from './cloud/affinity.js';
 import { loopsFor } from './cloud/loops.js';
 import {
   RECONCILE_DEBOUNCE_MS,
@@ -37,7 +38,7 @@ import { closeReportService } from './store/reportCache.js';
 import { AUDIT_ARCHIVE_TABLE, defaultArchiveDir, startAuditRetention } from './store/retention.js';
 import type { MemberRow } from './store/rows.js';
 import { revokeExpiredMember } from './store/sponsoredCascade.js';
-import { getTeamBySlug } from './store/teams.js';
+import { getTeamById, getTeamBySlug } from './store/teams.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
@@ -110,6 +111,8 @@ export interface ServerOptions {
    * passes this; the URLs in the cloud config are the store.
    */
   cloudPools?: { main: PoolFactory; trace: PoolFactory };
+  /** Tests only: the ADR 608 affinity (this machine's id and the peer list) instead of the env's. */
+  affinity?: AffinityOptions;
 }
 
 export interface RunningServer {
@@ -209,6 +212,28 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   config.traceDbPath =
     sqliteHandle(traceDb)?.name ?? (traceDb.dialect === 'sqlite' ? config.traceDbPath : 'postgres');
   const hub = new Hub();
+  // ADR 608: on Cloud under Fly, one server owns a team at a time; a lost team's sockets are closed
+  // so their clients reconnect through the proxy to the new owner. Off (null) off Cloud.
+  const affinity = cloud
+    ? new Affinity({
+        ...(opts.affinity ?? affinityFromEnv(process.env)),
+        onChange: (ownerOf) => {
+          // Walk the teams this server holds sockets for (by id) and close those it no longer
+          // owns (by slug). Resolved as the operator, which `opDb` below is; the closure runs on
+          // a timer, long after it is assigned.
+          void (async () => {
+            for (const teamId of hub.teamIds()) {
+              const team = await getTeamById(opDb, teamId).catch(() => null);
+              if (!team) continue;
+              const owner = ownerOf(team.slug);
+              if (owner === affinity?.self) continue;
+              const closed = hub.closeTeam(teamId);
+              log.info({ msg: 'affinity_lost', team: team.slug, closed, owner });
+            }
+          })();
+        },
+      })
+    : null;
   // Durable roster roots (ADR 058): explicit list (tests) or the rosterHome registry + env override.
   // An explicit list is fixed (hermetic tests); otherwise `reload()` re-resolves from the registry so
   // a team exported after the daemon started is picked up without a restart.
@@ -217,6 +242,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     db,
     traceDb,
     hub,
+    affinity,
     config,
     rosterRoots: opts.rosterRoots ?? resolveRosterRoots(),
   };
@@ -412,6 +438,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           boundPort = typeof addr === 'object' && addr ? addr.port : config.port;
           // Cloud runs only the loops that are about the database (cloud/loops.ts names the rest).
           if (loops.has('reaper')) stopReaper = startReaper(opCtx);
+          affinity?.start();
           if (loops.has('seeds_ingest')) stopSeeds = startSeedsIngest(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
@@ -584,6 +611,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       closing = new Promise((resolve) => {
         stopLoopWatch();
         stopReaper?.();
+        affinity?.stop();
         stopSeeds?.();
         stopDigest?.();
         stopSync?.();
