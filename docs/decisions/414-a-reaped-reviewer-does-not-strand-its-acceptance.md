@@ -68,6 +68,8 @@ is offered a live reviewer before it can be closed unreviewed.
 
 ### It terminates by construction, not by a counter
 
+_(Amended 2026-10-14: a counter now backs this — after 3 automatic re-routes in one submission the next move goes to a human; [ADR 595](595-reroute-hop-cap.md).)_
+
 Once a lane is re-routed its open ask belongs to a live seat, so the next tick's
 `abandonedAcceptances` no longer names it. A lane comes back only if its *new* reviewer also
 vanishes — which is the case where trying again is the right answer. No re-route counter, no clock
@@ -103,6 +105,11 @@ seat and the acceptances, so the two triggers differ only in how the departure b
   listened for a full presence timeout, the same window `reapStale` has waited on since lane
   01M1HNY302 (after boot, and after any gap as long as the timeout). Three tests on the real tick
   cover the boot, the suspend, and a holder that stays silent past the window.
+- **2026-10-14 — a chain of departures now has a cap** ([ADR 595](595-reroute-hop-cap.md)). In
+  the week after #2194, ten submissions were re-routed between agents more than twice (one six
+  times), each holder leaving before it judged. After 3 `reaped`/`departed` hops in one submission
+  the next move goes to a live human (`route: 'capped'`), so "terminates by construction" now has
+  a counter behind it.
 
 ## Observability & Evaluation
 

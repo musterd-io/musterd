@@ -545,6 +545,106 @@ withDrivers('reaper', (o) => {
       expect(await rerouted(team.id)).toHaveLength(1);
     });
 
+    describe('the hop cap (ADR 595)', async () => {
+      /** One submission's history: its `ready_for_review` row, then a hop per `routes` entry. */
+      async function seedHops(teamId: string, laneId: string, routes: string[]) {
+        await appendAudit(db, teamId, {
+          actor: 'Kim',
+          action: 'lane.ready_for_review',
+          target: laneId,
+          result: 'allow',
+          detail: { lane: laneId, owner: 'Kim' },
+        });
+        for (const [i, route] of routes.entries()) {
+          await appendAudit(db, teamId, {
+            actor: `seat${i}`,
+            action: 'lane.review_rerouted',
+            target: laneId,
+            result: 'allow',
+            detail: { lane: laneId, route, from_reviewer: `seat${i}`, reviewer: `seat${i + 1}` },
+          });
+        }
+      }
+
+      /** Moves the sweep made — only they supersede the fixture's ask; seeded hops carry none. */
+      const fresh = async (teamId: string) =>
+        (await rerouted(teamId)).filter(
+          (r) => JSON.parse(r.detail as string).superseded_ask === 'ask-vanished',
+        );
+
+      it('after three hops, the next move goes to a live human, not a fourth agent', async () => {
+        // Measured 2026-10-07..14: ten submissions re-routed between agents more than twice, one six
+        // times, each holder gone before judging it.
+        const { team, lane, linPresence } = await laneHeldByADepartedSeat();
+        const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+        const nickPresence = (await attach(db, nick.id, 'cli', 'conn-nick')).id;
+        await seedHops(team.id, lane.id, ['reaped', 'departed', 'reaped']);
+
+        stop = startReaper(ctx);
+        await liveFor(
+          config.presenceTimeoutMs + config.reaperIntervalMs * 2,
+          linPresence,
+          nickPresence,
+        );
+
+        const moved = await fresh(team.id);
+        expect(moved).toHaveLength(1);
+        const detail = JSON.parse(moved[0]!.detail as string);
+        expect(detail.route).toBe('capped');
+        expect(detail.reviewer).toBe('nick');
+        expect(detail.superseded_ask).toBe('ask-vanished');
+        expect(detail.hops).toBe(3);
+        expect(detail.holders).toEqual(['seat0', 'seat1', 'seat2', 'delta']);
+        const ask = await db.get<{ body: string; meta: string }>(
+          `SELECT m.body, m.meta FROM messages m JOIN members mem ON mem.id = m.to_member
+            WHERE mem.name = 'nick' AND m.act = 'ask'`,
+        );
+        expect(JSON.parse(ask!.meta).lane_review).toMatchObject({
+          route: 'capped',
+          grade: 'human',
+        });
+        expect(ask!.body).toContain('held by 4 seats in turn (seat0 → seat1 → seat2 → delta)');
+      });
+
+      it('with no human live it moves nowhere, and the first human to come live gets it', async () => {
+        const { team, lane, linPresence } = await laneHeldByADepartedSeat();
+        const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+        await seedHops(team.id, lane.id, ['reaped', 'reaped', 'reaped']);
+
+        stop = startReaper(ctx);
+        await liveFor(config.presenceTimeoutMs + config.reaperIntervalMs * 4, linPresence);
+        expect(await fresh(team.id)).toHaveLength(0);
+
+        const nickPresence = (await attach(db, nick.id, 'cli', 'conn-nick')).id;
+        await liveFor(config.reaperIntervalMs * 4, linPresence, nickPresence);
+        const moved = await fresh(team.id);
+        expect(moved).toHaveLength(1);
+        expect(JSON.parse(moved[0]!.detail as string).reviewer).toBe('nick');
+      });
+
+      it('counts one submission’s automatic hops only: a resubmit, a hand re-route or a tiebreak is no hop', async () => {
+        const { team, lane, linPresence } = await laneHeldByADepartedSeat();
+        const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+        const nickPresence = (await attach(db, nick.id, 'cli', 'conn-nick')).id;
+        await seedHops(team.id, lane.id, ['reaped', 'reaped', 'reaped']);
+        vi.setSystemTime(Date.now() + 1_000);
+        await seedHops(team.id, lane.id, ['named', 'tiebreak', 'reaped']);
+
+        stop = startReaper(ctx);
+        await liveFor(
+          config.presenceTimeoutMs + config.reaperIntervalMs * 2,
+          linPresence,
+          nickPresence,
+        );
+
+        const moved = await fresh(team.id);
+        expect(moved).toHaveLength(1);
+        const detail = JSON.parse(moved[0]!.detail as string);
+        expect(detail.route).toBe('reaped');
+        expect(detail.reviewer).toBe('Lin');
+      });
+    });
+
     it('a freshly booted loop moves no acceptance before it has listened a full window', async () => {
       const { team } = await laneHeldByADepartedSeat();
 
