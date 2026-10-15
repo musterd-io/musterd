@@ -21,11 +21,14 @@
  * Env: BENCH_APP (musterd-loadbench), BENCH_SIZE (performance-2x), BENCH_MEMORY_MB (4096),
  * BENCH_REGION (iad), BENCH_WAIT_MIN (180). Exits with the command's exit code.
  *
- * BENCH_HUB_APP=<fly app> also tails THAT app's log for the whole run and keeps its socket lines
- * (`ws_close`, `ws_cleanup_failed`, `ws_heartbeat_reaped`) in BENCH_HUB_LOG (default
- * ~/.musterd/cloud/bench/out/hub-<label>-<time>.log). Run 36 could not say who closed 23 viewer
- * sockets because `fly logs --no-tail` had rolled past the burst windows by the time anyone looked
- * (lane 01M4VAWG30); the hub's line now carries the close code, and this keeps it.
+ * BENCH_HUB_APP=<fly app> also tails THAT app's log for the whole run and keeps EVERY line of it in
+ * BENCH_HUB_LOG (default ~/.musterd/cloud/bench/out/hub-<label>-<time>.log), echoing only the
+ * socket lines (`ws_close`, `ws_cleanup_failed`, `ws_heartbeat_reaped`) to the console. Run 36
+ * could not say who closed 23 viewer sockets because `fly logs --no-tail` had rolled past the burst
+ * windows by the time anyone looked (lane 01M4VAWG30); the hub's line now carries the close code,
+ * and this keeps it. Run 42 then kept ONLY those lines and so could not name its one `GET /inbox`
+ * 502 or rebuild the per-route server table (lane 01M4YYPARB) — the file now holds the whole log,
+ * `http_request` lines included; grep it afterwards.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream, mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -119,7 +122,7 @@ async function createMachine(token, image, cmd) {
   return body.id;
 }
 
-/** Tail the hub app's log for the run, keeping only its socket lines, to a file and the console. */
+/** Tail the hub app's log for the run: every line to the file, socket lines also to the console. */
 function tailHub(label) {
   if (!HUB_APP) return null;
   const path =
@@ -134,12 +137,11 @@ function tailHub(label) {
     const lines = rest.split('\n');
     rest = lines.pop() ?? '';
     for (const line of lines) {
-      if (!HUB_LINE.test(line)) continue;
       file.write(`${line}\n`);
-      console.log(`[hub] ${line}`);
+      if (HUB_LINE.test(line)) console.log(`[hub] ${line}`);
     }
   });
-  console.log(`hub log (${HUB_APP}, socket lines) → ${path}`);
+  console.log(`hub log (${HUB_APP}, every line; socket lines echoed) → ${path}`);
   return { kill: () => child.kill(), end: () => file.end() };
 }
 
