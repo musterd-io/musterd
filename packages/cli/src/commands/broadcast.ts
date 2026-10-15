@@ -19,6 +19,7 @@ import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { cpuOfTree, cpuTotal, makePerfRecorder } from './broadcast-perf.js';
+import { resolve } from './helpers.js';
 
 /**
  * `musterd broadcast` — ADR 157 Increment 2: stream the office with no GUI in the loop.
@@ -169,6 +170,103 @@ export function broadcastUrl(
   const h = resolution === '1080p' ? '' : `&h=${stagePixels(resolution).height}`;
   const f = Number.isFinite(fps) && fps > 0 ? `&fps=${Math.round(fps)}` : '';
   return `${server.replace(/\/$/, '')}/broadcast?team=${encodeURIComponent(team)}${h}${f}`;
+}
+
+/**
+ * The observer seat a broadcast page connects as (ADR 594). Since ADR 580 a page cannot mint an
+ * observer over loopback, so the capturer brings one: minted once per run with the operator's
+ * human-admin credential, at **public** grade — a stream shows an audience team traffic, never DMs.
+ */
+export const BroadcastSeatSchema = z.object({
+  team: z.string().min(1),
+  name: z.string().min(1),
+  token: z.string().min(1),
+});
+export type BroadcastSeat = z.infer<typeof BroadcastSeatSchema>;
+
+/** `MUSTERD_BROADCAST_SEAT` — a seat minted elsewhere (`--mint-seat`, `musterd stream start`). It
+ * must name the team being streamed: a seat for another team would connect to nothing. */
+export function seatFromEnv(
+  team: string,
+  env: NodeJS.ProcessEnv = process.env,
+): BroadcastSeat | null {
+  const raw = env['MUSTERD_BROADCAST_SEAT']?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new CliError(
+      'MUSTERD_BROADCAST_SEAT is not JSON — set it from `musterd broadcast --mint-seat`',
+      2,
+    );
+  }
+  const seat = BroadcastSeatSchema.safeParse(parsed);
+  if (!seat.success) {
+    throw new CliError(
+      'MUSTERD_BROADCAST_SEAT needs {team, name, token} — set it from `musterd broadcast --mint-seat`',
+      2,
+    );
+  }
+  if (seat.data.team !== team) {
+    throw new CliError(`MUSTERD_BROADCAST_SEAT is for team "${seat.data.team}", not "${team}"`, 2);
+  }
+  return seat.data;
+}
+
+/** Mint the run's public-grade observer with this folder's identity. Refused unless that identity is
+ * a human admin (ADR 580) — the message says what to do instead of echoing the daemon's. */
+export async function mintBroadcastSeat(
+  flags: Record<string, string | boolean>,
+  team: string,
+): Promise<BroadcastSeat> {
+  const { http } = resolve({ ...flags, team });
+  const name = 'broadcast-' + Math.random().toString(36).slice(2, 8);
+  try {
+    const res = await http.addMember(team, {
+      name,
+      kind: 'human',
+      observer: true,
+      observer_scope: 'public',
+    });
+    if (!res.human_credential)
+      throw new CliError(
+        'the daemon minted the observer without a credential — is it older than the CLI?',
+        1,
+      );
+    return { team, name, token: res.human_credential };
+  } catch (e) {
+    if (e instanceof CliError && /human-admin/.test(e.message)) {
+      throw new CliError(
+        'a broadcast needs an observer seat, and minting one takes a human admin (ADR 580) — run this ' +
+          "from a human admin's folder, or pass a seat in MUSTERD_BROADCAST_SEAT (`musterd broadcast --mint-seat`)",
+        e.exitCode,
+      );
+    }
+    throw e;
+  }
+}
+
+/** Remove a seat this run minted. Best effort: the run is over either way, and an observer left
+ * behind is reaped at the 24h TTL (ADR 064) — so a failure is said, never thrown. */
+export async function revokeBroadcastSeat(
+  flags: Record<string, string | boolean>,
+  seat: BroadcastSeat,
+): Promise<void> {
+  try {
+    const { http } = resolve({ ...flags, team: seat.team });
+    await http.removeMember(seat.team, seat.name);
+  } catch (e) {
+    process.stderr.write(
+      `${theme.warn('!')} could not remove observer ${seat.name} (${e instanceof Error ? e.message : String(e)}) — the 24h reaper will\n`,
+    );
+  }
+}
+
+/** The script that hands the page its seat before any of the page's own code runs. Injected over CDP,
+ * never put in the URL or Chrome's argv, where `ps` and logs would show the credential. */
+export function seatInjection(seat: BroadcastSeat): string {
+  return `window.__musterdBroadcastSeat = ${JSON.stringify(seat)};`;
 }
 
 /**
@@ -1321,9 +1419,21 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   if (parsed.flags['status'] === true) return statusVerb();
   if (parsed.flags['stop'] === true) return stopVerb();
 
+  // `--mint-seat` prints a seat for a capturer that is not this process (the bench's x11 arm, a
+  // hand-run Chrome). Shown once, on stdout only — it is a credential (hard rule 5).
+  if (parsed.flags['mint-seat'] === true) {
+    const team = typeof parsed.flags['team'] === 'string' ? parsed.flags['team'] : '';
+    if (!team) throw new CliError('which team? — pass --team <slug>', 2);
+    process.stdout.write(JSON.stringify(await mintBroadcastSeat(parsed.flags, team)) + '\n');
+    return 0;
+  }
+
   const opts = parseOptions(parsed.flags);
   if (!opts.team) throw new CliError('which team? — pass --team <slug>', 2);
   const sink = await resolveSink(opts, keychainLookup);
+  // One seat for the whole run: every Chrome relaunch (ADR 551) is handed the same one.
+  const handed = seatFromEnv(opts.team);
+  const seat = handed ?? (await mintBroadcastSeat(parsed.flags, opts.team));
   const url = broadcastUrl(opts.server, opts.team, opts.resolution, opts.fps);
   const stage = stagePixels(opts.resolution);
 
@@ -1615,6 +1725,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
           deviceScaleFactor: 1,
           mobile: false,
         });
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: seatInjection(seat) });
         await cdp.send('Page.navigate', { url });
         await waitBroadcastReady(cdp, 30_000);
       })(),
@@ -1798,6 +1909,9 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   } finally {
     cleanup();
   }
+  // A seat this run minted dies with it. A handed seat belongs to whoever minted it. Forced stops
+  // reach process.exit() with no async teardown; the 24h observer reaper (ADR 064) ends those.
+  if (!handed) await revokeBroadcastSeat(parsed.flags, seat);
   if (exitCode === 0) process.stdout.write(`${theme.ok('✓')} broadcast ended cleanly\n`);
   // ffmpeg ending on its own after the stream was live is the sink dying, not the end of the run
   // (ADR 553): under a supervisor that is a restart inside the machine, not the machine's end.

@@ -464,6 +464,21 @@ export async function acquireObserver(team: string): Promise<LiveConfig> {
   return { team, as: creds.name, token: creds.token };
 }
 
+/** The seat a capturer handed this page (ADR 594). Since ADR 580 a page cannot mint an observer over
+ * loopback, so `musterd broadcast` mints one public-grade observer with its operator's human-admin
+ * credential and injects it before the page loads — never in the URL or Chrome's argv, where `ps`
+ * and logs would show it. Null when nothing was handed over, or it was handed for another team. */
+export function handedObserver(team: string): LiveConfig | null {
+  if (typeof window === 'undefined') return null;
+  const seat = (window as unknown as { __musterdBroadcastSeat?: unknown }).__musterdBroadcastSeat;
+  if (!seat || typeof seat !== 'object') return null;
+  const { team: t, name, token } = seat as Record<string, unknown>;
+  if (t !== team || typeof name !== 'string' || typeof token !== 'string' || !name || !token) {
+    return null;
+  }
+  return { team, as: name, token };
+}
+
 /* ─── the shared watch-link seat (ADR 136) ────────────────────────────────────────────────────────
  * A watch link used to carry `acquireObserver`'s credential — the operator's own **full-grade** seat —
  * so handing someone a link handed them every DM on the team. A link now gets its own **public-grade**

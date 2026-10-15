@@ -63,6 +63,8 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ({ code: 0, output: '' }),
       sendAsk: async () => {},
+      mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
+      stageSeat: () => ({ code: 0, output: '' }),
     };
   });
 
@@ -206,6 +208,8 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ((launches += 1), { code: 0, output: '' }),
       sendAsk: async (body: string) => void asks.push(body),
+      mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
+      stageSeat: () => ({ code: 0, output: '' }),
       ...over,
     });
 
@@ -376,6 +380,50 @@ describe('musterd stream', () => {
         }),
       ).toBe(0);
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
+    });
+
+    // ADR 594: since ADR 580 the page cannot mint its own observer, so start mints one and stages it
+    // as a Fly secret — never on the `fly machine run` argv, where `ps` and the machine config show it.
+    it('start stages a minted observer as a Fly secret and keeps it off the machine run argv', async () => {
+      withImage();
+      let flyArgs: string[] = [];
+      const staged: Array<{ app: string; seat: unknown }> = [];
+      expect(
+        await run(['start'], {
+          ...sup(),
+          stageSeat: (app, seat) => (staged.push({ app, seat }), { code: 0, output: '' }),
+          launch: (args) => ((flyArgs = args), (launches += 1), { code: 0, output: '' }),
+        }),
+      ).toBe(0);
+      expect(staged).toEqual([
+        {
+          app: 'musterd-broadcast',
+          seat: { team: 'revive', name: 'broadcast-test', token: 'mscr_test' },
+        },
+      ]);
+      expect(flyArgs.join(' ')).not.toContain('mscr_test');
+    });
+
+    it('a seat that cannot be staged launches nothing', async () => {
+      withImage();
+      await expect(
+        run(['start'], { ...sup(), stageSeat: () => ({ code: 1, output: 'not authorized' }) }),
+      ).rejects.toThrow(/could not stage .* not authorized/);
+      expect(launches).toBe(0);
+    });
+
+    it('a refused seat mint records no live intent for the supervisor to relaunch seatless', async () => {
+      withImage();
+      await expect(
+        run(['start'], {
+          ...sup(),
+          mintSeat: async () => {
+            throw new Error('minting one takes a human admin (ADR 580)');
+          },
+        }),
+      ).rejects.toThrow(/human admin/);
+      expect(launches).toBe(0);
+      expect(readStreamState(statePath)).toBeNull();
     });
 
     it('start records desired live with provenance before launching', async () => {

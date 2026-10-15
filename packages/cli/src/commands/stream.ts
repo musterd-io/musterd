@@ -16,7 +16,7 @@
  * machine; `stream` runs that same capture on a **rented** one and manages its lifetime. Different
  * failure modes, different preconditions, so a different verb.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
@@ -49,6 +49,7 @@ import { CliError } from '../errors.js';
 import { probeUpgradeHost, parseTailscaleSelf } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
+import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.js';
 import { resolveRead } from './helpers.js';
 
 const USAGE =
@@ -73,6 +74,10 @@ export interface StreamDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Raise the stand-down ask to the team (streamwatch service seat; ADR 293). */
   sendAsk?: (body: string) => Promise<void>;
+  /** Mint the stream's public-grade observer (ADR 594). Injected so tests never reach a daemon. */
+  mintSeat?: (team: string) => Promise<BroadcastSeat>;
+  /** Stage the seat as the app's MUSTERD_BROADCAST_SEAT Fly secret, over stdin (ADR 594). */
+  stageSeat?: (app: string, seat: BroadcastSeat) => { code: number; output: string };
 }
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
@@ -105,7 +110,11 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
   const launch = deps.launch ?? realLaunch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const sendAsk = deps.sendAsk ?? defaultSendAsk;
-  const sup = { statePath, now, who, launch, sleep, sendAsk };
+  const mintSeat =
+    deps.mintSeat ??
+    (async (team: string) => seatFromEnv(team) ?? (await mintBroadcastSeat(parsed.flags, team)));
+  const stageSeat = deps.stageSeat ?? realStageSeat;
+  const sup = { statePath, now, who, launch, sleep, sendAsk, mintSeat, stageSeat };
 
   switch (sub) {
     case 'doctor':
@@ -288,6 +297,22 @@ interface Sup {
   launch: (flyArgs: string[]) => LaunchResult | Promise<LaunchResult>;
   sleep: (ms: number) => Promise<void>;
   sendAsk: (body: string) => Promise<void>;
+  mintSeat: (team: string) => Promise<BroadcastSeat>;
+  stageSeat: (app: string, seat: BroadcastSeat) => { code: number; output: string };
+}
+
+/**
+ * Stage the stream's observer as an app secret (ADR 594). Through stdin, never argv or `--env`: argv
+ * shows in `ps` and `--env` lands in the machine config, both readable without the secret store.
+ * `--stage` writes it without restarting anything; the next `machine run` — start's, or the
+ * supervisor's relaunch — gets it, so streamwatch (an agent seat that cannot mint) never needs it.
+ */
+function realStageSeat(app: string, seat: BroadcastSeat): { code: number; output: string } {
+  const r = spawnSync('fly', ['secrets', 'import', '-a', app, '--stage'], {
+    input: `MUSTERD_BROADCAST_SEAT=${JSON.stringify(seat)}\n`,
+    encoding: 'utf8',
+  });
+  return { code: r.status ?? 1, output: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() };
 }
 
 /** The `fly machine run` invocation, shared by `start` and the supervisor's relaunch. */
@@ -370,6 +395,18 @@ async function startVerb(
     typeof a.parsed.flags['args'] === 'string'
       ? a.parsed.flags['args']
       : process.env['BROADCAST_ARGS'];
+
+  // Minted on this machine, by the operator, before intent is recorded: the box has no identity of
+  // its own, and since ADR 580 the page cannot mint one over the tailnet's loopback forward. A refusal
+  // here must leave no "live" intent behind for the supervisor to relaunch seatless.
+  const seat = await a.mintSeat(team);
+  const staged = a.stageSeat(a.app, seat);
+  if (staged.code !== 0) {
+    throw new CliError(
+      `could not stage the stream's observer as a Fly secret — ${staged.output}`,
+      1,
+    );
+  }
 
   // Intent is recorded BEFORE the launch (ADR 293): a start that fails at `fly` still says "this
   // stream should be live", and the supervisor's next tick retries it inside the flap budget. The
