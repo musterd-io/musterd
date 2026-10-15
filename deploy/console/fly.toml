@@ -1,0 +1,51 @@
+# The musterd console (ADR 615) — app.musterd.io: accounts and their sign-in identities, never team
+# membership (Cloud spec §4.2). Its own Fly app and its own Neon project, so a console compromise
+# does not share a blast radius or a deploy cadence with the team servers that trust its JWKS.
+# ONE machine, blue-green. Deploy only through scripts/cloud/deploy.mjs:
+#
+#   FLY_APP=musterd-console FLY_MIGRATE_APP=musterd-console-migrate CLOUD_PROBE_HOST=app.musterd.io \
+#   CLOUD_FLY_CONFIG=deploy/console/fly.toml \
+#   CLOUD_MIGRATE_CMD="node packages/console/dist/bin.js migrate" node scripts/cloud/deploy.mjs
+#
+# Secrets (never here): MUSTERD_CONSOLE_DATABASE_URL (the runtime role, pooled host) on this app;
+# MUSTERD_CONSOLE_DATABASE_OWNER_URL (direct host) and MUSTERD_CONSOLE_RUNTIME_ROLE only on
+# musterd-console-migrate. No team database URL is ever set on either app.
+app = "musterd-console"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MUSTERD_CONSOLE_ISSUER = "https://app.musterd.io"
+  MUSTERD_CONSOLE_HOST = "0.0.0.0"
+  MUSTERD_CONSOLE_PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+    # The console answers only on its configured host (ADR 615); the checker calls by internal IP.
+    [http_service.checks.headers]
+      Host = "app.musterd.io"
+
+[deploy]
+  strategy = "bluegreen"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

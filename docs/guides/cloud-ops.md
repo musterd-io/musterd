@@ -87,6 +87,32 @@ Fly's health checker calls the machine by its internal IP. Cloud mode's Host all
 
 The §8.1 load test (lane `01M3Z44C56`) makes a fresh team per run, so every run starts from the same board: `lb-smoke1` and `lb-run1` (2026-10-02) are throwaway bench teams, admin `owner`, credentials in `~/.musterd/cloud/teams/`. The harness takes the admin credential from the environment of the bench machine, and nothing it seeds is printed.
 
+## The console (`app.musterd.io`, ADR 615)
+
+A human provisions it once; the infra seat cannot create Fly apps or Neon projects.
+
+1. Neon: create project `musterd-console` (aws-us-east-1, Postgres 17), database `console`. Create a
+   login role for the runtime (`console_app`) with a generated password. Keep the owner's direct
+   URL and the runtime's pooled URL in `~/.musterd/cloud/console.env`, mode 600.
+2. Fly: `fly apps create musterd-console` and `fly apps create musterd-console-migrate`. Stage the
+   secrets through stdin, never on the command line:
+   `MUSTERD_CONSOLE_DATABASE_URL` (runtime, pooled) on `musterd-console`;
+   `MUSTERD_CONSOLE_DATABASE_OWNER_URL` (owner, direct) and `MUSTERD_CONSOLE_RUNTIME_ROLE=console_app`
+   on `musterd-console-migrate`. No team database URL on either.
+3. TLS and DNS: `fly certs add app.musterd.io -a musterd-console`, then a proxied CNAME
+   `app` → `musterd-console.fly.dev` in the `musterd.io` zone.
+4. Deploy from a clean checkout:
+
+```sh
+FLY_APP=musterd-console FLY_MIGRATE_APP=musterd-console-migrate CLOUD_PROBE_HOST=app.musterd.io \
+CLOUD_FLY_CONFIG=deploy/console/fly.toml \
+CLOUD_MIGRATE_CMD="node packages/console/dist/bin.js migrate" node scripts/cloud/deploy.mjs
+```
+
+Done when `curl -s https://app.musterd.io/health` answers `{"ok":true,"build":"<sha>"}` and
+`/.well-known/jwks.json` answers `{"keys":[]}`. Backups: Neon point-in-time restore until the
+increment 3 backup lane (`01M3Z42KWH`) covers this database too.
+
 ## Check it
 
 - Certificate: `fly certs check '*.musterd.dev' --app musterd-cloud`. It should say `Issued`.

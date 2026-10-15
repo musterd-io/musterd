@@ -1,0 +1,30 @@
+{
+  "name": "@musterd/console",
+  "version": "0.0.0",
+  "private": true,
+  "description": "musterd console (app.musterd.io): who a person is — accounts and their sign-in identities, never team membership (Cloud spec §4, ADR 615)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/bin.js",
+  "bin": {
+    "musterd-console": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ../../scripts/stamp-build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@musterd/protocol": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/pg": "^8.23.1"
+  }
+}

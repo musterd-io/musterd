@@ -1,0 +1,103 @@
+# 10 — Console (`@musterd/console`)
+
+> **Living document.** Direction, not gospel: if it disagrees with the code, fix the smaller of the two
+> in the same commit; a real disagreement is an ADR. The decisions behind this service are the
+> [Cloud design](../superpowers/specs/2026-09-29-musterd-cloud-design.md) §3 and §4 and
+> [ADR 615](../decisions/615-console-skeleton.md) (how the console is built, hosted and bounded).
+
+## What the console is
+
+`@musterd/console` is `app.musterd.io`: **who a person is** on musterd Cloud — an account and the
+sign-in identities that prove it (GitHub, Google, an email magic link). It never holds what a person
+is on a team: membership, roles, seats and credentials stay on each team server (spec §4.2), which
+binds a member row to an `account_id` and nothing more.
+
+It is the **trust anchor** team servers verify against: the console signs, through a cloud KMS, the
+short-lived tokens a team server accepts for admin operations, and publishes the keys at
+`/.well-known/jwks.json` (spec §4.3). That is why it runs in its own Fly app on its own Neon project,
+never beside team data.
+
+## What the skeleton serves (increment 2, lane `01M3Z42PED`)
+
+Two routes, and everything else is refused:
+
+| Route | Answer |
+| --- | --- |
+| `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
+| `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
+
+No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
+`01M3Z43QYB`, KMS tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create-team `01M3Z44MTV`.
+There is no development issuer or test key to fall back to.
+
+## The HTTP boundary
+
+- **Host:** answered only on the hosts pinned in config (the issuer's host, plus an explicit list);
+  any other Host is a 404.
+- **Trust inputs are config, never the request:** the issuer is `MUSTERD_CONSOLE_ISSUER`, an https
+  origin with no path. Nothing reads a Host header, a token's `jku`/`x5u`, or a caller-supplied URL
+  to decide what to trust.
+- **Forwarded headers are not read** — no route uses the client address.
+- **Methods:** GET and HEAD only; a body is never read. Header size (16 KiB) and the request (10 s) and
+  header (5 s) timeouts are bounded on the server.
+- **Request id:** an inbound `x-request-id` is kept only if it is an 8–64 character safe token, else
+  replaced; every response carries one.
+- **Headers on every response:** HSTS, `nosniff`, `no-referrer`, a `default-src 'none'` CSP,
+  frame-ancestors none, `cache-control: no-store` unless a route says otherwise.
+- **One error shape:** `{error: {code, message}}` with stable messages.
+- **Cookies** (none set by the skeleton): `hostCookie` is the one writer — `__Host-` prefixed, Secure,
+  `Path=/`, HttpOnly, SameSite=Lax, no Domain, and no option to weaken any of it.
+
+## Logs
+
+One JSON line per event on stdout. A request line carries the request id, method, route **label**,
+status and duration — never the raw path or query (a magic-link token rides a query string), never a
+header or a body. A field whose name says it carries a secret is dropped; every remaining string goes
+through `scrubCredentials` (ADR 445). The tests send an `Authorization`, a session cookie and token
+query strings down the success, refusal and error paths and assert none reaches the log.
+
+## The database
+
+Its own Neon project, `musterd-console`. Schema version 1:
+
+- `accounts (id, created_at, disabled_at)` — `id` is opaque, never an email (emails change, and a
+  team member row binds it).
+- `identities (provider, subject, account_id, email, created_at, last_used_at)`, primary key
+  `(provider, subject)` — one account holds several; the binding is the provider's stable subject,
+  never an email match.
+- `audit (id, ts, request_id, actor_account_id, action, detail)` — append-only for the runtime.
+- `console_meta (key, value)` — the schema version.
+
+Two roles. The **owner** migrates, from `musterd-console-migrate` only (`musterd-console migrate`,
+the direct host). The **runtime** role serves: DML on `accounts` and `identities`, **INSERT and nothing
+else on `audit`** (no read, update, delete or truncate), SELECT on the version row, no CREATE on the
+schema, no membership in the owner. Audit retention is a separate maintenance role, not this one.
+Boot refuses a schema that is not exactly its own (`schema newer|older than this build`), and the
+server never migrates.
+
+**Backups:** Neon's point-in-time restore until Cloud increment 3's backup lane (`01M3Z42KWH`), whose
+scope includes this database: an independently encrypted nightly export to R2 in a separate
+Cloudflare account, with the signing key never in a dump and a restore that does not revive consumed
+tokens or sessions (nick, 2026-10-15).
+
+## Deploy
+
+`deploy/console/fly.toml` + `deploy/console/Dockerfile`, through the same `scripts/cloud/deploy.mjs`
+(migrate, then a blue-green roll, then a probe of `https://app.musterd.io/health`), selected with
+`FLY_APP`, `FLY_MIGRATE_APP`, `CLOUD_PROBE_HOST`, `CLOUD_FLY_CONFIG` and `CLOUD_MIGRATE_CMD`. The
+console's secrets never include a team database URL. The provisioning steps are in
+[cloud-ops](../guides/cloud-ops.md).
+
+## File tree `packages/console/src/`
+
+```
+src/
+  bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
+  config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
+  cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
+  db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
+  http.ts         // createConsoleServer: host allow-list, GET/HEAD only, bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
+  log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
+  schema.ts       // SCHEMA_VERSION, MIGRATIONS (accounts, identities, audit, console_meta), grantsFor(runtimeRole) (INSERT-only audit), migrate(owner, role)
+  testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
+```

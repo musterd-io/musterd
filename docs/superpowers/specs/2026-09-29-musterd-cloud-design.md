@@ -76,7 +76,9 @@ tenant is us: the `revive` team moves onto Cloud and dogfoods it. Strangers come
                                        Cloudflare R2 (separate account, 30 days)
 ```
 
-- **Domains.** `musterd.io` is the site. `app.musterd.io` is the account console (accounts,
+- **Domains.** _(Amended 2026-10-15: how the console is built, hosted and bounded is
+  [ADR 615](../../decisions/615-console-skeleton.md) — its own Neon project, package and Fly app.)_
+  `musterd.io` is the site. `app.musterd.io` is the account console (accounts,
   team registry, create / import / export, the identity provider the team servers trust).
   `<team>.musterd.dev` is a team's API, WebSocket, MCP, OAuth, join and `/live` — one origin per
   team, so browser isolation is per team. `musterd.ai` and `musterd.build` are held (candidates:
