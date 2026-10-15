@@ -60,7 +60,11 @@ live predecessor of the *same logical session*, not a different session that snu
   against observed idleness — the mint is the evidence the displacement cites.
 - A person who opens a session in the spawn window and is actively typing when the claim lands
   can be displaced. This is the known cost, judged acceptable against a seat that never dreams;
-  the superseded frame is the mitigation, and the window is seconds wide.
+  the superseded frame is the mitigation, and the window is seconds wide — measured: the recorded
+  sneak attached ~12s after the mint (lazara 2026-10-12, `attached_at` 12s after the lease start).
+- _(Correction 2026-10-15, on dolly's review of #2653: the Decision's `[ADR 237](../decisions/)`
+  link points at [ADR 237 — supersession must be visible](237-supersession-must-be-visible.md).
+  Left in place there — the Decision is frozen — and recorded here.)_
 - lazara's surface-attestation sub-claim on the wiki page (a wake adapter attesting `cursor`) is
   **not** decided here — that row is about `resolveLaunchSurface` and stands.
 

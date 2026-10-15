@@ -42,7 +42,7 @@ seeing that person, and every guard downstream reads the seat as empty.
 ## Decision
 
 1. **An agent-seat claim that carries `provenance: 'wake'` is refused while a live session whose
-   provenance is not `wake` holds the seat.** "Live" means the session has a connected socket on
+   provenance is not `wake` holds the seat.** _(Amended 2026-10-15: bounded by ADR 609's lease window — a claim presenting its own daemon-minted lease displaces a row that attached after the mint. See Consequences.)_ "Live" means the session has a connected socket on
    the daemon: a row with no socket is an orphan, which every claim clears anyway. "Not `wake`"
    includes a row with no provenance, so a session from an older adapter is protected too.
 2. The refusal uses the existing `claim_conflict` code ("seat occupied", SPEC A.8), on both
