@@ -692,6 +692,7 @@ function LivePage() {
               onCaption={setCaption}
               linked={lit ?? linked}
               onPlateHover={setLinked}
+              you={signedIn ? (cfg?.as ?? null) : null}
             />
             <TeamColumn
               loading={loading}
@@ -710,6 +711,7 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
               asks={asks}
+              you={signedIn ? (cfg?.as ?? null) : null}
             />
             <Suspense fallback={null}>
               <LazyNowOverlay

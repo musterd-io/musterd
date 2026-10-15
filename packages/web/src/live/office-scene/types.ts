@@ -116,6 +116,12 @@ export interface OfficeData {
    * clears. Agent-routed review asks are filtered out upstream — they are reviews, not room moments.
    */
   asks?: OfficeAsk[];
+  /**
+   * The signed-in viewer's own seat — their plate says "you".
+   * Signed-in `/live` only: an observer is nobody in the room, and `/broadcast`'s seat is an observer,
+   * so both leave it absent (the scene also ignores it whenever its labels are not interactive).
+   */
+  you?: string | null;
 }
 
 export interface OfficeAsk {
