@@ -137,6 +137,25 @@ four of them 2026-10-14 22:08 to 2026-10-15 00:12, one at 12:32 today), and 1 le
 turns differ from its cost row by more than $0.001. The finding reads this from the hub; if the
 hub shows the same, that is a defect lane.
 
+**Arm C's `delta` was never wakeable.** Its residency names Fly host `850e40a4499168`, stopped
+since 2026-10-03 (last heartbeat 2026-10-02 22:31 PDT), so it took no lease in the window. dolly
+found this at 12:21 and retired delta at 15:04 (`residency off`, lane `01M50G647N`). Passes 1 and 2
+counted delta as wakeable because its residency was enrolled; that was wrong in fact, and the
+round-robin's "wakeable" now means a host heartbeat inside the last day, not an enrolment. Of the
+four lanes delta was handed:
+
+| lane | pass | what happened |
+| --- | --- | --- |
+| `01M4VTQ66X` product-communications split | 1 | dolly claimed it 12:21, landed it, lazara accepted 12:41 |
+| `01M4VPY8JV` role-skills 9 user guide | 2 | dolly claimed it 12:21, landed it, lazara accepted 13:51 |
+| `01M41PX0XB` duplicate envelope id → 409 | 1 | stranded on delta; released to open by ryder at 15:36 |
+| `01M3W815KR` seeds relay public-host rule | 2 | stranded on delta; released to open by ryder at 15:36 |
+
+The two dolly landed count for arm C as work done by a Claude Code seat, with the reassignment
+reported beside them: dolly was attended, so they are not unattended C work. The two released lanes
+are **excluded: recipient never wakeable**, are open again, and are offered to the next pass like
+any other open lane.
+
 ### Pass 3 — 2026-10-16 (prepared; the pass itself is recorded below when run)
 
 The first pass under amendment 1. Filter `musterd lanes --open --json` on the manifest's terms
@@ -146,6 +165,6 @@ amended term: finishable from a seat's own workspace, with no human live session
 account, phone, or hosted or streaming hardware. Every lane excluded on the amended term is listed
 here with its reason, so the class can be recounted without it. Order by `created_at`, alternate
 B / C, **start at B** (mason). C goes round-robin in name order over the Claude Code residency
-seats that are wakeable and unattended at the pass (pool as enrolled: `alfie`, `delta`, `dolly`,
-`lazara`, `sloane`); record which were attended. Note text is pass 1's with `pass 3 (2026-10-16)`.
+seats that are wakeable and unattended at the pass (pool: `alfie`, `dolly`, `lazara`, `sloane`;
+`delta` is retired, see below); record which were attended. Note text is pass 1's with `pass 3 (2026-10-16)`.
 Read both arms' spend against the ceilings and record it beside the table.
