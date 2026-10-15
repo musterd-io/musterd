@@ -1398,6 +1398,20 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-15 — `totalJsGzipBytes` 312,100 → 312,400 B: the office reads lane owners from the board (lane `01M50TZDDM`)
+
+| Budget   | Before (main)  | This branch (CI)            | Ceiling                    |
+| -------- | -------------- | --------------------------- | -------------------------- |
+| total JS | ≤ 304.8 KB     | 304.9 KB (~312,150–312,250 B) | RAISED 312,100 → 312,400 B |
+
+The deliver walk's carrier and the acceptance flourish now read each lane's owner from the board `/live`
+already holds, instead of only the walks the room watched (office-liveliness spec §5). That is ~100 B gz:
+a seed layer in `laneOwners.ts` and a one-map-per-board `WeakMap` in `OfficeScene.tsx`. There was nothing
+to cut, lazy-loading cannot move total (ADR 183), and the ceiling was saturated by the same-day raise
+above. Raised tight: CI's upper bound + ~0.05%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 312,100 B with this change in.
+
 ### 2026-10-15 — `totalJsGzipBytes` 311,700 → 312,100 B: a person glyph on human plates, and "you" (lane `01M50CD7SN`)
 
 | Budget   | Before (main, same laptop) | This branch (laptop)  | Ceiling                    |
