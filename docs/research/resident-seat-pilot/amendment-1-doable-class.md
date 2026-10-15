@@ -16,6 +16,16 @@ session. That lane re-woke mason about once a minute overnight, 13 times, each w
 A screen on B alone would give B only the lanes it can finish and leave C every lane. That breaks
 the comparison the kill criterion rests on, so the new term applies to both arms.
 
+**Correction (2026-10-15 11:50 PDT).** Both pass-2 wakes on `01M3AMY549` described above, and all
+six on `01M3W6GWVN` that followed (11:09 to 11:35), never ran the seat. Each lease is paired with a
+`residency.wake_deferred` row whose reason is `API key variable ANTHROPIC_API_KEY is unset on this
+host — the resident seat cannot run (ADR 588)`. They are a host outage, not mason going silent. The
+last `residency.wake_cost` row for mason is at 00:44:41. So "mason sent no act" is true, but it
+says nothing about how mason behaves. The overnight no-op wakes on `01M4FF0P6H` (insight
+`01M4Z8A0R1`) are a separate reading and are not corrected here. The amendment stands on that
+lane and on nick's direction. Deferred wakes are **not** counted as silent wakes. The finding
+reports arm B's outage window from these rows and leaves it out of measure 1's latency.
+
 ## The added term
 
 A lane is **in class** only if, in addition to the manifest's terms, it can be finished from a
@@ -39,5 +49,5 @@ the class without it.
 - **Readability floor:** with the two excluded, B holds 7 in-class lanes against the floor of 8.
   The floor is read over the window as amended.
 - **A seat that wakes on a lane and ends with no act** is counted per arm as a silent wake and
-  reported beside measure 2, whose numerator already carries its spend. It is the behaviour that
-  prompted this amendment.
+  reported beside measure 2, whose numerator already carries its spend. A lease the host deferred
+  (`residency.wake_deferred`) is not a wake of the seat and is not counted here.
