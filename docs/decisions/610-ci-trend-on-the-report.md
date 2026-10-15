@@ -72,6 +72,12 @@ afternoon. The data exists on the forge and ages out of `gh run list` in weeks.
   until this trend has shown how often `main-red` actually fires and what a revert would need.
   Follows-up: none.
 
+- _(2026-10-15, same day, PR #2662.)_ The commit review found three gaps in the first landing and
+  they are closed: the route refuses agent seats (a service seat or a human writes the team's CI
+  history, nobody else); `run_id`, `head_sha`, `event` and `conclusion` are validated as forge tokens
+  and names as printable ASCII, so nothing a terminal could interpret enters the ledger; the renderer
+  strips job names again rather than trust the wire.
+
 ## Observability & Evaluation
 
 - Traces: `ci.run_measured` rows (actor `autorefresh`), the sampler's line in
