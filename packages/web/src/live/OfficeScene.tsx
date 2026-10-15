@@ -49,6 +49,7 @@ function computeData(
   board: LaneBoard | null,
   envelopes: Envelope[],
   asks: readonly AskView[],
+  you: string | null = null,
   now: number = Date.now(),
 ): OfficeData {
   const byName = new Map(entries.map((e) => [e.name, e]));
@@ -65,6 +66,8 @@ function computeData(
     // already holds, so both surfaces gather without either route wiring anything.
     gathered: [...gatheredFrom(envelopes)],
     asks: roomAsks(asks, humans, Date.now()),
+    // Only a seat that is actually on the roster: a stale saved identity marks nobody.
+    you: you !== null && roster.some((m) => m.name === you) ? you : null,
     nodes: roster.map((m) => {
       const kind = m.kind === 'human' ? 'human' : 'agent';
       // Just woken and already gone: doze at the desk for a while instead of walking straight out
@@ -174,6 +177,7 @@ export function OfficeScene({
   onCaption,
   linked = null,
   onPlateHover,
+  you = null,
 }: OfficeRoomProps & {
   collapsed?: boolean;
   onCollapse?: () => void;
@@ -220,6 +224,9 @@ export function OfficeScene({
   linked?: string | readonly string[] | null;
   /** ADR 464: a plate under the pointer (null on leave), so the route can ring that member's card. */
   onPlateHover?: (name: string | null) => void;
+  /** The signed-in viewer's seat: their plate says "you". `/live` only —
+   *  `/broadcast` never passes it (its seat is an observer, not a person). */
+  you?: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -239,9 +246,9 @@ export function OfficeScene({
     return () => window.clearTimeout(t);
   }, [roster, lingerTick]);
   const data = useMemo(
-    () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks),
+    () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- lingerTick re-reads the clock
-    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks, lingerTick],
+    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you, lingerTick],
   );
   // Latest-value refs for the mount effect below, which subscribes ONCE and must not re-run when a
   // prop identity changes (re-running it would tear down and rebuild the whole canvas scene).

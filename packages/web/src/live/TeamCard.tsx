@@ -27,6 +27,7 @@ export function TeamCard({
   daemonBuild,
   daemonEpoch,
   still = false,
+  you = false,
 }: {
   card: Card;
   now: number;
@@ -36,6 +37,8 @@ export function TeamCard({
   daemonBuild?: string | undefined;
   daemonEpoch?: number | undefined;
   still?: boolean;
+  /** This card is the signed-in viewer's own seat (signed-in `/live` only). */
+  you?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const badge = modelBadge(card.member);
@@ -64,6 +67,11 @@ export function TeamCard({
       </span>
       <span className="lc-team-card__who">
         <span className="lc-team-card__name">{card.name}</span>
+        {you && (
+          <span className="lc-team-card__you" title="this is you">
+            you
+          </span>
+        )}
         <span
           className={`lc-team-card__model is-${badge.source}`}
           // The readable name first, so the accessible name matches what the eye reads; the raw

@@ -3,7 +3,7 @@ import { preloadCanvasFont } from '../canvasFont';
 import { roomTone, screenPan, type LifeContext } from '../sound';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
-import { providerIconHtml } from '../modelProviderIcon';
+import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
@@ -564,6 +564,9 @@ export function mountOffice(
   let teamName = 'revive';
   let teamWorkingHours: OfficeData['teamWorkingHours'] = null;
   let wallBoard: WallBoard | null = null; // the wall's agile board (bake-time data)
+  // The signed-in viewer's own seat: their plate says "you". Only where the labels are interactive —
+  // a stream's plates belong to nobody watching.
+  let you: string | null = null;
   let heldTeam = ''; // the team `heldMarks` was loaded for
   let heldMarks: HeldMarks = {}; // this viewer's pin-hole history (boardHoles.ts)
   /** Cards in someone's hand, and for a while after: a claimed lane's slot stays empty until the board's
@@ -952,6 +955,14 @@ export function mountOffice(
       who.className = 'lc-gl-label__who';
       who.textContent = name;
       plate.appendChild(who);
+      if (name === you) {
+        // The viewer finding themselves in a room of twenty: a mono "you" right after the name, rimmed
+        // in their own hue. Signed-in /live only (`you` is null wherever the labels are not interactive).
+        const youTag = document.createElement('span');
+        youTag.className = 'lc-gl-label__you';
+        youTag.textContent = 'you';
+        plate.appendChild(youTag);
+      }
       if (node.blocked) {
         // Briefing inc 2b: owns a blocked lane. A small pennant in danger ink right after the name —
         // seen across the room on /live and on the stream alike, and only while it is true.
@@ -1002,6 +1013,15 @@ export function mountOffice(
           tag.className = 'lc-gl-label__service';
           tag.textContent = 'service';
           plate.appendChild(tag);
+        } else if (node.kind === 'human') {
+          // A human attests no model either, so the provider slot used to show the unknown "?" on
+          // every person's plate — nick's included. A person glyph in the same 11px chip, worn in the
+          // human's own hue: what they are, not a missing attestation.
+          const icon = document.createElement('span');
+          icon.className = 'lc-gl-label__provider lc-gl-label__provider--human';
+          icon.title = 'human';
+          icon.innerHTML = HUMAN_GLYPH_SVG;
+          plate.appendChild(icon);
         } else {
           const provider = modelProvider(node.model);
           const icon = document.createElement('span');
@@ -2303,6 +2323,7 @@ export function mountOffice(
     onlineNames = nextOnline;
     teamName = next.teamName ?? 'revive';
     teamWorkingHours = next.teamWorkingHours ?? null;
+    you = interactiveLabels ? (next.you ?? null) : null;
     // The wall keeps a tack hole where a card has hung (lane 01M4VP3V99): fold what the board shows into
     // this viewer's high-water marks, loaded once per team and saved only when one rises.
     if (heldTeam !== teamName) {

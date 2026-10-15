@@ -307,3 +307,17 @@ describe('a bubble slides off the wall board instead of covering it (lane 01M4VM
     expect(fn).toContain('const board = speeches.size ? boardAnchor(fit) : undefined;');
   });
 });
+
+describe('a human plate and the viewer\'s own plate (lane 01M50CD7SN)', () => {
+  it('a human gets the person glyph in the provider slot, never the unknown "?"', () => {
+    const sync = body('syncLabels');
+    const human = sync.slice(sync.indexOf("node.kind === 'human'"), sync.indexOf('modelProvider(node.model)'));
+    expect(human).toContain('HUMAN_GLYPH_SVG');
+    expect(human).toContain("icon.title = 'human'");
+  });
+
+  it('"you" exists only where the labels are interactive — never on /broadcast', () => {
+    expect(index).toMatch(/you = interactiveLabels \? \(next\.you \?\? null\) : null;/);
+    expect(body('syncLabels')).toMatch(/name === you[\s\S]*?'lc-gl-label__you'/);
+  });
+});

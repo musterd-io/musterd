@@ -117,6 +117,12 @@ describe('TeamColumn', () => {
     expect(html).toContain('lc-team-card--asking');
   });
 
+  it('the viewer\'s own card says "you", and nobody else\'s does (lane 01M50CD7SN)', () => {
+    const html = render({ roster: [m('ryder'), m('nick', { kind: 'human' })], board, you: 'nick' });
+    expect(html.match(/lc-team-card__you/g)?.length).toBe(1);
+    expect(render({ roster: [m('nick', { kind: 'human' })], board })).not.toContain('lc-team-card__you');
+  });
+
   it('still (the stream): the same card, nothing to press, no operator notes (ADR 464 lane 5)', () => {
     const html = render({
       roster: [m('ryder')],

@@ -52,6 +52,7 @@ export function TeamColumn({
   stale = false,
   asks = [],
   still = false,
+  you = null,
 }: {
   /** Nothing loaded yet: card-shaped placeholders instead of an empty team saying "0 working". */
   loading?: boolean;
@@ -83,6 +84,8 @@ export function TeamColumn({
   stale?: boolean;
   /** Non-interactive (a stream source): no hover link, no expanding, no operator notes. */
   still?: boolean;
+  /** The signed-in viewer's seat — its card wears a "you" tag. `/live` only; observers pass null. */
+  you?: string | null;
 }) {
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
@@ -161,6 +164,7 @@ export function TeamColumn({
             daemonBuild={daemonBuild}
             daemonEpoch={daemonEpoch}
             still={still}
+            you={you === c.name}
           />
         ))}
       </ul>

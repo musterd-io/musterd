@@ -98,7 +98,10 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   (`teamCards.ts`: working on · waiting for review · blocked on · asking nick · between tasks ·
   away, from the lane board + posture + the derived asks), the lane title in large type with its goal and elapsed time, and offline seats
   folded to a count. Hovering a card rings the member's plate in the office and vice versa
-  (`OfficeHandle.setLinked`). Click expands to the operator detail the roster rail used to carry
+  (`OfficeHandle.setLinked`). On a signed-in `/live` the viewer's own card and office plate say
+  "you" (`OfficeScene`'s `you` → `OfficeData.you`; never on `/broadcast` or for an observer); a human's
+  plate carries a person glyph in their own hue in the provider slot, where it used to show the
+  unknown "?" (`modelProviderIcon.ts` `HUMAN_GLYPH_SVG`). Click expands to the operator detail the roster rail used to carry
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.

@@ -1397,3 +1397,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
+
+### 2026-10-15 — `totalJsGzipBytes` 311,700 → 312,100 B: a person glyph on human plates, and "you" (lane `01M50CD7SN`)
+
+| Budget   | Before (main, same laptop) | This branch (laptop)  | Ceiling                    |
+| -------- | -------------------------- | --------------------- | -------------------------- |
+| total JS | 304.3 KB                   | 304.5 KB (~311,800 B) | RAISED 311,700 → 312,100 B |
+
+Every human's plate showed the unknown-provider "?" because a person attests no model. It now shows a person
+glyph in their own hue, and the signed-in viewer's plate and team card say "you". That is ~200 B gz: the
+glyph SVG, the two tags and the `you` prop. Trimmed first: the floor ring under the viewer was cut (a
+seated viewer's desk paints over it, so it bought nothing), and the SVG lost its `xmlns`/size attributes.
+The ceiling was still saturated, and lazy-loading cannot move total (ADR 183). Raised tight: measured + ~0.1%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 311,700 B with this change in.

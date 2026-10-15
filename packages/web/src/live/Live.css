@@ -1721,6 +1721,30 @@
   font-weight: 700;
   line-height: 1;
 }
+/* A human's mark in the provider slot: a person glyph, chip rimmed and tinted in their own hue
+   (`--lc-plate-hue`, a FILL — it carries no text here either). Before this every human plate showed
+   the unknown-"?" mark, which read as a broken attestation on the one seat that attests nothing. */
+.lc-gl-label__provider--human {
+  border-color: var(--lc-plate-hue);
+  background: color-mix(in srgb, var(--lc-plate-hue) 18%, #fff);
+  color: color-mix(in srgb, var(--lc-plate-hue) 55%, var(--lc-paper-ink));
+}
+/* "you" on the signed-in viewer's own plate — mono, rimmed in their hue, ink stays paper ink. */
+.lc-gl-label__you {
+  flex: none;
+  margin-left: 4px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--lc-plate-hue);
+  background: color-mix(in srgb, var(--lc-plate-hue) 14%, transparent);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--lc-type-tag);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: lowercase;
+  color: var(--lc-paper-ink);
+}
 /* A service seat's mark — sits in the provider icon's slot (ADR 232: pure code, no model to
    attest, so a provider chip would be the unknown-"?" and read as a broken attestation). Mono,
    lowercase, quiet: it is a classification, not an identity. */
@@ -3393,6 +3417,19 @@
 .lc-team-card__name {
   font-size: 13px;
   font-weight: 650;
+  color: var(--lc-text);
+}
+/* The viewer's own card (signed-in /live): the plate's "you", in the column's ink. */
+.lc-team-card__you {
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lc-text) 30%, transparent);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: lowercase;
   color: var(--lc-text);
 }
 .lc-team-card__model {
