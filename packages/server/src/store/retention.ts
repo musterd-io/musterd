@@ -20,6 +20,7 @@ import {
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { readNodeState } from '../node/state.js';
 import type { AuditAction, AuditRow } from './audit.js';
@@ -91,6 +92,9 @@ export interface AuditPruneResult {
   skipped?: 'no_archive_dir';
 }
 
+/** Where a Cloud store archives: the `audit_archive` table (v97), named in `store.pruned`. */
+export const AUDIT_ARCHIVE_TABLE = 'audit_archive';
+
 const churnList = () => [...AUDIT_CHURN_ACTIONS].map((a) => `'${a}'`).join(', ');
 const latestList = () => [...LATEST_PER_SEAT].map((a) => `'${a}'`).join(', ');
 
@@ -150,6 +154,12 @@ function prunableSql(floors: number): string {
  * push cursor — the hub has not acked it yet (see {@link unpushedFloors}). Each batch is gzipped and appended to
  * `<archiveDir>/audit-YYYY-MM.jsonl.gz` (one gzip member per batch — `gunzip` reads them all)
  * BEFORE the delete runs; a failed archive write throws and deletes nothing.
+ *
+ * `archiveTable: true` is Cloud's form (a Fly VM's disk is ephemeral, so a file beside the store
+ * would be lost with the machine): each batch goes into `audit_archive` instead, one row per team
+ * and month, the same gzip bytes base64-encoded, inside the SAME transaction as its delete — a
+ * failed insert rolls the delete back. Only rows that transaction actually deleted are archived and
+ * counted, so two servers pruning at once never archive a row twice. `archiveDir` is ignored then.
  */
 export async function pruneAuditChurn(
   db: Driver,
@@ -159,6 +169,7 @@ export async function pruneAuditChurn(
     batch?: number;
     maxBatches?: number;
     archiveDir: string | null;
+    archiveTable?: boolean;
   },
 ): Promise<AuditPruneResult> {
   const now = opts.now ?? Date.now();
@@ -166,7 +177,7 @@ export async function pruneAuditChurn(
   const capturedThrough = await auditCapturedThrough(db);
   const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
   const perTeam: Record<string, number> = {};
-  if (opts.archiveDir === null) {
+  if (opts.archiveDir === null && !opts.archiveTable) {
     return {
       pruned: 0,
       archivedBytes: 0,
@@ -180,22 +191,44 @@ export async function pruneAuditChurn(
   const maxBatches = opts.maxBatches ?? AUDIT_PRUNE_MAX_BATCHES;
   const floors = await unpushedFloors(db);
   const SELECT = `${prunableSql(floors.length)} LIMIT ?`;
-  const deleteAll = (ids: string[]) =>
-    db.tx(async (t) => {
-      for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
-    });
+  const deleteAll = async (t: Driver, ids: string[]) => {
+    for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
+  };
   let pruned = 0;
   let archivedBytes = 0;
   for (let i = 0; i < maxBatches; i++) {
     const rows = await db.all<AuditRow>(SELECT, [cutoff, ...floors.flat(), batch]);
     if (rows.length === 0) break;
-    archivedBytes += archiveRows(opts.archiveDir, rows);
-    await deleteAll(rows.map((r) => r.id));
-    for (const r of rows) perTeam[r.team_id] = (perTeam[r.team_id] ?? 0) + 1;
-    pruned += rows.length;
+    let taken = rows;
+    if (opts.archiveTable) {
+      // Every Cloud server runs this loop, so two can select the same batch. Delete first and
+      // archive only the rows THIS transaction deleted: the other server's delete of a row waits on
+      // ours and then removes nothing, so no row is archived twice.
+      const done = await db.tx(async (t) => {
+        const gone: AuditRow[] = [];
+        for (const row of rows) {
+          const { changes } = await t.run('DELETE FROM audit WHERE id = ?', [row.id]);
+          if (changes > 0) gone.push(row);
+        }
+        return { gone, bytes: gone.length ? await archiveRowsToTable(t, gone, now) : 0 };
+      });
+      taken = done.gone;
+      archivedBytes += done.bytes;
+    } else {
+      archivedBytes += archiveRows(opts.archiveDir!, rows);
+      await db.tx((t) => deleteAll(t, rows.map((r) => r.id)));
+    }
+    for (const r of taken) perTeam[r.team_id] = (perTeam[r.team_id] ?? 0) + 1;
+    pruned += taken.length;
     if (rows.length < batch) break;
   }
   return { pruned, archivedBytes, cutoff, capturedThrough, perTeam };
+}
+
+/** `YYYY-MM` (UTC) of a row's `ts` — the archive's file and table grouping. */
+function monthOf(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 /** Append the rows, grouped by the month of their `ts`, as one gzip member per file. */
@@ -203,8 +236,7 @@ function archiveRows(dir: string, rows: AuditRow[]): number {
   mkdirSync(dir, { recursive: true });
   const byMonth = new Map<string, string[]>();
   for (const r of rows) {
-    const d = new Date(r.ts);
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const key = monthOf(r.ts);
     const lines = byMonth.get(key) ?? [];
     lines.push(JSON.stringify(r));
     byMonth.set(key, lines);
@@ -214,6 +246,43 @@ function archiveRows(dir: string, rows: AuditRow[]): number {
     const member = gzipSync(`${lines.join('\n')}\n`);
     appendFileSync(join(dir, `audit-${month}.jsonl.gz`), member);
     bytes += member.byteLength;
+  }
+  return bytes;
+}
+
+/**
+ * Cloud's archive: the rows grouped by (team, month), each group one `audit_archive` row whose
+ * `body` is the base64 of the gzipped JSONL — `gunzip` of the decoded body is exactly what a local
+ * archive member holds. Grouped by team so the row sits under that team's tenant policy and a
+ * per-team dump or export carries only its own rows. Returns the gzip bytes (before base64).
+ */
+async function archiveRowsToTable(t: Driver, rows: AuditRow[], now: number): Promise<number> {
+  const groups = new Map<string, AuditRow[]>();
+  for (const r of rows) {
+    const key = `${r.team_id}|${monthOf(r.ts)}`; // neither a team id nor a month holds a '|'
+    const g = groups.get(key) ?? [];
+    g.push(r);
+    groups.set(key, g);
+  }
+  let bytes = 0;
+  for (const [key, g] of groups) {
+    const [teamId, month] = key.split('|') as [string, string];
+    const gz = gzipSync(`${g.map((r) => JSON.stringify(r)).join('\n')}\n`);
+    await t.run(
+      `INSERT INTO ${AUDIT_ARCHIVE_TABLE} (id, team_id, month, row_count, from_ts, to_ts, body, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ulid(now),
+        teamId,
+        month,
+        g.length,
+        Math.min(...g.map((r) => r.ts)),
+        Math.max(...g.map((r) => r.ts)),
+        gz.toString('base64'),
+        now,
+      ],
+    );
+    bytes += gz.byteLength;
   }
   return bytes;
 }
@@ -229,7 +298,7 @@ export const AUDIT_PRUNE_FIRST_DELAY_MS = 10 * 60 * 1000;
  */
 export function startAuditRetention(
   db: Driver,
-  opts: { archiveDir: string | null; maxAgeMs?: number },
+  opts: { archiveDir: string | null; archiveTable?: boolean; maxAgeMs?: number },
   onPass: (r: AuditPruneResult) => void,
   onError: (err: unknown) => void,
 ): () => void {
@@ -237,6 +306,7 @@ export function startAuditRetention(
     try {
       const r = await pruneAuditChurn(db, {
         archiveDir: opts.archiveDir,
+        ...(opts.archiveTable ? { archiveTable: true } : {}),
         ...(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs }),
       });
       if (r.pruned > 0 && db.dialect === 'sqlite') await db.exec('PRAGMA incremental_vacuum');

@@ -25,14 +25,16 @@ export type LoopName = (typeof LOOPS)[number];
  * - `footprint` — samples `ps` on the host the daemon runs on; on Cloud that is a Fly VM.
  * - `sync_push` / `sync_pull` / `trace_push` — a federation NODE talking to its hub (ADR 328);
  *   Cloud is the place teams live, never a node of one.
- * - `audit_retention` — archives churn rows to a file beside the SQLite store (ADR 478) before
- *   pruning; a Cloud VM's disk is ephemeral, and pruning without the archive would lose rows.
- *   Cloud retention arrives with the backup pipeline (spec §7, increment 3).
  *
  * One is about the network instead:
  * - `seeds_ingest` — fetches a relay URL that a team's admin sets in policy, with no public-host
  *   check; on a multi-tenant fleet that is an outbound request any customer can aim at a private or
  *   platform-internal address. It returns once the relay fetch has the webhook's public-host rule.
+ *
+ * `audit_retention` was on this list until lane 01M3W6GWVN. Locally it archives churn rows to a file
+ * beside the SQLite store (ADR 478), and a Cloud VM's disk is ephemeral; on Cloud it archives into
+ * the `audit_archive` table instead, in the same transaction as the prune (index.ts passes
+ * `archiveTable`).
  */
 const NOT_ON_CLOUD: ReadonlySet<LoopName> = new Set([
   'roster_watch',
@@ -40,7 +42,6 @@ const NOT_ON_CLOUD: ReadonlySet<LoopName> = new Set([
   'sync_push',
   'sync_pull',
   'trace_push',
-  'audit_retention',
   'seeds_ingest',
 ]);
 

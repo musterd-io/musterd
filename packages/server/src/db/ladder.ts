@@ -267,6 +267,26 @@ export const LADDER: PortableMigration[] = [
       await d.exec('ALTER TABLE roles ADD COLUMN IF NOT EXISTS skill TEXT');
     },
   },
+  {
+    // v97 — ADR 478 on Cloud (lane 01M3W6GWVN): where churn-class `audit` rows go before they are
+    // pruned when there is no disk to archive beside. One row per (team, month, batch): `body` is the
+    // base64 of a gzip of the rows as JSONL, the same bytes the local `audit-YYYY-MM.jsonl.gz` member
+    // holds. Text, not BLOB/BYTEA, so both engines and every driver read it back as a string. Written
+    // in the same transaction as the delete, so a failed archive prunes nothing. Team-owned (tenant
+    // policy). A local SQLite store keeps archiving to its file; the table exists there, empty.
+    version: 97,
+    sql: `CREATE TABLE IF NOT EXISTS audit_archive (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  month TEXT NOT NULL,
+  row_count INTEGER NOT NULL,
+  from_ts BIGINT NOT NULL,
+  to_ts BIGINT NOT NULL,
+  body TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_archive_team_month ON audit_archive(team_id, month)`,
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'
