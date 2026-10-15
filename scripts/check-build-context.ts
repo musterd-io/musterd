@@ -74,6 +74,8 @@ const SEAT_STATE_ROOTS = ['.musterd', '.claude', '.codex'] as const;
  */
 export const KNOWN_WHOLE_CONTEXT: readonly string[] = [
   'deploy/cloud/Dockerfile',
+  // ADR 615: the console, built by scripts/cloud/deploy.mjs from the repo root like deploy/cloud.
+  'deploy/console/Dockerfile',
   'deploy/cloud-seat/Dockerfile',
   'scripts/broadcast/hosted.Dockerfile',
   'scripts/perf/broadcast-bench.Dockerfile',
