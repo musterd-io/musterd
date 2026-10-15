@@ -25,6 +25,7 @@ import {
   GovernedPolicyResponseSchema,
   GovernedPolicyReadResponseSchema,
   LaneBoardSchema,
+  LaneDetailSchema,
   LaneResultSchema,
   SeedListSchema,
   SeedResultSchema,
@@ -108,6 +109,7 @@ import {
   type Grant,
   type IssueGrant,
   type LaneBoard,
+  type LaneDetail,
   type LaneResult,
   type Seed,
   type SubmitSeedBrief,
@@ -1217,6 +1219,14 @@ export class HttpClient {
       patch,
     );
     const parsed = LaneResultSchema.safeParse(json);
+    if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+
+  /** ADR 582 §4: one lane in full — `id` is a full id or a prefix of at least 8; the daemon resolves it. */
+  async laneShow(slug: string, id: string): Promise<LaneDetail> {
+    const json = await this.request('GET', `/teams/${slug}/lanes/${encodeURIComponent(id)}`);
+    const parsed = LaneDetailSchema.safeParse(json);
     if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
     return parsed.data;
   }

@@ -62,6 +62,21 @@ describe('lane commands', () => {
     return lanes[lanes.length - 1]!.id;
   }
 
+  it('lane show prints one lane in full by a short id — brief and history (ADR 582 §4)', async () => {
+    const id = await openLane(['show me', '--detail', 'the brief\nsecond line', '--claim']);
+    const res = await capture(() => laneCommand(parseArgs(['show', id.slice(0, 10)])));
+    expect(res.code).toBe(0);
+    expect(res.out).toContain('"show me"');
+    expect(res.out).toContain('brief: the brief\nsecond line');
+    expect(res.out).toContain('history:');
+    expect(res.out).toMatch(/nick opened/);
+    expect(res.out).toMatch(/nick claimed by nick/);
+    const json = await capture(() => laneCommand(parseArgs(['show', id, '--json'])));
+    const d = JSON.parse(json.out) as { lane: { id: string }; acceptance_ask: unknown };
+    expect(d.lane.id).toBe(id);
+    expect(d.acceptance_ask).toBeNull();
+  });
+
   it('opens a lane and renders it with a checkmark', async () => {
     const res = await capture(() =>
       laneCommand(parseArgs(['open', 'wire the thing', '--surface', 'src/a.ts,src/b.ts'])),

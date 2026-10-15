@@ -111,6 +111,15 @@ and `pnpm context:check` refuses a raise without a stated rent and falsifier.
   `01M4VKS1T4` — short ids; `01M4VKSDJH` — areas, derivation, declared override and display;
   `01M4VKS6SF` — the single-lane read (Decision 4). Each is independent. `01M4VKRXEX` takes `area:` once
   areas exist.
+- 2026-10-15, lane `01M4VKS6SF`: the single-lane read shipped before `q`'s grammar (`01M4VKRXEX`).
+  `GET /lanes/:id` returns `LaneDetailSchema` — the lane annotated as the board annotates it, its
+  warnings, `history` (its `lane.*` audit rows, oldest first, newest 200) and `acceptance_ask` {id, to}
+  while it awaits acceptance. `musterd lane show <id>` prints it. On MCP, `lane_board` gained `q`, but
+  today `q` takes only a lone lane id (`laneIdQuery`: a ULID or a prefix of 8+, first character 0–7, so
+  an 8-letter word is not read as an id); anything else is refused with a pointer to `01M4VKRXEX` rather
+  than read as a search. That lane extends the same argument. The `q` argument cost 62 B of tool list,
+  recorded in `docs/perf/context-budgets.json`. The lines under a lane's board line come from one
+  protocol function, `laneDetailLines`, which both surfaces render.
 
 ## Observability & Evaluation
 

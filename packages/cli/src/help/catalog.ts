@@ -634,12 +634,13 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'lane',
     signature:
-      'open "<title>" [--surface <glob>,…] [--depends <id>,…] [--goal <id>] [--branch b] [--claim]  |  <claim|release|handoff|update|resolve> <id> [--to <seat>] [--branch <ref>] [--state <s>]',
+      'open "<title>" [--surface <glob>,…] [--depends <id>,…] [--goal <id>] [--branch b] [--claim]  |  <show|claim|release|handoff|update|resolve> <id> [--to <seat>] [--branch <ref>] [--state <s>]',
     summary: 'declare a unit of work; own it, hand it off, close it',
     group: 'work',
     primary: true,
     detail:
       'A lane is a declared unit of work with warn-only contention checks (ADR 083).\n' +
+      '  show <id> [--json]            one lane in full: brief, history, merge, the ask to reply_to\n' +
       '  open "<title>" [--surface …] [--depends …] [--goal <id>] [--branch b] [--claim]   declare it\n' +
       '  claim <id>                    take ownership\n' +
       '  release <id>                  let it go — open for anyone again\n' +
@@ -651,6 +652,7 @@ export const CATALOG: readonly CommandEntry[] = [
     examples: [
       'musterd lane open "wire the help catalog" --claim',
       'musterd lane handoff L3 --to scout --branch feat/help',
+      'musterd lane show 01M4VKS6SF',
     ],
   },
   {

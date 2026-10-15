@@ -11,6 +11,8 @@ import {
   type Goal,
   type Lane,
   isWireAttestationSource,
+  type LaneDetail,
+  LaneDetailSchema,
   type LaneWarning,
   type MemberSummary,
   type MemoryEnvelope,
@@ -982,6 +984,13 @@ export class MusterdClient {
     for (const s of q.state ?? []) params.append('state', s);
     const qs = params.toString();
     return this.request('GET', `/teams/${this.config.team}/lanes${qs ? `?${qs}` : ''}`);
+  }
+
+  /** ADR 582 §4: one lane in full — `id` is a full id or a prefix of at least 8; the daemon resolves it. */
+  async laneShow(id: string): Promise<LaneDetail> {
+    return LaneDetailSchema.parse(
+      await this.request('GET', `/teams/${this.config.team}/lanes/${encodeURIComponent(id)}`),
+    );
   }
 
   // ── Shared Seeds (ADR 319). Parse every daemon response at this wire boundary.

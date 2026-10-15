@@ -835,6 +835,93 @@ export const LaneBoardSchema = z.object({
 export type LaneBoard = z.infer<typeof LaneBoardSchema>;
 
 /**
+ * One edge of a lane's recorded life (ADR 582 §4): a `lane.*` audit row, reduced to the fields a
+ * reviewer reads. Which optional fields are present depends on `action` — `lane.claimed` carries
+ * `owner`/`previous_owner`/`kind`, `lane.state_changed` `from`/`to`, `lane.updated` `fields`,
+ * `lane.closed` `verified`/`reason`. Unknown actions arrive with `ts`/`action`/`actor` only, so a newer
+ * daemon's edge still renders.
+ */
+export const LaneEventSchema = z.object({
+  ts: z.number(),
+  action: z.string(),
+  actor: z.string().nullable(),
+  owner: z.string().nullable().optional(),
+  previous_owner: z.string().nullable().optional(),
+  kind: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  fields: z.array(z.string()).optional(),
+  verified: z.boolean().optional(),
+  reason: z.string().optional(),
+  reviewer: z.string().optional(),
+});
+export type LaneEvent = z.infer<typeof LaneEventSchema>;
+
+/**
+ * `GET /teams/:slug/lanes/:id` — one lane in full (ADR 582 §4): the lane as the board annotates it,
+ * its warnings, its recorded history oldest first, and the acceptance ask standing on it, so a
+ * reviewer can `reply_to` without a lookup. `acceptance_ask` is null when none is open.
+ */
+export const LaneDetailSchema = z.object({
+  lane: LaneSchema,
+  warnings: z.array(LaneWarningSchema),
+  history: z.array(LaneEventSchema),
+  acceptance_ask: z.object({ id: z.string(), to: z.string() }).nullable(),
+});
+export type LaneDetail = z.infer<typeof LaneDetailSchema>;
+
+/**
+ * `lane_board`'s `q` (ADR 582 §1/§4). Today it takes one lane id, full or a prefix of at least 8
+ * characters, and answers with that lane in full; the query grammar (`goal:`, `area:`, bare words)
+ * lands with lane 01M4VKRXEX. A `q` that is not a lone id is refused, never read as a search.
+ */
+export const LaneQuerySchema = z.string().trim().min(1).max(200);
+
+/**
+ * A lone lane id: a ULID or a prefix of one, 8 to 26 characters of its alphabet. A ULID's first
+ * character is a timestamp digit 0–7, which is what keeps an 8-letter word like `standard` from
+ * reading as an id.
+ */
+export function laneIdQuery(q: string): string | null {
+  const t = q.trim().toUpperCase();
+  return /^[0-7][0-9A-HJKMNP-TV-Z]{7,25}$/.test(t) ? t : null;
+}
+
+/** One history edge as a line: `<when> <who> <what>`. Shared by the CLI and the MCP render. */
+export function laneEventLine(e: LaneEvent): string {
+  const when = new Date(e.ts).toISOString().slice(0, 16).replace('T', ' ');
+  const who = e.actor ?? '—';
+  const verb = e.action.startsWith('lane.') ? e.action.slice(5) : e.action;
+  let what: string;
+  switch (e.action) {
+    case 'lane.claimed':
+      what =
+        e.kind === 'handoff'
+          ? `handed to ${e.owner ?? '?'} from ${e.previous_owner ?? '?'}`
+          : `claimed by ${e.owner ?? '?'}`;
+      break;
+    case 'lane.state_changed':
+      what = `${e.from ?? '?'} → ${e.to ?? '?'}`;
+      break;
+    case 'lane.updated':
+      what = `edited ${(e.fields ?? []).join(', ') || 'fields'}`;
+      break;
+    case 'lane.released':
+      what = `released${e.owner ? ` (was ${e.owner})` : ''}`;
+      break;
+    case 'lane.ready_for_review':
+      what = 'submitted for acceptance';
+      break;
+    case 'lane.closed':
+      what = `closed${e.to ? ` ${e.to}` : ''}${e.verified === false ? ' (unconfirmed)' : e.verified ? ' (confirmed)' : ''}${e.reason ? ` — ${e.reason}` : ''}`;
+      break;
+    default:
+      what = `${verb.replace(/_/g, ' ')}${e.reviewer ? ` (${e.reviewer})` : ''}`;
+  }
+  return `${when} ${who} ${what}`;
+}
+
+/**
  * `GET /teams/:slug/next` — the orientation brief (ADR 049), computed server-side so CLI + MCP render
  * one projection. The derived floor works at zero compliance: it reads the daemon's own lane/act
  * state. (The roadmap-Goal-by-wave enrichment is deferred with the Goal-source seam, ADR 048.)
@@ -1139,3 +1226,41 @@ export const NextBriefSchema = z.object({
   holds: z.array(HoldSchema).optional(),
 });
 export type NextBrief = z.infer<typeof NextBriefSchema>;
+
+/**
+ * Everything one lane's full read adds below its board line (ADR 582 §4), as lines — the CLI's
+ * `lane show` and the MCP `lane_board {q}` both render these, so the two cannot drift. The board
+ * line itself and the warnings stay each surface's own (they render those for the board already).
+ */
+export function laneDetailLines(d: LaneDetail): string[] {
+  const l = d.lane;
+  const out: string[] = [];
+  if (l.detail) out.push(`brief: ${l.detail}`);
+  if (l.merged) {
+    const m = l.merged;
+    const parts = [
+      m.pr !== undefined ? `#${m.pr}` : null,
+      m.sha ? m.sha.slice(0, 10) : null,
+      m.verification ?? null,
+      m.authorized_by ? `authorized by ${m.authorized_by}` : null,
+    ].filter((p): p is string => p !== null);
+    out.push(`merged: ${parts.join(' ') || 'yes'}`);
+  }
+  if (l.follows_up) {
+    out.push(`follows up: ${l.follows_up === 'none' ? 'none' : l.follows_up.join(', ')}`);
+  }
+  if (l.abandon_reason) out.push(`abandoned: ${l.abandon_reason}`);
+  if (d.acceptance_ask) {
+    const a = d.acceptance_ask;
+    out.push(
+      `acceptance ask ${a.id} → ${a.to} — verdict: team_send {act:'accept'|'decline', reply_to:'${a.id}'}`,
+    );
+  } else if (l.state === 'done' && l.verified !== undefined) {
+    out.push(`closed ${l.verified ? 'confirmed' : 'unconfirmed'}`);
+  }
+  if (d.history.length > 0) {
+    out.push('history:');
+    for (const e of d.history) out.push(`  ${laneEventLine(e)}`);
+  }
+  return out;
+}
