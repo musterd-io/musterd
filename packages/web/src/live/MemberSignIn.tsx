@@ -49,12 +49,17 @@ export function MemberSignInToggle({
   onAdvanced,
   openLabel = 'Advanced — connect as a specific seat',
   closeLabel = 'Use an auto observer instead',
+  canWatch = true,
 }: {
   advanced: AdvancedState;
   onAdvanced: (a: AdvancedState) => void;
   openLabel?: string;
   closeLabel?: string;
+  /** False when this browser holds no seat to watch with: since ADR 580 a signed-out page cannot
+   * mint one, so closing the sign-in fields would only lead back to them. */
+  canWatch?: boolean;
 }) {
+  if (advanced.open && !canWatch) return null;
   return (
     <button
       className="lc-form__advanced"
