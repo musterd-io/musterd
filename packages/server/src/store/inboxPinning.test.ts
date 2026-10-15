@@ -217,11 +217,17 @@ withDrivers('inboxPinning', (o) => {
     });
   });
 
-  describe('lane 01M4YYQCAP: a lane\'s own lifecycle discharges the acts that asked about it', async () => {
+  describe("lane 01M4YYQCAP: a lane's own lifecycle discharges the acts that asked about it", async () => {
     const lane = async (db: Driver, state: string) => {
-      const l = await openLane(db, (await db.get<{ id: string }>('SELECT id FROM teams'))!.id, 'revive', 'nick', {
-        title: 'x',
-      });
+      const l = await openLane(
+        db,
+        (await db.get<{ id: string }>('SELECT id FROM teams'))!.id,
+        'revive',
+        'nick',
+        {
+          title: 'x',
+        },
+      );
       await db.run('UPDATE lanes SET state = ? WHERE id = ?', [state, l.id]);
       return l.id;
     };
@@ -252,7 +258,10 @@ withDrivers('inboxPinning', (o) => {
       const { db, ada, send } = await seed();
       const shipped = await lane(db, 'awaiting_acceptance');
       const active = await lane(db, 'claimed');
-      const settled = await send('handoff', { id: 'settled', meta: { lane_handoff: { lane: shipped } } });
+      const settled = await send('handoff', {
+        id: 'settled',
+        meta: { lane_handoff: { lane: shipped } },
+      });
       const owed = await send('handoff', { id: 'owed', meta: { lane_handoff: { lane: active } } });
       await pad(send);
       const got = await bounded(db, ada, 2);
