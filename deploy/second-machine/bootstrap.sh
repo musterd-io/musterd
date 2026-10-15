@@ -174,6 +174,21 @@ step_key() {
 step_seat() {
   local name="$1" harness="$2"
   grep -q "\"$MUSTERD_TEAM\"" "$HOME/.musterd/node.json" 2>/dev/null || die "enrol first: bootstrap.sh machine"
+  # Finding 6 (2026-10-03): re-running this for a seat that already moved here did nothing visible,
+  # which read as a hang. `residency on` is the step's last write, so a host-registry entry for this
+  # seat and harness, with a bound Workspace, means every step before it finished. A partial run has
+  # no entry and resumes below.
+  local done_ws
+  done_ws="$(node -e '
+    const fs = require("fs"); const [p, team, seat, harness] = process.argv.slice(1);
+    let r; try { r = JSON.parse(fs.readFileSync(p, "utf8")); } catch { process.exit(0); }
+    const e = (r.entries || []).find((x) => x.team === team && x.seat === seat && x.harness === harness);
+    if (e && fs.existsSync(e.workspace + "/.musterd/binding.json")) console.log(e.workspace);' \
+    "${MUSTERD_HOST_REGISTRY:-$HOME/.musterd/host-registry.json}" "$MUSTERD_TEAM" "$name" "$harness")"
+  if [ -n "$done_ws" ]; then
+    log "seat $name [$harness] is already provisioned here ($done_ws) and wakeable — nothing to do. Open it: \`musterd $name\`; check it: (cd $done_ws && musterd harness status)"
+    return 0
+  fi
   log "seat $name [$harness] — on the HUB first, as $MUSTERD_HUMAN: \`musterd residency off --seat $name\` and \`musterd node unbind $name\` (an agent seat lives on one machine, ADR 358 §3)"
   # From the runtime checkout: a worktree lands under ~/musterd/<team>/<repo>/<name> (ADR 447) and
   # the harness set is wired through the reconcile engine (ADR 491) — no hand edits.
