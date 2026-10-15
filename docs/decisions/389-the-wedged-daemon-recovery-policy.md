@@ -279,6 +279,23 @@ this week's read and a human say so.
   disarmed by this note. No successor is opened here.
   Follows-up: none — a new window is a new watch, and this diff does not open one (2026-10-15).
 
+- _Dated note (2026-10-15) — the thirty-day successor was read after all, and it falsifies the
+  sample: `daemon_wedged` is disarmed and §1 re-opens._
+  The note above was a gate unblock, not a read: #2599 set the watch `void` from a seat that does not
+  have the guardian log, so `watch:check` would stop failing every PR. dolly read the series on the
+  host that writes it, by the join the watch pre-registered, and the watch now carries the verdict
+  ([resolution](../watches/2026-09-14-adr-389-sampled-read-successor.md)). 128 sampled rows in the
+  window against a floor of 5; 85 read `wedged: true`; 38 of those were followed by
+  `guardian.stall_recovered` with no guardian remediation and no autorefresh restart inside the
+  stall. The falsifier needs one. So the sample is not decisive on this host: a restart fired on any
+  of those 38 would have killed a daemon that came back on its own, mostly within four minutes. The
+  rows also widen the question the 2026-09-14 note posed about `???`: 27 of the 38 named a symbolled
+  frame, `sqlite3_step` and `uv_run` among them, so no rule about one frame shape rescues the
+  sample. Nothing is armed and nothing changes in code: the class stays at `alert`, and §4's
+  restart is not built on this evidence.
+  Follows-up: deferred — what could make a stall decisive (a second signal beside the sample, or
+  none) is a new decision with its own ADR; no lane is opened by this note (2026-10-15).
+
 ## Amendment 1 — the load average separates starved from blocked (2026-09-14, lane `01M2GTB0RA`)
 
 §1 said only the sample can make `daemon_wedged`. Six raises on 2026-09-14 (20:02Z–21:23Z) show
