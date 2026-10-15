@@ -163,6 +163,29 @@ describe('opencodeBackend', () => {
     expect(clears).toHaveLength(1);
   });
 
+  it('stamps the lease dream for a dream wake (ADR 604)', async () => {
+    const child = new Child();
+    child.pid = 4242;
+    const writes: Array<Record<string, unknown>> = [];
+    const backend = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      recordFreshSession: () => undefined,
+      spawn: (() => child) as never,
+      lease: {
+        write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
+        clear: () => {},
+        takeYield: () => false,
+      },
+    });
+    const wake = backend.wake({ ...spec, order: { ...spec.order, derivation: 'dream' } }, ctx);
+    await Promise.resolve();
+    expect(writes[0]).toMatchObject({ provenance: 'dream' });
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    child.exit();
+    await result.settled;
+  });
+
   it('a seat held by a non-wake session DEFERS — it does not burn the act (ADR 238)', async () => {
     const child = new Child();
     const backend = opencodeBackend({

@@ -227,6 +227,17 @@ describe('grok wake-lease file (ADR 546 — the launcher can find this wake)', (
     expect(clears).toEqual(['l']);
   });
 
+  it('stamps the lease dream for a dream wake (ADR 604)', async () => {
+    const { child, backend, ctx, writes } = setup({ findSessionId: () => undefined });
+    const result = await backend.wake(
+      { ...spec, order: { ...spec.order, derivation: 'dream' } },
+      ctx,
+    );
+    expect(writes[0]).toMatchObject({ lease_id: 'l', provenance: 'dream' });
+    child.exit(0);
+    await result.settled;
+  });
+
   it('a taken-over run settles as yielded', async () => {
     const { child, backend, ctx } = setup({
       lease: { write: () => {}, clear: () => {}, takeYield: () => true },

@@ -31,8 +31,11 @@ export const WAKE_LEASE_FILE = 'wake-lease.json';
 export const WakeLeaseFileSchema = z.object({
   /** The daemon-minted lease id (ADR 241) — opaque, never a session id or a token. */
   lease_id: z.string().min(1).max(64),
-  /** Only ever `wake`: the file exists to carry the one provenance the env could not. */
-  provenance: z.literal('wake'),
+  /** The provenance this lease confers: `dream` when the wake order's derivation is `dream`
+   *  (ADR 494/604 — was `z.literal('wake')`, which stamped every dream wake a lie), else `wake`.
+   *  The server settles Presence from its own lease record regardless; this is the take-over
+   *  handle's honesty, and old readers fail closed on `dream` (ADR 604 Consequences). */
+  provenance: z.enum(['wake', 'dream']),
   /** Which backend wrote it — for the audit, and so a mismatched harness can refuse it. */
   harness: z.string().min(1).max(32),
   /** The pid of the harness process the actuator spawned; the adapter honours the file only when

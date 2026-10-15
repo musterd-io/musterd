@@ -16,6 +16,10 @@ describe('wake take-over fields (ADR 546)', () => {
     );
     expect(WakeLeaseFileSchema.parse(base).session_id).toBeUndefined();
   });
+  it('provenance carries the derivation honestly (ADR 604): `dream` accepted, anything else refused', () => {
+    expect(WakeLeaseFileSchema.parse({ ...base, provenance: 'dream' }).provenance).toBe('dream');
+    expect(WakeLeaseFileSchema.safeParse({ ...base, provenance: 'session' }).success).toBe(false);
+  });
   it('the yield file names the lease it stops, who asked, and when', () => {
     expect(WAKE_YIELD_FILE).toBe('wake-yield.json');
     expect(WakeYieldFileSchema.parse({ lease_id: 'L1', by: 'nick', at: 5 })).toEqual({

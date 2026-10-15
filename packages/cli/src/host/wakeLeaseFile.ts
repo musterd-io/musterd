@@ -110,6 +110,8 @@ export function holdWakeLease(
     session_id?: string | undefined;
     /** The wake is a loop inside this process: `pid` is the host's own and is never signalled. */
     in_process?: boolean | undefined;
+    /** `dream` when the wake order's derivation is `dream` (ADR 604). Defaults to `wake`. */
+    provenance?: 'wake' | 'dream' | undefined;
   },
   deps: WakeLeaseDeps = {},
 ): WakeLeaseHandle {
@@ -119,7 +121,7 @@ export function holdWakeLease(
   const put = (): void =>
     write(workspace, {
       lease_id: o.lease_id,
-      provenance: 'wake',
+      provenance: o.provenance ?? 'wake',
       harness: o.harness,
       spawner_pid: o.pid,
       started_at: o.startedAt,

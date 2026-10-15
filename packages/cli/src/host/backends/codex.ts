@@ -249,6 +249,7 @@ async function attempt(
             startedAt,
             timeoutMs,
             session_id: expectedId,
+            provenance: spec.order.derivation === 'dream' ? 'dream' : 'wake',
           },
           {
             ...(deps.writeWakeLease ? { write: deps.writeWakeLease } : {}),

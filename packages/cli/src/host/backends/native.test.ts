@@ -196,7 +196,7 @@ describe('nativeBackend.wake', () => {
       turns: [turn(0.005), turn(0.007)],
       result: { end: 'completed', cost_usd: 0.012 },
     });
-    const { deps, posted, closed } = makeDeps({ engine });
+    const { deps, posted, closed, leases } = makeDeps({ engine });
     const log: string[] = [];
     const backend = nativeBackend(deps);
     const actuation = await backend.wake(
@@ -212,10 +212,22 @@ describe('nativeBackend.wake', () => {
     expect(posted[0]).toMatchObject({ lease_id: 'L1', cost_usd: 0.005, stop_reason: 'tool_use' });
     expect(posted[0]!.transcript).toMatchObject({ assistant: [{ type: 'text' }] });
     expect(log.some((l) => l.includes('woke izzo'))).toBe(true);
+    expect(leases.written[0]!.provenance).toBe('wake');
     // The engine got the daemon-composed line verbatim and the ladder-resolved model.
     expect(engine.lastSpec?.prompt).toBe('You are izzo. Check your inbox.');
     expect(engine.lastSpec?.model).toBe('claude-opus-5');
     expect(engine.lastSpec?.maxTurns).toBe(10);
+  });
+
+  it('stamps the lease dream for a dream wake (ADR 604)', async () => {
+    const engine = scriptedEngine({ turns: [turn(0.005)], result: { end: 'completed' } });
+    const { deps, leases } = makeDeps({ engine });
+    const actuation = await nativeBackend(deps).wake(
+      spec({ derivation: 'dream' }),
+      ctx(async () => ({ occupied: true, provenance: 'dream', lease_matched: true })),
+    );
+    expect(leases.written[0]!.provenance).toBe('dream');
+    await actuation.settled;
   });
 
   it('defers when the seat is held by another session (occupied && !lease_matched, ADR 241) and aborts the loop', async () => {
