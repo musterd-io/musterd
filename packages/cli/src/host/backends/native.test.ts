@@ -137,6 +137,8 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
       },
     }),
     env: {},
+    // No test reads the real Keychain (ADR 605): a miss unless a test supplies a key.
+    keychain: async () => null,
     finalReadDelayMs: 0,
     // No test touches the disk: the lease file, the watch spool and the yield marker are all stubs.
     lease: {
@@ -437,7 +439,47 @@ describe('nativeBackend.wake', () => {
     );
     expect(actuation.outcome).toMatchObject({ occupied: false, deferred: true });
     expect(actuation.outcome.reason).toContain('SEAT_KEY');
+    expect(actuation.outcome.reason).toContain('musterd:SEAT_KEY');
     expect(engine.lastSpec).toBeUndefined();
+  });
+
+  it('ADR 605: an unset key_env falls back to the Keychain item musterd:<VAR>', async () => {
+    const engine = scriptedEngine({});
+    const asked: string[] = [];
+    const { deps } = makeDeps({
+      engine,
+      env: {},
+      keychain: async (service) => {
+        asked.push(service);
+        return 'sk-from-keychain';
+      },
+    });
+    const actuation = await nativeBackend(deps).wake(
+      { ...spec(), key_env: 'SEAT_KEY' },
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(asked).toEqual(['musterd:SEAT_KEY']);
+    expect(actuation.outcome).toMatchObject({ occupied: true });
+    expect(engine.lastSpec).toBeDefined();
+  });
+
+  it('ADR 605: a set key_env wins and the Keychain is never read', async () => {
+    const engine = scriptedEngine({});
+    const asked: string[] = [];
+    const { deps } = makeDeps({
+      engine,
+      env: { SEAT_KEY: 'sk-from-env' },
+      keychain: async (service) => {
+        asked.push(service);
+        return 'sk-from-keychain';
+      },
+    });
+    await nativeBackend(deps).wake(
+      { ...spec(), key_env: 'SEAT_KEY' },
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(asked).toEqual([]);
+    expect(engine.lastSpec).toBeDefined();
   });
 
   it('ADR 588: the rehydration read is best-effort and its tally is one narrator line', async () => {
