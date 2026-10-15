@@ -26,7 +26,24 @@
     "2610.18425",
     "2610.13494",
     "2610.13663",
-    "2610.13772"
+    "2610.13772",
+    "2610.20576",
+    "2610.20563",
+    "2610.20548",
+    "2610.20277",
+    "2610.20200",
+    "2610.20144",
+    "2610.20099",
+    "2610.19999",
+    "2610.18522",
+    "2610.18614",
+    "2610.18780",
+    "2610.18861",
+    "2610.13144",
+    "2610.13267",
+    "2610.13534",
+    "2610.13594",
+    "2610.13737"
   ],
   "hf": [
     "2609.02783",
@@ -34,172 +51,12 @@
     "2610.12299",
     "2610.07625",
     "2610.07967",
-    "2610.13947"
+    "2610.13947",
+    "2610.14224"
   ],
   "exn": [
     "2609.37226",
     "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
   ],
-  "pending": [
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13737"
-        }
-      ],
-      "canonicalId": "2610.13737",
-      "title": "SafeDiSTL: Decomposing Joint Constraints for Safe Multi-Agent Reinforcement Learning",
-      "url": "https://arxiv.org/abs/2610.13737",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13594"
-        }
-      ],
-      "canonicalId": "2610.13594",
-      "title": "MENTOR: Learning from Failure with On-Policy Pedagogical Intervention",
-      "url": "https://arxiv.org/abs/2610.13594",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13534"
-        }
-      ],
-      "canonicalId": "2610.13534",
-      "title": "MAGMA-Bench: Evaluating Long-Horizon Embodied Agents under Dynamic Tasks and Execution Failures",
-      "url": "https://arxiv.org/abs/2610.13534",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13267"
-        }
-      ],
-      "canonicalId": "2610.13267",
-      "title": "Forgetting is Not Always Bad: A Neuro-Inspired Memory Repair Mechanism for Poisoned LLM Agents",
-      "url": "https://arxiv.org/abs/2610.13267",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13144"
-        }
-      ],
-      "canonicalId": "2610.13144",
-      "title": "Competence-Aware Orchestration for LLM-Based Multi-Agent Systems",
-      "url": "https://arxiv.org/abs/2610.13144",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.18861"
-        }
-      ],
-      "canonicalId": "2610.18861",
-      "title": "Hybrid Reasoning Agents",
-      "url": "https://arxiv.org/abs/2610.18861",
-      "published": "2026-10-13",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-15",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.18780"
-        }
-      ],
-      "canonicalId": "2610.18780",
-      "title": "BLADE: Auditing Information Use for Failure Attribution in LLM Multi-Agent Systems",
-      "url": "https://arxiv.org/abs/2610.18780",
-      "published": "2026-10-13",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-15",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.18614"
-        }
-      ],
-      "canonicalId": "2610.18614",
-      "title": "Can an Agent Learn to Predict Its Own Failure? Outcome-Grounded Confidence Calibration in LLM Agents",
-      "url": "https://arxiv.org/abs/2610.18614",
-      "published": "2026-10-13",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-15",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.18522"
-        }
-      ],
-      "canonicalId": "2610.18522",
-      "title": "Lost in Implicit Routing: How LLM Agents Fail to Load Relevant Skills at Scale",
-      "url": "https://arxiv.org/abs/2610.18522",
-      "published": "2026-10-13",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-15",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "hf",
-          "id": "2610.14224"
-        }
-      ],
-      "canonicalId": "2610.14224",
-      "title": "Harness^2: Recursive Agent Harnessing for an Open World",
-      "url": "https://huggingface.co/papers/2610.14224",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-15",
-      "lastAttempt": "2026-10-15",
-      "failure": "triage_incomplete"
-    }
-  ]
+  "pending": []
 }
