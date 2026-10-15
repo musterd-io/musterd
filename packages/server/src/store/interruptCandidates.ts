@@ -1,6 +1,7 @@
 import { isAwaitingAcceptance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { listRenderedActs } from './audit.js';
+import { handoffNamedLaneOutOfPlay } from './delivery.js';
 import type { MessageRow } from './rows.js';
 
 /**
@@ -261,10 +262,18 @@ async function buriedTurns(
  *  (iv)  a steer (or urgent act) this seat has already been SHOWN by an inbox read — the
  *        `inbox.rendered` row GET /inbox writes — is discharged, and the superseded steers under
  *        the newest one are dropped with it so none rises in its place (delta: stanley's steer
- *        01M2GC25MN rang ~20 boundaries after it was read and acted on).
+ *        01M2GC25MN rang ~20 boundaries after it was read and acted on);
+ *  (v)   a handoff whose NAMED lane has left play — submitted for acceptance or terminal — is
+ *        discharged, because a handoff is discharged by DOING THE WORK, never by a reply (#745).
+ *        The idle seam (ADR 558) admits handoffs and the fold could only ever drop one on an
+ *        accept/decline or the seat's own reply, so a settled handoff rang as urgent at every idle
+ *        boundary (ryder's handoff 01M4YYV60Q of lane 01M4S53AV4, done 2026-10-15, re-raised to
+ *        sloane twice after the close). Same predicate the inbox route and the orientation `why`
+ *        use (`handoffNamedLaneOutOfPlay`), same narrowness: a bare handoff or one naming an
+ *        unknown lane keeps ringing — a handoff that stops asking is work dropped on the floor.
  *
  * Every query here is keyed on ids already in hand and skipped when there are none, so the common
- * case — a window with no obligation, no eligible set and no steer — costs nothing extra.
+ * case — a window with no obligation, no eligible set, no handoff and no steer — costs nothing extra.
  */
 async function dischargeOutsideTheWindow(
   db: Driver,
@@ -306,6 +315,16 @@ async function dischargeOutsideTheWindow(
       // absence would silence a real obligation, which is the one direction this must never err.
       return state === undefined || isAwaitingAcceptance(state);
     });
+  }
+
+  // (v) handoffs whose named lane has left play — derived from the lane row, never stored, so a
+  // lane that acceptance sends back to active makes the handoff owed again on the next read.
+  const handoffs = out.filter((r) => r.act === 'handoff');
+  if (handoffs.length > 0) {
+    const settled = new Set<string>();
+    for (const r of handoffs)
+      if (await handoffNamedLaneOutOfPlay(db, member.team_id, r.meta, r.body)) settled.add(r.id);
+    if (settled.size > 0) out = out.filter((r) => !settled.has(r.id));
   }
 
   // (iii) eligible-set acts a co-addressee answered — fetch the answer by ref.
