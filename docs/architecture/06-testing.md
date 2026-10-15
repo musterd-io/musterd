@@ -51,7 +51,7 @@ config roots and sibling worktrees never share selections, ledger owners, journa
 worktree configured once for `claude-code`, `cursor`, `codex`, and `musterd` launches the same
 Member through each launcher's own `MUSTERD_LAUNCH_SURFACE` registration (native `musterd` is
 intrinsic) with no intervening `wire`; local state is byte-stable across launches; deselection
-releases exactly this worktree's ownership (a drifted fragment blocks with `release-blocked` and
+releases exactly this worktree's ownership (a drifted fragment blocks with `✗ release blocked — drifted while deselected` and
 retains its evidence); a pre-ADR-286 registration carrying the retired `MUSTERD_SURFACE` cannot
 attach, `harness status` names it, and only a human-confirmed `harness configure` repairs the
 marker; and a fixture `future.harness` adapter participates in selection/reconciliation while
