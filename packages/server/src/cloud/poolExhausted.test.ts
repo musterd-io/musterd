@@ -132,7 +132,10 @@ describe('a full pool is not an outage (lane 01M3ZC3G35)', () => {
     vi.mocked(requireTeam).mockImplementation(async (db, slug) => {
       // Only the factory's read fails; the route's own team and auth reads run as normal.
       if (new Error().stack?.includes('buildRemoteServer'))
-        throw new DriverError(`${POOL_EXHAUSTED_SENTENCE}: ${PG_POOL_ACQUIRE_TIMEOUT}`, 'saturated');
+        throw new DriverError(
+          `${POOL_EXHAUSTED_SENTENCE}: ${PG_POOL_ACQUIRE_TIMEOUT}`,
+          'saturated',
+        );
       return actual.requireTeam(db, slug);
     });
     const { s, seed, url } = await bootCloudWithOutage();
