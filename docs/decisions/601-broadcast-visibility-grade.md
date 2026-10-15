@@ -50,7 +50,7 @@ public-grade stream.
    The `/live` watch link stays `public` and the dashboard stays `full`.
 7. **`/broadcast` never mints for itself.** With no handed seat it shows the refusal and loads
    nothing, instead of falling back to a `full` seat.
-8. **Unknown or missing grades read as `public`.**
+8. **Unknown or missing grades read as `public`.** _(Amended 2026-10-15: "missing" means a connection with no grade at the fan-out; a NULL `observer_scope` stays `full` per ADR 136 — see Consequences.)_
 
 ## Consequences
 
@@ -63,6 +63,15 @@ public-grade stream.
 - A `broadcast` seat is a stream's seat. Endpoints the page does not read are not scrubbed for it.
 - Lanes: inc 2 `01M50C1T9P735H4Z4P7KW7XJX3` (server), inc 3 `01M50C1ZZMJFRG409G6TC4S303` (CLI and
   page). Until inc 3 ships, the stream keeps its `public` seat.
+
+- **2026-10-15 — what decision 8 covers** (big-body's send-back of inc 2, lane
+  `01M50C1T9P735H4Z4P7KW7XJX3`). Read literally, "missing → public" contradicts ADR 136's rule that a
+  NULL `observer_scope` is `full`, which the v18 migration relies on (it set every pre-v18 observer
+  to `full`, and every mint since writes an enum value). That reversal was not intended. What
+  decision 8 means: an `observer_scope` string other than `full`, `public` or `broadcast` resolves
+  to `public` wherever a grade is resolved (`resolveObserverScope`, feeding history, roster and
+  masking), and a live connection with no grade is `public` at the fan-out. A NULL column stays
+  `full`.
 
 ## Observability & Evaluation
 

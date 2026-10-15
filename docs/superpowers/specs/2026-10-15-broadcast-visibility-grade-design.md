@@ -64,7 +64,9 @@ stays public-grade; starting the broadcast still needs a human admin (ADR 580).
 - **Roster status.** For a `broadcast` or `public` reader, a member's `state` comes from their latest
   `status_update` that is not a human-pair DM. For `public`, this closes the leak above: the rule
   for public stays what ADR 136 says (team and broadcast acts), and its status line now follows it.
-- **Fail closed.** A missing or unknown grade is `public`, as `broadcastFirehose` already does.
+- **Fail closed.** An unrecognised `observer_scope` string is `public`, and a live connection with no
+  grade is `public`, as `broadcastFirehose` already does. A NULL column stays `full` (ADR 136; ADR 601
+  Consequences, 2026-10-15).
   `resolveObserverScope` returns `broadcast` only for the exact stored string.
 
 ### 2. Masking secrets
