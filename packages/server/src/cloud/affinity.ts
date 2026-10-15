@@ -28,8 +28,6 @@ import { log } from '../log.js';
  */
 
 export const REFRESH_MS = 5_000;
-/** The served-team set is bounded: a flood of invented team hosts must not grow memory. */
-export const SERVED_MAX = 10_000;
 
 /**
  * The machine a `fly-replay-src` header says replayed this request, or null. The header is set by
@@ -110,8 +108,12 @@ export interface AffinityOptions {
   machines?: () => Promise<string[]>;
   /** The Fly app whose machines are the peer set (`FLY_APP_NAME`). */
   app?: string | null;
-  /** Called with the teams this server no longer owns after a list change (close their sockets). */
-  onLost?: (teams: string[], newOwnerOf: (team: string) => string | null) => void;
+  /**
+   * Called after the machine list changed, with the new ownership function. The caller walks the
+   * teams it actually holds sockets for (the Hub knows them; this module does not track them, so a
+   * flood of invented team hosts costs nothing here) and closes those it no longer owns.
+   */
+  onChange?: (ownerOf: (team: string) => string | null) => void;
   refreshMs?: number;
 }
 
@@ -122,14 +124,12 @@ export class Affinity {
   private readonly fetch: () => Promise<string[]>;
   private timer: NodeJS.Timeout | null = null;
   private warned = false;
-  private readonly onLost: AffinityOptions['onLost'];
+  private readonly onChange: AffinityOptions['onChange'];
   private readonly refreshMs: number;
-  /** Teams this server has served since the last refresh — the set a list change is checked against. */
-  private served = new Set<string>();
 
   constructor(opts: AffinityOptions) {
     this.self = opts.self;
-    this.onLost = opts.onLost;
+    this.onChange = opts.onChange;
     this.refreshMs = opts.refreshMs ?? REFRESH_MS;
     const app = opts.app ?? null;
     this.fetch =
@@ -151,18 +151,12 @@ export class Affinity {
   }
 
   decide(team: string | null, replayed: boolean | string | null): AffinityDecision {
-    const d = decide(team, this.self, this.list, replayed);
-    // Record only a team this server OWNS and served — that is the set a list change can take
-    // away. A replayed or foreign team is not recorded, and the set is bounded (oldest out).
-    if (team !== null && d.local && d.owner === this.self) {
-      this.served.delete(team);
-      this.served.add(team);
-      if (this.served.size > SERVED_MAX) {
-        const oldest = this.served.values().next().value;
-        if (oldest !== undefined) this.served.delete(oldest);
-      }
-    }
-    return d;
+    return decide(team, this.self, this.list, replayed);
+  }
+
+  /** Who owns `team` under the list as last read. */
+  ownerOf(team: string): string | null {
+    return ownerFor(team, this.list);
   }
 
   /** Read the list once; a failure keeps the previous list and logs once. */
@@ -183,9 +177,7 @@ export class Affinity {
     this.list = [...next].sort();
     if (before.join(',') === this.list.join(',')) return;
     log.info({ msg: 'affinity_machines', machines: this.list, self: this.self });
-    const lost = [...this.served].filter((t) => ownerFor(t, this.list) !== this.self);
-    for (const t of lost) this.served.delete(t);
-    if (lost.length > 0 && this.onLost) this.onLost(lost, (t) => ownerFor(t, this.list));
+    this.onChange?.((t) => ownerFor(t, this.list));
   }
 
   start(): void {

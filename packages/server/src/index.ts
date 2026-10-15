@@ -38,7 +38,7 @@ import { closeReportService } from './store/reportCache.js';
 import { defaultArchiveDir, startAuditRetention } from './store/retention.js';
 import type { MemberRow } from './store/rows.js';
 import { revokeExpiredMember } from './store/sponsoredCascade.js';
-import { getTeamBySlug } from './store/teams.js';
+import { getTeamById, getTeamBySlug } from './store/teams.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
@@ -217,14 +217,18 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   const affinity = cloud
     ? new Affinity({
         ...(opts.affinity ?? affinityFromEnv(process.env)),
-        onLost: (teams, newOwnerOf) => {
-          // Slugs in, team ids out: the hub keys connections by team id. Resolved as the operator,
-          // which `opDb` below is; the closure runs on a timer, long after it is assigned.
+        onChange: (ownerOf) => {
+          // Walk the teams this server holds sockets for (by id) and close those it no longer
+          // owns (by slug). Resolved as the operator, which `opDb` below is; the closure runs on
+          // a timer, long after it is assigned.
           void (async () => {
-            for (const slug of teams) {
-              const team = await getTeamBySlug(opDb, slug).catch(() => null);
-              const closed = team ? hub.closeTeam(team.id) : 0;
-              log.info({ msg: 'affinity_lost', team: slug, closed, owner: newOwnerOf(slug) });
+            for (const teamId of hub.teamIds()) {
+              const team = await getTeamById(opDb, teamId).catch(() => null);
+              if (!team) continue;
+              const owner = ownerOf(team.slug);
+              if (owner === affinity?.self) continue;
+              const closed = hub.closeTeam(teamId);
+              log.info({ msg: 'affinity_lost', team: team.slug, closed, owner });
             }
           })();
         },

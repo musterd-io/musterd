@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Affinity, SERVED_MAX, decide, ownerFor, parseVmsTxt, replaySource } from './affinity.js';
+import { Affinity, decide, ownerFor, parseVmsTxt, replaySource } from './affinity.js';
 
 describe('ADR 608 — team affinity by rendezvous hash', () => {
   const machines = ['m1', 'm2', 'm3', 'm4'];
@@ -55,12 +55,6 @@ describe('ADR 608 — team affinity by rendezvous hash', () => {
     expect(decide('revive', other, machines, owner).local).toBe(true);
   });
 
-  it('the served set records only owned teams and is bounded', () => {
-    const a = new Affinity({ self: 'm1', machines: async () => ['m1'] });
-    for (let i = 0; i < SERVED_MAX + 50; i++) a.decide(`flood-${i}`, false);
-    expect((a as unknown as { served: Set<string> }).served.size).toBe(SERVED_MAX);
-  });
-
   it('decide: a list that does not name this machine is stale — serve, do not replay', () => {
     expect(decide('revive', 'm9', machines, false).local).toBe(true);
   });
@@ -71,26 +65,34 @@ describe('ADR 608 — team affinity by rendezvous hash', () => {
     expect(parseVmsTxt([])).toEqual([]);
   });
 
-  it('refresh: a list change hands lost teams to onLost; an empty or failing read changes nothing', async () => {
+  it('refresh: a list change calls onChange with the new ownership; an empty or failing read changes nothing', async () => {
     let list = ['m1'];
-    const lost: string[][] = [];
+    const changes: ((t: string) => string | null)[] = [];
     const a = new Affinity({
       self: 'm1',
       machines: async () => list,
-      onLost: (teams) => lost.push(teams),
+      onChange: (f) => changes.push(f),
     });
-    const teams = Array.from({ length: 50 }, (_, i) => `team-${i}`);
-    for (const t of teams) expect(a.decide(t, false).local).toBe(true);
     list = [];
     await a.refresh();
     expect(a.machines).toEqual(['m1']);
+    expect(changes).toHaveLength(0);
     list = ['m1', 'm2', 'm3'];
     await a.refresh();
-    expect(lost).toHaveLength(1);
-    const moved = lost[0]!;
+    expect(changes).toHaveLength(1);
+    const teams = Array.from({ length: 50 }, (_, i) => `team-${i}`);
+    const moved = teams.filter((t) => changes[0]!(t) !== 'm1');
     expect(moved.length).toBeGreaterThan(0);
-    for (const t of moved) expect(ownerFor(t, list)).not.toBe('m1');
-    for (const t of teams.filter((x) => !moved.includes(x))) expect(ownerFor(t, list)).toBe('m1');
+    for (const t of teams) expect(a.ownerOf(t)).toBe(changes[0]!(t));
+    // A failing read keeps the list and warns once.
+    const failing = new Affinity({
+      self: 'm1',
+      machines: async () => {
+        throw new Error('dns');
+      },
+    });
+    await failing.refresh();
+    expect(failing.machines).toEqual(['m1']);
     // Off: never replays, never refreshes.
     const off = new Affinity({ self: null, machines: async () => ['x', 'y'] });
     await off.refresh();

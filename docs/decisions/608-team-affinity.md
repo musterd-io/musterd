@@ -66,7 +66,11 @@ seat rule rebuilt as a cross-server operation) prices the 22 easy sites and not 
   for those teams, not downtime.
 - During the few seconds two servers hold different machine lists a team can be double-owned: a
   displacement in that window is not enforced across the pair. Decision 2's replay guard bounds the
-  damage to that window.
+  damage to that window, and the guard trusts `fly-replay-src` only when it names a live peer other
+  than this machine, so a client cannot spoof its way onto a non-owner.
+- The module tracks no per-team state of its own: on a list change the server walks the teams the
+  Hub holds sockets for and closes those it no longer owns, so a flood of invented team hosts costs
+  the affinity module nothing.
 - `fly-replay` buffers request bodies up to 1 MB; every musterd request body is far under it.
 - Spec §3 and `03-server.md` are amended in this change; `fly.toml`'s one-machine note is replaced.
 
