@@ -6746,10 +6746,12 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/wake-context') {
         const { team, member } = await authTouch(ctx, slug, req);
         const target = parseOrBadRequest(WakeContextRequestSchema, await readJson(req));
-        // Audit both allow and deny (ADR 209 follow-up): an authorization boundary that only records
-        // successes cannot answer "did anyone probe for lanes they do not own". The deny row uses the
-        // request's named id as `target` — same shape as allow — without disclosing whether it exists
-        // (the HTTP response stays a uniform forbidden).
+        // Audit both allow and deny (ADR 209 follow-up, amended by ADR 600): an authorization
+        // boundary that only records successes cannot answer "did anyone probe for lanes they do not
+        // own". The deny row uses the request's named id as `target` — same shape as allow. A
+        // guessing caller stays a uniform forbidden, and that audit does not disclose existence. A
+        // member already named on a wake lease for the act is told apart: gone is `not_found`
+        // (reason `missing`), unreadable is `forbidden` with a distinct message.
         try {
           const context = await buildWakeContext(ctx.db, team, member, target);
           const response = WakeContextResponseSchema.parse({ context });
@@ -6790,15 +6792,16 @@ export async function handleHttp(
           });
           return sendJson(res, 200, response);
         } catch (e) {
-          if (e instanceof MusterdError && e.code === 'forbidden') {
+          if (e instanceof MusterdError && (e.code === 'forbidden' || e.code === 'not_found')) {
             await appendAudit(ctx.db, team.id, {
               actor: member.name,
               action: 'residency.context_read',
               target: target.act_id ?? target.lane_id ?? '?',
               result: 'deny',
               detail: {
-                reason: 'forbidden',
-                // Request shape only — not derived from whether the target exists.
+                reason: e.code === 'not_found' ? 'missing' : 'forbidden',
+                // Request shape only. `missing` is recorded only for a member a wake lease already
+                // names (ADR 600); a guessing caller never reaches that code.
                 target_kind: target.act_id !== undefined ? 'act' : 'lane',
               },
             });

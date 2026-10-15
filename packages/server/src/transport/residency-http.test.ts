@@ -1119,6 +1119,27 @@ withDrivers('residency-http', (_o, kind) => {
         target_kind: 'act',
       });
     });
+
+    it('an ordered recipient is told the act is gone, and the audit says missing (ADR 600)', async () => {
+      await claimAda();
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const ada = (await getMemberByName(server.store, team.id, 'Ada'))!;
+      await server.store.run(
+        `INSERT INTO wake_leases (id, team_id, member_id, act_id, host, lane, status, created_at, expires_at)
+         VALUES ('L-gone', ?, ?, 'gone-act', 'laptop.local', 'batched', 'reported', 1, 2)`,
+        [team.id, ada.id],
+      );
+      const r = await postAsAda('/teams/dawn/wake-context', { act_id: 'gone-act' });
+      expect(r.status).toBe(404);
+      expect(r.json.error.code).toBe('not_found');
+      const rows = await audits('residency.context_read');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.result).toBe('deny');
+      expect(JSON.parse(rows[0]!.detail as string)).toEqual({
+        reason: 'missing',
+        target_kind: 'act',
+      });
+    });
   });
 
   describe('POST /teams/:slug/residency/wake-turn — per-turn telemetry + capture (ADR 251 §7)', () => {

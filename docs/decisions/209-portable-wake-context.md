@@ -111,6 +111,7 @@ daemon/host pair is upgraded.
 Act-targeted packet only when that Act was delivered to the caller. A caller may read a Lane-targeted
 packet only when it is the Lane owner or the recipient of the live review/handoff derivation for the
 Lane. Other requests return `forbidden` without disclosing the target’s existence.
+_(Amended 2026-10-15: a member a wake lease already names is told gone from unreadable — [ADR 600](600-wake-lease-readable-act.md). A guessing caller stays on this sentence.)_
 
 ### 5. Rollout is evidence-led and reversible
 
@@ -152,6 +153,10 @@ this ADR and `SPEC.md` carry the accepted, not-yet-shipped contract.
   the memory body — under a 12 KiB cap. The "no bodies" rule is narrowed to the reason it had:
   no bodies in the *spawn prompt* (ADR 088 §4), which is unchanged. Bounded and derived at read
   time, as §1 required, are what still hold.
+- 2026-10-15 ([ADR 600](600-wake-lease-readable-act.md)): §4's uniform `forbidden` still holds for
+  a guessing caller. A member already named on a `wake_leases` row for that act is told `not_found`
+  when the row is gone and a distinct `forbidden` when the act exists but `mayReadWakeAct` refuses
+  it. `claimWakeLeases` no longer mints a lease whose `act_id` fails that same predicate.
 
 ## Observability & Evaluation
 
