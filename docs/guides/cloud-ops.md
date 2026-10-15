@@ -11,7 +11,7 @@
 | Piece | Where | Notes |
 | --- | --- | --- |
 | Team endpoints | `*.musterd.dev` → Cloudflare (proxied) → Fly app `musterd-cloud` | Wildcard CNAME to `musterd-cloud.fly.dev`; Fly holds a Let's Encrypt `*.musterd.dev` certificate issued by DNS-01 (`_acme-challenge` CNAME, DNS only). IPs: shared v4, dedicated v6. |
-| Serving app | Fly `musterd-cloud`, org `personal` | **One machine** (nick, 2026-10-02) in iad, blue-green deploys, `performance-1x` with 2 GB: a dedicated core for the load-test week (nick, 2026-10-02; revisit by 2026-10-09). Before that it was `shared-cpu-1x` with 512 MB. Holds the **app** and **operator** database URLs only. It can never change the schema. A second machine waits on cross-server fan-out (lane `01M3Z4EMH3`). Under sustained load a shared CPU is throttled to its baseline share once its burst balance runs out: the 2026-10-02 load test hit that after seven minutes (`docs/perf/daemon-load-baseline.md`). |
+| Serving app | Fly `musterd-cloud`, org `personal` | **Two machines** since 2026-10-15 (nick ran `fly scale count 2`; ADR 608 team affinity makes N ≥ 2 safe), rolling deploys; before that one machine (nick, 2026-10-02), blue-green. `performance-1x` with 2 GB: a dedicated core for the load-test week (nick, 2026-10-02; revisit by 2026-10-09). Before that it was `shared-cpu-1x` with 512 MB. Holds the **app** and **operator** database URLs only. It can never change the schema. A second machine waits on cross-server fan-out (lane `01M3Z4EMH3`). Under sustained load a shared CPU is throttled to its baseline share once its burst balance runs out: the 2026-10-02 load test hit that after seven minutes (`docs/perf/daemon-load-baseline.md`). |
 | Migrate app | Fly `musterd-cloud-migrate` | No machines between deploys. Holds the **owner** URLs; the deploy runs the migrate step there before the rollout (spec §6). |
 | Database | Neon project `musterd-cloud` (`long-thunder-03987236`), aws-us-east-1, Postgres 17, **Launch plan** (nick, 2026-10-02), 7 days of point-in-time restore | Databases `musterd` and `musterd_trace`. Login users `musterd_app_login` / `musterd_operator_login`, made in SQL so they are not in `neon_superuser`. URLs use `sslmode=verify-full`. Fly's 15-second `/health` check keeps the compute awake. |
 | Staging console issuer | Key: `~/.musterd/cloud/staging-issuer.jwk` (mode 600, nick's laptop). JWKS: `https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks` (worker `workers/staging-jwks`) | Stands in for increment 2's console. It signs the tokens that create teams on staging. Retired by lane `01M3Z43V58`. |
@@ -68,15 +68,18 @@ comes back to `~/.musterd/cloud/teams/<slug>.json`.
 ## Deploy
 
 ```sh
-node scripts/cloud/deploy.mjs      # from a clean checkout of the commit to ship
+node scripts/cloud/deploy.mjs                              # from a clean checkout of the commit to ship
+CLOUD_DEPLOY_STRATEGY=rolling node scripts/cloud/deploy.mjs   # with N ≥ 2 machines (ADR 608)
 ```
 
 One image per commit (`registry.fly.io/musterd-cloud:git-<sha>`):
 
 1. It is built on Fly's remote builder. The script then waits for the tag to appear in the registry: the push lands after `fly deploy --build-only --push` returns.
 2. The migrate app runs `scripts/cloud/migrate.mjs` on that image as a one-shot machine, created through the Machines API because `fly machine run` looks images up inside its own app. The script reads the machine's exit event. Fly leaves out a zero `exit_code`, so a missing code means 0.
-3. Only on exit 0 is the serving app moved, blue-green, onto the same image. The new machine must pass `/health` before the old one is destroyed.
+3. Only on exit 0 is the serving app moved onto the same image: blue-green by default (one machine: start the new one, gate on `/health`, retire the old), or rolling with `CLOUD_DEPLOY_STRATEGY=rolling` (N ≥ 2: machines replaced one at a time, each gated on `/health`). Rolling is safe only because ADR 608 gives every team one owning machine; two builds serve the same schema for the length of the roll, which is what spec §6's expand/contract exists for.
 4. It checks `https://health.musterd.dev/health` through Cloudflare.
+
+**Rehearsed 2026-10-15 (§8.4, lane `01M3Z44EMJ`, `docs/perf/daemon-load-baseline.md`):** a migration is rehearsed first on a Neon branch of staging — `create_branch`, then `node --env-file=<mode-600 file with the branch's DIRECT owner URLs> scripts/cloud/migrate.mjs`, read `schema_meta` back, delete the branch. Then the real deploy under load: the migrate step moved staging 96 → 98 while 40/40/40 ran against two machines, the old build kept serving on the newer schema, and the hub log held no 5xx. The guard's other half: `fly machine run registry.fly.io/musterd-cloud:git-<old sha> --rm` with `fly.toml`'s `[env]` block passed as `-e` exits 1 with `schema newer than this build: database is at schema 98, this build knows 96`. The first roll stopped at machine 1 of 2 because the health check's `Host: health.musterd.dev` was read as a team and replayed (#2675 fixed it): a failed health gate leaves the app mixed, one machine per build, and the next `deploy.mjs` finishes the roll.
 
 Fly's health checker calls the machine by its internal IP. Cloud mode's Host allow-list (ADR 040) refuses that, so the check sends `Host: health.musterd.dev` (`deploy/cloud/fly.toml`). The web UI is served from the web build's `dist/client`.
 
