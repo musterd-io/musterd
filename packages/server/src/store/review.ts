@@ -24,7 +24,7 @@ import {
   QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
 } from './quiescence.js';
 import { listWakeableMemberIds, seatWakeabilityFacts, wakeabilityInputs } from './residency.js';
-import { type MemberRow } from './rows.js';
+import { type MemberRow, resolveCapabilities } from './rows.js';
 
 /**
  * The review counterpart picker (ADR 169 §4) — who gets the standard-tier `approve` ask when a lane
@@ -771,6 +771,87 @@ export async function pickHumanReviewer(
     grade: 'human',
     reviewer_family: await memberFamily(db, human),
   };
+}
+
+/**
+ * ADR 607: the human the stage-two ask goes to — live or not. Rule 1.1 is `pickHumanReviewer`
+ * unchanged (a human with live presence); rule 1.2, when nobody is live, is a non-observer human
+ * seat other than the worker, preferring `is_admin`, then the most recently seen. Kind-only, like
+ * stage one of this function: a stale `is_admin` on an agent row never satisfies the human stage.
+ * Null only when the team has no such human at all — the one case `human_ask_fired: false` still
+ * means something.
+ *
+ * Why offline is fine: the stage-two ask is an ordinary blocking-tier `ask`. An ask waiting in an
+ * inbox is how every other human ask is delivered, and it is what puts the lane on the `/live` and
+ * `/broadcast` ask rails — which the ADR 539 pending state, living only in the ledger and the
+ * orientation brief, never did (lane 01M50CD7SN, 2026-10-15: 6 of 7 minutes with nothing on the rail).
+ */
+export async function humanReviewerFor(
+  db: Driver,
+  teamId: string,
+  worker: string,
+  presenceTimeoutMs: number,
+): Promise<(ReviewPick & { live: boolean }) | null> {
+  const live = await pickHumanReviewer(db, teamId, worker, presenceTimeoutMs);
+  if (live) return { ...live, live: true };
+  const humans = (await listMembers(db, teamId)).filter(
+    (m) => m.kind === 'human' && !m.observer && m.name !== worker,
+  );
+  if (humans.length === 0) return null;
+  // "Most recently seen" is the newest presence row per seat — a human who has never attached
+  // ranks last, which is also right: the admin bit decides first, recency only breaks ties.
+  const seen = new Map(
+    (
+      await db.all<{ member_id: string; seen: number }>(
+        `SELECT member_id, MAX(last_seen_at) AS seen FROM presence
+          WHERE member_id IN (${humans.map(() => '?').join(',')}) GROUP BY member_id`,
+        humans.map((m) => m.id),
+      )
+    ).map((r) => [r.member_id, r.seen]),
+  );
+  const rank = (m: (typeof humans)[number]) =>
+    (resolveCapabilities(m).is_admin ? 1 : 0) * 2 ** 53 + (seen.get(m.id) ?? 0);
+  const human = humans.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+  return {
+    reviewer: human.name,
+    route: 'human_admin',
+    grade: 'human',
+    reviewer_family: await memberFamily(db, human),
+    live: false,
+  };
+}
+
+/**
+ * ADR 607 × ADR 603: the stage-two human ask that is out and unanswered — the state a risky lane is
+ * in from the peer's accept until the human's verdict, now that the ask fires whether or not the
+ * human is live. Read from the newest `lane.review_human_asked` row and the reply ledger, never
+ * stored. Null when no human was asked, or when the ask has an accept/decline.
+ */
+export async function humanAskOutstanding(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<{ ask: string; human: string; peer: string } | null> {
+  const row = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
+        WHERE team_id = ? AND action = 'lane.review_human_asked' AND target = ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  if (!row?.detail) return null;
+  let d: { ask?: unknown; human?: unknown; peer?: unknown };
+  try {
+    d = JSON.parse(row.detail) as typeof d;
+  } catch {
+    return null;
+  }
+  if (typeof d.ask !== 'string' || typeof d.human !== 'string') return null;
+  const answered = await db.get<{ id: string }>(
+    `SELECT id FROM messages WHERE team_id = ? AND act IN ('accept','decline') AND in_reply_to = ? LIMIT 1`,
+    [teamId, d.ask],
+  );
+  if (answered) return null;
+  return { ask: d.ask, human: d.human, peer: typeof d.peer === 'string' ? d.peer : '' };
 }
 
 /** Why a named acceptor was refused — the submit answers with the reason, never a silent fallback

@@ -410,6 +410,7 @@ import {
   acceptanceExemption,
   namedAcceptor,
   openAcceptanceAsk,
+  humanReviewerFor,
   pickHumanReviewer,
   pickWakeReviewer,
   REVIEW_LOOP_BREAKER_N,
@@ -7573,6 +7574,19 @@ export async function handleHttp(
                 }
               }
             }
+          }
+          // ADR 607 §3: a risky lane whose submit found no peer and no LIVE human is still owed its
+          // human review, so the ask goes to an offline human — admin first, then most recently
+          // seen. The ADR 191 wake path above is non-risky only (ADR 253), so for a risky lane the
+          // ladder here reads: live human, then offline human. A named acceptor never reaches this.
+          if (!pick && !exemption.exempt && lane.risk.length > 0 && !named) {
+            const offline = await humanReviewerFor(
+              ctx.db,
+              team.id,
+              worker,
+              ctx.config.presenceTimeoutMs,
+            );
+            if (offline) pick = offline;
           }
           // Record the ROUTING OUTCOME here, where it is known. Without it the close edge can only
           // see "this lane passed through review" and calls every owner-close a `review_timeout` —

@@ -64,6 +64,13 @@ the only thing the daemon did was write that down.
   refused for at most the promised window — 20 m by default (ADR 506) — then self-closes as before.
   The gate cannot wedge a lane.
 
+- _(2026-10-15, lane 01M50FG3MZ, ADR 607.)_ The stage-two ask now fires to an offline human, so
+  `peerConfirmedPending` rarely holds and Decision 1's gate would have gone dead the same day. It is
+  re-keyed: the owner's `done` is refused while the human's verdict is owed in **either** shape — the
+  stage-two ask out and unanswered (`humanAskOutstanding`, the common case), or no human seat
+  askable (ADR 539). Decision 2's narrowness is unchanged, and the refusal now names the human who
+  holds the ask.
+
 ## Observability & Evaluation
 
 - Traces: the refusal is a 409 on `PATCH /lanes/:id` whose message carries `ADR 603`; the

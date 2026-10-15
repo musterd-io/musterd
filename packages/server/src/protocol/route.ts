@@ -40,6 +40,7 @@ import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
 import {
   openAcceptanceAsk,
+  humanReviewerFor,
   pendingHumanReviews,
   pickHumanReviewer,
   supersededAcceptanceAsks,
@@ -1217,7 +1218,9 @@ async function fireGatedHumanAsk(
   if (!gated) return null;
   const { lane, owner } = gated;
 
-  const human = await pickHumanReviewer(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
+  // ADR 607: live human first, else an offline one (admin, then most recently seen). Null only when
+  // the team has no eligible human seat — the one case the ADR 539 pending state still covers.
+  const human = await humanReviewerFor(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
   // ADR 539: replicated (it always sat in the fold's LANE_VERBS, but was written local-only), so a
   // joiner's brief can say "peer-confirmed, waiting for a human" about a hub-side confirmation.
   await appendReplicatedEvent(ctx.db, team.id, {
@@ -1230,11 +1233,23 @@ async function fireGatedHumanAsk(
       peer: peer.name,
       grade: gated.grade,
       human_ask_fired: human !== null,
+      // ADR 607 §4: whether the human asked was live at the time — the ask fires either way.
+      human_live: human?.live ?? false,
       ...(peerAcceptId ? { peer_accept: peerAcceptId } : {}),
     },
   });
   if (!human) return { lane: lane.id, human: null };
-  await sendHumanStageAsk(ctx, team, lane, owner, peer.name, peerFindings, human.reviewer, false);
+  await sendHumanStageAsk(
+    ctx,
+    team,
+    lane,
+    owner,
+    peer.name,
+    peerFindings,
+    human.reviewer,
+    false,
+    human.live,
+  );
   return { lane: lane.id, human: human.reviewer };
 }
 
@@ -1248,6 +1263,8 @@ async function sendHumanStageAsk(
   peerFindings: string,
   human: string,
   retried: boolean,
+  /** ADR 607 §4: the human had live presence when asked. */
+  humanLive: boolean,
 ): Promise<void> {
   const findings = peerFindings.length > 500 ? `${peerFindings.slice(0, 500)}…` : peerFindings;
   const checklist =
@@ -1291,7 +1308,7 @@ async function sendHumanStageAsk(
     action: 'lane.review_human_asked',
     target: lane.id,
     result: 'allow',
-    detail: { lane: lane.id, human, ask: ask.id, peer: peerName, retried },
+    detail: { lane: lane.id, human, ask: ask.id, peer: peerName, retried, human_live: humanLive },
   });
 }
 
@@ -1335,6 +1352,7 @@ export async function retryPendingHumanAsks(
       pending.peer,
       accept?.body ?? '(peer findings not on this node)',
       human.reviewer,
+      true,
       true,
     );
     asked.push({ lane: lane.id, human: human.reviewer });
