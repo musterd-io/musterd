@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { runConnect } from './connect.js';
+import { runConnect, seatNameFor } from './connect.js';
 
 const h = vi.hoisted(() => ({
   multiQueue: [] as unknown[],
@@ -10,6 +10,15 @@ const h = vi.hoisted(() => ({
   recents: [] as { dir: string; harnesses: string[]; lastUsed: number }[],
   provision: null as unknown as ReturnType<typeof import('vitest').vi.fn>,
   confirmQueue: [] as boolean[],
+  selectQueue: [] as unknown[],
+  selectCalls: [] as { message: string }[],
+  textQueue: [] as unknown[],
+  textCalls: [] as {
+    message: string;
+    initialValue?: string;
+    validate: (v: string) => string | undefined;
+  }[],
+  notes: [] as string[],
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -17,10 +26,18 @@ vi.mock('@clack/prompts', () => ({
   cancel: vi.fn(),
   intro: vi.fn(),
   outro: vi.fn(),
-  note: vi.fn(),
+  note: vi.fn((body: string) => void h.notes.push(body)),
   log: { info: vi.fn(), warn: vi.fn(), step: vi.fn(), success: vi.fn(), message: vi.fn() },
   spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
   confirm: vi.fn(async () => h.confirmQueue.shift()),
+  select: vi.fn(async (o: { message: string }) => {
+    h.selectCalls.push(o);
+    return h.selectQueue.length ? h.selectQueue.shift() : 'accept';
+  }),
+  text: vi.fn(async (o: (typeof h.textCalls)[number]) => {
+    h.textCalls.push(o);
+    return h.textQueue.shift();
+  }),
   multiselect: vi.fn(
     async (o: { options: { value: string; hint?: string }[]; initialValues: string[] }) => {
       h.multiCalls.push(o);
@@ -80,6 +97,11 @@ beforeEach(async () => {
   h.confirmQueue.length = 0;
   h.multiQueue.length = 0;
   h.multiCalls.length = 0;
+  h.selectQueue.length = 0;
+  h.selectCalls.length = 0;
+  h.textQueue.length = 0;
+  h.textCalls.length = 0;
+  h.notes.length = 0;
   h.provision.mockReset();
   h.provision.mockImplementation(async (i: { sourceDir: string }) => seat(i.sourceDir));
 });
@@ -161,5 +183,70 @@ describe('runConnect', () => {
     h.multiQueue.push(['claude-code'], [here]);
     expect(await runConnect({ ...input(here), driver: 'nick' })).toBe(1);
     expect(p.confirm).not.toHaveBeenCalled();
+  });
+
+  it('shows each repo with its seat name and connects with them on Enter', async () => {
+    const here = repo();
+    const web = repo();
+    h.recents = [{ dir: web, harnesses: ['cursor'], lastUsed: 1 }];
+    h.multiQueue.push(['claude-code'], [here, web]);
+
+    expect(await runConnect(input(here))).toBe(0);
+
+    expect(h.selectCalls).toHaveLength(1);
+    expect(h.textCalls).toHaveLength(0);
+    const names = h.notes[0]!;
+    expect(names).toContain(seatNameFor(here, ['nick']));
+    expect(names).toContain(seatNameFor(web, ['nick']));
+    expect(h.provision.mock.calls.map(([c]) => c.name)).toEqual([
+      seatNameFor(here, ['nick']),
+      seatNameFor(web, ['nick']),
+    ]);
+  });
+
+  it('flags a folder name that is taken, and says what it became', async () => {
+    const here = repo();
+    h.recents = [];
+    vi.mocked(http as { roster: ReturnType<typeof vi.fn> }).roster.mockResolvedValueOnce({
+      members: [{ name: 'nick' }, { name: seatNameFor(here, []) }],
+    });
+    h.multiQueue.push(['claude-code'], [here]);
+    expect(await runConnect(input(here))).toBe(0);
+    expect(h.notes[0]).toContain(`${seatNameFor(here, [])} is taken`);
+    expect(h.provision.mock.calls[0]![0].name).toBe(`${seatNameFor(here, [])}-2`);
+  });
+
+  it('"Change names" asks once per repo, prefilled, and connects with what was typed', async () => {
+    const here = repo();
+    const web = repo();
+    h.recents = [{ dir: web, harnesses: ['cursor'], lastUsed: 1 }];
+    h.multiQueue.push(['claude-code'], [here, web]);
+    h.selectQueue.push('edit');
+    h.textQueue.push('backend', ' frontend ');
+
+    expect(await runConnect(input(here))).toBe(0);
+
+    expect(h.textCalls.map((c) => c.initialValue)).toEqual([
+      seatNameFor(here, ['nick']),
+      seatNameFor(web, ['nick']),
+    ]);
+    expect(h.provision.mock.calls.map(([c]) => c.name)).toEqual(['backend', 'frontend']);
+  });
+
+  it('the name prompt refuses a roster name and one already picked in this run', async () => {
+    const here = repo();
+    const web = repo();
+    h.recents = [{ dir: web, harnesses: ['cursor'], lastUsed: 1 }];
+    h.multiQueue.push(['claude-code'], [here, web]);
+    h.selectQueue.push('edit');
+    h.textQueue.push('backend', 'frontend');
+
+    await runConnect(input(here));
+
+    const [first, second] = h.textCalls;
+    expect(first!.validate('Nick')).toMatch(/taken/);
+    expect(first!.validate('has space')).toMatch(/letters/);
+    expect(first!.validate('backend')).toBeUndefined();
+    expect(second!.validate('backend')).toMatch(/taken/);
   });
 });

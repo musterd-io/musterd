@@ -2,7 +2,13 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { connectRepos, resultLine, seatNameFor, type ConnectReposInput } from './connect.js';
+import {
+  connectRepos,
+  resultLine,
+  seatNameFor,
+  seatNameProblem,
+  type ConnectReposInput,
+} from './connect.js';
 
 type Row = { harness: string; result: string; detail?: string };
 const seat = (dir: string, rows: Row[], ok = true) => ({
@@ -47,7 +53,36 @@ describe('seatNameFor', () => {
   });
 });
 
+describe('seatNameProblem', () => {
+  it('accepts a folder-style name and refuses what a seat file or the roster cannot hold', () => {
+    expect(seatNameProblem('web-2', [])).toBeNull();
+    expect(seatNameProblem('Ada_1', [])).toBeNull();
+    expect(seatNameProblem('', [])).toMatch(/name/);
+    expect(seatNameProblem('my repo', [])).toMatch(/letters/);
+    expect(seatNameProblem('-web', [])).toMatch(/letters/);
+    expect(seatNameProblem('a/b', [])).toMatch(/letters/);
+    expect(seatNameProblem('x'.repeat(65), [])).toMatch(/64/);
+  });
+
+  it('refuses a name already taken, ignoring case', () => {
+    expect(seatNameProblem('Web', ['web'])).toMatch(/taken/);
+  });
+});
+
 describe('connectRepos', () => {
+  it('uses the names it is given, and folder names for the rest', async () => {
+    const provision = okProvision();
+    const got = await connectRepos({
+      ...base,
+      repos: ['/c/api', '/c/web'],
+      names: { '/c/api': 'backend' },
+      provision,
+      writePrimer: vi.fn(),
+    });
+    expect(got.map((r) => r.name)).toEqual(['backend', 'web']);
+    expect(provision.mock.calls.map(([c]) => c['name'])).toEqual(['backend', 'web']);
+  });
+
   it('gives three repos three seats bound in place with the same desired set', async () => {
     const provision = okProvision();
     const writePrimer = vi.fn();

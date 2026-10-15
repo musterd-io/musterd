@@ -29,6 +29,23 @@ export function seatNameFor(dir: string, taken: Iterable<string>): string {
   for (let i = 2; ; i++) if (!lower.has(`${clean}-${i}`)) return `${clean}-${i}`;
 }
 
+const SEAT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * Why `name` cannot be a new seat, or null. The roster only refuses whitespace, but the name also
+ * becomes `seats/<name>.toml` and the git trailer `<name>@<team>.musterd`, so connect holds it to
+ * what `seatNameFor` itself produces. `taken` compares ignoring case, as `seatNameFor` does.
+ */
+export function seatNameProblem(name: string, taken: Iterable<string>): string | null {
+  if (!name) return 'name the seat';
+  if (name.length > 64) return 'at most 64 characters';
+  if (!SEAT_NAME_RE.test(name))
+    return 'letters, numbers, - and _ only, starting with a letter or number';
+  const lower = name.toLowerCase();
+  for (const t of taken) if (t.toLowerCase() === lower) return `${name} is taken on this team`;
+  return null;
+}
+
 export interface ConnectResult {
   dir: string;
   name: string;
@@ -46,6 +63,8 @@ export interface ConnectReposInput {
   http: AgentSeatInput['http'];
   /** Names already on the team, so a new seat never collides with one. */
   roster: string[];
+  /** Seat names chosen per repo dir; a repo missing here is named after its folder. */
+  names?: Record<string, string>;
   rosterHome?: string | undefined;
   driver?: string | undefined;
   model?: string | undefined;
@@ -65,7 +84,7 @@ export async function connectRepos(input: ConnectReposInput): Promise<ConnectRes
   const taken = [...input.roster];
   const out: ConnectResult[] = [];
   for (const dir of input.repos) {
-    const name = seatNameFor(dir, taken);
+    const name = input.names?.[dir] ?? seatNameFor(dir, taken);
     taken.push(name);
     try {
       // The binding about to land here holds the seat's credential, and this is the person's own
@@ -169,8 +188,60 @@ function realOr(dir: string): string {
 }
 
 /**
+ * Each repo's seat name: the folder name (suffixed when taken), shown as `repo → name` and kept on
+ * Enter. "Change names" asks once per repo, prefilled, refusing a taken or malformed name. A seat
+ * name sticks (seat file, git trailer, what teammates address), so it is shown before it is minted.
+ */
+async function chooseNames(
+  repos: string[],
+  roster: string[],
+  home: string,
+): Promise<Record<string, string>> {
+  const taken = [...roster];
+  const names: Record<string, string> = {};
+  const rows: string[] = [];
+  for (const dir of repos) {
+    const name = seatNameFor(dir, taken);
+    const folder = seatNameFor(dir, []);
+    taken.push(name);
+    names[dir] = name;
+    const why = name === folder ? '' : pc.dim(`  (${folder} is taken)`);
+    rows.push(`${tilde(dir, home)}  ${pc.dim('→')}  ${pc.cyan(name)}${why}`);
+  }
+  p.note(rows.join('\n'), 'Seat names');
+  const choice = guard(
+    await p.select({
+      message: 'Connect with these names?',
+      options: [
+        { value: 'accept', label: 'Yes, connect' },
+        { value: 'edit', label: 'Change names' },
+      ],
+      initialValue: 'accept',
+    }),
+  );
+  if (choice !== 'edit') return names;
+
+  const picked = [...roster];
+  for (const dir of repos) {
+    const before = [...picked];
+    const prefill = seatNameProblem(names[dir]!, before) ? seatNameFor(dir, before) : names[dir]!;
+    const name = guard(
+      await p.text({
+        message: `Seat name for ${tilde(dir, home)}`,
+        initialValue: prefill,
+        validate: (v) => seatNameProblem((v ?? '').trim(), before) ?? undefined,
+      }),
+    ).trim();
+    picked.push(name);
+    names[dir] = name;
+  }
+  return names;
+}
+
+/**
  * The connect path's prompts: which agents (once, for every repo), which repos (this folder first,
- * then what the agents have recently worked in), then one result line per repo. Returns the exit
+ * then what the agents have recently worked in), then their seat names, then one result line per
+ * repo. Returns the exit
  * code: 1 when any repo failed.
  */
 export async function runConnect(input: RunConnectInput): Promise<number> {
@@ -228,6 +299,8 @@ export async function runConnect(input: RunConnectInput): Promise<number> {
   }
 
   const { members } = await input.http.roster(input.team);
+  const roster = members.map((m) => m.name);
+  const names = await chooseNames(repos, roster, input.home);
   const s = p.spinner();
   s.start(`Connecting ${repos.length} repo${repos.length === 1 ? '' : 's'}`);
   const results = await connectRepos({
@@ -236,7 +309,8 @@ export async function runConnect(input: RunConnectInput): Promise<number> {
     team: input.team,
     server: input.server,
     http: input.http,
-    roster: members.map((m) => m.name),
+    roster,
+    names,
     rosterHome: input.rosterHome,
     driver: input.driver,
     model: input.model,
