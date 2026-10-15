@@ -447,7 +447,7 @@ function runAttempt(
   if (child.pid !== undefined) {
     (deps.writeWakeLease ?? writeWakeLeaseFile)(spec.workspace, {
       lease_id: spec.order.lease_id,
-      provenance: 'wake',
+      provenance: spec.order.derivation === 'dream' ? 'dream' : 'wake',
       harness: 'claude-code',
       spawner_pid: child.pid,
       started_at: spawnedAt,

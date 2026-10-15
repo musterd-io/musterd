@@ -192,6 +192,7 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
                   startedAt,
                   timeoutMs,
                   session_id: resumeId,
+                  provenance: spec.order.derivation === 'dream' ? 'dream' : 'wake',
                 },
                 deps.lease,
               )

@@ -213,6 +213,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
           startedAt,
           timeoutMs: spec.bounds.timeout_ms,
           in_process: true,
+          provenance: spec.order.derivation === 'dream' ? 'dream' : 'wake',
         },
         deps.lease,
       );

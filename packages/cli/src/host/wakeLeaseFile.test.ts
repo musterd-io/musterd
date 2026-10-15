@@ -156,6 +156,17 @@ describe('holdWakeLease (ADR 546)', () => {
     expect(existsSync(path())).toBe(false);
   });
 
+  it('stamps the derivation the caller names (ADR 604): `dream` for a dream wake, `wake` by default', () => {
+    holdWakeLease(ws, { ...opts, provenance: 'dream' });
+    expect(WakeLeaseFileSchema.parse(JSON.parse(readFileSync(path(), 'utf8'))).provenance).toBe(
+      'dream',
+    );
+    holdWakeLease(ws, opts);
+    expect(WakeLeaseFileSchema.parse(JSON.parse(readFileSync(path(), 'utf8'))).provenance).toBe(
+      'wake',
+    );
+  });
+
   it('settle reports a taken-over run, and a settled handle never rewrites the file', () => {
     mkdirSync(join(ws, BINDING_DIR), { recursive: true });
     writeFileSync(

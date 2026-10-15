@@ -1130,6 +1130,24 @@ describe('claudeCodeBackend.wake — the lease file and the yield marker (ADR 54
     expect(clears).toEqual(['L1']);
   });
 
+  it('stamps the lease dream when the order is a dream wake (ADR 604)', async () => {
+    const child = new FakeChild();
+    child.pid = 4242;
+    const writes: unknown[] = [];
+    const { backend } = harness(child, {
+      writeWakeLease: (_ws, lease) => writes.push(lease),
+      clearWakeLease: () => {},
+      takeYield: () => false,
+    });
+    const actuation = await backend.wake(
+      spec({ order: { ...order(), derivation: 'dream' } }),
+      ctx(async () => ({ occupied: true, provenance: 'dream', lease_matched: true })),
+    );
+    expect(writes[0]).toMatchObject({ lease_id: 'L1', provenance: 'dream' });
+    child.exit(0);
+    await actuation.settled;
+  });
+
   it('a run that settles while a yield marker names its lease completes as yielded', async () => {
     const child = new FakeChild();
     const { backend } = harness(child, { takeYield: (_ws, id) => id === 'L1' });

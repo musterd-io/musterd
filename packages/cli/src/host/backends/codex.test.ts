@@ -470,6 +470,19 @@ describe('the wake-lease file — a second channel for a harness that strips the
     expect(writes.at(-1)!.lease).toMatchObject({ harness: 'codex', session_id: 'new' });
   });
 
+  it('stamps the lease dream for a dream wake (ADR 604)', async () => {
+    const child = new Child();
+    child.pid = 4242;
+    const { backend, writes } = harness(child);
+    const wake = backend.wake({ ...spec, order: { ...spec.order, derivation: 'dream' } }, ctx);
+    await Promise.resolve();
+    expect(writes[0]!.lease).toMatchObject({ provenance: 'dream' });
+    child.out('{"type":"thread.started","thread_id":"new"}');
+    const actuation = await wake;
+    child.exit();
+    await actuation.settled;
+  });
+
   it('writes the lease naming the spawned child’s pid, before verification can conclude', async () => {
     const child = new Child();
     child.pid = 4242;
