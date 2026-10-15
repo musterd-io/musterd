@@ -3,15 +3,15 @@
 Open for a pitch deck or script, an investor email, a forwardable blurb, an
 investor update, Q&A prep, or an accelerator or credit-program application.
 
-You draft. nick decides the raise, the terms and who hears from us, and nick
-sends (hard rule 6). SAFE mechanics are background only; never advise on legal
+You draft. The person `team.md` names decides the raise, the terms and who hears
+from us, and sends (hard rule 6). SAFE mechanics are background only; never advise on legal
 or tax questions.
 
 ## The locked core
 
 Every investor artifact reuses one core, word for word:
 
-- **Three lengths of the same line**: about 50 characters (brand.md §1's short
+- **Three lengths of the same line**: about 50 characters (the brand guide's short
   form), one sentence, two sentences. The two-sentence line passes Michael
   Seibel's Email Test: send it to a smart friend and ask them to explain it back;
   any clarifying question means a rewrite. Aim for "80% accurate and 100% clear",
@@ -22,18 +22,18 @@ Every investor artifact reuses one core, word for word:
   answering: what are we building and for whom, why hasn't it been done before,
   why is it hard, why now
   ([Ralston, YC demo day guide](https://www.ycombinator.com/blog/guide-to-demo-day-pitches/)).
-- **The numbers ledger**: `docs/demo/pitch/script.md`'s sources table. Each row
+- **The numbers ledger**: one table of sources (`team.md` says where). Each row
   has the value, its definition, the date read and the command or link. Artifacts
-  quote ledger rows verbatim and nothing else (hard rule 4). `docs/demo/pitch/counts.sh`
-  refreshes the team's own counts.
+  quote ledger rows verbatim and nothing else (hard rule 4). Re-read the team's own
+  counts before each use, with its count script where it has one.
 
 Keep three spoken lengths of one story, all on the same vertebrae and numbers:
 two sentences, about two minutes (five to seven slides), and six minutes (the
-standing deck, `docs/demo/pitch/`).
+standing deck).
 
 ## Deck checklist
 
-- Slide 1 says what musterd does in plain words. Every slide passes the stranger
+- Slide 1 says what the product does in plain words. Every slide passes the stranger
   test: someone outside the field understands it at a glance
   ([Hale, YC 2015](https://www.ycombinator.com/blog/how-to-design-a-better-pitch-deck)).
 - The strongest true evidence comes straight after slide 1; order the rest from
@@ -46,15 +46,16 @@ standing deck, `docs/demo/pitch/`).
 - A competition slide. In DocSend's 2021–22 data, more than 70% of successful
   pre-seed decks had one, against 35% of unsuccessful ones
   ([DocSend](https://www.docsend.com/blog/the-pre-seed-round-in-2021-22/)).
-  It follows ADR 550 §5 and `landscape.md`'s freshness rule.
+  It follows the team's decision on how the field is used and the landscape's
+  freshness rule (`positioning-and-gtm.md`).
 - The ask: amount, the milestone it buys, the time frame. Seibel estimates that
   in about 70% of pitches the founder never asks; ours always does when the room
-  is investors. The amount and terms are nick's.
+  is investors. The amount and terms are the decider's (`team.md`).
 - Close on the vertebrae.
 
 ## Q&A prep
 
-Keep `docs/demo/pitch/script.md`'s "questions to expect" current. Each answer is
+Keep the deck's "questions to expect" current. Each answer is
 direct, short and true. "I don't know yet" with what would tell us is a good
 answer. For each expected objection (a lab builds this, open source can't make
 money, this is a feature), the answer cites something we have: a PR, an ADR, a

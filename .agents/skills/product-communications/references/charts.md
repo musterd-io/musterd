@@ -39,17 +39,14 @@ The Urban Institute's style guide codifies most of these and is Apache-2.0
 
 ## 3. Brand tokens that pass contrast
 
-One accent: color the one series the title is about, grey the rest. The catch: mustard
-`#E1AD01` is 2.06:1 on white, below the 3:1 that WCAG 2.2 requires for chart marks
-(SC 1.4.11, [W3C](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)).
-Ratios computed 2026-10-13 against brand.md's ramp:
-
-| Use | Light theme (on `#FFFFFF`) | Dark theme (on zinc-900 `#18181B`) |
-| --- | --- | --- |
-| Highlight mark | mustard-700 `#B8860B` (3.25:1), or `#E1AD01` with a 1px dark outline | mustard-500 `#E1AD01` (8.59:1) or mustard-300 `#EFC94C` (11.08:1) |
-| Accent text, value labels | mustard-900 `#7A5A06` (6.38:1) | mustard-300 `#EFC94C` |
-| Context series | zinc-300/400 with direct labels (zinc-400 is 2.56:1, so label it) | zinc-500 |
-| Never | `#E1AD01` as a bare mark or as text on white; rainbow or jet scales; meaning by hue alone | mustard-900 as text (2.78:1) |
+One accent: color the one series the title is about, grey the rest. The catch: a
+brand accent is often too light to use as a mark. WCAG 2.2 requires 3:1 for chart
+marks against their background
+(SC 1.4.11, [W3C](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)),
+and a yellow or a pastel can fall well short on white. Compute each brand color's
+ratio against both theme backgrounds with the WCAG formula, pick the shades that
+pass for marks and for text in each theme, and keep the table in `team.md`. Never
+use rainbow or jet scales, and never carry meaning by hue alone.
 
 SC 1.4.11 does not apply when every value is also shown as a label or in a table,
 so direct labels serve honesty and accessibility at once. Make them the default.
@@ -79,8 +76,8 @@ In SVG, give the figure `role="img"` with `<title>` and `<desc>`.
 
 ## Libraries
 
-ADR 579 decision 3: hand-written SVG or HTML from computed data stays the default,
-as `docs/demo/pitch/deck.html` does. When a chart needs real axes, scales or more
-than two series, the library is Observable Plot, pinned and rendered to static SVG
-at build time; the first PR that adds it cites ADR 579 as its dependency ADR.
+Hand-written SVG or HTML from computed data is the default. When a chart needs
+real axes, scales or more than two series, use a pinned library rendered to static
+SVG at build time. A library is a dependency decision; `team.md` names the one the
+team accepted.
 Compute contrast with the WCAG formula in a few lines of code; no color library.

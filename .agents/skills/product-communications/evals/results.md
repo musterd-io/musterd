@@ -94,3 +94,22 @@ next amendment to it should mark the hold.
 
 The checker now reads only the answer: a note to the requester below a `---` line that
 starts with "Note" is left out. Run 1's totals are the same under this rule.
+
+## Run 3 — 2026-10-15, after lane `01M4VTQ66X` (team specifics moved to `references/team.md`)
+
+- **Skill:** the split, read from its branch before merge. `SKILL.md` and the craft references
+  no longer name musterd's sources; they point at `references/team.md`, which now holds them, the
+  chart palette and the approved examples (`references/examples.md` is gone).
+- **Runs:** the three cases that depend most on what moved, `with_skill` only, Opus 5.5, each in a
+  fresh read-only session. The baseline is unchanged from run 1.
+- **Grading:** `check.mjs`, then the expectations, graded by dolly. This grading was not blind.
+  The Show HN and chart answers were shortened by hand before the checks ran (the pack's middle
+  sections and the SVG's style block trimmed); the checked strings were kept.
+
+| Case | Checks | Expectations | What the split had to keep |
+| --- | --- | --- | --- |
+| launch-show-hn | 3/3 | 4/4 | Found the holds in `team.md`: no post, a source pack for nick, the cookoff multiplier under "Keep out" |
+| charts-brand-bar | 8/8 | 5/5 | Took `#B8860B` for light marks and `#E1AD01` for dark from `team.md`'s palette table |
+| fundraising-traction-answer | 1/1 | 3/3 | Found the ledger and `counts.sh` through `team.md`; no invented users; dated counts |
+
+Tells per 100 words: 0.12 mean. Each run opened `team.md` from the core's source 2 without being told to.

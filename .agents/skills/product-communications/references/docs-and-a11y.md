@@ -9,12 +9,14 @@ lives here too.
 Diátaxis sorts every page with two questions: is it about action or cognition,
 and is it for acquiring a skill or applying one ([Diátaxis compass](https://diataxis.fr/compass/)).
 
-| Type | Serves | musterd examples |
+| Type | Serves | Examples |
 | --- | --- | --- |
-| Tutorial | Learning by doing, with a guaranteed result | README quickstart, first-run tour |
-| How-to | A competent user doing a task | `docs/wiki/shipping-a-pr.md`, `musterd help <command>` text |
-| Reference | Looking something up | `SPEC.md`, `docs/architecture/00–07`, CLI reference |
-| Explanation | Understanding why | ADRs, `docs/design/*` |
+| Tutorial | Learning by doing, with a guaranteed result | a README quickstart, a first-run tour |
+| How-to | A competent user doing a task | a task guide, a command's help text |
+| Reference | Looking something up | a spec, an API or CLI reference |
+| Explanation | Understanding why | decision records, design docs |
+
+`team.md` maps this team's own docs to the four types.
 
 Rules that follow from the type:
 
@@ -43,7 +45,7 @@ Rules that follow from the type:
 
    | Type | Red flags |
    | --- | --- |
-   | Tutorial | Explains before acting; offers choices; assumes knowledge of musterd; ends without a result the reader can check |
+   | Tutorial | Explains before acting; offers choices; assumes knowledge of the product; ends without a result the reader can check |
    | How-to | Teaches from scratch; explains theory; the goal is not in the title or first line |
    | Reference | Contains steps; narrative tone; coverage uneven between entries; opinions or recommendations |
    | Explanation | A list of bare facts; contains steps; never reaches the why or the trade-off |
@@ -193,7 +195,7 @@ Terminal output and diagrams, where developer docs fail most:
   ([Google Research](https://research.google/pubs/accessibility-of-command-line-interfaces/)).
 - Show terminal output as captured text in a code block, never as a screenshot.
 - Every ASCII or box-drawing diagram gets a prose equivalent next to it.
-- Every ANSI color in brand.md §2 is paired with a word or glyph in UI-copy specs.
+- Every ANSI color in the brand guide is paired with a word or glyph in UI-copy specs.
   Specs state the `NO_COLOR` and piped-output behavior ([no-color.org](https://no-color.org/)).
 
 Plain language, for ADR and architecture audits: ISO 24495-1's four principles.
@@ -203,13 +205,11 @@ Readers get what they need (relevant), can find it (findable), can understand it
 Report audit findings to the implementer as a list keyed to those four; the
 implementer keeps authorship.
 
-## 5. Lint with Vale before you hand it over
+## 5. Lint before you hand it over
 
-Run `pnpm prose:lint <paths>` on anything you wrote or edited (ADR 579; Vale is a
-per-machine install, `brew install vale`, and the command says so when it is
-missing). It checks the few rules that were right often enough on our own docs:
-brand.md §4's contrast frame, sentences over 35 words, paragraphs above grade 13, the
-accessibility rules for alt text, links and headings, the four banned words, and
-`musterd` in lowercase. About half its alerts are real. Treat each alert as a second look, never as the verdict; the trial
-behind this set, and why the stock Google, Readability and spelling packs are off,
-is in ADR 579's Consequences. CI does not run it.
+Run the team's prose linter (`team.md` names it) on anything you wrote or edited. A
+useful set holds only the rules that were right often enough on the team's own docs:
+the contrast frame, long sentences, dense paragraphs, the accessibility rules for alt
+text, links and headings, and the glossary's banned words. Stock style packs flag
+too much to read. Even a tuned set is right about half the time, so treat each alert
+as a second look and decide it yourself.

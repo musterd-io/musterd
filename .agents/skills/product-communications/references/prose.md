@@ -64,7 +64,7 @@ careful writer uses any one of them on purpose.
 
 | Pattern | Strength | Looks like | Rewrite |
 | --- | --- | --- | --- |
-| Mirror contrast | strong | "not just X but Y", "it's not X, it's Y", "X rather than Y", the split form "This doesn't mean X. It means Y.", a clipped tail ("…, no guessing") | State Y. brand.md §4 bans the whole family; its before/after allowance covers a scene's structure, never a sentence. |
+| Mirror contrast | strong | "not just X but Y", "it's not X, it's Y", "X rather than Y", the split form "This doesn't mean X. It means Y.", a clipped tail ("…, no guessing") | State Y. A voice guide that bans contrast frames bans the whole family; a before/after allowance covers a scene's structure, never a sentence. |
 | Negation list | strong | "No setup call, no YAML, no waiting." | Say what does happen. Keep one absence only when the reader is checking for it ("No account needed"). |
 | One-line closer | strong | "That's the point." "Read that again." A one-sentence paragraph restating the last; a row of fragments ("No config. No server. Just agents.") | Cut it, or merge it into a sentence that adds a fact. |
 | Saying that sounds deep | strong | "At its core…", "the real question is…", "X is the language of Y", "X becomes a trap" | Replace with the specific claim. |
@@ -80,7 +80,7 @@ careful writer uses any one of them on purpose.
 | Trailing "-ing" rider | strong | "…, making it easier to review." "…, ensuring nothing slips." | Delete it, or give it its own sentence with its own evidence. A clause that adds a new fact stays. |
 | Em-dash habit | weak alone | Two or three dashes a paragraph | About one per paragraph at most; use a period, comma or colon. |
 | Uniform rhythm | weak alone | Every sentence 12–18 words | Vary length: a short sentence after a long one. |
-| Repeated openings | weak alone | "musterd claims… musterd records… musterd shows…" | Merge, or begin with the action. |
+| Repeated openings | weak alone | "Acme claims… Acme records… Acme shows…" | Merge, or begin with the action. |
 | Stacked qualifiers | weak alone | "could potentially", "might arguably", "in some cases it may" | Keep a qualifier the source supports. Scope and safety notes stay. |
 
 ### Inflation
@@ -146,12 +146,12 @@ on top of these. Technical senses stay: a `key` in a config, a `robust` estimato
   guidance: say what to do, give the why, and anchor tone
   with 3–5 varied examples in `<example>` tags; the prompt's own style leaks into
   the output ([Claude prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)).
-  `examples.md` holds our examples.
+  `team.md` holds the team's approved examples.
 - **Orwell's four questions** for each sentence: what am I trying to say, what
   words express it, what image or idiom makes it clearer, is it fresh enough to
   have an effect ([Politics and the English Language, 1946](https://www.orwellfoundation.com/the-orwell-foundation/orwell/essays-and-other-works/politics-and-the-english-language/)).
 - **The representative reader.** Before the last pass, name one real reader (a
-  developer who runs two agents on one repo and has never heard of musterd) and
+  developer who runs two agents on one repo and has never heard of the product) and
   read the piece as them. Cut what they would skip.
 - **Read it aloud once.** Rhythm problems and missing words show up spoken.
 
@@ -160,9 +160,9 @@ on top of these. Technical senses stay: a `key` in a config, a `robust` estimato
 - Code, commands, file paths, quoted output and other people's words. Leave them
   exactly as they are.
 - A watched phrase inside a title, a proper name, or a passage that discusses the
-  phrase ("landscape" as the name of `docs/design/landscape.md`). Mention it plainly.
+  phrase ("landscape" as the name of a landscape doc). Mention it plainly.
 - Words the glossary requires. The glossary wins over the list.
-- A first-person piece nick will present or sign. Keep the writer's specific
+- A first-person piece a named person will present or sign. Keep the writer's specific
   details, asides and mixed feelings; those carry the voice. Remove the tells and
   keep the person.
 - Several tells together are the signal. People who judge by feel do little better

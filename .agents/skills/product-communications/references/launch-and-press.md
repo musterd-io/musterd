@@ -53,8 +53,9 @@ The weekly pass, after coreyhaines31/marketingskills' shipped-changes workflow:
    measured run, a benchmark in its body) with a ledger row. A PR that says
    "increment 1" makes an announcement that says the same.
 6. **Check for claim drift.** A shipped change can make an existing sentence
-   false: on musterd.io, in the README, in `docs/demo/pitch/`, in
-   `docs/design/landscape.md`. List each one with the file and the fix.
+   false: on the website, in the README, in the standing deck, in the
+   landscape (`team.md` lists the surfaces). List each one with the file and the
+   fix.
 
 ```
 ## Shipped <YYYY-MM-DD>–<YYYY-MM-DD>
@@ -76,21 +77,20 @@ Hard rule 5. HN's guidelines: "Don't post generated text or AI-edited text"
 HN advice, edited 2026-03-28: no LLM for any of it, including to edit
 ([HN item 22336638](https://news.ycombinator.com/item?id=22336638)).
 
-For a Show HN you write a **source pack**, and nick writes the post from it:
+For a Show HN you write a **source pack**, and the person `team.md` names writes the post from it:
 
 1. What it is, in one sentence.
 2. The try-it command, with no signup on the way ([Show HN rules](https://news.ycombinator.com/showhn.html)).
-3. Backstory as questions for nick to answer in their own words (why they built
+3. Backstory as questions for that person to answer in their own words (why they built
    it, what broke first). Never draft the answers.
 4. What is different, each point linked to its PR or ADR.
 5. Known limits, plainly.
-6. Likely questions with true, short answers (reuse `docs/demo/pitch/script.md`'s
-   questions to expect).
+6. Likely questions with true, short answers (reuse the deck's questions to
+   expect).
 
-Before the pack goes to nick, re-read today's state of everything it points at:
-the install path (ADR 568), the repo's visibility (ADR 565), and every figure
-against SKILL.md source 9's holds. Eval run 1's pack listed the cookoff
-multiplier, which is held out of outbound copy until its re-run lands.
+Before the pack goes out, re-read today's state of everything it points at: the
+install path, the repository's visibility, and every figure against the holds
+(SKILL.md source 4, `team.md`). A figure that is true and on hold stays out.
 
 Treat Lobsters and developer subreddits the same way by default. No primary rule
 was found for them; the caution is ours.
@@ -111,7 +111,7 @@ product is the evidence in the story. Most pitchable stories take one of these
 shapes (after coreyhaines31/marketingskills' public-relations skill):
 
 - **The founding story.** Why the team built it and what the numbers are now,
-  told by the person who lived it. It is nick's to tell (hard rule 3).
+  told by the person who lived it. It is theirs to tell (hard rule 3).
 - **The small team and the default.** A small team doing one thing the default
   way of working cannot. Name the one thing and show it.
 - **A broken system.** A way of working the reader already resents, named
@@ -132,7 +132,7 @@ Dateline — Lead: who, what, when, where, why, how in 25–35 words (count them
 Body 1 — expand the lead; the main data point
 Quote — a named person saying something with content
 Body 2 — context; availability; how to try it
-Boilerplate — about musterd, ≤100 words; SandRise Studio as the maker
+Boilerplate — about the product, ≤100 words; the maker as `team.md` names it
 Media contact
 ###
 ```
@@ -151,7 +151,7 @@ You draft both; a human sends (hard rule 6).
 ## When something goes wrong
 
 A security incident, a data exposure, a broken release or a public complaint is
-communications too. You draft; nick or the incident owner publishes (hard rule 6).
+communications too. You draft; the person `team.md` names or the incident owner publishes (hard rule 6).
 After coreyhaines31/marketingskills' crisis-communications reference:
 
 1. **Facts first.** Write down what is confirmed, who is affected, whether it is
@@ -182,8 +182,8 @@ The pattern across 100+ devtool landing pages ([Evil Martians](https://evilmarti
 a hero with a code or terminal visual; one specific primary call to action and a
 lighter one (docs, GitHub); a trust block straight after the hero; feature
 sections that each open on a user problem; a few short, real testimonials; one
-closing call to action. Our order and strings are set in
-`docs/design/homepage-copy-spec.md` and its ADRs; propose changes there.
+closing call to action. The team's own order and strings live in its homepage
+copy spec (`team.md`); propose changes there.
 
 Pre-launch, the trust block is our own record (lanes closed, the office live).
 Never testimonials we do not have (hard rule 2).
@@ -196,11 +196,11 @@ capabilities as the way there, and evidence that it works
 ([Raskin, Medium](https://medium.com/the-mission/the-greatest-sales-deck-ive-ever-seen-4f4ef3391ba0)).
 Nancy Duarte's alternative moves between what is and what could be.
 
-Both lean on before and after, which brand.md §4 allows as story structure
-(nick, 2026-10-13) on two conditions: the "before" is specific and true (the
+Both lean on before and after. Use it as story structure only where the team's
+voice guide allows it (`team.md`), and then on two conditions: the "before" is specific and true (the
 reader's situation or our measured past), and it is shown as a scene. The
-sentence-level ban still holds inside every scene. The standing deck's slide 2
-is the pattern.
+sentence-level ban on contrast frames still holds inside every scene. `team.md`
+names a pattern to follow.
 
 ## Social posts (provisional)
 

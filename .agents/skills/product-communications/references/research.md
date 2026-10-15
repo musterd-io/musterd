@@ -24,8 +24,8 @@ seeming "to care about everything", and says "Do not present synthetic-user
 research findings as real-user research findings"
 ([NN/g](https://www.nngroup.com/articles/synthetic-users/)).
 
-Our team's own use of musterd is evidence about us. It is grade A for "our team
-does X" and says nothing yet about other teams.
+A team's use of its own product is evidence about that team. It is grade A for
+"our team does X" and says nothing yet about other teams.
 
 ## Interview guides
 
@@ -70,7 +70,7 @@ Write each job as a **job statement** with no product in it: "When <circumstance
 I want to <progress>, so I can <outcome>." A job has functional, emotional and
 social sides; wanting to sign off on the agents' work in front of your own team
 would be a social side. Fill each side from what the participant said. Two hiring moments differ: the first install is the
-big hire, and each later choice to open musterd over the old way is the little
+big hire, and each later choice to open the product over the old way is the little
 hire. Retention lives in the little hire.
 
 ## Synthesis
@@ -113,7 +113,7 @@ answers the anxiety they named. Keep a phrase bank (phrase, source ID, date,
 consent) and write from it (`references/launch-and-press.md`, message mining).
 
 **Quoting public writing.** A public post can inform copy. It is never presented
-as an endorsement of musterd, and its author is never quoted on our surfaces
+as an endorsement of the product, and its author is never quoted on our surfaces
 without their permission.
 
 ## Product-market fit
