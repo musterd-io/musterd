@@ -194,7 +194,7 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
       return await new Promise<string>((resolveRun) => {
         // Its own process group, so the kill below reaches what the shell forked (a `tail -f`
         // under dash keeps the pipe open after the shell dies, and `close` never fires).
-        const child = spawn('/bin/sh', ['-c', command], {
+        const child = spawn('/bin/sh', ['-f', '-c', command], {
           cwd: opts.workspace,
           env,
           stdio: ['ignore', 'pipe', 'pipe'],

@@ -35,6 +35,25 @@ afterAll(() => {
 });
 
 describe('workingTools', () => {
+  it.each(['cat ?.txt', 'cat [a].txt', 'cat *.txt', 'cat {a,b}.txt'])(
+    'refuses expansion at preflight and execution: %s',
+    async (command) => {
+      expect(preflightWorkingTool({ workspace: ws, policy }, 'bash', { command })).toMatch(
+        /expansion/,
+      );
+      await expect(tools['bash']!.run({ command })).rejects.toThrow(/denied.*expansion/);
+    },
+  );
+
+  it('keeps quoted and escaped patterns literal in the shell child', async () => {
+    await expect(tools['bash']!.run({ command: String.raw`printf '%s' '*?[{'` })).resolves.toBe(
+      'exit 0\n*?[{',
+    );
+    await expect(tools['bash']!.run({ command: String.raw`printf '%s' \*\?\[\{` })).resolves.toBe(
+      'exit 0\n*?[{',
+    );
+  });
+
   it('publishes exactly read, write, edit, bash with object input schemas', () => {
     expect(Object.keys(tools)).toEqual(['read', 'write', 'edit', 'bash']);
     for (const t of Object.values(tools)) expect(t.input_schema['type']).toBe('object');
