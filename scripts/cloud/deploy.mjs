@@ -14,7 +14,7 @@
  *   node scripts/cloud/deploy.mjs            (from a clean checkout of the commit to ship)
  *
  * Env: FLY_APP (musterd-cloud), FLY_MIGRATE_APP (musterd-cloud-migrate), CLOUD_PROBE_HOST
- * (health.musterd.dev). Prints Fly's own progress and the migrate log — never a URL or secret.
+ * (health.musterd.dev), CLOUD_DEPLOY_STRATEGY (bluegreen | rolling, see STRATEGY). Prints Fly's own progress and the migrate log — never a URL or secret.
  */
 import { spawnSync } from 'node:child_process';
 
@@ -22,6 +22,13 @@ const APP = process.env.FLY_APP ?? 'musterd-cloud';
 const MIGRATE_APP = process.env.FLY_MIGRATE_APP ?? 'musterd-cloud-migrate';
 const PROBE = process.env.CLOUD_PROBE_HOST ?? 'health.musterd.dev';
 const CONFIG = 'deploy/cloud/fly.toml';
+/**
+ * `bluegreen` on one machine (the shape since 2026-10-02: start the new one, gate on /health,
+ * retire the old). `rolling` once the app runs N ≥ 2 (ADR 608 makes that safe): machines are
+ * replaced one at a time, so the §8.4 rehearsal sees two builds serving the same schema for the
+ * length of a roll. Set CLOUD_DEPLOY_STRATEGY=rolling; the default stays bluegreen.
+ */
+const STRATEGY = process.env.CLOUD_DEPLOY_STRATEGY === 'rolling' ? 'rolling' : 'bluegreen';
 
 function run(cmd, args, { capture = false } = {}) {
   const r = spawnSync(cmd, args, { encoding: 'utf8', stdio: capture ? 'pipe' : 'inherit' });
@@ -164,7 +171,7 @@ try {
     '--image',
     image,
     '--strategy',
-    'bluegreen',
+    STRATEGY,
     '--ha=false',
     '--wait-timeout',
     '5m',
