@@ -41,8 +41,8 @@ import {
 /**
  * Grok CLI (ADR 352). Project-local `.grok/config.toml` for MCP + statusline + permission floor;
  * `.grok/hooks/musterd.json` for Claude-parity hooks. Never writes `~/.grok/config.toml`.
- * Cursor MCP compat stays on (other servers); Cursor *hook* compat is turned off so capture
- * does not keep attesting `cursor`.
+ * Cursor MCP compat stays on (other servers). Cursor and Claude *hook* compat are turned off
+ * so inherited hooks do not double-fire or attest the wrong harness (ADR 352, ADR 597).
  */
 
 export const GROK_SURFACE = 'grok';
@@ -360,16 +360,36 @@ export function inspectGrokHookDrift(cwd: string): string[] {
   );
   if (leftoverPost) {
     drift.push(
-      'a leftover Grok PostToolUse interrupt hook is still installed — Grok ignores that seam (ADR 370). Run `musterd init --refresh-hooks`.',
+      'a leftover Grok PostToolUse interrupt hook is still installed — current Grok delivers that seam, so it doubles the PreToolUse line (ADR 370, ADR 597). Run `musterd init --refresh-hooks`.',
     );
   }
   return drift;
 }
 
-function ensureCursorHooksOff(toml: string): string {
-  if (/\[compat\.cursor\][\s\S]*?hooks\s*=\s*false/.test(toml)) return toml;
-  const block = '\n[compat.cursor]\nhooks = false\n';
-  return toml.replace(/\s*$/, '') + block;
+/**
+ * Turn off one vendor's hook scan without touching its other compat cells.
+ * An existing table gets `hooks = false` inside it. A second table of the same
+ * name is a TOML error, so this never appends one.
+ */
+function ensureCompatHooksOff(toml: string, vendor: 'cursor' | 'claude'): string {
+  const header = `[compat.${vendor}]`;
+  const tableRe = new RegExp(`\\[compat\\.${vendor}\\][^\\[]*`);
+  const match = tableRe.exec(toml);
+  if (!match || match.index === undefined) {
+    return toml.replace(/\s*$/, '') + `\n${header}\nhooks = false\n`;
+  }
+  const body = match[0];
+  if (/hooks\s*=\s*false/.test(body)) return toml;
+  const replaced = /hooks\s*=\s*true/.test(body)
+    ? body.replace(/hooks\s*=\s*true/, 'hooks = false')
+    : body.replace(header, `${header}\nhooks = false`);
+  return toml.slice(0, match.index) + replaced + toml.slice(match.index + body.length);
+}
+
+function ensureInheritedHooksOff(toml: string): string {
+  // ADR 352: Cursor hooks would attest capture as cursor.
+  // ADR 597: Claude hooks reach the model on Grok 1.0.52 and inject the interrupt line again.
+  return ensureCompatHooksOff(ensureCompatHooksOff(toml, 'cursor'), 'claude');
 }
 
 function statuslineCommand(): string {
@@ -464,7 +484,7 @@ export const grok: Harness = {
     const path = projectConfigPath();
     let toml = readText(path) ?? '';
     toml = upsertServer(toml, 'musterd', toTomlServer(entry));
-    toml = ensureCursorHooksOff(toml);
+    toml = ensureInheritedHooksOff(toml);
     const sl = ensureStatusline(toml, process.cwd());
     toml = mergePermissionFloor(sl.toml);
     writeText(path, toml);
@@ -489,7 +509,7 @@ export const grok: Harness = {
       const warnings = installMusterdGrokHooks(dir);
       let toml = readText(projectConfigPath(dir)) ?? '';
       if (toml.length > 0) {
-        toml = ensureCursorHooksOff(toml);
+        toml = ensureInheritedHooksOff(toml);
         const sl = ensureStatusline(toml, dir);
         toml = mergePermissionFloor(sl.toml);
         writeText(projectConfigPath(dir), toml);
@@ -644,7 +664,7 @@ export const grokAdapter: HarnessAdapter = {
         env: payload.env,
       });
     }
-    if (mutation.kind !== 'remove') toml = ensureCursorHooksOff(toml);
+    if (mutation.kind !== 'remove') toml = ensureInheritedHooksOff(toml);
     ctx.fs.mkdirp(dirname(path));
     ctx.fs.writeFile(path, toml.endsWith('\n') ? toml : `${toml}\n`, 0o644);
   },

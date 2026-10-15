@@ -53,7 +53,9 @@ describe('grokAdapter — managed fragments', () => {
     const after = fs.readFile(CFG)!;
     expect(after).toContain('command = "npx"');
     expect(after).toContain('[compat.cursor]');
-    expect(after).toMatch(/hooks\s*=\s*false/);
+    expect(after).toContain('[compat.claude]');
+    expect(after).toMatch(/\[compat\.cursor\][\s\S]*hooks\s*=\s*false/);
+    expect(after).toMatch(/\[compat\.claude\][\s\S]*hooks\s*=\s*false/);
     expect(await grokAdapter.observe(ctx, mcp)).toEqual({
       state: 'present',
       fingerprint: mcp.fingerprint,
