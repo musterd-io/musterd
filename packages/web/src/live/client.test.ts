@@ -3,7 +3,9 @@ import type { Lane } from '@musterd/protocol';
 import {
   AuditFetchError,
   LiveFetchError,
+  ObserverSignInRequired,
   acquireObserver,
+  acquireWatchLinkObserver,
   createLane,
   fetchLaneBoard,
   fetchLiveLaneBoard,
@@ -152,10 +154,90 @@ describe('acquireObserver (the observer-only path broadcast mode relies on)', ()
         text: async () => JSON.stringify({ human_credential: 'mscr_fresh' }),
       })),
     );
-    const cfg = await acquireObserver('revive');
+    const cfg = await acquireObserver('revive', 'mscr_admin');
     expect(cfg.team).toBe('revive');
     expect(cfg.token).toBe('mscr_fresh');
     expect(cfg.as).not.toBe('web-other');
+  });
+
+  // ADR 580: loopback no longer provisions an observer, so a page with no credential must not even
+  // try — the daemon would 401 and the viewer would read the server's refusal as the page's answer.
+  it('with nothing cached and no credential, asks for a sign-in and sends nothing', async () => {
+    store({});
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(acquireObserver('revive')).rejects.toBeInstanceOf(ObserverSignInRequired);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('mints with the signed-in human’s credential and caches the seat', async () => {
+    const map = store({});
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ human_credential: 'mscr_fresh' }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const cfg = await acquireObserver('revive', 'mscr_admin');
+    const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer mscr_admin');
+    expect(JSON.parse(init.body as string)).toMatchObject({ observer: true, observer_scope: 'full' });
+    expect(JSON.parse(map.get('musterd.live.observer.v2.revive')!)).toEqual({
+      name: cfg.as,
+      token: 'mscr_fresh',
+    });
+  });
+});
+
+describe('acquireWatchLinkObserver (ADR 580: minted by a signed-in human, public-grade)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const store = (entries: Record<string, string>) => {
+    const map = new Map(Object.entries(entries));
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (k: string) => map.get(k) ?? null,
+        setItem: (k: string, v: string) => void map.set(k, v),
+        removeItem: (k: string) => void map.delete(k),
+      },
+    });
+    return map;
+  };
+
+  it('reuses the cached link seat without a credential or a request', async () => {
+    store({
+      'musterd.live.watchlink.v1.revive': JSON.stringify({ name: 'watch-zz', token: 'mscr_pub' }),
+    });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(acquireWatchLinkObserver('revive', null)).resolves.toEqual({
+      name: 'watch-zz',
+      token: 'mscr_pub',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('with nothing cached and no credential, asks for a sign-in and sends nothing', async () => {
+    store({});
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(acquireWatchLinkObserver('revive', null)).rejects.toBeInstanceOf(
+      ObserverSignInRequired,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('mints a public-grade seat with the member credential', async () => {
+    store({});
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ human_credential: 'mscr_pub' }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await acquireWatchLinkObserver('revive', 'mscr_admin');
+    const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer mscr_admin');
+    expect(JSON.parse(init.body as string)).toMatchObject({ observer_scope: 'public' });
   });
 });
 

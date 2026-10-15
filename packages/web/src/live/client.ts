@@ -390,8 +390,9 @@ export function updateLane(cfg: LiveConfig, id: string, input: UpdateLane): Prom
 }
 
 /* ─── shared read-only observer seat ──────────────────────────────────────────────────────────────
- * A hidden, self-authorizing read-only seat (ADR 063/077) the browser caches per team, so any read-only
- * surface — /live, /board — is "enter a team and watch" with no pre-made seat. Keyed the same across
+ * A hidden read-only seat (ADR 063/077) the browser caches per team, so any read-only surface —
+ * /live, /board — can watch without connecting as a person. Minting one takes a human admin's
+ * credential (ADR 580); a cached one keeps working until the observer TTL reaps it. Keyed the same across
  * surfaces so they reuse ONE observer per team rather than minting a seat each. `.v2` = credential-based
  * (ADR 077 claim handshake); bumping it drops legacy token creds. */
 export interface ObserverCreds {
@@ -449,15 +450,29 @@ export function genObserverName(): string {
   return 'web-' + Math.random().toString(36).slice(2, 8);
 }
 
-/** Load this browser's cached observer for the team, or provision a fresh one and cache it. Returns the
- * {@link LiveConfig} a read-only surface connects with. This is the operator's OWN dashboard seat, on
- * their own machine — full-grade, so the office/stream still show the directed coordination that is
- * most of what there is to watch (ADR 136). */
-export async function acquireObserver(team: string): Promise<LiveConfig> {
+/**
+ * Since ADR 580 the daemon mints an observer only for a human admin's credential: loopback is no
+ * longer enough, because an observer reads team traffic. A page holding no such credential cannot
+ * get one, so it asks for a sign-in instead of sending a request it knows will be refused.
+ */
+export class ObserverSignInRequired extends Error {
+  constructor() {
+    super('watching needs a signed-in human — this page holds no seat to watch with');
+    this.name = 'ObserverSignInRequired';
+  }
+}
+
+/** Load this browser's cached observer for the team, or mint a fresh one with `bearer` and cache it.
+ * Returns the {@link LiveConfig} a read-only surface connects with. This is the operator's OWN
+ * dashboard seat — full-grade, so the office/stream still show the directed coordination that is
+ * most of what there is to watch (ADR 136). `bearer` is a signed-in human admin's credential (ADR
+ * 580); with none and nothing cached it throws {@link ObserverSignInRequired} without a request. */
+export async function acquireObserver(team: string, bearer?: string | null): Promise<LiveConfig> {
   let creds = loadObserver(team);
   if (!creds) {
+    if (!bearer) throw new ObserverSignInRequired();
     const name = genObserverName();
-    const token = await provisionObserver(team, name);
+    const token = await provisionObserver(team, name, 'full', bearer);
     creds = { name, token };
     saveObserver(team, creds);
   }
@@ -489,9 +504,12 @@ const watchLinkKey = (team: string) => `musterd.live.watchlink.v1.${team}`;
 
 /** The team's shared public-grade watch-link seat — cached, or minted on first share.
  *
- * Minting requires a local peer or an admin (ADR 134). The operator clicking "copy watch link" in the
- * daemon-served dashboard is local by construction, so this succeeds exactly where it should. */
-export async function acquireWatchLinkObserver(team: string): Promise<ObserverCreds> {
+ * Minting requires a human admin's credential (ADR 580), so `bearer` is the signed-in member's. With
+ * none and nothing cached it throws {@link ObserverSignInRequired} without a request. */
+export async function acquireWatchLinkObserver(
+  team: string,
+  bearer: string | null,
+): Promise<ObserverCreds> {
   try {
     const raw = window.localStorage.getItem(watchLinkKey(team));
     if (raw) {
@@ -501,8 +519,9 @@ export async function acquireWatchLinkObserver(team: string): Promise<ObserverCr
   } catch {
     // fall through and mint
   }
+  if (!bearer) throw new ObserverSignInRequired();
   const name = 'watch-' + Math.random().toString(36).slice(2, 8);
-  const token = await provisionObserver(team, name, 'public');
+  const token = await provisionObserver(team, name, 'public', bearer);
   const creds = { name, token };
   window.localStorage.setItem(watchLinkKey(team), JSON.stringify(creds));
   return creds;
@@ -728,11 +747,12 @@ export async function decideRequest(
 export async function provisionObserver(
   team: string,
   name: string,
-  scope: 'full' | 'public' = 'full',
+  scope: 'full' | 'public',
+  bearer: string,
 ): Promise<string> {
   const res = await fetch(`/teams/${encodeURIComponent(team)}/members`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}` },
     body: JSON.stringify({ name, kind: 'human', observer: true, observer_scope: scope }),
   });
   const text = await res.text();

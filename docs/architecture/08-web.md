@@ -10,8 +10,8 @@
 `@musterd/web` is the **browser console for a team** — a read-only window onto the same Members the CLI
 and MCP adapter serve, rendered from the daemon's firehose. It is a TanStack Start (React + Vite) app.
 It owns **no state the daemon doesn't**: every view is a projection of what the server derives or
-streams. There is no board CRUD, no second store, no write path beyond the self-provisioning observer
-seat it needs to subscribe.
+streams. There is no board CRUD, no second store, no write path beyond the observer seat it needs to
+subscribe.
 
 Two design commitments follow from "read-only projection":
 
@@ -39,16 +39,20 @@ Two design commitments follow from "read-only projection":
 
 `live/client.ts` + `live/useLiveStream.ts` implement the canonical **"backfill then tail"** pattern:
 
-1. **Self-provision an observer seat.** The browser `claim`s its own read-only observer seat
-   (self-authorizing, ADR 077 claim handshake; localhost-trust like team creation). `/board` and the
-   other live views reuse the same hidden observer.
+1. **Connect as a seat.** A signed-in member connects as themselves (ADR 222). Otherwise the browser
+   uses the read-only observer it cached for the team (ADR 077 claim handshake); `/board` and the other
+   live views reuse the same hidden observer. Minting a new observer takes a human admin's credential
+   (ADR 580), so a page with no cached observer and no sign-in opens the sign-in fields instead of
+   asking. An admin's sign-out mints one with the outgoing credential; `/broadcast` is handed one by
+   its capturer (ADR 594).
 2. **Backfill history over HTTP** — `GET /teams/:slug/messages` — so the view is not empty on load.
 3. **Subscribe to the firehose** — a WS `subscribe` with scope `team-all` (ADR 061) — and live-tail,
    **deduping by envelope id** against the backfill.
 
 A shared read-only **watch link** (`/live?team=<slug>&as=<observer>#w=<credential>`, ADR 063) lets a team
 hand someone a spectator view without provisioning them a real seat.
-The watch link mints a public-grade observer (ADR 136): it sees Team-broadcast Acts, not directed
+The watch link mints a public-grade observer (ADR 136) with the signed-in admin's credential, so
+"copy watch link" is offered only to a signed-in member: it sees Team-broadcast Acts, not directed
 traffic. It is a scoped observer, not anonymous access; roster handles and Presence remain visible.
 
 > **Known limitation (2026-07-07):** the HTTP backfill is capped (200) and returns the oldest of an

@@ -10,6 +10,7 @@ import {
 import {
   acquireObserver,
   forgetObserver,
+  ObserverSignInRequired,
   redeemSignin,
   type LiveConfig,
 } from '../live/client';
@@ -76,8 +77,8 @@ function BoardPage() {
     if (message) setError(message);
   }, []);
 
-  // A member credential the daemon rejects is a dead end to explain, not silently retry; a stale
-  // *observer* self-heals by dropping the cached seat and provisioning a fresh one.
+  // A credential the daemon rejects is a dead end to explain, not silently retry. A stale *observer*
+  // is dropped too: since ADR 580 a page cannot mint a replacement, so it goes to the sign-in form.
   const onCredentialInvalid = useCallback(() => {
     setCfg((current) => {
       if (!current) return current;
@@ -87,9 +88,8 @@ function BoardPage() {
         return null;
       }
       forgetObserver(current.team);
-      void acquireObserver(current.team).then(setCfg, (e: unknown) =>
-        disconnect(e instanceof Error ? e.message : String(e)),
-      );
+      setAdvanced({ open: true, as: '', token: '' });
+      disconnect("This browser's watching seat expired — sign in to see the board again.");
       return null;
     });
   }, [isMember, disconnect]);
@@ -202,7 +202,13 @@ function BoardPage() {
       try {
         setCfg(await acquireObserver(slug));
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        // ADR 580: a signed-out page cannot mint a watching seat, so open the sign-in fields.
+        if (e instanceof ObserverSignInRequired) {
+          setAdvanced({ open: true, as: '', token: '' });
+          setError('This browser has no saved seat for this team — sign in to see the board.');
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         setProvisioning(false);
       }
@@ -379,8 +385,9 @@ function BoardPage() {
           <div className="lc-form__card">
             <h1 className="lc-form__title">Work board</h1>
             <p className="lc-form__sub">
-              The team&apos;s lanes as a board — backlog, claimed, in progress, blocked, done. Watch as
-              a hidden observer, no account — or sign in as yourself and the board is yours to work.
+              The team&apos;s lanes as a board — backlog, claimed, in progress, blocked, done. Run{' '}
+              <code>musterd board</code> in your team folder and it opens signed in, yours to work. A
+              browser that has watched before keeps its hidden observer seat.
             </p>
             <label className="lc-form__field">
               <span>Team</span>
