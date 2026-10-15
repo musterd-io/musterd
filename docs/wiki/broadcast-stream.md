@@ -88,7 +88,7 @@ is down.
   closest stand-in and does not tell a rejected key from a dropped session.
 - How long Twitch shows the channel offline for each of those. Needs a watcher on Twitch's side.
 
-(2026-10-15: inc 7 measured the picture, and an outage of 5 min, while nick watched. See "What a viewer sees" below. Twitch rejecting the key is still open.)
+(2026-10-15: inc 7 measured the picture, and an outage of 5 min, while nick watched. See "What a viewer sees" below. Twitch rejecting the key is still open.) (2026-10-15, inc 6: a wrong key on a throwaway machine ended it in 26 s, one launch; a revoked key on an already-live stream is still unrun. See "Twitch refuses two reconnects" below.)
 
 Inc 3 measured the reset case; the rest of the list above is still open. Inc 4 (ADR 553, lane
 `01M4F32MMP63ZF9AVNHWWF3N6A`) changes the reset case: ffmpeg ending after `◉ live` now exits 75 under a
@@ -130,7 +130,7 @@ rerun until six short runs have failed, then ends the machine and `ensure` takes
 14 s from the reset to a live that held, on the same machine, against 96 s on a new one. It took two
 relaunches: Twitch refused the first reconnect about 2 s after accepting the TCP session and took the
 second. One run, one reset: how long Twitch refuses a reconnect is still not known, and the cap of six is a guess.
-Picture and Twitch-side offline time were not watched.
+Picture and Twitch-side offline time were not watched. (2026-10-15, inc 6: two more resets, three in all, each took 32 s and two refusals, and the cap of six was never near; see "Twitch refuses two reconnects" below.)
 
 ### What a viewer sees: a reset freezes the picture for about 15 s, and a 5 min daemon outage does not reach Twitch (2026-10-15; falsify: on a live hosted stream with someone watching the Twitch player, repeat the 3 s `tcp-reset` on outbound 443 and the 5 min `iptables -I OUTPUT -d <daemon tailnet ip> -j DROP` — an "offline" screen or a player that needs a reload after the reset, or any freeze, `relaunching` line or changed ffmpeg pid during the DROP, falsifies this) <!-- claim: other -->
 
@@ -171,6 +171,59 @@ then resumes on a session Twitch accepted, but one estimate does not settle that
 **Not seen:** whether the office on screen visibly stopped changing during the 5 min. The page received
 no team data in that window, so it showed the team as it was at 18:49. A viewer only sees that if
 something should have changed on screen in that window. A real laptop sleep is still longer than 5 min.
+
+### Twitch refuses two reconnects after a reset and takes the third at 32 s, three runs in three; a rejected key ends the machine at once (2026-10-15; falsify: repeat the 3 s `tcp-reset` on a live hosted stream on image `2aa3052a82e8` or later — a reset that needs more than three launches, or a held `◉ live` earlier than +30 s, falsifies the 32 s; a throwaway machine with a wrong `MUSTERD_STREAM_KEY` that retries in-machine instead of exiting 1 within ~30 s of boot falsifies the key half) <!-- claim: other -->
+
+Inc 6, lane `01M4FF0P6HP93K6XFK7R26DN00`. Same machine `807135a617de08` and image `2aa3052a82e8` as the
+inc 7 drill above, two more resets while nick was at the box, then a throwaway machine for the key.
+Box times Z.
+
+**Two more resets (3 s `REJECT --reject-with tcp-reset` on outbound 443):**
+
+| reset 1 | event | reset 2 | event |
+| --- | --- | --- | --- |
+| 18:57:37 | reset; ffmpeg ends (`ran 845s`), relaunch | 18:59:51 | reset; ffmpeg ends (`ran 104s`), relaunch |
+| 18:57:41 | `◉ live`, then `End of file` at once | 18:59:53 | `◉ live`; `End of file` at 18:59:55 |
+| 18:57:47 | relaunch (`ran 4s`) | 19:00:01 | relaunch (`ran 4s`) |
+| 18:57:49 | `◉ live`; `End of file` at 18:57:51 | 19:00:03 | `◉ live`; `End of file` at 19:00:05 |
+| 18:58:07 | relaunch (`ran 4s`) | 19:00:21 | relaunch (`ran 4s`) |
+| 18:58:09 | `◉ live`, held (no error to 18:59:29) | 19:00:23 | `◉ live`, held (no error to 19:01:24) |
+
+With inc 7's run that is three resets: **32 s from the reset to a live that held, each time, after two
+refused reconnects each time.** The refusals came at about +4 s and +14 s after the reset began; the
+accepted one at +32 s. The retry loop only probes those three moments (10 s, then 20 s of wait), so
+Twitch's refusal ended somewhere between +14 s and +32 s and this loop cannot say where. The cap of six
+in `SINK_RETRY_MAX` was never close: each recovery used three of six launches, on one machine, with no
+`ensure` involvement. Samples this close do not show the spread of Twitch's behaviour; they show that the
+same schedule meets the same answer on the same channel. Picture and Twitch-side offline time are inc 7's.
+
+**A rejected key, on a throwaway machine** (`stanley-badkey-test`, same image, `fly machine run` with an
+entrypoint that exports a wrong `MUSTERD_STREAM_KEY` before `entrypoint.sh`; the Fly secret and the live
+stream were never touched, and the machine was destroyed by its own `--rm`):
+
+| time (Z) | event |
+| --- | --- |
+| 19:05:03 | boot; the wrong key is set |
+| 19:05:06 | tailnet up |
+| 19:05:25 | `◉ live` |
+| 19:05:28 | `tls … End of file`; `rtmps://live.twitch.tv/app/<redacted>: Input/output error` |
+| 19:05:29 | `Main child exited normally with code: 1`; the machine ended |
+
+26 s from boot to the end, **one launch, no in-machine retry.** The run lasted 3 s, under
+`RESTARTABLE_AFTER_MS`, and a first run carries no retry count, so `sinkLossExitCode` returned 1 and the
+loop in `entrypoint.sh` never ran (that is the floor doing its job: a bad key cannot loop inside a
+machine). **A rejected key and a refused reconnect print the same two lines** — `◉ live`, then
+`End of file` within 3 s. The log does not tell them apart; what differs is that the reconnect follows a
+run that lasted over a minute, and the key follows a boot. What a revoked key does to a stream that is
+*already live* was not run: the inference from the code is six short runs at 10, 20, 30, 30, 30 s of
+wait (about two and a half minutes) and then the machine ends, but nobody has watched it. What `ensure`
+does with the replacement machine was not run either; its stand-down after three stops in 30 minutes was
+quoted by the streamwatch alert earlier today, which was a daemon restart and not a key.
+
+**Decision from the numbers: leave `SINK_RETRY_MAX = 6` and the 10 / 20 / 30 s waits as they are.** The
+reset case needs three launches of six and is back in 32 s, a rejected key stops at once, and a shorter
+wait would need the +14 s to +32 s boundary, which these runs cannot supply. Revisit if a reset ever needs
+more than three launches.
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
