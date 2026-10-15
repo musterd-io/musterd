@@ -209,6 +209,27 @@ const SMUGGLERS: [RegExp, string][] = [
   [/(^|[^&])&([^&]|$)/, 'backgrounding'],
 ];
 
+/** Only unquoted, unescaped text can expand into different arguments in the shell. */
+function hasArgumentExpansion(command: string): boolean {
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    if (quote === "'") {
+      if (c === quote) quote = null;
+    } else if (c === '\\') {
+      // In double quotes a backslash only escapes the shell's special characters.
+      if (quote === null || /[\\"$`\n]/.test(command[i + 1] ?? '')) i++;
+    } else if (quote === '"') {
+      if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if ('*?[{'.includes(c)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** A minimal POSIX-ish word splitter: quotes group, backslash escapes, nothing expands. */
 export function splitWords(segment: string): string[] {
   const words: string[] = [];
@@ -365,6 +386,8 @@ export function bashAllowed(command: string, policy: BashPolicy): BashVerdict {
   for (const [re, what] of SMUGGLERS) {
     if (re.test(command)) return { ok: false, reason: `${what} are not allowed in bash` };
   }
+  if (hasArgumentExpansion(command))
+    return { ok: false, reason: 'unquoted argument expansion is not allowed in bash' };
   const segments = command.split(/\|\||&&|;|\|/);
   for (const segment of segments) {
     const words = splitWords(segment.trim());

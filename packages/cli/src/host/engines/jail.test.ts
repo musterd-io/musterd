@@ -89,6 +89,23 @@ const deny = (cmd: string): string => {
 };
 
 describe('bashAllowed', () => {
+  it.each(['cat s?c/a.txt', 'cat s[c]c/a.txt', 'cat src/*', 'cat s{rc,pec}/a.txt', 'echo "safe"*'])(
+    'refuses unquoted expansion in %s',
+    (command) => {
+      expect(deny(command)).toMatch(/expansion/);
+    },
+  );
+
+  it.each([
+    String.raw`find src -name '*.ts'`,
+    String.raw`echo "*?[{"`,
+    String.raw`echo \*\?\[\{`,
+    String.raw`echo 'a"*'`,
+    String.raw`echo "a\"*"`,
+  ])('preserves literal patterns in %s', (command) => {
+    expect(bashAllowed(command, policy)).toEqual({ ok: true });
+  });
+
   it('allows the ADR 106 loop: fast gates, git on a feature branch, gh pr create/merge', () => {
     for (const cmd of [
       'pnpm typecheck && pnpm lint && pnpm format:check',
@@ -188,7 +205,7 @@ describe('bashAllowed', () => {
 
   it('denies the flags that turn a reader into an executor or a writer (fifty, miley)', () => {
     expect(deny('rg --pre evil pattern src')).toMatch(/executes or writes/);
-    expect(deny('rg --pre-glob=* pattern')).toMatch(/executes or writes/);
+    expect(deny('rg "--pre-glob=*" pattern')).toMatch(/executes or writes/);
     expect(deny('sort -o out.txt a.txt')).toMatch(/executes or writes/);
     expect(deny('find . -fprint out.txt')).toMatch(/executes or writes/);
     expect(deny('find . -fls out.txt')).toMatch(/executes or writes/);
