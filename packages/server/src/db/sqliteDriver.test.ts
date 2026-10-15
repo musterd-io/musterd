@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { log } from '../log.js';
 import { DriverError } from './driver.js';
 import { withRequestTiming } from './requestTiming.js';
 import { sqliteDriver } from './sqliteDriver.js';
@@ -11,6 +12,33 @@ function fresh() {
 }
 
 describe('sqliteDriver', () => {
+  it('a statement that holds the main thread 200 ms or more logs sqlite_stmt_slow with its SQL (lane 01M4YY5Z38)', async () => {
+    const raw = new Database(':memory:');
+    // A deterministic slow statement: a SQL function that spins 250 ms on the main thread.
+    raw.function('spin', () => {
+      const end = performance.now() + 250;
+      while (performance.now() < end);
+      return 1;
+    });
+    const d = sqliteDriver(raw);
+    const warn = vi.spyOn(log, 'warn');
+    try {
+      await d.get('SELECT spin()   AS x');
+      await d.tx((t) => t.get('SELECT spin() AS y'));
+      await d.get('SELECT 1');
+      const lines = warn.mock.calls
+        .map(([f]) => f as { msg: string; sql: string; in_tx: boolean; ms: number })
+        .filter((f) => f.msg === 'sqlite_stmt_slow');
+      expect(lines.map((l) => [l.sql, l.in_tx])).toEqual([
+        ['SELECT spin() AS x', false],
+        ['SELECT spin() AS y', true],
+      ]);
+      expect(lines.every((l) => l.ms >= 200)).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('get/all/run/exec round-trip with ? placeholders and report changes', async () => {
     const d = fresh();
     expect(d.dialect).toBe('sqlite');
