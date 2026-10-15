@@ -154,6 +154,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
+import { replayHeaders } from '../cloud/affinity.js';
 import {
   CONSOLE_UNREACHABLE_SENTENCE,
   ConsoleTokenError,
@@ -163,7 +164,7 @@ import {
   type ConsoleClaims,
 } from '../cloud/consoleToken.js';
 import { cloudHealth } from '../cloud/health.js';
-import { hostAllows } from '../cloud/hostIsolation.js';
+import { hostAllows, hostTeam, pathTeam } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { checkUpgrade, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
@@ -2473,6 +2474,17 @@ export async function handleHttp(
     // way to learn which other teams exist. Before any route, so no route can forget it.
     if (ctx.config.cloud && !hostAllows(req.headers.host, path, ctx.config.cloud.hostSuffix))
       return sendJson(res, 404, { error: { code: 'not_found', message: 'not found' } });
+    // ADR 608: a team's requests are served by the one server that owns it; any other server hands
+    // the request to the proxy to replay there. Global routes (`/health`, the apex) stay local.
+    if (ctx.config.cloud && ctx.affinity) {
+      const team = pathTeam(path) ?? hostTeam(req.headers.host, ctx.config.cloud.hostSuffix);
+      const d = ctx.affinity.decide(team, req.headers['fly-replay-src'] !== undefined);
+      if (!d.local && d.owner) {
+        res.writeHead(307, { ...replayHeaders(d.owner), 'content-length': '0' });
+        res.end();
+        return;
+      }
+    }
     // Negotiate response compression once; sendJson consults this for bodies over the size threshold.
     negotiatedEncoding.set(res, pickEncoding(req.headers['accept-encoding']));
 

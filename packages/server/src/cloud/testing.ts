@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import { PG_POOL_ACQUIRE_TIMEOUT } from '../db/pgDriver.js';
 import { openTestDriver, testCloudPools } from '../db/testing.js';
 import { createServer } from '../index.js';
+import type { AffinityOptions } from './affinity.js';
 
 /**
  * Cloud-mode test support (1C): the env, a booted server over the pooled PGlite stores, and an
@@ -28,7 +29,10 @@ export function stubCloudEnv(over: Record<string, string> = {}): void {
 
 /** A listening cloud server over fresh PGlite stores, plus its operator-scoped seed handle.
  *  `fresh: false` joins the stores as they are (a second server on the same database). */
-export async function bootCloud(over: Record<string, string> = {}, opts: { fresh?: boolean } = {}) {
+export async function bootCloud(
+  over: Record<string, string> = {},
+  opts: { fresh?: boolean; affinity?: AffinityOptions } = {},
+) {
   stubCloudEnv(over);
   const seed = opts.fresh === false ? null : await openTestDriver('pglite');
   if (opts.fresh !== false) await openTestDriver('pglite', { store: 'trace' });
@@ -36,6 +40,7 @@ export async function bootCloud(over: Record<string, string> = {}, opts: { fresh
     cloudPools: (await testCloudPools()).factories,
     rosterRoots: [],
     port: 0,
+    ...(opts.affinity ? { affinity: opts.affinity } : {}),
   });
   await s.listen();
   return { s, seed, url: `http://127.0.0.1:${s.port}` };

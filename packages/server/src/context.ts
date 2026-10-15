@@ -1,3 +1,4 @@
+import type { Affinity } from './cloud/affinity.js';
 import type { ResolvedConfig } from './config.js';
 import type { Driver } from './db/driver.js';
 import type { Hub } from './transport/hub.js';
@@ -8,6 +9,8 @@ export interface Ctx {
   /** The trace store (ADR 445 §3) — a separate file; nothing joins it to `db` at write time. */
   traceDb: Driver;
   hub: Hub;
+  /** ADR 608: which server owns a team on Cloud; null means every team is local (self-hosted). */
+  affinity?: Affinity | null;
   config: ResolvedConfig;
   /** Durable roster roots (ADR 058). Empty ⇒ no file-backed teams; the legacy db-authoritative
    * provisioning path stays in force (per-team cutover, migration-bootstrap.md). */

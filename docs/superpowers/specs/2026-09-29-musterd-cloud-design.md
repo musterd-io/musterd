@@ -85,6 +85,11 @@ tenant is us: the `revive` team moves onto Cloud and dogfoods it. Strangers come
   It is stateless: any server serves any team, so there is no router, no team→server registry, no
   Volume, no relocation. Presence fan-out between servers rides Postgres `LISTEN/NOTIFY` on a
   direct (non-pooled) connection; everything else goes through the pooler.
+  _(Amended 2026-10-15, [ADR 608](../../decisions/608-team-affinity.md): any server serves any
+  team's global routes; a team's own routes and sockets are served by the one server that owns it,
+  chosen by rendezvous hash over the live machine list, and a non-owner answers `fly-replay`. The
+  Hub stays in-process; there is no `LISTEN/NOTIFY` fan-out. One team's capacity is one machine,
+  stated; the bus stays on the roadmap for a team that outgrows one.)_
 - **Database.** Managed Postgres on Neon, one database, one schema, `team_id` on every team-owned
   row, **row-level security** keyed on a per-request setting. The schema is plain Postgres — no
   Neon-only feature is depended on — so the vendor can be swapped with `pg_dump`/restore.

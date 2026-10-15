@@ -1,8 +1,9 @@
-# musterd Cloud — the serving app (cloud increment 1D, lane 01M3Z43NHT). ONE machine for now (nick,
-# 2026-10-02): the Hub is in-process, so a second machine would not see the first one's WebSocket
-# pushes until cross-server fan-out exists (lane 01M3Z4EMH3, decided after the load test). Spec §3's
-# N ≥ 2 waits on that lane. Deploy only through scripts/cloud/deploy.mjs. It
-# migrates before it rolls, and `fly deploy` alone never migrates.
+# musterd Cloud — the serving app (cloud increment 1D, lane 01M3Z43NHT). ONE machine today; ADR 608
+# (2026-10-15) makes N ≥ 2 safe: each team is owned by one machine (rendezvous hash over
+# `vms.<app>.internal`) and the others answer `fly-replay`, so the in-process Hub never serves a
+# team from two places. Going to `count = 2` with a rolling strategy is the §8.4 rehearsal (lane
+# 01M3Z44EMJ). Deploy only through scripts/cloud/deploy.mjs. It migrates before it rolls, and
+# `fly deploy` alone never migrates.
 #
 # Secrets (never here): MUSTERD_DATABASE_{APP,OPERATOR}_URL and their MUSTERD_TRACE_DATABASE_* twins,
 # staged by scripts/cloud/provision-neon.mjs. The owner URLs live only on the migrate app.
