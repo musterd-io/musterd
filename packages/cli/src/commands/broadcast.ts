@@ -215,8 +215,14 @@ export function seatFromEnv(
   return seat.data;
 }
 
-/** Mint the run's public-grade observer with this folder's identity. Refused unless that identity is
- * a human admin (ADR 580) — the message says what to do instead of echoing the daemon's. */
+/** The mint request for a stream's seat. `broadcast` grade (ADR 601): every DM except human to
+ * human, with recognisable credentials masked by the daemon. Replaces ADR 594's `public`. */
+export function broadcastSeatRequest(name: string) {
+  return { name, kind: 'human', observer: true, observer_scope: 'broadcast' } as const;
+}
+
+/** Mint the run's broadcast-grade observer with this folder's identity. Refused unless that identity
+ * is a human admin (ADR 580) — the message says what to do instead of echoing the daemon's. */
 export async function mintBroadcastSeat(
   flags: Record<string, string | boolean>,
   team: string,
@@ -224,12 +230,7 @@ export async function mintBroadcastSeat(
   const { http } = resolve({ ...flags, team });
   const name = 'broadcast-' + Math.random().toString(36).slice(2, 8);
   try {
-    const res = await http.addMember(team, {
-      name,
-      kind: 'human',
-      observer: true,
-      observer_scope: 'public',
-    });
+    const res = await http.addMember(team, broadcastSeatRequest(name));
     if (!res.human_credential)
       throw new CliError(
         'the daemon minted the observer without a credential — is it older than the CLI?',

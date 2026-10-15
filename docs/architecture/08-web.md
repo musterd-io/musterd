@@ -43,8 +43,11 @@ Two design commitments follow from "read-only projection":
    uses the read-only observer it cached for the team (ADR 077 claim handshake); `/board` and the other
    live views reuse the same hidden observer. Minting a new observer takes a human admin's credential
    (ADR 580), so a page with no cached observer and no sign-in opens the sign-in fields instead of
-   asking. An admin's sign-out mints one with the outgoing credential; `/broadcast` is handed one by
-   its capturer (ADR 594).
+   asking. An admin's sign-out mints one with the outgoing credential. `/broadcast` watches only with
+   the seat its capturer hands it (ADR 594, `broadcastSeat`): a broadcast-grade observer that sees
+   every DM except human to human, with recognisable credentials masked by the daemon (ADR 601). It
+   never falls back to the browser's cached observer, which is full-grade; with no handed seat it
+   shows the refusal and loads nothing.
 2. **Backfill history over HTTP** — `GET /teams/:slug/messages` — so the view is not empty on load.
 3. **Subscribe to the firehose** — a WS `subscribe` with scope `team-all` (ADR 061) — and live-tail,
    **deduping by envelope id** against the backfill.

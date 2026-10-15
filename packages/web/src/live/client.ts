@@ -494,6 +494,25 @@ export function handedObserver(team: string): LiveConfig | null {
   return { team, as: name, token };
 }
 
+/** /broadcast has no seat of its own to watch with: its capturer did not hand one over. */
+export class BroadcastSeatMissing extends Error {
+  constructor() {
+    super(
+      'no seat for this stream — /broadcast runs on the seat `musterd broadcast` or `musterd stream start` hands it',
+    );
+    this.name = 'BroadcastSeatMissing';
+  }
+}
+
+/** The only seat /broadcast watches with: the one its capturer handed over (ADR 594), which is
+ * broadcast-grade (ADR 601). Never this browser's cached observer — that one is full-grade, every DM
+ * unmasked — and never a fresh mint. Throws {@link BroadcastSeatMissing} without a request. */
+export function broadcastSeat(team: string): LiveConfig {
+  const seat = handedObserver(team);
+  if (!seat) throw new BroadcastSeatMissing();
+  return seat;
+}
+
 /* ─── the shared watch-link seat (ADR 136) ────────────────────────────────────────────────────────
  * A watch link used to carry `acquireObserver`'s credential — the operator's own **full-grade** seat —
  * so handing someone a link handed them every DM on the team. A link now gets its own **public-grade**
