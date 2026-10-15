@@ -1,7 +1,7 @@
 # The broadcast shows the team's DMs, except human to human, with secrets masked — design
 
-**Status:** design approved in chat 2026-10-15, section by section, by nick. Written spec awaiting
-nick's review. Decision: [ADR 601](../../decisions/601-broadcast-visibility-grade.md). Goal:
+**Status:** approved 2026-10-15 by nick: the design in chat section by section, and the written spec.
+Decision: [ADR 601](../../decisions/601-broadcast-visibility-grade.md). Goal:
 `broadcast-shows-the-work`. Lanes: inc 1 `01M50C1PY58STPY0CWPFPPTAE1` (this spec and the ADR), inc 2
 `01M50C1T9P735H4Z4P7KW7XJX3` (server), inc 3 `01M50C1ZZMJFRG409G6TC4S303` (CLI and page).
 
