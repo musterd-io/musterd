@@ -5,23 +5,29 @@ import { z } from 'zod';
  * no log text, no PR body. `jobs` carries every job that ran (skipped ones are left out) so the
  * report can say which leaf moved, not only that the run did.
  */
+/** A forge token: lower-case word characters and `-` (`success`, `pull_request`, `workflow_dispatch`). */
+const TOKEN = /^[a-z0-9_-]+$/;
+/** A job or branch name as the forge prints it — printable ASCII only, so nothing a terminal
+ *  renderer could be made to interpret ever enters the ledger. */
+const PRINTABLE = /^[\x20-\x7e]+$/;
+
 export const CiJobSampleSchema = z.object({
-  name: z.string().min(1).max(64),
-  conclusion: z.string().min(1).max(32),
+  name: z.string().min(1).max(64).regex(PRINTABLE),
+  conclusion: z.string().min(1).max(32).regex(TOKEN),
   duration_ms: z.number().int().min(0).max(86_400_000),
 });
 export type CiJobSample = z.infer<typeof CiJobSampleSchema>;
 
 export const CiRunSampleSchema = z.object({
   /** The forge's run id — the dedupe key: a run is recorded once however often it is sampled. */
-  run_id: z.string().min(1).max(32),
-  head_sha: z.string().min(7).max(64),
-  branch: z.string().min(1).max(256),
+  run_id: z.string().regex(/^[0-9]{1,20}$/),
+  head_sha: z.string().regex(/^[0-9a-f]{7,64}$/),
+  branch: z.string().min(1).max(256).regex(PRINTABLE),
   /** `push` (main), `pull_request`, `schedule`, `workflow_dispatch` (the probe). */
-  event: z.string().min(1).max(32),
+  event: z.string().min(1).max(32).regex(TOKEN),
   /** The forge's attempt counter: 2+ means someone re-ran it, the strongest flake signal there is. */
   attempt: z.number().int().min(1).max(100),
-  conclusion: z.string().min(1).max(32),
+  conclusion: z.string().min(1).max(32).regex(TOKEN),
   /** Run creation, epoch ms — the bucket the run falls in. */
   created_at: z.number().int().min(0),
   /** Creation to completion, wall clock. */

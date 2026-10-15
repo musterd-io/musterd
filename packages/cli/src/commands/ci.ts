@@ -111,7 +111,7 @@ async function sampleRun(repo: string, r: ForgeRun): Promise<CiRunSample> {
   const ms = (iso: string) => Date.parse(iso);
   return {
     run_id: String(r.databaseId),
-    head_sha: r.headSha,
+    head_sha: r.headSha.toLowerCase(),
     branch: r.headBranch,
     event: r.event,
     attempt: r.attempt,
@@ -122,7 +122,9 @@ async function sampleRun(repo: string, r: ForgeRun): Promise<CiRunSample> {
       .filter((j) => j.conclusion !== 'skipped' && j.startedAt && j.completedAt)
       .slice(0, 64)
       .map((j) => ({
-        name: j.name.slice(0, 64),
+        // Printable ASCII only, so a job name the forge lets a workflow author pick cannot carry a
+        // terminal escape into the ledger (the schema refuses the rest; this keeps the batch valid).
+        name: j.name.replace(/[^\x20-\x7e]/g, '?').slice(0, 64),
         conclusion: j.conclusion || 'unknown',
         duration_ms: Math.max(0, ms(j.completedAt) - ms(j.startedAt)),
       })),
