@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
+import { openLane } from '../store/lanes.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
 withDrivers('idle-wake', (_o, kind) => {
@@ -118,6 +119,21 @@ withDrivers('idle-wake', (_o, kind) => {
       });
       expect((await post('/teams/dawn/messages', { envelope: reply }, ada)).status).toBe(201);
       expect((await check('?seam=idle')).raised).toBe(false);
+    });
+
+    it('is silent on a handoff whose named lane has left play — clause 7(v), nobody replies to a handoff', async () => {
+      const team = await server.store.get<{ id: string }>(`SELECT id FROM teams WHERE slug = ?`, [
+        'dawn',
+      ]);
+      const lane = await openLane(server.store, team!.id, 'dawn', 'nick', { title: 'handed' });
+      const handoff = await toAda('handoff', { lane_handoff: { lane: lane.id, branch: null } });
+      expect(await check('?seam=idle')).toMatchObject({ raised: true, seam: 'idle' });
+      await server.store.run(`UPDATE lanes SET state = 'done' WHERE id = ?`, [lane.id]);
+      expect((await check('?seam=idle')).raised).toBe(false);
+      // Only the one row, from the ring before the close.
+      expect(await audits('interrupt.raised')).toEqual([
+        expect.objectContaining({ act: handoff.id, seam: 'idle' }),
+      ]);
     });
 
     it('idle_wake off answers idle_wake:false and writes no row', async () => {

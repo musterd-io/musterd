@@ -297,6 +297,11 @@ working, and every boundary before that is guaranteed deaf (clause 3, delta).
 - **Clause 7 — lane `01M2GJFCQV` (izzo), landed the same day as ADR 088 amendment 3:** (ii) lane
   state, (iii) co-addressee answers fetched by reference, (iv) `inbox.rendered` on read plus the
   addressee's own reply. ryder's ask and delta's steer are the regression fixtures.
+  _(2026-10-15, lane `01M50BFPTR`, izzo.)_ (v) a handoff whose named lane has left play — the idle
+  seam (ADR 558) admits handoffs, and nobody replies to a handoff, so ryder's settled handoff
+  `01M4YYV60Q` rang sloane twice after its lane closed. The interrupt path now asks the same
+  `handoffNamedLaneOutOfPlay` the inbox route and the orientation `why` ask; a bare handoff keeps
+  ringing.
 - **Codex live delivery remains unmeasured:** ADR 397 ships the bounded PostToolUse seam and unit
   proof, but the authorized Codex 0.154.0 Surface resolved a different adapter checkout and could
   not call musterd. A correctly wired disposable run must record callability and model delivery;

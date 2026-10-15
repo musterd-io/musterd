@@ -279,6 +279,49 @@ withDrivers('interruptCandidates', (o) => {
       expect(await viaCandidates(db, team, ada, true)).not.toContain('oblig-live');
     });
 
+    it('clause 7(v): a handoff whose named lane has left play stops ringing the idle seam — a handoff is discharged by doing the work, never by a reply', async () => {
+      const { db, team, nick, ada } = await seed();
+      // ryder's fixture (2026-10-15): handoff 01M4YYV60Q of lane 01M4S53AV4 to sloane. The lane
+      // closed (#2610) with no reply on the handoff — nobody replies to a handoff — and the idle
+      // seam re-raised it as urgent twice after the close. The inbox route drops it (shape v,
+      // `handoffNamedLaneOutOfPlay`); the interrupt path asked nothing.
+      const viaIdle = async () =>
+        pendingInterrupts(
+          await rowsToEnvelopes(
+            db,
+            team.slug,
+            await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true }),
+          ),
+          ada.name,
+          { obligations: true, directed: true },
+        ).map((e) => e.id);
+      const lane = await openLane(db, team.id, team.slug, 'nick', { title: 'cold-start numbers' });
+      await say(db, team, nick, ada, 'handoff', 'handoff-named', {
+        meta: { lane_handoff: { lane: lane.id, branch: null } },
+      });
+      // A bare handoff, and one naming a lane that does not exist, keep ringing: a handoff that
+      // stops asking is work dropped on the floor, and only a wake that should not have fired is
+      // recoverable.
+      await say(db, team, nick, ada, 'handoff', 'handoff-bare');
+      await say(db, team, nick, ada, 'handoff', 'handoff-unknown', {
+        meta: { lane_handoff: { lane: '01HZZZZZZZZZZZZZZZZZZZZZZZ', branch: null } },
+      });
+      expect(await viaIdle()).toEqual(
+        expect.arrayContaining(['handoff-named', 'handoff-bare', 'handoff-unknown']),
+      );
+
+      for (const state of ['awaiting_acceptance', 'done', 'abandoned']) {
+        await db.run('UPDATE lanes SET state = ? WHERE id = ?', [state, lane.id]);
+        const raised = await viaIdle();
+        expect(raised, state).not.toContain('handoff-named');
+        expect(raised, state).toEqual(expect.arrayContaining(['handoff-bare', 'handoff-unknown']));
+      }
+      // Derived, never stored: acceptance rejecting the lane puts it back in play, and the handoff
+      // is owed again on the next read with nothing to un-set.
+      await db.run("UPDATE lanes SET state = 'active' WHERE id = ?", [lane.id]);
+      expect(await viaIdle()).toContain('handoff-named');
+    });
+
     it("clause 7(iii): a co-addressee's accept discharges an eligible-set act — the accept is a DM to the asker, outside this seat's window", async () => {
       const { db, team, nick, ada, bob } = await seed();
       await say(db, team, nick, null, 'request_help', 'help-shared', {
