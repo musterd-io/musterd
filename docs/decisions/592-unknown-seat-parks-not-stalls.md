@@ -120,3 +120,28 @@ it did not author, and a fold never folds an act for a seat it cannot resolve.
   person must pull by hand. If stops keep holding for minutes after this lands, the remaining cause
   is on the minting side (a `failed` publish nobody read), and the next step is the one ADR 591
   left open: the daemon writes and publishes the file itself.
+
+## Amendment — the claim path (lane `01M4S7N1HV`, 2026-10-15)
+
+Decision 2 covered the fold. A lane claim (and every ownership/state edge a joiner forwards) met
+the same unknown seat in `arbitrateLanePatch` and answered "the roster reconciles from git; retry".
+On 2026-10-12 TJ's file was untracked on the joiner, so no retry could work, and once pushed it
+still waited on a human `git pull` on the hub.
+
+5. **The hub's arbitration pulls too.** On a seat its roster lacks, `arbitrateLanePatch` calls
+   `Ctx.onUnresolvedSeat` (now wired on the request ctx as well, sharing the per-seat rate limit),
+   re-reads the seat when a root moved, and decides the edge if it arrived. Otherwise it refuses
+   with `reason: 'unknown_seat'` beside `holder`/`state` — an optional string on
+   `SyncClaimRefusalSchema`, the one protocol change; an older joiner ignores it.
+6. **The joiner says which step is missing.** On an `unknown_seat` refusal the joiner reads its own
+   roster roots (`seatFileReach`) and appends one sentence (`describeSeatFileReach`): no roster
+   home holds the file (`musterd team add`), uncommitted (the add/commit/push), unpushed
+   (`git push`), or pushed — the only case that says to retry, in a minute, and names the hub-side
+   `git pull` if it stands.
+7. A daemon `reload()` now re-points the hook's roster roots too; before, a team exported after
+   boot was never pulled by it.
+
+Eval: `sync/claim.test.ts` ("lane 01M4S7N1HV") — the joiner's 409 carries `unknown_seat` and its
+own sentence after the hub's; a hook that adds the seat turns the same refused claim into a claim.
+`sync/rosterRefresh.test.ts` ("seatFileReach") walks missing → uncommitted → unpushed → pushed on a
+real clone and pins each sentence's fix.

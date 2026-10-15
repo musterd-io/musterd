@@ -43,7 +43,7 @@ import { getMemberByName } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode, seatBinding, seatBindings, trustNodeForSeat } from '../store/nodes.js';
 import { hasLivePresence } from '../store/presence.js';
-import { resolveCapabilities } from '../store/rows.js';
+import { type MemberRow, resolveCapabilities } from '../store/rows.js';
 import { peekPullStop } from './pull.js';
 
 /**
@@ -72,6 +72,8 @@ export class ClaimRefusedError extends Error {
     message: string,
     readonly holder: string | null,
     readonly state: string,
+    /** `unknown_seat`: the hub has no roster entry for the seat (see `SyncClaimRefusalSchema`). */
+    readonly reason?: string,
   ) {
     super(message);
     this.name = 'ClaimRefusedError';
@@ -456,9 +458,39 @@ export interface ArbitratedLanePatch {
 }
 
 /**
+ * ADR 592's pull, on the claim path too (lane 01M4S7N1HV): a seat the hub's roster lacks may be one
+ * `git pull` away in the hub's roster checkout, and nothing on this path fetched it. On 2026-10-12
+ * TJ's claim was refused with "retry" until a human ran `git pull` on the hub. The hook is
+ * rate-limited per seat, so a seat that never arrives costs one git call a minute, not one a claim.
+ */
+async function memberAfterRosterPull(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  name: string,
+): Promise<MemberRow | undefined> {
+  if (!ctx.onUnresolvedSeat) return undefined;
+  const moved = await ctx.onUnresolvedSeat(team, name).catch(() => false);
+  return moved ? await getMemberByName(ctx.db, team.id, name) : undefined;
+}
+
+/**
+ * The hub's sentence for a seat its roster does not hold. It cannot see the joiner's checkout, so it
+ * says what it did and what must be true; the joiner adds which step is missing on its side
+ * (`describeSeatFileReach`), since only it can tell uncommitted from unpushed.
+ */
+export function unknownSeatAtHub(seat: string): string {
+  return (
+    `seat "${seat}" is not on the hub's roster: the hub's roster checkout has no ` +
+    `.musterd/seats/${seat}.toml. The hub pulls its roster remote on this refusal (at most once a ` +
+    `minute per seat), so the file has to be committed and pushed from the machine that made the seat`
+  );
+}
+
+/**
  * Hub side, every ownership/state edge (ADR 361; the claim since ADR 355). Throws
  * `ClaimRefusedError` for every "no" the caller can act on; anything else is a fault. In order:
- *  - the seat is not on this roster yet (git lag) — retry after the roster reconciles;
+ *  - the seat is not on this roster — pull the roster remote once (ADR 592), then refuse with
+ *    `reason: 'unknown_seat'` so the joiner can say which publishing step is missing;
  *  - the seat is bound to another node (ADR 328 §4) — `SeatBoundElsewhereError`;
  *  - the lane is not here yet (the origin's `lane.opened` has not folded) — retry after sync;
  *  - the policy (`decideLanePatch`) against the HUB's row — a live incumbent, a service seat;
@@ -490,13 +522,11 @@ export async function arbitrateLanePatch(
   req: SyncLanePatchRequest,
   now: number = Date.now(),
 ): Promise<ArbitratedLanePatch> {
-  const seat = await getMemberByName(ctx.db, team.id, req.seat);
+  const seat =
+    (await getMemberByName(ctx.db, team.id, req.seat)) ??
+    (await memberAfterRosterPull(ctx, team, req.seat));
   if (!seat) {
-    throw new ClaimRefusedError(
-      `seat "${req.seat}" is not on the hub's roster yet — the roster reconciles from git; retry`,
-      null,
-      'unknown',
-    );
+    throw new ClaimRefusedError(unknownSeatAtHub(req.seat), null, 'unknown', 'unknown_seat');
   }
   if (seat.kind === 'service' && req.patch.owner_seat !== undefined) {
     throw new ClaimRefusedError(
@@ -642,6 +672,7 @@ export async function patchAtHub(
         refusal.data.error.message,
         refusal.data.holder,
         refusal.data.state,
+        refusal.data.reason,
       );
     }
   }

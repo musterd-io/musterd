@@ -358,11 +358,17 @@ export type SyncLanePatchRequest = z.infer<typeof SyncLanePatchRequestSchema>;
  * A refused claim carries WHO holds the lane beside the error envelope, the way a sync gap carries
  * `expected_seq`: the caller can act on a name (ask for a handoff) where it cannot act on a
  * sentence. `holder` is null when the refusal is about state, not ownership.
+ *
+ * `reason` names a refusal the joiner can say more about than the hub can (lane 01M4S7N1HV):
+ * `unknown_seat` — the hub's roster has no file for the seat, and only the joiner's own roster
+ * checkout knows whether the file was never committed, never pushed, or pushed and not yet pulled.
+ * A string, not an enum, so a hub that learns a new reason never fails an older joiner's parse.
  */
 export const SyncClaimRefusalSchema = z.object({
   error: z.object({ code: z.literal('conflict'), message: z.string() }),
   holder: z.string().nullable(),
   state: z.string(),
+  reason: z.string().optional(),
 });
 export type SyncClaimRefusal = z.infer<typeof SyncClaimRefusalSchema>;
 
