@@ -29,13 +29,10 @@ import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
 import { clearSnapshot, saveSnapshot } from '../live/liveCache';
 import {
-  provisionObserver,
-  loadObserver,
-  saveObserver,
   forgetObserver,
-  genObserverName,
   acquireObserver,
   acquireWatchLinkObserver,
+  ObserverSignInRequired,
   redeemSignin,
 } from '../live/client';
 import {
@@ -188,67 +185,44 @@ function LivePage() {
     });
   };
 
-  // Auto-recovery for a stale observer credential (a wiped DB or an expired 24h observer TTL, ADR 064):
-  // instead of dead-ending on "invalid … credential", drop the cached credential and provision a fresh
-  // observer, then reconnect. `recoveredToken` dedupes the HTTP-401 + WS-refused double-signal for one
-  // credential; `attempts` is a backstop so a persistently-failing provision falls back to the form
-  // rather than looping. `onConnected` re-arms both once a fresh credential works.
+  // A credential the daemon rejects (a wiped DB, a reaped 24h observer, ADR 064; an expired sign-in)
+  // drops back to the connect form with the sign-in fields open and says why. Since ADR 580 a page
+  // cannot mint a replacement observer on its own, so there is no silent re-provision to try first.
+  // `recoveredToken` dedupes the HTTP-401 + WS-refused double-signal for one credential.
   const recoveredToken = useRef<string | null>(null);
-  const recoverAttempts = useRef(0);
   const recoverObserver = useCallback(() => {
     const team = cfg?.team;
     const staleToken = cfg?.token;
     const staleAs = cfg?.as;
     if (!team || !staleToken) return;
     if (recoveredToken.current === staleToken) return; // already handling this exact credential
+    recoveredToken.current = staleToken;
     // A signed-in human is NOT silently demoted to an observer (ADR 222). Doing that would take the
     // answer buttons away again with no explanation — the exact defect this arc exists to fix — so a
-    // dead member credential drops back to watching and says why.
+    // dead member credential falls back to this browser's cached watching seat, if it has one, and
+    // says why.
     if (signedIn) {
-      recoveredToken.current = staleToken;
       forgetMemberIdentity(team);
       if (staleAs) clearSnapshot(team, staleAs);
       setSignedIn(false);
       setFormError('your sign-in expired — sign in again to answer asks');
-      void acquireObserver(team).then(setCfg, (e: unknown) => {
-        setFormError(e instanceof Error ? e.message : String(e));
+      void acquireObserver(team).then(setCfg, () => {
+        setAdvanced({ open: true, as: '', token: '' });
         setCfg(null);
       });
       return;
     }
-    if (recoverAttempts.current >= 2) {
-      forgetObserver(team);
-      setFormError('the live observer keeps being rejected — reconnect or check the daemon');
-      setCfg(null);
-      return;
-    }
-    recoveredToken.current = staleToken;
-    recoverAttempts.current += 1;
     forgetObserver(team);
-    void (async () => {
-      try {
-        const name = genObserverName();
-        const credential = await provisionObserver(team, name);
-        saveObserver(team, { name, token: credential });
-        setCfg({ team, as: name, token: credential }); // reconnect with the fresh observer
-      } catch (e) {
-        setFormError(e instanceof Error ? e.message : String(e));
-        setCfg(null);
-      }
-    })();
+    setFormError("this browser's watching seat expired — sign in to watch again");
+    setAdvanced({ open: true, as: '', token: '' });
+    setCfg(null);
   }, [cfg?.team, cfg?.token, cfg?.as, signedIn]);
-  const armRecovery = useCallback(() => {
-    recoverAttempts.current = 0;
-  }, []);
 
   // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
   const outage = useServerHealth();
   // ADR 516: the Team's active holds, read from the same route every surface reads.
   const { holds, canSet: canSetHold, refresh: refreshHolds } = useTeamHolds(cfg);
-  const stream = useLiveStream(cfg, {
-    onCredentialInvalid: recoverObserver,
-    onConnected: armRecovery,
-  });
+  const stream = useLiveStream(cfg, { onCredentialInvalid: recoverObserver });
   const {
     envelopes: streamed,
     roster,
@@ -355,18 +329,22 @@ function LivePage() {
   }, []);
 
   /** Hand the screen back: drop the identity and fall back to watching. The escape hatch a cached
-   *  seat never had — before ADR 222 the only way out was clearing localStorage by hand. */
+   *  seat never had — before ADR 222 the only way out was clearing localStorage by hand. The
+   *  watching seat is minted with the outgoing credential (ADR 580), so only an admin's sign-out
+   *  can leave the room watching; anyone else's lands on the connect form. */
   const signOut = useCallback(() => {
     const slug = cfg?.team;
     const as = cfg?.as;
+    const outgoing = cfg?.token;
     if (!slug || !as) return;
     forgetMemberIdentity(slug);
     clearSnapshot(slug, as);
     setSignedIn(false);
-    void acquireObserver(slug).then(setCfg, (e: unknown) =>
-      setFormError(e instanceof Error ? e.message : String(e)),
-    );
-  }, [cfg?.team, cfg?.as]);
+    void acquireObserver(slug, outgoing).then(setCfg, () => {
+      setFormError(null);
+      setCfg(null);
+    });
+  }, [cfg?.team, cfg?.as, cfg?.token]);
 
   /**
    * The rail's one button, both meanings (ADR 222). If this machine has an identity, becoming
@@ -402,24 +380,20 @@ function LivePage() {
       return;
     }
 
-    // Default: reuse this browser's observer seat for the team, or provision one.
+    // Default: this browser's cached watching seat for the team. Minting a new one takes a human
+    // admin's credential (ADR 580), which a signed-out page does not have, so without one the
+    // sign-in fields open and say how to get in.
     setSignedIn(false);
-    let creds = loadObserver(slug);
-    if (!creds) {
-      setProvisioning(true);
-      try {
-        const name = genObserverName();
-        const credential = await provisionObserver(slug, name);
-        creds = { name, token: credential };
-        saveObserver(slug, creds);
-      } catch (e) {
+    try {
+      setCfg(await acquireObserver(slug));
+    } catch (e) {
+      if (e instanceof ObserverSignInRequired) {
+        setAdvanced({ open: true, as: '', token: '' });
+        setFormError('This browser has no saved seat for this team — sign in to watch.');
+      } else {
         setFormError(e instanceof Error ? e.message : String(e));
-        setProvisioning(false);
-        return;
       }
-      setProvisioning(false);
     }
-    setCfg({ team: slug, as: creds.name, token: creds.token });
   };
 
   // The wall's agile board, opened. Two ways in, and they differ only in where the panel comes
@@ -667,7 +641,9 @@ function LivePage() {
             </svg>
           </button>
         )}
-        {connected && <WatchLinkButton cfg={cfg!} />}
+        {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
+            watching page does not hold, so offering it there would only ever fail. */}
+        {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
         {connected && <RoomToneToggle />}
         {connected && <SoundToggle />}
         <Clock />
@@ -828,20 +804,27 @@ function LivePage() {
  * dashboard's credential. It used to be `cfg.token`, which is the operator's own full-grade seat, so
  * sharing a link shared every DM on the team. A viewer now sees team/broadcast traffic and nothing
  * directed.
+ *
+ * Minting it takes a human admin's credential (ADR 580), so the button is only offered signed in, and
+ * `cfg.token` is the member's own — used to mint, never put in the link.
  */
 function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const copy = async () => {
     const { origin } = window.location;
     let creds;
     try {
-      creds = await acquireWatchLinkObserver(cfg.team);
-    } catch {
+      creds = await acquireWatchLinkObserver(cfg.team, cfg.token);
+    } catch (e) {
       // Minting failed — do NOT fall back to cfg.token. That fallback is the whole bug: it would
       // silently hand out a full-visibility credential at the exact moment we meant to withhold one.
-      setFailed(true);
-      window.setTimeout(() => setFailed(false), 2400);
+      setFailed(
+        e instanceof Error && /admin|unauthorized|forbidden/i.test(e.message)
+          ? 'Only a team admin can share a watch link'
+          : 'Could not make a watch link — try again',
+      );
+      window.setTimeout(() => setFailed(null), 2400);
       return;
     }
     const url =
@@ -861,9 +844,7 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
       className={`lc__pbtn${copied ? ' lc__pbtn--on' : ''}`}
       onClick={() => void copy()}
       title={
-        failed
-          ? 'Could not mint a watch-link seat — copy it from the daemon host'
-          : 'Copy a shareable read-only watch link (public traffic only — no DMs, no account)'
+        failed ?? 'Copy a shareable read-only watch link (public traffic only — no DMs, no account)'
       }
     >
       {copied ? (
@@ -977,14 +958,15 @@ function ConnectForm({
       <div className="lc-form__card">
         <h1 className="lc-form__title">Watch the team, live</h1>
         <p className="lc-form__sub">
-          Enter a team to stream all of its communication. A hidden read-only observer seat is
-          created for you — watching never shows you on the roster.
+          Run <code>musterd live</code> in your team folder and this page opens signed in. A browser
+          that has watched this team before keeps its hidden read-only seat — watching never shows
+          you on the roster.
         </p>
         <label className="lc-form__field">
           <span>Team</span>
           {/* No autoFocus. This form is the FIRST thing on the page, and focusing it on load drops a
               screen-reader user straight into a text field — past the heading and past the sentence
-              above explaining that watching creates a hidden observer seat and never puts them on
+              above explaining that watching uses a hidden observer seat and never puts them on
               the roster. That is a privacy fact they are entitled to hear before they start typing.
               The page is a single form, so a keyboard user is one Tab away regardless. */}
           <input
@@ -996,7 +978,7 @@ function ConnectForm({
           />
         </label>
 
-        <MemberSignInFields advanced={advanced} onAdvanced={onAdvanced} />
+        <MemberSignInFields advanced={advanced} onAdvanced={onAdvanced} seatLabel="Sign in as (seat)" />
 
         {error && <p className="lc-form__error">{error}</p>}
 
@@ -1006,10 +988,15 @@ function ConnectForm({
           onClick={onWatch}
         >
           {provisioning && <span className="lc-spinner" aria-hidden="true" />}
-          {provisioning ? 'Provisioning…' : 'Watch live'}
+          {provisioning ? 'Signing in…' : advanced.open ? 'Sign in' : 'Watch live'}
         </button>
 
-        <MemberSignInToggle advanced={advanced} onAdvanced={onAdvanced} />
+        <MemberSignInToggle
+          advanced={advanced}
+          onAdvanced={onAdvanced}
+          openLabel="Sign in as yourself"
+          closeLabel="Just watch instead"
+        />
       </div>
     </div>
   );

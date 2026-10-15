@@ -66,6 +66,10 @@ broadcast` on the laptop and `musterd stream start` take the same path, so they 
   loopback and are refused the same way. They are browser surfaces with no capturer to bring a
   seat, so they need their own answer.
   Follows-up: a lane for `/live`'s observer and watch link after ADR 580, opened with this PR.
+- **2026-10-14 — the browser surfaces' answer** (lane `01M4YDJK1N`). `/live` and `/board` mint only
+  with a signed-in human's credential: "copy watch link" uses it and is offered only signed in, and
+  an admin's sign-out uses the outgoing one. A browser with no cached observer and no sign-in gets
+  the sign-in fields and the `musterd live` / `musterd board` hint, not a refused request.
 
 ## Observability & Evaluation
 
