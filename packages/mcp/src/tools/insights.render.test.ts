@@ -170,7 +170,9 @@ describe('fmtReport — spend cap (ADR 602)', () => {
       }),
       'team',
     );
-    expect(over).toContain('cap $10.00 OVER · measured wake cost, not payments');
+    expect(over).toContain(
+      'cap $10.00 OVER · agent wakes held · window 7d · measured wake cost, not payments',
+    );
 
     const quiet = fmtReport(
       report({ wake: wake({ spend_cap_usd: 10, spend_over_cap: false }) }),

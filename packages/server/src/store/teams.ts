@@ -825,7 +825,7 @@ export async function getPolicy(db: Driver, teamId: string): Promise<Policy> {
 /**
  * ADR 602. The team's spend cap in USD, or null when nobody set one. Null is unbounded.
  * Never coerce a missing key to 0 — zero would read as "deny every wake" once a reader treats it
- * as a bound. This increment only displays the number.
+ * as a bound. ADR 611 reads this from the wake poll. Absence stays unbounded.
  */
 export function spendCapUsd(policy: Policy): number | null {
   return policy.spend_cap_usd ?? null;

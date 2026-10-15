@@ -1,10 +1,12 @@
 import { makeEnvelope, WakeContextPacketSchema, type Act } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import type { PgliteDriver } from '../db/pgliteDriver.js';
 import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { withDrivers } from '../db/testing.js';
+import { log } from '../log.js';
+import { readSpendCapBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
@@ -2797,6 +2799,206 @@ withDrivers('residency', (o, kind) => {
       await setPolicy(db, team.id, { incident: { wake_on_route: true, wake_on_resolve: true } });
       await msg(db, team, nick, ada, 'message', 'r2', 1_000, { meta: routeNotice('L1', 'bob') });
       expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+    });
+  });
+
+  describe('claimWakeLeases — spend cap holds new agent wakes (ADR 611)', async () => {
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+    async function priced(
+      db: Driver,
+      team: TeamRow,
+      seat: string,
+      usd: number,
+      leaseId = 'L-cost',
+    ) {
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: seat,
+        result: 'allow',
+        detail: { lease_id: leaseId, cost_usd: usd },
+      });
+    }
+
+    async function capGates(db: Driver, teamId: string) {
+      return (await listAudit(db, teamId)).filter((r) => {
+        if (r.action !== 'action.gate' || r.detail === null) return false;
+        return (JSON.parse(r.detail) as { cause?: string }).cause === 'spend_cap';
+      });
+    }
+
+    async function claim(db: Driver, team: TeamRow) {
+      const breach = await readSpendCapBreach(db, team.id);
+      return claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        Date.now(),
+        undefined,
+        breach,
+      );
+    }
+
+    it('at the cap, a due agent gets no lease and one deny, and the next poll adds nothing', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await priced(db, team, 'Ada', 10);
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+
+      const breach = await readSpendCapBreach(db, team.id);
+      expect(breach).toMatchObject({ capUsd: 10, totalUsd: 10, windowDays: 7 });
+      expect(await claim(db, team)).toEqual([]);
+      const gates = await capGates(db, team.id);
+      expect(gates).toHaveLength(1);
+      expect(JSON.parse(gates[0]!.detail!)).toMatchObject({
+        cause: 'spend_cap',
+        outcome: 'denied_held',
+        cap_usd: 10,
+        total_usd: 10,
+        window_days: 7,
+      });
+      expect(String(JSON.parse(gates[0]!.detail!).reason)).toContain('New agent wakes are held');
+
+      expect(await claim(db, team)).toEqual([]);
+      expect(await capGates(db, team.id)).toHaveLength(1);
+    });
+
+    it('a human still gets a lease while the agent on the same host does not', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await enroll(db, team, nick);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await msg(db, team, ada, nick, 'request_help', 'help-nick', Date.now());
+      await priced(db, team, 'Ada', 10);
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+
+      const orders = await claim(db, team);
+      expect(orders.map((o) => o.seat)).toEqual(['nick']);
+      expect(await capGates(db, team.id)).toHaveLength(1);
+    });
+
+    it('an unset cap and a null priced total do not deny', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      expect(await readSpendCapBreach(db, team.id)).toBeNull();
+      expect(await claim(db, team)).toHaveLength(1);
+      expect(await capGates(db, team.id)).toHaveLength(0);
+
+      const quiet = await seed();
+      await enroll(quiet.db, quiet.team, quiet.ada);
+      await msg(quiet.db, quiet.team, quiet.nick, quiet.ada, 'request_help', 'help-2', Date.now());
+      await setPolicy(quiet.db, quiet.team.id, { spend_cap_usd: 10 });
+      expect(await readSpendCapBreach(quiet.db, quiet.team.id)).toBeNull();
+      expect(await claim(quiet.db, quiet.team)).toHaveLength(1);
+      expect(await capGates(quiet.db, quiet.team.id)).toHaveLength(0);
+    });
+
+    it('aging the cost row out of the window restores the lease', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await priced(db, team, 'Ada', 10);
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+      expect(await claim(db, team)).toEqual([]);
+
+      await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND action = 'residency.wake_cost'`, [
+        Date.now() - WEEK_MS - 24 * 60 * 60 * 1000,
+        team.id,
+      ]);
+      expect(await readSpendCapBreach(db, team.id)).toBeNull();
+      expect(await claim(db, team)).toHaveLength(1);
+    });
+
+    it('a lease minted under the cap stays leased after a later cost puts the total over it', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+      const [order] = await claim(db, team);
+      expect(order?.seat).toBe('Ada');
+
+      await priced(db, team, 'Ada', 25, order!.lease_id);
+      const during = await claim(db, team);
+      expect(during).toEqual([]);
+      expect(
+        await db.get<{ status: string }>('SELECT status FROM wake_leases WHERE id = ?', [
+          order!.lease_id,
+        ]),
+      ).toMatchObject({ status: 'leased' });
+      expect(await capGates(db, team.id)).toHaveLength(0);
+
+      await db.run(`UPDATE wake_leases SET status = 'reported' WHERE id = ?`, [order!.lease_id]);
+      const over = await readSpendCapBreach(db, team.id);
+      expect(over).not.toBeNull();
+      expect(over!.totalUsd).toBeGreaterThan(over!.capUsd);
+      expect(await claim(db, team)).toEqual([]);
+      expect(await capGates(db, team.id)).toHaveLength(1);
+    });
+
+    it('holds a provisioned first wake without marking it taken', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      const now = Date.now();
+      await db.run(
+        `INSERT INTO host_provisions (id, team_id, member_id, sponsor_id, host, state, claimed_by,
+           claimed_at, ready_at, first_wake_at, failed_reason, connect_origin, created_at)
+         VALUES ('prov-1', ?, ?, ?, NULL, 'ready', NULL, NULL, ?, NULL, NULL, NULL, ?)`,
+        [team.id, ada.id, nick.id, now, now],
+      );
+      expect(
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS, now, undefined, {
+          capUsd: 1,
+          totalUsd: 1,
+          windowDays: 7,
+        }),
+      ).toEqual([]);
+      expect(
+        await db.get<{ first_wake_at: number | null }>(
+          'SELECT first_wake_at FROM host_provisions WHERE id = ?',
+          ['prov-1'],
+        ),
+      ).toMatchObject({ first_wake_at: null });
+
+      const taken = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS, now);
+      expect(taken).toHaveLength(1);
+      expect(taken[0]).toMatchObject({ seat: 'Ada', derivation: 'immediate' });
+      expect(
+        (
+          await db.get<{ first_wake_at: number | null }>(
+            'SELECT first_wake_at FROM host_provisions WHERE id = ?',
+            ['prov-1'],
+          )
+        )?.first_wake_at,
+      ).toEqual(expect.any(Number));
+    });
+
+    it('a thrown cap read allows the poll', async () => {
+      const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const db = {
+        get: async () => {
+          throw new Error('read down');
+        },
+        all: async () => {
+          throw new Error('read down');
+        },
+      } as unknown as Driver;
+      await expect(readSpendCapBreach(db, 'team-1')).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ msg: 'spend cap read failed open', team: 'team-1' }),
+      );
+      warn.mockRestore();
+    });
+
+    it('a priced total under the cap is not a breach', async () => {
+      const { db, team } = await seed();
+      await priced(db, team, 'Ada', 9);
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+      expect(await readSpendCapBreach(db, team.id)).toBeNull();
     });
   });
 });

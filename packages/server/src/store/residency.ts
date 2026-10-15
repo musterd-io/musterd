@@ -1717,6 +1717,9 @@ interface SeatPass {
    *  (seat, act, edge) trip: written again only after a newer `woke` or `wake_failed` on that
    *  lane and edge. */
   exhausted: { entry: AuditEntry; once: boolean }[];
+  /** ADR 611. One deny for this over-cap episode, written with no lease. Null when the episode
+   *  is already open, or the seat is not held. */
+  spendHold: AuditEntry | null;
 }
 
 /**
@@ -1887,11 +1890,69 @@ async function unpushedOriginFloors(db: Driver): Promise<Map<string, number>> {
   return floors;
 }
 
+/** ADR 611. The poll already measured this. Residency applies it and does not read the cost fold. */
+type SpendCapBreach = {
+  capUsd: number;
+  totalUsd: number;
+  windowDays: number;
+};
+
+function spendHoldEntry(seat: string, breach: SpendCapBreach): AuditEntry {
+  return {
+    actor: null,
+    action: 'action.gate',
+    target: seat,
+    result: 'deny',
+    detail: {
+      cause: 'spend_cap',
+      outcome: 'denied_held',
+      cap_usd: breach.capUsd,
+      total_usd: breach.totalUsd,
+      window_days: breach.windowDays,
+      reason:
+        `spend cap $${breach.capUsd.toFixed(2)}: ${breach.windowDays}d measured wake cost ` +
+        `$${breach.totalUsd.toFixed(2)} is at the cap. New agent wakes are held. A human still passes. ` +
+        'Measured wake cost, not payments.',
+    },
+  };
+}
+
+/** Open while this seat's newest local spend-cap deny has no later lease. A lease closes it. */
+async function spendCapEpisodeOpen(db: Driver, teamId: string, seat: string): Promise<boolean> {
+  const row = await db.get<{ action: string }>(
+    `SELECT action FROM audit
+      WHERE team_id = ? AND target = ?
+        AND (
+          (action = 'action.gate' AND json_extract(detail, '$.cause') = 'spend_cap')
+          OR action = 'residency.wake_leased'
+        )
+        ${MINTED_HERE}
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, seat],
+  );
+  return row?.action === 'action.gate';
+}
+
+/** Drop a non-human plan before a lease is minted, so a dream night and a first wake are not spent. */
+async function applySpendCap(
+  db: Driver,
+  teamId: string,
+  pass: SeatPass,
+  breach: SpendCapBreach | null,
+): Promise<void> {
+  if (breach === null || pass.member.kind === 'human' || pass.plan === null) return;
+  pass.plan = null;
+  if (await spendCapEpisodeOpen(db, teamId, pass.member.name)) return;
+  pass.spendHold = spendHoldEntry(pass.member.name, breach);
+}
+
 /**
  * The host's poll (ADR 131 §4 as amended by ADR 576). Each enrolled seat's wake is worked out with
  * plain reads, outside any transaction, and then each seat that has one is rechecked and written in
  * its own short transaction. On a large team the derivation is hundreds of awaited statements, and
  * on SQLite every other write on the daemon queued behind it while it ran inside one transaction.
+ *
+ * `breach` (ADR 611) is the poll's spend-cap read. Null withholds nothing.
  */
 export async function claimWakeLeases(
   db: Driver,
@@ -1901,11 +1962,21 @@ export async function claimWakeLeases(
   presenceTimeoutMs: number,
   now = Date.now(),
   scope: HostScope = TEAM_WIDE_HOST,
+  breach: SpendCapBreach | null = null,
 ): Promise<WakeOrder[]> {
   // Lane 01M4VJNEX2: the backlog is rows already written, one per poll. Drop the repeats once
   // per process, before this poll's scans. A failure here must not stop the poll.
   await scheduleEdgeExhaustionPrune(db);
-  const passes = await deriveSeatPasses(db, teamId, teamSlug, host, presenceTimeoutMs, now, scope);
+  const passes = await deriveSeatPasses(
+    db,
+    teamId,
+    teamSlug,
+    host,
+    presenceTimeoutMs,
+    now,
+    scope,
+    breach,
+  );
   const orders: WakeOrder[] = [];
   for (const pass of passes) {
     const order = await writeSeatPass(db, teamId, teamSlug, host, presenceTimeoutMs, now, pass);
@@ -1923,6 +1994,7 @@ async function deriveSeatPasses(
   presenceTimeoutMs: number,
   now: number,
   scope: HostScope,
+  breach: SpendCapBreach | null,
 ): Promise<SeatPass[]> {
   const passes: SeatPass[] = [];
   const reclaimable = await listReclaimableMemberIds(db, teamId, now);
@@ -1959,7 +2031,7 @@ async function deriveSeatPasses(
     const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name);
     if (snoozeUntil !== null && now < snoozeUntil) continue;
     const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
-    const pass: SeatPass = { member, policy, plan: null, exhausted: [] };
+    const pass: SeatPass = { member, policy, plan: null, exhausted: [], spendHold: null };
     passes.push(pass);
     // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
     // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
@@ -1971,6 +2043,7 @@ async function deriveSeatPasses(
     if (provisioned) {
       const sponsorName = (await getMemberById(db, provisioned.sponsor_id))?.name ?? '?';
       pass.plan = { kind: 'provisioned', provisionId: provisioned.id, sponsorName };
+      await applySpendCap(db, teamId, pass, breach);
       continue;
     }
     if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) continue;
@@ -2154,8 +2227,9 @@ async function deriveSeatPasses(
       });
       if (blocker === null) pass.plan = { kind: 'dream' };
     }
+    await applySpendCap(db, teamId, pass, breach);
   }
-  return passes.filter((p) => p.plan !== null || p.exhausted.length > 0);
+  return passes.filter((p) => p.plan !== null || p.exhausted.length > 0 || p.spendHold !== null);
 }
 
 /**
@@ -2179,6 +2253,9 @@ async function writeSeatPass(
         if (once && (await isExhausted(t, teamId, String(entry.detail?.act)))) continue;
         if (!once && (await edgeTripAlreadyRecorded(t, teamId, entry))) continue;
         await appendAudit(t, teamId, entry);
+      }
+      if (pass.spendHold !== null && !(await spendCapEpisodeOpen(t, teamId, member.name))) {
+        await appendAudit(t, teamId, pass.spendHold);
       }
       if (plan === null) return null;
       if (await hasLivePresence(t, member.id, presenceTimeoutMs)) return null;

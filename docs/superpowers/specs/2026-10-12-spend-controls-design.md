@@ -91,6 +91,7 @@ speaker described becomes something an admin can grant and the team can read.
    Range, report fields, and the display-only bound: [ADR 602](../../decisions/602-spend-cap-display.md).
 3. Increment 2 (`01M4SB4BZBQDHWFWH4RXBNR7CQ`, depends on increment 1): gate enforcement —
    deny agent actuation at/over cap, humans pass, notice surface, audit rows. The bound.
+   [ADR 611](../../decisions/611-spend-cap-holds-wakes.md).
 4. Named follow-up (`01M4SB4CJPTCSCYK3X8KGY2W33`, not this arc): approvals for costly acts
    above a threshold.
 5. Named follow-up (`01M4SB4D7RTW21W62NKCPDV816`): the unpriced floor (bound what isn't

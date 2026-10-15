@@ -643,7 +643,7 @@ export async function deriveReviewMetrics(
   return m;
 }
 
-const WAKE_WINDOW_DAYS = 7;
+export const WAKE_WINDOW_DAYS = 7;
 const WAKE_WINDOW_MS = WAKE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 /** One parsed `residency.*` audit row — the wake ledger's outcome record. */
@@ -691,20 +691,17 @@ export const WAKE_AUDIT_SQL = `SELECT action, target, ts, detail FROM audit
  * `cost_reported` carries the honesty denominator. Per-seat economics flag `over_budget` against
  * the seat's effective `budget_usd` — a REPORT bound (nothing was stopped mid-run).
  */
-export async function deriveWakeMetrics(
-  db: Driver,
-  teamId: string,
-  now: number = Date.now(),
-): Promise<WakeMetrics> {
-  const since = now - WAKE_WINDOW_MS;
+/** The window's wake rows, ts order, parsed. Shared by the report and the spend-cap read (ADR 611)
+ *  so the poll does not also walk a message per woken act. */
+async function loadWakeAuditRows(db: Driver, teamId: string, now: number): Promise<WakeAuditRow[]> {
   // No ORDER BY in the SQL (lane 01M4VYH20W): with one, SQLite walks `(team_id, ts)` to skip the
   // sort and reads every audit row the team wrote in the window — 163,001 rows on the hub
   // (2026-10-13) to keep 5,428, 1.4 s with a cold cache. Without it, it seeks
   // `(team_id, action, ts)` once per action (0.07 s). The rows are put in ts order here instead.
-  const rows: WakeAuditRow[] = (
+  return (
     await db.all<{ action: string; target: string; ts: number; detail: string | null }>(
       WAKE_AUDIT_SQL,
-      [teamId, since],
+      [teamId, now - WAKE_WINDOW_MS],
     )
   )
     .sort((a, b) => a.ts - b.ts)
@@ -717,6 +714,41 @@ export async function deriveWakeMetrics(
       }
       return { action: r.action, target: r.target, ts: r.ts, detail };
     });
+}
+
+/** Cost per lease: primary report fields first, a supplementary `wake_cost` row wins. */
+function foldLeaseCosts(rows: WakeAuditRow[]): Map<string, { seat: string; cost: number }> {
+  const costByLease = new Map<string, { seat: string; cost: number }>();
+  for (const r of rows) {
+    if (r.detail.lease_id === undefined || r.detail.cost_usd === undefined) continue;
+    if (r.action === 'residency.wake_cost' || !costByLease.has(r.detail.lease_id)) {
+      costByLease.set(r.detail.lease_id, { seat: r.target, cost: r.detail.cost_usd });
+    }
+  }
+  return costByLease;
+}
+
+/**
+ * ADR 611. The 7-day priced total `deriveWakeMetrics` reports as `cost_usd_total`, without the
+ * per-act message walk. Null when the window has no priced lease. A lone `wake_cost` row counts.
+ */
+export async function pricedWakeCostUsd(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<number | null> {
+  const costs = [...foldLeaseCosts(await loadWakeAuditRows(db, teamId, now)).values()].map(
+    (c) => c.cost,
+  );
+  return costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
+}
+
+export async function deriveWakeMetrics(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<WakeMetrics> {
+  const rows = await loadWakeAuditRows(db, teamId, now);
 
   // ADR 273: reports the daemon REFUSED. Not a wake outcome — a wake whose outcome never got
   // recorded, which is worse, because the lease then expires and reads as "the host never
@@ -733,14 +765,7 @@ export async function deriveWakeMetrics(
   const byAct = new Map<string, WakeAuditRow>();
   for (const r of wokeRows) if (r.detail.act) byAct.set(r.detail.act, r);
 
-  // Cost per lease: primary report fields first, a supplementary wake_cost row wins.
-  const costByLease = new Map<string, { seat: string; cost: number }>();
-  for (const r of rows) {
-    if (r.detail.lease_id === undefined || r.detail.cost_usd === undefined) continue;
-    if (r.action === 'residency.wake_cost' || !costByLease.has(r.detail.lease_id)) {
-      costByLease.set(r.detail.lease_id, { seat: r.target, cost: r.detail.cost_usd });
-    }
-  }
+  const costByLease = foldLeaseCosts(rows);
 
   const latencies: number[] = [];
   let answered = 0;

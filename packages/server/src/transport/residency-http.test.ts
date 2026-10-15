@@ -2,7 +2,7 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
-import { listAudit } from '../store/audit.js';
+import { appendAudit, listAudit } from '../store/audit.js';
 import { openLane, updateLane } from '../store/lanes.js';
 import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
@@ -1677,6 +1677,51 @@ withDrivers('residency-http', (_o, kind) => {
       expect(detail.from_reviewer).toBe('Ada');
       expect(detail.superseded_ask).toBe('ask-departing');
       expect(detail.reviewer).not.toBe('Ada');
+    });
+  });
+
+  describe('wake-leases spend cap (ADR 611)', () => {
+    it('holds a due agent when the poll reads the 7-day total at the cap', async () => {
+      await enrollAda();
+      const send = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'cap1',
+            team: 'dawn',
+            from: 'nick',
+            to: { kind: 'member', name: 'Ada' },
+            act: 'message',
+            body: 'need you',
+            meta: { urgent: true, urgent_reason: 'wake me' },
+          }),
+        },
+        nickCred,
+      );
+      expect(send.status).toBe(201);
+
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      await setPolicy(server.store, team.id, { spend_cap_usd: 10 });
+      await appendAudit(server.store, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: 'Ada',
+        result: 'allow',
+        detail: { lease_id: 'L-cost', cost_usd: 10 },
+      });
+
+      const leases = await post(
+        '/teams/dawn/residency/wake-leases',
+        { host: 'laptop.local' },
+        agentKey,
+      );
+      expect(leases.status).toBe(200);
+      expect(leases.json.orders).toEqual([]);
+      const gates = (await audits('action.gate')).filter((row) => {
+        if (row.detail === null) return false;
+        return (JSON.parse(row.detail) as { cause?: string }).cause === 'spend_cap';
+      });
+      expect(gates).toHaveLength(1);
     });
   });
 });
