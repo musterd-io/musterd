@@ -1,4 +1,6 @@
 import {
+  type CiTrend,
+  type CiWindow,
   DISPUTE_VIA_ORDER,
   fmtShare,
   type ActDelivery,
@@ -217,6 +219,11 @@ function render(r: Report, altitude: Altitude, liveness?: SweepFinding): void {
   if (r.disputes) {
     w(`\n${theme.accent('disputes')}:\n`);
     renderDisputes(r.disputes, w);
+  }
+  // ADR 610: one line of CI trend when anything has been sampled; the full shape is `report ci`.
+  if (r.ci && (r.ci.current.main_runs > 0 || r.ci.previous.main_runs > 0)) {
+    w(`\n${theme.accent('ci')}:\n`);
+    w(`  ${ciHeadline(r.ci)}\n`);
   }
   w(`\n${theme.accent('waiting on')}:\n`);
   renderWaitingOn(r, w);
@@ -799,6 +806,74 @@ async function traceReport(parsed: Parsed): Promise<number> {
   return 0;
 }
 
+const fmtMin = (ms: number | null): string => (ms === null ? '—' : `${(ms / 60_000).toFixed(1)}m`);
+const arrow = (cur: number | null, prev: number | null): string =>
+  cur === null || prev === null || prev === 0
+    ? ''
+    : cur > prev * 1.1
+      ? ' ↑'
+      : cur < prev * 0.9
+        ? ' ↓'
+        : ' →';
+
+/** ADR 610: the one-line trend — this window's main p50/p90, red count and flake rate, each
+ *  arrowed against the previous window. Arrows, never bare deltas: the reader asks "is it drifting". */
+function ciHeadline(ci: CiTrend): string {
+  const c = ci.current;
+  const p = ci.previous;
+  const flake = c.pr_shas > 0 ? `${c.pr_flaky}/${c.pr_shas} PR SHAs flaky` : 'no PR runs';
+  const flakePrev = p.pr_shas > 0 ? ` (was ${p.pr_flaky}/${p.pr_shas})` : '';
+  return (
+    `main ${c.main_runs} runs · p50 ${fmtMin(c.main_p50_ms)}${arrow(c.main_p50_ms, p.main_p50_ms)} · ` +
+    `p90 ${fmtMin(c.main_p90_ms)}${arrow(c.main_p90_ms, p.main_p90_ms)} · ` +
+    `red ${c.main_red}${arrow(c.main_red, p.main_red)} · ${flake}${flakePrev} (${ci.window_days}d vs prior ${ci.window_days}d)`
+  );
+}
+
+/**
+ * ADR 610: `musterd report ci` — the CI trend in full: this window beside the previous one, per-job
+ * p50s slowest first, and when the sampler last saw a run. The "superfan" reading of CI: not one
+ * red run (the `main-red` issue already says that) but the shape of the week.
+ */
+async function ciReport(parsed: Parsed): Promise<number> {
+  const { team, http } = resolve(parsed.flags);
+  const report = await http.report(team);
+  const w = process.stdout.write.bind(process.stdout);
+  const ci = report.ci;
+  if (parsed.flags['json']) return (w(JSON.stringify(ci ?? null) + '\n'), 0);
+  if (!ci) {
+    w(theme.meta('this daemon predates CI telemetry (ADR 610) — rebuild + restart it') + '\n');
+    return 0;
+  }
+  w(
+    `${theme.accent('ci trend')} — ${team} ${theme.meta(`· last ${ci.window_days}d vs the ${ci.window_days}d before`)}\n\n`,
+  );
+  if (ci.sampled_through === null) {
+    w(
+      theme.meta(
+        '  nothing sampled yet — `musterd ci sample --full` reads the forge; the ci-probe tick does it hourly',
+      ) + '\n',
+    );
+    return 0;
+  }
+  const row = (label: string, c: CiWindow) =>
+    w(
+      `  ${label.padEnd(9)} main ${String(c.main_runs).padStart(3)} runs · p50 ${fmtMin(c.main_p50_ms).padStart(5)} · p90 ${fmtMin(c.main_p90_ms).padStart(5)} · red ${c.main_red} · PR SHAs ${c.pr_shas}, flaky ${c.pr_flaky}\n`,
+    );
+  row('this', ci.current);
+  row('previous', ci.previous);
+  if (ci.current.jobs.length > 0) {
+    w(`\n  ${theme.meta('jobs, p50 this window, slowest first:')}\n`);
+    const prev = new Map(ci.previous.jobs.map((j) => [j.name, j.p50_ms]));
+    for (const j of ci.current.jobs)
+      w(
+        `    ${j.name.padEnd(16)} ${fmtMin(j.p50_ms).padStart(5)}${arrow(j.p50_ms, prev.get(j.name) ?? null)} ${theme.meta(`(${j.runs})`)}\n`,
+      );
+  }
+  w(`\n  ${theme.meta(`sampled through ${new Date(ci.sampled_through).toISOString()}`)}\n`);
+  return 0;
+}
+
 export async function reportCommand(parsed: Parsed): Promise<number> {
   if (parsed.positionals[0] === 'trace') return traceReport(parsed);
   if (parsed.positionals[0] === 'delivery') return deliveryReport(parsed, parsed.positionals[1]);
@@ -806,6 +881,7 @@ export async function reportCommand(parsed: Parsed): Promise<number> {
   if (parsed.positionals[0] === 'residency') return residencyReport(parsed);
   if (parsed.positionals[0] === 'tools') return toolsReport(parsed);
   if (parsed.positionals[0] === 'review') return reviewReport(parsed);
+  if (parsed.positionals[0] === 'ci') return ciReport(parsed);
   const { team, http } = resolve(parsed.flags);
   const report = await http.report(team);
   if (parsed.flags['json']) {
@@ -815,7 +891,7 @@ export async function reportCommand(parsed: Parsed): Promise<number> {
   const raw = flagStr(parsed.flags, 'altitude') ?? 'team';
   if (raw !== 'ic' && raw !== 'team' && raw !== 'exec')
     throw new CliError(
-      'usage: musterd report [delivery [<id>] | coordination | residency | tools | trace] [--altitude ic|team|exec] [--json]',
+      'usage: musterd report [delivery [<id>] | coordination | residency | tools | review | ci | trace] [--altitude ic|team|exec] [--json]',
       2,
     );
   // Read off the local sweep series, not the server projection: the finding is a machine-local

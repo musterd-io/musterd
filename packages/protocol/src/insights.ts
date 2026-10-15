@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CiTrendSchema } from './ci-telemetry.js';
 import { SPEND_CAP_USD_MAX } from './credentials.js';
 import { GoalSchema } from './goals.js';
 import { FAMILY_POSTURE_STATES, WAKEABILITIES, type FamilyPosture } from './model.js';
@@ -582,5 +583,8 @@ export const ReportSchema = z.object({
    *  at projection time, never stored. Team-visible at `--altitude team` only. Optional for
    *  back-compat with older daemons — the server always sets it. */
   disputes: DisputeReadoutSchema.optional(),
+  /** ADR 610: the CI trend — this window beside the previous one. Optional for back-compat with
+   *  pre-610 daemons — the server always sets it. */
+  ci: CiTrendSchema.optional(),
 });
 export type Report = z.infer<typeof ReportSchema>;

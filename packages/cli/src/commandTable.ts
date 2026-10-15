@@ -17,6 +17,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   board: async () => (await import('./commands/board.js')).boardCommand,
   broadcast: async () => (await import('./commands/broadcast.js')).broadcastCommand,
   calendar: async () => (await import('./commands/calendar.js')).calendarCommand,
+  ci: async () => (await import('./commands/ci.js')).ciCommand,
   claim: async () => (await import('./commands/claim.js')).claimCommand,
   'codex-hook': async () => (await import('./commands/codexHook.js')).codexHookCommand,
   done: async () => (await import('./commands/done.js')).doneCommand,

@@ -166,6 +166,15 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       for (const s of t.surface)
         lines.push(`  ${s.seat}: ${s.tools} tools ≈ ${s.est_tokens} tokens rendered at connect`);
     }
+    // ADR 610: one CI line when anything has been sampled — the full shape is `musterd report ci`.
+    const ci = r.ci;
+    if (ci && (ci.current.main_runs > 0 || ci.previous.main_runs > 0)) {
+      const m = (ms: number | null) => (ms === null ? '—' : `${(ms / 60_000).toFixed(1)}m`);
+      lines.push('\nci:');
+      lines.push(
+        `  main ${ci.current.main_runs} runs · p50 ${m(ci.current.main_p50_ms)} (was ${m(ci.previous.main_p50_ms)}) · red ${ci.current.main_red} (was ${ci.previous.main_red}) · flaky PR SHAs ${ci.current.pr_flaky}/${ci.current.pr_shas} (${ci.window_days}d)`,
+      );
+    }
     lines.push('\nwaiting on:');
     lines.push(...waitingLines());
   }

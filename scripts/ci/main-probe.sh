@@ -26,6 +26,17 @@ case "${1:-dispatch}" in
       echo "$ts dispatch FAILED: $out"
       exit 1
     fi
+    # ADR 610: the same hourly tick samples the forge's completed runs into the ledger, as the
+    # autorefresh service seat (the token the auto-refresher's tick already uses). Best-effort:
+    # a sampling failure is one log line, never a failed probe.
+    bin=$(cd "$(dirname "$0")/../.." && pwd)/packages/cli/dist/bin.js
+    if [ -f "$bin" ]; then
+      if out=$(MUSTERD_SERVICE_TOKEN_FILE="$HOME/.musterd/autorefresh/seat-token" MUSTERD_PROBE_REPO="$REPO" node "$bin" ci sample 2>&1); then
+        echo "$ts $out"
+      else
+        echo "$ts ci sample FAILED: $out"
+      fi
+    fi
     ;;
   install)
     script=$(cd "$(dirname "$0")" && pwd)/main-probe.sh

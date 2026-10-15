@@ -73,6 +73,7 @@ import {
   emptyPoolFromCandidates,
   LANE_TERMINAL_STATES,
   LaneDetailSchema,
+  CiRunBatchSchema,
   LaneStateSchema,
   isAwaitingAcceptance,
   makeEnvelope,
@@ -213,6 +214,7 @@ import {
   listCalendarSince,
   replaceCalendarEntry,
 } from '../store/calendar.js';
+import { recordCiRuns } from '../store/ci.js';
 import { checkClaims } from '../store/claimCheck.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
 import { deferralFold } from '../store/deferralFold.js';
@@ -6910,6 +6912,24 @@ export async function handleHttp(
         if (body.surface) await recordSurfaceRender(ctx.db, team.id, member.name, body.surface);
         if (body.startup) await recordAdapterStartup(ctx.db, team.id, member.name, body.startup);
         return sendJson(res, 200, {});
+      }
+
+      // ADR 610: the CI sampler's batch. A service seat (or an operator by hand) posts completed
+      // runs read off the forge; the store dedupes by run id, so a tick may resend. Leaseless and
+      // presence-neutral like the trace tap: a LaunchAgent tick must never flip the roster.
+      if (method === 'POST' && rest === '/telemetry/ci-runs') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          { leaseless: true },
+        );
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(CiRunBatchSchema, await readJson(req));
+        const added = await recordCiRuns(ctx.db, team.id, member.name, body.runs);
+        return sendJson(res, 200, { added, seen: body.runs.length - added });
       }
 
       // The hook tap's ingest (ADR 445 §2 R1, increment 1a). Seat credential with or WITHOUT a
