@@ -823,7 +823,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           releaseSlot();
         }
       });
-      workspaceTail.set(key, task.catch(() => undefined));
+      workspaceTail.set(
+        key,
+        task.catch(() => undefined),
+      );
       return task;
     });
     try {
