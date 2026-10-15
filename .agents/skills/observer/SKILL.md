@@ -30,6 +30,10 @@ first report in a session.
   see, and link to the source instead of copying it.
 - **People are not your subject.** You report on goals, lanes and the team's flow, never on how
   much a person did.
+- **An audience is not a seat.** The observer role is a roster seat with messaging off. People who
+  only need to watch (a demo room, a stakeholder) get a watcher instead: a watch link from `/live`
+  or `musterd team observe <name>`, graded public, which emits no presence and sees only
+  team-wide traffic (musterd ADR 136). A public view still must not carry private content.
 
 ## Hard rules
 

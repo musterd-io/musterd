@@ -66,6 +66,13 @@ Vision models also misjudge whether a chart misleads
 5. Reconcile every number in the title, labels, alt text and surrounding copy
    with the data.
 
+When the session cannot run code or render, still deliver the chart: work the
+coordinates out from the data step by step and show the arithmetic, check n, min,
+max and sum by hand, and hand back the SVG marked "not rendered", with steps 3 and
+4 left as the requester's to do before it ships. A plan instead of a chart helps
+nobody. When `team.md` has no palette yet, use a neutral grey for marks and dark
+text for labels, and say the brand shade is still to choose.
+
 ## 5. Accessibility deliverables
 
 Each chart ships with a short alt text (what it shows and the takeaway, about one

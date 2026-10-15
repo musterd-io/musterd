@@ -113,3 +113,20 @@ Where it lost: `team-accent-text`. Both answers said `#E1AD01` fails on white; t
 proposed a concrete darker shade, while the skill run said team.md records none and stopped. With
 a blank team file the skill should still propose a value that passes, labelled as a proposal.
 `team-new-typeface` tied at nothing: its expectations are almost all team facts.
+
+## Run 3 — 2026-10-15, after the blank-team fixes (lane `01M50TPMMA`)
+
+- **Fix:** hard rule 4 says that when the team has not recorded an ink shade for the accent, the
+  designer computes one of the same hue that passes and labels it a proposed token.
+- **Runs:** the one case that lost in the run above, `with_skill` only, set up the same way (scratch
+  repository, shipped form with the blank `team.md`, Opus 5.5, read-only). The baseline is that
+  run's `without_skill` answers, unchanged.
+- **Grading:** one grader blind to which answer was which (seed 20261016), against the same
+  expectations.
+
+| Case | Before: craft (+team) · readiness · preferred | After: craft (+team) · readiness · preferred |
+| --- | --- | --- |
+| team-accent-text | 2/2 (+0/1) · 6 · without skill | 2/2 (+0/1) · 8 · with skill |
+
+It now proposes `#8A6B01` at 5.0:1 (the grader recomputed 5.02) as a token, keeps `#E1AD01` for
+fills, and keeps links underlined. The brand's own `mustard-900` is a team fact it cannot know.
