@@ -55,8 +55,8 @@ export interface MemberRow {
   /** Read-only observer seat (ADR 063): hidden from roster/counts/presence, can't send. 0/1. */
   observer: number;
   /** How much this observer may see (ADR 136): `'full'` — the whole timeline, the trusted local
-   * dashboard; `'public'` — team/broadcast traffic only, a shared watch-link. NULL ⇒ `'full'`
-   * (pre-v18 rows, and the default for a mint that doesn't ask). Meaningless when `observer = 0`. */
+   * dashboard; `'public'` — team/broadcast traffic only, a shared watch-link. NULL ⇒ `'public'` (ADR 601 decision 8; was `'full'` under ADR 136)
+   * Meaningless when `observer = 0`. */
   observer_scope: string | null;
   /** Admin-set account-status override (ADR 070): disabled|banned|archived. NULL ⇒ derived from
    * occupancy (`bound_at`): held ⇒ active, never-held ⇒ provisioned. */
@@ -180,17 +180,22 @@ export function resolveCapabilities(row: MemberRow): Capabilities {
 }
 
 /**
- * Observer grade (ADR 136). NULL ⇒ `'full'`: a pre-v18 row, or a mint that didn't ask. Defaulting to
- * full is safe *because minting is privileged* — ADR 134 restricts provisioning to a local peer or an
- * admin — so the only seats that reach this default were created by a trusted party. A shared
- * watch-link asks for `'public'` explicitly.
+ * Observer grade. `'full'`, `'public'` (ADR 136) or `'broadcast'` (ADR 601) — the exact stored
+ * string. Anything else, NULL included, reads as `'public'` (ADR 601 decision 8): a grade the row
+ * cannot name is the least it could mean, not the most. ADR 136 read NULL as `'full'` because only
+ * a privileged mint could leave it unset; since v18 backfilled every observer row to `'full'` and
+ * `addMember` has written a grade on every mint, no row reaches NULL by construction — the
+ * fail-closed default costs nothing a live dashboard has, and keeps a stray row off the DMs.
  */
 export function resolveObserverScope(row: MemberRow): 'full' | 'public' | 'broadcast' {
-  if (row.observer_scope === 'public') return 'public';
-  // ADR 601: the stream's seat — the exact stored string only. An unknown string falls to `full`
-  // like NULL does, for the reason above: only a privileged mint reaches this default.
-  if (row.observer_scope === 'broadcast') return 'broadcast';
-  return 'full';
+  switch (row.observer_scope) {
+    case 'full':
+      return 'full';
+    case 'broadcast':
+      return 'broadcast';
+    default:
+      return 'public';
+  }
 }
 
 /** Parse persisted working-hours JSON defensively; malformed legacy data means no schedule. */

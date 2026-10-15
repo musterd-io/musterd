@@ -85,6 +85,11 @@ still an observer for presence and displacement whatever it may read. Conflating
   credentials masked. `full` and `public` keep the meanings above. The same ADR closes a `public`
   leak: a member's roster status line was their latest `status_update` whatever it was addressed
   to, so a human-to-human DM could show through a watch link.
+- **2026-10-15 — NULL reads as `public`, not `full`** (ADR 601 decision 8, lane `01M50C1T9P`). This
+  record read an unset grade as `full` because only a privileged mint could leave it unset. v18's
+  backfill and `addMember` writing a grade on every mint mean no row is NULL by construction, so
+  the fail-closed default costs no live dashboard anything; a stray NULL or unknown string now
+  reads as the least it could mean.
 
 ## Observability & Evaluation
 
