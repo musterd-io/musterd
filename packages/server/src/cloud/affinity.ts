@@ -28,6 +28,21 @@ import { log } from '../log.js';
  */
 
 export const REFRESH_MS = 5_000;
+/** The served-team set is bounded: a flood of invented team hosts must not grow memory. */
+export const SERVED_MAX = 10_000;
+
+/**
+ * The machine a `fly-replay-src` header says replayed this request, or null. The header is set by
+ * the proxy on a replayed request, but a client can send one too, so it is trusted only when it
+ * names a machine in the live list other than this one — a spoofed value with no real machine
+ * behind it does not buy a bypass of the owner rule.
+ */
+export function replaySource(header: string | string[] | undefined): string | null {
+  const raw = Array.isArray(header) ? header[0] : header;
+  if (!raw) return null;
+  const m = /(?:^|;)\s*instance=([A-Za-z0-9_-]+)/.exec(raw);
+  return m ? m[1]! : null;
+}
 
 export interface AffinityDecision {
   /** Serve here. */
@@ -59,9 +74,15 @@ export function decide(
   team: string | null,
   self: string | null,
   machines: readonly string[],
-  replayed: boolean,
+  replayed: boolean | string | null,
 ): AffinityDecision {
-  if (team === null || self === null || replayed) return { local: true, owner: null };
+  if (team === null || self === null) return { local: true, owner: null };
+  // `replayed` as a machine id (from `replaySource`) is honoured only for a real peer; `true` is the
+  // caller vouching for it (tests).
+  const vouched =
+    replayed === true ||
+    (typeof replayed === 'string' && replayed !== self && machines.includes(replayed));
+  if (vouched) return { local: true, owner: null };
   const owner = ownerFor(team, machines);
   if (owner === null || owner === self) return { local: true, owner: self };
   // A list that does not contain this machine is stale (we are running); serve rather than replay
@@ -129,9 +150,19 @@ export class Affinity {
     return this.self !== null;
   }
 
-  decide(team: string | null, replayed: boolean): AffinityDecision {
-    if (team !== null) this.served.add(team);
-    return decide(team, this.self, this.list, replayed);
+  decide(team: string | null, replayed: boolean | string | null): AffinityDecision {
+    const d = decide(team, this.self, this.list, replayed);
+    // Record only a team this server OWNS and served — that is the set a list change can take
+    // away. A replayed or foreign team is not recorded, and the set is bounded (oldest out).
+    if (team !== null && d.local && d.owner === this.self) {
+      this.served.delete(team);
+      this.served.add(team);
+      if (this.served.size > SERVED_MAX) {
+        const oldest = this.served.values().next().value;
+        if (oldest !== undefined) this.served.delete(oldest);
+      }
+    }
+    return d;
   }
 
   /** Read the list once; a failure keeps the previous list and logs once. */

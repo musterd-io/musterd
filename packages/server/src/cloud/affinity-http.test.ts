@@ -48,10 +48,15 @@ describe('ADR 608 — team affinity on Cloud', () => {
 
       // Already replayed once (the proxy stamps fly-replay-src): served here, whatever the list says.
       const again = await raw(url, '/teams/revive/messages', 'revive.musterd.test', {
-        'fly-replay-src': 'instance=m-z;state=;t=1',
+        'fly-replay-src': `instance=${owner};state=;t=1`,
       });
       expect(again.headers['fly-replay']).toBeUndefined();
       expect(again.status).not.toBe(307);
+      // A spoofed source (no such machine) does not bypass the owner.
+      const spoof = await raw(url, '/teams/revive/messages', 'revive.musterd.test', {
+        'fly-replay-src': 'instance=m-z;state=;t=1',
+      });
+      expect(spoof.status).toBe(307);
 
       // Global routes never move.
       const health = await raw(url, '/health', 'health.musterd.test');

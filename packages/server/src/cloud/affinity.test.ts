@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Affinity, decide, ownerFor, parseVmsTxt } from './affinity.js';
+import { Affinity, SERVED_MAX, decide, ownerFor, parseVmsTxt, replaySource } from './affinity.js';
 
 describe('ADR 608 — team affinity by rendezvous hash', () => {
   const machines = ['m1', 'm2', 'm3', 'm4'];
@@ -41,6 +41,24 @@ describe('ADR 608 — team affinity by rendezvous hash', () => {
     expect(decide('revive', owner, machines, false)).toEqual({ local: true, owner });
     const other = machines.find((m) => m !== owner)!;
     expect(decide('revive', other, machines, false)).toEqual({ local: false, owner });
+  });
+
+  it('a replay source is honoured only when it names a real peer', () => {
+    const owner = ownerFor('revive', machines)!;
+    const other = machines.find((m) => m !== owner)!;
+    expect(replaySource('instance=m1;state=;t=1')).toBe('m1');
+    expect(replaySource(undefined)).toBeNull();
+    // Spoofed: not a machine we know, or ourselves — still replayed to the owner.
+    expect(decide('revive', other, machines, 'm-spoof').local).toBe(false);
+    expect(decide('revive', other, machines, other).local).toBe(false);
+    // Real peer: served here.
+    expect(decide('revive', other, machines, owner).local).toBe(true);
+  });
+
+  it('the served set records only owned teams and is bounded', () => {
+    const a = new Affinity({ self: 'm1', machines: async () => ['m1'] });
+    for (let i = 0; i < SERVED_MAX + 50; i++) a.decide(`flood-${i}`, false);
+    expect((a as unknown as { served: Set<string> }).served.size).toBe(SERVED_MAX);
   });
 
   it('decide: a list that does not name this machine is stale — serve, do not replay', () => {

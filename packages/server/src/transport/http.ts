@@ -154,7 +154,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { replayHeaders } from '../cloud/affinity.js';
+import { replayHeaders, replaySource } from '../cloud/affinity.js';
 import {
   CONSOLE_UNREACHABLE_SENTENCE,
   ConsoleTokenError,
@@ -2478,7 +2478,7 @@ export async function handleHttp(
     // the request to the proxy to replay there. Global routes (`/health`, the apex) stay local.
     if (ctx.config.cloud && ctx.affinity) {
       const team = pathTeam(path) ?? hostTeam(req.headers.host, ctx.config.cloud.hostSuffix);
-      const d = ctx.affinity.decide(team, req.headers['fly-replay-src'] !== undefined);
+      const d = ctx.affinity.decide(team, replaySource(req.headers['fly-replay-src']));
       if (!d.local && d.owner) {
         res.writeHead(307, { ...replayHeaders(d.owner), 'content-length': '0' });
         res.end();

@@ -8,6 +8,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import { replaySource } from '../cloud/affinity.js';
 import { hostTeam } from '../cloud/hostIsolation.js';
 import { checkUpgrade } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
@@ -248,7 +249,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
     // like any other, so the same `fly-replay` answer moves it there.
     if (rootCtx.config.cloud && rootCtx.affinity) {
       const team = hostTeam(req.headers.host, rootCtx.config.cloud.hostSuffix);
-      const d = rootCtx.affinity.decide(team, req.headers['fly-replay-src'] !== undefined);
+      const d = rootCtx.affinity.decide(team, replaySource(req.headers['fly-replay-src']));
       if (!d.local && d.owner) {
         socket.write(
           `HTTP/1.1 307 Temporary Redirect\r\nfly-replay: instance=${d.owner}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`,
