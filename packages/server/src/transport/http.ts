@@ -536,6 +536,7 @@ import {
   recordTraceReplicated,
 } from '../telemetry.js';
 import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
+import { scrubForReader } from './broadcastScrub.js';
 import { isReloadOf } from './hub.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
@@ -1189,7 +1190,7 @@ const AddMemberBody = z.object({
   /** Observer grade (ADR 136). `'public'` — team/broadcast traffic only, what a shared watch-link
    *  gets. Omitted ⇒ `'full'`, the trusted local dashboard; safe as a default only because ADR 134
    *  restricts minting to a local peer or an admin. */
-  observer_scope: z.enum(['full', 'public']).optional(),
+  observer_scope: z.enum(['full', 'public', 'broadcast']).optional(),
   /** ADR 374: the seat's hue. Honoured on a DB-only team; on a file-backed team the seat file the
    *  CLI wrote first carries it and reconcile projects it. */
   hue: z.number().int().min(0).max(359).nullish(),
@@ -2258,6 +2259,10 @@ async function summarize(
     presenceRows,
   } = await sharedRosterBase(ctx, teamId, () => loadRosterBase(ctx, teamSlug, teamId), opts);
   const viewerIsAdmin = viewer ? resolveCapabilities(viewer).is_admin : false;
+  // ADR 601 decision 5: a `broadcast` or `public` reader is shown each member's latest status that
+  // is not a human-to-human DM; an unauthenticated roster read (self-hosted, no bearer) is public.
+  const viewerGrade = viewer ? messageVisibilityOf(viewer) : 'public';
+  const openStatus = viewerGrade === 'broadcast' || viewerGrade === 'public';
   const quiescenceNow = Date.now();
   // One resolve per distinct prefs blob for the whole roster, not two per row (lane 01M4GQ2G7B).
   const resolveRowStyle = styleResolver(style);
@@ -2273,9 +2278,10 @@ async function summarize(
       // The ADR 155 Inc 3 decay window now applies to everyone (presence-honesty §2.1): humans keep
       // the presence timeout; agents get their own generous window — `working` requires fresh
       // evidence, and past it the read decays to `active` with the claim kept, aged.
+      const status = statuses.get(s.member.id) ?? null;
       const activity = resolveActivity(
         live,
-        statuses.get(s.member.id) ?? null,
+        openStatus ? (status?.open ?? null) : status,
         steering,
         s.member.kind === 'human' ? ctx.config.presenceTimeoutMs : ctx.config.agentIdleMs,
       );
@@ -2776,15 +2782,21 @@ export async function handleHttp(
 
       if (method === 'GET' && rest === '') {
         const team = await requireTeam(ctx.db, slug);
-        return sendJson(res, 200, {
-          team: {
-            id: team.id,
-            slug: team.slug,
-            display: team.display,
-            working_hours: parseWorkingHours(team.working_hours),
-          },
-          members: await summarize(ctx, slug, team.id, await rosterViewer(ctx, slug, req)),
-        });
+        const viewer = await rosterViewer(ctx, slug, req);
+        return sendJson(
+          res,
+          200,
+          // ADR 601 decision 3: a `broadcast` reader's roster (status lines included) is scrubbed.
+          scrubForReader(viewer ? messageVisibilityOf(viewer) : 'public', {
+            team: {
+              id: team.id,
+              slug: team.slug,
+              display: team.display,
+              working_hours: parseWorkingHours(team.working_hours),
+            },
+            members: await summarize(ctx, slug, team.id, viewer),
+          }),
+        );
       }
 
       if (method === 'POST' && rest === '/members') {
@@ -2969,7 +2981,11 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/members') {
         const team = await requireTeam(ctx.db, slug);
         const viewer = await rosterViewer(ctx, slug, req);
-        let members = await summarize(ctx, slug, team.id, viewer);
+        // ADR 601 decision 3: a `broadcast` reader's roster (status lines included) is scrubbed.
+        let members = scrubForReader(
+          viewer ? messageVisibilityOf(viewer) : 'public',
+          await summarize(ctx, slug, team.id, viewer),
+        );
         // ADR 227 close-out: the discovery filter runs HERE, not in the client, so the daemon can
         // see role queries at all. Each authenticated filtered read leaves a `roster.role_query`
         // row — the countable inc-1 signal, and half of the role-addressed-send reopening trigger
@@ -6703,11 +6719,15 @@ export async function handleHttp(
             ...(wait.route !== undefined ? { acceptance_route: wait.route } : {}),
           };
         });
-        return sendJson(res, 200, {
-          lanes:
-            brief === '1' ? annotated.map((l) => ({ ...l, detail: null, scope: [] })) : annotated,
-          warnings,
-        });
+        return sendJson(
+          res,
+          200,
+          scrubForReader(messageVisibilityOf(member), {
+            lanes:
+              brief === '1' ? annotated.map((l) => ({ ...l, detail: null, scope: [] })) : annotated,
+            warnings,
+          }),
+        );
       }
 
       // The brief's per-turn numbers (lane 01M2GTB0RA): what the statusline and the orient nudge
@@ -6865,14 +6885,15 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/report') {
-        const { team, member: _member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         // Shared across viewers (store/reportCache.ts, lanes 01M3D4069F, 01M3ZCTQ77). Keyed by the
         // ROOT store — on Postgres `ctx.db` is a team handle minted per request — and derived under
         // this request's team scope.
         const report = await reportServiceFor(rootCtx.db, ctx.config.presenceTimeoutMs, {
           cacheInline: ctx.config.mode === 'cloud',
         }).get(team.id, team.slug, ctx.db);
-        return sendJson(res, 200, report);
+        // ADR 601: scrubbed when served to a `broadcast` reader, never in the shared cache.
+        return sendJson(res, 200, scrubForReader(messageVisibilityOf(member), report));
       }
 
       // Tool-call telemetry ingest (ADR 144 inc 1): the adapter's batched flush of its own MCP
@@ -7045,8 +7066,14 @@ export async function handleHttp(
       // `message` act to `@team` carrying `meta.goal`; no new act, no new table. Status is derived,
       // never stored, same as everything else in the orientation spine.
       if (method === 'GET' && rest === '/goals') {
-        const { team, member: _member } = await authTouch(ctx, slug, req);
-        return sendJson(res, 200, { goals: await listGoals(ctx.db, team.id, team.slug) });
+        const { team, member } = await authTouch(ctx, slug, req);
+        return sendJson(
+          res,
+          200,
+          scrubForReader(messageVisibilityOf(member), {
+            goals: await listGoals(ctx.db, team.id, team.slug),
+          }),
+        );
       }
 
       if (method === 'POST' && rest === '/goals') {
@@ -8610,7 +8637,8 @@ export async function handleHttp(
           scope: { grade: messageVisibilityOf(member), readerId: member.id },
         });
         const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
-        return sendJson(res, 200, { messages });
+        // ADR 601 decision 3: a `broadcast` reader's history is credential-scrubbed on the way out.
+        return sendJson(res, 200, scrubForReader(messageVisibilityOf(member), { messages }));
       }
 
       if (method === 'POST' && rest === '/inbox/cursor') {

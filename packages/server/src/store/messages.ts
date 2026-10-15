@@ -905,24 +905,74 @@ function statusState(row: {
 export async function latestStatusUpdates(
   db: Driver,
   teamId: string,
-): Promise<Map<string, { state: string; ts: number }>> {
-  const rows = await db.all<{ from_member: string; body: string; meta: string | null; ts: number }>(
-    `SELECT msg.from_member AS from_member, msg.body AS body, msg.meta AS meta, msg.ts AS ts
+): Promise<Map<string, RosterStatus>> {
+  // Two latest-per-member picks in one statement: the newest status_update of any address, and the
+  // newest that is not a human-to-human DM (ADR 601 decision 5). A `broadcast` or `public` reader is
+  // shown the second; everyone else the first. Found while designing ADR 601: a human's DM to
+  // another human, sent as a `status_update`, was that human's roster line on the public stream.
+  const rows = await db.all<{
+    from_member: string;
+    body: string;
+    meta: string | null;
+    ts: number;
+    open: number;
+  }>(
+    `SELECT msg.from_member AS from_member, msg.body AS body, msg.meta AS meta, msg.ts AS ts, 0 AS open
        FROM messages msg
       WHERE msg.id IN (
         SELECT (SELECT x.id FROM messages x
                  WHERE x.from_member = m.id AND x.act = 'status_update'
                  ORDER BY x.ts DESC, x.id DESC LIMIT 1)
           FROM members m
+         WHERE m.team_id = ? AND m.left_at IS NULL)
+     UNION ALL
+     SELECT msg.from_member AS from_member, msg.body AS body, msg.meta AS meta, msg.ts AS ts, 1 AS open
+       FROM messages msg
+      WHERE msg.id IN (
+        SELECT (SELECT x.id FROM messages x
+                 WHERE x.from_member = m.id AND x.act = 'status_update'
+                   AND NOT ${humanPairSql('x')}
+                 ORDER BY x.ts DESC, x.id DESC LIMIT 1)
+          FROM members m
          WHERE m.team_id = ? AND m.left_at IS NULL)`,
-    [teamId],
+    [teamId, teamId],
   );
-  const out = new Map<string, { state: string; ts: number }>();
-  for (const row of rows) {
+  const out = new Map<string, RosterStatus>();
+  for (const row of rows.filter((r) => Number(r.open) === 0)) {
     const status = statusState(row);
-    if (status) out.set(row.from_member, status);
+    if (status) out.set(row.from_member, { ...status, open: null });
+  }
+  for (const row of rows.filter((r) => Number(r.open) === 1)) {
+    const status = statusState(row);
+    const cur = out.get(row.from_member);
+    if (status && cur) cur.open = status;
   }
   return out;
+}
+
+/**
+ * A member's roster line: the latest `status_update` whatever it was addressed to, and `open`, the
+ * latest that was not a human-to-human DM — what a `broadcast` or `public` reader is shown (ADR 601).
+ * `open` is null when every status_update the member ever sent was a human-pair DM.
+ */
+export interface RosterStatus {
+  state: string;
+  ts: number;
+  open: { state: string; ts: number } | null;
+}
+
+/**
+ * The SQL of ADR 601's one exclusion: a member-addressed act whose sender and recipient are both
+ * human, non-observer members. Service seats are agents; an observer is never a human end. Named
+ * once so the history read and the roster line cannot drift; the live fan-out computes the same
+ * pair from the two member rows it already holds (`route.ts`, `humanPair`).
+ */
+export function humanPairSql(alias: string): string {
+  return `(${alias}.to_kind = 'member'
+    AND EXISTS (SELECT 1 FROM members hs WHERE hs.id = ${alias}.from_member
+                  AND hs.kind = 'human' AND hs.observer = 0)
+    AND EXISTS (SELECT 1 FROM members hr WHERE hr.id = ${alias}.to_member
+                  AND hr.kind = 'human' AND hr.observer = 0))`;
 }
 
 /**
@@ -973,6 +1023,10 @@ function readScopeSql(scope: ReadScope): { sql: string; params: unknown[] } {
           ' AND from_member IS NOT ? AND to_member IS NOT ?)',
         params: [scope.readerId, scope.readerId],
       };
+    case 'broadcast':
+      // ADR 601: everything, minus the human-to-human DM. The stream's own mail is never a human
+      // pair (an observer is not a human end), so no reader exemption is needed.
+      return { sql: ` AND NOT ${humanPairSql('messages')}`, params: [] };
     case 'public':
       // The ADR 128 party predicate, which for an observer — never a sender, never a directed
       // recipient except of its own mail — collapses to exactly the public timeline (ADR 136).

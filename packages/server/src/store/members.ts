@@ -188,7 +188,7 @@ export interface AddMemberInput {
   observer?: boolean;
   /** Observer grade (ADR 136): `'public'` sees only team/broadcast traffic — what a shared watch-link
    *  gets. Omitted ⇒ `'full'` (the local dashboard). Ignored unless `observer`. */
-  observerScope?: 'full' | 'public';
+  observerScope?: 'full' | 'public' | 'broadcast';
 }
 
 /** Add a member to a team and mint its one-time token. Returns the row plus the plaintext token. */

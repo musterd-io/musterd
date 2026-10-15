@@ -185,8 +185,12 @@ export function resolveCapabilities(row: MemberRow): Capabilities {
  * admin — so the only seats that reach this default were created by a trusted party. A shared
  * watch-link asks for `'public'` explicitly.
  */
-export function resolveObserverScope(row: MemberRow): 'full' | 'public' {
-  return row.observer_scope === 'public' ? 'public' : 'full';
+export function resolveObserverScope(row: MemberRow): 'full' | 'public' | 'broadcast' {
+  if (row.observer_scope === 'public') return 'public';
+  // ADR 601: the stream's seat — the exact stored string only. An unknown string falls to `full`
+  // like NULL does, for the reason above: only a privileged mint reaches this default.
+  if (row.observer_scope === 'broadcast') return 'broadcast';
+  return 'full';
 }
 
 /** Parse persisted working-hours JSON defensively; malformed legacy data means no schedule. */
@@ -209,6 +213,9 @@ export function parseWorkingHours(raw: string | null | undefined) {
  *              and is not this seat's own (ADR 407 §3). Every claimed member that is not an observer.
  * - `public` — team/broadcast acts only. A public-grade observer on a shared watch-link (ADR 136):
  *              the one reader who is not on the team, and the reason a scoped grade survives at all.
+ * - `broadcast` — everything `full` sees except a member-addressed act whose sender and recipient
+ *              are both human, non-observer members (ADR 601). Confidential asks included. Every
+ *              string it receives is credential-scrubbed on the way out (`transport/broadcastScrub.ts`).
  *
  * The single predicate behind both enforcement points, `GET /messages` and the firehose. They were
  * two independent `member.observer` / `conn.observer` tests before ADR 136, which is precisely the
@@ -217,7 +224,7 @@ export function parseWorkingHours(raw: string | null | undefined) {
  * a fact about the pair (reader, envelope), and a boolean on the reader alone could no longer carry
  * it — so it is a grade, and the envelope-side half is `confidentialAskSubject` in the protocol.
  */
-export type MessageVisibility = 'full' | 'team' | 'public';
+export type MessageVisibility = 'full' | 'team' | 'broadcast' | 'public';
 
 export function messageVisibilityOf(row: MemberRow): MessageVisibility {
   if (resolveCapabilities(row).is_admin) return 'full';
