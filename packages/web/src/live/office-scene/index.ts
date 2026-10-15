@@ -867,6 +867,14 @@ export function mountOffice(
       '<i></i><i></i><i></i>',
       'translate(-50%, -100%)',
     );
+    // A room of mugs must not puff in unison (lane 01M50X1WRW): each mug runs its three wisps a stable
+    // fraction of the 3.6s cycle out of phase with the next. Negative delays start them mid-cycle.
+    deskSteamEls.forEach((el, i) => {
+      const off = ((i * 7) % 12) * 0.3;
+      el.querySelectorAll('i').forEach((wisp, k) => {
+        wisp.style.animationDelay = `${(k * 1.4 - off).toFixed(1)}s`;
+      });
+    });
   }
 
   function positionSteam() {
