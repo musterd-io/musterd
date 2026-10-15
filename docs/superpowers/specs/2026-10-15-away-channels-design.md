@@ -105,6 +105,31 @@ nick's decision to answer ordinary asks from Slack stands, with this meaning: in
 `consult` reaches the asking agent as advice, and the list of classes where a Slack answer can release work
 grows one reviewed class at a time. Which classes to add first is in [Open questions](#open-questions).
 
+## Scale: every musterd user, two transports (decided 2026-10-15)
+
+_(Added 2026-10-15 on nick's requirement that away channels work for **all musterd users at scale**. The first
+draft was written for one team's laptop daemon and a single-workspace Slack app; the points below replace
+that.)_
+
+- **Two kinds of daemon, one adapter interface and one token model.** A self-hosted daemon on a laptop takes
+  no inbound connections, so it reaches providers through the **relay** (below). A Cloud team's server is
+  already public, so provider callbacks land on it **directly**, with no relay hop. Only the transport
+  differs; the adapter, the assurance levels, the class rules and the ask token are the same.
+- **The relay is multi-tenant and operated by musterd.** It runs in a **dedicated musterd Cloudflare
+  account**, separate from the account that runs Cloud production, so a relay compromise cannot reach team
+  data. A self-hoster may point their daemon at their own relay instead; the relay protocol is small and
+  versioned for that reason.
+- **Slack is a distributed app.** Each team installs it into its own workspace through Slack's OAuth flow and
+  gets its own bot token. A workspace admin installs; each person then pairs. Slack gives the app **one
+  signing secret for every install**, so a compromised relay could forge *advisory* callbacks for any team,
+  not only one. The A1 rule already limits that to advice (no `authorized_by`, no gate release); the ADR
+  states the wider blast radius plainly rather than leaving it implied.
+- **Tenancy is a security property, not a convenience.** A team's daemon credential, its Durable Object and
+  its Slack install must never reach another team's. Cross-team isolation is a falsifier (below), and every
+  team has its own rate limits and quota, including against Slack's per-workspace send limits.
+- **Secrets are set by the operator directly** (Worker secrets, the Slack signing secret and client secret),
+  never through an agent, and never logged (hard rule 5).
+
 ## Architecture
 
 ```
@@ -121,9 +146,11 @@ agent ──ask──▶ daemon (loopback) ──WS, daemon dials out──▶ r
   to its team's object. Idle cost is near zero and an answer reaches the daemon the moment it arrives.
 - The Worker is the public URL providers call (Slack's interactivity Request URL). It checks the
   provider's signature and acknowledges inside Slack's 3 seconds.
-- **The relay stores only**: an opaque ask reference, the rendered per-channel message while delivery is
-  in flight, delivery status, an expiry, and dedupe ids. No ask body after delivery, no logs of tokens,
-  keys or bodies. Retention is a stated number in the ADR (open question 2).
+- **The relay stores only**: an opaque ask reference, the rendered per-channel message, delivery status, an
+  expiry, and dedupe ids. **Retention is until the ask expires** (decided by nick, 2026-10-15): the entry is
+  deleted when the ask resolves or expires, whichever comes first, which is minutes (blocking 15, standard
+  5, advisory 3). There are no logs of tokens, keys or bodies, and no copy outlives the entry, including
+  in backups.
 - It authenticates each daemon separately per team, rejects a second socket replacing a live one for the
   same team, and caps payload size, queue depth and retries.
 - It is **thin on purpose**: the relay protocol is small and versioned, the daemon-side client is the
@@ -229,7 +256,9 @@ ask or action for another; replay after revoke; race both buttons; pair a differ
 lie in the confirmation UI. It also covers the class rules above: a privileged request **mislabeled as a
 `consult`**; a lane whose **risk tags are missing or were removed**; an action that **becomes privileged
 after delivery** (redemption must re-read current state); and an A1 answer **offered to the gate release
-read, acceptance and `request.decide`** (each must refuse it). It also states, in the ADR, **exactly which attacks remain excluded** by the
+read, acceptance and `request.decide`** (each must refuse it). At scale it adds **cross-tenant** cases: one
+team's daemon credential, Durable Object or Slack install used to read, answer or replace another team's
+(each must be refused), and a flood from one team that must not starve another. It also states, in the ADR, **exactly which attacks remain excluded** by the
 trust assumptions (for A1: a compromised relay or provider forging an advisory or listed-class answer; a stolen
 unlocked phone; a provider workspace admin acting as the user).
 
@@ -247,9 +276,8 @@ unlocked phone; a provider workspace admin acting as the user).
 
 ## Increments
 
-Goal `away-channels`. The lanes are open but unclaimable: increment 1 depends on this spec's own lane
-(`01M50XMB1K0BYJEZTJP88Q9K63`), which stays open until nick approves the spec, and each later increment
-depends on the ones before it. Parking is a human choice, so dependencies carry the wait.
+Goal `away-channels`. Each increment depends on the ones before it, so a later lane is not claimable until
+its predecessors land. Increments 1 and 2 are the first two; 8 to 10 were added by the scale amendment.
 
 | # | Lane | Increment | Depends on |
 | --- | --- | --- | --- |
@@ -260,15 +288,18 @@ depends on the ones before it. Parking is a human choice, so dependencies carry 
 | 5 | `01M50XQ04M8E3X5QHY173Q18X7` | Slack adapter: interactive messages, signature check, deliver and answer for advisory (and later listed-class) asks | 3, 4 |
 | 6 | `01M50XQ5YXXPJ8KVCV31KFB2N8` | Channel settings: CLI, `/live` panel, presence gating | 2 |
 | 7 | `01M50XQ1TGXNVXRF0481TCK4AA` | Mobile app as an ask client and A2 device-signed answers (own spec and ADR) | 1 to 6 |
+| 8 | `01M50ZQCTWM5QBZ083782J9N6R` | Multi-tenant relay hardening: per-team daemon credentials, tenant-isolation falsifiers, quotas and Slack send limits, bring-your-own-relay | 3 |
+| 9 | `01M50ZQGWYNZKNWDNDDRP41W5B` | Slack as a distributed app: OAuth install per workspace, per-install tokens, admin install vs per-user pairing, app review | 5 |
+| 10 | `01M50ZQQW95YDYVWE2BTCMKKH7` | Cloud-direct transport: callbacks land on the Cloud server for hosted teams, no relay hop | 5 |
 
-Increments 1 to 6 reach nick on Slack with advisory answers. Increment 7 is what makes privileged asks
-answerable off the computer.
+Increments 1 to 6 reach nick's own team on Slack with advisory answers. Increments 8 to 10 make it work for
+every musterd user: multi-tenant relay hardening, the distributed Slack app, and the Cloud-direct transport.
+Increment 7 is what makes privileged asks answerable off the computer.
 
 ## Out of scope
 
 Other providers' adapters (the interface is defined here; Discord, Telegram, email and ntfy each get a lane
-when wanted). A Slack app distributed to other workspaces (this is a single-workspace app for nick's team).
-Answering from a machine that is asleep: if the laptop is asleep the daemon is down and no ask exists to
+when wanted). Answering from a machine that is asleep: if the laptop is asleep the daemon is down and no ask exists to
 answer. Changing the hold ceiling or `stranded` (ADR 153).
 
 ## Open questions
@@ -276,9 +307,9 @@ answer. Changing the hold ceiling or `stranded` (ADR 153).
 1. **Which operation classes an A1 answer may release work for, after v1.** v1 is advisory-only for
    `consult` and the releasing list is empty (see "Where the class comes from"). nick decides what is added
    first and when; each needs a daemon-side classifier and a redemption re-check.
-2. **Relay retention.** What is stored, for how long, and whether a pending ask's rendered message may sit
-   in the Durable Object until delivery or only until expiry. big-body asks that this is set with nick.
-3. **Who owns the Cloudflare account and the Slack app**, and where the signing secret lives, given that
-   its holder is the A1 trust anchor.
+2. _Decided 2026-10-15:_ relay retention is until the ask expires (see "Relay").
+3. _Decided 2026-10-15:_ a dedicated musterd Cloudflare account, separate from Cloud production, with the
+   secrets set by the operator directly. The Slack app is distributed (see "Scale"). Still open: which
+   person or role holds the org logins and rotates the signing secret, and what the recovery path is.
 4. **Does a per-channel "answer off" also remove delivery to privileged asks**, or only the buttons.
    Proposed: only the buttons; delivery is its own switch.
