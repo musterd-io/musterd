@@ -185,6 +185,11 @@ async function answerPolicyReviewAct(
  * The single validate→persist→deliver path shared by WS `send` and HTTP POST messages.
  * The envelope must already be schema-valid; this enforces identity + resolves/persists/delivers.
  */
+/** ADR 601: both ends human and neither an observer seat. Service seats count as agents. */
+function isHumanPair(a: MemberRow, b: MemberRow): boolean {
+  return a.kind === 'human' && a.observer === 0 && b.kind === 'human' && b.observer === 0;
+}
+
 export async function routeEnvelope(
   ctx: Ctx,
   team: TeamRow,
@@ -516,6 +521,9 @@ async function routeEnvelopeInner(
   // and accountability are separate axes, and only the latter was ever meant to shrink.
   let toMemberId: string | null = null;
   let recipients: string[];
+  // ADR 601: a DM between two human, non-observer members is the one act a `broadcast` reader
+  // never gets. Computed here from the two rows already in hand; `humanPairSql` is the SQL twin.
+  let humanPair = false;
   // Names ride with the ids: live delivery needs each recipient's name, and one lookup per
   // recipient was a team-size N+1 on every send (lane 01M4563RDY, Cloud load run 9).
   const recipientNames = new Map<string, string>();
@@ -527,6 +535,7 @@ async function routeEnvelopeInner(
     toMemberId = target.id;
     recipients = [target.id];
     recipientNames.set(target.id, target.name);
+    humanPair = isHumanPair(sender, target);
   } else {
     // team or broadcast: every participant currently in the team except the sender. Observers (ADR
     // 063) aren't participants — they receive it via the firehose, not as addressed recipients.
@@ -750,6 +759,7 @@ async function routeEnvelopeInner(
     message.to_kind === 'member',
     confidentialAskSubject(env) !== null,
     senderConnId,
+    humanPair,
   );
 
   // The to-human ask stream's guaranteed reach (ADR 147 §3): an `ask` routes to admin humans by default.
@@ -854,10 +864,12 @@ export async function deliverFoldedLive(
       const sender = await getMemberById(ctx.db, row.from_member);
       if (!sender) continue;
       let recipients: { id: string; name: string }[];
+      let humanPair = false;
       if (row.to_kind === 'member' && row.to_member) {
         const target = await getMemberById(ctx.db, row.to_member);
         recipients =
           target && target.left_at === null ? [{ id: target.id, name: target.name }] : [];
+        humanPair = target !== null && target !== undefined && isHumanPair(sender, target);
       } else {
         recipients = await ctx.db.all<{ id: string; name: string }>(
           'SELECT id, name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
@@ -880,6 +892,8 @@ export async function deliverFoldedLive(
         new Set(recipients.map((r) => r.id)),
         row.to_kind === 'member',
         confidentialAskSubject(env) !== null,
+        undefined,
+        humanPair,
       );
     } catch (err) {
       log.warn({ msg: 'folded_live_delivery_failed', message: id, err: String(err) });

@@ -1,5 +1,6 @@
 import type { WSServerFrame } from '@musterd/protocol';
 import type { MessageVisibility } from '../store/rows.js';
+import { scrubForBroadcast } from './broadcastScrub.js';
 
 export interface Connection {
   connId: string;
@@ -163,7 +164,10 @@ export class Hub {
    * grade: a `directed` (member-kind) envelope reaches `team` and `full` connections; a
    * `confidential` one — a to-human ask naming a seat, ADR 407 §3 — reaches `full` only; a
    * public-grade observer on a shared watch-link gets team/broadcast acts and nothing else
-   * (ADR 136). Returns how many got it.
+   * (ADR 136); a `broadcast`-grade seat (ADR 601) gets everything `full` gets except a `humanPair`
+   * envelope — a DM between two human, non-observer members — and what it gets is
+   * credential-scrubbed, one copy per message, made only when such a connection is listening.
+   * Returns how many got it.
    */
   broadcastFirehose(
     teamId: string,
@@ -172,14 +176,23 @@ export class Hub {
     directed?: boolean,
     confidential?: boolean,
     skipConnId?: string,
+    humanPair?: boolean,
   ): number {
     let n = 0;
+    let scrubbed: WSServerFrame | null = null;
     for (const connId of this.firehose) {
       const conn = this.byConn.get(connId);
       if (!conn || conn.teamId !== teamId) continue;
       if (connId === skipConnId) continue;
       if (skipMemberIds?.has(conn.memberId)) continue;
       const grade = conn.visibility ?? 'public';
+      if (grade === 'broadcast') {
+        if (humanPair) continue;
+        scrubbed ??= scrubForBroadcast(frame);
+        conn.send(scrubbed);
+        n++;
+        continue;
+      }
       if (directed && grade === 'public') continue;
       if (confidential && grade !== 'full') continue;
       conn.send(frame);
