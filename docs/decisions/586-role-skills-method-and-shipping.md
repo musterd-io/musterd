@@ -160,6 +160,11 @@ it. The holder judges the landed skill against the job as they do it.
   landed as decided.
   Follows-up: 01M4W7HTD27HQ7Q7H98JWWGGXN
 
+- _(2026-10-15, lane `01M50GZPJ6`.)_ **product-communications now ships.** Its brand sources moved to
+  `references/team.md` (#2657), and eval run 1 (2026-10-13) was graded blind (four graders, A and B
+  assigned at random), so decision 6's bar is met; `BUILTIN_ROLE_SKILLS` lists it. Runs 2 and 3 were
+  graded by the author and are not blind; they do not count toward the bar.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. `role create` and `init` already report what they write; the copied skill

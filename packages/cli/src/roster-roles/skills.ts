@@ -19,15 +19,15 @@ import { SKILL_NAME_RE } from '@musterd/protocol';
  * out again into a team's repo.
  *
  * Only a role whose skill has a recorded blind-graded eval run ships one (decision 6). The
- * product-communications skill has one, but names this team's brand sources throughout, so it is
- * team-specific until it is split the way `references/team.md` splits the others (ADR 586,
- * Consequences 2026-10-13); its role file ships without it.
+ * product-communications skill's run 1 was graded blind, and its brand sources now sit in
+ * `references/team.md` (#2657), so it ships like the others.
  */
 export const BUILTIN_ROLE_SKILLS: readonly string[] = [
   'designer',
   'observer',
   'planner',
   'platform',
+  'product-communications',
   'steward',
 ];
 

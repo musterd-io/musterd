@@ -43,7 +43,7 @@ holds your team's roster, the folder with `.musterd/team.toml`.
 | `observer` | Reads team state for dashboards and digests; holds no lanes, sends no acts | Yes |
 | `security` | Owns the team's security evidence: threat models, scans, findings, disclosure | Role file only |
 | `courier` | Moves team material between the team's machines | Role file only |
-| `product-communications` | Owns the product's voice: messaging, public docs, release notes | Role file only |
+| `product-communications` | Owns the product's voice: messaging, public docs, release notes | Yes |
 | `admin` | The team's governance authority, held by a person | Role file only |
 
 A role ships with its skill only when the skill has evals and a recorded run in which answers with
@@ -125,7 +125,7 @@ When the skill is done, assign the role and run `musterd wire`, as for a built-i
 | A role is a charter, a ceiling and a skill | ADR 227 (roles), ADR 586 §1; `building-a-role-skill/SKILL.md` |
 | A member reads its charter when it joins | the MCP `team_join` reply ("Your Team Role charter") |
 | The nine built-ins and their one-line jobs | `packages/cli/src/roster-roles/templates.ts`, each role's `summary` |
-| Which built-ins ship a skill | `BUILTIN_ROLE_SKILLS` in `packages/cli/src/roster-roles/skills.ts` (designer, observer, planner, platform, steward); admin is human-only (ADR 172) |
+| Which built-ins ship a skill | `BUILTIN_ROLE_SKILLS` in `packages/cli/src/roster-roles/skills.ts` (designer, observer, planner, platform, product-communications, steward); admin is human-only (ADR 172) |
 | The evidence bar for shipping a skill | ADR 586 §6 |
 | `role create --from` writes the role file and copies the skill | `packages/cli/src/commands/role.ts` `installRoleSkills` |
 | Commit both; the daemon reconciles on merge | the `role create` output ("commit both files — the daemon reconciles the roster on merge", ADR 058) |
@@ -145,9 +145,6 @@ When the skill is done, assign the role and run `musterd wire`, as for a built-i
 
 ## 5. Open, and who owns it
 
-- **The `product-communications` row** changes to "Yes" when lane `01M4VTQ66X` (its skill split)
-  has landed and the role joins `BUILTIN_ROLE_SKILLS`. That is a code change with its own lane;
-  update this row in the same PR.
 - **The README** gets a one-line pointer to `/docs/roles` once the page is live. A pointer to a page
   that 404s helps nobody, so it waits for the designer's lane.
 - **ADR 586's experiment** (the time a user team takes from `role create` to a first eval run) is
