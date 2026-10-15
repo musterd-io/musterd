@@ -578,3 +578,19 @@ reached through `start`'s own retry rather than the supervisor's crash predicate
 the same `occupiedMachines` question its top-of-function guard asks *before each relaunch*: if the
 last attempt left an occupying machine, it waits for that machine instead of racing it. The 45s sleep
 was always the right wait; only the second `fly machine run` was wrong.
+
+## `stream doctor` passed an image older than the capture code it needed (2026-10-15; falsify: record an image at a commit before #2595, run `musterd stream doctor` — a green `capture image built` falsifies the fix) <!-- claim: defect -->
+
+On 2026-10-15 doctor reported `✓ capture image built — sha256:9d6a43c3feaa` for an image built on
+2026-10-12. ADR 594 (#2595, 2026-10-15) taught the box's `musterd broadcast` to hand the page its
+observer seat; the old image's CLI had no `addScriptToEvaluateOnNewDocument` and its `build.json`
+said `builtAt 2026-10-12T23:47`. With no seat handed over, the page could not mint one (ADR 580),
+never reported ready, and every machine exited after ~30 s with `✗ the broadcast page never
+reported ready`. The supervisor relaunched three times in 30 minutes and stood down. `stream build`
+then `stream start` brought it up on the first try (`◉ live 0e2b410`, 5 s after streaming began).
+
+The check only knew that an image existed. `stream build` now records the commit it built at in
+`~/.musterd/stream/image.json`, and doctor fails the image when `git log <commit>..origin/main` has
+commits on the paths the box runs (`CAPTURE_PATHS` in `packages/cli/src/broadcast/hosted.ts`), when
+the record predates the commit field, or when git cannot compare. `stream start` prints the same
+finding as a warning and launches anyway. `origin/main` is as this checkout last fetched it.

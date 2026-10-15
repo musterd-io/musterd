@@ -452,21 +452,28 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
     checks.push(skip('image', 'capture image built', 'not inside a musterd checkout'));
   } else {
     const built = Boolean(ctx.image);
+    // An image is only as good as the capture code in it (2026-10-15: one built before ADR 594 read
+    // green here and every start crash-looped), so a machine record is also compared with main.
+    const stale =
+      built && ctx.image!.source === 'machine'
+        ? imageStaleness(exec, ctx.repoRoot, ctx.image!)
+        : null;
+    const fresh = built && (!stale || stale.kind === 'current');
     checks.push({
       key: 'image',
       label: 'capture image built',
-      state: built ? 'ok' : 'fail',
+      state: fresh ? 'ok' : 'fail',
       // Say WHERE it came from. A doctor that reports a digest without saying whether the machine
       // or merely this worktree holds it is the false green this record exists to remove.
       ...(built
         ? {
             detail:
               ctx.image!.source === 'machine'
-                ? `${ctx.image!.digest.slice(0, 19)} · recorded for this machine`
+                ? `${ctx.image!.digest.slice(0, 19)} · recorded for this machine · ${describeStaleness(stale!)}`
                 : `${ctx.image!.digest.slice(0, 19)} · from this checkout only — run \`musterd stream build\` to record it for the machine`,
           }
         : {}),
-      ...(built ? {} : { fix: 'musterd stream build' }),
+      ...(fresh ? {} : { fix: 'musterd stream build' }),
     });
   }
 
@@ -510,6 +517,63 @@ export interface CaptureImage {
   source: 'machine' | 'checkout';
   /** Which checkout ran the build. Provenance for `doctor`, never used to decide anything. */
   repo?: string;
+  /** The commit the build ran at — what `doctor` compares with main. Absent on older records. */
+  commit?: string;
+}
+
+/** What the capture box actually runs from the image: the broadcast CLI, the code it shares, and
+ * the image's own scripts. A commit elsewhere in the repo does not make an image stale. */
+export const CAPTURE_PATHS = [
+  'packages/cli/src/commands/broadcast.ts',
+  'packages/cli/src/broadcast/',
+  'packages/protocol/src/',
+  'scripts/broadcast/',
+] as const;
+
+export type ImageStaleness =
+  | { kind: 'current'; commit: string }
+  | { kind: 'behind'; commit: string; commits: string[] }
+  | { kind: 'no-commit' }
+  | { kind: 'unknown'; commit: string };
+
+/** Is the recorded image behind `origin/main` (as this checkout last fetched it) on the capture
+ * paths? Answers `unknown` rather than `current` when git cannot say — a blind pass is the bug. */
+export function imageStaleness(
+  exec: Exec,
+  repoRoot: string | null,
+  image: CaptureImage,
+): ImageStaleness {
+  if (!image.commit) return { kind: 'no-commit' };
+  if (!repoRoot) return { kind: 'unknown', commit: image.commit };
+  const log = exec('git', [
+    '-C',
+    repoRoot,
+    'log',
+    '--format=%h %s',
+    `${image.commit}..origin/main`,
+    '--',
+    ...CAPTURE_PATHS,
+  ]);
+  if (log.code !== 0) return { kind: 'unknown', commit: image.commit };
+  const commits = log.stdout.split('\n').filter((l) => l.trim() !== '');
+  return commits.length === 0
+    ? { kind: 'current', commit: image.commit }
+    : { kind: 'behind', commit: image.commit, commits };
+}
+
+export function describeStaleness(s: ImageStaleness): string {
+  switch (s.kind) {
+    case 'current':
+      return `built at ${s.commit.slice(0, 7)}, current with origin/main`;
+    case 'behind': {
+      const n = s.commits.length;
+      return `built at ${s.commit.slice(0, 7)}, ${n} capture commit${n === 1 ? '' : 's'} behind origin/main (newest: ${s.commits[0]})`;
+    }
+    case 'no-commit':
+      return 'built before images recorded their commit, so its age is unknown';
+    case 'unknown':
+      return `built at ${s.commit.slice(0, 7)}, but git cannot compare it with origin/main here (git fetch origin main?)`;
+  }
 }
 
 export function captureImagePath(statePath: string): string {
@@ -522,10 +586,16 @@ export function writeCaptureImage(a: {
   digest: string;
   repoRoot: string | null;
   now: number;
+  commit?: string;
 }): void {
   const path = captureImagePath(a.statePath);
   mkdirSync(dirname(path), { recursive: true });
-  const body = { digest: a.digest, at: a.now, ...(a.repoRoot ? { repo: a.repoRoot } : {}) };
+  const body = {
+    digest: a.digest,
+    at: a.now,
+    ...(a.repoRoot ? { repo: a.repoRoot } : {}),
+    ...(a.commit ? { commit: a.commit } : {}),
+  };
   // tmp + rename: the supervisor reads this on its own 60s clock, and a half-written record read
   // mid-build is a digest that resolves to nothing.
   const tmp = `${path}.${process.pid}.tmp`;
@@ -544,6 +614,7 @@ export function readCaptureImage(a: {
       digest?: unknown;
       at?: unknown;
       repo?: unknown;
+      commit?: unknown;
     };
     // A tag can resolve to a stale image and a digest cannot — the same refusal `build` makes.
     if (typeof raw.digest === 'string' && raw.digest.startsWith('sha256:')) {
@@ -552,6 +623,7 @@ export function readCaptureImage(a: {
         at: typeof raw.at === 'number' ? raw.at : 0,
         source: 'machine',
         ...(typeof raw.repo === 'string' ? { repo: raw.repo } : {}),
+        ...(typeof raw.commit === 'string' ? { commit: raw.commit } : {}),
       };
     }
     return null; // present and unusable is not a reason to fall back to a checkout's guess

@@ -785,6 +785,27 @@ describe('musterd stream', () => {
       expect(args[0]!.join(' ')).toContain('f'.repeat(64));
     });
 
+    // Lane 01M50D71N1: `start` names a stale image but still launches it — doctor is the gate.
+    it('start warns that the image is behind main on the capture paths, and launches anyway', async () => {
+      writeCaptureImage({
+        statePath,
+        digest: 'sha256:' + 'f'.repeat(64),
+        repoRoot: repo,
+        now: NOW,
+        commit: 'c0ffee0000000000000000000000000000000000',
+      });
+      const exec = greenExec({ [`git -C ${repo} log`]: ok('e1d1541 ADR 594: seat handoff\n') });
+      let launched = 0;
+      expect(
+        await run(['start'], {
+          ...sup({ launch: () => ((launched += 1), { code: 0, output: '' }) }),
+          exec,
+        }),
+      ).toBe(0);
+      expect(launched).toBe(1);
+      expect(out.join('')).toContain('1 capture commit behind origin/main (newest: e1d1541');
+    });
+
     it('start records the launched image so ensure can tell a deploy from a crash', async () => {
       withImage();
       expect(await run(['start'], sup())).toBe(0);

@@ -10,6 +10,7 @@ import {
 } from '../integrations/tailscale.js';
 import type { Exec, ExecResult } from '../process.js';
 import {
+  CAPTURE_PATHS,
   parsePushedDigest,
   parseSecrets,
   runChecks,
@@ -50,6 +51,8 @@ function greenExec(over: Partial<Record<string, ExecResult>> = {}): Exec {
     if (key === 'tailscale status --json') return ok(TS_STATUS);
     if (key === 'tailscale serve status --json')
       return ok(JSON.stringify({ TCP: { '4849': { TCPForward: '127.0.0.1:4849' } } }));
+    // The image's commit has nothing on main's capture paths since it was built: an up-to-date image.
+    if (key.startsWith('git -C /repo log')) return ok('');
     if (key === 'fly version') return ok('flyctl v0.3.0\n');
     if (key === 'fly auth whoami') return ok('nick@example.com\n');
     if (key.startsWith('fly status')) return ok('{}');
@@ -74,6 +77,7 @@ const green = {
     digest: 'sha256:' + 'a'.repeat(64),
     at: 1_000,
     source: 'machine' as const,
+    commit: 'c0ffee0000000000000000000000000000000000',
   },
 };
 
@@ -369,6 +373,55 @@ describe('runChecks', () => {
     });
     expect(by(legacy, 'image').detail).toContain('this checkout only');
   });
+
+  // 2026-10-15: doctor passed an image built 2026-10-12, before ADR 594 taught the box's CLI to hand
+  // the page its seat, and every start crash-looped on "the broadcast page never reported ready".
+  // An image is only as good as the capture code in it, so the check compares it with main.
+  it('fails an image whose commit is behind main on the capture paths, naming the newest', async () => {
+    const exec = greenExec({
+      'git -C /repo log': ok(
+        'e1d1541 ADR 594: broadcast-carries-its-own-observer\n9f0a2b3 fix(broadcast): x\n',
+      ),
+    });
+    const c = by(await runChecks({ ...green, exec }), 'image');
+    expect(c.state).toBe('fail');
+    expect(c.detail).toContain('2 capture commits behind origin/main');
+    expect(c.detail).toContain('e1d1541 ADR 594');
+    expect(c.fix).toBe('musterd stream build');
+  });
+
+  it('asks git only about the paths the box runs, from the commit the image was built at', async () => {
+    const asked: string[] = [];
+    const exec: Exec = (cmd, args) => {
+      if (cmd === 'git') asked.push(args.join(' '));
+      return greenExec()(cmd, args);
+    };
+    await runChecks({ ...green, exec });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain('c0ffee0000000000000000000000000000000000..origin/main');
+    for (const p of CAPTURE_PATHS) expect(asked[0]).toContain(p);
+  });
+
+  it('passes an up-to-date image and shows the commit it was built at', async () => {
+    const c = by(await runChecks(green), 'image');
+    expect(c.state).toBe('ok');
+    expect(c.detail).toContain('c0ffee0');
+  });
+
+  it('fails an image recorded before builds recorded their commit — its age is unknowable', async () => {
+    const { commit: _drop, ...noCommit } = green.image;
+    const c = by(await runChecks({ ...green, image: noCommit }), 'image');
+    expect(c.state).toBe('fail');
+    expect(c.detail).toContain('built before images recorded their commit');
+    expect(c.fix).toBe('musterd stream build');
+  });
+
+  it('fails, rather than passing blind, when git cannot compare the commit with main', async () => {
+    const exec = greenExec({ 'git -C /repo log': fail('fatal: bad revision') });
+    const c = by(await runChecks({ ...green, exec }), 'image');
+    expect(c.state).toBe('fail');
+    expect(c.detail).toContain('cannot compare');
+  });
 });
 
 /** One digest per MACHINE, not one per checkout (2026-09-17, lane 01M2RAJ0JK).
@@ -408,6 +461,11 @@ describe('the capture image record', () => {
       source: 'machine',
       repo,
     });
+  });
+
+  it('round-trips the commit the image was built at', () => {
+    writeCaptureImage({ statePath, digest: A, repoRoot: repo, now: 1_000, commit: 'abc1234def' });
+    expect(readCaptureImage({ statePath, repoRoot: repo })?.commit).toBe('abc1234def');
   });
 
   // The whole point: the reader does not care which checkout it is standing in.

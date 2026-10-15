@@ -24,7 +24,9 @@ import { ulid } from 'ulid';
 import type { Parsed } from '../args.js';
 import {
   DEFAULT_APP,
+  describeStaleness,
   findRepoRoot,
+  imageStaleness,
   parsePushedDigest,
   readCaptureImage,
   writeCaptureImage,
@@ -282,7 +284,16 @@ async function buildVerb(a: {
   }
   // Recorded ONCE PER MACHINE, beside `state.json` — not in this checkout. Whichever worktree ran
   // the build, `start`, `ensure` and the supervisor all read the same record (lane 01M2RAJ0JK).
-  writeCaptureImage({ statePath: a.statePath, digest, repoRoot: root, now: a.now() });
+  // The commit too, so `doctor` can tell an image built before the capture code it needs (lane
+  // 01M50D71N1). The build uploads the working tree, so this is HEAD as of the upload.
+  const head = a.exec('git', ['-C', root, 'rev-parse', 'HEAD']);
+  writeCaptureImage({
+    statePath: a.statePath,
+    digest,
+    repoRoot: root,
+    now: a.now(),
+    ...(head.code === 0 ? { commit: head.stdout.trim() } : {}),
+  });
   a.out(`${theme.ok('✓')} built ${theme.meta(digest.slice(0, 19))} — recorded for this machine\n`);
   return 0;
 }
@@ -387,6 +398,15 @@ async function startVerb(
     throw new CliError(`already live (machine ${live[0]}) — \`musterd stream stop\` first`, 1);
   }
   const { digest, addr } = launchPreconditions(a);
+  // Warn, never block: a deliberate run on an older image is the operator's call. `doctor` is
+  // where a stale image fails (lane 01M50D71N1).
+  const image = readCaptureImage({ statePath: a.statePath, repoRoot: a.repoRoot });
+  const stale = image?.source === 'machine' ? imageStaleness(a.exec, a.repoRoot, image) : null;
+  if (stale && stale.kind !== 'current') {
+    a.err(
+      `${theme.warn('!')} capture image ${describeStaleness(stale)} — \`musterd stream build\` first if the stream must run current code\n`,
+    );
+  }
   const team =
     (typeof a.parsed.flags['team'] === 'string' ? a.parsed.flags['team'] : undefined) ??
     process.env['MUSTERD_TEAM'] ??
