@@ -1057,3 +1057,40 @@ The server's own timings, from the hub's lines after the first minute:
 - Falsify: the next readout shows `messages` past 20% dead with no autovacuum since 2026-10-13
   18:22Z. Then autovacuum is not reaching it under this load, and ADR 589's open read runs are the
   first suspect.
+
+## 2026-10-15 — Cloud run 42: p95 524 ms, a second matched repeat on `1311808`; autovacuum fired mid-run and `messages` ended at 0.2% dead (lane 01M4YYPARBCV5N1HHK4J802WZN)
+
+Same build as runs 40–41 (staging still on `1311808`, the same app machine `82dd559c7051e8`, Neon 1
+CU), shape 75/75/75 with ramp 1 000 s and duration 1 300 s, `performance-4x` bench on a fresh team
+`lb-run42`. The bench image was rebuilt at `84ad877`; `scripts/perf/demo-audience-load.mjs`, the
+Dockerfile and `bench-run.mjs` are unchanged since run 41's `4ba6f3b`. `pg_stat_statements` was
+reset at 05:01:29Z; load ran 05:02:49–05:24:30Z. The first launch (04:59Z) never started: the bench
+machine was refused because `performance-4x` needs `BENCH_MEMORY_MB=8192` and the script's default
+is 4096. Runs on this size set it.
+
+| run | build | p50 | p95 | p99 | requests (req/s) | errors | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 40 | `1311808` | 229 ms | 537 ms | 671 ms | 67 160 (51.7) | 1 | 235 ms |
+| 41 | `1311808` | 214 ms | 509 ms | 654 ms | 66 107 (50.9) | 100 | 213 ms |
+| 42 | `1311808` | **216 ms** | **524 ms** | 679 ms | 65 948 (50.7) | 4 | 217 ms |
+
+- **Three matched runs sit inside a 28 ms p95 spread** (509–537 ms), 476 ms under the 1 000 ms
+  budget. Run 40 was not a low draw; the gain from #2543 and ADR 589 is the build.
+- **The 4 errors:** one `GET /inbox` 502, and three viewer sockets closed 1006 at +897, +1 048 and
+  +1 213 s, each back in 1–2 s (the bench reconnects). Unlike run 41 there was no 50-socket burst.
+  The 502 is unexplained: this run did not capture the hub's `http_request` lines (runs 39–41
+  did), and `fly logs --no-tail` had rolled past it. The per-route server timings of run 41's
+  second table therefore have no run 42 counterpart; the load generator's own per-route table is the
+  evidence here.
+- **Vacuum kept up, and the falsifier did not fire.** Before the run `messages` was at 15.4% dead
+  (20 589 dead, 113 322 live), last autovacuum 2026-10-13 18:22Z, 4 in all. Autovacuum ran on it at
+  05:22:45Z, during the run, and the count went to 5. After the run it was at 217 dead of 116 054
+  (0.2%). `presence` (703 autovacuums, the latest 05:24:43Z) held 75 dead rows, `lanes` 0, and
+  `audit` was at 9.0% (last vacuum 2026-10-13 19:10Z). At the end the database held 180 idle
+  connections and 1 active, none idle in transaction.
+- **Trap, readout queries:** `~/.musterd/cloud/neon.env` names the retired Neon project `musterd-1b`
+  (`steep-grass-78620414`), whose tables are empty. Staging's database is the project `musterd-cloud`
+  (`long-thunder-03987236`), database `musterd`. Querying the wrong one returns zero rows and, on an
+  archived project, wakes it.
+- Falsify: a later run whose pre-run readout shows `messages` above 20% dead with a last autovacuum
+  older than the previous run's start. Then the mid-run vacuum here was luck, not a rate that keeps up.
