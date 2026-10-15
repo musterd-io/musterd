@@ -55,13 +55,29 @@ vi.mock('../config.js', () => ({
   saveBinding: h.saveBinding,
   saveWorkspaceSpec: h.saveWorkspaceSpec,
 }));
-vi.mock('../roster.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../roster.js')>()),
-  writeSeatFile: h.writeSeatFile,
-  seatFileExists: () => false,
-  seatFileUnpublished: () => h.unpublished,
-  publishSeatFile: h.publishSeatFile,
-}));
+vi.mock('../roster.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../roster.js')>();
+  return {
+    ...real,
+    writeSeatFile: h.writeSeatFile,
+    seatFileExists: () => false,
+    seatFileUnpublished: () => h.unpublished,
+    publishSeatFile: h.publishSeatFile,
+    // The real helper calls the two above inside roster.ts, out of this mock's reach: the same
+    // composition over the stubs (roster.test.ts runs the real one against a real clone).
+    publishSeatFileReport: (
+      name: string,
+      home: string | undefined,
+      opts: { publish?: boolean } = {},
+    ) => {
+      if (!home || h.unpublished === null) return null;
+      if (opts.publish === false)
+        return { outcome: null, warn: real.unpublishedSeatLines(name, home, h.unpublished) };
+      const outcome = h.publishSeatFile(home, name);
+      return { outcome, ...(real.seatPublishLines(name, home, outcome, h.unpublished) ?? {}) };
+    },
+  };
+});
 vi.mock('../onboard/harnesses/index.js', () => ({
   harnessAdapters: () =>
     ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
@@ -361,6 +377,16 @@ describe('musterd agent <name>', () => {
       expect(h.publishSeatFile).not.toHaveBeenCalled();
       expect(kept).toContain('other machines cannot resolve June');
       expect(kept).toContain('git -C /home/ritual/.musterd add .musterd/seats/June.toml');
+    });
+
+    it('--json publishes too, and says how (ADR 592: seat_file_published)', async () => {
+      h.rosterHome = { ritual: '/home/ritual/.musterd' };
+      h.unpublished = 'uncommitted';
+      h.publish = { state: 'published' };
+      h.publishSeatFile.mockClear();
+      const body = JSON.parse(await out(['June', '--json']));
+      expect(h.publishSeatFile).toHaveBeenCalledWith('/home/ritual/.musterd', 'June');
+      expect(body.seat_file_published).toEqual({ state: 'published' });
     });
 
     it('carries the same fact in --json', async () => {

@@ -22,7 +22,7 @@ import {
 import { renderBanner } from '../render/rows.js';
 import { paint as pc, theme } from '../render/theme.js';
 import { sym } from '../render/ui.js';
-import { seatFileExists, writeSeatFile } from '../roster.js';
+import { publishSeatFileReport, seatFileExists, writeSeatFile } from '../roster.js';
 import { runConnect } from './connect.js';
 import { acceptSurface, readDeclined } from './declined.js';
 import { bindingRefusal, inspectInitTarget, nameBoundElsewhere } from './guard.js';
@@ -834,6 +834,11 @@ export async function runInit(): Promise<number> {
     sm.stop(pc.red(`Could not add ${name}: ${(err as Error).message}`));
     return 1;
   }
+  // ADR 592 (lane 01M4Z6FN8W): the daemon accepted the member, so push its seat file to the roster
+  // remote now — until it lands there, every other machine refuses this seat as unknown.
+  const published = publishSeatFileReport(name, config.rosterHome[team]);
+  if (published?.ok) p.log.success(published.ok);
+  if (published?.warn) p.log.warn(`${published.warn[0]}\n${pc.dim(published.warn[1])}`);
 
   // Stamp the folder's claim policy alongside the minted identity (claim-on-first-use, ADR 032):
   // `init` mints the primary seat as before (back-compat), but also records `seat:<name>` so a

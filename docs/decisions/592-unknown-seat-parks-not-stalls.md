@@ -98,6 +98,13 @@ it did not author, and a fold never folds an act for a seat it cannot resolve.
 - The CLI's `init` "Add a new agent" path (lane `01M4RJF62E`, stanley) and the second-machine
   bootstrap (lane `01M41NQ05V`) write seat files on paths this ADR does not touch; they can call
   `publishSeatFile` when they land.
+- 2026-10-15, lane `01M4Z6FN8W` (part 2 of `01M4S7N1HV`): the three remaining seat-writing CLI paths
+  publish. `musterd init`'s connect path (per repo; a miss makes that repo's row partial with git's
+  reason and fix), its "Add a new agent" path (after the daemon accepts the member) and the
+  launcher's "+ new seat" now call `publishSeatFileReport` (`roster.ts`), the same call `musterd
+  agent` makes. That command's `--json` branch had returned before publishing; it now publishes
+  first and carries `seat_file_published`, as Decision 1 says. The second-machine bootstrap
+  (`01M41NQ05V`) is still the one path that writes a seat file without publishing it.
 
 ## Observability & Evaluation
 

@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { publishSeatFileReport } from '../roster.js';
 import { actingSeat, createSeat } from './create.js';
 import type { Seat } from './store.js';
 
@@ -97,7 +98,7 @@ describe('createSeat (ADR 491 §4.7)', () => {
     expect(created.address).toBe('acme/proj/slate');
   });
 
-  it('says when the new seat file has not reached a remote, and stays quiet when it has', async () => {
+  it('publishes the new seat file (ADR 592), warns with the fix when it could not, quiet when nothing to do', async () => {
     const nickDir = write('nick', { agent_key: 'mscr_nick' });
     const prior = process.env.MUSTERD_CONFIG;
     process.env.MUSTERD_CONFIG = join(home, 'config.json');
@@ -105,8 +106,9 @@ describe('createSeat (ADR 491 §4.7)', () => {
       process.env.MUSTERD_CONFIG,
       JSON.stringify({ rosterHome: { acme: '/roster/acme' } }),
     );
-    const run = async (seatFileUnpublished: 'uncommitted' | 'unpushed' | null) => {
+    const run = async (report: ReturnType<typeof publishSeatFileReport>) => {
       const warn = vi.fn();
+      const publish = vi.fn(() => report);
       await createSeat(
         {
           team: 'acme',
@@ -120,6 +122,7 @@ describe('createSeat (ADR 491 §4.7)', () => {
           client: () => ({}) as never,
           baseRef: () => null,
           warn,
+          publish,
           provision: vi.fn(async () => ({
             workspace: {
               dir: write('slate', { agent_key: 'msac_new' }),
@@ -130,17 +133,26 @@ describe('createSeat (ADR 491 §4.7)', () => {
             granted: true,
             wiring: null,
             wiringError: null,
-            seatFileUnpublished,
+            seatFileUnpublished: 'uncommitted' as const,
           })),
         },
       );
+      expect(publish).toHaveBeenCalledWith('slate', '/roster/acme');
       return warn;
     };
-    const warn = await run('uncommitted');
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]![0]).toContain('other machines cannot resolve slate');
-    expect(warn.mock.calls[0]![0]).toContain('git -C /roster/acme push');
-    expect(await run('unpushed')).toHaveBeenCalledTimes(1);
+    const ok = await run({
+      outcome: { state: 'published' },
+      ok: 'published .musterd/seats/slate.toml',
+    });
+    expect(ok).toHaveBeenCalledTimes(1);
+    expect(ok.mock.calls[0]![0]).toBe('✓ published .musterd/seats/slate.toml');
+    const failed = await run({
+      outcome: { state: 'failed', detail: 'rejected' },
+      warn: ['could not publish .musterd/seats/slate.toml (rejected)', 'git -C /roster/acme push'],
+    });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed.mock.calls[0]![0]).toContain('could not publish');
+    expect(failed.mock.calls[0]![0]).toContain('git -C /roster/acme push');
     expect(await run(null)).not.toHaveBeenCalled();
     if (prior === undefined) delete process.env.MUSTERD_CONFIG;
     else process.env.MUSTERD_CONFIG = prior;
