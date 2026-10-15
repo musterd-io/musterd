@@ -59,9 +59,11 @@ async function cdpPage(port, urlPart = '/broadcast') {
     pending.delete(m.id);
   };
   const send = (method, params = {}) =>
-    new Promise((res) => {
+    new Promise((res, rej) => {
       const n = ++id;
-      pending.set(n, (m) => res(m.result));
+      pending.set(n, (m) =>
+        m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result),
+      );
       ws.send(JSON.stringify({ id: n, method, params }));
     });
   const evaluate = async (expression) =>
@@ -243,11 +245,21 @@ async function armX11(label) {
   let ffmpeg;
   try {
     const page = await cdpPage(9333, 'about:blank');
+    // As broadcast.ts does: without Page.enable the injected script never ran (seat:false, 2026-10-14).
+    await page.send('Page.enable');
     await page.send('Page.addScriptToEvaluateOnNewDocument', {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
     await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30` });
-    if (!(await waitForRoom(page))) return { arm: label, invalid: 'empty room (no posed actors)' };
+    if (!(await waitForRoom(page))) {
+      // Say what the page saw, so an empty room is a reading rather than a guess.
+      const seen = await page.evaluate(
+        'JSON.stringify({ href: location.href, seat: !!window.__musterdBroadcastSeat, ' +
+          'ready: window.__broadcastReady === true, vis: document.visibilityState, ' +
+          'text: document.body?.innerText?.slice(0, 160) })',
+      );
+      return { arm: label, invalid: `empty room (no posed actors) ${seen}` };
+    }
     ffmpeg = spawn(
       'ffmpeg',
       [

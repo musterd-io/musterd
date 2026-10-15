@@ -267,6 +267,28 @@ Readings:
 
 Per the stop rule, the next move is a rethink with nick (2026-10-14), not increment 2.
 
+## Capture A/B re-run after the sprite-cache fix (Fly `performance-4x`, sjc, 2026-10-14)
+
+The same script and box as the 2026-10-13 run, on a build with #2568 (the sprite cache measures each
+item once) and ADR 594 (the capturer hands the page its observer — ADR 580 had stopped every
+broadcast from connecting). Lane `01M4YD9AMFS2MS6RZQ2HKSDNFK`; falsify: a re-run on the same build
+and box size puts screencast under 15 draws/s.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| screencast#1 | 17.0 | 55.3 | 91.8 | 225.7 | 79.5 | — | 8.1 | 313.3 | 16.0 |
+| x11grab | 18.4 | 52.4 | 67.3 | 167.7 | 72.9 | 4.7 | — | 245.3 | 33.1 |
+| screencast#2 | 16.8 | 56.2 | 92.5 | 226.9 | 80.1 | — | 8.4 | 315.4 | 15.5 |
+
+Readings:
+
+- **The sprite-cache fix bought about a fifth more draws** on both paths (screencast 13.7 → ~17,
+  x11grab 15.4 → 18.4) and cut screencast's p95 gap from ~130 to ~92 ms. An earlier screencast-only
+  run on the same build the same evening measured 18.1 and 18.5, so treat ~17–18.5 as the band.
+- **It does not clear the bar.** 30 draws/s with a p95 under 40 ms is still well away, and with
+  x11grab the box again sat a third idle. The single-thread draw is still the wall, so dirty-rect
+  repaint (lane `01M4VS1SJQ`) stays the next lever, ahead of increment 2.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
