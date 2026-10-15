@@ -65,6 +65,7 @@ export type JournalRecovery = 'none' | 'retried' | 'finalized' | 'conflict';
 export interface ReconcileResult {
   harness: HarnessId;
   resourceKey: string;
+  fragmentKey: string;
   scope: string;
   action: PlannedAction;
   result: FragmentResultKind;
@@ -235,6 +236,26 @@ export function classifyFragment(
   return others.length > 0
     ? { observation: 'owned-exact', plan: 'release-owner', planned: 'applied' }
     : { observation: 'owned-exact', plan: 'remove', planned: 'applied' };
+}
+
+function classifiedDetail(classified: Classified, observed: ObservedFragment): string | undefined {
+  if (classified.planned === 'conflict') {
+    return classified.observation === 'owned-drifted'
+      ? 'drifted — evidence retained'
+      : "not musterd's to overwrite";
+  }
+  if (classified.planned === 'release-blocked') {
+    return 'drifted while deselected';
+  }
+  if (classified.planned === 'repair-needed') {
+    return 'pre-ADR-286 registration — run musterd harness configure';
+  }
+  if (classified.planned === 'invalid-container') {
+    return observed.state === 'invalid-container'
+      ? observed.issues.map((i) => i.message).join(', ') || 'container unreadable'
+      : 'container unreadable';
+  }
+  return undefined;
 }
 
 /** Allowlisted span attributes ONLY (ADR 282 O&E): classifications and outcomes — never a path,
@@ -550,6 +571,7 @@ export async function reconcileHarnesses(
       results.push({
         harness: adapter.id,
         resourceKey: '',
+        fragmentKey: '',
         scope: '',
         action: 'none',
         result: 'pending',
@@ -581,10 +603,12 @@ export async function reconcileHarnesses(
           results.push({
             harness: adapter.id,
             resourceKey: intent.resourceKey,
+            fragmentKey: intent.fragmentKey,
             scope: intent.scope,
             action,
             result,
             recovery,
+            detail: 'another reconciler holds this container',
           });
           continue;
         }
@@ -599,6 +623,7 @@ export async function reconcileHarnesses(
           results.push({
             harness: adapter.id,
             resourceKey: intent.resourceKey,
+            fragmentKey: intent.fragmentKey,
             scope: intent.scope,
             action,
             result,
@@ -619,6 +644,7 @@ export async function reconcileHarnesses(
             results.push({
               harness: adapter.id,
               resourceKey: intent.resourceKey,
+              fragmentKey: intent.fragmentKey,
               scope: intent.scope,
               action,
               result,
@@ -645,13 +671,16 @@ export async function reconcileHarnesses(
 
         if (classified.plan === 'none') {
           result = classified.planned;
+          const detail = classifiedDetail(classified, observed);
           results.push({
             harness: adapter.id,
             resourceKey: intent.resourceKey,
+            fragmentKey: intent.fragmentKey,
             scope: intent.scope,
             action,
             result,
             recovery,
+            ...(detail !== undefined ? { detail } : {}),
           });
           continue;
         }
@@ -734,6 +763,7 @@ export async function reconcileHarnesses(
         results.push({
           harness: adapter.id,
           resourceKey: intent.resourceKey,
+          fragmentKey: intent.fragmentKey,
           scope: intent.scope,
           action,
           result,
@@ -744,6 +774,7 @@ export async function reconcileHarnesses(
         results.push({
           harness: adapter.id,
           resourceKey: intent.resourceKey,
+          fragmentKey: intent.fragmentKey,
           scope: intent.scope,
           action,
           result,

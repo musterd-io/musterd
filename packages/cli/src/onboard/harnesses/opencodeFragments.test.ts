@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { memoryFs, type HarnessContext, type MemoryFs } from '../reconcile/context.js';
 import { opencodeAdapter } from './opencode.js';
+import {
+  OPENCODE_PLUGIN_GENERATION,
+  OPENCODE_PLUGIN_SURFACE,
+  opencodePluginHeader,
+  renderOpencodePlugin,
+} from './opencodePlugin.js';
 
 const ROOT = '/w/a';
 const CFG = '/w/a/.opencode/opencode.json';
+const PLUGIN = '/w/a/.opencode/plugins/musterd.js';
 
 function ctxOf(fs: MemoryFs): HarnessContext {
   return {
@@ -27,12 +34,61 @@ const THEIR_CFG = JSON.stringify({
 });
 
 describe('opencodeAdapter — managed fragments', () => {
-  it('exposes the single musterd MCP entry as one fragment carrying only the launch marker', async () => {
+  it('exposes the musterd MCP entry and the doorbell plugin as independent fragments', async () => {
     const intents = await intentsOf(ctxOf(memoryFs()));
-    expect(intents.map((i) => i.fragmentKey)).toEqual(['mcp.musterd']);
+    expect(intents.map((i) => i.fragmentKey)).toEqual(['mcp.musterd', 'plugin']);
+    expect(new Set(intents.map((i) => i.containerKey)).size).toBe(2);
     const payload = intents[0]!.payload as { environment: Record<string, string>; type: string };
     expect(payload.type).toBe('local');
     expect(payload.environment).toEqual({ MUSTERD_LAUNCH_SURFACE: 'opencode' });
+    expect(intents[1]!.payload).toBe(renderOpencodePlugin());
+  });
+
+  it('writes, observes, and removes the doorbell plugin fragment; leaves foreign or newer plugins untouched', async () => {
+    const fs = memoryFs();
+    const ctx = ctxOf(fs);
+    const intents = await intentsOf(ctx);
+    const plugin = intents.find((i) => i.fragmentKey === 'plugin')!;
+    expect(await opencodeAdapter.observe(ctx, plugin)).toEqual({ state: 'absent' });
+
+    await opencodeAdapter.apply(ctx, { kind: 'write', intent: plugin });
+    expect(fs.readFile(PLUGIN)).toBe(renderOpencodePlugin());
+    expect(await opencodeAdapter.observe(ctx, plugin)).toEqual({
+      state: 'present',
+      fingerprint: plugin.fingerprint,
+    });
+
+    await opencodeAdapter.apply(ctx, { kind: 'remove', intent: plugin });
+    expect(fs.readFile(PLUGIN)).toBeNull();
+    expect(await opencodeAdapter.observe(ctx, plugin)).toEqual({ state: 'absent' });
+
+    // A newer generation is not downgraded on apply (ADR 168).
+    const newer = `${opencodePluginHeader(OPENCODE_PLUGIN_GENERATION + 1)}\nexport default {};\n`;
+    fs.writeFile(PLUGIN, newer, 0o644);
+    await opencodeAdapter.apply(ctx, { kind: 'write', intent: plugin });
+    expect(fs.readFile(PLUGIN)).toBe(newer);
+
+    // A foreign file at the path is neither overwritten nor removed (ADR 027).
+    const foreign = '// user plugin\nexport default {};\n';
+    fs.writeFile(PLUGIN, foreign, 0o644);
+    await opencodeAdapter.apply(ctx, { kind: 'write', intent: plugin });
+    expect(fs.readFile(PLUGIN)).toBe(foreign);
+    await opencodeAdapter.apply(ctx, { kind: 'remove', intent: plugin });
+    expect(fs.readFile(PLUGIN)).toBe(foreign);
+  });
+
+  it('omits the plugin fragment when opencode:plugin is declined in .musterd/declined.json (ADR 332)', async () => {
+    const fs = memoryFs();
+    fs.writeFile(
+      `${ROOT}/.musterd/declined.json`,
+      JSON.stringify({
+        version: 1,
+        declined: [{ surface: OPENCODE_PLUGIN_SURFACE, at: '2026-09-06T00:00:00Z' }],
+      }),
+      0o600,
+    );
+    const intents = await intentsOf(ctxOf(fs));
+    expect(intents.map((i) => i.fragmentKey)).toEqual(['mcp.musterd']);
   });
 
   it('unrelated keys and entries survive the write and the remove byte-for-key intact', async () => {
