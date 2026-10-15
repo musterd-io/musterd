@@ -255,11 +255,10 @@ withDrivers('broadcast grade (ADR 601)', (_o, kind) => {
 });
 
 /**
- * ADR 601 decision 8 — a grade the row cannot name reads as `public`. No mint writes NULL or an
- * unknown string (v18 backfilled, `addMember` always writes one), so these are forced by SQL: the
- * shape a hand edit, a future migration slip, or a foreign writer could leave behind.
+ * ADR 601 §8 (as amended 2026-10-15) — a grade string this build cannot name reads as `public`;
+ * NULL keeps ADR 136's rule and reads as `full`. No mint writes either, so both are forced by SQL.
  */
-withDrivers('observer grade fallback (ADR 601 decision 8)', (_o, kind) => {
+withDrivers('observer grade fallback (ADR 601 §8)', (_o, kind) => {
   const h = integrationHarness(kind);
   const { TestWs, get, post, standingGrant } = h;
 
@@ -276,79 +275,75 @@ withDrivers('observer grade fallback (ADR 601 decision 8)', (_o, kind) => {
     );
     await h.db.run("UPDATE members SET observer_scope = ? WHERE name = 'odd-1'", [stored]);
     const ada = { key, seat: 'Ada' };
-    const dm = await post(
-      '/teams/dawn/messages',
-      {
-        envelope: {
-          id: 'dm1',
-          v: PROTOCOL_VERSION,
-          team: 'dawn',
-          from: 'Ada',
-          to: { kind: 'member', name: 'Lin' },
-          act: 'message',
-          body: 'private',
-          ts: Date.now(),
+    for (const [id, to, act] of [
+      ['dm1', { kind: 'member', name: 'Lin' }, 'message'],
+      ['pub1', { kind: 'team' }, 'status_update'],
+    ] as const) {
+      const r = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: {
+            id,
+            v: PROTOCOL_VERSION,
+            team: 'dawn',
+            from: 'Ada',
+            to,
+            act,
+            body: id,
+            ts: Date.now() + (id === 'pub1' ? 1 : 0),
+          },
         },
-      },
-      ada,
-    );
-    expect(dm.status).toBe(201);
-    const pub = await post(
-      '/teams/dawn/messages',
-      {
-        envelope: {
-          id: 'pub1',
-          v: PROTOCOL_VERSION,
-          team: 'dawn',
-          from: 'Ada',
-          to: { kind: 'team' },
-          act: 'status_update',
-          body: 'public',
-          ts: Date.now() + 1,
-        },
-      },
-      ada,
-    );
-    expect(pub.status).toBe(201);
+        ada,
+      );
+      expect(r.status).toBe(201);
+    }
     return { nickTok, key, obsTok: obs.json.human_credential as string };
   }
 
-  for (const stored of [null, 'bogus'] as const) {
-    it(`history: a ${stored === null ? 'NULL' : 'unknown'} grade sees team traffic, never the DM`, async () => {
-      const t = await seedWithGrade(stored);
-      const view = await get('/teams/dawn/messages', t.obsTok);
-      expect(view.json.messages.map((m: { id: string }) => m.id)).toEqual(['pub1']);
+  const firstDelivered = async (t: Awaited<ReturnType<typeof seedWithGrade>>) => {
+    const a = new TestWs();
+    const w = new TestWs();
+    await Promise.all([a.open(), w.open()]);
+    await a.claim('dawn', t.key, 'Ada', 'claude-code', await standingGrant(t.nickTok, 'Ada'));
+    await w.claim('dawn', t.key, 'odd-1', 'web', await standingGrant(t.nickTok, 'odd-1'));
+    await w.subscribe('team-all');
+    const env = (id: string, to: unknown, act: string) => ({
+      type: 'send',
+      envelope: {
+        id,
+        v: PROTOCOL_VERSION,
+        team: 'dawn',
+        from: 'Ada',
+        to,
+        act,
+        body: id,
+        ts: Date.now(),
+      },
     });
+    a.send(env('dm2', { kind: 'member', name: 'Lin' }, 'message'));
+    a.send(env('pub2', { kind: 'team' }, 'status_update'));
+    const frame = (await w.waitFor('deliver')) as { envelope: { id: string } };
+    a.close();
+    w.close();
+    return frame.envelope.id;
+  };
 
-    it(`firehose: a ${stored === null ? 'NULL' : 'unknown'} grade is not pushed a DM between two others`, async () => {
-      const t = await seedWithGrade(stored);
-      const a = new TestWs();
-      const w = new TestWs();
-      await Promise.all([a.open(), w.open()]);
-      await a.claim('dawn', t.key, 'Ada', 'claude-code', await standingGrant(t.nickTok, 'Ada'));
-      await w.claim('dawn', t.key, 'odd-1', 'web', await standingGrant(t.nickTok, 'odd-1'));
-      await w.subscribe('team-all');
-      const env = (id: string, to: unknown, act: string) => ({
-        type: 'send',
-        envelope: {
-          id,
-          v: PROTOCOL_VERSION,
-          team: 'dawn',
-          from: 'Ada',
-          to,
-          act,
-          body: id,
-          ts: Date.now(),
-        },
-      });
-      a.send(env('dm2', { kind: 'member', name: 'Lin' }, 'message'));
-      a.send(env('pub2', { kind: 'team' }, 'status_update'));
-      const frame = (await w.waitFor('deliver')) as { envelope: { id: string } };
-      expect(frame.envelope.id).toBe('pub2');
-      a.close();
-      w.close();
-    });
-  }
+  it('history: an unknown grade sees team traffic, never the DM', async () => {
+    const t = await seedWithGrade('bogus');
+    const view = await get('/teams/dawn/messages', t.obsTok);
+    expect(view.json.messages.map((m: { id: string }) => m.id)).toEqual(['pub1']);
+  });
+
+  it('firehose: an unknown grade is not pushed a DM between two others', async () => {
+    expect(await firstDelivered(await seedWithGrade('bogus'))).toBe('pub2');
+  });
+
+  it('history and firehose: a NULL grade keeps ADR 136 and reads as full', async () => {
+    const t = await seedWithGrade(null);
+    const view = await get('/teams/dawn/messages', t.obsTok);
+    expect(view.json.messages.map((m: { id: string }) => m.id)).toEqual(['dm1', 'pub1']);
+    expect(await firstDelivered(t)).toBe('dm2');
+  });
 
   it('an explicit full grade is unchanged', async () => {
     const t = await seedWithGrade('full');

@@ -55,7 +55,7 @@ export interface MemberRow {
   /** Read-only observer seat (ADR 063): hidden from roster/counts/presence, can't send. 0/1. */
   observer: number;
   /** How much this observer may see (ADR 136): `'full'` — the whole timeline, the trusted local
-   * dashboard; `'public'` — team/broadcast traffic only, a shared watch-link. NULL ⇒ `'public'` (ADR 601 decision 8; was `'full'` under ADR 136)
+   * dashboard; `'public'` — team/broadcast traffic only, a shared watch-link. NULL ⇒ `'full'` (ADR 136); an unrecognised string ⇒ `'public'` (ADR 601 §8)
    * Meaningless when `observer = 0`. */
   observer_scope: string | null;
   /** Admin-set account-status override (ADR 070): disabled|banned|archived. NULL ⇒ derived from
@@ -180,15 +180,14 @@ export function resolveCapabilities(row: MemberRow): Capabilities {
 }
 
 /**
- * Observer grade. `'full'`, `'public'` (ADR 136) or `'broadcast'` (ADR 601) — the exact stored
- * string. Anything else, NULL included, reads as `'public'` (ADR 601 decision 8): a grade the row
- * cannot name is the least it could mean, not the most. ADR 136 read NULL as `'full'` because only
- * a privileged mint could leave it unset; since v18 backfilled every observer row to `'full'` and
- * `addMember` has written a grade on every mint, no row reaches NULL by construction — the
- * fail-closed default costs nothing a live dashboard has, and keeps a stray row off the DMs.
+ * Observer grade. `'full'`, `'public'` (ADR 136) or `'broadcast'` (ADR 601). NULL reads as `'full'`
+ * (ADR 136, kept by ADR 601 §8's 2026-10-15 amendment): v18 backfilled every pre-v18 observer to
+ * `'full'`, and a NULL is only ever left by a privileged mint. Any other string — one this build
+ * cannot name — reads as `'public'`, the least it could mean (ADR 601 §8).
  */
 export function resolveObserverScope(row: MemberRow): 'full' | 'public' | 'broadcast' {
   switch (row.observer_scope) {
+    case null:
     case 'full':
       return 'full';
     case 'broadcast':
