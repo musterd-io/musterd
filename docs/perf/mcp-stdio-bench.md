@@ -33,12 +33,60 @@ Schema before the first `team_*` call: yes. This Grok session called `team_*`
 tools directly. There was no schema-search step. That is one session, not a
 fresh process captured at startup.
 
-## codex
+## codex (2026-10-14; falsify: ten runs of the command below, on this entry, with a 1-minute load under 13, put the median `spawn_to_tools_list_ms` outside 201–288, or return a tool count other than 31)
 
-No reply yet. big-body is on Codex and was present when the grok runs were
-taken. Not measured here.
+Measured by big-body. The command is the one that workspace's
+`.codex/config.toml` launches: `/opt/homebrew/Cellar/node@22/22.23.1/bin/node`,
+entry `~/.musterd/runtime/packages/mcp/dist/index.js`, `--surface codex`. Ten
+runs. The 1-minute load was 12.84 at the start and 12.05 at the end.
 
-## opencode
+| | spawn → tools/list |
+| --- | --- |
+| median | 222.4 |
+| range | 201.9–287.1 |
 
-No reply yet. dreamy is on OpenCode and was present when the grok runs were
-taken. Not measured here.
+31 tools, 19811 bytes, `tools_list_has_ttl` false. One line near the median:
+
+```json
+{"entry":"/Users/nick/.musterd/runtime/packages/mcp/dist/index.js","import_ms":70.4,"import_wall_ms":124.2,"surface":"codex","spawn_to_initialize_ms":218.9,"spawn_to_tools_list_ms":223.8,"tools":31,"tools_list_bytes":19811,"tools_list_has_ttl":false}
+```
+
+Schema before the first `team_*` call: no. The session's first visible tool
+declarations held no `team_*` schemas. Before its first call it listed every
+tool through `functions.exec` `ALL_TOOLS`, whose descriptions carry the
+schemas, then called `team_inbox_check`. It used no tool-search service. That
+is what the model could see, not the host's internal load timing.
+
+## opencode (2026-10-14; falsify: ten runs of the command below, on this entry, with a 1-minute load under 4, put the median `spawn_to_tools_list_ms` outside 193–208, or return a tool count other than 31)
+
+Measured by dreamy. The command is the one that workspace's OpenCode config
+launches: `/usr/local/bin/node`, entry
+`~/.musterd/runtime/packages/mcp/dist/index.js`, `--surface opencode`. Ten
+runs. The 1-minute load was 3.62 at the start and 3.65 at the end.
+
+| | import_ms | spawn → initialize | spawn → tools/list |
+| --- | --- | --- | --- |
+| median | 76.4 | 191.6 | 196.9 |
+| range | 74.9–79.8 | 187.6–202.7 | 193.3–207.8 |
+
+31 tools, 19811 bytes, `tools_list_has_ttl` false. One line near the median:
+
+```json
+{"entry":"/Users/swethadhamodharan/.musterd/runtime/packages/mcp/dist/index.js","import_ms":74.9,"import_wall_ms":116.3,"surface":"opencode","spawn_to_initialize_ms":192.3,"spawn_to_tools_list_ms":197.4,"tools":31,"tools_list_bytes":19811,"tools_list_has_ttl":false}
+```
+
+Schema before the first `team_*` call: partly. OpenCode runs MCP tools inside
+its Code Mode `execute` catalog, and the system prompt showed 7 of the 31
+musterd tools (`lane_release`, `team_leave`, `team_memory_read`, `team_next`,
+`team_seed_get`, `team_status`, `team_style`). `team_inbox_check` was not one
+of them, so the first `execute` block called `search({ namespace: "musterd" })`
+before it. `team_next` and `team_status` were already loaded and ran in that
+same block.
+
+## What the three show
+
+The spawn itself is not the cost. All three hosts launch the adapter and get
+the tool list back in under 350 ms at the median, and the spread follows
+machine load. The schema step is where they differ: Grok had `team_*` loaded,
+Codex enumerated its tool list first, and OpenCode searched for any tool
+outside its 7 shown.
