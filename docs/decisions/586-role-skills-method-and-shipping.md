@@ -165,6 +165,22 @@ it. The holder judges the landed skill against the job as they do it.
   assigned at random), so decision 6's bar is met; `BUILTIN_ROLE_SKILLS` lists it. Runs 2 and 3 were
   graded by the author and are not blind; they do not count toward the bar.
 
+- _(2026-10-15, lane `01M50SZECV`, nick asked for it.)_ **Every built-in also clears the bar as it
+  ships.** Each earlier blind run used our filled `references/team.md`, but a team that installs a
+  role gets the blank skeleton. All six built-ins were re-run that way, in a scratch repository
+  outside musterd against no skill, graded blind, with the expectations that need our team file
+  listed before the run and scored apart. Craft expectations, with skill vs without: designer 31/32
+  vs 24/32, observer 13/14 vs 10/14, planner 19/20 vs 14/20, platform 33/33 vs 28/33,
+  product-communications 52/60 vs 44/60, steward 14/17 vs 13/17; the grader preferred the skill in
+  every set (steward 6 to 0, the closest platform 6 to 3). None comes off `BUILTIN_ROLE_SKILLS`.
+  The run found gaps a blank team file exposes: the planner keeps "never a leaderboard of
+  Members" only in `team.md` and recommended ranking members without it; the planner read a
+  blank file as "no rules apply" where it means "not recorded here", and the designer stopped at a
+  missing token instead of proposing one; product-communications made no chart in a session that
+  could not render one. Each skill's `evals/results.md` has the run; the
+  method's `references/evals.md` now asks for this run for any skill other teams install.
+  Follows-up: 01M50TPMMAF7ADHATG1NGNFJEK
+
 ## Observability & Evaluation
 
 - **Traces:** none new. `role create` and `init` already report what they write; the copied skill

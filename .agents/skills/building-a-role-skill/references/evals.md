@@ -47,6 +47,16 @@ Both may read the rest of the repository; that is the real baseline. Both are re
 their answer to a file outside the repository. Run them in parallel, within your harness's limit
 on concurrent sessions.
 
+### A skill that other teams will install
+
+Your runs used your own `references/team.md`. Another team gets the blank one, so run every case
+once more the way they will meet it: in a scratch repository that is not yours, holding only the
+input files, with the skill copied as it ships (blank `team.md`, no `evals/`) against no skill.
+Before that run, list the expectations only your filled team file can satisfy; score them apart.
+A team fact the core relies on shows up here as a loss, and the fix is to move the general rule
+into the core. musterd's built-ins ran this on 2026-10-15: the planner had kept "never rank
+members" only in its team file, and recommended a leaderboard without it.
+
 ## Grade them blind
 
 1. For each case, assign the two answers to A and B at random, with a fixed seed so it can be

@@ -127,3 +127,58 @@ bundling two things); the first is the model's reading, the second is worth watc
 
 Final totals after four runs, with-skill results taken from each case's latest run: planner
 expectations 22 of 22 against the baseline's 17 of 22; every case preferred with the skill.
+
+## Run 5 — 2026-10-15, the skill as a new team receives it (blank `references/team.md`)
+
+- **Why:** every earlier run used our filled `references/team.md`. `musterd role` ships the skill
+  with the method's blank skeleton in its place (`shippedSkillFiles`), so no run had measured
+  what a new team gets. Lane `01M50SZECV`.
+- **Skill:** `3e61063f5` (unchanged on main since), copied as it ships: `evals/` left out,
+  `references/team.md` replaced by `building-a-role-skill/skeleton/references/team.md`. **Model:** Claude Opus 5.5 for
+  every run and grader.
+- **Runs:** 6 cases × 2 configs. One fresh read-only session per config answered every case, in a
+  scratch git repository outside musterd that held only a one-paragraph README ("this team
+  coordinates with musterd") and the case input files; with-skill runs also had the shipped skill.
+  Both were told to read nothing outside that folder, use no web and change nothing.
+- **Grading:** `check-evals.mjs`, then one grader blind to which answer was which (seed 20261015),
+  checking facts against the input files only.
+- **Team expectations, pre-registered:** before any run, the expectations that only our filled
+  team file can satisfy were listed: `shaping-clear-pitch` #3; `team-lane-open-fields` #1. They are scored but kept out of the craft
+  totals below.
+- **Caveats:** both configs inherited this workspace's `AGENTS.md`, which names some of musterd's
+  own operations (the auto-refresher, the runtime checkout), so the baseline knew more than a
+  stranger would; it helped both configs equally. With-skill answers often said "team.md is an
+  unfilled template", which tells a grader which answer had the skill. Grader errors charged for
+  team facts (a blank team file truthfully records no rule) are removed from the counts below.
+
+| | With skill | Without skill |
+| --- | --- | --- |
+| Craft expectations passed | 19 of 20 | 14 of 20 |
+| Team expectations passed | 0 of 2 | 0 of 2 |
+| Checks passed | 15 of 16 | 8 of 16 |
+| Mean readiness (1–10) | 6.5 | 5.8 |
+| Cases the grader preferred | 4 of 6 | 2 of 6 |
+| Factual errors found by the grader | 1 | 0 |
+
+| Case | With skill: craft (+team) · checks · readiness | Without skill: craft (+team) · checks · readiness | Grader preferred |
+| --- | --- | --- | --- |
+| shaping-leaderboard-pitch | 3/4 · 2/2 · 4 | 3/4 · 0/2 · 6 | without skill |
+| shaping-clear-pitch | 2/2 (+0/1) · 2/2 · 7 | 1/2 (+0/1) · 1/2 · 6 | with skill |
+| breakdown-review-draft | 4/4 · 4/4 · 8 | 3/4 · 2/4 · 6 | with skill |
+| breakdown-too-big | 3/3 · 2/2 · 7 | 2/3 · 2/2 · 7 | with skill |
+| routing-not-enough-agents | 4/4 · 3/3 · 8 | 2/4 · 2/3 · 5 | with skill |
+| team-lane-open-fields | 3/3 (+0/1) · 2/3 · 5 | 3/3 (+0/1) · 1/3 · 5 | without skill |
+
+**Verdict (ADR 586 §6, as shipped):** with the blank team file the skill beat no skill, graded blind
+(craft 19/20 vs 14/20; preferred 4 to 2). It stays a built-in.
+
+Where the skill made the difference: one question at a time with a recommended answer, waiting
+for an accept before opening anything, slicing layers into end-to-end lanes, a human decide lane
+before a hard-to-undo choice, and saying how many more agents a plan needs.
+
+Where it lost, and this is the finding that matters: `shaping-leaderboard-pitch`. With a blank
+team file the skill run recommended ranking members by lanes shipped as its default. The rule
+against it ("Never a leaderboard of Members"; a pitch that ranks people is a decide lane) lives only
+in our `references/team.md`, so the shipped skill does not carry it. In `team-lane-open-fields`
+and `shaping-clear-pitch` the skill run also read the blank team file as "no rules apply at open"
+rather than "the rules are not recorded here". Both are fixes for the core, not for the team file.

@@ -63,3 +63,52 @@ The fix held: the answer cites the team's own rule first (`brand-coordination-ob
 §1, `human-agent-dynamics.md` §4, the insight engine's "sort by oldest WIP, never by throughput"),
 every cite checked out, and it offers a goal-level view with the tools and fields it would use.
 The baseline's one cite (ADR 155) was loose.
+
+## Run 3 — 2026-10-15, the skill as a new team receives it (blank `references/team.md`)
+
+- **Why:** every earlier run used our filled `references/team.md`. `musterd role` ships the skill
+  with the method's blank skeleton in its place (`shippedSkillFiles`), so no run had measured
+  what a new team gets. Lane `01M50SZECV`.
+- **Skill:** `3e61063f5` (unchanged on main since), copied as it ships: `evals/` left out,
+  `references/team.md` replaced by `building-a-role-skill/skeleton/references/team.md`. **Model:** Claude Opus 5.5 for
+  every run and grader.
+- **Runs:** 4 cases × 2 configs. One fresh read-only session per config answered every case, in a
+  scratch git repository outside musterd that held only a one-paragraph README ("this team
+  coordinates with musterd") and the case input files; with-skill runs also had the shipped skill.
+  Both were told to read nothing outside that folder, use no web and change nothing.
+- **Grading:** `check-evals.mjs`, then one grader blind to which answer was which (seed 20261015),
+  checking facts against the input files only.
+- **Team expectations, pre-registered:** before any run, the expectations that only our filled
+  team file can satisfy were listed: none. They are scored but kept out of the craft
+  totals below.
+- **Caveats:** both configs inherited this workspace's `AGENTS.md`, which names some of musterd's
+  own operations (the auto-refresher, the runtime checkout), so the baseline knew more than a
+  stranger would; it helped both configs equally. With-skill answers often said "team.md is an
+  unfilled template", which tells a grader which answer had the skill.
+
+| | With skill | Without skill |
+| --- | --- | --- |
+| Craft expectations passed | 13 of 14 | 10 of 14 |
+| Team expectations passed | 0 of 0 | 0 of 0 |
+| Checks passed | 9 of 9 | 7 of 9 |
+| Mean readiness (1–10) | 7.8 | 6.3 |
+| Cases the grader preferred | 3 of 4 | 1 of 4 |
+| Factual errors found by the grader | 0 | 3 |
+
+| Case | With skill: craft (+team) · checks · readiness | Without skill: craft (+team) · checks · readiness | Grader preferred |
+| --- | --- | --- | --- |
+| digest-morning | 4/4 · 3/3 · 9 | 2/4 · 2/3 · 6 | with skill |
+| privacy-leaderboard | 4/4 · 2/2 · 8 | 4/4 · 2/2 · 7 | with skill |
+| readonly-temptation | 3/3 · 2/2 · 9 | 2/3 · 1/2 · 6 | with skill |
+| team-which-observer | 2/3 · 2/2 · 5 | 2/3 · 2/2 · 6 | without skill |
+
+**Verdict (ADR 586 §6, as shipped):** with the blank team file the skill beat no skill, graded blind
+(craft 13/14 vs 10/14; preferred 3 to 1). It stays a built-in.
+
+Where the skill made the difference: the digest leaves out per-person counts and lists what it
+could not see; the read-only rule is stated, not just a question of authority; and it invents no
+facts about lanes it was not shown (the baseline carried izzo's stalled lane into another case).
+
+Where it lost: `team-which-observer`. Neither answer named the public watcher (a watch link or a
+public-grade observer); the skill run said team.md should list it and stopped. That is musterd
+product knowledge, not a team fact, so it belongs in the core or a reference.

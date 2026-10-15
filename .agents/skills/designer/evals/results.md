@@ -57,3 +57,59 @@ it with `--connected-only`. The claim was right; the error count above still inc
 each config).
 
 No run 2: the fixes correct facts in the references and add one line; no case's verdict turns on them.
+
+## Run 2 — 2026-10-15, the skill as a new team receives it (blank `references/team.md`)
+
+- **Why:** every earlier run used our filled `references/team.md`. `musterd role` ships the skill
+  with the method's blank skeleton in its place (`shippedSkillFiles`), so no run had measured
+  what a new team gets. Lane `01M50SZECV`.
+- **Skill:** `3e61063f5` (unchanged on main since), copied as it ships: `evals/` left out,
+  `references/team.md` replaced by `building-a-role-skill/skeleton/references/team.md`. **Model:** Claude Opus 5.5 for
+  every run and grader.
+- **Runs:** 10 cases × 2 configs. One fresh read-only session per config answered every case, in a
+  scratch git repository outside musterd that held only a one-paragraph README ("this team
+  coordinates with musterd") and the case input files; with-skill runs also had the shipped skill.
+  Both were told to read nothing outside that folder, use no web and change nothing.
+- **Grading:** `check-evals.mjs`, then one grader blind to which answer was which (seed 20261015),
+  checking facts against the input files only.
+- **Team expectations, pre-registered:** before any run, the expectations that only our filled
+  team file can satisfy were listed: `visual-tells-review` #5; `visual-cli-color` #4; `team-accent-text` #2; `team-new-typeface` #1, #2, #3. They are scored but kept out of the craft
+  totals below.
+- **Caveats:** both configs inherited this workspace's `AGENTS.md`, which names some of musterd's
+  own operations (the auto-refresher, the runtime checkout), so the baseline knew more than a
+  stranger would; it helped both configs equally. With-skill answers often said "team.md is an
+  unfilled template", which tells a grader which answer had the skill.
+
+| | With skill | Without skill |
+| --- | --- | --- |
+| Craft expectations passed | 31 of 32 | 24 of 32 |
+| Team expectations passed | 0 of 6 | 0 of 6 |
+| Checks passed | 18 of 22 | 16 of 22 |
+| Mean readiness (1–10) | 7.3 | 6.4 |
+| Cases the grader preferred | 7 of 10 | 2 of 10 (1 tie) |
+| Factual errors found by the grader | 0 | 1 |
+
+| Case | With skill: craft (+team) · checks · readiness | Without skill: craft (+team) · checks · readiness | Grader preferred |
+| --- | --- | --- | --- |
+| visual-tells-review | 4/4 (+0/1) · 4/4 · 7 | 3/4 (+0/1) · 4/4 · 7 | with skill |
+| visual-cli-color | 3/3 (+0/1) · 1/2 · 7 | 2/3 (+0/1) · 1/2 · 6 | with skill |
+| a11y-live-scene | 4/4 · 3/3 · 8 | 3/4 · 2/3 · 6 | with skill |
+| a11y-board-drag | 3/3 · 2/2 · 8 | 2/3 · 2/2 · 6 | with skill |
+| handoff-stale-banner-spec | 4/4 · 2/2 · 8 | 2/4 · 2/2 · 6 | with skill |
+| handoff-capture-method | 4/4 · 2/2 · 8 | 4/4 · 2/2 · 8 | without skill |
+| critique-acceptance-verdict | 4/4 · 2/2 · 9 | 4/4 · 2/2 · 8 | with skill |
+| critique-rewrite-request | 3/3 · 1/1 · 8 | 2/3 · 0/1 · 6 | with skill |
+| team-accent-text | 2/2 (+0/1) · 0/2 · 6 | 2/2 (+0/1) · 1/2 · 7 | without skill |
+| team-new-typeface | 0/1 (+0/3) · 1/2 · 4 | 0/1 (+0/3) · 0/2 · 4 | tie |
+
+**Verdict (ADR 586 §6, as shipped):** with the blank team file the skill beat no skill, graded blind
+(craft 31/32 vs 24/32; preferred 7 to 2). It stays a built-in.
+
+Where the skill made the difference with a blank team file: the 2.2.2 pause control for the
+live scene, target size on the board, a spec that names tokens and leaves strings to the voice
+owner, findings with a severity, and routing the copy rather than rewriting it.
+
+Where it lost: `team-accent-text`. Both answers said `#E1AD01` fails on white; the baseline then
+proposed a concrete darker shade, while the skill run said team.md records none and stopped. With
+a blank team file the skill should still propose a value that passes, labelled as a proposal.
+`team-new-typeface` tied at nothing: its expectations are almost all team facts.
