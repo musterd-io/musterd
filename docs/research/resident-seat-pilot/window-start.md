@@ -98,3 +98,54 @@ lane 8 and the stream lanes.
 `residency.wake_cost` rows (gateway-priced) against the $100 ceiling, resident $0.013 against $15.
 The replica's `wake_turns` for mason sum to $14.68 across 40 leases. That gap of four leases and
 $1.87 is measure 5's question, and the finding reads it from the hub.
+
+### Between pass 2 and pass 3 — 2026-10-15, recorded 15:10 PDT
+
+**Arm B was down 10:59 to 12:12 PDT.** The Air rebooted at 10:24 and `launchctl setenv` does not
+survive a reboot, so every lease the host actuated for mason in that window is paired with a
+`residency.wake_deferred` row (`API key variable ANTHROPIC_API_KEY is unset on this host`): 15
+deferrals, 10:59:45 to 12:12:05, on `01M3AMY549` and `01M3W6GWVN`. None ran the seat. The fix is
+[ADR 605](../../decisions/605-resident-key-keychain.md) (#2639, `3fede650`, merged 12:01): the host
+reads the key from the Keychain item `musterd:ANTHROPIC_API_KEY` when the variable is unset, and
+the launchd env was cleared. B's first priced wake after the outage is 12:25:26
+(`dispatch_handoff`, $3.97); 8 priced wakes followed by 13:33, $7.68 in all. The finding leaves
+the outage out of measure 1 and reports it as a host outage (amendment 1, correction).
+
+**Two B lanes released with intervention** (amendment 1): `01M3AMY549` at 11:09 (back to open,
+still open at 15:10) and `01M4FF0P6H` at 11:09, then handed to `stanley` at 11:15 outside the pilot
+(it needs nick's box session, capture protocol `01M4Z00K5X`); stanley submitted at 12:12 and
+wanderer accepted at 12:20. Neither counts for either arm. Steer `01M50C1XQ3` to mason is the
+intervention row.
+
+**Probe (measure 6) ran at 12:26 on lease `01M50GF7JF` and FAILED.** Steer `01M50GFAVR` was sent
+while mason was inside a tool call on `01M3W6GWVN`: delivered +0.5 s, the next model call completed
+at +5.0 s without it, the seat read the steer by `team_inbox_check` on call 3 (+8.1 s), and the
+in-thread answer landed at +15.3 s after calls 4 and 5. Pass was "answered before the next model
+call completes"; that call was call 2. Defect lane `01M50GH51Z` is open: the doorbell injects a
+pointer to the act, not the act, so the seat spends a model call and a tool round reading it.
+Per the manifest the week continues. Arm A's probe 2 (2026-10-13) stands as the pass.
+
+**B's handed set at 15:10:** 7 in-class lanes (pass 1: `01M3ZC3G35`, `01M4HGY13Z`, `01M4S7N1HV`,
+`01M4W7HY7Z`; pass 2: `01M3W6GWVN`, `01M4RX7NE2`, `01M4SB4D7R`). Five are `done` (`01M3W6GWVN`
+accepted by izzo today), `01M4SB4D7R` is awaiting acceptance, `01M4RX7NE2` is claimed. B needs at
+least one more in-class lane to reach the readability floor of 8.
+
+**Spend at 15:10**, read from this joiner's replica, not the hub: mason $20.56 across 45
+`residency.wake_cost` rows against $100, resident $0.099 across 10 against $15. Measure 5 on the
+replica: mason has 50 leases with `wake_turns` rows, 5 of them with no `wake_cost` row ($2.08,
+four of them 2026-10-14 22:08 to 2026-10-15 00:12, one at 12:32 today), and 1 lease whose summed
+turns differ from its cost row by more than $0.001. The finding reads this from the hub; if the
+hub shows the same, that is a defect lane.
+
+### Pass 3 — 2026-10-16 (prepared; the pass itself is recorded below when run)
+
+The first pass under amendment 1. Filter `musterd lanes --open --json` on the manifest's terms
+(stakes normal, no risk tag, ≤3 surface globs, none under `packages/protocol/src`, `docs/decisions`,
+`SPEC.md`, `.github`, `deploy`, no **open** dependency, no brainstorm/spec-first title) **and** the
+amended term: finishable from a seat's own workspace, with no human live session, third-party
+account, phone, or hosted or streaming hardware. Every lane excluded on the amended term is listed
+here with its reason, so the class can be recounted without it. Order by `created_at`, alternate
+B / C, **start at B** (mason). C goes round-robin in name order over the Claude Code residency
+seats that are wakeable and unattended at the pass (pool as enrolled: `alfie`, `delta`, `dolly`,
+`lazara`, `sloane`); record which were attended. Note text is pass 1's with `pass 3 (2026-10-16)`.
+Read both arms' spend against the ceilings and record it beside the table.
