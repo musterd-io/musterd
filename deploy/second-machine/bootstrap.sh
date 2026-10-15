@@ -178,6 +178,17 @@ step_seat() {
   # From the runtime checkout: a worktree lands under ~/musterd/<team>/<repo>/<name> (ADR 447) and
   # the harness set is wired through the reconcile engine (ADR 491) — no hand edits.
   ( cd "$(human_ws)" && musterd agent "$name" --harness "$harness" ) 2>&1 | tee -a "$LOG"
+  # ADR 592: `musterd agent` pushes the seat file it wrote. The hub learns a member only from that
+  # file, and a `residency on` it cannot resolve is lost (finding 1, 2026-10-03), so refuse to enrol
+  # a seat whose file has not reached the remote — with the commands that get it there.
+  local rel=".musterd/seats/$name.toml"
+  if [ -f "$TEAM_HOME/$rel" ] && git -C "$TEAM_HOME" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [ -n "$(git -C "$TEAM_HOME" status --porcelain -- "$rel")" ] \
+      || [ -n "$(git -C "$TEAM_HOME" rev-list '@{upstream}..HEAD' -- "$rel" 2>/dev/null)" ]; then
+      die "$rel has not reached the roster remote, so the hub cannot know $name yet — publish it, then re-run this step:
+  git -C $TEAM_HOME add $rel && git -C $TEAM_HOME commit -m \"roster: add $name\" -- $rel && git -C $TEAM_HOME push"
+    fi
+  fi
   local ws
   ws="$(ls -d "$TEAM_HOME"/*/"$name" 2>/dev/null | head -1)"
   [ -n "$ws" ] && [ -f "$ws/.musterd/binding.json" ] || die "no Workspace for $name under $TEAM_HOME/*/ — read the agent output above"

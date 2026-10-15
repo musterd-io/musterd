@@ -154,23 +154,28 @@ per machine) — the seat starts a fresh session on the joiner, with its musterd
 The hub's worktree for the seat goes stale; leave it or `git worktree remove` it from
 `~/.musterd/runtime`.
 
-## A seat born on the joiner — the same step, plus a roster commit
+## A seat born on the joiner — the same step; the roster commit is now part of it
 
 `bootstrap.sh seat <name> <harness>` works for a name the team has never seen: `musterd agent` adds
-the member when it is new. Skip the two hub lines it prints (there is nothing to unbind). What the
-step does **not** do is get the member to the hub: the roster is file-backed (ADR 058), so `musterd
-agent` writes `seats/<name>.toml` into the **joiner's** roster clone and nowhere else. The hub learns
-a member from a seat file in its own clone, and until that file arrives the hub has no such seat —
-`residency on` from the joiner lands on nothing and is silently lost.
+the member when it is new. Skip the two hub lines it prints (there is nothing to unbind). The roster
+is file-backed (ADR 058), so the hub learns a member only from a seat file in its own clone, and
+until that file arrives the hub has no such seat — a `residency on` from the joiner lands on nothing
+and is silently lost.
+
+Since ADR 592, `musterd agent` adds, commits and pushes `.musterd/seats/<name>.toml` in the
+joiner's roster clone itself and says so (`published .musterd/seats/<name>.toml …`), and the hub
+pulls its roster when it meets a seat it does not know. The seat step checks the file reached the
+remote before it enrols (lane `01M41NQ05V`); if the push failed it stops with the commands that
+publish it, and you re-run the step:
 
 ```sh
-# joiner — after `bootstrap.sh seat dreamy opencode`
-cd ~/musterd/<team>            # the roster clone
-git add .musterd/seats/dreamy.toml && git commit -m "add dreamy" && git push
-# hub — the daemon watches the roster dir; the seat appears on the pull
+# joiner — only if `bootstrap.sh seat dreamy opencode` stopped on an unpublished seat file
+git -C ~/musterd/<team> add .musterd/seats/dreamy.toml \
+  && git -C ~/musterd/<team> commit -m "roster: add dreamy" -- .musterd/seats/dreamy.toml \
+  && git -C ~/musterd/<team> push
+bash ~/bootstrap.sh seat dreamy opencode
+# hub — only if the hub's roster still lacks the seat a minute later
 cd ~/musterd/<team> && git pull --ff-only
-# joiner — ONLY NOW: re-run the enrolment the seat step already tried
-musterd residency on --seat dreamy --workspace <ws> --harness opencode --flow auto
 ```
 
 Measured 2026-10-03: `added dreamy (agent) to revive` printed on Air 2 at 17:46Z; 40 minutes later
@@ -316,17 +321,22 @@ Append; never rewrite. Dated, with what was measured and what was done about it.
   is in the table above. New findings, each now in the steps above:
   1. A seat born on the joiner reaches the hub only through a roster commit; `residency on` before
      the hub's pull is lost (section above). Product fix: the `seat` step commits and pushes the
-     file, or refuses to enrol a seat the hub does not yet have.
+     file, or refuses to enrol a seat the hub does not yet have. _Fixed 2026-10-15 (lane
+     `01M41NQ05V`): `musterd agent` publishes the file (ADR 592) and the step refuses to enrol
+     until it has reached the remote._
   2. The hub's `musterd residency status` prints `! drift: "<seat>" is enrolled to mac.lan but
      missing from this machine's host registry` for every joiner seat. False positive — the seat is
      in the joiner's registry — and the suggested remedy would re-home it. The drift check should
-     skip seats enrolled to another node.
+     skip seats enrolled to another node. _Fixed 2026-10-15 (lane `01M41NQ05V`): the check skips
+     a seat whose roster `residence` names a node other than the answering daemon's own._
   3. The host label in residency is the joiner's `hostname()`, which here collides with the hub's
      (`mac.lan` on both). ADR 393's host column cannot distinguish two Macs with the default name;
      the presence line's node label can. Same root as the `--label` edge in node-enrollment.md.
   4. Air 2's actuator logs `wake due … wake deferred: <seat> — seat not in this machine's host
      registry` for **every hub seat with a due act, every tick** (ghost, wanderer, miley all day).
-     Correct (ADR 393) but it buries the one line about a seat that does live there.
+     Correct (ADR 393) but it buries the one line about a seat that does live there. _Fixed
+     2026-10-15 (lane `01M41NQ05V`): the actuator logs a seat's deferral once per reason; every
+     deferral is still reported to the daemon._
   5. A new session on the joiner reads its inbox before the hub's act is pulled (60 s cadence); the
      act is there on the second read. Said once to each new seat: "check your inbox".
   6. `bash ~/bootstrap.sh seat lazara codex && musterd lazara` for an already-moved seat is a

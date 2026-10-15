@@ -808,6 +808,9 @@ export class HttpClient {
     }>;
     /** ADR 360 follow-on: this machine's standing push refusal. Absent from an older daemon. */
     sync?: RosterSyncState;
+    /** ADR 503 §4: the answering daemon's own node — what a member's `residence.node` is compared
+     *  against. Null or absent on a daemon with no node, or an older one. */
+    node?: { id: string; label: string } | null;
   }> {
     return this.request('GET', `/teams/${slug}/members`);
   }
