@@ -165,7 +165,7 @@ import {
   type ConsoleClaims,
 } from '../cloud/consoleToken.js';
 import { cloudHealth } from '../cloud/health.js';
-import { hostAllows, hostTeam, pathTeam } from '../cloud/hostIsolation.js';
+import { hostAllows, pathTeam } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { checkUpgrade, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
@@ -2478,10 +2478,13 @@ export async function handleHttp(
     if (ctx.config.cloud && !hostAllows(req.headers.host, path, ctx.config.cloud.hostSuffix))
       return sendJson(res, 404, { error: { code: 'not_found', message: 'not found' } });
     // ADR 608: a team's requests are served by the one server that owns it; any other server hands
-    // the request to the proxy to replay there. Global routes (`/health`, the apex) stay local.
+    // the request to the proxy to replay there. Only a team NAMED IN THE PATH moves: the host alone
+    // does not, because a global route is called on a team-shaped host — Fly's checker sends
+    // `Host: health.musterd.dev` to `/health`, and reading that as team `health` replayed the
+    // health check to the other machine and failed the first rolling deploy (2026-10-15, staging).
+    // Host-only paths (`/live`, static assets) are the same bytes on every machine.
     if (ctx.config.cloud && ctx.affinity) {
-      const team = pathTeam(path) ?? hostTeam(req.headers.host, ctx.config.cloud.hostSuffix);
-      const d = ctx.affinity.decide(team, replaySource(req.headers['fly-replay-src']));
+      const d = ctx.affinity.decide(pathTeam(path), replaySource(req.headers['fly-replay-src']));
       if (!d.local && d.owner) {
         res.writeHead(307, { ...replayHeaders(d.owner), 'content-length': '0' });
         res.end();

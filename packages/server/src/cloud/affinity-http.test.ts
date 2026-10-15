@@ -58,10 +58,16 @@ describe('ADR 608 — team affinity on Cloud', () => {
       });
       expect(spoof.status).toBe(307);
 
-      // Global routes never move.
+      // Global routes never move — including on a team-shaped host. Fly's checker calls /health
+      // with `Host: health.<suffix>`; reading that host as team `health` replayed the check to the
+      // other machine and failed the first rolling deploy (2026-10-15).
       const health = await raw(url, '/health', 'health.musterd.test');
       expect(health.headers['fly-replay']).toBeUndefined();
       expect([200, 503]).toContain(health.status);
+      const healthOnTeamHost = await raw(url, '/health', 'revive.musterd.test');
+      expect(healthOnTeamHost.headers['fly-replay']).toBeUndefined();
+      const live = await raw(url, '/live', 'revive.musterd.test');
+      expect(live.headers['fly-replay']).toBeUndefined();
 
       // The WebSocket upgrade for the team gets the same answer.
       const upgrade = await new Promise<{ status: number; replay: string | undefined }>(
