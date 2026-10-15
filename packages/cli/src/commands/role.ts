@@ -458,7 +458,7 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
 /**
  * The role's skill beside its file (ADR 586 §4–5). `--from` a built-in that ships one copies it; a
  * custom role gets the method's skeleton with its name filled in, plus the method skill to build it
- * by. A built-in without a skill (admin, product-communications) gets none. Nothing the user already
+ * by. A built-in without a skill (admin, courier, security) gets none. Nothing the user already
  * has is overwritten.
  */
 function installRoleSkills(rosterHome: string, name: string, from?: string): SkillInstall[] {
