@@ -23,10 +23,10 @@ import {
   reconcileHarnesses,
   type FragmentInspection,
   type HarnessInspection,
-  type ReconcileResult,
 } from '../onboard/reconcile/engine.js';
 import { registryOrder, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
 import { theme } from '../render/theme.js';
+import { renderConfigureReceipt, verdictOf } from './harnessVerdict.js';
 
 /**
  * `musterd harness` — the desired-set front door (ADR 281/282/286).
@@ -150,33 +150,7 @@ function harnessHeadline(h: HarnessInspection): string {
   return `${h.harness.padEnd(13)} ${selection} · ${avail}`;
 }
 
-/** The exact verdict strings the terminal brief pins (docs/design/figma-brief-terminal.md §8-10). */
-export function verdictOf(f: FragmentInspection): string {
-  if (f.journal === 'invalid') return `${theme.err('✗')} container unreadable`;
-  if (f.journal === 'pending') return 'journal pending — re-run musterd wire';
-  if (f.lock === 'held') return '⏳ busy — another reconciler holds this';
-  if (f.lock === 'invalid') return `${theme.err('✗')} container unreadable`;
-  switch (f.planned) {
-    case 'unchanged':
-      return f.desired ? `${theme.ok('✓')} in place` : `${theme.ok('✓')} released`;
-    case 'satisfied-unmanaged':
-      return `${theme.ok('✓')} satisfied (unmanaged)`;
-    case 'applied':
-      return '→ needs wire';
-    case 'conflict':
-      return f.observation === 'owned-drifted'
-        ? `${theme.err('✗')} drifted — evidence retained`
-        : `${theme.err('✗')} conflict — not musterd's to overwrite`;
-    case 'release-blocked':
-      return `${theme.err('✗')} release blocked — drifted while deselected`;
-    case 'repair-needed':
-      return `${theme.err('✗')} pre-ADR-286 registration — run musterd harness configure`;
-    case 'invalid-container':
-      return `${theme.err('✗')} container unreadable`;
-    default:
-      return f.planned;
-  }
-}
+export { verdictOf };
 
 function fragmentHealthy(f: FragmentInspection): boolean {
   if (f.journal !== 'none' || f.lock === 'invalid') return false;
@@ -305,7 +279,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
     legacyRepair: true, // the ONE caller allowed to: the human just confirmed the complete set
     ...(deps?.registry ? { registry: deps.registry } : {}),
   });
-  for (const r of report.results) out(renderResult(r));
+  for (const r of report.results) out(renderConfigureReceipt(r));
   if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
   if (report.ok) {
     out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);
@@ -327,22 +301,6 @@ export function deltaLine(before: string[], after: string[]): string {
     ...(added.length > 0 ? [`added ${added.join(', ')}`] : []),
     ...(removed.length > 0 ? [`removed ${removed.join(', ')}`] : []),
   ].join(' · ');
-}
-
-function renderResult(r: ReconcileResult): string {
-  const target = r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
-  const label = `${target}  ${r.action === 'none' ? '' : `(${r.action}) `}`;
-  const verdictText =
-    r.result === 'applied'
-      ? `${theme.ok('✓')} applied`
-      : r.result === 'unchanged'
-        ? `${theme.ok('✓')} unchanged`
-        : r.result === 'satisfied-unmanaged'
-          ? `${theme.ok('✓')} satisfied (unmanaged)`
-          : r.result === 'pending'
-            ? `· pending (${r.detail ?? 'not installed here'})`
-            : `${theme.err('✗')} ${r.result}${r.detail ? ` — ${r.detail}` : ''}`;
-  return `  ${label}${verdictText}`;
 }
 
 /** A legacy folder's preselection: the v2 manifest's own `desired` set, else the v1 manifest's

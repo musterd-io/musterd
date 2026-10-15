@@ -8,10 +8,11 @@ import { claudeCode } from '../onboard/harnesses/claudeCode.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
 import { loadProvisioning } from '../onboard/manifest.js';
 import { defaultHarnessContext, type HarnessContext } from '../onboard/reconcile/context.js';
-import { reconcileHarnesses, type ReconcileResult } from '../onboard/reconcile/engine.js';
+import { reconcileHarnesses } from '../onboard/reconcile/engine.js';
 import type { HarnessAdapter } from '../onboard/reconcile/fragments.js';
 import { roleSkillNotes, withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
+import { renderWireReceipts } from './harnessVerdict.js';
 
 /**
  * `musterd wire` — the headless, no-prompt counterpart to `musterd harness configure` for a folder
@@ -191,7 +192,7 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
     return report.ok ? 0 : 1;
   }
 
-  for (const r of report.results) process.stdout.write(`${renderWireResult(r)}\n`);
+  for (const line of renderWireReceipts(report.results)) process.stdout.write(`${line}\n`);
   for (const line of roleSkillNotes(ctx.worktreeRoot, team))
     process.stdout.write(`${theme.warn('⚠')} ${line}\n`);
   if (report.ok) {
@@ -220,16 +221,6 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
     );
   }
   return report.ok ? 0 : 1;
-}
-
-function renderWireResult(r: ReconcileResult): string {
-  const target = r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
-  const head = `  ${target.padEnd(13)} ${r.action === 'none' ? '' : `(${r.action}) `}`;
-  if (r.result === 'applied' || r.result === 'unchanged')
-    return `${head}${theme.ok('✓')} ${r.result}`;
-  if (r.result === 'satisfied-unmanaged') return `${head}${theme.ok('✓')} satisfied (unmanaged)`;
-  if (r.result === 'pending') return `${head}· pending (${r.detail ?? 'not installed here'})`;
-  return `${head}${theme.err('✗')} ${r.result}${r.detail ? ` — ${r.detail}` : ''}`;
 }
 
 /**

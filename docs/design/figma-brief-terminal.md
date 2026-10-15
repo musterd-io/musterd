@@ -61,7 +61,13 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
    On confirm: `✓ desired harnesses: claude-code, musterd`, then a dim delta against the prior set
    (`  added grok · removed cursor`, or `  no change from the previous set` — so an Enter that
    toggled nothing is visible), then one line per reconciled fragment
-   (see the status verdict glyphs below), ending `✓ worktree configured — musterd wire repairs it any time`.
+   (see the status verdict glyphs below). Every fragment reconciled ends
+   `✓ worktree configured — musterd wire repairs it any time` and exits **0**.
+   A fragment that did not ends on this line and exits **1**:
+   ```
+   ⚠ some fragments need attention — `musterd harness status` for the detail
+   ```
+   The backticks around the command are characters in the line.
    Cancel (esc) prints `no changes made` (dim) and exits **0**.
 9. `cmd/harness-status` — `$ musterd harness status` → one block per registry adapter:
    ```
