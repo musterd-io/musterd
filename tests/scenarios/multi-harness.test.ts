@@ -335,7 +335,7 @@ describe('multi-harness worktree selection (ADR 281/282/286 acceptance)', () => 
     writeFileSync(join(wsA, '.cursor', 'mcp.json'), `${JSON.stringify(drifted, null, 2)}\n`);
     const result = await configure(wsA, ctxA, registry, []);
     expect(result.code).toBe(1);
-    expect(result.out).toContain('release-blocked');
+    expect(result.out).toContain('✗ release blocked — drifted while deselected');
     expect(
       JSON.parse(readFileSync(join(wsA, '.cursor', 'mcp.json'), 'utf8')).mcpServers.musterd.args,
     ).toEqual(['/hand/edited.js']);

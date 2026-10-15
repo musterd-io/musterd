@@ -238,22 +238,31 @@ export function classifyFragment(
     : { observation: 'owned-exact', plan: 'remove', planned: 'applied' };
 }
 
+/** The words frame 9 prints for a classified failure. Receipts and status both build on these. */
+export const CLASSIFIED_DETAIL = {
+  drifted: 'drifted — evidence retained',
+  unmanaged: "not musterd's to overwrite",
+  releaseBlocked: 'drifted while deselected',
+  repair: 'pre-ADR-286 registration — run musterd harness configure',
+  unreadable: 'container unreadable',
+} as const;
+
 function classifiedDetail(classified: Classified, observed: ObservedFragment): string | undefined {
   if (classified.planned === 'conflict') {
     return classified.observation === 'owned-drifted'
-      ? 'drifted — evidence retained'
-      : "not musterd's to overwrite";
+      ? CLASSIFIED_DETAIL.drifted
+      : CLASSIFIED_DETAIL.unmanaged;
   }
   if (classified.planned === 'release-blocked') {
-    return 'drifted while deselected';
+    return CLASSIFIED_DETAIL.releaseBlocked;
   }
   if (classified.planned === 'repair-needed') {
-    return 'pre-ADR-286 registration — run musterd harness configure';
+    return CLASSIFIED_DETAIL.repair;
   }
   if (classified.planned === 'invalid-container') {
     return observed.state === 'invalid-container'
-      ? observed.issues.map((i) => i.message).join(', ') || 'container unreadable'
-      : 'container unreadable';
+      ? observed.issues.map((i) => i.message).join(', ') || CLASSIFIED_DETAIL.unreadable
+      : CLASSIFIED_DETAIL.unreadable;
   }
   return undefined;
 }

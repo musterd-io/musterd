@@ -362,7 +362,7 @@ describe('musterd wire (noninteractive, desire-preserving — ADR 282)', () => {
     });
     const { code, out } = await run([], { ctx: ctxOf(), registry: [a] });
     expect(code).toBe(1);
-    expect(out).toContain('repair-needed');
+    expect(out).toContain('✗ pre-ADR-286 registration — run musterd harness configure');
     expect(a.state.applied).toEqual([]); // wire never repairs the marker
   });
 
