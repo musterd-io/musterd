@@ -83,9 +83,8 @@ import {
 } from './render';
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
-import { loadHeld, saveHeld } from './boardHoles';
 import { createLaneOwners } from './laneOwners';
-import { laneSeed, WALL_COLUMNS, withHeld, withPinned, withTaken, type HeldMarks, type PinnedCard, type WallBoard } from './wallboard';
+import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -567,8 +566,6 @@ export function mountOffice(
   // The signed-in viewer's own seat: their plate says "you". Only where the labels are interactive —
   // a stream's plates belong to nobody watching.
   let you: string | null = null;
-  let heldTeam = ''; // the team `heldMarks` was loaded for
-  let heldMarks: HeldMarks = {}; // this viewer's pin-hole history (boardHoles.ts)
   /** Cards in someone's hand, and for a while after: a claimed lane's slot stays empty until the board's
    *  own refresh has moved it to "claimed" (or 12s pass), so the card does not pop back onto the wall
    *  between the walker sitting down and the board catching up. `laneSeed` → expiry (ms). */
@@ -2355,16 +2352,8 @@ export function mountOffice(
     teamName = next.teamName ?? 'revive';
     teamWorkingHours = next.teamWorkingHours ?? null;
     you = interactiveLabels ? (next.you ?? null) : null;
-    // The wall keeps a tack hole where a card has hung (lane 01M4VP3V99): fold what the board shows into
-    // this viewer's high-water marks, loaded once per team and saved only when one rises.
-    if (heldTeam !== teamName) {
-      heldTeam = teamName;
-      heldMarks = loadHeld(teamName);
-    }
-    const heldNow = withHeld(next.wallBoard ?? null, heldMarks);
-    heldMarks = heldNow.marks;
-    if (heldNow.changed) saveHeld(teamName, heldMarks);
-    wallBoard = heldNow.board;
+    // The wall's tack holes come with the board (`projectWallBoard`, lane 01M50WEBTC): one cork for everyone.
+    wallBoard = next.wallBoard ?? null;
     // The board's owners are the base layer under what the room watches (lane 01M50TZDDM).
     if (next.laneOwners && next.laneOwners !== seededOwners) {
       seededOwners = next.laneOwners;

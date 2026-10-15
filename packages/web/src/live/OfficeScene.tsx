@@ -74,7 +74,7 @@ function computeData(
     teamName,
     teamWorkingHours,
     // A stopped plan's cards fade on the wall (lane 01M4V9YKMG) — the Now card's rule, at lane level.
-    wallBoard: projectWallBoard(board, stalledLaneIds(board, now)),
+    wallBoard: projectWallBoard(board, stalledLaneIds(board, now), now),
     laneOwners: laneOwnersOf(board),
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
     // already holds, so both surfaces gather without either route wiring anything.
