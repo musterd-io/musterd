@@ -1192,3 +1192,49 @@ ramp 1 000 s, duration 1 300 s, `performance-4x` bench on a fresh team `lb-run44
   machine — then the host is not the variable and the next lane is a traceroute from the bench
   machine through Cloudflare to the app. If it returns to the 510–540 band with `/health` near
   215 ms, the host was.
+
+## 2026-10-15 — §8.4 rolling schema deploy: an expand-phase change across two servers under load, then the old build refuses to boot (lane 01M3Z44EMJAEEEMAR3P6Z2X24T)
+
+Spec §8 item 4. Staging went from one machine to two (`fly scale count 2`, run by nick), both on
+`60cf546` at schema 96. ADR 608's team affinity is what makes two machines safe for the in-process
+Hub. The expand-phase change was real, not staged for the test: main had landed v97
+(`audit_archive`, #2655) and v98 (#2667) since `60cf546`.
+
+1. **Rehearsed on a Neon branch first.** Branch `rehearse-v97-2026-10-15` of staging, migrated with
+   `scripts/cloud/migrate.mjs` on the branch's direct owner URLs: 96 → 97 clean, `audit_archive`
+   present, 121 445 messages intact.
+2. **Deploy under load.** Bench `lb-run45`, 40 humans / 40 agents / 40 viewers, ramp 240 s,
+   duration 900 s, `performance-4x`, whole hub log kept. Three minutes in,
+   `CLOUD_DEPLOY_STRATEGY=rolling node scripts/cloud/deploy.mjs` migrated staging 96 → 98 as the
+   pre-rollout step (22:10:52Z) and began replacing machines one at a time.
+
+| | value |
+| --- | --- |
+| requests (req/s) | 26 149 (29.1) |
+| p50 / p95 / p99 | 296 / 472 / 614 ms |
+| hub status codes | 21 699 × 200, 1 668 × 201, 32 × 302, 8 × 429, 1 × 401, **no 5xx** |
+| bench errors | 91: 65 viewer sockets closed 1006, all 65 back in 2–3 s; 17 network-layer; 8 × 429; 1 × 401 |
+
+- **No refused request.** The 8 429s are `POST /oauth/<team>/register` during the client ramp
+  (the registration rate limit, before the roll began) and the 401 is one interrupt-check; none is
+  the deploy. The old build on machine 2 served the newer schema the whole time, which is what
+  expand/contract promises: 22 928 requests from 22:05 to 22:21Z, every one of them once machine 1
+  stopped passing at 22:11Z.
+- **The rehearsal caught a defect in ADR 608, and the roll stopped at machine 1 of 2.** Fly's
+  checker calls `/health` with `Host: health.musterd.dev`; the affinity code read that host as a
+  team named `health` and the non-owner answered `fly-replay`, so the check never passed. #2675
+  limits HTTP replays to a team named in the path. A failed health gate leaves the app mixed, one
+  machine per build, and that is a safe state: the next deploy finishes the roll.
+- **The second deploy did not reach the roll** (22:24Z): the migrate machine pulled its image in
+  39 s and then stayed `created` for 10 minutes. A Fly host-side stall; `deploy.mjs` timed out and
+  destroyed it, nothing was changed, and staging kept serving. The third deploy (`e695906`, 22:29Z)
+  migrated clean and rolled both machines. Both list each other in `affinity_machines`.
+- **Affinity works live.** Twelve requests for `/teams/lb-run45` through Cloudflare: the non-owner
+  `801650b60e0578` answered all of its share with `307` + `fly-replay`, the owner `8de50dfe952498`
+  served every one, and the client saw only the owner's answer.
+- **The old build refuses to boot.** `fly machine run registry.fly.io/musterd-cloud:git-60cf546b2e2d
+  --rm` with `fly.toml`'s `[env]` passed as `-e`, against the migrated database: `✗ schema newer
+  than this build: database is at schema 98, this build knows 96`, exit 1.
+- **Spec §8 increment 1 acceptance:** item 1 (load) met by runs 40–44; items 2 and 3 (tenancy,
+  loopback audit) landed earlier; item 4 met here. Falsify: a later rolling deploy under load whose
+  hub log holds a 5xx from the deploy window, or an old image that boots against a newer schema.
