@@ -1,4 +1,5 @@
 import {
+  type CiRunBatch,
   type HostProvision,
   type HostProvisionReportBody,
   HostProvisionSchema,
@@ -1488,6 +1489,14 @@ export class HttpClient {
     return (await this.request('POST', `/teams/${slug}/signin-handoff`, body)) as {
       nonce: string;
       expires_in_ms: number;
+    };
+  }
+
+  /** ADR 610: the CI sampler's batch — completed runs read off the forge, deduped by run id. */
+  async sampleCiRuns(slug: string, batch: CiRunBatch): Promise<{ added: number; seen: number }> {
+    return (await this.request('POST', `/teams/${slug}/telemetry/ci-runs`, batch)) as {
+      added: number;
+      seen: number;
     };
   }
 

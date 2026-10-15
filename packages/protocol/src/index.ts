@@ -57,6 +57,7 @@ export * from './lanes.js';
 export * from './seeds.js';
 export * from './autoTarget.js';
 export * from './tool-telemetry.js';
+export * from './ci-telemetry.js';
 export * from './trace.js';
 export * from './hostProvisions.js';
 export * from './traceScrub.js';

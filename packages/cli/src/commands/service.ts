@@ -1878,7 +1878,7 @@ function defaultTeamHolds(parsed: Parsed): TeamHoldsApi {
   };
 }
 
-function serviceSeatAuth(): { http: HttpClient; team: string } | null {
+export function serviceSeatAuth(): { http: HttpClient; team: string } | null {
   const tokenFile = process.env['MUSTERD_SERVICE_TOKEN_FILE'] ?? serviceTokenPath();
   let token: string;
   try {

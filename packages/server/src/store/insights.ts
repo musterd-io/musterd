@@ -23,6 +23,7 @@ import {
   type WakeSeatCost,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { deriveCiTrend } from './ci.js';
 import { actAnswered, openDirectedLedger } from './delivery.js';
 import { undischargedSql } from './discharge.js';
 import { listGoals } from './goals.js';
@@ -968,6 +969,8 @@ export async function deriveReport(
     steering: await deriveSteeringMetrics(db, teamId, now),
     wake,
     tool_calls: await deriveToolCallMetrics(db, teamId, now),
+    // ADR 610: the CI trend, this window beside the last.
+    ci: await deriveCiTrend(db, teamId, now),
     review: await deriveReviewMetrics(db, teamId, now),
     long_deferred: await deriveLongDeferred(db, teamId, teamSlug, now),
     disputes: await deriveDisputes(db, teamId, now),

@@ -728,9 +728,21 @@ export const CATALOG: readonly CommandEntry[] = [
 
   // ── Insight ────────────────────────────────────────────────────────────────────────────────
   {
+    name: 'ci',
+    signature: 'sample [--repo <owner/name>] [--full] [--json]',
+    summary: 'sample the forge’s completed CI runs into the ledger (ADR 610)',
+    group: 'insight',
+    detail:
+      'Reads completed runs of ci.yml through `gh` since the last tick and posts them as ' +
+      '`ci.run_measured` rows; the daemon dedupes by run id. The ci-probe LaunchAgent runs it hourly ' +
+      'as the autorefresh service seat; by hand it runs as you. `--full` ignores the high-water mark ' +
+      'and re-reads the forge’s recent history. `musterd report ci` shows the trend.',
+    examples: ['musterd ci sample', 'musterd ci sample --full'],
+  },
+  {
     name: 'report',
     signature:
-      '[--altitude ic|team|exec] [--json]  |  delivery [<id>]  |  coordination  |  tools  |  review',
+      '[--altitude ic|team|exec] [--json]  |  delivery [<id>]  |  coordination  |  tools  |  review  |  ci',
     summary: 'the insight report — flow metrics, waiting-on, the Goal board',
     group: 'insight',
     primary: true,
@@ -739,7 +751,8 @@ export const CATALOG: readonly CommandEntry[] = [
       '  report delivery [<id>]   the delivery ledger — open directed acts and who has seen/answered them\n' +
       '  report coordination      coordination health — density, time-to-unblock, ignored help, stalls\n' +
       '  report tools             the MCP tool surface — per-tool calls/bounces/latency + rendered weight\n' +
-      '  report review            outcome acceptance (ADR 192) — asks routed, no-counterpart degradations, rejects',
+      '  report review            outcome acceptance (ADR 192) — asks routed, no-counterpart degradations, rejects\n' +
+      '  report ci                the CI trend (ADR 610) — main p50/p90, main-red, PR flake rate, this week beside last',
   },
   {
     name: 'board',

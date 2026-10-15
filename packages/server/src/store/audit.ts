@@ -414,6 +414,9 @@ export type AuditAction =
   // ADR 584: one adapter launch's startup (`{ surface, initialize_ms, tools_list_ms }`, ms of
   // process uptime), once per adapter session on its first telemetry flush. Timings only.
   | 'mcp.startup_measured'
+  // ADR 610: one completed CI run as the sampler read it off the forge (`{ head_sha, branch, event,
+  // attempt, conclusion, duration_ms, jobs }`), keyed by the forge run id. Timings and verdicts only.
+  | 'ci.run_measured'
   // ADR 147 (human-ask-stream, on ADR 145 §3.1): the four lifecycle rows of a to-human `ask`. These
   // shapes only (species/tier/ask_ref/until and the risk/approach the *agent* authored), never bodies
   // (ADR 051). `raised` = an ask was sent (detail `{ species, tier }`); `deferred` = a human replied
@@ -729,6 +732,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'inbox.deferred': 'actor',
   'mcp.surface_rendered': 'actor',
   'mcp.startup_measured': 'actor',
+  'ci.run_measured': 'actor',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',
@@ -1010,6 +1014,8 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'mcp.surface_rendered',
   // ADR 584 — a launch's startup timing, read only by the report's startup block.
   'mcp.startup_measured',
+  // ADR 610 — a CI run's shape, read only by the report's ci block.
+  'ci.run_measured',
 ]);
 
 /** Insert an audit row and surface failure when the caller's transaction requires the evidence. */
