@@ -43,6 +43,14 @@ import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAg
 
 const handlers = new Map<string, McpHttpHandler>();
 const requestResponse = new AsyncLocalStorage<ServerResponse>();
+/**
+ * What the per-request factory threw, if it threw (lane 01M3ZC3G35). The factory runs inside the
+ * SDK, which answers a factory throw with its own bare 500 — so a store that was unreachable or out
+ * of pooled connections while the factory read the team surfaced as a 500, not the 503 REST gives
+ * the same cause (34 of them in the 2026-10-02 load test). The throw is kept here and answered
+ * through the same boundary as every other `/mcp` failure.
+ */
+const factoryFailure = new AsyncLocalStorage<{ err?: unknown }>();
 
 /**
  * Bridge a zod-v3 object schema to what SDK 2.0.0's `registerTool` accepts: the Standard Schema
@@ -410,7 +418,13 @@ async function getHandler(ctx: Ctx, slug: string): Promise<McpHttpHandler> {
     // team count, never by callers. Rehearsal measures the SDK-owned session growth (inc 3).
     handler = createMcpHandler(async (fctx: { requestInfo?: Request }) => {
       if (!fctx.requestInfo) throw new Error('remote MCP factory needs the request');
-      return await buildRemoteServer(ctx, fctx.requestInfo);
+      try {
+        return await buildRemoteServer(ctx, fctx.requestInfo);
+      } catch (err) {
+        const failure = factoryFailure.getStore();
+        if (failure && failure.err === undefined) failure.err = err;
+        throw err;
+      }
     });
     handlers.set(slug, handler);
   }
@@ -596,14 +610,21 @@ export async function handleMcpRoute(
   }
   try {
     const webReq = await toWebRequest(req, path, url, { team: slug, member: memberName });
-    const webRes = await requestResponse.run(res, async () =>
-      (await getHandler(ctx, slug)).fetch(webReq),
+    const failure: { err?: unknown } = {};
+    const webRes = await requestResponse.run(res, () =>
+      factoryFailure.run(failure, async () => (await getHandler(ctx, slug)).fetch(webReq)),
     );
+    if (failure.err !== undefined) {
+      // The SDK's own answer to the factory throw is a bare 500; answer the cause instead.
+      await webRes.body?.cancel().catch(() => {});
+      throw failure.err;
+    }
     await sendWebResponse(res, webRes);
   } catch (err) {
     const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
-    // A factory throw means the seat vanished mid-request; anything else is a 500 with no secret.
+    // A store that is unreachable or out of pooled connections is a 503 with its stable sentence,
+    // as on REST (lane 01M3ZC3G35); anything else is a 500 with no secret.
     if (!res.headersSent) {
       res.writeHead(me.httpStatus, {
         'content-type': 'application/json',

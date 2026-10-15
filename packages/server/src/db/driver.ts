@@ -52,6 +52,7 @@ export type DriverErrorCode =
   | 'not_sqlite'
   | 'closed'
   | 'unavailable'
+  | 'saturated'
   | 'no_tenant_scope';
 
 /**
@@ -60,6 +61,25 @@ export type DriverErrorCode =
  * and banners — never reworded.
  */
 export const DATABASE_UNREACHABLE_SENTENCE = 'database unreachable';
+
+/**
+ * The stable sentence for a store that IS reachable but whose connection pool had no client free
+ * within the acquire timeout: what a `DriverError('saturated')` carries. The 2026-10-02 load test
+ * (lane 01M3ZC3G35) answered 3,565 of these "database unreachable" while Neon served throughout —
+ * the app was starved, not the database out — so the two causes carry two sentences. Never reworded.
+ */
+export const POOL_EXHAUSTED_SENTENCE = 'database pool exhausted';
+
+/**
+ * The stable 503 sentence a store failure carries, or null when it is not an availability failure:
+ * `unavailable` (cannot reach it) and `saturated` (reached, but no pooled client free in time).
+ */
+export function unavailableSentence(err: unknown): string | null {
+  if (!(err instanceof DriverError)) return null;
+  if (err.code === 'unavailable') return DATABASE_UNREACHABLE_SENTENCE;
+  if (err.code === 'saturated') return POOL_EXHAUSTED_SENTENCE;
+  return null;
+}
 
 export class DriverError extends Error {
   constructor(

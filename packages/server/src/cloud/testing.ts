@@ -1,5 +1,6 @@
 import { request } from 'node:http';
 import { vi } from 'vitest';
+import { PG_POOL_ACQUIRE_TIMEOUT } from '../db/pgDriver.js';
 import { openTestDriver, testCloudPools } from '../db/testing.js';
 import { createServer } from '../index.js';
 
@@ -41,19 +42,27 @@ export async function bootCloud(over: Record<string, string> = {}, opts: { fresh
 }
 
 /** A cloud server whose coordination database can be pulled out from under it: `setDown(true)`
- *  refuses every new connection on the main store's pools (app and operator alike). */
+ *  refuses every new connection on the main store's pools (app and operator alike);
+ *  `setExhausted(true)` answers every checkout as pg-pool does when no pooled client came back in
+ *  time — the database is fine, the pool is full (lane 01M3ZC3G35). */
 export async function bootCloudWithOutage() {
   stubCloudEnv();
   const seed = await openTestDriver('pglite');
   await openTestDriver('pglite', { store: 'trace' });
   const pools = (await testCloudPools()).factories;
   let down = false;
+  let exhausted = false;
   const refused = () =>
     Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:5432'), { code: 'ECONNREFUSED' });
   const main = (u: string) => {
     const p = pools.main(u);
     return {
-      connect: () => (down ? Promise.reject(refused()) : p.connect()),
+      connect: () =>
+        down
+          ? Promise.reject(refused())
+          : exhausted
+            ? Promise.reject(new Error(PG_POOL_ACQUIRE_TIMEOUT))
+            : p.connect(),
       end: () => p.end(),
     };
   };
@@ -64,6 +73,7 @@ export async function bootCloudWithOutage() {
     seed,
     url: `http://127.0.0.1:${s.port}`,
     setDown: (v: boolean) => void (down = v),
+    setExhausted: (v: boolean) => void (exhausted = v),
   };
 }
 
