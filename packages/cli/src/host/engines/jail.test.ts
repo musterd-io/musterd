@@ -106,6 +106,12 @@ describe('bashAllowed', () => {
     expect(bashAllowed(command, policy)).toEqual({ ok: true });
   });
 
+  it('ADR 605: the seat cannot read its own key from the Keychain', () => {
+    expect(bashAllowed('security find-generic-password -s musterd:SEAT_KEY -w', policy).ok).toBe(
+      false,
+    );
+  });
+
   it('allows the ADR 106 loop: fast gates, git on a feature branch, gh pr create/merge', () => {
     for (const cmd of [
       'pnpm typecheck && pnpm lint && pnpm format:check',

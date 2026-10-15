@@ -23,6 +23,7 @@ import {
   removeHostEntry,
   upsertHostEntry,
 } from '../host/registry.js';
+import { keychainLookup, seatKeyService } from '../keychain.js';
 import { opencodeCapability } from '../opencodeBin.js';
 import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -476,12 +477,16 @@ async function onCommand(parsed: Parsed): Promise<number> {
   );
   if (keyEnv !== undefined) {
     process.stdout.write(
-      theme.meta(`  key env ${keyEnv} — read by \`musterd host\` at spawn, never stored`) + '\n',
+      theme.meta(
+        `  key env ${keyEnv} — read by \`musterd host\` at spawn (else Keychain ${seatKeyService(keyEnv)}), never stored`,
+      ) + '\n',
     );
-    if (!process.env[keyEnv]) {
+    if (!process.env[keyEnv] && !(await keychainLookup(seatKeyService(keyEnv)))) {
       process.stdout.write(
         theme.warn(
-          `  ! ${keyEnv} is unset in this shell — if \`musterd host\` runs here, every wake of "${seat}" defers until it is set`,
+          `  ! ${keyEnv} is unset in this shell and there is no Keychain item — every wake of "${seat}" defers. ` +
+            `Keep the key out of the user-wide environment (ADR 605): ` +
+            `security add-generic-password -s ${seatKeyService(keyEnv)} -a musterd -w`,
         ) + '\n',
       );
     }

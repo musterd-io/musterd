@@ -17,6 +17,7 @@ import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
+import { keychainLookup } from '../keychain.js';
 import { theme } from '../render/theme.js';
 import { cpuOfTree, cpuTotal, makePerfRecorder } from './broadcast-perf.js';
 import { resolve } from './helpers.js';
@@ -375,15 +376,6 @@ export function makeSecretScrubber(sink: { kind: 'file' | 'rtmp'; target: string
     return rest ? redactSink(rest, sink) : '';
   };
   return push;
-}
-
-/** macOS Keychain lookup (`security find-generic-password -w`); null on any miss/error. */
-export function keychainLookup(service: string): Promise<string | null> {
-  return new Promise((res) => {
-    execFile('security', ['find-generic-password', '-s', service, '-w'], (err, stdout) => {
-      res(err ? null : stdout.trim() || null);
-    });
-  });
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 import { resolveWorkspaceKey } from '@musterd/protocol/project';
 import { HttpClient } from '../../client.js';
 import { findBinding } from '../../config.js';
+import { keychainLookup, seatKeyService } from '../../keychain.js';
 import { localSessionLiveness, type LocalSessionLiveness } from '../../session/liveness.js';
 import type {
   ActuatorBackend,
@@ -113,6 +114,8 @@ export interface NativeDeps {
   readSession?: (workspace: string) => LocalSessionLiveness;
   telemetry?: (server: string, agentKey: string) => TurnTelemetry;
   env?: Record<string, string | undefined>;
+  /** The Keychain read behind an unset key variable (ADR 605; tests never touch the Keychain). */
+  keychain?: (service: string) => Promise<string | null>;
   finalReadDelayMs?: number;
   /** Lease-file seams (ADR 546; tests never touch disk). */
   lease?: WakeLeaseDeps;
@@ -152,10 +155,17 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       }
       // ADR 588 §1: the operator's key, read from the NAMED variable at spawn. Only the name is
       // ever written anywhere (registry, this log line); the value goes to pi and the gateway.
-      const apiKey = spec.key_env !== undefined ? env[spec.key_env] : undefined;
+      // ADR 605: an unset variable falls back to the Keychain item `musterd:<VAR>`, so the key
+      // need not sit in launchd's user-wide environment where every other tool can pick it up.
+      let apiKey = spec.key_env !== undefined ? env[spec.key_env] : undefined;
+      if (spec.key_env !== undefined && !apiKey) {
+        apiKey =
+          (await (deps.keychain ?? keychainLookup)(seatKeyService(spec.key_env))) ?? undefined;
+      }
       if (spec.key_env !== undefined && !apiKey) {
         return deferred(
-          `API key variable ${spec.key_env} is unset on this host — the resident seat cannot run (ADR 588)`,
+          `API key variable ${spec.key_env} is unset on this host and no Keychain item ` +
+            `${seatKeyService(spec.key_env)} — the resident seat cannot run (ADR 588/605)`,
         );
       }
       // The local-session guard, re-checked defensively like every backend: an in-process loop
