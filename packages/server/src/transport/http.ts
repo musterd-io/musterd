@@ -6962,6 +6962,15 @@ export async function handleHttp(
           { leaseless: true },
         );
         assertSeatCanRead(member);
+        // The team's CI history is shared evidence: a service seat (the sampler's tick) or a human
+        // (an operator by hand) may write it. An agent seat may not — a fabricated run row would
+        // be read by every report on the team under the sampler's authority.
+        if (member.kind !== 'service' && member.kind !== 'human')
+          throw new MusterdError(
+            'forbidden',
+            'CI samples are written by a service seat or a human — run `musterd ci sample` as the ' +
+              'autorefresh service seat (the ci-probe tick does) or as yourself',
+          );
         const body = parseOrBadRequest(CiRunBatchSchema, await readJson(req));
         const added = await recordCiRuns(ctx.db, team.id, member.name, body.runs);
         return sendJson(res, 200, { added, seen: body.runs.length - added });

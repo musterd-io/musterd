@@ -867,9 +867,12 @@ async function ciReport(parsed: Parsed): Promise<number> {
   if (ci.current.jobs.length > 0) {
     w(`\n  ${theme.meta('jobs, p50 this window, slowest first:')}\n`);
     const prev = new Map(ci.previous.jobs.map((j) => [j.name, j.p50_ms]));
+    // Job names come from the forge; the schema admits printable ASCII only, and the renderer
+    // strips anything else again rather than trust the wire.
+    const safe = (name: string) => name.replace(/[^\x20-\x7e]/g, '?').slice(0, 32);
     for (const j of ci.current.jobs)
       w(
-        `    ${j.name.padEnd(16)} ${fmtMin(j.p50_ms).padStart(5)}${arrow(j.p50_ms, prev.get(j.name) ?? null)} ${theme.meta(`(${j.runs})`)}\n`,
+        `    ${safe(j.name).padEnd(16)} ${fmtMin(j.p50_ms).padStart(5)}${arrow(j.p50_ms, prev.get(j.name) ?? null)} ${theme.meta(`(${j.runs})`)}\n`,
       );
   }
   w(`\n  ${theme.meta(`sampled through ${new Date(ci.sampled_through).toISOString()}`)}\n`);
