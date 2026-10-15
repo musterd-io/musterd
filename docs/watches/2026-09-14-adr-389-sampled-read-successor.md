@@ -12,7 +12,8 @@ cadence:    read once, at revisit_by
 opened:     2026-09-14
 opened_by:  ryder
 revisit_by: 2026-10-14
-status:     open
+status:     void
+resolution: "unattended — revisit_by passed with nobody reading the series. No verdict."
 ---
 
 Opened by the resolution of `2026-09-05-adr-389-sampled-read.md`, which voided on volume: one row in
