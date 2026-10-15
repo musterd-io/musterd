@@ -246,6 +246,10 @@ describe('the deliver walk is carried by the lane owner (lane 01M4V774MK)', () =
     const body = index.slice(at, index.indexOf("case 'megaphone':", at));
     expect(body).toContain('laneOwners.carrier(ev.lane, ev.from)');
     expect(body).toContain('actors.deliver(carrier, ev.to');
+    // The claim notes its owner only live: a replayed claim is older than the board (lane 01M50TZDDM).
+    expect(claim).toContain('if (!replaying) laneOwners.note(ev.lane, ev.who)');
+    // The board seeds the owners only when it is a new board, not on every roster tick.
+    expect(index).toContain('next.laneOwners !== seededOwners');
     expect(body).not.toContain('actors.deliver(ev.from');
   });
 });
@@ -256,7 +260,8 @@ describe('the accept flourish at the board (spec 2026-10-13 L3)', () => {
     const body = index.slice(at, index.indexOf("case 'walk-deliver':", at));
     // Only a submit names the owner; a done pin by anyone else is an acceptance.
     expect(body).toContain("laneOwners.closedByOther(ev.lane, ev.who)");
-    expect(body).toContain("if (ev.state === 'awaiting_acceptance') laneOwners.note(ev.lane, ev.who)");
+    // …and a replayed submit is older than the board, so it never notes one (lane 01M50TZDDM).
+    expect(body).toContain("if (ev.state === 'awaiting_acceptance' && !replaying) laneOwners.note(ev.lane, ev.who)");
     // The walk's flourish waits for the card to land; the fallback flourishes at once, live only.
     expect(body).toContain('acceptedPins.add(seed)');
     expect(body).toContain('accepted && tempo === 1');

@@ -41,6 +41,19 @@ function replayOnce(h: OfficeHandle | null, ref: MutableRefObject<ReplayOnce>): 
   h.replay(replayEvents(r.envelopes, r.liveIds, Date.now()));
 }
 
+/** lane id → owner, one map per board object, so the scene sees a new reference only when the board
+ *  changes (a roster tick must not re-seed and drop the walks the room just watched). */
+const ownersByBoard = new WeakMap<LaneBoard, ReadonlyMap<string, string>>();
+function laneOwnersOf(board: LaneBoard | null): ReadonlyMap<string, string> | null {
+  if (!board) return null;
+  let owners = ownersByBoard.get(board);
+  if (!owners) {
+    owners = new Map(board.lanes.flatMap((l) => (l.owner_seat ? [[l.id, l.owner_seat] as const] : [])));
+    ownersByBoard.set(board, owners);
+  }
+  return owners;
+}
+
 function computeData(
   teamName: string,
   teamWorkingHours: WorkingHours | null,
@@ -62,6 +75,7 @@ function computeData(
     teamWorkingHours,
     // A stopped plan's cards fade on the wall (lane 01M4V9YKMG) — the Now card's rule, at lane level.
     wallBoard: projectWallBoard(board, stalledLaneIds(board, now)),
+    laneOwners: laneOwnersOf(board),
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
     // already holds, so both surfaces gather without either route wiring anything.
     gathered: [...gatheredFrom(envelopes)],
