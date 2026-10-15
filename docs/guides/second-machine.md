@@ -338,7 +338,13 @@ Append; never rewrite. Dated, with what was measured and what was done about it.
      2026-10-15 (lane `01M41NQ05V`): the actuator logs a seat's deferral once per reason; every
      deferral is still reported to the daemon._
   5. A new session on the joiner reads its inbox before the hub's act is pulled (60 s cadence); the
-     act is there on the second read. Said once to each new seat: "check your inbox".
+     act is there on the second read. Said once to each new seat: "check your inbox". _Closed
+     2026-10-15 (lane `01M50N412S`): the ADR 552 hub doorbell (2026-10-08) pulls when its socket opens
+     and on every `head` poke, so the act arrives in about a second. The 60 s tick only applies while
+     the stream is down._
   6. `bash ~/bootstrap.sh seat lazara codex && musterd lazara` for an already-moved seat is a
-     no-op that prints nothing, which reads as a hang. The step should say "already provisioned".
+     no-op that prints nothing, which reads as a hang. The step should say "already provisioned". _Fixed
+     2026-10-15 (lane `01M50N412S`): a seat already in this machine's host registry, with the same
+     harness and a bound Workspace, is reported "already provisioned", with how to open it. A partial
+     earlier run has no entry and resumes._
 
