@@ -1,15 +1,18 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
 import {
+  describeSeatFileReach,
   makeUnresolvedSeatHook,
   refreshRosterRoot,
   resetRosterRefreshAttempts,
   ROSTER_REFRESH_MIN_INTERVAL_MS,
   type RosterRefreshOutcome,
+  type SeatFileReach,
+  seatFileReach,
 } from './rosterRefresh.js';
 
 /**
@@ -85,6 +88,75 @@ describe('refreshRosterRoot — fast-forward a roster root from its upstream (AD
     expect(r.detail).toMatch(/fast-forward|diverg/i);
     // b's own commit is untouched: nothing was merged, rebased or reset.
     expect(git(b, 'log', '-1', '--format=%s')).toBe('add resident on b');
+  });
+});
+
+describe('seatFileReach — which publishing step a joiner is missing (lane 01M4S7N1HV)', () => {
+  let root: string;
+  let remote: string;
+  let home: string;
+  const rel = join('.musterd', 'seats', 'tj.toml');
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-seatreach-'));
+    remote = join(root, 'remote.git');
+    home = join(root, 'home');
+    execFileSync('git', ['init', '--quiet', '--bare', '-b', 'main', remote]);
+    execFileSync('git', ['clone', '--quiet', remote, home]);
+    git(home, 'config', 'user.email', 't@t');
+    git(home, 'config', 'user.name', 't');
+    mkdirSync(join(home, '.musterd', 'seats'), { recursive: true });
+    writeFileSync(join(home, '.musterd', 'team.toml'), 'slug = "bravo"\n');
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'team');
+    git(home, 'push', '-q', '-u', 'origin', 'main');
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('walks missing → uncommitted → unpushed → pushed as the joiner publishes', async () => {
+    expect(await seatFileReach([home], 'tj')).toEqual({ state: 'missing' });
+    expect(await seatFileReach([], 'tj')).toEqual({ state: 'missing' });
+    // TJ's state on 2026-10-12: the file was written and never added.
+    writeFileSync(join(home, rel), 'kind = "agent"\n');
+    expect(await seatFileReach([home], 'tj')).toEqual({ state: 'uncommitted', root: home });
+    git(home, 'add', rel);
+    expect(await seatFileReach([home], 'tj')).toEqual({ state: 'uncommitted', root: home });
+    git(home, 'commit', '-q', '-m', 'roster: add tj');
+    expect(await seatFileReach([home], 'tj')).toEqual({ state: 'unpushed', root: home });
+    git(home, 'push', '-q');
+    expect(await seatFileReach([home], 'tj')).toEqual({ state: 'pushed', root: home });
+  });
+
+  it('picks the root that holds the file, and says unknown outside a git checkout', async () => {
+    const plain = join(root, 'plain');
+    mkdirSync(join(plain, '.musterd', 'seats'), { recursive: true });
+    writeFileSync(join(plain, rel), 'kind = "agent"\n');
+    expect(await seatFileReach([plain], 'tj')).toEqual({ state: 'unknown', root: plain });
+    writeFileSync(join(home, rel), 'kind = "agent"\n');
+    expect(await seatFileReach([join(root, 'nowhere'), home], 'tj')).toEqual({
+      state: 'uncommitted',
+      root: home,
+    });
+  });
+
+  it('each state names its fix; only `pushed` says to retry', () => {
+    const say = (state: SeatFileReach['state']) =>
+      describeSeatFileReach('tj', { state, ...(state === 'missing' ? {} : { root: '/r' }) });
+    expect(say('missing')).toContain('musterd team add tj --kind agent');
+    expect(say('uncommitted')).toContain(
+      'git -C /r add .musterd/seats/tj.toml && git -C /r commit -m "roster: add tj" && git -C /r push',
+    );
+    expect(say('unpushed')).toContain('git -C /r push');
+    expect(say('pushed')).toMatch(/retry in a minute/);
+    for (const s of ['missing', 'uncommitted', 'unpushed', 'unknown'] as const)
+      expect(say(s)).not.toMatch(/retry in/);
+    expect(say('uncommitted')).toContain('no retry can work');
   });
 });
 

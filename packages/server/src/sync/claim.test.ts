@@ -18,7 +18,7 @@ import { touchAmbientPresence } from '../store/presence.js';
 import { claimWakeLeases, enrollResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
-import { patchAtHub } from './claim.js';
+import { arbitrateLanePatch, ClaimRefusedError, patchAtHub } from './claim.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
 
@@ -447,6 +447,76 @@ withDrivers('claim', (_o, kind) => {
       );
       expect(res.status).toBe(409);
       expect(res.json.error.message).toMatch(/not yet replicated|sync/);
+    });
+  });
+
+  // Lane 01M4S7N1HV (TJ on Air 2, 2026-10-12): a seat whose file never reached the hub's roster was
+  // refused with "the roster reconciles from git; retry". No retry could work — the file was
+  // untracked on the joiner — and once pushed it still waited on a human `git pull` on the hub.
+  describe('lane 01M4S7N1HV — a seat the hub roster lacks: the hub pulls, the joiner says what is missing', () => {
+    it('the joiner relays an unknown_seat refusal with its own sentence after the hub’s, never a bare retry', async () => {
+      const laneId = await laneOnBoth();
+      const tj = await addMember(joiner.store, await joinerTeam(), { name: 'tj', kind: 'human' });
+      const tjOnJoiner = (await mintCredential(joiner.store, tj.row.id)).credential;
+      const res = await patch(
+        joinerBase,
+        `/teams/bravo/lanes/${laneId}`,
+        { owner_seat: 'tj' },
+        tjOnJoiner,
+      );
+      expect(res.status, JSON.stringify(res.json)).toBe(409);
+      expect(res.json.reason).toBe('unknown_seat');
+      expect(res.json.holder).toBeNull();
+      expect(res.json.error.message).toContain(`seat "tj" is not on the hub's roster`);
+      expect(res.json.error.message).toContain('.musterd/seats/tj.toml');
+      expect(res.json.error.message).not.toMatch(/; retry$/);
+      // The joiner's half — one of `describeSeatFileReach`'s sentences — follows the hub's.
+      expect(res.json.error.message).toMatch(/\. (No roster home|On this machine|This machine)/);
+    });
+
+    it('the hub pulls its roster on an unknown seat, and decides the claim once the seat arrived', async () => {
+      const laneId = await laneOnBoth();
+      const team = await hubTeam();
+      const before = (await getLane(hub.store, team.id, laneId, 'bravo'))!;
+      const node = { id: readNodeState().nodes['bravo']!.node_id, label: 'joiner laptop' };
+      const req = {
+        lane: laneId,
+        seat: 'tj',
+        patch: { owner_seat: 'tj' },
+        expect: { owner_seat: before.owner_seat, state: before.state },
+      };
+      // The pull brought nothing: refused with the reason, after exactly one pull for the seat.
+      const pulled: string[] = [];
+      const refused = await arbitrateLanePatch(
+        {
+          ...hubCtx(),
+          onUnresolvedSeat: async (_team, seat) => {
+            pulled.push(seat);
+            return false;
+          },
+        },
+        team,
+        node,
+        req,
+      ).catch((err: unknown) => err);
+      expect(refused).toBeInstanceOf(ClaimRefusedError);
+      expect((refused as ClaimRefusedError).reason).toBe('unknown_seat');
+      expect((refused as ClaimRefusedError).holder).toBeNull();
+      expect(pulled).toEqual(['tj']);
+      // The pull brought tj's file in: the same claim is decided, with no human on the hub.
+      const { lane } = await arbitrateLanePatch(
+        {
+          ...hubCtx(),
+          onUnresolvedSeat: async () => {
+            await addMember(hub.store, team, { name: 'tj', kind: 'agent' });
+            return true;
+          },
+        },
+        team,
+        node,
+        req,
+      );
+      expect(lane).toMatchObject({ id: laneId, owner_seat: 'tj', state: 'claimed' });
     });
   });
 

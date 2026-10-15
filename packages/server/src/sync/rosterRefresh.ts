@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Ctx } from '../context.js';
 import { log } from '../log.js';
@@ -104,6 +106,88 @@ export async function refreshRosterRoots(
   const out: RosterRefreshOutcome[] = [];
   for (const root of roots) out.push(await refreshRosterRoot(root));
   return out;
+}
+
+/**
+ * Where a seat's file stands in this machine's roster checkout (lane 01M4S7N1HV):
+ *  - `missing` — no roster root here holds `.musterd/seats/<seat>.toml`;
+ *  - `uncommitted` — the file is here but git has no commit for it (untracked, staged, ignored);
+ *  - `unpushed` — committed, on no remote-tracking branch;
+ *  - `pushed` — committed and on a remote-tracking branch, so the hub's pull is what is missing;
+ *  - `unknown` — the root is not a git checkout, or git failed; nothing more can be said.
+ */
+export interface SeatFileReach {
+  state: 'missing' | 'uncommitted' | 'unpushed' | 'pushed' | 'unknown';
+  /** The roster root holding the file; absent when `missing`. */
+  root?: string;
+}
+
+/** Read where `seat`'s file stands in the first roster root that holds it. Never throws. */
+export async function seatFileReach(
+  roots: readonly string[],
+  seat: string,
+): Promise<SeatFileReach> {
+  const rel = join('.musterd', 'seats', `${seat}.toml`);
+  const root = roots.find((r) => existsSync(join(r, rel)));
+  if (!root) return { state: 'missing' };
+  try {
+    if ((await git(root, ['rev-parse', '--is-inside-work-tree'])) !== 'true')
+      return { state: 'unknown', root };
+  } catch {
+    return { state: 'unknown', root };
+  }
+  try {
+    await git(root, ['ls-files', '--error-unmatch', '--', rel]);
+  } catch {
+    return { state: 'uncommitted', root };
+  }
+  try {
+    const sha = await git(root, ['log', '-1', '--format=%H', '--', rel]);
+    if (sha === '') return { state: 'uncommitted', root };
+    const remote = await git(root, ['branch', '-r', '--contains', sha]);
+    return { state: remote === '' ? 'unpushed' : 'pushed', root };
+  } catch {
+    return { state: 'unknown', root };
+  }
+}
+
+/**
+ * The joiner's half of an `unknown_seat` refusal: which publishing step is missing on THIS machine,
+ * and the command that does it. The hub cannot see this checkout; "retry" was all it could say, and
+ * on 2026-10-12 a retry could never work — TJ's file was untracked on the joiner.
+ */
+export function describeSeatFileReach(seat: string, reach: SeatFileReach): string {
+  const rel = `.musterd/seats/${seat}.toml`;
+  switch (reach.state) {
+    case 'missing':
+      return (
+        `No roster home on this machine holds ${rel} either, so the seat was never written to the ` +
+        `roster: run \`musterd team add ${seat} --kind agent\` from a folder bound to you, then commit ` +
+        `and push the file`
+      );
+    case 'uncommitted':
+      return (
+        `On this machine ${rel} was never committed, so no retry can work: ` +
+        `git -C ${reach.root} add ${rel} && git -C ${reach.root} commit -m "roster: add ${seat}" && ` +
+        `git -C ${reach.root} push`
+      );
+    case 'unpushed':
+      return (
+        `On this machine ${rel} is committed but not pushed, so no retry can work: ` +
+        `git -C ${reach.root} push`
+      );
+    case 'pushed':
+      return (
+        `On this machine ${rel} is committed and pushed, so the hub has not pulled it yet: retry in ` +
+        `a minute. If the refusal stands, the hub's roster checkout cannot fast-forward — run ` +
+        `\`git pull\` in it on the hub (its log names the root under sync_roster_refresh_failed)`
+      );
+    case 'unknown':
+      return (
+        `This machine could not tell whether ${reach.root}/${rel} reached its remote (not a git ` +
+        `checkout, or git failed) — commit and push it from the roster repo`
+      );
+  }
 }
 
 /** When each (team, seat) stop last triggered a pull, per daemon. */

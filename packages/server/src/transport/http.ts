@@ -523,6 +523,7 @@ import {
 } from '../sync/log.js';
 import { kickSyncPull, peekPullStop, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
+import { describeSeatFileReach, seatFileReach } from '../sync/rosterRefresh.js';
 import { kickSyncStream } from '../sync/streamJoiner.js';
 import {
   recordError,
@@ -5863,6 +5864,7 @@ export async function handleHttp(
               error: { code: 'conflict', message: err.message },
               holder: err.holder,
               state: err.state,
+              ...(err.reason ? { reason: err.reason } : {}),
             });
           }
           if (err instanceof SeatBoundElsewhereError) {
@@ -5901,6 +5903,7 @@ export async function handleHttp(
               error: { code: 'conflict', message: err.message },
               holder: err.holder,
               state: err.state,
+              ...(err.reason ? { reason: err.reason } : {}),
             });
           }
           if (err instanceof SeatBoundElsewhereError) {
@@ -7187,10 +7190,18 @@ export async function handleHttp(
             });
           } catch (err) {
             if (err instanceof ClaimRefusedError) {
+              // Lane 01M4S7N1HV: the hub cannot see this machine's roster checkout, so on an
+              // unknown seat the joiner says which publishing step is missing here, with its fix.
+              let message = err.message;
+              if (err.reason === 'unknown_seat') {
+                const reach = await seatFileReach(ctx.rosterRoots, member.name);
+                message = `${err.message}. ${describeSeatFileReach(member.name, reach)}`;
+              }
               return sendJson(res, 409, {
-                error: { code: 'conflict', message: err.message },
+                error: { code: 'conflict', message },
                 holder: err.holder,
                 state: err.state,
+                ...(err.reason ? { reason: err.reason } : {}),
               });
             }
             if (err instanceof SeatBoundElsewhereError) {

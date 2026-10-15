@@ -229,6 +229,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // wired on the operator ctx the sync loops run under, because reconcile is about every team.
   // A test that passes `rosterRoots: []` gets a hook that answers false at once.
   opCtx.onUnresolvedSeat = makeUnresolvedSeatHook(opCtx);
+  // The hub's claim arbitration runs on the request ctx and pulls on an unknown seat too (lane
+  // 01M4S7N1HV); same hook, same per-seat rate limit, so a fold and a claim never double the pulls.
+  ctx.onUnresolvedSeat = opCtx.onUnresolvedSeat;
   // ADR 533: how the policy review ask is stored and delivered — the daemon's route, daemon-composed.
   const policyReviewSend = async (from: MemberRow, env: Envelope) => {
     const team = (await getTeamBySlug(opDb, env.team))!;
@@ -549,6 +552,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       // Wired to SIGHUP by the daemon bin — the lib never grabs process signals (tests would clash).
       if (!loops.has('roster_watch')) return; // Cloud: no roster files to re-read
       if (!rootsExplicit) ctx.rosterRoots = resolveRosterRoots();
+      // `opCtx` is a copy taken at boot; its roots feed the ADR 592 pull hook, which would
+      // otherwise never pull a roster exported after the daemon started.
+      opCtx.rosterRoots = ctx.rosterRoots;
       const summary = await reconcileAll(opDb, ctx.rosterRoots);
       await broadcastReconciled(ctx, summary);
       await startWatching();
