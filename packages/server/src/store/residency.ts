@@ -254,10 +254,29 @@ function mayReadWakeAct(row: MessageRow, recipient: MemberRow): boolean {
 }
 
 /**
+ * True when this member is already named on a wake lease for the act (any status). The hub
+ * supplied the id, so telling that member gone from unreadable does not leak existence to a
+ * guesser (ADR 600). A caller with no such row stays on ADR 209 §4's uniform forbidden.
+ */
+async function wakeOrderedThisAct(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  actId: string,
+): Promise<boolean> {
+  const row = await db.get<{ one: number }>(
+    'SELECT 1 AS one FROM wake_leases WHERE team_id = ? AND member_id = ? AND act_id = ? LIMIT 1',
+    [teamId, memberId, actId],
+  );
+  return row != null;
+}
+
+/**
  * Derive the bounded orientation packet for one recipient (ADR 209; v2 per ADR 430). It reads
  * canonical rows only and stores nothing. Bodies cross this seam *attributed and budgeted* — the
  * waking thread's recent acts, the recipient's own memory — under `context`; the audit that records
- * the read never carries them. An unauthorized target is indistinguishable from a missing one.
+ * the read never carries them. A guessing caller cannot tell a missing target from one it may not
+ * read. A member a wake lease already names for that act can (ADR 600).
  */
 export async function buildWakeContext(
   db: Driver,
@@ -270,8 +289,13 @@ export async function buildWakeContext(
       team.id,
       request.act_id,
     ]);
-    if (!row || !mayReadWakeAct(row, recipient))
+    if (!row || !mayReadWakeAct(row, recipient)) {
+      const ordered = await wakeOrderedThisAct(db, team.id, recipient.id, request.act_id);
+      if (ordered && !row) throw new MusterdError('not_found', 'wake context act is gone');
+      if (ordered)
+        throw new MusterdError('forbidden', 'wake context act is not readable by this seat');
       throw new MusterdError('forbidden', 'forbidden wake context target');
+    }
     const threadId = row.thread_id ?? row.id;
     const meta = JSON.parse(row.meta ?? '{}') as {
       lane_handoff?: { lane?: string };
@@ -2090,6 +2114,18 @@ async function deriveSeatPasses(
           // an event worth a row on every poll.
           if (!(await laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge))) continue;
         }
+      }
+      // ADR 600: never hand a seat an act_id buildWakeContext would refuse. A missing row is the
+      // same as an unreadable one. Skipping is what stops the re-fire: no lease is minted, so
+      // ADR 434's woke suppression never sees a row. A side message does not discharge the open
+      // ledger (ADR 436 clause 5) and does not itself write that row. A work-order continuation
+      // has no act_id and is not checked here.
+      if (candidate.act_id) {
+        const readable = await db.get<MessageRow>(
+          'SELECT * FROM messages WHERE team_id = ? AND id = ?',
+          [teamId, candidate.act_id],
+        );
+        if (!readable || !mayReadWakeAct(readable, member)) continue;
       }
       pass.plan = { kind: 'candidate', candidate, edge, exhKey };
       break; // one lease per seat per poll

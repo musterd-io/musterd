@@ -302,6 +302,119 @@ withDrivers('residency', (o, kind) => {
         fetch: ['git_artifact'],
       });
     });
+
+    /**
+     * ADR 600. A guessing caller stays on the uniform forbidden (ADR 209 §4). A member already
+     * named on a wake_leases row for that act_id — the hub supplied the id — is told gone from
+     * unreadable. The row is inserted directly: after the mint fix, claimWakeLeases will not
+     * create an unreadable lease to test against.
+     */
+    async function orderedLease(db: Driver, team: TeamRow, member: MemberRow, actId: string) {
+      await db.run(
+        `INSERT INTO wake_leases (id, team_id, member_id, act_id, host, lane, status, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, 'batched', 'reported', 1, 2)`,
+        [`lease-${actId}`, team.id, member.id, actId, HOST],
+      );
+    }
+
+    it('an ordered recipient is told the act is gone (ADR 600)', async () => {
+      const { db, team, ada } = await seed();
+      await orderedLease(db, team, ada, 'gone1');
+      await expect(buildWakeContext(db, team, ada, { act_id: 'gone1' })).rejects.toMatchObject({
+        code: 'not_found',
+        message: expect.stringMatching(/gone/),
+      });
+    });
+
+    it('an ordered recipient is told the act is not readable (ADR 600)', async () => {
+      const { db, team, nick, ada } = await seed();
+      await msg(db, team, nick, null, 'message', 'plain-team', 1_000);
+      await orderedLease(db, team, ada, 'plain-team');
+      await expect(buildWakeContext(db, team, ada, { act_id: 'plain-team' })).rejects.toMatchObject(
+        {
+          code: 'forbidden',
+          message: expect.stringMatching(/not readable/),
+        },
+      );
+    });
+
+    it('a guessing caller still cannot tell missing from unreadable (ADR 600)', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await msg(db, team, nick, ada, 'message', 'secret', 1_000);
+      await expect(buildWakeContext(db, team, bob, { act_id: 'secret' })).rejects.toMatchObject({
+        code: 'forbidden',
+        message: 'forbidden wake context target',
+      });
+      await expect(
+        buildWakeContext(db, team, ada, { act_id: 'no-such-act' }),
+      ).rejects.toMatchObject({
+        code: 'forbidden',
+        message: 'forbidden wake context target',
+      });
+    });
+  });
+
+  describe('claimWakeLeases — an unreadable act_id is never leased (ADR 600)', async () => {
+    it('does not lease a plain @team request_help, and a side message does not re-fire it', async () => {
+      // The open ledger still owes the act (a message discharges nothing, ADR 436 clause 5). What
+      // stops the re-fire is that no lease is minted, so ADR 434's woke row is never written.
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, null, 'request_help', 'team-help', 1_000);
+
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(0);
+      expect(
+        orders.some((o) => o.act_id === 'team-help' || o.composed_line.includes('team-help')),
+      ).toBe(false);
+      const leased = await db.all<{ act_id: string | null }>(
+        'SELECT act_id FROM wake_leases WHERE team_id = ?',
+        [team.id],
+      );
+      expect(leased.map((r) => r.act_id)).not.toContain('team-help');
+
+      await msg(db, team, ada, nick, 'message', 'beside', 2_000);
+      const again = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(again).toHaveLength(0);
+      expect(await countOpenLoops(db)).toBe(1);
+      expect(
+        (await listAudit(db, team.id)).filter((r) => r.action === 'residency.woke'),
+      ).toHaveLength(0);
+    });
+
+    it('keeps the act_id on an eligible-set request_help the named seat can read (ADR 254)', async () => {
+      const { db, team, nick, ada } = await seed();
+      const carol = (await addMember(db, team, { name: 'carol', kind: 'agent' })).row;
+      await enroll(db, team, ada);
+      await enroll(db, team, carol);
+      await msg(db, team, nick, null, 'request_help', 'elig-help', 1_000, {
+        meta: { eligible: ['Ada', 'bob'] },
+      });
+
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.map((o) => o.seat)).toEqual(['Ada']);
+      expect(orders[0]!.act_id).toBe('elig-help');
+      expect(orders[0]!.composed_line).toContain('team_wake_context {act_id: "elig-help"}');
+      expect(await buildWakeContext(db, team, ada, { act_id: 'elig-help' })).toMatchObject({
+        wake: { act_id: 'elig-help' },
+      });
+      await expect(
+        buildWakeContext(db, team, carol, { act_id: 'elig-help' }),
+      ).rejects.toMatchObject({ code: 'forbidden', message: 'forbidden wake context target' });
+    });
+
+    it('skips an unreadable candidate and leases the next readable one', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, null, 'request_help', 'old-help', 1_000);
+      await msg(db, team, nick, ada, 'handoff', 'h-mine', 2_000);
+
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]!.act_id).toBe('h-mine');
+      expect(orders[0]!.composed_line).toContain('team_wake_context {act_id: "h-mine"}');
+      expect(orders[0]!.composed_line).not.toContain('old-help');
+    });
   });
 
   describe('claimWakeLeases — the transactional wake derivation', async () => {
