@@ -50,6 +50,19 @@ describe('registryDrift — the enrollment↔registry cross-check', () => {
     expect(noBinding).toHaveLength(1);
   });
 
+  it('skips a seat the roster binds to another node, even when its host label is ours (lane 01M41NQ05V)', () => {
+    // The hub and the joiner both answer `mac.lan`: on the hub, a joiner seat matched this
+    // machine's label and read as missing from its registry, with a remedy that would re-home it.
+    const both = [
+      { seat: 'izzo', host: 'mac.lan' },
+      { seat: 'dreamy', host: 'mac.lan' },
+    ];
+    const lines = registryDrift(both, [], 'revive', 'mac.lan', () => false, new Set(['dreamy']));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('"izzo"');
+    expect(lines.join('\n')).not.toContain('dreamy');
+  });
+
   it('a vanished workspace and an unprovisioned one are different sentences', () => {
     // Vanished: nothing at the path at all — an abandoned worktree the registry outlived.
     const vanished = registryDrift(enrolled, [entry()], 'revive', 'mac.lan', () => false);

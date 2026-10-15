@@ -151,6 +151,15 @@ export interface HostPollDeps {
   /** Lane 01M4HGY13Z: how many wakes one poll may have spawning and verifying at once (default
    *  {@link HOST_WAKE_CONCURRENCY}). 1 restores the old one-at-a-time actuation. */
   maxConcurrentWakes?: number;
+  /**
+   * Lane 01M41NQ05V: seat → the deferral reason last logged for it, kept across polls by the
+   * actuator. A joiner is handed every hub seat's due wake and defers each — correctly (ADR 393) —
+   * but logged `wake due` + `wake deferred` for all of them every tick, burying the one line about
+   * a seat that lives here (second-machine run 2026-10-03, finding 4). With this map a repeat of the
+   * same deferral is silent; a new reason, or the seat becoming spawnable here, logs again. The
+   * daemon still gets every report. Absent (tests): every deferral logs, as before.
+   */
+  deferralsLogged?: Map<string, string>;
 }
 
 /**
@@ -470,11 +479,22 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
     const actuateOrder = async (order: WakeOrder, releasePrep: () => void): Promise<void> => {
       if (!pending.delete(order)) return; // already handed back by a stop
       orders += 1;
-      deps.log(
-        `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'} ` +
-          `(lease ${order.lease_id})`,
-      );
       const entry = spawnable.get(order.seat);
+      // Not spawnable here: the deferral reason, decided now so a repeat of a logged one is quiet.
+      const registered = entry ? undefined : group.entries.find((e) => e.seat === order.seat);
+      const deferral = entry
+        ? null
+        : registered
+          ? `workspace ${registered.workspace} is missing or has no binding — the registry entry ` +
+            `outlived it; re-run \`musterd residency on --as <admin>\` in the seat's real workspace`
+          : 'seat not in this machine’s host registry — re-run `musterd residency on` in its workspace';
+      const repeat = deferral !== null && deps.deferralsLogged?.get(order.seat) === deferral;
+      if (entry) deps.deferralsLogged?.delete(order.seat);
+      if (!repeat)
+        deps.log(
+          `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'} ` +
+            `(lease ${order.lease_id})`,
+        );
       // Every failed wake is loud HERE, in the one place every outcome funnels through, rather than
       // only on the actuation path. The pre-actuation branches below (no registry entry, dead
       // workspace, no backend) settle the lease and `continue` — before this, they did so with the
@@ -503,14 +523,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         // stale binary. Three of those exhaust the act on a diagnosis that names the wrong thing.
         // ADR 189: same enum the wake pool marks with — dead workspace vs not on this host's
         // registry (cross-machine / never-registered mismatch).
-        const registered = group.entries.find((e) => e.seat === order.seat);
         const wakeability = registered
           ? wakeabilityFromFacts({ enrolled: true, workspace_readable: false })
           : wakeabilityFromFacts({ enrolled: false });
-        const reason = registered
-          ? `workspace ${registered.workspace} is missing or has no binding — the registry entry ` +
-            `outlived it; re-run \`musterd residency on --as <admin>\` in the seat's real workspace`
-          : 'seat not in this machine’s host registry — re-run `musterd residency on` in its workspace';
+        const reason = deferral!;
         // DEFERRED, not failed (lane 01M1J2V4EJ, 2026-09-02; ADR 221's line). Both faults are
         // properties of this machine's bookkeeping — nothing spawned, nothing was paid, and the fix
         // is a local command. Reported as failures they charged `attempt_cap` and `hourly_cap`:
@@ -518,7 +534,8 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         // on a diagnosis that named the wrong thing. A deferral keeps the act due and the seat's
         // budget whole; the explicit log line below keeps the rail loud (`report` is quiet on
         // deferrals by design — that silence is for the local-session guard, not for this).
-        deps.log(`wake deferred: ${order.seat} — ${reason}`);
+        if (!repeat) deps.log(`wake deferred: ${order.seat} — ${reason}`);
+        deps.deferralsLogged?.set(order.seat, reason);
         await report({ occupied: false, deferred: true, wakeability, reason });
         return;
       }

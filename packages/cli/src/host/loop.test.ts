@@ -246,6 +246,36 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
     expect(lines.join('\n')).toMatch(/wake deferred: ghost.*host registry/);
   });
 
+  it('a hub seat deferred every tick logs once, still reports each time, and logs again when the reason changes (lane 01M41NQ05V)', async () => {
+    const deferralsLogged = new Map<string, string>();
+    const lines: string[] = [];
+    let reports = 0;
+    const poll = async (entries: ReturnType<typeof entryOf>[]) => {
+      const { client, calls } = fakeClient([order({ seat: 'ghost', lease_id: `L${reports}` })]);
+      await pollHostOnce(
+        deps({
+          backends: new Map(),
+          loadRegistry: () => ({ entries }),
+          readAgentKey: (ws) => (ws === '/ws/ghost' ? undefined : 'mskey_x'),
+          clientFor: () => client,
+          log: (l) => lines.push(l),
+          deferralsLogged,
+        }),
+      );
+      reports += calls.reports.length;
+    };
+    await poll([entryOf()]);
+    await poll([entryOf()]);
+    await poll([entryOf()]);
+    expect(reports).toBe(3);
+    expect(lines.filter((l) => l.startsWith('wake deferred: ghost'))).toHaveLength(1);
+    expect(lines.filter((l) => l.startsWith('wake due: ghost'))).toHaveLength(1);
+    // The seat gets registered here with a dead workspace: a different fault, so it is said.
+    await poll([entryOf(), entryOf({ seat: 'ghost', workspace: '/ws/ghost' })]);
+    expect(lines.filter((l) => l.startsWith('wake deferred: ghost'))).toHaveLength(2);
+    expect(lines.at(-1)).toMatch(/missing or has no binding/);
+  });
+
   it('a registered seat whose workspace is unreadable DEFERS as enrolled_dead_workspace (ADR 189)', async () => {
     const { client, calls } = fakeClient([order({ seat: 'ghost', lease_id: 'L8' })]);
     const lines: string[] = [];

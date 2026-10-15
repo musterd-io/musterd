@@ -198,6 +198,8 @@ export async function hostCommand(
     ...(parsed.flags['no-gateway'] === true ? { gateway: false as const } : {}),
     log,
     signal: stop.signal,
+    // Lane 01M41NQ05V: one memo for the actuator's life, so a hub seat's deferral logs once.
+    deferralsLogged: new Map(),
     ...(hostLabel !== undefined ? { hostLabel } : {}),
     ...deps,
   };

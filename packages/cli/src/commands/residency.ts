@@ -127,11 +127,18 @@ export function registryDrift(
   team: string,
   hostLabel: string,
   exists: (p: string) => boolean = existsSync,
+  /**
+   * Seats the roster says live on ANOTHER node (ADR 503 `residence`, a node id, never a hostname).
+   * Skipped whatever their host label says: two Macs both answer `mac.lan`, so on the hub every
+   * joiner seat matched this machine's label and read as drift, with a remedy that would re-home it
+   * (second-machine run 2026-10-03, finding 2; lane 01M41NQ05V).
+   */
+  boundElsewhere: ReadonlySet<string> = new Set(),
 ): string[] {
   const myLabels = new Set([hostLabel, ...entries.map((e) => e.host)]);
   const lines: string[] = [];
   for (const r of residency) {
-    if (!myLabels.has(r.host)) continue;
+    if (!myLabels.has(r.host) || boundElsewhere.has(r.seat)) continue;
     const entry = entries.find((e) => e.team === team && e.seat === r.seat);
     if (!entry) {
       lines.push(
@@ -733,7 +740,29 @@ async function statusCommand(parsed: Parsed): Promise<number> {
     process.stdout.write(theme.warn(line) + '\n');
   }
 
-  for (const line of registryDrift(residency, registry.entries, team, hostname())) {
+  // Seats whose residence the roster binds to another node than the answering daemon's own. The
+  // roster read is best-effort: an older daemon without `node`/`residence` skips nothing.
+  const boundElsewhere = new Set<string>();
+  try {
+    const roster = await http.roster(team);
+    const here = roster.node?.id;
+    if (here) {
+      for (const m of roster.members) {
+        const r = m.residence;
+        if (r && (r.kind === 'cloud' || r.node !== here)) boundElsewhere.add(m.name);
+      }
+    }
+  } catch {
+    /* the check degrades to host labels alone, as before */
+  }
+  for (const line of registryDrift(
+    residency,
+    registry.entries,
+    team,
+    hostname(),
+    existsSync,
+    boundElsewhere,
+  )) {
     process.stdout.write(theme.warn(line) + '\n');
   }
   for (const entry of registry.entries.filter((e) => e.team === team)) {
