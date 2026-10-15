@@ -18,7 +18,15 @@
     "2610.13296",
     "2610.13273",
     "2610.13116",
-    "2610.13439"
+    "2610.13439",
+    "2610.18808",
+    "2610.18572",
+    "2610.18538",
+    "2610.18497",
+    "2610.18425",
+    "2610.13494",
+    "2610.13663",
+    "2610.13772"
   ],
   "hf": [
     "2609.02783",
@@ -28,24 +36,11 @@
     "2610.07967",
     "2610.13947"
   ],
-  "exn": [],
+  "exn": [
+    "2609.37226",
+    "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
+  ],
   "pending": [
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13772"
-        }
-      ],
-      "canonicalId": "2610.13772",
-      "title": "MARGoS: A Configuration-Driven Platform for Reproducible MARL Experiments in ARGoS",
-      "url": "https://arxiv.org/abs/2610.13772",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "triage_incomplete"
-    },
     {
       "sourceIds": [
         {
@@ -59,23 +54,7 @@
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13663"
-        }
-      ],
-      "canonicalId": "2610.13663",
-      "title": "A Multi-Agent LLM System for Automated Tuning of Specialized Neural Network Models",
-      "url": "https://arxiv.org/abs/2610.13663",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-15",
       "failure": "triage_incomplete"
     },
     {
@@ -91,7 +70,7 @@
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-15",
       "failure": "triage_incomplete"
     },
     {
@@ -107,23 +86,7 @@
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
-          "id": "2610.13494"
-        }
-      ],
-      "canonicalId": "2610.13494",
-      "title": "Humanize MLE Agents: Multi-Agent Session Alternation Beyond Single-Agent Limits",
-      "url": "https://arxiv.org/abs/2610.13494",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-15",
       "failure": "triage_incomplete"
     },
     {
@@ -139,7 +102,7 @@
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-15",
       "failure": "triage_incomplete"
     },
     {
@@ -155,26 +118,88 @@
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-15",
       "failure": "triage_incomplete"
     },
     {
       "sourceIds": [
         {
-          "source": "exn",
-          "id": "2609.37226"
+          "source": "arxiv",
+          "id": "2610.18861"
         }
       ],
-      "canonicalId": "2609.37226",
-      "title": "Follow the Entities: A Corpus Map for Agentic Search",
-      "url": "https://arxiv.org/html/2609.37226v1",
-      "published": "2026-10-06",
-      "episodeIds": [
-        "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
+      "canonicalId": "2610.18861",
+      "title": "Hybrid Reasoning Agents",
+      "url": "https://arxiv.org/abs/2610.18861",
+      "published": "2026-10-13",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-15",
+      "lastAttempt": "2026-10-15",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.18780"
+        }
       ],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "article_retrieval"
+      "canonicalId": "2610.18780",
+      "title": "BLADE: Auditing Information Use for Failure Attribution in LLM Multi-Agent Systems",
+      "url": "https://arxiv.org/abs/2610.18780",
+      "published": "2026-10-13",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-15",
+      "lastAttempt": "2026-10-15",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.18614"
+        }
+      ],
+      "canonicalId": "2610.18614",
+      "title": "Can an Agent Learn to Predict Its Own Failure? Outcome-Grounded Confidence Calibration in LLM Agents",
+      "url": "https://arxiv.org/abs/2610.18614",
+      "published": "2026-10-13",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-15",
+      "lastAttempt": "2026-10-15",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.18522"
+        }
+      ],
+      "canonicalId": "2610.18522",
+      "title": "Lost in Implicit Routing: How LLM Agents Fail to Load Relevant Skills at Scale",
+      "url": "https://arxiv.org/abs/2610.18522",
+      "published": "2026-10-13",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-15",
+      "lastAttempt": "2026-10-15",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "hf",
+          "id": "2610.14224"
+        }
+      ],
+      "canonicalId": "2610.14224",
+      "title": "Harness^2: Recursive Agent Harnessing for an Open World",
+      "url": "https://huggingface.co/papers/2610.14224",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-15",
+      "lastAttempt": "2026-10-15",
+      "failure": "triage_incomplete"
     }
   ]
 }
