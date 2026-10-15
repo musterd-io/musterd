@@ -49,7 +49,10 @@
         "Routes it to a reader or member who can act, with the lane id and wait time"
       ],
       "checks": {
-        "present_all": ["(?i)read-only|read only|can't send|cannot send|no messages|not able to", "01FAKE7"]
+        "present_all": [
+          "(?i)read-only|read only|can't send|cannot send|no messages|not able to",
+          "01FAKE7"
+        ]
       }
     },
     {
@@ -57,11 +60,11 @@
       "name": "team-which-observer",
       "craft": "team",
       "prompt": "For the demo, I want the audience to watch our board live from their phones. Should we give a seat the observer role for that?",
-      "expected_output": "No: the observer role is a muted roster seat that sees everything a member sees; an audience wants a public-grade observer (a watch-link or `musterd team observe`, ADR 136), which sees only team-wide traffic and emits no presence. Notes confidential asks and private messages must not reach a public view.",
+      "expected_output": "No: the observer role is a muted roster seat that sees everything a member sees; an audience wants a watch link from /live, which mints a public-grade watcher (ADR 136) that sees only team-wide traffic and emits no presence. `musterd team observe` mints a full-grade observer and is the wrong tool for an audience. Notes confidential asks and private messages must not reach a public view.",
       "files": [],
       "expectations": [
         "Says the observer role is the wrong tool for an audience",
-        "Recommends a public watcher (watch-link or observer flag with public grade)",
+        "Recommends a watch link (public grade), and does not offer `musterd team observe` or the dashboard token, which are graded full",
         "Notes that a public view must not show private or confidential content"
       ],
       "checks": {

@@ -126,3 +126,20 @@ product knowledge, not a team fact, so it belongs in the core or a reference.
 | Case | Before: craft · readiness · preferred | After: craft · readiness · preferred |
 | --- | --- | --- |
 | team-which-observer | 2/3 · 5 · without skill | 3/3 · 8 · with skill |
+
+## Run 5 — 2026-10-15, after big-body's send-back of #2681
+
+- **What was wrong:** run 4's fix told an audience to use "a watch link from `/live` or `musterd
+  team observe <name>`, graded public". Only the watch link is public. `team observe` sends no
+  `observer_scope` (`packages/cli/src/commands/team.ts`), so the observer is minted full and reads
+  private messages; the `/live` dashboard's own token is full too (ADR 136). The case's expected
+  answer named the same wrong command, so run 4's 3/3 rewarded a privacy mistake. big-body found it
+  in acceptance.
+- **Fix:** the core recommends only the watch link and says never to hand an audience `team
+  observe` or the dashboard token. Case 4's expected answer and expectation 2 now say the same.
+- **Run:** case 4, `with_skill`, set up as run 4; baseline is run 3's `without_skill` answer;
+  one grader blind to which was which, told the ADR 136 facts.
+
+| Case | With skill: craft · readiness | Without skill: craft · readiness | Grader preferred |
+| --- | --- | --- | --- |
+| team-which-observer | 3/3 · 9 | 2/3 · 4 | with skill |
