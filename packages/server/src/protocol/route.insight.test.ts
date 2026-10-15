@@ -58,6 +58,27 @@ withDrivers('route.insight', (o) => {
       );
     });
 
+    it('rejects an insight with an empty or whitespace-only body (lane 01M50C7QWJ)', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'dawn' });
+      const { row: sender } = await addMember(db, team, { name: 'ghost', kind: 'agent', role: '' });
+
+      for (const body of ['', '   ']) {
+        const env = makeEnvelope({
+          id: ID,
+          team: team.slug,
+          from: sender.name,
+          to: { kind: 'team' },
+          act: 'insight',
+          body,
+          meta: { headline: 'headline with no finding' },
+        });
+        await expect(routeEnvelope(stubCtx(db), team, sender, env)).rejects.toThrowError(
+          new MusterdError('validation', 'act "insight" body must not be empty'),
+        );
+      }
+    });
+
     it('accepts an insight at the cap boundary and counts bytes, not chars', async () => {
       const db = await openStore();
       const team = await createTeam(db, { slug: 'dawn' });
