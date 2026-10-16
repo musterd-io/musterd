@@ -2,6 +2,7 @@ import {
   BUILD_ON_CHECK,
   builtOnLine,
   emptyPoolHint,
+  LANE_REQUESTED_NUDGE,
   laneDetailLines,
   LaneStakesSchema,
   LaneStateSchema,
@@ -9,6 +10,7 @@ import {
   scopeIsHumanVisible,
   type Lane,
   type LaneStakes,
+  type OpenLane,
   type LaneWarning,
 } from '@musterd/protocol';
 import { resolveProject } from '@musterd/protocol/project';
@@ -29,13 +31,13 @@ import { claimSeams, renderClaims } from './laneClaims.js';
 const USAGE =
   'usage:\n' +
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id> [--reason "<why>"]\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
@@ -103,6 +105,10 @@ export function renderLane(l: Lane): string {
   // ADR 561: the issue the lane came from.
   // Stripped: a fold stores what another daemon sent, and a ref names text from outside the team.
   const src = l.source_ref ? theme.meta(` ⌁ ${plainTerminalText(l.source_ref)}`) : '';
+  // ADR 629: who asked, and how strongly. Absent stays off the board line; `lane show` prints it.
+  const asked = l.requested
+    ? theme.meta(` asked:${plainTerminalText(l.requested.by)} (${l.requested.basis})`)
+    : '';
   // ADR 466: a parked lane shows who shelved it and why where an owner would be.
   const parked = l.parked
     ? theme.meta(
@@ -112,7 +118,26 @@ export function renderLane(l: Lane): string {
             : ''),
       )
     : '';
-  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${areas}${src}${surface}${deps}${branch}${parked}`;
+  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${areas}${src}${asked}${surface}${deps}${branch}${parked}`;
+}
+
+/** ADR 629: one of --self, --by, --act, --seed. None means the lane opens with the asker missing. */
+function requestedFromFlags(
+  flags: Parsed['flags'],
+  selfName: string,
+): OpenLane['requested'] | undefined {
+  const self = flags['self'] === true;
+  const by = flagStr(flags, 'by');
+  const act = flagStr(flags, 'act');
+  const seed = flagStr(flags, 'seed');
+  const chosen = [self, by !== undefined, act !== undefined, seed !== undefined].filter(Boolean);
+  if (chosen.length === 0) return undefined;
+  if (chosen.length > 1)
+    throw new CliError('say who asked with one of --self, --by, --act, or --seed', 2);
+  if (self) return { basis: 'self' };
+  if (act !== undefined) return { basis: 'act', ref: act };
+  if (seed !== undefined) return { basis: 'seed', ref: seed };
+  return { by: by!, basis: by === selfName ? 'self' : 'stated' };
 }
 
 function renderWarnings(warnings: LaneWarning[]): void {
@@ -210,6 +235,9 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(flagStr(parsed.flags, 'source-ref') !== undefined
         ? { source_ref: flagStr(parsed.flags, 'source-ref')! }
         : {}),
+      ...(requestedFromFlags(parsed.flags, identity.name) !== undefined
+        ? { requested: requestedFromFlags(parsed.flags, identity.name)! }
+        : {}),
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
         : {}),
@@ -224,6 +252,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(parsed.flags['claim'] === true ? { claim: true } : {}),
     });
     process.stdout.write(`${theme.ok('✓')} lane opened\n${renderLane(res.lane)}\n`);
+    if (!res.lane.requested) process.stdout.write(theme.meta(LANE_REQUESTED_NUDGE) + '\n');
     renderWarnings(res.warnings);
     return 0;
   }
@@ -449,6 +478,9 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       // ADR 561: the issue this lane came from; refused while another live lane holds it.
       ...(flagStr(parsed.flags, 'source-ref') !== undefined
         ? { source_ref: flagStr(parsed.flags, 'source-ref')! }
+        : {}),
+      ...(requestedFromFlags(parsed.flags, identity.name) !== undefined
+        ? { requested: requestedFromFlags(parsed.flags, identity.name)! }
         : {}),
       // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE — a lane stamped with the
       // wrong merge had no way back. Owner or admin only; the daemon refuses a counterpart.

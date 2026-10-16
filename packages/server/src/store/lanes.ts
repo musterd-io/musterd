@@ -8,6 +8,8 @@ import {
   isAwaitingAcceptance,
   LANE_CONTENDING_STATES,
   LANE_TERMINAL_STATES,
+  LaneRequestedSchema,
+  requestedRecordJson,
   resolveStakesDefault,
   type EmptyPool,
   type BuiltOn,
@@ -66,6 +68,8 @@ interface LaneRow {
   unfinished_todos_json: string | null;
   /** The issue this lane came from (ADR 561, v91); null = none. */
   source_ref: string | null;
+  /** Who asked for the lane (ADR 629, v102): JSON `{by, basis, ref?}`; null = missing. */
+  requested_json: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
@@ -87,9 +91,85 @@ function normalizeDeclaredAreas(areas: readonly string[] | null | undefined): st
   return out.length > 0 ? out : null;
 }
 
+function requestedFromJson(raw: string | null): Lane['requested'] {
+  if (!raw) return undefined;
+  try {
+    const parsed = LaneRequestedSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** ADR 629: settle a lane_open / lane_update `requested` into the stored record. */
+async function resolveRequested(
+  db: Driver,
+  teamId: string,
+  actor: string,
+  input: OpenLane['requested'],
+): Promise<Lane['requested']> {
+  if (!input) return undefined;
+  const { by, basis, ref } = input;
+  if (!by && !basis && !ref) return undefined;
+  if (basis === 'self' || (basis === undefined && !ref && (by === undefined || by === actor))) {
+    if (by !== undefined && by !== actor)
+      throw new MusterdError('bad_request', 'a self request names the seat who is writing it');
+    if (ref) throw new MusterdError('bad_request', 'a self request has no act or seed behind it');
+    return { by: actor, basis: 'self' };
+  }
+  if (basis === 'act') {
+    if (!ref) throw new MusterdError('bad_request', 'an act request names the act id');
+    const row = await db.get<{ name: string; act: string }>(
+      `SELECT members.name AS name, messages.act AS act
+         FROM messages JOIN members ON members.id = messages.from_member
+        WHERE messages.team_id = ? AND messages.id = ?`,
+      [teamId, ref],
+    );
+    if (!row) throw new MusterdError('not_found', `no act ${ref}`);
+    if (row.act !== 'steer' && row.act !== 'ask' && row.act !== 'handoff')
+      throw new MusterdError(
+        'bad_request',
+        `act ${ref} is a ${row.act}; who-asked counts a steer, an ask, or a handoff`,
+      );
+    if (by !== undefined && by !== row.name)
+      throw new MusterdError('bad_request', `act ${ref} was sent by ${row.name}, not ${by}`);
+    return { by: row.name, basis: 'act', ref };
+  }
+  if (basis === 'seed') {
+    if (!ref) throw new MusterdError('bad_request', 'a seed request names the seed id');
+    // The column is a member id. The lane record stores the name, which is what `Seed.submitted_by`
+    // already resolved to, so a caller `by` is that name.
+    const row = await db.get<{ name: string }>(
+      `SELECT members.name AS name
+         FROM seeds JOIN members ON members.id = seeds.submitted_by
+        WHERE seeds.team_id = ? AND seeds.id = ?`,
+      [teamId, ref],
+    );
+    if (!row) throw new MusterdError('not_found', `no seed ${ref}`);
+    if (by !== undefined && by !== row.name)
+      throw new MusterdError('bad_request', `seed ${ref} was submitted by ${row.name}, not ${by}`);
+    return { by: row.name, basis: 'seed', ref };
+  }
+  if (basis === 'stated' || (basis === undefined && by !== undefined && !ref)) {
+    if (by === undefined || by === actor)
+      throw new MusterdError(
+        'bad_request',
+        'a stated request names someone other than the seat writing it',
+      );
+    if (ref)
+      throw new MusterdError(
+        'bad_request',
+        'a stated request has no act or seed; use basis act or seed',
+      );
+    return { by, basis: 'stated' };
+  }
+  throw new MusterdError('bad_request', 'say who asked with basis self, stated, act, or seed');
+}
+
 function rowToLane(row: LaneRow, teamSlug: string): Lane {
   const scope = JSON.parse(row.surface_globs) as string[];
   const declaredAreas = row.areas_json ? (JSON.parse(row.areas_json) as string[]) : undefined;
+  const requested = requestedFromJson(row.requested_json);
   return {
     id: row.id,
     team: teamSlug,
@@ -125,6 +205,7 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
       ? { unfinished_todos: JSON.parse(row.unfinished_todos_json) as Lane['unfinished_todos'] }
       : {}),
     ...(row.source_ref ? { source_ref: row.source_ref } : {}),
+    ...(requested ? { requested } : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
@@ -270,6 +351,7 @@ export async function openLane(
       : undefined;
   const stakes = input.stakes ?? rule?.stakes ?? 'normal';
   const declaredAreas = normalizeDeclaredAreas(input.areas);
+  const requested = await resolveRequested(db, teamId, createdBy, input.requested);
   const row: LaneRow = {
     id: ulid(),
     team_id: teamId,
@@ -301,6 +383,7 @@ export async function openLane(
     areas_json: declaredAreas ? JSON.stringify(declaredAreas) : null,
     declined_json: null,
     source_ref: input.source_ref ?? null,
+    requested_json: requestedRecordJson(requested),
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -308,8 +391,8 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
@@ -331,6 +414,7 @@ export async function openLane(
       row.merged_json,
       row.areas_json,
       row.source_ref,
+      row.requested_json,
       row.state,
       row.created_by,
       row.created_at,
@@ -357,6 +441,7 @@ export async function openLane(
       stakes,
       stakes_provenance: row.stakes_provenance ?? 'declared',
       ...(row.source_ref !== null ? { source_ref: row.source_ref } : {}),
+      ...(requested ? { requested } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -637,6 +722,21 @@ async function updateLaneInTx(
       : ownerSeat !== null && ownerSeat !== existing.owner_seat
         ? null
         : (existing.declined ?? null);
+  // ADR 629: fill a missing requester. A different record on a lane that already has one is a 409;
+  // the same value again is a no-op so a retry succeeds. Omitted leaves whatever is stored.
+  let requestedJson = requestedRecordJson(existing.requested);
+  if (patch.requested !== undefined) {
+    const actor = audit?.actor;
+    if (!actor)
+      throw new MusterdError('bad_request', 'recording who asked needs the seat doing it');
+    const settled = await resolveRequested(db, teamId, actor, patch.requested);
+    if (settled) {
+      const nextJson = requestedRecordJson(settled);
+      if (requestedJson !== null && requestedJson !== nextJson)
+        throw new MusterdError('conflict', 'who asked is already recorded on this lane');
+      requestedJson = nextJson;
+    }
+  }
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -668,6 +768,7 @@ async function updateLaneInTx(
     unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
     declined_json: declined !== null ? JSON.stringify(declined) : null,
     source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
+    requested_json: requestedJson,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -722,6 +823,7 @@ async function updateLaneInTx(
     'abandon_reason',
     'unfinished_todos_json',
     'source_ref',
+    'requested_json',
     'claims_json',
     'areas_json',
     'declined_json',
@@ -785,6 +887,7 @@ const AUDITED_LANE_FIELDS = [
   'unfinished_todos',
   'source_ref',
   'declined',
+  'requested',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */
@@ -900,8 +1003,8 @@ export async function countLanesBefore(
  */
 export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane): Promise<boolean> {
   const r = await db.run(
-    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, areas_json, declined_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, areas_json, declined_json, source_ref, requested_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`,
     [
       lane.id,
@@ -929,6 +1032,7 @@ export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane)
         : null,
       lane.declined ? JSON.stringify(lane.declined) : null,
       lane.source_ref ?? null,
+      requestedRecordJson(lane.requested),
       lane.state,
       lane.created_by,
       lane.created_at,

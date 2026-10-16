@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import type { Lane } from '@musterd/protocol';
+import { LANE_REQUESTED_NUDGE, type Lane } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
@@ -428,6 +428,40 @@ describe('lane commands', () => {
       laneCommand(parseArgs(['update', id, '--source-ref', 'ENG-42'])),
     );
     expect(upd.out).toContain('⌁ ENG-42');
+  });
+
+  it('open with nobody named still opens and says how to record who asked (ADR 629)', async () => {
+    const res = await capture(() => laneCommand(parseArgs(['open', 'unnamed'])));
+    expect(res.code).toBe(0);
+    expect(res.out).toContain('lane opened');
+    expect(res.out).toContain(LANE_REQUESTED_NUDGE);
+    expect(res.out).not.toContain('asked:');
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as { lanes: { title: string; requested?: unknown }[] };
+    expect(lanes.find((l) => l.title === 'unnamed')?.requested).toBeUndefined();
+  });
+
+  it('open --self records the caller; --by on a later update states someone else', async () => {
+    const res = await capture(() => laneCommand(parseArgs(['open', 'mine to ask', '--self'])));
+    expect(res.code).toBe(0);
+    expect(res.out).not.toContain(LANE_REQUESTED_NUDGE);
+    expect(res.out).toContain('asked:nick (self)');
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as {
+      lanes: { id: string; title: string; requested?: { by: string; basis: string } }[];
+    };
+    const mine = lanes.find((l) => l.title === 'mine to ask');
+    expect(mine?.requested).toEqual({ by: 'nick', basis: 'self' });
+    const shown = await capture(() => laneCommand(parseArgs(['show', mine!.id])));
+    expect(shown.out).toContain('asked: nick (self)');
+
+    const id = await openLane(['later']);
+    const upd = await capture(() => laneCommand(parseArgs(['update', id, '--by', 'ada'])));
+    expect(upd.code).toBe(0);
+    expect(upd.out).toContain('asked:ada (stated)');
+    await expect(
+      capture(() => laneCommand(parseArgs(['open', 'both', '--self', '--by', 'ada']))),
+    ).rejects.toThrow(/one of --self, --by, --act, or --seed/);
   });
 
   it('renderLane strips control characters from a stored source_ref', () => {

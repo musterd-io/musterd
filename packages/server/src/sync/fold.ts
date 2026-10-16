@@ -5,6 +5,8 @@ import {
   type SyncPullLaneEvent,
   isWireAttestationSource,
   LANE_TERMINAL_STATES,
+  LaneRequestedSchema,
+  requestedRecordJson,
   type LaneState,
   StylePrefsSchema,
 } from '@musterd/protocol';
@@ -152,11 +154,12 @@ async function projectLaneEvent(
     const risk = Array.isArray(d['risk']) ? d['risk'] : [];
     const stakes = typeof d['stakes'] === 'string' ? d['stakes'] : 'normal';
     const provenance = typeof d['stakes_provenance'] === 'string' ? d['stakes_provenance'] : null;
+    const requested = LaneRequestedSchema.safeParse(d['requested']);
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -176,6 +179,7 @@ async function projectLaneEvent(
         // ADR 561: carried, never judged — the fold applies history, so a ref another live lane
         // already holds lands anyway (each daemon refuses at its own write; re-sync names the rest).
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
+        requested.success ? requestedRecordJson(requested.data) : null,
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -270,6 +274,7 @@ async function projectLaneEvent(
         declared_areas: 'areas_json',
         source_ref: 'source_ref',
         declined: 'declined_json',
+        requested: 'requested_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -287,6 +292,14 @@ async function projectLaneEvent(
           field === 'declined'
         )
           value = value === null ? null : JSON.stringify(value);
+        else if (field === 'requested') {
+          if (value === null) value = null;
+          else {
+            const parsed = LaneRequestedSchema.safeParse(value);
+            if (!parsed.success) continue;
+            value = requestedRecordJson(parsed.data);
+          }
+        }
         await db.run(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`, [
           value,
           ts,

@@ -361,6 +361,20 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS declined_json TEXT');
     },
   },
+  {
+    // v102 — ADR 629 (lane 01M4EDCQ2W): who asked for a lane. JSON `{by, basis, ref?}`. Null means
+    // missing, which is not the opener and not "nobody". No backfill: lanes opened before this
+    // stay missing, and the reply on a new open says how to fill the field.
+    version: 102,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('requested_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN requested_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS requested_json TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

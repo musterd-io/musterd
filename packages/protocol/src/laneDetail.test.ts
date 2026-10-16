@@ -176,6 +176,15 @@ describe('laneDetailLines', () => {
       laneDetailLines(detail({ lane: { areas: ['ui', 'docs'], declared_areas: ['ui', 'docs'] } })),
     ).toEqual(['areas: ui, docs (declared)']);
   });
+
+  it('names who asked only when the lane recorded it (ADR 629)', () => {
+    expect(laneDetailLines(detail({ lane: { requested: { by: 'nick', basis: 'self' } } }))).toEqual(
+      ['asked: nick (self)'],
+    );
+    expect(
+      laneDetailLines(detail({ lane: { requested: { by: 'ada', basis: 'act', ref: 'ACT1' } } })),
+    ).toEqual(['asked: ada (act ACT1)']);
+  });
 });
 
 describe('deriveLaneAreas (ADR 582 §3)', () => {

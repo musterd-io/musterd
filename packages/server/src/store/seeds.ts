@@ -605,7 +605,19 @@ async function promote(
     db.tx(async (t) => {
       const current = await requireSeed(t, teamId, seed.id);
       if (current.state === 'promoted') return current;
-      const lane = await openLane(t, teamId, teamSlug, actor.name, { title, detail }, now);
+      const lane = await openLane(
+        t,
+        teamId,
+        teamSlug,
+        actor.name,
+        {
+          title,
+          detail,
+          // ADR 629: the asker is the seed's submitter, not whoever promoted it.
+          requested: { basis: 'seed', ref: seed.id, by: seed.submitted_by },
+        },
+        now,
+      );
       await t.run(
         `UPDATE seeds
        SET state = 'promoted', explorer_id = NULL, linked_lane_id = ?, promotion_kind = ?,

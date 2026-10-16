@@ -365,6 +365,43 @@ withDrivers('fold', (_o, kind) => {
       await db.close();
     });
 
+    it('carries requested on a birth and an update, and skips a record it cannot parse (ADR 629)', async () => {
+      const { db, team } = await seed();
+      const res = await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', {
+          lane: 'L1',
+          title: 'asked',
+          requested: { by: 'nick', basis: 'self' },
+        }),
+        foreignLane('e-2', 2, 2, 'lane.opened', {
+          lane: 'L2',
+          title: 'garbled',
+          requested: { by: 'x' },
+        }),
+        foreignLane('e-3', 3, 3, 'lane.updated', {
+          lane: 'L2',
+          changes: {
+            title: { from: 'garbled', to: 'kept' },
+            requested: { from: null, to: { nope: true } },
+          },
+        }),
+        foreignLane('e-4', 4, 4, 'lane.updated', {
+          lane: 'L2',
+          changes: { requested: { from: null, to: { by: 'ada', basis: 'stated' } } },
+        }),
+      ]);
+      expect(res).toMatchObject({ applied: 4, skipped: 0, stop: null });
+      expect(
+        await db.all('SELECT id, title, requested_json FROM lanes WHERE team_id = ? ORDER BY id', [
+          team.id,
+        ]),
+      ).toEqual([
+        { id: 'L1', title: 'asked', requested_json: '{"by":"nick","basis":"self"}' },
+        { id: 'L2', title: 'kept', requested_json: '{"by":"ada","basis":"stated"}' },
+      ]);
+      await db.close();
+    });
+
     it('blocks on a verb it cannot project — the wire outran the reader', async () => {
       const { db, team } = await seed();
       const res = await foldBatch(db, team.id, [

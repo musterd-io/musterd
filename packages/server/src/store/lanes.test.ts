@@ -28,6 +28,7 @@ import {
 } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
+import { captureRepoSeed } from './seeds.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -1599,6 +1600,181 @@ withDrivers('lanes', (o) => {
       const { db, base } = await twins();
       const other = await createTeam(db, { slug: 'charlie' });
       expect(await resolveLaneRef(db, other.id, base.id.slice(0, 10))).toEqual({ kind: 'none' });
+    });
+  });
+
+  describe('requested — who asked (ADR 629)', () => {
+    async function people() {
+      const { db, team } = await seed();
+      const june = (await addMember(db, team, { name: 'June', kind: 'agent' })).row;
+      return { db, team, june };
+    }
+
+    async function steer(db: Driver, teamId: string, fromId: string, id: string, act: string) {
+      await insertMessage(
+        db,
+        teamId,
+        fromId,
+        null,
+        makeEnvelope({
+          id,
+          team: 'bravo',
+          from: 'June',
+          to: { kind: 'team' },
+          act: act as 'steer',
+          body: 'please',
+          ts: 1,
+        }),
+      );
+    }
+
+    it('opens with the asker missing, and a later self names the seat who fills it', async () => {
+      const { db, team } = await people();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'unnamed' });
+      expect(lane.requested).toBeUndefined();
+      expect(laneFieldDiff(lane, lane).requested).toBeUndefined();
+
+      await expect(
+        updateLane(db, team.id, lane.id, 'bravo', { requested: { basis: 'self' } }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+
+      const filled = await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { requested: { basis: 'self' } },
+        Date.now(),
+        undefined,
+        { actor: 'Cleo' },
+      );
+      expect(filled?.requested).toEqual({ by: 'Cleo', basis: 'self' });
+      expect(laneFieldDiff(lane, filled!).requested).toEqual({
+        from: null,
+        to: { by: 'Cleo', basis: 'self' },
+      });
+      const again = await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { requested: { basis: 'self' } },
+        Date.now(),
+        undefined,
+        { actor: 'Cleo' },
+      );
+      expect(again?.requested).toEqual({ by: 'Cleo', basis: 'self' });
+      await expect(
+        updateLane(
+          db,
+          team.id,
+          lane.id,
+          'bravo',
+          { requested: { by: 'ada', basis: 'stated' } },
+          Date.now(),
+          undefined,
+          { actor: 'Cleo' },
+        ),
+      ).rejects.toMatchObject({ code: 'conflict' });
+    });
+
+    it('records self, stated, an act, and a seed, and refuses the dishonest shapes', async () => {
+      const { db, team, june } = await people();
+      const self = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'self',
+        requested: { by: 'June' },
+      });
+      expect(self.requested).toEqual({ by: 'June', basis: 'self' });
+      const stored = await db.get<{ requested_json: string }>(
+        'SELECT requested_json FROM lanes WHERE id = ?',
+        [self.id],
+      );
+      expect(stored?.requested_json).toBe('{"by":"June","basis":"self"}');
+
+      const stated = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'stated',
+        requested: { by: 'ada' },
+      });
+      expect(stated.requested).toEqual({ by: 'ada', basis: 'stated' });
+
+      await steer(db, team.id, june.id, 'STEER1', 'steer');
+      const fromAct = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'from the steer',
+        requested: { basis: 'act', ref: 'STEER1' },
+      });
+      expect(fromAct.requested).toEqual({ by: 'June', basis: 'act', ref: 'STEER1' });
+      await expect(
+        openLane(db, team.id, 'bravo', 'Cleo', {
+          title: 'wrong sender',
+          requested: { basis: 'act', ref: 'STEER1', by: 'Cleo' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+      await steer(db, team.id, june.id, 'NOTE1', 'message');
+      await expect(
+        openLane(db, team.id, 'bravo', 'Cleo', {
+          title: 'not an ask',
+          requested: { basis: 'act', ref: 'NOTE1' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+      await expect(
+        openLane(db, team.id, 'bravo', 'Cleo', {
+          title: 'missing act',
+          requested: { basis: 'act', ref: 'NOPE' },
+        }),
+      ).rejects.toMatchObject({ code: 'not_found' });
+
+      const idea = await captureRepoSeed(db, team.id, june, {
+        ref: 'docs/idea.md#ask',
+        body: 'please build this',
+      });
+      const fromSeed = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'from the seed',
+        requested: { basis: 'seed', ref: idea.id },
+      });
+      expect(fromSeed.requested).toEqual({ by: 'June', basis: 'seed', ref: idea.id });
+      await expect(
+        openLane(db, team.id, 'bravo', 'Cleo', {
+          title: 'wrong submitter',
+          requested: { basis: 'seed', ref: idea.id, by: 'Cleo' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+
+      await expect(
+        openLane(db, team.id, 'bravo', 'June', {
+          title: 'self about someone else',
+          requested: { basis: 'self', by: 'Cleo' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+      await expect(
+        openLane(db, team.id, 'bravo', 'June', {
+          title: 'stated about yourself',
+          requested: { basis: 'stated', by: 'June' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+      await expect(
+        openLane(db, team.id, 'bravo', 'June', {
+          title: 'self with a ref',
+          requested: { basis: 'self', ref: 'STEER1' },
+        }),
+      ).rejects.toMatchObject({ code: 'bad_request' });
+    });
+
+    it('a snapshot carries requested, and a lane without one stays missing', async () => {
+      const { db, team } = await people();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'source',
+        requested: { by: 'ada', basis: 'stated' },
+      });
+      const copy = { ...lane, id: '01REQAAAAAA000000000000000', title: 'copied' };
+      expect(await insertLaneSnapshot(db, team.id, copy)).toBe(true);
+      expect((await getLane(db, team.id, copy.id, 'bravo'))?.requested).toEqual({
+        by: 'ada',
+        basis: 'stated',
+      });
+      const bare = await openLane(db, team.id, 'bravo', 'June', { title: 'bare' });
+      const bareCopy = { ...bare, id: '01REQBBBBBB000000000000000' };
+      expect(await insertLaneSnapshot(db, team.id, bareCopy)).toBe(true);
+      expect((await getLane(db, team.id, bareCopy.id, 'bravo'))?.requested).toBeUndefined();
     });
   });
 });

@@ -171,7 +171,12 @@ withDrivers('seeds', (o) => {
       expect(replay.linked_lane_id).toBe(first.linked_lane_id);
       expect(first.promotion).toMatchObject({ kind: 'automatic', research_skipped: false });
       expect(await listLanes(db, team.id, team.slug)).toMatchObject([
-        { title: 'Test the idea', detail: 'Ship one bounded experiment', owner_seat: null },
+        {
+          title: 'Test the idea',
+          detail: 'Ship one bounded experiment',
+          owner_seat: null,
+          requested: { by: 'nick', basis: 'seed', ref: seed.id },
+        },
       ]);
     });
 
@@ -203,6 +208,7 @@ withDrivers('seeds', (o) => {
         lane: promoted.linked_lane_id,
         title: 'Test the idea',
         created_by: 'ada',
+        requested: { by: 'nick', basis: 'seed', ref: seed.id },
       });
     });
 
@@ -227,7 +233,11 @@ withDrivers('seeds', (o) => {
       expect(promoted.promotion).toMatchObject({ kind: 'manual', research_skipped: true });
       expect(promoted.linked_lane_id).not.toBeNull();
       expect(await listLanes(db, team.id, team.slug)).toMatchObject([
-        { title: 'A raw idea', owner_seat: null },
+        {
+          title: 'A raw idea',
+          owner_seat: null,
+          requested: { by: 'nick', basis: 'seed', ref: seed.id },
+        },
       ]);
     });
 
