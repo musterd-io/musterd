@@ -25,10 +25,12 @@ describe('console schema (ADR 615)', () => {
       String(SCHEMA_VERSION + 1),
     ]);
     await expect(assertSchema(q, SCHEMA_VERSION)).rejects.toThrow(/schema newer than this build/);
-    const fresh = (await pglite()).q;
-    await expect(assertSchema(fresh, SCHEMA_VERSION)).rejects.toThrow(
-      /schema older than this build/,
-    );
+    // Older: the same database, version rewound — one PGlite per test keeps this inside the
+    // timeout on a loaded machine (a second fresh instance pushed it past 30 s).
+    await q.query("UPDATE console_meta SET value = '0' WHERE key = 'schema_version'", []);
+    await expect(assertSchema(q, SCHEMA_VERSION)).rejects.toThrow(/schema older than this build/);
+    await q.query('DROP TABLE console_meta', []);
+    await expect(assertSchema(q, SCHEMA_VERSION)).rejects.toThrow(/schema older than this build/);
   });
 
   it('migrate refuses a database newer than this build', async () => {
