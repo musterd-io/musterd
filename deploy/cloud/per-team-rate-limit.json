@@ -1,9 +1,9 @@
 {
-  "description": "Per-team request budget (ADR 622). One counter per team host. cf.colo.id is mandatory, so this sheds per data center; the server window is the precise budget.",
+  "description": "Cloud client admission (ADR 634). One counter per team host and source IP per data center; shared-address clients share an allowance. The server applies its sliding window to the trusted edge client address.",
   "expression": "(http.host matches \"(?i)^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.musterd\\.dev$\")",
   "action": "block",
   "ratelimit": {
-    "characteristics": ["cf.colo.id", "http.host"],
+    "characteristics": ["cf.colo.id", "http.host", "ip.src"],
     "period": 60,
     "requests_per_period": 600,
     "mitigation_timeout": 60

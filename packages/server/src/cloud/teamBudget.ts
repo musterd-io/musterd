@@ -1,21 +1,13 @@
-/**
- * Per-team request budget (ADR 622, cloud design §5.4).
- *
- * The key is the team slug. On Cloud every request arrives from the edge, so a peer-IP key is one
- * bucket for every team, or a bucket a caller can rotate. HTTP charges the path team and a
- * WebSocket upgrade charges the host team. They share this map. A global route has no team and is
- * not charged.
- *
- * The check is synchronous. A denial records no hit, so the caller can answer before it checks a
- * client out of the shared pool.
- */
+import type { IncomingMessage } from 'node:http';
+import { ClientAddressSchema } from '@musterd/protocol';
 
-/** Requests admitted per team per window when `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` is unset. */
+/** Cloud admission per (team, client address), shared by HTTP and WS (ADR 634). */
+/** Requests admitted per team and client per window when `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` is unset. */
 export const CLOUD_TEAM_BUDGET_PER_MIN = 600;
 
 export const TEAM_BUDGET_WINDOW_MS = 60_000;
 
-/** Distinct slugs are unbounded. The map is not. Same cap as the OAuth buckets (ADR 446). */
+/** Distinct team/client pairs are unbounded. The map is not. Same cap as the OAuth buckets (ADR 446). */
 export const TEAM_BUDGET_MAX_KEYS = 10_000;
 
 /** No slug: the path is attacker-controlled and may itself be credential-shaped. */
@@ -34,11 +26,16 @@ export function __teamBudgetSizeForTest(): number {
 }
 
 /**
- * True when this request is inside the team's window. A denial prunes expired hits and records
+ * True when this request is inside the team/client window. A denial prunes expired hits and records
  * nothing new.
  */
-export function takeTeamRequest(team: string, limit: number, now = Date.now()): boolean {
-  const key = team.toLowerCase();
+export function takeTeamRequest(
+  team: string,
+  client: string,
+  limit: number,
+  now = Date.now(),
+): boolean {
+  const key = JSON.stringify([team.toLowerCase(), client]);
   const windowStart = now - TEAM_BUDGET_WINDOW_MS;
   const prev = buckets.get(key) ?? [];
   const hits = prev.filter((t) => t > windowStart);
@@ -59,4 +56,20 @@ export function takeTeamRequest(team: string, limit: number, now = Date.now()): 
     }
   }
   return true;
+}
+
+/**
+ * Cloudflare overwrites CF-Connecting-IP. Trust it only in the configured proxy posture, which
+ * requires an origin reachable only through that proxy and no Worker rewriting this header.
+ * Never trust X-Forwarded-For. Missing/malformed metadata falls back to the peer, grouping such
+ * requests conservatively. Addresses select counters only: no authorization and no logging.
+ */
+export function requestBudgetClient(req: IncomingMessage, trustProxy: boolean): string {
+  const edge = trustProxy ? req.headers['cf-connecting-ip'] : undefined;
+  const parsed = ClientAddressSchema.safeParse(typeof edge === 'string' ? edge.trim() : undefined);
+  const address = parsed.success ? parsed.data : req.socket.remoteAddress;
+  const peer = ClientAddressSchema.safeParse(address);
+  if (!peer.success) return 'unknown';
+  // URL canonicalizes equivalent IPv6 spellings; IPv4 is already canonical after schema parsing.
+  return peer.data.includes(':') ? new URL(`http://[${peer.data}]/`).hostname : peer.data;
 }

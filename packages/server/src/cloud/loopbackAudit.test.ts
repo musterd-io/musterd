@@ -39,6 +39,9 @@ const ALLOWED: Record<string, (text: string) => boolean> = {
   'cloud/localTrust.ts': () => true,
   // The OAuth rate-limit KEY (who to count), never an authorization: with trustProxy on it is
   // CF-Connecting-IP instead.
+  // Admission counter fallback only, never loopback authorization (ADR 634).
+  'cloud/teamBudget.ts': (t) =>
+    t === 'const address = parsed.success ? parsed.data : req.socket.remoteAddress;',
   'transport/oauth.ts': (t) => t === "return req.socket.remoteAddress ?? 'unknown';",
 };
 

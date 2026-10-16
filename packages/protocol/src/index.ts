@@ -68,3 +68,4 @@ export * from './traceReport.js';
 export * from './memory.js';
 export * from './integrations.js';
 export * from './governed.js';
+export * from './client-address.js';
