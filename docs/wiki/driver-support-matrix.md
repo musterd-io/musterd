@@ -113,5 +113,7 @@ this — this page only records the fact. The nearest real enum on the wire is `
 - [Model attestation](model-attestation.md) — per-harness observe behavior, measured; linked not duplicated.
 - [Harness statusline seams](harness-statusline-seams.md) — why the `persistent seat indicator` row reads
   as it does: the per-harness survey behind those cells, each verdict dated with its own falsifier.
+- [Harness end-to-end shape](harness-e2e-shape.md) — onboard, wake, resume, meter, doorbell, and
+  idle-wake, one row per harness, read 2026-10-16.
 - `docs/design/harness-residency.md` — residency classes per harness×driver (the closest prior table).
 - ADRs 160, 186 (labeling), 418 (runtime tool-list gate + terminal `label-nudge` silence), 265 (Cursor CLI capture), 021 (driver co-presence).
