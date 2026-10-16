@@ -9,60 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WatchRouteImport } from './routes/watch'
-import { Route as StartRouteImport } from './routes/start'
-import { Route as OfficePreviewRouteImport } from './routes/office-preview'
-import { Route as LiveRouteImport } from './routes/live'
-import { Route as CharacterSheetRouteImport } from './routes/character-sheet'
-import { Route as BroadcastRouteImport } from './routes/broadcast'
-import { Route as BoardRouteImport } from './routes/board'
-import { Route as AuditRouteImport } from './routes/audit'
-import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as ApprovalsRouteImport } from './routes/approvals'
+import { Route as AuditRouteImport } from './routes/audit'
+import { Route as BoardRouteImport } from './routes/board'
+import { Route as BroadcastRouteImport } from './routes/broadcast'
+import { Route as CharacterSheetRouteImport } from './routes/character-sheet'
+import { Route as LiveRouteImport } from './routes/live'
+import { Route as OfficePreviewRouteImport } from './routes/office-preview'
+import { Route as StartRouteImport } from './routes/start'
+import { Route as WatchRouteImport } from './routes/watch'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
-import { Route as JoinTeamRouteImport } from './routes/join.$team'
-import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
+import { Route as JoinTeamRouteImport } from './routes/join.$team'
 
-const WatchRoute = WatchRouteImport.update({
-  id: '/watch',
-  path: '/watch',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StartRoute = StartRouteImport.update({
-  id: '/start',
-  path: '/start',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OfficePreviewRoute = OfficePreviewRouteImport.update({
-  id: '/office-preview',
-  path: '/office-preview',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LiveRoute = LiveRouteImport.update({
-  id: '/live',
-  path: '/live',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CharacterSheetRoute = CharacterSheetRouteImport.update({
-  id: '/character-sheet',
-  path: '/character-sheet',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BroadcastRoute = BroadcastRouteImport.update({
-  id: '/broadcast',
-  path: '/broadcast',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BoardRoute = BoardRouteImport.update({
-  id: '/board',
-  path: '/board',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditRoute = AuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApprovalsRoute = ApprovalsRouteImport.update({
@@ -70,14 +35,44 @@ const ApprovalsRoute = ApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocsIndexRoute = DocsIndexRouteImport.update({
-  id: '/docs/',
-  path: '/docs/',
+const BoardRoute = BoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BroadcastRoute = BroadcastRouteImport.update({
+  id: '/broadcast',
+  path: '/broadcast',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CharacterSheetRoute = CharacterSheetRouteImport.update({
+  id: '/character-sheet',
+  path: '/character-sheet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OfficePreviewRoute = OfficePreviewRouteImport.update({
+  id: '/office-preview',
+  path: '/office-preview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartRoute = StartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WatchRoute = WatchRouteImport.update({
+  id: '/watch',
+  path: '/watch',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
@@ -85,9 +80,14 @@ const BlogIndexRoute = BlogIndexRouteImport.update({
   path: '/blog/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const JoinTeamRoute = JoinTeamRouteImport.update({
-  id: '/join/$team',
-  path: '/join/$team',
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsSlugRoute = DocsSlugRouteImport.update({
@@ -95,9 +95,9 @@ const DocsSlugRoute = DocsSlugRouteImport.update({
   path: '/docs/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/blog/$slug',
-  path: '/blog/$slug',
+const JoinTeamRoute = JoinTeamRouteImport.update({
+  id: '/join/$team',
+  path: '/join/$team',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -227,60 +227,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/watch': {
-      id: '/watch'
-      path: '/watch'
-      fullPath: '/watch'
-      preLoaderRoute: typeof WatchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/start': {
-      id: '/start'
-      path: '/start'
-      fullPath: '/start'
-      preLoaderRoute: typeof StartRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/office-preview': {
-      id: '/office-preview'
-      path: '/office-preview'
-      fullPath: '/office-preview'
-      preLoaderRoute: typeof OfficePreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/live': {
-      id: '/live'
-      path: '/live'
-      fullPath: '/live'
-      preLoaderRoute: typeof LiveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/character-sheet': {
-      id: '/character-sheet'
-      path: '/character-sheet'
-      fullPath: '/character-sheet'
-      preLoaderRoute: typeof CharacterSheetRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/broadcast': {
-      id: '/broadcast'
-      path: '/broadcast'
-      fullPath: '/broadcast'
-      preLoaderRoute: typeof BroadcastRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/board': {
-      id: '/board'
-      path: '/board'
-      fullPath: '/board'
-      preLoaderRoute: typeof BoardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/audit': {
-      id: '/audit'
-      path: '/audit'
-      fullPath: '/audit'
-      preLoaderRoute: typeof AuditRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/approvals': {
@@ -290,18 +241,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApprovalsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/docs/': {
-      id: '/docs/'
-      path: '/docs'
-      fullPath: '/docs/'
-      preLoaderRoute: typeof DocsIndexRouteImport
+    '/board': {
+      id: '/board'
+      path: '/board'
+      fullPath: '/board'
+      preLoaderRoute: typeof BoardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/broadcast': {
+      id: '/broadcast'
+      path: '/broadcast'
+      fullPath: '/broadcast'
+      preLoaderRoute: typeof BroadcastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/character-sheet': {
+      id: '/character-sheet'
+      path: '/character-sheet'
+      fullPath: '/character-sheet'
+      preLoaderRoute: typeof CharacterSheetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/office-preview': {
+      id: '/office-preview'
+      path: '/office-preview'
+      fullPath: '/office-preview'
+      preLoaderRoute: typeof OfficePreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start': {
+      id: '/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/watch': {
+      id: '/watch'
+      path: '/watch'
+      fullPath: '/watch'
+      preLoaderRoute: typeof WatchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog/': {
@@ -311,11 +304,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/join/$team': {
-      id: '/join/$team'
-      path: '/join/$team'
-      fullPath: '/join/$team'
-      preLoaderRoute: typeof JoinTeamRouteImport
+    '/blog/$slug': {
+      id: '/blog/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/$slug': {
@@ -325,11 +325,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/blog/$slug': {
-      id: '/blog/$slug'
-      path: '/blog/$slug'
-      fullPath: '/blog/$slug'
-      preLoaderRoute: typeof BlogSlugRouteImport
+    '/join/$team': {
+      id: '/join/$team'
+      path: '/join/$team'
+      fullPath: '/join/$team'
+      preLoaderRoute: typeof JoinTeamRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
