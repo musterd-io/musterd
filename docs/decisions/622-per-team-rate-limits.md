@@ -23,7 +23,7 @@ tool for a team budget.
 
 1. **Cloud only.** The check runs when `config.cloud` is set. Self-hosted has no cloud block, and
    the budget does not run there.
-2. **The key is the team slug.** HTTP charges `pathTeam` after host isolation and after the
+2. **The key is the team slug.** _(Amended 2026-10-16: [ADR 634](634-cloud-client-admission.md) partitions this early counter by team and client address.)_ HTTP charges `pathTeam` after host isolation and after the
    affinity replay (ADR 608), so a non-owner has already handed the request off and only the owning
    machine counts. A WebSocket upgrade charges `hostTeam` in the same place, on the same map. A
    global route has no path team and is not charged. On Cloud a claim whose team differs from the
@@ -34,10 +34,10 @@ tool for a team budget.
 4. **Over budget is `429` `rate_limited`**, `Retry-After: 60`, message "too many requests for this
    team — retry in a minute". The message does not include the slug. The check is synchronous and
    throws before any store checkout. A denial records no hit.
-5. **An unknown slug still takes a key** before the team is known to exist, so an over-budget scan
+5. _(Amended 2026-10-16: [ADR 634](634-cloud-client-admission.md) bounds team/client keys instead of slug-only keys.)_ **An unknown slug still takes a key** before the team is known to exist, so an over-budget scan
    of one slug never reaches the store. The map holds at most 10,000 keys: expire empty windows,
    then evict the oldest key. Same bound as the OAuth buckets. Those buckets are unchanged.
-6. **The edge half is a checked-in Cloudflare rate limiting rule**,
+6. **The edge half is a checked-in Cloudflare rate limiting rule**, _(Amended 2026-10-16: [ADR 634](634-cloud-client-admission.md) adds `ip.src` to the characteristics.)_
    `deploy/cloud/per-team-rate-limit.json`. Characteristics are `http.host` and the mandatory
    `cf.colo.id`. `cf.colo.id` is not in the expression. `ip.src` is in neither: it would split a
    team by client, or merge teams that share an address. The count is the same 600 per 60 seconds.
@@ -49,6 +49,11 @@ tool for a team budget.
    this decision.
 
 ## Consequences
+
+2026-10-16 — [ADR 634](634-cloud-client-admission.md) replaces the aggregate team counter with
+client admission within each team, retaining early pool shedding. Shared-address clients share a
+window; distributed clients each have an allowance. The checked-in edge rule is updated, not
+deployed by that change.
 
 - One team's over-budget requests return before `connect()`, so they do not hold a pooled client.
   Another team's request still checks a client out.

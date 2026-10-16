@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
-import { request } from 'node:http';
+import { request, type IncomingMessage } from 'node:http';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTestDriver, testCloudPools } from '../db/testing.js';
 import { createServer } from '../index.js';
+import { addMember, mintCredential } from '../store/members.js';
+import { createTeam } from '../store/teams.js';
 import {
   CLOUD_TEAM_BUDGET_PER_MIN,
   TEAM_BUDGET_MAX_KEYS,
@@ -14,8 +16,9 @@ import {
   __resetTeamBudgetForTest,
   __teamBudgetSizeForTest,
   takeTeamRequest,
+  requestBudgetClient,
 } from './teamBudget.js';
-import { stubCloudEnv } from './testing.js';
+import { bootCloud, hostRequest, stubCloudEnv } from './testing.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -25,28 +28,54 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+describe('requestBudgetClient', () => {
+  const req = (headers: Record<string, string | string[]>, peer = '127.0.0.1') =>
+    ({ headers, socket: { remoteAddress: peer } }) as IncomingMessage;
+  it('uses the edge address only in proxy mode and never X-Forwarded-For', () => {
+    expect(requestBudgetClient(req({ 'cf-connecting-ip': '192.0.2.1' }), true)).toBe('192.0.2.1');
+    expect(requestBudgetClient(req({ 'cf-connecting-ip': '192.0.2.1' }), false)).toBe('127.0.0.1');
+    expect(requestBudgetClient(req({ 'x-forwarded-for': '192.0.2.1' }), true)).toBe('127.0.0.1');
+  });
+  it('rejects malformed and repeated edge values and canonicalizes IPv6 spellings', () => {
+    for (const value of [
+      'garbage',
+      '192.0.2.1, 192.0.2.2',
+      'fe80::1%eth0',
+      ['192.0.2.1', '192.0.2.2'],
+    ]) {
+      expect(requestBudgetClient(req({ 'cf-connecting-ip': value }), true)).toBe('127.0.0.1');
+    }
+    expect(requestBudgetClient(req({ 'cf-connecting-ip': '2001:0db8:0:0:0:0:0:1' }), true)).toBe(
+      '[2001:db8::1]',
+    );
+    expect(requestBudgetClient(req({ 'cf-connecting-ip': '2001:db8::1' }), true)).toBe(
+      '[2001:db8::1]',
+    );
+  });
+});
+
 describe('takeTeamRequest', () => {
   it('admits a second team after the first is over its budget', () => {
-    expect(takeTeamRequest('alpha', 1, 0)).toBe(true);
-    expect(takeTeamRequest('alpha', 1, 1)).toBe(false);
-    expect(takeTeamRequest('bravo', 1, 1)).toBe(true);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, 0)).toBe(true);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, 1)).toBe(false);
+    expect(takeTeamRequest('bravo', '192.0.2.1', 1, 1)).toBe(true);
   });
 
   it('folds the slug and does not spend a slot on a denial', () => {
-    expect(takeTeamRequest('Alpha', 1, 0)).toBe(true);
-    expect(takeTeamRequest('alpha', 1, 1)).toBe(false);
-    expect(takeTeamRequest('alpha', 1, 2)).toBe(false);
-    expect(takeTeamRequest('alpha', 1, TEAM_BUDGET_WINDOW_MS + 1)).toBe(true);
-    expect(takeTeamRequest('alpha', 1, TEAM_BUDGET_WINDOW_MS + 2)).toBe(false);
+    expect(takeTeamRequest('Alpha', '192.0.2.1', 1, 0)).toBe(true);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, 1)).toBe(false);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, 2)).toBe(false);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, TEAM_BUDGET_WINDOW_MS + 1)).toBe(true);
+    expect(takeTeamRequest('alpha', '192.0.2.1', 1, TEAM_BUDGET_WINDOW_MS + 2)).toBe(false);
   });
 
   it('keeps at most TEAM_BUDGET_MAX_KEYS keys, and the newest team stays admitted', () => {
     for (let i = 0; i < TEAM_BUDGET_MAX_KEYS; i++)
-      expect(takeTeamRequest(`t${i}`, 1, 1_000)).toBe(true);
+      expect(takeTeamRequest(`t${i}`, '192.0.2.1', 1, 1_000)).toBe(true);
     expect(__teamBudgetSizeForTest()).toBe(TEAM_BUDGET_MAX_KEYS);
-    expect(takeTeamRequest('overflow', 1, 1_000)).toBe(true);
+    expect(takeTeamRequest('overflow', '192.0.2.1', 1, 1_000)).toBe(true);
     expect(__teamBudgetSizeForTest()).toBeLessThanOrEqual(TEAM_BUDGET_MAX_KEYS);
-    expect(takeTeamRequest('overflow', 1, 1_001)).toBe(false);
+    expect(takeTeamRequest('overflow', '192.0.2.1', 1, 1_001)).toBe(false);
   });
 });
 
@@ -56,11 +85,17 @@ interface Reply {
   retryAfter: string | undefined;
 }
 
-function ask(url: string, path: string, host: string): Promise<Reply> {
+function ask(url: string, path: string, host: string, client = '192.0.2.1'): Promise<Reply> {
   const u = new URL(url);
   return new Promise((resolve, reject) => {
     const r = request(
-      { host: u.hostname, port: u.port, path, method: 'GET', headers: { host } },
+      {
+        host: u.hostname,
+        port: u.port,
+        path,
+        method: 'GET',
+        headers: { host, 'cf-connecting-ip': client },
+      },
       (res) => {
         let body = '';
         res.on('data', (c: Buffer) => (body += c.toString()));
@@ -78,12 +113,12 @@ function ask(url: string, path: string, host: string): Promise<Reply> {
   });
 }
 
-function upgrade(port: string, host: string): Promise<string> {
+function upgrade(port: string, host: string, client = '192.0.2.1'): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const sock = net.connect({ host: '127.0.0.1', port: Number(port) }, () => {
       sock.write(
-        `GET /ws HTTP/1.1\r\nHost: ${host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`,
+        `GET /ws HTTP/1.1\r\nHost: ${host}\r\nCF-Connecting-IP: ${client}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`,
       );
     });
     const finish = () => {
@@ -105,6 +140,34 @@ function upgrade(port: string, host: string): Promise<string> {
     });
   });
 }
+
+describe('client admission', () => {
+  it('keeps another client admitted on the same team across HTTP and upgrades', async () => {
+    const { s, seed, url } = await bootCloud({ MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN: '2' });
+    try {
+      const team = await createTeam(seed!, { slug: 'alpha' });
+      const { row } = await addMember(seed!, team, { name: 'ada', kind: 'human', role: '' });
+      const { credential } = await mintCredential(seed!, row.id);
+      // Spend the first client's two slots without any credential.
+      await ask(url, '/teams/alpha/members', 'alpha.musterd.test');
+      await upgrade(String(s.port), 'alpha.musterd.test');
+      expect((await ask(url, '/teams/alpha/members', 'alpha.musterd.test')).status).toBe(429);
+      expect(await upgrade(String(s.port), 'alpha.musterd.test')).toContain('429');
+      const admitted = await hostRequest(url, '/teams/alpha/members', 'alpha.musterd.test', {
+        headers: { authorization: `Bearer ${credential}`, 'cf-connecting-ip': '192.0.2.2' },
+      });
+      expect(admitted.status).toBe(200);
+      expect(await upgrade(String(s.port), 'alpha.musterd.test', '192.0.2.2')).toContain(
+        '101 Switching Protocols',
+      );
+      expect(
+        (await ask(url, '/teams/alpha/members', 'alpha.musterd.test', '192.0.2.2')).status,
+      ).toBe(429);
+    } finally {
+      await s.close();
+    }
+  });
+});
 
 describe('one team over budget does not hold the pool', () => {
   it('returns 429 while an in-budget checkout is still pending, and the other team reaches connect', async () => {
@@ -182,7 +245,7 @@ describe('one team over budget does not hold the pool', () => {
 });
 
 describe('edge rule', () => {
-  it('matches the server budget and keys the team host, with the mandatory colo characteristic', () => {
+  it('keys independent source addresses within each team host and keeps the colo characteristic', () => {
     const rule = JSON.parse(
       readFileSync(join(repoRoot, 'deploy/cloud/per-team-rate-limit.json'), 'utf8'),
     ) as {
@@ -205,8 +268,8 @@ describe('edge rule', () => {
     expect(rule.ratelimit.requests_per_period).toBe(CLOUD_TEAM_BUDGET_PER_MIN);
     expect(rule.ratelimit.period).toBe(60);
     expect(rule.ratelimit.mitigation_timeout).toBe(60);
-    expect(rule.ratelimit.characteristics).toEqual(['cf.colo.id', 'http.host']);
-    expect(rule.ratelimit.characteristics).not.toContain('ip.src');
+    expect(rule.ratelimit.characteristics).toEqual(['cf.colo.id', 'http.host', 'ip.src']);
+
     // The rules language treats `.` as any character, so the suffix's dot is escaped.
     expect(rule.expression).toContain((suffix ?? '').replaceAll('.', String.raw`\.`));
     expect(rule.expression).not.toContain('cf.colo.id');

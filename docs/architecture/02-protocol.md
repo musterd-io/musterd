@@ -388,3 +388,6 @@ export const ContinuityRegistry = z.object({ version:1, team, seat, bindings:Con
 `actMetaRules` is the single place encoding the per-act `meta` requirements from the table above; both server and clients import it so validation is identical everywhere. **Changing any of these schemas requires an ADR** (`00-overview.md` hard rule).
 
 `AuditEntry`/`AuditResponse` (ADR 071/074) are the wire contract for the admin-only `GET /teams/:slug/audit` governance log. `action` is deliberately an **open string** rather than an enum: ADR 071 shapes the table for P3 verbs (`grant.*`, `claim.*`, `account_status.change`, `key.rotate`, `policy.change`, `request.decide`, `governed.*`) that add rows not schema, and the CLI renders unknown verbs plainly instead of rejecting them. The server's internal `AuditAction` union (in `@musterd/server`) is the enumerated write-side type; this protocol schema is the permissive read-side contract.
+
+`client-address.ts` (ADR 634) owns the local transport IP-address schema used to select Cloud
+admission counters. It does not change protocol messages or grant authorization.

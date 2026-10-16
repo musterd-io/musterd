@@ -20,12 +20,12 @@ src/
   config.ts           // env + defaults (port 4849, host, db path, tunable timeouts) + secured-bind guard, scheme, Origin/Host check (ADR 040; a Cloud host suffix makes every <team>.<suffix> a public face); mode + cloud block (cloud/mode.ts) — in cloud trustProxy is forced on and db paths read 'postgres'
   context.ts          // Ctx: the per-server bundle (db, traceDb, hub, affinity (ADR 608, null off Cloud), config, rosterRoots) threaded through routing/transport
   cloud/              // MUSTERD_MODE=cloud (cloud design §5; increment 1C) — every cloud effect keys on config.mode; self-hosted is untouched
-    mode.ts           // CloudConfig + resolveCloudConfig(env): the cloud block (MUSTERD_DATABASE_{APP,OPERATOR}_URL, MUSTERD_TRACE_DATABASE_{APP,OPERATOR}_URL, MUSTERD_CONSOLE_JWKS_URL, MUSTERD_CONSOLE_AUDIENCE, MUSTERD_CLOUD_HOST_SUFFIX); refuses an unknown mode or a missing/malformed variable naming it, never its value (hard rule 5); optional MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN (default 600, ADR 622); postgresUrl(env, name)
+    mode.ts           // CloudConfig + resolveCloudConfig(env): the cloud block (MUSTERD_DATABASE_{APP,OPERATOR}_URL, MUSTERD_TRACE_DATABASE_{APP,OPERATOR}_URL, MUSTERD_CONSOLE_JWKS_URL, MUSTERD_CONSOLE_AUDIENCE, MUSTERD_CLOUD_HOST_SUFFIX); refuses an unknown mode or a missing/malformed variable naming it, never its value (hard rule 5); optional MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN (default 600 per team/client, ADR 634); postgresUrl(env, name)
     localTrust.ts     // trustsLocalPeer(ctx, req): machine-local predicate, false on Cloud (§5.1); locality may bypass actor auth only for agent-seat operations, never human/admin authority
     consoleToken.ts   // §4.3 console tokens: verifyConsoleToken (ES256 compact JWS via node:crypto — shape, then alg, then signature, then claims; aud-bound, ≤60 s, 5 s skew), JwksCache (by kid; a set is trusted 10 min (JWKS_MAX_AGE_MS) then refetched before use — a revoked key stops working within it, and a stale set with the console down fails CLOSED; an unknown kid refetches at most every 30 s; one fetch in flight; a failed fetch backs off 30 s; failure → console_unreachable), jwksFor(url), redeemJti(db, jti, exp) — refuses a token past exp + skew AT REDEMPTION (a slow body reaches it after verification), then one insert into console_token_jti, a duplicate is a replay; rows are pruned on the way in once an hour past their exp (JTI_RETENTION_S), so a prune can never reopen a token
     affinity.ts       // ADR 608 team affinity: ownerFor(slug, machines) (rendezvous hash), decide(team, self, machines, replayed) — local for a global route, when off, when already replayed (`fly-replay-src`), when owner, or when the list omits this machine; Affinity (the cached machine list from Fly's `vms.<app>.internal` TXT, refreshed every 5 s, onLost(teams) when a served team's owner moved), affinityFromEnv (FLY_MACHINE_ID / FLY_APP_NAME), replayHeaders(owner)
     hostIsolation.ts  // §5.3: hostTeam(host, suffix) (one DNS label under the suffix), pathTeam(path) (every route shape that names a team), hostAllows — a team host reaches only its team's routes; the caller answers 404
-    teamBudget.ts     // ADR 622: takeTeamRequest(team, limit) — one 60 s sliding window per team slug, shared by the HTTP path team and the WS host team; default 600/min (MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN); over budget is 429 rate_limited before any store checkout; 10_000 key cap
+    teamBudget.ts     // ADR 634: takeTeamRequest(team, client, limit) — one 60 s sliding window per team/client address, shared by the HTTP path team and the WS host team; default 600/min (MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN); over budget is 429 rate_limited before any store checkout; 10_000 key cap
     health.ts         // §5.5: cloudHealth(db, traceDb) → 200 {ok:true} | 503 {ok:false, reason:"database unreachable" | "database pool exhausted"} — SELECT 1 on both operator handles, nothing about the machine; the reason is unavailableSentence(err) (driver.ts), "database unreachable" for anything else
     loops.ts          // loopsFor(mode): the background loops a server starts — Cloud drops the machine-local ones (roster watch, footprint, federation sync push/pull/trace push, audit retention's file archive). Seeds ingest runs on Cloud since lane 01M3W815KR: its relay pull goes through `getPinned` (resolve, refuse private, pin, no redirect)
     migrate.ts        // §6: migrateCloud(env) — the separate migrate step, as the OWNER (MUSTERD_DATABASE_OWNER_URL, MUSTERD_TRACE_DATABASE_OWNER_URL; the server never reads either); scripts/cloud/migrate.mjs runs it
@@ -437,7 +437,7 @@ changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERA
 `MUSTERD_TRACE_DATABASE_*` twins, `MUSTERD_CONSOLE_JWKS_URL`, `MUSTERD_CONSOLE_AUDIENCE` and
 `MUSTERD_CLOUD_HOST_SUFFIX`, and refuses to start without any of them (naming it, never its value).
 Optional `MUSTERD_PG_POOL_SIZE` sets connections per pool (one pool per role per store; default 10).
-Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` sets the per-team request budget (default 600, ADR 622).
+Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` sets the per-team/client request allowance (default 600, ADR 634).
 
 1. **The store is Postgres.** Both stores are `pgDriver` over the configured URLs; no SQLite file is
    opened. Every statement runs in a stamped transaction; `BEGIN`, `SET LOCAL ROLE` and the tenant
@@ -489,13 +489,17 @@ Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` sets the per-team request budget (d
    `GET /teams/:slug/members`) answer an anonymous caller on a loopback daemon — the projection scopes
    itself to whoever asks, and anonymous there means "on this machine". On Cloud they require a
    credential for the team (`rosterViewer`), so the internet cannot list a team's members.
-8. **Per-team request budget (§5.4, ADR 622).** HTTP charges the path team and a WebSocket upgrade
-   charges the host team, one shared 60-second window, after host isolation and after affinity
-   replay. The default is 600 requests a minute (`MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN`). Over budget
-   is `429 rate_limited` with `Retry-After: 60`, before any store checkout, so one team's flood
-   does not hold the shared pool. Global routes are not charged. The edge half is
-   `deploy/cloud/per-team-rate-limit.json` (one counter per team host, per data center). The OAuth
-   per-IP buckets are unchanged.
+8. **Cloud client admission (§5.4, ADR 634).** HTTP charges the path team and a WebSocket
+   upgrade charges the host team, in a shared 60-second window per team/client address, after host
+   isolation and affinity replay. The default is 600 per client within a team
+   (`MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN`). Over budget is `429 rate_limited` with `Retry-After: 60`
+   before store checkout. Client identity is a validated single `CF-Connecting-IP` value when
+   `trustProxy` is set, otherwise the peer address; malformed/missing values fall back to the peer,
+   and XFF is ignored. Equivalent IPv6 spellings share a key. Trust requires an origin restricted
+   to the proxy path and no Worker rewriting that header. Global HTTP routes are unchanged. The
+   edge artifact `deploy/cloud/per-team-rate-limit.json` keys by host + source IP + colo; checking
+   it in does not deploy it. Shared-address users share an allowance; distributed sources each
+   have one. This replaces ADR 622's aggregate team quota. OAuth per-IP buckets are unchanged.
 
 ## Diagnostics (ADR 016)
 
