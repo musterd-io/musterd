@@ -335,6 +335,29 @@ export const LaneParkSchema = z.object({
 export type LanePark = z.infer<typeof LaneParkSchema>;
 
 /**
+ * ADR 624: how a lane-picker pick reached the daemon, and how strongly "who asked" is proven.
+ * `attested` is true only when the patch's actor IS `requested_by` (a /live handoff from the
+ * signed-in human). A seat claiming for itself — a terminal pick — is never attested; the daemon
+ * refuses one that says so.
+ */
+export const PickSchema = z.object({
+  via: z.enum(['terminal', 'live']),
+  requested_by: z.string().min(1).max(64),
+  attested: z.boolean(),
+  harness: z.string().max(32).optional(),
+  at: z.number().int(),
+});
+export type Pick = z.infer<typeof PickSchema>;
+
+/** ADR 624: the most recent decline — a release that gave a reason. Any later claim clears it. */
+export const LaneDeclinedSchema = z.object({
+  by: z.string(),
+  reason: z.string().max(500),
+  at: z.number().int(),
+});
+export type LaneDeclined = z.infer<typeof LaneDeclinedSchema>;
+
+/**
  * What a closing lane says is left (ADR 487 §5.1): `"none"`, or the lanes that carry the rest — each
  * an existing lane in any state. Answered on `lane_submit` / `lane_resolve`; optional, and refused
  * as missing only when {@link leftoverSignal} finds the lane declares itself one part of several.
@@ -532,6 +555,9 @@ export const LaneSchema = z.object({
   state: LaneStateSchema,
   /** Present iff `state === 'parked'` (ADR 466). Optional (like `kind`) so older daemons and fixtures stay assignable; absent reads as not parked. */
   parked: LaneParkSchema.nullable().optional(),
+  /** ADR 624: the latest decline (a release with a reason), shown by the lane picker. Optional like
+   *  `parked`, so older daemons and fixtures stay assignable; absent reads as none. */
+  declined: LaneDeclinedSchema.nullable().optional(),
   /**
    * ADR 487: what the close said is left — `"none"` or the lanes carrying the rest. Optional and
    * nullable (like `parked`): absent or null reads as none, so older daemons stay assignable.
@@ -759,6 +785,12 @@ export const UpdateLaneSchema = z.object({
    * Mirrors `park_reason`. Required on an abandoned lane named in another lane's `follows_up`.
    */
   abandon_reason: z.string().min(1).max(280).optional(),
+  /** ADR 624: a lane-picker pick — meaningful only on a patch that sets `owner_seat`; recorded on
+   *  `lane.claimed`. */
+  pick: PickSchema.optional(),
+  /** ADR 624: why the seat is giving the lane back — only on a release to `open`; becomes
+   *  `declined` on the lane. */
+  release_reason: z.string().min(1).max(500).optional(),
   /**
    * ADR 487 §5.2: replace the lane's unfinished to-do snapshot with these titles (the harness hook
    * sends the whole list, last write wins); an empty list clears it. The daemon stamps `at`.
