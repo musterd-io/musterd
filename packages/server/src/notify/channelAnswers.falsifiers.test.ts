@@ -39,6 +39,16 @@ describe('consumers enforce assurance (ADR 618 §5)', () => {
   it.todo('an A1 answer to a consult sets no authorized_by');
 });
 
+describe('shared Slack ingress and tenancy (spec: Slack ingress)', () => {
+  it.todo('a request field cannot select the ingress destination: only the install mapping does');
+  it.todo(
+    'a payload naming another team or enterprise id is dispatched only to its mapped destination',
+  );
+  it.todo('a receiver refuses a payload with a missing or invalid ingress attestation');
+  it.todo('one team daemon credential, object or Slack install cannot read or answer another team');
+  it.todo('a flood from one team does not starve another team');
+});
+
 describe('kill switch and audit (ADR 618 §7-§8)', () => {
   it.todo(
     'the kill switch revokes every binding generation and outstanding token without the relay',
