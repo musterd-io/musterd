@@ -12,6 +12,7 @@ import {
   type HarnessAdapter,
   type ObservedFragment,
 } from '../onboard/reconcile/fragments.js';
+import { CLAUDE_BRIDGE, roleSkillFragments } from '../onboard/roleSkills.js';
 import { deltaLine, harnessCommand } from './harness.js';
 
 let cwd: string;
@@ -429,6 +430,72 @@ describe('musterd harness status', () => {
     const { code, out } = await run(['status'], { ctx: ctxOf(), registry: [a] });
     expect(code).toBe(1);
     expect(out).toContain('not selected');
+  });
+
+  it('a seat with a role and no bridge shows role-skill.<skill> as needs wire', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'musterd-harness-roster-'));
+    const prevConfig = process.env['MUSTERD_CONFIG'];
+    process.env['MUSTERD_CONFIG'] = join(machineRoot, 'config.json');
+    try {
+      writeFileSync(
+        join(machineRoot, 'config.json'),
+        JSON.stringify({ rosterHome: { alpha: home } }),
+      );
+      mkdirSync(join(home, '.musterd', 'seats'), { recursive: true });
+      writeFileSync(
+        join(home, '.musterd', 'seats', 'slippy.toml'),
+        'kind = "agent"\nrole = "designer"\n',
+      );
+      mkdirSync(join(cwd, '.agents', 'skills', 'designer'), { recursive: true });
+      writeFileSync(
+        join(cwd, '.agents', 'skills', 'designer', 'SKILL.md'),
+        '---\nname: designer\ndescription: Owns what people see.\n---\n\n# designer\n',
+      );
+      mkdirSync(join(cwd, '.musterd'), { recursive: true });
+      writeFileSync(
+        join(cwd, '.musterd', 'workspace.json'),
+        JSON.stringify({
+          version: 2,
+          server: 'http://localhost:4849',
+          team: 'alpha',
+          claim: { mode: 'seat', name: 'slippy' },
+        }),
+      );
+      writeFileSync(
+        join(cwd, '.musterd', 'binding.json'),
+        JSON.stringify({
+          version: 2,
+          server: 'http://localhost:4849',
+          team: 'alpha',
+          claim: { mode: 'seat', name: 'slippy' },
+        }),
+      );
+      writeV3Provisioning(['claude-code']);
+      const a = fakeAdapter('claude-code');
+      const entry = a.desiredFragments.bind(a);
+      a.desiredFragments = async (ctx) => [
+        ...(await entry(ctx)),
+        ...roleSkillFragments(
+          ctx,
+          'claude-code',
+          CLAUDE_BRIDGE,
+          `folder ${ctx.worktreeRoot} claude-code-role-skills`,
+        ),
+      ];
+      a.observe = async (_ctx, intent) =>
+        intent.fragmentKey.startsWith('role-skill.')
+          ? { state: 'absent' }
+          : { state: 'present', fingerprint: intent.fingerprint };
+      // No injected ctx: status must resolve the seat's skills itself.
+      const { code, out } = await run(['status'], { registry: [a] });
+      expect(code).toBe(1);
+      expect(out).toContain('role-skill.designer');
+      expect(out).toMatch(/role-skill\.designer\s+folder\s+→ needs wire/);
+    } finally {
+      if (prevConfig === undefined) delete process.env['MUSTERD_CONFIG'];
+      else process.env['MUSTERD_CONFIG'] = prevConfig;
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('--json exposes the same stable fields', async () => {

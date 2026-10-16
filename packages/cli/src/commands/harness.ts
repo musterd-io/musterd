@@ -25,6 +25,7 @@ import {
   type HarnessInspection,
 } from '../onboard/reconcile/engine.js';
 import { registryOrder, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
+import { withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
 import { renderConfigureReceipt, verdictOf } from './harnessVerdict.js';
 
@@ -74,7 +75,10 @@ function localState(deps?: HarnessDeps): LocalState {
       : isRecord(workspace.kind === 'legacy' ? workspace.value : null)
         ? String((workspace as { value: Record<string, unknown> }).value['team'] ?? '')
         : '';
-  const ctx = deps?.ctx ?? defaultHarnessContext(cwd, process.env, { team });
+  // Role-skill bridges resolve from the seat the same way `wire` does (ADR 586 §4). A context
+  // that never sets `roleSkills` plans no `role-skill.*` fragment, so a seat provisioned before
+  // those bridges existed showed a clean status while the skill was absent.
+  const ctx = withRoleSkills(deps?.ctx ?? defaultHarnessContext(cwd, process.env, { team }));
   return {
     ctx,
     workspace,

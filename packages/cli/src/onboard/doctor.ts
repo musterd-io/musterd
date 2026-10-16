@@ -47,7 +47,13 @@ import { classifyPrimerTarget } from './primer.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
 import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
-import { roleSkillNotes } from './roleSkills.js';
+import {
+  absentRoleSkillFragments,
+  roleSkillNeedsWireNote,
+  roleSkillNotes,
+  roleSkillWireSentence,
+  withRoleSkills,
+} from './roleSkills.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -617,18 +623,23 @@ async function planEntries(
   cwd: string,
   desired: readonly string[],
   team: string,
-): Promise<Map<string, EntryPlan>> {
+): Promise<{ plans: Map<string, EntryPlan>; roleSkillLines: string[] }> {
   const plans = new Map<string, EntryPlan>();
-  if (desired.length === 0) return plans;
+  const roleSkillLines: string[] = [];
+  if (desired.length === 0) return { plans, roleSkillLines };
   try {
-    const ctx = defaultHarnessContext(cwd, process.env, { team });
+    const ctx = withRoleSkills(defaultHarnessContext(cwd, process.env, { team }));
     for (const h of await inspectHarnesses(ctx, desired)) {
       plans.set(h.harness, entryPlanOf(h.fragments.find((f) => f.fragmentKey === 'mcp.musterd')));
+      for (const f of h.fragments) {
+        const note = roleSkillNeedsWireNote(h.harness, f.fragmentKey, f.planned);
+        if (note) roleSkillLines.push(note);
+      }
     }
   } catch {
-    return new Map();
+    return { plans: new Map(), roleSkillLines: [] };
   }
-  return plans;
+  return { plans, roleSkillLines };
 }
 
 export async function inspectProvisioning(
@@ -719,8 +730,10 @@ export async function inspectProvisioning(
   // What a reconciler would ACTUALLY do to each entry, asked rather than inferred. `wire.ts` has
   // carried the note that this predicate belongs on `inspectHarnesses` since ADR 281; inferring it
   // is what let the doctor prescribe a reconciler that plans nothing (see `EntryPlan`).
-  const entryPlans =
-    deps?.entryPlans ?? (await planEntries(cwd, desiredHarnesses, binding?.team ?? ''));
+  const planned = deps?.entryPlans
+    ? { plans: deps.entryPlans, roleSkillLines: [] as string[] }
+    : await planEntries(cwd, desiredHarnesses, binding?.team ?? '');
+  const entryPlans = planned.plans;
   // Entry drift: the shared harness entry disagrees with this folder's binding.json. Tracked
   // separately from `drift` so `--fix` can route it to `musterd wire` (headless, whole-family)
   // instead of `musterd init` (mints a member, trips the bound guard, steals the shared slot).
@@ -1134,6 +1147,7 @@ export async function inspectProvisioning(
       ...labelNotes,
       ...sessionReachWallNotes(harnesses.filter((h) => h.configured).map((h) => h.label)),
       ...packagedInstallNotes(),
+      ...planned.roleSkillLines,
     ],
     anyConfigured,
   };
@@ -1415,6 +1429,27 @@ export function inspectArtifactDrift(cwd: string): {
 }
 
 /**
+ * One bounded session-start line when a harness already provisioned in this folder is missing a
+ * role-skill bridge (ADR 586 §4). File reads only — no `detect()`, no mutation lease (ADR 408).
+ * Empty when there is nothing to say. Never throws.
+ */
+export function roleSkillWireLine(cwd: string): string {
+  try {
+    const provisioning = loadProvisioning(cwd);
+    if (provisioning.kind !== 'valid') return '';
+    const team = findBinding(cwd)?.team ?? '';
+    const ctx = defaultHarnessContext(cwd, process.env, { team });
+    const keys = absentRoleSkillFragments(ctx, provisioning.value.desired, (id) => {
+      const harness = HARNESSES.find((item) => item.id === id);
+      return harness?.refreshHooks?.applies(cwd) ?? false;
+    });
+    return roleSkillWireSentence(keys);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * `musterd init --check-build`: the SessionStart probe (ADR 135 build skew + ADR 171 artifact drift).
  *
  * **Why the flag is still called `--check-build`.** It now reports more than the build, and the
@@ -1485,6 +1520,10 @@ export async function runSessionProbe(deps?: {
     // reads .mcp.json itself, but its folder may also be provisioned for Codex or OpenCode.
     const mirrored = describeMirror(await (deps?.mirror ?? mirrorRepoServers)(cwd));
     if (mirrored) process.stdout.write(`${mirrored}\n`);
+    // A missing role-skill bridge is not guidance and not a hook, so self-heal does not write it
+    // (ADR 408: no reconciler, no lease). The same absence status prints as `→ needs wire`.
+    const bridge = roleSkillWireLine(cwd);
+    if (bridge) process.stdout.write(`${bridge}\n`);
   } catch {
     // A health probe never fails a session start, and never invents drift from a folder it cannot read.
   } finally {
