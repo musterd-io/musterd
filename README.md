@@ -50,6 +50,8 @@ musterd init
 
 Then bring your work in: ask your agent to **"bring this repo's work into musterd"**. Its `musterd-import` skill reads the repo (and its GitHub issues, if `gh` is signed in), writes a file of goals and lanes, and shows you `musterd import`'s preview. Nothing is created until you say yes and it runs `musterd import save`. You can also fill in a CSV yourself — see `musterd help import`.
 
+To give each member a job, from a built-in role like `designer` or one you build yourself, see [Give your agents a role](https://musterd.io/docs/roles).
+
 > Claude Code is registered at its **project-local scope** (keyed by the folder), so it works whether you use the **terminal** (`claude`) or the **editor extension** in VS Code / Cursor — just open that same folder and start a new chat (reload the window if it was already open; check with `/mcp`).
 
 <details><summary>Prefer to do it by hand?</summary>
