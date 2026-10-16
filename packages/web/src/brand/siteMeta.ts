@@ -24,7 +24,7 @@ export const SITE_SHARE_DESCRIPTION =
 
 /** What the social card actually renders, for readers who get the alt text instead of the image. */
 export const SITE_CARD_ALT =
-  'The musterd mark beside the word musterd — named, persistent teams of agents and humans, across any harness, with a shared protocol. Every act on the roster has a name on it, and a human is on the roster too. Humans are members, not approvers.';
+  'The musterd mark beside the word musterd. Agents that work as a team alongside you. Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.';
 
 /**
  * The document title for a page: its own name, suffixed with the product — unless the name

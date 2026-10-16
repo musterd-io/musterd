@@ -5,9 +5,8 @@
   the command in README.md here and never hand-edit the PNG. Until 2026-09-16 the card existed
   only as a PNG from a Figma export (docs/design/figma-brief-brand.md), which is the same trap the
   one-slide fell into: copy three weeks behind the positioning decision with nobody able to fix it.
-  Copy is derived, not invented: the one-liner is brand.md §1 verbatim; the accent line is the
-  ADR 320 §5a compression (2026-09-16) — a name on every act, a human on the same roster — with
-  README Principle 1 kept as its second half. Voice: brand.md §4. Palette: brand.md §2 (zinc-900
+  Copy is derived, not invented: the headline is the brand.md §1 tagline and the paragraph under it
+  is the brand.md §1 subhead, both verbatim (ADR 563, 2026-10-12). Voice: brand.md §4. Palette: brand.md §2 (zinc-900
   ground, mustard-500 accent). The lockup is the mark (ADR 497, ../../design/assets/chip.svg) beside the word. 1200×630. Self-contained: no network, no font files, no build step.
 -->
 <html lang="en">
@@ -35,12 +34,13 @@
   .lockup img { width: 96px; height: 96px; display: block; }
   .word { font-size: 64px; font-weight: 700; letter-spacing: 0; line-height: 1; }
   .word b { color: var(--accent); font-weight: 700; }
-  .line { font-size: 30px; line-height: 1.45; color: var(--muted); max-width: 640px; margin: 0; }
-  .accent { font-size: 18px; line-height: 1.5; color: var(--accent); margin: 0; max-width: 760px; }
+  .line { font-size: 58px; font-weight: 700; line-height: 1.2; color: var(--ink); max-width: 1000px; margin: 0; }
+  .line b { color: var(--accent); font-weight: 700; }
+  .sub { font-size: 21px; line-height: 1.55; color: var(--muted); margin: 0; max-width: 1000px; }
 </style>
 <div class="card">
   <div class="lockup"><img src="../../design/assets/chip.svg" alt="" /><div class="word">muster<b>d</b></div></div>
-  <p class="line">Named, persistent teams of<br />agents and humans —<br />across any harness,<br />with a shared protocol.</p>
-  <p class="accent">every act on the roster has a name on it,<br />and a human is on the roster too.<br />humans are members, not approvers.</p>
+  <p class="line">Agents that work as a team<br /><b>alongside you.</b></p>
+  <p class="sub">Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.</p>
 </div>
 </html>
