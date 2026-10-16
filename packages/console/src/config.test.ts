@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveConsoleConfig } from './config.js';
+import { buildFromFlyImage, resolveConsoleConfig } from './config.js';
 
 const base = {
   MUSTERD_CONSOLE_DATABASE_URL: 'postgres://console_app:s3cretpw@db.test/console',
@@ -58,6 +58,26 @@ describe('resolveConsoleConfig (ADR 615)', () => {
     } catch (e) {
       expect(String(e)).toContain('MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID');
       expect(String(e)).not.toContain('cf-tok');
+    }
+  });
+
+  it('falls back to the Fly image label when the dist stamp is null', () => {
+    const img = 'registry.fly.io/musterd-console:git-6fd7aca44986';
+    expect(resolveConsoleConfig({ ...base, FLY_IMAGE_REF: img }).build).toBe('6fd7aca44986');
+    expect(resolveConsoleConfig({ ...base, FLY_IMAGE_REF: img }, 'a'.repeat(40)).build).toBe(
+      'a'.repeat(40),
+    );
+    expect(resolveConsoleConfig(base).build).toBeNull();
+  });
+
+  it('reads the git-<sha> label with a digest, and nothing else', () => {
+    const digest = `@sha256:${'e'.repeat(64)}`;
+    expect(buildFromFlyImage(`registry.fly.io/musterd-cloud:git-60cf546b2e2d${digest}`)).toBe(
+      '60cf546b2e2d',
+    );
+    expect(buildFromFlyImage(undefined)).toBeNull();
+    for (const label of ['', 'deployment-01K2ABC', 'git-main', 'git-6fd7aca44986x']) {
+      expect(buildFromFlyImage(`registry.fly.io/musterd-console:${label}`)).toBeNull();
     }
   });
 

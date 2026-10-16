@@ -109,13 +109,17 @@ tokens or sessions (nick, 2026-10-15).
 console's secrets never include a team database URL. The provisioning steps are in
 [cloud-ops](../guides/cloud-ops.md).
 
+The image is built without `.git`, so its `dist/build.json` stamp is `ref: null`. `/health` then
+reports the 12-character sha from the image label deploy.mjs pushed (`git-<sha>`), which Fly
+exposes to the machine as `FLY_IMAGE_REF`.
+
 ## File tree `packages/console/src/`
 
 ```
 src/
   accounts.ts     // accountFor(db, identity, now): the account an identity (provider, subject) belongs to, or a new one — never by email; null when disabled; methodsOf(account)
   audit.ts        // appendAudit(db, {action, requestId, actorAccountId, detail}, now): one INSERT; detail goes through log.ts's redact, so no secret lands in audit
-  bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
+  bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL; the /health build is the dist stamp, else the FLY_IMAGE_REF git-<sha> label (the image has no .git)
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
   csrf.ts         // csrfTokenFor(sid) (sha256 of the session id, base64url), csrfTokenValid (constant time), originAllowed (exactly the issuer; missing or null refused)
   clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16; bucketOf keys IPv6 by its /64

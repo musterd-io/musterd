@@ -17,7 +17,8 @@ export interface ConsoleConfig {
   allowedHosts: string[];
   host: string;
   port: number;
-  /** Build commit stamped by `pnpm build` (ADR 130); `/health` carries it, nothing else. */
+  /** Build commit stamped by `pnpm build` (ADR 130), else the Fly image's `git-<sha>` label;
+   *  `/health` carries it, nothing else. */
   build: string | null;
   /**
    * OAuth clients (ADR 620). A provider is enabled only when both its id and secret are set; an
@@ -49,6 +50,22 @@ function url(env: Env, name: string, protocols: string[]): URL {
   return u;
 }
 
+/**
+ * The commit a Fly machine's image was built from, read from `FLY_IMAGE_REF`. The Docker build has
+ * no `.git` (`.dockerignore`), so `stamp-build.mjs` writes `ref: null` inside it. Fly sets
+ * `FLY_IMAGE_REF` on every machine, and `scripts/cloud/deploy.mjs` labels each image `git-<sha>`
+ * (12 hex chars), e.g. `registry.fly.io/musterd-console:git-6fd7aca44986`, possibly followed by an
+ * `@sha256:` digest. Any other label, such as a hand-run `fly deploy`'s `deployment-…`, is null.
+ */
+export function buildFromFlyImage(imageRef: string | undefined): string | null {
+  const m = /:git-([0-9a-f]{7,40})(?:@|$)/.exec(imageRef?.trim() ?? '');
+  return m?.[1] ?? null;
+}
+
+/**
+ * `build` is the dist's own stamp (ADR 135), null when it has none. Inside the Fly image it is
+ * always null, so `/health` falls back to the image label in `FLY_IMAGE_REF`.
+ */
 export function resolveConsoleConfig(env: Env, build: string | null = null): ConsoleConfig {
   url(env, 'MUSTERD_CONSOLE_DATABASE_URL', ['postgres:', 'postgresql:']);
   const issuerUrl = url(env, 'MUSTERD_CONSOLE_ISSUER', ['https:', 'http:']);
@@ -100,6 +117,6 @@ export function resolveConsoleConfig(env: Env, build: string | null = null): Con
     allowedHosts: [...new Set([issuerUrl.host.toLowerCase(), ...extra])],
     host: env['MUSTERD_CONSOLE_HOST']?.trim() || '0.0.0.0',
     port,
-    build,
+    build: build ?? buildFromFlyImage(env['FLY_IMAGE_REF']),
   };
 }
