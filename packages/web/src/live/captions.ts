@@ -28,8 +28,10 @@ export interface Caption {
   tone: CaptionTone;
 }
 
-/** Plain-sentence caption for a notable act — `null` for everything that should stay quiet. */
-export function captionFor(env: Envelope): Caption | null {
+/** Plain-sentence caption for a notable act — `null` for everything that should stay quiet. `answered`
+ *  is the act an accept replies to (`meta.in_reply_to`), when the page holds it: an accept alone cannot
+ *  say whether it closed a lane, picked an option or took a handoff (lane 01M51E333V). */
+export function captionFor(env: Envelope, answered?: Envelope): Caption | null {
   const from = env.from;
   /**
    * Who the act is for, as a phrase the sentence can drop in.
@@ -52,8 +54,7 @@ export function captionFor(env: Envelope): Caption | null {
     case 'handoff':
       return to ? say(`${from} is handing work to ${to}`, 'handoff') : null;
     case 'accept':
-      // The recipient is whose work was accepted — same rule as the confetti (mapping.ts).
-      return to ? say(`${from} accepted ${to}'s work — it's done`, 'accept') : null;
+      return to ? say(acceptLine(env, from, to, answered), 'accept') : null;
     case 'steer':
       return say(`${from} is redirecting ${to ?? 'the team'}`, 'steer');
     case 'request_help':
@@ -99,3 +100,21 @@ export function tickCaption(s: CaptionRail, now: number): CaptionRail {
   const [head, ...rest] = s.queue;
   return { current: head ?? null, shownAt: now, queue: rest };
 }
+
+/**
+ * What an accept accepted, in words (lane 01M51E333V). "accepted X's work — it's done" is a claim that a
+ * lane was accepted, so it is said only when that is what happened: the answered ask was a lane review,
+ * or the accept carries a verdict's claims (a peer's acceptance, readable even when the ask is out of
+ * the window). A choice names its option; anything the page cannot see is a plain yes.
+ */
+function acceptLine(env: Envelope, from: string, to: string, answered: Envelope | undefined): string {
+  const picked = /^([A-Z]|\d{1,2}) — /.exec(env.body ?? '');
+  if (picked) return `${from} chose ${picked[1]} on ${to}'s question`;
+  if (answered?.meta?.['lane_review'] || Array.isArray(env.meta?.['claims']))
+    return `${from} accepted ${to}'s work — it's done`;
+  if (answered?.act === 'handoff') return `${from} took on ${to}'s handoff`;
+  if (answered?.act === 'request_help') return `${from} is helping ${to}`;
+  if (answered?.act === 'ask') return `${from} approved ${to}'s ask`;
+  return `${from} said yes to ${to}`;
+}
+
