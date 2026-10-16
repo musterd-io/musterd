@@ -832,6 +832,14 @@ export function spendCapUsd(policy: Policy): number | null {
 }
 
 /**
+ * ADR 635. The team's per-wake gateway approval threshold in USD, or null when nobody set one.
+ * Null leaves today's gateway behavior. Never coerce a missing key to 0.
+ */
+export function spendApprovalUsd(policy: Policy): number | null {
+  return policy.spend_approval_usd ?? null;
+}
+
+/**
  * The wait a `lane_review` ask at `tier` promises on this team (ADR 506): the tier's own timeout,
  * floored at the team's `acceptance_review_window_ms`. Every ready row and reroute records this.
  */

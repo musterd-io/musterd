@@ -1351,6 +1351,39 @@ withDrivers('insights', (o) => {
       expect(under.wake?.spend_over_cap).toBe(false);
     });
 
+    it('deriveReport copies the per-wake approval threshold only when set (ADR 635)', async () => {
+      const { db, team, nick, ada } = await wakeSeed();
+      const unset = await deriveReport(db, team.id, 'revive', NOW);
+      expect(unset.wake).not.toHaveProperty('spend_approval_usd');
+
+      await setPolicy(db, team.id, { spend_approval_usd: 12.5 });
+      const quiet = await deriveReport(db, team.id, 'revive', NOW);
+      expect(quiet.wake?.spend_approval_usd).toBe(12.5);
+      // The weekly cap is a different comparison. This key does not invent spend_over_cap.
+      expect(quiet.wake).not.toHaveProperty('spend_over_cap');
+      expect(await deriveWakeMetrics(db, team.id, NOW)).not.toHaveProperty('spend_approval_usd');
+
+      await directed(db, team, nick, ada, 'handoff', 'h1', NOW - 60 * 60_000);
+      await residencyRow(
+        db,
+        team.id,
+        'residency.woke',
+        'ada',
+        { act: 'h1', lease_id: 'L1', cost_usd: 40 },
+        NOW - 50 * 60_000,
+      );
+      const priced = await deriveReport(db, team.id, 'revive', NOW);
+      expect(priced.wake?.cost_usd_total).toBeCloseTo(40);
+      expect(priced.wake?.spend_approval_usd).toBe(12.5);
+      expect(priced.wake).not.toHaveProperty('spend_over_cap');
+
+      await setPolicy(db, team.id, { spend_approval_usd: 12.5, spend_cap_usd: 50 });
+      const withCap = await deriveReport(db, team.id, 'revive', NOW);
+      expect(withCap.wake?.spend_approval_usd).toBe(12.5);
+      expect(withCap.wake?.spend_cap_usd).toBe(50);
+      expect(withCap.wake?.spend_over_cap).toBe(false);
+    });
+
     // The ADR 209/210 Eval split. The property that matters is NOT the counts — it is that an
     // unmeasured cohort stays distinguishable from a measured-zero one. Every wake in the real ledger
     // on 2026-08-04 predated ADR 209 and reported no delivery; if that rendered as `0 fresh`, a

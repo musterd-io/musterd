@@ -447,6 +447,11 @@ export const WakeMetricsSchema = z.object({
   /** Priced `cost_usd_total` is at or above `spend_cap_usd`. Omitted together with the cap. */
   spend_over_cap: z.boolean().optional(),
   /**
+   * ADR 635. Copied from team policy so the report can show the per-wake gateway threshold
+   * without an admin policy read. Omitted when unset. Display only. Nothing is held.
+   */
+  spend_approval_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
+  /**
    * ADR 252: wakes that PAID for a session and left no price. `residency.wake_cost` is written only
    * when a host reports, so a lease that spawned a session and then expired unreported contributes
    * nothing to the totals above and reads as free. This counts those leases — identified by the

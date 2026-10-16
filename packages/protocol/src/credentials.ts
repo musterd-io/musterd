@@ -236,6 +236,13 @@ export const PolicySchema = z.object({
    */
   spend_cap_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
   /**
+   * ADR 635. Per-wake gateway threshold in USD. No default: absent leaves today's gateway
+   * behavior, and 0 is not a stand-in for absent. Display only in this lane. The gateway
+   * read is lane 01M531H8WGX270MZRR5KN08XPS. Finite, greater than 0, at most
+   * {@link SPEND_CAP_USD_MAX}.
+   */
+  spend_approval_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
+  /**
    * Sponsor-hosted agents (ADR 463 §2). `max_per_host` bounds live enrolled sponsored seats per
    * host label; `policy` is the residency override every provisioned seat enrolls with. `budget_usd`
    * inside it is REQUIRED for a provision to go ready — checked at claim, not here, so `parse({})`

@@ -106,15 +106,19 @@ Decline stops further calls on it. The team cap still holds new wakes.
 
 ## Delivery
 
-1. This spec. Decided 2026-10-16: option A.
-2. After that pick: the policy key and a report line when the key is set. No hold yet.
-   The key is a protocol field, so the build lane writes its own ADR. Depends on this
-   decided spec.
-3. The hold, the ask, and the audit row, on the path the decision names. Depends on step 2.
-   For A or B that path is the gateway. For C it is the wake-lease poll.
+1. This spec. Decided 2026-10-16: option A. Lane `01M4SB4CJPTCSCYK3X8KGY2W33`.
+2. The policy key and a report line when the key is set. Lane
+   `01M531GZGV8WRTNXWM32SPACK3`. The key is a protocol field.
+   [ADR 635](../../decisions/635-spend-approval-display.md). The gateway holds nothing in
+   this lane.
+3. The hold, the ask, and the audit row on the gateway. Lane
+   `01M531H8WGX270MZRR5KN08XPS`. Depends on step 2.
 
 ## Testing
 
+- Display lane `01M531GZGV8WRTNXWM32SPACK3`: an unset key omits the report field and the
+  line. A set key prints `approval $N per wake` and `display only`, and leaves
+  `spend_over_cap` on the weekly cap.
 - Unset matches today. A non-human wake under the threshold completes with no ask.
 - At the threshold, the next provider call is not forwarded, one `ask` exists, and a second
   call in the same wake does not send a second ask (option A).
