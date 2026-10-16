@@ -925,16 +925,6 @@ export function laneIdQuery(q: string): string | null {
   return /^[0-7][0-9A-HJKMNP-TV-Z]{7,25}$/.test(t) ? t : null;
 }
 
-/**
- * A title that is nothing but a full lane id (26 characters). `lane open <id>` typed where
- * `lane claim <id>` was meant opens an empty lane named after another one — twice in half an hour on
- * 2026-10-15. Full ids only, unlike {@link laneIdQuery}: an 8-character prefix rule would refuse a
- * title that is a date or a short word.
- */
-export function isBareLaneId(title: string): boolean {
-  return /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i.test(title.trim());
-}
-
 /** One history edge as a line: `<when> <who> <what>`. Shared by the CLI and the MCP render. */
 export function laneEventLine(e: LaneEvent): string {
   const when = new Date(e.ts).toISOString().slice(0, 16).replace('T', ' ');

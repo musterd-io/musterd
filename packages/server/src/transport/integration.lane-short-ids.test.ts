@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
-import { getLane, insertLaneSnapshot } from '../store/lanes.js';
+import { getLane, insertLaneSnapshot, isBareLaneId } from '../store/lanes.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { integrationHarness } from './integration.helpers.js';
 
@@ -75,6 +75,20 @@ withDrivers('integration · lane short ids', (_o, kind) => {
   });
 
   describe('a lane id is not a title', () => {
+    it('isBareLaneId: a full id in any case, never a prefix, a date, a word or a mention', () => {
+      expect(isBareLaneId('01M50C1ZZMJFRG409G6TC4S303')).toBe(true);
+      expect(isBareLaneId(' 01m4vkrxex53sf0wkgpd1pa97t ')).toBe(true);
+      for (const t of [
+        '01M50C1ZZM',
+        '20261015',
+        'standard',
+        'follow-up to 01M50C1ZZMJFRG409G6TC4S303',
+        '81M50C1ZZMJFRG409G6TC4S303',
+        '01M50C1ZZMJFRG409G6TC4S30I',
+      ])
+        expect(isBareLaneId(t)).toBe(false);
+    });
+
     it('refuses to open a lane titled with a bare lane id, and points at claim', async () => {
       const tok = await team('typo');
       const real = (await post('/teams/typo/lanes', { title: 'the real work' }, tok)).json.lane;

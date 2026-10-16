@@ -403,6 +403,16 @@ export async function getLane(
   return row ? rowToLane(row, teamSlug) : null;
 }
 
+/**
+ * A title that is nothing but a full lane id (26 characters). `lane open <id>` typed where
+ * `lane claim <id>` was meant opens an empty lane named after another one — twice in half an hour on
+ * 2026-10-15. Full ids only, unlike a prefix: an 8-character rule would refuse a title that is a
+ * date or a short word. `POST /lanes` refuses such a title (http.ts).
+ */
+export function isBareLaneId(title: string): boolean {
+  return /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i.test(title.trim());
+}
+
 /** ADR 582 §2: the shortest prefix that names a lane. A ULID's first 10 characters are its millisecond
  *  timestamp; 8 still separates lanes opened a second apart, and refusing shorter keeps a typo from
  *  landing on whichever lane happens to share two characters. */
