@@ -97,8 +97,8 @@ export interface WakeLeaseHandle {
 /**
  * The lease-file bookkeeping every wake backend does the same way (ADR 354/546), in one place:
  * write after spawn, rewrite once the session id is known, clear and take the yield marker at exit.
- * Claude Code and Codex predate this and inline the same three calls; Grok, opencode and the native
- * loop use it, so a wake on any harness is findable by `musterd <seat>`.
+ * Claude Code and Codex predate this and inline the same three calls; Grok, opencode, cursor-agent
+ * and the native loop use it, so a wake on any harness is findable by `musterd <seat>`.
  */
 export function holdWakeLease(
   workspace: string,
