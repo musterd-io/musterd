@@ -45,3 +45,28 @@ export function parseCodexHookEvent(
     return undefined;
   }
 }
+
+/** ADR 632: local rollout header, never a wire field. Only interactive sources count. */
+const CodexAttendedMetaSchema = z
+  .object({
+    type: z.literal('session_meta'),
+    payload: z
+      .object({
+        session_id: nonEmpty.max(120),
+        cwd: nonEmpty,
+        source: z.enum(['cli', 'vscode']),
+      })
+      .strip(),
+  })
+  .strip();
+
+/** Read only the metadata record, excluding exec, subagents and unknown source kinds. */
+export function parseCodexAttendedMeta(raw: string): { id: string; cwd: string } | undefined {
+  try {
+    const parsed = CodexAttendedMetaSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    return { id: parsed.data.payload.session_id, cwd: parsed.data.payload.cwd };
+  } catch {
+    return undefined;
+  }
+}
