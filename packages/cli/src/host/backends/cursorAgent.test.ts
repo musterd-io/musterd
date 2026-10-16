@@ -12,6 +12,7 @@ import {
 class Child extends EventEmitter {
   pid: number | undefined = 4242;
   exitCode: number | null = null;
+  stdout?: EventEmitter;
   kill(): boolean {
     return true;
   }
@@ -40,12 +41,14 @@ const spec: WakeSpec = {
   bounds: { timeout_ms: 5_000 },
 };
 
-describe('cursor-agent wake argv (measured 2026.10.01-e373342)', () => {
-  it('fresh is --trust --print --approve-mcps --workspace, never --force or --yolo', () => {
+describe('cursor-agent wake argv (2026.10.01-e373342; --output-format json on 2026.10.14-941492e)', () => {
+  it('fresh is --trust --print --output-format json --approve-mcps --workspace, never --force or --yolo', () => {
     const args = buildCursorAgentFreshArgs('hello from the daemon', '/tmp/ws');
     expect(args).toEqual([
       '--trust',
       '--print',
+      '--output-format',
+      'json',
       '--approve-mcps',
       '--workspace',
       '/tmp/ws',
@@ -58,6 +61,8 @@ describe('cursor-agent wake argv (measured 2026.10.01-e373342)', () => {
     expect(buildCursorAgentResumeArgs('line', 'chat-1', '/tmp/ws')).toEqual([
       '--trust',
       '--print',
+      '--output-format',
+      'json',
       '--approve-mcps',
       '--resume',
       'chat-1',
@@ -113,7 +118,7 @@ describe('cursorAgentBackend.wake', () => {
     expect(spawned).toBe(false);
   });
 
-  it('spawns fresh, settles with duration and injected usage, and stays unpriced', async () => {
+  it('spawns fresh, settles injected tokens as harness_prints_no_price, and sets no cost_usd', async () => {
     const child = new Child();
     const lines: string[] = [];
     const seen: string[][] = [];
@@ -140,7 +145,8 @@ describe('cursorAgentBackend.wake', () => {
     const completion = await result.settled;
     expect(completion?.duration_ms).toBeTypeOf('number');
     expect(completion?.usage).toEqual({ input_tokens: 10, output_tokens: 2 });
-    expect(completion?.unpriced_reason).toBe('harness_price_unverified');
+    expect(completion?.cost_usd).toBeUndefined();
+    expect(completion?.unpriced_reason).toBe('harness_prints_no_price');
     expect(completion?.captures).toEqual([
       { harness: 'cursor', ids: ['wake-l', undefined], id: 'chat-real' },
     ]);
@@ -167,6 +173,45 @@ describe('cursorAgentBackend.wake', () => {
     const completion = await result.settled;
     expect(completion?.duration_ms).toBeTypeOf('number');
     expect(completion?.usage).toBeUndefined();
+    expect(completion?.cost_usd).toBeUndefined();
+    expect(completion?.unpriced_reason).toBe('harness_price_unverified');
+  });
+
+  it('reads usage from JSON stdout when no reader is injected', async () => {
+    const child = new Child();
+    child.stdout = new EventEmitter();
+    const backend = cursorAgentBackend({
+      resolveBin: async () => '/cursor-agent',
+      spawn: (() => child) as never,
+      readSession: () => ({ state: 'none', source: 'slot' }) as never,
+      recordFreshSession: () => undefined,
+      ensurePinned: () => undefined,
+      findSessionId: () => 'chat-real',
+    });
+    const result = await backend.wake(spec, {
+      verifyOccupied: async () => ({ occupied: true, provenance: 'wake', lease_matched: true }),
+      log: () => {},
+    });
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'result',
+          subtype: 'success',
+          usage: { inputTokens: 11, outputTokens: 4, cacheReadTokens: 7, cacheWriteTokens: 0 },
+        })}\n`,
+      ),
+    );
+    child.exit(0);
+    const completion = await result.settled;
+    expect(completion?.usage).toEqual({
+      input_tokens: 11,
+      output_tokens: 4,
+      cached_input_tokens: 7,
+      cache_write_input_tokens: 0,
+    });
+    expect(completion?.cost_usd).toBeUndefined();
+    expect(completion?.unpriced_reason).toBe('harness_prints_no_price');
   });
 
   it('resumes a captured cursor chat, and does not spawn fresh when that occupies', async () => {

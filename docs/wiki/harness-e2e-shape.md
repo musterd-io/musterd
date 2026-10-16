@@ -1,6 +1,6 @@
 # Harness end-to-end shape
 
-Three harnesses hold onboard, wake, resume, meter, doorbell, and idle-wake; codex, cursor-agent, and grok each have a named gap (read 2026-10-16 at `0c5f3c0c`, lane `01M50ZJ9WD89`).
+Three harnesses hold onboard, wake, resume, meter, doorbell, and idle-wake; codex and grok each have a named gap (read 2026-10-16 at `0c5f3c0c`, lane `01M50ZJ9WD89`).
 
 ## How a cell was read
 
@@ -14,7 +14,7 @@ The read is the files below, at `0c5f3c0c` (2026-10-16; falsify: the named symbo
 | opencode | holds | holds | holds | holds | holds | holds |
 | native (`musterd`) | guidance | holds | holds | holds | holds | exempt |
 | codex | holds | holds | holds | holds | holds in unit | gap |
-| cursor-agent | holds | holds | holds | gap | holds | exempt |
+| cursor-agent | holds | holds | holds | holds | holds | exempt |
 | grok | holds | holds | holds | holds | holds | gap |
 | muse | holds | holds | holds | holds | holds | deaf |
 
@@ -38,11 +38,13 @@ Onboard is `codexHooks.ts` (SessionStart, SessionEnd, PostToolUse, UserPromptSub
 
 Follows-up: 01M4M6Q8QKM2PK5E5T5AMF9E44
 
-## cursor-agent holds except the meter (2026-10-16)
+## cursor-agent holds, idle exempt (2026-10-16)
 
-Onboard is `cursor.ts`: postToolUse `session observe --stdin --interrupt`, the PreToolUse gate, and sessionStart orient. Wake and resume are `host/backends/cursorAgent.ts` (`--resume`). Doorbell holds mid-turn in the doorbell contract (2026-09-14). Idle-wake stays deaf on purpose (ADR 558 §6); `injectAdapterFor` returns `no-inject:cursor`. Settle calls `deps.readUsage` only, and the reason is always `harness_price_unverified` (2026-10-16; falsify: `cursorAgent.ts` reads usage when `deps.readUsage` is omitted). <!-- claim: other -->
+Onboard is `cursor.ts`: postToolUse `session observe --stdin --interrupt`, the PreToolUse gate, and sessionStart orient. Wake and resume are `host/backends/cursorAgent.ts` (`--resume`, `--output-format json`). Doorbell holds mid-turn in the doorbell contract (2026-09-14). Idle-wake stays deaf on purpose (ADR 558 §6); `injectAdapterFor` returns `no-inject:cursor`.
 
-Follows-up: 01M535CZNQS8CCZGWR1834079N
+Meter reads the wake's stdout. cursor-agent 2026.10.14-941492e writes `{type:"result", usage:{inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens}}` and no dollar field when `--print --output-format json` is set (`--help` that day: text | json | stream-json, default text). `parseCursorAgentResult` maps those counts. A result with usage settles `harness_prints_no_price` and leaves `cost_usd` unset. No usage object leaves usage off the row and settles `harness_price_unverified` (2026-10-16; falsify: a successful `--print --output-format json` result on this build has no `usage` object, or that object carries a dollar field). <!-- claim: other -->
+
+A credentialed `--print --output-format json` run the same day exited 1 before any result: the $10 additional-usage cap. Stdout was empty. That run's transcript jsonl held the error and no token fields, and local agent transcripts hold no usage file. The parser follows the writer in that build.
 
 ## grok holds except idle inject (2026-10-16)
 
