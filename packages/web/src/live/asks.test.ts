@@ -67,6 +67,16 @@ describe('deriveAsks (ADR 149)', () => {
     expect(deriveAsks([env('bad', 'ask', { meta: { species: 'nope' } })])).toHaveLength(0);
   });
 
+  it('an accept that names an option records which one; a bare accept records none (lane 01M511XNQC)', () => {
+    const picked = deriveAsks([
+      ask('c1', 1000),
+      env('a', 'accept', { from: 'nick', ts: 2000, meta: { in_reply_to: 'c1' }, body: 'C — Add a separate key' }),
+    ]);
+    expect(picked[0]).toMatchObject({ state: 'accepted', answeredBy: 'nick', chose: 'C' });
+    const bare = deriveAsks([ask('c2', 1000), env('b', 'accept', { from: 'nick', ts: 2000, meta: { in_reply_to: 'c2' } })]);
+    expect(bare[0]!.chose).toBeUndefined();
+  });
+
   it('an accept referencing the ask closes it (in_reply_to, thread, or ask_ref)', () => {
     const byReply = deriveAsks([
       ask('a1', 1000),

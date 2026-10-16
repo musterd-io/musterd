@@ -1,7 +1,7 @@
 import { ASK_TIER_DEFAULTS, PROTOCOL_VERSION, type Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { applyTierClock, deriveAsks } from './asks';
-import { askBanner, askStatePhrase, SETTLED_MS } from './askPhrase';
+import { askBanner, askChoices, askStatePhrase, choiceReply, SETTLED_MS } from './askPhrase';
 
 const MIN = 60_000;
 const NOW = 100 * MIN;
@@ -148,5 +148,67 @@ describe('askBanner', () => {
 
   it('the tier timeout the phrase quotes is the protocol constant', () => {
     expect(ASK_TIER_DEFAULTS.standard.timeout_ms).toBe(5 * MIN);
+  });
+});
+
+describe('askChoices — an ask that is a choice says so (lane 01M511XNQC)', () => {
+  // The consult nick approved without seeing its options (01M50H0C2E, 2026-10-15).
+  const MASON = `Spend controls, unpriced floor (lane 01M4SB4D7R): I need a product decision from you. Spec is in PR #2661. Under spend_cap_usd today, codex and opencode wakes, and any wake that never reports cost, count for nothing. A team running only codex has no bound at all. The options:
+A. Keep this as is and state it.
+B. Block unpriced harnesses whenever a cap is set.
+C. Add a separate key, unpriced_wake_cap, a count over 7 days on the same deny path. Unset keeps today's behaviour, 0 blocks unpriced harnesses explicitly, N allows N.
+D. Price third-party tokens from a host table. ADR 364 says that needs its own ADR, and it still misses wakes that never report.
+I recommend C. B makes an admin who only wants a dollar bound lose every codex seat. Which one? And if C, should the deny notice name both caps when both trip? I propose yes.`;
+
+  it('finds every option of the consult that went wrong, and what the asker recommends', () => {
+    const c = askChoices(MASON)!;
+    expect(c.options.map((o) => o.key)).toEqual(['A', 'B', 'C', 'D']);
+    expect(c.options[1]!.text).toBe('Block unpriced harnesses whenever a cap is set.');
+    expect(c.options[2]!.text.startsWith('Add a separate key, unpriced_wake_cap')).toBe(true);
+    expect(c.recommended).toBe('C');
+    // The card shows only the question; the options are the buttons.
+    expect(c.question.startsWith('Spend controls, unpriced floor')).toBe(true);
+    expect(c.question.endsWith('The options:')).toBe(true);
+    expect(c.question).not.toContain('Keep this as is');
+  });
+
+  it('reads `A)`, numbered and bulleted-letter styles', () => {
+    expect(askChoices('Pick:\nA) red\nB) blue')!.options.map((o) => o.key)).toEqual(['A', 'B']);
+    expect(askChoices('Which?\n1. ship now\n2. wait a day\n3. drop it')!.options.map((o) => o.key)).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+    expect(askChoices('- (a) keep\n- (b) cut')!.options.map((o) => o.key)).toEqual(['A', 'B']);
+  });
+
+  it('is not a choice: a yes/no ask, a single option, or prose that only mentions "a."', () => {
+    expect(askChoices('Can I merge #2661 now?')).toBeNull();
+    expect(askChoices('Options:\nA. only this one')).toBeNull();
+    expect(askChoices('I looked at plan a. It works. Merge?')).toBeNull();
+    expect(askChoices('')).toBeNull();
+  });
+
+  it('keeps options in order and only a run that starts at A or 1', () => {
+    expect(askChoices('Steps:\nB. second\nC. third')).toBeNull();
+  });
+
+  it('records a pick as the option itself, so the thread never needs interpreting', () => {
+    const c = askChoices(MASON)!;
+    expect(choiceReply(c.options[2]!)).toMatch(/^C — Add a separate key, unpriced_wake_cap/);
+  });
+
+  it('settles the rail on the option picked: "nick chose C"', () => {
+    const picked = [
+      ask('a'),
+      env('r', 'accept', {
+        from: 'nick',
+        to: { kind: 'member', name: 'ryder' },
+        meta: { in_reply_to: 'a' },
+        body: 'C — Add a separate key',
+        ts: NOW - 2_000,
+      }),
+    ];
+    expect(banner(picked)).toMatchObject({ mode: 'settled', outcome: 'nick chose C ✓' });
   });
 });

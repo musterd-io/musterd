@@ -108,6 +108,8 @@ describe('the fold', () => {
       thread: 'root',
       meta: { in_reply_to: 'q' },
     });
+    // A choice is answered with the option itself (lane 01M511XNQC), so the record says which one.
+    expect(askAnswer(t.asks[0]!, 'accept', 'C — Add a separate key').body).toBe('C — Add a separate key');
     const all = [root, ask, env({ id: 'y', from: 'nick', act: 'accept', to: { kind: 'member', name: 'dolly' }, thread: 'root', ts: T + 9, meta: { in_reply_to: 'q' } })];
     const answered = composerThread(all, root, 'nick', deriveAsks(all));
     expect(answered.asks[0]!.state).toBe('accepted');

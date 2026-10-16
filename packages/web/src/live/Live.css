@@ -828,6 +828,12 @@
   inset: var(--lc-4) 56px auto var(--lc-4);
   z-index: var(--lc-z-overlay);
 }
+/* An OPEN sheet is the thing you just asked to see, so it stacks above the other overlays on the room.
+   The Now briefing shares this z and comes later in the DOM, so it painted over the sheet: Choose…
+   opened the options underneath it (found 2026-10-16, lane 01M511XNQC). */
+.lc-office__asks:has(.lc-asks.is-open) {
+  z-index: calc(var(--lc-z-overlay) + 1);
+}
 
 /* The rail's own outer margin was for the page slot; inside the office the slot IS the margin. */
 .lc-office__asks .lc-asks {
@@ -7065,6 +7071,200 @@
 .lc-ask__btn--later {
   font-family: var(--font-mono, monospace);
   font-size: 10px;
+}
+
+/* ─── a choice is answered by picking an option (lane 01M511XNQC) ─────────────────────────────────
+   On 2026-10-15 a consult with options A–D was approved from this rail with none of them on screen, and
+   the asker read the empty accept as C. So a choice never gets the green one-click Approve. The rail
+   shows the letters on offer and a Choose… that breathes until opened (accent: a way to an answer, not
+   an answer). The sheet deals every option in full, one after another; the asker's pick wears a small
+   sparkle; a hover lifts the card; a pick lands like a rubber stamp — the card presses, its letter tilts
+   and pops, the rest fall back — and says where it went. All motion is off under reduced motion. */
+.lc-asks__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--lc-dim);
+  white-space: nowrap;
+}
+.lc-asks__tok {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--lc-accent-ink);
+  background: color-mix(in srgb, var(--lc-accent) 14%, var(--lc-surface-2));
+}
+.lc-ask__btn--choose {
+  color: var(--lc-accent-ink);
+  border-color: color-mix(in srgb, var(--lc-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--lc-accent) 10%, var(--lc-surface-2));
+  animation: lc-choose-breathe 2.4s var(--lc-ease-out) infinite;
+}
+.lc-ask__btn--choose:hover,
+.lc-ask__btn--choose[aria-expanded='true'] {
+  animation: none;
+}
+@keyframes lc-choose-breathe {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--lc-accent) 18%, transparent);
+  }
+}
+/* A choice card lays its options UNDER the question, full width, at every size the sheet has. */
+.lc-ask--choice {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.lc-ask__actions--choice {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lc-2);
+}
+.lc-ask__actions--choice > .lc-ask__btn--later {
+  align-self: flex-start;
+}
+.lc-choices {
+  display: grid;
+  gap: var(--lc-2);
+}
+.lc-choice {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--lc-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  padding: var(--lc-2) var(--lc-3);
+  border-radius: 12px;
+  border: 1px solid var(--lc-border-2);
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+  cursor: pointer;
+  animation: lc-choice-in var(--lc-dur-3) var(--lc-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+  transition: var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc-choice.is-rec {
+  border-color: color-mix(in srgb, var(--lc-lane) 35%, var(--lc-border-2));
+}
+.lc-choice:hover:not(:disabled),
+.lc-choice:focus-visible {
+  border-color: color-mix(in srgb, var(--lc-accent) 55%, transparent);
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--lc-accent) 45%, transparent);
+  transform: translateY(-1px);
+  outline: none;
+}
+.lc-choice:disabled {
+  cursor: default;
+}
+.lc-choice__key {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lc-accent-ink);
+  background: color-mix(in srgb, var(--lc-accent) 14%, var(--lc-surface-2));
+  transition: inherit;
+}
+.lc-choice:hover:not(:disabled) .lc-choice__key,
+.lc-choice:focus-visible .lc-choice__key {
+  color: var(--lc-surface);
+  background: var(--lc-accent-ink);
+}
+.lc-choice__rec {
+  padding: 1px var(--lc-2);
+  border-radius: 999px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--lc-lane-ink);
+  background: color-mix(in srgb, var(--lc-lane) 12%, var(--lc-surface-2));
+}
+.lc-choices.has-pick .lc-choice:not(.is-picked) {
+  opacity: 0.4;
+  transform: scale(0.985);
+}
+.lc-choice.is-picked {
+  border-color: color-mix(in srgb, var(--lc-success) 55%, transparent);
+  background: color-mix(in srgb, var(--lc-success) 12%, var(--lc-surface-2));
+  animation: lc-choice-stamp var(--lc-dur-3) var(--lc-ease-out);
+}
+.lc-choice.is-picked .lc-choice__key {
+  color: var(--lc-surface);
+  background: var(--lc-success-ink);
+  animation: lc-choice-tilt var(--lc-dur-3) var(--lc-ease-out);
+}
+@keyframes lc-choice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes lc-choice-stamp {
+  35% {
+    transform: scale(0.97);
+  }
+}
+@keyframes lc-choice-tilt {
+  40% {
+    transform: rotate(-14deg) scale(1.2);
+  }
+}
+.lc-choices__none {
+  justify-self: start;
+  min-height: 24px;
+  padding: 0 var(--lc-2);
+  font: inherit;
+  font-size: 11px;
+  color: var(--lc-dim);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.lc-choices__none:hover:not(:disabled) {
+  color: var(--lc-danger-ink);
+}
+.lc-choices__sent {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-success-ink);
+  animation: lc-choice-in var(--lc-dur-3) var(--lc-ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-ask__btn--choose,
+  .lc-choice,
+  .lc-choice.is-picked,
+  .lc-choice.is-picked .lc-choice__key,
+  .lc-choices__sent {
+    animation: none;
+  }
+  .lc-choice,
+  .lc-choices.has-pick .lc-choice:not(.is-picked) {
+    transform: none;
+  }
+}
+@container asks (max-width: 700px) {
+  .lc-asks__pick {
+    display: none;
+  }
+}
+@container asks (max-width: 480px) {
+  .lc-asks__choice {
+    display: none;
+  }
 }
 
 /* ─── the way in, and who you are (ADR 222) ───────────────────────────────────────────────────────

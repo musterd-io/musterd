@@ -139,7 +139,8 @@ function outcome(ask: AskView): string {
   const by = ask.answeredBy ?? ask.to ?? 'someone';
   switch (ask.state) {
     case 'accepted':
-      return `${by} approved ✓`;
+      // A choice settles on the option picked (lane 01M511XNQC): "nick chose C", not "approved".
+      return ask.chose ? `${by} chose ${ask.chose} ✓` : `${by} approved ✓`;
     case 'declined':
       return `${by} said no ✗`;
     case 'deferred':
@@ -155,4 +156,64 @@ function oneLine(body: string): string {
   const line = body.split('\n').find((l) => l.trim()) ?? '';
   const t = line.trim();
   return t.length > QUESTION_MAX ? `${t.slice(0, QUESTION_MAX - 1).trimEnd()}…` : t;
+}
+
+/** One option of an ask that is a choice: its key as the asker wrote it (`A`, `2`) and its text. */
+export interface AskChoice {
+  key: string;
+  text: string;
+}
+
+/**
+ * An ask that is a choice, read from its body (lane 01M511XNQC). On 2026-10-15 nick approved a consult
+ * from the rail that offered options A–D: the rail had hidden the gist, Approve sent an empty accept,
+ * and the asker read that click as option C. So a choice must be recognisable before anything can
+ * answer it.
+ *
+ * A choice is a run of two or more option lines — `A.`, `A)`, `(a)`, `1.`, `1)`, optionally after a
+ * `-`/`*` bullet — each starting its own line, in order from `A` or `1`. A line that continues an
+ * option (no marker of its own) joins it. "I recommend C" / "recommend option C" names the asker's
+ * pick. Prose that merely contains "a." is not a choice: the marker must open the line.
+ */
+export function askChoices(
+  body: string,
+): { options: AskChoice[]; recommended: string | null; question: string } | null {
+  const MARK = /^\s*(?:[-*•]\s*)?\(?([A-Za-z]|\d{1,2})[.)]\s+(.+)$/;
+  const options: AskChoice[] = [];
+  let open: AskChoice | null = null;
+  let firstOption = -1;
+  const lines = body.split('\n');
+  for (const [n, line] of lines.entries()) {
+    const m = MARK.exec(line);
+    const key = m ? m[1]!.toUpperCase() : null;
+    const expected = options.length === 0 ? null : nextKey(options[options.length - 1]!.key);
+    if (m && key !== null && (options.length === 0 ? key === 'A' || key === '1' : key === expected)) {
+      open = { key, text: m[2]!.trim() };
+      if (options.length === 0) firstOption = n;
+      options.push(open);
+    } else if (open && line.trim() !== '' && !m) {
+      // A wrapped option: its next line has no marker. A blank line or the asker's own prose ends it —
+      // prose is told apart by not being indented when the option lines were not.
+      if (/^\s/.test(line)) open.text = `${open.text} ${line.trim()}`;
+      else open = null;
+    } else {
+      open = null;
+    }
+  }
+  if (options.length < 2) return null;
+  const rec = /\brecommend(?:s|ed)?\s+(?:option\s+)?\(?([A-Za-z]|\d{1,2})\)?\b/i.exec(body);
+  const recommended = rec ? rec[1]!.toUpperCase() : null;
+  // The question is what comes before the options: a choice card shows it, and the option cards carry
+  // the rest, so nobody reads the options twice.
+  const question = lines.slice(0, firstOption).join(' ').replace(/\s+/g, ' ').trim();
+  return { options, recommended: options.some((o) => o.key === recommended) ? recommended : null, question };
+}
+
+function nextKey(key: string): string {
+  return /\d/.test(key) ? String(Number(key) + 1) : String.fromCharCode(key.charCodeAt(0) + 1);
+}
+
+/** The reply a pick sends: the option itself, so the thread records WHICH option, not just "accept". */
+export function choiceReply(option: AskChoice): string {
+  return `${option.key} — ${option.text}`;
 }

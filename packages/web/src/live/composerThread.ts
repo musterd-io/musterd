@@ -176,10 +176,12 @@ export function answeredLine(thread: Pick<ComposerThread, 'answered' | 'cast'>):
 export function askAnswer(
   ask: AskView,
   kind: 'accept' | 'decline' | 'deciding',
+  /** The picked option of a choice (`choiceReply`, lane 01M511XNQC): the record names it. */
+  body?: string,
 ): { act: Envelope['act']; to: Envelope['to']; thread: string; body?: string; meta: Record<string, unknown> } {
   const to = { kind: 'member', name: ask.env.from } as const;
   const thread = ask.env.thread ?? ask.env.id;
   return kind === 'deciding'
     ? { act: 'wait', to, thread, body: 'deciding — check back in 1h', meta: { ask_ref: ask.env.id, until: '1h' } }
-    : { act: kind, to, thread, meta: { in_reply_to: ask.env.id } };
+    : { act: kind, to, thread, ...(body ? { body } : {}), meta: { in_reply_to: ask.env.id } };
 }
