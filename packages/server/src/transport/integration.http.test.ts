@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer } from '../index.js';
 import { getMemberByName } from '../store/members.js';
-import { insertMessage } from '../store/messages.js';
+import { DUPLICATE_ENVELOPE_ID, insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { integrationHarness } from './integration.helpers.js';
 
@@ -93,6 +93,53 @@ withDrivers('integration · http', (_o, kind) => {
       await post('/teams/dawn/inbox/cursor', { last_read_message_id: 'mh1' }, boTok);
       const inbox2 = await get('/teams/dawn/inbox?unread=1', boTok);
       expect(inbox2.json.messages).toHaveLength(0);
+    });
+
+    it('a duplicate envelope id is 409 conflict, and a cross-team collision is that same refusal', async () => {
+      const dawn = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const dusk = await post('/teams', { slug: 'dusk', creator: { name: 'ada', kind: 'human' } });
+      const envelope = (team: string, from: string, id = 'dup-env-1') => ({
+        id,
+        v: PROTOCOL_VERSION,
+        team,
+        from,
+        to: { kind: 'team' as const },
+        act: 'message',
+        body: 'hello',
+        ts: Date.now(),
+      });
+      const first = await post(
+        '/teams/dawn/messages',
+        { envelope: envelope('dawn', 'nick') },
+        dawn.json.human_credential,
+      );
+      expect(first.status).toBe(201);
+
+      const sameTeam = await post(
+        '/teams/dawn/messages',
+        { envelope: envelope('dawn', 'nick') },
+        dawn.json.human_credential,
+      );
+      const otherTeam = await post(
+        '/teams/dusk/messages',
+        { envelope: envelope('dusk', 'ada') },
+        dusk.json.human_credential,
+      );
+      expect(DUPLICATE_ENVELOPE_ID).toBe('that envelope id is already in use');
+      const refusal = { error: { code: 'conflict', message: DUPLICATE_ENVELOPE_ID } };
+      expect(sameTeam.status).toBe(409);
+      expect(otherTeam.status).toBe(409);
+      expect(sameTeam.json).toEqual(refusal);
+      expect(otherTeam.json).toEqual(sameTeam.json);
+      // The body is the whole oracle. It must not name either team, or say that another one holds the id.
+      expect(JSON.stringify(sameTeam.json)).not.toMatch(/dawn|dusk|other team/i);
+
+      const fresh = await post(
+        '/teams/dusk/messages',
+        { envelope: envelope('dusk', 'ada', 'dup-env-2') },
+        dusk.json.human_credential,
+      );
+      expect(fresh.status).toBe(201);
     });
 
     it('a second human member is minted a credential that authenticates (ADR 069 cutover gap)', async () => {

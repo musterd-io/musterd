@@ -6,9 +6,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { openDriver } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
+import { MusterdError } from '../errors.js';
 import { appendReplicatedEvent } from './audit.js';
 import { addMember } from './members.js';
-import { insertMessage } from './messages.js';
+import { DUPLICATE_ENVELOPE_ID, insertMessage } from './messages.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -68,11 +69,29 @@ withDrivers('originStamp', (o, kind) => {
       await insertMessage(db, team.id, ada.id, null, await env('m-2', 1002));
       await expect(
         insertMessage(db, team.id, ada.id, null, await env('m-2', 1003)),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        name: 'MusterdError',
+        code: 'conflict',
+        message: DUPLICATE_ENVELOPE_ID,
+      });
       const node = await db.get('SELECT next_seq FROM nodes WHERE team_id = ?', [team.id]);
       expect(node?.next_seq).toBe(3);
       await insertMessage(db, team.id, ada.id, null, await env('m-3', 1004));
       expect((await seqsFor(db, team.id)).map((r) => r.origin_seq)).toEqual([1, 2, 3]);
+    });
+
+    it('a foreign-key failure on the same insert is not the envelope-id conflict', async () => {
+      const { db, team } = await seed();
+      const err = await insertMessage(
+        db,
+        team.id,
+        'not-a-member',
+        null,
+        await env('m-fk', 1001),
+      ).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(MusterdError);
+      expect((err as Error).message).toMatch(/FOREIGN KEY|foreign key/i);
     });
 
     // Eval (iii): monotone across restart — the counter is a column, not process state.
