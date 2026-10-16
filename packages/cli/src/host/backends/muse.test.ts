@@ -149,6 +149,38 @@ describe('museBackend.wake', () => {
       { harness: 'muse', ids: ['wake-l', 'ses-new-uuid'], id: 'ses-new-uuid' },
     ]);
     expect(clears).toEqual(['l']);
+    expect(completion?.usage).toBeUndefined();
+    expect(completion?.cost_usd).toBeUndefined();
+  });
+
+  it('settles parsed tokens as harness_prints_no_price and never a dollar figure', async () => {
+    const seen: string[] = [];
+    const { child, backend, ctx } = setup({
+      readUsage: (sessionId: string) => {
+        seen.push(sessionId);
+        return {
+          input_tokens: 28411,
+          output_tokens: 16,
+          cached_input_tokens: 0,
+          cache_write_input_tokens: 0,
+          reasoning_output_tokens: 5,
+        };
+      },
+    });
+    const result = await backend.wake(spec, ctx);
+    child.exit(0);
+    const completion = await result.settled;
+    expect(seen).toEqual(['ses-new-uuid']);
+    expect(completion?.usage).toEqual({
+      input_tokens: 28411,
+      output_tokens: 16,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      reasoning_output_tokens: 5,
+    });
+    expect(completion?.unpriced_reason).toBe('harness_prints_no_price');
+    expect(completion?.cost_usd).toBeUndefined();
+    expect(completion?.harness_cost_usd).toBeUndefined();
   });
 
   it('stamps the lease dream for a dream wake (ADR 604)', async () => {

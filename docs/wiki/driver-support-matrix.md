@@ -93,7 +93,7 @@ A cell that rests on that run says so.
 | Config entry scope | machine-global `~/.config/muse/settings.json` (`schema_version: 1` mandatory) | same |
 | MCP env channel | **absent** — stdio children receive `MUSE_SESSION_ID` but not `MUSTERD_*` (measured); the lease file attests | same |
 | MCP `mode` | `optional` required in practice: `required` aborts every run whose server exits, including non-musterd repos (measured both ways) | same |
-| Usage metering shape | measured 2026-10-16 on 1.4.10: `model_completed.usage` is `{input_tokens, output_tokens, cached_tokens, cache_write_tokens, cache_read_tokens, reasoning_tokens}` (that run's cached count was 0). Follows-up: 01M52YJW3H8D6SWBEPX0RH4KKW wires this into WakeCompletion; until then a Muse wake stays `harness_price_unverified` | same |
+| Usage metering shape | measured 2026-10-16 on 1.4.10: `model_completed.usage` is `{input_tokens, output_tokens, cached_tokens, cache_write_tokens, cache_read_tokens, reasoning_tokens}` (that run's cached count was 0). A wake reads that session's `session.jsonl` — the id is known at spawn — and sums those counts onto `WakeCompletion.usage`. `cache_read_tokens` is the cache-read count when the line has it; otherwise `cached_tokens`. The event has no dollar figure, so a parsed wake is `harness_prints_no_price`. A log with no `model_completed` stays `harness_price_unverified` and carries no usage. Dollars stay on the gateway price rows | same |
 
 ## The wire is not this page
 
