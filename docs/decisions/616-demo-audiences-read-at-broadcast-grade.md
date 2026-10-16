@@ -52,7 +52,8 @@ Neither path gives the audience what nick asked for.
    never mints `full`.
 4. **A member whose role is `guest` reads at `broadcast` grade.** `messageVisibilityOf` returns
    `broadcast` for a non-admin, non-observer member whose role ceiling is the talk-only guest role that
-   Cloud increment 4 defines. Every other member keeps `team`; admins keep `full`.
+   Cloud increment 4 defines. Every other member keeps `team`; admins keep `full`. _(Amended 2026-10-15: the
+   talk-only ceiling is ADR 621's `can_coordinate: false`; §7 of 621 states the rule.)_
 5. **A guest is always a party to its own acts.** On top of the `broadcast` filter, a guest reads every
    act it sent and every act addressed to it (ADR 128's party predicate), including a DM between it and
    another human. The `broadcast` filter removes a human-to-human DM from every *other* broadcast

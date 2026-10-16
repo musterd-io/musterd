@@ -248,6 +248,11 @@ agent (ADR 449) may redeem its sponsor's one-time connect nonce at `POST /oauth/
 (proof `kind: 'agent_connect'`) and receive an `msat_`/`msrt_` chain bound to the agent seat. Every
 other agent stays on the claim handshake, and an agent credential is never an authorize proof.
 
+- **2026-10-15 — ADR 621 sets the remote tool set.** The remote MCP serves the full member tool
+  set, gated by the seat's capabilities, and lists only what the seat may call. This replaces
+  §1's plan to converge the set after rehearsal. Until that lane lands the endpoint keeps its five
+  tools, and a talk-only guest is refused agent creation and connection.
+
 ## Observability & Evaluation
 
 - Traces: `oauth.*` audit verbs (`client_registered / code_issued / token_issued / token_rotated /
