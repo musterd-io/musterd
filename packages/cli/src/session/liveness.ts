@@ -6,6 +6,7 @@ import {
   enumerateCodexSessions,
   enumerateCursorSessions,
   enumerateGrokSessions,
+  enumerateMuseSessions,
   enumerateOpencodeSessions,
   LOCAL_SESSION_LIVE_MS,
   type SessionFile,
@@ -140,7 +141,9 @@ export function localSessionLiveness(
           ? (dir: string) => enumerateOpencodeSessions(dir)
           : selectedHarness === 'grok'
             ? (dir: string) => enumerateGrokSessions(dir)
-            : (dir: string) => enumerateClaudeSessions(dir));
+            : selectedHarness === 'muse'
+              ? (dir: string) => enumerateMuseSessions(dir)
+              : (dir: string) => enumerateClaudeSessions(dir));
   const enumerated = enumeratedLiveness(workspace, now, selected);
   if (!enumerated) return { source: 'slot', ...slot };
   // ADR 199 / ADR 179: clean SessionEnd outranks a still-warm transcript on the deciding

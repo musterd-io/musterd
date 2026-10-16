@@ -77,6 +77,23 @@ headless live measurement (scratch port, isolated `XDG_DATA_HOME`).
 | Idle-at-prompt | covered — `prompt_async` needs no turn-end (measured); TUI may not render injected messages (#8564) | n/a (unreachable) | covered |
 | Hook drift detection | ~~not populated (2026-09-03)~~ ADR 392: `detect().hookDrift` names the plugin missing ("nothing probes") or STALE (ADR 168) | same | same |
 
+### Muse Code (added 2026-10-16, ADR 619)
+
+Observed against dev.meta.ai muse-code docs and binary 1.4.9 on 2026-10-15/16 (echo provider;
+no Meta credentials — every credentialed cell is marked as such).
+
+| Feature | Muse Code (terminal, interactive `muse`) | Muse Code (headless `muse exec`) |
+| --- | --- | --- |
+| Session labeling | terminal OSC 0 only (no sidebar write API observed) | none — no controlling terminal |
+| Hook capture | SessionStart + Stop in `.muse/hooks.json` (Claude-style nesting, measured — docs show no schema; startup validation names violations) | same files (hooks run headless — measured both firing) |
+| Skills / guidance | `.agents/skills` read natively (shared with musterd's canonical skill — no bridge) + AGENTS.md | same |
+| Model attestation | hook payload `model_id`/`model` when present; session.jsonl model records unmapped (Follows-up: 01M50ZJ8KG) | same |
+| Session capture | `~/.local/share/muse/sessions/<YYYY>/<MM>/<DD>/<uuid>/session.jsonl`, attributed by recorded `workspace_root` | same |
+| Config entry scope | machine-global `~/.config/muse/settings.json` (`schema_version: 1` mandatory) | same |
+| MCP env channel | **absent** — stdio children receive `MUSE_SESSION_ID` but not `MUSTERD_*` (measured); the lease file attests | same |
+| MCP `mode` | `optional` required in practice: `required` aborts every run whose server exits, including non-musterd repos (measured both ways) | same |
+| Usage metering shape | unverified — needs a credentialed run | unverified — needs a credentialed run |
+
 ## The wire is not this page
 
 The glossary entry for *driver* says "Already the wire field (`presence.driver`)". Observed

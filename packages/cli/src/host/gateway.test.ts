@@ -263,7 +263,7 @@ describe('startMeteringGateway (ADR 583)', () => {
   });
 
   it('a model with no price row is metered but not priced: summary cost undefined', async () => {
-    const f = await fakeUpstream(() => ({ body: anthropicJson(10, 10, 'muse-spark-1.3') }));
+    const f = await fakeUpstream(() => ({ body: anthropicJson(10, 10, 'muse-spark-9-9') }));
     up = f.server;
     gw = await startMeteringGateway({
       leaseId: 'L3',

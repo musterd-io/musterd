@@ -42,6 +42,7 @@ const row = (
 const ANTHROPIC_SRC = 'platform.claude.com/docs/en/about-claude/pricing, read 2026-10-13';
 const OPENAI_SRC = 'developers.openai.com/api/docs/pricing, read 2026-10-13';
 const XAI_SRC = 'docs.x.ai/developers/pricing, read 2026-10-13 (<200k-prompt tier)';
+const MUSE_SRC = 'dev.meta.ai/products/muse-code, read 2026-10-15';
 
 /** The table. Keep provider rows together; the lookup sorts by prefix length, not by position.
  *  Long-context tiers (Anthropic >100k on Haiku, OpenAI >272k, xAI ≥200k) are NOT modelled: a
@@ -69,6 +70,13 @@ export const PRICE_ROWS: readonly PriceRow[] = [
   row('grok-4.7', 2, 6, 0.25, 0, XAI_SRC),
   row('grok-4.6', 2, 6, 0.25, 0, XAI_SRC),
   row('grok-build', 1, 2, 0.2, 0, XAI_SRC),
+  // Meta — contributor tier pays 0.02× input on cache read; standard 0.12×; no cache-write
+  // charge published. Contributor and standard are distinct model ids, hence distinct rows —
+  // longest-prefix match keeps them apart.
+  row('muse-spark-1.3-contributor', 0.1, 0.2, 0.02, 0, MUSE_SRC),
+  row('muse-spark-1.3', 1.25, 4.25, 0.12, 0, MUSE_SRC),
+  row('muse-spark-1.2-contributor', 0.1, 0.2, 0.02, 0, MUSE_SRC),
+  row('muse-spark-1.2', 1.25, 4.25, 0.12, 0, MUSE_SRC),
 ];
 
 /** The row a model id prices by: the longest matching prefix, or undefined. */
