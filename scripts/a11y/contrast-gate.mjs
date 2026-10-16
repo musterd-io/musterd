@@ -631,6 +631,43 @@ if (!STATIC_ONLY) {
       '/live (connected, now briefing open)',
       LIVE_FLOOR,
     );
+    /* The LANE PICKER, open (`?pick=<seat>`, lane 01M5162T6H). A lazy overlay with its own sheet
+       (PickOverlay.css), so no other pass paints it: the rows, the goal headers, the brief and its
+       risk/blocked/declined flags, the claimable/blocked switch. `bo` is a fixture agent seat with the
+       fixture's open lanes to pick from. One lighting value: opaque paper over a blurred room. */
+    report(
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&pick=bo`, {
+        identityFile,
+      }),
+      '/live (connected, lane picker open)',
+      12,
+    );
+    /* …and the same picker driven by the keyboard alone (spec §7): focus opens in the filter, Tab and
+       Shift+Tab stay in the dialog, ↓ moves the highlight, Esc closes, ⏎ picks. LAST, because its
+       final step really hands a lane to `bo` and so changes the fixture's board. */
+    const keys = await new Promise((resolve) => {
+      const child = spawn(
+        process.execPath,
+        [join(HERE, 'pick-keyboard.mjs'), `${base}/live?team=${team}${SCENE_STILL}&pick=bo`],
+        {
+          stdio: ['ignore', 'pipe', 'inherit'],
+          env: {
+            ...process.env,
+            CHROME_BIN: CHROME,
+            A11Y_CONNECTED_MEMBER_IDENTITY_FILE: identityFile,
+          },
+        },
+      );
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.on('close', (code) => resolve({ code, out }));
+    });
+    process.stdout.write(keys.out);
+    measured += 1;
+    if (keys.code !== 0) {
+      failed.push('/live (lane picker, keyboard)');
+      console.log(`  ✗ /live (lane picker, keyboard) — pick-keyboard exited ${keys.code}`);
+    } else console.log('  ✓ /live (lane picker, keyboard)');
   } finally {
     await sh(['down']);
   }
