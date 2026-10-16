@@ -612,7 +612,7 @@ function LivePage() {
           />
         )}
         {connected && watchLink && (
-          <span className="lc-watchgrade" title={WATCH_GRADES.find((g) => g.grade === watchGrade)!.says}>
+          <span className="lc-watchgrade">
             {watchGrade === 'broadcast' ? 'demo view · agent DMs shown' : 'watching · team-wide only'}
           </span>
         )}
@@ -904,7 +904,7 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
         onClick={() => setChoosing((c) => !c)}
         aria-expanded={choosing}
         aria-label="Share a read-only watch link"
-        title={failed ?? 'Share a read-only watch link: public, or a demo link that also shows agent DMs'}
+        title={failed ?? 'Share a read-only watch link'}
       >
         {copied ? (
           <svg viewBox="0 0 16 16" aria-hidden="true">
