@@ -1874,8 +1874,20 @@ const SLEEPING_RECEPTIONIST: ReceptionistState = {
   beatLen: 0,
 };
 
-function receptionItems(ctx: CanvasRenderingContext2D, fit: Fit, recep: ReceptionistState | null, t: number): DepthItem[] {
+function receptionItems(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  recep: ReceptionistState | null,
+  t: number,
+  /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
+  statKey = '',
+): DepthItem[] {
   const R = RECEPTION;
+  const still = (d: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
+    d,
+    fn: () => draw(ctx),
+    parts: [{ kind: 'sprite', key: `${key}·${statKey}`, draw }],
+  });
   return [
     // She sorts at her own feet, north of the counter, so the counter paints over her lower body.
     {
@@ -1883,12 +1895,11 @@ function receptionItems(ctx: CanvasRenderingContext2D, fit: Fit, recep: Receptio
       fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t),
     },
     { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => frontDesk(ctx, fit, t, recep?.mode === 'typing') },
-    { d: depth(R.endTable.lx, R.endTable.ly), fn: () => endTable(ctx, fit, R.endTable.lx, R.endTable.ly) },
-    {
-      d: depth(R.chair.lx, R.chair.ly),
-      fn: () => armchair(ctx, fit, R.chair.lx, R.chair.ly, PAL.couch, R.chair.dir, WAIT_CHAIR),
-    },
-    { d: depth(R.plant.lx, R.plant.ly), fn: () => drawPlant(ctx, fit, R.plant.lx, R.plant.ly, 'fiddle') },
+    still(depth(R.endTable.lx, R.endTable.ly), 'recep·endtable', (c) => endTable(c, fit, R.endTable.lx, R.endTable.ly)),
+    still(depth(R.chair.lx, R.chair.ly), 'recep·armchair', (c) =>
+      armchair(c, fit, R.chair.lx, R.chair.ly, PAL.couch, R.chair.dir, WAIT_CHAIR),
+    ),
+    still(depth(R.plant.lx, R.plant.ly), 'recep·plant', (c) => drawPlant(c, fit, R.plant.lx, R.plant.ly, 'fiddle')),
   ];
 }
 
@@ -2021,16 +2032,26 @@ function nookItems(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
   fridgeOpen = false,
+  /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
+  statKey = '',
 ): { rug: (c: CanvasRenderingContext2D) => void; items: DepthItem[] } {
   const { lx, ly } = NOOK;
   const L = LOUNGE;
-  const at = (dx: number, dy: number, fn: () => void): DepthItem => ({ d: depth(lx + dx, ly + dy), fn });
+  /* Every nook piece is still furniture, so each one is a sprite; `key` carries whatever else it
+     reads (the fridge door). */
+  const at = (dx: number, dy: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
+    d: depth(lx + dx, ly + dy),
+    fn: () => draw(ctx),
+    parts: [{ kind: 'sprite', key: `nook·${key}·${statKey}`, draw }],
+  });
   return {
     // Flat floor paint: it belongs to the background layer, so it takes the context to draw on.
     rug: (c) => drawRug(c, fit, NOOK_RUG, lx, ly, NOOK_RUG_R * 2, NOOK_RUG_R * 2),
     items: [
-      at(L.fridge.dx, L.fridge.dy, () => fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, fridgeOpen)),
-      at(L.counter.dx, L.counter.dy, () => {
+      at(L.fridge.dx, L.fridge.dy, `fridge·${fridgeOpen ? 'open' : 'shut'}`, (ctx) =>
+        fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, fridgeOpen),
+      ),
+      at(L.counter.dx, L.counter.dy, 'counter', (ctx) => {
         // Base cabinets, then a slab that overhangs them — the overhang is what separates a worktop
         // from a plain box, and it is most of why this now reads as a fitted kitchen run.
         box(ctx, fit, lx + L.counter.dx, ly + L.counter.dy, L.counter.w - 4, L.counter.d - 3, L.counter.h - 4, dim(woodTop(), 0.88));
@@ -2053,9 +2074,9 @@ function nookItems(
           frustum(ctx, fit, lx + L.counter.dx + 32, ly + L.counter.dy, 6, 6, 7, 7, 5, '#f2e7d5', L.counter.h + i * 5);
         }
       }),
-      at(L.cooler.dx, L.cooler.dy, () => watercooler(ctx, fit, lx + L.cooler.dx, ly + L.cooler.dy)),
-      at(L.couch.dx, L.couch.dy, () => couch(ctx, fit, lx + L.couch.dx, ly + L.couch.dy, PAL.couch, 'S')),
-      at(L.table.dx, L.table.dy, () => ctable(ctx, fit, lx + L.table.dx, ly + L.table.dy)),
+      at(L.cooler.dx, L.cooler.dy, 'cooler', (ctx) => watercooler(ctx, fit, lx + L.cooler.dx, ly + L.cooler.dy)),
+      at(L.couch.dx, L.couch.dy, 'couch', (ctx) => couch(ctx, fit, lx + L.couch.dx, ly + L.couch.dy, PAL.couch, 'S')),
+      at(L.table.dx, L.table.dy, 'table', (ctx) => ctable(ctx, fit, lx + L.table.dx, ly + L.table.dy)),
     ],
   };
 }
@@ -4623,6 +4644,9 @@ export function deskStationItems(
   const hide = opts.hide;
   const t = opts.t ?? 0;
   const env = { lampsOn: opts.lampsOn ?? false };
+  /* The static-sprite key suffix, as `renderScene` spells it: where the pixel grid is, how dense it
+     is, and what the theme resolved to. */
+  const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}`;
   const litLamps = new Set<number>();
   // The desk comes to life only once its owner has actually walked over and sat down — screen,
   // dock and the room's typing all off this one fact (`workingAtDesk`). Same `sit > 0.9` the chair
@@ -4692,7 +4716,11 @@ export function deskStationItems(
     // on empty floor the second pass is invisible. It changes the picture only where a body has
     // landed between the two keys, and there it is the right answer. See `deskNearHalf` for why
     // the desk's own key cannot simply move (#1394, #1400).
-    out.push({ d: deskNearDepth(slot, seatedHere), fn: () => deskNearHalf(ctx, fit, slot) });
+    out.push({
+      d: deskNearDepth(slot, seatedHere),
+      fn: () => deskNearHalf(ctx, fit, slot),
+      parts: [{ kind: 'sprite', key: `near·${slot.id}·${statKey}`, draw: (c) => deskNearHalf(c, fit, slot) }],
+    });
   }
   // The task chair, in two depth items (see `chairBase`/`chairBack`): the cushion the member sits *on*
   // paints before them, the backrest at its own footprint — so at every facing the sitter lands between
@@ -4719,8 +4747,25 @@ export function deskStationItems(
   const by = cy + bdx * Math.sin(yaw) + bdy * Math.cos(yaw);
   const chairColor = node ? hslL(node.color, 0.5) : '#4a5560';
   const chairStyle = chairStyleFor(slot.id);
-  out.push({ d: depth(cx, cy) - 0.2, fn: () => chairBase(ctx, fit, cx, cy, slot.dir, chairColor, chairStyle) });
-  out.push({ d: depth(bx, by), fn: () => chairBack(ctx, fit, bx, by, slot.dir, chairColor, chairStyle) });
+  /* A chair at rest is furniture, so it is a sprite keyed on where it rests (seated or vacant) and its
+     colour. Mid-beat (a roll-back, a swivel) it moves every frame, and a sprite per position would
+     only churn the cache, so it paints live until the beat ends. */
+  const resting = shift === 0 && yaw === 0;
+  const chairKey = `chair·${slot.id}·${vacantPeek}·${chairColor}·${statKey}`;
+  out.push({
+    d: depth(cx, cy) - 0.2,
+    fn: () => chairBase(ctx, fit, cx, cy, slot.dir, chairColor, chairStyle),
+    ...(resting && {
+      parts: [{ kind: 'sprite', key: `${chairKey}·base`, draw: (c) => chairBase(c, fit, cx, cy, slot.dir, chairColor, chairStyle) }],
+    }),
+  });
+  out.push({
+    d: depth(bx, by),
+    fn: () => chairBack(ctx, fit, bx, by, slot.dir, chairColor, chairStyle),
+    ...(resting && {
+      parts: [{ kind: 'sprite', key: `${chairKey}·back`, draw: (c) => chairBack(c, fit, bx, by, slot.dir, chairColor, chairStyle) }],
+    }),
+  });
   // Stepped-away texture (§4 lane 4): a jacket in the owner's colour draped over the chair back —
   // the visual half of the plate's "stepped away"; offline owners get no jacket (they went home).
   if (deskOwned && node && node.presence !== 'offline') {
@@ -4893,7 +4938,7 @@ export function renderScene(
       parts: [{ kind: 'sprite', key: `shelf·${si}·${statKey}`, draw: (c) => bookshelf(c, fit, s, si) }],
     });
   });
-  const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false);
+  const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false, statKey);
   items.push(...nook.items);
 
   /* THE ROOM SHELL, painted before the depth-sorted loop: the ground shadow the diorama sits on, the
@@ -4934,14 +4979,26 @@ export function renderScene(
   } else {
     run(() => shell(ctx));
   }
-  items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => meetingTable(ctx, fit) });
-  for (const c of MEETING.chairs) {
+  items.push({
+    d: depth(MEETING.lx, MEETING.ly),
+    fn: () => meetingTable(ctx, fit),
+    parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw: (c) => meetingTable(c, fit) }],
+  });
+  MEETING.chairs.forEach((c, ci) => {
     const cx = MEETING.lx + c.dx;
     const cy = MEETING.ly + c.dy;
-    items.push({ d: depth(cx, cy), fn: () => meetingChair(ctx, fit, cx, cy, c.dir) });
-  }
-  items.push(...receptionItems(ctx, fit, recep, t));
-  items.push({ d: depth(PRINTER.lx, PRINTER.ly), fn: () => printer(ctx, fit) });
+    items.push({
+      d: depth(cx, cy),
+      fn: () => meetingChair(ctx, fit, cx, cy, c.dir),
+      parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw: (g) => meetingChair(g, fit, cx, cy, c.dir) }],
+    });
+  });
+  items.push(...receptionItems(ctx, fit, recep, t, statKey));
+  items.push({
+    d: depth(PRINTER.lx, PRINTER.ly),
+    fn: () => printer(ctx, fit),
+    parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw: (c) => printer(c, fit) }],
+  });
   items.push({
     d: depth(ENTRANCE.lx, ENTRANCE.ly),
     fn: () => drawEntrance(ctx, fit),
