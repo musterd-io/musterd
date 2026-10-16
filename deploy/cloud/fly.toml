@@ -18,6 +18,8 @@ primary_region = "iad"
   MUSTERD_HOST = "0.0.0.0"
   MUSTERD_PORT = "8080"
   MUSTERD_CLOUD_HOST_SUFFIX = "musterd.dev"
+  # Edge half of the per-team budget (ADR 622): deploy/cloud/per-team-rate-limit.json.
+  # Checked in here. This file does not post it. Deploy stays scripts/cloud/deploy.mjs.
   # Increment 1D's staging issuer (workers/staging-jwks). Increment 2's console replaces both lines.
   MUSTERD_CONSOLE_AUDIENCE = "https://musterd.dev"
   MUSTERD_CONSOLE_JWKS_URL = "https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks"

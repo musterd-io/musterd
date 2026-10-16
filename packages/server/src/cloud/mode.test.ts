@@ -36,7 +36,18 @@ describe('resolveCloudConfig', () => {
       consoleJwksUrl: FULL['MUSTERD_CONSOLE_JWKS_URL'],
       consoleAudience: FULL['MUSTERD_CONSOLE_AUDIENCE'],
       hostSuffix: 'musterd.dev',
+      teamBudgetPerMin: 600,
     });
+  });
+
+  it('reads an optional MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN, refusing a non-positive-integer by name', () => {
+    expect(
+      resolveCloudConfig({ ...FULL, MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN: '1200' })?.teamBudgetPerMin,
+    ).toBe(1200);
+    for (const bad of ['0', '-3', '2.5', 'many'])
+      expect(() => resolveCloudConfig({ ...FULL, MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN: bad })).toThrow(
+        /MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN must be a positive integer/,
+      );
   });
 
   it('reads an optional MUSTERD_PG_POOL_SIZE, refusing a non-positive-integer by name', () => {

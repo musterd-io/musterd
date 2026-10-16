@@ -10,6 +10,7 @@ import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { replaySource } from '../cloud/affinity.js';
 import { hostTeam } from '../cloud/hostIsolation.js';
+import { TEAM_BUDGET_MESSAGE, takeTeamRequest } from '../cloud/teamBudget.js';
 import { checkUpgrade } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import { MusterdError, asMusterdError } from '../errors.js';
@@ -253,6 +254,21 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
       if (!d.local && d.owner) {
         socket.write(
           `HTTP/1.1 307 Temporary Redirect\r\nfly-replay: instance=${d.owner}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`,
+        );
+        socket.destroy();
+        return;
+      }
+    }
+    // ADR 622: same window as HTTP, keyed by the host team, after the replay so a non-owner does
+    // not count an upgrade it hands off. A cloud claim for a different team is already not_found,
+    // so charging the upgrade charges the team the socket can actually join.
+    if (rootCtx.config.cloud) {
+      const team = hostTeam(req.headers.host, rootCtx.config.cloud.hostSuffix);
+      if (team && !takeTeamRequest(team, rootCtx.config.cloud.teamBudgetPerMin)) {
+        log.warn({ msg: 'ws_upgrade_rejected', reason: 'rate_limited' });
+        const body = JSON.stringify(new MusterdError('rate_limited', TEAM_BUDGET_MESSAGE).toBody());
+        socket.write(
+          `HTTP/1.1 429 Too Many Requests\r\nRetry-After: 60\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
         );
         socket.destroy();
         return;

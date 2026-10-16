@@ -1,3 +1,5 @@
+import { CLOUD_TEAM_BUDGET_PER_MIN } from './teamBudget.js';
+
 /**
  * Cloud mode (spec 2026-09-29 §5): `MUSTERD_MODE=cloud` is one flag with a defined set of effects.
  * This module holds the configuration half — the variables cloud mode requires and how they are
@@ -26,6 +28,11 @@ export interface CloudConfig {
    * the driver's default (10) when unset. A §8.1 load-run knob (lane 01M3Z455NE).
    */
   pgPoolSize?: number;
+  /**
+   * Requests per minute for one team (ADR 622). The HTTP path team and the WebSocket host team
+   * share the window. Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN`; 600 when unset.
+   */
+  teamBudgetPerMin: number;
 }
 
 /** Every variable cloud mode reads, in the order a refusal names them. */
@@ -105,5 +112,7 @@ export function resolveCloudConfig(env: Env = process.env): CloudConfig | null {
     consoleAudience: required(env, 'MUSTERD_CONSOLE_AUDIENCE'),
     hostSuffix: suffix,
     ...(poolSize !== undefined ? { pgPoolSize: poolSize } : {}),
+    teamBudgetPerMin:
+      optionalPositiveInt(env, 'MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN') ?? CLOUD_TEAM_BUDGET_PER_MIN,
   };
 }
