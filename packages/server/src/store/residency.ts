@@ -44,6 +44,7 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
+import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
 import { getPolicy, getTeamById } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
@@ -1323,6 +1324,85 @@ async function dueDispatchHandoffWorkOrders(
 }
 
 /**
+ * ADR 628: how long a seat's last act keeps a dispatch_continuation off its lanes. Longer than
+ * any CI wait or coffee gap in the 2026-10-16 duplicate wakes (a second worker spawned onto
+ * owned, live lanes twice in one night because presence had gone stale mid-flow); shorter than
+ * any real stall. Tunable by the eval in ADR 628 Consequences.
+ */
+export const OWNER_ENGAGEMENT_MS = 15 * 60_000;
+
+export interface OwnerEngagement {
+  engaged: boolean;
+  reason: 'live_presence' | 'recent_act' | null;
+  /** The newest evidencing act, for the suppression row and the nudge line. */
+  evidence?: { act_id: string; age_ms: number } | undefined;
+}
+
+/**
+ * Is this seat on it — live presence now, or any act/audit action inside the window? Presence
+ * answers "is a socket open"; the activity read answers "is someone working", which is what a
+ * heartbeat cannot see through a CI wait, a read, or a think. Either one engages.
+ */
+export async function ownerEngaged(
+  db: Driver,
+  teamId: string,
+  member: MemberRow,
+  presenceTimeoutMs: number,
+  now = Date.now(),
+): Promise<OwnerEngagement> {
+  if (await hasLivePresence(db, member.id, presenceTimeoutMs)) {
+    return { engaged: true, reason: 'live_presence' };
+  }
+  const since = now - OWNER_ENGAGEMENT_MS;
+  const actions = await lastActionBySubject(db, teamId, { now, lookbackMs: OWNER_ENGAGEMENT_MS });
+  const auditTs = actions.get(member.name) ?? 0;
+  const msg = await db.get<{ id: string; ts: number }>(
+    `SELECT id, ts FROM messages WHERE team_id = ? AND from_member = ? AND ts > ?
+     ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, member.id, since],
+  );
+  const best = Math.max(auditTs, msg?.ts ?? 0);
+  if (best <= since) return { engaged: false, reason: null };
+  // Prefer the message id for evidence (an act the owner can open); else the audit row.
+  return {
+    engaged: true,
+    reason: 'recent_act',
+    evidence: { act_id: msg?.id ?? 'audit', age_ms: now - best },
+  };
+}
+
+/** A nudge the derivation held back for the poll handler to send (it owns no hub). */
+export interface DispatchNudge {
+  laneId: string;
+  laneTitle: string;
+  owner: string;
+  /** The voice asking — lane creator, else latest non-owner lane actor, else null (suppress-only). */
+  voice: string | null;
+  evidence: string;
+}
+
+/**
+ * Who voices a dispatch nudge to this lane's owner — never the owner (a self-send never reaches
+ * an inbox, per the incident precedent). Null when no second voice exists: suppression still
+ * holds, the nudge is skipped and the audit says so.
+ */
+async function dispatchNudgeVoice(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  createdBy: string,
+  owner: string,
+): Promise<string | null> {
+  if (createdBy !== owner) return createdBy;
+  const row = await db.get<{ actor: string }>(
+    `SELECT actor FROM audit WHERE team_id = ? AND target = ? AND actor IS NOT NULL AND actor != ?
+     ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, laneId, owner],
+  );
+  return row?.actor ?? null;
+}
+
+/**
  * Board-owned claimed/active lanes with no triggering act (ADR 199 continuation edge).
  * Never wakes for unowned open work.
  */
@@ -1720,6 +1800,13 @@ interface SeatPass {
   /** ADR 611. One deny for this over-cap episode, written with no lease. Null when the episode
    *  is already open, or the seat is not held. */
   spendHold: AuditEntry | null;
+  /** ADR 628. Suppression rows, written unconditionally (the eval counts them; the nudge cooldown
+   *  reads their recency — the exhausted trip-dedup would eat both). */
+  suppressed: AuditEntry[];
+  /** ADR 628. Nudges this pass held back: the derivation owns no hub, so the poll handler sends
+   *  them (it owns the response). Non-empty also blocks the dream fallthrough below — a dream
+   *  would duplicate the engaged seat exactly like the suppressed continuation. */
+  nudges: DispatchNudge[];
 }
 
 /**
@@ -2035,6 +2122,12 @@ export async function claimWakeLeases(
   scope: HostScope = TEAM_WIDE_HOST,
   breach: SpendCapBreach | null = null,
   unpriced: UnpricedWakeBreach | null = null,
+  opts: {
+    /** ADR 628. Called once per suppressed dispatch the poll held back; the caller (which owns
+     *  the response) sends the nudge through normal delivery. Adversarial to nothing: the
+     *  suppression row is already written whether or not anyone listens. */
+    onNudge?: (nudge: DispatchNudge) => void;
+  } = {},
 ): Promise<WakeOrder[]> {
   // Lane 01M4VJNEX2: the backlog is rows already written, one per poll. Drop the repeats once
   // per process, before this poll's scans. A failure here must not stop the poll.
@@ -2054,6 +2147,7 @@ export async function claimWakeLeases(
   for (const pass of passes) {
     const order = await writeSeatPass(db, teamId, teamSlug, host, presenceTimeoutMs, now, pass);
     if (order) orders.push(order);
+    for (const nudge of pass.nudges) opts.onNudge?.(nudge);
   }
   return orders;
 }
@@ -2105,7 +2199,15 @@ async function deriveSeatPasses(
     const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name);
     if (snoozeUntil !== null && now < snoozeUntil) continue;
     const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
-    const pass: SeatPass = { member, policy, plan: null, exhausted: [], spendHold: null };
+    const pass: SeatPass = {
+      member,
+      policy,
+      plan: null,
+      exhausted: [],
+      spendHold: null,
+      suppressed: [],
+      nudges: [],
+    };
     passes.push(pass);
     // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
     // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
@@ -2274,13 +2376,70 @@ async function deriveSeatPasses(
         );
         if (!readable || !mayReadWakeAct(readable, member)) continue;
       }
+      // ADR 628: the owner is on it — suppress the duplicate, nudge at most once per window.
+      // Runs only where a lease would otherwise mint (after every skip above): a suppression is
+      // a decision about this candidate, not a verdict on the seat.
+      if (edge === 'dispatch_continuation' && candidate.lane_id !== undefined) {
+        const engagement = await ownerEngaged(db, teamId, member, presenceTimeoutMs, now);
+        if (engagement.engaged) {
+          const lane = await getLane(db, teamId, candidate.lane_id, teamSlug);
+          const recentNudge = await db.get<{ id: string }>(
+            `SELECT id FROM audit WHERE team_id = ? AND action = 'residency.dispatch_suppressed'
+             AND json_extract(detail, '$.lane_id') = ?
+             AND json_extract(detail, '$.nudge_sent') IS TRUE AND ts > ?`,
+            [teamId, candidate.lane_id, now - OWNER_ENGAGEMENT_MS],
+          );
+          const voice =
+            lane === null
+              ? null
+              : await dispatchNudgeVoice(db, teamId, lane.id, lane.created_by, member.name);
+          const nudgeSent = voice !== null && recentNudge === undefined;
+          // Written every poll it fires (not through the exhausted trip-dedup: the eval counts
+          // suppressions, and the nudge cooldown reads their recency).
+          pass.suppressed.push({
+            actor: null,
+            action: 'residency.dispatch_suppressed',
+            target: member.name,
+            result: 'deny',
+            detail: {
+              lane_id: candidate.lane_id,
+              edge,
+              reason: engagement.reason === 'live_presence' ? 'owner_live' : 'owner_active',
+              ...(engagement.evidence !== undefined
+                ? {
+                    last_act: engagement.evidence.act_id,
+                    last_act_age_ms: engagement.evidence.age_ms,
+                  }
+                : {}),
+              nudge_sent: nudgeSent,
+              ...(voice === null ? { no_voice: true } : {}),
+            },
+          });
+          if (nudgeSent && lane !== null) {
+            pass.nudges.push({
+              laneId: lane.id,
+              laneTitle: lane.title,
+              owner: member.name,
+              voice,
+              evidence:
+                engagement.reason === 'live_presence'
+                  ? 'live presence'
+                  : `last act ${engagement.evidence?.act_id ?? '?'} ` +
+                    `${Math.round((engagement.evidence?.age_ms ?? 0) / 1000)}s ago`,
+            });
+          }
+          continue;
+        }
+      }
       pass.plan = { kind: 'candidate', candidate, edge, exhKey };
       break; // one lease per seat per poll
     }
     // ADR 494: nothing asked-for was leased, so the seat may be due a dream — idle (the live
     // presence and deferral-snooze gates above already passed), cooled, outside its working
     // hours, inside tonight's count and budget. A dream never shares a pass with another wake.
-    if (pass.plan === null && policy.dream_enabled && cooled) {
+    // ADR 628: nor with a suppressed continuation — the seat is engaged, and a dream session
+    // would duplicate it exactly like the suppressed wake.
+    if (pass.plan === null && pass.suppressed.length === 0 && policy.dream_enabled && cooled) {
       const hours = parseWorkingHours(member.working_hours) ?? teamHours;
       const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
       const night =
@@ -2303,7 +2462,16 @@ async function deriveSeatPasses(
     }
     await applyWakeHold(db, teamId, pass, breach, unpriced);
   }
-  return passes.filter((p) => p.plan !== null || p.exhausted.length > 0 || p.spendHold !== null);
+  // ADR 628: a suppressed-only pass still reaches the writer — its rows are the eval, and
+  // its nudges ride the poll response. Without this the filter eats the whole decision.
+  return passes.filter(
+    (p) =>
+      p.plan !== null ||
+      p.exhausted.length > 0 ||
+      p.spendHold !== null ||
+      p.suppressed.length > 0 ||
+      p.nudges.length > 0,
+  );
 }
 
 /**
@@ -2330,6 +2498,9 @@ async function writeSeatPass(
       }
       if (pass.spendHold !== null && !(await spendCapEpisodeOpen(t, teamId, member.name))) {
         await appendAudit(t, teamId, pass.spendHold);
+      }
+      for (const entry of pass.suppressed) {
+        await appendAudit(t, teamId, entry);
       }
       if (plan === null) return null;
       if (await hasLivePresence(t, member.id, presenceTimeoutMs)) return null;

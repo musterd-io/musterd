@@ -316,6 +316,7 @@ export type AuditAction =
   | 'residency.enrolled'
   | 'residency.revoked'
   | 'residency.wake_leased'
+  | 'residency.dispatch_suppressed'
   | 'residency.woke'
   | 'residency.wake_failed'
   | 'residency.wake_exhausted'
@@ -724,6 +725,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.enrolled': 'actor',
   'residency.revoked': 'actor',
   'residency.wake_leased': 'none',
+  'residency.dispatch_suppressed': 'none',
   'residency.woke': 'none',
   'residency.wake_failed': 'none',
   'residency.wake_exhausted': 'none',
