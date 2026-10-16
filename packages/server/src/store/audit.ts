@@ -115,6 +115,13 @@ export type AuditAction =
   | 'store.pruned'
   | 'request.decide'
   | 'request.expired'
+  // ADR 623 §7 (away channels): an answer that arrived through a channel. `advisory` = an A1 answer was
+  // recorded (it authorizes nothing, ADR 618 §4); `refused` = a redemption was turned away, with a
+  // closed `detail.reason`. Detail carries the human authorizer and the delivery actor separately; never
+  // the token, its hash, a nonce, a signature or the body. `channel.answer.accepted` is reserved for the
+  // first class that can release work and is not written yet.
+  | 'channel.answer.advisory'
+  | 'channel.answer.refused'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -655,6 +662,9 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'agent_session_lease.renewed': 'actor',
   'request.decide': 'actor',
   'request.expired': 'none',
+  // The relay is not a seat; the human is named in detail.authorizer, the delivery path in detail.delivery_actor.
+  'channel.answer.advisory': 'none',
+  'channel.answer.refused': 'none',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
   // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.
