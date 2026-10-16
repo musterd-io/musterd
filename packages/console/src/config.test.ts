@@ -26,6 +26,23 @@ describe('resolveConsoleConfig (ADR 615)', () => {
     }
   });
 
+  it('enables a provider only with both its id and secret, and refuses half a pair', () => {
+    expect(resolveConsoleConfig(base).providers).toEqual({});
+    const both = resolveConsoleConfig({
+      ...base,
+      MUSTERD_CONSOLE_GITHUB_CLIENT_ID: 'id',
+      MUSTERD_CONSOLE_GITHUB_CLIENT_SECRET: 'sekrit',
+    });
+    expect(both.providers.github).toEqual({ clientId: 'id', clientSecret: 'sekrit' });
+    try {
+      resolveConsoleConfig({ ...base, MUSTERD_CONSOLE_GOOGLE_CLIENT_SECRET: 'sekrit' });
+      throw new Error('should refuse');
+    } catch (e) {
+      expect(String(e)).toContain('MUSTERD_CONSOLE_GOOGLE_CLIENT_ID');
+      expect(String(e)).not.toContain('sekrit');
+    }
+  });
+
   it('refuses an issuer that is not a bare https origin', () => {
     for (const bad of [
       'http://app.musterd.io',

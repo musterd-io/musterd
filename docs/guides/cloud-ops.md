@@ -109,6 +109,28 @@ CLOUD_FLY_CONFIG=deploy/console/fly.toml \
 CLOUD_MIGRATE_CMD="node packages/console/dist/bin.js migrate" node scripts/cloud/deploy.mjs
 ```
 
+### Sign-in providers (ADR 620)
+
+Each provider is off until both its client id and secret are set on `musterd-console`.
+
+- **GitHub:** github.com → Settings → Developer settings → OAuth Apps → New OAuth App (under the
+  `musterd-io` organization if it should belong to it). Application name `musterd`, homepage
+  `https://musterd.io`, authorization callback URL `https://app.musterd.io/auth/github/callback`.
+  Copy the client id and generate a client secret.
+- **Google:** console.cloud.google.com → a project for musterd → APIs & Services → OAuth consent
+  screen: External, app name `musterd`, support email, scopes `openid` and `email` only. Then
+  Credentials → Create credentials → OAuth client ID → Web application, authorized redirect URI
+  `https://app.musterd.io/auth/google/callback`. Copy the client id and secret.
+
+Stage them through stdin, then deploy:
+
+```sh
+printf 'MUSTERD_CONSOLE_GITHUB_CLIENT_ID=%s\nMUSTERD_CONSOLE_GITHUB_CLIENT_SECRET=%s\n' "$GH_ID" "$GH_SECRET" \
+  | fly secrets import -a musterd-console --stage
+printf 'MUSTERD_CONSOLE_GOOGLE_CLIENT_ID=%s\nMUSTERD_CONSOLE_GOOGLE_CLIENT_SECRET=%s\n' "$G_ID" "$G_SECRET" \
+  | fly secrets import -a musterd-console --stage
+```
+
 Done when `curl -s https://app.musterd.io/health` answers `{"ok":true,"build":"<sha>"}` and
 `/.well-known/jwks.json` answers `{"keys":[]}`. Backups: Neon point-in-time restore until the
 increment 3 backup lane (`01M3Z42KWH`) covers this database too.

@@ -14,6 +14,7 @@ const config: ConsoleConfig = {
   host: '127.0.0.1',
   port: 0,
   build: 'abc123',
+  providers: {},
 };
 const okDb: Queryable = { query: async () => ({ rows: [] }) };
 const downDb: Queryable = {
