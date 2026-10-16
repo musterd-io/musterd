@@ -60,7 +60,9 @@ One command, three steps, and the middle one is the important one:
 
 The landing `<head>` is the share card: `og:image` / `twitter:image` point at the hashed
 `src/brand/social-card.png` (source of truth `docs/design/assets/social-card.png`), which Vite
-emits into `assets/` so it rides the existing stage allowlist. `og:title` is `musterd`, not the
+emits into `assets/` so it rides the existing stage allowlist. `og:image:alt` and
+`twitter:image:alt` are both `SITE_CARD_ALT`. Naming `twitter:image` opts a client out of the
+Open Graph fallback, so the alt has to be on that tag too. `og:title` is `musterd`, not the
 retired roadmap title. After merge, `deploy:site` (or the next site publish) is what makes a
 Slack/X unfurl pick up the new tags — the daemon's `/live` bundle is a different origin.
 

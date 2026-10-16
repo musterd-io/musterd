@@ -38,6 +38,9 @@ export const Route = createRootRoute({
       { property: 'og:image:height', content: '630' },
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:image', content: ogImage },
+      // Naming twitter:image opts a client out of the og:* fallback, so the alt is named
+      // here too. pageMeta does the same when a page brings its own card.
+      { name: 'twitter:image:alt', content: SITE_CARD_ALT },
     ],
     links: [
       { rel: 'icon', href: chipIcon, type: 'image/svg+xml' },
