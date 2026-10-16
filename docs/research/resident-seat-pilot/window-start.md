@@ -156,15 +156,87 @@ reported beside them: dolly was attended, so they are not unattended C work. The
 are **excluded: recipient never wakeable**, are open again, and are offered to the next pass like
 any other open lane.
 
-### Pass 3 — 2026-10-16 (prepared; the pass itself is recorded below when run)
+### Pass 3 — 2026-10-16 11:03 PDT
 
-The first pass under amendment 1. Filter `musterd lanes --open --json` on the manifest's terms
-(stakes normal, no risk tag, ≤3 surface globs, none under `packages/protocol/src`, `docs/decisions`,
-`SPEC.md`, `.github`, `deploy`, no **open** dependency, no brainstorm/spec-first title) **and** the
-amended term: finishable from a seat's own workspace, with no human live session, third-party
-account, phone, or hosted or streaming hardware. Every lane excluded on the amended term is listed
-here with its reason, so the class can be recounted without it. Order by `created_at`, alternate
-B / C, **start at B** (mason). C goes round-robin in name order over the Claude Code residency
-seats that are wakeable and unattended at the pass (pool: `alfie`, `dolly`, `lazara`, `sloane`;
-`delta` is retired, see below); record which were attended. Note text is pass 1's with `pass 3 (2026-10-16)`.
-Read both arms' spend against the ceilings and record it beside the table.
+The first pass under amendment 1. 101 open lanes, 24 that passed the manifest's terms (stakes
+normal, no risk tag, ≤3 surface globs, none under `packages/protocol/src`, `docs/decisions`,
+`SPEC.md`, `.github`, `deploy`, no open dependency, no brainstorm/spec-first title). Of those, 7
+also passed the amended term and were handed off by `created_at`, alternating B / C, starting at
+B, with pass 1's note (`pass 3 (2026-10-16)` in place of `pass 1`).
+
+**Arm C's pool.** A seat counted only with a host heartbeat inside the last day, and only if it
+was unattended. At 10:59 PDT `host_liveness` had `macbook-air-2.lan`, `mac.lan`, and
+`MacBook-Air-2.local`. `Nicks-Laptop.local` had no row.
+
+| seat | host | at the pass |
+| --- | --- | --- |
+| alfie | `Nicks-Laptop.local` | no heartbeat. Not in the pool. |
+| dolly | `Nicks-Laptop.local` | no heartbeat, and a claude-code presence online at 10:48. Attended. Not in the pool. |
+| lazara | `mac.lan` | heartbeat at 10:59, no presence. In the pool. |
+| sloane | `macbook-air-2.lan` | heartbeat at 10:59, no claude process (an opencode process, pid 96024, was in the workspace; the host's attended check is claude-code only). In the pool. |
+
+Round-robin in name order over the pool that remained: `lazara`, then `sloane`.
+
+| # | lane | arm | to |
+| --- | --- | --- | --- |
+| 1 | `01M3W815KR` Cloud seeds relay public-host rule | B | mason |
+| 2 | `01M41PX0XB` duplicate envelope id answers 409 | C | lazara |
+| 3 | `01M46GR8AC` deaf seats re-measure | B | mason |
+| 4 | `01M4S9AVXF` overlap from what branches change | C | sloane |
+| 5 | `01M50ZB4YM` console `/health` build stamp from `FLY_IMAGE_REF` | B | mason |
+| 6 | `01M50ZJ9F9` cursor-agent wake backend | C | lazara |
+| 7 | `01M5162W38` musterd pick 5: skill and pick act text | B | mason |
+
+Mason's host woke lease `01M52Y3ZGW` on lane 1 at 11:03:27. Sloane's first wake on lane 4
+(lease `01M52Y4GN2`) settled exit 1 in 5.0 s: the harness said the weekly limit resets at 8pm
+America/Los_Angeles. The lane stays hers. The board's surface-overlap warnings at handoff were
+advisory and were not acted on.
+
+**Excluded on the amended term** (a human's live session, a third-party account, a phone, or
+hosted or streaming hardware), so the class can be recounted without the term:
+
+| lane | reason |
+| --- | --- |
+| `01M0FS6J5A` QLoRA coordination-seat experiment | nick's hands-on training run |
+| `01M2H2M5S3` dogfood run 1 | human-run scenario |
+| `01M2H2MP1F` dogfood run 2 | human-run scenario |
+| `01M2H2NQJH` dogfood run 3 | human-run scenario |
+| `01M2H2P1XX` dogfood run 5 | human-run scenario |
+| `01M2H2PGJE` dogfood run 6 | human-run scenario |
+| `01M2H2QK3X` dogfood run 10 | human-run scenario |
+| `01M2H2R1QB` dogfood run 11 | human-run scenario |
+| `01M2H2RKFM` dogfood run 12 | a stranger, and the stream |
+| `01M2M6NV4C` dogfood run 13 | human-run scenario |
+| `01M3AMY549` ChatGPT Business rehearsal | third-party account and phones (the same lane released on 2026-10-15) |
+| `01M46WD973` repair GPTBot Codex MCP | gptbot's workspace is not on this machine; the repair is that seat's local registration |
+| `01M4EDCSJD` accountability dogfood | humans have to receive the handoffs |
+| `01M4RKQX5V` tour step for nick | nick's live session |
+| `01M50FNNRS` stream key swap on a live machine | nick at the box, and the streaming machine |
+
+Two more passed the manifest's terms and were not handed, for reasons that are not the amended
+term: `01M3TB1GPM` (ADR 436 trigger read) is dated 2026-10-21, and running it today would take
+the reading early; `01M50ZJ9WD` (harness E2E audit) says it starts after its lanes 1–4 land, and
+at the pass muse 3 (`01M50ZJ8KG`) was still active and the cursor-agent backend was still open
+(it is row 6 above).
+
+**B's handed set after this pass:** the 7 in-class lanes recorded at 15:10 on 2026-10-15, plus
+rows 1, 3, 5 and 7. Six of the earlier seven are `done`; `01M4RX7NE2` is still claimed. That is
+11 in-class lanes handed to B, against the floor of 8.
+
+**Spend at the pass**, read from this joiner's replica before the new wakes were priced: mason
+$21.05 across 46 `residency.wake_cost` rows against the $100 ceiling, resident $0.11 across 11
+against $15. Neither ceiling stops dispatch.
+
+**ADR 627** merged as `7bf7f569` at 2026-10-15 21:21:38 PDT (#2719). This machine's host (pid
+90969, started 2026-10-16 10:46:14 PDT) is running runtime build `90d0ad5`, which contains that
+commit.
+
+**Probe re-run (measure 6) passed.** Steer `01M52Y54DE` was sent at 11:03:58.766 while mason's
+lease `01M52Y3ZGW` had turn 8 (`toolUse`, 11:03:56.124) as its latest `wake_turns` row.
+`residency.steered` records delivery at 11:03:58.844, and the host log says the act was
+delivered into the running loop with the host read. Turn 9 completed at 11:04:00.253 with no
+steer in the transcript: that request was already in flight, which ADR 627 names as the loop's
+own wait. Turn 10 completed at 11:04:02.943. Its transcript has `host_reads`: the host's
+`team_inbox_check` of `01M52Y54DE`, then the model's own tool `team_send`. The in-thread answer
+is message `01M52Y58DZ` ("seen") at 11:04:02.879. No model-made `team_inbox_check` of the steer
+id precedes that answer. The falsifier in ADR 627 does not fire.
