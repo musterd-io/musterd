@@ -7,6 +7,7 @@ import type { ConsoleConfig } from './config.js';
 import { hostCookie } from './cookies.js';
 import { csrfTokenValid, originAllowed } from './csrf.js';
 import { DATABASE_UNREACHABLE_SENTENCE, type Queryable } from './db.js';
+import { sendSignInEmail } from './email.js';
 import type { Log } from './log.js';
 import {
   finishFlow,
@@ -18,8 +19,18 @@ import {
 import { hit } from './ratelimit.js';
 import { cookie, FormError, readForm, SESSION_COOKIE } from './request.js';
 import { safeReturnPath } from './returnpath.js';
+import { hashSecret, newSecret } from './secrets.js';
 import { ABSOLUTE_MS, createSession, loadSession, revokeSession } from './sessions.js';
-import { consumeOAuthTx, createOAuthTx, TX_COOKIE, TX_TTL_MS } from './transactions.js';
+import {
+  consumeMagic,
+  consumeOAuthTx,
+  createMagicTx,
+  createOAuthTx,
+  lookupMagic,
+  MAGIC_TTL_MS,
+  TX_COOKIE,
+  TX_TTL_MS,
+} from './transactions.js';
 
 /**
  * The console's HTTP boundary (ADR 615). The skeleton serves exactly two routes — `GET /health`
@@ -63,10 +74,56 @@ export interface ConsoleDeps {
   providers?: ProviderOverrides;
   /** Which hops' forwarded headers are believed (default: on Fly, Cloudflare's ranges). */
   clientIp?: ClientIpOptions;
+  /** Tests only: the email transport (default: Cloudflare Email Service over fetch). */
+  sendEmail?: typeof sendSignInEmail;
 }
 
 /** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
-const POST_ROUTES = new Set(['/logout', '/auth/github/start', '/auth/google/start']);
+const POST_ROUTES = new Set([
+  '/logout',
+  '/auth/github/start',
+  '/auth/google/start',
+  '/auth/email/start',
+  '/auth/email/confirm',
+]);
+/**
+ * Magic-link limits (ADR 620 decisions 6 and 9). None of them is global, because a global limit
+ * is a switch any one client can flip for everyone (security review, 2026-10-16):
+ * - per client: 5 an hour, whatever the addresses;
+ * - per address AND client: 5 an hour, so one client cannot bomb an inbox;
+ * - per address across all clients: 20 an hour, which bounds a distributed bombing. This is the
+ *   one limit an attacker can aim at someone: twenty sends an hour, sustained, delays email
+ *   sign-in for that one address. Its other sign-in methods are untouched. Recorded in ADR 620.
+ * The send count is watched, not enforced: past EMAIL_SEND_WATCH an hour the console logs a
+ * warning for a human, and Cloudflare's own sending quota is the cost backstop.
+ */
+const EMAIL_PER_CLIENT = 5;
+const EMAIL_PER_ADDRESS_CLIENT = 5;
+const EMAIL_PER_ADDRESS = 20;
+const EMAIL_WINDOW_MS = 60 * 60 * 1000;
+const EMAIL_SEND_WATCH = 2000;
+
+/**
+ * An address we will send to: trimmed, at most 254 characters, one `@`, a dotted domain, no
+ * whitespace or control characters. The domain is lowercased; the local part is kept exactly
+ * (ADR 620 decision 3: no plus-alias collapsing, no dot removal).
+ */
+function emailAddress(input: string | null): string | null {
+  const v = (input ?? '').trim();
+  if (
+    v.length < 3 ||
+    v.length > 254 ||
+    /[\s<>"]/.test(v) ||
+    [...v].some((c) => c.charCodeAt(0) < 0x20)
+  )
+    return null;
+  const at = v.lastIndexOf('@');
+  if (at < 1 || v.indexOf('@') !== at) return null;
+  const domain = v.slice(at + 1).toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(domain))
+    return null;
+  return `${v.slice(0, at)}@${domain}`;
+}
 const START = /^\/auth\/(github|google)\/start$/;
 const CALLBACK = /^\/auth\/(github|google)\/callback$/;
 /**
@@ -201,6 +258,155 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 },
               );
             }
+            if (path === '/auth/email/start') {
+              route = 'auth_start_email';
+              if (!config.email) return send(res, 404, err('not_found', 'not found'));
+              const t = now();
+              const address = emailAddress(form.get('email'));
+              // The answer never says whether the address has an account — there is no lookup to
+              // reveal. A malformed address is the one thing refused here.
+              if (!address)
+                return send(res, 400, err('invalid_email', 'enter a valid email address'));
+              const client = clientKey(req);
+              const addr = hashSecret(address);
+              const allowed =
+                (await hit(
+                  db,
+                  {
+                    bucket: `email-client:${client}`,
+                    max: EMAIL_PER_CLIENT,
+                    windowMs: EMAIL_WINDOW_MS,
+                  },
+                  t,
+                )) &&
+                (await hit(
+                  db,
+                  {
+                    bucket: `email-address-client:${addr}:${client}`,
+                    max: EMAIL_PER_ADDRESS_CLIENT,
+                    windowMs: EMAIL_WINDOW_MS,
+                  },
+                  t,
+                )) &&
+                (await hit(
+                  db,
+                  {
+                    bucket: `email-address:${addr}`,
+                    max: EMAIL_PER_ADDRESS,
+                    windowMs: EMAIL_WINDOW_MS,
+                  },
+                  t,
+                ));
+              if (
+                !(await hit(
+                  db,
+                  { bucket: 'email-send-watch', max: EMAIL_SEND_WATCH, windowMs: EMAIL_WINDOW_MS },
+                  t,
+                ))
+              )
+                log.warn('signin_email_volume_high', { rid, per_hour_over: EMAIL_SEND_WATCH });
+              if (!allowed)
+                return send(
+                  res,
+                  429,
+                  err('too_many_requests', 'too many sign-in emails; try again later'),
+                  { 'retry-after': '900' },
+                );
+              const token = newSecret();
+              const txValue = await createMagicTx(
+                db,
+                { email: address, token, returnPath: safeReturnPath(form.get('return')) },
+                t,
+              );
+              const link = `${config.issuer}/auth/email/confirm?t=${token}`;
+              const sent = await (deps.sendEmail ?? sendSignInEmail)(config.email, {
+                to: address,
+                link,
+                expiresMinutes: MAGIC_TTL_MS / 60_000,
+              }).catch(() => false);
+              await appendAudit(
+                db,
+                { action: 'signin.start', requestId: rid, detail: { provider: 'email', sent } },
+                t,
+              );
+              if (!sent) log.warn('signin_email_not_sent', { rid });
+              return send(
+                res,
+                200,
+                { ok: true, state: 'check_email' },
+                { 'set-cookie': txCookie(txValue, MAGIC_TTL_MS / 1000) },
+              );
+            }
+            if (path === '/auth/email/confirm') {
+              route = 'auth_confirm_email';
+              if (!config.email) return send(res, 404, err('not_found', 'not found'));
+              const t = now();
+              const done = await consumeMagic(db, form.get('t'), cookie(req, TX_COOKIE), t);
+              const clearTx = { 'set-cookie': txCookie('', 0) };
+              if (!done) {
+                await appendAudit(
+                  db,
+                  {
+                    action: 'signin.result',
+                    requestId: rid,
+                    detail: { provider: 'email', ok: false, reason: 'link_invalid' },
+                  },
+                  t,
+                );
+                return send(
+                  res,
+                  400,
+                  err(
+                    'link_invalid',
+                    'this link has expired, was already used, or belongs to another browser',
+                  ),
+                  clearTx,
+                );
+              }
+              const identity = {
+                provider: 'email' as const,
+                subject: done.email,
+                email: done.email,
+              };
+              const account = await accountFor(db, identity, t);
+              if (!account)
+                return send(res, 403, err('account_disabled', 'this account is disabled'), clearTx);
+              const sid = await createSession(
+                db,
+                {
+                  accountId: account.accountId,
+                  method: 'email',
+                  identityProvider: 'email',
+                  identitySubject: done.email,
+                },
+                t,
+              );
+              await appendAudit(
+                db,
+                {
+                  action: 'signin.result',
+                  requestId: rid,
+                  actorAccountId: account.accountId,
+                  detail: { provider: 'email', ok: true, created: account.created },
+                },
+                t,
+              );
+              await appendAudit(
+                db,
+                {
+                  action: 'session.issue',
+                  requestId: rid,
+                  actorAccountId: account.accountId,
+                  detail: { method: 'email' },
+                },
+                t,
+              );
+              res.setHeader('set-cookie', [
+                hostCookie('session', sid, ABSOLUTE_MS / 1000),
+                txCookie('', 0),
+              ]);
+              return send(res, 303, { ok: true }, { location: done.returnPath });
+            }
             if (path === '/logout') {
               route = 'logout';
               const sid = cookie(req, SESSION_COOKIE);
@@ -224,11 +430,25 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               return send(res, 303, { ok: true }, clear);
             }
           }
-          if ((req.method !== 'GET' && req.method !== 'HEAD') || POST_ROUTES.has(path)) {
+          const readOnlyGet =
+            (req.method === 'GET' || req.method === 'HEAD') && path === '/auth/email/confirm';
+          if (
+            ((req.method !== 'GET' && req.method !== 'HEAD') || POST_ROUTES.has(path)) &&
+            !readOnlyGet
+          ) {
             route = 'method_not_allowed';
             return send(res, 405, err('method_not_allowed', 'method not allowed'), {
               allow: POST_ROUTES.has(path) ? 'POST' : 'GET, HEAD',
             });
+          }
+          if (path === '/auth/email/confirm' && (req.method === 'GET' || req.method === 'HEAD')) {
+            // ADR 620 decision 6: the link's GET only SHOWS — it never consumes or signs in, so a
+            // mail scanner or prefetcher that follows it changes nothing. The page then POSTs.
+            route = 'auth_confirm_email_view';
+            if (!config.email) return send(res, 404, err('not_found', 'not found'));
+            const token = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('t');
+            const state = await lookupMagic(db, token, cookie(req, TX_COOKIE), now());
+            return send(res, 200, { state });
           }
           const callback = CALLBACK.exec(path);
           if (callback) {

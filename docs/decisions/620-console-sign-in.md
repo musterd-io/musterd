@@ -101,6 +101,14 @@ where a plausible shortcut becomes a takeover path.
 - Before sign-in ships, tests cover: same and cross-browser links, a stolen link, a scanner GET,
   double redemption across two servers, session fixation, state and provider swaps, return-path
   variants, revoked and expired sessions, and the fresh-sign-in requirement.
+- _(2026-10-16, while building it.)_ Three security reviews of the build sharpened decision 9.
+  No sign-in limit is global — a global bucket is a switch one client can flip for everyone — and
+  a limit's client key believes `cf-connecting-ip` only from Cloudflare's published ranges, counts
+  IPv6 by its /64, and otherwise uses the sender's own address. One limit can still be aimed at a
+  person: twenty magic-link sends an hour to one address, across all clients, sustained, delays
+  email sign-in for that address. It bounds inbox bombing, which an unlimited address would allow,
+  and the address's other sign-in methods are untouched. The email send count is watched (a
+  warning past 2,000 an hour), never enforced.
 - If export and delete ever need AAL2, the console needs a second factor (a passkey is the natural
   one). That is a separate decision.
 - The screens and their words come from slippy and sloane; this record governs what the screens are

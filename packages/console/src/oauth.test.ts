@@ -124,6 +124,7 @@ async function boot(opts: { providers?: ConsoleConfig['providers'] } = {}) {
     port: 0,
     build: null,
     providers: opts.providers ?? { github: creds, google: creds },
+    email: null,
   };
   const server = createConsoleServer({
     config,

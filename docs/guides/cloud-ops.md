@@ -122,12 +122,19 @@ Each provider is off until both its client id and secret are set on `musterd-con
   Credentials → Create credentials → OAuth client ID → Web application, authorized redirect URI
   `https://app.musterd.io/auth/google/callback`. Copy the client id and secret.
 
+- **Magic-link email:** in the Cloudflare dashboard for the `musterd.io` zone, Email → Email
+  Sending → onboard `musterd.io` (it adds the SPF and DKIM records). Then create an API token with
+  only the Email Sending permission for this account. Copy the account id and the token. The
+  sender is `signin@musterd.io`.
+
 Stage them through stdin, then deploy:
 
 ```sh
 printf 'MUSTERD_CONSOLE_GITHUB_CLIENT_ID=%s\nMUSTERD_CONSOLE_GITHUB_CLIENT_SECRET=%s\n' "$GH_ID" "$GH_SECRET" \
   | fly secrets import -a musterd-console --stage
 printf 'MUSTERD_CONSOLE_GOOGLE_CLIENT_ID=%s\nMUSTERD_CONSOLE_GOOGLE_CLIENT_SECRET=%s\n' "$G_ID" "$G_SECRET" \
+  | fly secrets import -a musterd-console --stage
+printf 'MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID=%s\nMUSTERD_CONSOLE_EMAIL_API_TOKEN=%s\nMUSTERD_CONSOLE_EMAIL_FROM=signin@musterd.io\n' "$CF_ACCOUNT" "$CF_EMAIL_TOKEN" \
   | fly secrets import -a musterd-console --stage
 ```
 

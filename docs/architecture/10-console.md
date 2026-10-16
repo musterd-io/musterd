@@ -27,6 +27,9 @@ Two routes, and everything else is refused:
 | `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
 | `POST /auth/{github,google}/start` | ADR 620: exact Origin; 30 a minute per client (`clientip.ts`: `cf-connecting-ip` only when the hop Fly saw is in Cloudflare's published ranges, else the sender's own address — so a direct-to-origin sender can neither invent addresses nor name a victim's; there is no global sign-in bucket to exhaust); a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
 | `GET /auth/{github,google}/callback` | consumes the transaction atomically (cookie, provider, state, TTL), exchanges the code (Google's ID token verified: signature, issuer, audience, expiry, nonce; GitHub's numeric id from the pinned `/user`), finds or makes the account by `(provider, subject)` only, issues a session, `303` to an allowlisted return path. Any failure is a fixed error, never a redirect |
+| `POST /auth/email/start` | ADR 620: exact Origin; a valid address (domain case-folded, local part kept); limits per client, per address-and-client, and per address (20 an hour), none global; a single-use magic transaction bound to this browser's `__Host-tx` cookie, 15 minutes; emails `issuer/auth/email/confirm?t=…` through Cloudflare Email Service; always answers "check your email" |
+| `GET /auth/email/confirm` | shows `confirm`, `other_browser` or `expired` — never consumes, so a mail scanner following the link changes nothing |
+| `POST /auth/email/confirm` | exact Origin; consumes the token only together with the browser's tx cookie, in one atomic UPDATE; issues a session; `303` to the allowlisted return path |
 | `GET /me` | temporary JSON view of the signed-in account and its methods, until the signed-in page lands |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
 
@@ -118,6 +121,7 @@ src/
   clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16; bucketOf keys IPv6 by its /64
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
+  email.ts        // sendSignInEmail(cfg, {to, link, expiresMinutes}): one POST to Cloudflare Email Service's REST endpoint, no SDK, no tracking; signInMessage (placeholder words until the copy spec lands)
   http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
   providers.ts    // PINNED GitHub/Google endpoints, startFlow (state, PKCE S256, Google nonce; pinned callback), finishFlow (openid-client code exchange; Google ID token claims; GitHub numeric id from /user); ProviderOverrides for tests only
@@ -128,5 +132,5 @@ src/
   secrets.ts      // newSecret (256-bit base64url), hashSecret (SHA-256 hex — the only form a secret is stored in), sameSecret (constant time)
   sessions.ts     // IDLE_MS / ABSOLUTE_MS / FRESH_MS; createSession (always a new id), loadSession (one query: not revoked, both expiries, account live, generation current; touches at most once a minute), isFresh, revokeSession, revokeAllSessions
   testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
-  transactions.ts // TX_COOKIE, TX_TTL_MS; createOAuthTx (hashed cookie id and state), consumeOAuthTx (one atomic UPDATE … WHERE consumed_at IS NULL; cookie, provider, state, TTL)
+  transactions.ts // TX_COOKIE, TX_TTL_MS; createOAuthTx (hashed cookie id and state), consumeOAuthTx (one atomic UPDATE … WHERE consumed_at IS NULL; cookie, provider, state, TTL); createMagicTx, lookupMagic (read-only: confirm / other_browser / expired), consumeMagic (token AND browser cookie, atomic)
 ```
