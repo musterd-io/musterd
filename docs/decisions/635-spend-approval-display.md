@@ -31,11 +31,12 @@ Without a stored key, the hold lane has nothing to read, and the team cannot see
 
 6. No feature-epoch bump. The field is optional. An older client strips it. An older daemon omits it, and the newer client renders the report it already rendered.
 
-7. Nothing is held. No gateway reads this key. Lane `01M531H8WGX270MZRR5KN08XPS` is the hold.
+7. Nothing is held. No gateway reads this key. Lane `01M531H8WGX270MZRR5KN08XPS` is the hold. _(Amended 2026-10-16: the hold landed in [ADR 636](636-spend-approval-hold.md). This record still stores the key and prints the report line. See the amendment below.)_
 
 ## Consequences
 
 - _(2026-10-16)_ Reserved as 634 on draft PR #2757. Main took 634 for Cloud client admission (PR #2756) before this change landed, so this record is 635.
+- _(2026-10-16)_ The hold landed in [ADR 636](636-spend-approval-hold.md). The report line still says `display only`. The gateway reads the key at wake start through the team report. This record still stores the key and prints the line.
 - An admin sets one number. The report shows it as a per-wake gateway threshold and says the hold is not on yet.
 - The weekly cap line is unchanged. Setting this key does not move `spend_over_cap`.
 - The policy view gains one line on every team, including a team with no threshold. The report text and the report JSON do not, until a threshold is set.
@@ -45,4 +46,4 @@ Without a stored key, the hold lane has nothing to read, and the team cannot see
 
 - **Traces:** a set or cleared threshold is the existing `policy.change` audit row. No new audit action.
 - **Eval:** the protocol rejects 0, negatives, non-finite values, and values above 1_000_000, and `parse({})` leaves the key unset. The report omits `spend_approval_usd` when the key is unset and copies the number when it is set. The CLI report text contains no `approval $` until the key is set, then shows `display only`. `deriveWakeMetrics` does not carry the key.
-- **Experiment:** none. Whether the line changes what a team spends is outside this decision. The hold lane is where a wake actually waits.
+- **Experiment:** none. Whether the line changes what a team spends is outside this decision. A wake that waits is recorded by [ADR 636](636-spend-approval-hold.md).

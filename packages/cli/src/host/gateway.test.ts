@@ -332,3 +332,236 @@ describe('startMeteringGateway (ADR 583)', () => {
     expect(body.error.message).toContain('1.5000');
   });
 });
+
+describe('spend approval hold (ADR 636)', () => {
+  async function until(cond: () => boolean): Promise<void> {
+    const deadline = Date.now() + 2_000;
+    while (!cond()) {
+      if (Date.now() > deadline) throw new Error('condition not met in time');
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+
+  async function boot(over: {
+    budgetUsd?: number;
+    spendApprovalUsd?: number;
+    onSpendApproval?: (req: {
+      leaseId: string;
+      spentUsd: number;
+      thresholdUsd: number;
+      signal: AbortSignal;
+    }) => Promise<'accept' | 'decline' | 'wake_ended'>;
+    log?: (line: string) => void;
+  }) {
+    const f = await fakeUpstream(() => ({ body: anthropicJson(10, 0) }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L9',
+      price: () => 0.1,
+      upstreams: [{ name: 'anthropic', url: f.url, envVar: 'ANTHROPIC_BASE_URL' }],
+      ...over,
+    });
+    return { f, base: gw.env['ANTHROPIC_BASE_URL']! };
+  }
+
+  it('forwards under the threshold and does not ask', async () => {
+    let asked = 0;
+    const { base } = await boot({
+      spendApprovalUsd: 0.2,
+      onSpendApproval: () => {
+        asked += 1;
+        return Promise.resolve('decline');
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    expect(asked).toBe(0);
+    expect(gw!.summary().approval_refused).toBe(0);
+  });
+
+  it('holds the next call at the threshold, asks once, and forwards it on accept', async () => {
+    let asked = 0;
+    let resolve: (v: 'accept') => void = () => undefined;
+    const pending = new Promise<'accept'>((r) => {
+      resolve = r;
+    });
+    const { f, base } = await boot({
+      spendApprovalUsd: 0.1,
+      onSpendApproval: (req) => {
+        asked += 1;
+        expect(req.spentUsd).toBeCloseTo(0.1, 9);
+        expect(req.thresholdUsd).toBe(0.1);
+        expect(req.leaseId).toBe('L9');
+        return pending;
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const held = post(base, '/v1/messages', '{}', { authorization: 'Bearer sk-ant-oat-SECRET' });
+    await until(() => asked === 1);
+    expect(f.seen).toHaveLength(1);
+    resolve('accept');
+    const forwarded = await held;
+    expect(forwarded.status).toBe(200);
+    expect(f.seen).toHaveLength(2);
+    expect(f.seen[1]!.headers['authorization']).toBe('Bearer sk-ant-oat-SECRET');
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    expect(f.seen).toHaveLength(3);
+    expect(asked).toBe(1);
+    const s = gw!.summary();
+    expect(s.budget_exhausted).toBe(false);
+    expect(s.approval_refused).toBe(0);
+    expect(s.refused).toBe(0);
+    expect(JSON.stringify(s)).not.toContain('SECRET');
+  });
+
+  it('two calls waiting on the same threshold share one ask', async () => {
+    let asked = 0;
+    let resolve: (v: 'accept') => void = () => undefined;
+    const pending = new Promise<'accept'>((r) => {
+      resolve = r;
+    });
+    const { f, base } = await boot({
+      spendApprovalUsd: 0.1,
+      onSpendApproval: () => {
+        asked += 1;
+        return pending;
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const a = post(base, '/v1/messages', '{}');
+    const b = post(base, '/v1/messages', '{}');
+    await until(() => asked === 1);
+    expect(f.seen).toHaveLength(1);
+    resolve('accept');
+    expect((await a).status).toBe(200);
+    expect((await b).status).toBe(200);
+    expect(asked).toBe(1);
+    expect(f.seen).toHaveLength(3);
+  });
+
+  it('decline answers 402 musterd_spend_approval_declined and forwards nothing further', async () => {
+    let asked = 0;
+    const lines: string[] = [];
+    const { f, base } = await boot({
+      spendApprovalUsd: 0.1,
+      log: (line) => lines.push(line),
+      onSpendApproval: () => {
+        asked += 1;
+        return Promise.resolve('decline');
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const first = await post(base, '/v1/messages', '{}');
+    const second = await post(base, '/v1/messages', '{}');
+    for (const refused of [first, second]) {
+      expect(refused.status).toBe(402);
+      expect(JSON.parse(refused.body)).toMatchObject({
+        error: { code: 'musterd_spend_approval_declined' },
+      });
+      expect(refused.body).toContain('lease L9');
+      expect(refused.body).toContain('0.1000');
+    }
+    expect(f.seen).toHaveLength(1);
+    expect(asked).toBe(1);
+    const s = gw!.summary();
+    expect(s.approval_refused).toBe(2);
+    expect(s.refused).toBe(0);
+    expect(s.budget_exhausted).toBe(false);
+    expect(lines.filter((l) => l.includes('spend approval declined'))).toHaveLength(1);
+  });
+
+  it('silence leaves the call held and does not forward it', async () => {
+    let asked = 0;
+    let release: (v: 'decline') => void = () => undefined;
+    const pending = new Promise<'decline'>((r) => {
+      release = r;
+    });
+    const { f, base } = await boot({
+      spendApprovalUsd: 0.1,
+      onSpendApproval: (req) => {
+        asked += 1;
+        req.signal.addEventListener('abort', () => release('decline'), { once: true });
+        return pending;
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const held = post(base, '/v1/messages', '{}');
+    await until(() => asked === 1);
+    const raced = await Promise.race([
+      held.then(() => 'settled' as const),
+      new Promise<'held'>((r) => setTimeout(() => r('held'), 40)),
+    ]);
+    expect(raced).toBe('held');
+    expect(f.seen).toHaveLength(1);
+    expect(asked).toBe(1);
+    release('decline');
+    expect((await held).status).toBe(402);
+  });
+
+  it('close during the hold answers 402 and records that the wake ended', async () => {
+    let asked = 0;
+    const { f, base } = await boot({
+      spendApprovalUsd: 0.1,
+      onSpendApproval: (req) =>
+        new Promise((resolve) => {
+          asked += 1;
+          req.signal.addEventListener('abort', () => resolve('wake_ended'), { once: true });
+        }),
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const held = post(base, '/v1/messages', '{}');
+    await until(() => asked === 1);
+    expect(f.seen).toHaveLength(1);
+    await gw!.close();
+    const body = await held;
+    expect(body.status).toBe(402);
+    expect(body.body).toContain('wake ended');
+    expect(body.body).toContain('musterd_spend_approval_declined');
+    const s = gw!.summary();
+    expect(s.approval_wake_ended).toBe(true);
+    expect(s.budget_exhausted).toBe(false);
+    expect(s.refused).toBe(0);
+    expect(s.approval_refused).toBe(1);
+  });
+
+  it('a thrown callback declines, and a threshold with no callback declines', async () => {
+    const thrown = await boot({
+      spendApprovalUsd: 0.1,
+      onSpendApproval: () => Promise.reject(new Error('boom')),
+    });
+    expect((await post(thrown.base, '/v1/messages', '{}')).status).toBe(200);
+    const refused = await post(thrown.base, '/v1/messages', '{}');
+    expect(refused.status).toBe(402);
+    expect(JSON.parse(refused.body).error.code).toBe('musterd_spend_approval_declined');
+    expect(gw!.summary().budget_exhausted).toBe(false);
+    await gw!.close();
+    gw = undefined;
+    await new Promise<void>((r) => thrown.f.server.close(() => r()));
+    up = undefined;
+
+    const bare = await boot({ spendApprovalUsd: 0.1 });
+    expect((await post(bare.base, '/v1/messages', '{}')).status).toBe(200);
+    const again = await post(bare.base, '/v1/messages', '{}');
+    expect(again.status).toBe(402);
+    expect(JSON.parse(again.body).error.code).toBe('musterd_spend_approval_declined');
+  });
+
+  it('the budget gate refuses before spend approval is asked', async () => {
+    let asked = 0;
+    const { f, base } = await boot({
+      budgetUsd: 0.05,
+      spendApprovalUsd: 0.1,
+      onSpendApproval: () => {
+        asked += 1;
+        return Promise.resolve('accept');
+      },
+    });
+    expect((await post(base, '/v1/messages', '{}')).status).toBe(200);
+    const refused = await post(base, '/v1/messages', '{}');
+    expect(refused.status).toBe(402);
+    expect(JSON.parse(refused.body).error.code).toBe('musterd_budget_exhausted');
+    expect(asked).toBe(0);
+    expect(f.seen).toHaveLength(1);
+    expect(gw!.summary().budget_exhausted).toBe(true);
+    expect(gw!.summary().approval_refused).toBe(0);
+  });
+});

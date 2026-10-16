@@ -4896,6 +4896,9 @@ export async function handleHttp(
                 // ADR 583: which path priced it, and whether the gateway refused on budget.
                 ...(body.price_source ? { price_source: body.price_source } : {}),
                 ...(body.budget_exhausted ? { budget_exhausted: true } : {}),
+                // ADR 636: the wake ended during the spend-approval hold. Same `reason` field the
+                // primary report already copies; the supplement is where this sentence lands.
+                ...(body.reason ? { reason: body.reason } : {}),
                 ...(await adapterBuildStamp(ctx, settled.member_id)),
                 ...(body.delivery_outcome ? { delivery_outcome: body.delivery_outcome } : {}),
                 ...(body.exact_match ? { exact_match: body.exact_match } : {}),

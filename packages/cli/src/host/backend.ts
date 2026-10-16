@@ -61,6 +61,9 @@ export interface WakeCompletion {
   price_source?: 'gateway' | 'harness_artifact';
   /** ADR 583 §4: the gateway refused at least one model call because `budget_usd` was spent. */
   budget_exhausted?: boolean;
+  /** ADR 636: the wake closed while a provider call was held for spend approval. The supplementary
+   *  report copies this onto `residency.wake_cost` as `detail.reason`. */
+  reason?: string;
   /** ADR 436 clause 4: the session capture(s) this run made or resumed, which the LOOP stamps
    *  ended at settle. Host-local — stripped before the supplementary report. */
   captures?: CaptureClaim[];

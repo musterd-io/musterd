@@ -884,6 +884,27 @@ withDrivers('residency-http', (_o, kind) => {
       expect(report.json.wake.cost_reported).toBe(1);
     });
 
+    it('a supplementary report stores the wake-ended reason on residency.wake_cost', async () => {
+      const leaseId = await reportedLease();
+      const supplement = await post(
+        '/teams/dawn/residency/wake-report',
+        {
+          lease_id: leaseId,
+          occupied: true,
+          duration_ms: 1_000,
+          reason: 'wake ended during the spend approval hold',
+        },
+        agentKey,
+      );
+      expect(supplement.status).toBe(200);
+      expect(supplement.json.status).toBe('cost_recorded');
+      const rows = await audits('residency.wake_cost');
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0]!.detail as string).reason).toBe(
+        'wake ended during the spend approval hold',
+      );
+    });
+
     it('a cost-less duplicate still 409s — the double-report guard stays intact', async () => {
       const leaseId = await reportedLease();
       const dup = await post(

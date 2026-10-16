@@ -1,5 +1,6 @@
 import {
   wakeabilityFromFacts,
+  type MemberKind,
   type MemberSummary,
   type WakeLeasesResponse,
   type WakeOrder,
@@ -37,6 +38,12 @@ import {
   type MeteringGatewayOptions,
 } from './gateway.js';
 import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
+import {
+  SPEND_APPROVAL_WAKE_ENDED,
+  armSpendApproval,
+  awaitSpendApproval,
+  type SpendApprovalSeat,
+} from './spendApproval.js';
 import { endWakeCapture } from './wakeCapture.js';
 
 export interface HealBeforeWakeDeps {
@@ -131,6 +138,12 @@ export interface HostPollDeps {
   /** ADR 583: the per-wake metering gateway. `false` runs wakes without one (the `--no-gateway`
    *  flag, and tests that assert the bare spawn); undefined starts the real one per actuation. */
   gateway?: ((opts: MeteringGatewayOptions) => Promise<MeteringGateway>) | false;
+  /** ADR 636: seat kind from the roster. Undefined kind or a throw leaves the wake unarmed. */
+  memberKind?: (team: string, seat: string) => Promise<MemberKind | undefined>;
+  /** ADR 636: `wake.spend_approval_usd` from GET /report with the seat credential. */
+  readSpendApproval?: (workspace: string, team: string) => Promise<number | null>;
+  /** ADR 636: the seat-credential client that sends the one approve ask and reads the reply. */
+  spendApprovalSeat?: (workspace: string, team: string) => SpendApprovalSeat;
   /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
   heal?: (workspace: string) => string;
   /** The repo-server mirror run before a spawn (ADR 529; tests). */
@@ -232,7 +245,37 @@ export function gatewayCompletion(
     ...(g.cost_usd !== undefined ? { cost_usd: g.cost_usd } : { unpriced_reason: 'no_price_row' }),
     ...(harnessCost !== undefined ? { harness_cost_usd: harnessCost } : {}),
     ...(g.budget_exhausted ? { budget_exhausted: true } : {}),
+    ...(g.approval_wake_ended ? { reason: SPEND_APPROVAL_WAKE_ENDED } : {}),
   };
+}
+
+function memberKindFromRoster(members: MemberSummary[], seat: string): MemberKind | undefined {
+  const kind = members.find((m) => m.name === seat)?.kind;
+  return kind === 'agent' || kind === 'human' || kind === 'service' ? kind : undefined;
+}
+
+/** GET /report with the seat credential. GET /policy is admin-only; the host key receives 403. */
+export function readSpendApprovalUsd(workspace: string, team: string): Promise<number | null> {
+  const http = seatHttp(workspace);
+  return http.report(team).then((report) => report.wake?.spend_approval_usd ?? null);
+}
+
+/** The seat client the approve ask is sent as. Inbox is peeked and limited to the newest page. */
+export function openSpendApprovalSeat(workspace: string, team: string): SpendApprovalSeat {
+  const http = seatHttp(workspace);
+  return {
+    send: (envelope) => http.send(team, envelope),
+    inbox: async () => {
+      const page = await http.inbox(team, { limit: 50, peek: true });
+      return { messages: page.messages };
+    },
+  };
+}
+
+function seatHttp(workspace: string): HttpClient {
+  const binding = findBinding(workspace, {});
+  if (!binding?.seat_credential || !binding.server) throw new Error('no seat credential');
+  return new HttpClient({ server: binding.server, key: binding.seat_credential }).presenceNeutral();
 }
 
 /** One tick's result: how many orders were claimed, and the in-flight actuations (`host --once`
@@ -653,6 +696,54 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       // ADR 583: the metering gateway, one per wake, dies with it (closed at settle below). Every
       // metered call lands as a `wake_turns` row at once — fire-and-forget like the native row's
       // rail, one narrator line on the first failure.
+      // ADR 636: arm spend approval once, before the gateway listens. A human, a missing kind,
+      // a thrown read, or no gateway leaves the wake on today's path.
+      let spendApprovalUsd: number | undefined;
+      let onSpendApproval: MeteringGatewayOptions['onSpendApproval'];
+      if (deps.gateway !== false) {
+        let kind: MemberKind | undefined;
+        try {
+          kind = deps.memberKind
+            ? await deps.memberKind(group.team, order.seat)
+            : memberKindFromRoster((await client.roster(group.team)).members, order.seat);
+        } catch (err) {
+          deps.log(`spend approval kind unread for ${order.seat}: ${(err as Error).message}`);
+        }
+        if (kind === 'agent' || kind === 'service') {
+          try {
+            const threshold = await (deps.readSpendApproval ?? readSpendApprovalUsd)(
+              entry.workspace,
+              group.team,
+            );
+            spendApprovalUsd = armSpendApproval(kind, threshold);
+            if (spendApprovalUsd !== undefined) {
+              const thresholdUsd = spendApprovalUsd;
+              const seatClient = (deps.spendApprovalSeat ?? openSpendApprovalSeat)(
+                entry.workspace,
+                group.team,
+              );
+              onSpendApproval = (req) =>
+                awaitSpendApproval({
+                  team: group.team,
+                  from: order.seat,
+                  seat: order.seat,
+                  leaseId: order.lease_id,
+                  spentUsd: req.spentUsd,
+                  thresholdUsd,
+                  laneId: order.lane_id,
+                  signal: req.signal,
+                  seatClient,
+                });
+            }
+          } catch (err) {
+            spendApprovalUsd = undefined;
+            onSpendApproval = undefined;
+            deps.log(
+              `spend approval policy read failed for ${order.seat}: ${(err as Error).message}`,
+            );
+          }
+        }
+      }
       let turnPostFailed = false;
       const gateway =
         deps.gateway === false
@@ -660,6 +751,9 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           : await (deps.gateway ?? startMeteringGateway)({
               leaseId: order.lease_id,
               budgetUsd: order.bounds?.budget_usd,
+              ...(spendApprovalUsd !== undefined && onSpendApproval !== undefined
+                ? { spendApprovalUsd, onSpendApproval }
+                : {}),
               log: deps.log,
               onCall: (call) => {
                 void client
@@ -759,14 +853,23 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
           // harness's own artifact is the fallback, named as such. Tokens come from the provider's
           // usage block; dollars only from the host's table (`no_price_row` otherwise).
           if (gateway) {
-            const g = gateway.summary();
+            // Close first: a hold still open becomes wake_ended and the summary then carries it.
             await gateway.close();
-            if (g.calls > 0) {
+            const g = gateway.summary();
+            if (g.calls > 0 || g.approval_wake_ended) {
               completion = gatewayCompletion(g, completion, actuatedAt);
+              const cost =
+                g.cost_usd !== undefined ? ` $${g.cost_usd.toFixed(4)}` : ' (no price row)';
+              const budget = g.budget_exhausted
+                ? ` — budget exhausted, ${String(g.refused)} refused`
+                : '';
+              const approval = g.approval_wake_ended
+                ? ` — ${SPEND_APPROVAL_WAKE_ENDED}, ${String(g.approval_refused)} refused`
+                : g.approval_refused > 0
+                  ? ` — spend approval declined, ${String(g.approval_refused)} refused`
+                  : '';
               deps.log(
-                `${order.seat}'s wake metered by the gateway: ${String(g.calls)} call(s)` +
-                  (g.cost_usd !== undefined ? ` $${g.cost_usd.toFixed(4)}` : ' (no price row)') +
-                  (g.budget_exhausted ? ` — budget exhausted, ${String(g.refused)} refused` : ''),
+                `${order.seat}'s wake metered by the gateway: ${String(g.calls)} call(s)${cost}${budget}${approval}`,
               );
             } else if (completion?.cost_usd !== undefined || completion?.usage) {
               completion = { ...completion, price_source: 'harness_artifact' };
