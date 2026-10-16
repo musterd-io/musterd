@@ -96,6 +96,23 @@ describe('console schema (ADR 615)', () => {
         await expect(asRuntime(q, sql), sql).rejects.toThrow(/permission denied/);
     });
 
+    it('can issue and revoke sessions but never delete one, nor a sign-in transaction', async () => {
+      const { q } = await migrated();
+      await q.query('INSERT INTO accounts (id, created_at) VALUES ($1, $2)', ['acc_s', 1]);
+      await asRuntime(
+        q,
+        `INSERT INTO sessions (id_hash, account_id, generation, created_at, last_activity_at,
+           idle_expires_at, absolute_expires_at, authenticated_at, method, identity_provider,
+           identity_subject) VALUES ('h1','acc_s',0,1,1,2,3,1,'github','github','42')`,
+      );
+      await asRuntime(q, "UPDATE sessions SET revoked_at = 5 WHERE id_hash = 'h1'");
+      for (const sql of [
+        "DELETE FROM sessions WHERE id_hash = 'h1'",
+        'DELETE FROM auth_transactions',
+      ])
+        await expect(asRuntime(q, sql), sql).rejects.toThrow(/permission denied/);
+    });
+
     it('cannot change the schema or the version row, and is not the owner', async () => {
       const { q } = await migrated();
       for (const sql of [

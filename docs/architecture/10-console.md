@@ -25,6 +25,7 @@ Two routes, and everything else is refused:
 | --- | --- |
 | `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
 | `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
+| `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
 
 No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
 `01M3Z43QYB`, KMS tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create-team `01M3Z44MTV`.
@@ -68,6 +69,20 @@ Its own Neon project, `musterd-console`. Schema version 1:
 - `audit (id, ts, request_id, actor_account_id, action, detail)` — append-only for the runtime.
 - `console_meta (key, value)` — the schema version.
 
+Schema version 2 (ADR 620, sign-in state):
+
+- `accounts.session_generation` — revoke-all bumps it; a session whose generation is behind is dead.
+- `sessions` — the id's SHA-256, account, generation, created / last-activity / idle and absolute
+  expiries, `authenticated_at`, method and identity, `revoked_at` and reason. **14 days idle, 30
+  days absolute, fresh for 15 minutes** (nick, against NIST SP 800-63B-4). Every read re-checks
+  revocation, both expiries, account disable and generation in one query — no cache.
+- `auth_transactions` — OAuth and magic-link transactions, single-use (`consumed_at`), every secret
+  hashed.
+- `rate_limits` — fixed windows per bucket, upserted atomically, so limits hold across servers.
+
+The runtime may insert and update `sessions` and `auth_transactions` but never delete them —
+revocation and consumption are columns, so the record survives.
+
 Two roles. The **owner** migrates, from `musterd-console-migrate` only (`musterd-console migrate`,
 the direct host). The **runtime** role serves: DML on `accounts` and `identities`, **INSERT and nothing
 else on `audit`** (no read, update, delete or truncate), SELECT on the version row, no CREATE on the
@@ -92,12 +107,18 @@ console's secrets never include a team database URL. The provisioning steps are 
 
 ```
 src/
+  audit.ts        // appendAudit(db, {action, requestId, actorAccountId, detail}, now): one INSERT; detail goes through log.ts's redact, so no secret lands in audit
   bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
+  csrf.ts         // csrfTokenFor(sid) (sha256 of the session id, base64url), csrfTokenValid (constant time), originAllowed (exactly the issuer; missing or null refused)
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
-  http.ts         // createConsoleServer: host allow-list, GET/HEAD only, bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
+  http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
-  schema.ts       // SCHEMA_VERSION, MIGRATIONS (accounts, identities, audit, console_meta), grantsFor(runtimeRole) (INSERT-only audit), migrate(owner, role)
+  ratelimit.ts    // hit(db, {bucket, max, windowMs}, now): one atomic upsert per hit, held across servers; pruneRateLimits
+  request.ts      // SESSION_COOKIE, cookie(req, name), readForm(req) — urlencoded only, at most 8 KiB, else FormError 415/413
+  schema.ts       // SCHEMA_VERSION, MIGRATIONS (v1 accounts, identities, audit, console_meta; v2 sessions, auth_transactions, rate_limits), grantsFor(runtimeRole) (INSERT-only audit; no DELETE on sessions or transactions), migrate(owner, role)
+  secrets.ts      // newSecret (256-bit base64url), hashSecret (SHA-256 hex — the only form a secret is stored in), sameSecret (constant time)
+  sessions.ts     // IDLE_MS / ABSOLUTE_MS / FRESH_MS; createSession (always a new id), loadSession (one query: not revoked, both expiries, account live, generation current; touches at most once a minute), isFresh, revokeSession, revokeAllSessions
   testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
 ```
