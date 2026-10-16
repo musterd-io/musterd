@@ -158,6 +158,80 @@ withDrivers('broadcast grade (ADR 601)', (_o, kind) => {
     });
   });
 
+  // ADR 616 §4–7 / ADR 621 §7: a talk-only member (a guest) reads at `broadcast` grade, with its own
+  // conversation exempt from the human-pair filter — it is a human end of it. Lane 01M50XJJFE.
+  describe('a guest reads at broadcast grade', () => {
+    it('sees agent DMs and asks, never a DM between two other humans, always its own; keys masked', async () => {
+      const t = await seedTeam();
+      const ada = { key: t.key, seat: 'Ada' };
+      const gia = await post('/teams/dawn/members', { name: 'Gia', kind: 'human' }, t.nickTok);
+      expect(gia.status).toBe(201);
+      const giaTok = gia.json.human_credential as string;
+      const narrowed = await post(
+        '/teams/dawn/members/Gia/ceiling',
+        { ceiling: 'guest' },
+        t.nickTok,
+      );
+      expect(narrowed.status).toBe(200);
+
+      const hh = await send(
+        t.nickTok,
+        'nick',
+        { kind: 'member', name: 'Bo' },
+        'message',
+        'private',
+      );
+      const aa = await send(
+        ada,
+        'Ada',
+        { kind: 'member', name: 'Lin' },
+        'message',
+        'agent to agent',
+      );
+      const ask = await send(
+        ada,
+        'Ada',
+        { kind: 'member', name: 'nick' },
+        'ask',
+        `use ${SECRET}?`,
+        {
+          species: 'consult',
+          tier: 'standard',
+        },
+      );
+      const mine = await send(
+        giaTok,
+        'Gia',
+        { kind: 'member', name: 'nick' },
+        'message',
+        'hi nick',
+      );
+      const reply = await send(
+        t.nickTok,
+        'nick',
+        { kind: 'member', name: 'Gia' },
+        'message',
+        'hi Gia',
+      );
+
+      const view = await get('/teams/dawn/messages', giaTok);
+      expect(view.status).toBe(200);
+      expect(ids(view)).toEqual([aa, ask, mine, reply]);
+      expect(ids(view)).not.toContain(hh);
+      expect(JSON.stringify(view.json)).not.toContain(SECRET);
+      expect(view.json.messages.find((m: any) => m.id === ask).body).toBe(
+        'use <redacted:credential>?',
+      );
+
+      // The stream (a broadcast observer) sees the same minus the guest's own pair with nick.
+      expect(ids(await get('/teams/dawn/messages', t.streamTok))).toEqual([aa, ask]);
+      // A member-role seat's reads are unchanged: `team` grade sees the human pair too.
+      const bo = ids(await get('/teams/dawn/messages', t.boTok));
+      expect(bo).toContain(hh);
+      expect(bo).toContain(mine);
+    });
+  });
+
   describe('masking — every string a broadcast reader gets', () => {
     it('masks a planted credential in a body and in meta for the stream, not for the dashboard', async () => {
       const t = await seedTeam();
