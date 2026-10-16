@@ -77,9 +77,10 @@ describe('muse settings.json (ADR 619)', () => {
     const doc = JSON.parse(text) as Record<string, Record<string, unknown>>;
     expect(doc['mcpServers']).toHaveProperty('musterd');
     expect(doc['mcpServers']['musterd']).toMatchObject({ mode: 'optional' });
-    // Foreign servers stay where they were; our stale snake entry is gone.
-    expect(doc['mcp_servers']).toHaveProperty('other');
-    expect(doc['mcp_servers']).not.toHaveProperty('musterd');
+    // Foreign servers migrate to camelCase with ours; the snake key is dropped entirely
+    // so mcpServers and mcp_servers never coexist (muse faults on both).
+    expect(doc['mcpServers']).toHaveProperty('other');
+    expect(doc['mcp_servers']).toBeUndefined();
   });
 
   it('refuses a malformed file instead of clobbering it', () => {
@@ -89,6 +90,36 @@ describe('muse settings.json (ADR 619)', () => {
   it('the server entry carries the launch-surface marker', () => {
     expect(museServerEntry(ENTRY).env).toMatchObject({ MUSTERD_SERVER: 'http://127.0.0.1:4849' });
     expect(Object.keys(museServerEntry(ENTRY).env).some((k) => k.includes('SURFACE'))).toBe(true);
+  });
+
+  // Regression: stanley's decline on lane 01M50ZJ7B3 (#2710) — muse faults when
+  // settings.json carries both mcpServers and mcp_servers. The snake key is now
+  // dropped entirely (foreign servers migrate to camelCase) so they never coexist.
+  it('legacy snake block + fresh upsert drops mcp_servers entirely', () => {
+    const raw = JSON.stringify({
+      mcp_servers: {
+        other: { transport: 'stdio', command: 'x', args: [] },
+        musterd: { transport: 'stdio', command: 'old', args: [], mode: 'required' },
+      },
+    });
+    const { text } = upsertMuseServer(raw, ENTRY);
+    const doc = JSON.parse(text) as Record<string, unknown>;
+    expect(doc['mcpServers']).toBeDefined();
+    expect(doc['mcp_servers']).toBeUndefined();
+    expect(doc['mcpServers'] as Record<string, unknown>).toHaveProperty('musterd');
+    expect(doc['mcpServers'] as Record<string, unknown>).toHaveProperty('other');
+  });
+
+  it('existing camel block keeps foreign servers and drops any stray snake key', () => {
+    const raw = JSON.stringify({
+      mcpServers: { foreign: { transport: 'stdio', command: 'y', args: [] } },
+      mcp_servers: { musterd: { transport: 'stdio', command: 'old', args: [] } },
+    });
+    const { text } = upsertMuseServer(raw, ENTRY);
+    const doc = JSON.parse(text) as Record<string, unknown>;
+    expect(doc['mcp_servers']).toBeUndefined();
+    expect(doc['mcpServers'] as Record<string, unknown>).toHaveProperty('foreign');
+    expect(doc['mcpServers'] as Record<string, unknown>).toHaveProperty('musterd');
   });
 });
 
