@@ -40,6 +40,17 @@ import { errorResult, textResult } from './format.js';
  * wake; the board is the pull view.
  */
 
+// ADR 629. Undescribed, and without min/max, on both tools: tools/list has no spare bytes
+// (docs/perf/context-budgets.json). OpenRequestedSchema still bounds `by` and `ref`. The open
+// reply names a miss. Written out here so the tools/list render does not pick up those bounds.
+const requestedArg = z
+  .object({
+    by: z.string().optional(),
+    basis: z.enum(['act', 'seed', 'self', 'stated']).optional(),
+    ref: z.string().optional(),
+  })
+  .optional();
+
 function fmtLane(l: Lane): string {
   const owner = l.owner_seat ?? 'unowned';
   const scopeGlobs = l.scope ?? [];
@@ -190,16 +201,7 @@ export function registerLanes(
           .max(200)
           .optional()
           .describe('issue it came from (acme/app#12); one open lane per ref'),
-        requested: z
-          .object({
-            by: z.string().min(1).max(80).optional(),
-            basis: z.enum(['act', 'seed', 'self', 'stated']).optional(),
-            ref: z.string().min(1).max(80).optional(),
-          })
-          .optional()
-          .describe(
-            'who asked (ADR 629). Omit and the lane still opens; the reply says it is missing',
-          ),
+        requested: requestedArg,
         role: z.string().optional().describe('assignment hint (advisory)'),
         stakes: z
           .enum(['low', 'normal', 'high'])
@@ -413,14 +415,8 @@ export function registerLanes(
           .describe('link (or clear, with null) this lane to a Goal'),
         // ADR 561 — described on lane_open; undescribed here for the tools-list budget.
         source_ref: z.string().min(1).max(200).optional(),
-        // ADR 629 — described on lane_open. Fills a missing requester; a second value is a 409.
-        requested: z
-          .object({
-            by: z.string().min(1).max(80).optional(),
-            basis: z.enum(['act', 'seed', 'self', 'stated']).optional(),
-            ref: z.string().min(1).max(80).optional(),
-          })
-          .optional(),
+        // ADR 629 — same shape as lane_open. Fills a missing requester; a second value is a 409.
+        requested: requestedArg,
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),
