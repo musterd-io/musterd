@@ -15,6 +15,7 @@ export const DOCS_MANIFEST: DocEntry[] = [
   // public to install. Restore it from git history (packages/web/content/docs/getting-started.md) when
   // musterd opens up.
   { slug: 'concepts', title: null, source: 'packages/web/content/docs/concepts.md' },
+  { slug: 'roles', title: null, source: 'packages/web/content/docs/roles.md' },
   // The protocol spec is designed in the open (MIT, versioned from the first commit) — the one
   // team file that is already written for outside readers.
   { slug: 'spec', title: 'Protocol spec', source: 'SPEC.md' },
