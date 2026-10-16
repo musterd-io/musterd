@@ -40,7 +40,28 @@ unmeasured until an adapter built from the evaluated workspace can expose its to
 
 Codex has a bounded, unit-proven structured PostToolUse seam. A future Stop change needs its own
 ADR for continuation reason, loop suppression, and a live falsifier. Do not claim idle push,
-tool callability, deferral, or reconnect behavior from the current evaluation.
+tool callability, deferral, or reconnect behavior from the 2026-09-03 evaluation. The section
+below measures `codex queue`, which this recommendation does not cover.
+
+## Idle queue on 0.162.1 (2026-10-16)
+
+The 2026-09-03 idle row above is about a completed background hook. It is a separate fact from
+`codex queue`.
+
+Installed CLI `codex-cli 0.162.1` attached to the already-running app-server 0.163.0. An isolated
+idle TUI (`codex --no-alt-screen -s read-only`, composer up, no prior user turn) already had a
+thread id under `~/.codex/tui-thread-reference-capabilities/` before any rollout file existed.
+`codex queue --thread <id> --message …` exited 0 and printed `Queued message <id> for thread <id>`.
+The rollout recorded `task_started`, the queued user text, the assistant reply, and
+`task_complete`. The TUI rendered the reply. Originator was `codex-tui`. `session_meta.cli_version`
+was 0.163.0. Sandbox on the turn was `read-only` because the probe passed `-s read-only`.
+
+A half-typed `DRAFT9XK` confirmed on screen before the queue stayed in the composer and is absent
+from the rollout (n=1). An earlier turn completed as well; that run had not confirmed the draft
+was on screen, so it measures the turn and not the draft (n=2 turns, n=1 draft). Approval policy
+was `on-request` and no tool call ran, so an open approval dialog was not measured.
+
+(2026-10-16; falsify: `codex queue` against an idle TUI on codex-cli 0.162.1 leaves the rollout without `task_complete` for that message, or a confirmed on-screen draft is submitted by that queue.) <!-- claim: other -->
 
 ## Sources
 
