@@ -1,11 +1,13 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import type { WakeUsage } from '@musterd/protocol';
 import { findBinding, saveBinding } from '../../config.js';
 import { resolveMuseBin } from '../../museBin.js';
 import { localSessionLiveness, type LocalSessionLiveness } from '../../session/liveness.js';
 import type { ActuatorBackend, WakeCompletion } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
+import { readMuseWakeUsage } from './museUsage.js';
 
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
@@ -109,6 +111,8 @@ export interface MuseDeps {
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
   /** Fresh session ids (tests inject; default randomUUID — `exec --session-id` accepts it). */
   newSessionId?: () => string;
+  /** Session-log usage for the id this wake spawned (tests inject; default {@link readMuseWakeUsage}). */
+  readUsage?: (sessionId: string) => WakeUsage | undefined;
 }
 
 function recordFreshSession(workspace: string, id: string, startedAt: number): void {
@@ -207,9 +211,11 @@ export function museBackend(deps: MuseDeps = {}): ActuatorBackend {
           timeoutMs,
         );
         watchdog.unref();
-        // ADR 436 clause 1: every wake settles and prices. Muse usage metering rides lane 3's
-        // live work (the --json usage shape needs a credentialed run); until then the row
-        // carries no dollars, like Grok's unverified ticks (ADR 364).
+        // ADR 436 clause 1: every wake settles. The session id is known at spawn, so the
+        // reader sums model_completed.usage from that session's log (ADR 619). The event
+        // has no dollar figure: a parsed wake is harness_prints_no_price (ADR 364). A missing
+        // log stays harness_price_unverified — cannot tell is not zeros, and this backend
+        // does not convert tokens into cost_usd. The gateway prices its own calls.
         const exited = new Promise<number | null>((resolve) => {
           child.once('exit', (code) => resolve(code));
           child.once('error', () => resolve(null));
@@ -223,9 +229,11 @@ export function museBackend(deps: MuseDeps = {}): ActuatorBackend {
             `run for ${spec.order.seat} (${label}) settled: exit=${code ?? 'error'} ` +
               `wall=${(duration_ms / 1000).toFixed(1)}s`,
           );
+          const usage = (deps.readUsage ?? readMuseWakeUsage)(sessionId);
           return {
             duration_ms,
-            unpriced_reason: 'harness_price_unverified',
+            ...(usage ? { usage } : {}),
+            unpriced_reason: usage ? 'harness_prints_no_price' : 'harness_price_unverified',
             captures: [{ harness: 'muse', ids: [placeholder, sessionId], id: sessionId }],
             ...(yielded ? { yielded: true } : {}),
           };
