@@ -3,8 +3,8 @@
 Lane `01M4SB4D7RTW21W62NKCPDV816`. This is the fifth named follow-up in
 [the spend-controls spec](2026-10-12-spend-controls-design.md). The gap it closes: leases that report
 no cost burn free under `spend_cap_usd`. The lane brief says the answer is a product decision, not a
-default, and has to be specced first. **Status: decided. nick accepted the recommendation (option C,
-and one notice naming both caps) on 2026-10-15, ask `01M50H0C2E`.**
+default, and has to be specced first. **Status: recommended. Ask `01M50H0C2E` (2026-10-15) was an
+empty Approve. It selected no option. C remains the written recommendation.**
 
 ## The gap, measured from the code (checked 2026-10-15, read-only)
 
@@ -62,15 +62,17 @@ kind of unpriced wake, including ones that never report. It adds no accounting: 
 window, the deny path and the audit shape that increment 2 (`01M4SB4BZBQDHWFWH4RXBNR7CQ`, lazara,
 active) is building.
 
-## Decision (nick, 2026-10-15)
+## Record of the ask (2026-10-15)
 
-The ask (`01M50H0C2E`) put two questions. nick accepted the recommendation on both:
-
-1. **C.** A separate `unpriced_wake_cap` count key. Unset keeps today's behaviour, and `0` blocks
-   unpriced harnesses explicitly.
-2. **One notice names both caps** when both trip, listing each cap, its total and the window.
+Ask `01M50H0C2E` asked nick to pick among A–D, and whether a deny notice should name both caps.
+The reply was an empty Approve. It selected no option. C remains the written recommendation: a
+separate `unpriced_wake_cap` count key, unset keeping today's behaviour, `0` blocking unpriced
+harnesses, and one notice naming both caps when both trip. The key and the deny path stay
+unauthorized until nick picks in words.
 
 ## Delivery
+
+The shape of recommendation C. Unauthorized until nick picks in words.
 
 1. This spec.
 2. The policy key `unpriced_wake_cap` (range 0..10000, unset by default). Report display next to the
