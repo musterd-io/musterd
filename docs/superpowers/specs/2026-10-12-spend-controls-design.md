@@ -93,7 +93,7 @@ speaker described becomes something an admin can grant and the team can read.
    deny agent actuation at/over cap, humans pass, notice surface, audit rows. The bound.
    [ADR 611](../../decisions/611-spend-cap-holds-wakes.md).
 4. Named follow-up (`01M4SB4CJPTCSCYK3X8KGY2W33`): approvals for costly wakes above a
-   threshold. Outside this arc. Proposed 2026-10-16, options and the recommendation:
+   threshold. Outside this arc. Decided 2026-10-16 (nick): option A.
    [2026-10-16-spend-approval-threshold-design.md](2026-10-16-spend-approval-threshold-design.md).
 5. Named follow-up (`01M4SB4D7RTW21W62NKCPDV816`): the unpriced floor (bound what isn't
    priced, or decide to block unpriced harnesses explicitly). Decided 2026-10-15 (nick): a separate

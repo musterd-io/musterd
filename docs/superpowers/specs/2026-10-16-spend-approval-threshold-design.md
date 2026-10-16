@@ -3,7 +3,7 @@
 Lane `01M4SB4CJPTCSCYK3X8KGY2W33`. Fourth named follow-up in
 [the spend-controls spec](2026-10-12-spend-controls-design.md). The parent keeps the team cap as
 the aggregate bound and leaves this lane for a human approval when one wake gets expensive.
-**Status: proposed.** The recommendation is option A. The decision is nick's.
+**Status: decided.** nick chose option A on 2026-10-16.
 
 The lane title says "costly acts". The spend this spec bounds is a wake's priced provider
 calls. A protocol act is a different thing, and this document means the calls.
@@ -95,12 +95,21 @@ the aggregate bound.
 A harness with no gateway dollar never raises this ask. That gap stays with the unpriced
 floor ([2026-10-15-spend-unpriced-floor-design.md](2026-10-15-spend-unpriced-floor-design.md)).
 
+## Decision (nick, 2026-10-16)
+
+nick chose option A. His words were "A sounds good", in reply to ask
+`01M52Z9Z13AANZYP05V92J2CSN`.
+
+**A.** One blocking approve ask per non-human wake. When the gateway's running cost reaches
+`spend_approval_usd`, the host holds the next provider call. Accept continues that wake.
+Decline stops further calls on it. The team cap still holds new wakes.
+
 ## Delivery
 
-1. This spec. It stays proposed until nick picks A, B, or C.
+1. This spec. Decided 2026-10-16: option A.
 2. After that pick: the policy key and a report line when the key is set. No hold yet.
-   The key is a protocol field, so the build lane writes its own ADR. Depends on this spec
-   being accepted.
+   The key is a protocol field, so the build lane writes its own ADR. Depends on this
+   decided spec.
 3. The hold, the ask, and the audit row, on the path the decision names. Depends on step 2.
    For A or B that path is the gateway. For C it is the wake-lease poll.
 
