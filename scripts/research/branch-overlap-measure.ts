@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { DatabaseSync } from 'node:sqlite';
 import { homedir } from 'node:os';
 import process from 'node:process';
+import { DatabaseSync } from 'node:sqlite';
 
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith('--limit='));
