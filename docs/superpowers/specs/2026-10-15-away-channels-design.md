@@ -113,11 +113,12 @@ that.)_
 
 - **Two kinds of daemon, one adapter interface and one token model.** A self-hosted daemon on a laptop takes
   no inbound connections, so it reaches providers through the **relay** (below). A Cloud team's server is
-  already public, so provider callbacks land on it **directly**, with no relay hop. Only the transport
+  already public, so the shared ingress forwards provider callbacks to it **without a Durable Object hop** (see "Slack ingress"). Only the transport
   differs; the adapter, the assurance levels, the class rules and the ask token are the same.
 - **The relay is multi-tenant and operated by musterd.** It runs in a **dedicated musterd Cloudflare
-  account**, separate from the account that runs Cloud production, so a relay compromise cannot reach team
-  data. A self-hoster may point their daemon at their own relay instead; the relay protocol is small and
+  account**, separate from the account that runs Cloud production, so a relay compromise cannot reach the
+  production credentials or the team store. It **can** read content in flight: the relay necessarily sees
+  each ask as it is delivered, and the separate account does not change that. A self-hoster may point their daemon at their own relay instead; the relay protocol is small and
   versioned for that reason.
 - **Slack is a distributed app.** Each team installs it into its own workspace through Slack's OAuth flow and
   gets its own bot token. A workspace admin installs; each person then pairs. Slack gives the app **one
@@ -129,6 +130,34 @@ that.)_
   team has its own rate limits and quota, including against Slack's per-workspace send limits.
 - **Secrets are set by the operator directly** (Worker secrets, the Slack signing secret and client secret),
   never through an agent, and never logged (hard rule 5).
+
+### Slack ingress: one app, one Request URL, an authenticated dispatch
+
+_(Added 2026-10-15 on big-body's send-back of #2696.)_ A distributed Slack app has **one** interactivity
+Request URL ([Slack docs](https://docs.slack.dev/interactivity/handling-user-interaction/)); Slack does not
+call a distinct URL per installation. So Cloud teams cannot be reached by "Slack calls their server
+directly", and the amendment's earlier wording is withdrawn. The design is a single ingress that dispatches:
+
+1. **Ingress** is a small Worker at the app's fixed Request URL, in the dedicated musterd Cloudflare account.
+   It verifies Slack's signature (timestamp tolerance and HMAC over the raw body) and acknowledges inside
+   Slack's 3 seconds. **The Slack signing secret lives only here.**
+2. **Dispatch is by an authenticated mapping, never by the caller.** At install time, Slack's OAuth flow
+   gives the Slack team (and enterprise) id; the install flow records `slack team id -> musterd team ->
+   destination` (a relay Durable Object, or a Cloud server). The mapping is written only by the
+   authenticated install and pairing flow. Nothing in the incoming request, including any field the
+   sender controls, selects the destination.
+3. **The ingress forwards the exact raw payload and Slack's headers, plus its own attestation** (a signature
+   by an ingress key; receivers hold only the public key). The receiving server, whether a Cloud server or a
+   daemon via the relay, **verifies the ingress attestation, re-parses the payload, and rechecks the
+   binding, the team and the ask token** against its own state. The shared Slack signing secret is not
+   copied to receivers. A private ingress-to-destination hop avoids Durable Object queuing for Cloud teams,
+   but it is an internal route, not Slack choosing a per-install URL.
+4. **Cloud teams and laptop daemons share this ingress.** The transport differs after dispatch: a Cloud
+   server receives an authenticated request; a laptop daemon receives the same envelope over its WebSocket.
+5. **Fallback topology, if the shared ingress proves too wide a trust boundary:** two Slack apps, one whose
+   Request URL is the relay and one whose Request URL is the Cloud server, so no dispatch is needed. It
+   costs two installs and two reviews, and is the first thing to try if the ingress cannot be made to
+   satisfy the falsifiers (including cross-tenant dispatch).
 
 ## Architecture
 
@@ -146,11 +175,30 @@ agent ──ask──▶ daemon (loopback) ──WS, daemon dials out──▶ r
   to its team's object. Idle cost is near zero and an answer reaches the daemon the moment it arrives.
 - The Worker is the public URL providers call (Slack's interactivity Request URL). It checks the
   provider's signature and acknowledges inside Slack's 3 seconds.
-- **The relay stores only**: an opaque ask reference, the rendered per-channel message, delivery status, an
-  expiry, and dedupe ids. **Retention is until the ask expires** (decided by nick, 2026-10-15): the entry is
-  deleted when the ask resolves or expires, whichever comes first, which is minutes (blocking 15, standard
-  5, advisory 3). There are no logs of tokens, keys or bodies, and no copy outlives the entry, including
-  in backups.
+- **What the relay stores, and what it does not.** _(Amended 2026-10-15 on big-body's send-back of #2696.)_
+  Durable Object SQLite storage supports point-in-time restore to any point in the past 30 days
+  ([Cloudflare docs](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/); the page
+  does not say it can be shortened or disabled). So "no copy outlives the entry" cannot be true of anything
+  written to storage, and the design does not rely on it. Instead:
+  - **Ask content is never written to Durable Object storage.** The daemon pushes the rendered message over
+    the WebSocket, the relay posts it to the provider inside that request, and the relay drops it. If a
+    delivery needs a retry, the daemon, which is the source of truth, pushes it again.
+  - **Storage holds metadata only**: an opaque ask reference, delivery status, the provider message
+    coordinates needed to update the message after it resolves (for Slack, channel and message timestamp),
+    `expires_at`, and dedupe ids. No body, token, key or signature.
+  - **Retention is until the ask expires** (nick, 2026-10-15): metadata rows are deleted when the ask
+    resolves or reaches `expires_at`, whichever is first. That is a stronger position than holding the
+    message until expiry, so it does not weaken his choice.
+  - **Provider recovery window, stated, needing nick's acceptance:** Cloudflare may restore deleted metadata
+    rows for up to 30 days. They hold no ask content. (Open question 5.)
+  - The **provider** (Slack) keeps the delivered message under its own retention. The relay cannot change
+    that; it is the cost of delivering a body to Slack at all, and ADR 149 already accepted it.
+  - **Ask expiry is defined, not inferred.** The daemon stamps `expires_at = raised_at + the tier's
+    response window` (`askContract(tier).timeout_ms`, ADR 147) on the ask. The token and the relay row both
+    use that value and never outlive it; the daemon's clock is authoritative, and an answer received after
+    `expires_at` is refused even if the row still exists. The tier response window and these expiries are
+    one number today but are separate fields, so the window can change without silently changing token
+    lifetime.
 - It authenticates each daemon separately per team, rejects a second socket replacing a live one for the
   same team, and caps payload size, queue depth and retries.
 - It is **thin on purpose**: the relay protocol is small and versioned, the daemon-side client is the
@@ -258,7 +306,7 @@ lie in the confirmation UI. It also covers the class rules above: a privileged r
 after delivery** (redemption must re-read current state); and an A1 answer **offered to the gate release
 read, acceptance and `request.decide`** (each must refuse it). At scale it adds **cross-tenant** cases: one
 team's daemon credential, Durable Object or Slack install used to read, answer or replace another team's
-(each must be refused), and a flood from one team that must not starve another. It also states, in the ADR, **exactly which attacks remain excluded** by the
+(each must be refused); a request field that tries to **select the ingress destination** (only the install mapping may); a payload with a **missing or invalid ingress attestation** at the receiver; a payload naming another team's Slack team or enterprise id; and a flood from one team that must not starve another. It also states, in the ADR, **exactly which attacks remain excluded** by the
 trust assumptions (for A1: a compromised relay or provider forging an advisory or listed-class answer; a stolen
 unlocked phone; a provider workspace admin acting as the user).
 
@@ -290,7 +338,7 @@ its predecessors land. Increments 1 and 2 are the first two; 8 to 10 were added 
 | 7 | `01M50XQ1TGXNVXRF0481TCK4AA` | Mobile app as an ask client and A2 device-signed answers (own spec and ADR) | 1 to 6 |
 | 8 | `01M50ZQCTWM5QBZ083782J9N6R` | Multi-tenant relay hardening: per-team daemon credentials, tenant-isolation falsifiers, quotas and Slack send limits, bring-your-own-relay | 3 |
 | 9 | `01M50ZQGWYNZKNWDNDDRP41W5B` | Slack as a distributed app: OAuth install per workspace, per-install tokens, admin install vs per-user pairing, app review | 5 |
-| 10 | `01M50ZQQW95YDYVWE2BTCMKKH7` | Cloud-direct transport: callbacks land on the Cloud server for hosted teams, no relay hop | 5 |
+| 10 | `01M50ZQQW95YDYVWE2BTCMKKH7` | Cloud transport: the shared ingress dispatches to the Cloud server for hosted teams, which verifies the ingress attestation and rechecks binding and team; no relay hop | 5 |
 
 Increments 1 to 6 reach nick's own team on Slack with advisory answers. Increments 8 to 10 make it work for
 every musterd user: multi-tenant relay hardening, the distributed Slack app, and the Cloud-direct transport.
@@ -313,3 +361,5 @@ answer. Changing the hold ceiling or `stranded` (ADR 153).
    person or role holds the org logins and rotates the signing secret, and what the recovery path is.
 4. **Does a per-channel "answer off" also remove delivery to privileged asks**, or only the buttons.
    Proposed: only the buttons; delivery is its own switch.
+5. **Provider recovery window.** Cloudflare may restore deleted relay metadata rows (no ask content) for up to
+   30 days. nick to accept that, or ask for a different design.
