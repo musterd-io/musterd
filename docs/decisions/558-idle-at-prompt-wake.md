@@ -134,7 +134,7 @@ Each harness gets one module in `@musterd/mcp` with two calls: `probe()` and `in
   `{"type":"user","message":{"role":"user","content":<line>}}`.
 - **Every other harness is deaf until its increment lands:** opencode (a ring file the ADR 392
   plugin watches), codex (`codex queue`), grok (a spike). Cursor stays deaf, because no Cursor hook
-  starts a turn from idle. _(Amended 2026-10-16, lane 01M535CZQH, Muse Code 1.4.10: Muse stays deaf, and that is not an increment waiting to land. `muse session-message` returns `external_agent_ingress_closed`. A runtime-socket hello as `peer_runtime` authenticates (session `01a14675-e770-7d03-9d9a-e8469ed80e6b`). `session.user_message.submit` then returns `malformed_request` (session `01a14676-abf5-7f20-b3a0-1e1c41184ba3`) or, with no extra fields, `role_denied` (session `01a14677-f1fe-7730-b001-440ff16dd23e`). `peer_message.submit_agent` returns `malformed_request`. Canary `MUSEIDLECANARY9Q4` is absent from that day's session logs. `injectAdapterFor('muse')` stays `no-inject:muse`. No guessed private body is wired.)_ Native is exempt: a native occupancy has no idle state.
+  starts a turn from idle. _(Amended 2026-10-16: Muse Code 1.4.10 stays deaf, and that is not an increment waiting to land. See the amendment below.)_ Native is exempt: a native occupancy has no idle state.
   _(Amended 2026-10-13: exempt from the idle seam, not from reach — a resident native seat (ADR 588
   §6) hears a directed act mid-turn through its engine's steering queue, with no idle state to wait
   for; it attests `hearing: idle` on its heartbeat and each delivery is a `residency.steered` row.)_
