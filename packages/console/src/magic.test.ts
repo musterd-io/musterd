@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { blockListOf } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import type { SignInEmail } from './email.js';
-import { createConsoleServer } from './http.js';
+import { createConsoleServer, inboxKey } from './http.js';
 import { makeLog } from './log.js';
 import { migrate } from './schema.js';
 import { pglite } from './testing.js';
@@ -267,5 +267,17 @@ describe('magic links (ADR 620 decision 6)', () => {
         ['audit', audit],
       ] as const)
         expect(text, `${where}: ${leak.slice(0, 8)}`).not.toContain(leak);
+  });
+
+  it('counts every spelling that reaches one inbox as that inbox', async () => {
+    expect(inboxKey('Nick+promo@Example.TEST')).toBe('nick@example.test');
+    expect(inboxKey('n.i.c.k+x@googlemail.com')).toBe('nick@gmail.com');
+    expect(inboxKey('n.ick@other.test')).toBe('n.ick@other.test');
+    const { ask } = await boot();
+    const spellings = ['Victim', 'VICTIM', 'victim+1', 'victim+2', 'victim+3', 'victim+4'];
+    const statuses: number[] = [];
+    for (const local of spellings)
+      statuses.push((await ask(`${local}@example.test`, '198.51.100.20')).r.status);
+    expect(statuses.at(-1)).toBe(429);
   });
 });

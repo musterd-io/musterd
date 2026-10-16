@@ -104,6 +104,23 @@ const EMAIL_WINDOW_MS = 60 * 60 * 1000;
 const EMAIL_SEND_WATCH = 2000;
 
 /**
+ * The inbox an address reaches, for COUNTING only — never for identity (ADR 620 decision 3 keeps
+ * the identity exactly as typed). Mail systems deliver `Nick@`, `NICK@`, `nick+anything@` and, at
+ * Gmail, `n.i.c.k@` to one inbox, so a limit keyed on the typed address let each variant start a
+ * fresh bucket and bomb the same inbox (security review, 2026-10-16). Case-folded, `+tag` dropped,
+ * and Gmail's dots removed.
+ */
+export function inboxKey(address: string): string {
+  const at = address.lastIndexOf('@');
+  let local = address.slice(0, at).toLowerCase();
+  const domain = address.slice(at + 1).toLowerCase();
+  const plus = local.indexOf('+');
+  if (plus > 0) local = local.slice(0, plus);
+  if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.replace(/\./g, '');
+  return `${local}@${domain === 'googlemail.com' ? 'gmail.com' : domain}`;
+}
+
+/**
  * An address we will send to: trimmed, at most 254 characters, one `@`, a dotted domain, no
  * whitespace or control characters. The domain is lowercased; the local part is kept exactly
  * (ADR 620 decision 3: no plus-alias collapsing, no dot removal).
@@ -268,7 +285,7 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               if (!address)
                 return send(res, 400, err('invalid_email', 'enter a valid email address'));
               const client = clientKey(req);
-              const addr = hashSecret(address);
+              const addr = hashSecret(inboxKey(address));
               const allowed =
                 (await hit(
                   db,
