@@ -24,7 +24,7 @@ import {
   resolveMcpLaunch,
   RETIRED_SURFACE_ENV,
 } from '../mcpEntry.js';
-import { STANDARD_FLOOR } from '../permissions.js';
+import { canonicalRuleForm, STANDARD_FLOOR } from '../permissions.js';
 import { nodeExec, type ExecSeam, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
@@ -1539,8 +1539,13 @@ export const claudeCodeAdapter: HarnessAdapter = {
         const present: ProvisionPermissions = { allow: [], ask: [], deny: [] };
         let any = false;
         for (const list of PERM_LISTS) {
-          const have = new Set(settings.permissions?.[list] ?? []);
-          present[list] = desired[list].filter((e) => have.has(e));
+          // ADR 633: compare in canonicalRuleForm — the same spelling equivalence the ADR 261
+          // merge and inspector use. A settings file carrying `Bash(pnpm test*)` holds a working
+          // spelling of the floor's `Bash(pnpm test *)`; a raw-string comparison called it absent,
+          // held the fragment in unmanaged-conflict forever, and no musterd command could
+          // reconcile that against the merge's "nothing to add".
+          const have = new Set((settings.permissions?.[list] ?? []).map(canonicalRuleForm));
+          present[list] = desired[list].filter((e) => have.has(canonicalRuleForm(e)));
           if (present[list].length > 0) any = true;
         }
         if (!any) return { state: 'absent' };

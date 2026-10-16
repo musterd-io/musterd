@@ -194,6 +194,49 @@ describe('claudeCodeAdapter — managed fragments', () => {
     expect(await claudeCodeAdapter.observe(ctx, hooks)).toEqual({ state: 'absent' });
   });
 
+  it('permissions observe folds the three wildcard spellings — a no-space floor IS complete (ADR 633)', async () => {
+    // The live trap (stanley's workspace, 2026-10-16): every floor entry present, five of them
+    // only as `Bash(pnpm test*)`-style bare-star spellings a human or older tool wrote. The
+    // raw-string observer called the subset incomplete → unmanaged-conflict forever, while the
+    // ADR 261 merge — the same file, same entries — reported "nothing to add".
+    const fs = memoryFs();
+    const ctx = fragCtx(fs);
+    const intents = await claudeCodeAdapter.desiredFragments(
+      ctx,
+      await claudeCodeAdapter.target(ctx),
+    );
+    const permissions = intents.find((i) => i.fragmentKey === 'permissions')!;
+    const desired = permissions.payload as { allow: string[]; ask: string[]; deny: string[] };
+    const bareStar = (entry: string) => entry.replace(/ \*\)$/, '*)');
+    fs.writeFile(
+      '/w/a/.claude/settings.local.json',
+      JSON.stringify({
+        permissions: { allow: desired.allow.map(bareStar), ask: desired.ask, deny: desired.deny },
+      }),
+      0o600,
+    );
+    // Complete in alternate spellings → the intent fingerprint → unmanaged-equivalent → green.
+    expect(await claudeCodeAdapter.observe(ctx, permissions)).toEqual({
+      state: 'present',
+      fingerprint: permissions.fingerprint,
+    });
+    // One genuinely absent entry (not an alternate spelling) still observes incomplete.
+    fs.writeFile(
+      '/w/a/.claude/settings.local.json',
+      JSON.stringify({
+        permissions: {
+          allow: desired.allow.filter((e) => e !== 'Read').map(bareStar),
+          ask: desired.ask,
+          deny: desired.deny,
+        },
+      }),
+      0o600,
+    );
+    const partial = await claudeCodeAdapter.observe(ctx, permissions);
+    expect(partial.state).toBe('present');
+    if (partial.state === 'present') expect(partial.fingerprint).not.toBe(permissions.fingerprint);
+  });
+
   it('guidance renders as a deterministic stamped file map, observed byte-exactly', async () => {
     const fs = memoryFs();
     const ctx = fragCtx(fs);
