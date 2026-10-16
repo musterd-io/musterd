@@ -200,9 +200,7 @@ export function registerLanes(
         risk: z
           .array(z.string())
           .optional()
-          .describe(
-            'risk tags (ADR 169). A tag other than user-facing asks a human; user-facing alone is a peer review unless stakes is high or the landed diff is large (ADR 631). [] = none.',
-          ),
+          .describe('only user-facing: peer review. Other tag or stakes high: human. [] = none.'),
       },
     },
     async (args) => {
