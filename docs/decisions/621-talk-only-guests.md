@@ -83,7 +83,8 @@ None of this exists yet, and three things in the code shape how it can be built.
 8. **Tool lists follow the ceiling.** The remote MCP (`transport/mcpHttp.ts`) and the local adapter
    list only the tools the seat's effective capabilities allow, so a phone is never offered a tool
    it would be refused. Refusal at the server is the guarantee; the filtered list is courtesy.
-9. **The remote MCP serves the full member tool set, gated by these capabilities** (spec §4.6). This
+9. **The remote MCP serves the full member tool set, gated by these capabilities** (spec §4.6). _(Amended 2026-10-16:
+   served by composing the adapter's own tools, not by building them in the daemon — ADR 630.)_ This
    replaces ADR 446's increment-3 plan to converge "after rehearsal" for members. Building that set
    is lane `01M512KNKZ`; until then the remote surface stays at its five tools, and a guest is
    refused `team_agent_create` and `team_agent_connect` by decision 2.
