@@ -98,7 +98,8 @@ secret is printed once (hard rule 5). The two verifiers differ on purpose (§3):
   they are removed by the member revoke path (ADR 449 §2), not the invite.
 
 The secret carries no identity and no seat. On its own it grants nothing except the right to
-create one new human member at sign-in, while the invite is live.
+create one new human member at sign-in, while the invite is live. _(Amended 2026-10-15: an invite also carries a
+ceiling, `guest` by default or `member`, stamped on every member it admits — ADR 621 §5.)_
 
 ### 2. The authorize page gains a second proof: `kind: 'invite'`
 
@@ -268,6 +269,10 @@ client is increment 3 (below).
   field. The "forwards it to the sign-in URL" lines in §"What this does not decide" and
   Consequences are superseded by this note; the security posture is unchanged (the value still
   never enters a query string or a server log).
+
+- **2026-10-15 — ADR 621: an invite admits a guest by default.** New invites carry a ceiling,
+  `guest` unless minted with `--member`; a guest can talk but not coordinate. Invites minted before
+  ADR 621 still admit members.
 
 ## Observability & Evaluation
 
