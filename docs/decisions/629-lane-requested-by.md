@@ -72,7 +72,9 @@ distinction on the lane itself, or "who asked" means two different things.
   so mixed builds keep today's behaviour.
 - Increment 2 will read one lane end to end (CLI and /live): asked, claimed, model, accepted,
   authorized, each link verified, stated, or missing.
-  Follows-up: deferred — this field is on main and the Eval has a week of opens to read (2026-10-23)
+  Follows-up: 01M534RA2HCAWDT6ZQDVS2FVHJ
+- 2026-10-16: that lane is open and claimable, and it depends on this one. The 2026-10-23 date
+  stays the Observability eval (a week of opens). It is not a park date for the reader.
 - 2026-10-16: tools/list had no spare bytes. `requested` on `lane_open` and `lane_update` is
   undescribed and unbounded in the MCP schema. The protocol schema still bounds `by` and `ref`,
   and the open reply names a miss. The standing-context budget moves by that measured remainder
