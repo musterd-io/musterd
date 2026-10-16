@@ -242,7 +242,7 @@ live/
   TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch, then re-reads every 4s while open, paused on a hidden tab, last list kept on a failed refresh); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit
-  Board.tsx / ApprovalQueue.tsx / ApprovalCard.tsx / AuditLog.tsx   // the other live views
+  Board.tsx / ApprovalQueue.tsx / ApprovalCard.tsx / AuditLog.tsx   // the other live views; a card's chain control (and a focused card) reads one lane and shows asked, claimed, model, accepted, authorized (ADR 629)
   sound.ts                      // opt-in WebAudio firehose cues
   Live.css                      // the /live palette + component styles (--lc-* tokens)
   office-scene/

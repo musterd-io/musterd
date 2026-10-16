@@ -3,6 +3,7 @@ import { ClaimCheckSchema } from './claimCheck.js';
 import { LaneClaimsSchema } from './claims.js';
 import { GoalSchema } from './goals.js';
 import { HoldSchema } from './holds.js';
+import { laneChain, laneChainLines } from './laneChain.js';
 import {
   EMPTY_POOL_KINDS,
   EMPTY_POOL_LIVE_EXCLUSIONS,
@@ -12,9 +13,12 @@ import {
   type EmptyPool,
   type LaneState,
 } from './lanes.wire.js';
+import { WIRE_ATTESTATION_SOURCES } from './model.js';
 import { ReviewPromiseClosureRowSchema, ReviewPromiseOpenRowSchema } from './review-promise.js';
 import { SEED_SOURCES } from './seeds.wire.js';
 import { OwnDisputeRowSchema } from './sycophancy.js';
+
+export { laneChain, laneChainLines };
 
 /**
  * Coordination lanes, Phase 1 (ADR 083) — the { work-item × owner × scope } unit that makes
@@ -1019,6 +1023,14 @@ export const LaneEventSchema = z.object({
   verified: z.boolean().optional(),
   reason: z.string().optional(),
   reviewer: z.string().optional(),
+  /**
+   * The model on the audit row that wrote this edge (ADR 581), projected so the chain
+   * can name it (ADR 629). Omitted when the row recorded none. `unknown` is not sent.
+   * Older readers ignore the field.
+   */
+  model: z.string().min(1).max(120).optional(),
+  /** Which tier produced `model` (ADR 101). Omitted when the row has no wire source. */
+  model_source: z.enum(WIRE_ATTESTATION_SOURCES).optional(),
 });
 export type LaneEvent = z.infer<typeof LaneEventSchema>;
 
@@ -1399,7 +1411,7 @@ export type NextBrief = z.infer<typeof NextBriefSchema>;
  */
 export function laneDetailLines(d: LaneDetail): string[] {
   const l = d.lane;
-  const out: string[] = [];
+  const out: string[] = [...laneChainLines(laneChain(l, d.history))];
   if (l.detail) out.push(`brief: ${l.detail}`);
   if (l.requested) {
     const ref = l.requested.ref ? ` ${l.requested.ref}` : '';

@@ -57,7 +57,10 @@ withDrivers('integration · lane detail', (_o, kind) => {
       const actions = body.history.map((e) => e.action);
       expect(actions[0]).toBe('lane.opened');
       expect(actions).toContain('lane.claimed');
-      expect(body.history.find((e) => e.action === 'lane.claimed')?.owner).toBe('ada');
+      expect(body.history.find((e) => e.action === 'lane.claimed')).toMatchObject({
+        owner: 'ada',
+        model: 'claude-opus-5',
+      });
       const moved = body.history.find(
         (e) => e.action === 'lane.state_changed' && e.to === 'active',
       );

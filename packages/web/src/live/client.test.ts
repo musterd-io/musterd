@@ -10,6 +10,7 @@ import {
   broadcastSeat,
   createLane,
   fetchLaneBoard,
+  fetchLaneChain,
   fetchLiveLaneBoard,
   fetchReport,
   fetchRoster,
@@ -413,6 +414,31 @@ describe('createLane / updateLane (the writable board, item 5)', () => {
 
   // live-loads-fast inc 1 (lane 01M4RNCZVB): /live asks for brief rows (no detail — it never shows
   // one) and for every state but abandoned (nothing on /live shows those either).
+  it('fetchLaneChain reads GET /lanes/:id into the five links', async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        lane: {
+          owner_seat: 'TJ',
+          requested: { by: 'big-body', basis: 'stated' },
+          merged: null,
+        },
+        history: [],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const links = await fetchLaneChain(cfg, '01M534RA2H');
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('/teams/revive/lanes/01M534RA2H');
+    expect(links.map((link) => link.mark)).toEqual([
+      'stated',
+      'verified',
+      'missing',
+      'missing',
+      'missing',
+    ]);
+    expect(links[0]).toMatchObject({ link: 'asked', value: 'big-body' });
+    expect(links[1]).toMatchObject({ link: 'claimed', value: 'TJ' });
+  });
+
   it('fetchLaneBoard passes brief=1 and the repeatable ?state= filter', async () => {
     const fetchMock = vi.fn(async () => okJson({ lanes: [], warnings: [] }));
     vi.stubGlobal('fetch', fetchMock);

@@ -44,6 +44,7 @@ import type { AuditResponse } from './audit.js';
 import type { Capabilities } from './capabilities.js';
 import { ACCOUNT_STATUSES, type AccountStatus } from './capabilities.wire.js';
 import type { Report } from './insights.js';
+import { laneChain, type LaneChainEvent, type LaneChainLink } from './laneChain.js';
 import type { LaneBoard, LaneResult } from './lanes.js';
 import type { Member, MemberSummary, Presence, Quiescence } from './member.js';
 import { WAKEABILITIES, WIRE_ATTESTATION_SOURCES, type Wakeability } from './model.js';
@@ -409,6 +410,50 @@ export function readLaneBoard(json: unknown): LaneBoard {
     lanes: json['lanes'].map(withLaneDefaults),
     warnings: json['warnings'],
   } as LaneBoard;
+}
+
+/**
+ * The five-link chain from `GET /teams/:slug/lanes/:id` (ADR 629). The envelope is
+ * required. A history entry that is not an object is skipped, so one bad row does not
+ * hide the read. Field checks stay on the daemon.
+ */
+export function readLaneChain(json: unknown): LaneChainLink[] {
+  if (!isRecord(json) || !isRecord(json['lane']) || !Array.isArray(json['history'])) {
+    throw new WireShapeError('lane detail');
+  }
+  const lane = json['lane'];
+  const requested = isRecord(lane['requested']) ? lane['requested'] : null;
+  const merged = isRecord(lane['merged']) ? lane['merged'] : null;
+  const history: LaneChainEvent[] = [];
+  for (const row of json['history']) {
+    if (!isRecord(row) || typeof row['action'] !== 'string') continue;
+    const model = typeof row['model'] === 'string' ? row['model'] : undefined;
+    const modelSource = typeof row['model_source'] === 'string' ? row['model_source'] : undefined;
+    history.push({
+      action: row['action'],
+      actor: typeof row['actor'] === 'string' ? row['actor'] : null,
+      owner: typeof row['owner'] === 'string' ? row['owner'] : null,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelSource !== undefined ? { model_source: modelSource } : {}),
+      ...(typeof row['verified'] === 'boolean' ? { verified: row['verified'] } : {}),
+    });
+  }
+  const by = typeof requested?.['by'] === 'string' ? requested['by'] : undefined;
+  const basis = typeof requested?.['basis'] === 'string' ? requested['basis'] : undefined;
+  const authorizedBy =
+    typeof merged?.['authorized_by'] === 'string' ? merged['authorized_by'] : undefined;
+  return laneChain(
+    {
+      owner_seat: typeof lane['owner_seat'] === 'string' ? lane['owner_seat'] : null,
+      requested: requested
+        ? { ...(by !== undefined ? { by } : {}), ...(basis !== undefined ? { basis } : {}) }
+        : null,
+      merged: merged
+        ? { ...(authorizedBy !== undefined ? { authorized_by: authorizedBy } : {}) }
+        : null,
+    },
+    history,
+  );
 }
 
 /** `{ lane, warnings, review?, notices? }` — every mutating lane verb's echo. */

@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-16 — `totalJsGzipBytes` 323,400 → 324,000 B and `liveCssGzipBytes` 22,400 → 22,500 B: one lane read end to end (lane `01M534RA2H`, ADR 629)
+
+| Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |
+| -------- | ----------------------------- | ------------------- | -------------------------- |
+| total JS | 322,275 B                     | 323,407 B           | RAISED 323,400 → 324,000 B |
+| live CSS | 22,219 B                      | 22,323 B            | RAISED 22,400 → 22,500 B   |
+
+The chain is +1,132 B gzip of JS. `wire` +624 is `laneChain` (who asked, who claimed, which model, who accepted, who authorized). `Board` +393 is the five links and the card control. `BoardOverlay` +68, the `/board` route +57, and `client` +7 are the fetch. Other chunks net about −7 B, gzip noise. Live CSS +104 B is the list in `Live.css` (the 24px control, the three columns, the word for the mark). Nothing in that delta is removable without dropping the read, and lazy-loading cannot move total (ADR 183). JS is local 323,407 plus the ~450 B CI gap measured on 2026-10-15; CSS is measured plus ~150 B. The local JS reading is 7 B over the old ceiling, so a trim of the noise would still leave CI red.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 323,400 B and live CSS at or under 22,400 B with this change in.
+
 ### 2026-10-16 — `totalJsGzipBytes` 319,500 → 323,400 B and `appCssGzipBytes` 12,000 → 13,300 B: the /live lane picker (lane `01M5162T6H`)
 
 | Budget   | Delta vs main (built beside it)                                   | Ceiling                    |

@@ -9,6 +9,7 @@ import {
 } from '../live/MemberSignIn';
 import {
   acquireObserver,
+  fetchLaneChain,
   forgetObserver,
   loadObserver,
   ObserverSignInRequired,
@@ -64,6 +65,13 @@ function BoardPage() {
   const [team, setTeam] = useState('');
   const [advanced, setAdvanced] = useState<AdvancedState>({ open: false, as: '', token: '' });
   const [cfg, setCfg] = useState<LiveConfig | null>(null);
+  const loadChain = useCallback(
+    (id: string) => {
+      if (!cfg) return Promise.reject(new Error('no session'));
+      return fetchLaneChain(cfg, id);
+    },
+    [cfg],
+  );
   const [isMember, setIsMember] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -478,6 +486,7 @@ function BoardPage() {
                 onCreate={doCreate}
                 onPatch={doPatch}
                 focusLane={focusLane}
+                loadChain={cfg ? loadChain : undefined}
                 />
               </>
             )}
