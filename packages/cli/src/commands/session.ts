@@ -1117,6 +1117,48 @@ export function refreshTranscriptlessObservation(
   }
 }
 
+/**
+ * A captured slot with no transcript still names its harness. Read that probe.
+ * OpenCode stays on {@link refreshTranscriptlessObservation}: its normal state is
+ * no slot at all. Grok's capture never writes a transcript path, and a repo that
+ * vendors `.opencode/opencode.json` must not stamp the newest OpenCode row onto it.
+ *
+ * A foreign observation is not kept for the refresh window. The next call replaces
+ * it, or drops it when this harness's probe returns nothing — a missing attestation
+ * is honest, and another harness's model is not.
+ */
+function refreshNamedHarnessObservation(
+  dir: string,
+  binding: Binding,
+  session: SessionCapture,
+  now: number = Date.now(),
+): string | undefined {
+  try {
+    const prior = binding.model_observed;
+    const foreign = prior !== undefined && prior.harness !== session.harness;
+    const current =
+      !foreign &&
+      prior !== undefined &&
+      prior.observed_at >= session.started_at &&
+      now - prior.observed_at < OBSERVATION_REFRESH_MS;
+    if (current) return undefined;
+    const observed = observeModelFor(session.harness, { cwd: dir, session_id: session.id });
+    if (!observed) {
+      if (!foreign) return undefined;
+      const { model_observed: _dropped, ...rest } = binding;
+      saveBinding(dir, rest, { drop: { model_observed: true } });
+      return undefined;
+    }
+    saveBinding(dir, {
+      ...binding,
+      model_observed: { model: observed, harness: session.harness, observed_at: now },
+    });
+    return observed;
+  } catch {
+    return undefined;
+  }
+}
+
 export function refreshModelObservation(
   dirHint?: string,
   // Injected for tests, mirroring `localSessionLiveness` — the enumerator reads the real
@@ -1129,9 +1171,15 @@ export function refreshModelObservation(
     const binding = findBinding(dir, {});
     if (!binding) return undefined;
     const session = binding?.session;
-    // ADR 521: no transcript to re-read (opencode keeps sessions in opencode.db, not a file).
-    // Ask the harness that owns the workspace directly instead of retiring observation for life.
-    if (!session?.transcript_path) return refreshTranscriptlessObservation(dir, binding);
+    // No transcript. OpenCode keeps sessions in opencode.db and often has no slot (ADR 521).
+    // A slot that names another harness is that session: Grok never writes a transcript path,
+    // and the OpenCode marker in this repo must not supply its model.
+    if (!session?.transcript_path) {
+      if (session && session.harness !== 'opencode') {
+        return refreshNamedHarnessObservation(dir, binding, session);
+      }
+      return refreshTranscriptlessObservation(dir, binding);
+    }
 
     // Only a live captured session has a transcript worth re-reading — but "ended" is a claim by the
     // SLOT, and ADR 166 already established that the slot is the weaker witness: enumerated session

@@ -38,7 +38,13 @@ written and tested, so ADR 383's removal does not transfer.
 1. **The seam is the refresh bail, not the plugin.** In `refreshModelObservation`, when the
    binding has no transcript to re-read, ask the harness that owns the workspace directly
    instead of returning `undefined`. The opencode probe self-selects — it returns `undefined`
-   outside its own sessions — so the branch is a no-op everywhere else. Gated on the opencode
+   outside its own sessions — so the branch is a no-op everywhere else.
+   _(Amended 2026-10-16: the probe does not self-select by harness. It returns the newest
+   OpenCode row for the directory, so a slot that names another harness and has no transcript
+   attested that row. The caller runs this probe only when the slot is OpenCode or absent. A
+   named slot is read by its own probe; a foreign observation is replaced, or dropped when
+   that probe returns nothing.)_
+   Gated on the opencode
    workspace marker so non-opencode seats pay one file check, not a subprocess.
 2. **Reuse the existing contract.** The same throttle (`OBSERVATION_REFRESH_MS`), the same
    never-throw / never-erase rules, the same `model_observed` write. A `session start` hook
@@ -75,6 +81,10 @@ written and tested, so ADR 383's removal does not transfer.
   row for the directory, the same approximation class as transcript enumeration's warm
   neighbour. A mid-session model switch re-attests within the refresh window, which is better
   than the start-only observation this replaces the absence of.
+- 2026-10-16: seat schmidt's Grok session attested `gemini-4-argon-contributor` as observed
+  while its summary said `grok-4.7`. The capture has no transcript path, this repo contains
+  `.opencode/opencode.json`, and `opencode.db` had that model for the directory. The nameplate
+  shortened the id to "Gemini 4". The caller now branches on the captured harness first.
 - If the `session_v2` row proves unreliable live (v2 session store moves, shared directories
   misattribute), the fallback is (b): remove the probe and the surface from
   `PROBE_CAPABLE_SURFACES` per ADR 383, with the measurement in the new ADR's Context.
