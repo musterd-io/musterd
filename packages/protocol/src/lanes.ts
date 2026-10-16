@@ -484,6 +484,38 @@ export function leftoverSignal(lane: {
   return null;
 }
 
+/** How strongly "who asked for this lane" is known (ADR 629). Same split ADR 624 made for a claim. */
+export const LaneRequestedBasisSchema = z.enum(['act', 'seed', 'self', 'stated']);
+export const LaneRequestedSchema = z.object({
+  /** Seat or person who asked. On `act` and `seed` the daemon fills this from the record. */
+  by: z.string().min(1).max(80),
+  basis: LaneRequestedBasisSchema,
+  /** Act id (`act`) or seed id (`seed`). Absent for `self` and `stated`. */
+  ref: z.string().min(1).max(80).optional(),
+});
+export type LaneRequested = z.infer<typeof LaneRequestedSchema>;
+
+/** What `lane_open` / `lane_update` accept. The daemon settles it into {@link LaneRequestedSchema}. */
+export const OpenRequestedSchema = z.object({
+  by: z.string().min(1).max(80).optional(),
+  basis: LaneRequestedBasisSchema.optional(),
+  ref: z.string().min(1).max(80).optional(),
+});
+
+/** Printed when a lane opens with no requester (ADR 629). The lane still opens. */
+export const LANE_REQUESTED_NUDGE =
+  'who asked for this lane is not recorded. Say so with --self, --by <name>, --act <id>, or --seed <id>.';
+
+/** Stable JSON for `lanes.requested_json`. Key order is part of the equality check on retry. */
+export function requestedRecordJson(value: LaneRequested | null | undefined): string | null {
+  if (!value) return null;
+  return JSON.stringify(
+    value.ref
+      ? { by: value.by, basis: value.basis, ref: value.ref }
+      : { by: value.by, basis: value.basis },
+  );
+}
+
 export const LaneSchema = z.object({
   id: z.string(),
   team: z.string(),
@@ -621,6 +653,11 @@ export const LaneSchema = z.object({
   /** ADR 561: the issue this lane came from. Absent reads as none (skew posture, like `follows_up`). */
   // Read side stays a plain string: a stored value the write rule would refuse must not break a board.
   source_ref: z.string().nullable().optional(),
+  /**
+   * Who asked for this lane (ADR 629). Absent means missing — never the opener, and never "nobody".
+   * Optional like `source_ref`, so a daemon that predates the field stays assignable.
+   */
+  requested: LaneRequestedSchema.optional(),
   /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
   unfinished_todos: LaneTodosSchema.nullable().optional(),
   /** ADR 585: the claims filed at submit and re-checked at accept, each with its verdict and the
@@ -716,6 +753,8 @@ export const OpenLaneSchema = z.object({
   goal_id: z.string().optional(),
   /** The issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
   source_ref: LaneSourceRefSchema.optional(),
+  /** Who asked (ADR 629). Omitted leaves the field missing; the lane still opens. */
+  requested: OpenRequestedSchema.optional(),
   /** Declared risk tags (ADR 169). Which of them ask a human is {@link humanReviewRequired} (ADR 631). */
   risk: z.array(z.string()).optional(),
   /** Declared acceptance stakes (ADR 234). Omitted ⇒ `normal`. `high` on a user-facing lane asks a human (ADR 631). */
@@ -754,6 +793,8 @@ export const UpdateLaneSchema = z.object({
   goal_id: z.string().nullable().optional(),
   /** Set the issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
   source_ref: LaneSourceRefSchema.optional(),
+  /** Fill who asked (ADR 629), only while the lane has none. A different value is a 409. */
+  requested: OpenRequestedSchema.optional(),
   /** Transfer ownership to this seat (lane_handoff / lane_claim sets it to the caller). */
   owner_seat: z.string().optional(),
   /**
@@ -1359,6 +1400,10 @@ export function laneDetailLines(d: LaneDetail): string[] {
   const l = d.lane;
   const out: string[] = [];
   if (l.detail) out.push(`brief: ${l.detail}`);
+  if (l.requested) {
+    const ref = l.requested.ref ? ` ${l.requested.ref}` : '';
+    out.push(`asked: ${l.requested.by} (${l.requested.basis}${ref})`);
+  }
   const areas = l.areas ?? [];
   if (areas.length > 0) {
     out.push(

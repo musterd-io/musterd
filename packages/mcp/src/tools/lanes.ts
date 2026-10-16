@@ -11,6 +11,7 @@ import {
   describeHoldLine,
   emptyPoolCopy,
   emptyPoolHint,
+  LANE_REQUESTED_NUDGE,
   fmtOwnDisputes,
   incidentBannerLines,
   laneDetailLines,
@@ -48,12 +49,13 @@ function fmtLane(l: Lane): string {
   const goal = l.goal_id ? ` goal=${l.goal_id}` : '';
   const areas = l.areas?.length ? ` areas=[${l.areas.join(', ')}]` : '';
   const src = l.source_ref ? ` src=${l.source_ref}` : '';
+  const asked = l.requested ? ` asked=${l.requested.by} (${l.requested.basis})` : '';
   // ADR 466: a parked lane says who shelved it and why, in place of an owner.
   const parked = l.parked
     ? ` parked by ${l.parked.by}: "${l.parked.reason}"` +
       (l.parked.until ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})` : '')
     : '';
-  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${areas}${src}${scope}${deps}${branch}${parked}`;
+  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${areas}${src}${asked}${scope}${deps}${branch}${parked}`;
 }
 
 function fmtWarnings(warnings: LaneWarning[]): string {
@@ -188,6 +190,16 @@ export function registerLanes(
           .max(200)
           .optional()
           .describe('issue it came from (acme/app#12); one open lane per ref'),
+        requested: z
+          .object({
+            by: z.string().min(1).max(80).optional(),
+            basis: z.enum(['act', 'seed', 'self', 'stated']).optional(),
+            ref: z.string().min(1).max(80).optional(),
+          })
+          .optional()
+          .describe(
+            'who asked (ADR 629). Omit and the lane still opens; the reply says it is missing',
+          ),
         role: z.string().optional().describe('assignment hint (advisory)'),
         stakes: z
           .enum(['low', 'normal', 'high'])
@@ -224,7 +236,8 @@ export function registerLanes(
           ...args,
           project: resolveProject({ explicit: args.project }),
         });
-        return laneResult('lane opened', lane, warnings);
+        const hint = lane.requested ? undefined : `\n${LANE_REQUESTED_NUDGE}`;
+        return laneResult('lane opened', lane, warnings, hint);
       } catch (err) {
         return errorResult(err);
       }
@@ -400,6 +413,14 @@ export function registerLanes(
           .describe('link (or clear, with null) this lane to a Goal'),
         // ADR 561 — described on lane_open; undescribed here for the tools-list budget.
         source_ref: z.string().min(1).max(200).optional(),
+        // ADR 629 — described on lane_open. Fills a missing requester; a second value is a 409.
+        requested: z
+          .object({
+            by: z.string().min(1).max(80).optional(),
+            basis: z.enum(['act', 'seed', 'self', 'stated']).optional(),
+            ref: z.string().min(1).max(80).optional(),
+          })
+          .optional(),
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),
