@@ -84,9 +84,7 @@ The live remainder worth a look is `expired` on slippy (5) and TJ (4), and `pres
 ryder and dreamy (4 each). Those are a lease renewal that never arrived and a Presence let go under
 a running session, not a startup window.
 
-Measured on the live ledger (2026-10-16; falsify: `pnpm delivery:measure --days 7` prints
-`unknown` as the largest non-`not_joined` reason, or a HOLD verdict naming refusals above 25% of
-raises). <!-- claim: other -->
+Measured on the live ledger (2026-10-16; falsify: `pnpm delivery:measure --days 7` prints `unknown` as the largest non-`not_joined` reason, or a HOLD verdict naming refusals above 25% of raises). <!-- claim: other -->
 
 ## What this does not decide
 
