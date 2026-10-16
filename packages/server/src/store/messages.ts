@@ -12,6 +12,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
+import { MusterdError } from '../errors.js';
 import {
   answeredByAnyoneSql,
   laneSettledSql,
@@ -123,6 +124,38 @@ export function onReplicatedCommit(listener: () => void): () => void {
   return () => void replicatedCommitListeners.delete(listener);
 }
 
+/** One sentence for a taken envelope id. Names no team: the primary key is global. */
+export const DUPLICATE_ENVELOPE_ID = 'that envelope id is already in use';
+
+/**
+ * The global `messages.id` primary key, and nothing else. SQLite says
+ * `UNIQUE constraint failed: messages.id` (`SQLITE_CONSTRAINT_PRIMARYKEY`). Postgres says sqlstate
+ * `23505` on `messages_pkey`. Both drivers append `\n  in: <sql>` on the way out and keep the
+ * driver error as `cause`, so either layer can carry the fact. A different constraint — a foreign
+ * key on the same INSERT — must not match.
+ */
+function isDuplicateEnvelopeId(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    if (duplicateEnvelopeIdError(current)) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
+function duplicateEnvelopeIdError(err: Error): boolean {
+  const code = 'code' in err && typeof err.code === 'string' ? err.code : '';
+  const constraint =
+    'constraint' in err && typeof err.constraint === 'string' ? err.constraint : '';
+  if (code === '23505') {
+    if (constraint) return constraint === 'messages_pkey';
+    return /"messages_pkey"/.test(err.message);
+  }
+  return /UNIQUE constraint failed: messages\.id(?:\n|$)/.test(err.message);
+}
+
 /**
  * Insert an envelope into the append-only log. `toMemberId` set iff to.kind==='member'.
  *
@@ -130,6 +163,9 @@ export function onReplicatedCommit(listener: () => void): () => void {
  * wire field, so a caller cannot supply an origin. The seq is assigned at commit (ADR 531,
  * {@link stampOriginAtCommit}), in the same transaction as the insert, so a throw — a replayed
  * envelope id's UNIQUE violation is the realistic one — burns no number and leaves no hole.
+ *
+ * That violation is `conflict` ({@link DUPLICATE_ENVELOPE_ID}). A raw driver error would tell a
+ * caller that some team already holds the id. A foreign-key or check failure stays a driver error.
  */
 export async function insertMessage(
   db: Driver,
@@ -163,27 +199,32 @@ export async function insertMessage(
       ts: env.ts,
       created_at: opts.now ?? Date.now(),
     };
-    await t.run(
-      `INSERT INTO messages
-         (id, team_id, from_member, to_kind, to_member, act, body, thread_id, meta, from_provenance, origin_node, origin_seq, ts, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        row.id,
-        row.team_id,
-        row.from_member,
-        row.to_kind,
-        row.to_member,
-        row.act,
-        row.body,
-        row.thread_id,
-        row.meta,
-        row.from_provenance,
-        row.origin_node,
-        row.origin_seq,
-        row.ts,
-        row.created_at,
-      ],
-    );
+    try {
+      await t.run(
+        `INSERT INTO messages
+           (id, team_id, from_member, to_kind, to_member, act, body, thread_id, meta, from_provenance, origin_node, origin_seq, ts, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          row.id,
+          row.team_id,
+          row.from_member,
+          row.to_kind,
+          row.to_member,
+          row.act,
+          row.body,
+          row.thread_id,
+          row.meta,
+          row.from_provenance,
+          row.origin_node,
+          row.origin_seq,
+          row.ts,
+          row.created_at,
+        ],
+      );
+    } catch (err) {
+      if (isDuplicateEnvelopeId(err)) throw new MusterdError('conflict', DUPLICATE_ENVELOPE_ID);
+      throw err;
+    }
     stampOriginAtCommit(t, 'messages', row);
     return row;
   });
