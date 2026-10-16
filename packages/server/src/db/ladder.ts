@@ -316,6 +316,37 @@ CREATE INDEX IF NOT EXISTS idx_audit_archive_team_month ON audit_archive(team_id
       await d.exec('ALTER TABLE team_invites ADD COLUMN IF NOT EXISTS ceiling TEXT');
     },
   },
+  {
+    // v100 — ADR 623 §5 (away channels 2c, lane 01M515KYT64): the ask token and the decision record.
+    // `ask_channel_tokens` keeps only the sha256 of a token (hard rule 5). `ask_decisions` has ONE row
+    // per ask across every channel: its primary key is the compare-and-set that makes a decision
+    // atomic. New tables, no backfill; both are team-owned, so row-level security covers them.
+    version: 100,
+    sql: `CREATE TABLE IF NOT EXISTS ask_channel_tokens (
+  token_hash TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  ask_id TEXT NOT NULL,
+  ask_digest TEXT NOT NULL,
+  action_class TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  binding_id TEXT NOT NULL,
+  binding_generation INTEGER NOT NULL,
+  required_assurance TEXT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_ask_channel_tokens_team_ask ON ask_channel_tokens(team_id, ask_id);
+CREATE TABLE IF NOT EXISTS ask_decisions (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  ask_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  decision TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  decided_at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, ask_id)
+)`,
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

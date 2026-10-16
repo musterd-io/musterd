@@ -122,6 +122,13 @@ rows are added to the audit action map.
   and stamps one on every ask. A `null` meta, a prototype key as the species, and a `meta.gate` all
   classify `privileged`. A stripped client copy is not audited, as with the sibling server-controlled
   keys; add `ask.class_stripped` if abuse shows up.
+- _(2026-10-15, lane 2c)_ §5-§7 are built as ladder v100 (`ask_channel_tokens`, `ask_decisions`) and
+  `store/askChannelTokens.ts`. Two deviations from the text above, both on the side of caution. A token
+  presented by another team is refused as `unknown_token`, not `wrong_team`: the lookup is scoped to the
+  caller's team, so a cross-team probe cannot learn that a token exists; `wrong_team` is no longer
+  produced. An ask that is no longer open (answered on another surface) is refused as `conflict`. The
+  closed set of reasons is `unknown_token`, `expired`, `consumed`, `assurance`, `stale_revision`,
+  `class_changed`, `binding_stale`, `no_binding_store`, `conflict`.
 - Stamping a class on every ask costs one pure function at raise time. The cost to existing consumers is
   one helper call each.
 - `advisory` being the class of a mislabeled privileged request is deliberate and is the main thing a
