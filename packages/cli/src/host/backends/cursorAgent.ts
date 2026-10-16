@@ -7,6 +7,7 @@ import { localSessionLiveness, type LocalSessionLiveness } from '../../session/l
 import type { ActuatorBackend, WakeActuation, WakeCompletion } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
+import { parseCursorAgentResult } from './cursorUsage.js';
 
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
@@ -17,9 +18,22 @@ const RESUME_VERIFY_WINDOW_MS = 30_000;
  * `--approve-mcps` is what lets the seat's musterd server connect without a person at the
  * keyboard. `--force` and `--yolo` are on the binary and are not passed: a wake does not
  * bypass the harness's own command denials.
+ * `--output-format json` was read from `--help` on 2026.10.14-941492e (2026-10-16). The
+ * default is text, and text stdout has no usage. json is what puts the token object on
+ * stdout (`cursorUsage.ts`). It only works together with `--print`, which this argv already
+ * passes.
  */
 export function buildCursorAgentFreshArgs(line: string, workspace: string): string[] {
-  return ['--trust', '--print', '--approve-mcps', '--workspace', workspace, line];
+  return [
+    '--trust',
+    '--print',
+    '--output-format',
+    'json',
+    '--approve-mcps',
+    '--workspace',
+    workspace,
+    line,
+  ];
 }
 
 export function buildCursorAgentResumeArgs(
@@ -30,6 +44,8 @@ export function buildCursorAgentResumeArgs(
   return [
     '--trust',
     '--print',
+    '--output-format',
+    'json',
     '--approve-mcps',
     '--resume',
     sessionId,
@@ -167,7 +183,9 @@ export function cursorAgentBackend(deps: CursorAgentDeps = {}): ActuatorBackend 
             cwd: spec.workspace,
             env: cursorAgentWakeEnv(process.env, spec.order.lease_id, pinnedDir, spec.gateway?.env),
             detached: true,
-            stdio: ['ignore', 'ignore', 'ignore'],
+            // stdout is the usage artifact (JSON result). Stderr stays ignored. The pipe is
+            // drained below so a long result cannot fill it and stall the child.
+            stdio: ['ignore', 'pipe', 'ignore'],
           });
         } catch (err) {
           return {
@@ -197,6 +215,10 @@ export function cursorAgentBackend(deps: CursorAgentDeps = {}): ActuatorBackend 
           timeoutMs,
         );
         watchdog.unref();
+        let stdout = '';
+        child.stdout?.on('data', (chunk: Buffer | string) => {
+          stdout += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        });
         const exited = new Promise<number | null>((resolve) => {
           child.once('exit', (code) => resolve(code));
           child.once('error', () => resolve(null));
@@ -210,7 +232,13 @@ export function cursorAgentBackend(deps: CursorAgentDeps = {}): ActuatorBackend 
             `run for ${spec.order.seat} (${label}) settled: exit=${code ?? 'error'} ` +
               `wall=${(duration_ms / 1000).toFixed(1)}s`,
           );
-          const usage = deps.readUsage?.(spec.workspace, startedAt);
+          // An injected reader replaces the stdout parse (tests, and the old seam).
+          // Tokens from the JSON result have no dollar field, so they settle as
+          // harness_prints_no_price. No usage object is "cannot tell": the field stays
+          // absent and the reason stays harness_price_unverified. cost_usd is never set.
+          const usage = deps.readUsage
+            ? deps.readUsage(spec.workspace, startedAt)
+            : parseCursorAgentResult(stdout);
           const realId =
             label === 'fresh'
               ? (deps.findSessionId ?? findCursorWakeSessionId)(spec.workspace, startedAt)
@@ -218,9 +246,7 @@ export function cursorAgentBackend(deps: CursorAgentDeps = {}): ActuatorBackend 
           return {
             duration_ms,
             ...(usage ? { usage } : {}),
-            // No credentialed run has priced a cursor-agent wake. Tokens, when a reader
-            // supplies them, still do not become a dollar figure (ADR 364).
-            unpriced_reason: 'harness_price_unverified',
+            unpriced_reason: usage ? 'harness_prints_no_price' : 'harness_price_unverified',
             captures: [{ harness: 'cursor', ids: [placeholder, resumeId], id: realId }],
             ...(yielded ? { yielded: true } : {}),
           };
