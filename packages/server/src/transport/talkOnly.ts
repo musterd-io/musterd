@@ -43,12 +43,12 @@ export function talkOnlyAllows(method: string, rest: string): boolean {
 }
 
 /**
- * Credentials that can belong to a talk-only seat: a human seat credential and an OAuth access token
- * (a phone, ADR 446). Agent keys, grants and observer tokens are never a guest's, so the guard does
- * not spend a lookup on them.
+ * Whether a request carries a bearer the auth layer could accept. Fail closed on purpose: any member
+ * can be narrowed to talk-only (`team ceiling`), agents included, and an agent authenticates with its
+ * own seat credential, so the guard must not guess from the credential's prefix which callers could be
+ * talk-only. The match is the auth layer's own (`bearer()` in http.ts: exactly `Bearer `), so a header
+ * this declines never authenticates either.
  */
-export function mayBeTalkOnlyBearer(authorization: string | undefined): boolean {
-  if (!authorization || !authorization.startsWith('Bearer ')) return false;
-  const token = authorization.slice('Bearer '.length).trim();
-  return token.startsWith('mscr_') || token.startsWith('msat_');
+export function hasBearer(authorization: string | undefined): boolean {
+  return !!authorization && authorization.startsWith('Bearer ');
 }

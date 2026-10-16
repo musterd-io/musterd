@@ -556,7 +556,7 @@ import {
   tellSponsorOfProvision,
   unhostFailedProvision,
 } from './sponsoredAgentMint.js';
-import { mayBeTalkOnlyBearer, talkOnlyAllows } from './talkOnly.js';
+import { hasBearer, talkOnlyAllows } from './talkOnly.js';
 
 /**
  * The content-coding negotiated for this response from its request's `Accept-Encoding`, set once at
@@ -2802,14 +2802,10 @@ export async function handleHttp(
       const known = await getTeamBySlug(operatorCtx(rootCtx).db, slug);
       const ctx = known ? teamCtx(rootCtx, known.id) : rootCtx;
 
-      // ADR 621 §2: a talk-only seat (a guest) reaches only the talk routes. The lookup is spent
-      // only on a non-talk route called with a credential a guest could hold (`mscr_` / `msat_`);
-      // the route then re-authenticates as it always has.
-      if (
-        known &&
-        !talkOnlyAllows(method, rest) &&
-        mayBeTalkOnlyBearer(req.headers['authorization'])
-      ) {
+      // ADR 621 §2: a talk-only seat reaches only the talk routes. Checked for every authenticated
+      // caller of a non-talk route (fail closed — any member, agents included, can be narrowed);
+      // the route then re-authenticates as it always has. Talk routes skip the lookup.
+      if (known && !talkOnlyAllows(method, rest) && hasBearer(req.headers['authorization'])) {
         const caller = await tryAuth(ctx, slug, req);
         if (caller && isTalkOnly(caller)) {
           throw new MusterdError(
