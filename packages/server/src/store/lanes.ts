@@ -70,6 +70,9 @@ interface LaneRow {
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
   areas_json: string | null;
+  /** ADR 624 (v101): the latest decline — `{by, reason, at}` from a release with a reason; cleared
+   *  by any claim; null = none. */
+  declined_json: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -123,6 +126,7 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
       : {}),
     ...(row.source_ref ? { source_ref: row.source_ref } : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
+    ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -185,6 +189,8 @@ async function recordLaneEdges(
   after: Lane,
   ownerPatched: boolean,
   audit: LaneAudit,
+  /** ADR 624: the patch fields the edges record — the pick on a claim, the reason on a release. */
+  edge: { pick?: UpdateLane['pick']; release_reason?: string | undefined } = {},
 ): Promise<void> {
   const claimed =
     ownerPatched && after.owner_seat !== null && after.owner_seat !== before.owner_seat;
@@ -196,6 +202,8 @@ async function recordLaneEdges(
       // A handoff and a self-claim are the same patch; only the record can tell them apart later.
       kind: after.owner_seat === audit.actor ? 'claim' : 'handoff',
       ...(before.owner_seat ? { takeover_of_offline_owner: true } : {}),
+      // ADR 624: a lane-picker pick, verbatim — `attested` says how strongly "who asked" is proven.
+      ...(edge.pick ? { pick: edge.pick } : {}),
     });
   }
   const changed = laneFieldChanges(before, after);
@@ -212,6 +220,7 @@ async function recordLaneEdges(
       lane: after.id,
       released_by: audit.actor,
       owner_before: before.owner_seat,
+      ...(edge.release_reason !== undefined ? { reason: edge.release_reason } : {}),
     });
   }
   const enteringAcceptance =
@@ -290,6 +299,7 @@ export async function openLane(
     unfinished_todos_json: null,
     claims_json: null,
     areas_json: declaredAreas ? JSON.stringify(declaredAreas) : null,
+    declined_json: null,
     source_ref: input.source_ref ?? null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
@@ -617,6 +627,16 @@ async function updateLaneInTx(
     patch.areas !== undefined
       ? normalizeDeclaredAreas(patch.areas)
       : (existing.declared_areas ?? null);
+  // ADR 624: a release that says why becomes the lane's decline note, which the lane picker shows the
+  // next time anyone opens it; any claim clears it, so the note never sits on a lane someone owns.
+  // A release without a reason, and every other edit, leaves the standing note as it was.
+  const releasing = ownerSeat === null && existing.owner_seat !== null && state === 'open';
+  const declined =
+    releasing && patch.release_reason !== undefined
+      ? { by: audit?.actor ?? 'unknown', reason: patch.release_reason, at: now }
+      : ownerSeat !== null && ownerSeat !== existing.owner_seat
+        ? null
+        : (existing.declined ?? null);
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -646,6 +666,7 @@ async function updateLaneInTx(
     areas_json: declaredAreas ? JSON.stringify(declaredAreas) : null,
     abandon_reason: abandonReason,
     unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
+    declined_json: declined !== null ? JSON.stringify(declined) : null,
     source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
@@ -703,6 +724,7 @@ async function updateLaneInTx(
     'source_ref',
     'claims_json',
     'areas_json',
+    'declined_json',
     'state',
     'claimed_at',
     'resolved_at',
@@ -715,7 +737,10 @@ async function updateLaneInTx(
   );
   const after = (await getLane(db, teamId, id, teamSlug))!;
   if (audit)
-    await recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit);
+    await recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit, {
+      pick: patch.pick,
+      release_reason: patch.release_reason,
+    });
   // ADR 487 §5.1: a named follow-up with no goal joins this lane's goal, in the same transaction —
   // so the local path and the hub's arbitration both attach it, and a refused write attaches
   // nothing. One already on a goal keeps it. The policy (`decideFollowsUp`) has already refused a
@@ -759,6 +784,7 @@ const AUDITED_LANE_FIELDS = [
   'abandon_reason',
   'unfinished_todos',
   'source_ref',
+  'declined',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */
@@ -874,8 +900,8 @@ export async function countLanesBefore(
  */
 export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane): Promise<boolean> {
   const r = await db.run(
-    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, areas_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, areas_json, declined_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`,
     [
       lane.id,
@@ -901,6 +927,7 @@ export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane)
       lane.declared_areas && lane.declared_areas.length > 0
         ? JSON.stringify(lane.declared_areas)
         : null,
+      lane.declined ? JSON.stringify(lane.declined) : null,
       lane.source_ref ?? null,
       lane.state,
       lane.created_by,

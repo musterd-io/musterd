@@ -269,6 +269,7 @@ async function projectLaneEvent(
         unfinished_todos: 'unfinished_todos_json',
         declared_areas: 'areas_json',
         source_ref: 'source_ref',
+        declined: 'declined_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -282,7 +283,8 @@ async function projectLaneEvent(
           field === 'merged' ||
           field === 'parked' ||
           field === 'follows_up' ||
-          field === 'unfinished_todos'
+          field === 'unfinished_todos' ||
+          field === 'declined'
         )
           value = value === null ? null : JSON.stringify(value);
         await db.run(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`, [

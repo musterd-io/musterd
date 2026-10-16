@@ -31,7 +31,7 @@ const USAGE =
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
   '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
-  '  musterd lane release <id>\n' +
+  '  musterd lane release <id> [--reason "<why>"]\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
@@ -338,7 +338,12 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     // unowned, so the state move IS the release — the store clears the owner and the claim stamp.
     const id = parsed.positionals[1];
     if (!id) throw new CliError(USAGE, 2);
-    const res = await http.updateLane(team, id, { state: 'open' });
+    // ADR 624: the reason becomes the lane's decline note, shown by the lane picker.
+    const reason = flagStr(parsed.flags, 'reason');
+    const res = await http.updateLane(team, id, {
+      state: 'open',
+      ...(reason ? { release_reason: reason } : {}),
+    });
     process.stdout.write(
       `${theme.ok('✓')} lane released — open for anyone\n${renderLane(res.lane)}\n`,
     );

@@ -269,12 +269,17 @@ export function registerLanes(
         'Let go of a lane you own without finishing it — it returns to the board as open for ' +
         'anyone. Use when you park work rather than complete it; a claimed lane sitting idle ' +
         'reserves work nobody is doing.',
-      inputSchema: { id: z.string().describe('lane id') },
+      // ADR 624: `reason` is undescribed (the tools list is budgeted) — it becomes the lane's
+      // decline note, which the lane picker shows the next time a human opens it.
+      inputSchema: { id: z.string().describe('lane id'), reason: z.string().optional() },
     },
     async (args) => {
       try {
         // `open` means unowned, so the state move is the whole release — the store clears the owner.
-        const { lane, warnings } = await client.updateLane(args.id, { state: 'open' });
+        const { lane, warnings } = await client.updateLane(args.id, {
+          state: 'open',
+          ...(args.reason ? { release_reason: args.reason } : {}),
+        });
         return laneResult('lane released — open for anyone', lane, warnings);
       } catch (err) {
         return errorResult(err);

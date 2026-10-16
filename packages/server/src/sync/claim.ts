@@ -383,6 +383,7 @@ export async function decideLanePatch(
       );
   }
   decideParkPatch(member, before, body);
+  decidePickPatch(member, before, body);
   await decideRiskyClosePendingHuman(db, teamId, member, before, body);
   await decideFollowsUp(db, teamId, member, before, body);
   // A CLAIM is distinguishable from a HANDOFF by who the new owner is: taking it for yourself is
@@ -1025,6 +1026,40 @@ export async function decideRiskyClosePendingHuman(
       `it from the board now; after the window your self-close is recorded unconfirmed as before ` +
       `(ADR 603).`,
   );
+}
+
+/**
+ * ADR 624 — the lane picker's two patch fields, refused the same way on the local path and at the
+ * hub. `pick` rides a claim or handoff only, and may say `attested: true` only when the actor IS the
+ * human it names: a seat claiming for itself (a terminal pick) cannot prove who asked, so the record
+ * must not say it can. `release_reason` rides a real release only — an owned lane moving to `open`.
+ */
+export function decidePickPatch(
+  member: { name: string; kind: string },
+  before: Lane,
+  body: UpdateLane,
+): void {
+  if (body.pick !== undefined) {
+    if (!body.owner_seat)
+      throw new MusterdError(
+        'bad_request',
+        'pick rides a claim or handoff — send it with owner_seat (ADR 624)',
+      );
+    if (body.pick.attested && body.pick.requested_by !== member.name)
+      throw new MusterdError(
+        'bad_request',
+        `a pick is attested only when its requester sends it — "${member.name}" cannot attest ` +
+          `that "${body.pick.requested_by}" asked; send attested: false (ADR 624)`,
+      );
+  }
+  if (
+    body.release_reason !== undefined &&
+    !(body.state === 'open' && before.owner_seat !== null && before.state !== 'open')
+  )
+    throw new MusterdError(
+      'bad_request',
+      'release_reason rides a release only — an owned lane moving to open (ADR 624)',
+    );
 }
 
 export function decideParkPatch(
