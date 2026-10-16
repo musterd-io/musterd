@@ -16,7 +16,7 @@ The read is the files below, at `0c5f3c0c` (2026-10-16; falsify: the named symbo
 | codex | holds | holds | holds | holds | holds in unit | gap |
 | cursor-agent | holds | holds | holds | gap | holds | exempt |
 | grok | holds | holds | holds | holds | holds | gap |
-| muse | holds | holds | holds | holds | unmeasured | gap |
+| muse | holds | holds | holds | holds | holds | gap |
 
 `HARNESSES` in `packages/cli/src/onboard/harnesses/index.ts` is claude-code, cursor, codex, opencode, grok, muse. `musterdAdapter` is guidance and is not selectable. Native is the engine. `packages/cli/src/commands/host.ts` constructs all seven wake backends.
 
@@ -56,9 +56,11 @@ Follows-up: 01M535CZQ2PJB4SVT586NS8SN2
 
 Onboard is `onboard/harnesses/muse.ts` (SessionStart orient, Stop interrupt). Wake and resume are `host/backends/muse.ts` (`--session-id`, resume adds `--allow-workspace-switch`). Meter reads that session's `session.jsonl` and, when `model_completed.usage` parses, settles the summed tokens as `harness_prints_no_price` (ancestor `c42f00c4`). A log with no such event stays `harness_price_unverified` and carries no usage.
 
-`museStopCommand` runs `inbox --interrupt-check --hook muse` and keeps stdout (stderr goes to `/dev/null`). Whether that stdout reaches the model is unmeasured (2026-10-16; falsify: one raised act on Muse 1.4.x shows up in model context, or the transcript shows the stdout discarded). <!-- claim: other -->
+`museStopCommand` prints nothing when `interrupt-check` is silent. A non-empty line becomes `{"decision":"block","reason":"<line>"}`, and a continuation whose stdin has `stop_hook_active: true` exits 0. On Muse 1.4.10 a Stop hook that prints a bare line and exits 0 stores stdout as `""` and does not add a model step (2026-10-16, echo, session `eeeeeeee-3333-4333-8333-000000000003`; falsify: that bare line appears in a `context_block_updated` block). <!-- claim: other -->
 
-Follows-up: 01M535CZPM72QMCB6YQEQ55JRH
+The shipped wrapper reaches the next model step: the reason is a developer context block `hook:stop:stop:0` from `runtime_hook`, the first stop is `blocked`, and `stop_hook_active` makes the second stop `completed` (2026-10-16, echo, session `ffffffff-8888-4888-8888-000000000001`, two model steps; a silent check on `ffffffff-8888-4888-8888-000000000002` stays one step; falsify: that JSON is status `failed`, or the reason is absent from the next model step). <!-- claim: other -->
+
+`additionalContext` is rejected on Stop.
 
 `injectAdapterFor('muse')` returns `no-inject:muse` (2026-10-16; falsify: `inject.ts` returns a ready adapter for `muse`). <!-- claim: other -->
 

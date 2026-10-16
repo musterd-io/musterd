@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
@@ -11,6 +12,7 @@ import {
   museHooksPath,
   museServerEntry,
   museSettingsPathFor,
+  MUSE_INTERRUPT_STOP_SCRIPT,
   museStartCommand,
   museStopCommand,
   upsertMuseHooks,
@@ -161,8 +163,88 @@ describe('muse hooks.json (ADR 619 — measured nesting)', () => {
 
   it('commands carry the epoch markers and the muse hook name', () => {
     expect(museStartCommand()).toMatch(/musterd-muse-start e\d+/);
-    expect(museStopCommand()).toMatch(/--hook muse/);
+    expect(museStopCommand()).toContain('"--hook","muse"');
     expect(museStopCommand()).toMatch(/musterd-muse-stop e\d+/);
+    expect(museStopCommand()).toContain('decision:"block"');
+    expect(museStopCommand()).toContain('stop_hook_active');
+    expect(museStopCommand()).not.toContain('additionalContext');
+    expect(museStopCommand()).not.toContain('interrupt-check >/dev/null');
+  });
+});
+
+function runStop(stdin: string, env?: NodeJS.ProcessEnv) {
+  return spawnSync(process.execPath, ['-e', MUSE_INTERRUPT_STOP_SCRIPT], {
+    input: stdin,
+    encoding: 'utf8',
+    env: env ? { ...process.env, ...env } : process.env,
+  });
+}
+
+function fakeMusterd(dir: string, stdout: string): string {
+  const bin = join(dir, 'musterd');
+  writeFileSync(bin, `#!/bin/sh\nprintf '%s' ${JSON.stringify(stdout)}\n`);
+  chmodSync(bin, 0o755);
+  return dir;
+}
+
+describe('muse Stop doorbell (Muse 1.4.10)', () => {
+  const stdin = JSON.stringify({
+    hook_event_name: 'Stop',
+    stop_hook_active: false,
+    session_id: 's1',
+  });
+
+  it('blocks once with the interrupt line, and stays silent when the check prints nothing', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const raised = runStop(stdin, {
+        PATH: `${fakeMusterd(binDir, 'urgent from nick')}:${process.env['PATH'] ?? ''}`,
+      });
+      expect(raised.status).toBe(0);
+      expect(JSON.parse(raised.stdout)).toEqual({ decision: 'block', reason: 'urgent from nick' });
+
+      const quiet = runStop(stdin, {
+        PATH: `${fakeMusterd(binDir, '')}:${process.env['PATH'] ?? ''}`,
+      });
+      expect(quiet.status).toBe(0);
+      expect(quiet.stdout).toBe('');
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not block a continuation Muse already marked stop_hook_active', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const env = {
+        PATH: `${fakeMusterd(binDir, 'urgent from nick')}:${process.env['PATH'] ?? ''}`,
+      };
+      const continued = runStop(
+        JSON.stringify({ hook_event_name: 'Stop', stop_hook_active: true }),
+        env,
+      );
+      expect(continued.status).toBe(0);
+      expect(continued.stdout).toBe('');
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('still blocks when the probe exits without reading its stdin', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const env = {
+        PATH: `${fakeMusterd(binDir, 'urgent from nick')}:${process.env['PATH'] ?? ''}`,
+      };
+      const block = runStop(
+        JSON.stringify({ stop_hook_active: false, pad: 'x'.repeat(1 << 20) }),
+        env,
+      );
+      expect(block.status).toBe(0);
+      expect(JSON.parse(block.stdout)).toEqual({ decision: 'block', reason: 'urgent from nick' });
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
   });
 });
 

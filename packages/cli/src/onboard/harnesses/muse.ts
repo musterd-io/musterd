@@ -187,9 +187,33 @@ export function museStartCommand(): string {
   );
 }
 
-/** Stop: the mid-loop interrupt line (ADR 088) — silent unless an interrupt-class act waits. */
+/**
+ * Stop doorbell, measured on Muse 1.4.10 (2026-10-16). A hook that prints plain stdout and exits 0
+ * is stored with empty stdout and the model does not continue. `{"decision":"block","reason":...}`
+ * is consumed into a developer context block and the model runs again. Stdin then has
+ * `stop_hook_active: true`; exiting 0 there ends the loop (an unconditional block runs until
+ * `--max-model-steps`). `additionalContext` is rejected. Silent interrupt-check prints nothing, so
+ * an ordinary stop is not blocked. Grok's `end_turn` / `stopHookActive` names are not Muse's.
+ */
+export const MUSE_INTERRUPT_STOP_SCRIPT = [
+  'const fs=require("fs");',
+  'const {spawnSync}=require("child_process");',
+  'let raw="";',
+  'try{raw=fs.readFileSync(0,"utf8")}catch{}',
+  'let ev={};',
+  'try{ev=JSON.parse(raw)}catch{}',
+  'if(ev.stop_hook_active)process.exit(0);',
+  'let line="";',
+  'try{const r=spawnSync("musterd",["inbox","--interrupt-check","--hook","muse"],{encoding:"utf8",input:raw,stdio:["pipe","pipe","ignore"]});if(r.status===0&&r.stdout)line=r.stdout.trim()}catch{}',
+  'if(line)console.log(JSON.stringify({decision:"block",reason:line}))',
+].join('');
+
+/** Stop: the mid-loop interrupt line (ADR 088), in the shape Muse 1.4.10 feeds back to the model. */
 export function museStopCommand(): string {
-  return musterdHookCommand('inbox --interrupt-check --hook muse', MUSE_STOP_MARKER);
+  return (
+    'command -v musterd >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && ' +
+    `node -e '${MUSE_INTERRUPT_STOP_SCRIPT}' || true # ${MUSE_STOP_MARKER} ${epochTag(FEATURE_EPOCH)}`
+  );
 }
 
 function hookGroup(command: string): MuseHookGroup {
