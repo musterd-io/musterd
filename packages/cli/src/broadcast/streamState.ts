@@ -25,6 +25,13 @@ export interface StreamState {
   /** The image digest the last launch ran — what lets `ensure` tell a deploy from a crash. */
   image?: string;
   /**
+   * The Fly machine id last seen occupying the app. A launch and an ensure tick that sees the
+   * machine write it, and only while `desired` is still live — a stop that landed first is left
+   * alone. A crash looks this id up with `fly machine status` after the machine has left
+   * `fly machine list`. Absent on state written before the field existed.
+   */
+  machine?: string;
+  /**
    * Extra flags the capture process was started with (`--args`, passed as `BROADCAST_ARGS`).
    * The supervisor relaunches from this file, not from the shell that ran `start`, so a crash
    * restart that omitted them came back on entrypoint defaults and said nothing. Absent on state
@@ -170,7 +177,18 @@ export function readStreamState(path: string): StreamState | null {
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as StreamState;
     if (raw.desired !== 'live' && raw.desired !== 'stopped') return null;
-    return { ...raw, restarts: Array.isArray(raw.restarts) ? raw.restarts : [] };
+    // A tampered or legacy value must not become a `fly` argument. Hex only; anything else is
+    // absent — the key is omitted, so a file from before this field still round-trips.
+    const { machine: rawMachine, ...rest } = raw;
+    const machine =
+      typeof rawMachine === 'string' && /^[0-9a-f]{4,}$/i.test(rawMachine)
+        ? rawMachine.toLowerCase()
+        : undefined;
+    return {
+      ...rest,
+      restarts: Array.isArray(raw.restarts) ? raw.restarts : [],
+      ...(machine ? { machine } : {}),
+    };
   } catch {
     return null; // missing or unparseable — fail safe: no state, no enforcement
   }

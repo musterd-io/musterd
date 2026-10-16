@@ -428,6 +428,57 @@ describe('musterd stream', () => {
       expect(readStreamState(statePath)).toBeNull();
     });
 
+    it('start records the machine id the launch printed', async () => {
+      withImage();
+      expect(
+        await run(
+          ['start'],
+          sup({ launch: () => ({ code: 0, output: 'Machine ID: d8d55d6a7e96e8\n' }) }),
+        ),
+      ).toBe(0);
+      expect(readStreamState(statePath)!.machine).toBe('d8d55d6a7e96e8');
+    });
+
+    it('start --once does not record a machine id onto a stopped intent', async () => {
+      withImage();
+      expect(
+        await run(
+          ['start', '--once'],
+          sup({ launch: () => ({ code: 0, output: 'Machine ID: d8d55d6a7e96e8\n' }) }),
+        ),
+      ).toBe(0);
+      const st = readStreamState(statePath)!;
+      expect(st.desired).toBe('stopped');
+      expect(st.machine).toBeUndefined();
+    });
+
+    it('records the occupying machine when the launch output names none', async () => {
+      withImage();
+      let listCalls = 0;
+      const inner = greenExec({});
+      const exec: Exec = (cmd, args) => {
+        const key = [cmd, ...args].join(' ');
+        if (key.startsWith('fly machine list')) {
+          listCalls += 1;
+          if (listCalls === 1) return ok('[]');
+          const state = listCalls >= 3 ? 'started' : 'created';
+          return ok(JSON.stringify([{ id: 'abc123def45678', state }]));
+        }
+        return inner(cmd, args);
+      };
+      expect(
+        await run(
+          ['start'],
+          sup({
+            exec,
+            launch: () => ({ code: 1, output: MANIFEST_UNKNOWN }),
+            sleep: async () => {},
+          }),
+        ),
+      ).toBe(0);
+      expect(readStreamState(statePath)!.machine).toBe('abc123def45678');
+    });
+
     it('start records desired live with provenance before launching', async () => {
       withImage();
       expect(await run(['start'], sup())).toBe(0);
@@ -537,6 +588,19 @@ describe('musterd stream', () => {
         'fly machine list': ok(JSON.stringify([{ id: 'abc123', state: 'started' }])),
       });
       expect(await run(['ensure'], sup({ exec }))).toBe(0);
+      expect(launches).toBe(0);
+      expect(readStreamState(statePath)!.machine).toBe('abc123');
+    });
+
+    it('does not record a machine id onto a stopped intent', async () => {
+      writeStreamState(statePath, { desired: 'stopped', by: 'miley', at: NOW, restarts: [] });
+      const exec = greenExec({
+        'fly machine list': ok(JSON.stringify([{ id: 'abc123', state: 'started' }])),
+      });
+      expect(await run(['ensure'], sup({ exec }))).toBe(0);
+      const st = readStreamState(statePath)!;
+      expect(st.desired).toBe('stopped');
+      expect(st.machine).toBeUndefined();
       expect(launches).toBe(0);
     });
 
@@ -819,6 +883,140 @@ describe('musterd stream', () => {
       it('status stays quiet when there is nothing to quote', async () => {
         expect(await run(['status'], sup())).toBe(0);
         expect(out.join('')).not.toContain('last end');
+      });
+
+      // Lane 01M539NG4N — the 2026-10-16 death of 830722b7704158 left no epitaph. Fly's event was
+      // exit_code=-1,oom_killed=false,requested_stop=false. The note has to quote that, and only that.
+      const dead = '830722b7704158';
+      const flyStatus = [
+        '2026-10-16T14:10:40Z stopped destroy flyd',
+        '2026-10-16T14:10:39Z stopped crash flyd exit_code=-1,oom_killed=false,requested_stop=false',
+        '2026-10-16T12:06:12Z started start flyd exit_code=0,oom_killed=false,requested_stop=true',
+      ].join('\n');
+
+      it('no epitaph quotes the Fly exit of the machine the state file still names', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        const exec = greenExec({ [`fly machine status ${dead}`]: ok(flyStatus) });
+        expect(await run(['ensure'], sup({ exec }))).toBe(0);
+        const note = out.join('');
+        expect(note).toContain('no last words — it died without reporting');
+        expect(note).toContain('exit -1, not oom, not a requested stop');
+        expect(note).not.toContain('exit 0');
+      });
+
+      it('a Fly status that fails keeps the hard-kill sentence', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        const exec = greenExec({
+          'fly machine status': { code: 1, stdout: '', stderr: 'not found' },
+        });
+        expect(await run(['ensure'], sup({ exec }))).toBe(0);
+        const note = out.join('');
+        expect(note).toContain('a hard kill, or pre-epitaph capture code');
+        expect(note).not.toContain('not oom');
+      });
+
+      it('a recent epitaph is not replaced, and Fly is not asked', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        let statusCalls = 0;
+        const inner = greenExec({ 'fly machine status': ok(flyStatus) });
+        const exec: Exec = (cmd, args) => {
+          if (args[0] === 'machine' && args[1] === 'status') statusCalls += 1;
+          return inner(cmd, args);
+        };
+        expect(await run(['ensure'], sup({ exec, fetchEpitaph: async () => EP }))).toBe(0);
+        expect(out.join('')).toContain(
+          'last words (exit 1 after 25m): “ffmpeg ended (code 1) — the sink dropped”',
+        );
+        expect(out.join('')).not.toContain('not oom');
+        expect(statusCalls).toBe(0);
+      });
+
+      it('a stale epitaph yields to the Fly exit', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        const exec = greenExec({ [`fly machine status ${dead}`]: ok(flyStatus) });
+        const stale = { ...EP, ts: NOW - 16 * 60_000 };
+        expect(await run(['ensure'], sup({ exec, fetchEpitaph: async () => stale }))).toBe(0);
+        expect(out.join('')).toContain('exit -1, not oom, not a requested stop');
+        expect(out.join('')).not.toContain(EP.reason);
+      });
+
+      it('the stand-down ask quotes the Fly exit when there are no last words', async () => {
+        withImage();
+        writeStreamState(statePath, {
+          desired: 'live',
+          at: NOW - 60_000,
+          restarts: [NOW - 20 * 60_000, NOW - 10 * 60_000, NOW - 5 * 60_000],
+          machine: dead,
+        });
+        const exec = greenExec({
+          [`fly machine status ${dead}`]: ok('exit_code=-1,oom_killed=true,requested_stop=false'),
+        });
+        expect(await run(['ensure'], sup({ exec }))).toBe(0);
+        expect(asks.length).toBe(1);
+        expect(asks[0]!).toContain('no last words — it died without reporting');
+        expect(asks[0]!).toContain('exit -1, oom, not a requested stop');
+      });
+
+      it('quotes the dead machine, then records the id the relaunch printed', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        const exec = greenExec({ [`fly machine status ${dead}`]: ok(flyStatus) });
+        expect(
+          await run(
+            ['ensure'],
+            sup({
+              exec,
+              launch: () => ({ code: 0, output: 'Machine ID: d8d55d6a7e96e8\n' }),
+            }),
+          ),
+        ).toBe(0);
+        expect(out.join('')).toContain('exit -1, not oom, not a requested stop');
+        expect(readStreamState(statePath)!.machine).toBe('d8d55d6a7e96e8');
+      });
+
+      it('a stop that lands during the relaunch is not rewritten live', async () => {
+        crashState();
+        writeStreamState(statePath, { ...readStreamState(statePath)!, machine: dead });
+        expect(
+          await run(
+            ['ensure'],
+            sup({
+              launch: () => {
+                writeStreamState(statePath, {
+                  desired: 'stopped',
+                  by: 'miley',
+                  at: NOW,
+                  reason: 'nick asked',
+                  restarts: [],
+                });
+                return { code: 0, output: 'Machine ID: d8d55d6a7e96e8\n' };
+              },
+            }),
+          ),
+        ).toBe(0);
+        const st = readStreamState(statePath)!;
+        expect(st.desired).toBe('stopped');
+        expect(st.reason).toBe('nick asked');
+        expect(st.machine).toBeUndefined();
+      });
+
+      it('a non-hex machine id is not passed to fly', async () => {
+        crashState();
+        const raw = readStreamState(statePath)!;
+        writeFileSync(statePath, JSON.stringify({ ...raw, machine: '--help' }));
+        const calls: string[] = [];
+        const inner = greenExec();
+        const exec: Exec = (cmd, args) => {
+          calls.push([cmd, ...args].join(' '));
+          return inner(cmd, args);
+        };
+        expect(await run(['ensure'], sup({ exec }))).toBe(0);
+        expect(calls.some((c) => c.includes('machine status'))).toBe(false);
+        expect(out.join('')).toContain('a hard kill, or pre-epitaph capture code');
       });
     });
 
