@@ -42,7 +42,8 @@ const row = (
 const ANTHROPIC_SRC = 'platform.claude.com/docs/en/about-claude/pricing, read 2026-10-13';
 const OPENAI_SRC = 'developers.openai.com/api/docs/pricing, read 2026-10-13';
 const XAI_SRC = 'docs.x.ai/developers/pricing, read 2026-10-13 (<200k-prompt tier)';
-const MUSE_SRC = 'dev.meta.ai/products/muse-code, read 2026-10-15';
+const MUSE_SRC =
+  'dev.meta.ai/docs/pricing-rate-limits (Muse Wonder $4/$20/$0.20 standard; contributor n/a) + /products/muse-code (Muse Spark), read 2026-10-16';
 
 /** The table. Keep provider rows together; the lookup sorts by prefix length, not by position.
  *  Long-context tiers (Anthropic >100k on Haiku, OpenAI >272k, xAI ≥200k) are NOT modelled: a
@@ -77,6 +78,12 @@ export const PRICE_ROWS: readonly PriceRow[] = [
   row('muse-spark-1.3', 1.25, 4.25, 0.12, 0, MUSE_SRC),
   row('muse-spark-1.2-contributor', 0.1, 0.2, 0.02, 0, MUSE_SRC),
   row('muse-spark-1.2', 1.25, 4.25, 0.12, 0, MUSE_SRC),
+  // Meta — Muse Wonder (published 2026-10-16): $4.00/M input, $20.00/M output,
+  // $0.20/M cached input, no cache-write. Meta publishes no contributor arm for
+  // Wonder; the contributor-tagged runtime id therefore mirrors the standard rate
+  // (owner decision 2026-10-16). Longest-prefix keeps the two rows apart.
+  row('muse-wonder-1.0-contributor', 4.0, 20.0, 0.2, 0, MUSE_SRC),
+  row('muse-wonder-1.0', 4.0, 20.0, 0.2, 0, MUSE_SRC),
 ];
 
 /** The row a model id prices by: the longest matching prefix, or undefined. */
