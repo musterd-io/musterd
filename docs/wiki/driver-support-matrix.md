@@ -87,7 +87,7 @@ no Meta credentials — every credentialed cell is marked as such).
 | Session labeling | terminal OSC 0 only (no sidebar write API observed) | none — no controlling terminal |
 | Hook capture | SessionStart + Stop in `.muse/hooks.json` (Claude-style nesting, measured — docs show no schema; startup validation names violations) | same files (hooks run headless — measured both firing) |
 | Skills / guidance | `.agents/skills` read natively (shared with musterd's canonical skill — no bridge) + AGENTS.md | same |
-| Model attestation | hook payload `model_id`/`model` when present; session-log lookup not yet built | same |
+| Model attestation | hook payload `model_id`/`model` when present; session.jsonl model records unmapped (Follows-up: 01M50ZJ8KG) | same |
 | Session capture | `~/.local/share/muse/sessions/<YYYY>/<MM>/<DD>/<uuid>/session.jsonl`, attributed by recorded `workspace_root` | same |
 | Config entry scope | machine-global `~/.config/muse/settings.json` (`schema_version: 1` mandatory) | same |
 | MCP env channel | **absent** — stdio children receive `MUSE_SESSION_ID` but not `MUSTERD_*` (measured); the lease file attests | same |
