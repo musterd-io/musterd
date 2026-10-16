@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { buildRefFromFlyImage, readBuildStamp } from '@musterd/protocol/build-stamp';
 import pg from 'pg';
 import { resolveConsoleConfig } from './config.js';
 import { assertSchema, type Queryable } from './db.js';
@@ -14,14 +14,15 @@ import { migrate, SCHEMA_VERSION } from './schema.js';
  *   from MUSTERD_CONSOLE_RUNTIME_ROLE. The server never reads the owner URL.
  * Prints versions and states — never a URL (hard rule 5).
  */
+/**
+ * The commit `/health` reports: the dist's own stamp (ADR 135) when it has one. Inside the Fly
+ * image the stamp is `ref: null`, because the Docker build has no `.git`. There the image label
+ * deploy.mjs pushed (`git-<sha>`, read from `FLY_IMAGE_REF`) is the deployed commit.
+ */
 function buildStamp(): string | null {
-  try {
-    const raw = readFileSync(new URL('./build.json', import.meta.url), 'utf8');
-    const ref = (JSON.parse(raw) as { ref?: unknown }).ref;
-    return typeof ref === 'string' ? ref : null;
-  } catch {
-    return null;
-  }
+  return (
+    readBuildStamp(import.meta.url) ?? buildRefFromFlyImage(process.env['FLY_IMAGE_REF']) ?? null
+  );
 }
 
 async function serve(): Promise<void> {

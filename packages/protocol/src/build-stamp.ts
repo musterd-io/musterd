@@ -54,3 +54,18 @@ export function readBuildStamp(metaUrl: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * The commit a Fly machine's image was built from, read from `FLY_IMAGE_REF`. A Docker build has no
+ * `.git` (`.dockerignore`), so `stamp-build.mjs` writes `ref: null` inside it. Fly sets
+ * `FLY_IMAGE_REF` on every machine, and `scripts/cloud/deploy.mjs` labels each image `git-<sha>`
+ * (12 hex chars). The ref looks like `registry.fly.io/musterd-console:git-6fd7aca44986`, possibly
+ * with an `@sha256:…` digest after it.
+ *
+ * Returns the hex after `:git-`, or `undefined` for an unset variable or any other label, such as
+ * an image `fly deploy` labelled `deployment-…` by hand. It never guesses.
+ */
+export function buildRefFromFlyImage(imageRef: string | undefined): string | undefined {
+  const m = /:git-([0-9a-f]{7,40})(?:@|$)/.exec(imageRef?.trim() ?? '');
+  return m?.[1];
+}
