@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 51;
+export const GUIDANCE_CONTENT_VERSION = 52;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -238,6 +238,10 @@ export function renderSkillBody(opts: { team: string }): string {
     '  A hold is not a fight — it goes to a second reviewer, from another model family, who judges the',
     '  disagreement itself (ADR 505 §4; the re-route lands with its increment 2). Reviewers: a bare',
     '  "no" is not a note — name the file, the line, the unmet criterion (ADR 204).',
+    '- **A `message` is not an answer.** A `message` replying to a dispute records neither a concession',
+    '  nor a hold, and a review rejection stays pinned until the `accept` or `decline` arrives',
+    '  (ADR 614). The same goes for chat: telling a human "I concede" before you have checked is the reflex',
+    '  this section exists to stop. Check first, then answer once, on the record.',
     "- **Send a `challenge` when you doubt a peer's claim.** If a finding, premise, or number a teammate",
     '  put on the record would change your work and you have evidence it is wrong, send `challenge` to them',
     '  (`reply_to` the act) naming the claim and your evidence, not a `message`. A `message` can be left',

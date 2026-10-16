@@ -12,7 +12,12 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
-import { laneSettledSql, undischargedSql } from './discharge.js';
+import {
+  answeredByAnyoneSql,
+  laneSettledSql,
+  resolvedThreadSql,
+  undischargedSql,
+} from './discharge.js';
 import type { MessageRow, MessageVisibility } from './rows.js';
 
 /**
@@ -393,15 +398,22 @@ export async function listInbox(
     // stamped as a review dispute is owed an answer by the lane's owner, so it is pinned like any
     // obligation. Read off the server stamp (`isReviewDispute` is the in-memory twin), never the
     // act alone: a plain `decline` is still an answer, owed to nobody.
+    //
+    // ADR 614: the review dispute's discharge is narrower than ADR 434's four shapes, as SPEC §Disputes
+    // says — it stays pinned until an `accept` or `decline` answers it (or its thread is resolved).
+    // The owner's `message` reply (shape 3) clears every other obligation and used to clear this one
+    // too, which let a concession or hold go unrecorded: 6 of 7 such replies in 30 days conceded.
     const pinned = await db.all<MessageRow>(
       `SELECT * FROM messages ${where}
            AND (
-             act IN (${pinnedAny})
-             OR (to_kind = 'member' AND act IN (${pinnedDirected}))
+             ((act IN (${pinnedAny})
+               OR (to_kind = 'member' AND act IN (${pinnedDirected})))
+              ${undischargedSql('messages', '?')})
              OR (to_kind = 'member' AND act = 'decline'
-                 AND json_extract(meta, '$.dispute.via') = ?)
+                 AND json_extract(meta, '$.dispute.via') = ?
+                 AND NOT EXISTS (${answeredByAnyoneSql('messages')})
+                 AND NOT EXISTS (${resolvedThreadSql('messages')}))
            )
-           ${undischargedSql('messages', '?')}
            ${laneSettledSql('messages')}
          ORDER BY created_at ASC, id ASC
          LIMIT ?`,
@@ -409,8 +421,8 @@ export async function listInbox(
         ...params,
         ...OBLIGATION_ACTS_ANY,
         ...OBLIGATION_ACTS_DIRECTED,
-        REVIEW_DISPUTE_VIA,
         member.id,
+        REVIEW_DISPUTE_VIA,
         opts.pinnedLimit ?? PINNED_DEFAULT_LIMIT,
       ],
     );

@@ -246,10 +246,12 @@ export function renderDisputes(d: NonNullable<Report['disputes']>, w: (s: string
     const tb = c.tiebreak.settled
       ? ` · tiebreaks ${String(c.tiebreak.settled)} settled, hold stood ${String(c.tiebreak.hold_stood)}`
       : '';
+    // ADR 614: shown only when non-zero, so a team with no message-only replies reads as before.
+    const msg = c.message_only ? ` · message only ${String(c.message_only)}` : '';
     w(
       `    ${label.padEnd(11)} opened ${String(c.opened).padEnd(3)} answered ${String(c.answered).padEnd(3)} ` +
         `conceded ${String(c.conceded).padEnd(3)} held ${String(c.held).padEnd(3)} ` +
-        `named a check ${fmtShare(c.named_check, c.answered)}${theme.meta(tb)}\n`,
+        `named a check ${fmtShare(c.named_check, c.answered)}${theme.meta(tb + msg)}\n`,
     );
   };
   for (const via of DISPUTE_VIA_ORDER) line(via, d.by_via[via]);

@@ -33,7 +33,8 @@ export type { DisputeCell, DisputeReadout, DisputeRow };
 const here = dirname(fileURLToPath(import.meta.url));
 const ENTRIES_DIR = join(here, '..', '..', 'docs', 'claims', 'entries');
 
-/** The acts the readout reads. Mirrors `deriveDisputes` (server) minus the team filter. */
+/** The acts the readout reads. Mirrors `deriveDisputes` (server) minus the team filter — plus, since
+ *  ADR 614, a `message` that replies to something (counted as `message_only`, never as an answer). */
 export const DISPUTE_ACTS = ['challenge', 'decline', 'accept', 'ask'] as const;
 
 function load(dbPath: string, sinceMs: number): DisputeRow[] {
@@ -47,7 +48,9 @@ function load(dbPath: string, sinceMs: number): DisputeRow[] {
            FROM messages r
            JOIN members mem ON mem.id = r.from_member
            LEFT JOIN messages p ON p.id = r.in_reply_to
-          WHERE r.ts >= ? AND r.act IN ('challenge','decline','accept','ask')
+          WHERE r.ts >= ?
+            AND (r.act IN ('challenge','decline','accept','ask')
+                 OR (r.act = 'message' AND r.in_reply_to IS NOT NULL))
           ORDER BY r.ts, r.id`,
       )
       .all(sinceMs) as unknown as RawDisputeRow[];
@@ -94,9 +97,10 @@ function cellLine(label: string, c: DisputeCell): string {
   const tb = c.tiebreak.settled
     ? ` · tiebreaks ${String(c.tiebreak.settled)} settled, hold stood ${String(c.tiebreak.hold_stood)}`
     : '';
+  const msg = c.message_only ? ` · message only ${String(c.message_only)}` : '';
   return (
     `    ${label.padEnd(11)} opened ${String(c.opened).padEnd(3)} answered ${String(c.answered).padEnd(3)} ` +
-    `conceded ${String(c.conceded).padEnd(3)} held ${String(c.held).padEnd(3)} ${named}${tb}`
+    `conceded ${String(c.conceded).padEnd(3)} held ${String(c.held).padEnd(3)} ${named}${tb}${msg}`
   );
 }
 

@@ -112,6 +112,28 @@ withDrivers('inboxPinning', (o) => {
       expect(rows).not.toContain(plain);
     });
 
+    it('ADR 614: a review dispute stays pinned through the owner\u2019s message; an accept or decline clears it', async () => {
+      const { db, ada, send } = await seed();
+      const stamp = (n: string) => ({
+        in_reply_to: `ask-${n}`,
+        dispute: { via: 'review', lane: `L${n}`, ask: `ask-${n}` },
+      });
+      const messaged = await send('decline', { meta: stamp('1') });
+      const conceded = await send('decline', { meta: stamp('2') });
+      const plainSteer = await send('steer');
+      const ownerAda = { id: ada.id, name: 'Ada' };
+      // The owner replies to the first with a message ("you're right"), to the second with accept.
+      await send('message', { to: 'team', from: ownerAda, meta: { in_reply_to: messaged } });
+      await send('accept', { to: 'team', from: ownerAda, meta: { in_reply_to: conceded } });
+      // A message reply still discharges every other obligation (ADR 434 shape 3).
+      await send('message', { to: 'team', from: ownerAda, meta: { in_reply_to: plainSteer } });
+      for (let i = 0; i < 20; i++) await send('message');
+      const rows = await bounded(db, ada);
+      expect(rows).toContain(messaged);
+      expect(rows).not.toContain(conceded);
+      expect(rows).not.toContain(plainSteer);
+    });
+
     it('pins the directed steering trio and a handoff', async () => {
       const { db, ada, send } = await seed();
       const owed: string[] = [];

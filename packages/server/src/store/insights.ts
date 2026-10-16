@@ -927,7 +927,9 @@ export async function deriveDisputes(
        FROM messages r
        JOIN members mem ON mem.id = r.from_member
        LEFT JOIN messages p ON p.id = r.in_reply_to
-      WHERE r.team_id = ? AND r.ts >= ? AND r.act IN ('challenge','decline','accept','ask')
+      WHERE r.team_id = ? AND r.ts >= ?
+        AND (r.act IN ('challenge','decline','accept','ask')
+             OR (r.act = 'message' AND r.in_reply_to IS NOT NULL))
       ORDER BY r.ts, r.id`,
     [teamId, since],
   );

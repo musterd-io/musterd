@@ -15,7 +15,8 @@
  *
  * WHAT IS AN ANSWER. The first `accept` (conceded) or `decline` (held) replying to the dispute
  * from a seat other than the one who opened it. "Named a check" is `namesCheck` on that body —
- * ADR 476 §4's floor on "verified", not a judgment of quality.
+ * ADR 476 §4's floor on "verified", not a judgment of quality. A `message` reply is not an answer
+ * (ADR 614): it is counted apart, as `message_only`, when it is the claim side's only reply.
  *
  * WHAT IS A TIEBREAK. A `lane_review` ask carrying `tiebreak {rejection, hold, first_reviewer}`
  * (ADR 505 §4), joined to its dispute by `rejection`; its first `accept` means the hold stood, its
@@ -135,6 +136,10 @@ export const DisputeCellSchema = z.object({
   held: z.number().int(),
   /** Answers whose body names a check (`namesCheck`) — numerator over `answered`. */
   named_check: z.number().int(),
+  /** ADR 614: disputes the claim's side replied to only with a `message` — the pin is cleared
+   *  (ADR 434 shape 3) but neither verdict is recorded. Not inside `answered`; the leak, counted.
+   *  Defaults to 0 so a report from a daemon before ADR 614 still parses. */
+  message_only: z.number().int().default(0),
   /** Holds that went to a second reviewer and got a verdict; `hold_stood` is the count the tiebreak
    *  sided with the owner (a correct hold). `settled - hold_stood` is the wrong-hold count. */
   tiebreak: z.object({ settled: z.number().int(), hold_stood: z.number().int() }),
@@ -171,6 +176,7 @@ const cell = (): DisputeCell => ({
   conceded: 0,
   held: 0,
   named_check: 0,
+  message_only: 0,
   tiebreak: { settled: 0, hold_stood: 0 },
 });
 
@@ -182,11 +188,14 @@ export function summariseDisputes(rows: readonly DisputeRow[], since: number): D
   const seats = new Map<string, DisputeSeat>();
 
   // Disputes, by id, with who opened them.
-  const disputes = new Map<string, { via: DisputeVia; opener: string; answered: boolean }>();
+  const disputes = new Map<
+    string,
+    { via: DisputeVia; opener: string; answered: boolean; messaged: boolean }
+  >();
   for (const r of ordered) {
     const via = disputeViaOf(r);
     if (!via || r.ts < since) continue;
-    disputes.set(r.id, { via, opener: r.seat, answered: false });
+    disputes.set(r.id, { via, opener: r.seat, answered: false, messaged: false });
     byVia[via].opened++;
     total.opened++;
   }
@@ -201,6 +210,11 @@ export function summariseDisputes(rows: readonly DisputeRow[], since: number): D
   // Answers: the first accept/decline on a dispute from someone other than its opener; the first
   // accept/decline on a tiebreak ask from someone other than its author.
   for (const r of ordered) {
+    if (r.act === 'message' && r.inReplyTo) {
+      const d = disputes.get(r.inReplyTo);
+      if (d && r.seat !== d.opener) d.messaged = true;
+      continue;
+    }
     if ((r.act !== 'accept' && r.act !== 'decline') || !r.inReplyTo) continue;
     const d = disputes.get(r.inReplyTo);
     if (d && !d.answered && r.seat !== d.opener) {
@@ -231,6 +245,12 @@ export function summariseDisputes(rows: readonly DisputeRow[], since: number): D
         if (r.act === 'accept') c.tiebreak.hold_stood++;
       }
     }
+  }
+  // ADR 614: a dispute whose only reply from the claim's side was a `message`.
+  for (const d of disputes.values()) {
+    if (d.answered || !d.messaged) continue;
+    byVia[d.via].message_only++;
+    total.message_only++;
   }
   const by_seat = [...seats.values()].sort(
     (a, b) => b.answered - a.answered || a.seat.localeCompare(b.seat),
@@ -333,6 +353,25 @@ export const DISPUTE_EVIDENCE_NOTICE =
   "this concedes a dispute without naming what you checked — if you checked something, say what; if you didn't, say that";
 /** @deprecated ADR 505 inc 3 — the same text under its ADR 484 name, kept one epoch for callers. */
 export const CHALLENGE_EVIDENCE_NOTICE = DISPUTE_EVIDENCE_NOTICE;
+
+/**
+ * ADR 614: the line added to the sender's reply when a `message` answers a dispute. A message
+ * records no verdict, so the concession or hold it carries is invisible to the readout and to the
+ * evidence rail; a review rejection stays pinned until the verdict arrives. Sender-only, never
+ * stored on the act.
+ */
+export const DISPUTE_MESSAGE_NOTICE =
+  'a dispute is answered with `accept` (conceded — name what you checked) or `decline` (held — with the evidence). A message records neither, and a review rejection stays pinned until one arrives';
+
+/** True for a `message` replying to a dispute (stamped, or a bare `challenge`) — ADR 614. */
+export function isMessageDisputeReply(
+  act: string,
+  parentAct: string | null,
+  parentMeta: Record<string, unknown> | null,
+): boolean {
+  if (act !== 'message') return false;
+  return parentAct === 'challenge' || disputeOf(parentMeta) !== null;
+}
 
 /** True for an `accept` answering a dispute (stamped, or a bare `challenge`) whose body names no check. */
 export function isUnverifiedDisputeAnswer(

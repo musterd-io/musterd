@@ -1852,6 +1852,7 @@ withDrivers('insights', (o) => {
         conceded: 0,
         held: 1,
         named_check: 1,
+        message_only: 0,
         tiebreak: { settled: 1, hold_stood: 1 },
       });
       expect(block.by_via.dependency.opened).toBe(0);
