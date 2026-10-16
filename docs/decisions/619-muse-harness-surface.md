@@ -25,7 +25,7 @@ enumeration, no prices. A seat cannot stand on Muse at all.
 ## Decision
 
 1. `SURFACES` gains `'muse'` (protocol, this ADR — the only closed-enum change; `HarnessId` is an open string and needs none).
-2. Onboarding writes the two machine files Muse actually reads: the musterd MCP stdio entry into `mcp_servers` (with `MUSE_SESSION_ID`-style env passthrough noted, `mode: required`), and SessionStart + Stop hooks into `.muse/hooks.json` in the measured nesting. Trust follows Muse's own rule: user settings need none, project hooks need `--trust-workspace` (which wakes pass).
+2. Onboarding writes the two machine files Muse actually reads: the musterd MCP stdio entry into `mcp_servers` (with `MUSE_SESSION_ID`-style env passthrough noted, `mode: required` _(Amended 2026-10-16: `optional` — `required` wedged every non-musterd repo on the machine. See Consequences.)_), and SessionStart + Stop hooks into `.muse/hooks.json` in the measured nesting. Trust follows Muse's own rule: user settings need none, project hooks need `--trust-workspace` (which wakes pass).
 3. The env channel (`MUSTERD_WAKE_LEASE`/`MUSTERD_PROVENANCE` on the spawn) does NOT reach Muse's MCP stdio children — measured: only `MUSE_SESSION_ID` arrives. So the ADR 354 lease file is the primary attestation for Muse (as for Codex), with `${MUSTERD_WAKE_LEASE}` interpolation in the server entry as a secondary to verify live.
 4. `--provider echo` runs with no credentials and is the offline E2E vehicle for spawn/verify/settle mechanics (measured: exit 0, JSONL session streams, `--session-id` resume, `export --session`). Model behavior, usage metering shape, and `${VAR}` interpolation still need a credentialed run — the lane 3 human gate.
 
@@ -34,6 +34,7 @@ enumeration, no prices. A seat cannot stand on Muse at all.
 - A `muse` seat attests `surface: muse`; enumeration, wake and provisioning speak the name.
 - The hooks.json nesting is pinned by a test against the measured shape, not by docs (which show none) — if Meta changes it, startup validation names the breakage and the test is the tripwire.
 - The SitePoint install path (`npm install -g @meta-ai/muse-code`, `~/.muse-code/config.json`) is wrong — that package 404s and no such config exists on 1.4.9. Nothing in this lane trusts unverified third-party docs; the ADR cites only dev.meta.ai and the binary.
+- _(Amended 2026-10-16, on izzo's send-back of #2697: `mode: required` in the machine-global settings.json aborts EVERY muse run whose musterd MCP child exits — including repos that are not musterd workspaces, where no binding exists by construction. Reproduced on 1.4.9: required + failing server refuses the run; optional warns and proceeds. The entry is now `mode: 'optional'`; a wake that needs the channel fails honestly at verify (lease unattested) instead. Two further measurements from the same session: the binary reads both `mcp_servers` and `mcpServers` but canonicalizes to camelCase on write (stripping `enabled`/`mode` it does not persist) — so onboarding writes camelCase and migrates only its own snake_case entry.)_
 
 ## Observability & Evaluation
 
