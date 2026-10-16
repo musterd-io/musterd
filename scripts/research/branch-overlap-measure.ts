@@ -9,8 +9,8 @@ const dbArg = args.find((a) => a.startsWith('--db='));
 const repoArg = args.find((a) => a.startsWith('--repo='));
 
 const LIMIT = limitArg ? Number(limitArg.slice('--limit='.length)) : 150;
-const DB_PATH = dbArg ? dbArg.slice('--db='.length) : `${homedir()}/.musterd/musterd.db`;
-const REPO = repoArg ? repoArg.slice('--repo='.length) : process.cwd();
+const DB_PATH = dbArg ? dbArg!.slice('--db='.length) : `${homedir()}/.musterd/musterd.db`;
+const REPO = repoArg ? repoArg!.slice('--repo='.length) : process.cwd();
 
 const EXCLUDED = new Set(['ROADMAP.md', 'pnpm-lock.yaml', 'docs/implementation-plan.md']);
 
@@ -36,7 +36,7 @@ function parseHunks(diff: string): Map<string, Array<[number, number]>> {
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git ')) {
       const m = line.match(/ b\/(.+)$/);
-      current = m ? m[1] : null;
+      current = m && m[1] ? m[1] : null;
       if (current && !out.has(current)) out.set(current, []);
       continue;
     }
@@ -48,10 +48,12 @@ function parseHunks(diff: string): Map<string, Array<[number, number]>> {
         let start = 0;
         let count = 1;
         if (body.includes(',')) {
-          const [s, c] = body.split(',');
+          const parts = body.split(',');
+          const s = parts[0] ?? '';
+          const c = parts[1];
           if (!/^\d+$/.test(s)) continue;
           start = Number(s);
-          count = /^\d+$/.test(c) ? Number(c) : 1;
+          count = c && /^\d+$/.test(c) ? Number(c) : 1;
         } else {
           if (!/^\d+$/.test(body)) continue;
           start = Number(body);
@@ -140,9 +142,9 @@ let sharedFilePairs = 0;
 let sharedHunkPairs = 0;
 
 for (let i = 0; i < data.length; i++) {
+  const a = data[i]!;
   for (let j = i + 1; j < data.length; j++) {
-    const a = data[i];
-    const b = data[j];
+    const b = data[j]!;
     if (a.resolved < b.created || b.resolved < a.created) continue;
     timeOverlapping++;
     const common = [...a.files].filter((f) => b.files.has(f));
