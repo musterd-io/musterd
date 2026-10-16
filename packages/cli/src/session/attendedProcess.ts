@@ -1,6 +1,16 @@
 import { execFileSync } from 'node:child_process';
-import { readlinkSync, realpathSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readlinkSync,
+  readSync,
+  realpathSync,
+} from 'node:fs';
 import { basename, sep } from 'node:path';
+import { parseCodexAttendedMeta } from '@musterd/protocol';
 
 /**
  * The host guard's backstop for an attended session (ADR 444). The transcript guard (ADR 131 §5)
@@ -22,6 +32,10 @@ export interface HarnessProcess {
   args: string;
   /** The process's working directory, when it could be read. */
   cwd?: string;
+  /** ADR 632: interactive rollout headers held open by this Codex app server. */
+  attendedWorkspaces?: string[];
+  /** True only when ps reports a controlling terminal for this process. */
+  terminal?: boolean;
 }
 
 /** Lists harness processes, or `undefined` when the process table cannot be read. */
@@ -36,6 +50,7 @@ interface ProcessSignature {
 /** Only harnesses with a known signature are judged; the rest return "cannot tell". */
 const SIGNATURES: Readonly<Record<string, ProcessSignature>> = {
   'claude-code': { comm: 'claude', headless: ['-p', '--print'] },
+  codex: { comm: 'codex', headless: [] },
 };
 
 const EXEC_TIMEOUT_MS = 2_000;
@@ -58,6 +73,65 @@ function readCwd(pid: number): string | undefined {
     });
     const line = out.split('\n').find((l) => l.startsWith('n'));
     return line ? line.slice(1) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** ADR 632: metadata is attributed by its recorded cwd, never by a rollout filename. */
+export function readCodexAttendedWorkspace(path: string): string | undefined {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    if (!fstatSync(fd).isFile()) return undefined;
+    const buf = Buffer.alloc(64 * 1024);
+    const count = readSync(fd, buf, 0, buf.length, 0);
+    const prefix = buf.subarray(0, count).toString('utf8');
+    const end = prefix.indexOf('\n');
+    if (end < 0) return undefined;
+    return parseCodexAttendedMeta(prefix.slice(0, end))?.cwd;
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        /* process/file may have disappeared */
+      }
+    }
+  }
+}
+
+/** A process-held file is evidence while idle; a transcript merely left on disk is not. */
+export function codexOpenWorkspaces(pid: number): string[] | undefined {
+  try {
+    const files =
+      process.platform === 'linux'
+        ? readdirSync(`/proc/${pid}/fd`).flatMap((fd) => {
+            try {
+              return [readlinkSync(`/proc/${pid}/fd/${fd}`)];
+            } catch {
+              return [];
+            }
+          })
+        : process.platform === 'darwin'
+          ? execFileSync('/usr/sbin/lsof', ['-p', String(pid), '-Fn'], {
+              encoding: 'utf8',
+              timeout: EXEC_TIMEOUT_MS,
+              maxBuffer: 1024 * 1024,
+              stdio: ['ignore', 'pipe', 'ignore'],
+            })
+              .split('\n')
+              .filter((line) => line.startsWith('n'))
+              .map((line) => line.slice(1))
+          : undefined;
+    if (!files) return undefined;
+    return [...new Set(files)].flatMap((path) => {
+      if (!basename(path).startsWith('rollout-') || !path.endsWith('.jsonl')) return [];
+      const workspace = readCodexAttendedWorkspace(path);
+      return workspace ? [workspace] : [];
+    });
   } catch {
     return undefined;
   }
@@ -94,7 +168,28 @@ export function listHarnessProcesses(): HarnessProcess[] | undefined {
       continue; // exited between the two reads
     }
     const cwd = readCwd(pid);
-    found.push({ pid, comm, args, ...(cwd !== undefined ? { cwd } : {}) });
+    const attendedWorkspaces = comm === 'codex' ? codexOpenWorkspaces(pid) : undefined;
+    let terminal = false;
+    if (comm === 'codex') {
+      try {
+        const tty = execFileSync('ps', ['-o', 'tty=', '-p', String(pid)], {
+          encoding: 'utf8',
+          timeout: EXEC_TIMEOUT_MS,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        terminal = tty !== '' && tty !== '?' && tty !== '??' && tty !== '-';
+      } catch {
+        /* no terminal evidence */
+      }
+    }
+    found.push({
+      ...(terminal ? { terminal } : {}),
+      pid,
+      comm,
+      args,
+      ...(cwd !== undefined ? { cwd } : {}),
+      ...(attendedWorkspaces !== undefined ? { attendedWorkspaces } : {}),
+    });
   }
   return found;
 }
@@ -114,12 +209,28 @@ export function attendedHarnessProcess(
   const procs = list();
   if (procs === undefined) return undefined;
   const root = canonical(workspace);
+  let unknown = false;
+  const owns = (cwd: string): boolean => {
+    const path = canonical(cwd);
+    return path === root || path.startsWith(root + sep);
+  };
   const hit = procs.find((p) => {
-    if (basename(p.comm) !== signature.comm || p.cwd === undefined) return false;
+    if (basename(p.comm) !== signature.comm) return false;
     const tokens = p.args.split(/\s+/);
+    if (harness === 'codex') {
+      if (p.attendedWorkspaces?.some(owns)) return true;
+      // A native TUI can delegate its rollout to the shared app server. A controlling terminal
+      // plus cwd is the independent evidence; command names are exclusions, never proof alone.
+      const headless = ['exec', 'e', 'app-server', 'mcp-server', 'exec-server', 'review'];
+      if (p.terminal && p.cwd !== undefined && !headless.some((cmd) => tokens.includes(cmd)))
+        return owns(p.cwd);
+      if (p.attendedWorkspaces === undefined) unknown = true;
+      return false;
+    }
+    if (p.cwd === undefined) return false;
     if (signature.headless.some((flag) => tokens.includes(flag))) return false;
     const cwd = canonical(p.cwd);
     return cwd === root || cwd.startsWith(root + sep);
   });
-  return hit ? { pid: hit.pid } : null;
+  return hit ? { pid: hit.pid } : unknown ? undefined : null;
 }
