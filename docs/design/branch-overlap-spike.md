@@ -26,7 +26,7 @@ precision/recall.
 Decision 3 defers the useful overlap signal until it is computed from what contending
 lanes' pushed branches actually change, and measured against merge history before it
 sends anything. This document now contains both the cost spike and a measurement taken
-against this daemon's own lane data (146 merged lanes, 4259 concurrently-open pairs).
+against this daemon's own lane data (146 merged lanes, 4381 concurrently-open pairs).
 
 ## Unit of comparison
 
@@ -92,7 +92,7 @@ file-sharing warnings.
 
 Proposed here (not inherited from ADR 575): promote the default warning from file
 level to hunk level only if hunk-level precision is at least 60% and recall within 5
-points of file-level recall. On this dataset, hunk-level overlap is 12.3% of
+points of file-level recall. On this dataset, hunk-level overlap is 11.9% of
 file-sharing pairs, which does not clear that proposed 60% bar by itself. That means
 the daemon's own squash-commit history does not currently justify tightening the
 default warning to hunk range only. The measurement is taken on squash commits that
