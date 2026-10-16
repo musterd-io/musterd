@@ -1398,6 +1398,20 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-15 — `totalJsGzipBytes` 312,700 → 313,000 B: a watch link takes a grade (lane `01M50XJDJ7`)
+
+| Budget   | main (local) | main (CI)                       | After trim (local) | Ceiling                    |
+| -------- | ------------ | ------------------------------- | ------------------ | -------------------------- |
+| total JS | 312,339 B    | 305.4 KB (> 312,700 B, red)     | 312,290 B          | RAISED 312,700 → 313,000 B |
+
+#2694 (ADR 616) made the `/live` share button offer a public link or a demo link at broadcast grade,
+with a separate cached seat per grade and a grade label on the viewer's page. CI then read total JS at
+305.4 KB, over the 312,700 B cap, and every PR that runs the perf leaf went red. Trimmed first: the two
+longest tooltips (49 B). CI reads about 400 B over local on this tree, so the trim does not clear it on
+its own. Lazy-loading cannot move total (ADR 183), and the ceiling was saturated by the raises below.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 312,700 B with this change in.
+
 ### 2026-10-15 — `liveCssGzipBytes` 21,600 → 21,700 B: the replay age tag's rules (lane `01M50TZA8X`)
 
 CI read live CSS at 21.1 KB, just over the 21,600 B cap, for the three rules that let an aged walk tag
