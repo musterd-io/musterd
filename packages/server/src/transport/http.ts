@@ -279,6 +279,7 @@ import {
   countLanesBefore,
   deriveGoalStatus,
   getLane,
+  isBareLaneId,
   LANE_ID_PREFIX_MIN,
   resolveLaneRef,
   LaneConflictError,
@@ -7226,6 +7227,14 @@ export async function handleHttp(
             `"${member.name}" is a service seat — ledger seats never open or hold lanes (ADR 232)`,
           );
         const body = parseOrBadRequest(OpenLaneSchema, await readJson(req));
+        // A title that is a bare lane id is a claim typed as an open (two empty lanes on 2026-10-15).
+        // Refused here so every door — CLI, MCP, HTTP — gets the same answer.
+        if (isBareLaneId(body.title))
+          throw new MusterdError(
+            'bad_request',
+            `the title "${body.title.trim()}" is a lane id, not a work item — to take that lane, ` +
+              `claim it (\`musterd lane claim <id>\` / lane_claim); to open a new one, give it a title`,
+          );
         if (body.depends_on) body.depends_on = await lanesNamedIn(ctx, team.id, body.depends_on);
         // The `lane.opened` birth row and the `lane.claimed at_open` row (ADR 203's third
         // acquisition edge) are written by the store inside the insert's transaction, as the

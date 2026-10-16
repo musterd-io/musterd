@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
-import { getLane, insertLaneSnapshot } from '../store/lanes.js';
+import { getLane, insertLaneSnapshot, isBareLaneId } from '../store/lanes.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { integrationHarness } from './integration.helpers.js';
 
@@ -71,6 +71,39 @@ withDrivers('integration · lane short ids', (_o, kind) => {
         'at least 8 characters',
       );
       expect((await patch('tiny', 'ZZZZZZZZZZ', { owner_seat: 'nick' }, tok)).status).toBe(404);
+    });
+  });
+
+  describe('a lane id is not a title', () => {
+    it('isBareLaneId: a full id in any case, never a prefix, a date, a word or a mention', () => {
+      expect(isBareLaneId('01M50C1ZZMJFRG409G6TC4S303')).toBe(true);
+      expect(isBareLaneId(' 01m4vkrxex53sf0wkgpd1pa97t ')).toBe(true);
+      for (const t of [
+        '01M50C1ZZM',
+        '20261015',
+        'standard',
+        'follow-up to 01M50C1ZZMJFRG409G6TC4S303',
+        '81M50C1ZZMJFRG409G6TC4S303',
+        '01M50C1ZZMJFRG409G6TC4S30I',
+      ])
+        expect(isBareLaneId(t)).toBe(false);
+    });
+
+    it('refuses to open a lane titled with a bare lane id, and points at claim', async () => {
+      const tok = await team('typo');
+      const real = (await post('/teams/typo/lanes', { title: 'the real work' }, tok)).json.lane;
+      // 2026-10-15: `lane open <id>` typed for `lane claim <id>`, twice, made two empty lanes.
+      const res = await post('/teams/typo/lanes', { title: ` ${real.id.toLowerCase()} ` }, tok);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.json)).toMatch(/is a lane id, not a work item/);
+      expect(JSON.stringify(res.json)).toMatch(/lane claim/);
+      // A title that merely mentions an id, or is a short prefix, still opens.
+      expect(
+        (await post('/teams/typo/lanes', { title: `follow-up to ${real.id}` }, tok)).status,
+      ).toBe(201);
+      expect((await post('/teams/typo/lanes', { title: real.id.slice(0, 10) }, tok)).status).toBe(
+        201,
+      );
     });
   });
 
