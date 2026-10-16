@@ -1,6 +1,6 @@
 # Harness end-to-end shape
 
-Three harnesses hold onboard, wake, resume, meter, doorbell, and idle-wake; codex and grok each have a named gap (read 2026-10-16 at `0c5f3c0c`, lane `01M50ZJ9WD89`).
+claude-code, opencode, and grok hold onboard, wake, resume, meter, doorbell, and idle-wake; codex has the remaining named gap (read 2026-10-16, lane `01M535CZQ2PJB4SVT586NS8SN2`).
 
 ## How a cell was read
 
@@ -15,7 +15,7 @@ The read is the files below, at `0c5f3c0c` (2026-10-16; falsify: the named symbo
 | native (`musterd`) | guidance | holds | holds | holds | holds | exempt |
 | codex | holds | holds | holds | holds | holds in unit | gap |
 | cursor-agent | holds | holds | holds | holds | holds | exempt |
-| grok | holds | holds | holds | holds | holds | gap |
+| grok | holds | holds | holds | holds | holds | holds |
 | muse | holds | holds | holds | holds | holds | deaf |
 
 `HARNESSES` in `packages/cli/src/onboard/harnesses/index.ts` is claude-code, cursor, codex, opencode, grok, muse. `musterdAdapter` is guidance and is not selectable. Native is the engine. `packages/cli/src/commands/host.ts` constructs all seven wake backends.
@@ -46,13 +46,13 @@ Meter reads the wake's stdout. cursor-agent 2026.10.14-941492e writes `{type:"re
 
 A credentialed `--print --output-format json` run the same day exited 1 before any result: the $10 additional-usage cap. Stdout was empty. That run's transcript jsonl held the error and no token fields, and local agent transcripts hold no usage file. The parser follows the writer in that build.
 
-## grok holds except idle inject (2026-10-16)
+## grok holds (2026-10-16)
 
-Onboard is `grok.ts`. Wake and resume are `host/backends/grok.ts` (`-r`). Meter is `readGrokWakeUsage` plus `harness_price_unverified`, because `costUsdTicks` is a price the host does not attest (ADR 364). Doorbell is PreToolUse `additionalContext` (ADR 370), measured 2026-09-03. `injectAdapterFor('grok')` returns `no-inject:grok` (2026-10-16; falsify: `inject.ts` returns a ready adapter for `grok`). <!-- claim: other -->
+Onboard is `grok.ts`. Wake and resume are `host/backends/grok.ts` (`-r`). Meter is `readGrokWakeUsage` plus `harness_price_unverified`, because `costUsdTicks` is a price the host does not attest (ADR 364). Doorbell is PreToolUse `additionalContext` (ADR 370), measured 2026-09-03.
 
-The leader-socket measurement stays on [Grok leader socket](grok-leader-socket.md). A default TUI has no socket. The inject for a `--leader` TUI is the gap.
+Idle-wake is `grokLeader`. Probe is ready only when the leader socket exists (`GROK_LEADER_SOCKET`, otherwise `~/.grok/leader.sock`). A missing socket is `no-leader-socket`, so a default TUI stays deaf. A `--leader` session is prompted only when `session/list` has a row whose cwd is the binding directory (2026-10-16, Grok 1.0.62; falsify: `injectAdapterFor('grok')` stays `no-inject:grok` when the socket exists). <!-- claim: other -->
 
-Follows-up: 01M535CZQ2PJB4SVT586NS8SN2
+The leader-socket measurement stays on [Grok leader socket](grok-leader-socket.md).
 
 ## muse holds, idle deaf (2026-10-16)
 

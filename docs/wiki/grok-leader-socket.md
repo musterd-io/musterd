@@ -39,8 +39,19 @@ ACP is a later frame `{"type":"acp","payload":"<json-rpc string>"}`. `payload` a
 
 Other frame types the register error named: `control`, `ping`, `disconnect`. Not exercised past seeing the names.
 
+## Register on 1.0.62 requires client_type (2026-10-16; falsify: a register frame with mode stdio and no client_type field is answered with type registered) <!-- claim: other -->
+
+Isolated leader, custom `--leader-socket`, grok 1.0.62 (`1474f9cbdd91`), n=1. The default path `~/.grok/leader.sock` was absent. Framing is unchanged: a big-endian u32 length, then one JSON object.
+
+- `{"type":"register","mode":"stdio"}` closed the socket. The leader log named a missing `client_type`. No error frame.
+- `{"type":"register","mode":"stdio","client_type":"musterd"}` returned `type: registered`, `ready: true`, `leader_protocol_version: 1`, `leader_binary_version: "1.0.62"`.
+- `type: "Register"` closed the socket.
+- `initialize` (`protocolVersion: 1`, empty `clientCapabilities`, `clientInfo` name `musterd`) returned result keys `protocolVersion`, `agentCapabilities`, `authMethods`, `_meta`. The leader then pushed ACP notifications. One notification carried local MCP environment values. Those values are not written down here.
+- `session/list` with `{}` returned rows with `sessionId`, `cwd`, and `updatedAt`, including sessions this leader did not create. A client prompts only a row whose cwd is the binding directory.
+- `session/prompt` for an unknown session id with `prompt: [{type:"text", text:"ping"}]` returned JSON-RPC code -32602. That is a rejected prompt. It is not a busy signal. A running turn's reply shape was not measured on this build. The successful prompt remains the 1.0.52 turn above.
+
 ## What this does not settle
 
-- A default musterd Grok seat stays deaf. Nothing in this repo starts `grok` with `--leader`, and `use_leader` is off unless someone sets it. The ingress exists only for a TUI that attached to a leader.
+- A default musterd Grok seat stays deaf. Nothing in this repo starts `grok` with `--leader`, and `use_leader` is off unless someone sets it. `grokLeader` probes `no-leader-socket` when the socket is absent and prompts a `--leader` session whose cwd is the binding directory.
 - A half-typed draft and an open approval dialog were not tried. The [idle-wake spec](../superpowers/specs/2026-10-07-idle-wake-design.md) §3 leaves both unmeasured on every harness.
 - n=1. One idle TUI, one injected turn, Grok 1.0.52 on this laptop.
