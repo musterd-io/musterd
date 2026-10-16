@@ -2059,7 +2059,9 @@ export function mountOffice(
       f,
     );
     const now = performance.now();
-    const due = now - lastFullAt > SAFETY_REPAINT_MS;
+    /* The parity check pauses the safety net: a missed damage then builds up where it can be seen,
+       instead of being wiped every few seconds and passing as residue. */
+    const due = !(import.meta.env.DEV && parity) && now - lastFullAt > SAFETY_REPAINT_MS;
     const plan = due
       ? ({ kind: 'full' } as const)
       : planRepaint(prevUnits, units, canvas.width, canvas.height);

@@ -241,6 +241,7 @@ live/
     mapping.ts                  // actToEvent: act/envelope → OfficeEvent (the projection)
     types.ts                    // OfficeEvent / OfficeNode / Pose / OfficeHandle
     render.ts                   // canvas drawing primitives + toneColor + Cue
+    damage.ts                   // broadcast only: dirty-rect repaint — a measure pass keys and boxes every paint unit, the diff against the last frame is the damage, the paint pass clips to it and skips the units that cannot touch it (smooth-capture spec lever 2, ADR — see the lane 01M4VS1SJQ PR)
     replay.ts                   // replay on open (nick, 2026-10-12): the last ten minutes' lane walks (claim / pin / handoff) from backfill, oldest first, capped — the handle plays them at REPLAY_TEMPO× then settles to live
     domCadence.ts               // broadcast only: the page's DOM animations (steam, motes, twinkles, fan, banner) are paused and advanced per drawn frame — the box's software compositor was composing 60 frames/s over a 15 fps canvas (lane 01M4S96VAW, 2026-10-13)
     actors.ts / nav.ts / seating.ts / layout.ts / iso.ts   // placement, walk routing, iso projection
