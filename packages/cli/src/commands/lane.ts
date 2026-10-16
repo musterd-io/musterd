@@ -183,9 +183,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     if (scopeIsHumanVisible(scope) && riskRaw === undefined) {
       throw new CliError(
         `open "${title}": scope reaches a human-visible surface (${scope?.join(', ')}). ` +
-          `Declare its acceptance risk with --risk <tags> (e.g. --risk user-facing,production), ` +
-          `or --risk none to record that there is none. The lane cannot open with the default if it ` +
-          `would otherwise skip the human review gate.`,
+          `Declare its acceptance risk with --risk <tags> (e.g. --risk user-facing), ` +
+          `or --risk none to record that there is none. user-facing alone is a peer review; ` +
+          `add another tag, or --stakes high, when the change is big (ADR 631). ` +
+          `The lane cannot open with the default.`,
         2,
       );
     }

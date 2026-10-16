@@ -1,5 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { LaneSchema, OpenLaneSchema, scopeIsHumanVisible, UpdateLaneSchema } from './lanes.js';
+import {
+  humanReviewRequired,
+  LaneSchema,
+  OpenLaneSchema,
+  scopeIsHumanVisible,
+  UpdateLaneSchema,
+  USER_FACING_LARGE_DIFF_FILES,
+} from './lanes.js';
+
+describe('humanReviewRequired', () => {
+  it('asks a human for any tag other than user-facing', () => {
+    expect(humanReviewRequired({ risk: ['security'] })).toBe(true);
+    expect(humanReviewRequired({ risk: ['user-facing', 'production'] })).toBe(true);
+    expect(humanReviewRequired({ risk: [] })).toBe(false);
+    expect(humanReviewRequired({})).toBe(false);
+  });
+
+  it('treats user-facing alone as a peer review, and a big or large change as a human review', () => {
+    expect(humanReviewRequired({ risk: ['user-facing'], stakes: 'normal' })).toBe(false);
+    expect(humanReviewRequired({ risk: ['user-facing'], stakes: 'low' })).toBe(false);
+    expect(humanReviewRequired({ risk: ['user-facing'], stakes: 'high' })).toBe(true);
+    expect(
+      humanReviewRequired({
+        risk: ['user-facing'],
+        merged: { changed: { docs: 8, code: 2 } },
+      }),
+    ).toBe(false);
+    expect(
+      humanReviewRequired({
+        risk: ['user-facing'],
+        merged: { changed: { docs: 5, code: USER_FACING_LARGE_DIFF_FILES - 5 } },
+      }),
+    ).toBe(true);
+    // tests do not count toward the size
+    expect(
+      humanReviewRequired({
+        risk: ['user-facing'],
+        merged: { changed: { docs: 0, code: 0 } },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('scopeIsHumanVisible', () => {
   it('flags scopes that reach a rendered surface', () => {

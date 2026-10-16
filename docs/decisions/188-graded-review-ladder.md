@@ -72,7 +72,10 @@ left indistinguishable from a legacy row.
 
 ### 4. Risky lanes take two reviews, peer first (increment 2, PR B)
 
-A lane with any declared `risk` tag requires **peer review then human review**. The peer ask
+A lane with any declared `risk` tag requires **peer review then human review**
+_(Amended 2026-10-16, ADR 631: `user-facing` alone is peer review, and that accept closes the lane.
+The human stage remains for every other tag, for `stakes: high`, and for a large landed diff.)_.
+The peer ask
 (ladder, tier `standard`) fires at ready time; the human ask (tier `blocking`) fires when the
 peer's _accept lands on the ask thread_ — not on `lane_resolve`, which would close the lane — and
 carries the peer's findings, so the human reviews an already-screened change. Sequencing is

@@ -200,7 +200,9 @@ export function registerLanes(
         risk: z
           .array(z.string())
           .optional()
-          .describe('risk tags (ADR 169) — any tag routes the acceptance human-first; [] = none.'),
+          .describe(
+            'risk tags (ADR 169). A tag other than user-facing asks a human; user-facing alone is a peer review unless stakes is high or the landed diff is large (ADR 631). [] = none.',
+          ),
       },
     },
     async (args) => {
@@ -213,8 +215,8 @@ export function registerLanes(
             new Error(
               `lane_open: this lane's scope reaches a human-visible surface` +
                 `${args.scope ? ` (${args.scope.join(', ')})` : ''}. Pass risk explicitly — as your` +
-                ` tags (e.g. ["user-facing"]), or [] to record there is none. A route whose acceptance` +
-                ` is a human's judgement of a rendered surface cannot borrow risk: []`,
+                ` tags (e.g. ["user-facing"]), or [] to record there is none. user-facing alone is a` +
+                ` peer review; another tag, or stakes high, is what asks a human (ADR 631).`,
             ),
           );
         }

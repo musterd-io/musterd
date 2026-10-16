@@ -76,6 +76,7 @@ import {
   LaneDetailSchema,
   CiRunBatchSchema,
   LaneStateSchema,
+  humanReviewRequired,
   isAwaitingAcceptance,
   makeEnvelope,
   type Envelope,
@@ -7683,7 +7684,7 @@ export async function handleHttp(
                 );
           const peerPick = named ?? peerSelection.pick;
           const humanFallback =
-            lane.risk.length > 0 && !peerPick
+            humanReviewRequired(lane) && !peerPick
               ? await pickHumanReviewer(ctx.db, team.id, worker, ctx.config.presenceTimeoutMs)
               : null;
           let pick = peerPick ?? humanFallback;
@@ -7704,7 +7705,7 @@ export async function handleHttp(
           const posture = exemption.exempt
             ? undefined
             : await teamFamilyPosture(ctx.db, team.id, ctx.config.presenceTimeoutMs);
-          if (!pick && !exemption.exempt && lane.risk.length === 0 && posture) {
+          if (!pick && !exemption.exempt && !humanReviewRequired(lane) && posture) {
             if ((await reviewLoopBounceCount(ctx.db, team.id, lane.id)) >= REVIEW_LOOP_BREAKER_N) {
               breakerTripped = true;
               // ADR 253: a non-risky breaker trip stops spending wakes. It does not ask a human —
@@ -7734,7 +7735,7 @@ export async function handleHttp(
           // human review, so the ask goes to an offline human — admin first, then most recently
           // seen. The ADR 191 wake path above is non-risky only (ADR 253), so for a risky lane the
           // ladder here reads: live human, then offline human. A named acceptor never reaches this.
-          if (!pick && !exemption.exempt && lane.risk.length > 0 && !named) {
+          if (!pick && !exemption.exempt && humanReviewRequired(lane) && !named) {
             const offline = await humanReviewerFor(
               ctx.db,
               team.id,
@@ -7752,7 +7753,7 @@ export async function handleHttp(
           // ADR 172: a declared risk tag makes HUMAN review a requirement, not a preference — the
           // picker no longer substitutes an agent when no human/admin is live, and the ready row
           // records the requirement so the close edge can derive `human_review_missed`.
-          const humanRequired = lane.risk.length > 0;
+          const humanRequired = humanReviewRequired(lane);
           // ADR 172: when nobody is eligible, record WHY nobody was — the derived family posture.
           // Without it a run of no_candidate rows says "the pool was empty" but not what the pool
           // looked like, and the remedy (wake an enrolled seat vs. enroll one) is undecidable later.
@@ -8057,7 +8058,7 @@ export async function handleHttp(
               ...(standing ?? { reviewer: named.reviewer, route: 'named' }),
             };
           } else {
-            const humanRequired = lane.risk.length > 0;
+            const humanRequired = humanReviewRequired(lane);
             const acceptanceTier: AskTier =
               humanRequired && named.grade === 'human' ? 'blocking' : 'standard';
             const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);

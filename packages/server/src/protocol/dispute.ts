@@ -31,6 +31,7 @@ import {
   type Envelope,
   LANE_TERMINAL_STATES,
   disputeOf,
+  humanReviewRequired,
   isAwaitingAcceptance,
   tiebreakNotice,
 } from '@musterd/protocol';
@@ -268,7 +269,7 @@ export async function applyDisputeAnswer(
       ...(stamp.ask ? { superseded_ask: stamp.ask } : {}),
       dispute: repliedToId,
       hold: answerId,
-      human_required: lane.risk.length > 0,
+      human_required: humanReviewRequired(lane),
       ask_tier: acceptanceTier,
       ask_timeout_ms: acceptanceWaitMs,
     },

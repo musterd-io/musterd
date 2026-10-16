@@ -2,6 +2,7 @@ import {
   ACCEPTANCE_MOVES_NOTICE,
   type AskTier,
   changeLabelText,
+  humanReviewRequired,
   type Lane,
   leftoverSignal,
   makeEnvelope,
@@ -269,7 +270,7 @@ export async function rerouteAcceptances(
         ).pick;
     if (!pick || pick.reviewer === gone.name) continue;
     const moveRoute = capped ? 'capped' : route;
-    const humanRequired = lane.risk.length > 0;
+    const humanRequired = humanReviewRequired(lane);
     const acceptanceTier: AskTier = 'standard';
     const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
     await appendLaneEventRequired(ctx.db, team.id, {

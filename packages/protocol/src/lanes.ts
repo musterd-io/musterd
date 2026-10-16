@@ -161,7 +161,7 @@ export const LaneStateSchema = z.enum(LANE_STATES);
  */
 export const HUMAN_VISIBLE_SCOPE_ROOTS: readonly string[] = ['packages/web/', 'packages/mobile/'];
 
-/** Would opening this scope owe the human gate? Used to decide whether a lane must declare risk. */
+/** Must this scope declare `risk` at open (ADR 530)? The declaration is not itself the human gate (ADR 631). */
 export function scopeIsHumanVisible(scope: readonly string[] | undefined): boolean {
   if (!scope) return false;
   return scope.some((glob) =>
@@ -172,6 +172,57 @@ export function scopeIsHumanVisible(scope: readonly string[] | undefined): boole
       return glob === norm || glob.startsWith(`${norm}/`);
     }),
   );
+}
+
+/**
+ * The tag that means "a person will see this" (ADR 530's example, ADR 631's exemption).
+ * Any other declared tag still requires a human.
+ */
+export const USER_FACING_RISK_TAG = 'user-facing';
+
+/**
+ * Code files plus doc files on the landed diff. Tests do not count. At or above this, a
+ * `user-facing` lane still asks a human (ADR 631, "changes a lot"). 25 sits above every
+ * user-facing landing that had a recorded count on 2026-10-16; the largest of those was 12.
+ */
+export const USER_FACING_LARGE_DIFF_FILES = 25;
+
+/**
+ * Does this lane's acceptance owe a human (ADR 172, narrowed by ADR 631)?
+ *
+ * A tag other than `user-facing` does — security, production, destructive, and the rest.
+ * `user-facing` alone does not: a peer accept closes it. It does again when the author
+ * declared the change big (`stakes: high`) or the landed diff is large. Counts that were
+ * never recorded are not large. An empty risk list is not a human review.
+ */
+export function humanReviewRequired(lane: {
+  risk?: readonly string[] | null | undefined;
+  stakes?: string | null | undefined;
+  // `| undefined` is load-bearing. exactOptionalPropertyTypes treats an explicit
+  // `changed: undefined` as a different type from an absent field, and a Lane carries
+  // the explicit form.
+  merged?:
+    | {
+        changed?:
+          | { docs?: number | null | undefined; code?: number | null | undefined }
+          | null
+          | undefined;
+      }
+    | null
+    | undefined;
+}): boolean {
+  const risk = lane.risk ?? [];
+  if (risk.some((tag) => tag !== USER_FACING_RISK_TAG)) return true;
+  if (!risk.includes(USER_FACING_RISK_TAG)) return false;
+  if (lane.stakes === 'high') return true;
+  const changed = lane.merged?.changed;
+  if (!changed) return false;
+  const docs = changed.docs ?? 0;
+  const code = changed.code ?? 0;
+  if (!Number.isSafeInteger(docs) || !Number.isSafeInteger(code) || docs < 0 || code < 0) {
+    return false;
+  }
+  return docs + code >= USER_FACING_LARGE_DIFF_FILES;
 }
 
 /**
@@ -478,9 +529,11 @@ export const LaneSchema = z.object({
   /** Optional link up to a declared Goal (ADR 084). null = ungrouped; the join is flat, never a tree. */
   goal_id: z.string().nullable(),
   /**
-   * Declared risk tags (ADR 169), e.g. ["user-facing", "production", "cost"]. Any tag routes the
-   * review ask human-first. Declared at open/update, never inferred from surfaces. Defaulted so a
-   * newer client parses an older daemon's lanes (skew-tolerant, the ADR 148 posture).
+   * Declared risk tags (ADR 169), e.g. ["user-facing", "production", "cost"]. A tag other than
+   * `user-facing` requires a human review. `user-facing` alone is a peer review unless the change
+   * is declared big or the landed diff is large ({@link humanReviewRequired}, ADR 631). Declared
+   * at open/update, never inferred from surfaces. Defaulted so a newer client parses an older
+   * daemon's lanes (skew-tolerant, the ADR 148 posture).
    */
   risk: z.array(z.string()).default([]),
   /**
@@ -663,9 +716,9 @@ export const OpenLaneSchema = z.object({
   goal_id: z.string().optional(),
   /** The issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
   source_ref: LaneSourceRefSchema.optional(),
-  /** Declared risk tags (ADR 169) — any tag routes the review ask human-first. */
+  /** Declared risk tags (ADR 169). Which of them ask a human is {@link humanReviewRequired} (ADR 631). */
   risk: z.array(z.string()).optional(),
-  /** Declared acceptance stakes (ADR 234). Omitted ⇒ `normal`; nothing routes on it yet. */
+  /** Declared acceptance stakes (ADR 234). Omitted ⇒ `normal`. `high` on a user-facing lane asks a human (ADR 631). */
   stakes: LaneStakesSchema.optional(),
   /** Lane kind (spec 2026-08-14): only the daemon sets 'incident'; omitted ⇒ ordinary lane. */
   kind: z.enum(['incident']).optional(),
@@ -714,7 +767,7 @@ export const UpdateLaneSchema = z.object({
    * otherwise rather than rejected, so a client that always sends it is not punished for it.
    */
   handoff_note: z.string().max(4000).optional(),
-  /** Declared risk tags (ADR 169) — any tag routes the review ask human-first. */
+  /** Declared risk tags (ADR 169). Which of them ask a human is {@link humanReviewRequired} (ADR 631). */
   risk: z.array(z.string()).optional(),
   /**
    * Re-declare acceptance stakes (ADR 234). Editable after open on purpose: what a change is worth

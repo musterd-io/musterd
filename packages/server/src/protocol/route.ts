@@ -11,6 +11,7 @@ import {
   answerAuthority,
   changeLabelText,
   classifyAskAction,
+  humanReviewRequired,
   isAwaitingAcceptance,
   type Lane,
   type LaneSupersededWire,
@@ -1299,7 +1300,7 @@ async function gatedLane(
   }
   if (!laneReview?.lane) return null;
   const lane = await getLane(ctx.db, team.id, laneReview.lane, team.slug);
-  if (!lane || lane.risk.length === 0 || !isAwaitingAcceptance(lane.state)) return null;
+  if (!lane || !humanReviewRequired(lane) || !isAwaitingAcceptance(lane.state)) return null;
   const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
   if (!owner) return null;
   return { lane, owner, grade: laneReview.grade ?? null };
@@ -1430,7 +1431,7 @@ export async function retryPendingHumanAsks(
   const asked: Array<{ lane: string; human: string }> = [];
   for (const pending of await pendingHumanReviews(ctx.db, team.id)) {
     const lane = await getLane(ctx.db, team.id, pending.lane, team.slug);
-    if (!lane || !isAwaitingAcceptance(lane.state) || lane.risk.length === 0) continue;
+    if (!lane || !isAwaitingAcceptance(lane.state) || !humanReviewRequired(lane)) continue;
     const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
     if (!owner) continue;
     const human = await pickHumanReviewer(

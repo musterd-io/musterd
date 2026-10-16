@@ -2671,7 +2671,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       await h.server.store.run(`UPDATE members SET observer = 1 WHERE name = 'boss'`);
       const lane = await post(
         '/teams/quiet/lanes',
-        { title: 'nameplates stop jumping', risk: ['user-facing'], claim: true },
+        { title: 'nameplates stop jumping', risk: ['security'], claim: true },
         ada,
       );
       const laneId = lane.json.lane.id as string;
@@ -2821,7 +2821,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       const peerConfirm = async (title: string) => {
         const lane = await post(
           '/teams/early/lanes',
-          { title, risk: ['user-facing'], claim: true },
+          { title, risk: ['security'], claim: true },
           ada,
         );
         const laneId = lane.json.lane.id as string;
@@ -2919,7 +2919,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       await reattestAgentModel('rail', gee, 'gpt-5.2-codex');
       const lane = await post(
         '/teams/rail/lanes',
-        { title: 'person glyph', risk: ['user-facing'], claim: true },
+        { title: 'person glyph', risk: ['security'], claim: true },
         ada,
       );
       const laneId = lane.json.lane.id as string;
@@ -2989,6 +2989,93 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         bossTok,
       );
       expect(closed.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+    });
+
+    it('ADR 631: user-facing alone closes on the peer accept; a large diff still asks a human', async () => {
+      const team = await post('/teams', {
+        slug: 'uface',
+        creator: { name: 'boss', kind: 'human' },
+      });
+      const bossTok = team.json.human_credential as string;
+      for (const name of ['ada', 'gee']) {
+        await fetch(h.base + '/teams/uface/members', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${bossTok}`,
+            'x-musterd-no-touch': '1',
+          },
+          body: JSON.stringify({ name, kind: 'agent' }),
+        });
+      }
+      const ada = (await resolveAuth('/teams/uface/inbox', {
+        key: team.json.agent_key,
+        seat: 'ada',
+      }))!;
+      const gee = (await resolveAuth('/teams/uface/inbox', {
+        key: team.json.agent_key,
+        seat: 'gee',
+      }))!;
+      await reattestAgentModel('uface', ada, 'claude-opus-5');
+      await reattestAgentModel('uface', gee, 'gpt-5.2-codex');
+      const acceptPeer = async (title: string, extra: Record<string, unknown>) => {
+        const lane = await post(
+          '/teams/uface/lanes',
+          { title, risk: ['user-facing'], claim: true, ...extra },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        expect(
+          (
+            await fetch(h.base + `/teams/uface/lanes/${laneId}`, {
+              method: 'PATCH',
+              headers: { 'content-type': 'application/json', ...authHeaders(ada) },
+              body: JSON.stringify({
+                state: 'ready_for_review',
+                merged: extra.merged,
+              }),
+            })
+          ).status,
+        ).toBe(200);
+        const peerAsk = (await get('/teams/uface/inbox?unread=1', gee)).json.messages.find(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+        expect(peerAsk).toBeDefined();
+        const sent = await post(
+          '/teams/uface/messages',
+          {
+            envelope: {
+              v: PROTOCOL_VERSION,
+              id: ulid(),
+              team: 'uface',
+              from: 'gee',
+              to: { kind: 'member', name: 'ada' },
+              act: 'accept',
+              body: 'peer: the rendered change matches the lane',
+              meta: { in_reply_to: peerAsk.id },
+              ts: Date.now(),
+            },
+          },
+          gee,
+        );
+        return { laneId, sent };
+      };
+
+      const small = await acceptPeer('caption copy', {});
+      expect(small.sent.json.lane_escalation).toBeUndefined();
+      expect(small.sent.json.lane_verdict).toEqual({ lane: small.laneId, state: 'done' });
+
+      const large = await acceptPeer('office overhaul', {
+        merged: {
+          pr: 1,
+          sha: 'abc',
+          authorized_by: 'nick',
+          change_class: 'web',
+          changed: { docs: 5, tests: 10, code: 20 },
+        },
+      });
+      expect(large.sent.json.lane_verdict).toBeUndefined();
+      expect(large.sent.json.lane_escalation).toEqual({ lane: large.laneId, human: 'boss' });
     });
 
     it('risky with NO peer candidate: the human ask fires immediately at blocking (ADR 188)', async () => {
