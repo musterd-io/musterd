@@ -328,6 +328,100 @@ withDrivers('integration · misc', (_o, kind) => {
   });
 
   /**
+   * Lane 01M52Z987280: the broadcast's last words. The stream posts its exit reason before the
+   * machine's teardown can take it; the row outlives the machine. The writer is the stream's own
+   * observer seat (read-only for SPEECH — this is an audit artifact, not an act), the reader any
+   * readable seat (the streamwatch service seat, or an operator).
+   */
+  describe('stream epitaph (lane 01M52Z987280)', () => {
+    async function seed() {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential as string;
+      const stream = await post(
+        '/teams/dawn/members',
+        { name: 'broadcast-t1', kind: 'human', observer: true, observer_scope: 'broadcast' },
+        nickTok,
+      );
+      return { nickTok, streamTok: stream.json.human_credential as string };
+    }
+
+    it('an observer seat posts its epitaph and any readable seat reads it back', async () => {
+      const t = await seed();
+      const res = await post(
+        '/teams/dawn/stream/epitaph',
+        { reason: 'ffmpeg ended (code 1) — the sink dropped', code: 75, ran_ms: 1_477_000 },
+        t.streamTok,
+      );
+      expect(res.status, JSON.stringify(res.json)).toBe(202);
+
+      // The row is the audit record: actor is the observer seat, detail carries the exit.
+      const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
+      const rows = (await listAudit(h.server.store, teamId)).filter(
+        (r) => r.action === 'stream.exit',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.actor).toBe('broadcast-t1');
+      expect(JSON.parse(rows[0]!.detail!)).toMatchObject({
+        reason: 'ffmpeg ended (code 1) — the sink dropped',
+        code: 75,
+        ran_ms: 1_477_000,
+      });
+
+      // Read back as an ordinary member — the streamwatch/operator path — newest first. (A
+      // human credential here: an agent seat's GET would need its ADR 337 session lease, which
+      // this route deliberately does not special-case.)
+      const view = await get('/teams/dawn/stream/epitaph', t.nickTok);
+      expect(view.status).toBe(200);
+      expect(view.json.epitaphs).toHaveLength(1);
+      expect(view.json.epitaphs[0]).toMatchObject({
+        seat: 'broadcast-t1',
+        code: 75,
+        reason: 'ffmpeg ended (code 1) — the sink dropped',
+      });
+      // The observer seat itself can read too — it is a readable seat like any other.
+      const self = await get('/teams/dawn/stream/epitaph', t.streamTok);
+      expect(self.status).toBe(200);
+    });
+
+    it('returns the newest few with ?limit, newest first', async () => {
+      const t = await seed();
+      await post(
+        '/teams/dawn/stream/epitaph',
+        { reason: 'first', code: 1, ran_ms: 10 },
+        t.streamTok,
+      );
+      await post(
+        '/teams/dawn/stream/epitaph',
+        { reason: 'second', code: 75, ran_ms: 20 },
+        t.streamTok,
+      );
+      const view = await get('/teams/dawn/stream/epitaph?limit=2', t.nickTok);
+      expect(view.json.epitaphs.map((e: { reason: string }) => e.reason)).toEqual([
+        'second',
+        'first',
+      ]);
+    });
+
+    it('refuses a malformed body and the unauthenticated', async () => {
+      const t = await seed();
+      const bad = await post(
+        '/teams/dawn/stream/epitaph',
+        { reason: '', code: 1, ran_ms: 10 },
+        t.streamTok,
+      );
+      expect(bad.status).toBe(400);
+      const noAuth = await post('/teams/dawn/stream/epitaph', {
+        reason: 'x',
+        code: 1,
+        ran_ms: 10,
+      });
+      expect(noAuth.status).toBe(401);
+      const noRow = await get('/teams/dawn/stream/epitaph', t.nickTok);
+      expect(noRow.json.epitaphs).toHaveLength(0);
+    });
+  });
+
+  /**
    * Seat provisioning is localhost-trust — and now actually enforces it.
    *
    * `POST /members` mints a seat and returns its secret, and an `{observer:true}` seat reads every

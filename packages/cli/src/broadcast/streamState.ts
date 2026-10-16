@@ -56,6 +56,10 @@ export const FLAP_WINDOW_MS = 30 * 60_000;
 
 export interface EnsureDecision {
   action: 'noop' | 'restart' | 'stand_down';
+  /** What a restart is answering: a `crash` gets the dead machine's last words merged into the
+   * note (lane 01M52Z987280); a `deploy` already carries its explanation, and quoting a dead
+   * run's epitaph against it would read as a second cause. Absent on noop/stand_down. */
+  cause?: 'crash' | 'deploy';
   /** The state as it should be persisted after this decision (ledger stamped / stand-down set). */
   state: StreamState;
   /** One human-readable line for the supervisor log. */
@@ -132,6 +136,7 @@ export function decideEnsure(args: {
   if (recordedDigest && state.image && state.image !== recordedDigest && !digestPredatesRun) {
     return {
       action: 'restart',
+      cause: 'deploy',
       state: { ...state, restarts, failures, image: recordedDigest },
       note: `deploy detected: machine gone and the recorded image changed (${state.image.slice(7, 15)} → ${recordedDigest.slice(7, 15)}) — replacing, not charged to the flap window${broadcastArgsNote(state)}`,
     };
@@ -150,6 +155,7 @@ export function decideEnsure(args: {
   const relaunchImage = state.image ?? recordedDigest;
   return {
     action: 'restart',
+    cause: 'crash',
     state: {
       ...state,
       restarts: [...restarts, now],

@@ -76,6 +76,9 @@ export interface StreamDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Raise the stand-down ask to the team (streamwatch service seat; ADR 293). */
   sendAsk?: (body: string) => Promise<void>;
+  /** The last `stream.exit` the dead machine posted (lane 01M52Z987280), null when none is
+   * reachable — the supervisor merges it into the crash note and the stand-down ask. */
+  fetchEpitaph?: (team: string) => Promise<StreamEpitaph | null>;
   /** Mint the stream's public-grade observer (ADR 594). Injected so tests never reach a daemon. */
   mintSeat?: (team: string) => Promise<BroadcastSeat>;
   /** Stage the seat as the app's MUSTERD_BROADCAST_SEAT Fly secret, over stdin (ADR 594). */
@@ -112,11 +115,12 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
   const launch = deps.launch ?? realLaunch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const sendAsk = deps.sendAsk ?? defaultSendAsk;
+  const fetchEpitaph = deps.fetchEpitaph ?? defaultFetchEpitaph;
   const mintSeat =
     deps.mintSeat ??
     (async (team: string) => seatFromEnv(team) ?? (await mintBroadcastSeat(parsed.flags, team)));
   const stageSeat = deps.stageSeat ?? realStageSeat;
-  const sup = { statePath, now, who, launch, sleep, sendAsk, mintSeat, stageSeat };
+  const sup = { statePath, now, who, launch, sleep, sendAsk, fetchEpitaph, mintSeat, stageSeat };
 
   switch (sub) {
     case 'doctor':
@@ -308,6 +312,7 @@ interface Sup {
   launch: (flyArgs: string[]) => LaunchResult | Promise<LaunchResult>;
   sleep: (ms: number) => Promise<void>;
   sendAsk: (body: string) => Promise<void>;
+  fetchEpitaph: (team: string) => Promise<StreamEpitaph | null>;
   mintSeat: (team: string) => Promise<BroadcastSeat>;
   stageSeat: (app: string, seat: BroadcastSeat) => { code: number; output: string };
 }
@@ -675,10 +680,25 @@ function stopVerb(
   return 0;
 }
 
-function statusVerb(a: { exec: Exec; app: string; out: (s: string) => void } & Sup): number {
+async function statusVerb(
+  a: { exec: Exec; app: string; out: (s: string) => void } & Sup,
+): Promise<number> {
   const live = startedMachines(machineListJson(a.exec, a.app));
   const state = readStreamState(a.statePath);
   if (live.length === 0) {
+    // "Why did it die?" is the question a not-live status is being asked — answer it with the
+    // stream's own last words when it left any (lane 01M52Z987280). No row: say nothing; the
+    // "died without reporting" reading belongs to the supervisor's crash note, not a status poll.
+    const ep = await a.fetchEpitaph(state?.team ?? process.env['MUSTERD_TEAM'] ?? 'revive');
+    if (ep) {
+      const ago = Math.round((a.now() - ep.ts) / 60_000);
+      const when = ago < 1 ? 'just now' : ago < 90 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+      a.out(
+        theme.meta(
+          `  last end ${when} · exit ${ep.code} after ${Math.round(ep.ran_ms / 60_000)}m live — “${ep.reason}”`,
+        ) + '\n',
+      );
+    }
     // Silence has three different meanings, and the bare "not live" hid all of them.
     if (state?.standDownAt !== undefined) {
       a.out(
@@ -750,14 +770,18 @@ async function ensureVerb(
       return 0;
     case 'stand_down': {
       writeStreamState(a.statePath, d.state);
-      a.err(`${theme.err('⚠')} ${d.note}\n`);
+      const lastWords = lastWordsClause(
+        await a.fetchEpitaph(d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive'),
+        a.now(),
+      );
+      a.err(`${theme.err('⚠')} ${d.note.trimEnd()}${lastWords}\n`);
       try {
         // One sentence, composed once, from what was observed — the same one in the log line above.
         // These used to be two strings that disagreed: the log said "3 restarts", the ask said "the
         // broadcast crashed 3×", and the second is the only thing a human ever sees, because
         // standing down means the supervisor stops trying (lane 01M2K6BWVR).
         await a.sendAsk(
-          `streamwatch: ${standDownReport(d.state, a.now())} — \`musterd stream doctor\` then ` +
+          `streamwatch: ${standDownReport(d.state, a.now())}${lastWords} — \`musterd stream doctor\` then ` +
             `\`musterd stream start\` to re-arm (attempts: ${d.state.restarts
               .map((t) => new Date(t).toLocaleTimeString())
               .join(', ')})`,
@@ -773,7 +797,15 @@ async function ensureVerb(
       // The ledger is stamped BEFORE the launch: a launch that fails still spent an attempt, so a
       // hard-broken stream converges on stand-down instead of retrying forever.
       writeStreamState(a.statePath, d.state);
-      a.out(`${theme.warn('↻')} ${d.note}\n`);
+      // Only a crash earns the dead machine's last words — a deploy already named its cause.
+      const lastWords =
+        d.cause === 'crash'
+          ? lastWordsClause(
+              await a.fetchEpitaph(d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive'),
+              a.now(),
+            )
+          : '';
+      a.out(`${theme.warn('↻')} ${d.note.trimEnd()}${lastWords}\n`);
       // Relaunch the image the DECISION settled on, never whatever this checkout happens to hold.
       // `.image-digest` is per-checkout and streamwatch runs from the main one, so reading it here
       // is how a worktree-started stream came back 14 days old (2026-09-17). `d.state.image` is the
@@ -822,6 +854,56 @@ async function defaultSendAsk(body: string): Promise<void> {
       meta: { species: 'consult', tier: 'standard' },
     }),
   );
+}
+
+/** One `stream.exit` row as the daemon returns it (lane 01M52Z987280). */
+export interface StreamEpitaph {
+  ts: number;
+  seat: string;
+  reason: string;
+  code: number;
+  ran_ms: number;
+  machine?: string;
+}
+
+/** Read the newest epitaph as the streamwatch seat. Null on ANY failure — an unreadable epitaph
+ *  and an unwritten one mean the same thing to the crash note: nothing honest to quote. */
+async function defaultFetchEpitaph(team: string): Promise<StreamEpitaph | null> {
+  try {
+    const tokenFile = join(dirname(configPath()), 'stream', 'seat-token');
+    const token = readFileSync(tokenFile, 'utf8').trim();
+    const config = loadConfig();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    try {
+      const res = await fetch(
+        `${config.server}/teams/${encodeURIComponent(team)}/stream/epitaph?limit=1`,
+        { headers: { authorization: `Bearer ${token}` }, signal: ctrl.signal },
+      );
+      if (!res.ok) return null;
+      const body = (await res.json()) as { epitaphs?: StreamEpitaph[] };
+      return body.epitaphs?.[0] ?? null;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The dead machine's last words as one clause for the crash note and the stand-down ask (lane
+ * 01M52Z987280). Only a RECENT row counts — an epitaph from a run that ended hours ago would be
+ * quoted against a newer death, the same mistake `standDownReport` exists to stop. No row is the
+ * other half of the finding: a death that outran the post (OOM, host, fly teardown), or capture
+ * code older than the epitaph — both are said, because only one of them is actionable now.
+ */
+export function lastWordsClause(ep: StreamEpitaph | null, now: number): string {
+  if (!ep || now - ep.ts > 15 * 60_000) {
+    return ' · no last words — it died without reporting (a hard kill, or pre-epitaph capture code)';
+  }
+  const mins = Math.round(ep.ran_ms / 60_000);
+  return ` · last words (exit ${ep.code} after ${mins}m): “${ep.reason}”`;
 }
 
 function requireRepo(repoRoot: string | null): string {

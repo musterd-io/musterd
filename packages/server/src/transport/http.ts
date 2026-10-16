@@ -210,6 +210,7 @@ import {
   laneHistory,
   laneOwnerHistory,
   listAudit,
+  listAuditByAction,
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
@@ -1213,6 +1214,20 @@ const AddMemberBody = z.object({
 const SponsoredAgentBody = z.object({
   name: z.string().min(1).max(64),
   role: z.string().max(64).nullish(),
+});
+
+/**
+ * Body for `POST /teams/:slug/stream/epitaph` (lane 01M52Z987280) — the broadcast's last words.
+ * Bounded hard: the row lands in audit verbatim, so nothing a seat posts here can grow a row past
+ * a kilobyte. `code` is the process exit code the stream chose (0 clean, 75 asks the supervisor
+ * for a relaunch); `ran_ms` is how long the stream had been live, so "died at 24m" is data, not
+ * a stopwatch.
+ */
+const StreamEpitaphBody = z.object({
+  reason: z.string().min(1).max(500),
+  code: z.number().int().min(0).max(255),
+  ran_ms: z.number().int().min(0),
+  machine: z.string().max(64).optional(),
 });
 
 function requestOrigin(req: IncomingMessage): string {
@@ -7121,6 +7136,60 @@ export async function handleHttp(
           recordTraceIngest(harness, kind, n);
         }
         return sendJson(res, 202, { accepted, content: contentMode });
+      }
+
+      // The broadcast's last words (lane 01M52Z987280). A hosted stream's exit reason used to die
+      // with the machine: fly ships the final stderr lines only on a graceful teardown, and even
+      // then the box is `--rm`, so the supervisor's "machine gone, no stop record" was all anyone
+      // ever saw. The stream posts its reason here BEFORE exiting; the audit row outlives the
+      // machine, and a hard kill (OOM, host, fly teardown) is exactly the case no row can cover —
+      // its absence is the finding.
+      //
+      // The writer is the stream's own observer seat: an observer cannot SPEAK (route.ts refuses
+      // it), but this is not speech — an audit artifact about the stream itself, modeled on the
+      // trace tap above: leaseless (a dying process holds no lease) and presence-neutral (no
+      // `authTouch` — a stream's last gasp must not flip the roster). Any readable seat may write
+      // it; the reason string is bounded and the actor is stamped, so abuse is visible and
+      // revocable. The reader is any readable seat too — the streamwatch service seat reads it on
+      // a crash, and the content is the stream's own operational state, never team traffic.
+      if (method === 'POST' && rest === '/stream/epitaph') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          { leaseless: true },
+        );
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(StreamEpitaphBody, await readJson(req));
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: 'stream.exit',
+          target: null,
+          result: 'allow',
+          detail: {
+            reason: body.reason,
+            code: body.code,
+            ran_ms: body.ran_ms,
+            ...(body.machine ? { machine: body.machine } : {}),
+          },
+        });
+        return sendJson(res, 202, {});
+      }
+      if (method === 'GET' && rest === '/stream/epitaph') {
+        const { team, member } = await authMember(ctx.db, slug, bearer(req), actingSeat(req));
+        assertSeatCanRead(member);
+        const rawLimit = Number(url.searchParams.get('limit') ?? '1');
+        const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 20 ? rawLimit : 1;
+        const rows = await listAuditByAction(ctx.db, team.id, 'stream.exit', limit);
+        return sendJson(res, 200, {
+          epitaphs: rows.map((r) => ({
+            ts: r.ts,
+            seat: r.actor,
+            ...(r.detail ? (JSON.parse(r.detail) as Record<string, unknown>) : {}),
+          })),
+        });
       }
 
       // One session's trace, end to end (ADR 445 increment 2 — the read behind `musterd trace

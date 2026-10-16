@@ -1030,6 +1030,61 @@ export function sinkLossExitCode(
 }
 
 /**
+ * The stream's last words, posted to the daemon BEFORE the process exits (lane 01M52Z987280).
+ *
+ * A hosted run's exit reason used to die with the machine: the box is `--rm`, and fly ships the
+ * final stderr lines only when teardown is graceful — so alfie's 2026-10-16 machine streamed for
+ * 24m37s and vanished without one line of cause, and the supervisor's "machine gone, no stop
+ * record" was the whole story. This leaves the reason where it outlives the machine: one
+ * `stream.exit` audit row, written by the stream's own observer seat (an observer cannot speak —
+ * `route.ts` refuses it — but this is an audit artifact about the stream itself, not speech).
+ *
+ * Best effort by construction: the daemon may be the very thing that is down, so this races a
+ * short timeout, never throws, and never delays a stop path by more than `timeoutMs`. A death
+ * that kills the process outright (OOM, host, fly teardown) leaves NO row — and that absence is
+ * itself the finding the supervisor reports. The reason strings are composed here in code, never
+ * from ffmpeg's raw stderr, so the stream key cannot ride along (the scrubber owns ffmpeg's).
+ */
+export async function reportExit(args: {
+  server: string;
+  team: string;
+  /** The run's observer seat credential — the only identity this process holds on a hosted box. */
+  token: string;
+  reason: string;
+  code: number;
+  ranMs: number;
+  /** The Fly machine id, when the run is hosted — which box these words are about. */
+  machine?: string | undefined;
+  fetchFn?: typeof fetch;
+  timeoutMs?: number;
+}): Promise<boolean> {
+  const fetchFn = args.fetchFn ?? fetch;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), args.timeoutMs ?? 1500);
+  try {
+    const res = await fetchFn(
+      `${args.server}/teams/${encodeURIComponent(args.team)}/stream/epitaph`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${args.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          reason: args.reason.slice(0, 500),
+          code: args.code,
+          ran_ms: Math.max(0, Math.round(args.ranMs)),
+          ...(args.machine ? { machine: args.machine } : {}),
+        }),
+        signal: ctrl.signal,
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * How many times Chrome may fail inside `RELAUNCH_WINDOW_MS` before the stream stops relaunching it.
  *
  * A lost or frozen Chrome used to end the whole stream — ffmpeg, the RTMP session and all — and a
@@ -1468,6 +1523,8 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   /** When the pump actually started — the clock `socketLossExitCode` judges restart-eligibility by. */
   let runStartedAt = Date.now();
   let stopping = false;
+  /** The signal that started a graceful stop — the epitaph names it (`stopped by SIGTERM`). */
+  let stopSignal: string | undefined;
   /** The capture in flight. Replaced on a relaunch; the closures below always reach the current one. */
   let current: Capture | undefined;
   /** A Chrome relaunch is in progress — one at a time, and the watchdog stays quiet while it runs. */
@@ -1489,13 +1546,39 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     flushScrubbedStderr(); // before exit: the last lines say why the stream died
     process.exit(code);
   };
+  /**
+   * Record the exit reason with the daemon, then force-stop. Every forced path below goes through
+   * this — the reason is posted BEFORE `process.exit` truncates the event loop, or it is lost with
+   * the machine (lane 01M52Z987280). `reportExit` is time-boxed and never throws, so this adds at
+   * most ~1.5s to a path that is ending anyway, and the await keeps the loop (and the fetch)
+   * alive until the post resolves. The sweep on `exit` still runs whenever exit comes.
+   */
+  let runEnded = false; // the epitaph is written once — the first end path to fire owns it
+  const endForced = async (reason: string, code: number): Promise<never> => {
+    if (!runEnded) {
+      runEnded = true;
+      await reportExit({
+        server: opts.server,
+        team: opts.team,
+        token: seat.token,
+        reason,
+        code,
+        ranMs: Date.now() - runStartedAt,
+        machine: process.env['FLY_MACHINE_ID'],
+      });
+    }
+    return forceStop(code);
+  };
   const gracefulStop = () => {
     disarmFrameWatch();
     if (pumpTimer) clearInterval(pumpTimer);
     ffmpeg.stdin?.end(); // let ffmpeg finalize the container (moov atom in file mode)
     // If ffmpeg never exits (wedged RTMP socket), the stop must still stop. unref'd: it never
     // holds the process open, it only fires if something else still is.
-    setTimeout(() => forceStop(1), 5000).unref();
+    setTimeout(
+      () => void endForced(`ffmpeg never finalized within 5s of a stop — the sink wedged`, 1),
+      5000,
+    ).unref();
   };
   /**
    * Chrome cannot be kept, and the stream is ending with it: the whole-stream path, as it was before
@@ -1505,14 +1588,14 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
    * has proven itself, stay fatal for a run that never worked so a broken config cannot bill in a
    * loop, and never ask on a laptop where nothing is standing by.
    */
-  const giveUp = (why: string): never => {
+  const giveUp = async (why: string): Promise<never> => {
     const code = socketLossExitCode(Date.now() - runStartedAt);
     process.stderr.write(
       `${theme.err('✗')} ${why} ${
         code === RESTART_EXIT_CODE ? 'Asking the supervisor for a relaunch.' : 'Ending the stream.'
       }\n`,
     );
-    return forceStop(code);
+    return endForced(why, code);
   };
   /** Set once the watchdog exists; the stop paths disarm it through this so a teardown that
    *  stops delivery is never reported as a freeze. */
@@ -1540,15 +1623,23 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   const onStall = () => {
     if (stalled) return;
     stalled = true;
+    const why = `the encoder is not keeping up — ${Math.round(STALL_BYTES / 1024 / 1024)}MB of frames queued and growing`;
     process.stderr.write(
-      `${theme.err('✗')} the encoder is not keeping up — ${Math.round(STALL_BYTES / 1024 / 1024)}MB of frames queued and growing. ` +
+      `${theme.err('✗')} ${why}. ` +
         `Ending the stream rather than buffering into a hang; try a lower --fps or --bitrate.\n`,
     );
-    forceStop(1);
+    void endForced(why, 1);
   };
   const onSignal = (sig: NodeJS.Signals) => {
-    if (stopping || !live) forceStop(sig === 'SIGINT' ? 130 : 1);
+    if (stopping || !live) {
+      void endForced(
+        `stopped by ${sig}${live ? ' (forced)' : ' before the stream was live'}`,
+        sig === 'SIGINT' ? 130 : 1,
+      );
+      return;
+    }
     stopping = true;
+    stopSignal = sig;
     process.stdout.write(theme.meta(`\nstopping (${sig}) — again to force`) + '\n');
     gracefulStop();
   };
@@ -1814,7 +1905,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     disarmFrameWatch(); // nothing arrives from a Chrome that is being replaced — that is not a freeze
     try {
       if (decideRelaunch(relaunches, Date.now()) === 'give_up') {
-        giveUp(
+        await giveUp(
           `${reason} — Chrome has failed ${RELAUNCH_MAX} times in ${RELAUNCH_WINDOW_MS / 60_000} minutes, so this is not a blip.`,
         );
       }
@@ -1836,7 +1927,9 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     } catch (err) {
       // The stream ending (a signal, ffmpeg gone) is what pulled Chrome out from under this launch.
       if (stopping || ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
-      giveUp(`Chrome would not come back (${err instanceof Error ? err.message : String(err)}).`);
+      await giveUp(
+        `Chrome would not come back (${err instanceof Error ? err.message : String(err)}).`,
+      );
     } finally {
       recovering = false;
     }
@@ -1899,12 +1992,26 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     // stall watchdog above. Every road converges here. Chrome dying is NOT one of them: the capture
     // is replaced in place (`relaunchCapture`).
     exitCode = await ffmpegExit;
+  } catch (err) {
+    // A thrown death (ffmpeg gone before the first frame, Chrome that never readies, the page that
+    // never reports ready) gets the same epitaph as a clean end — a hosted startup failure is
+    // exactly the death that used to end the machine with nothing but fly's boot log.
+    if (!runEnded) {
+      runEnded = true;
+      await reportExit({
+        server: opts.server,
+        team: opts.team,
+        token: seat.token,
+        reason: err instanceof Error ? err.message : String(err),
+        code: err instanceof CliError ? err.exitCode : 1,
+        ranMs: Date.now() - runStartedAt,
+        machine: process.env['FLY_MACHINE_ID'],
+      });
+    }
+    throw err;
   } finally {
     cleanup();
   }
-  // A seat this run minted dies with it. A handed seat belongs to whoever minted it. Forced stops
-  // reach process.exit() with no async teardown; the 24h observer reaper (ADR 064) ends those.
-  if (!handed) await revokeBroadcastSeat(parsed.flags, seat);
   if (exitCode === 0) process.stdout.write(`${theme.ok('✓')} broadcast ended cleanly\n`);
   // ffmpeg ending on its own after the stream was live is the sink dying, not the end of the run
   // (ADR 553): under a supervisor that is a restart inside the machine, not the machine's end.
@@ -1918,5 +2025,26 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       `${theme.err('✗')} ffmpeg ended (code ${exitCode}) — the sink dropped. Asking the supervisor for a relaunch.\n`,
     );
   }
+  // The epitaph goes BEFORE the seat dies: it rides the seat's credential. A forced path that
+  // already reported skips this (`runEnded`) — the first end path to fire owns the row.
+  if (!runEnded) {
+    runEnded = true;
+    await reportExit({
+      server: opts.server,
+      team: opts.team,
+      token: seat.token,
+      reason: stopSignal
+        ? `stopped by ${stopSignal}`
+        : exitCode === 0
+          ? 'broadcast ended cleanly'
+          : `ffmpeg ended (code ${exitCode}) — the sink dropped`,
+      code,
+      ranMs: Date.now() - runStartedAt,
+      machine: process.env['FLY_MACHINE_ID'],
+    });
+  }
+  // A seat this run minted dies with it. A handed seat belongs to whoever minted it. Forced stops
+  // reach process.exit() with no async teardown; the 24h observer reaper (ADR 064) ends those.
+  if (!handed) await revokeBroadcastSeat(parsed.flags, seat);
   return code;
 }

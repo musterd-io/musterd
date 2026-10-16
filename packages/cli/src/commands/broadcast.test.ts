@@ -59,6 +59,7 @@ import {
   STALL_BYTES,
   sweepStaleProfiles,
   type EncoderPipe,
+  reportExit,
 } from './broadcast.js';
 
 describe('broadcast parseOptions', () => {
@@ -237,6 +238,72 @@ describe('resolveSink (stream-key resolution)', () => {
       'rtmps://live.twitch.tv/app/kc',
     );
     await expect(resolveSink(o, async () => null, {})).rejects.toThrow(/no stream key/);
+  });
+});
+
+// Lane 01M52Z987280: the stream's last words, posted before exit so a machine's teardown cannot
+// take the reason with it. Best effort is the contract — a dying stream must never hang or throw
+// on the post, and a credential never rides the URL.
+describe('reportExit (lane 01M52Z987280)', () => {
+  const base = {
+    server: 'http://100.100.246.14:4849',
+    team: 'revive',
+    token: 'mscr_seat',
+    reason: 'ffmpeg ended (code 1) — the sink dropped',
+    code: 75,
+    ranMs: 1_477_000.4,
+    machine: '84731dc2e50508',
+  };
+
+  it('posts the epitaph to the daemon with the seat credential, bounded and rounded', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchFn = async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init! });
+      return new Response('{}', { status: 202 });
+    };
+    expect(await reportExit({ ...base, fetchFn: fetchFn as typeof fetch })).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('http://100.100.246.14:4849/teams/revive/stream/epitaph');
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers.authorization).toBe('Bearer mscr_seat');
+    // The credential is a header, never the URL — `ps` and logs see argv/paths, not headers.
+    expect(calls[0]!.url).not.toContain('mscr_');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+      reason: base.reason,
+      code: 75,
+      ran_ms: 1_477_000, // rounded from the float
+      machine: '84731dc2e50508',
+    });
+  });
+
+  it('caps the reason at the server’s bound', async () => {
+    let body = '';
+    const fetchFn = async (_u: unknown, init?: RequestInit) => {
+      body = String(init?.body);
+      return new Response('{}', { status: 202 });
+    };
+    await reportExit({ ...base, reason: 'x'.repeat(900), fetchFn: fetchFn as typeof fetch });
+    expect(JSON.parse(body).reason).toHaveLength(500);
+  });
+
+  it('a daemon that is down is a false, never a throw — the stop path must not hang on it', async () => {
+    const down = async () => {
+      throw new Error('ECONNREFUSED');
+    };
+    expect(await reportExit({ ...base, fetchFn: down as typeof fetch })).toBe(false);
+    // A fetch that answers only when its caller gives up, like the real one does on abort.
+    const slow: typeof fetch = ((_u: unknown, init?: RequestInit) =>
+      new Promise<Response>((_res, rej) => {
+        init?.signal?.addEventListener('abort', () => rej(new Error('aborted')));
+      })) as unknown as typeof fetch;
+    const started = Date.now();
+    expect(await reportExit({ ...base, fetchFn: slow, timeoutMs: 50 })).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('a non-2xx answer is a false — recorded nowhere, but the stream still ends', async () => {
+    const refused = async () => new Response('no', { status: 403 });
+    expect(await reportExit({ ...base, fetchFn: refused as typeof fetch })).toBe(false);
   });
 });
 
