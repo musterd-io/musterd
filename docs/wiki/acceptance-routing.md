@@ -173,6 +173,15 @@ Measured twice on adjacent nights, on live lanes that had been declined once and
 
 Against this page's own evidence those fast rows are the tails of a wide distribution, not a contradiction of it: the sections above describe what happens when the ask sits unread while the recipient works other lanes or is structurally unreachable. Fast turns occur exactly when the recipient is live and the only blocker was something concrete the reviewer could check. They are a floor on the distribution, not a property of routing generally — and they read as measurement *misses* of the slow-median thesis only when someone quotes them without the fast-path conditions attached.
 
+## A first-submit acceptance with no re-route can close inside two minutes (2026-10-15; falsify: on lanes `01M4YE8CGD`, `01M4S0WNZ5` and `01M4SB4BZB`, a `resolve`-then-`ask` re-route before the close, or ask-to-resolve gaps other than 41.2s, 79.9s and 99.4s in the acts table) <!-- claim: other -->
+
+The section above is about lanes that were declined and re-submitted. This one is the first ask on a lane, answered by the seat it was sent to, with no earlier decline and no re-route. Seen on two nights, all on non-risky lanes:
+
+- 2026-10-14, lane `01M4YE8CGD` (ADR 597, #2599): ask `1792023967784`, resolved by alfie `1792024008984` — **41.2s** (lazara insight `01M4Z1HC7A`). The same night, lane `01M4W5VFAB` took **17m 3s** on the same shape, so the fast case is not every case.
+- 2026-10-15, lane `01M4S0WNZ5` (spend controls increment 1): ask `01M50DYTWC` at `1792089746316`, resolved by miley `1792089826230` — **79.9s**. Lane `01M4SB4BZB` (spend controls increment 2): ask `01M50J4TGE` at `1792094136846`, resolved by fifty `1792094236266` — **99.4s**.
+
+Same reading as the re-reviewed case: these are the fast tail, seen when the acceptor is live and the lane needs no human stage. A risky lane does not close this way however quick the peer is — its peer accept is only stage one (see the 2026-10-15 izzo insight `01M50BPJVJ`, and ADR 603).
+
 ## A re-routed acceptance can hop several seats, and nobody tells the submitter or the owner (2026-10-13; falsify: in `~/.musterd/musterd.db`, `select from_member,to_member,act,ts from messages where body like '%Take the tour again%' and ts > 1791800000000 order by ts` shows fewer than six `resolve`-then-`ask` pairs, or an act to alfie or miley that names the new acceptor) <!-- claim: defect -->
 
 Each re-route sends a `resolve` to the old holder ("the ask you held is closed") and a new `ask` to the next one. Neither act goes to the seat that submitted the lane or to the seat that owns it. Seen on two nights:
