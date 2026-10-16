@@ -129,6 +129,19 @@ const POOL: Mock[] = [
 ];
 
 /**
+ * More colleagues for `?n` past the hand-written roster (ADR 617): the density bar is about a room of
+ * twelve SEATED members, and the ten above only seat six (three are active-but-idle, one is away).
+ * All working agents, so each takes a desk.
+ */
+const EXTRA: Mock[] = ['Kai', 'Lux', 'Mo', 'Nia', 'Oz', 'Pip', 'Quin', 'Rue'].map((name) => ({
+  name,
+  kind: 'agent',
+  activity: 'working',
+  state: 'tidying a lane',
+}));
+const ROSTER: Mock[] = [...POOL, ...EXTRA];
+
+/**
  * The seat a wake put in the room (ADR 131), for the same reason Jib is a service seat: a state the
  * fixture cannot reach is a state reviewed for the first time in production.
  *
@@ -323,7 +336,7 @@ const SCRIPT: { at: number; ev: OfficeEvent }[] = [
   },
 ];
 /** A fixture member's kind, for the caption dot's colour — the pool is the roster here. */
-const kindOfMock = (name: string): Kind => POOL.find((m) => m.name === name)?.kind ?? 'agent';
+const kindOfMock = (name: string): Kind => ROSTER.find((m) => m.name === name)?.kind ?? 'agent';
 
 const LOOP = 5600;
 
@@ -356,7 +369,7 @@ function OfficePreviewPage() {
   // has to survive (a real team is ~5 against 12 desks, and that is when empty desks read loudest).
   const [present, setPresent] = useState<Set<string>>(() => {
     const n = Number(previewSearch().get('n'));
-    const pool = Number.isFinite(n) && n > 0 ? POOL.slice(0, n) : POOL;
+    const pool = Number.isFinite(n) && n > 0 ? ROSTER.slice(0, n) : POOL;
     return new Set(pool.map((m) => m.name));
   });
   const [away, setAway] = useState<Set<string>>(() => new Set(['Gus']));
@@ -368,7 +381,7 @@ function OfficePreviewPage() {
   const [idle, setIdle] = useState<Set<string>>(() => {
     const raw = previewSearch().get('idle');
     if (!raw) return new Set();
-    if (raw === 'all') return new Set(POOL.map((m) => m.name));
+    if (raw === 'all') return new Set(ROSTER.map((m) => m.name));
     return new Set(raw.split(',').map((s) => s.trim()));
   });
 
@@ -422,7 +435,7 @@ function OfficePreviewPage() {
         end: '15:00',
       },
       nodes: [
-        ...POOL.filter((m) => present.has(m.name)).map((m): OfficeNode => {
+        ...ROSTER.filter((m) => present.has(m.name)).map((m): OfficeNode => {
           const isOffline = offlineSet.has(m.name);
           const isAway = !isOffline && away.has(m.name);
           const isStale = stale.has(m.name);

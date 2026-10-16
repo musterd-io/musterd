@@ -25,7 +25,7 @@ import {
   shouldCoalesceDraw,
   suspendIgnored,
 } from './broadcast';
-import { AMBIENT_SLOT_MS, ambientPool, decideAmbient, roll, slotAt, slotRng } from './ambientSeed';
+import { AMBIENT_SLOT_MS, ambientPool, decideAmbient, roll, slotAt, slotRng, type AmbientDecision } from './ambientSeed';
 import { walkTag } from '../headline';
 import {
   createPet,
@@ -147,7 +147,8 @@ const AFTERGLOW_MS = 2600;
  * every viewer of the same team sees the same beats. How OFTEN is `ambientSeed.ambientFireP`, which
  * scales with how many people are in the room (E1b): a populated floor reads at ~2.5–3 beats/idle-min,
  * a room of two stays near the old ~30–70s cadence so a near-empty office does not read as twitchy.
- * Timer-based (not RAF), one beat at a time, always preempted by a real act. 90–180s read as a frozen
+ * Timer-based (not RAF), one beat at a time (plus, in a room of six or more, one in-place companion
+ * gesture inside the same wake — ADR 617), always preempted by a real act. 90–180s read as a frozen
  * room once the beat variety grew (nick's call, 2026-07); the old 15–25s water-cooler parade is still
  * the floor to stay well above. */
 /** While Tier B is awake for an *ambient-only* beat, coalesce toward ~20fps: only advance+redraw once
@@ -2211,10 +2212,11 @@ export function mountOffice(
       // non-working ones for errands, and chat pairs with nobody working (ADR 464 §3.1).
       const pool = ambientPool(placements, nodes);
       const decision = decideAmbient(teamName, slot, pool);
+      let played = false;
       if (decision.kind === 'pet') {
         // The pet's beat: it wakes, stretches, pads to a fresh nap spot (a sunbeam by day, a rug by
         // night, occasionally a working member's side) and curls back up.
-        const played = petBeat(pet, {
+        played = petBeat(pet, {
           daylight: lightEnv.daylight,
           hours: lightEnv.hours,
           workSpots: workingSideSpots(),
@@ -2225,17 +2227,17 @@ export function mountOffice(
       } else if (decision.kind === 'pair') {
         // The pair beat: two neighbours turn and talk — the one beat with two subjects, so it is
         // decided above the per-member pick.
-        const played = actors.deskChat(decision.a, decision.b, slotRng(teamName, slot, 'chat'));
+        played = actors.deskChat(decision.a, decision.b, slotRng(teamName, slot, 'chat'));
         logAmbient({ slot, kind: 'pair', pair: [decision.a, decision.b], played });
         if (played) ensureLoop();
       } else if (decision.kind === 'meet') {
         // The aisle meet (nick, 2026-10-12): two idle members get up, meet between their desks, talk,
         // and go back — the room reading as a team rather than parallel solo workers.
-        const played = actors.aisleMeet(decision.a, decision.b, slotRng(teamName, slot, 'meet'));
+        played = actors.aisleMeet(decision.a, decision.b, slotRng(teamName, slot, 'meet'));
         logAmbient({ slot, kind: 'meet', pair: [decision.a, decision.b], played });
         if (played) ensureLoop();
       } else if (decision.kind === 'member') {
-        const played = playAmbientBeat(
+        played = playAmbientBeat(
           decision.who,
           slot,
           pool.errands?.includes(decision.who) ?? true,
@@ -2243,8 +2245,39 @@ export function mountOffice(
         logAmbient({ slot, kind: 'member', who: decision.who, played });
         if (played) ensureLoop();
       }
+      // The companion (ADR 617): one more seated member's in-place gesture beside a beat that PLAYED —
+      // never a walk, and never on its own, so it can only share a wake the room was already paying for.
+      if (played && decision.kind !== 'none' && decision.companion) {
+        // The room notices (nick, 2026-10-15): when the beat is something MOVING nearby — the dog off
+        // to a sunbeam, two colleagues meeting in the aisle, someone heading for coffee — the companion
+        // swivels to watch it go by instead of fidgeting. Otherwise, a seated gesture of their own.
+        const c = decision.companion;
+        const target = movingNear(decision, c);
+        const ok =
+          (target !== null && actors.notice(c, target, slotRng(teamName, slot, 'notice'))) ||
+          playAmbientBeat(c, slot, false, 'companion-beat');
+        logAmbient({ slot, kind: 'companion', who: c, played: ok });
+      }
     }
     scheduleAmbient();
+  }
+
+  /** How far a seated member will turn to watch something go by, in floor units — about two pods. */
+  const NOTICE_RANGE = 280;
+  /** Where the slot's beat is moving, if it is moving and near enough for `who` to notice (ADR 617). */
+  function movingNear(d: AmbientDecision, who: string): { lx: number; ly: number } | null {
+    const poses = actors.poses();
+    const me = poses.get(who);
+    if (!me) return null;
+    let at: { lx: number; ly: number } | null = null;
+    if (d.kind === 'pet') at = { lx: pet.lx, ly: pet.ly };
+    else if (d.kind === 'meet') {
+      const a = poses.get(d.a);
+      const b = poses.get(d.b);
+      if (a && b) at = { lx: (a.lx + b.lx) / 2, ly: (a.ly + b.ly) / 2 };
+    } else if (d.kind === 'member' && actors.walking(d.who)) at = poses.get(d.who) ?? null;
+    if (!at || Math.hypot(at.lx - me.lx, at.ly - me.ly) > NOTICE_RANGE) return null;
+    return at;
   }
 
   /**
@@ -2253,7 +2286,7 @@ export function mountOffice(
    * coffee-stroll staying in the mix at ~1 in 5. Weighted rather than uniform so the broad, always-valid
    * beats (stretch/glance/scratch/chin/lean) carry the room and the chair theatrics stay occasional.
    */
-  function playAmbientBeat(who: string, slot: number, mayErrand = true): boolean {
+  function playAmbientBeat(who: string, slot: number, mayErrand = true, purpose = 'beat'): boolean {
     const pl = placements.get(who);
     const deskSlot = pl?.kind === 'desk' ? pl.slot : null;
     const casters = deskSlot !== null; // every desk chair rolls now (the `stool` kind is gone)
@@ -2315,7 +2348,8 @@ export function mountOffice(
       );
     let total = 0;
     for (const [w] of beats) total += w;
-    let r = roll(teamName, slot, 'beat') * total;
+    // `purpose` keeps a companion's roll apart from the slot's own beat, so the two never mirror.
+    let r = roll(teamName, slot, purpose) * total;
     for (const [w, play] of beats) {
       r -= w;
       if (r <= 0) return play();

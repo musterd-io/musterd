@@ -1398,6 +1398,22 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-15 — `totalJsGzipBytes` 313,000 → 313,600 B: a companion gesture, and the room notices (lane `01M50YPZN8`, ADR 617)
+
+| Budget   | This branch (local, rebased on #2700) | First CI run (before the rebase) | Ceiling                    |
+| -------- | ------------------------------------- | -------------------------------- | -------------------------- |
+| total JS | 312,990 B                             | 305.9 KB (~313,200 B)            | RAISED 313,000 → 313,600 B |
+
+About 400–500 B gz: the shared rotation that companions take turns in (`ambientSeed.ts`),
+`actors.notice` and `walking`, the scene's `movingNear` and companion step, and `/office-preview`'s
+synthetic colleagues for `?n` past the hand-written roster, which a twelve-seat measurement needs.
+Nothing to cut that is not the feature, and lazy-loading cannot move total (ADR 183). CI has read
+400–500 B above local today, for this PR and for #2700 below, so the ceiling is local plus that gap
+plus ~0.05%. Ambient CPU, measured with `ambient-density.mjs` (twelve seated, 8 min per arm), stayed
+inside run-to-run noise: 22.1% before, 14.5% after (ADR 617 has the table).
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 313,000 B with this change in.
+
 ### 2026-10-15 — `totalJsGzipBytes` 312,700 → 313,000 B: a watch link takes a grade (lane `01M50XJDJ7`)
 
 | Budget   | main (local) | main (CI)                       | After trim (local) | Ceiling                    |
