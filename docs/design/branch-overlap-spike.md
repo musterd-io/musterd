@@ -14,7 +14,7 @@ feature landed.
 
 Revised 2026-10-16 after big-body's decline (01M530AABE1CH96K4J9RY4FTF5), which
 repeated the earlier wanderer review (01M52YRSR6WE93W3RPZXJBYD05). Corrections
-applied: (1) cost arithmetic uses each run's own population (8.3 vs 9.7 ms, not
+applied: (1) cost arithmetic uses each run's own population (8.5 vs 9.7 ms, not
 1000x); (2) the 60% hunk gate and 30-day window below are labelled as this lane's
 proposals, not ADR 575's own gates, which are separated out; (3) the measurement
 script is supplied so the numbers reproduce; (4) 61/492 is stated as an overlap
@@ -47,7 +47,7 @@ lockfiles.
 Command: node --disable-warning=ExperimentalWarning scripts/research/branch-overlap-measure.ts
 Measured in this repository's checkout against the daemon's merged lanes (146 commits):
 
-- File-level (git diff --name-only): 8.3 ms/commit (1241 ms total).
+- File-level (git diff --name-only): 8.5 ms/commit (1241 ms total).
 - Hunk-level (git diff --unified=0 plus @@ range parse): 9.7 ms/commit (1420 ms
   total).
 
@@ -84,8 +84,8 @@ conflicts/reverts, which merge history does not label here).
 The current surface_overlap warns on declared globs at 27-37% precision (ADR 575). A
 branch-diff warning at file level can never warn a pair that did not touch a common
 file, so its precision against actual changed files is 100% by construction (no glob
-false positives), at the cost of ~8.3 ms/commit and dependence on pushed-branch
-freshness. Promoting from file level to hunk level would suppress a further 87.7% of
+false positives), at the cost of ~8.5 ms/commit and dependence on pushed-branch
+freshness. Promoting from file level to hunk level would suppress a further 88.1% of
 file-sharing warnings.
 
 ## Success gate - this lane's proposal (not ADR 575)
