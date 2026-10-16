@@ -1659,8 +1659,23 @@ const BRANCH_OVERLAP_EXCLUDED = new Set([
   'docs/implementation-plan.md',
 ]);
 
+function branchTipSha(root: string, branch: string): string | null {
+  try {
+    return (
+      execFileSync('git', ['-C', root, 'rev-parse', `${branch}^{commit}`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim() || null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function branchChangedFiles(root: string, branch: string): string[] {
-  const key = root + '\u0000' + branch;
+  const tip = branchTipSha(root, branch);
+  if (!tip) return [];
+  const key = root + '\u0000' + branch + '\u0000' + tip;
   if (BRANCH_FILE_CACHE.has(key)) {
     return BRANCH_FILE_CACHE.get(key) ?? [];
   }
