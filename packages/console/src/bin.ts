@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { buildRefFromFlyImage, readBuildStamp } from '@musterd/protocol/build-stamp';
+import { readBuildStamp } from '@musterd/protocol/build-stamp';
 import pg from 'pg';
 import { resolveConsoleConfig } from './config.js';
 import { assertSchema, type Queryable } from './db.js';
@@ -15,14 +15,11 @@ import { migrate, SCHEMA_VERSION } from './schema.js';
  * Prints versions and states — never a URL (hard rule 5).
  */
 /**
- * The commit `/health` reports: the dist's own stamp (ADR 135) when it has one. Inside the Fly
- * image the stamp is `ref: null`, because the Docker build has no `.git`. There the image label
- * deploy.mjs pushed (`git-<sha>`, read from `FLY_IMAGE_REF`) is the deployed commit.
+ * The dist's own stamp (ADR 135), null when it has none. Inside the Fly image it is always null,
+ * because the Docker build has no `.git`; resolveConsoleConfig then reads `FLY_IMAGE_REF`.
  */
 function buildStamp(): string | null {
-  return (
-    readBuildStamp(import.meta.url) ?? buildRefFromFlyImage(process.env['FLY_IMAGE_REF']) ?? null
-  );
+  return readBuildStamp(import.meta.url) ?? null;
 }
 
 async function serve(): Promise<void> {
