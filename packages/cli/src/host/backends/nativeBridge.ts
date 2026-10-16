@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { autojoin, buildMcpServer, MusterdClient, type McpConfig } from '@musterd/mcp';
 import { FEATURE_EPOCH, type AttestationSource, type Binding } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import type { EngineTool } from '../engine.js';
+import type { EngineTool, SteerRead } from '../engine.js';
 
 /**
  * The native backend's tool surface (ADR 251 §4): connect to the daemon as an MCP client using the
@@ -145,8 +145,31 @@ export interface NativeBridge {
    * can queue it as the next user turn instead of waiting for the next musterd tool call to carry
    * it. The same line is suppressed on the tool-result path for a minute, so one act rings once.
    */
-  onRaised(deliver: (line: string, actId: string) => void): () => void;
+  onRaised(deliver: (line: string, actId: string, read?: SteerRead) => void): () => void;
   close(): Promise<void>;
+}
+
+/** The read the host performs for a steered act (ADR 627) — the one the line itself names. */
+export const STEER_READ_TOOL = 'team_inbox_check';
+
+/**
+ * ADR 627: run the seat's own by-id read of a raised act, in-process, so the engine can hand the
+ * model the act with the line instead of spending a model call to fetch it. Through the adapter's
+ * real tool, so the seat sees exactly what its own call would have returned. Never throws: a read
+ * that fails leaves the line a pointer, which is the behaviour before ADR 627.
+ */
+export async function readSteeredAct(
+  client: Pick<BridgeClient, 'callTool'>,
+  actId: string,
+): Promise<SteerRead | undefined> {
+  const args = { ids: [actId] };
+  try {
+    const res = await client.callTool({ name: STEER_READ_TOOL, arguments: args });
+    const result = contentToText(res.content);
+    return result.length > 0 ? { tool: STEER_READ_TOOL, args, result } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** How long a steered line is kept out of the tool-result path — one act, one ring (clause 7). */
@@ -192,16 +215,20 @@ export async function openNativeBridge(config: McpConfig): Promise<NativeBridge>
       musterd.onDirected((env) => {
         // The daemon composes the line (ADR 088: structured fields, never a body) and discharges the
         // act on the seat's next read; asking here is what makes a steer provable from its side.
+        // ADR 627: the host then makes the by-id read the line names, so the body reaches the model
+        // as that tool's result — the channel the seat's own read would have used — not in the line.
         void musterd.interruptCheck().then((line) => {
           if (!line) return;
           const at = steered.get(line);
           if (at !== undefined && Date.now() - at < STEERED_SUPPRESS_MS) return;
           steered.set(line, Date.now());
-          try {
-            deliver(line, env.id);
-          } catch {
-            // the engine's problem, never the socket's
-          }
+          void readSteeredAct(harness, env.id).then((read) => {
+            try {
+              deliver(line, env.id, read);
+            } catch {
+              // the engine's problem, never the socket's
+            }
+          });
         });
       }),
     close: async () => {

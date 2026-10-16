@@ -20,7 +20,7 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
-import type { AgentLoopEngine, EngineTool, EngineTurn } from '../engine.js';
+import type { AgentLoopEngine, EngineTool, EngineTurn, SteerRead } from '../engine.js';
 import { piEngine } from '../engines/pi.js';
 import {
   bashPathOk,
@@ -346,13 +346,17 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         });
       // ADR 588 §6: the in-process doorbell. A raised act reaches the loop as its next user turn
       // through the bridge's socket, not only on a tool result; each delivery is a
-      // `residency.steered` row (best-effort, one narrator line on the first failure).
+      // `residency.steered` row (best-effort, one narrator line on the first failure). ADR 627: the
+      // delivery carries the host's read of the act, so the seat answers without fetching it.
       let steeredPostFailed = false;
       const steer = {
-        subscribe: (deliver: (line: string) => void) =>
-          bridge.onRaised((line, actId) => {
-            deliver(line);
-            ctx.log(`⚡ steered ${seat}: act ${actId} delivered into the running loop`);
+        subscribe: (deliver: (line: string, read?: SteerRead) => void) =>
+          bridge.onRaised((line, actId, read) => {
+            deliver(line, read);
+            ctx.log(
+              `⚡ steered ${seat}: act ${actId} delivered into the running loop` +
+                (read ? ' with the host read' : ''),
+            );
             void telemetry
               .residencySteered(spec.team, {
                 lease_id: spec.order.lease_id,

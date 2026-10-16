@@ -237,6 +237,12 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   maintenance stream the readout measured). Decision 6's in-process doorbell now uses
   `pi-agent-core`'s own steering queue (`agent.steer`), which needs no pi-durable.
 
+- **2026-10-15 (probe failed, then [ADR 627](627-native-steer-host-read.md)).** The pilot's probe on
+  the worker seat failed: a steer delivered +0.5 s into a tool call was answered at +15.3 s, after
+  model calls 2 to 5, because the line is a pointer and the seat spent a call reading the act (lane
+  01M50GH51Z). ADR 627 has the host make that read itself and hand it to the loop as a tool exchange
+  after the line. Decision 6's delivery point is unchanged.
+
 ## Observability & Evaluation
 
 - **Traces.** The existing residency rails with surface `musterd`: `wake_leases`, `wake_turns`

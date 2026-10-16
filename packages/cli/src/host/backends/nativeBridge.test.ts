@@ -6,6 +6,8 @@ import {
   bridgeTools,
   contentToText,
   nativeMcpConfig,
+  readSteeredAct,
+  STEER_READ_TOOL,
   STEERED_SUPPRESS_MS,
 } from './nativeBridge.js';
 
@@ -159,5 +161,39 @@ describe('contentToText', () => {
 describe('STEERED_SUPPRESS_MS (ADR 588 §6 — one act, one ring)', () => {
   it('is a minute: long enough to outlast the next tool call, short enough that a re-raise rings again', () => {
     expect(STEERED_SUPPRESS_MS).toBe(60_000);
+  });
+});
+
+describe('readSteeredAct (ADR 627 — the host makes the read the line names)', () => {
+  it('calls the seat’s own by-id inbox read and returns its text as the read', async () => {
+    const calls: { name: string; arguments: Record<string, unknown> }[] = [];
+    const read = await readSteeredAct(
+      {
+        callTool: async (params) => {
+          calls.push(params);
+          return { content: [{ type: 'text', text: 'nick [steer]: stop' }] };
+        },
+      },
+      'ACT1',
+    );
+    expect(calls).toEqual([{ name: STEER_READ_TOOL, arguments: { ids: ['ACT1'] } }]);
+    expect(read).toEqual({
+      tool: 'team_inbox_check',
+      args: { ids: ['ACT1'] },
+      result: 'nick [steer]: stop',
+    });
+  });
+
+  it('never throws: a failed or empty read leaves the line a pointer', async () => {
+    await expect(
+      readSteeredAct({ callTool: async () => Promise.reject(new Error('socket')) }, 'ACT1'),
+    ).resolves.toBeUndefined();
+    await expect(
+      readSteeredAct({ callTool: async () => ({ content: [] }) }, 'ACT1'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('names a tool the seat surface actually renders', () => {
+    expect(TOOL_NAMES).toContain(STEER_READ_TOOL);
   });
 });

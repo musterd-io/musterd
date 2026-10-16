@@ -18,7 +18,12 @@ import type {
   EngineUsage,
 } from '../engine.js';
 import { priceUsage } from '../prices.js';
-import { rehydrate, type PiTurnTranscript } from './rehydrate.js';
+import {
+  hostReadMessages,
+  rehydrate,
+  type PiHostRead,
+  type PiTurnTranscript,
+} from './rehydrate.js';
 
 /**
  * The pi engine (ADR 588 §3 as amended): `@earendil-works/pi-agent-core` runs the turn and
@@ -229,6 +234,9 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         streamFn,
         ...(opts.apiKey !== undefined ? { getApiKey: () => opts.apiKey } : {}),
         toolExecution: 'sequential',
+        // ADR 627: a steer is up to three messages (line, host call, its result) that must reach
+        // the same request — drain the whole queue at once, not one message per check.
+        steeringMode: 'all',
         beforeToolCall: async ({ toolCall, args }) => {
           const reason = opts.preflight?.(toolCall.name, args);
           return reason ? { block: true, reason: `denied: ${reason}` } : undefined;
@@ -251,9 +259,27 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
       // The lines pi drained ahead of the turn now running — snapshotted at `turn_start`, so a line
       // raised while turn N's tools ran lands on turn N+1, the request it actually preceded.
       let steeredForCurrentTurn: string[] = [];
-      const unsubscribeSteer = spec.steer?.subscribe((line) => {
+      // ADR 627: the host reads that followed those lines, keyed to the line they belong to.
+      let readsSinceLastTurn: PiHostRead[] = [];
+      let readsForCurrentTurn: PiHostRead[] = [];
+      let hostReadSeq = 0;
+      const unsubscribeSteer = spec.steer?.subscribe((line, read) => {
+        const at = Date.now();
         steeredSinceLastTurn.push(line);
-        agent.steer({ role: 'user', content: line, timestamp: Date.now() });
+        agent.steer({ role: 'user', content: line, timestamp: at });
+        if (!read) return;
+        hostReadSeq += 1;
+        const id = `musterd_read_${String(hostReadSeq)}_${at.toString(36)}`;
+        const [call, result] = hostReadMessages(model, read, id, at);
+        agent.steer(call);
+        agent.steer(result);
+        readsSinceLastTurn.push({
+          line: steeredSinceLastTurn.length - 1,
+          tool_call_id: id,
+          tool: read.tool,
+          args: read.args,
+          result: read.result,
+        });
       });
 
       let costTotal: number | undefined;
@@ -263,6 +289,8 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         if (event.type === 'turn_start') {
           steeredForCurrentTurn = steeredSinceLastTurn;
           steeredSinceLastTurn = [];
+          readsForCurrentTurn = readsSinceLastTurn;
+          readsSinceLastTurn = [];
           return;
         }
         if (event.type !== 'turn_end' || event.message.role !== 'assistant') return;
@@ -278,11 +306,14 @@ export function piEngine(opts: PiEngineOptions = {}): AgentLoopEngine {
         lastError = message.errorMessage;
         const steered = steeredForCurrentTurn;
         steeredForCurrentTurn = [];
+        const hostReads = readsForCurrentTurn;
+        readsForCurrentTurn = [];
         const transcript: PiTurnTranscript = {
           v: 1,
           engine: 'pi',
           ...(turnsSeen === 1 ? { prompt: spec.prompt } : {}),
           ...(steered.length > 0 ? { steered } : {}),
+          ...(hostReads.length > 0 ? { host_reads: hostReads } : {}),
           assistant: message,
           tool_results: event.toolResults,
         };

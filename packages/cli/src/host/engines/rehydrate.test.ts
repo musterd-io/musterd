@@ -164,6 +164,58 @@ describe('rehydrate', () => {
     ]);
   });
 
+  it('ADR 627: replays a host read after the line it followed, as the tool exchange it was', () => {
+    const line = '⚡ musterd [revive]: steer from nick (steer) — read exactly it';
+    const r = rehydrate([
+      lease('L1', [
+        row(1, {
+          v: 1,
+          engine: 'pi',
+          prompt: 'p',
+          assistant: assistant('working', [{ id: 'c1', name: 'team_next' }]),
+          tool_results: [result('c1', 'team_next')],
+        }),
+        row(2, {
+          v: 1,
+          engine: 'pi',
+          steered: [line],
+          host_reads: [
+            {
+              line: 0,
+              tool_call_id: 'musterd_read_1_x',
+              tool: 'team_inbox_check',
+              args: { ids: ['ACT1'] },
+              result: 'nick [steer]: stop',
+            },
+          ],
+          assistant: assistant('heard'),
+          tool_results: [],
+        }),
+      ]),
+    ]);
+    expect(
+      r.messages.map((m) => (m.role === 'user' ? `user:${String(m.content)}` : m.role)),
+    ).toEqual([
+      'user:p',
+      'assistant',
+      'toolResult',
+      `user:${line}`,
+      'assistant',
+      'toolResult',
+      'assistant',
+    ]);
+    const call = r.messages[4] as { content: { type: string; id: string; name: string }[] };
+    expect(call.content).toEqual([
+      expect.objectContaining({
+        type: 'toolCall',
+        id: 'musterd_read_1_x',
+        name: 'team_inbox_check',
+      }),
+    ]);
+    expect(r.messages[5]).toMatchObject({ toolCallId: 'musterd_read_1_x', isError: false });
+    expect(r.patched).toBe(0);
+  });
+
   it('is empty for no leases', () => {
     expect(rehydrate([])).toEqual({ messages: [], replayed: 0, skipped: 0, patched: 0 });
   });
