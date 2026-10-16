@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import type { MemberCeiling } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
@@ -42,6 +43,9 @@ export interface TeamInviteRow {
   failures: number;
   expires_at: number;
   member_until: number | null;
+  /** The ceiling stamped on every member this invite admits (ADR 621 §5): `'guest'` or NULL. NULL
+   * on an invite minted before ADR 621 means it admits members, as it did. */
+  ceiling?: string | null;
   created_by: string;
   created_at: number;
   revoked_at: number | null;
@@ -60,6 +64,9 @@ export interface TeamInviteSummary {
   fail_budget: number;
   expires_at: number;
   member_until: number | null;
+  /** The ceiling stamped on every member this invite admits (ADR 621 §5): `'guest'` or NULL. NULL
+   * on an invite minted before ADR 621 means it admits members, as it did. */
+  ceiling?: string | null;
   created_by: string;
   created_at: number;
   revoked_at: number | null;
@@ -191,6 +198,7 @@ export function summarizeInvite(row: TeamInviteRow, now = Date.now()): TeamInvit
     fail_budget: row.fail_budget,
     expires_at: row.expires_at,
     member_until: row.member_until,
+    ceiling: row.ceiling ?? null,
     created_by: row.created_by,
     created_at: row.created_at,
     revoked_at: row.revoked_at,
@@ -204,6 +212,8 @@ export interface MintInviteInput {
   failBudget?: number;
   expiresAt?: number;
   memberUntil?: number | null;
+  /** ADR 621 §5: `'guest'` (the default when absent) or `null` for an invite that admits members. */
+  ceiling?: MemberCeiling | null;
 }
 
 /** Mint one invite. Returns the plaintext link value and room code exactly once. */
@@ -261,13 +271,14 @@ export async function mintInvite(
     failures: 0,
     expires_at: expiresAt,
     member_until: input.memberUntil ?? null,
+    ceiling: input.ceiling === undefined ? 'guest' : input.ceiling,
     created_by: input.createdBy,
     created_at: now,
     revoked_at: null,
   };
   await db.run(
-    `INSERT INTO team_invites (id, team_id, selector, secret_hash, code_mac, max_uses, uses, fail_budget, failures, expires_at, member_until, created_by, created_at, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO team_invites (id, team_id, selector, secret_hash, code_mac, max_uses, uses, fail_budget, failures, expires_at, member_until, ceiling, created_by, created_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id,
       row.team_id,
@@ -280,6 +291,7 @@ export async function mintInvite(
       row.failures,
       row.expires_at,
       row.member_until,
+      row.ceiling ?? null,
       row.created_by,
       row.created_at,
       row.revoked_at,

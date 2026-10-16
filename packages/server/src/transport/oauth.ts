@@ -20,7 +20,13 @@ import { noteRequestFailure } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { checkInvite, consumeInvite } from '../store/invites.js';
-import { addMember, authMember, getMemberByName, memberStandingRefusal } from '../store/members.js';
+import {
+  addMember,
+  authMember,
+  getMemberByName,
+  memberStandingRefusal,
+  setMemberCeiling,
+} from '../store/members.js';
 import {
   burnUnexchangedCodes,
   chainMember,
@@ -827,13 +833,19 @@ export async function handleOAuthRoutes(
             : {}),
         });
         // `added.token` (the member's mscr_) is dropped here on purpose: never shown, never logged.
+        // ADR 621 §5: the invite's ceiling rides onto every member it admits, in this transaction.
+        const ceiling = check.invite.ceiling ?? null;
+        if (ceiling !== null) {
+          await setMemberCeiling(t, added.row.id, ceiling);
+          added.row.ceiling = ceiling;
+        }
         await consumeInvite(t, check.invite.id);
         await appendAudit(t, team.id, {
           actor: added.row.name,
           action: 'member.invite_admitted',
           target: check.invite.id,
           result: 'allow',
-          detail: { ...auditClientKind(clientId), via: check.via },
+          detail: { ...auditClientKind(clientId), via: check.via, ceiling },
         });
         return { row: added.row, via: check.via };
       });

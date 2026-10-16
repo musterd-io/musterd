@@ -1,6 +1,6 @@
 import { GENERALIST_CAPABILITIES, type Capabilities } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { scopedToolNames, WRITE_TOOLS } from './scope.js';
+import { scopedToolNames, TALK_ONLY_TOOLS, WRITE_TOOLS } from './scope.js';
 import { TOOL_NAMES } from './toolNames.js';
 
 /**
@@ -76,5 +76,29 @@ describe('scopedToolNames (ADR 144 inc 5)', () => {
     const full = scopedToolNames(GENERALIST_CAPABILITIES).length;
     const scoped = scopedToolNames(muted).length;
     expect(full - scoped).toBeGreaterThanOrEqual(10);
+  });
+});
+
+/** ADR 621 §8: a talk-only seat (a guest) is offered the talk surface and nothing else. */
+describe('scopedToolNames — talk-only (ADR 621)', () => {
+  const guest: Capabilities = { ...GENERALIST_CAPABILITIES, can_coordinate: false };
+
+  it('renders only the talk tools, in registration order', () => {
+    const names = scopedToolNames(guest);
+    expect(new Set(names)).toEqual(new Set(TOOL_NAMES.filter((t) => TALK_ONLY_TOOLS.has(t))));
+    expect(names).toEqual(TOOL_NAMES.filter((t) => names.includes(t)));
+  });
+
+  it('never offers a lane, goal, seed, memory, report or insight tool', () => {
+    for (const name of scopedToolNames(guest))
+      expect(name).not.toMatch(/^(lane_|team_goal|team_seed|team_memory|team_report|team_insight)/);
+  });
+
+  it('a muted talk-only seat also loses team_send', () => {
+    expect(scopedToolNames({ ...guest, can_message: 'none' })).not.toContain('team_send');
+  });
+
+  it('every TALK_ONLY_TOOLS entry is a real registered tool', () => {
+    for (const t of TALK_ONLY_TOOLS) expect(TOOL_NAMES).toContain(t);
   });
 });

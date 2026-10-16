@@ -162,11 +162,13 @@ function readCapabilities(v: unknown): Capabilities | undefined | typeof FAIL {
   const declared_resource_scopes = strings(v['declared_resource_scopes']);
   // Absent reads as the schema default (pre-459 blobs keep parsing); a present non-boolean fails.
   const can_create_agents = v['can_create_agents'];
+  const can_coordinate = v['can_coordinate']; // ADR 621; absent = true, like can_create_agents
   if (
     typeof v['is_admin'] !== 'boolean' ||
     typeof v['can_flag_urgent'] !== 'boolean' ||
     typeof v['can_observe'] !== 'boolean' ||
     (can_create_agents !== undefined && typeof can_create_agents !== 'boolean') ||
+    (can_coordinate !== undefined && typeof can_coordinate !== 'boolean') ||
     can_message === undefined ||
     visibility_level === undefined ||
     tool_allowlist === undefined ||
@@ -179,6 +181,7 @@ function readCapabilities(v: unknown): Capabilities | undefined | typeof FAIL {
     can_flag_urgent: v['can_flag_urgent'],
     can_observe: v['can_observe'],
     can_create_agents: can_create_agents ?? true,
+    can_coordinate: can_coordinate ?? true,
     can_message,
     visibility_level,
     tool_allowlist: [...tool_allowlist],

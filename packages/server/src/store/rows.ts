@@ -4,7 +4,9 @@ import {
   WorkingHoursSchema,
   type Capabilities,
   CapabilitiesSchema,
+  clampNarrow,
   GENERALIST_CAPABILITIES,
+  GUEST_CEILING,
   type Member,
   type MemberKind,
 } from '@musterd/protocol';
@@ -64,6 +66,10 @@ export interface MemberRow {
   /** Resolved effective capabilities as JSON (ADR 070), projected by reconcile from role defaults ⊕
    * per-seat narrowing. NULL ⇒ the generalist default (a db-only or not-yet-reconciled seat). */
   capabilities: string | null;
+  /** A ceiling applied at read time (ADR 621 §4): `'guest'` clamps the projected capabilities with
+   * `GUEST_CEILING`, so reconcile, a role file or a seat file cannot widen it; only an admin clears
+   * it. NULL ⇒ no ceiling. An unrecognised string reads as `'guest'`, the least it could mean. */
+  ceiling?: string | null;
   /** v0.3 P3 (ADR 076): sha256 of this human's credential. NULL for agent seats / pre-P3 rows. */
   credential_hash: string | null;
   /** Sticky why-offline (ADR 141): `disconnected` | `signed_off`. NULL ⇒ never stamped / cleared on attach. */
@@ -173,10 +179,20 @@ export function resolveAccountStatus(row: MemberRow): AccountStatus {
  *  reads through here, so the clamp is repeated at the read — a row projected before the write-side
  *  clamp (or written by any other path) still carries `is_admin` in its JSON. */
 export function resolveCapabilities(row: MemberRow): Capabilities {
-  const caps = row.capabilities
+  const projected = row.capabilities
     ? (CapabilitiesSchema.safeParse(JSON.parse(row.capabilities)).data ?? GENERALIST_CAPABILITIES)
     : GENERALIST_CAPABILITIES;
+  // ADR 621 §4: a ceiling clamps at the read, like `is_admin` below, so no projection widens it.
+  const caps =
+    row.ceiling !== null && row.ceiling !== undefined
+      ? clampNarrow(projected, GUEST_CEILING)
+      : projected;
   return caps.is_admin && row.kind !== 'human' ? { ...caps, is_admin: false } : caps;
+}
+
+/** True when a seat is talk-only (ADR 621): its effective capabilities forbid coordinating. */
+export function isTalkOnly(row: MemberRow): boolean {
+  return row.observer !== 1 && !resolveCapabilities(row).can_coordinate;
 }
 
 /**
@@ -233,6 +249,9 @@ export type MessageVisibility = 'full' | 'team' | 'broadcast' | 'public';
 export function messageVisibilityOf(row: MemberRow): MessageVisibility {
   if (resolveCapabilities(row).is_admin) return 'full';
   if (row.observer === 1) return resolveObserverScope(row);
+  // ADR 621 §7 / ADR 616 §4: a talk-only member (a guest) reads at `broadcast` grade. Its own acts
+  // stay visible to it: the history and fan-out branches union the party predicate (ADR 616 §5).
+  if (isTalkOnly(row)) return 'broadcast';
   return 'team';
 }
 

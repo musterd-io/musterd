@@ -77,6 +77,14 @@ const routes = [
     gates: [/await authAdmin\(ctx, slug, req\)/, /mintTeamInvite\(/],
   },
   {
+    // ADR 621 §6: lifting a guest's ceiling grants coordination, so only an admin moves it.
+    name: 'POST /teams/:slug/members/:name/ceiling',
+    source: http,
+    start: "const ceilingMatch = method === 'POST' ? rest.match(",
+    end: 'const inviteMatch = rest.match(',
+    gates: [/await authAdmin\(ctx, slug, req\)/, /setMemberCeiling\(/],
+  },
+  {
     name: 'POST /oauth/:team/authorize',
     source: oauth,
     start: "if (method === 'POST' && rest === '/authorize') {",

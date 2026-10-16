@@ -871,6 +871,23 @@ export async function markBound(db: Driver, id: string): Promise<void> {
 }
 
 /**
+ * Set or clear a member's ceiling (ADR 621 §4–6). Not a capability write: the ceiling is applied at
+ * read time by `resolveCapabilities`, so reconcile — the single writer of `capabilities` — cannot
+ * widen it. Callers are the invite admit path and the admin-only ceiling route, which audits it.
+ */
+export async function setMemberCeiling(
+  db: Driver,
+  id: string,
+  ceiling: string | null,
+): Promise<void> {
+  await db.run('UPDATE members SET ceiling = ?, updated_at = ? WHERE id = ?', [
+    ceiling,
+    Date.now(),
+    id,
+  ]);
+}
+
+/**
  * Project a seat's governance state onto its member row (ADR 070, v0.3 P1). Kept **separate** from the
  * identity/mint paths so reconcile is the single writer of capabilities + the admin account-status
  * override, and the mint/revive/db-only paths stay untouched (their rows default to NULL ⇒

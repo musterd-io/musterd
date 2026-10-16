@@ -152,6 +152,7 @@ import {
   SyncHaltRequestSchema,
   SyncHoldRequestSchema,
   CalendarEntryInputSchema,
+  MemberCeilingSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -319,6 +320,7 @@ import {
   newSecret,
   rotateToken,
   setAvailability,
+  setMemberCeiling,
   setMemberGovernance,
   setMemberHue,
   teamHasAdmin,
@@ -436,6 +438,7 @@ import {
   resolveAccountStatus,
   resolveCapabilities,
   toMember,
+  isTalkOnly,
 } from '../store/rows.js';
 import {
   answerSeedClarification,
@@ -555,6 +558,7 @@ import {
   tellSponsorOfProvision,
   unhostFailedProvision,
 } from './sponsoredAgentMint.js';
+import { hasBearer, talkOnlyAllows } from './talkOnly.js';
 
 /**
  * The content-coding negotiated for this response from its request's `Accept-Encoding`, set once at
@@ -2810,6 +2814,19 @@ export async function handleHttp(
       const known = await getTeamBySlug(operatorCtx(rootCtx).db, slug);
       const ctx = known ? teamCtx(rootCtx, known.id) : rootCtx;
 
+      // ADR 621 §2: a talk-only seat reaches only the talk routes. Checked for every authenticated
+      // caller of a non-talk route (fail closed — any member, agents included, can be narrowed);
+      // the route then re-authenticates as it always has. Talk routes skip the lookup.
+      if (known && !talkOnlyAllows(method, rest) && hasBearer(req.headers['authorization'])) {
+        const caller = await tryAuth(ctx, slug, req);
+        if (caller && isTalkOnly(caller)) {
+          throw new MusterdError(
+            'forbidden',
+            `talk-only seat: ${method} ${rest || '/'} is coordination`,
+          );
+        }
+      }
+
       if (method === 'GET' && rest === '') {
         const team = await requireTeam(ctx.db, slug);
         const viewer = await rosterViewer(ctx, slug, req);
@@ -3792,6 +3809,8 @@ export async function handleHttp(
             fail_budget: z.number().int().min(1).max(INVITE_DEFAULTS.failBudgetMax).optional(),
             expires_at: z.number().int().positive().optional(),
             member_until: z.number().int().positive().nullable().optional(),
+            // ADR 621 §5: who the invite admits. Absent ⇒ `guest` (talk-only); `member` ⇒ full.
+            ceiling: z.enum(['guest', 'member']).optional(),
           })
           .strict();
         const body = parseOrBadRequest(InviteBody, await readJson(req));
@@ -3811,6 +3830,7 @@ export async function handleHttp(
           ...(body.fail_budget !== undefined ? { failBudget: body.fail_budget } : {}),
           ...(body.expires_at !== undefined ? { expiresAt: body.expires_at } : {}),
           ...(body.member_until !== undefined ? { memberUntil: body.member_until } : {}),
+          ceiling: body.ceiling === 'member' ? null : 'guest',
         });
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -3823,6 +3843,7 @@ export async function handleHttp(
             fail_budget: minted.invite.fail_budget,
             expires_at: minted.invite.expires_at,
             member_until: minted.invite.member_until,
+            ceiling: minted.invite.ceiling ?? null,
           },
         });
         return sendJson(res, 201, minted);
@@ -3830,6 +3851,32 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/invites') {
         const { team } = await authAdmin(ctx, slug, req);
         return sendJson(res, 200, { invites: await listTeamInvites(ctx.db, team.id) });
+      }
+      // ADR 621 §6: an admin sets or clears a member's ceiling — promote a guest, or narrow a member
+      // admitted before ADR 621. Admin-only and audited; the ceiling applies at read time, so the
+      // change takes effect on the member's next request.
+      const ceilingMatch = method === 'POST' ? rest.match(/^\/members\/([^/]+)\/ceiling$/) : null;
+      if (ceilingMatch) {
+        const { team, member: admin } = await authAdmin(ctx, slug, req);
+        const body = parseOrBadRequest(
+          z.object({ ceiling: MemberCeilingSchema.nullable() }).strict(),
+          await readJson(req),
+        );
+        const name = decodeURIComponent(ceilingMatch[1]!);
+        const target = await getMemberByName(ctx.db, team.id, name);
+        if (!target || target.left_at !== null)
+          throw new MusterdError('not_found', `no member "${name}" on team "${slug}"`);
+        if (target.observer === 1)
+          throw new MusterdError('validation', 'an observer seat has a grade, not a ceiling');
+        await setMemberCeiling(ctx.db, target.id, body.ceiling);
+        await appendAudit(ctx.db, team.id, {
+          actor: admin.name,
+          action: 'member.ceiling_set',
+          target: target.name,
+          result: 'allow',
+          detail: { from: target.ceiling ?? null, to: body.ceiling },
+        });
+        return sendJson(res, 200, { member: target.name, ceiling: body.ceiling });
       }
       const inviteMatch = rest.match(/^\/invites\/([^/]+)$/);
       if (method === 'DELETE' && inviteMatch) {
