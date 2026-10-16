@@ -42,6 +42,23 @@ describe('host price table (ADR 583 Consequences — one table, dated provenance
     );
   });
 
+  it('muse-wonder mirrors the published API rate for standard and contributor ids (ADR 619)', () => {
+    // Owner decision: Meta publishes no contributor arm for Wonder; the
+    // contributor-tagged id mirrors the standard published rate.
+    expect(
+      priceUsage('muse-wonder-1.0', {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_input_tokens: 1_000_000,
+      }),
+    ).toBeCloseTo(4.0 + 20.0 + 0.8, 6);
+    expect(priceRowFor('muse-wonder-1.0-contributor')?.prefix).toBe('muse-wonder-1.0-contributor');
+    expect(priceRowFor('muse-wonder-1.0')?.prefix).toBe('muse-wonder-1.0');
+    expect(
+      priceUsage('muse-wonder-1.0-contributor', { input_tokens: 1_000_000, output_tokens: 0 }),
+    ).toBeCloseTo(4.0, 6);
+  });
+
   it('every row names where its number was read', () => {
     for (const row of PRICE_ROWS) expect(row.source).toMatch(/20\d\d/);
   });
