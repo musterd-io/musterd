@@ -24,7 +24,8 @@ describe('which background loops a server runs (1C task 8)', () => {
     );
   });
 
-  it.each(['roster_watch', 'footprint', 'sync_push', 'sync_pull', 'trace_push'])('cloud does not run %s', (loop) => {
+  const machineLoops = ['roster_watch', 'footprint', 'sync_push', 'sync_pull', 'trace_push'];
+  it.each(machineLoops)('cloud does not run %s', (loop) => {
     expect(loopsFor('cloud').has(loop as never)).toBe(false);
   });
 });
