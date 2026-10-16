@@ -366,6 +366,7 @@ describe('harness registry', () => {
       'codex',
       'cursor',
       'grok',
+      'muse',
       'opencode',
     ]);
     expect(claudeCode.surface).toBe('claude-code');

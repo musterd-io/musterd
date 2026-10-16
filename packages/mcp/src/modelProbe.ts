@@ -31,6 +31,7 @@ export const PROBE_CAPABLE_SURFACES = [
   'claude-code',
   'codex',
   'grok',
+  'muse',
   'opencode',
 ] as const satisfies readonly Surface[];
 

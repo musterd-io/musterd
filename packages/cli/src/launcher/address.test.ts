@@ -26,6 +26,13 @@ describe('harness labels', () => {
   });
 
   it('lists the launchable harnesses in registry order', () => {
-    expect(LAUNCHABLE_HARNESSES).toEqual(['claude-code', 'cursor', 'codex', 'opencode', 'grok']);
+    expect(LAUNCHABLE_HARNESSES).toEqual([
+      'claude-code',
+      'cursor',
+      'codex',
+      'opencode',
+      'grok',
+      'muse',
+    ]);
   });
 });

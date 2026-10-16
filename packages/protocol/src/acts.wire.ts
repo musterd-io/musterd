@@ -86,7 +86,7 @@ export function isObligationAct(act: Act, directed: boolean): boolean {
 /** Surfaces a Member can be present on. v0.1 implements cli/claude-code/codex; the rest are
  *  reserved. `musterd` (ADR 131 §7) is the native harness — the agent loop hosted in `musterd host`.
  *  `opencode` (ADR 321) and `grok` (ADR 352) are first-class CLI harnesses — enumeration, wake, and
- *  provisioning all speak their names. */
+ *  provisioning all speak their names. `muse` (ADR 619) is Meta's Muse Code CLI — same standing. */
 export const SURFACES = [
   'cli',
   'claude-code',
@@ -99,6 +99,7 @@ export const SURFACES = [
   'slack',
   'other',
   'musterd',
+  'muse',
 ] as const;
 export type Surface = (typeof SURFACES)[number];
 
