@@ -8,9 +8,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { roleSkillWireLine, runSessionProbe } from './doctor.js';
 import { defaultHarnessContext, type HarnessContext } from './reconcile/context.js';
 import {
+  absentRoleSkillFragments,
   applyRoleSkill,
   CLAUDE_BRIDGE,
   CURSOR_BRIDGE,
@@ -19,6 +21,8 @@ import {
   observeRoleSkill,
   resolveSeatRoleSkills,
   roleSkillFragments,
+  roleSkillNeedsWireNote,
+  roleSkillWireSentence,
   skillDescription,
 } from './roleSkills.js';
 
@@ -153,5 +157,74 @@ describe('role-skill bridges as reconciler fragments (ADR 586 §4)', () => {
     expect(
       roleSkillFragments(defaultHarnessContext(worktree), 'claude-code', CLAUDE_BRIDGE, 'c'),
     ).toEqual([]);
+  });
+});
+
+describe('a missing role-skill bridge is visible without writing it', () => {
+  function designer(): void {
+    write(join(home, '.musterd', 'seats', 'fifty.toml'), 'kind = "agent"\nrole = "designer"\n');
+    skill('designer', 'Owns what people see.');
+  }
+
+  it('names an absent bridge, and goes quiet once the file exists or the harness is not provisioned', () => {
+    designer();
+    const ctx = {
+      ...defaultHarnessContext(worktree, process.env, { team: 'alpha' }),
+      roleSkills: [{ skill: 'designer', description: 'Owns what people see.' }],
+    };
+    const provisioned = (id: string) => id === 'claude-code';
+    expect(absentRoleSkillFragments(ctx, ['claude-code'], provisioned)).toEqual([
+      'role-skill.designer',
+    ]);
+    expect(roleSkillWireSentence(['role-skill.designer'])).toBe(
+      'musterd: role-skill.designer → needs wire',
+    );
+    expect(roleSkillNeedsWireNote('claude-code', 'role-skill.designer', 'applied')).toBe(
+      'claude-code role-skill.designer → needs wire',
+    );
+    expect(roleSkillNeedsWireNote('claude-code', 'mcp.musterd', 'applied')).toBeNull();
+    const [intent] = roleSkillFragments(ctx, 'claude-code', CLAUDE_BRIDGE, 'c');
+    applyRoleSkill(ctx.fs, worktree, intent!, CLAUDE_BRIDGE, 'write');
+    expect(absentRoleSkillFragments(ctx, ['claude-code'], provisioned)).toEqual([]);
+    expect(absentRoleSkillFragments(ctx, ['claude-code'], () => false)).toEqual([]);
+  });
+
+  it('the session-start probe prints the line and still exits 0', async () => {
+    designer();
+    const prev = process.env['MUSTERD_CONFIG'];
+    process.env['MUSTERD_CONFIG'] = join(worktree, 'config.json');
+    write(join(worktree, 'config.json'), JSON.stringify({ rosterHome: { alpha: home } }));
+    write(
+      join(worktree, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: '',
+        desired: ['claude-code'],
+        contributions: {},
+        provisionedAt: '2026-10-12T00:00:00.000Z',
+      }),
+    );
+    write(join(worktree, '.claude', 'settings.local.json'), '{}\n');
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string) => {
+      lines.push(String(chunk));
+      return true;
+    }) as never);
+    try {
+      expect(roleSkillWireLine(worktree)).toBe('musterd: role-skill.designer → needs wire');
+      const code = await runSessionProbe({
+        cliRef: '',
+        cwd: worktree,
+        selfHeal: () => ({ ran: false, report: null, line: '' }),
+        mirror: async () => ({ changed: [], servers: [] }),
+        refreshDrift: () => undefined,
+      });
+      expect(code).toBe(0);
+      expect(lines.join('')).toBe('musterd: role-skill.designer → needs wire\n');
+    } finally {
+      spy.mockRestore();
+      if (prev === undefined) delete process.env['MUSTERD_CONFIG'];
+      else process.env['MUSTERD_CONFIG'] = prev;
+    }
   });
 });

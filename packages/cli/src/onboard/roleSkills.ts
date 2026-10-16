@@ -206,6 +206,62 @@ export function isRoleSkillFragment(fragmentKey: string): boolean {
   return fragmentKey.startsWith(FRAGMENT_PREFIX);
 }
 
+/** Harnesses that catalog a skill through a bridge file. The others read `.agents/skills/` directly. */
+const BRIDGE_BY_HARNESS: Partial<Record<HarnessId, BridgeShape>> = {
+  'claude-code': CLAUDE_BRIDGE,
+  cursor: CURSOR_BRIDGE,
+  grok: GROK_BRIDGE,
+};
+
+/**
+ * A doctor note for one role-skill fragment the reconciler would create. `applied` is the engine's
+ * word for that plan; status renders it as `→ needs wire` ({@link verdictOf} in harnessVerdict.ts).
+ */
+export function roleSkillNeedsWireNote(
+  harness: string,
+  fragmentKey: string,
+  planned: string,
+): string | null {
+  if (planned !== 'applied' || !isRoleSkillFragment(fragmentKey)) return null;
+  return `${harness} ${fragmentKey} → needs wire`;
+}
+
+/**
+ * Role-skill fragments whose bridge file is absent. The session-start probe uses this instead of
+ * `inspectHarnesses`: that inspection shells out, and the probe is file I/O only (ADR 408). A file
+ * that is present — drifted, unmanaged, or in place — is not this list. The probe names the absence
+ * and does not write the bridge; writing it is `wire` / `harness configure`, which take the lease.
+ *
+ * `provisioned` is the harness's own `refreshHooks.applies`: a selected harness with no project
+ * files yet is not this probe's to nag, because `wire` would not create a first install either.
+ */
+export function absentRoleSkillFragments(
+  ctx: HarnessContext,
+  desired: readonly string[],
+  provisioned: (harness: string) => boolean,
+): string[] {
+  const wrapped = ctx.roleSkills ? ctx : withRoleSkills(ctx);
+  const keys: string[] = [];
+  for (const id of desired) {
+    const shape = BRIDGE_BY_HARNESS[id];
+    if (!shape || !provisioned(id)) continue;
+    for (const intent of roleSkillFragments(wrapped, id, shape, 'role-skill-probe')) {
+      if (observeRoleSkill(wrapped.fs, wrapped.worktreeRoot, intent, shape).state === 'absent') {
+        keys.push(intent.fragmentKey);
+      }
+    }
+  }
+  return [...new Set(keys)];
+}
+
+/** One session-start line, bounded: at most four fragment keys, then a count. Empty when none. */
+export function roleSkillWireSentence(keys: readonly string[]): string {
+  if (keys.length === 0) return '';
+  const shown = keys.slice(0, 4);
+  const more = keys.length > shown.length ? ` +${keys.length - shown.length} more` : '';
+  return `musterd: ${shown.join(', ')}${more} → needs wire`;
+}
+
 /** The intent's file map, or — for a release rebuilt from the ledger, which has no payload — its
  *  paths alone, which is all observing what is on disk and removing it need. */
 function filesOf(intent: FragmentIntent, shape: BridgeShape): Record<string, string> {
