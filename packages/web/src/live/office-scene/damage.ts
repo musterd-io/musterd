@@ -390,230 +390,104 @@ export function makeRecorder(opts: {
     return obj;
   }
 
-  const O = {
-    save: op('save'),
-    restore: op('restore'),
-    translate: op('translate'),
-    scale: op('scale'),
-    rotate: op('rotate'),
-    transform: op('transform'),
-    setTransform: op('setTransform'),
-    resetTransform: op('resetTransform'),
-    setLineDash: op('setLineDash'),
-    beginPath: op('beginPath'),
-    moveTo: op('moveTo'),
-    lineTo: op('lineTo'),
-    closePath: op('closePath'),
-    bezierCurveTo: op('bezierCurveTo'),
-    quadraticCurveTo: op('quadraticCurveTo'),
-    arc: op('arc'),
-    arcTo: op('arcTo'),
-    ellipse: op('ellipse'),
-    rect: op('rect'),
-    roundRect: op('roundRect'),
-    fill: op('fill'),
-    stroke: op('stroke'),
-    clip: op('clip'),
-    fillRect: op('fillRect'),
-    strokeRect: op('strokeRect'),
-    clearRect: op('clearRect'),
-    fillText: op('fillText'),
-    strokeText: op('strokeText'),
-    drawImage: op('drawImage'),
-    linear: op('createLinearGradient'),
-    radial: op('createRadialGradient'),
-    conic: op('createConicGradient'),
-    pattern: op('createPattern'),
-  };
   const canvas = { width: opts.width, height: opts.height };
-
-  /* eslint-disable prefer-rest-params -- `arguments` avoids an array per call on the hot path */
-  const ctx: Record<string, unknown> = {
-    canvas,
-    save() {
-      h.word(O.save);
-      stack.push(clone(st));
-    },
-    restore() {
-      h.word(O.restore);
-      st = stack.pop() ?? st;
-    },
-    translate(x: number, y: number) {
-      call(O.translate, arguments);
-      st.m = mul(st.m, [1, 0, 0, 1, x, y]);
-    },
-    scale(x: number, y: number) {
-      call(O.scale, arguments);
-      st.m = mul(st.m, [x, 0, 0, y, 0, 0]);
-    },
-    rotate(r: number) {
-      call(O.rotate, arguments);
-      const c = Math.cos(r);
-      const s = Math.sin(r);
-      st.m = mul(st.m, [c, s, -s, c, 0, 0]);
-    },
-    transform(a: number, b: number, c: number, d: number, e: number, f: number) {
-      call(O.transform, arguments);
-      st.m = mul(st.m, [a, b, c, d, e, f]);
-    },
-    setTransform(
-      a: number | DOMMatrix2DInit,
-      b?: number,
-      c?: number,
-      d?: number,
-      e?: number,
-      f?: number,
-    ) {
-      if (typeof a === 'object') {
-        st.m = [a.a ?? 1, a.b ?? 0, a.c ?? 0, a.d ?? 1, a.e ?? 0, a.f ?? 0];
-      } else st.m = [a, b!, c!, d!, e!, f!];
-      h.word(O.setTransform);
-      for (const n of st.m) h.num(n);
-    },
-    resetTransform() {
-      h.word(O.resetTransform);
-      st.m = [1, 0, 0, 1, 0, 0];
-    },
-    getTransform() {
-      return { a: st.m[0], b: st.m[1], c: st.m[2], d: st.m[3], e: st.m[4], f: st.m[5] };
-    },
-    setLineDash(d: number[]) {
-      call(O.setLineDash, arguments);
-      st.dash = [...d];
-    },
-    getLineDash() {
-      return [...st.dash];
-    },
-    beginPath() {
-      h.word(O.beginPath);
-      touched = true;
-      clearPath();
-    },
-    moveTo(x: number, y: number) {
-      call(O.moveTo, arguments);
-      pathCall(O.moveTo, arguments, true);
-      pt(x, y);
-    },
-    lineTo(x: number, y: number) {
-      call(O.lineTo, arguments);
-      pathCall(O.lineTo, arguments, true);
-      pt(x, y);
-    },
-    closePath() {
-      h.word(O.closePath);
-      pathCall(O.closePath, arguments, true);
-    },
-    bezierCurveTo(a: number, b: number, c: number, d: number, e: number, f: number) {
-      call(O.bezierCurveTo, arguments);
-      pathCall(O.bezierCurveTo, arguments, true);
-      pt(a, b);
-      pt(c, d);
-      pt(e, f);
-    },
-    quadraticCurveTo(a: number, b: number, c: number, d: number) {
-      call(O.quadraticCurveTo, arguments);
-      pathCall(O.quadraticCurveTo, arguments, true);
-      pt(a, b);
-      pt(c, d);
-    },
-    arc(x: number, y: number, r: number) {
-      call(O.arc, arguments);
-      pathCall(O.arc, arguments, true);
-      box(x - r, y - r, 2 * r, 2 * r);
-    },
-    arcTo(a: number, b: number, c: number, d: number, r: number) {
-      call(O.arcTo, arguments);
-      pathCall(O.arcTo, arguments, true);
-      box(a - r, b - r, 2 * r, 2 * r);
-      box(c - r, d - r, 2 * r, 2 * r);
-    },
-    ellipse(x: number, y: number, rx: number, ry: number) {
-      call(O.ellipse, arguments);
-      pathCall(O.ellipse, arguments, true);
-      const r = Math.max(Math.abs(rx), Math.abs(ry));
-      box(x - r, y - r, 2 * r, 2 * r);
-    },
-    rect(x: number, y: number, w: number, hh: number) {
-      call(O.rect, arguments);
-      pathCall(O.rect, arguments, true);
-      box(x, y, w, hh);
-    },
-    roundRect(x: number, y: number, w: number, hh: number) {
-      call(O.roundRect, arguments);
-      pathCall(O.roundRect, arguments, true);
-      box(x, y, w, hh);
-    },
-    fill() {
-      call(O.fill, arguments);
-      pathCall(O.fill, arguments, false);
-      paintPath(0);
-    },
-    stroke() {
-      call(O.stroke, arguments);
-      pathCall(O.stroke, arguments, false);
-      paintPath(strokeGrow());
-    },
-    clip() {
-      call(O.clip, arguments);
-      pathCall(O.clip, arguments, false);
-      const x = new Hasher();
-      x.word(st.clip);
-      x.num(px0);
-      x.num(py0);
-      x.num(px1);
-      x.num(py1);
-      st.clip = x.a;
-    },
-    isPointInPath() {
-      return false;
-    },
-    fillRect(x: number, y: number, w: number, hh: number) {
-      call(O.fillRect, arguments);
-      paintBox(x, y, w, hh, 0);
-    },
-    strokeRect(x: number, y: number, w: number, hh: number) {
-      call(O.strokeRect, arguments);
-      paintBox(x, y, w, hh, strokeGrow());
-    },
-    clearRect(x: number, y: number, w: number, hh: number) {
-      call(O.clearRect, arguments);
-      paintBox(x, y, w, hh, 0);
-    },
-    fillText(s: unknown, x: number, y: number) {
-      call(O.fillText, arguments);
-      text(s, x, y, 0);
-    },
-    strokeText(s: unknown, x: number, y: number) {
-      call(O.strokeText, arguments);
-      text(s, x, y, strokeGrow());
-    },
-    measureText(s: string) {
-      return { width: measure(String(st.v[I_FONT]), String(s)) };
-    },
-    drawImage(img: { width?: number; height?: number }, ...a: number[]) {
-      call(O.drawImage, arguments);
-      if (a.length >= 8) paintBox(a[4]!, a[5]!, a[6]!, a[7]!, 0);
-      else if (a.length >= 4) paintBox(a[0]!, a[1]!, a[2]!, a[3]!, 0);
-      else paintBox(a[0]!, a[1]!, Number(img.width) || 0, Number(img.height) || 0, 0);
-    },
-    createLinearGradient() {
-      call(O.linear, arguments);
-      return makePaint('linear', arguments);
-    },
-    createRadialGradient() {
-      call(O.radial, arguments);
-      return makePaint('radial', arguments);
-    },
-    createConicGradient() {
-      call(O.conic, arguments);
-      return makePaint('conic', arguments);
-    },
-    createPattern() {
-      call(O.pattern, arguments);
-      return makePaint('pattern', arguments);
-    },
+  const ctx: Record<string, unknown> = { canvas };
+  type Args = number[];
+  /*
+   * The context calls the room uses, one line each: what the call does to the state or the unit's
+   * box. `def` adds the bookkeeping every call shares — its op code and arguments go in the unit's
+   * hash, and a call that builds (PATH) or paints with (USE) the current path goes in the path's.
+   * Written as a table, not 35 hand-rolled methods, because every byte of it ships (ADR 151).
+   */
+  const PATH = 1;
+  const USE = 2;
+  const def = (name: string, flags: number, fn: (...a: Args) => unknown): void => {
+    const code = op(name);
+    ctx[name] = function (this: unknown) {
+      // eslint-disable-next-line prefer-rest-params -- no array per call on the hot path
+      const a = arguments as unknown as Args;
+      call(code, a);
+      if (flags) pathCall(code, a, flags === PATH);
+      return Reflect.apply(fn, null, a);
+    };
   };
-  /* eslint-enable prefer-rest-params */
+  const tf = (n: M): void => {
+    st.m = mul(st.m, n);
+  };
+  def('save', 0, () => stack.push(clone(st)));
+  def('restore', 0, () => {
+    st = stack.pop() ?? st;
+  });
+  def('translate', 0, (x, y) => tf([1, 0, 0, 1, x!, y!]));
+  def('scale', 0, (x, y) => tf([x!, 0, 0, y!, 0, 0]));
+  def('rotate', 0, (r) => tf([Math.cos(r!), Math.sin(r!), -Math.sin(r!), Math.cos(r!), 0, 0]));
+  def('transform', 0, (a, b, c, d, e, f) => tf([a!, b!, c!, d!, e!, f!]));
+  def('setTransform', 0, (...a) => {
+    const o = a[0] as unknown as DOMMatrix2DInit | number;
+    st.m =
+      typeof o === 'object' ? [o.a ?? 1, o.b ?? 0, o.c ?? 0, o.d ?? 1, o.e ?? 0, o.f ?? 0] : (a.slice(0, 6) as M);
+  });
+  def('resetTransform', 0, () => {
+    st.m = [1, 0, 0, 1, 0, 0];
+  });
+  def('setLineDash', 0, (...d) => {
+    st.dash = [...((d[0] as unknown as number[]) ?? [])];
+  });
+  def('beginPath', 0, () => {
+    touched = true;
+    clearPath();
+  });
+  def('moveTo', PATH, pt);
+  def('lineTo', PATH, pt);
+  def('closePath', PATH, () => {});
+  def('bezierCurveTo', PATH, (a, b, c, d, e, f) => {
+    pt(a!, b!);
+    pt(c!, d!);
+    pt(e!, f!);
+  });
+  def('quadraticCurveTo', PATH, (a, b, c, d) => {
+    pt(a!, b!);
+    pt(c!, d!);
+  });
+  def('arc', PATH, (x, y, r) => box(x! - r!, y! - r!, 2 * r!, 2 * r!));
+  def('arcTo', PATH, (a, b, c, d, r) => {
+    box(a! - r!, b! - r!, 2 * r!, 2 * r!);
+    box(c! - r!, d! - r!, 2 * r!, 2 * r!);
+  });
+  def('ellipse', PATH, (x, y, rx, ry) => {
+    const r = Math.max(Math.abs(rx!), Math.abs(ry!));
+    box(x! - r, y! - r, 2 * r, 2 * r);
+  });
+  def('rect', PATH, box as (...a: Args) => void);
+  def('roundRect', PATH, box as (...a: Args) => void);
+  def('fill', USE, () => paintPath(0));
+  def('stroke', USE, () => paintPath(strokeGrow()));
+  def('clip', USE, () => {
+    const x = new Hasher();
+    x.word(st.clip);
+    x.num(px0);
+    x.num(py0);
+    x.num(px1);
+    x.num(py1);
+    st.clip = x.a;
+  });
+  def('fillRect', 0, (x, y, w, hh) => paintBox(x!, y!, w!, hh!, 0));
+  def('strokeRect', 0, (x, y, w, hh) => paintBox(x!, y!, w!, hh!, strokeGrow()));
+  def('clearRect', 0, (x, y, w, hh) => paintBox(x!, y!, w!, hh!, 0));
+  def('fillText', 0, (s, x, y) => text(s, x!, y!, 0));
+  def('strokeText', 0, (s, x, y) => text(s, x!, y!, strokeGrow()));
+  def('drawImage', 0, (...a) => {
+    const img = a[0] as unknown as { width?: number; height?: number };
+    if (a.length >= 9) paintBox(a[5]!, a[6]!, a[7]!, a[8]!, 0);
+    else if (a.length >= 5) paintBox(a[1]!, a[2]!, a[3]!, a[4]!, 0);
+    else paintBox(a[1]!, a[2]!, Number(img.width) || 0, Number(img.height) || 0, 0);
+  });
+  for (const kind of ['Linear', 'Radial', 'Conic']) def(`create${kind}Gradient`, 0, (...a) => makePaint(kind, a));
+  def('createPattern', 0, (...a) => makePaint('pattern', a));
+  ctx.getTransform = () => ({ a: st.m[0], b: st.m[1], c: st.m[2], d: st.m[3], e: st.m[4], f: st.m[5] });
+  ctx.getLineDash = () => [...st.dash];
+  ctx.isPointInPath = () => false;
+  ctx.measureText = (s: string) => ({ width: measure(String(st.v[I_FONT]), String(s)) });
   for (const [i, k] of STATE_KEYS.entries()) {
     const code = op(k);
     Object.defineProperty(ctx, k, {

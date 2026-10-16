@@ -289,6 +289,25 @@ Readings:
   x11grab the box again sat a third idle. The single-thread draw is still the wall, so dirty-rect
   repaint (lane `01M4VS1SJQ`) stays the next lever, ahead of increment 2.
 
+## Dirty-rect repaint, laptop numbers (mac headless Chrome `--disable-gpu`, 4× CPU throttle, 2026-10-15)
+
+Increment 3 of the smooth-capture spec (lane `01M4VS1SJQ`, [ADR 625](../decisions/625-broadcast-dirty-rect-repaint.md)). **Not the bar:** a laptop under 4× throttle stands in for the box's single thread, and other workspaces' builds were running on the same machine, so rounds of the same arm differ by up to ~25%. The bench run is increment 4's. `/office-preview` at 1920×1028, 15 s windows, CDP `Performance.getMetrics` task and script time divided by draws; "sprites" includes the furniture sprites this increment added.
+
+| Room | Arm | Task ms / draw (two rounds) | Script ms / draw | Draws / s | Canvas repainted |
+| --- | --- | --- | --- | --- | --- |
+| seated (`quiet`) | direct (`sprites=0`) | 169.3 / 143.6 | 26.6 / 21.7 | 5.9 / 7.0 | 100% |
+| seated | sprites | 82.1 / 73.9 | 10.6 / 9.2 | 12.2 / 13.5 | 100% |
+| seated | sprites + dirty | 40.6 / 56.7 | 14.4 / 19.4 | 22.9 / 17.5 | ~7–10% |
+| choreographed | direct | 121.8 / 117.7 | 18.3 / 18.1 | 8.2 / 8.5 | 100% |
+| choreographed | sprites | 65.7 / 86.0 | 8.0 / 11.1 | 15.2 / 11.6 | 100% |
+| choreographed | sprites + dirty | 55.2 / 79.9 | 14.2 / 22.2 | 18.1 / 12.4 | ~35–40% |
+
+Readings:
+
+- **The measure pass is the cost.** It replays every unit's drawing JS to key and box it; that is the script column's rise. Before the static furniture became sprites the replay cancelled the raster saving outright (seated 79 → 66 ms, choreographed 68 → 79 ms, 2026-10-15 earlier the same day).
+- **The choreographed room is the hard case:** `/office-preview`'s loop walks most of the room at once, so a third of the canvas changes per frame. The bench fixture's one act every 3 s sits between the two rooms.
+- **Correctness:** `node scripts/perf/scene-pixel-check.mjs <dev> --dirty` — four moving rooms, worst frame 134 differing bytes, max Δ53, flat over the run. A partial frame is never byte-identical on Chrome; ADR 625 records why and the accepted bound.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being

@@ -20,11 +20,11 @@
  *     [--stage 1920x1080] [--images <dir>]   (pass baseUrl FIRST when using any valued flag)
  *   node scripts/perf/scene-pixel-check.mjs [baseUrl] --dirty [--secs 20] [--stage 1920x1080]
  *
- * `--dirty` checks the DIRTY-RECT repaint instead (smooth-capture spec lever 2, ADR <see below>):
+ * `--dirty` checks the DIRTY-RECT repaint instead (smooth-capture spec lever 2, ADR 625):
  * the room is left MOVING (`/office-preview?…&dirty`, its looping choreography), and for `--secs`
  * per state `__office.dirtyParity()` mirrors every frame's partial repaint offscreen and compares it
  * with a whole frame. Chrome antialiases a path differently when the clip cuts it, so a partial frame
- * is never byte-equal — that residue is a few pixels a frame and was accepted (ADR below). What this
+ * is never byte-equal — that residue is a few pixels a frame and was accepted (ADR 625). What this
  * mode fails on is what a person would see: a frame with a stale patch in it (`DIRTY_FRAME_MAX`
  * differing bytes), or a residue that builds up over the run instead of staying flat.
  *
@@ -305,14 +305,17 @@ if (DIRTY) {
   for (const state of DIRTY_MATRIX) {
     const url = `${BASE}/office-preview?${state.q}`;
     await send('Page.navigate', { url });
-    if (!(await waitForScene())) await die(2, `${state.name}: no dev office at ${url} (needs vite dev)`);
+    if (!(await waitForScene()))
+      await die(2, `${state.name}: no dev office at ${url} (needs vite dev)`);
     await new Promise((r) => setTimeout(r, 2000));
     const has = await evaluate('typeof window.__office.dirtyParity === "function"');
-    if (!has) await die(2, `${state.name}: no dirtyParity() — a DEV build of this commit is needed`);
+    if (!has)
+      await die(2, `${state.name}: no dirtyParity() — a DEV build of this commit is needed`);
     await evaluate('(window.__office.dirtyParity(true), 0)');
     await new Promise((r) => setTimeout(r, DIRTY_SECS * 1000));
     const p = JSON.parse(await evaluate('JSON.stringify(window.__office.dirtyParity(false))'));
-    if (!p || p.partial === 0) await die(2, `${state.name}: no partial frames were painted — nothing was checked`);
+    if (!p || p.partial === 0)
+      await die(2, `${state.name}: no partial frames were painted — nothing was checked`);
     const q = Math.max(1, Math.floor(p.series.length / 4));
     const mean = (a) => a.reduce((n, x) => n + x, 0) / Math.max(1, a.length);
     const head = mean(p.series.slice(0, q));
@@ -323,14 +326,26 @@ if (DIRTY) {
     const stale = p.worstFrame > DIRTY_FRAME_MAX;
     const deep = p.maxDelta > DIRTY_DELTA_MAX;
     const dense = p.beyond / p.partial > DIRTY_BEYOND_PER_FRAME;
-    rows.push({ state: state.name, ...p, head, tail, ok: !buildsUp && !stale && !deep && !dense, buildsUp, stale, deep, dense });
+    rows.push({
+      state: state.name,
+      ...p,
+      head,
+      tail,
+      ok: !buildsUp && !stale && !deep && !dense,
+      buildsUp,
+      stale,
+      deep,
+      dense,
+    });
   }
   for (const r of rows) {
     console.log(
       `${r.ok ? 'OK     ' : 'FAULT  '} ${r.state.padEnd(11)} frames ${r.frames} (partial ${r.partial})  ` +
         `with residue ${r.mismatched}  worst frame ${r.worstFrame} B  beyond1 ${r.beyond}  maxDelta ${r.maxDelta}  ` +
         `first-quarter ${r.head.toFixed(1)} B/frame → last-quarter ${r.tail.toFixed(1)}` +
-        (r.stale ? `  ← a frame over ${DIRTY_FRAME_MAX} B: a stale patch, first at (${r.first?.x},${r.first?.y})` : '') +
+        (r.stale
+          ? `  ← a frame over ${DIRTY_FRAME_MAX} B: a stale patch, first at (${r.first?.x},${r.first?.y})`
+          : '') +
         (r.buildsUp ? '  ← the residue builds up' : '') +
         (r.deep ? `  ← Δ${r.maxDelta} is an object's colour, not an edge step` : '') +
         (r.dense ? `  ← ${(r.beyond / r.partial).toFixed(1)} B beyond one step per frame` : ''),
