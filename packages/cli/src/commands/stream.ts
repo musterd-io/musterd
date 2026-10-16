@@ -27,6 +27,9 @@ import {
   describeStaleness,
   findRepoRoot,
   imageStaleness,
+  formatFlyExit,
+  parseFlyExit,
+  parseLaunchedMachine,
   parsePushedDigest,
   readCaptureImage,
   writeCaptureImage,
@@ -36,6 +39,7 @@ import {
   startedMachines,
   VM_SIZE,
   type Check,
+  type FlyExit,
 } from '../broadcast/hosted.js';
 import {
   FLAP_MAX,
@@ -457,6 +461,9 @@ async function startVerb(
     `${theme.accent('stream')} ${theme.meta(`${team} · via ${addr} · ${VM_SIZE} ${REGION}`)}\n`,
   );
   const args = launchArgs({ app: a.app, digest, addr, team, extra });
+  // Captured across every attempt so the `finally` can record whichever machine the attempt left,
+  // including one whose output named an id and then threw.
+  let launchedOutput = '';
 
   /**
    * Did this attempt leave a machine behind, and did it come up?
@@ -507,58 +514,65 @@ async function startVerb(
     return 'stuck';
   }
 
-  let result = await a.launch(args);
-  for (let attempt = 1; attempt <= LAUNCH_RETRIES && result.code !== 0; attempt++) {
-    if (!isUnpropagatedImage(result.output)) break;
-    const settled = await settleLeftoverMachine();
-    if (settled === 'started') {
+  try {
+    let result = await a.launch(args);
+    launchedOutput = result.output;
+    for (let attempt = 1; attempt <= LAUNCH_RETRIES && result.code !== 0; attempt++) {
+      if (!isUnpropagatedImage(result.output)) break;
+      const settled = await settleLeftoverMachine();
+      if (settled === 'started') {
+        a.out(
+          `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
+        );
+        return 0;
+      }
+      if (settled === 'stuck') {
+        throw new CliError(
+          `a machine was created but never started — ${digest.slice(7, 15)} is not resolvable from ` +
+            `the registry. This is not publish lag. Check \`fly logs -a ${a.app}\` and the recorded ` +
+            'digest, then `musterd stream stop` the stuck machine.',
+          1,
+        );
+      }
       a.out(
-        `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
+        `${theme.warn('↻')} ${theme.meta(
+          `the registry has not published ${digest.slice(7, 15)} yet — retrying in ` +
+            `${LAUNCH_RETRY_DELAY_MS / 1000}s (${attempt}/${LAUNCH_RETRIES})`,
+        )}\n`,
       );
-      return 0;
+      await a.sleep(LAUNCH_RETRY_DELAY_MS);
+      result = await a.launch(args);
+      launchedOutput = result.output;
     }
-    if (settled === 'stuck') {
-      throw new CliError(
-        `a machine was created but never started — ${digest.slice(7, 15)} is not resolvable from ` +
-          `the registry. This is not publish lag. Check \`fly logs -a ${a.app}\` and the recorded ` +
-          'digest, then `musterd stream stop` the stuck machine.',
-        1,
-      );
+    // The LAST attempt's leftovers need the same question asked. Without this, an exhausted loop
+    // throws while a machine is booting, and the operator's next `stream start` is refused
+    // "already live (machine …)" — exit 1 over a machine that was about to work.
+    if (result.code !== 0 && isUnpropagatedImage(result.output)) {
+      const settled = await settleLeftoverMachine();
+      if (settled === 'started') {
+        a.out(
+          `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
+        );
+        return 0;
+      }
+      if (settled === 'stuck') {
+        throw new CliError(
+          `a machine was created but never started — ${digest.slice(7, 15)} is not resolvable from ` +
+            `the registry. This is not publish lag. Check \`fly logs -a ${a.app}\` and the recorded ` +
+            'digest, then `musterd stream stop` the stuck machine.',
+          1,
+        );
+      }
     }
+    if (result.code !== 0) throw new CliError('fly machine run failed — see the output above', 1);
     a.out(
-      `${theme.warn('↻')} ${theme.meta(
-        `the registry has not published ${digest.slice(7, 15)} yet — retrying in ` +
-          `${LAUNCH_RETRY_DELAY_MS / 1000}s (${attempt}/${LAUNCH_RETRIES})`,
-      )}\n`,
+      `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
     );
-    await a.sleep(LAUNCH_RETRY_DELAY_MS);
-    result = await a.launch(args);
+    return 0;
+  } finally {
+    // Re-reads state: a stop that landed during the launch must not be rewritten as live.
+    rememberLaunched(a, launchedOutput);
   }
-  // The LAST attempt's leftovers need the same question asked. Without this, an exhausted loop
-  // throws while a machine is booting, and the operator's next `stream start` is refused
-  // "already live (machine …)" — exit 1 over a machine that was about to work.
-  if (result.code !== 0 && isUnpropagatedImage(result.output)) {
-    const settled = await settleLeftoverMachine();
-    if (settled === 'started') {
-      a.out(
-        `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
-      );
-      return 0;
-    }
-    if (settled === 'stuck') {
-      throw new CliError(
-        `a machine was created but never started — ${digest.slice(7, 15)} is not resolvable from ` +
-          `the registry. This is not publish lag. Check \`fly logs -a ${a.app}\` and the recorded ` +
-          'digest, then `musterd stream stop` the stuck machine.',
-        1,
-      );
-    }
-  }
-  if (result.code !== 0) throw new CliError('fly machine run failed — see the output above', 1);
-  a.out(
-    `${theme.ok('◉ live')} ${theme.meta(`watch: fly logs -a ${a.app} · end: musterd stream stop`)}\n`,
-  );
-  return 0;
 }
 
 /** What a launch attempt reported: its exit code, and the output the retry decision reads. */
@@ -750,10 +764,14 @@ async function ensureVerb(
   } & Sup,
 ): Promise<number> {
   const state = readStreamState(a.statePath);
+  // The id of the machine that just died, captured before any relaunch. `fly machine list` no
+  // longer has it; the status lookup below is the only reader.
+  const deadMachine = state?.machine;
   // The crash predicate asks whether a machine EXISTS, never whether it is up yet — a booting
   // machine read as absent is the 2026-09-03 duplicate-launch, where the supervisor put a second
   // performance-4x beside a healthy start and Twitch killed one of them.
-  const liveCount = occupiedMachines(machineListJson(a.exec, a.app)).length;
+  const occupying = occupiedMachines(machineListJson(a.exec, a.app));
+  const liveCount = occupying.length;
   // The machine's record if there is one, this checkout's legacy file only if there is not — and
   // `decideEnsure` is told which, because a difference means something different in each case.
   const recorded = readCaptureImage({ statePath: a.statePath, repoRoot: a.repoRoot });
@@ -767,13 +785,12 @@ async function ensureVerb(
   });
   switch (d.action) {
     case 'noop':
+      // A live tick is when the id is cheapest to learn. A stopped intent is not rewritten.
+      if (occupying[0]) rememberMachine(a.statePath, occupying[0]);
       return 0;
     case 'stand_down': {
       writeStreamState(a.statePath, d.state);
-      const lastWords = lastWordsClause(
-        await a.fetchEpitaph(d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive'),
-        a.now(),
-      );
+      const lastWords = await crashClause(a, d.state.team, deadMachine);
       a.err(`${theme.err('⚠')} ${d.note.trimEnd()}${lastWords}\n`);
       try {
         // One sentence, composed once, from what was observed — the same one in the log line above.
@@ -798,13 +815,8 @@ async function ensureVerb(
       // hard-broken stream converges on stand-down instead of retrying forever.
       writeStreamState(a.statePath, d.state);
       // Only a crash earns the dead machine's last words — a deploy already named its cause.
-      const lastWords =
-        d.cause === 'crash'
-          ? lastWordsClause(
-              await a.fetchEpitaph(d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive'),
-              a.now(),
-            )
-          : '';
+      // The lookup uses the machine that died, never the id the relaunch below is about to print.
+      const lastWords = d.cause === 'crash' ? await crashClause(a, d.state.team, deadMachine) : '';
       a.out(`${theme.warn('↻')} ${d.note.trimEnd()}${lastWords}\n`);
       // Relaunch the image the DECISION settled on, never whatever this checkout happens to hold.
       // `.image-digest` is per-checkout and streamwatch runs from the main one, so reading it here
@@ -827,6 +839,9 @@ async function ensureVerb(
           failures: [...(d.state.failures ?? []), { at: a.now(), code, error: output }],
         });
       } else a.out(`${theme.ok('◉ live again')} ${theme.meta(`machine relaunched · ${a.app}`)}\n`);
+      // After the failure write, so that write cannot put the dead id back over the new one.
+      // Re-reads: a stop during the relaunch is not overwritten with desired live.
+      rememberLaunched(a, output);
       return 0;
     }
   }
@@ -891,19 +906,72 @@ async function defaultFetchEpitaph(team: string): Promise<StreamEpitaph | null> 
   }
 }
 
+/** An epitaph older than this belongs to a previous run, not the death being reported. */
+const EPITAPH_FRESH_MS = 15 * 60_000;
+
 /**
  * The dead machine's last words as one clause for the crash note and the stand-down ask (lane
  * 01M52Z987280). Only a RECENT row counts — an epitaph from a run that ended hours ago would be
  * quoted against a newer death, the same mistake `standDownReport` exists to stop. No row is the
- * other half of the finding: a death that outran the post (OOM, host, fly teardown), or capture
- * code older than the epitaph — both are said, because only one of them is actionable now.
+ * other half of the finding. When the state file still names the dead machine, that absence is
+ * filled with the three facts Fly still prints — exit code, oom, requested stop (lane
+ * 01M539NG4N) — and nothing Fly did not say. Fly returning nothing keeps the hard-kill sentence.
  */
-export function lastWordsClause(ep: StreamEpitaph | null, now: number): string {
-  if (!ep || now - ep.ts > 15 * 60_000) {
-    return ' · no last words — it died without reporting (a hard kill, or pre-epitaph capture code)';
+export function lastWordsClause(
+  ep: StreamEpitaph | null,
+  now: number,
+  fly: FlyExit | null = null,
+): string {
+  if (ep && now - ep.ts <= EPITAPH_FRESH_MS) {
+    const mins = Math.round(ep.ran_ms / 60_000);
+    return ` · last words (exit ${ep.code} after ${mins}m): “${ep.reason}”`;
   }
-  const mins = Math.round(ep.ran_ms / 60_000);
-  return ` · last words (exit ${ep.code} after ${mins}m): “${ep.reason}”`;
+  if (fly) return ` · no last words — it died without reporting (${formatFlyExit(fly)})`;
+  return ' · no last words — it died without reporting (a hard kill, or pre-epitaph capture code)';
+}
+
+/** Epitaph when it is fresh; otherwise Fly's exit event for the machine that died. */
+async function crashClause(
+  a: {
+    exec: Exec;
+    app: string;
+    now: () => number;
+    fetchEpitaph: (team: string) => Promise<StreamEpitaph | null>;
+  },
+  team: string | undefined,
+  machine: string | undefined,
+): Promise<string> {
+  const ep = await a.fetchEpitaph(team ?? process.env['MUSTERD_TEAM'] ?? 'revive');
+  const now = a.now();
+  // A fresh epitaph already names the cause, so this tick skips the Fly lookup.
+  const fly = ep && now - ep.ts <= EPITAPH_FRESH_MS ? null : readFlyExit(a.exec, a.app, machine);
+  return lastWordsClause(ep, now, fly);
+}
+
+/** `fly machine status` text. Non-zero, or a table with no exit line, is nothing to quote. */
+function readFlyExit(exec: Exec, app: string, machine: string | undefined): FlyExit | null {
+  if (!machine) return null;
+  const r = exec('fly', ['machine', 'status', machine, '-a', app]);
+  if (r.code !== 0) return null;
+  return parseFlyExit(`${r.stdout}\n${r.stderr}`);
+}
+
+/**
+ * Record the machine id only while the intent is still live. Re-reads so a `stream stop` that
+ * wrote `desired: stopped` during the launch is not overwritten — that write is the off-switch.
+ */
+function rememberMachine(statePath: string, id: string): void {
+  const machine = id.toLowerCase();
+  const cur = readStreamState(statePath);
+  if (!cur || cur.desired !== 'live' || cur.machine === machine) return;
+  if (!/^[0-9a-f]{4,}$/.test(machine)) return;
+  writeStreamState(statePath, { ...cur, machine });
+}
+
+/** Prefer the id the launch printed. Fall back to whatever is occupying the app right now. */
+function rememberLaunched(a: { exec: Exec; app: string; statePath: string }, output: string): void {
+  const id = parseLaunchedMachine(output) ?? occupiedMachines(machineListJson(a.exec, a.app))[0];
+  if (id) rememberMachine(a.statePath, id);
 }
 
 function requireRepo(repoRoot: string | null): string {

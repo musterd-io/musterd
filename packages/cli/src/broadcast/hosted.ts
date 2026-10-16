@@ -196,6 +196,41 @@ export function parsePushedDigest(out: string): string | null {
   return m[m.length - 1]!.split('@')[1] ?? null;
 }
 
+/** The machine id `fly machine run` prints. Absent when the attempt never got that far. */
+export function parseLaunchedMachine(output: string): string | null {
+  const m = /Machine ID:\s*([0-9a-f]+)/i.exec(output);
+  return m?.[1]?.toLowerCase() ?? null;
+}
+
+/**
+ * What Fly still knows after the guest is gone: the newest event line that carries an exit.
+ *
+ * `fly machine status` has no `--json`. Its human table prints newest first, and a destroy line
+ * has no `exit_code`, so the first match is the death rather than the destroy that followed it
+ * or the start that preceded it. Measured 2026-10-16 on machine 830722b7704158:
+ * `exit_code=-1,oom_killed=false,requested_stop=false`.
+ */
+export interface FlyExit {
+  code: number;
+  oom: boolean;
+  requestedStop: boolean;
+}
+
+const FLY_EXIT = /exit_code=(-?\d+),oom_killed=(true|false),requested_stop=(true|false)/;
+
+export function parseFlyExit(statusText: string): FlyExit | null {
+  const m = FLY_EXIT.exec(statusText);
+  if (!m) return null;
+  return { code: Number(m[1]), oom: m[2] === 'true', requestedStop: m[3] === 'true' };
+}
+
+/** One clause. Names the three fields Fly printed and nothing Fly did not say. */
+export function formatFlyExit(exit: FlyExit): string {
+  const oom = exit.oom ? 'oom' : 'not oom';
+  const stop = exit.requestedStop ? 'a requested stop' : 'not a requested stop';
+  return `exit ${exit.code}, ${oom}, ${stop}`;
+}
+
 // ── The daemon's upgrade gate, probed for real ───────────────────────────────────────────────────
 
 // ── Checks ───────────────────────────────────────────────────────────────────────────────────────

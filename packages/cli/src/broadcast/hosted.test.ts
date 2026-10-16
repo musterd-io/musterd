@@ -11,6 +11,9 @@ import {
 import type { Exec, ExecResult } from '../process.js';
 import {
   CAPTURE_PATHS,
+  formatFlyExit,
+  parseFlyExit,
+  parseLaunchedMachine,
   parsePushedDigest,
   parseSecrets,
   runChecks,
@@ -169,6 +172,31 @@ describe('parsers', () => {
     const out = `--> pushing capture@sha256:${'1'.repeat(64)}\ndone capture@sha256:${'2'.repeat(64)}\n`;
     expect(parsePushedDigest(out)).toBe('sha256:' + '2'.repeat(64));
     expect(parsePushedDigest('no digest here')).toBeNull();
+  });
+
+  it('reads the machine id fly machine run prints', () => {
+    expect(parseLaunchedMachine('Machine ID: d8d55d6a7e96e8\n')).toBe('d8d55d6a7e96e8');
+    expect(parseLaunchedMachine('machine id: ABCDEF12345678')).toBe('abcdef12345678');
+    expect(parseLaunchedMachine('no machine yet')).toBeNull();
+  });
+
+  // Status prints newest first. The destroy line has no exit_code, so the first match is the
+  // crash, not the start underneath it (2026-10-16, machine 830722b7704158).
+  it('takes the first Fly exit event and ignores a destroy line', () => {
+    const text = [
+      '2026-10-16T14:10:40Z stopped destroy flyd',
+      '2026-10-16T14:10:39Z stopped crash flyd exit_code=-1,oom_killed=false,requested_stop=false',
+      '2026-10-16T12:06:12Z started start flyd exit_code=0,oom_killed=false,requested_stop=true',
+    ].join('\n');
+    expect(parseFlyExit(text)).toEqual({ code: -1, oom: false, requestedStop: false });
+    expect(formatFlyExit(parseFlyExit(text)!)).toBe('exit -1, not oom, not a requested stop');
+    expect(parseFlyExit('no exit here')).toBeNull();
+  });
+
+  it('names oom and a requested stop when Fly says so', () => {
+    const exit = parseFlyExit('exit_code=137,oom_killed=true,requested_stop=true');
+    expect(exit).toEqual({ code: 137, oom: true, requestedStop: true });
+    expect(formatFlyExit(exit!)).toBe('exit 137, oom, a requested stop');
   });
 });
 
