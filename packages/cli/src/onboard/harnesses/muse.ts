@@ -64,9 +64,12 @@ function readText(path: string): string | null {
   }
 }
 
-function writeText(path: string, body: string): void {
+function writeText(path: string, body: string, mode?: number): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, body.endsWith('\n') ? body : `${body}\n`, 'utf8');
+  writeFileSync(path, body.endsWith('\n') ? body : `${body}\n`, {
+    encoding: 'utf8',
+    ...(mode === undefined ? {} : { mode }),
+  });
 }
 
 /** The `eN` generation tag written into a musterd hook's marker comment (ADR 168). */
@@ -150,14 +153,21 @@ export function upsertMuseServer(
     }
   }
   settings = { ...settings, schema_version: MUSE_SETTINGS_VERSION };
-  // Canonical camelCase (what the binary itself writes); a legacy snake_case block keeps
-  // foreign servers untouched, but our own entry migrates so the two keys never disagree.
-  const servers = { ...((settings.mcpServers ?? {}) as Record<string, unknown>) };
-  servers['musterd'] = museServerEntry(entry);
-  settings.mcpServers = servers;
-  if (typeof settings.mcp_servers === 'object' && settings.mcp_servers !== null) {
-    delete (settings.mcp_servers as Record<string, unknown>)['musterd'];
+  // Canonical camelCase (what the binary itself writes). A legacy snake_case block is
+  // migrated in whole — foreign servers move to camelCase, our own entry is overwritten
+  // by the fresh one — and the mcp_servers key is then dropped: muse faults on a
+  // settings.json carrying both keys (stanley, reproduced on 1.4.9), so they must
+  // never coexist.
+  const camel = { ...((settings.mcpServers ?? {}) as Record<string, unknown>) };
+  const snake = settings.mcp_servers;
+  if (typeof snake === 'object' && snake !== null) {
+    for (const [name, server] of Object.entries(snake as Record<string, unknown>)) {
+      if (name !== 'musterd') camel[name] = server;
+    }
+    delete settings.mcp_servers;
   }
+  camel['musterd'] = museServerEntry(entry);
+  settings.mcpServers = camel;
   return { text: `${JSON.stringify(settings, null, 2)}\n`, created };
 }
 
@@ -283,7 +293,9 @@ export const muse: Harness = {
   async configure(entry: McpServerEntry) {
     const path = museSettingsPath();
     const { text } = upsertMuseServer(readText(path), entry);
-    writeText(path, text);
+    // 0o600: the entry env can carry the seat's agent key — tighten on create and on
+    // every rewrite so an existing umask-leaked file is narrowed too (izzo).
+    writeText(path, text, 0o600);
     const hooksPath = museHooksPath();
     writeText(hooksPath, upsertMuseHooks(readText(hooksPath)));
     return {
