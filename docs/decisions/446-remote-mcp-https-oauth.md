@@ -70,7 +70,8 @@ per-request factory: each request builds a fresh `McpServer` bound to the reques
 tool names and input shapes as the adapter, same `routeEnvelope`/`listInbox` store paths the REST
 routes use), never a shared client. Increment 1 registers the Done-line tools only (`team_join` /
 `team_inbox_check` / `team_send` — the join-page prompt's whole vocabulary); the rest of the
-adapter surface converges in increment 3, after rehearsal says which tools a phone reaches for.
+adapter surface converges in increment 3, after rehearsal says which tools a phone reaches for. _(Amended 2026-10-16:
+the daemon implements no tools; the launcher composes the adapter's own tools in — ADR 630.)_
 
 Stateful sessions (`mcp-session-id`) are served by the SDK handler (one handler per team, bounded
 by the team count — the factory itself holds no seat state); a missing/expired session fails
@@ -252,6 +253,11 @@ other agent stays on the claim handshake, and an agent credential is never an au
   set, gated by the seat's capabilities, and lists only what the seat may call. This replaces
   §1's plan to converge the set after rehearsal. Until that lane lands the endpoint keeps its five
   tools, and a talk-only guest is refused agent creation and connection.
+
+- **2026-10-16 — ADR 630: the remote tools are the adapter's.** The daemon's three
+  reimplemented tools drifted (about 1 of 17 adapter changes reached them). `musterd serve` now
+  composes the adapter's own tools in through a `remoteMcp` factory, calling the daemon over
+  loopback; the daemon keeps OAuth and the edge.
 
 ## Observability & Evaluation
 
