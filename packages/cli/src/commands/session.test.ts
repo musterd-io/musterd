@@ -1506,6 +1506,14 @@ describe('musterd session (capture)', () => {
       writeFileSync(join(ws, '.opencode', 'opencode.json'), JSON.stringify({ mcp: {} }));
     };
 
+    /** Grok's probe reads `$GROK_HOME/sessions/<cwd>/<id>/summary.json`. `home` is the stub HOME. */
+    const grokSummary = (sessionId: string, model: string): void => {
+      vi.stubEnv('GROK_HOME', home);
+      const summaryDir = join(home, 'sessions', encodeURIComponent(wsA), sessionId);
+      mkdirSync(summaryDir, { recursive: true });
+      writeFileSync(join(summaryDir, 'summary.json'), JSON.stringify({ current_model_id: model }));
+    };
+
     it('observes an opencode workspace with no session slot at all', () => {
       stubSqlite('{"id":"opencode-model-live"}');
       markOpencode(wsA);
@@ -1595,6 +1603,174 @@ describe('musterd session (capture)', () => {
       writeBinding(wsA, bindingOf());
       expect(refreshModelObservation(wsA)).toBeUndefined();
       expect(readBinding(wsA).model_observed).toBeUndefined();
+    });
+
+    it('an opencode slot still reads opencode.db', () => {
+      stubSqlite('{"id":"opencode-model-live"}');
+      markOpencode(wsA);
+      grokSummary('oc-sid', 'grok-4.7');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'opencode', id: 'oc-sid', started_at: Date.now() - 60_000 },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('opencode-model-live');
+      expect(readBinding(wsA).model_observed).toMatchObject({
+        model: 'opencode-model-live',
+        harness: 'opencode',
+      });
+    });
+
+    it('a grok slot reads its summary, not the newest opencode row, and replaces a foreign observation', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      const sessionId = 'grok-sid';
+      grokSummary(sessionId, 'grok-4.7');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: sessionId, started_at: Date.now() - 60_000 },
+          model_observed: {
+            model: 'gemini-4-argon-contributor',
+            harness: 'opencode',
+            observed_at: Date.now(),
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('grok-4.7');
+      expect(readBinding(wsA).model_observed).toMatchObject({
+        model: 'grok-4.7',
+        harness: 'grok',
+      });
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
+    });
+
+    it('a grok slot observes without the opencode marker', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      grokSummary('grok-sid', 'grok-4.7');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: 'grok-sid', started_at: Date.now() - 60_000 },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('grok-4.7');
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
+    });
+
+    it('leaves a current same-harness grok observation untouched', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      const sessionId = 'grok-sid';
+      const observedAt = Date.now() - 1_000;
+      grokSummary(sessionId, 'grok-4.7-newer');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: sessionId, started_at: observedAt - 60_000 },
+          model_observed: { model: 'grok-4.7', harness: 'grok', observed_at: observedAt },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed).toMatchObject({
+        model: 'grok-4.7',
+        observed_at: observedAt,
+      });
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
+    });
+
+    it('re-reads a stale grok observation from the summary', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      const sessionId = 'grok-sid';
+      const observedAt = Date.now() - OBSERVATION_REFRESH_MS - 1_000;
+      grokSummary(sessionId, 'grok-4.7');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: sessionId, started_at: observedAt - 60_000 },
+          model_observed: { model: 'grok-4.5', harness: 'grok', observed_at: observedAt },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('grok-4.7');
+      expect(readBinding(wsA).model_observed).toMatchObject({ model: 'grok-4.7', harness: 'grok' });
+    });
+
+    it('re-probes an observation older than this session even inside the window', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      const sessionId = 'grok-sid';
+      const startedAt = Date.now();
+      grokSummary(sessionId, 'grok-4.7');
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: sessionId, started_at: startedAt },
+          model_observed: {
+            model: 'grok-4.5',
+            harness: 'grok',
+            observed_at: startedAt - 1_000,
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('grok-4.7');
+      expect(readBinding(wsA).model_observed?.harness).toBe('grok');
+    });
+
+    it('never erases a grok observation when the summary is missing', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      vi.stubEnv('GROK_HOME', home);
+      const observedAt = Date.now() - OBSERVATION_REFRESH_MS - 1_000;
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: 'grok-sid', started_at: observedAt - 60_000 },
+          model_observed: { model: 'grok-4.7', harness: 'grok', observed_at: observedAt },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed?.model).toBe('grok-4.7');
+    });
+
+    it('drops a foreign observation when the grok summary is missing', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      vi.stubEnv('GROK_HOME', home);
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'grok', id: 'grok-sid', started_at: Date.now() - 60_000 },
+          model_observed: {
+            model: 'gemini-4-argon-contributor',
+            harness: 'opencode',
+            observed_at: Date.now(),
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed).toBeUndefined();
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
+    });
+
+    it('drops a foreign observation on a harness with no probe, and never spawns sqlite3', () => {
+      stubSqlite('{"id":"gemini-4-argon-contributor"}');
+      markOpencode(wsA);
+      writeBinding(
+        wsA,
+        bindingOf({
+          session: { harness: 'cursor', id: 'cursor-sid', started_at: Date.now() - 60_000 },
+          model_observed: {
+            model: 'gemini-4-argon-contributor',
+            harness: 'opencode',
+            observed_at: Date.now(),
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed).toBeUndefined();
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
     });
   });
 
