@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { laneChain, laneChainLines } from './laneChain.js';
 import {
   deriveLaneAreas,
   LANE_AREAS,
@@ -126,33 +127,39 @@ describe('laneEventLine', () => {
   });
 });
 
+/** The chain block `laneDetailLines` leads with, for this fixture. */
+function chainOf(d: LaneDetail): string[] {
+  return laneChainLines(laneChain(d.lane, d.history));
+}
+
 describe('laneDetailLines', () => {
-  it('a bare lane with no history adds nothing under its board line', () => {
-    expect(laneDetailLines(detail())).toEqual([]);
+  it('leads with the chain even when the lane has no other detail', () => {
+    const d = detail();
+    expect(laneDetailLines(d)).toEqual(chainOf(d));
+    expect(laneDetailLines(d)[0]).toBe('chain:');
   });
 
   it('carries the brief, merge, follow-ups, the ask to reply to, and the history in order', () => {
-    const lines = laneDetailLines(
-      detail({
-        lane: {
-          detail: 'the brief',
-          state: 'awaiting_acceptance',
-          merged: {
-            pr: 12,
-            sha: 'abcdef1234567890',
-            authorized_by: 'nick',
-            verification: 'ancestor',
-          },
-          follows_up: ['01M50AAAAA'],
+    const d = detail({
+      lane: {
+        detail: 'the brief',
+        state: 'awaiting_acceptance',
+        merged: {
+          pr: 12,
+          sha: 'abcdef1234567890',
+          authorized_by: 'nick',
+          verification: 'ancestor',
         },
-        acceptance_ask: { id: 'ASK1', to: 'schmidt' },
-        history: [
-          { ts: at(9), action: 'lane.opened', actor: 'izzo' },
-          { ts: at(10), action: 'lane.ready_for_review', actor: 'TJ' },
-        ],
-      }),
-    );
-    expect(lines).toEqual([
+        follows_up: ['01M50AAAAA'],
+      },
+      acceptance_ask: { id: 'ASK1', to: 'schmidt' },
+      history: [
+        { ts: at(9), action: 'lane.opened', actor: 'izzo' },
+        { ts: at(10), action: 'lane.ready_for_review', actor: 'TJ' },
+      ],
+    });
+    expect(laneDetailLines(d)).toEqual([
+      ...chainOf(d),
       'brief: the brief',
       'merged: #12 abcdef1234 ancestor authorized by nick',
       'follows up: 01M50AAAAA',
@@ -164,26 +171,26 @@ describe('laneDetailLines', () => {
   });
 
   it('says how a done lane closed, and what an abandoned one was dropped for', () => {
-    expect(
-      laneDetailLines(
-        detail({ lane: { state: 'done', verified: false, follows_up: 'none', merged: {} } }),
-      ),
-    ).toEqual(['merged: yes', 'follows up: none', 'closed unconfirmed']);
-    expect(
-      laneDetailLines(detail({ lane: { state: 'abandoned', abandon_reason: 'superseded' } })),
-    ).toEqual(['abandoned: superseded']);
-    expect(
-      laneDetailLines(detail({ lane: { areas: ['ui', 'docs'], declared_areas: ['ui', 'docs'] } })),
-    ).toEqual(['areas: ui, docs (declared)']);
+    const unconfirmed = detail({
+      lane: { state: 'done', verified: false, follows_up: 'none', merged: {} },
+    });
+    expect(laneDetailLines(unconfirmed)).toEqual([
+      ...chainOf(unconfirmed),
+      'merged: yes',
+      'follows up: none',
+      'closed unconfirmed',
+    ]);
+    const abandoned = detail({ lane: { state: 'abandoned', abandon_reason: 'superseded' } });
+    expect(laneDetailLines(abandoned)).toEqual([...chainOf(abandoned), 'abandoned: superseded']);
+    const areas = detail({ lane: { areas: ['ui', 'docs'], declared_areas: ['ui', 'docs'] } });
+    expect(laneDetailLines(areas)).toEqual([...chainOf(areas), 'areas: ui, docs (declared)']);
   });
 
   it('names who asked only when the lane recorded it (ADR 629)', () => {
-    expect(laneDetailLines(detail({ lane: { requested: { by: 'nick', basis: 'self' } } }))).toEqual(
-      ['asked: nick (self)'],
-    );
-    expect(
-      laneDetailLines(detail({ lane: { requested: { by: 'ada', basis: 'act', ref: 'ACT1' } } })),
-    ).toEqual(['asked: ada (act ACT1)']);
+    const self = detail({ lane: { requested: { by: 'nick', basis: 'self' } } });
+    expect(laneDetailLines(self)).toEqual([...chainOf(self), 'asked: nick (self)']);
+    const act = detail({ lane: { requested: { by: 'ada', basis: 'act', ref: 'ACT1' } } });
+    expect(laneDetailLines(act)).toEqual([...chainOf(act), 'asked: ada (act ACT1)']);
   });
 });
 

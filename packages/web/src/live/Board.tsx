@@ -8,6 +8,7 @@ import type {
   OpenLane,
   UpdateLane,
 } from '@musterd/protocol';
+import type { LaneChainLink } from '@musterd/protocol/wire';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   acceptanceWait,
@@ -123,6 +124,11 @@ export interface BoardProps {
    * `lanes`.
    */
   boardLanes?: Lane[];
+  /**
+   * Load one lane's chain (ADR 629). The board does not fetch: `/live` and `/board` pass
+   * this when a session exists. Absent means the card shows no chain control.
+   */
+  loadChain?: ((id: string) => Promise<LaneChainLink[]>) | undefined;
 }
 
 export function Board({
@@ -141,6 +147,7 @@ export function Board({
   onPatch,
   focusLane = null,
   boardLanes,
+  loadChain,
 }: BoardProps) {
   // Lanes carrying a live warning (unmet dependency / surface overlap) — advisory, warn-never-block.
   // Every warning a lane carries, one per line: a Map keyed on subject kept only the last.
@@ -284,6 +291,7 @@ export function Board({
         onPatch={onPatch}
         focused={focused}
         cardRef={focused ? focusRef : null}
+        loadChain={loadChain}
       />
     );
   };
@@ -371,6 +379,71 @@ export function Board({
   );
 }
 
+/** The five links, in read order. Words match the CLI chain block. */
+export function LaneChainList({ links }: { links: readonly LaneChainLink[] }) {
+  return (
+    <dl className="lc-card__chain">
+      {links.map((link) => (
+        <div key={link.link} className="lc-card__chain-row">
+          <dt>{link.link}</dt>
+          <dd className="lc-card__chain-value">{link.value ?? '—'}</dd>
+          <dd className="lc-card__chain-mark">{link.mark}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function LaneChainRead({
+  laneId,
+  phase,
+  links,
+}: {
+  laneId: string;
+  phase: 'loading' | 'ready' | 'error';
+  links: LaneChainLink[] | null;
+}) {
+  return (
+    <div id={`lane-chain-${laneId}`} className="lc-card__chain-wrap">
+      {phase === 'loading' && <p className="lc-card__chain-status">reading chain…</p>}
+      {phase === 'error' && <p className="lc-card__chain-status">chain unavailable</p>}
+      {phase === 'ready' && links && <LaneChainList links={links} />}
+    </div>
+  );
+}
+
+/** Fetch when the row is open. A failed read stays an error — the card does not invent a chain. */
+function useLaneChain(
+  id: string,
+  open: boolean,
+  load?: ((id: string) => Promise<LaneChainLink[]>) | undefined,
+): { phase: 'loading' | 'ready' | 'error'; links: LaneChainLink[] | null } {
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [links, setLinks] = useState<LaneChainLink[] | null>(null);
+  useEffect(() => {
+    if (!open || !load) return;
+    let cancel = false;
+    setPhase('loading');
+    load(id).then(
+      (rows) => {
+        if (cancel) return;
+        setLinks(rows);
+        setPhase('ready');
+      },
+      () => {
+        if (!cancel) {
+          setLinks(null);
+          setPhase('error');
+        }
+      },
+    );
+    return () => {
+      cancel = true;
+    };
+  }, [open, load, id]);
+  return { phase, links };
+}
+
 function LaneCard({
   lane,
   warnDetail,
@@ -384,6 +457,7 @@ function LaneCard({
   onPatch,
   focused = false,
   cardRef = null,
+  loadChain,
 }: {
   lane: Lane;
   warnDetail: string | null;
@@ -399,6 +473,7 @@ function LaneCard({
   /** This is the lane the deep link named — ringed, and announced to assistive tech. */
   focused?: boolean;
   cardRef?: MutableRefObject<HTMLElement | null> | null;
+  loadChain?: ((id: string) => Promise<LaneChainLink[]>) | undefined;
 }) {
   // Done cards age from resolved_at; live cards from claimed_at (how long in flight), else created.
   const stamp =
@@ -410,6 +485,11 @@ function LaneCard({
   // ADR 518: who an awaiting-acceptance card waits on, when the daemon said.
   const wait = acceptanceWait(lane);
   const [picking, setPicking] = useState(false);
+  const [chainOpen, setChainOpen] = useState(focused);
+  useEffect(() => {
+    if (focused) setChainOpen(true);
+  }, [focused]);
+  const chain = useLaneChain(lane.id, chainOpen && loadChain != null, loadChain);
   const abandonAction = actions.find((a) => a.kind === 'abandon');
   const pills = actions.filter((a) => a.kind !== 'abandon');
 
@@ -491,6 +571,9 @@ function LaneCard({
           </span>
         )}
       </div>
+      {chainOpen && loadChain && (
+        <LaneChainRead laneId={lane.id} phase={chain.phase} links={chain.links} />
+      )}
       {waits?.kind === 'deps' &&
         waits.deps.map((d) => (
           <p key={d.id} className="lc-card__waits">
@@ -560,6 +643,17 @@ function LaneCard({
           <span className="lc-card__warn" title={warnDetail} aria-label={`Lane warning: ${warnDetail}`}>
             ⚠ flag
           </span>
+        )}
+        {loadChain && (
+          <button
+            type="button"
+            className="lc-ask__btn lc-card__chain-btn"
+            aria-expanded={chainOpen}
+            aria-controls={`lane-chain-${lane.id}`}
+            onClick={() => setChainOpen((open) => !open)}
+          >
+            chain
+          </button>
         )}
         <time className="lc-card__age">{ago(stamp)}</time>
       </div>

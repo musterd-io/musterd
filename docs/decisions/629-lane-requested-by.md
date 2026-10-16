@@ -79,6 +79,17 @@ distinction on the lane itself, or "who asked" means two different things.
   undescribed and unbounded in the MCP schema. The protocol schema still bounds `by` and `ref`,
   and the open reply names a miss. The standing-context budget moves by that measured remainder
   and adds no headroom (`docs/perf/context-budgets.json`).
+- 2026-10-16: the reader prints five links, in order, on `lane show` and on a card on `/live`
+  and `/board` (focused, or opened with the chain control). Each mark is `verified`, `stated`,
+  or `missing`. `asked` is verified for `act`, `seed`, and `self`, stated for `stated` or a name
+  with no basis, and missing when nobody is named. `claimed` is the current owner, or the latest
+  `lane.claimed` owner when the lane is unowned, and is verified or missing. `model` is the
+  newest `lane.*` audit row that carries `actor_model` (`LaneEvent.model` /
+  `LaneEvent.model_source`, optional, older readers ignore them); `observed` is verified, a
+  declaration or a model with no source is stated, and no row is missing. `accepted` is the
+  newest `lane.closed` row with `verified: true` and an actor; a self-close is missing.
+  `authorized` is `merged.authorized_by` and is stated, never verified: the name is the client's
+  word (ADR 109), and an ancestor SHA does not promote it.
 
 ## Observability & Evaluation
 

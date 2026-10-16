@@ -454,6 +454,8 @@ describe('lane commands', () => {
     expect(mine?.requested).toEqual({ by: 'nick', basis: 'self' });
     const shown = await capture(() => laneCommand(parseArgs(['show', mine!.id])));
     expect(shown.out).toContain('asked: nick (self)');
+    expect(shown.out).toContain('chain:');
+    expect(shown.out).toContain('nick  verified');
 
     const id = await openLane(['later']);
     const upd = await capture(() => laneCommand(parseArgs(['update', id, '--by', 'ada'])));

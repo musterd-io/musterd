@@ -1,7 +1,7 @@
 import type { Goal, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ESCAPE_SCOPES, OPEN_TILT, shouldDismiss, zoomTransform } from './boardOverlayMath';
-import type { LiveConfig } from './client';
+import { fetchLaneChain, type LiveConfig } from './client';
 import { useBoardData } from './useBoardData';
 import { goalFilter, resolveBoardView } from './goalGrid';
 
@@ -61,6 +61,13 @@ export function BoardOverlay({
 }) {
   const { board, me, busyId, note, doCreate, doPatch } = useBoardData(cfg, roster, base);
   const [composing, setComposing] = useState(false);
+  const loadChain = useCallback(
+    (id: string) => {
+      if (!cfg) return Promise.reject(new Error('no session'));
+      return fetchLaneChain(cfg, id);
+    },
+    [cfg],
+  );
   // Same default rule as /board (no stored preference in the overlay): grid iff goals exist.
   const unshipped = goals.filter((g) => g.status !== 'shipped').length;
   const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(
@@ -227,6 +234,7 @@ export function BoardOverlay({
                 onCreate={doCreate}
                 onPatch={doPatch}
                 focusLane={focusLane}
+                loadChain={cfg ? loadChain : undefined}
               />
             </Suspense>
           )}

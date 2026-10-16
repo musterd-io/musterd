@@ -5439,6 +5439,47 @@
   gap: var(--lc-4);
   margin-top: 1px;
 }
+/* ADR 629: the five-link read. Ink is the card's own text and muted ink — the mark is a word. */
+.lc-card__chain-btn {
+  min-width: 24px;
+  min-height: 24px;
+}
+.lc-card__chain-wrap {
+  margin: 2px 0 0;
+}
+.lc-card__chain-status {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lc-muted);
+}
+.lc-card__chain {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+.lc-card__chain-row {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lc-text);
+}
+.lc-card__chain-row dt,
+.lc-card__chain-row dd {
+  margin: 0;
+}
+.lc-card__chain-row dt,
+.lc-card__chain-mark {
+  color: var(--lc-muted);
+}
+.lc-card__chain-value {
+  overflow-wrap: anywhere;
+}
 .lc-card__warn {
   font-size: 10.5px;
   color: var(--lc-danger-ink);

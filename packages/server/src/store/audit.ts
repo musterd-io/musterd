@@ -1445,7 +1445,8 @@ export const LANE_HISTORY_MAX = 200;
 
 /**
  * One lane's recorded life (ADR 582 §4): its `lane.*` audit rows, oldest first, each reduced to the
- * fields a reviewer reads ({@link LaneEvent}). Rides `idx_audit_team_action_target_ts`. Legacy-blind
+ * fields a reviewer reads ({@link LaneEvent}), including the row's model when it has one (ADR 629).
+ * Rides `idx_audit_team_action_target_ts`. Legacy-blind
  * the same way {@link laneOwnerHistory} is: edges from before a row was written for them are absent.
  * A malformed detail keeps its row with `ts`/`action`/`actor` only.
  */
@@ -1459,8 +1460,10 @@ export async function laneHistory(
     action: string;
     actor: string | null;
     detail: string | null;
+    actor_model: string | null;
+    actor_model_source: string | null;
   }>(
-    `SELECT ts, action, actor, detail FROM audit
+    `SELECT ts, action, actor, detail, actor_model, actor_model_source FROM audit
          WHERE team_id = ? AND action LIKE 'lane.%' AND target = ?
        ORDER BY ts DESC, id DESC LIMIT ?`,
     [teamId, laneId, LANE_HISTORY_MAX],
@@ -1487,6 +1490,13 @@ export async function laneHistory(
     if (typeof d['verified'] === 'boolean') e.verified = d['verified'];
     if (str(d['reason']) !== undefined) e.reason = str(d['reason']);
     if (str(d['reviewer']) !== undefined) e.reviewer = str(d['reviewer']);
+    // ADR 629: the chain's model link. `unknown` is not a model, and a source that is
+    // not on the wire is omitted rather than guessed (ADR 101).
+    const model = str(r.actor_model);
+    if (model !== undefined && model !== 'unknown') {
+      e.model = model;
+      if (isWireAttestationSource(r.actor_model_source)) e.model_source = r.actor_model_source;
+    }
     return e;
   });
 }

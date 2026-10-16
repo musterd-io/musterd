@@ -21,7 +21,7 @@ import type {
   UpdateLane,
   WorkingHours,
 } from '@musterd/protocol';
-import type { StyleDialsWire, StyleFloorWire, StylePrefsWire } from '@musterd/protocol/wire';
+import type { LaneChainLink, StyleDialsWire, StyleFloorWire, StylePrefsWire } from '@musterd/protocol/wire';
 // The read path takes the validator-free door (ADR 148; `protocol/guards.ts`): the browser reads
 // this daemon over its own origin and the daemon parses everything on ingest, so re-deriving the
 // schemas here bought a strict page-level reject and ~20 KB of zod. The guards keep the one check
@@ -30,6 +30,7 @@ import {
   buildEnvelope,
   readAuditResponse,
   readLaneBoard,
+  readLaneChain,
   readLaneResult,
   readMemberSummary,
   readReport,
@@ -249,6 +250,18 @@ export async function fetchLaneBoard(
     `/teams/${encodeURIComponent(cfg.team)}/lanes${qs ? `?${qs}` : ''}`,
   );
   return readLaneBoard(json);
+}
+
+/**
+ * One lane's chain (ADR 629). `GET /lanes/:id` carries the history the board rows do not.
+ * A bad envelope throws; the card then says the chain is unavailable rather than guessing.
+ */
+export async function fetchLaneChain(cfg: LiveConfig, id: string): Promise<LaneChainLink[]> {
+  const json = await apiGet<unknown>(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/lanes/${encodeURIComponent(id)}`,
+  );
+  return readLaneChain(json);
 }
 
 /**
