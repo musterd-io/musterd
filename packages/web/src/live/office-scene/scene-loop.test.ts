@@ -340,3 +340,13 @@ describe('a replayed walk wears its age (lane 01M50TZA8X)', () => {
   });
 });
 
+
+describe('the companion gesture rides a beat that played (ADR 617)', () => {
+  it('plays only beside a played beat, in place, on its own roll', () => {
+    const fire = index.slice(index.indexOf('function fireAmbient'), index.indexOf('function playAmbientBeat'));
+    expect(fire).toContain('if (played && decision.kind !== \'none\' && decision.companion)');
+    // The room notices first (something moving nearby), else a seated gesture of their own.
+    expect(fire).toContain("actors.notice(c, target, slotRng(teamName, slot, 'notice'))");
+    expect(fire).toContain("playAmbientBeat(c, slot, false, 'companion-beat')");
+  });
+});

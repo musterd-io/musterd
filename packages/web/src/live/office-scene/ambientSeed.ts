@@ -110,15 +110,17 @@ export function ambientPool(
   };
 }
 
+/** A fired slot's companion (ADR 617): one more seated member who plays a gesture beside the beat. */
+type Companion = { companion?: string };
 export type AmbientDecision =
   | { kind: 'none' }
-  | { kind: 'pet' }
-  | { kind: 'pair'; a: string; b: string }
+  | ({ kind: 'pet' } & Companion)
+  | ({ kind: 'pair'; a: string; b: string } & Companion)
   /** Two idle members meet in the aisle for a word and go back (nick, 2026-10-12: the room should
    *  read as a team, not parallel solo workers). Both come from `errands` — a working member's
    *  screen is the point. */
-  | { kind: 'meet'; a: string; b: string }
-  | { kind: 'member'; who: string };
+  | ({ kind: 'meet'; a: string; b: string } & Companion)
+  | ({ kind: 'member'; who: string } & Companion);
 
 /**
  * Occupancy → per-slot fire probability (E1b, spec §3): a populated room reads at ~2.5–3
@@ -201,35 +203,84 @@ function rollDecision(team: string, slot: number, pool: AmbientPool, members: st
   return { kind: 'member', who: members[Math.floor(roll(team, slot, 'actor') * members.length)]! };
 }
 
+/** Rooms at least this full get a companion gesture on some fired slots (ADR 617); smaller rooms keep
+ *  their calm. */
+export const COMPANION_MIN_ROOM = 6;
 /**
- * The whole per-slot decision: fire?, whose beat is it, which pair/member. Pure over
- * (team, slot, pool) — and the pool is canonicalized here (sorted members, ordered pairs) so a
- * caller's array order can never leak into the pick.
+ * How often a fired slot carries a companion, seeded per slot (ADR 617) — weighted toward beats worth
+ * watching (nick, 2026-10-15: "is there a middle ground?"). Beside something MOVING (the dog, an aisle
+ * meet) a companion nearly always rides along, because that is when the room can notice; beside a
+ * still beat (a gesture, a desk chat) it is rarer. Swept over 200 teams of twelve under the room-quiet
+ * model: 0.9/0.4 keeps 0.75-flat's coverage (0.25% of members, 3% of windows still for ten minutes)
+ * with ~10% fewer seated beats, and 65% of companions land beside a mover (46% flat). 0.9/0.3 lost
+ * coverage (0.92%). Not zero, by construction: a turn spent on a slot this browser did not play cannot
+ * be known to the replay.
+ */
+export const COMPANION_P_MOVING = 0.9;
+export const COMPANION_P_STILL = 0.4;
+
+/**
+ * The whole per-slot decision: fire?, whose beat is it, which pair/member, and whether a companion
+ * rides along. Pure over (team, slot, pool) — and the pool is canonicalized here (sorted members,
+ * ordered pairs) so a caller's array order can never leak into the pick.
  *
  * **Who fidgets is a rotation, not a draw** (lane 01M4V9VNMY, spec 2026-10-13 L1). A uniform draw per
  * single-member beat left a third of a twelve-person room without one gesture in ten minutes
  * (35% simulated, 22% at six; the room-quiet gate caps delivered beats near three a minute, so the
- * draw's variance, not its rate, was what froze desks). The actor now walks a seeded permutation of
- * the pool, advancing on each `member` decision of the current coverage window — a pure replay of the
- * earlier slots, so every viewer lands on the same member without anyone remembering anything.
- * Each lap reshuffles, and a lap never opens on the member the last one ended on.
+ * draw's variance, not its rate, was what froze desks). The actor walks a seeded permutation of the
+ * pool. Each lap reshuffles, and a lap never opens on the member the last one ended on.
+ *
+ * **A companion takes the next turn** (ADR 617). Even a fair rotation runs out of turns at twelve:
+ * about ten single-member beats land in ten minutes. So in a room of `COMPANION_MIN_ROOM` or more, a
+ * fired slot (whatever its beat) may carry — `COMPANION_P_MOVING` beside a mover, `COMPANION_P_STILL`
+ * beside a still beat — one more seated member's gesture
+ * beside it — the next turn of the same rotation, skipping the beat's own actors. Turns are a pure
+ * replay of the window's earlier slots, so every viewer lands on the same members without anyone
+ * remembering anything.
  */
 export function decideAmbient(team: string, slot: number, pool: AmbientPool): AmbientDecision {
   const members = [...pool.members].sort();
-  const d = rollDecision(team, slot, pool, members);
-  if (d.kind !== 'member' || members.length < 2) return d;
-  const w0 = Math.floor(slot / COVERAGE_WINDOW_SLOTS) * COVERAGE_WINDOW_SLOTS;
-  let count = 0;
-  for (let t = w0; t < slot; t++) if (rollDecision(team, t, pool, members).kind === 'member') count++;
   const n = members.length;
-  // A lap's order, after the guard: it never opens on the member the previous lap (as played) ended on.
+  const w0 = Math.floor(slot / COVERAGE_WINDOW_SLOTS) * COVERAGE_WINDOW_SLOTS;
+  // A lap's order, after the guard: it never opens on the member the previous lap ended on.
+  const laps = new Map<number, string[]>();
   const order = (lap: number): string[] => {
+    const cached = laps.get(lap);
+    if (cached) return cached;
     const o = [...members].sort(
       (a, b) => roll(team, w0 + lap * 7919, `lap:${a}`) - roll(team, w0 + lap * 7919, `lap:${b}`),
     );
     if (lap > 0 && o[0] === order(lap - 1)[n - 1]) [o[0], o[1]] = [o[1]!, o[0]!];
+    laps.set(lap, o);
     return o;
   };
-  const mine = order(Math.floor(count / n));
-  return { kind: 'member', who: mine[count % n]! };
+  let turn = 0;
+  let deferred: string | null = null; // a turn passed over because its member was busy — it goes next
+  const take = (): string => {
+    if (deferred !== null) {
+      const who = deferred;
+      deferred = null;
+      return who;
+    }
+    const who = order(Math.floor(turn / n))[turn % n]!;
+    turn++;
+    return who;
+  };
+  for (let t = w0; ; t++) {
+    let d = rollDecision(team, t, pool, members);
+    if (d.kind === 'member' && n >= 2) d = { kind: 'member', who: take() };
+    const pc = d.kind === 'pet' || d.kind === 'meet' ? COMPANION_P_MOVING : COMPANION_P_STILL;
+    if (d.kind !== 'none' && n >= COMPANION_MIN_ROOM && roll(team, t, 'companion') < pc) {
+      const busy = d.kind === 'member' ? [d.who] : d.kind === 'pet' ? [] : [d.a, d.b];
+      let c = take();
+      if (busy.includes(c)) {
+        // The beat's own actor is busy: the next member goes now and this one keeps the next turn.
+        const next = take();
+        deferred = c;
+        c = next;
+      }
+      if (!busy.includes(c)) d = { ...d, companion: c };
+    }
+    if (t === slot) return d;
+  }
 }

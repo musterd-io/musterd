@@ -8,6 +8,7 @@ import {
   ambientFireP,
   ambientPool,
   type AmbientPool,
+  COMPANION_MIN_ROOM,
   COVERAGE_WINDOW_SLOTS,
   decideAmbient,
   roll,
@@ -303,6 +304,8 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
     for (let s = w * COVERAGE_WINDOW_SLOTS; s < (w + 1) * COVERAGE_WINDOW_SLOTS; s++) {
       const d = decideAmbient(team, s, poolOf(n));
       if (d.kind === 'member') out.push(d.who);
+      // A companion takes the next turn of the same rotation (ADR 617), right after the slot's own.
+      if (d.kind !== 'none' && d.companion) out.push(d.companion);
     }
     return out;
   }
@@ -341,6 +344,7 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
       if (d.kind === 'none') continue;
       busyUntil = s + 1 + Math.floor(roll(team, s, 'len') * 2);
       if (d.kind === 'member') gestured.add(d.who);
+      if (d.companion) gestured.add(d.companion);
     }
     return 1 - gestured.size / n;
   }
@@ -350,5 +354,50 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
   it('leaves few desks frozen for ten minutes (a uniform draw left 22% of six and 35% of twelve)', () => {
     expect(mean(6)).toBeLessThan(0.15);
     expect(mean(12)).toBeLessThan(0.2);
+  });
+
+  describe('the companion gesture (ADR 617)', () => {
+    it("meets nick's bar in practice: a twelve-person room almost never leaves anyone still for ten minutes", () => {
+      // Not zero by construction (ADR 617): the replay cannot know which slots a browser skipped.
+      const T = Array.from({ length: 200 }, (_, k) => `t${k}`);
+      const frozen = T.map((t) => frozenShare(t, 12));
+      const members = frozen.reduce((a, f) => a + f, 0) / T.length;
+      const windows = frozen.filter((f) => f > 0).length / T.length;
+      expect(members).toBeLessThanOrEqual(0.005);
+      expect(windows).toBeLessThanOrEqual(0.05);
+    });
+
+    it('is never the actor of the beat it accompanies', () => {
+      for (const team of teams) {
+        for (let s = 0; s < 4 * COVERAGE_WINDOW_SLOTS; s++) {
+          const d = decideAmbient(team, s, poolOf(12));
+          if (d.kind === 'none' || !d.companion) continue;
+          if (d.kind === 'member') expect(d.companion).not.toBe(d.who);
+          if (d.kind === 'pair' || d.kind === 'meet') expect([d.a, d.b]).not.toContain(d.companion);
+        }
+      }
+    });
+
+    it('keeps a small room calm: five or fewer members never get one', () => {
+      for (const team of teams)
+        for (let s = 0; s < 2 * COVERAGE_WINDOW_SLOTS; s++) {
+          const d = decideAmbient(team, s, poolOf(COMPANION_MIN_ROOM - 1));
+          expect(d.kind === 'none' ? undefined : d.companion).toBeUndefined();
+        }
+    });
+
+    it('rides along on some fired slots, not all of them', () => {
+      let fired = 0;
+      let withCompanion = 0;
+      for (const team of teams)
+        for (let s = 0; s < COVERAGE_WINDOW_SLOTS; s++) {
+          const d = decideAmbient(team, s, poolOf(12));
+          if (d.kind === 'none') continue;
+          fired++;
+          if (d.companion) withCompanion++;
+        }
+      expect(withCompanion / fired).toBeGreaterThan(0.55);
+      expect(withCompanion / fired).toBeLessThan(0.9);
+    });
   });
 });

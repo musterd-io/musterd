@@ -107,7 +107,9 @@ Targets (desktop baseline; the office panel is one pane of `/live`):
 - **At rest (Tier A only):** **0 office-canvas rAF/sec** (the idle-park invariant holds); only the compositor
   is active. No measurable sustained main-thread work from the office.
 - **An ambient beat:** a single Tier-B wake, **≤ ~4s**, at **≤ 20fps**, then re-park. At most one beat at a
-  time.
+  time. _(Amended 2026-10-15 by [ADR 617](617-companion-gesture.md): in a room of six or more seated
+  members, a beat that plays may carry one companion in-place gesture by another seated member, inside
+  the same wake. A companion never starts a wake on its own.)_
 - **A real act:** full 60fps choreography, **unchanged** by ambient — an ambient beat in flight yields
   immediately.
 - **Reduced-motion / hidden tab / collapsed panel:** no ambient work at all.
@@ -157,3 +159,5 @@ act semantics. The client-side **render** performance this ADR is about is budge
 "Performance budget & verification" above (headless rAF-count + frame-budget traces), which is the right
 instrumentation for a rendering change — distinct from the coordination telemetry the obs-evals gate governs.
 The underlying data's own observability lives with the firehose/presence ADRs it consumes (ADR 061/057).
+
+Snapshot-debt: none — the `rare` in the Decision ("Rare, brief, preemptable") is a design target for Tier B wakes, not an observed rate; this file is touched on 2026-10-15 only for a dated marker pointing at ADR 617, whose own Observability section carries the measured beat rates.

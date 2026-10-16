@@ -383,7 +383,8 @@ export interface OfficeHandle {
 /** @see OfficeHandle.ambientLog */
 export interface AmbientLogEntry {
   slot: number;
-  kind: 'pet' | 'pair' | 'meet' | 'member';
+  /** `companion`: the in-place gesture that rode along beside the slot's beat (ADR 617). */
+  kind: 'pet' | 'pair' | 'meet' | 'member' | 'companion';
   who?: string;
   pair?: [string, string];
   /** Whether THIS browser's local guards let the beat run — the one honest per-viewer field. */

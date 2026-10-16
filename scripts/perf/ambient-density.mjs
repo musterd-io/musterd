@@ -166,19 +166,28 @@ const occupancy = await evalJson('new URLSearchParams(location.search).get("n")'
 // The in-page log is capped at 200 entries, so poll and merge by slot rather than reading once at
 // the end: a long window at a raised probability can overflow it.
 const seen = new Map();
+// Keyed by slot AND kind: a companion gesture (ADR 617) logs beside its slot's own beat, and a
+// slot-only key would let one overwrite the other.
+const keyOf = (e) => `${e.slot}:${e.kind === 'companion' ? 'c' : 'm'}`;
+// Main-thread busy time over the window (CDP TaskDuration, seconds) — the drift tier's cost method.
+await send('Performance.enable');
+const taskSecs = async () =>
+  (await send('Performance.getMetrics')).metrics.find((m) => m.name === 'TaskDuration')?.value ?? 0;
+const task0 = await taskSecs();
 const started = Date.now();
 const endAt = started + MINUTES * 60_000;
 process.stdout.write(`ambient-density: ${url}\n  window ${MINUTES}min, polling every 15s\n`);
 while (Date.now() < endAt) {
   await new Promise((r) => setTimeout(r, 15_000));
   const log = await evalJson('JSON.parse(JSON.stringify(window.__office.ambientLog()))');
-  for (const e of log) seen.set(e.slot, e);
+  for (const e of log) seen.set(keyOf(e), e);
   process.stdout.write(
     `  ${Math.round((Date.now() - started) / 60_000)}min: ${seen.size} fires, ` +
       `${[...seen.values()].filter((e) => e.played).length} played\n`,
   );
 }
 const elapsedMs = Date.now() - started;
+const busyPct = Number(((100 * ((await taskSecs()) - task0)) / (elapsedMs / 1000)).toFixed(2));
 
 const entries = [...seen.values()].sort((a, b) => a.slot - b.slot);
 const played = entries.filter((e) => e.played);
@@ -206,6 +215,10 @@ const out = {
   observedFireRate: Number((entries.length / slotsElapsed).toFixed(3)),
   playRate: entries.length ? Number((played.length / entries.length).toFixed(3)) : null,
   byKind,
+  /* Who moved at least once (a member beat or a companion) out of the room — ADR 617's bar. */
+  membersMoved: new Set(played.filter((e) => e.who).map((e) => e.who)).size,
+  /* Main-thread busy time as a share of one core across the window. */
+  busyPct,
 };
 process.stdout.write(`\n${JSON.stringify(out, null, 2)}\n`);
 if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));

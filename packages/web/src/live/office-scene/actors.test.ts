@@ -954,6 +954,45 @@ describe('neighbour conversations', () => {
   });
 });
 
+describe('the room notices (ADR 617)', () => {
+  function fullRoom() {
+    const nodes = Array.from({ length: 12 }, (_, i) => node('N' + String(i).padStart(2, '0')));
+    const { placements, byName } = world(nodes);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return actors;
+  }
+
+  it('turns a seated member toward what moved, keeps them in the chair, then back to the desk', () => {
+    const actors = fullRoom();
+    const [a] = actors.deskNeighbours()[0]!;
+    const home = actors.poses().get(a)!;
+    // Somewhere off to the side of their desk: a quarter turn away from where they face.
+    const target = { lx: home.lx + 120, ly: home.ly - 120 };
+    expect(actors.notice(a, target, () => 0.5)).toBe(true);
+    let minSit = 1;
+    let turned = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 1200) {
+      actors.step(0.05);
+      const p = actors.poses().get(a)!;
+      minSit = Math.min(minSit, p.sit);
+      if (p.dir !== home.dir) turned = true;
+    }
+    expect(turned).toBe(true);
+    expect(minSit).toBeGreaterThan(0.9);
+    expect(actors.poses().get(a)!.dir).toBe(home.dir);
+  });
+
+  it('declines a member who is already busy, so the scene can fall back to a gesture', () => {
+    const actors = fullRoom();
+    const [a, b] = actors.deskNeighbours()[0]!;
+    actors.deskChat(a, b);
+    const h = actors.poses().get(a)!;
+    expect(actors.notice(a, { lx: h.lx + 100, ly: h.ly }, () => 0.5)).toBe(false);
+  });
+});
+
 describe('the check-in beat', () => {
   it('does NOT fire for members already present on the first snapshot', () => {
     // The first reconcile is how a page load seats the room. Everyone in it is "new" to the client

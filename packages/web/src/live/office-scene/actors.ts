@@ -478,6 +478,10 @@ const ROW_GAP = POD_ACROSS * 2;
 /** The gesture pairs a chat can be built from — one each, traded. `chin`/`lean` is the original and
  *  stays first so the familiar exchange remains the most common shape at a glance; the other two lean
  *  on beats that read at office scale without a hand (see the 2026-09-14 gesture pass). */
+/** What a member does while watching something go by (ADR 617): a hand to the chin, a little glance, or
+ *  a lean back — never anything that reads as work. */
+const NOTICE_REACTIONS: readonly number[] = [GESTURE.chin, GESTURE.glance, GESTURE.lean];
+
 const EXCHANGES: ReadonlyArray<readonly [number, number]> = [
   [GESTURE.chin, GESTURE.lean],
   [GESTURE.glance, GESTURE.chin],
@@ -552,6 +556,12 @@ export interface Actors {
    * window. Stationary filler, not a real act; returns false if the member can't gesture (absent, small,
    * exiting, walking, or already busy). See ADR 086 Phase 2 tail. */
   gestureBeat(from: string, kind: IdleGesture): boolean;
+  /** The room notices (ADR 617): a seated member swivels to watch something move at `at` — the dog
+   *  padding past, a colleague heading for coffee — then turns back to work. Stays in the chair.
+   *  False when they can't (absent, small, already busy), so the caller can fall back to a gesture. */
+  notice(who: string, at: { lx: number; ly: number }, rng?: () => number): boolean;
+  /** True while `name` is on a walk (an errand, a stroll, a meet) rather than seated or gesturing in place. */
+  walking(name: string): boolean;
   /** Seated desk members eligible to be sent on an ambient stroll right now (present, not small, idle). */
   idleDeskMembers(): string[];
   /** True when motion is in flight and *all* of it is ambient — drives the idle-FPS cap in the loop. */
@@ -1540,6 +1550,36 @@ export function createActors(): Actors {
       };
       walks.set(a, { legs: turn(ha, hb, true), i: 0, t: 0, small: false, ambient: true });
       walks.set(b, { legs: turn(hb, ha, false), i: 0, t: 0, small: false, ambient: true });
+      return true;
+    },
+    walking(name) {
+      return walks.has(name);
+    },
+    notice(who, at, rng = Math.random) {
+      const h = homes.get(who);
+      if (!h || !chatReady(who)) return false;
+      // The desk chat's seated turn, aimed at a point instead of a person: `sitAt` holds the chair,
+      // the leg's `dir` eases the swivel. A beat of plain watching, then a little reaction while still
+      // looking, then the walk ends and they ease back to the monitor.
+      const seat = { zone: 'lounge' as const, lx: h.lx, ly: h.ly, dir: h.dir, sit: 1, casual: false };
+      const face = travelDir(h.lx, h.ly, at.lx, at.ly);
+      if (face === h.dir) return false; // already looking that way: nothing would visibly happen
+      const watch = 1.4 + rng() * 0.8;
+      const react = NOTICE_REACTIONS[Math.floor(rng() * NOTICE_REACTIONS.length)] ?? GESTURE.chin;
+      const leg = (dur: number, overlay?: number): Leg => ({
+        fx: h.lx,
+        fy: h.ly,
+        tx: h.lx,
+        ty: h.ly,
+        dir: face,
+        dur,
+        carry: null,
+        bubble: null,
+        ease: 'inOut',
+        ...(overlay !== undefined ? { overlay } : {}),
+        sitAt: seat,
+      });
+      walks.set(who, { legs: [leg(watch), leg(1.1, react)], i: 0, t: 0, small: false, ambient: true });
       return true;
     },
     aisleMeet(a, b, rng = Math.random) {
