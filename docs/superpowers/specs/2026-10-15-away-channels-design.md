@@ -189,8 +189,8 @@ agent ──ask──▶ daemon (loopback) ──WS, daemon dials out──▶ r
   - **Retention is until the ask expires** (nick, 2026-10-15): metadata rows are deleted when the ask
     resolves or reaches `expires_at`, whichever is first. That is a stronger position than holding the
     message until expiry, so it does not weaken his choice.
-  - **Provider recovery window, stated, needing nick's acceptance:** Cloudflare may restore deleted metadata
-    rows for up to 30 days. They hold no ask content. (Open question 5.)
+  - **Provider recovery window, accepted by nick 2026-10-15:** Cloudflare may restore deleted metadata rows
+    for up to 30 days. They hold no ask content. (Open question 5.)
   - The **provider** (Slack) keeps the delivered message under its own retention. The relay cannot change
     that; it is the cost of delivering a body to Slack at all, and ADR 149 already accepted it.
   - **Ask expiry is defined, not inferred.** The daemon stamps `expires_at = raised_at + the tier's
@@ -361,5 +361,5 @@ answer. Changing the hold ceiling or `stranded` (ADR 153).
    person or role holds the org logins and rotates the signing secret, and what the recovery path is.
 4. **Does a per-channel "answer off" also remove delivery to privileged asks**, or only the buttons.
    Proposed: only the buttons; delivery is its own switch.
-5. **Provider recovery window.** Cloudflare may restore deleted relay metadata rows (no ask content) for up to
-   30 days. nick to accept that, or ask for a different design.
+5. _Decided 2026-10-15:_ nick accepts that Cloudflare may restore deleted relay metadata rows (no ask content)
+   for up to 30 days.
