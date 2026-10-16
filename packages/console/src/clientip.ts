@@ -73,12 +73,29 @@ function inList(list: BlockList, ip: string): boolean {
   return list.check(ip, isIP(ip) === 6 ? 'ipv6' : 'ipv4');
 }
 
+/**
+ * The bucket an address is counted in. IPv4: the address. IPv6: its /64 — one subscriber is
+ * normally handed a whole /64, so keying on the full address would let a single sender rotate
+ * through 2^64 buckets and never hit a limit (security review, 2026-10-16).
+ */
+export function bucketOf(ip: string): string {
+  if (isIP(ip) !== 6 || ip.includes('.')) return ip;
+  const [head = '', tail = ''] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const full = ip.includes('::') ? [...h, ...Array(8 - h.length - t.length).fill('0'), ...t] : h;
+  return `${full
+    .slice(0, 4)
+    .map((x) => x.replace(/^0+(?=.)/, ''))
+    .join(':')}::/64`;
+}
+
 export function clientIp(req: IncomingMessage, o: ClientIpOptions): string {
   const socketPeer = asIp(req.socket.remoteAddress) ?? 'unknown';
   const peer = (o.behindFlyProxy ? asIp(req.headers['fly-client-ip']) : null) ?? socketPeer;
   if (peer !== 'unknown' && inList(o.trustedProxies ?? CLOUDFLARE, peer)) {
     const visitor = asIp(req.headers['cf-connecting-ip']);
-    if (visitor) return visitor;
+    if (visitor) return bucketOf(visitor);
   }
-  return peer;
+  return peer === 'unknown' ? peer : bucketOf(peer);
 }

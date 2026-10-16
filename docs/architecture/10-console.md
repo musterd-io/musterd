@@ -115,7 +115,7 @@ src/
   bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
   csrf.ts         // csrfTokenFor(sid) (sha256 of the session id, base64url), csrfTokenValid (constant time), originAllowed (exactly the issuer; missing or null refused)
-  clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16
+  clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16; bucketOf keys IPv6 by its /64
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
   http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
