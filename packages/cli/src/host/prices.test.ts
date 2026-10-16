@@ -20,8 +20,26 @@ describe('host price table (ADR 583 Consequences — one table, dated provenance
   });
 
   it('an unknown model prices to undefined — the ledger records no_price_row, never a guess', () => {
-    expect(priceUsage('muse-spark-1.3', { input_tokens: 10, output_tokens: 10 })).toBeUndefined();
+    expect(priceUsage('muse-spark-9-9', { input_tokens: 10, output_tokens: 10 })).toBeUndefined();
     expect(priceUsage('', { input_tokens: 10 })).toBeUndefined();
+  });
+
+  it('muse-spark contributor and standard rows price apart (ADR 619)', () => {
+    // Contributor: $0.10 in / $0.20 out; cache read 0.02× of input.
+    expect(
+      priceUsage('muse-spark-1.3-contributor', {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_input_tokens: 1_000_000,
+      }),
+    ).toBeCloseTo(0.1 + 0.2 + 0.002, 6);
+    // Standard: $1.25 in / $4.25 out; cache read 0.12× of input — longest prefix wins.
+    expect(priceRowFor('muse-spark-1.3-contributor')?.prefix).toBe('muse-spark-1.3-contributor');
+    expect(priceRowFor('muse-spark-1.3')?.prefix).toBe('muse-spark-1.3');
+    expect(priceUsage('muse-spark-1.2', { input_tokens: 1_000_000, output_tokens: 0 })).toBeCloseTo(
+      1.25,
+      6,
+    );
   });
 
   it('every row names where its number was read', () => {

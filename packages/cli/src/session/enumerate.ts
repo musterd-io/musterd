@@ -130,6 +130,7 @@ let codexMemo: { root: string; at: number; rows: ScannedTranscript[] | undefined
 let cursorMemo: { root: string; at: number; rows: ScannedTranscript[] | undefined } | null = null;
 let opencodeMemo: { at: number; rows: ScannedTranscript[] | undefined } | null = null;
 let grokMemo: { root: string; at: number; rows: ScannedTranscript[] | undefined } | null = null;
+let museMemo: { root: string; at: number; rows: ScannedTranscript[] | undefined } | null = null;
 
 /** Drop the scan memo — tests and long-lived processes that need a guaranteed-fresh read. */
 export function resetSessionScan(): void {
@@ -138,6 +139,7 @@ export function resetSessionScan(): void {
   cursorMemo = null;
   opencodeMemo = null;
   grokMemo = null;
+  museMemo = null;
 }
 
 /**
@@ -442,6 +444,105 @@ const GrokSummarySchema = z
  * `$GROK_HOME/sessions/<encoded-cwd>/<id>/summary.json`. `grok sessions list` has no --json.
  * I/O failure is "cannot tell" (`undefined`), never "no sessions".
  */
+/**
+ * Muse Code sessions (ADR 619). The store is date-partitioned:
+ * `<dataRoot>/sessions/<YYYY>/<MM>/<DD>/<uuid>/session.jsonl`, where dataRoot defaults to
+ * `~/.local/share/muse` (measured on 1.4.9; XDG_DATA_HOME handling unverified, so not claimed).
+ * Attribution reads what Muse records: the event log carries `"workspace_root":"<path>"`
+ * (verified in a live log), resolved through {@link findWorkspaceDir} like every sibling — never
+ * decoded from directory names. mtime/bytes come from stat (the harness appends per turn).
+ */
+export function museDataRoot(home: string = homedir()): string {
+  return join(home, '.local', 'share', 'muse');
+}
+
+// The root appears both bare and backslash-escaped (inside `record_json` strings). Two patterns,
+// because one pattern eats the other's terminator: in the escaped form the value ends at `\"`
+// (a backslash NOT followed by a quote is value content, e.g. a Windows separator).
+const MUSE_WORKSPACE_ROOT_ESCAPED_RE = /\\"workspace_root\\":\\"((?:[^"\\]|\\(?!"))*)\\"/;
+const MUSE_WORKSPACE_ROOT_BARE_RE = /"workspace_root":"([^"]*)"/;
+
+function readMuseWorkspaceRoot(path: string): string | undefined {
+  let head: string;
+  try {
+    const fd = openSync(path, 'r');
+    try {
+      const buf = Buffer.alloc(CWD_PROBE_BYTES);
+      const n = readSync(fd, buf, 0, CWD_PROBE_BYTES, 0);
+      head = buf.subarray(0, n).toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return undefined;
+  }
+  const m = MUSE_WORKSPACE_ROOT_ESCAPED_RE.exec(head) ?? MUSE_WORKSPACE_ROOT_BARE_RE.exec(head);
+  if (!m) return undefined;
+  try {
+    return JSON.parse(`"${m[1]}"`) as string;
+  } catch {
+    return undefined;
+  }
+}
+
+export function enumerateMuseSessions(
+  workspace: string,
+  home: string = homedir(),
+  now = Date.now(),
+): SessionFile[] | undefined {
+  const root = join(museDataRoot(home), 'sessions');
+  if (!museMemo || museMemo.root !== root || now - museMemo.at > MEMO_MS) {
+    let rows: ScannedTranscript[] | undefined;
+    try {
+      rows = [];
+      const years = readdirSync(root, { withFileTypes: true });
+      for (const year of years) {
+        if (!year.isDirectory() || !/^\d{4}$/.test(year.name)) continue;
+        const months = readdirSync(join(root, year.name), { withFileTypes: true });
+        for (const month of months) {
+          if (!month.isDirectory() || !/^\d{2}$/.test(month.name)) continue;
+          const days = readdirSync(join(root, year.name, month.name), {
+            withFileTypes: true,
+          });
+          for (const day of days) {
+            if (!day.isDirectory() || !/^\d{2}$/.test(day.name)) continue;
+            const ids = readdirSync(join(root, year.name, month.name, day.name), {
+              withFileTypes: true,
+            });
+            for (const id of ids) {
+              if (!id.isDirectory()) continue;
+              const logPath = join(root, year.name, month.name, day.name, id.name, 'session.jsonl');
+              let stat: { mtimeMs: number; size: number };
+              try {
+                stat = statSync(logPath);
+              } catch {
+                continue;
+              }
+              const cwd = readMuseWorkspaceRoot(logPath);
+              rows.push({
+                id: id.name,
+                path: logPath,
+                mtime: stat.mtimeMs,
+                bytes: stat.size,
+                workspace: cwd === undefined ? null : findWorkspaceDir(cwd),
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      rows = undefined;
+    }
+    museMemo = { root, at: now, rows };
+  }
+  if (museMemo.rows === undefined) return undefined;
+  const target = resolve(workspace);
+  return museMemo.rows
+    .filter((row) => row.workspace !== null && resolve(row.workspace) === target)
+    .map(({ id, path, mtime, bytes }) => ({ id, path, mtime, bytes }))
+    .sort((a, b) => b.mtime - a.mtime);
+}
+
 export function enumerateGrokSessions(
   workspace: string,
   home = process.env['GROK_HOME'] ?? join(homedir(), '.grok'),
