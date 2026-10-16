@@ -101,6 +101,12 @@ Either way, the human picks a lane and it goes to the seat they are talking to.
   behaviour.
 - Lanes 2–5 build on these names (`docs/superpowers/plans/2026-10-16-musterd-pick.md`).
 
+- **2026-10-16 — `pickerRows` is also exported from `@musterd/protocol/wire`** (lane `01M5162T6H`, the
+  /live lane picker, #2733). The browser needs it, and the root index carries node-only modules
+  (`guidance-epoch` imports `node:fs`); the overlay, as the page's first runtime import of the root,
+  broke `/live` in dev. `picker.ts` has only type imports, so `wire.ts` re-exports it unchanged. No
+  schema or behaviour change: the same function, reachable from the browser-safe entry point.
+
 ## Observability & Evaluation
 
 - **Traces:**
