@@ -242,8 +242,13 @@ function denyOutranks(rule: string, candidate: string): boolean {
  * SPELLING equivalence only, deliberately: the three forms of one prefix fold together, and
  * nothing else does. No subsumption ("`Bash(git *)` covers `Bash(git push *)`") — that reasoning
  * belongs to the harness's matcher, and a home-grown copy of it is where the defect-3 class lives.
+ *
+ * Exported since ADR 633: the ADR 282 claude-code permissions fragment observer compares through
+ * the same form, so install, inspect and reconcile share ONE notion of "present" — a
+ * raw-string observer held a no-space-spelled workspace in `unmanaged-conflict` forever while
+ * the merge (same file) reported nothing to add.
  */
-function canonicalRuleForm(entry: string): string {
+export function canonicalRuleForm(entry: string): string {
   const m = /^(.+\()(.+?)(?: \*|:\*|\*)\)$/.exec(entry);
   return m ? `${m[1]}${m[2]} *)` : entry;
 }

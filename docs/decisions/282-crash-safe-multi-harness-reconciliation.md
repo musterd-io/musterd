@@ -209,3 +209,12 @@ Two refinements the implementation surfaced; neither alters the Decision above.
    under one fragment's lease may belong to a sibling fragment of the same container, so recovery
    resolves the journaled resource key against ALL of the adapter's current intents, not the one
    whose lease found it.
+
+## Note (2026-10-16, ADR 633)
+
+The claude-code permissions fragment's `observe` compared raw strings, so a settings file
+carrying a floor entry in an alternate working spelling (`Bash(pnpm test*)` vs the floor's
+`Bash(pnpm test *)`) observed incomplete and classified `unmanaged-conflict` forever, while
+ADR 261's merge — same file, different ADR — saw equivalence and reported nothing to add.
+[ADR 633](./633-harness-permissions-fragment-canonical-form.md) brings the observer onto
+`canonicalRuleForm`, the one shared notion of "present". The action matrix above is unchanged.
