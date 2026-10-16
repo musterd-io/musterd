@@ -79,20 +79,21 @@ headless live measurement (scratch port, isolated `XDG_DATA_HOME`).
 
 ### Muse Code (added 2026-10-16, ADR 619)
 
-Observed against dev.meta.ai muse-code docs and binary 1.4.9 on 2026-10-15/16 (echo provider;
-no Meta credentials — every credentialed cell is marked as such).
+Observed against dev.meta.ai muse-code docs and binary 1.4.9 on 2026-10-15 (echo provider),
+plus one credentialed run of 1.4.10 on 2026-10-16 (lane 01M50ZJ8KG, recorded in ADR 619).
+A cell that rests on that run says so.
 
 | Feature | Muse Code (terminal, interactive `muse`) | Muse Code (headless `muse exec`) |
 | --- | --- | --- |
 | Session labeling | terminal OSC 0 only (no sidebar write API observed) | none — no controlling terminal |
 | Hook capture | SessionStart + Stop in `.muse/hooks.json` (Claude-style nesting, measured — docs show no schema; startup validation names violations) | same files (hooks run headless — measured both firing) |
 | Skills / guidance | `.agents/skills` read natively (shared with musterd's canonical skill — no bridge) + AGENTS.md | same |
-| Model attestation | hook payload `model_id`/`model` when present; session.jsonl model records unmapped (Follows-up: 01M50ZJ8KG) | same |
+| Model attestation | hook payload `model_id`/`model` when present. The 1.4.10 run recorded `muse-wonder-1.0` in standard mode and `muse-wonder-1.0-contributor` in contributor mode. Enumeration attributes a session by `workspace_root` and does not read a model id out of session.jsonl | same |
 | Session capture | `~/.local/share/muse/sessions/<YYYY>/<MM>/<DD>/<uuid>/session.jsonl`, attributed by recorded `workspace_root` | same |
 | Config entry scope | machine-global `~/.config/muse/settings.json` (`schema_version: 1` mandatory) | same |
 | MCP env channel | **absent** — stdio children receive `MUSE_SESSION_ID` but not `MUSTERD_*` (measured); the lease file attests | same |
 | MCP `mode` | `optional` required in practice: `required` aborts every run whose server exits, including non-musterd repos (measured both ways) | same |
-| Usage metering shape | unverified — needs a credentialed run | unverified — needs a credentialed run |
+| Usage metering shape | measured 2026-10-16 on 1.4.10: `model_completed.usage` is `{input_tokens, output_tokens, cached_tokens, cache_write_tokens, cache_read_tokens, reasoning_tokens}` (that run's cached count was 0). Follows-up: 01M52YJW3H8D6SWBEPX0RH4KKW wires this into WakeCompletion; until then a Muse wake stays `harness_price_unverified` | same |
 
 ## The wire is not this page
 
