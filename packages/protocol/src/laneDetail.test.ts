@@ -5,6 +5,7 @@ import {
   laneDetailLines,
   LaneDetailSchema,
   laneEventLine,
+  isBareLaneId,
   laneIdQuery,
   LaneQuerySchema,
   type LaneDetail,
@@ -46,6 +47,25 @@ function detail(over: Partial<LaneDetail> & { lane?: Partial<LaneDetail['lane']>
     lane: { ...LANE, ...over.lane },
   });
 }
+
+describe('isBareLaneId', () => {
+  it('is a full 26-character lane id, any case, surrounding space ignored', () => {
+    expect(isBareLaneId('01M50C1ZZMJFRG409G6TC4S303')).toBe(true);
+    expect(isBareLaneId(' 01m4vkrxex53sf0wkgpd1pa97t ')).toBe(true);
+  });
+
+  it('is not a prefix, a date, a word, or a title that mentions an id', () => {
+    for (const t of [
+      '01M50C1ZZM',
+      '20261015',
+      'standard',
+      'follow-up to 01M50C1ZZMJFRG409G6TC4S303',
+      '81M50C1ZZMJFRG409G6TC4S303',
+      '01M50C1ZZMJFRG409G6TC4S30I',
+    ])
+      expect(isBareLaneId(t)).toBe(false);
+  });
+});
 
 describe('laneIdQuery', () => {
   it('takes a ULID or a prefix of 8+, any case, and normalizes to upper', () => {

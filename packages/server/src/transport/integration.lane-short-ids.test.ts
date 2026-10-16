@@ -74,6 +74,25 @@ withDrivers('integration · lane short ids', (_o, kind) => {
     });
   });
 
+  describe('a lane id is not a title', () => {
+    it('refuses to open a lane titled with a bare lane id, and points at claim', async () => {
+      const tok = await team('typo');
+      const real = (await post('/teams/typo/lanes', { title: 'the real work' }, tok)).json.lane;
+      // 2026-10-15: `lane open <id>` typed for `lane claim <id>`, twice, made two empty lanes.
+      const res = await post('/teams/typo/lanes', { title: ` ${real.id.toLowerCase()} ` }, tok);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.json)).toMatch(/is a lane id, not a work item/);
+      expect(JSON.stringify(res.json)).toMatch(/lane claim/);
+      // A title that merely mentions an id, or is a short prefix, still opens.
+      expect(
+        (await post('/teams/typo/lanes', { title: `follow-up to ${real.id}` }, tok)).status,
+      ).toBe(201);
+      expect((await post('/teams/typo/lanes', { title: real.id.slice(0, 10) }, tok)).status).toBe(
+        201,
+      );
+    });
+  });
+
   describe('lane ids a body names (ADR 582)', () => {
     it('stores depends_on and follows_up prefixes as full ids', async () => {
       const tok = await team('named');
