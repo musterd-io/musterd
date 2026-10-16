@@ -1,6 +1,12 @@
 import type { request as httpsRequest, RequestOptions } from 'node:https';
 import { afterEach, describe, expect, it } from 'vitest';
-import { postJsonPinned, setSinkPostForTests, type PinnedPostDeps } from './pinnedPost.js';
+import {
+  getPinned,
+  postJsonPinned,
+  setPinnedGetForTests,
+  setSinkPostForTests,
+  type PinnedPostDeps,
+} from './pinnedPost.js';
 
 type Captured = {
   url: URL;
@@ -159,6 +165,116 @@ describe('postJsonPinned — resolve, refuse private, pin (ADR 443 §5 closed)',
     expect(await postJsonPinned('https://x.example/', 'ab', 1000)).toEqual({
       ok: true,
       status: 20,
+    });
+  });
+});
+
+/** A fake https.request for GET: records the call and the pin, answers `status` with `chunks`. */
+function fakeGet(
+  status: number,
+  chunks: string[] = [],
+): { request: typeof httpsRequest; calls: Captured[] } {
+  const calls: Captured[] = [];
+  const request = ((url: URL, options: RequestOptions, cb: (res: unknown) => void) => {
+    const call: Captured = { url, options, body: '', pinned: null };
+    calls.push(call);
+    options.lookup?.(
+      url.hostname,
+      { all: false } as never,
+      ((_err: unknown, address: string, family: number) => {
+        call.pinned = { address, family };
+      }) as never,
+    );
+    const req = {
+      on() {
+        return req;
+      },
+      end() {
+        const handlers: Record<string, (arg?: unknown) => void> = {};
+        setImmediate(() => {
+          cb({
+            statusCode: status,
+            headers: {},
+            resume() {},
+            on(ev: string, fn: (arg?: unknown) => void) {
+              handlers[ev] = fn;
+            },
+          });
+          for (const chunk of chunks) handlers['data']?.(Buffer.from(chunk));
+          handlers['end']?.();
+        });
+      },
+      destroy() {},
+    };
+    return req;
+  }) as unknown as typeof httpsRequest;
+  return { request, calls };
+}
+
+describe('getPinned — the seeds relay pull takes the same rule (lane 01M3W815KR)', () => {
+  afterEach(() => setPinnedGetForTests(null));
+
+  it('GETs through the pin with the given headers and returns the body on a 2xx', async () => {
+    const d = deps([{ address: '93.184.216.34', family: 4 }], fakeGet(200, ['{"seeds"', ':[]}']));
+    const out = await getPinned(
+      'https://relay.example/seeds',
+      { authorization: 'Bearer t' },
+      1000,
+      1024,
+      d,
+    );
+    expect(out).toEqual({ ok: true, status: 200, body: '{"seeds":[]}' });
+    const call = d.calls[0]!;
+    expect(call.pinned).toEqual({ address: '93.184.216.34', family: 4 });
+    expect(call.options.method).toBe('GET');
+    expect(call.options.servername).toBe('relay.example');
+    expect((call.options.headers as Record<string, string>)['authorization']).toBe('Bearer t');
+  });
+
+  it('a name resolving to a private, loopback, link-local or ULA address is refused unconnected', async () => {
+    const answers: { address: string; family: 4 | 6 }[] = [
+      { address: '10.0.0.8', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+      { address: '169.254.169.254', family: 4 },
+      { address: 'fdaa::3', family: 6 },
+      { address: 'fe80::1', family: 6 },
+    ];
+    for (const answer of answers) {
+      const d = deps([answer], fakeGet(200, ['{}']));
+      expect(await getPinned('https://relay.example/seeds', {}, 1000, 1024, d)).toEqual({
+        ok: false,
+        refused: true,
+      });
+      expect(d.calls).toHaveLength(0);
+    }
+  });
+
+  it('http, a malformed URL and an unresolvable name are refused; a 3xx is a status, not followed', async () => {
+    const d = deps([{ address: '93.184.216.34', family: 4 }], fakeGet(200));
+    expect(await getPinned('http://relay.example/seeds', {}, 1000, 1024, d)).toEqual({
+      ok: false,
+      refused: true,
+    });
+    expect(await getPinned('not a url', {}, 1000, 1024, d)).toEqual({ ok: false, refused: true });
+    expect(d.calls).toHaveLength(0);
+    const nx = deps(new Error('ENOTFOUND'));
+    expect(await getPinned('https://nx.example/seeds', {}, 1000, 1024, nx)).toEqual({
+      ok: false,
+      refused: true,
+    });
+    const moved = deps([{ address: '93.184.216.34', family: 4 }], fakeGet(302));
+    expect(await getPinned('https://relay.example/seeds', {}, 1000, 1024, moved)).toEqual({
+      ok: false,
+      status: 302,
+    });
+    expect(moved.calls).toHaveLength(1);
+  });
+
+  it('a body past maxBytes is dropped, not returned', async () => {
+    const d = deps([{ address: '93.184.216.34', family: 4 }], fakeGet(200, ['x'.repeat(8)]));
+    expect(await getPinned('https://relay.example/seeds', {}, 1000, 4, d)).toEqual({
+      ok: false,
+      status: 200,
     });
   });
 });

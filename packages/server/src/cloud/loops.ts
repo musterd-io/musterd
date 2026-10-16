@@ -20,16 +20,16 @@ export const LOOPS = [
 export type LoopName = (typeof LOOPS)[number];
 
 /**
- * Loops that do not run on Cloud (1C task 8; review M4). Most read or write THIS MACHINE:
+ * Loops that do not run on Cloud (1C task 8; review M4). Each reads or writes THIS MACHINE:
  * - `roster_watch` — projects roster files from local checkouts (ADR 058); Cloud has none.
  * - `footprint` — samples `ps` on the host the daemon runs on; on Cloud that is a Fly VM.
  * - `sync_push` / `sync_pull` / `trace_push` — a federation NODE talking to its hub (ADR 328);
  *   Cloud is the place teams live, never a node of one.
  *
- * One is about the network instead:
- * - `seeds_ingest` — fetches a relay URL that a team's admin sets in policy, with no public-host
- *   check; on a multi-tenant fleet that is an outbound request any customer can aim at a private or
- *   platform-internal address. It returns once the relay fetch has the webhook's public-host rule.
+ * `seeds_ingest` was on this list until lane 01M3W815KR. It fetches a relay URL a team's admin sets
+ * in policy, which on a multi-tenant fleet any customer could aim at a private or platform-internal
+ * address. The pull now goes through `getPinned` (ADR 443 §5's rule: https, resolved and refused
+ * unless every answer is global unicast, pinned, no redirect), so it runs on Cloud.
  *
  * `audit_retention` was on this list until lane 01M3W6GWVN. Locally it archives churn rows to a file
  * beside the SQLite store (ADR 478), and a Cloud VM's disk is ephemeral; on Cloud it archives into
@@ -42,7 +42,6 @@ const NOT_ON_CLOUD: ReadonlySet<LoopName> = new Set([
   'sync_push',
   'sync_pull',
   'trace_push',
-  'seeds_ingest',
 ]);
 
 export function loopsFor(mode: ResolvedConfig['mode']): ReadonlySet<LoopName> {

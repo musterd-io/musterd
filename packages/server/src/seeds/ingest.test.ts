@@ -9,6 +9,7 @@ import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { saveNodeEnrollment } from '../node/state.js';
+import { setPinnedGetForTests, type PinnedGet } from '../notify/pinnedPost.js';
 import { listLanes } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
@@ -47,6 +48,7 @@ withDrivers('ingest', (o) => {
 
     afterEach(() => {
       vi.restoreAllMocks();
+      setPinnedGetForTests(null);
       db.close();
     });
 
@@ -63,13 +65,22 @@ withDrivers('ingest', (o) => {
       return team;
     }
 
+    /** The relay behind the pinned-GET seam; pinnedPost.test.ts exercises the real transport. */
     async function mockRelay(batches: unknown[][]) {
       let call = 0;
-      return vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      const spy = vi.fn<PinnedGet>(() => {
         const seeds = batches[Math.min(call, batches.length - 1)] ?? [];
         call += 1;
-        return Promise.resolve(new Response(JSON.stringify({ seeds }), { status: 200 }));
+        return Promise.resolve({ ok: true, status: 200, body: JSON.stringify({ seeds }) });
       });
+      setPinnedGetForTests(spy);
+      return spy;
+    }
+
+    function noRelay() {
+      const spy = vi.fn<PinnedGet>();
+      setPinnedGetForTests(spy);
+      return spy;
     }
 
     it('creates one shared Seed per Slack record, opens no Lane, and advances the cursor', async () => {
@@ -101,7 +112,7 @@ withDrivers('ingest', (o) => {
 
     it('does nothing when policy has no relay configured — no outbound call ever', async () => {
       const team = await seedTeam(false);
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const fetchSpy = noRelay();
       expect(await ingestTeamSeeds(ctx, team)).toBe(0);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
@@ -120,7 +131,7 @@ withDrivers('ingest', (o) => {
           node_id,
           enrolled_at: 1,
         });
-        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+        const fetchSpy = noRelay();
         expect(await ingestTeamSeeds(ctx, team)).toBe(0);
         expect(fetchSpy).not.toHaveBeenCalled();
         expect(await listSeeds(db, team.id)).toEqual([]);
@@ -187,9 +198,47 @@ withDrivers('ingest', (o) => {
 
     it('a relay failure opens nothing and leaves the cursor where it was', async () => {
       const team = await seedTeam();
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 500 }));
+      setPinnedGetForTests(() => Promise.resolve({ ok: false, status: 500 }));
       await expect(ingestTeamSeeds(ctx, team)).rejects.toThrow('relay responded 500');
       expect(await listSeeds(db, team.id)).toHaveLength(0);
+    });
+
+    it('a relay redirect is a status, never followed — nothing is created', async () => {
+      const team = await seedTeam();
+      setPinnedGetForTests(() => Promise.resolve({ ok: false, status: 302 }));
+      await expect(ingestTeamSeeds(ctx, team)).rejects.toThrow('relay responded 302');
+      expect(await listSeeds(db, team.id)).toHaveLength(0);
+    });
+
+    // Lane 01M3W815KR (review M4): on Cloud any customer admin sets the relay URL. Through the REAL
+    // transport (no seam), a private, loopback, link-local, ULA or non-https target is refused
+    // before any connection, the cursor does not move, and the error never echoes the URL.
+    it.each([
+      'https://127.0.0.1',
+      'https://10.0.0.8',
+      'https://172.16.0.1',
+      'https://192.168.1.1',
+      'https://169.254.169.254',
+      'https://100.64.0.1',
+      'https://[::1]',
+      'https://[fe80::1]',
+      'https://[fdaa::3]',
+      'https://[::ffff:7f00:1]',
+      'http://relay.example',
+    ])('refuses a relay at %s without connecting', async (relayUrl) => {
+      const team = await seedTeam();
+      await setPolicy(db, team.id, { seeds_relay_url: relayUrl, seeds_relay_token: 'tok' });
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const error: unknown = await ingestTeamSeeds(ctx, team).catch((e: unknown) => e);
+      expect(String(error)).toContain('relay refused: the url must be https to a public host');
+      expect(String(error)).not.toContain(new URL(relayUrl).hostname);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(await listSeeds(db, team.id)).toEqual([]);
+      const cursor = await db.get(
+        'SELECT last_seed_id FROM seeds_ingest_cursor WHERE team_id = ?',
+        [team.id],
+      );
+      expect(cursor).toBeFalsy();
     });
   });
 });
