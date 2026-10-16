@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   mergeClaims,
   ACCEPTANCE_STALE_MS,
@@ -1650,6 +1651,43 @@ export async function builtOn(
   return out;
 }
 
+const BRANCH_FILE_CACHE = new Map<string, string[] | null>();
+
+const BRANCH_OVERLAP_EXCLUDED = new Set([
+  'ROADMAP.md',
+  'pnpm-lock.yaml',
+  'docs/implementation-plan.md',
+]);
+
+function branchChangedFiles(root: string, branch: string): string[] {
+  const key = root + '\u0000' + branch;
+  if (BRANCH_FILE_CACHE.has(key)) {
+    return BRANCH_FILE_CACHE.get(key) ?? [];
+  }
+  let files: string[] | null = null;
+  try {
+    const base = execFileSync('git', ['-C', root, 'merge-base', 'origin/main', branch], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (base) {
+      const out = execFileSync('git', ['-C', root, 'diff', '--name-only', `${base}..${branch}`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      files = out
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((f) => !BRANCH_OVERLAP_EXCLUDED.has(f));
+    }
+  } catch {
+    files = null;
+  }
+  BRANCH_FILE_CACHE.set(key, files);
+  return files ?? [];
+}
+
 export async function laneWarnings(
   db: Driver,
   teamId: string,
@@ -1692,6 +1730,30 @@ export async function laneWarnings(
       }
     }
   }
+  // branch_overlap: file-level comparison of pushed branches (ADR 637). Advisory only,
+  // board-level, never a directed act. Opt-in via MUSTERD_BRANCH_OVERLAP=1 and only
+  // when a repository root is available.
+  if (process.env.MUSTERD_BRANCH_OVERLAP === '1' && lane.branch && CONTENDING.has(lane.state)) {
+    const root = process.env.MUSTERD_REPO_ROOT ?? process.cwd();
+    for (const other of board ?? (await listLanes(db, teamId, teamSlug))) {
+      if (other.id === lane.id || !CONTENDING.has(other.state)) continue;
+      if (!other.branch) continue;
+      if (!projectsContend(lane.project, other.project)) continue;
+      const a = branchChangedFiles(root, lane.branch);
+      if (a.length === 0) continue;
+      const bSet = new Set(branchChangedFiles(root, other.branch));
+      const shared = a.filter((f) => bSet.has(f));
+      if (shared.length === 0) continue;
+      warnings.push({
+        kind: 'branch_overlap',
+        subject: lane.id,
+        with: other.id,
+        owner: other.owner_seat,
+        detail: `branch overlaps "${other.title}" (owner ${other.owner_seat ?? 'unowned'}): ${shared.join(', ')}`,
+      });
+    }
+  }
+
   if (CONTENDING.has(lane.state)) {
     const w = noGoalWarning(lane, goals ?? (await listGoals(db, teamId, teamSlug)));
     if (w) warnings.push(w);
