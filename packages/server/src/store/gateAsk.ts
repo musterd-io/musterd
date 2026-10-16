@@ -1,3 +1,4 @@
+import { answerAuthority } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 
 /**
@@ -47,17 +48,29 @@ export async function gateAskHumanAnswer(
   askId: string,
 ): Promise<{ act: 'accept' | 'decline'; by: string; ts: number } | null> {
   try {
-    const row = await db.get<{ act: string; by: string; ts: number }>(
-      `SELECT m.act AS act, mem.name AS by, m.ts AS ts
+    // Earliest first, and the first one that is AUTHORITY wins (ADR 623 §4): an answer that came
+    // through a channel is advisory and never releases a gate, so it is skipped, not honoured.
+    const rows = await db.all<{ act: string; by: string; ts: number; meta: string | null }>(
+      `SELECT m.act AS act, mem.name AS by, m.ts AS ts, m.meta AS meta
            FROM messages m JOIN members mem ON mem.id = m.from_member
           WHERE m.team_id = ? AND m.act IN ('accept', 'decline')
             AND mem.kind = 'human'
             AND m.in_reply_to = ?
-          ORDER BY m.ts ASC LIMIT 1`,
+          ORDER BY m.ts ASC`,
       [teamId, askId],
     );
-    if (!row) return null;
-    return { act: row.act as 'accept' | 'decline', by: row.by, ts: row.ts };
+    for (const row of rows) {
+      let meta: Record<string, unknown> | null = null;
+      try {
+        meta = row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : null;
+      } catch {
+        // Unreadable meta cannot prove it is not a channel answer: fail closed, skip it.
+        continue;
+      }
+      if (answerAuthority(null, meta) !== 'authority') continue;
+      return { act: row.act as 'accept' | 'decline', by: row.by, ts: row.ts };
+    }
+    return null;
   } catch {
     return null;
   }

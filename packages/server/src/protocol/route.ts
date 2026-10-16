@@ -8,6 +8,7 @@ import {
   type DisputeAnswerWire,
   type Envelope,
   ACCEPTANCE_MOVES_NOTICE,
+  answerAuthority,
   changeLabelText,
   classifyAskAction,
   isAwaitingAcceptance,
@@ -507,6 +508,37 @@ async function routeEnvelopeInner(
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
 
+  // ADR 623 §2: `channel_answer` marks an answer that came through a channel. It is server-controlled:
+  // a client copy would let a seat dress a reply as a channel answer (or, by omission, hide one), so it
+  // is stripped from any envelope the daemon did not compose.
+  if (!daemonComposed && outgoingEnv.meta && 'channel_answer' in outgoingEnv.meta) {
+    const { channel_answer: _clientChannelAnswer, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
+  // ADR 623 §3-§4: one door for every consumer that treats a human `accept` or `decline` as authority
+  // (acceptance, hold proposals, policy review, handoff accept). A channel answer is recorded as a
+  // `message`, never as one of these, so a daemon-composed accept/decline that still carries
+  // `channel_answer` is a bug in the channel path, and it is refused here, before persist, rather than
+  // honoured by whichever consumer reads it first.
+  if (
+    (outgoingEnv.act === 'accept' || outgoingEnv.act === 'decline') &&
+    answerAuthority(null, outgoingEnv.meta) === 'advisory'
+  ) {
+    await appendAudit(ctx.db, team.id, {
+      actor: null,
+      action: 'channel.answer.refused',
+      target:
+        typeof outgoingEnv.meta?.['in_reply_to'] === 'string'
+          ? outgoingEnv.meta['in_reply_to']
+          : null,
+      result: 'deny',
+      detail: { reason: 'assurance', act: outgoingEnv.act, from: sender.name },
+    });
+    throw new MusterdError(
+      'forbidden',
+      'a channel answer cannot be an accept or decline (ADR 623): it is advice, not authority',
+    );
+  }
   // ADR 623 §1: `action_class` says what a channel answer (ADR 618) to this ask is worth. It is
   // **server-controlled** and stripped from every envelope, the daemon's own included: a client copy
   // would let an `approve` call itself `advisory`. Every ask is then classified from what the daemon

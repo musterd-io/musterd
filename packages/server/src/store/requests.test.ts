@@ -19,6 +19,29 @@ withDrivers('requests', (o) => {
   });
 
   describe('requests store (ADR 076)', async () => {
+    it('refuses a decision that arrived through a channel (ADR 623 §4) and leaves the request pending', async () => {
+      const { db, teamId } = await setup();
+      const r = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'seat:Ada',
+        surface: 'claude-code',
+      });
+      expect(
+        await decideRequest(db, teamId, r.id, 'approved', 'nick', { assurance: 'A1' }),
+      ).toBeNull();
+      expect(
+        await decideRequest(db, teamId, r.id, 'approved', 'nick', { assurance: 'A2' }),
+      ).toBeNull();
+      expect((await listRequests(db, teamId, { pendingOnly: true })).map((x) => x.id)).toContain(
+        r.id,
+      );
+      // The native path (no channel) is unchanged.
+      expect(await decideRequest(db, teamId, r.id, 'approved', 'nick')).toMatchObject({
+        status: 'approved',
+      });
+    });
+
     it('creates a pending request with surface + a computed expires_at', async () => {
       const { db, teamId } = await setup();
       const r = await createRequest(db, teamId, {

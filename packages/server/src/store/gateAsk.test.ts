@@ -101,6 +101,55 @@ withDrivers('gateAsk', (o) => {
   });
 
   describe('gateAskHumanAnswer (human-only release signal)', async () => {
+    it('ignores an A1 channel answer written as an accept (ADR 623 §4): it releases nothing', async () => {
+      const { db, team, ada, nick } = await seed();
+      await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        nick.id,
+        makeEnvelope({
+          id: 'ans-a1',
+          team: team.slug,
+          from: nick.name,
+          to: { kind: 'member', name: nick.name },
+          act: 'accept',
+          meta: {
+            in_reply_to: 'ask-1',
+            channel_answer: { channel: 'slack', assurance: 'A1', decision: 'approve' },
+          },
+          ts: 2_000,
+        }),
+      );
+      expect(await gateAskHumanAnswer(db, team.id, 'ask-1')).toBeNull();
+    });
+
+    it('still releases on a plain human accept that follows an ignored A1 one', async () => {
+      const { db, team, ada, nick } = await seed();
+      await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        nick.id,
+        makeEnvelope({
+          id: 'ans-a1',
+          team: team.slug,
+          from: nick.name,
+          to: { kind: 'member', name: nick.name },
+          act: 'decline',
+          meta: { in_reply_to: 'ask-1', channel_answer: { channel: 'slack', assurance: 'A1' } },
+          ts: 2_000,
+        }),
+      );
+      await answer(db, team, nick, 'accept', 'ans-plain', 'ask-1', 3_000);
+      expect(await gateAskHumanAnswer(db, team.id, 'ask-1')).toMatchObject({
+        act: 'accept',
+        by: 'nick',
+      });
+    });
+
     it('returns a human accept naming the ask', async () => {
       const { db, team, ada, nick } = await seed();
       await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
