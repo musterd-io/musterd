@@ -2,6 +2,7 @@ import { RelaySeedListSchema, type RelaySeed } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
+import { getPinned } from '../notify/pinnedPost.js';
 import { appendAudit } from '../store/audit.js';
 import { createSeedFromRelay } from '../store/seeds.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
@@ -35,15 +36,28 @@ async function lastSeedId(ctx: Ctx, teamId: string): Promise<string> {
   return row?.last_seed_id ?? '';
 }
 
+/** A relay page is a batch of short text records; anything past this is not a relay. */
+const MAX_RELAY_BYTES = 1024 * 1024;
+
+/**
+ * The relay URL is admin-set team policy, so the pull takes the doorbell sinks' rule (ADR 443 §5,
+ * `notify/pinnedPost.ts`): https only, the name resolved here and refused if any answer is not
+ * global unicast, the connection pinned to the checked address, and no redirect followed. That is
+ * what lets this loop run on a multi-tenant Cloud (lane 01M3W815KR). Errors never echo the URL.
+ */
 async function pullSeeds(url: string, token: string, after: string): Promise<RelaySeed[]> {
   const target = new URL('/seeds', url);
   if (after) target.searchParams.set('after', after);
-  const res = await fetch(target, {
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(PULL_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`relay responded ${res.status}`);
-  return RelaySeedListSchema.parse(await res.json()).seeds;
+  const res = await getPinned(
+    target.href,
+    { authorization: `Bearer ${token}`, accept: 'application/json' },
+    PULL_TIMEOUT_MS,
+    MAX_RELAY_BYTES,
+  );
+  if (res.refused) throw new Error('relay refused: the url must be https to a public host');
+  if (!res.ok || res.body === undefined)
+    throw new Error(`relay responded ${res.status ?? 'nothing'}`);
+  return RelaySeedListSchema.parse(JSON.parse(res.body)).seeds;
 }
 
 async function advanceCursor(

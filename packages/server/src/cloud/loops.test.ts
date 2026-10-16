@@ -18,19 +18,14 @@ describe('which background loops a server runs (1C task 8)', () => {
         'provision_sweep',
         'digest',
         'policy_review',
+        // Lane 01M3W815KR: the relay pull is resolved, checked public and pinned (ADR 443 §5).
+        'seeds_ingest',
       ].sort(),
     );
   });
 
-  it.each([
-    'roster_watch',
-    'footprint',
-    'sync_push',
-    'sync_pull',
-    'trace_push',
-    // Review M4: an admin-set relay URL is fetched with no public-host check — not on a fleet.
-    'seeds_ingest',
-  ])('cloud does not run %s', (loop) => {
+  const machineLoops = ['roster_watch', 'footprint', 'sync_push', 'sync_pull', 'trace_push'];
+  it.each(machineLoops)('cloud does not run %s', (loop) => {
     expect(loopsFor('cloud').has(loop as never)).toBe(false);
   });
 });
