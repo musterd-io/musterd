@@ -577,7 +577,12 @@ export type AuditAction =
   // detail.act = 'trust' — one row shape for every probe from a machine outside the set.
   | 'seat.node_trusted'
   // Spec 2026-09-16 (workspace self-heal), ADR 408: what a SessionStart repair wrote, skipped, left.
-  | 'workspace.repaired';
+  | 'workspace.repaired'
+  // Lane 01M52Z987280: the broadcast's last words — the stream posted its exit reason
+  // (`POST /teams/:slug/stream/epitaph`) before the machine's teardown could take it. actor = the
+  // stream's own observer seat, target null, detail `{ reason, code, ran_ms, machine? }` — the
+  // reason is composed in the CLI, never ffmpeg's raw stderr, so no credential rides along.
+  | 'stream.exit';
 
 /**
  * ADR 410 — whose row is this? `'actor'` and `'target'` name the column holding **the seat that
@@ -790,6 +795,9 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.unbound': 'actor',
   'seat.node_trusted': 'actor',
   'workspace.repaired': 'actor',
+  // The stream's observer seat posted its own epitaph — the row is about the stream's end and was
+  // acted by the seat itself, like any self-report.
+  'stream.exit': 'actor',
   'governed.policy.change': 'actor',
   'governed.launch.issue': 'actor',
   'governed.launch.consume': 'actor',
@@ -1181,6 +1189,22 @@ export async function hasRecentInterruptRefusal(
   } catch {
     return false;
   }
+}
+
+/** Read one action's rows for a team, newest-first, capped. A separate query from `listAudit`
+ *  rather than a new branch in it: that one's opts matrix is already three filters deep, and the
+ *  epitaph reader wants exactly this. */
+export async function listAuditByAction(
+  db: Driver,
+  teamId: string,
+  action: string,
+  limit = 1,
+): Promise<AuditRow[]> {
+  const cap = Math.min(Math.max(limit, 1), 100);
+  return await db.all<AuditRow>(
+    'SELECT * FROM audit WHERE team_id = ? AND action = ? ORDER BY ts DESC, id DESC LIMIT ?',
+    [teamId, action, cap],
+  );
 }
 
 /** Read the audit log for a team, newest-first, capped. `before` pages older than a given ts.

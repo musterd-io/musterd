@@ -208,6 +208,8 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ((launches += 1), { code: 0, output: '' }),
       sendAsk: async (body: string) => void asks.push(body),
+      // Hermetic default: no test may read the real daemon's epitaphs. Tests that care inject one.
+      fetchEpitaph: async () => null,
       mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
       stageSeat: () => ({ code: 0, output: '' }),
       ...over,
@@ -515,6 +517,8 @@ describe('musterd stream', () => {
       who: () => 'miley',
       launch: () => ((launches += 1), { code: 0, output: '' }),
       sendAsk: async (body: string) => void asks.push(body),
+      // Hermetic default: no test may read the real daemon's epitaphs. Tests that care inject one.
+      fetchEpitaph: async () => null,
       ...over,
     });
 
@@ -719,6 +723,103 @@ describe('musterd stream', () => {
       expect(await run(['ensure'], sup())).toBe(0);
       expect(readStreamState(statePath)!.restarts).toEqual([NOW]);
       expect(out.join('')).not.toMatch(/deploy/i);
+    });
+
+    // Lane 01M52Z987280 — the dead machine's last words, merged into the supervisor's own lines.
+    // The wiring is the defect class: the epitaph could be sitting in audit perfectly and a crash
+    // note would still read "no stop record" and nothing else, which was the whole 2026-10-16 story.
+    describe('last words (lane 01M52Z987280)', () => {
+      const EP = {
+        ts: NOW - 30_000,
+        seat: 'broadcast-t1',
+        reason: 'ffmpeg ended (code 1) — the sink dropped',
+        code: 1,
+        ran_ms: 1_477_000,
+      };
+      const crashState = () => {
+        withImage();
+        agedImage(NOW - 120_000); // the recorded digest predates the run → a crash, not a deploy
+        writeStreamState(statePath, {
+          desired: 'live',
+          at: NOW - 60_000,
+          restarts: [],
+          image: 'sha256:' + 'b'.repeat(64),
+        });
+      };
+
+      it('a crash restart quotes the epitaph the machine posted before dying', async () => {
+        crashState();
+        expect(await run(['ensure'], sup({ fetchEpitaph: async () => EP }))).toBe(0);
+        const note = out.join('');
+        expect(note).toContain('crash detected');
+        expect(note).toContain(
+          'last words (exit 1 after 25m): “ffmpeg ended (code 1) — the sink dropped”',
+        );
+      });
+
+      it('no epitaph is itself the finding: died without reporting', async () => {
+        crashState();
+        expect(await run(['ensure'], sup())).toBe(0); // the base default returns null
+        expect(out.join('')).toContain('no last words — it died without reporting');
+      });
+
+      it('a stale epitaph is not quoted against a newer death', async () => {
+        crashState();
+        const stale = { ...EP, ts: NOW - 16 * 60_000 };
+        expect(await run(['ensure'], sup({ fetchEpitaph: async () => stale }))).toBe(0);
+        expect(out.join('')).toContain('no last words');
+        expect(out.join('')).not.toContain(EP.reason);
+      });
+
+      it('a deploy restart never asks for last words — it already named its cause', async () => {
+        withImage(); // record now says aaa…, the dead machine ran bbb…
+        writeStreamState(statePath, {
+          desired: 'live',
+          at: NOW - 60_000,
+          restarts: [],
+          image: 'sha256:' + 'b'.repeat(64),
+        });
+        let asked = 0;
+        expect(await run(['ensure'], sup({ fetchEpitaph: async () => ((asked += 1), EP) }))).toBe(
+          0,
+        );
+        expect(out.join('')).toMatch(/deploy/i);
+        expect(out.join('')).not.toContain('last words');
+        expect(asked).toBe(0);
+      });
+
+      it('the stand-down ask carries the last words a human needs', async () => {
+        withImage();
+        agedImage(NOW - 120_000);
+        writeStreamState(statePath, {
+          desired: 'live',
+          at: NOW - 60_000,
+          restarts: [NOW - 20 * 60_000, NOW - 10 * 60_000, NOW - 5 * 60_000],
+        });
+        expect(await run(['ensure'], sup({ fetchEpitaph: async () => EP }))).toBe(0);
+        expect(asks.length).toBe(1);
+        expect(asks[0]!).toContain('stopped 3×');
+        expect(asks[0]!).toContain(EP.reason);
+      });
+
+      it('status names the last end when the stream is not live', async () => {
+        writeStreamState(statePath, {
+          desired: 'stopped',
+          by: 'nick',
+          at: NOW - 60_000,
+          restarts: [],
+        });
+        expect(await run(['status'], sup({ fetchEpitaph: async () => EP }))).toBe(0);
+        const text = out.join('');
+        expect(text).toContain('last end');
+        expect(text).toContain('exit 1 after 25m live');
+        expect(text).toContain(EP.reason);
+      });
+
+      it('status stays quiet when there is nothing to quote', async () => {
+        expect(await run(['status'], sup())).toBe(0);
+        expect(out.join('')).not.toContain('last end');
+      });
     });
 
     // The falsifier from lane 01M2RAJ0JK: a build in ANY checkout is visible to `ensure` run from
