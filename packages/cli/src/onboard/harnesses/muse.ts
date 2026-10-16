@@ -19,7 +19,8 @@ import {
 
 /**
  * Meta's Muse Code CLI (ADR 619). Machine-global `~/.config/muse/settings.json` for the MCP
- * server entry (`mcp_servers.musterd`, stdio) and project-local `.muse/hooks.json` for the
+ * server entry (`mcpServers.musterd`, stdio — camelCase, what the binary writes; snake_case reads
+ * too and our entry migrates) and project-local `.muse/hooks.json` for the
  * lifecycle hooks (SessionStart orient nudge, Stop interrupt check). Shapes verified against the
  * installed binary (1.4.9, 2026-10-15) — the hooks nesting is Claude-style
  * `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "..."}]}]}}`, which the docs
@@ -85,7 +86,23 @@ export interface MuseMcpServer {
 export interface MuseSettings {
   schema_version?: number;
   mcp_servers?: Record<string, unknown>;
+  mcpServers?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+/**
+ * The `mcp_servers` block, whatever its case. Docs show snake_case; the binary (1.4.9) reads
+ * both and canonicalizes to camelCase on write — measured. Camel wins when both exist.
+ */
+export function museServersBlock(settings: MuseSettings): {
+  key: 'mcpServers' | 'mcp_servers';
+  servers: Record<string, unknown>;
+} | null {
+  for (const key of ['mcpServers', 'mcp_servers'] as const) {
+    const servers = settings[key];
+    if (typeof servers === 'object' && servers !== null) return { key, servers };
+  }
+  return null;
 }
 
 /** Parse settings.json, or null when absent/unparseable — a malformed file is never clobbered. */
@@ -108,7 +125,12 @@ export function museServerEntry(entry: McpServerEntry): MuseMcpServer {
     args: entry.args,
     env: { ...entry.env, ...launchEntryEnv(MUSE_SURFACE) },
     enabled: true,
-    mode: 'required',
+    // `optional`, never `required`: this file is machine-global, so a required musterd server
+    // aborts EVERY muse run on the box — including repos that are not musterd workspaces (a seat
+    // whose binding is missing makes the MCP exit, and required fails the run). Measured
+    // 2026-10-16 on 1.4.9: required + failing server refuses the run; optional warns and proceeds.
+    // A wake that needs the channel fails honestly at verify instead (lease unattested, ADR 379).
+    mode: 'optional',
   };
 }
 
@@ -128,7 +150,14 @@ export function upsertMuseServer(
     }
   }
   settings = { ...settings, schema_version: MUSE_SETTINGS_VERSION };
-  settings.mcp_servers = { ...(settings.mcp_servers ?? {}), musterd: museServerEntry(entry) };
+  // Canonical camelCase (what the binary itself writes); a legacy snake_case block keeps
+  // foreign servers untouched, but our own entry migrates so the two keys never disagree.
+  const servers = { ...((settings.mcpServers ?? {}) as Record<string, unknown>) };
+  servers['musterd'] = museServerEntry(entry);
+  settings.mcpServers = servers;
+  if (typeof settings.mcp_servers === 'object' && settings.mcp_servers !== null) {
+    delete (settings.mcp_servers as Record<string, unknown>)['musterd'];
+  }
   return { text: `${JSON.stringify(settings, null, 2)}\n`, created };
 }
 
@@ -233,11 +262,13 @@ export const muse: Harness = {
     const installed =
       existsSync(join(home, '.config', 'muse')) || (await resolveMuseBin()) !== null;
     const settings = readMuseSettings() ?? {};
-    const servers = settings.mcp_servers;
-    const inSettings = typeof servers === 'object' && servers !== null && 'musterd' in servers;
+    const block = museServersBlock(settings);
+    const inSettings = block !== null && 'musterd' in block.servers;
     const env =
-      inSettings && typeof servers['musterd'] === 'object' && servers['musterd'] !== null
-        ? ((servers['musterd'] as Record<string, unknown>)['env'] as
+      inSettings &&
+      typeof block.servers['musterd'] === 'object' &&
+      block.servers['musterd'] !== null
+        ? ((block.servers['musterd'] as Record<string, unknown>)['env'] as
             | Record<string, string>
             | undefined)
         : undefined;
@@ -342,7 +373,8 @@ export const museAdapter: HarnessAdapter = {
           issues: [{ path: museSettingsPathFor(ctx.env), message: 'settings.json does not parse' }],
         };
       }
-      const entry = parsed?.mcp_servers?.['musterd'] as MuseMcpServer | undefined;
+      const block = parsed === null ? null : museServersBlock(parsed);
+      const entry = block?.servers['musterd'] as MuseMcpServer | undefined;
       if (!entry) return { state: 'absent' };
       // Same shape as desiredFragments — command + args + env + enabled + mode — so a write
       // observes as itself. Entries predating the launch marker read as legacy (as on Grok).
@@ -367,8 +399,9 @@ export const museAdapter: HarnessAdapter = {
         if (raw === null) return;
         try {
           const settings = JSON.parse(raw) as MuseSettings;
-          if (settings.mcp_servers && 'musterd' in settings.mcp_servers) {
-            delete settings.mcp_servers['musterd'];
+          const block = museServersBlock(settings);
+          if (block !== null && 'musterd' in block.servers) {
+            delete block.servers['musterd'];
             ctx.fs.mkdirp(dirname(path));
             ctx.fs.writeFile(path, `${JSON.stringify(settings, null, 2)}\n`, 0o600);
           }

@@ -40,12 +40,14 @@ describe('muse settings.json (ADR 619)', () => {
     expect(created).toBe(true);
     const doc = JSON.parse(text) as Record<string, unknown>;
     expect(doc['schema_version']).toBe(1);
-    expect(doc['mcp_servers']).toMatchObject({
+    expect(doc['mcpServers']).toMatchObject({
       musterd: {
         transport: 'stdio',
         command: ENTRY.command,
         enabled: true,
-        mode: 'required',
+        // `optional`, never `required`: required wedges every non-musterd repo on the machine
+        // (measured 2026-10-16 — izzo's send-back of #2697).
+        mode: 'optional',
       },
     });
   });
@@ -54,14 +56,30 @@ describe('muse settings.json (ADR 619)', () => {
     const raw = JSON.stringify({
       schema_version: 1,
       theme: 'dark',
-      mcp_servers: { other: { transport: 'stdio', command: 'x', args: [] } },
+      mcpServers: { other: { transport: 'stdio', command: 'x', args: [] } },
     });
     const { text, created } = upsertMuseServer(raw, ENTRY);
     expect(created).toBe(false);
     const doc = JSON.parse(text) as Record<string, unknown>;
     expect(doc['theme']).toBe('dark');
+    expect(doc['mcpServers']).toHaveProperty('other');
+    expect(doc['mcpServers']).toHaveProperty('musterd');
+  });
+
+  it('reads a legacy snake_case block and migrates our entry to camelCase', () => {
+    const raw = JSON.stringify({
+      mcp_servers: {
+        other: { transport: 'stdio', command: 'x', args: [] },
+        musterd: { transport: 'stdio', command: 'old', args: [], mode: 'required' },
+      },
+    });
+    const { text } = upsertMuseServer(raw, ENTRY);
+    const doc = JSON.parse(text) as Record<string, Record<string, unknown>>;
+    expect(doc['mcpServers']).toHaveProperty('musterd');
+    expect(doc['mcpServers']['musterd']).toMatchObject({ mode: 'optional' });
+    // Foreign servers stay where they were; our stale snake entry is gone.
     expect(doc['mcp_servers']).toHaveProperty('other');
-    expect(doc['mcp_servers']).toHaveProperty('musterd');
+    expect(doc['mcp_servers']).not.toHaveProperty('musterd');
   });
 
   it('refuses a malformed file instead of clobbering it', () => {
