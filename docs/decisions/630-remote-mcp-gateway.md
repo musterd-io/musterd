@@ -73,10 +73,9 @@ already depends on `@musterd/server` for its tests).
    tests) answers `/mcp/:team` tool traffic with 503 "remote MCP not configured"; the OAuth routes
    still work. The server's tests cover OAuth and transport with a stub factory. Tool-level remote
    tests live in the CLI package, which depends on both.
-9. **Until the composed endpoint lands, the existing remote tools get their three bugs fixed**
-   (lane `01M51GMEJ4`: the read cursor, `GET /inbox` semantics, telemetry). They are deleted when
-   decision 2 ships.
-   Follows-up: 01M51GMEJ4BWWNBH2VW7RHAT5D
+9. **No stopgap on the old tools.** The daemon's three remote tools keep their known bugs (the read
+   cursor never advances, `GET /inbox` semantics are skipped, nothing is counted) until decision 2
+   ships and deletes them. nick chose this over patching code that is about to be removed.
 
 ## Consequences
 
@@ -103,8 +102,9 @@ already depends on `@musterd/server` for its tests).
 
 - **Traces:** each remote tool call is a `tool_call_stats` row with surface `remote` (decision 7),
   so per-seat counts and durations are on `GET /report`.
-- **Eval:** the CLI end-to-end tests named above, plus the stopgap's checks carried forward (a second
-  unread-only inbox check returns nothing new; a steer read on a phone is discharged).
+- **Eval:** the CLI end-to-end tests named above, including the checks that close the old tools'
+  bugs: a second unread-only inbox check returns nothing new, and a steer read on a phone is
+  discharged.
 - **Experiment:** p50 and p95 duration of `team_inbox_check` and `team_send` over the remote surface
   against the same tools from a desk adapter on the same daemon, read from `tool_call_stats` after a
   week of use. Falsifier: remote p95 more than 2× desk p95 means the loopback design needs the
