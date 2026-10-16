@@ -49,8 +49,20 @@ export type EngineEndReason = 'completed' | 'max_turns' | 'aborted' | 'auth' | '
  * tool-result path appends (`appendInterrupt`), so the seat hears an act whether or not it is calling
  * a musterd tool right now. The backend builds the source; the engine knows nothing about musterd.
  */
+/**
+ * ADR 627: the host's own read of a steered act — the tool call the seat would have made next
+ * (`team_inbox_check` by the act's id), already run, with its result. The engine puts it in the
+ * loop as a tool exchange, so the act's body reaches the model through the tool-result channel,
+ * never as a user turn (ADR 088 §4 holds for the line itself).
+ */
+export interface SteerRead {
+  tool: string;
+  args: Record<string, unknown>;
+  result: string;
+}
+
 export interface SteerSource {
-  subscribe(deliver: (line: string) => void): () => void;
+  subscribe(deliver: (line: string, read?: SteerRead) => void): () => void;
 }
 
 export interface EngineRunSpec {

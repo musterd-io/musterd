@@ -1,7 +1,13 @@
 import type { ResidencySteeredBody, WakeLeaseFile, WakeTurnBody } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { BackendContext, WakeSpec } from '../backend.js';
-import type { AgentLoopEngine, EngineRunResult, EngineRunSpec, EngineTurn } from '../engine.js';
+import type {
+  AgentLoopEngine,
+  EngineRunResult,
+  EngineRunSpec,
+  EngineTurn,
+  SteerRead,
+} from '../engine.js';
 import { boundTranscript, nativeBackend, resolveNativeModel, type NativeDeps } from './native.js';
 
 /**
@@ -399,7 +405,7 @@ describe('nativeBackend.wake', () => {
   });
 
   it('ADR 588 §6: a raised act reaches the engine through the run spec’s steer source and posts a residency.steered receipt', async () => {
-    let raised: ((line: string, actId: string) => void) | undefined;
+    let raised: ((line: string, actId: string, read?: SteerRead) => void) | undefined;
     const engine = scriptedEngine({});
     const { deps, steered } = makeDeps({
       engine,
@@ -417,16 +423,22 @@ describe('nativeBackend.wake', () => {
       spec(),
       ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true }), log),
     );
-    const heard: string[] = [];
-    const unsubscribe = engine.lastSpec?.steer?.subscribe((line) => heard.push(line));
+    const heard: [string, SteerRead | undefined][] = [];
+    const unsubscribe = engine.lastSpec?.steer?.subscribe((line, read) => heard.push([line, read]));
     expect(raised).toBeDefined();
-    raised!('⚡ musterd [revive]: steer from nick (steer) — read exactly it', 'ACT1');
+    const read: SteerRead = { tool: 'team_inbox_check', args: { ids: ['ACT1'] }, result: 'body' };
+    raised!('⚡ musterd [revive]: steer from nick (steer) — read exactly it', 'ACT1', read);
     await new Promise((r) => setTimeout(r, 5));
-    expect(heard).toEqual(['⚡ musterd [revive]: steer from nick (steer) — read exactly it']);
+    // ADR 627: the host read rides through to the engine with the line.
+    expect(heard).toEqual([
+      ['⚡ musterd [revive]: steer from nick (steer) — read exactly it', read],
+    ]);
     expect(steered).toEqual([
       expect.objectContaining({ lease_id: 'L1', act_id: 'ACT1', delivered_at: expect.any(Number) }),
     ]);
-    expect(log.some((l) => l.includes('steered izzo: act ACT1'))).toBe(true);
+    expect(
+      log.some((l) => l.includes('steered izzo: act ACT1') && l.includes('with the host read')),
+    ).toBe(true);
     unsubscribe?.();
   });
 

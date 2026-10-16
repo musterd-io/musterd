@@ -7,7 +7,7 @@ import {
 } from '@earendil-works/pi-ai';
 import type { WakeTranscriptLease } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import type { EngineTool, EngineTurn } from '../engine.js';
+import type { EngineTool, EngineTurn, SteerRead } from '../engine.js';
 import { classifyPiFailure, piEngine, providerForModel } from './pi.js';
 import { isPiTurnTranscript } from './rehydrate.js';
 
@@ -248,6 +248,87 @@ describe('piEngine.run', () => {
     ]);
     expect((turns[0]!.transcript as { steered?: string[] }).steered).toBeUndefined();
     expect(unsubscribed).toBe(1);
+  });
+
+  it('ADR 627: a steer that carries the host read reaches the next request as line, call and result — the model answers without fetching it', async () => {
+    const { models, handle } = faux();
+    let deliver: ((line: string, read?: SteerRead) => void) | undefined;
+    const seen: string[][] = [];
+    let requests = 0;
+    handle.setResponses([
+      fauxAssistantMessage([fauxToolCall('team_next', {}, { id: 'c1' })], {
+        stopReason: 'toolUse',
+      }),
+      (context) => {
+        requests += 1;
+        seen.push(
+          context.messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => {
+              if (m.role === 'user')
+                return `user:${typeof m.content === 'string' ? m.content : m.content.map((c) => ('text' in c ? c.text : '')).join('')}`;
+              if (m.role === 'assistant')
+                return `assistant:${m.content.map((c) => (c.type === 'toolCall' ? c.name : c.type)).join(',')}`;
+              return `toolResult:${m.content.map((c) => ('text' in c ? c.text : '')).join('')}`;
+            }),
+        );
+        return fauxAssistantMessage('answered in thread');
+      },
+    ]);
+    const turns: EngineTurn[] = [];
+    const line = '⚡ musterd [revive]: steer from nick (steer) — read exactly it';
+    const read: SteerRead = {
+      tool: 'team_inbox_check',
+      args: { ids: ['ACT1'] },
+      result: 'nick [steer]: stop and answer me',
+    };
+    const result = await piEngine({ models }).run({
+      model: 'claude-faux',
+      prompt: 'p',
+      tools: [
+        tool('team_next', async () => {
+          deliver?.(line, read);
+          return 'next — as mason';
+        }),
+      ],
+      steer: {
+        subscribe: (d) => {
+          deliver = d;
+          return () => undefined;
+        },
+      },
+      onTurn: (t) => turns.push(t),
+    });
+    expect(result.end).toBe('completed');
+    // One request after the steer, and it already holds the act's body as a tool result.
+    expect(requests).toBe(1);
+    expect(seen[0]).toEqual([
+      'user:p',
+      'assistant:team_next',
+      'toolResult:next — as mason',
+      `user:${line}`,
+      'assistant:team_inbox_check',
+      'toolResult:nick [steer]: stop and answer me',
+    ]);
+    // The body never rides a user turn (ADR 088 §4 for the line).
+    expect(
+      seen[0]!.filter((m) => m.startsWith('user:')).some((m) => m.includes('stop and answer')),
+    ).toBe(false);
+    // The record names the call as the host's, apart from the model's own assistant message.
+    const t1 = turns[1]!.transcript as {
+      steered?: string[];
+      host_reads?: { line: number; tool: string }[];
+    };
+    expect(t1.steered).toEqual([line]);
+    expect(t1.host_reads).toEqual([
+      expect.objectContaining({
+        line: 0,
+        tool: 'team_inbox_check',
+        args: { ids: ['ACT1'] },
+        result: read.result,
+      }),
+    ]);
+    expect(turns).toHaveLength(2);
   });
 
   it('stops at the turn cap and reports max_turns when the model still wanted tools', async () => {
