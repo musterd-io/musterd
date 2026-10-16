@@ -720,6 +720,7 @@ export const LaneWarningSchema = z.object({
   kind: z.enum([
     'unmet_dependency',
     'surface_overlap',
+    'branch_overlap',
     'stale_plan',
     'stale_dependency',
     'no_goal',
