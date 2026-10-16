@@ -158,3 +158,96 @@ describe('hostCookie (ADR 615)', () => {
     expect(() => hostCookie('s', 'v;Domain=evil')).toThrow();
   });
 });
+
+describe('POST /logout (ADR 620 decision 8)', () => {
+  async function bootWithStore() {
+    const { pglite } = await import('./testing.js');
+    const { migrate } = await import('./schema.js');
+    const { createSession, loadSession } = await import('./sessions.js');
+    const { db, q } = await pglite();
+    await db.exec('CREATE ROLE console_app NOLOGIN');
+    await migrate(q, 'console_app');
+    await q.query('INSERT INTO accounts (id, created_at) VALUES ($1, $2)', ['acc_1', 1]);
+    const sid = await createSession(
+      q,
+      { accountId: 'acc_1', method: 'github', identityProvider: 'github', identitySubject: '42' },
+      Date.now(),
+    );
+    const lines: string[] = [];
+    const server = createConsoleServer({ config, db: q, log: makeLog((l) => lines.push(l)) });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    stop = () => new Promise((r) => server.close(() => r()));
+    const port = (server.address() as AddressInfo).port;
+    const post = (path: string, body: string, headers: Record<string, string>) =>
+      new Promise<{ status: number; headers: Record<string, unknown> }>((resolve, reject) => {
+        const r = request(
+          {
+            host: '127.0.0.1',
+            port,
+            path,
+            method: 'POST',
+            headers: { host: 'app.musterd.test', ...headers },
+          },
+          (res) => {
+            res.resume();
+            res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
+          },
+        );
+        r.on('error', reject);
+        r.end(body);
+      });
+    const alive = async () => (await loadSession(q, sid, Date.now())) !== null;
+    return { sid, post, alive, lines };
+  }
+  const form = { 'content-type': 'application/x-www-form-urlencoded' };
+
+  it('refuses a missing, null or foreign Origin before reading anything', async () => {
+    const { sid, post, alive } = await bootWithStore();
+    const c = { cookie: `__Host-session=${sid}`, ...form };
+    for (const origin of [
+      undefined,
+      'null',
+      'https://evil.test',
+      'https://app.musterd.test.evil.test',
+    ]) {
+      const h: Record<string, string> = { ...c };
+      if (origin) h.origin = origin;
+      expect((await post('/logout', 'csrf=x', h)).status, String(origin)).toBe(403);
+    }
+    expect(await alive()).toBe(true);
+  });
+
+  it('refuses a wrong content type and a wrong CSRF token, and the session lives', async () => {
+    const { sid, post, alive } = await bootWithStore();
+    const base = { cookie: `__Host-session=${sid}`, origin: 'https://app.musterd.test' };
+    expect(
+      (await post('/logout', '{}', { ...base, 'content-type': 'application/json' })).status,
+    ).toBe(415);
+    expect((await post('/logout', 'csrf=wrong', { ...base, ...form })).status).toBe(403);
+    expect(await alive()).toBe(true);
+  });
+
+  it('with the right Origin and token: revokes the session, clears the cookie, redirects home', async () => {
+    const { csrfTokenFor } = await import('./csrf.js');
+    const { sid, post, alive, lines } = await bootWithStore();
+    const r = await post('/logout', `csrf=${csrfTokenFor(sid)}`, {
+      cookie: `__Host-session=${sid}`,
+      origin: 'https://app.musterd.test',
+      ...form,
+    });
+    expect(r.status).toBe(303);
+    expect(r.headers['location']).toBe('/');
+    expect(String(r.headers['set-cookie'])).toContain(
+      '__Host-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0',
+    );
+    expect(await alive()).toBe(false);
+    expect(lines.join('\n')).not.toContain(sid);
+  });
+
+  it('a GET to /logout changes nothing', async () => {
+    const { call } = await boot();
+    const r = await call('/logout');
+    expect(r.status).toBe(405);
+    expect(r.headers['allow']).toBe('POST');
+  });
+});

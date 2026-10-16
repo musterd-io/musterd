@@ -11,8 +11,11 @@ import { schemaVersion, type Queryable } from './db.js';
  *   account can hold several, and the binding is the provider's stable subject, never an email
  *   match (no auto-linking by email; big-body, 2026-10-15).
  * - `audit` is append-only for the runtime role: INSERT, nothing else (see GRANTS).
+ * - v2 (ADR 620): `sessions`, `auth_transactions` (OAuth and magic-link, single-use) and
+ *   `rate_limits`. Sessions and transactions are never deleted by the runtime — revocation and
+ *   consumption are columns, so the record survives; pruning is the maintenance role's.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const MIGRATIONS: { version: number; sql: string }[] = [
   {
@@ -47,6 +50,53 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);`,
   },
+  {
+    // v2 — sign-in state (ADR 620). Every secret is stored as a SHA-256 hash: a session id, a
+    // transaction cookie, an OAuth state, a magic-link token. The PKCE verifier and nonce are kept
+    // as issued (they are server-held and never leave the console). `session_generation` on the
+    // account is what revoke-all bumps; a session whose generation is behind is dead.
+    version: 2,
+    sql: `
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS session_generation INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS sessions (
+  id_hash TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id),
+  generation INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,
+  last_activity_at BIGINT NOT NULL,
+  idle_expires_at BIGINT NOT NULL,
+  absolute_expires_at BIGINT NOT NULL,
+  authenticated_at BIGINT NOT NULL,
+  method TEXT NOT NULL,
+  identity_provider TEXT NOT NULL,
+  identity_subject TEXT NOT NULL,
+  revoked_at BIGINT,
+  revoke_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id);
+CREATE TABLE IF NOT EXISTS auth_transactions (
+  id_hash TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  state_hash TEXT,
+  pkce_verifier TEXT,
+  nonce TEXT,
+  redirect_uri TEXT,
+  return_path TEXT NOT NULL,
+  email TEXT,
+  token_hash TEXT,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_tx_token ON auth_transactions(token_hash) WHERE token_hash IS NOT NULL;
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket TEXT NOT NULL,
+  window_start BIGINT NOT NULL,
+  count INTEGER NOT NULL,
+  PRIMARY KEY (bucket, window_start)
+);`,
+  },
 ];
 
 /**
@@ -66,7 +116,9 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO ${runtimeRole};
 GRANT SELECT ON console_meta TO ${runtimeRole};
 GRANT SELECT, INSERT, UPDATE, DELETE ON accounts, identities TO ${runtimeRole};
-GRANT INSERT ON audit TO ${runtimeRole};`;
+GRANT INSERT ON audit TO ${runtimeRole};
+GRANT SELECT, INSERT, UPDATE ON sessions, auth_transactions TO ${runtimeRole};
+GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limits TO ${runtimeRole};`;
 }
 
 /**

@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { appendAudit } from './audit.js';
 import type { ConsoleConfig } from './config.js';
+import { hostCookie } from './cookies.js';
+import { csrfTokenValid, originAllowed } from './csrf.js';
 import { DATABASE_UNREACHABLE_SENTENCE, type Queryable } from './db.js';
 import type { Log } from './log.js';
+import { cookie, FormError, readForm, SESSION_COOKIE } from './request.js';
+import { loadSession, revokeSession } from './sessions.js';
 
 /**
  * The console's HTTP boundary (ADR 615). The skeleton serves exactly two routes — `GET /health`
@@ -40,7 +45,12 @@ export interface ConsoleDeps {
   config: ConsoleConfig;
   db: Queryable;
   log: Log;
+  /** The clock (tests hold it). */
+  now?: () => number;
 }
+
+/** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
+const POST_ROUTES = new Set(['/logout']);
 
 function hostOf(req: IncomingMessage): string | null {
   const h = req.headers.host;
@@ -75,6 +85,7 @@ const err = (code: string, message: string) => ({ error: { code, message } });
 
 export function createConsoleServer(deps: ConsoleDeps): Server {
   const { config, db, log } = deps;
+  const now = deps.now ?? Date.now;
   const server = createServer(
     { maxHeaderSize: MAX_HEADER_BYTES, requestTimeout: REQUEST_TIMEOUT_MS },
     (req, res) => {
@@ -96,13 +107,51 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
         try {
           if (!allowedHost(req, config.allowedHosts))
             return send(res, 404, err('not_found', 'not found'));
-          if (req.method !== 'GET' && req.method !== 'HEAD') {
+          const path = (req.url ?? '/').split('?')[0] ?? '/';
+          if (req.method === 'POST' && POST_ROUTES.has(path)) {
+            // Every state change: the exact Origin, then the body's type and size, then the
+            // session's CSRF token (ADR 620 decision 8). A GET never reaches this branch.
+            if (!originAllowed(req, config.issuer)) {
+              route = 'forbidden_origin';
+              return send(res, 403, err('forbidden', 'forbidden'));
+            }
+            let form: URLSearchParams;
+            try {
+              form = await readForm(req);
+            } catch (e) {
+              if (e instanceof FormError)
+                return send(res, e.status, err(e.code, e.code.replace(/_/g, ' ')));
+              throw e;
+            }
+            if (path === '/logout') {
+              route = 'logout';
+              const sid = cookie(req, SESSION_COOKIE);
+              const t = now();
+              const session = await loadSession(db, sid, t);
+              const clear = { 'set-cookie': hostCookie('session', '', 0), location: '/' };
+              if (!session) return send(res, 303, { ok: true }, clear);
+              if (!csrfTokenValid(sid!, form.get('csrf')))
+                return send(res, 403, err('forbidden', 'forbidden'));
+              await revokeSession(db, session.idHash, 'logout', t);
+              await appendAudit(
+                db,
+                {
+                  action: 'session.revoke',
+                  requestId: rid,
+                  actorAccountId: session.accountId,
+                  detail: { reason: 'logout' },
+                },
+                t,
+              );
+              return send(res, 303, { ok: true }, clear);
+            }
+          }
+          if ((req.method !== 'GET' && req.method !== 'HEAD') || POST_ROUTES.has(path)) {
             route = 'method_not_allowed';
             return send(res, 405, err('method_not_allowed', 'method not allowed'), {
-              allow: 'GET, HEAD',
+              allow: POST_ROUTES.has(path) ? 'POST' : 'GET, HEAD',
             });
           }
-          const path = (req.url ?? '/').split('?')[0];
           if (path === '/health') {
             route = 'health';
             try {
