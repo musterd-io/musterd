@@ -433,6 +433,10 @@ export function filterPicker(view: PickerView, text: string): PickerView {
 
 ### Task 2.2: Record `pick`, refuse a forged attestation, raise the notice
 
+_(2026-10-16: the "raise the notice" half is replaced by ADR 626. The daemon only records the pick
+and refuses a forged attestation. The pending-pick marker, written by `musterd pick` and shown by
+`inbox --interrupt-check`, moves to lane 3, Task 3.4.)_
+
 - **Test:**
   1. A seat claims for itself with `pick: {via:'terminal', requested_by:'nick', attested:false,
      at}`. The `lane.claimed` row detail has `pick` verbatim. The seat's inbox holds one directed
@@ -520,6 +524,9 @@ export function filterPicker(view: PickerView, text: string): PickerView {
      filter (Review focus 3).
   4. Otherwise PATCH `{owner_seat: identity.name, pick: {via:'terminal', requested_by: <the
      human>, attested:false, harness, at}}`.
+- ADR 626: after a successful pick, write `.musterd/pending-pick.json` `{lane, title, requested_by,
+  at}` in the workspace. `musterd inbox --interrupt-check` prints it once (the ADR 626 text) and
+  deletes it. Test both halves.
 - `requested_by`: the team's human admin when there is exactly one, otherwise `--for-human
   <name>`, which is required then. Never invent one. `harness`: `MUSTERD_LAUNCH_SURFACE`, or
   omitted.

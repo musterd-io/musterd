@@ -347,6 +347,20 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
   PRIMARY KEY (team_id, ask_id)
 )`,
   },
+  {
+    // v101 — ADR 624 (lane picker, lane 01M5162MTC): a lane's latest decline (`declined_json`:
+    // `{by, reason, at}` from a release that gave a reason; cleared by any claim). Nullable, no
+    // backfill: NULL is "never declined".
+    version: 101,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('declined_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN declined_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS declined_json TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

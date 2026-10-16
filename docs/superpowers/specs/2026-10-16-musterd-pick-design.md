@@ -141,6 +141,10 @@ flow runs first and returns to the overlay.
 
 ### 5.6 The seat hears a terminal pick
 
+_(2026-10-16: the daemon notice below proved undeliverable. A seat's own acts reach no inbox, and the
+daemon has no member to send from. A terminal pick is instead delivered by a marker in the seat's
+workspace, which the interrupt check shows once. See ADR 626.)_
+
 In Claude Code, the output of a `!` command lands in the agent's context. In a split pane on another
 harness it does not, and a seat's own claim sends that seat no act. So when a claim carries `pick`,
 the daemon raises a directed notice on that seat's interrupt line. The existing per-harness hooks

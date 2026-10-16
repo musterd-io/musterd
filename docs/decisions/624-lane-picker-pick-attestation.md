@@ -55,7 +55,9 @@ Either way, the human picks a lane and it goes to the seat they are talking to.
    refuses a self-claim that says `true`. A terminal pick is therefore never recorded as proven.
    The record says the seat claimed the lane at the human's request, and that the request is
    unverified.
-3. **A picked claim raises a directed interrupt-class act to the seat.** When a claim carrying
+3. _(Amended 2026-10-16: for a terminal pick the daemon sends no act — a seat's own acts reach no
+   inbox and the daemon has no member to send from; the seat's workspace delivers the pick instead.
+   See ADR 626.)_ **A picked claim raises a directed interrupt-class act to the seat.** When a claim carrying
    `pick` changes the lane's owner, the daemon delivers a directed act to the new owner. The act
    carries `meta.lane_pick {lane, title, requested_by, via}`, and its body asks the seat for a short
    plan. It uses the interrupt line, so each harness's existing hook delivers it. Re-picking a lane
@@ -100,6 +102,10 @@ Either way, the human picks a lane and it goes to the seat they are talking to.
   (zod strips unknown keys) and never sends `declined`, so mixed builds degrade to today's
   behaviour.
 - Lanes 2–5 build on these names (`docs/superpowers/plans/2026-10-16-musterd-pick.md`).
+- 2026-10-16, lane `01M5162MTC`: Decision 3's act could not be delivered. A seat's own acts are
+  dropped by every inbox, delivery, interrupt and wake query, and `messages.from_member` must be a
+  member, which the daemon is not. ADR 626 replaces the act with a pending-pick marker that
+  `musterd pick` writes into the seat's workspace and the seat's interrupt check shows once.
 
 ## Observability & Evaluation
 
