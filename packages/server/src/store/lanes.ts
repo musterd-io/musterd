@@ -1661,10 +1661,12 @@ const BRANCH_OVERLAP_EXCLUDED = new Set([
 
 function branchTipSha(root: string, branch: string): string | null {
   try {
-    return execFileSync('git', ['-C', root, 'rev-parse', `${branch}^{commit}`], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim() || null;
+    return (
+      execFileSync('git', ['-C', root, 'rev-parse', `${branch}^{commit}`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim() || null
+    );
   } catch {
     return null;
   }
