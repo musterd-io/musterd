@@ -129,6 +129,17 @@ rows are added to the audit action map.
   produced. An ask that is no longer open (answered on another surface) is refused as `conflict`. The
   closed set of reasons is `unknown_token`, `expired`, `consumed`, `assurance`, `stale_revision`,
   `class_changed`, `binding_stale`, `no_binding_store`, `conflict`.
+- _(2026-10-15, lane 2d)_ §3-§4 are built. `answerAuthority` lives in `ask.wire.ts`. Rather than patch
+  each consumer, one door in `route.ts` refuses a daemon-composed `accept` or `decline` that carries
+  `meta.channel_answer` (audited as `channel.answer.refused`, reason `assurance`), which covers
+  acceptance, hold proposals, policy review and handoff accept at once; `gateAskHumanAnswer` skips an
+  advisory answer when it reads the log; `decideRequest` takes an optional `via` and refuses any
+  channel decision. `meta.channel_answer` is stripped from every client envelope. The open question
+  above is answered by the existing discharge predicate (ADR 434, shape 3): an advisory `message`
+  reply from the addressed human with `in_reply_to` the ask DOES discharge the wait for a consult
+  addressed to them, and discharges nothing for an ask addressed to the team or to someone else.
+  Pinned in `discharge.test.ts`. The falsifier suite's server-side entries are real tests now; the
+  ones that need pairing, the relay or the Slack adapter stay `todo` and name their lane.
 - Stamping a class on every ask costs one pure function at raise time. The cost to existing consumers is
   one helper call each.
 - `advisory` being the class of a mislabeled privileged request is deliberate and is the main thing a

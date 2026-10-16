@@ -73,6 +73,32 @@ export function classifyAskAction(
   return ASK_ACTION_CLASS_BY_SPECIES[species as AskSpecies];
 }
 
+/** What an answer is worth to a consumer of "a human answered" (ADR 623 §3). */
+export type AnswerAuthority = 'authority' | 'advisory';
+
+/**
+ * The ONE place that says what an answer is worth (ADR 623 §3); every consumer that treats a human's
+ * answer as authority calls this and none re-implements the rule.
+ *
+ * An answer with no `meta.channel_answer` is a plain answer from a seat the daemon authenticated:
+ * `authority`, exactly as before. An answer that carries `channel_answer` came through a channel
+ * (ADR 618): `advisory`, whatever its shape. Fail closed: a malformed `channel_answer`, an unknown
+ * assurance and A2 itself all read `advisory`, because A2 does not exist yet (ADR 623 §2) and the table
+ * of classes an A1 answer may release work for is empty in v1 (ADR 618 §4). Widening that is a
+ * reviewed change here, with a trusted classifier and a recheck at redemption.
+ *
+ * `_askMeta` is the ask being answered. It is part of the signature because the first class that lets
+ * a channel release work will be decided by the ask, not the answer; v1 does not read it.
+ */
+export function answerAuthority(
+  _askMeta: Record<string, unknown> | null | undefined,
+  answerMeta: Record<string, unknown> | null | undefined,
+): AnswerAuthority {
+  if (!answerMeta) return 'authority';
+  const channel = answerMeta['channel_answer'];
+  return channel === undefined || channel === null ? 'authority' : 'advisory';
+}
+
 /** The two no-answer policies (ADR 147 §2). Derived from tier — never stored on the ask. */
 export const ASK_NO_ANSWER = ['hold', 'proceed_with_risk'] as const;
 export type AskNoAnswer = (typeof ASK_NO_ANSWER)[number];

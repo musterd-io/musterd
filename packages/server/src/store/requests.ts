@@ -178,7 +178,11 @@ export async function decideRequest(
   id: string,
   decision: 'approved' | 'denied',
   decidedBy: string,
+  /** ADR 623 §4: how the decision arrived. Absent means a seat the daemon authenticated (`authAdmin`).
+   *  A channel decision never settles a request: an A1 answer is advisory and A2 does not exist yet. */
+  via?: { assurance: 'A1' | 'A2' },
 ): Promise<Request | null> {
+  if (via) return null;
   const res = await db.run(
     `UPDATE requests SET status = ?, decided_by = ?
        WHERE team_id = ? AND id = ? AND status = 'pending'`,

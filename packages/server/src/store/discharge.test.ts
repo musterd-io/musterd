@@ -132,6 +132,42 @@ withDrivers('discharge', (o) => {
     });
   });
 
+  describe('ADR 623: an advisory channel reply discharges the wait, never the authority', async () => {
+    it("the addressed human's channel reply (a `message` with in_reply_to) discharges a consult addressed to them", async () => {
+      const { db, team, nick, ada } = await seed();
+      const consult = { species: 'consult', tier: 'standard', action_class: 'advisory' };
+      for (let i = 0; i < 5; i++) await msg(db, team, ada, null, 'message', `n${i}`, 1_100 + i);
+      await msg(db, team, ada, nick, 'ask', 'ask-1', 1_000, { meta: consult });
+      expect(await pinnedIds(db, nick)).toContain('ask-1');
+
+      await msg(db, team, nick, ada, 'message', 'chan-reply', 2_000, {
+        meta: {
+          in_reply_to: 'ask-1',
+          channel_answer: { channel: 'slack', assurance: 'A1', decision: 'approve' },
+        },
+      });
+      // The agent stops waiting: it reads the reply as information (ADR 618 §4)...
+      expect(await pinnedIds(db, nick)).not.toContain('ask-1');
+      // ...and nothing else moved: it is a `message`, so the accept/decline readers do not see it.
+      const answers = await db.all(
+        "SELECT 1 FROM messages WHERE in_reply_to = ? AND act IN ('accept','decline')",
+        ['ask-1'],
+      );
+      expect(answers).toHaveLength(0);
+    });
+
+    it('a channel reply from someone other than the addressed human discharges nothing', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      const consult = { species: 'consult', tier: 'standard', action_class: 'advisory' };
+      for (let i = 0; i < 5; i++) await msg(db, team, ada, null, 'message', `n${i}`, 1_100 + i);
+      await msg(db, team, ada, nick, 'ask', 'ask-1', 1_000, { meta: consult });
+      await msg(db, team, bob, ada, 'message', 'not-the-human', 2_000, {
+        meta: { in_reply_to: 'ask-1', channel_answer: { channel: 'slack', assurance: 'A1' } },
+      });
+      expect(await pinnedIds(db, nick)).toContain('ask-1');
+    });
+  });
+
   describe('ADR 434: what still does NOT discharge', async () => {
     it("a third party's message in the thread or naming the act is chatter, not an answer", async () => {
       const { db, team, nick, ada, bob } = await seed();

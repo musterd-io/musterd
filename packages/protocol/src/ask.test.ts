@@ -10,6 +10,7 @@ import {
   ACCEPTANCE_REVIEW_WINDOW_MS,
   acceptanceAskContract,
   askContract,
+  answerAuthority,
   askContractText,
   classifyAskAction,
   reviewWaitMinutes,
@@ -177,5 +178,29 @@ describe('the ask action class (ADR 623 §1)', () => {
 
   it('does not trust a client-supplied action_class in the meta it classifies', () => {
     expect(classifyAskAction({ species: 'approve', action_class: 'advisory' })).toBe('privileged');
+  });
+});
+
+describe('what an answer is worth (ADR 623 §3)', () => {
+  it('an answer with no channel provenance is a plain answer from an authenticated seat', () => {
+    expect(answerAuthority({ species: 'approve' }, { in_reply_to: 'a1' })).toBe('authority');
+    expect(answerAuthority({}, undefined)).toBe('authority');
+    expect(answerAuthority(undefined, null)).toBe('authority');
+  });
+
+  it('an A1 channel answer is advisory, for every ask class and every species', () => {
+    for (const species of ASK_SPECIES) {
+      const ask = { species, action_class: ASK_ACTION_CLASS_BY_SPECIES[species] };
+      expect(answerAuthority(ask, { channel_answer: { channel: 'slack', assurance: 'A1' } })).toBe(
+        'advisory',
+      );
+    }
+  });
+
+  it('fails closed: any channel_answer is advisory, however malformed, and A2 grants nothing yet', () => {
+    expect(answerAuthority({}, { channel_answer: {} })).toBe('advisory');
+    expect(answerAuthority({}, { channel_answer: 'A2' })).toBe('advisory');
+    expect(answerAuthority({}, { channel_answer: { assurance: 'A2' } })).toBe('advisory');
+    expect(answerAuthority({}, { channel_answer: { assurance: 'bogus' } })).toBe('advisory');
   });
 });
