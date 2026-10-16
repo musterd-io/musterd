@@ -368,7 +368,7 @@ Sending an Envelope still requires the sender to **hold the occupancy** of `from
 
 ## A.8 Error / refusal codes
 
-Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `held` is a refusal by an enforced Team hold (A.15, ADR 516 — the message names the effect, the human and the end time). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets — the next move is retry, never re-authenticate.
+Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `held` is a refusal by an enforced Team hold (A.15, ADR 516 — the message names the effect, the human and the end time). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets and, on Cloud, the per-team request budget (ADR 622) — the next move is retry, never re-authenticate.
 
 ## A.9 Migration
 

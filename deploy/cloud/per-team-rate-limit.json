@@ -1,0 +1,18 @@
+{
+  "description": "Per-team request budget (ADR 622). One counter per team host. cf.colo.id is mandatory, so this sheds per data center; the server window is the precise budget.",
+  "expression": "(http.host matches \"(?i)^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.musterd\\.dev$\")",
+  "action": "block",
+  "ratelimit": {
+    "characteristics": ["cf.colo.id", "http.host"],
+    "period": 60,
+    "requests_per_period": 600,
+    "mitigation_timeout": 60
+  },
+  "action_parameters": {
+    "response": {
+      "status_code": 429,
+      "content_type": "application/json",
+      "content": "{\"error\":{\"code\":\"rate_limited\",\"message\":\"too many requests for this team — retry in a minute\"}}"
+    }
+  }
+}

@@ -167,6 +167,7 @@ import {
 import { cloudHealth } from '../cloud/health.js';
 import { hostAllows, pathTeam } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
+import { TEAM_BUDGET_MESSAGE, takeTeamRequest } from '../cloud/teamBudget.js';
 import { checkUpgrade, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
@@ -2490,6 +2491,16 @@ export async function handleHttp(
         res.writeHead(307, { ...replayHeaders(d.owner), 'content-length': '0' });
         res.end();
         return;
+      }
+    }
+    // ADR 622: charge the path team after the replay, so only the owning machine counts. Synchronous,
+    // and a denial records no hit — an over-budget request must not check out a pooled client.
+    // Global routes (no path team) are not charged.
+    if (ctx.config.cloud) {
+      const team = pathTeam(path);
+      if (team && !takeTeamRequest(team, ctx.config.cloud.teamBudgetPerMin)) {
+        res.setHeader('retry-after', '60');
+        throw new MusterdError('rate_limited', TEAM_BUDGET_MESSAGE);
       }
     }
     // Negotiate response compression once; sendJson consults this for bodies over the size threshold.

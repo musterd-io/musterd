@@ -419,9 +419,9 @@ where this section was silent: **(a)** "admin routes" in increment 1 is `POST /t
 **not mounted** on Cloud — 404, not 403. **(c)** Seat provisioning off-machine was already
 admin-only; on Cloud there is no other way in. **(d)** OAuth's TLS-except-loopback becomes
 TLS-always, read from the edge's `x-forwarded-proto`. **(e)** A host/path team mismatch is 404, so a
-host cannot probe which teams exist. **(f)** Rate limits (4 above) are lane 01M3W3EQ67, outside
-increment 1's acceptance. **(g)** The guard also refuses an **older** schema ("schema older than
-this build"): the migrate step did not run. **(h)** A third stable sentence, "console unreachable",
+host cannot probe which teams exist. **(f)** Rate limits (4 above) were outside increment 1's
+acceptance (lane 01M3W3EQ67). ADR 622 is that per-team request budget. **(g)** The guard also
+refuses an **older** schema ("schema older than this build"): the migrate step did not run. **(h)** A third stable sentence, "console unreachable",
 is the 503 when the console's JWKS cannot be fetched. **(i)** A 503 body carries `code:
 server_error` — the protocol has no unavailable code, and adding one is an ADR (hard rule 1).
 
