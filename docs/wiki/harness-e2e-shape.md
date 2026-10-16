@@ -1,6 +1,6 @@
 # Harness end-to-end shape
 
-Three harnesses hold onboard, wake, resume, meter, doorbell, and idle-wake; codex, cursor-agent, grok, and muse each have a named gap (read 2026-10-16 at `0c5f3c0c`, lane `01M50ZJ9WD89`).
+Three harnesses hold onboard, wake, resume, meter, doorbell, and idle-wake; codex, cursor-agent, and grok each have a named gap (read 2026-10-16 at `0c5f3c0c`, lane `01M50ZJ9WD89`).
 
 ## How a cell was read
 
@@ -16,7 +16,7 @@ The read is the files below, at `0c5f3c0c` (2026-10-16; falsify: the named symbo
 | codex | holds | holds | holds | holds | holds in unit | gap |
 | cursor-agent | holds | holds | holds | gap | holds | exempt |
 | grok | holds | holds | holds | holds | holds | gap |
-| muse | holds | holds | holds | holds | holds | gap |
+| muse | holds | holds | holds | holds | holds | deaf |
 
 `HARNESSES` in `packages/cli/src/onboard/harnesses/index.ts` is claude-code, cursor, codex, opencode, grok, muse. `musterdAdapter` is guidance and is not selectable. Native is the engine. `packages/cli/src/commands/host.ts` constructs all seven wake backends.
 
@@ -52,7 +52,7 @@ The leader-socket measurement stays on [Grok leader socket](grok-leader-socket.m
 
 Follows-up: 01M535CZQ2PJB4SVT586NS8SN2
 
-## muse holds onboard, wake, resume, and meter (2026-10-16)
+## muse holds, idle deaf (2026-10-16)
 
 Onboard is `onboard/harnesses/muse.ts` (SessionStart orient, Stop interrupt). Wake and resume are `host/backends/muse.ts` (`--session-id`, resume adds `--allow-workspace-switch`). Meter reads that session's `session.jsonl` and, when `model_completed.usage` parses, settles the summed tokens as `harness_prints_no_price` (ancestor `c42f00c4`). A log with no such event stays `harness_price_unverified` and carries no usage.
 
@@ -64,6 +64,4 @@ The shipped wrapper reaches the next model step: the reason is a developer conte
 
 `injectAdapterFor('muse')` returns `no-inject:muse` (2026-10-16; falsify: `inject.ts` returns a ready adapter for `muse`). <!-- claim: other -->
 
-Follows-up: 01M535CZQHHTQQJJGY77JVSZMJ
-
-ADR 558 exempts native and leaves cursor deaf. Muse has neither an inject nor that exemption.
+Idle-wake stays deaf on Muse 1.4.10 (ADR 558 §6). `muse session-message` returns `external_agent_ingress_closed`. A runtime-socket `peer_runtime` hello authenticates, and `session.user_message.submit` and `peer_message.submit_agent` return `role_denied` or `malformed_request` and the session log does not gain the line (2026-10-16, echo, sessions `01a14676-abf5-7f20-b3a0-1e1c41184ba3` and `01a14677-f1fe-7730-b001-440ff16dd23e`; falsify: an outside client puts a line into a Muse session). <!-- claim: other -->

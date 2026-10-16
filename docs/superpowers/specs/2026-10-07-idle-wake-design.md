@@ -194,7 +194,7 @@ Each is its own lane under `idle-wake`.
 7. Lane `01M4M6QE47M3XNVFEK5H2X4705`. **ADR 444 Consequences note:** "delivered when the seat is next idle" is now implemented for armed
    sessions.
 
-Cursor stays deaf with no lane.
+Cursor stays deaf with no lane. Muse 1.4.10 stays deaf (lane `01M535CZQH`, 2026-10-16): no outside push, and `injectAdapterFor` stays `no-inject:muse`.
 
 ## Considered and rejected
 
