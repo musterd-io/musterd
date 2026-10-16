@@ -33,15 +33,16 @@ Nothing on this card is invented. Change the sources first, then the card.
 | On the card | Comes from |
 | --- | --- |
 | Wordmark | `docs/design/brand.md` §1 — lowercase, the `d` in mustard |
-| The four-line one-liner | `docs/design/brand.md` §1 — the canonical one-liner, verbatim |
-| "every act on the roster has a name on it, and a human is on the roster too." | [ADR 320](../../decisions/320-positioning-the-value-prop-decided.md) §5a (2026-09-16) — the approved compression of the swarm counter-line |
-| "humans are members, not approvers." | README Principle 1; ADR 320 §2 |
+| Headline | `docs/design/brand.md` §1 — the canonical tagline, verbatim ([ADR 563](../../decisions/563-the-claim-is-the-team.md), 2026-10-12) |
+| The paragraph under it | `docs/design/brand.md` §1 — the canonical subhead, verbatim |
 
 ## Rules this card has to keep
 
-- **No bare "coordination layer"** (ADR 320 §4). The card does not use the phrase.
-- **No containment claim, and not the critic's noun** (ADR 320 §5). Names and the observed record
-  are the answer; "swarm" never appears.
+- **No "coordination layer"** (ADR 550 §1 takes it out of headlines and opening sentences). The
+  card does not use the phrase.
+- **No containment claim, and not the critic's noun** (ADR 320 §5, which ADR 550 §6 carries
+  forward). Names and the observed record are the answer; "swarm" never appears.
+- **The record shows, it never proves** (brand.md §1 claim discipline).
 - **No hype vocabulary** — `docs/design/brand.md` §4.
 - **The alt text matches the render.** A reader who gets the alt instead of the image gets the same
   claims in the same order.
