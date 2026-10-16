@@ -1032,4 +1032,102 @@ withDrivers('integration · asks', (_o, kind) => {
       expect((await claim(t.dee, 'mac-a')).status).toBe(401);
     });
   });
+
+  describe('the ask action class is server-controlled (ADR 623 §1, away channels 2b)', () => {
+    function askEnv(from: string, id: string, act: string, meta: Record<string, unknown>) {
+      return {
+        id,
+        v: PROTOCOL_VERSION,
+        team: 'dawn',
+        from,
+        to: { kind: 'team' },
+        act,
+        body: '',
+        meta,
+        ts: Date.now(),
+      };
+    }
+
+    async function setup() {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickCred = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickCred);
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      /** Send as Ada, then read the stored envelope back from the admin inbox. */
+      async function sendAndRead(act: string, meta: Record<string, unknown>, id: string) {
+        const sent = await post(
+          '/teams/dawn/messages',
+          { envelope: askEnv('Ada', id, act, meta) },
+          ada,
+        );
+        expect(sent.status).toBe(201);
+        const inbox = await get('/teams/dawn/inbox', nickCred);
+        const found = inbox.json.messages.find((m: any) => m.id === id);
+        expect(found).toBeDefined();
+        return found.meta as Record<string, unknown>;
+      }
+      return { sendAndRead };
+    }
+
+    it('stamps advisory on a consult and privileged on escalate and approve', async () => {
+      const { sendAndRead } = await setup();
+      expect(
+        (await sendAndRead('ask', { species: 'consult', tier: 'standard' }, 'cls-1'))[
+          'action_class'
+        ],
+      ).toBe('advisory');
+      expect(
+        (await sendAndRead('ask', { species: 'escalate', tier: 'blocking' }, 'cls-2'))[
+          'action_class'
+        ],
+      ).toBe('privileged');
+      expect(
+        (await sendAndRead('ask', { species: 'approve', tier: 'standard' }, 'cls-3'))[
+          'action_class'
+        ],
+      ).toBe('privileged');
+    });
+
+    it('overwrites a client-supplied action_class: an approve cannot call itself advisory', async () => {
+      const { sendAndRead } = await setup();
+      const meta = await sendAndRead(
+        'ask',
+        { species: 'approve', tier: 'standard', action_class: 'advisory' },
+        'cls-4',
+      );
+      expect(meta['action_class']).toBe('privileged');
+    });
+
+    it('an ask with no species never reaches the stamp: the schema refuses it (422)', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      const sent = await post(
+        '/teams/dawn/messages',
+        { envelope: askEnv('Ada', 'cls-5', 'ask', { tier: 'standard' }) },
+        ada,
+      );
+      expect(sent.status).toBe(422);
+    });
+
+    it('a meta.gate on a consult makes it privileged (the safe direction)', async () => {
+      const { sendAndRead } = await setup();
+      const meta = await sendAndRead(
+        'ask',
+        {
+          species: 'consult',
+          tier: 'standard',
+          gate: { class: 'costly-action', fingerprint: 'f' },
+        },
+        'cls-6',
+      );
+      expect(meta['action_class']).toBe('privileged');
+    });
+
+    it('strips action_class from a non-ask act and does not stamp one', async () => {
+      const { sendAndRead } = await setup();
+      const meta = await sendAndRead('status_update', { action_class: 'advisory' }, 'cls-7');
+      expect(meta).not.toHaveProperty('action_class');
+    });
+  });
 });
