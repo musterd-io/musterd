@@ -239,6 +239,8 @@ export interface TeamInviteSummary {
   fail_budget: number;
   expires_at: number;
   member_until: number | null;
+  /** ADR 621 §5: `'guest'` — admits talk-only members; null — admits members. Absent from an older daemon. */
+  ceiling?: string | null;
   created_by: string;
   created_at: number;
   revoked_at: number | null;
@@ -767,9 +769,27 @@ export class HttpClient {
   // ADR 450: team invites. The secret comes back once from mint and is never listed.
   mintInvite(
     slug: string,
-    body: { max_uses?: number; fail_budget?: number; expires_at?: number; member_until?: number },
+    body: {
+      max_uses?: number;
+      fail_budget?: number;
+      expires_at?: number;
+      member_until?: number;
+      ceiling?: 'guest' | 'member';
+    },
   ): Promise<{ invite: TeamInviteSummary; link_secret: string; room_code: string }> {
     return this.request('POST', `/teams/${encodeURIComponent(slug)}/invites`, body);
+  }
+  /** ADR 621 §6: set (`'guest'`) or clear (`null`) a member's ceiling. Admin-only, audited. */
+  setMemberCeiling(
+    slug: string,
+    name: string,
+    ceiling: 'guest' | null,
+  ): Promise<{ member: string; ceiling: 'guest' | null }> {
+    return this.request(
+      'POST',
+      `/teams/${encodeURIComponent(slug)}/members/${encodeURIComponent(name)}/ceiling`,
+      { ceiling },
+    );
   }
   listInvites(slug: string): Promise<{ invites: TeamInviteSummary[] }> {
     return this.request('GET', `/teams/${encodeURIComponent(slug)}/invites`);

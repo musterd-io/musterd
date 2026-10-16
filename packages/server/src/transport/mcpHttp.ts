@@ -14,6 +14,7 @@ import { rowsToEnvelopes } from '../store/hydrate.js';
 import { authMember, getMemberByName, touchSeen } from '../store/members.js';
 import { listInbox } from '../store/messages.js';
 import { touchAmbientPresence } from '../store/presence.js';
+import { isTalkOnly } from '../store/rows.js';
 import { requireTeam } from '../store/teams.js';
 import { isTlsPeer, requireTeamRedacted } from './oauth.js';
 import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
@@ -176,13 +177,20 @@ function requestSeat(webReq: Request): { team: string; member: string } {
 async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> {
   const { team: slug, member: memberName } = requestSeat(webReq);
   const team = await requireTeam(ctx.db, slug);
+  // ADR 621 §8: a talk-only seat (a guest) is offered the talk tools only. The server refuses the
+  // rest regardless (route.ts, the talk-only route guard); this keeps a phone from being offered
+  // what it would be refused.
+  const seatRow = await getMemberByName(ctx.db, team.id, memberName);
+  const talkOnly = seatRow ? isTalkOnly(seatRow) : false;
   const server = new McpServer(
     { name: 'musterd', version: DAEMON_VERSION },
     {
       instructions:
         `You are joined to the musterd team "${slug}" as ${memberName} over a phone connector. ` +
-        `Call team_join first, then team_inbox_check; send with team_send. ` +
-        `team_agent_create adds an agent you sponsor; team_agent_connect starts a team agent.`,
+        `Call team_join first, then team_inbox_check; send with team_send.` +
+        (talkOnly
+          ? ' You are a guest: you can talk with the team, not change its work.'
+          : ' team_agent_create adds an agent you sponsor; team_agent_connect starts a team agent.'),
     },
   );
 
@@ -253,87 +261,89 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
   // ADR 449 §3: a human member creates an agent they sponsor — the same mint as
   // `POST …/members/agents` (one helper, so the surfaces cannot drift). The result carries a
   // one-time connect link and no secret: the human opens it on the device that will run the agent.
-  server.registerTool(
-    'team_agent_create',
-    {
-      description:
-        'Create an agent on this team that you sponsor. Returns a one-time connect link (15 minutes) ' +
-        'to open on the device that will run it. It expires when you do, and removing you removes it. ' +
-        'At most 3 live agents each.',
-      inputSchema: asMcpSchema(TeamAgentCreateInput, {
-        type: 'object',
-        required: ['name'],
-        properties: {
-          name: { type: 'string', description: "the agent's member name (no spaces)" },
-          role: { type: 'string', description: 'optional role, e.g. research' },
-        },
-      }),
-    },
-    (rawArgs: unknown) =>
-      withRemoteToolErrors(async () => {
-        const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
-        if (!parsed.success) return toolError('invalid input: name | role?');
-        const sponsor = await getMemberByName(ctx.db, team.id, memberName);
-        if (!sponsor) return toolError('seat is gone — sign in again');
-        try {
-          const origin = originFrom(
-            webReq.headers.get('host'),
-            webReq.headers.get('x-forwarded-proto'),
-          );
-          const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
-          // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
-          // here is the link to open on the device that will run it.
-          return textResult(
-            minted.hosting === 'sponsor_host'
-              ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                  `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
-                  "(If it doesn't within 15 minutes you'll get a connect link.)"
-              : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                  `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
-                  `${minted.connect_url}`,
-          );
-        } catch (err) {
-          return remoteToolError(err);
-        }
-      }),
-  );
+  if (!talkOnly)
+    server.registerTool(
+      'team_agent_create',
+      {
+        description:
+          'Create an agent on this team that you sponsor. Returns a one-time connect link (15 minutes) ' +
+          'to open on the device that will run it. It expires when you do, and removing you removes it. ' +
+          'At most 3 live agents each.',
+        inputSchema: asMcpSchema(TeamAgentCreateInput, {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', description: "the agent's member name (no spaces)" },
+            role: { type: 'string', description: 'optional role, e.g. research' },
+          },
+        }),
+      },
+      (rawArgs: unknown) =>
+        withRemoteToolErrors(async () => {
+          const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
+          if (!parsed.success) return toolError('invalid input: name | role?');
+          const sponsor = await getMemberByName(ctx.db, team.id, memberName);
+          if (!sponsor) return toolError('seat is gone — sign in again');
+          try {
+            const origin = originFrom(
+              webReq.headers.get('host'),
+              webReq.headers.get('x-forwarded-proto'),
+            );
+            const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
+            // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
+            // here is the link to open on the device that will run it.
+            return textResult(
+              minted.hosting === 'sponsor_host'
+                ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                    `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
+                    "(If it doesn't within 15 minutes you'll get a connect link.)"
+                : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                    `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
+                    `${minted.connect_url}`,
+            );
+          } catch (err) {
+            return remoteToolError(err);
+          }
+        }),
+    );
 
   // ADR 456 §2: a teammate starts a team agent from their phone — the same issue path as
   // `POST …/members/agents/:name/connect`, gated by the team's `agent_connect` policy.
-  server.registerTool(
-    'team_agent_connect',
-    {
-      description:
-        "Get a one-time connect link (15 minutes) for one of the team's member-created agents, to open " +
-        'on the device that will run it. Connecting takes the agent over from whatever device ' +
-        "held it; the agent's sponsor is told. Who may is team policy.",
-      inputSchema: asMcpSchema(TeamAgentConnectInput, {
-        type: 'object',
-        required: ['name'],
-        properties: { name: { type: 'string', description: "the agent's member name" } },
-      }),
-    },
-    (rawArgs: unknown) =>
-      withRemoteToolErrors(async () => {
-        const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
-        if (!parsed.success) return toolError('invalid input: name');
-        const caller = await getMemberByName(ctx.db, team.id, memberName);
-        if (!caller) return toolError('seat is gone — sign in again');
-        try {
-          const origin = originFrom(
-            webReq.headers.get('host'),
-            webReq.headers.get('x-forwarded-proto'),
-          );
-          const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
-          return textResult(
-            `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
-              `${issued.connect_url}`,
-          );
-        } catch (err) {
-          return remoteToolError(err);
-        }
-      }),
-  );
+  if (!talkOnly)
+    server.registerTool(
+      'team_agent_connect',
+      {
+        description:
+          "Get a one-time connect link (15 minutes) for one of the team's member-created agents, to open " +
+          'on the device that will run it. Connecting takes the agent over from whatever device ' +
+          "held it; the agent's sponsor is told. Who may is team policy.",
+        inputSchema: asMcpSchema(TeamAgentConnectInput, {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string', description: "the agent's member name" } },
+        }),
+      },
+      (rawArgs: unknown) =>
+        withRemoteToolErrors(async () => {
+          const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
+          if (!parsed.success) return toolError('invalid input: name');
+          const caller = await getMemberByName(ctx.db, team.id, memberName);
+          if (!caller) return toolError('seat is gone — sign in again');
+          try {
+            const origin = originFrom(
+              webReq.headers.get('host'),
+              webReq.headers.get('x-forwarded-proto'),
+            );
+            const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
+            return textResult(
+              `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
+                `${issued.connect_url}`,
+            );
+          } catch (err) {
+            return remoteToolError(err);
+          }
+        }),
+    );
 
   server.registerTool(
     'team_send',

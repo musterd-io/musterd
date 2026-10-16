@@ -299,6 +299,23 @@ CREATE INDEX IF NOT EXISTS idx_audit_archive_team_month ON audit_archive(team_id
       await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS areas_json TEXT');
     },
   },
+  {
+    // v99 — ADR 621 (talk-only guests, lane 01M3Z42GN1): a member's ceiling (`'guest'` or NULL),
+    // applied at read time so reconcile cannot widen it, and the ceiling an invite stamps on the
+    // members it admits. Nullable, no backfill: NULL is "no ceiling" on a member and "admits members"
+    // on an invite minted before 621.
+    version: 99,
+    sqlite: (db) => {
+      const m = db.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+      if (!m.includes('ceiling')) db.exec('ALTER TABLE members ADD COLUMN ceiling TEXT');
+      const i = db.prepare("SELECT name FROM pragma_table_info('team_invites')").pluck().all();
+      if (!i.includes('ceiling')) db.exec('ALTER TABLE team_invites ADD COLUMN ceiling TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS ceiling TEXT');
+      await d.exec('ALTER TABLE team_invites ADD COLUMN IF NOT EXISTS ceiling TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

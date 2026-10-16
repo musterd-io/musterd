@@ -75,6 +75,7 @@ export async function teamCommand(parsed: Parsed): Promise<number> {
   if (sub === 'grant') return teamGrant(parsed);
   if (sub === 'invite') return teamInvite(parsed);
   if (sub === 'remove') return teamRemove(parsed);
+  if (sub === 'ceiling') return teamCeiling(parsed);
   if (sub === 'archive') return teamArchive(parsed);
   if (sub === 'export') return teamExport(parsed);
   // ADR 514: `team policy style …` is the one positional area; every other knob is a flag.
@@ -83,9 +84,34 @@ export async function teamCommand(parsed: Parsed): Promise<number> {
   if (sub === 'policy') return teamPolicy(parsed);
   if (sub === 'hue') return teamHue(parsed);
   throw new CliError(
-    'usage: musterd team <create|add|observe|credential|agent-key|bootstrap|grant|invite|remove|archive|export|policy|hue> ...',
+    'usage: musterd team <create|add|observe|credential|agent-key|bootstrap|grant|invite|remove|ceiling|archive|export|policy|hue> ...',
     2,
   );
+}
+
+/**
+ * `musterd team ceiling <name> guest|none` — ADR 621 §6. An admin narrows a member to talk-only
+ * (`guest`) or lifts the ceiling (`none`). The daemon applies it on the member's next request.
+ */
+async function teamCeiling(parsed: Parsed): Promise<number> {
+  const name = parsed.positionals[1];
+  const value = parsed.positionals[2];
+  if (!name || (value !== 'guest' && value !== 'none'))
+    throw new CliError('usage: musterd team ceiling <name> guest|none [--team <slug>]', 2);
+  const { team, http } = resolve(parsed.flags);
+  const out = await http.setMemberCeiling(team, name, value === 'guest' ? 'guest' : null);
+  if (parsed.flags['json']) {
+    process.stdout.write(JSON.stringify(out) + '\n');
+    return 0;
+  }
+  process.stdout.write(
+    success(
+      out.ceiling === 'guest'
+        ? `${out.member} is a guest on ${team} ${theme.meta('— can talk, cannot coordinate')}`
+        : `${out.member} has no ceiling on ${team} ${theme.meta('— a full member again')}`,
+    ) + '\n',
+  );
+  return 0;
 }
 
 /**
@@ -120,6 +146,8 @@ async function teamInvite(parsed: Parsed): Promise<number> {
       ...(whenFlag('member-until') !== undefined
         ? { member_until: whenFlag('member-until')! }
         : {}),
+      // ADR 621 §5: an invite admits talk-only guests unless --member says otherwise.
+      ceiling: parsed.flags['member'] === true ? 'member' : 'guest',
     });
     if (json) {
       process.stdout.write(JSON.stringify(minted) + '\n');
@@ -134,7 +162,12 @@ async function teamInvite(parsed: Parsed): Promise<number> {
         `invite id: ${minted.invite.id} · ${minted.invite.max_uses} uses · burns after ${minted.invite.fail_budget} wrong codes · expires ${new Date(minted.invite.expires_at).toISOString()}` +
           (minted.invite.member_until
             ? ` · members until ${new Date(minted.invite.member_until).toISOString()}`
-            : ''),
+            : '') +
+          (minted.invite.ceiling === 'guest'
+            ? ' · admits guests (talk only; --member admits members)'
+            : minted.invite.ceiling === null
+              ? ' · admits members'
+              : ''),
       ) + '\n',
     );
     return 0;

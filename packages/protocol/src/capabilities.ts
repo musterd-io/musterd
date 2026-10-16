@@ -55,6 +55,14 @@ export const CapabilitiesSchema = z.object({
    * refuses a narrowed sponsor. False never widens anything else.
    */
   can_create_agents: z.boolean().default(true),
+  /**
+   * Whether this seat may coordinate: lanes, goals, seeds, memory, insights, reports, policy, agents,
+   * and the coordination acts (ADR 621). Default true: every existing seat and stored blob keeps
+   * today's behavior. `false` is **talk-only** — the seat may send `message`, `status_update`,
+   * `request_help` and `ask`, and reply on a thread addressed to it ({@link TALK_ONLY_SEND_ACTS}).
+   * The guest ceiling sets it false; it narrows like every capability (`true→false` only).
+   */
+  can_coordinate: z.boolean().default(true),
   can_message: CanMessageSchema,
   visibility_level: VisibilityLevelSchema,
   tool_allowlist: z.array(z.string()),
@@ -77,11 +85,46 @@ export const GENERALIST_CAPABILITIES: Capabilities = {
   can_flag_urgent: true,
   can_observe: true,
   can_create_agents: true,
+  can_coordinate: true,
   can_message: 'team',
   visibility_level: 'team',
   tool_allowlist: [],
   declared_resource_scopes: [],
 };
+
+/**
+ * The **guest** ceiling (ADR 621 §3, Cloud spec §4.6): talk, never coordinate. Applied at read time
+ * to a member whose `members.ceiling` is `'guest'`, so nothing a role or seat file projects can widen
+ * it. `can_observe` is left alone: the firehose a guest subscribes to is already filtered at its
+ * `broadcast` grade (ADR 616 §4, `messageVisibilityOf`), so narrowing it would only take the live
+ * stream away (ADR 621 §3, amended 2026-10-15).
+ */
+export const GUEST_CEILING: PartialCapabilities = {
+  can_coordinate: false,
+  can_create_agents: false,
+  can_flag_urgent: false,
+};
+
+/** The per-member ceilings an invite or an admin may set (ADR 621 §4–6). */
+export const MEMBER_CEILINGS = ['guest'] as const;
+export type MemberCeiling = (typeof MEMBER_CEILINGS)[number];
+export const MemberCeilingSchema = z.enum(MEMBER_CEILINGS);
+
+/** Acts a talk-only seat may send to anyone (ADR 621 §2). */
+export const TALK_ONLY_SEND_ACTS: ReadonlySet<string> = new Set([
+  'message',
+  'status_update',
+  'request_help',
+  'ask',
+]);
+
+/** Acts a talk-only seat may send only as a reply to an act addressed to it (ADR 621 §2). */
+export const TALK_ONLY_REPLY_ACTS: ReadonlySet<string> = new Set([
+  'accept',
+  'decline',
+  'wait',
+  'resolve',
+]);
 
 // Narrowing order for the scoped fields: a seat may move DOWN this rank, never up.
 const CAN_MESSAGE_RANK: Record<CanMessage, number> = { none: 0, team: 1 };
@@ -105,6 +148,7 @@ export function clampNarrow(
     can_flag_urgent: bool(ceiling.can_flag_urgent, override.can_flag_urgent),
     can_observe: bool(ceiling.can_observe, override.can_observe),
     can_create_agents: bool(ceiling.can_create_agents, override.can_create_agents),
+    can_coordinate: bool(ceiling.can_coordinate, override.can_coordinate),
     can_message:
       override.can_message === undefined
         ? ceiling.can_message
@@ -151,6 +195,8 @@ export function mergeRoleDefaults(partials: PartialCapabilities[]): PartialCapab
     if (urgent !== undefined) out.can_flag_urgent = urgent;
     const observe = bool(out.can_observe, p.can_observe);
     if (observe !== undefined) out.can_observe = observe;
+    const coordinate = bool(out.can_coordinate, p.can_coordinate);
+    if (coordinate !== undefined) out.can_coordinate = coordinate;
     if (p.can_message !== undefined) {
       out.can_message =
         out.can_message === undefined ||
@@ -191,6 +237,7 @@ export function effectiveCapabilities(
     can_flag_urgent: roleDefaults.can_flag_urgent ?? g.can_flag_urgent,
     can_observe: roleDefaults.can_observe ?? g.can_observe,
     can_create_agents: roleDefaults.can_create_agents ?? g.can_create_agents,
+    can_coordinate: roleDefaults.can_coordinate ?? g.can_coordinate,
     can_message: roleDefaults.can_message ?? g.can_message,
     visibility_level: roleDefaults.visibility_level ?? g.visibility_level,
     tool_allowlist: roleDefaults.tool_allowlist ?? g.tool_allowlist,

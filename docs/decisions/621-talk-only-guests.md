@@ -56,6 +56,9 @@ None of this exists yet, and three things in the code shape how it can be built.
      refused>". It is audited like a muted send.
 3. **The guest ceiling** is one constant in the protocol:
    `{ can_coordinate: false, can_create_agents: false, can_flag_urgent: false, can_observe: false }`.
+   _(Amended 2026-10-15: `can_observe` is not narrowed. It gates the firehose, which a guest needs
+   for ADR 616's live view and which is already filtered at its `broadcast` grade — see
+   Consequences.)_
    "Guest" is the name of this ceiling on an invite and in the CLI's invite and member commands. On
    the roster and `/live` a guest is a member, as the spec says.
 4. **The guest ceiling lives in its own column, `members.ceiling`** (`'guest'` or NULL), and is
@@ -69,7 +72,9 @@ None of this exists yet, and three things in the code shape how it can be built.
    before this ADR (NULL) still admits members, so a link already in a room keeps meaning what it
    meant. Minting stays human-admin only (ADR 134, ADR 580).
 6. **An admin sets or clears a seat's ceiling.** `musterd member ceiling <name> guest|none` (and the
-   HTTP route behind it) is admin-only and audited (`member.ceiling_set`). This promotes a guest who
+   HTTP route behind it) is admin-only and audited (`member.ceiling_set`). _(Amended 2026-10-15: the
+   command is `musterd team ceiling <name> guest|none`, beside `team add` and `team remove`; there
+   is no `member` command group.)_ This promotes a guest who
    should help build, and narrows a member admitted before this ADR, such as a past demo joiner who
    still holds a credential.
 7. **A talk-only seat reads at `broadcast` grade.** `messageVisibilityOf` returns `broadcast` for a
@@ -104,6 +109,12 @@ None of this exists yet, and three things in the code shape how it can be built.
   §4–7). Decision 9's full member set on the remote MCP is lane `01M512KNKZ`.
   Follows-up: 01M512KNKZBSGSG5KEJ9HYJ5TT
   Follows-up: 01M50XJJFE7WC6E1Z126XG28Q9
+
+- **2026-10-15 — the guest ceiling keeps `can_observe`.** Found while building: `can_observe`
+  gates the firehose subscription (ADR 071), and a guest's firehose is filtered at its `broadcast`
+  grade because the connection's grade comes from `messageVisibilityOf`. Narrowing it would only
+  remove ADR 616's live view, so the ceiling narrows `can_coordinate`, `can_create_agents` and
+  `can_flag_urgent` only.
 
 ## Observability & Evaluation
 

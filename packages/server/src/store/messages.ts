@@ -1025,8 +1025,12 @@ function readScopeSql(scope: ReadScope): { sql: string; params: unknown[] } {
       };
     case 'broadcast':
       // ADR 601: everything, minus the human-to-human DM. The stream's own mail is never a human
-      // pair (an observer is not a human end), so no reader exemption is needed.
-      return { sql: ` AND NOT ${humanPairSql('messages')}`, params: [] };
+      // pair (an observer is not a human end). A talk-only guest IS a human end (ADR 621 §7, ADR 616
+      // §5): its own conversation with another human stays visible to it, so the reader is exempt.
+      return {
+        sql: ` AND (NOT ${humanPairSql('messages')} OR from_member = ? OR to_member = ?)`,
+        params: [scope.readerId, scope.readerId],
+      };
     case 'public':
       // The ADR 128 party predicate, which for an observer — never a sender, never a directed
       // recipient except of its own mail — collapses to exactly the public timeline (ADR 136).

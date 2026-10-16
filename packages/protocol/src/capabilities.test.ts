@@ -5,6 +5,9 @@ import {
   clampNarrow,
   effectiveCapabilities,
   GENERALIST_CAPABILITIES,
+  GUEST_CEILING,
+  TALK_ONLY_REPLY_ACTS,
+  TALK_ONLY_SEND_ACTS,
   mergeRoleDefaults,
   RoleSchema,
 } from './capabilities.js';
@@ -175,5 +178,41 @@ describe('capability model (ADR 070)', () => {
     expect(role.capabilities.can_flag_urgent).toBe(false);
     // capabilities defaults to {} when omitted
     expect(RoleSchema.parse({ name: 'backend' }).capabilities).toEqual({});
+  });
+});
+
+describe('can_coordinate and the guest ceiling (ADR 621)', () => {
+  it("defaults to true, so a pre-621 blob keeps today's behaviour", () => {
+    const { can_coordinate: _drop, ...old } = GENERALIST_CAPABILITIES;
+    expect(CapabilitiesSchema.parse(old).can_coordinate).toBe(true);
+    expect(GENERALIST_CAPABILITIES.can_coordinate).toBe(true);
+  });
+
+  it('narrows true→false and never widens', () => {
+    const guest = clampNarrow(GENERALIST_CAPABILITIES, GUEST_CEILING);
+    expect(guest.can_coordinate).toBe(false);
+    expect(guest.can_create_agents).toBe(false);
+    expect(guest.can_flag_urgent).toBe(false);
+    expect(guest.can_observe).toBe(true); // the firehose is filtered by grade instead
+    expect(clampNarrow(guest, { can_coordinate: true }).can_coordinate).toBe(false);
+  });
+
+  it('a role that says false holds against one that says true', () => {
+    expect(
+      mergeRoleDefaults([{ can_coordinate: true }, { can_coordinate: false }]).can_coordinate,
+    ).toBe(false);
+    expect(effectiveCapabilities({ can_coordinate: false }).can_coordinate).toBe(false);
+  });
+
+  it('the talk acts are the four the Cloud spec names, replies kept apart', () => {
+    expect([...TALK_ONLY_SEND_ACTS].sort()).toEqual([
+      'ask',
+      'message',
+      'request_help',
+      'status_update',
+    ]);
+    expect([...TALK_ONLY_REPLY_ACTS].sort()).toEqual(['accept', 'decline', 'resolve', 'wait']);
+    for (const act of ['handoff', 'steer', 'challenge', 'defer', 'insight'])
+      expect(TALK_ONLY_SEND_ACTS.has(act) || TALK_ONLY_REPLY_ACTS.has(act)).toBe(false);
   });
 });

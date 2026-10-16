@@ -415,12 +415,14 @@ export const CATALOG: readonly CommandEntry[] = [
       '  bootstrap cutover [--force] [--yes]\n' +
       '                               disable the legacy Team key after every held seat and enrolled host\n' +
       '                               proves scoped use; --force bypasses readiness, --yes confirmation\n' +
-      '  invite create [--uses <n>] [--fail-budget <n>] [--expires <iso|duration>] [--member-until <iso|duration>]\n' +
+      '  invite create [--uses <n>] [--fail-budget <n>] [--expires <iso|duration>] [--member-until <iso|duration>] [--member]\n' +
       '                               mint a team invite (ADR 450): prints the room code + link value once;\n' +
-      '                               a stranger who signs in with it becomes a NEW human member\n' +
+      '                               a stranger who signs in with it becomes a NEW human member, a talk-only\n' +
+      '                               guest unless --member (ADR 621)\n' +
       '  invite list                 redacted invite inventory — uses, failures/budget, state (admin)\n' +
       '  invite revoke <id>          close one invite; members it admitted stay (admin)\n' +
       '  remove <name>                soft-remove a member (history is kept)\n' +
+      '  ceiling <name> guest|none    make a member a talk-only guest, or lift it (admin, ADR 621)\n' +
       '  archive <slug>  soft-archive a whole team — off status/rosters, history kept (admin; run from your Workspace)\n' +
       '  export <slug> [--to <dir>]   move the roster onto git-tracked .musterd/ files (ADR 058);\n' +
       '                               defaults into the team home when the team has one (ADR 176)\n' +

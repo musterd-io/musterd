@@ -52,6 +52,22 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set<string>([
 ]);
 
 /**
+ * The talk surface (ADR 621 §2, Cloud spec §4.6): what a talk-only seat may use. An allowlist, so a
+ * new tool is NOT offered to a guest until someone decides it is talk — the opposite default to
+ * {@link WRITE_TOOLS}, because here the risk of being wrong points the other way.
+ */
+export const TALK_ONLY_TOOLS: ReadonlySet<string> = new Set<string>([
+  'team_join',
+  'team_leave',
+  'team_send',
+  'team_inbox_check',
+  'team_status',
+  'team_members',
+  'team_availability',
+  'team_style',
+]);
+
+/**
  * The tool names to register for a seat with these capabilities, in registration order.
  *
  * `undefined` capabilities means "not known at render time" and yields the full surface — the
@@ -61,9 +77,16 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set<string>([
  * a boolean.
  */
 export function scopedToolNames(capabilities: Capabilities | undefined): string[] {
-  if (!capabilities || capabilities.can_message !== 'none') return [...TOOL_NAMES];
+  if (!capabilities) return [...TOOL_NAMES];
+  const muted = capabilities.can_message === 'none';
+  // ADR 621 §8: a talk-only seat (a guest) renders only the talk surface. An explicit `false` only:
+  // a record from a daemon that predates the field has no key, which reads as "may coordinate".
+  const talkOnly = capabilities.can_coordinate === false;
+  if (!muted && !talkOnly) return [...TOOL_NAMES];
   // Filter, never sort: registration order is what keeps the cached `tools/list` byte-stable.
-  return TOOL_NAMES.filter((name) => !WRITE_TOOLS.has(name));
+  return TOOL_NAMES.filter(
+    (name) => (!muted || !WRITE_TOOLS.has(name)) && (!talkOnly || TALK_ONLY_TOOLS.has(name)),
+  );
 }
 
 /** A registered tool, as the SDK returns it — we neither read nor reshape it, only pass it back. */

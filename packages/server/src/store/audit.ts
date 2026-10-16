@@ -31,6 +31,7 @@ export type AuditAction =
   | 'member.agent_connect_issued'
   // ADR 450: a team invite admitted a new human at OAuth authorize / refused an invite proof.
   | 'member.invite_admitted'
+  | 'member.ceiling_set'
   | 'member.invite_refused'
   // ADR 452: a sponsored agent's device redeemed its sponsor's connect nonce / a nonce was refused.
   | 'member.agent_connected'
@@ -611,6 +612,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'member.sponsored_agent_created': 'actor',
   'member.agent_connect_issued': 'actor',
   'member.invite_admitted': 'actor',
+  // ADR 621 §6: the row is about the member whose ceiling moved, written by the admin.
+  'member.ceiling_set': 'target',
   'member.invite_refused': 'actor',
   'member.agent_connected': 'actor',
   'member.agent_connect_refused': 'actor',

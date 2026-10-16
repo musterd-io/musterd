@@ -1226,6 +1226,87 @@ withDrivers('oauth-http', (_o, kind) => {
       expect((await get('/teams/dawn/invites', admin())).json.invites[0].uses).toBe(2);
     });
 
+    // ADR 621: an invite admits a talk-only guest by default — it can talk, not coordinate.
+    it('a default invite admits a talk-only guest: talk tools only, coordination refused (ADR 621)', async () => {
+      const m = await mint();
+      expect(m.invite.ceiling).toBe('guest');
+      const { authz, client_id } = await authorizeInvite(m.room_code, 'gia');
+      const tok = (await tokenFor(authz, client_id)).json.access_token as string;
+
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const row = (await server.store.get(
+        'SELECT ceiling FROM members WHERE team_id = ? AND name = ?',
+        [team.id, 'gia'],
+      )) as { ceiling: string | null };
+      expect(row.ceiling).toBe('guest');
+      expect((await audits('member.invite_admitted'))[0]).toMatchObject({ actor: 'gia' });
+      expect(JSON.stringify((await audits('member.invite_admitted'))[0])).toContain('guest');
+
+      // The phone is offered the talk tools only (§8).
+      const list = await mcpCall(tok, 'tools/list', {}, 2);
+      expect(list.json.result.tools.map((t: any) => t.name).sort()).toEqual([
+        'team_inbox_check',
+        'team_join',
+        'team_send',
+      ]);
+      // It can talk…
+      const said = await mcpCall(
+        tok,
+        'tools/call',
+        { name: 'team_send', arguments: { act: 'message', body: 'hi from the room' } },
+        3,
+      );
+      expect(JSON.stringify(said.json.result)).toContain('sent');
+      // …but not coordinate: a coordination act and a coordination route are refused (§2).
+      const handoff = await mcpCall(
+        tok,
+        'tools/call',
+        { name: 'team_send', arguments: { act: 'handoff', to: 'nick', body: 'take this' } },
+        4,
+      );
+      expect(JSON.stringify(handoff.json)).toContain('talk-only seat');
+      const lane = await postJson(
+        '/teams/dawn/lanes',
+        { title: 'a guest tries to open a lane' },
+        { authorization: `Bearer ${tok}` },
+      );
+      expect(lane.status).toBe(403);
+      expect(JSON.stringify(lane.json)).toContain('talk-only seat');
+      // A guest reads at broadcast grade (§7, ADR 616 §4).
+      const history = await get('/teams/dawn/messages', { authorization: `Bearer ${tok}` });
+      expect(history.status).toBe(200);
+    });
+
+    it('a --member invite admits a full member; an admin narrows and lifts a ceiling (ADR 621 §5–6)', async () => {
+      const m = await mint({ ceiling: 'member' });
+      expect(m.invite.ceiling).toBeNull();
+      const { authz, client_id } = await authorizeInvite(m.room_code, 'max');
+      const tok = (await tokenFor(authz, client_id)).json.access_token as string;
+      const asMax = { authorization: `Bearer ${tok}` };
+
+      const open = (title: string) => postJson('/teams/dawn/lanes', { title }, asMax);
+      expect((await open('a member opens a lane')).status).not.toBe(403);
+
+      // Only an admin moves a ceiling; the member cannot lift or set its own.
+      expect(
+        (await postJson('/teams/dawn/members/max/ceiling', { ceiling: null }, asMax)).status,
+      ).toBe(403);
+      const narrow = await postJson(
+        '/teams/dawn/members/max/ceiling',
+        { ceiling: 'guest' },
+        admin(),
+      );
+      expect(narrow.status).toBe(200);
+      expect(narrow.json).toEqual({ member: 'max', ceiling: 'guest' });
+      expect((await open('now a guest')).status).toBe(403);
+      const set = await audits('member.ceiling_set');
+      expect(set[0]).toMatchObject({ actor: 'nick', target: 'max' });
+
+      const lift = await postJson('/teams/dawn/members/max/ceiling', { ceiling: null }, admin());
+      expect(lift.status).toBe(200);
+      expect((await open('a member again')).status).not.toBe(403);
+    });
+
     it('wrong code, unknown selector, revoked, exhausted and burned all return the same refusal', async () => {
       const m = await mint({ fail_budget: 2, max_uses: 1 });
       const sel = m.invite.selector;

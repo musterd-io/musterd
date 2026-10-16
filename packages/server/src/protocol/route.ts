@@ -17,6 +17,8 @@ import {
   confidentialAskSubject,
   describeHoldLine,
   SetHoldBodySchema,
+  TALK_ONLY_REPLY_ACTS,
+  TALK_ONLY_SEND_ACTS,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
@@ -392,6 +394,44 @@ async function routeEnvelopeInner(
       detail: { can_message: 'none' },
     });
     throw new MusterdError('forbidden', `seat "${sender.name}" is muted (can_message: none)`);
+  }
+
+  // can_coordinate (ADR 621 §2): a talk-only seat — a guest — sends the four talk acts to anyone,
+  // and accept/decline/wait/resolve only as a reply to an act addressed to it. Everything else
+  // (handoff, steer, challenge, defer, insight, …) is coordination and refused, audited like a mute.
+  if (!caps.can_coordinate && !TALK_ONLY_SEND_ACTS.has(env.act)) {
+    let replyOk = false;
+    if (TALK_ONLY_REPLY_ACTS.has(env.act)) {
+      const meta = (env.meta ?? {}) as { in_reply_to?: unknown; defer_ref?: unknown };
+      const refs = [meta.in_reply_to, meta.defer_ref, env.thread].filter(
+        (r): r is string => typeof r === 'string' && r.length > 0,
+      );
+      for (const ref of refs) {
+        const row = await ctx.db.get<{ to_member: string | null }>(
+          'SELECT to_member FROM messages WHERE team_id = ? AND id = ?',
+          [team.id, ref],
+        );
+        if (row?.to_member === sender.id) {
+          replyOk = true;
+          break;
+        }
+      }
+    }
+    if (!replyOk) {
+      await appendAudit(ctx.db, team.id, {
+        actor: sender.name,
+        action: 'send.denied',
+        target,
+        result: 'deny',
+        detail: { can_coordinate: false, act: env.act },
+      });
+      throw new MusterdError(
+        'forbidden',
+        TALK_ONLY_REPLY_ACTS.has(env.act)
+          ? `talk-only seat: ${env.act} is only a reply to an act addressed to you`
+          : `talk-only seat: cannot send ${env.act}`,
+      );
+    }
   }
 
   // can_flag_urgent: the urgency breakthrough (ADR 044) is the scarce, auditable flag. A seat without
