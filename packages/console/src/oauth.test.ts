@@ -2,6 +2,7 @@ import { createSign, generateKeyPairSync } from 'node:crypto';
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
+import { blockListOf } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import { createConsoleServer } from './http.js';
 import { makeLog } from './log.js';
@@ -129,6 +130,8 @@ async function boot(opts: { providers?: ConsoleConfig['providers'] } = {}) {
     db: q,
     log: makeLog((l) => lines.push(l)),
     providers: fake.overrides,
+    // The test client plays Cloudflare: its cf-connecting-ip is believed from the loopback.
+    clientIp: { behindFlyProxy: false, trustedProxies: blockListOf(['127.0.0.1/32', '::1/128']) },
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   closers.push(() => new Promise((r) => server.close(() => r())));

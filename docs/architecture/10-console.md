@@ -25,7 +25,7 @@ Two routes, and everything else is refused:
 | --- | --- |
 | `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
 | `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
-| `POST /auth/{github,google}/start` | ADR 620: exact Origin; 30 a minute per client (keyed by `cf-connecting-ip`, advisory — it can split a sender's own traffic, never fill someone else's bucket; there is no global sign-in bucket to exhaust); a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
+| `POST /auth/{github,google}/start` | ADR 620: exact Origin; 30 a minute per client (`clientip.ts`: `cf-connecting-ip` only when the hop Fly saw is in Cloudflare's published ranges, else the sender's own address — so a direct-to-origin sender can neither invent addresses nor name a victim's; there is no global sign-in bucket to exhaust); a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
 | `GET /auth/{github,google}/callback` | consumes the transaction atomically (cookie, provider, state, TTL), exchanges the code (Google's ID token verified: signature, issuer, audience, expiry, nonce; GitHub's numeric id from the pinned `/user`), finds or makes the account by `(provider, subject)` only, issues a session, `303` to an allowlisted return path. Any failure is a fixed error, never a redirect |
 | `GET /me` | temporary JSON view of the signed-in account and its methods, until the signed-in page lands |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
@@ -115,6 +115,7 @@ src/
   bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
   csrf.ts         // csrfTokenFor(sid) (sha256 of the session id, base64url), csrfTokenValid (constant time), originAllowed (exactly the issuer; missing or null refused)
+  clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
   http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label

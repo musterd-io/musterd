@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { accountFor, methodsOf } from './accounts.js';
 import { appendAudit } from './audit.js';
+import { clientIp, type ClientIpOptions } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import { hostCookie } from './cookies.js';
 import { csrfTokenValid, originAllowed } from './csrf.js';
@@ -60,6 +61,8 @@ export interface ConsoleDeps {
   now?: () => number;
   /** Tests only: fake provider endpoints. */
   providers?: ProviderOverrides;
+  /** Which hops' forwarded headers are believed (default: on Fly, Cloudflare's ranges). */
+  clientIp?: ClientIpOptions;
 }
 
 /** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
@@ -74,24 +77,6 @@ const CALLBACK = /^\/auth\/(github|google)\/callback$/;
 const START_PER_CLIENT = 30;
 const CALLBACK_PER_CLIENT = 30;
 const WINDOW_MS = 60_000;
-
-/**
- * The client a rate-limit bucket is keyed by. Behind Cloudflare, `cf-connecting-ip`; else Fly's
- * `fly-client-ip`; else the socket. The header is ADVISORY: a request sent straight to the Fly
- * origin can set it, which lets that sender split their OWN traffic across buckets (evading their
- * own limit, which the edge rule still bounds) but never lets them fill anyone else's bucket. It
- * keys a limit and nothing else — no decision about trust or identity reads it.
- */
-function clientKey(req: IncomingMessage): string {
-  const pick = (h: string | string[] | undefined) =>
-    typeof h === 'string' && /^[0-9a-fA-F:.]{2,45}$/.test(h.trim()) ? h.trim() : null;
-  return (
-    pick(req.headers['cf-connecting-ip']) ??
-    pick(req.headers['fly-client-ip']) ??
-    req.socket.remoteAddress ??
-    'unknown'
-  );
-}
 
 function txCookie(value: string, maxAgeSeconds: number): string {
   return hostCookie('tx', value, maxAgeSeconds);
@@ -131,6 +116,10 @@ const err = (code: string, message: string) => ({ error: { code, message } });
 export function createConsoleServer(deps: ConsoleDeps): Server {
   const { config, db, log } = deps;
   const now = deps.now ?? Date.now;
+  const ipOptions: ClientIpOptions = deps.clientIp ?? {
+    behindFlyProxy: Boolean(process.env['FLY_APP_NAME']),
+  };
+  const clientKey = (req: IncomingMessage) => clientIp(req, ipOptions);
   const server = createServer(
     { maxHeaderSize: MAX_HEADER_BYTES, requestTimeout: REQUEST_TIMEOUT_MS },
     (req, res) => {
