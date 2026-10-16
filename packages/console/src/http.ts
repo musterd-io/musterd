@@ -66,10 +66,32 @@ export interface ConsoleDeps {
 const POST_ROUTES = new Set(['/logout', '/auth/github/start', '/auth/google/start']);
 const START = /^\/auth\/(github|google)\/start$/;
 const CALLBACK = /^\/auth\/(github|google)\/callback$/;
-/** Global ceilings on sign-in starts and callbacks (ADR 620 decision 9). Per-IP limits live at
- *  the Cloudflare edge: the console reads no forwarded header, so it cannot trust a client IP. */
-const START_LIMIT = { bucket: 'global:oauth-start', max: 600, windowMs: 60_000 };
-const CALLBACK_LIMIT = { bucket: 'global:oauth-callback', max: 600, windowMs: 60_000 };
+/**
+ * Sign-in rate limits are per client, never global (ADR 620 decision 9: no limit an attacker can
+ * use to keep someone else out). A single global bucket let one client spend the whole budget and
+ * lock every person out of sign-in (security review of #2725, 2026-10-16).
+ */
+const START_PER_CLIENT = 30;
+const CALLBACK_PER_CLIENT = 30;
+const WINDOW_MS = 60_000;
+
+/**
+ * The client a rate-limit bucket is keyed by. Behind Cloudflare, `cf-connecting-ip`; else Fly's
+ * `fly-client-ip`; else the socket. The header is ADVISORY: a request sent straight to the Fly
+ * origin can set it, which lets that sender split their OWN traffic across buckets (evading their
+ * own limit, which the edge rule still bounds) but never lets them fill anyone else's bucket. It
+ * keys a limit and nothing else — no decision about trust or identity reads it.
+ */
+function clientKey(req: IncomingMessage): string {
+  const pick = (h: string | string[] | undefined) =>
+    typeof h === 'string' && /^[0-9a-fA-F:.]{2,45}$/.test(h.trim()) ? h.trim() : null;
+  return (
+    pick(req.headers['cf-connecting-ip']) ??
+    pick(req.headers['fly-client-ip']) ??
+    req.socket.remoteAddress ??
+    'unknown'
+  );
+}
 
 function txCookie(value: string, maxAgeSeconds: number): string {
   return hostCookie('tx', value, maxAgeSeconds);
@@ -153,7 +175,13 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               const creds = config.providers[p];
               if (!creds) return send(res, 404, err('not_found', 'not found'));
               const t = now();
-              if (!(await hit(db, START_LIMIT, t)))
+              if (
+                !(await hit(
+                  db,
+                  { bucket: `start:${clientKey(req)}`, max: START_PER_CLIENT, windowMs: WINDOW_MS },
+                  t,
+                ))
+              )
                 return send(res, 429, err('too_many_requests', 'too many requests'), {
                   'retry-after': '60',
                 });
@@ -221,7 +249,17 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
             if (!creds) return send(res, 404, err('not_found', 'not found'));
             const t = now();
             const clearTx = { 'set-cookie': txCookie('', 0) };
-            if (!(await hit(db, CALLBACK_LIMIT, t)))
+            if (
+              !(await hit(
+                db,
+                {
+                  bucket: `callback:${clientKey(req)}`,
+                  max: CALLBACK_PER_CLIENT,
+                  windowMs: WINDOW_MS,
+                },
+                t,
+              ))
+            )
               return send(res, 429, err('too_many_requests', 'too many requests'), {
                 'retry-after': '60',
               });

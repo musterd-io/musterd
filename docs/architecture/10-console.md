@@ -25,7 +25,7 @@ Two routes, and everything else is refused:
 | --- | --- |
 | `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
 | `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
-| `POST /auth/{github,google}/start` | ADR 620: exact Origin; a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
+| `POST /auth/{github,google}/start` | ADR 620: exact Origin; 30 a minute per client (keyed by `cf-connecting-ip`, advisory — it can split a sender's own traffic, never fill someone else's bucket; there is no global sign-in bucket to exhaust); a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
 | `GET /auth/{github,google}/callback` | consumes the transaction atomically (cookie, provider, state, TTL), exchanges the code (Google's ID token verified: signature, issuer, audience, expiry, nonce; GitHub's numeric id from the pinned `/user`), finds or makes the account by `(provider, subject)` only, issues a session, `303` to an allowlisted return path. Any failure is a fixed error, never a redirect |
 | `GET /me` | temporary JSON view of the signed-in account and its methods, until the signed-in page lands |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |

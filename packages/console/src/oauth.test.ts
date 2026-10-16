@@ -318,6 +318,19 @@ describe('GitHub and Google sign-in (ADR 620)', () => {
     expect((await call('GET', '/auth/github/start')).status).toBe(405);
   });
 
+  it('one client hitting its limit does not lock out another (no global bucket)', async () => {
+    const { call } = await boot();
+    const form = { origin: ISSUER, 'content-type': 'application/x-www-form-urlencoded' };
+    const a = { ...form, 'cf-connecting-ip': '203.0.113.1' };
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i++)
+      statuses.push((await call('POST', '/auth/github/start', a, '')).status);
+    expect(statuses.slice(0, 30).every((s) => s === 303)).toBe(true);
+    expect(statuses[30]).toBe(429);
+    const b = { ...form, 'cf-connecting-ip': '198.51.100.7' };
+    expect((await call('POST', '/auth/github/start', b, '')).status).toBe(303);
+  });
+
   it('no code, state, token, transaction cookie or session id reaches the log or the audit', async () => {
     const { signIn, start, callback, lines, q } = await boot();
     const { s, sid } = await signIn('github');
