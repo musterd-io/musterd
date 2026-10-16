@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-16
 **Seat:** izzo
-**Status:** design agreed with nick in chat on 2026-10-16. This spec is the record of it. Nothing is
-built yet.
+**Status:** design agreed with nick in chat on 2026-10-16, and nick approved this written spec the
+same day. Nothing is built yet.
 **Lane:** `01M515KHW00AMF9AJ703RNW9GN` (goal `find-work`)
 
 ## 1. What this is for
@@ -223,15 +223,15 @@ One ADR, written with lane 1. It covers:
 
 ## 9. Work breakdown
 
-The lanes open under goal `find-work` when nick approves this spec. Each lane is one PR.
+The lanes are open under goal `find-work` (opened 2026-10-16). Each lane is one PR.
 
 | # | Lane                                                                 | Needs |
 | - | -------------------------------------------------------------------- | ----- |
-| 1 | ADR + `pickerRows` in protocol, with tests                           | —     |
-| 2 | Daemon: the `pick` field, the audit row, the interrupt notice, and an optional reason on release | 1     |
-| 3 | CLI: `musterd pick` (two-pane, table fallback, `--open`), plus the Figma frame and snapshots | 1     |
-| 4 | /live `PickOverlay`                                                  | 1, 2  |
-| 5 | musterd skill: behavior B (claim, plan, start; decline with a reason) | 2     |
+| 1 | `01M5162FVM` ADR + `pickerRows` in protocol, with tests | — |
+| 2 | `01M5162MTC` Daemon: the `pick` field, the audit row, the interrupt notice, and an optional reason on release | 1 |
+| 3 | `01M5162QS1` CLI: `musterd pick` (two-pane, table fallback, `--open`), plus the Figma frame and snapshots | 1 |
+| 4 | `01M5162T6H` /live `PickOverlay` | 1, 2 |
+| 5 | `01M5162W38` musterd skill: behavior B (claim, plan, start; decline with a reason) | 2 |
 
 Lanes 2 and 3 run in parallel after lane 1. Nothing waits on find-work's grammar.
 
