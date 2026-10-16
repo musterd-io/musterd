@@ -134,7 +134,7 @@ Each harness gets one module in `@musterd/mcp` with two calls: `probe()` and `in
   `{"type":"user","message":{"role":"user","content":<line>}}`.
 - **Every other harness is deaf until its increment lands:** opencode (a ring file the ADR 392
   plugin watches), codex (`codex queue`), grok (a spike). Cursor stays deaf, because no Cursor hook
-  starts a turn from idle. Native is exempt: a native occupancy has no idle state.
+  starts a turn from idle. _(Amended 2026-10-16: Muse Code 1.4.10 stays deaf, and that is not an increment waiting to land. See the amendment below.)_ Native is exempt: a native occupancy has no idle state.
   _(Amended 2026-10-13: exempt from the idle seam, not from reach — a resident native seat (ADR 588
   §6) hears a directed act mid-turn through its engine's steering queue, with no idle state to wait
   for; it attests `hearing: idle` on its heartbeat and each delivery is a `residency.steered` row.)_
@@ -226,6 +226,7 @@ report never fakes liveness.
 
   The plugin also records each turn start (`trace hook --kind UserPromptSubmit`, beside the existing
   `Stop`), so the turn markers and the keyboard guard have evidence on opencode.
+- _(Amended 2026-10-16, lane 01M535CZQH, Muse Code 1.4.10.)_ Muse has no outside push. `muse session-message list` and `send --json` return `external_agent_ingress_closed` while a message-capable runtime socket exists. A `channel.hello` with `requested_role: peer_runtime` and `schema_version: 4` returns `authenticated`. From that role, `session.user_message.submit` returns `malformed_request` or `role_denied`, and `peer_message.submit_agent` returns `malformed_request` for an empty body and for a top-level `body`. `peer_message.submit_external_agent` and `session.permissions.inspect` return `role_denied`. The canary `MUSEIDLECANARY9Q4` does not appear in any session log from that day. Terminal injection stays refused. The adapter stays `no-inject:muse`.
 
 Follows-up: lane `01M4M6PXZT8ND6F17ZSBDKZQCS` — the core and the claude-code inject, with its canary.
 Follows-up: lane `01M4M6Q5ERZTP2GGHJZM71HP9R` — the opencode inject.

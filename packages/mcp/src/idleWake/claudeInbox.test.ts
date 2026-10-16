@@ -79,6 +79,10 @@ describe('claude-code inbox inject (ADR 558 §6)', () => {
       ready: false,
       reason: 'no-inject:cursor',
     });
+    expect(injectAdapterFor('muse', {}).probe()).toEqual({
+      ready: false,
+      reason: 'no-inject:muse',
+    });
     expect(injectAdapterFor(null, {}).probe()).toEqual({
       ready: false,
       reason: 'no-inject:unknown',
