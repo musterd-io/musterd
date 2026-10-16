@@ -3,6 +3,8 @@ import { ASK_OUTCOMES, ASK_SPECIES, ASK_TIERS } from './ask.wire.js';
 
 /** The zod face of the ask vocabulary; the tuples, contract table and helpers are `ask.wire.js`. */
 export {
+  ASK_ACTION_CLASSES,
+  ASK_ACTION_CLASS_BY_SPECIES,
   ASK_NO_ANSWER,
   ASK_OUTCOMES,
   ASK_SPECIES,
@@ -14,7 +16,9 @@ export {
   askContract,
   askContractText,
   askTierHolds,
+  classifyAskAction,
   reviewWaitMinutes,
+  type AskActionClass,
   type AskContract,
   type AskNoAnswer,
   type AskOutcome,

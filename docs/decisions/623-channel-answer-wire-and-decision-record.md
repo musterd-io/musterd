@@ -117,6 +117,11 @@ rows are added to the audit action map.
 - The wire grows two server-controlled meta keys and two tables. No new act, no change to `SPEC.md`'s
   act set; the meta keys and the stripping rule are documented in `docs/architecture/02-protocol.md` in
   the lane that implements them.
+- _(2026-10-15, lane 2b, #2711)_ §1 is built: `classifyAskAction` and the pinned species table live in
+  `packages/protocol/src/ask.wire.ts`; `route.ts` strips a client `meta.action_class` from every envelope
+  and stamps one on every ask. A `null` meta, a prototype key as the species, and a `meta.gate` all
+  classify `privileged`. A stripped client copy is not audited, as with the sibling server-controlled
+  keys; add `ask.class_stripped` if abuse shows up.
 - Stamping a class on every ask costs one pure function at raise time. The cost to existing consumers is
   one helper call each.
 - `advisory` being the class of a mislabeled privileged request is deliberate and is the main thing a

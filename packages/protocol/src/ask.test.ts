@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ASK_ACTION_CLASSES,
+  ASK_ACTION_CLASS_BY_SPECIES,
   ASK_OUTCOMES,
   ASK_SPECIES,
   ASK_TIERS,
@@ -9,6 +11,7 @@ import {
   acceptanceAskContract,
   askContract,
   askContractText,
+  classifyAskAction,
   reviewWaitMinutes,
   askTierHolds,
 } from './ask.js';
@@ -131,5 +134,48 @@ describe('the lane_review ask window (ADR 506)', () => {
   it('reviewWaitMinutes reads the reported wait, or the default from an older daemon', () => {
     expect(reviewWaitMinutes(10 * 60_000)).toBe(10);
     expect(reviewWaitMinutes(undefined)).toBe(20);
+  });
+});
+
+describe('the ask action class (ADR 623 §1)', () => {
+  it('pins the class table: only consult is advisory, every other species is privileged', () => {
+    // Widening this table is a reviewed change (ADR 618 §4). A species added without a row here
+    // would be a type error; a row changed here must change this test, on purpose.
+    expect(ASK_ACTION_CLASS_BY_SPECIES).toEqual({
+      consult: 'advisory',
+      escalate: 'privileged',
+      approve: 'privileged',
+    });
+    expect([...ASK_ACTION_CLASSES]).toEqual(['privileged', 'advisory']);
+    for (const species of ASK_SPECIES) expect(ASK_ACTION_CLASS_BY_SPECIES[species]).toBeDefined();
+  });
+
+  it('classifies a consult with no gate as advisory', () => {
+    expect(classifyAskAction({ species: 'consult', tier: 'advisory' })).toBe('advisory');
+  });
+
+  it('classifies escalate and approve as privileged', () => {
+    expect(classifyAskAction({ species: 'escalate' })).toBe('privileged');
+    expect(classifyAskAction({ species: 'approve' })).toBe('privileged');
+  });
+
+  it('a gate-raised ask is privileged even when it says consult', () => {
+    expect(
+      classifyAskAction({ species: 'consult', gate: { class: 'costly-action', fingerprint: 'x' } }),
+    ).toBe('privileged');
+  });
+
+  it('fails closed: missing meta, missing or unknown species, and prototype keys are privileged', () => {
+    expect(classifyAskAction(undefined)).toBe('privileged');
+    expect(classifyAskAction(null)).toBe('privileged');
+    expect(classifyAskAction({})).toBe('privileged');
+    expect(classifyAskAction({ species: 'whatever' })).toBe('privileged');
+    expect(classifyAskAction({ species: 42 })).toBe('privileged');
+    expect(classifyAskAction({ species: 'constructor' })).toBe('privileged');
+    expect(classifyAskAction({ species: '__proto__' })).toBe('privileged');
+  });
+
+  it('does not trust a client-supplied action_class in the meta it classifies', () => {
+    expect(classifyAskAction({ species: 'approve', action_class: 'advisory' })).toBe('privileged');
   });
 });

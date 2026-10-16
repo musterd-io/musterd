@@ -35,6 +35,44 @@ export type AskSpecies = (typeof ASK_SPECIES)[number];
 export const ASK_TIERS = ['advisory', 'standard', 'blocking'] as const;
 export type AskTier = (typeof ASK_TIERS)[number];
 
+/**
+ * The action class of an ask (ADR 623 §1), stamped by the daemon at raise time and stripped from any
+ * client envelope. It says what a channel answer (ADR 618) to the ask is worth:
+ * - `advisory` — an A1 answer is information for the asking agent and authorizes nothing. It does NOT
+ *   mean low risk: a privileged request an agent mislabels as a `consult` lands here, and stays harmless
+ *   because every consumer of "a human answered" refuses an advisory answer (ADR 623 §3-§4).
+ * - `privileged` — gets no buttons on an A1 channel; the message points at `/live` or the CLI.
+ */
+export const ASK_ACTION_CLASSES = ['privileged', 'advisory'] as const;
+export type AskActionClass = (typeof ASK_ACTION_CLASSES)[number];
+
+/**
+ * The class table, by species. A constant with a test that pins it (ADR 618 §4): widening it is a
+ * reviewed change. In v1 no class lets an A1 answer release work; only `consult` is `advisory`.
+ */
+export const ASK_ACTION_CLASS_BY_SPECIES: Record<AskSpecies, AskActionClass> = {
+  consult: 'advisory',
+  escalate: 'privileged',
+  approve: 'privileged',
+};
+
+/**
+ * Classify an ask from what the DAEMON knows (ADR 623 §1). Fails closed: a gate-raised ask
+ * (`meta.gate`, ADR 150), an unknown or missing species, or anything not in the table is `privileged`.
+ */
+export function classifyAskAction(
+  meta: Record<string, unknown> | null | undefined,
+): AskActionClass {
+  if (!meta) return 'privileged';
+  if (meta['gate'] !== undefined && meta['gate'] !== null) return 'privileged';
+  const species = meta['species'];
+  if (typeof species !== 'string') return 'privileged';
+  if (!Object.prototype.hasOwnProperty.call(ASK_ACTION_CLASS_BY_SPECIES, species)) {
+    return 'privileged';
+  }
+  return ASK_ACTION_CLASS_BY_SPECIES[species as AskSpecies];
+}
+
 /** The two no-answer policies (ADR 147 §2). Derived from tier — never stored on the ask. */
 export const ASK_NO_ANSWER = ['hold', 'proceed_with_risk'] as const;
 export type AskNoAnswer = (typeof ASK_NO_ANSWER)[number];

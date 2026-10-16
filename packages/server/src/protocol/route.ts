@@ -9,6 +9,7 @@ import {
   type Envelope,
   ACCEPTANCE_MOVES_NOTICE,
   changeLabelText,
+  classifyAskAction,
   isAwaitingAcceptance,
   type Lane,
   type LaneSupersededWire,
@@ -504,6 +505,21 @@ async function routeEnvelopeInner(
   if (!daemonComposed && outgoingEnv.meta && 'policy_review' in outgoingEnv.meta) {
     const { policy_review: _clientReview, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
+
+  // ADR 623 §1: `action_class` says what a channel answer (ADR 618) to this ask is worth. It is
+  // **server-controlled** and stripped from every envelope, the daemon's own included: a client copy
+  // would let an `approve` call itself `advisory`. Every ask is then classified from what the daemon
+  // knows (species, `meta.gate`), failing closed to `privileged`. A non-ask act never carries one.
+  if (outgoingEnv.meta && 'action_class' in outgoingEnv.meta) {
+    const { action_class: _clientActionClass, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
+  if (outgoingEnv.act === 'ask') {
+    outgoingEnv = {
+      ...outgoingEnv,
+      meta: { ...outgoingEnv.meta, action_class: classifyAskAction(outgoingEnv.meta) },
+    };
   }
 
   // Per-act model stamp (ADR 101): the occupancy attestation is the *source*, the stamp on each act
