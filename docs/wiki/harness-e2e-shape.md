@@ -1,6 +1,6 @@
 # Harness end-to-end shape
 
-claude-code, opencode, and grok hold onboard, wake, resume, meter, doorbell, and idle-wake; codex has the remaining named gap (read 2026-10-16, lane `01M535CZQ2PJB4SVT586NS8SN2`).
+claude-code, opencode, grok, and codex hold onboard, wake, resume, meter, doorbell, and idle-wake; muse idle-wake stays deaf, and cursor-agent and native stay exempt (read 2026-10-16, lane `01M4M6Q8QKM2PK5E5T5AMF9E44`).
 
 ## How a cell was read
 
@@ -13,7 +13,7 @@ The read is the files below, at `0c5f3c0c` (2026-10-16; falsify: the named symbo
 | claude-code | holds | holds | holds | holds | holds | holds |
 | opencode | holds | holds | holds | holds | holds | holds |
 | native (`musterd`) | guidance | holds | holds | holds | holds | exempt |
-| codex | holds | holds | holds | holds | holds in unit | gap |
+| codex | holds | holds | holds | holds | holds in unit | holds |
 | cursor-agent | holds | holds | holds | holds | holds | exempt |
 | grok | holds | holds | holds | holds | holds | holds |
 | muse | holds | holds | holds | holds | holds | deaf |
@@ -32,11 +32,13 @@ Onboard is `opencode.ts` plus `opencodePlugin.ts`. Wake and resume are `host/bac
 
 Onboard is `musterdAdapter`, guidance the engine appends. Wake is `nativeBackend`. Resume is the daemon wake-transcript rehydrate in `native.ts`, not a harness session id. Meter is the engine's `cost_usd`. Doorbell is `interruptCheck` and `appendInterrupt` in `nativeBridge.ts`. Idle-wake is exempt: ADR 558 §6 says a native occupancy has no idle state, amended 2026-10-13 to the idle seam only.
 
-## codex holds except idle-wake (2026-10-16)
+## codex holds (2026-10-16)
 
-Onboard is `codexHooks.ts` (SessionStart, SessionEnd, PostToolUse, UserPromptSubmit). Wake and resume are `host/backends/codex.ts` (`resume`). Meter is the printed tokens plus `harness_prints_no_price`. Doorbell holds in unit (`codex-hook post-tool-use`); live delivery stays the 2026-09-15 cell in the doorbell contract and [codex live doorbell eval](codex-live-doorbell-eval.md). `injectAdapterFor('codex')` returns `no-inject:codex` (2026-10-16; falsify: `inject.ts` returns a ready adapter for `codex`). <!-- claim: other -->
+Onboard is `codexHooks.ts` (SessionStart, SessionEnd, PostToolUse, UserPromptSubmit). Wake and resume are `host/backends/codex.ts` (`resume`). Meter is the printed tokens plus `harness_prints_no_price`. Doorbell holds in unit (`codex-hook post-tool-use`); live delivery stays the 2026-09-15 cell in the doorbell contract and [codex live doorbell eval](codex-live-doorbell-eval.md).
 
-Follows-up: 01M4M6Q8QKM2PK5E5T5AMF9E44
+Idle-wake is `codexQueue`. Probe is `no-thread` when the binding has no live codex session id, and it checks that id before `codex --version`. Below 0.149.0 the probe is `below-0.149`. `inject` runs `codex queue --thread <id> --message <line>` (2026-10-16; falsify: `injectAdapterFor('codex')` on a directory with no live codex session returns anything other than `no-thread`). <!-- claim: other -->
+
+On codex-cli 0.162.1 talking to app-server 0.163.0, an idle TUI (`--no-alt-screen -s read-only`, composer up, no prior user turn) took that queue. The TUI rendered the reply (n=2). A half-typed `DRAFT9XK` confirmed on screen before the queue stayed in the composer and was absent from the rollout (n=1). Both turns recorded sandbox `read-only` because the probe passed `-s read-only`. An open approval dialog was not measured (2026-10-16; falsify: a queue to an idle TUI on this CLI submits a confirmed on-screen draft, or the rollout has no completed task for that message). <!-- claim: other -->
 
 ## cursor-agent holds, idle exempt (2026-10-16)
 

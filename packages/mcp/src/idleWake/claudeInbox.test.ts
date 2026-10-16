@@ -87,9 +87,14 @@ describe('claude-code inbox inject (ADR 558 §6)', () => {
       ready: false,
       reason: 'no-inject:unknown',
     });
-    expect(await injectAdapterFor('codex', {}).inject('x')).toEqual({
+    const dir = mkdtempSync(join(tmpdir(), 'codex-deaf-'));
+    expect(injectAdapterFor('codex', {}, dir).probe()).toEqual({
+      ready: false,
+      reason: 'no-thread',
+    });
+    expect(await injectAdapterFor('codex', {}, dir).inject('x')).toEqual({
       ok: false,
-      reason: 'no-inject:codex',
+      reason: 'no-thread',
     });
   });
 });
