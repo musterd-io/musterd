@@ -61,6 +61,9 @@ export interface AskView {
   state: AskState;
   /** Who closed/deferred it (accept/decline/wait sender), when someone did. */
   answeredBy?: string;
+  /** The option an accept picked, when the ask was a choice and the accept names one (`C — …`,
+   *  `choiceReply`, lane 01M511XNQC). Absent on a bare accept: the surface never guesses. */
+  chose?: string;
   /** The "deciding — check back in ⟨until⟩" horizon, when deferred. */
   until?: string;
   /** When the timeline moved this ask out of `open` — the ts of the answer, deferral, outcome or
@@ -182,6 +185,8 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
       if (env.act === 'accept') {
         ask.state = 'accepted';
         ask.answeredBy = env.from;
+        const picked = /^([A-Z]|\d{1,2}) — /.exec(env.body ?? '');
+        if (picked?.[1]) ask.chose = picked[1];
       } else if (env.act === 'decline') {
         ask.state = 'declined';
         ask.answeredBy = env.from;

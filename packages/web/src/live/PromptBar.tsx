@@ -89,11 +89,11 @@ export function PromptBar({
   );
   const hide = () => root && setHidden((h) => [...h, root.id]);
   const [answering, setAnswering] = useState<string | null>(null);
-  const answer = async (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => {
+  const answer = async (ask: AskView, kind: 'accept' | 'decline' | 'deciding', body?: string) => {
     setAnswering(ask.env.id);
     setError('');
     try {
-      onSent(await sendFn(cfg, askAnswer(ask, kind)));
+      onSent(await sendFn(cfg, askAnswer(ask, kind, body)));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -222,7 +222,7 @@ export function PromptBar({
           idx={idx}
           viewer={viewer}
           busy={answering}
-          onAnswer={(a, k) => void answer(a, k)}
+          onAnswer={(a, k, b) => void answer(a, k, b)}
           onHide={hide}
         />
       )}

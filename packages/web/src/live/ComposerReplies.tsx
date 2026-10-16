@@ -10,6 +10,8 @@ import {
 import { clock } from './format';
 import { MemberFace } from './MemberFace';
 import { displayModel } from './modelBadge';
+import { AskChoices } from './AskChoices';
+import { askChoices, choiceReply } from './askPhrase';
 
 /**
  * The thread panel over the composer (lane 01M4KY55N1). The viewer's sentence comes first, on the
@@ -72,7 +74,7 @@ export function ComposerThreadPanel({
   viewer: string;
   /** The ask id an answer is in flight for. */
   busy: string | null;
-  onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => void;
+  onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding', body?: string) => void;
   onHide: () => void;
 }) {
   const states = thread.cast.map((name) => [name, seatState(name, thread, idx.get(name))] as const);
@@ -179,7 +181,10 @@ const SETTLED: Partial<Record<AskView['state'], string>> = {
 function settledLine(ask: AskView, viewer: string): string {
   const verb = SETTLED[ask.state] ?? '';
   if (!ask.answeredBy) return verb;
-  return `${verb} by ${ask.answeredBy === viewer ? 'you' : ask.answeredBy}`;
+  const who = ask.answeredBy === viewer ? 'you' : ask.answeredBy;
+  // A choice settles on the option picked, not on "Approved" (lane 01M511XNQC).
+  if (ask.chose) return `${who === 'you' ? 'You' : who} chose ${ask.chose}`;
+  return `${verb} by ${who}`;
 }
 
 function AskCard({
@@ -191,9 +196,10 @@ function AskCard({
   ask: AskView;
   viewer: string;
   busy: boolean;
-  onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => void;
+  onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding', body?: string) => void;
 }) {
   const mine = ask.to === viewer || ask.to === null;
+  const choices = askChoices(ask.env.body ?? '');
   const open = ask.state === 'open' || ask.state === 'held'; // askIsLoud, inlined for the same reason
   return (
     <div className={`cthread__col cthread__ask${open ? ' is-open' : ''}`}>
@@ -202,8 +208,23 @@ function AskCard({
         {mine ? VERB_YOU[ask.species] : `asks ${ask.to}`}
         <time>{clock(ask.env.ts)}</time>
       </div>
-      {ask.env.body && <Bubble text={ask.env.body} />}
-      {open && mine ? (
+      {/* A choice shows its question; its options are the answer buttons below (lane 01M511XNQC). */}
+      {ask.env.body && <Bubble text={(open && mine && choices?.question) || ask.env.body} />}
+      {open && mine && choices ? (
+        // A choice is answered by picking an option, never by a bare Approve (lane 01M511XNQC).
+        <div>
+          <AskChoices
+            choices={choices}
+            asker={ask.env.from}
+            busy={busy}
+            onPick={(o) => onAnswer(ask, 'accept', choiceReply(o))}
+            onNone={() => onAnswer(ask, 'decline')}
+          />
+          <button type="button" disabled={busy} className="lc-ask__btn lc-ask__btn--later" onClick={() => onAnswer(ask, 'deciding')}>
+            Deciding — 1h
+          </button>
+        </div>
+      ) : open && mine ? (
         <div>
           <button type="button" disabled={busy} className="lc-ask__btn lc-ask__btn--accept" onClick={() => onAnswer(ask, 'accept')}>
             Approve

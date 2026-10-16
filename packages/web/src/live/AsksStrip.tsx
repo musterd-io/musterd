@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { holdStateLine } from './holdState';
-import { askBanner } from './askPhrase';
+import { askBanner, askChoices, choiceReply, SETTLED_MS } from './askPhrase';
 import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { askTierHolds } from '@musterd/protocol/wire';
 import {
@@ -22,6 +22,7 @@ import { asksOpenMode, stillMode } from './stillMode';
 import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
+import { AskChoices } from './AskChoices';
 
 /**
  * The asks & approvals rail (ADR 149) — the above-the-fold home of the to-human ask stream (ADR 147)
@@ -84,6 +85,14 @@ export function AsksStrip({
   // Answers this browser just sent: fold the POST ack into the derivation so the card settles
   // immediately; the firehose copy that follows is deduped by id in `deriveAsks`.
   const [localAnswers, setLocalAnswers] = useState<Envelope[]>([]);
+  /* A choice just picked stays on screen for a beat (lane 01M511XNQC): the answer is already sent, but
+     the card would vanish the instant it settled and take the stamp and its "sent to …" line with it.
+     Kept by id, as the open view it was, so the same AskChoices instance keeps its picked state. */
+  const [lingering, setLingering] = useState<AskView[]>([]);
+  const linger = useCallback((ask: AskView) => {
+    setLingering((l) => [...l.filter((a) => a.env.id !== ask.env.id), ask]);
+    window.setTimeout(() => setLingering((l) => l.filter((a) => a.env.id !== ask.env.id)), 1600);
+  }, []);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Closed by default; `?asks-open` starts it open so the contrast gate can measure the cards inside
@@ -127,7 +136,7 @@ export function AsksStrip({
    */
   const lapsed = asks.filter((a) => a.state === 'lapsed');
   const closed = asks.length - loud.length - deferred.length - lapsed.length;
-  const cards = [...loud, ...deferred, ...lapsed];
+  const cards = [...loud, ...lingering.filter((a) => !loud.some((l) => l.env.id === a.env.id)), ...deferred, ...lapsed];
   // The banner (ADR 464 §6): one open ask in plain words, a settled outcome for a few seconds,
   // else the idle pill. Its lead is the one the rail answers inline — a human's question first.
   const bannerView = askBanner(asks, ctx, now);
@@ -135,6 +144,8 @@ export function AsksStrip({
   const leadAudience = lead ? askAudience(lead, ctx) : null;
   // Yours-or-anyone's: the only audiences whose asks this browser should be invited to answer.
   const leadIsOurs = leadAudience === 'you' || leadAudience === 'team';
+  // Is the lead a choice (lane 01M511XNQC)? Then the rail offers Choose…, never a one-click Approve.
+  const leadChoices = lead ? askChoices(lead.env.body ?? '') : null;
   const yoursCount = answerableCount(loud, ctx);
 
   // The review queue (nick, 2026-08-05): every lane in acceptance and who it waits on, at a glance.
@@ -149,11 +160,18 @@ export function AsksStrip({
   // reports is a frame. The card keeps whatever value it had at mount, which is exactly what a
   // reader sees at any instant; it simply stops counting down while being photographed.
   const still = stillMode();
+  // …and keeps ticking through a settle (lane 01M511XNQC): answering the last open ask used to stop the
+  // clock BEFORE the answer's timestamp, so `askBanner` never saw it as settled and "nick approved ✓" /
+  // "nick chose C ✓" never showed. An answer newer than the clock, or one inside SETTLED_MS, keeps it on.
+  const settling = derived.some(
+    (a) => a.settledAt !== undefined && (a.settledAt > now || now - a.settledAt <= SETTLED_MS),
+  );
   useEffect(() => {
-    if (loud.length === 0 || still) return;
+    if ((loud.length === 0 && !settling) || still) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [loud.length, still]);
+  }, [loud.length, settling, still]);
 
   // Waiting-on-YOU count in the tab title — loud even when the tab isn't front. Counts only asks
   // this browser's identity could answer (yours + team-pool): titling the tab "(10 asks)" for ten
@@ -227,7 +245,7 @@ export function AsksStrip({
     !!lead && askIsLoud(lead.state) && !canAnswer && leadIsOurs && wayIn !== 'none';
 
   const answer = useCallback(
-    async (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => {
+    async (ask: AskView, kind: 'accept' | 'decline' | 'deciding', body?: string) => {
       setBusy(ask.env.id);
       setError(null);
       try {
@@ -246,6 +264,8 @@ export function AsksStrip({
                 act: kind,
                 to,
                 thread,
+                // A picked option rides as the body (lane 01M511XNQC), so the record says which one.
+                ...(body ? { body } : {}),
                 meta: { in_reply_to: ask.env.id },
               });
         setLocalAnswers((prev) => [...prev, ack]);
@@ -365,7 +385,30 @@ export function AsksStrip({
                 </span>
               </>
             )}
-            {askIsLoud(lead.state) && canAnswer && leadIsOurs && (
+            {askIsLoud(lead.state) && canAnswer && leadIsOurs && leadChoices && (
+              // A choice is never one click on the rail (lane 01M511XNQC): it says it is a choice and
+              // opens the sheet, where every option is on screen and each one is its own answer.
+              <span className="lc-asks__quick">
+                <span className="lc-asks__choice" title={`a choice of ${leadChoices.options.length}`}>
+                  {leadChoices.options.map((o) => (
+                    <span key={o.key} className="lc-asks__tok" aria-hidden="true">
+                      {o.key}
+                    </span>
+                  ))}
+                  <span className="lc-asks__pick">pick one</span>
+                </span>
+                <button
+                  type="button"
+                  className="lc-ask__btn lc-ask__btn--choose"
+                  aria-expanded={open}
+                  onClick={() => setOpen(true)}
+                  title={`${lead.env.from} offers ${leadChoices.options.map((o) => o.key).join(', ')} — see them before you answer`}
+                >
+                  Choose…
+                </button>
+              </span>
+            )}
+            {askIsLoud(lead.state) && canAnswer && leadIsOurs && !leadChoices && (
               <span className="lc-asks__quick">
                 <button
                   type="button"
@@ -529,7 +572,10 @@ export function AsksStrip({
                   audience={aud}
                   busy={busy === ask.env.id}
                   now={now}
-                  onAnswer={(kind) => void answer(ask, kind)}
+                  onAnswer={(kind, body) => {
+                    if (body) linger(ask);
+                    void answer(ask, kind, body);
+                  }}
                   onReveal={onReveal}
                   style={{ '--i': i } as React.CSSProperties}
                 />
@@ -612,7 +658,7 @@ function AskCard({
   busy: boolean;
   /** The strip's single clock — the same instant that decided this card's state. */
   now: number;
-  onAnswer: (kind: 'accept' | 'decline' | 'deciding') => void;
+  onAnswer: (kind: 'accept' | 'decline' | 'deciding', body?: string) => void;
   onReveal: (id: string) => void;
   style?: React.CSSProperties;
 }) {
@@ -620,8 +666,9 @@ function AskCard({
   const kind = kindOf(from, idx);
   const open = askIsLoud(ask.state);
   const ours = audience === 'you' || audience === 'team';
+  const choices = askChoices(ask.env.body ?? '');
   return (
-    <article className={`lc-ask lc-ask--${ask.state}`} style={style}>
+    <article className={`lc-ask lc-ask--${ask.state}${choices ? ' lc-ask--choice' : ''}`} style={style}>
       {/* Left column: who + what, stacked. The clock and the actions get their own columns so that
           down a list of twenty, every clock and every button lands on the same vertical line. */}
       <div className="lc-ask__main">
@@ -646,12 +693,34 @@ function AskCard({
             onClick={() => onReveal(ask.env.id)}
             title="Open this ask in the log"
           >
-            {ask.env.body}
+            {/* A choice shows its question; its options are the answer buttons below. */}
+            {choices?.question || ask.env.body}
           </button>
         )}
       </div>
       <AskClock ask={ask} now={now} />
-      {open && canAnswer && (
+      {open && canAnswer && choices && (
+        // A choice (lane 01M511XNQC): every option in full, each its own answer; the pick is the body.
+        <div className="lc-ask__actions lc-ask__actions--choice">
+          <AskChoices
+            choices={choices}
+            asker={from}
+            busy={busy}
+            onPick={(o) => onAnswer('accept', choiceReply(o))}
+            onNone={() => onAnswer('decline')}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            className="lc-ask__btn lc-ask__btn--later"
+            onClick={() => onAnswer('deciding')}
+            title="Tell them you are deciding — the clock stops, they check back in an hour"
+          >
+            Deciding — 1h
+          </button>
+        </div>
+      )}
+      {open && canAnswer && !choices && (
         <div className="lc-ask__actions">
           <button
             type="button"

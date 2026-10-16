@@ -1398,6 +1398,24 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-16 — `totalJsGzipBytes` 313,600 → 315,700 B and `liveCssGzipBytes` 21,700 → 22,400 B: an ask that is a choice (lane `01M511XNQC`)
+
+| Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |
+| -------- | ----------------------------- | ------------------- | -------------------------- |
+| total JS | 312,989 B                     | 314,995 B           | RAISED 313,600 → 315,700 B |
+| live CSS | 21.2 KB                       | 22,251 B            | RAISED 21,700 → 22,400 B   |
+
+On 2026-10-15 nick approved a four-option consult from the `/live` rail without seeing the options, and
+the asker read the empty accept as option C. Now a choice gets Choose… instead of Approve, the sheet shows
+every option as its own answer, the pick is sent as the option ("C — …"), and the rail settles on "nick
+chose C ✓". The JS is almost all in the `askPhrase` chunk: the option parser, the `AskChoices` picker,
+and the strip's linger and settle-clock logic. The CSS was trimmed first (the per-property transition
+lists, a margin rule and a duplicate font) and is the picker's look: the dealt cards, the stamp, and the
+breathing Choose…. Lazy-loading cannot move total (ADR 183). JS is local plus the ~450 B CI gap measured
+on 2026-10-15; CSS is measured plus ~150 B.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 313,600 B and live CSS at or under 21,700 B with this change in.
+
 ### 2026-10-15 — `totalJsGzipBytes` 313,000 → 313,600 B: a companion gesture, and the room notices (lane `01M50YPZN8`, ADR 617)
 
 | Budget   | This branch (local, rebased on #2700) | First CI run (before the rebase) | Ceiling                    |
