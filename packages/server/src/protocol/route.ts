@@ -399,25 +399,36 @@ async function routeEnvelopeInner(
   // can_coordinate (ADR 621 §2): a talk-only seat — a guest — sends the four talk acts to anyone,
   // and accept/decline/wait/resolve only as a reply to an act addressed to it. Everything else
   // (handoff, steer, challenge, defer, insight, …) is coordination and refused, audited like a mute.
-  if (!caps.can_coordinate && !TALK_ONLY_SEND_ACTS.has(env.act)) {
-    let replyOk = false;
+  if (!caps.can_coordinate) {
+    const meta = (env.meta ?? {}) as Record<string, unknown>;
+    let refusal: string | null = null;
     if (TALK_ONLY_REPLY_ACTS.has(env.act)) {
-      const meta = (env.meta ?? {}) as { in_reply_to?: unknown; defer_ref?: unknown };
-      const refs = [meta.in_reply_to, meta.defer_ref, env.thread].filter(
+      // EVERY reference the act carries must point at an act addressed to this seat, and there must
+      // be at least one. Checking "any" would let a guest aim `in_reply_to` at someone else's
+      // acceptance ask while `thread` names its own conversation.
+      const refs = [meta['in_reply_to'], meta['defer_ref'], env.thread].filter(
         (r): r is string => typeof r === 'string' && r.length > 0,
       );
+      let ok = refs.length > 0;
       for (const ref of refs) {
         const row = await ctx.db.get<{ to_member: string | null }>(
           'SELECT to_member FROM messages WHERE team_id = ? AND id = ?',
           [team.id, ref],
         );
-        if (row?.to_member === sender.id) {
-          replyOk = true;
+        if (row?.to_member !== sender.id) {
+          ok = false;
           break;
         }
       }
+      if (!ok) refusal = `talk-only seat: ${env.act} is only a reply to an act addressed to you`;
+    } else if (!TALK_ONLY_SEND_ACTS.has(env.act)) {
+      refusal = `talk-only seat: cannot send ${env.act}`;
+    } else if ('hold_proposal' in meta) {
+      // A hold proposal rides an `ask` and a human admin's accept turns it into a team-wide hold:
+      // proposing one is coordination, so a guest's ask may not carry it.
+      refusal = 'talk-only seat: an ask cannot carry meta.hold_proposal';
     }
-    if (!replyOk) {
+    if (refusal) {
       await appendAudit(ctx.db, team.id, {
         actor: sender.name,
         action: 'send.denied',
@@ -425,12 +436,7 @@ async function routeEnvelopeInner(
         result: 'deny',
         detail: { can_coordinate: false, act: env.act },
       });
-      throw new MusterdError(
-        'forbidden',
-        TALK_ONLY_REPLY_ACTS.has(env.act)
-          ? `talk-only seat: ${env.act} is only a reply to an act addressed to you`
-          : `talk-only seat: cannot send ${env.act}`,
-      );
+      throw new MusterdError('forbidden', refusal);
     }
   }
 

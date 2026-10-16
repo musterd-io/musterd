@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { OAUTH_RATE_LIMITS } from '@musterd/protocol';
+import { OAUTH_RATE_LIMITS, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
@@ -1275,6 +1275,55 @@ withDrivers('oauth-http', (_o, kind) => {
       // A guest reads at broadcast grade (§7, ADR 616 §4).
       const history = await get('/teams/dawn/messages', { authorization: `Bearer ${tok}` });
       expect(history.status).toBe(200);
+
+      // A reply counts only when EVERY reference it carries is addressed to the guest: naming its
+      // own thread does not let it answer someone else's act (security review of #2704).
+      let n = 0;
+      const send = async (bearer: string, from: string, to: unknown, act: string, extra = {}) => {
+        n += 1;
+        const id = `m-${act}-${n}-${Date.now()}`;
+        const res = await postJson(
+          '/teams/dawn/messages',
+          {
+            envelope: {
+              id,
+              v: PROTOCOL_VERSION,
+              team: 'dawn',
+              from,
+              to,
+              act,
+              body: `${act} ${n}`,
+              ts: Date.now() + n,
+              ...extra,
+            },
+          },
+          { authorization: `Bearer ${bearer}` },
+        );
+        return { ...res, id };
+      };
+      const toGia = await send(nickCred, 'nick', { kind: 'member', name: 'gia' }, 'message');
+      expect(toGia.status).toBeLessThan(300);
+      const toTeam = await send(nickCred, 'nick', { kind: 'team' }, 'message');
+      expect(toTeam.status).toBeLessThan(300);
+      const forged = await send(tok, 'gia', { kind: 'member', name: 'nick' }, 'accept', {
+        thread: toGia.id,
+        meta: { in_reply_to: toTeam.id },
+      });
+      expect(forged.status).toBe(403);
+      expect(JSON.stringify(forged.json)).toContain('only a reply to an act addressed to you');
+      const real = await send(tok, 'gia', { kind: 'member', name: 'nick' }, 'accept', {
+        meta: { in_reply_to: toGia.id },
+      });
+      expect(real.status).toBeLessThan(300);
+      // An ask may not carry a hold proposal from a guest.
+      const hold = await send(tok, 'gia', { kind: 'member', name: 'nick' }, 'ask', {
+        meta: {
+          species: 'approve',
+          tier: 'standard',
+          hold_proposal: { effect: 'autorefresh_paused' },
+        },
+      });
+      expect(hold.status).toBe(403);
     });
 
     it('a --member invite admits a full member; an admin narrows and lifts a ceiling (ADR 621 §5–6)', async () => {
