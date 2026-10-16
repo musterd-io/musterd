@@ -7,10 +7,12 @@ const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith('--limit='));
 const dbArg = args.find((a) => a.startsWith('--db='));
 const repoArg = args.find((a) => a.startsWith('--repo='));
+const cutoffArg = args.find((a) => a.startsWith('--resolved-before='));
 
 const LIMIT = limitArg ? Number(limitArg.slice('--limit='.length)) : 150;
 const DB_PATH = dbArg ? dbArg!.slice('--db='.length) : `${homedir()}/.musterd/musterd.db`;
 const REPO = repoArg ? repoArg!.slice('--repo='.length) : process.cwd();
+const CUTOFF = cutoffArg ? Number(cutoffArg.slice('--resolved-before='.length)) : null;
 
 const EXCLUDED = new Set(['ROADMAP.md', 'pnpm-lock.yaml', 'docs/implementation-plan.md']);
 
@@ -70,13 +72,16 @@ function parseHunks(diff: string): Map<string, Array<[number, number]>> {
 }
 
 const db = new DatabaseSync(DB_PATH);
-const rows = db
-  .prepare(
-    `SELECT id, created_at, claimed_at, resolved_at, merged_json
-   FROM lanes WHERE merged_json IS NOT NULL
-   ORDER BY resolved_at DESC LIMIT ?`,
-  )
-  .all(LIMIT) as Array<{
+const query =
+  CUTOFF === null
+    ? `SELECT id, created_at, claimed_at, resolved_at, merged_json
+       FROM lanes WHERE merged_json IS NOT NULL
+       ORDER BY resolved_at DESC LIMIT ?`
+    : `SELECT id, created_at, claimed_at, resolved_at, merged_json
+       FROM lanes WHERE merged_json IS NOT NULL AND (resolved_at IS NULL OR resolved_at <= ?)
+       ORDER BY resolved_at DESC LIMIT ?`;
+const stmt = db.prepare(query);
+const rows = (CUTOFF === null ? stmt.all(LIMIT) : stmt.all(CUTOFF, LIMIT)) as Array<{
   id: string;
   created_at: number;
   claimed_at: number | null;
@@ -172,6 +177,7 @@ for (let i = 0; i < data.length; i++) {
 console.log('branch-overlap measurement (ADR 575 section 3 follow-up)');
 console.log('db:', DB_PATH);
 console.log('repo:', REPO);
+console.log('resolved-before (ms, pinned):', CUTOFF === null ? 'none (latest)' : CUTOFF);
 console.log('lanes measured:', data.length);
 console.log('total wall time:', totalMs, 'ms');
 console.log(

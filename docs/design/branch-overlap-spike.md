@@ -14,7 +14,7 @@ feature landed.
 
 Revised 2026-10-16 after big-body's decline (01M530AABE1CH96K4J9RY4FTF5), which
 repeated the earlier wanderer review (01M52YRSR6WE93W3RPZXJBYD05). Corrections
-applied: (1) cost arithmetic uses each run's own population (8.5 vs 9.7 ms, not
+applied: (1) cost arithmetic uses each run's own population (8.3 vs 9.7 ms, not
 1000x); (2) the 60% hunk gate and 30-day window below are labelled as this lane's
 proposals, not ADR 575's own gates, which are separated out; (3) the measurement
 script is supplied so the numbers reproduce; (4) 61/492 is stated as an overlap
@@ -47,8 +47,8 @@ lockfiles.
 Command: node --disable-warning=ExperimentalWarning scripts/research/branch-overlap-measure.ts
 Measured in this repository's checkout against the daemon's merged lanes (146 commits):
 
-- File-level (git diff --name-only): 8.5 ms/commit (1241 ms total).
-- Hunk-level (git diff --unified=0 plus @@ range parse): 9.7 ms/commit (1416 ms
+- File-level (git diff --name-only): 8.3 ms/commit (1241 ms total).
+- Hunk-level (git diff --unified=0 plus @@ range parse): 9.7 ms/commit (1420 ms
   total).
 
 Parsing hunk ranges adds ~1.2 ms/commit (~1.14x) over names-only, so the cost gap
@@ -64,18 +64,19 @@ computation on the daemon and recompute lazily on board read.
 
 Dataset: 146 merged lanes from this daemon's SQLite store (merged_json with a squash
 commit sha), each with created_at / claimed_at / resolved_at. Time overlap defined as
-overlapping created..resolved windows. Regenerated paths excluded. Command:
-scripts/research/branch-overlap-measure.ts.
+overlapping created..resolved windows. Regenerated paths excluded. Command (pinned population, reproducible):
+  node --disable-warning=ExperimentalWarning scripts/research/branch-overlap-measure.ts \
+    --resolved-before=1792177618000 --limit=150
 
 Results:
-- concurrently-open lane pairs: 4259
-- pairs sharing at least one changed file: 487 (11.43% of concurrent pairs)
-- pairs whose shared file also has an overlapping hunk range: 60 (1.41% of
+- concurrently-open lane pairs: 4381
+- pairs sharing at least one changed file: 470 (10.73% of concurrent pairs)
+- pairs whose shared file also has an overlapping hunk range: 56 (1.28% of
   concurrent pairs)
-- of the 487 file-sharing pairs, 60 (12.3%) also overlap at hunk range; branch-diff
-  warning would skip 427 file-only pairs (87.7%)
+- of the 470 file-sharing pairs, 56 (11.9%) also overlap at hunk range; branch-diff
+  warning would skip 414 file-only pairs (88.1%)
 
-Reading: this 60/487 figure is the fraction of file-sharing concurrent pairs that also
+Reading: this 56/470 figure is the fraction of file-sharing concurrent pairs that also
 clash at hunk range. It is an overlap fraction of the measured population, not an
 independent validation of warning precision or recall (those need a ground-truth set of
 conflicts/reverts, which merge history does not label here).
@@ -83,7 +84,7 @@ conflicts/reverts, which merge history does not label here).
 The current surface_overlap warns on declared globs at 27-37% precision (ADR 575). A
 branch-diff warning at file level can never warn a pair that did not touch a common
 file, so its precision against actual changed files is 100% by construction (no glob
-false positives), at the cost of ~8.5 ms/commit and dependence on pushed-branch
+false positives), at the cost of ~8.3 ms/commit and dependence on pushed-branch
 freshness. Promoting from file level to hunk level would suppress a further 87.7% of
 file-sharing warnings.
 
@@ -119,11 +120,16 @@ gate is re-run after the first 30 days of opt-in data.
 
 ## Follow-up
 
-Implementation + caching: reuse this measurement and scripts/research/branch-overlap-
-measure.ts, compute (branch, tip SHA) -> changed file set (and lazy hunk ranges) on
-the daemon, and expose it through boardWarnings as a non-directed branch_overlap kind.
-Concrete next work: lane-level cache keyed on (lane.id, branch, tip SHA), integration
-into boardWarnings behind a flag, and one round of hunk-gate re-measurement on
-opt-in data before any default change.
+Implementation lane opened: 01M531R914FQVS0HHDK8CRVCQR ("Overlap from what branches
+change: board hunk-overlap annotation (implementation follow-up)"), claimed by sloane
+and linked to goal signals-earn-attention.
+
+That lane owns the concrete work this spike deliberately does not: lane-level cache
+keyed on (lane.id, branch, tip SHA), integration into boardWarnings as a
+non-directed branch_overlap kind (file level default with hunk ranges shown but not
+gating), integration behind a flag, and one round of hunk-gate re-measurement on
+opt-in data before any default change. Reuse scripts/research/branch-overlap-measure.ts
+for every re-measurement; pin the population with --resolved-before so verdicts stay
+reproducible.
 
 Refs ADR-575
