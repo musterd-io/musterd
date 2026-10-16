@@ -79,11 +79,13 @@ export const PRICE_ROWS: readonly PriceRow[] = [
   row('muse-spark-1.2-contributor', 0.1, 0.2, 0.02, 0, MUSE_SRC),
   row('muse-spark-1.2', 1.25, 4.25, 0.12, 0, MUSE_SRC),
   // Meta — Muse Wonder (published 2026-10-16): $4.00/M input, $20.00/M output,
-  // $0.20/M cached input, no cache-write. Meta publishes no contributor arm for
-  // Wonder; the contributor-tagged runtime id therefore mirrors the standard rate
-  // (owner decision 2026-10-16). Longest-prefix keeps the two rows apart.
-  row('muse-wonder-1.0-contributor', 4.0, 20.0, 0.2, 0, MUSE_SRC),
-  row('muse-wonder-1.0', 4.0, 20.0, 0.2, 0, MUSE_SRC),
+  // $0.20/M cached input, no cache-write. cacheRead is a fraction of the input
+  // price, so $0.20 / $4.00 = 0.05 (0.2 would bill cached tokens at $0.80/M).
+  // Meta publishes no contributor arm for Wonder; the contributor-tagged runtime
+  // id therefore mirrors the standard rate (owner decision 2026-10-16).
+  // Longest-prefix keeps the two rows apart.
+  row('muse-wonder-1.0-contributor', 4.0, 20.0, 0.05, 0, MUSE_SRC),
+  row('muse-wonder-1.0', 4.0, 20.0, 0.05, 0, MUSE_SRC),
 ];
 
 /** The row a model id prices by: the longest matching prefix, or undefined. */
