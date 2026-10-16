@@ -1320,7 +1320,7 @@ withDrivers('oauth-http', (_o, kind) => {
         meta: {
           species: 'approve',
           tier: 'standard',
-          hold_proposal: { effect: 'autorefresh_paused' },
+          hold_proposal: { effect: 'autorefresh_paused', reason: 'stop it', for_ms: 60_000 },
         },
       });
       expect(hold.status).toBe(403);

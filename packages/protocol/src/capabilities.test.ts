@@ -19,6 +19,7 @@ describe('capability model (ADR 070)', () => {
       can_flag_urgent: true, // urgent stays ungated until P2 flips the default
       can_observe: true,
       can_create_agents: true, // ADR 459: minting stays open unless an admin narrows it
+      can_coordinate: true, // ADR 621: talk-only is a narrowing, never the default
       can_message: 'team',
       visibility_level: 'team',
       tool_allowlist: [],
