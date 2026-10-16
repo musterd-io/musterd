@@ -92,6 +92,8 @@ where a plausible shortcut becomes a takeover path.
 - Two new runtime dependencies for `@musterd/console`: `openid-client` (and through it
   `oauth4webapi` and `jose`) and the Cloudflare Email Service client or REST call. None reaches the
   team server.
+- _(2026-10-16)_ Landed as `openid-client` 6.8.8 in `@musterd/console` only (lane `01M3Z43QYB`,
+  part 2), with its own two dependencies `oauth4webapi` 3.8.8 and `jose` 6.2.12.
 - The console schema grows: sessions, OAuth transactions, magic-link tokens, and rate-limit state.
 - Three human steps gate the lane's done-state: a GitHub OAuth app, a Google OAuth client, and
   `musterd.io` verified as an email sending domain. Their exact steps go in `docs/guides/cloud-ops.md`
