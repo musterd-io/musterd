@@ -388,7 +388,11 @@ export function OfficeScene({
       if (ev) h.emit(ev);
       // The caption rail (first-five-seconds §2): the lazy scene owns scheduling + DOM; only the
       // plain-sentence projection is computed here (keeps the entry chunk out of the rail's bytes).
-      const caption = captionFor(e);
+      // An accept is narrated by what it answered (lane 01M51E333V), so look the answered act up — only
+      // for an accept, so the common act pays nothing for it.
+      const ref = e.act === 'accept' ? e.meta?.['in_reply_to'] : undefined;
+      const answered = typeof ref === 'string' ? envelopes.find((x) => x.id === ref) : undefined;
+      const caption = captionFor(e, answered);
       if (caption) h.emit({ kind: 'caption', caption });
       // EVERY act also speaks over the sender's head — constructed in mapping.ts (speechEventFor),
       // where the passthrough of text/tone/addressee is pinned by tests this component can't carry.

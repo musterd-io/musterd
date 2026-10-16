@@ -65,8 +65,11 @@ describe('captionFor — plain-language narration of notable moments (first-five
     ).toEqual({ text: 'ryder is handing work to dolly', who: 'ryder', tone: 'handoff' });
   });
 
-  it('narrates a directed accept as the work being done', () => {
-    expect(captionFor(env({ act: 'accept', from: 'dolly', to: { kind: 'member', name: 'izzo' } }))).toEqual({
+  it('narrates a lane acceptance as the work being done', () => {
+    const review = env({ id: 'r', act: 'ask', from: 'izzo', meta: { lane_review: { lane: 'L1' } } });
+    expect(
+      captionFor(env({ act: 'accept', from: 'dolly', to: { kind: 'member', name: 'izzo' }, meta: { in_reply_to: 'r' } }), review),
+    ).toEqual({
       text: "dolly accepted izzo's work — it's done",
       who: 'dolly',
       tone: 'accept',
@@ -175,3 +178,37 @@ describe('pushCaption — one at a time, short queue, drop the past', () => {
     expect(s.current).toBeNull();
   });
 });
+
+describe('an accept says what it accepted (lane 01M51E333V)', () => {
+  // 2026-10-16: picking option B on a consult made the room say "driver accepted s1's work — it's
+  // done", a claim that a lane was accepted when none was.
+  const accept = (over: Partial<Envelope> = {}) =>
+    env({ act: 'accept', from: 'driver', to: { kind: 'member', name: 's1' }, meta: { in_reply_to: 'q' }, ...over });
+  const asked = (meta: Record<string, unknown>, act: Envelope['act'] = 'ask') =>
+    env({ id: 'q', act, from: 's1', to: { kind: 'member', name: 'driver' }, meta });
+
+  it('names the option a choice picked', () => {
+    const c = captionFor(accept({ body: 'B — Sea shanties.' }), asked({ species: 'consult', tier: 'standard' }));
+    expect(c?.text).toBe("driver chose B on s1's question");
+  });
+
+  it('says "it’s done" only for a lane acceptance', () => {
+    const review = asked({ species: 'approve', tier: 'standard', lane_review: { lane: 'L1' } });
+    expect(captionFor(accept(), review)?.text).toBe("driver accepted s1's work — it's done");
+    // A peer's verdict carries its claims even when the ask is out of the window.
+    expect(captionFor(accept({ meta: { in_reply_to: 'q', claims: [] } }))?.text).toBe(
+      "driver accepted s1's work — it's done",
+    );
+  });
+
+  it('names a plain ask, a handoff and a call for help for what they were', () => {
+    expect(captionFor(accept(), asked({ species: 'approve', tier: 'standard' }))?.text).toBe("driver approved s1's ask");
+    expect(captionFor(accept(), asked({}, 'handoff'))?.text).toBe("driver took on s1's handoff");
+    expect(captionFor(accept(), asked({}, 'request_help'))?.text).toBe('driver is helping s1');
+  });
+
+  it('claims nothing it cannot see: an accept with no answered act in view is a plain yes', () => {
+    expect(captionFor(accept())?.text).toBe('driver said yes to s1');
+  });
+});
+
