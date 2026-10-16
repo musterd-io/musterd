@@ -61,6 +61,14 @@ describe('public content routes', () => {
     expect(read('./docs.$slug.tsx')).toContain('docsPages');
     expect(read('./blog.$slug.tsx')).toContain('blogPosts');
   });
+
+  // Measured on production 2026-10-16: the homepage set og:image:alt and twitter:image, and
+  // omitted twitter:image:alt. Naming twitter:image opts a client out of the og:* fallback.
+  it('the root share card names twitter:image:alt with the same string as og:image:alt', () => {
+    const src = read('./__root.tsx');
+    expect(src).toContain("{ property: 'og:image:alt', content: SITE_CARD_ALT }");
+    expect(src).toContain("{ name: 'twitter:image:alt', content: SITE_CARD_ALT }");
+  });
 });
 
 /*
