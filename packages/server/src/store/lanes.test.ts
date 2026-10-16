@@ -69,6 +69,22 @@ withDrivers('lanes', (o) => {
     });
   }
 
+  /**
+   * The fastest of `runs` timed runs of `fn`, in ms. The ReDoS guards below assert a bound on how long a
+   * pathological glob takes (~1 ms when healthy). A loaded CI runner adds GC pauses and scheduling to a
+   * single sample, and noise only ever adds time, so the minimum filters it out. A real regression (a
+   * backtracking or quadratic matcher) slows every run and still fails.
+   */
+  function fastestOf(runs: number, fn: () => void): number {
+    let best = Infinity;
+    for (let i = 0; i < runs; i++) {
+      const t0 = performance.now();
+      fn();
+      best = Math.min(best, performance.now() - t0);
+    }
+    return best;
+  }
+
   describe('globsOverlap (segment intersection, ADR 083 / ADR 575)', () => {
     it('overlaps on shared path prefixes, either direction', () => {
       expect(globsOverlap('packages/server/src/store/**', 'packages/server/**')).toBe(true);
@@ -99,10 +115,16 @@ withDrivers('lanes', (o) => {
     it('stays fast on a pathological wildcard segment', () => {
       const pattern = 'x/' + '*a'.repeat(30) + 'b';
       const text = 'x/' + 'a'.repeat(5_000);
-      const t0 = performance.now();
+      const near = 'x/' + 'a'.repeat(200);
+      const shortPattern = 'x/' + '*a'.repeat(12) + 'b';
       expect(globsOverlap(pattern, text)).toBe(true); // too long to match exactly → errs to warn
-      expect(globsOverlap('x/' + '*a'.repeat(12) + 'b', 'x/' + 'a'.repeat(200))).toBe(false);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(globsOverlap(shortPattern, near)).toBe(false);
+      expect(
+        fastestOf(5, () => {
+          globsOverlap(pattern, text);
+          globsOverlap(shortPattern, near);
+        }),
+      ).toBeLessThan(50);
     });
   });
 
@@ -152,21 +174,37 @@ withDrivers('lanes', (o) => {
     it('stays fast on a pathological wildcard segment', () => {
       const pattern = 'x/' + '*a'.repeat(30) + 'b';
       const text = 'x/' + 'a'.repeat(5_000);
-      const t0 = performance.now();
+      const near = 'x/' + 'a'.repeat(200);
+      const shortPattern = 'x/' + '*a'.repeat(12) + 'b';
+      const stars = '*'.repeat(30);
+      const longA = 'a'.repeat(5_000);
       expect(pathGlobMatches(pattern, text)).toBe(false);
-      expect(pathGlobMatches('x/' + '*a'.repeat(12) + 'b', 'x/' + 'a'.repeat(200))).toBe(false);
-      expect(pathGlobMatches('*'.repeat(30), 'a'.repeat(5_000))).toBe(true);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(pathGlobMatches(shortPattern, near)).toBe(false);
+      expect(pathGlobMatches(stars, longA)).toBe(true);
+      expect(
+        fastestOf(5, () => {
+          pathGlobMatches(pattern, text);
+          pathGlobMatches(shortPattern, near);
+          pathGlobMatches(stars, longA);
+        }),
+      ).toBeLessThan(50);
     });
     it('a scope past the table cap does not match, and does not build the table', () => {
       const glob = '**' + 'a'.repeat(5_000);
-      const t0 = performance.now();
-      expect(pathGlobMatches(glob, 'a'.repeat(100))).toBe(false);
+      const hundred = 'a'.repeat(100);
+      const huge = 'a'.repeat(2_000_000); // built once, outside the timed section
+      expect(pathGlobMatches(glob, hundred)).toBe(false);
       // A short `**` glob still matches a long path. Only the table's cell count is capped, so a
       // path that would allocate one does not match and is not scanned.
-      expect(pathGlobMatches('**', 'a'.repeat(100))).toBe(true);
-      expect(pathGlobMatches('**', 'a'.repeat(2_000_000))).toBe(false);
-      expect(performance.now() - t0).toBeLessThan(50);
+      expect(pathGlobMatches('**', hundred)).toBe(true);
+      expect(pathGlobMatches('**', huge)).toBe(false);
+      expect(
+        fastestOf(5, () => {
+          pathGlobMatches(glob, hundred);
+          pathGlobMatches('**', hundred);
+          pathGlobMatches('**', huge);
+        }),
+      ).toBeLessThan(50);
     });
   });
 
