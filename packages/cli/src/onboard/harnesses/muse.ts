@@ -221,6 +221,13 @@ export const muse: Harness = {
     importSkillPath: '.agents/skills/musterd-import/SKILL.md',
   },
 
+  observeModel: (payload) => {
+    // ADR 619: the hook payload shape is Muse's own — until a session-log lookup lands (lane 3),
+    // the slot reads a declared model id when the payload carries one, else degrades honestly.
+    const id = payload.model_id?.trim() || payload.model?.trim();
+    return id || undefined;
+  },
+
   async detect() {
     const home = homedir();
     const installed =

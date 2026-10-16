@@ -7,6 +7,7 @@ const LABELS: Readonly<Record<string, string>> = {
   codex: 'codex',
   opencode: 'opencode',
   grok: 'grok',
+  muse: 'muse',
   musterd: 'musterd',
   shell: 'shell',
   human: 'human',
@@ -27,6 +28,7 @@ export const LAUNCHABLE_HARNESSES: readonly string[] = [
   'codex',
   'opencode',
   'grok',
+  'muse',
 ];
 
 /** Asked for > the harness used last (if still desired) > first desired > last session > claude-code. */

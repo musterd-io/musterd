@@ -44,6 +44,11 @@ export const GUIDANCE_INSTALL_PATHS: readonly string[] = [
   '.grok/commands/musterd-standup.md',
   '.grok/commands/musterd-handoff.md',
   '.grok/commands/musterd-claim.md',
+  // Muse Code (ADR 619) — no per-harness bridge: Muse reads `.agents/skills` natively, so the
+  // guidance paths ARE the shared canonical placements.
+  '.agents/skills/musterd/SKILL.md',
+  '.agents/skills/musterd-orient/SKILL.md',
+  '.agents/skills/musterd-import/SKILL.md',
 ];
 
 /**

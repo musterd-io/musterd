@@ -145,6 +145,7 @@ const REGISTRY_ORDER: readonly string[] = [
   'codex',
   'opencode',
   'grok',
+  'muse',
   'musterd',
 ];
 
