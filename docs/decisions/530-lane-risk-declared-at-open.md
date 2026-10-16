@@ -46,6 +46,10 @@ counts as human-visible; a sibling prefix like `packages/webhooks/` is deliberat
 
 ## Consequences
 
+- _(2026-10-16, ADR 631.)_ Declaring `user-facing` still satisfies this open-time guard. It no longer,
+  by itself, asks a human. `none` is still an explicit waiver. A big change is another tag or
+  `stakes: high`; a large landed diff asks a human even when the only tag is `user-facing`.
+
 - New human-visible lanes must say `risk` once. A lane with empty surface (the default) is not
   treated as web-visible — if its work is really rendered, the author must declare the surface for
   the guard to fire. This is the intended trade: a guard that guesses from nothing is worse than a

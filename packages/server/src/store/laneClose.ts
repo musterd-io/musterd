@@ -1,4 +1,10 @@
-import { summariseClaims, type Lane, isAwaitingAcceptance, reviewGrade } from '@musterd/protocol';
+import {
+  summariseClaims,
+  type Lane,
+  humanReviewRequired,
+  isAwaitingAcceptance,
+  reviewGrade,
+} from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { appendAudit, appendLaneEventRequired, peerReviewGradeOf, reviewRouting } from './audit.js';
 import { memberIsHuman, memberModelByName, workerFamily } from './review.js';
@@ -255,7 +261,7 @@ export async function recordLaneClose(
       // ADR 188 two-stage: which peer review a RISKY lane actually got — the newest
       // lane.review_peer_confirmed row's grade, or 'none'. Only written on risky lanes; the human
       // half of the pair stays `human_review_missed`, derived exactly as before.
-      ...(lane.risk.length > 0 && isAwaitingAcceptance(before.state)
+      ...(humanReviewRequired(lane) && isAwaitingAcceptance(before.state)
         ? { peer_review: await peerReviewGradeOf(db, teamId, lane.id) }
         : {}),
       // ADR 188: the close edge finally CHECKS what the confirm was worth, for routed and voluntary

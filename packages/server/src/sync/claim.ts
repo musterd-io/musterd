@@ -3,6 +3,7 @@ import {
   ErrorBodySchema,
   type Hold,
   HoldResponseSchema,
+  humanReviewRequired,
   isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
   type Lane,
@@ -1001,7 +1002,7 @@ export async function decideRiskyClosePendingHuman(
   body: UpdateLane,
 ): Promise<void> {
   if (body.state !== 'done') return;
-  if (!isAwaitingAcceptance(before.state) || before.risk.length === 0) return;
+  if (!isAwaitingAcceptance(before.state) || !humanReviewRequired(before)) return;
   if (member.name !== before.owner_seat || member.kind === 'human') return;
   // Two shapes of "a human's verdict is owed": no human was askable yet (ADR 539's pending state,
   // now only on teams with no human seat), or the stage-two ask is out and unanswered (ADR 607 —

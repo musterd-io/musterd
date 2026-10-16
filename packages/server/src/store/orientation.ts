@@ -1,6 +1,7 @@
 import {
   compareGoals,
   GOAL_STALE_DAYS,
+  humanReviewRequired,
   isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
   type Lane,
@@ -578,7 +579,9 @@ export async function deriveNext(
       const empty_pool = no_candidate ? await emptyPoolFromSubmitAudit(db, teamId, lane.id) : null;
       // ADR 539: the peer stage is done and no human was ever asked — the wait is on a human coming
       // live, which a reader should be able to tell from a reviewer being slow.
-      const pending = lane.risk.length > 0 ? await peerConfirmedPending(db, teamId, lane.id) : null;
+      const pending = humanReviewRequired(lane)
+        ? await peerConfirmedPending(db, teamId, lane.id)
+        : null;
       return {
         id: lane.id,
         title: lane.title,

@@ -451,6 +451,8 @@ export interface AcceptanceExemption {
  *    requirement they also declared. Without this clause `stakes: low` would be a second, quieter
  *    way to clear `risk` — precisely the shared-predicate collision ADR 225 and ADR 234 §3 built two
  *    separate fields to avoid, rebuilt at the consumer instead of at the schema.
+ *    ADR 631 does not change this clause. `user-facing` no longer asks a human by itself, and it
+ *    still keeps the peer ask: stakes `low` must not exempt a rendered surface from acceptance.
  *
  * The draw is per-SUBMIT and deliberately not derived from the lane id: hashing the id would make
  * the same lane always-exempt or never-exempt, which is a fixed subpopulation rather than a sample,

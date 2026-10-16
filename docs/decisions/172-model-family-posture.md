@@ -91,6 +91,7 @@ per-seat; the posture aggregates them, it does not re-decide them.
   drafted as an open question; nick resolved it before the ADR merged, so the decision lands here
   with it. A risky lane (any declared `risk` tag — user-facing / expensive / destructive /
   prod-touching) now requires a **human** review, and an agent is not a substitute:
+  _(Amended 2026-10-16: ADR 631. `user-facing` alone no longer requires a human. Any other tag, `stakes: high` on a user-facing lane, or a landed diff of 25 or more code and doc files, still does.)_
   - `pickReviewCounterpart` no longer falls through to cross-family agents when no human/admin is
     live — the pick is null, and the response says so before the worker chooses
     (`human_review_required`, `close_records: 'human_review_missed'`), with the posture attached so
