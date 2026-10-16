@@ -99,8 +99,9 @@ speaker described becomes something an admin can grant and the team can read.
    ([ADR 635](../../decisions/635-spend-approval-display.md)). The gateway hold is lane
    `01M531H8WGX270MZRR5KN08XPS`.
 5. Named follow-up (`01M4SB4D7RTW21W62NKCPDV816`): the unpriced floor (bound what isn't
-   priced, or decide to block unpriced harnesses explicitly). Decided 2026-10-15 (nick): a separate
-   `unpriced_wake_cap` count key, where `0` blocks unpriced harnesses. Options and the decision:
+   priced, or decide to block unpriced harnesses explicitly). The written recommendation is a separate
+   `unpriced_wake_cap` count key, where `0` blocks unpriced harnesses. Ask `01M50H0C2E` (2026-10-15)
+   was an empty Approve, so the recommendation is not nick's decision. Options:
    [2026-10-15-spend-unpriced-floor-design.md](2026-10-15-spend-unpriced-floor-design.md).
 
 ## Testing
