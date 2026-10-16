@@ -71,6 +71,10 @@ const LazySeedsTray = lazy(() =>
 const LazyBoardOverlay = lazy(() =>
   import('../live/BoardOverlay').then((module) => ({ default: module.BoardOverlay })),
 );
+/** The lane picker (`/live?pick=<seat>`, lane 01M5162T6H): its own lazy chunk and stylesheet. */
+const LazyPickOverlay = lazy(() =>
+  import('../live/PickOverlay').then((module) => ({ default: module.PickOverlay })),
+);
 function preloadBoardOverlay(): void {
   void import('../live/BoardOverlay').then((module) => module.preloadBoard());
 }
@@ -413,6 +417,14 @@ function LivePage() {
   // activeElement read any later sees only <body>), and focus goes home after the close commits.
   const [boardOrigin, setBoardOrigin] = useState<DOMRect | null>(null);
   const [boardLane, setBoardLane] = useState<string | null>(null);
+  /** `?pick=<seat>` — the lane picker for that seat (musterd pick spec §5.4). */
+  const [pickSeat, setPickSeat] = useState<string | null>(null);
+  const closePick = useCallback(() => {
+    setPickSeat(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('pick');
+    window.history.replaceState(null, '', url);
+  }, []);
   // A goal the board opens drilled into (a Now goal row); null is "lanes on no goal", undefined none.
   const [boardGoal, setBoardGoal] = useState<string | null | undefined>(undefined);
   const boardOpen = boardOrigin != null || boardLane != null || boardGoal !== undefined;
@@ -461,6 +473,8 @@ function LivePage() {
     // fades in rather than zooming (see BoardOverlay's `origin`).
     const urlLane = params.get('lane');
     if (urlLane) setBoardLane(urlLane);
+    const urlPick = params.get('pick');
+    if (urlPick) setPickSeat(urlPick);
     // `#s=<nonce>` — `musterd live` walked us here (ADR 222). Outranks the watch link below: they
     // never appear together, and if they somehow did, your own identity is the right answer.
     const nonce = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('s');
@@ -685,7 +699,7 @@ function LivePage() {
             }
             // A modal means it: while the board overlay is up, the room behind it takes no focus and
             // no clicks (the AsksStrip inert precedent, promoted to page scope).
-            inert={boardOpen || seedsOpen || logOpen}
+            inert={boardOpen || seedsOpen || logOpen || pickSeat !== null}
           >
             <OfficeScene
               {...officeRoom(team, stream, { entries, board, asks })}
@@ -777,6 +791,18 @@ function LivePage() {
                   />
                 </Suspense>
               </LazyLogDrawer>
+            </Suspense>
+          )}
+          {pickSeat !== null && (
+            <Suspense fallback={null}>
+              <LazyPickOverlay
+                cfg={cfg}
+                seat={pickSeat}
+                signedIn={signedIn}
+                roster={roster}
+                onSignIn={() => signInHere()}
+                onClose={closePick}
+              />
             </Suspense>
           )}
           {boardOpen && (

@@ -28,6 +28,8 @@ export * from './calendar.wire.js';
 // read a room without pulling zod in behind it.
 export * from './huddleView.js';
 export * from './lanes.wire.js';
+// ADR 624's picker list: pure, type-only imports, so the browser can render it (the /live lane picker).
+export * from './picker.js';
 export * from './model.js';
 export * from './offline.wire.js';
 export * from './posture.wire.js';

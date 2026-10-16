@@ -139,6 +139,16 @@ access; roster handles and Presence remain visible.
   sparse stored doc (ADR 185). Each knob there is labelled `default` or `set for the team`; who set it,
   and when, stays with `musterd team policy style`, which reads the audit. A `POST /policy` refusal
   hides that section. Agents get no chip: they have no preferences.
+- **Lane picker** (`live/PickOverlay.tsx`, state in `live/pickList.ts`, its own lazy chunk and
+  `PickOverlay.css`) — `/live?pick=<seat>` (musterd pick spec §5.4, ADR 624, lane 01M5162T6H). The
+  board's open lanes for that seat from `pickerRows` (read through `@musterd/protocol/wire`, since the
+  root index carries node-only modules), grouped by goal on the left, the highlighted lane's brief on
+  the right with its risk, blocked-on and declined notes. Type to filter, ↑/↓, ⏎ picks, Esc closes;
+  Tab moves focus inside the dialog, so claimable/blocked is a two-button switch. A pick is the
+  existing handoff from the signed-in human (`owner_seat` + `handoff_note`), re-reading the board
+  first so a lane taken meanwhile says by whom. Not signed in, it asks first and stays open; a service
+  seat is refused (ADR 232). The a11y gate measures it open and drives it by keyboard alone
+  (`scripts/a11y/pick-keyboard.mjs`).
 - **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
   (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
   inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s

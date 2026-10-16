@@ -107,6 +107,12 @@ Either way, the human picks a lane and it goes to the seat they are talking to.
   member, which the daemon is not. ADR 626 replaces the act with a pending-pick marker that
   `musterd pick` writes into the seat's workspace and the seat's interrupt check shows once.
 
+- **2026-10-16 — `pickerRows` is also exported from `@musterd/protocol/wire`** (lane `01M5162T6H`, the
+  /live lane picker, #2733). The browser needs it, and the root index carries node-only modules
+  (`guidance-epoch` imports `node:fs`); the overlay, as the page's first runtime import of the root,
+  broke `/live` in dev. `picker.ts` has only type imports, so `wire.ts` re-exports it unchanged. No
+  schema or behaviour change: the same function, reachable from the browser-safe entry point.
+
 ## Observability & Evaluation
 
 - **Traces:**

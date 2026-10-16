@@ -1,0 +1,373 @@
+/* The /live lane picker (lane 01M5162T6H). Its own sheet, loaded with the lazy overlay, so the always-on
+   live stylesheet pays nothing for it. The panel grows in like a ledger opened on the desk; rows are
+   dealt in; the brief crossfades as the highlight moves; a pick lands with a stamp. All motion is off
+   under reduced motion. */
+.pick {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--lc-z-overlay) + 2);
+  display: grid;
+  place-items: center;
+  padding: var(--lc-5);
+  background: color-mix(in srgb, var(--lc-bg) 55%, transparent);
+  backdrop-filter: blur(3px);
+  animation: pick-fade var(--lc-dur-2) var(--lc-ease-out) both;
+}
+.pick__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: min(720px, 100%);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 16px;
+  background: var(--lc-surface);
+  box-shadow: 0 24px 60px -24px color-mix(in srgb, var(--lc-text) 35%, transparent);
+  outline: none;
+  overflow: hidden;
+  animation: pick-grow var(--lc-dur-3) var(--lc-ease-out) both;
+}
+.pick__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--lc-2) var(--lc-4);
+  padding: var(--lc-4) var(--lc-5) var(--lc-3);
+  border-bottom: 1px solid var(--lc-border);
+}
+.pick__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.pick__team {
+  color: var(--lc-dim);
+  font-weight: 400;
+}
+.pick__carrying {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lc-warn-ink);
+}
+.pick__close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--lc-dim);
+  font-size: 20px;
+  cursor: pointer;
+}
+.pick__close:hover {
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+}
+.pick__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-3);
+  padding: var(--lc-3) var(--lc-5);
+}
+.pick__filter {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: var(--lc-2) var(--lc-3);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 10px;
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+  font: inherit;
+  font-size: 13px;
+}
+.pick__filter:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--lc-accent) 60%, transparent);
+  outline-offset: 1px;
+}
+.pick__tabs {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+}
+.pick__tab {
+  min-height: 28px;
+  padding: 0 var(--lc-3);
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--lc-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--lc-dur-1) var(--lc-ease-out);
+}
+.pick__tab[aria-pressed='true'] {
+  background: var(--lc-surface);
+  color: var(--lc-text);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--lc-text) 18%, transparent);
+}
+.pick__panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+  border-top: 1px solid var(--lc-border);
+}
+.pick__list {
+  margin: 0;
+  padding: var(--lc-2) 0;
+  list-style: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--lc-border);
+}
+.pick__goal {
+  padding: var(--lc-3) var(--lc-5) var(--lc-1);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-dim);
+}
+.pick__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--lc-3);
+  padding: 7px var(--lc-5);
+  cursor: pointer;
+  color: var(--lc-text);
+  font-size: 13px;
+  animation: pick-deal var(--lc-dur-3) var(--lc-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+  transition: background var(--lc-dur-1) var(--lc-ease-out);
+}
+/* The highlight is a warm wash with an accent bar that grows in from the left edge. */
+.pick__row::before {
+  content: '';
+  position: absolute;
+  inset: 4px auto 4px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lc-accent);
+  transform: scaleY(0);
+  transition: transform var(--lc-dur-2) var(--lc-ease-out);
+}
+.pick__row.is-on {
+  background: color-mix(in srgb, var(--lc-accent) 8%, var(--lc-surface));
+}
+.pick__row.is-on::before {
+  transform: scaleY(1);
+}
+.pick__id {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-accent-ink);
+}
+.pick__rowtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick__age {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--lc-dim);
+}
+.pick__brief {
+  padding: var(--lc-4) var(--lc-5);
+  overflow-y: auto;
+}
+.pick__briefin {
+  animation: pick-fade var(--lc-dur-2) var(--lc-ease-out) both;
+}
+.pick__briefid {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-accent-ink);
+}
+.pick__brieftitle {
+  margin: var(--lc-1) 0 var(--lc-2);
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--lc-text);
+}
+.pick__meta,
+.pick__scope,
+.pick__for {
+  margin: 0 0 var(--lc-3);
+  font-size: 12px;
+  color: var(--lc-dim);
+}
+.pick__scope {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.pick__detail {
+  margin: 0 0 var(--lc-3);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lc-text);
+  white-space: pre-line;
+}
+.pick__flag {
+  margin: 0 0 var(--lc-3);
+  padding: var(--lc-2) var(--lc-3);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--lc-lane-ink);
+  background: color-mix(in srgb, var(--lc-lane) 10%, var(--lc-surface));
+}
+.pick__flag--blocked {
+  color: var(--lc-warn-ink);
+  background: color-mix(in srgb, var(--lc-warn) 12%, var(--lc-surface));
+}
+.pick__flag--declined {
+  color: var(--lc-danger-ink);
+  background: color-mix(in srgb, var(--lc-danger) 8%, var(--lc-surface));
+}
+.pick__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  padding: var(--lc-3) var(--lc-5);
+  border-top: 1px solid var(--lc-border);
+}
+.pick__keys,
+.pick__note {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--lc-dim);
+}
+.pick__note {
+  color: var(--lc-warn-ink);
+}
+.pick__keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+.pick__primary {
+  min-height: 32px;
+  padding: 0 var(--lc-4);
+  border: 1px solid color-mix(in srgb, var(--lc-accent) 50%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lc-accent) 14%, var(--lc-surface-2));
+  color: var(--lc-accent-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--lc-dur-1) var(--lc-ease-out);
+}
+.pick__primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--lc-accent) 55%, transparent);
+}
+.pick__primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pick__empty {
+  padding: var(--lc-4) var(--lc-5);
+  font-size: 13px;
+  color: var(--lc-dim);
+}
+.pick__gate,
+.pick__done {
+  display: grid;
+  justify-items: center;
+  gap: var(--lc-3);
+  padding: var(--lc-6) var(--lc-5);
+  text-align: center;
+  font-size: 14px;
+  color: var(--lc-text);
+}
+.pick__gate p,
+.pick__done p {
+  max-width: 44ch;
+  margin: 0;
+}
+.pick__stamp {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  font-size: 28px;
+  color: var(--lc-surface);
+  background: var(--lc-success-ink);
+  animation: pick-stamp var(--lc-dur-3) var(--lc-ease-out) both;
+}
+.pick__donehint {
+  color: var(--lc-dim);
+}
+@keyframes pick-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pick-grow {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@keyframes pick-deal {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+@keyframes pick-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-18deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.92) rotate(4deg);
+  }
+}
+/* A narrow panel stacks the brief under the list (spec decision 5). */
+@media (max-width: 760px) {
+  .pick {
+    padding: var(--lc-2);
+  }
+  .pick__panes {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .pick__list {
+    border-right: 0;
+    border-bottom: 1px solid var(--lc-border);
+  }
+  .pick__brief {
+    max-height: 40vh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pick,
+  .pick__panel,
+  .pick__row,
+  .pick__briefin,
+  .pick__stamp {
+    animation: none;
+  }
+  .pick__row::before,
+  .pick__primary {
+    transition: none;
+  }
+}

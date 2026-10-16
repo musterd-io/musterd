@@ -1406,6 +1406,23 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-16 — `totalJsGzipBytes` 319,500 → 323,400 B and `appCssGzipBytes` 12,000 → 13,300 B: the /live lane picker (lane `01M5162T6H`)
+
+| Budget   | Delta vs main (built beside it)                                   | Ceiling                    |
+| -------- | ----------------------------------------------------------------- | -------------------------- |
+| total JS | +4,005 B: `PickOverlay` 3,284 (lazy), `wire` +500, `live` +151      | RAISED 319,500 → 323,400 B |
+| app CSS  | +1,814 B: `PickOverlay.css`, classed `app` so `live` pays nothing | RAISED 12,000 → 13,300 B   |
+
+A new surface: `/live?pick=<seat>` lists the board's open lanes for a seat from `pickerRows` and hands the
+picked one over as the human. The overlay is its own lazy chunk with its own sheet, so the initial load
+is unchanged (139.1 of 141.2 KB) and the always-on live stylesheet gains nothing. The chunk is the
+component alone (about 9 KB minified, with nothing bundled that the page did not already carry). The
+picker logic joins the shared `wire` chunk, because the root protocol index carries node-only modules.
+Lazy-loading cannot move total (ADR 183). JS is local plus the ~450 B CI gap measured on 2026-10-15;
+CSS is measured plus ~150 B.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 319,500 B and app CSS at or under 12,000 B with this change in.
+
 ### 2026-10-16 — `totalJsGzipBytes` 313,600 → 315,700 B and `liveCssGzipBytes` 21,700 → 22,400 B: an ask that is a choice (lane `01M511XNQC`)
 
 | Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |
