@@ -82,7 +82,7 @@ where a plausible shortcut becomes a takeover path.
    use to keep a victim out. Callbacks get the same body and time limits as every route (ADR 615).
 10. **Audit and logs.** Audit rows for sign-in start, result, reason and provider; session issue,
     revoke and revoke-all; identity link and unlink; with server-generated request ids. Never codes,
-    verifiers, token hashes, cookies, magic URLs or provider profile bodies — in audit or logs —
+    verifiers, token hashes, cookies, magic URLs or provider user-info responses — in audit or logs —
     tested on the refused and error paths as well as success.
 11. **A console session grants nothing on a team.** Team membership stays on the team server (§4.2);
     the §4.3 admin token's KMS signature and the team's own owner check stay separate from sign-in.
