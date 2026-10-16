@@ -286,11 +286,20 @@ function writeSpendCapWithoutCost(k: NonNullable<Report['wake']>, w: (s: string)
   w(`  cap $${k.spend_cap_usd.toFixed(2)} ${theme.meta(`no priced spend · ${SPEND_CAP_NOTE}`)}\n`);
 }
 
+/** ADR 635. Empty when the threshold is unset. The line names the per-wake gateway threshold. */
+function writeSpendApproval(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
+  if (k.spend_approval_usd === undefined) return;
+  w(
+    `  approval $${k.spend_approval_usd.toFixed(2)} per wake ${theme.meta('· gateway running cost · display only')}\n`,
+  );
+}
+
 /** Wake metrics (ADR 131 inc 5) — the always-on claim's instrument panel. */
 function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
   if (k.wakes === 0 && k.failed === 0 && k.deferred === 0) {
     w(theme.meta(`  no wakes (${k.window_days}d)`) + '\n');
     writeSpendCapWithoutCost(k, w);
+    writeSpendApproval(k, w);
     return;
   }
   const rate = k.answer_rate === null ? '' : ` (${Math.round(k.answer_rate * 100)}%)`;
@@ -308,6 +317,7 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
     );
   }
   writeSpendCapWithoutCost(k, w);
+  writeSpendApproval(k, w);
   // ADR 252: spend the cost line structurally cannot show. Printed only when there is some — a zero
   // here would read as "nothing went unpriced", which the token cannot yet promise.
   if ((k.unpriced_sessions ?? 0) > 0) {

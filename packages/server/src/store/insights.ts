@@ -35,7 +35,7 @@ import { listTeamMessages, longDeferred } from './messages.js';
 import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
 import { teamFamilyPosture } from './review.js';
 import type { MessageRow } from './rows.js';
-import { getPolicy, spendCapUsd } from './teams.js';
+import { getPolicy, spendApprovalUsd, spendCapUsd } from './teams.js';
 import { deriveToolCallMetrics } from './toolCalls.js';
 
 /** Matches the inbox/wake reads' bound (ADR 211 §3). */
@@ -971,15 +971,20 @@ export async function deriveReport(
   // admin-only; the report is how the rest of the team reads the number. Omitted when unset so a
   // team that never chose a cap keeps today's report bytes. Never coerced to 0.
   const wakeMetrics = await deriveWakeMetrics(db, teamId, now);
-  const cap = spendCapUsd(await getPolicy(db, teamId));
-  const wake =
-    cap === null
-      ? wakeMetrics
-      : {
-          ...wakeMetrics,
-          spend_cap_usd: cap,
-          spend_over_cap: wakeMetrics.cost_usd_total !== null && wakeMetrics.cost_usd_total >= cap,
-        };
+  const policy = await getPolicy(db, teamId);
+  const cap = spendCapUsd(policy);
+  // ADR 635. The approval threshold is a per-wake gateway number. The 7-day comparison
+  // stays on spend_over_cap. Omitted when unset.
+  const approval = spendApprovalUsd(policy);
+  let wake = wakeMetrics;
+  if (cap !== null) {
+    wake = {
+      ...wake,
+      spend_cap_usd: cap,
+      spend_over_cap: wakeMetrics.cost_usd_total !== null && wakeMetrics.cost_usd_total >= cap,
+    };
+  }
+  if (approval !== null) wake = { ...wake, spend_approval_usd: approval };
 
   return {
     team: teamSlug,

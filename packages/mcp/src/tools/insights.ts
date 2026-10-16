@@ -139,15 +139,27 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
           `  cap $${k.spend_cap_usd.toFixed(2)} no priced spend · measured wake cost, not payments`,
         );
       }
+      if (k.spend_approval_usd !== undefined) {
+        lines.push(
+          `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
+        );
+      }
       if (k.exhausted > 0) lines.push(`  ⚠ ${k.exhausted} act(s) exhausted their wake attempts`);
       for (const seat of k.by_seat.filter((b) => b.over_budget))
         lines.push(`  ⚠ ${seat.seat} — a wake exceeded its $${seat.budget_usd} report bound`);
-    } else if (k?.spend_cap_usd !== undefined) {
-      // Quiet window. The digest stays silent when no cap is set; a set cap is still worth one line.
+    } else if (k?.spend_cap_usd !== undefined || k?.spend_approval_usd !== undefined) {
+      // Quiet window. The digest stays silent when neither number is set.
       lines.push('\nwake:');
-      lines.push(
-        `  cap $${k.spend_cap_usd.toFixed(2)} no priced spend · measured wake cost, not payments`,
-      );
+      if (k.spend_cap_usd !== undefined) {
+        lines.push(
+          `  cap $${k.spend_cap_usd.toFixed(2)} no priced spend · measured wake cost, not payments`,
+        );
+      }
+      if (k.spend_approval_usd !== undefined) {
+        lines.push(
+          `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
+        );
+      }
     }
     // Tool-call telemetry (ADR 144 inc 1) — the surface-redesign instrument panel, rendered only
     // once something has landed. Full per-tool detail lives in `musterd report tools`.

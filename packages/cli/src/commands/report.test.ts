@@ -174,6 +174,34 @@ describe('report command', () => {
     expect(exact.out).toContain('window 7d');
   });
 
+  it('shows the per-wake approval threshold on its own line, and says nothing when unset (ADR 635)', async () => {
+    const quiet = await capture(() => reportCommand(parseArgs([])));
+    expect(quiet.out).not.toContain('approval $');
+    const before = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake?: Record<string, unknown>;
+    };
+    expect(before.wake).not.toHaveProperty('spend_approval_usd');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--spend-approval', '10'])));
+    expect(set.code).toBe(0);
+    const shown = await capture(() => reportCommand(parseArgs([])));
+    expect(shown.out).toContain('no wakes');
+    expect(shown.out).toContain('approval $10.00 per wake');
+    expect(shown.out).toContain('gateway running cost');
+    expect(shown.out).toContain('display only');
+    expect(shown.out).not.toContain('OVER');
+
+    const after = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake: { spend_approval_usd?: number; spend_over_cap?: boolean };
+    };
+    expect(after.wake.spend_approval_usd).toBe(10);
+    expect(after.wake).not.toHaveProperty('spend_over_cap');
+
+    const residency = await capture(() => reportCommand(parseArgs(['residency'])));
+    expect(residency.out).toContain('approval $10.00 per wake');
+    expect(residency.out).toContain('display only');
+  });
+
   it('rejects an unknown altitude', async () => {
     await expect(reportCommand(parseArgs(['--altitude', 'bogus']))).rejects.toThrow(/usage/);
   });

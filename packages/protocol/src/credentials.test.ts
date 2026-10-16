@@ -162,3 +162,28 @@ describe('PolicySchema.spend_cap_usd (ADR 602)', () => {
     expect(sparsifyPolicy({ spend_cap_usd: 12.5 })).toEqual({ spend_cap_usd: 12.5 });
   });
 });
+
+describe('PolicySchema.spend_approval_usd (ADR 635)', () => {
+  it('is unset on an empty policy — absent, and never zero', () => {
+    expect(PolicySchema.parse({}).spend_approval_usd).toBeUndefined();
+    expect(PolicyOverrideSchema.parse({}).spend_approval_usd).toBeUndefined();
+  });
+
+  it('accepts a positive finite amount up to the ceiling, including cents', () => {
+    expect(PolicySchema.parse({ spend_approval_usd: 12.5 }).spend_approval_usd).toBe(12.5);
+    expect(PolicySchema.parse({ spend_approval_usd: SPEND_CAP_USD_MAX }).spend_approval_usd).toBe(
+      SPEND_CAP_USD_MAX,
+    );
+  });
+
+  it('rejects zero, negatives, non-finite values, and a fat-finger past the ceiling', () => {
+    for (const bad of [0, -1, Number.POSITIVE_INFINITY, Number.NaN, SPEND_CAP_USD_MAX + 0.01]) {
+      expect(PolicySchema.safeParse({ spend_approval_usd: bad }).success).toBe(false);
+      expect(PolicyOverrideSchema.safeParse({ spend_approval_usd: bad }).success).toBe(false);
+    }
+  });
+
+  it('sparsifyPolicy keeps a chosen threshold — the key has no schema default to collapse into', () => {
+    expect(sparsifyPolicy({ spend_approval_usd: 12.5 })).toEqual({ spend_approval_usd: 12.5 });
+  });
+});

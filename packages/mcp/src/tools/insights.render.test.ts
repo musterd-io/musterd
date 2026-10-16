@@ -182,3 +182,40 @@ describe('fmtReport — spend cap (ADR 602)', () => {
     expect(quiet).not.toContain('OVER');
   });
 });
+
+describe('fmtReport — spend approval (ADR 635)', () => {
+  it('says nothing about a threshold that was never set', () => {
+    const quiet = fmtReport(report({ wake: wake() }), 'team');
+    expect(quiet).not.toContain('approval $');
+    const active = fmtReport(
+      report({
+        wake: wake({ wakes: 1, cost_usd_total: 4, cost_usd_per_wake: 4, cost_reported: 1 }),
+      }),
+      'team',
+    );
+    expect(active).toContain('cost $4.00');
+    expect(active).not.toContain('approval $');
+  });
+
+  it('prints the per-wake threshold on an active wake and on a quiet window', () => {
+    const active = fmtReport(
+      report({
+        wake: wake({
+          wakes: 1,
+          cost_usd_total: 4,
+          cost_usd_per_wake: 4,
+          cost_reported: 1,
+          spend_approval_usd: 10,
+        }),
+      }),
+      'team',
+    );
+    expect(active).toContain('approval $10.00 per wake · gateway running cost · display only');
+    expect(active).not.toContain('OVER');
+
+    const quiet = fmtReport(report({ wake: wake({ spend_approval_usd: 10 }) }), 'team');
+    expect(quiet).toContain('approval $10.00 per wake · gateway running cost · display only');
+    expect(quiet).toContain('wake:');
+    expect(quiet).not.toContain('cap $');
+  });
+});

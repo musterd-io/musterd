@@ -180,6 +180,40 @@ describe('team policy command', () => {
     );
   });
 
+  it('--spend-approval sets the per-wake gateway threshold, and off clears it (ADR 635)', async () => {
+    const unset = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(unset).toContain('spend approval: unset');
+    const unsetLine = unset.split('\n').find((line) => line.includes('spend approval:'));
+    expect(unsetLine).not.toContain('default');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--spend-approval', '12.5'])));
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('spend approval: $12.50 per wake at the gateway');
+    expect(set.out).toContain('display only');
+    const view = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(view).toContain('spend approval: $12.50 per wake at the gateway');
+    expect(view.split('\n').find((line) => line.includes('spend approval:'))).not.toContain(
+      'default',
+    );
+    expect(view).toContain('spend cap: unset (unbounded)');
+
+    const off = await capture(() => teamCommand(parseArgs(['policy', '--spend-approval', 'off'])));
+    expect(off.out).toContain('spend approval off — no per-wake gateway threshold');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'spend approval: unset',
+    );
+
+    await expect(teamCommand(parseArgs(['policy', '--spend-approval', '0']))).rejects.toThrow(
+      /--spend-approval/,
+    );
+    await expect(teamCommand(parseArgs(['policy', '--spend-approval', '-1']))).rejects.toThrow(
+      /--spend-approval/,
+    );
+    await expect(teamCommand(parseArgs(['policy', '--spend-approval', '1000001']))).rejects.toThrow(
+      /--spend-approval/,
+    );
+  });
+
   it('--acceptance-review-window sets the lane-review wait in minutes, and the view says how long (ADR 506)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'acceptance review window: 20m',
