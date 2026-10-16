@@ -1421,12 +1421,26 @@ describe('workstation phases (sprite cache)', () => {
       }
     }
   });
-  it('deskStationItems carries sprite·live·sprite parts for a desk slot and none for a bench seat', () => {
+  it('deskStationItems carries sprite·live·sprite parts for a desk slot and no workstation parts for a bench seat', () => {
     const r = recordingCtx();
     const desk = deskStationItems(r.ctx, fit, slot, owner, { teamName: 'revive', t: 3, lampsOn: true });
     expect(desk.items[0]!.parts!.map((p) => p.kind)).toEqual(['sprite', 'live', 'sprite']);
     const bench = deskStationItems(r.ctx, fit, DESK_SLOTS.find((s) => s.kind === 'bench')!, owner, { teamName: 'revive' });
-    expect(bench.items.every((i) => !i.parts)).toBe(true);
+    // A bench seat has no workstation; only its resting chair is still furniture, and sprites as such.
+    const keys = bench.items.flatMap((i) => i.parts ?? []).map((p) => (p.kind === 'sprite' ? p.key.split('·')[0] : 'live'));
+    expect(keys.every((k) => k === 'chair')).toBe(true);
+  });
+  it('a chair sprites only at rest — mid roll-back it paints live', () => {
+    const r = recordingCtx();
+    const desk = DESK_SLOTS.find((s) => s.kind !== 'bench')!;
+    const seat = deskSeat(desk);
+    const at = (gesture: number, gestureT: number) =>
+      deskStationItems(r.ctx, fit, desk, owner, {
+        teamName: 'revive',
+        ownerPose: { lx: seat.lx, ly: seat.ly, dir: desk.dir, sit: 1, gesture, gestureT } as Pose,
+      }).items.filter((i) => i.parts?.some((p) => p.kind === 'sprite' && p.key.startsWith('chair·'))).length;
+    expect(at(0, 0)).toBe(2); // base + back, resting
+    expect(at(GESTURE.roll, 0.5)).toBe(0);
   });
   it('the workstation key changes with every pixel-changing input and never with t', () => {
     const base = { slot, node: owner, teamName: 'revive', owned: false, working: true, lampLit: true, hidden: undefined, fit, dpr: 1, warmAlpha: '' };
@@ -1493,6 +1507,30 @@ describe('static furniture sprites', () => {
       draw(r.ctx);
       expect(r.ops.length, label).toBeGreaterThan(5);
       expect(readsBeforeWrites(r.ops), label).toEqual([]);
+    }
+  });
+  it('every sprite part in the room sets every state it reads — the furniture made sprites for dirty rects too', () => {
+    const { placements, byName, poses } = fullRoom();
+    const draws = new Map<string, (c: CanvasRenderingContext2D) => void>();
+    const census: SpriteCache = {
+      box: measuredBox,
+      get: (key, _box, draw) => {
+        draws.set(key, draw);
+        return {} as CanvasImageSource;
+      },
+      size: () => 0,
+      clear: () => {},
+    };
+    renderScene(recordingCtx().ctx, fit, placements, byName, poses, 3, 'revive', computeLightEnv(21, true), null, undefined, null, null, null, {
+      sprites: census,
+      dpr: 1,
+    });
+    const kinds = new Set([...draws.keys()].map((k) => k.split('·')[0]));
+    for (const k of ['near', 'chair', 'meeting', 'printer', 'nook', 'recep']) expect(kinds.has(k), k).toBe(true);
+    for (const [key, draw] of draws) {
+      const r = recordingCtx();
+      draw(r.ctx);
+      expect(readsBeforeWrites(r.ops), key).toEqual([]);
     }
   });
   it('a sprite key follows the palette, so a theme flip cannot reuse the old raster', () => {

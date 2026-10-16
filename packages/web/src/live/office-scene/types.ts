@@ -347,6 +347,12 @@ export interface OfficeHandle {
   spriteCrops?: (cx: number, cy: number, r: number, zoom?: number) => Record<string, string>;
   /** DEV only: whole-frame PNG data URLs — direct, sprite-cached, and a readable diff. */
   spriteImages?: () => { direct: string; sprite: string; diff: string };
+  /**
+   * DEV only: the dirty-rect parity check. `true` starts it (every frame's partial repaint is mirrored
+   * offscreen and compared with a whole frame); `false` stops it and returns what it saw. Driven by
+   * `scripts/perf/scene-pixel-check.mjs --dirty`.
+   */
+  dirtyParity?: (on: boolean) => DirtyParity | null;
   /** The shared ambient beat log (E1 spec §5): one entry per fired slot — slot number, whose beat,
    * and whether this browser played it. Two visible viewers of the same team over the same interval
    * must agree on everything but `played`. Capped at the last 200 entries. */
@@ -378,6 +384,23 @@ export interface OfficeHandle {
      *  counted as walking through the table. */
     sit: number;
   }[];
+}
+
+/** @see OfficeHandle.dirtyParity */
+export interface DirtyParity {
+  /** Frames compared, and how many of them were partial repaints (the ones that test anything). */
+  frames: number;
+  partial: number;
+  /** Frames with any byte different, and the total of differing bytes across them. */
+  mismatched: number;
+  differing: number;
+  maxDelta: number;
+  /** Of `differing`, the bytes more than one step out — what a second rounding cannot explain. */
+  beyond: number;
+  /** The most differing bytes in any one frame, and every frame's count in order (does it build up?). */
+  worstFrame: number;
+  series: number[];
+  first: { frame: number; x: number; y: number; plan: string } | null;
 }
 
 /** @see OfficeHandle.ambientLog */
@@ -412,4 +435,19 @@ export interface OfficeStats {
   since: number;
   /** Welcome Wagon sequences started since mount (lane 01M3F81DD9) — the perf harness's probe. */
   welcomes: number;
+  /**
+   * Dirty-rect repaint's own counters (./damage.ts). All zero unless the room repaints by damage
+   * (`/broadcast`, `&dirty=0` opts out). `px / ((full + partial + skipped) × stagePx)` is the share of
+   * the canvas actually repainted, which is the number that says what the lever bought.
+   */
+  repaint: {
+    /** Device pixels repainted since mount: a full frame adds the whole canvas, a partial its rects. */
+    px: number;
+    /** The canvas, in device pixels. */
+    stagePx: number;
+    full: number;
+    partial: number;
+    /** Frames where nothing changed, so nothing was painted. */
+    skipped: number;
+  };
 }

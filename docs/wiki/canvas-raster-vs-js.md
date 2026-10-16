@@ -78,6 +78,8 @@ The two unclipped controls agree to 0.1 ms, so the clipped arm is not box drift.
 
 **This is an optimistic bound, not a shipping number.** The 1% clip here is synthetic — a fixed scatter of rects with no damage tracking behind it. Real damage is median 0.97% but p90 1.2%, and 1 frame in 60 changes 48% of the stage and costs the full 33.6 ms. A real dirty-rect implementation lands **between 17.4 and 19.2 draws/s**, not at 19.2.
 
+Damage tracking now exists (ADR 625, 2026-10-15). It clips *and* skips the units outside the damage, so it removes their per-op cost as well as their area. The falsifier above still needs the box: increment 4 (`01M4VS22F1`) reads it.
+
 **Speed was never the open question anyway.** The sprite cache's fidelity is: its parity run recorded 4,028 pixels beyond rounding at a maximum delta of 88/255, and that run was taken on a GPU laptop against `/office-preview`'s 1,377,600-pixel canvas — not the stream's 2,073,600. On-box parity is still unmeasured, because `OfficeHandle.spriteParity()` is `import.meta.env.DEV`-only and is compiled out of the production build the box serves.
 
 ## Method notes

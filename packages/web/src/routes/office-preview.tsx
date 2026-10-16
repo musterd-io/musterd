@@ -548,6 +548,10 @@ function OfficePreviewPage() {
              2026-09-18, so `?sprites=0` turned the cache ON here and OFF there — opposite meanings
              for one spelling, on the one route a human eyeballs arms by hand (found by ryder). */
           sprites: spritesFromUrl(search.toString()),
+          /* `?dirty` — repaint by damage (smooth-capture spec, lever 2), over the sprite cache. Off
+             unless asked for: this route is where `__office.dirtyParity()` runs against the looping
+             choreography, which is the moving room the parity gate needs. */
+          dirtyRects: search.has('dirty'),
           // The narration is chrome now, so the scene only says what the moment is and the fixture's
           // own overlay renders it — the same wiring `/live` and `/broadcast` use.
           onCaption: (next) => setCaption(next),

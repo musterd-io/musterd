@@ -955,6 +955,14 @@ loosen. New ceiling is the CI-measured upper bound + ~1.2%, per the 2026-09-01/1
   272.1 KiB (278,600 B). If main reads at or under 275,200 B (268.75 KiB), the over-budget cause has
   left the graph and this raise should go with it.
 
+## 2026-10-15 — `totalJsGzipBytes` 315,700 → 319,500: /broadcast repaints only what changed (ADR 625, lane 01M4VS1SJQ)
+
+Measured with the gate over `packages/web/dist/client`, origin/main built beside this branch on the same laptop: main **307.8 KiB**, this branch **311.5 KiB** — about **+3.7 KiB gz**. Per chunk: `office-scene` +3,176 B (`damage.ts` — the measure-pass recorder, the unit hash, rect merging and the repaint plan — and the frame driver in `index.ts`), `render` +324 B (the unit hook through the paint sequence, the furniture sprite parts), `broadcast` +43 B (`&dirty=0`).
+
+Trimmed first: the recorder went from 35 hand-written methods to a table (−347 B). The dev-only parity check (`__office.dirtyParity`) is behind `import.meta.env.DEV` and does not ship; its strings are absent from the built chunks. What remains is the lever; lazy-loading cannot move total (ADR 183), there is no dependency to drop, and a re-baseline would loosen. New ceiling is measured + the same ~520 B headroom main carries today.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 312.0 KiB. At or under 307.8 KiB, the repaint has left the graph and this raise should go with it.
+
 ## 2026-10-05 — `totalJsGzipBytes` 271,100 → 275,200: the dense /board goal table (board readability inc 2, lane 01M472ETXPJX92917BTQP9W56R)
 
 Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @

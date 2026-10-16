@@ -81,7 +81,16 @@ import {
   type RenderOpts,
   type ScenePalette,
 } from './render';
-import { makeSpriteCache } from './sprite-cache';
+import {
+  makeRecorder,
+  mustRun,
+  planRepaint,
+  type Recorder,
+  type RepaintPlan,
+  type Unit,
+  type UnitHook,
+} from './damage';
+import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
 import { createLaneOwners } from './laneOwners';
 import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
@@ -99,6 +108,7 @@ import {
   type SpeechToken,
 } from './speech';
 import type {
+  DirtyParity,
   OfficeAsk,
   AmbientLogEntry,
   OfficeData,
@@ -184,6 +194,9 @@ const DRIFT_FRAME_MS = 250;
 /** How often the office re-reads the PST clock so the lighting tracks the real sun (the sun moves slowly —
  * once a minute is plenty, and a rebake only happens when the veil/lamp state actually crosses a step). */
 const LIGHT_TICK_MS = 60000;
+/** Dirty-rect repaint's safety net: a whole frame at least this often, so anything a measurement
+ *  missed heals within seconds instead of leaving a ghost on the stream (smooth-capture spec, lever 2). */
+const SAFETY_REPAINT_MS = 5000;
 
 /**
  * The `?light=HH` / `?light=HH:MM` dev override, if present — a dev aid for previewing dawn/dusk/night
@@ -324,6 +337,12 @@ export interface OfficeOptions {
    */
   sprites?: boolean;
   /**
+   * Repaint only what changed (./damage.ts, smooth-capture spec lever 2). Needs `sprites` — it rides
+   * the sprite cache's switch, as the spec scopes it. `/broadcast` passes it by default (`&dirty=0`
+   * opts out) and `/office-preview?dirty` for the parity gate; `/live` never does.
+   */
+  dirtyRects?: boolean;
+  /**
    * What the panel is fitted to. `'room'` (default): the whole scene, margins and all — the musterd.io
    * hero and /office-preview. `'furnished'`: the furnished room (`furnishedBox`), so people and plates
    * read larger while the door and the agile board are always in frame — /live and /broadcast.
@@ -358,6 +377,11 @@ export function mountOffice(
      always has, so this flag is the whole blast radius. Cleared on resize (every key carries the
      fit, so stale entries would only waste memory) and on dispose. */
   const sprites = options.sprites === true ? makeSpriteCache({ dpr }) : undefined;
+  const dirtyRects = sprites !== undefined && options.dirtyRects === true;
+  /* The dirty-rect state (see drawDamaged): the measure-pass recorder, sized to the canvas, and the
+     last painted frame's units. Both reset on resize. */
+  let recorder: Recorder | null = null;
+  let prevUnits: Unit[] | null = null;
 
   const canvas = document.createElement('canvas');
   canvas.style.display = 'block';
@@ -735,6 +759,9 @@ export function mountOffice(
     fit = fitBox(width, height, fitTo, fitMargin);
     // Every sprite key carries the fit, so a resize only strands the old rasters — drop them.
     sprites?.clear();
+    // A new canvas is a new pixel grid: the next frame paints whole, measured from scratch.
+    recorder = null;
+    prevUnits = null;
   }
 
   /** Read the office surface tokens (`--floor`, `--floor-2`, `--wood`, `--couch`) the active theme
@@ -1791,10 +1818,10 @@ export function mountOffice(
     s.cancels.push(() => clearInterval(iv));
   }
 
-  function drawCues() {
+  function drawCues(c: CanvasRenderingContext2D = ctx) {
     if (!cues.length) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const c of cues) drawCue(ctx, c, fit.scale);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const cue of cues) drawCue(c, cue, fit.scale);
   }
 
   /** Idle frame: blit the baked buffer, then any cues on top. */
@@ -1803,30 +1830,255 @@ export function mountOffice(
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(buf, 0, 0);
     drawCues();
+    prevUnits = null; // the canvas now holds the baked frame, which no measured frame describes
   }
 
-  /** Active frame: full depth-sorted redraw with live poses, labels following, cues on top. */
-  function drawDynamic() {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.clearRect(0, 0, width, height);
+  /** What one frame paints from, read once: the wall board ages its stickies off `performance.now()`,
+   *  so the measure pass and the paint pass of one frame must read the same snapshot. */
+  function frameInputs() {
+    return {
+      nodes: actors.nodes(),
+      poses: actors.poses(),
+      fx: actors.sceneFx(),
+      board: wallBoardNow(),
+    };
+  }
+  type FrameInputs = ReturnType<typeof frameInputs>;
+
+  /** One pass of the room's paint sequence onto `c`, every unit through `units`. */
+  function paintRoom(
+    c: CanvasRenderingContext2D,
+    units?: UnitHook,
+    f: FrameInputs = frameInputs(),
+  ) {
     const anchors = renderScene(
-      ctx,
+      c,
       fit,
       placements,
-      actors.nodes(),
-      actors.poses(),
+      f.nodes,
+      f.poses,
       clock,
       teamName,
       lightEnv,
       pet,
-      actors.sceneFx(),
+      f.fx,
       recep,
-      wallBoardNow(),
+      f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint },
+      { sprites, dpr, welcome: welcomeRoom.paint, units },
     );
-    drawCues();
+    if (units) units.run(() => drawCues(c));
+    else drawCues(c);
+    return anchors;
+  }
+
+  /** Active frame: full depth-sorted redraw with live poses, labels following, cues on top. */
+  function drawDynamic() {
+    if (dirtyRects) {
+      drawDamaged();
+      return;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, width, height);
+    const anchors = paintRoom(ctx);
+    positionLabels(anchors.heads);
+  }
+
+  /*
+   * Dirty-rect repaint (./damage.ts). The room measures every unit of its paint sequence into a
+   * recorder, diffs that against the last painted frame, and repaints only the rects that changed —
+   * or the whole canvas on the first frame, after a resting blit, past the damage ceiling, and on the
+   * periodic safety repaint that heals anything a measurement missed.
+   */
+  let lastFullAt = 0;
+  let repaintPx = 0;
+  let fullRepaints = 0;
+  let partialRepaints = 0;
+  let skippedRepaints = 0;
+  let measureCtx: CanvasRenderingContext2D | null = null;
+  let measureFont = '';
+  function measureText(font: string, text: string): number {
+    measureCtx ??= document.createElement('canvas').getContext('2d');
+    if (!measureCtx) return 0.6 * 10 * text.length;
+    if (font !== measureFont) {
+      measureCtx.font = font;
+      measureFont = font;
+    }
+    return measureCtx.measureText(text).width;
+  }
+  /** Paint one frame's plan onto `c`. False when the paint sequence did not match the measured one. */
+  function applyPlan(
+    c: CanvasRenderingContext2D,
+    plan: RepaintPlan,
+    units: Unit[],
+    f: FrameInputs,
+  ): boolean {
+    if (plan.kind === 'none') return true;
+    /* Every frame starts from the 2D defaults, which is what the recorder measured against. Without
+       this a frame inherits whatever the last one left (round line joins, a stroke colour), so a
+       frame's pixels depended on its predecessor — and the stage's first frame differed from every
+       frame after it, at the wall board's corners. */
+    resetCtxState(c);
+    if (plan.kind === 'full') {
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, width, height);
+      c.beginPath(); // the recorder starts each frame with no path; so does the stage
+      paintRoom(c, undefined, f);
+      return true;
+    }
+    const rects = plan.rects;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.beginPath();
+    for (const r of rects) c.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    c.clip();
+    for (const r of rects) c.clearRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.beginPath();
+    let i = 0;
+    paintRoom(
+      c,
+      {
+        run(draw) {
+          if (mustRun(units[i++], rects)) draw();
+        },
+      },
+      f,
+    );
+    c.restore();
+    return i === units.length;
+  }
+
+  /*
+   * DEV ONLY — the dirty-rect parity check (`__office.dirtyParity`). While it runs, every frame's plan
+   * is also applied to an offscreen MIRROR that receives exactly what the stage receives, and a whole
+   * frame is painted into a second offscreen canvas; the two are compared byte for byte. Both are
+   * offscreen canvases of one kind, so a difference is the partial repaint's and not the backend's.
+   * `import.meta.env.DEV` is static, so none of this reaches a production bundle.
+   */
+  let parity: {
+    mirror: CanvasRenderingContext2D;
+    full: CanvasRenderingContext2D;
+    frames: number;
+    partial: number;
+    mismatched: number;
+    differing: number;
+    maxDelta: number;
+    beyond: number;
+    worstFrame: number;
+    series: number[];
+    first: { frame: number; x: number; y: number; plan: string } | null;
+  } | null = null;
+  function checkParity(plan: RepaintPlan, units: Unit[], f: FrameInputs) {
+    const p = parity!;
+    applyPlan(p.mirror, plan, units, f);
+    applyPlan(p.full, { kind: 'full' }, units, f);
+    p.frames++;
+    if (plan.kind === 'rects') p.partial++;
+    const a = p.mirror.getImageData(0, 0, canvas.width, canvas.height).data;
+    const b = p.full.getImageData(0, 0, canvas.width, canvas.height).data;
+    let bad = 0;
+    for (let i = 0; i < a.length; i++) {
+      const d = Math.abs(a[i]! - b[i]!);
+      if (!d) continue;
+      bad++;
+      if (d > 1) p.beyond++;
+      if (d > p.maxDelta) p.maxDelta = d;
+      if (!p.first) {
+        const px = i >> 2;
+        p.first = {
+          frame: p.frames,
+          x: px % canvas.width,
+          y: Math.floor(px / canvas.width),
+          plan: plan.kind,
+        };
+      }
+    }
+    if (bad) p.mismatched++;
+    p.differing += bad;
+    if (bad > p.worstFrame) p.worstFrame = bad;
+    p.series.push(bad);
+  }
+  function dirtyParity(on: boolean): DirtyParity | null {
+    if (!on) {
+      const p = parity;
+      parity = null;
+      if (!p) return null;
+      const { frames, partial, mismatched, differing, maxDelta, first, beyond, worstFrame } = p;
+      return {
+        frames,
+        partial,
+        mismatched,
+        differing,
+        maxDelta,
+        first,
+        beyond,
+        worstFrame,
+        series: p.series,
+      };
+    }
+    const surface = (): CanvasRenderingContext2D => {
+      const c = document.createElement('canvas');
+      c.width = canvas.width;
+      c.height = canvas.height;
+      return c.getContext('2d', { willReadFrequently: true })!;
+    };
+    parity = {
+      mirror: surface(),
+      full: surface(),
+      frames: 0,
+      partial: 0,
+      mismatched: 0,
+      differing: 0,
+      maxDelta: 0,
+      beyond: 0,
+      worstFrame: 0,
+      series: [],
+      first: null,
+    };
+    prevUnits = null; // the mirror starts blank, so its first frame must be whole
+    return null;
+  }
+
+  function drawDamaged() {
+    recorder ??= makeRecorder({ width: canvas.width, height: canvas.height, measure: measureText });
+    const rec = recorder;
+    rec.reset([dpr, 0, 0, dpr, 0, 0]);
+    const units: Unit[] = [];
+    const f = frameInputs();
+    const anchors = paintRoom(
+      rec.ctx,
+      {
+        run(draw) {
+          rec.begin();
+          draw();
+          units.push(rec.end());
+        },
+      },
+      f,
+    );
+    const now = performance.now();
+    /* The parity check pauses the safety net: a missed damage then builds up where it can be seen,
+       instead of being wiped every few seconds and passing as residue. */
+    const due = !(import.meta.env.DEV && parity) && now - lastFullAt > SAFETY_REPAINT_MS;
+    const plan = due
+      ? ({ kind: 'full' } as const)
+      : planRepaint(prevUnits, units, canvas.width, canvas.height);
+    prevUnits = units;
+    if (plan.kind === 'none') skippedRepaints++;
+    else if (plan.kind === 'full') {
+      lastFullAt = now;
+      fullRepaints++;
+      repaintPx += canvas.width * canvas.height;
+    } else {
+      partialRepaints++;
+      repaintPx += plan.area;
+    }
+    // A sequence that came out a different length is not the one that was measured: paint the
+    // next frame whole rather than trust this one's rects.
+    if (!applyPlan(ctx, plan, units, f)) prevUnits = null;
+    if (import.meta.env.DEV && parity) checkParity(plan, units, f);
     positionLabels(anchors.heads);
   }
 
@@ -3008,7 +3260,7 @@ export function mountOffice(
   ensureLoop(); // a room with anyone working is alive from the first frame (no-op under reduced-motion)
 
   return {
-    ...(import.meta.env.DEV ? { spriteParity, spriteCrops, spriteImages } : {}),
+    ...(import.meta.env.DEV ? { spriteParity, spriteCrops, spriteImages, dirtyParity } : {}),
     update,
     emit,
     replay: (evs) => {
@@ -3016,7 +3268,20 @@ export function mountOffice(
       replayPending = evs;
       ensureLoop(); // a frame drains it once someone is placed; a parked room would otherwise never start
     },
-    stats: () => ({ ticks, draws, beats, since, welcomes: welcomeRoom.started() }),
+    stats: () => ({
+      ticks,
+      draws,
+      beats,
+      since,
+      welcomes: welcomeRoom.started(),
+      repaint: {
+        px: repaintPx,
+        stagePx: canvas.width * canvas.height,
+        full: fullRepaints,
+        partial: partialRepaints,
+        skipped: skippedRepaints,
+      },
+    }),
     ambientLog: () => [...ambientLog],
     floorSamples: () =>
       [...actors.poses()].map(([name, p]) => ({

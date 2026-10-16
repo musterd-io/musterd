@@ -177,6 +177,7 @@ export function OfficeScene({
   broadcast = false,
   captureFps,
   sprites = false,
+  dirtyRects = false,
   fit = 'room',
   entries,
   board,
@@ -211,6 +212,9 @@ export function OfficeScene({
   /** Cache the static furniture as sprites instead of redrawing the room every frame (spec
    * 2026-09-17). On for `/broadcast` (ADR 488, `&sprites=0` opts out); `/live` never passes it. */
   sprites?: boolean;
+  /** Repaint only what changed each frame (smooth-capture spec, lever 2). Needs `sprites`; honoured
+   * under `broadcast` only. On for `/broadcast` (`&dirty=0` opts out); `/live` never passes it. */
+  dirtyRects?: boolean;
   /** What the room is fitted to — `'furnished'` on /live and /broadcast (see `mountOffice`). */
   fit?: 'room' | 'furnished';
   /** Handed the scene handle once it mounts (and `null` on teardown) — the broadcast route publishes it
@@ -332,6 +336,7 @@ export function OfficeScene({
           broadcast,
           ...(captureFps !== undefined ? { captureFps } : {}),
           sprites,
+          dirtyRects,
           fit,
           interactiveLabels: !broadcast,
           showWorkCues: workCues === 'hybrid',
@@ -353,7 +358,7 @@ export function OfficeScene({
       handleRef.current = null;
       onReadyRef.current?.(null);
     };
-  }, [broadcast, captureFps, sprites, fit, workCues]);
+  }, [broadcast, captureFps, sprites, dirtyRects, fit, workCues]);
 
   useEffect(() => {
     handleRef.current?.update(data);
