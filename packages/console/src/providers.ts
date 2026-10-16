@@ -97,7 +97,7 @@ export async function startFlow(
 }
 
 export interface ProviderIdentity {
-  provider: ProviderId;
+  provider: ProviderId | 'email';
   subject: string;
   /** A provider-verified email, kept for display only — never used to find or link an account. */
   email: string | null;

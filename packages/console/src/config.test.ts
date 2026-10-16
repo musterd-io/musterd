@@ -43,6 +43,24 @@ describe('resolveConsoleConfig (ADR 615)', () => {
     }
   });
 
+  it('turns magic-link email on only with all three variables, and refuses a partial set', () => {
+    expect(resolveConsoleConfig(base).email).toBeNull();
+    const on = resolveConsoleConfig({
+      ...base,
+      MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID: 'acct',
+      MUSTERD_CONSOLE_EMAIL_API_TOKEN: 'cf-tok',
+      MUSTERD_CONSOLE_EMAIL_FROM: 'signin@musterd.io',
+    });
+    expect(on.email?.fromAddress).toBe('signin@musterd.io');
+    try {
+      resolveConsoleConfig({ ...base, MUSTERD_CONSOLE_EMAIL_API_TOKEN: 'cf-tok' });
+      throw new Error('should refuse');
+    } catch (e) {
+      expect(String(e)).toContain('MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID');
+      expect(String(e)).not.toContain('cf-tok');
+    }
+  });
+
   it('refuses an issuer that is not a bare https origin', () => {
     for (const bad of [
       'http://app.musterd.io',

@@ -15,6 +15,7 @@ const config: ConsoleConfig = {
   port: 0,
   build: 'abc123',
   providers: {},
+  email: null,
 };
 const okDb: Queryable = { query: async () => ({ rows: [] }) };
 const downDb: Queryable = {

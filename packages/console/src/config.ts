@@ -24,6 +24,8 @@ export interface ConsoleConfig {
    * unconfigured provider's routes answer 404, as if they did not exist.
    */
   providers: Partial<Record<'github' | 'google', { clientId: string; clientSecret: string }>>;
+  /** Magic-link email (ADR 620 decision 2): on only when the account id, token and sender are all set. */
+  email: { accountId: string; apiToken: string; fromAddress: string; fromName: string } | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -73,7 +75,25 @@ export function resolveConsoleConfig(env: Env, build: string | null = null): Con
     else if (clientId || clientSecret)
       throw new Error(`${prefix}_CLIENT_ID and ${prefix}_CLIENT_SECRET must be set together`);
   }
+  const emailVars = [
+    'MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID',
+    'MUSTERD_CONSOLE_EMAIL_API_TOKEN',
+    'MUSTERD_CONSOLE_EMAIL_FROM',
+  ];
+  const emailSet = emailVars.filter((v) => env[v]?.trim());
+  if (emailSet.length > 0 && emailSet.length < emailVars.length)
+    throw new Error(`${emailVars.join(', ')} must be set together`);
+  const email =
+    emailSet.length === emailVars.length
+      ? {
+          accountId: env['MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID']!.trim(),
+          apiToken: env['MUSTERD_CONSOLE_EMAIL_API_TOKEN']!.trim(),
+          fromAddress: env['MUSTERD_CONSOLE_EMAIL_FROM']!.trim(),
+          fromName: 'musterd',
+        }
+      : null;
   return {
+    email,
     providers,
     databaseUrl: required(env, 'MUSTERD_CONSOLE_DATABASE_URL'),
     issuer: issuerUrl.origin,

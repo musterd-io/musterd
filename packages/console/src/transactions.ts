@@ -38,6 +38,81 @@ export async function createOAuthTx(db: Queryable, tx: OAuthTx, now: number): Pr
   return cookieValue;
 }
 
+export const MAGIC_TTL_MS = 15 * 60 * 1000;
+
+/** A magic-link transaction: the browser's tx cookie AND the emailed token, both hashed. */
+export async function createMagicTx(
+  db: Queryable,
+  tx: { email: string; token: string; returnPath: string },
+  now: number,
+): Promise<string> {
+  const cookieValue = newSecret();
+  await db.query(
+    `INSERT INTO auth_transactions (id_hash, kind, provider, email, token_hash, return_path,
+       created_at, expires_at)
+     VALUES ($1, 'magic', 'email', $2, $3, $4, $5, $6)`,
+    [
+      hashSecret(cookieValue),
+      tx.email,
+      hashSecret(tx.token),
+      tx.returnPath,
+      now,
+      now + MAGIC_TTL_MS,
+    ],
+  );
+  return cookieValue;
+}
+
+export type MagicLookup = 'confirm' | 'other_browser' | 'expired';
+
+/**
+ * What the link's GET may show — it never consumes (mail scanners and prefetchers GET links).
+ * `confirm` only when the token is live AND this browser holds the transaction that asked.
+ */
+export async function lookupMagic(
+  db: Queryable,
+  token: string | null,
+  cookieValue: string | undefined,
+  now: number,
+): Promise<MagicLookup> {
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return 'expired';
+  const r = await db.query<{ id_hash: string }>(
+    `SELECT id_hash FROM auth_transactions
+      WHERE token_hash = $1 AND kind = 'magic' AND consumed_at IS NULL AND expires_at > $2::bigint`,
+    [hashSecret(token), now],
+  );
+  const row = r.rows[0];
+  if (!row) return 'expired';
+  return cookieValue && sameSecret(row.id_hash, hashSecret(cookieValue))
+    ? 'confirm'
+    : 'other_browser';
+}
+
+/** Consume a magic link: the token and this browser's tx cookie must name the same live row. */
+export async function consumeMagic(
+  db: Queryable,
+  token: string | null,
+  cookieValue: string | undefined,
+  now: number,
+): Promise<{ email: string; returnPath: string } | null> {
+  if (
+    !token ||
+    !cookieValue ||
+    !/^[A-Za-z0-9_-]{43}$/.test(token) ||
+    !/^[A-Za-z0-9_-]{43}$/.test(cookieValue)
+  )
+    return null;
+  const r = await db.query<{ email: string; return_path: string }>(
+    `UPDATE auth_transactions SET consumed_at = $3::bigint
+      WHERE token_hash = $1 AND id_hash = $2 AND kind = 'magic'
+        AND consumed_at IS NULL AND expires_at > $3::bigint
+      RETURNING email, return_path`,
+    [hashSecret(token), hashSecret(cookieValue), now],
+  );
+  const row = r.rows[0];
+  return row ? { email: row.email, returnPath: row.return_path } : null;
+}
+
 /**
  * Consume the transaction a callback names, or null. Null for: no cookie, unknown cookie, another
  * provider, expired, already consumed, or a state that does not match.
