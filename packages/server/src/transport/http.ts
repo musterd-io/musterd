@@ -21,6 +21,7 @@ import {
   PROTOCOL_VERSION,
   FEATURE_EPOCH,
   DISPUTE_EVIDENCE_NOTICE,
+  DISPUTE_MESSAGE_NOTICE,
   GENERALIST_CAPABILITIES,
   ClaimTargetSchema,
   DecideRequestSchema,
@@ -140,6 +141,8 @@ import {
   TRACE_SEAT_TIMELINE_MAX,
   TraceSeatTimelineResponseSchema,
   HuddleTraceSchema,
+  isMessageDisputeReply,
+  isReviewDispute,
   isUnverifiedDisputeAnswer,
   activeHoldFor,
   describeHoldLine,
@@ -2398,19 +2401,25 @@ async function auditStylePrefsSet(
  * `challenge` without naming a check, the SENDER's reply gains one line and an audit row records it
  * fired. Never a refusal, never stored on the act, never shown to the challenger. Once per
  * challenge per seat: a seat that concedes again after the warning has been told once.
+ *
+ * ADR 614: a `message` replying to a dispute gets its own line, whatever the switch says. A
+ * message records no verdict, so the concession or hold it carries reaches neither the readout nor
+ * the rail above (and a review rejection stays pinned, `listInbox`). Same once-per-target rule, own
+ * audit verb.
  */
-async function challengeEvidenceNotice(
+async function disputeReplyNotice(
   ctx: Ctx,
   teamId: string,
-  seat: string,
+  sender: { id: string; name: string },
   env: Envelope,
 ): Promise<string | undefined> {
-  if (env.act !== 'accept') return undefined;
+  if (env.act !== 'accept' && env.act !== 'message') return undefined;
   const parentId = (env.meta as { in_reply_to?: unknown } | null | undefined)?.in_reply_to;
   if (typeof parentId !== 'string') return undefined;
-  if (!(await getPolicy(ctx.db, teamId)).challenge_evidence_rail) return undefined;
-  const parent = await ctx.db.get<{ act: string; meta: string | null }>(
-    'SELECT act, meta FROM messages WHERE team_id = ? AND id = ?',
+  const railOn = (await getPolicy(ctx.db, teamId)).challenge_evidence_rail;
+  if (env.act === 'accept' && !railOn) return undefined;
+  const parent = await ctx.db.get<{ act: string; meta: string | null; from_member: string }>(
+    'SELECT act, meta, from_member FROM messages WHERE team_id = ? AND id = ?',
     [teamId, parentId],
   );
   // ADR 505 §8: the rail covers any dispute the daemon stamped (a review rejection, a dependency
@@ -2424,21 +2433,33 @@ async function challengeEvidenceNotice(
       parentMeta = null;
     }
   }
-  if (!isUnverifiedDisputeAnswer(env.act, parent?.act ?? null, parentMeta, env.body))
-    return undefined;
+  let action: 'challenge.accept_unverified' | 'dispute.message_answer';
+  let notice: string;
+  if (env.act === 'message') {
+    // The opener adding to their own dispute is not an answer to it.
+    if (!parent || parent.from_member === sender.id) return undefined;
+    if (!isMessageDisputeReply(env.act, parent.act, parentMeta)) return undefined;
+    action = 'dispute.message_answer';
+    notice = DISPUTE_MESSAGE_NOTICE;
+  } else {
+    if (!isUnverifiedDisputeAnswer(env.act, parent?.act ?? null, parentMeta, env.body))
+      return undefined;
+    action = 'challenge.accept_unverified';
+    notice = DISPUTE_EVIDENCE_NOTICE;
+  }
   const told = await ctx.db.get<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = 'challenge.accept_unverified' AND actor = ? AND target = ?",
-    [teamId, seat, parentId],
+    'SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = ? AND actor = ? AND target = ?',
+    [teamId, action, sender.name, parentId],
   );
   if (Number(told?.n ?? 0) > 0) return undefined;
   await appendAudit(ctx.db, teamId, {
-    actor: seat,
-    action: 'challenge.accept_unverified',
+    actor: sender.name,
+    action,
     target: parentId,
     result: 'allow',
     detail: { act: env.id },
   });
-  return DISPUTE_EVIDENCE_NOTICE;
+  return notice;
 }
 
 export async function handleHttp(
@@ -5728,7 +5749,7 @@ export async function handleHttp(
           member.name,
           env.to.kind === 'member' ? env.to.name : null,
         );
-        const evidenceNotice = await challengeEvidenceNotice(ctx, team.id, member.name, env);
+        const evidenceNotice = await disputeReplyNotice(ctx, team.id, member, env);
         // An `ask` ack additionally carries the derived tier contract WITH the reachability projection
         // (ADR 153 §1): `unblocker_reachable` is a fact only the daemon can compute (admin roster +
         // presence + enforcement policy), so it rides the send response beside the pure tier numbers the
@@ -8623,9 +8644,26 @@ export async function handleHttp(
         // Keyed on `in_reply_to`, never on the thread: an explicit `reply_to` sets the former and
         // does not inherit the latter, which is 173 of the 205 replies on record. /live already
         // closes an ask this way (web/src/live/asks.ts); this is that rule where the inbox can see it.
+        //
+        // ADR 614: a review dispute counts as answered only by an `accept` or `decline` — the SPEC's
+        // pin rule, which the pinned SELECT in `listInbox` now keeps. Without this the client would
+        // un-pin on a `message` reply what the server just pinned.
+        const reviewDisputes = new Set(
+          messages
+            .filter((m) => isReviewDispute(m.act, m.to.kind === 'member', m.meta))
+            .map((m) => m.id),
+        );
         const answered = [
           ...new Set(
             own
+              .filter(
+                (m) =>
+                  m.act === 'accept' ||
+                  m.act === 'decline' ||
+                  !reviewDisputes.has(
+                    String((m.meta as { in_reply_to?: unknown } | null)?.in_reply_to),
+                  ),
+              )
               .map((m) => (m.meta as { in_reply_to?: unknown } | null)?.in_reply_to)
               .filter((id): id is string => typeof id === 'string'),
           ),

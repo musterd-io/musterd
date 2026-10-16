@@ -4,6 +4,7 @@ import {
   disputeViaOf,
   fmtOwnDisputes,
   fmtShare,
+  isMessageDisputeReply,
   isUnverifiedDisputeAnswer,
   namesCheck,
   ownDisputeArm,
@@ -164,6 +165,7 @@ describe('summariseDisputes', () => {
       conceded: 0,
       held: 1,
       named_check: 1,
+      message_only: 0,
       tiebreak: { settled: 1, hold_stood: 1 },
     });
     expect(r.total).toEqual(r.by_via.review);
@@ -220,6 +222,35 @@ describe('summariseDisputes', () => {
     });
     // Only the first answer counts, and it was ada's.
     expect(r.by_seat).toEqual([{ seat: 'ada', answered: 1, named_check: 0, conceded: 1, held: 0 }]);
+  });
+
+  it('ADR 614: a message-only reply is counted apart, never as an answer; a later accept/decline wins', () => {
+    const review = { dispute: { via: 'review', lane: 'L', ask: 'q' } };
+    const rows = [
+      row({ id: 'd1', seat: 'izzo', act: 'decline', meta: review, body: 'docs drift', ts: 1 }),
+      row({ id: 'd2', seat: 'izzo', act: 'decline', meta: review, body: 'no test', ts: 2 }),
+      // The opener adding to their own dispute is not the claim side replying.
+      row({ id: 'own', seat: 'izzo', act: 'message', inReplyTo: 'd1', body: 'also x', ts: 3 }),
+      row({ id: 'm1', seat: 'ada', act: 'message', inReplyTo: 'd1', body: 'agreed', ts: 4 }),
+      row({ id: 'm2', seat: 'bo', act: 'message', inReplyTo: 'd2', body: 'agreed', ts: 5 }),
+      row({
+        id: 'a2',
+        seat: 'bo',
+        act: 'accept',
+        inReplyTo: 'd2',
+        parentAct: 'decline',
+        parentMeta: review,
+        body: 'fixed in #12',
+        ts: 6,
+      }),
+    ];
+    const r = summariseDisputes(rows, 0);
+    expect(r.by_via.review).toMatchObject({ opened: 2, answered: 1, conceded: 1, message_only: 1 });
+    expect(r.total.message_only).toBe(1);
+    // A report from a daemon before ADR 614 carries no message_only and still parses.
+    const old = JSON.parse(JSON.stringify(r)) as { total: Record<string, unknown> };
+    delete old.total['message_only'];
+    expect(DisputeReadoutSchema.parse(old).total.message_only).toBe(0);
   });
 
   it('a tiebreak decline is a wrong hold: settled without hold_stood', () => {
@@ -333,6 +364,15 @@ describe('isUnverifiedDisputeAnswer (ADR 484, widened by ADR 505 §8)', () => {
     ).toBe(false);
     expect(isUnverifiedDisputeAnswer('accept', 'request_help', null, 'ok')).toBe(false);
     expect(isUnverifiedDisputeAnswer('decline', 'challenge', null, 'no')).toBe(false);
+  });
+});
+
+describe('isMessageDisputeReply (ADR 614)', () => {
+  it('fires on a message replying to a challenge or a stamped dispute, and on nothing else', () => {
+    expect(isMessageDisputeReply('message', 'challenge', null)).toBe(true);
+    expect(isMessageDisputeReply('message', 'decline', { dispute: { via: 'review' } })).toBe(true);
+    expect(isMessageDisputeReply('message', 'decline', null)).toBe(false);
+    expect(isMessageDisputeReply('accept', 'challenge', null)).toBe(false);
   });
 });
 

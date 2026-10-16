@@ -252,6 +252,10 @@ a change that raises holds without the tiebreak siding with them.
   | 5 | `01M44BVFV9VWV3J0987ZW00D8A` | §6 build-on prompts: `lane_claim` finished-dependency outcomes, handoff-accept note | no |
 
   2 depends on 1; 3 on 2; 4 and 5 on 1 only, so they can run beside 2.
+- **2026-10-15 — [ADR 614](614-a-message-is-not-a-dispute-answer.md)** (TJ; lane 01M4VEC15F): a
+  review dispute now stays pinned until `accept`/`decline` (the §3 rule, which ADR 434's shape 3
+  had been overriding); a `message` reply gets a sender notice; §8's cells gain `message_only`.
+  On 2026-10-15, 7 of 17 replied review rejections had been answered only by a `message`.
 
 ## Observability & Evaluation
 

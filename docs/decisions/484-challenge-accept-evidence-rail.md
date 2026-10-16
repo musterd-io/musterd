@@ -60,6 +60,11 @@ it looks verified.
   (target = the challenge id); the once-per-challenge rule above is read off that audit row. The
   test is `isUnverifiedChallengeAccept` in `@musterd/protocol`, on ADR 481's shared `namesCheck`.
   Off by default, so the 10-04 baseline is untouched; switching it on stays the read's call.
+- **2026-10-15 — audit, and a sibling notice for `message` replies, by [ADR 614](614-a-message-is-not-a-dispute-answer.md)**
+  (TJ; lane 01M4VEC15F). revive never switched the rail on: 0 `challenge.accept_unverified` rows.
+  Of 11 `accept` answers to a dispute in 30 days, 2 fail `namesCheck`, and both name a CI run id
+  the pattern misses, so 0 were really unchecked. The leak was the `message` reply (6 of 7 conceded).
+  ADR 614 adds an always-on notice for that case. The switch stays with ADR 476's thirty-day read.
 
 ## Observability & Evaluation
 

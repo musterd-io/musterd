@@ -108,6 +108,10 @@ separate shape because it is not a reply.
 - Falsifier: a second `residency.wake_leased` for the same `act` and `target`, with a
   `residency.woke` between them and no act from another seat on that thread in between; or an
   `openDirectedLedger` row whose `to_member` has a newer turn in its thread.
+- **2026-10-15 — narrowed for review disputes by [ADR 614](614-a-message-is-not-a-dispute-answer.md)**
+  (TJ; lane 01M4VEC15F). The pinned set's review-dispute clause takes shapes 1 and 2 only, as SPEC
+  §3 always said: the owner's `message` reply (shape 3 or 4) no longer clears it. Every other
+  obligation keeps all four shapes, and the inbox's `answered` list follows the same rule.
 
 ## Observability & Evaluation
 

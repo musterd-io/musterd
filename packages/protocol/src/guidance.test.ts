@@ -238,6 +238,7 @@ describe('version-bump discipline (ADR 085)', () => {
     49: '3f1fe9596e3a7372', // musterd-import plans new work (goals → 3-7 lanes, agreed before the file), points at `musterd import sheet`, and says where an issue that fits no group goes (lane 01M4M4AAJA)
     50: '8ecce30506ed33eb', // musterd-import prefers `musterd import github` (fetch + re-sync) and a hand-written GitHub ref names the repo, `<owner>/<repo>#<number>` (spec 2026-10-11, lane 01M4Q7PMAP)
     51: '8cf18ca06cb4ea13', // musterd-import points Linear and Jira at `musterd import linear` / `musterd import jira` when the credentials are already set (spec 2026-10-11, lane 01M4Q7PQGX)
+    52: 'f823abce918f6db5', // + disputes: a `message` is not an answer, and a chat concession before the check is the reflex to stop (ADR 614, lane 01M4VEC15F)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

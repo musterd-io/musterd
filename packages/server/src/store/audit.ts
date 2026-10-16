@@ -549,6 +549,10 @@ export type AuditAction =
   // check, and the sender was told once (actor = the conceding seat, target = the challenge id,
   // detail `{ act }` = the accept's id). Counted by the eval; never stored on the act.
   | 'challenge.accept_unverified'
+  // ADR 614: a `message` replied to a dispute — it recorded no verdict, and the sender was told
+  // once to answer with accept/decline (actor = the replying seat, target = the
+  // dispute's id, detail `{ act }` = the message's id). Never stored on the act.
+  | 'dispute.message_answer'
   | 'node.enrolled'
   | 'node.enrollment_refused'
   | 'node.rotated'
@@ -766,6 +770,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'footprint.reaped': 'actor',
   'node.invited': 'actor',
   'challenge.accept_unverified': 'actor',
+  'dispute.message_answer': 'actor',
   'node.enrolled': 'none',
   'node.enrollment_refused': 'none',
   'node.rotated': 'actor',

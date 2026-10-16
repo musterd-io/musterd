@@ -1485,6 +1485,31 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         const declined = await send(ada, 'ada', 'decline', 'no, holding', ch2.id);
         expect(declined.json.evidence_notice).toBeUndefined();
       });
+
+      it('ADR 614: a message answering a dispute is told to send accept/decline — rail off, once, never the opener', async () => {
+        const { nickTok, ada } = await setup();
+        const ch = await send(nickTok, 'nick', 'challenge', 'are you sure?');
+        const own = await send(nickTok, 'nick', 'message', 'also the docs', ch.id);
+        expect(own.json.evidence_notice).toBeUndefined();
+
+        const first = await send(ada, 'ada', 'message', 'you are right, fixing', ch.id);
+        expect(first.status).toBe(201);
+        expect(first.json.evidence_notice).toMatch(/records neither/);
+        const again = await send(ada, 'ada', 'message', 'fixed', ch.id);
+        expect(again.json.evidence_notice).toBeUndefined();
+        const rows = await auditRows(nickTok, 'dispute.message_answer');
+        expect(rows).toHaveLength(1);
+        expect((rows[0] as any).target).toBe(ch.id);
+        // The accept that follows is the verdict; with the rail off it carries no notice.
+        const verdict = await send(ada, 'ada', 'accept', 'fair', ch.id);
+        expect(verdict.json.evidence_notice).toBeUndefined();
+
+        // A message replying to a plain message is not a dispute answer.
+        const m = await send(nickTok, 'nick', 'message', 'hello');
+        expect(
+          (await send(ada, 'ada', 'message', 'hi', m.id)).json.evidence_notice,
+        ).toBeUndefined();
+      });
     });
 
     describe('an acceptance verdict moves the lane (ADR 202)', () => {
