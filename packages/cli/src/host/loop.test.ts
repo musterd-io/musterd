@@ -1,13 +1,26 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MemberSummary, WakeOrder, WakeReportBody, WakeTurnBody } from '@musterd/protocol';
+import {
+  makeEnvelope,
+  type Envelope,
+  type MemberSummary,
+  type WakeOrder,
+  type WakeReportBody,
+  type WakeTurnBody,
+} from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveBinding } from '../config.js';
 import type { ActuatorBackend, BackendContext, WakeSpec } from './backend.js';
-import type { GatewaySummary, MeteredCall, MeteringGateway } from './gateway.js';
+import type {
+  GatewaySummary,
+  MeteredCall,
+  MeteringGateway,
+  MeteringGatewayOptions,
+} from './gateway.js';
 import { healBeforeWake, pollHostOnce, type HostPollDeps, type WakeClient } from './loop.js';
 import type { HostRegistryEntry } from './registry.js';
+import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalSeat } from './spendApproval.js';
 
 /**
  * The loop is exercised entirely through its injectables: no sockets, no spawns, no filesystem.
@@ -1620,6 +1633,8 @@ describe('the metering gateway rides every wake (ADR 583)', () => {
           floor_tokens: null,
           models: [],
           budget_exhausted: false,
+          approval_refused: 0,
+          approval_wake_ended: false,
           ...summary,
         }),
         close: async () => {
@@ -1769,5 +1784,231 @@ describe('the metering gateway rides every wake (ADR 583)', () => {
     expect(specs[0]!.gateway).toBeUndefined();
     expect(calls.reports[0]).toMatchObject({ occupied: true });
     expect(lines.some((l) => l.includes('metering gateway failed to start'))).toBe(true);
+  });
+});
+
+describe('spend approval is armed once per non-human wake (ADR 636)', () => {
+  function acceptingSeat(): { seat: SpendApprovalSeat; sent: Envelope[] } {
+    const sent: Envelope[] = [];
+    const seat: SpendApprovalSeat = {
+      send: async (envelope) => {
+        sent.push(envelope);
+        return {};
+      },
+      inbox: async () => {
+        const ask = sent.find((e) => e.act === 'ask');
+        if (!ask) return { messages: [] };
+        return {
+          messages: [
+            makeEnvelope({
+              id: 'acc1',
+              team: 'dawn',
+              from: 'nick',
+              to: { kind: 'team' },
+              act: 'accept',
+              body: 'ok',
+              meta: { in_reply_to: ask.id },
+            }),
+          ],
+        };
+      },
+    };
+    return { seat, sent };
+  }
+
+  async function wake(over: Partial<HostPollDeps>, ord: WakeOrder = order()) {
+    const { client, calls } = fakeClient([ord]);
+    const { backend } = fakeBackend();
+    const lines: string[] = [];
+    const started: MeteringGatewayOptions[] = [];
+    const gateway = async (opts: MeteringGatewayOptions): Promise<MeteringGateway> => {
+      started.push(opts);
+      return {
+        port: 1,
+        env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:1/anthropic' },
+        summary: () => ({
+          calls: 0,
+          refused: 0,
+          unmetered: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          cost_usd: undefined,
+          floor_tokens: null,
+          models: [],
+          budget_exhausted: false,
+          approval_refused: 0,
+          approval_wake_ended: false,
+        }),
+        close: async () => undefined,
+      };
+    };
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        gateway,
+        ...over,
+        log: (l) => lines.push(l),
+      }),
+    );
+    await Promise.all(result.settled);
+    return { calls, lines, started };
+  }
+
+  it('a human wake does not read the threshold', async () => {
+    let reads = 0;
+    const { started } = await wake({
+      memberKind: async () => 'human',
+      readSpendApproval: async () => {
+        reads += 1;
+        return 1;
+      },
+    });
+    expect(reads).toBe(0);
+    expect(started[0]?.spendApprovalUsd).toBeUndefined();
+    expect(started[0]?.onSpendApproval).toBeUndefined();
+  });
+
+  it('an unknown kind does not read the threshold', async () => {
+    let reads = 0;
+    const { started } = await wake({
+      memberKind: async () => undefined,
+      readSpendApproval: async () => {
+        reads += 1;
+        return 1;
+      },
+    });
+    expect(reads).toBe(0);
+    expect(started[0]?.spendApprovalUsd).toBeUndefined();
+  });
+
+  it('a thrown kind read logs and does not read the threshold', async () => {
+    let reads = 0;
+    const { lines, started } = await wake({
+      memberKind: async () => {
+        throw new Error('roster down');
+      },
+      readSpendApproval: async () => {
+        reads += 1;
+        return 1;
+      },
+    });
+    expect(reads).toBe(0);
+    expect(lines.some((l) => l.includes('spend approval kind unread for scout: roster down'))).toBe(
+      true,
+    );
+    expect(started[0]?.spendApprovalUsd).toBeUndefined();
+  });
+
+  it('an agent wake asks once, names the lane, and leaves budget_usd unchanged', async () => {
+    const { seat, sent } = acceptingSeat();
+    const { started } = await wake(
+      {
+        memberKind: async () => 'agent',
+        readSpendApproval: async () => 0.5,
+        spendApprovalSeat: () => seat,
+      },
+      order({ lane_id: '01LANE', bounds: { timeout_ms: 30_000, budget_usd: 1 } }),
+    );
+    expect(started[0]?.budgetUsd).toBe(1);
+    expect(started[0]?.spendApprovalUsd).toBe(0.5);
+    const verdict = await started[0]!.onSpendApproval!({
+      leaseId: 'L1',
+      spentUsd: 0.5,
+      thresholdUsd: 9,
+      signal: new AbortController().signal,
+    });
+    expect(verdict).toBe('accept');
+    const asks = sent.filter((e) => e.act === 'ask');
+    expect(asks).toHaveLength(1);
+    expect(asks[0]!.meta).toMatchObject({ species: 'approve', tier: 'blocking' });
+    expect(asks[0]!.body).toBe('scout lease L1 spent $0.5000, approval $0.5000, lane 01LANE');
+    expect(asks[0]!.body.toLowerCase()).not.toContain('prompt');
+    expect(started[0]?.budgetUsd).toBe(1);
+  });
+
+  it('a thrown policy read logs and starts the gateway without a threshold', async () => {
+    let seats = 0;
+    const { lines, started } = await wake({
+      memberKind: async () => 'agent',
+      readSpendApproval: async () => {
+        throw new Error('no seat credential');
+      },
+      spendApprovalSeat: () => {
+        seats += 1;
+        throw new Error('seat opened');
+      },
+    });
+    expect(seats).toBe(0);
+    expect(
+      lines.some((l) =>
+        l.includes('spend approval policy read failed for scout: no seat credential'),
+      ),
+    ).toBe(true);
+    expect(started[0]?.spendApprovalUsd).toBeUndefined();
+    expect(started[0]?.onSpendApproval).toBeUndefined();
+  });
+
+  it('a bypassed gateway reads neither kind nor threshold', async () => {
+    let kinds = 0;
+    let reads = 0;
+    const { started } = await wake({
+      gateway: false,
+      memberKind: async () => {
+        kinds += 1;
+        return 'agent';
+      },
+      readSpendApproval: async () => {
+        reads += 1;
+        return 1;
+      },
+    });
+    expect(kinds).toBe(0);
+    expect(reads).toBe(0);
+    expect(started).toEqual([]);
+  });
+
+  it('a gateway that fails to start records no ask', async () => {
+    const { seat, sent } = acceptingSeat();
+    const { lines } = await wake({
+      memberKind: async () => 'agent',
+      readSpendApproval: async () => 1,
+      spendApprovalSeat: () => seat,
+      gateway: async () => {
+        throw new Error('EADDRINUSE');
+      },
+    });
+    expect(sent).toEqual([]);
+    expect(lines.some((l) => l.includes('metering gateway failed to start'))).toBe(true);
+    expect(lines.some((l) => l.includes('spend approval policy read failed'))).toBe(false);
+  });
+
+  it('close before summary puts the wake-ended sentence on the supplement', async () => {
+    let ended = false;
+    const { calls, lines } = await wake({
+      gateway: async () => ({
+        port: 1,
+        env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:1/anthropic' },
+        summary: () => ({
+          calls: 0,
+          refused: 0,
+          unmetered: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          cost_usd: undefined,
+          floor_tokens: null,
+          models: [],
+          budget_exhausted: false,
+          approval_refused: 1,
+          approval_wake_ended: ended,
+        }),
+        close: async () => {
+          ended = true;
+        },
+      }),
+    });
+    const supplement = calls.reports[1]!;
+    expect(supplement.reason).toBe(SPEND_APPROVAL_WAKE_ENDED);
+    expect(supplement.budget_exhausted).toBeUndefined();
+    expect(lines.some((l) => l.includes(SPEND_APPROVAL_WAKE_ENDED))).toBe(true);
   });
 });

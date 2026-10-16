@@ -8,6 +8,7 @@ import {
 import { request as httpsRequest } from 'node:https';
 import type { Socket } from 'node:net';
 import { priceUsage, type UsageLike } from './prices.js';
+import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalVerdict } from './spendApproval.js';
 
 /**
  * The metering gateway (ADR 583): a loopback, per-wake, pass-through HTTP proxy the host points a
@@ -16,6 +17,13 @@ import { priceUsage, type UsageLike } from './prices.js';
  * included); the gateway reads only the provider's usage block and model id as the bytes pass,
  * prices them from the host's table, and refuses the next call once the wake's `budget_usd` is
  * spent (§4) — a machine gate on a machine fact, never a model judgment.
+ *
+ * ADR 636: when the host passes `spendApprovalUsd`, a call that arrives with running cost at that
+ * threshold is held. The host's callback is one blocking approve ask. Accept forwards this call
+ * and every later call on the wake. Decline, or the wake ending during the hold, answers 402
+ * `musterd_spend_approval_declined`. Those refusals do not set `budget_exhausted`. The request
+ * stays paused until the decision, so Authorization and the body are unread while it is held.
+ * `close` aborts the hold. The callback settles when that signal aborts; otherwise `close` waits.
  *
  * What it never does (§5, hard rule 5): read, keep or log an `Authorization` header, an API key
  * or an OAuth token; keep request or response bodies past the usage block; listen anywhere but
@@ -109,6 +117,10 @@ export interface GatewaySummary {
   floor_tokens: number | null;
   models: string[];
   budget_exhausted: boolean;
+  /** Calls answered 402 because spend approval declined or the wake ended during the hold (ADR 636). */
+  approval_refused: number;
+  /** The wake closed while a provider call was held for spend approval. */
+  approval_wake_ended: boolean;
 }
 
 export interface MeteringGatewayOptions {
@@ -117,6 +129,18 @@ export interface MeteringGatewayOptions {
   upstreams?: GatewayUpstream[];
   /** Called as each metered call completes (the loop posts the `wake_turns` row). */
   onCall?: (call: MeteredCall) => void;
+  /** ADR 636: per-wake approval threshold. Absent: the gateway does not hold for approval. */
+  spendApprovalUsd?: number | undefined;
+  /**
+   * One ask for the wake, invoked the first time running cost has reached `spendApprovalUsd`
+   * and `budget_usd` still allows the call. Lane id stays in the host closure.
+   */
+  onSpendApproval?: (req: {
+    leaseId: string;
+    spentUsd: number;
+    thresholdUsd: number;
+    signal: AbortSignal;
+  }) => Promise<SpendApprovalVerdict>;
   price?: (model: string, usage: UsageLike) => number | undefined;
   log?: (line: string) => void;
 }
@@ -302,34 +326,23 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   let spent = 0;
   let budgetExhausted = false;
   const sockets = new Set<Socket>();
+  type ApprovalDecision = 'forward' | 'decline' | 'wake_ended';
+  let decided: ApprovalDecision | undefined;
+  let gate: Promise<ApprovalDecision> | undefined;
+  let approvalRefused = 0;
+  let approvalWakeEnded = false;
+  let approvalLogged = false;
+  const approvalAbort = new AbortController();
+  const approvalWrites: Promise<void>[] = [];
+  let closePromise: Promise<void> | undefined;
 
-  const handle = (req: IncomingMessage, res: ServerResponse): void => {
-    const m = /^\/([^/]+)(\/.*)?$/.exec(req.url ?? '');
-    const up = m ? upstreams.find((u) => u.name === m[1]) : undefined;
-    if (!up) {
-      res.writeHead(404, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          type: 'error',
-          error: { type: 'not_found_error', message: 'musterd gateway: unknown provider prefix' },
-        }),
-      );
-      req.resume();
-      return;
-    }
-    if (opts.budgetUsd !== undefined && spent >= opts.budgetUsd) {
-      refused += 1;
-      budgetExhausted = true;
-      res.writeHead(402, { 'content-type': 'application/json' });
-      res.end(budgetRefusal(opts.leaseId, opts.budgetUsd, spent, calls.length));
-      req.resume();
-      if (refused === 1)
-        log(
-          `wake budget exhausted on lease ${opts.leaseId}: $${spent.toFixed(4)} ≥ $${opts.budgetUsd.toFixed(4)} — next model call refused`,
-        );
-      return;
-    }
-    const target = new URL(up.url.replace(/\/$/, '') + (m![2] ?? ''));
+  const relay = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    up: GatewayUpstream,
+    rest: string,
+  ): void => {
+    const target = new URL(up.url.replace(/\/$/, '') + rest);
     const headers: Record<string, string | string[]> = {};
     for (const [k, v] of Object.entries(req.headers)) {
       if (v === undefined || HOP_BY_HOP.has(k.toLowerCase())) continue;
@@ -398,6 +411,137 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
     req.pipe(upstream);
   };
 
+  const writeApprovalRefusal = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    kind: 'decline' | 'wake_ended',
+  ): void => {
+    if (req.aborted || res.destroyed || res.writableEnded) {
+      req.resume();
+      return;
+    }
+    approvalRefused += 1;
+    const threshold = opts.spendApprovalUsd ?? 0;
+    const message =
+      kind === 'wake_ended'
+        ? `musterd: ${SPEND_APPROVAL_WAKE_ENDED} (lease ${opts.leaseId})`
+        : `musterd: spend approval $${threshold.toFixed(4)} declined ` +
+          `($${spent.toFixed(4)} spent, lease ${opts.leaseId})`;
+    res.writeHead(402, { 'content-type': 'application/json' });
+    const done = new Promise<void>((resolve) => {
+      res.end(
+        JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            code: 'musterd_spend_approval_declined',
+            message,
+          },
+        }),
+        () => resolve(),
+      );
+    });
+    approvalWrites.push(done);
+    req.resume();
+    if (approvalLogged) return;
+    approvalLogged = true;
+    log(
+      kind === 'wake_ended'
+        ? `spend approval hold ended with the wake on lease ${opts.leaseId}`
+        : `spend approval declined on lease ${opts.leaseId}: $${spent.toFixed(4)} ≥ $${threshold.toFixed(4)} — next model call refused`,
+    );
+  };
+
+  const beginHold = (): Promise<ApprovalDecision> => {
+    if (decided) return Promise.resolve(decided);
+    if (!gate) {
+      const spentAtHold = spent;
+      const threshold = opts.spendApprovalUsd ?? 0;
+      gate = (async (): Promise<ApprovalDecision> => {
+        const signal = approvalAbort.signal;
+        let result: SpendApprovalVerdict = 'decline';
+        if (opts.onSpendApproval) {
+          try {
+            result = await opts.onSpendApproval({
+              leaseId: opts.leaseId,
+              spentUsd: spentAtHold,
+              thresholdUsd: threshold,
+              signal,
+            });
+          } catch {
+            result = signal.aborted ? 'wake_ended' : 'decline';
+          }
+        }
+        if (decided === 'forward' || decided === 'decline') return decided;
+        const outcome: ApprovalDecision =
+          signal.aborted || result === 'wake_ended'
+            ? 'wake_ended'
+            : result === 'accept'
+              ? 'forward'
+              : 'decline';
+        decided = outcome;
+        if (outcome === 'wake_ended') approvalWakeEnded = true;
+        return outcome;
+      })();
+    }
+    return gate;
+  };
+
+  const holdThen = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    up: GatewayUpstream,
+    rest: string,
+  ): Promise<void> =>
+    beginHold()
+      .then((outcome) => {
+        if (outcome === 'forward') relay(req, res, up, rest);
+        else writeApprovalRefusal(req, res, outcome);
+      })
+      .catch(() => {
+        writeApprovalRefusal(req, res, approvalAbort.signal.aborted ? 'wake_ended' : 'decline');
+      });
+
+  const handle = (req: IncomingMessage, res: ServerResponse): void => {
+    const matched = /^\/([^/]+)(\/.*)?$/.exec(req.url ?? '');
+    const upstream = matched ? upstreams.find((u) => u.name === matched[1]) : undefined;
+    if (!matched || !upstream) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'not_found_error', message: 'musterd gateway: unknown provider prefix' },
+        }),
+      );
+      req.resume();
+      return;
+    }
+    if (opts.budgetUsd !== undefined && spent >= opts.budgetUsd) {
+      refused += 1;
+      budgetExhausted = true;
+      res.writeHead(402, { 'content-type': 'application/json' });
+      res.end(budgetRefusal(opts.leaseId, opts.budgetUsd, spent, calls.length));
+      req.resume();
+      if (refused === 1)
+        log(
+          `wake budget exhausted on lease ${opts.leaseId}: $${spent.toFixed(4)} ≥ $${opts.budgetUsd.toFixed(4)} — next model call refused`,
+        );
+      return;
+    }
+    const rest = matched[2] ?? '';
+    if (opts.spendApprovalUsd !== undefined) {
+      if (decided === 'decline' || decided === 'wake_ended') {
+        writeApprovalRefusal(req, res, decided);
+        return;
+      }
+      if (decided !== 'forward' && spent >= opts.spendApprovalUsd) {
+        void holdThen(req, res, upstream, rest);
+        return;
+      }
+    }
+    relay(req, res, upstream, rest);
+  };
+
   const server: Server = createServer(handle);
   server.on('connection', (s) => {
     sockets.add(s);
@@ -449,12 +593,25 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
           : null,
         models: [...new Set(calls.flatMap((c) => (c.model ? [c.model] : [])))],
         budget_exhausted: budgetExhausted,
+        approval_refused: approvalRefused,
+        approval_wake_ended: approvalWakeEnded,
       };
     },
-    close: () =>
-      new Promise<void>((resolve) => {
+    close: () => {
+      if (closePromise) return closePromise;
+      closePromise = (async () => {
+        // A finished accept or decline stays. Abort must not turn it into wake_ended.
+        if (gate && decided !== 'forward' && decided !== 'decline') approvalWakeEnded = true;
+        approvalAbort.abort();
+        if (gate) await gate;
+        // The handler waiting on `gate` writes its 402 before this continuation runs.
+        await Promise.all(approvalWrites);
         for (const s of sockets) s.destroy();
-        server.close(() => resolve());
-      }),
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        });
+      })();
+      return closePromise;
+    },
   };
 }
