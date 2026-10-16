@@ -25,6 +25,9 @@ Two routes, and everything else is refused:
 | --- | --- |
 | `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
 | `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
+| `POST /auth/{github,google}/start` | ADR 620: exact Origin; a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
+| `GET /auth/{github,google}/callback` | consumes the transaction atomically (cookie, provider, state, TTL), exchanges the code (Google's ID token verified: signature, issuer, audience, expiry, nonce; GitHub's numeric id from the pinned `/user`), finds or makes the account by `(provider, subject)` only, issues a session, `303` to an allowlisted return path. Any failure is a fixed error, never a redirect |
+| `GET /me` | temporary JSON view of the signed-in account and its methods, until the signed-in page lands |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
 
 No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
@@ -107,6 +110,7 @@ console's secrets never include a team database URL. The provisioning steps are 
 
 ```
 src/
+  accounts.ts     // accountFor(db, identity, now): the account an identity (provider, subject) belongs to, or a new one — never by email; null when disabled; methodsOf(account)
   audit.ts        // appendAudit(db, {action, requestId, actorAccountId, detail}, now): one INSERT; detail goes through log.ts's redact, so no secret lands in audit
   bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
@@ -115,10 +119,13 @@ src/
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
   http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
+  providers.ts    // PINNED GitHub/Google endpoints, startFlow (state, PKCE S256, Google nonce; pinned callback), finishFlow (openid-client code exchange; Google ID token claims; GitHub numeric id from /user); ProviderOverrides for tests only
   ratelimit.ts    // hit(db, {bucket, max, windowMs}, now): one atomic upsert per hit, held across servers; pruneRateLimits
   request.ts      // SESSION_COOKIE, cookie(req, name), readForm(req) — urlencoded only, at most 8 KiB, else FormError 415/413
+  returnpath.ts   // RETURN_PATHS allowlist and safeReturnPath(input): exactly a listed path, else "/"
   schema.ts       // SCHEMA_VERSION, MIGRATIONS (v1 accounts, identities, audit, console_meta; v2 sessions, auth_transactions, rate_limits), grantsFor(runtimeRole) (INSERT-only audit; no DELETE on sessions or transactions), migrate(owner, role)
   secrets.ts      // newSecret (256-bit base64url), hashSecret (SHA-256 hex — the only form a secret is stored in), sameSecret (constant time)
   sessions.ts     // IDLE_MS / ABSOLUTE_MS / FRESH_MS; createSession (always a new id), loadSession (one query: not revoked, both expiries, account live, generation current; touches at most once a minute), isFresh, revokeSession, revokeAllSessions
   testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
+  transactions.ts // TX_COOKIE, TX_TTL_MS; createOAuthTx (hashed cookie id and state), consumeOAuthTx (one atomic UPDATE … WHERE consumed_at IS NULL; cookie, provider, state, TTL)
 ```

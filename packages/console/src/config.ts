@@ -19,6 +19,11 @@ export interface ConsoleConfig {
   port: number;
   /** Build commit stamped by `pnpm build` (ADR 130); `/health` carries it, nothing else. */
   build: string | null;
+  /**
+   * OAuth clients (ADR 620). A provider is enabled only when both its id and secret are set; an
+   * unconfigured provider's routes answer 404, as if they did not exist.
+   */
+  providers: Partial<Record<'github' | 'google', { clientId: string; clientSecret: string }>>;
 }
 
 type Env = Record<string, string | undefined>;
@@ -57,7 +62,19 @@ export function resolveConsoleConfig(env: Env, build: string | null = null): Con
   const port = Number(portRaw);
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error('MUSTERD_CONSOLE_PORT must be a port number');
+  const providers: ConsoleConfig['providers'] = {};
+  for (const [p, prefix] of [
+    ['github', 'MUSTERD_CONSOLE_GITHUB'],
+    ['google', 'MUSTERD_CONSOLE_GOOGLE'],
+  ] as const) {
+    const clientId = env[`${prefix}_CLIENT_ID`]?.trim();
+    const clientSecret = env[`${prefix}_CLIENT_SECRET`]?.trim();
+    if (clientId && clientSecret) providers[p] = { clientId, clientSecret };
+    else if (clientId || clientSecret)
+      throw new Error(`${prefix}_CLIENT_ID and ${prefix}_CLIENT_SECRET must be set together`);
+  }
   return {
+    providers,
     databaseUrl: required(env, 'MUSTERD_CONSOLE_DATABASE_URL'),
     issuer: issuerUrl.origin,
     allowedHosts: [...new Set([issuerUrl.host.toLowerCase(), ...extra])],

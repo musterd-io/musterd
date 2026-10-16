@@ -1,13 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { accountFor, methodsOf } from './accounts.js';
 import { appendAudit } from './audit.js';
 import type { ConsoleConfig } from './config.js';
 import { hostCookie } from './cookies.js';
 import { csrfTokenValid, originAllowed } from './csrf.js';
 import { DATABASE_UNREACHABLE_SENTENCE, type Queryable } from './db.js';
 import type { Log } from './log.js';
+import {
+  finishFlow,
+  PROVIDERS,
+  startFlow,
+  type ProviderId,
+  type ProviderOverrides,
+} from './providers.js';
+import { hit } from './ratelimit.js';
 import { cookie, FormError, readForm, SESSION_COOKIE } from './request.js';
-import { loadSession, revokeSession } from './sessions.js';
+import { safeReturnPath } from './returnpath.js';
+import { ABSOLUTE_MS, createSession, loadSession, revokeSession } from './sessions.js';
+import { consumeOAuthTx, createOAuthTx, TX_COOKIE, TX_TTL_MS } from './transactions.js';
 
 /**
  * The console's HTTP boundary (ADR 615). The skeleton serves exactly two routes — `GET /health`
@@ -47,10 +58,22 @@ export interface ConsoleDeps {
   log: Log;
   /** The clock (tests hold it). */
   now?: () => number;
+  /** Tests only: fake provider endpoints. */
+  providers?: ProviderOverrides;
 }
 
 /** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
-const POST_ROUTES = new Set(['/logout']);
+const POST_ROUTES = new Set(['/logout', '/auth/github/start', '/auth/google/start']);
+const START = /^\/auth\/(github|google)\/start$/;
+const CALLBACK = /^\/auth\/(github|google)\/callback$/;
+/** Global ceilings on sign-in starts and callbacks (ADR 620 decision 9). Per-IP limits live at
+ *  the Cloudflare edge: the console reads no forwarded header, so it cannot trust a client IP. */
+const START_LIMIT = { bucket: 'global:oauth-start', max: 600, windowMs: 60_000 };
+const CALLBACK_LIMIT = { bucket: 'global:oauth-callback', max: 600, windowMs: 60_000 };
+
+function txCookie(value: string, maxAgeSeconds: number): string {
+  return hostCookie('tx', value, maxAgeSeconds);
+}
 
 function hostOf(req: IncomingMessage): string | null {
   const h = req.headers.host;
@@ -123,6 +146,44 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 return send(res, e.status, err(e.code, e.code.replace(/_/g, ' ')));
               throw e;
             }
+            const start = START.exec(path);
+            if (start) {
+              const p = start[1] as ProviderId;
+              route = `auth_start_${p}`;
+              const creds = config.providers[p];
+              if (!creds) return send(res, 404, err('not_found', 'not found'));
+              const t = now();
+              if (!(await hit(db, START_LIMIT, t)))
+                return send(res, 429, err('too_many_requests', 'too many requests'), {
+                  'retry-after': '60',
+                });
+              const flow = await startFlow(p, creds, config.issuer, deps.providers);
+              const txValue = await createOAuthTx(
+                db,
+                {
+                  provider: p,
+                  state: flow.state,
+                  pkceVerifier: flow.pkceVerifier,
+                  nonce: flow.nonce,
+                  returnPath: safeReturnPath(form.get('return')),
+                },
+                t,
+              );
+              await appendAudit(
+                db,
+                { action: 'signin.start', requestId: rid, detail: { provider: p } },
+                t,
+              );
+              return send(
+                res,
+                303,
+                { ok: true },
+                {
+                  location: flow.url,
+                  'set-cookie': txCookie(txValue, TX_TTL_MS / 1000),
+                },
+              );
+            }
             if (path === '/logout') {
               route = 'logout';
               const sid = cookie(req, SESSION_COOKIE);
@@ -150,6 +211,98 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
             route = 'method_not_allowed';
             return send(res, 405, err('method_not_allowed', 'method not allowed'), {
               allow: POST_ROUTES.has(path) ? 'POST' : 'GET, HEAD',
+            });
+          }
+          const callback = CALLBACK.exec(path);
+          if (callback) {
+            const p = callback[1] as ProviderId;
+            route = `auth_callback_${p}`;
+            const creds = config.providers[p];
+            if (!creds) return send(res, 404, err('not_found', 'not found'));
+            const t = now();
+            const clearTx = { 'set-cookie': txCookie('', 0) };
+            if (!(await hit(db, CALLBACK_LIMIT, t)))
+              return send(res, 429, err('too_many_requests', 'too many requests'), {
+                'retry-after': '60',
+              });
+            const query = (req.url ?? '').split('?')[1] ?? '';
+            const params = new URLSearchParams(query);
+            const tx = await consumeOAuthTx(db, cookie(req, TX_COOKIE), p, params.get('state'), t);
+            const fail = async (code: string, message: string, status = 400) => {
+              await appendAudit(
+                db,
+                {
+                  action: 'signin.result',
+                  requestId: rid,
+                  detail: { provider: p, ok: false, reason: code },
+                },
+                t,
+              );
+              return send(res, status, err(code, message), clearTx);
+            };
+            if (!tx) return fail('signin_expired', 'this sign-in has expired or was already used');
+            if (params.has('error'))
+              return fail('provider_refused', 'the provider did not sign you in');
+            let identity;
+            try {
+              identity = await finishFlow(p, creds, config.issuer, query, tx, deps.providers);
+            } catch (e) {
+              log.warn('signin_exchange_failed', {
+                rid,
+                provider: p,
+                kind: e instanceof Error ? e.name : typeof e,
+              });
+              return fail('provider_refused', 'the provider did not sign you in');
+            }
+            const account = await accountFor(db, identity, t);
+            if (!account) return fail('account_disabled', 'this account is disabled', 403);
+            const sid = await createSession(
+              db,
+              {
+                accountId: account.accountId,
+                method: p,
+                identityProvider: identity.provider,
+                identitySubject: identity.subject,
+              },
+              t,
+            );
+            await appendAudit(
+              db,
+              {
+                action: 'signin.result',
+                requestId: rid,
+                actorAccountId: account.accountId,
+                detail: { provider: p, ok: true, created: account.created },
+              },
+              t,
+            );
+            await appendAudit(
+              db,
+              {
+                action: 'session.issue',
+                requestId: rid,
+                actorAccountId: account.accountId,
+                detail: { method: p },
+              },
+              t,
+            );
+            res.setHeader('set-cookie', [
+              hostCookie('session', sid, ABSOLUTE_MS / 1000),
+              txCookie('', 0),
+            ]);
+            return send(res, 303, { ok: true }, { location: tx.returnPath });
+          }
+          if (path === '/me') {
+            // Temporary: a JSON view of who is signed in, until slippy's signed-in page lands.
+            route = 'me';
+            const session = await loadSession(db, cookie(req, SESSION_COOKIE), now());
+            if (!session) return send(res, 401, err('signed_out', 'not signed in'));
+            return send(res, 200, {
+              account_id: session.accountId,
+              method: session.method,
+              authenticated_at: session.authenticatedAt,
+              methods: await methodsOf(db, session.accountId),
+              providers: PROVIDERS.filter((x) => config.providers[x]),
             });
           }
           if (path === '/health') {
