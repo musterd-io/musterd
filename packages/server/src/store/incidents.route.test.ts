@@ -264,6 +264,8 @@ withDrivers('incidents.route', (o) => {
       const owned = (await directed()).filter((m) => m.body.startsWith('[incident] routed to you'));
       expect(owned).toHaveLength(1);
       expect(owned[0]!.to).toBe('stanley');
+      // ADR 649: the board tells them, not a reporter who never wrote it.
+      expect(owned[0]!.from).toBe('board');
       expect(owned[0]!.body).toContain(routed.lane.id);
       // The assignment is a routing default, not a verdict about who should fix it.
       expect(owned[0]!.body).toMatch(/hand it off or release it/);
@@ -387,6 +389,10 @@ withDrivers('incidents.route', (o) => {
       const told = (await directed()).filter((m) => m.body.includes('[incident] resolved'));
       expect(told.map((m) => m.to).sort()).toEqual(['dolly', 'izzo']);
       expect(told.every((m) => m.body.includes(GATE))).toBe(true);
+      // ADR 649: the board sends it and the body names the closer.
+      expect(told.every((m) => m.from === 'board' && m.body.includes('resolved by stanley'))).toBe(
+        true,
+      );
     });
 
     it('does not send the closer a note about their own close', async () => {

@@ -162,6 +162,9 @@ Both fields are `.optional()`, so a brief from a pre-271 daemon renders exactly 
   admits them. `meta.incident` is server-controlled: `routeEnvelope` strips a client copy, as it does
   `lane_review`. Increment 3 (the CI watcher) is dropped: it was gated on an increment 1 eval that was
   never run, and nothing since has shown first-reporter burn worth a second detection source.
+- _2026-10-17 (ADR 649):_ the route and resolve notices, and increment 1's opened announcement and
+  duplicate reply, are sent by the `board` service seat instead of a lane member. The §4 wake edges
+  read `meta.incident`, not the sender, so they are unchanged.
 
 ## Observability & Evaluation
 

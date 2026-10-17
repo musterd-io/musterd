@@ -29,6 +29,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
+import { boardSeat } from '../store/boardSeat.js';
 import { dreamMayWrite, isDreaming } from '../store/dream.js';
 import { holdExpiry, holdForProposal, setHold } from '../store/holds.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
@@ -963,9 +964,9 @@ async function routeEnvelopeInner(
  * delivery-hint nudge for free and out seats get inbox rows. Daemon-composed envelopes are
  * `act:'message'`, which the caller's status_update guard never matches (recursion bound).
  *
- * The composed messages are sent FROM the lane's owner when it has one, else from the lane's
- * creator (the seat whose report tripped the threshold) — same posture as `fireGatedHumanAsk`,
- * which routes as the lane owner: incident traffic reads as coming from whoever carries the lane.
+ * The composed messages come from the team's `board` service seat (ADR 649, after ADR 646): the
+ * daemon wrote them, so no member is named as their sender. The bodies still say who carries the
+ * lane.
  */
 /**
  * Push messages the fold just inserted to the sockets open on THIS machine — recipients first, then
@@ -1105,12 +1106,14 @@ async function handleBlockedReport(
   if (outcome.kind === 'recorded' || outcome.kind === 'disabled') return;
 
   const lane = outcome.lane;
-  const fromRow = await laneVoice(ctx, team, lane);
-  if (!fromRow) return; // nobody to speak as — the report itself is still durably recorded
+  // ADR 649: the board speaks. Null only when `board` names a person or an agent: the report itself
+  // is still durably recorded, and the board never speaks as somebody else.
+  const fromRow = await boardSeat(ctx.db, team);
+  if (!fromRow) return;
 
   if (outcome.kind === 'appended') {
     // Don't answer the lane's own carrier: the owner re-reporting their own incident needs no pointer.
-    if (sender.name === fromRow.name) return;
+    if (sender.name === lane.owner_seat) return;
     const reply = makeEnvelope({
       id: ulid(),
       team: team.slug,
@@ -1134,21 +1137,13 @@ async function handleBlockedReport(
     return;
   }
 
-  // opened: announce to every distinct reporter (the threshold pair, typically). A self-send never
-  // reaches an inbox, so when the recipient IS the lane's voice (the tripping reporter created it),
-  // speak as another reporter instead — the threshold guarantees at least two exist.
+  // opened: announce to every distinct reporter (the threshold pair, typically). The board is
+  // never a reporter, so no announcement is a self-send.
   const reporters = await incidentReporters(ctx.db, team.id, lane.id);
+  const voice = fromRow;
   for (const reporter of reporters) {
-    const voice =
-      reporter === fromRow.name
-        ? await firstMemberNamed(
-            ctx,
-            team.id,
-            reporters.filter((r) => r !== reporter),
-          )
-        : fromRow;
     const to = await getMemberByName(ctx.db, team.id, reporter);
-    if (!to || !voice) continue;
+    if (!to) continue;
     const announce = makeEnvelope({
       id: ulid(),
       team: team.slug,
@@ -1168,10 +1163,9 @@ async function handleBlockedReport(
  * Tell the seat an unclaimed incident was just handed to (ADR 271, spec §3), and tell the reporters
  * their red now has an owner.
  *
- * The voice cannot come from `laneVoice` here: assignment has ALREADY set `owner_seat`, so
- * `laneVoice` would return the new owner and every message would be a self-send — which never
- * reaches an inbox (the lesson increment 1 paid for on the open announcement). So the voice is
- * explicitly a reporter other than the recipient.
+ * The board speaks (ADR 649). Before it, the voice had to be a reporter other than the recipient:
+ * assignment has already set `owner_seat`, so a lane-derived voice was the new owner and every
+ * message a self-send, which never reaches an inbox.
  *
  * Called from the reaper rather than a transport, on the `seeds/ingest.ts` precedent: a
  * daemon-composed act routed through normal delivery, so live sessions get the existing
@@ -1186,15 +1180,8 @@ export async function announceIncidentRouted(
   waitedMs: number,
 ): Promise<void> {
   const reporters = await incidentReporters(ctx.db, team.id, lane.id);
-  const voiceFor = async (recipient: string): Promise<MemberRow | null> =>
-    (await firstMemberNamed(
-      ctx,
-      team.id,
-      reporters.filter((r) => r !== recipient),
-    )) ??
-    (lane.created_by !== recipient
-      ? ((await getMemberByName(ctx.db, team.id, lane.created_by)) ?? null)
-      : null);
+  const voice = await boardSeat(ctx.db, team);
+  if (!voice) return;
 
   const minutes = Math.round(waitedMs / 60_000);
   // The owner first, and they are told they can hand it back — an assignment nobody chose is a
@@ -1216,8 +1203,7 @@ export async function announceIncidentRouted(
 
   for (const [recipient, body] of recipients) {
     const to = await getMemberByName(ctx.db, team.id, recipient);
-    const voice = await voiceFor(recipient);
-    if (!to || !voice) continue;
+    if (!to) continue;
     await routeEnvelope(
       ctx,
       team,
@@ -1258,7 +1244,8 @@ export async function announceIncidentResolved(
 ): Promise<void> {
   if (lane.kind !== 'incident') return;
   const reporters = await incidentReporters(ctx.db, team.id, lane.id);
-  const voice = await getMemberByName(ctx.db, team.id, closedBy);
+  // ADR 649: the board speaks; the body names who closed it.
+  const voice = await boardSeat(ctx.db, team);
   if (!voice) return;
 
   for (const reporter of reporters) {
@@ -1285,15 +1272,6 @@ export async function announceIncidentResolved(
       true,
     );
   }
-}
-
-/** The seat incident traffic speaks as: the lane's owner, else its creator. */
-async function laneVoice(ctx: Ctx, team: TeamRow, lane: Lane): Promise<MemberRow | null> {
-  return (
-    (lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null) ??
-    (await getMemberByName(ctx.db, team.id, lane.created_by)) ??
-    null
-  );
 }
 
 /**
@@ -1867,19 +1845,6 @@ async function recordAskLifecycle(
       });
     }
   }
-}
-
-/** The first of `names` that is a member row, in order — an async `find` over `getMemberByName`. */
-async function firstMemberNamed(
-  ctx: Ctx,
-  teamId: string,
-  names: string[],
-): Promise<MemberRow | null> {
-  for (const r of names) {
-    const m = await getMemberByName(ctx.db, teamId, r);
-    if (m) return m;
-  }
-  return null;
 }
 
 /**

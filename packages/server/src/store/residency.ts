@@ -30,11 +30,12 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { type AuditEntry, appendAudit } from './audit.js';
+import { BOARD_SEAT } from './boardSeat.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { getLane, listLanes } from './lanes.js';
-import { addMember, getMemberById, getMemberByName } from './members.js';
+import { getMemberById, getMemberByName } from './members.js';
 import { memoryEnvelope } from './memory.js';
 import {
   deferrals,
@@ -45,7 +46,7 @@ import {
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
 import { lastActionBySubject } from './quiescence.js';
-import { type MemberRow, type MessageRow, parseWorkingHours, type TeamRow } from './rows.js';
+import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
 import { getPolicy, getTeamById } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 
@@ -1379,24 +1380,8 @@ export interface DispatchNudge {
   evidence: string;
 }
 
-/**
- * The service seat a dispatch nudge speaks as (ADR 646, replacing ADR 628 decision 3): the board
- * held the wake, so the board says so. An ADR 232 ledger seat, never a lane owner — like `digest`
- * and `policy`, which the daemon also composes acts as. A service seat is never bound to a node
- * (`sync/log.ts`), so a nudge minted on any node pushes cleanly: the `bound_elsewhere` wedge #2807
- * fixed for member voices cannot occur.
- */
-export const BOARD_SEAT = 'board';
-
-/**
- * The team's `board` service seat, minted on first use. Null when the name is already held by a
- * seat that is not a live service seat: the board never speaks as somebody's agent or person.
- */
-export async function boardSeat(db: Driver, team: TeamRow): Promise<MemberRow | null> {
-  const existing = await getMemberByName(db, team.id, BOARD_SEAT);
-  if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
-  return (await addMember(db, team, { name: BOARD_SEAT, kind: 'service' })).row;
-}
+// ADR 646/649: the board's service seat lives in its own module, shared with the incident notices.
+export { BOARD_SEAT, boardSeat } from './boardSeat.js';
 
 /** Whether the board can speak on this team — its seat is free to mint, or is a live service seat.
  *  Read-only, for the derivation; the poll handler mints (`boardSeat`) when it sends. */

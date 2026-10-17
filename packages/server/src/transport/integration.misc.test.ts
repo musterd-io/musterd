@@ -1472,6 +1472,12 @@ withDrivers('integration · misc', (_o, kind) => {
       expect(JSON.stringify(izzoInbox.json)).toContain(incident.id);
       const dollyInbox = await get('/teams/dawn/inbox', toks['dolly']);
       expect(JSON.stringify(dollyInbox.json)).toContain(incident.id);
+      // ADR 649: the board announces, not a reporter.
+      const announcements = [...izzoInbox.json.messages, ...dollyInbox.json.messages].filter(
+        (m: any) => typeof m.body === 'string' && m.body.startsWith('[incident] opened'),
+      );
+      expect(announcements).toHaveLength(2);
+      expect(announcements.every((m: any) => m.from === 'board')).toBe(true);
     });
 
     it('third reporter gets the park-behind-it auto-reply and no second lane opens', async () => {
@@ -1483,6 +1489,8 @@ withDrivers('integration · misc', (_o, kind) => {
       expect(lanes.json.lanes.filter((l: any) => l.kind === 'incident')).toHaveLength(1);
       const stanleyInbox = await get('/teams/dawn/inbox', toks['stanley']);
       expect(JSON.stringify(stanleyInbox.json)).toContain('park behind it');
+      const reply = stanleyInbox.json.messages.find((m: any) => m.body?.includes('park behind it'));
+      expect(reply.from).toBe('board');
     });
 
     it('a status_update without blocked_by opens nothing', async () => {
