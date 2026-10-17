@@ -42,9 +42,8 @@ tailscale status >/dev/null || { echo "✗ tailscale never came up"; tail -20 /t
 # config failures above. It cannot cover the common case: `fly machine destroy` and a hard stop
 # SIGKILL the box, and nothing runs then. So it reduces the leak and does not close it.
 #
-# EXIT only, deliberately. Trapping INT/TERM here would put bash in front of the signal path the
-# broadcast CLI uses for its own graceful stop (it finalises the container and drains ffmpeg), and
-# reordering that to tidy a device record would be trading a real behaviour for a cosmetic one.
+# EXIT only for the tidy-up. The INT/TERM/HUP traps in the run loop below only pass the signal on to
+# the broadcast CLI, so its own graceful stop (finalise the container, drain ffmpeg) runs unchanged.
 #
 # `rc` is captured and re-raised because the trap's own commands must not become the machine's exit
 # status — entrypoint keys its whole lifetime off 75 vs anything else.
@@ -207,6 +206,11 @@ while :; do
   set +e
   # BROADCAST_ARGS is a flag STRING ("--duration 14400"), so the splitting is the point.
   # shellcheck disable=SC2086
+  #
+  # In the background, with the stop signals passed on. `musterd stream stop` signals THIS script
+  # (Fly's main child), not the CLI. A foreground child never saw it: bash waits for the child before
+  # it handles a trapped or default SIGINT, so Fly SIGTERMed the box 30 s later and the graceful stop
+  # never ran (the ADR 642 trial and the 2026-10-16 run, docs/wiki/broadcast-stream.md).
   node /app/packages/cli/dist/bin.js broadcast \
     --team "$TEAM" \
     --server "$SERVER" \
@@ -216,8 +220,19 @@ while :; do
     --fps 30 \
     --encoder libx264 \
     --audio \
-    ${BROADCAST_ARGS:-}
-  code=$?
+    ${BROADCAST_ARGS:-} &
+  cli=$!
+  trap 'kill -INT "$cli" 2>/dev/null' INT
+  trap 'kill -TERM "$cli" 2>/dev/null' TERM
+  trap 'kill -HUP "$cli" 2>/dev/null' HUP
+  # A trapped signal ends `wait` early with 128+N while the CLI is still stopping, so wait again
+  # until it has really exited. Its own code is the one the restart check below reads.
+  while :; do
+    wait "$cli"
+    code=$?
+    kill -0 "$cli" 2>/dev/null || break
+  done
+  trap - INT TERM HUP
   set -e
 
   [ "$code" -eq "$RESTART_EXIT_CODE" ] || exit "$code"
