@@ -13,7 +13,7 @@ import {
   type ObservedFragment,
 } from '../onboard/reconcile/fragments.js';
 import { CLAUDE_BRIDGE, roleSkillFragments } from '../onboard/roleSkills.js';
-import { deltaLine, harnessCommand } from './harness.js';
+import { deltaLine, harnessCommand, selectableHarnesses } from './harness.js';
 
 let cwd: string;
 let machineRoot: string;
@@ -327,8 +327,21 @@ describe('musterd harness configure', () => {
     expect(a.state.applied).toEqual([]);
   });
 
-  it('a selected but unavailable harness reconciles as pending and still exits 0', async () => {
+  it('refuses to newly select a harness that is not installed here, and writes nothing (ADR 643)', async () => {
     writeV2Identity();
+    writeV3Provisioning([]);
+    const before = readFileSync(join(cwd, '.musterd', 'provisioned.json'), 'utf8');
+    const a = fakeAdapter('fake-a', { available: false });
+    await expect(
+      run(['configure'], { ctx: ctxOf(), registry: [a], select: ['fake-a'] }),
+    ).rejects.toThrow(/not installed here: fake-a .*install it/s);
+    expect(readFileSync(join(cwd, '.musterd', 'provisioned.json'), 'utf8')).toBe(before);
+    expect(a.state.applied).toEqual([]);
+  });
+
+  it('an already-selected unavailable harness stays pending and still exits 0', async () => {
+    writeV2Identity();
+    writeV3Provisioning(['fake-a']);
     const a = fakeAdapter('fake-a', { available: false });
     const { code, out } = await run(['configure'], {
       ctx: ctxOf(),
@@ -338,6 +351,18 @@ describe('musterd harness configure', () => {
     expect(code).toBe(0);
     expect(out).toContain('pending');
     expect(a.state.applied).toEqual([]);
+  });
+
+  it('the picker offers installed harnesses and already-selected ones, and names the rest', () => {
+    const avail = new Map([
+      ['fake-a', { available: true }],
+      ['fake-b', { available: false }],
+      ['fake-c', { available: false }],
+    ]);
+    const registry = [fakeAdapter('fake-a'), fakeAdapter('fake-b'), fakeAdapter('fake-c')];
+    const { offered, missing } = selectableHarnesses(registry, avail, ['fake-c']);
+    expect(offered.map((a) => a.id)).toEqual(['fake-a', 'fake-c']);
+    expect(missing.map((a) => a.id)).toEqual(['fake-b']);
   });
 
   it('refuses a folder with no musterd identity at all', async () => {

@@ -265,19 +265,19 @@ export async function runConnect(input: RunConnectInput): Promise<number> {
 
   const labels: Record<string, string> = Object.fromEntries(HARNESSES.map((h) => [h.id, h.label]));
   const installed = new Set(detected.filter((x) => x.d.installed).map((x) => x.h.id));
-  const adapters = harnessAdapters().filter((a) => a.id !== 'musterd');
-  const desired = guard(
-    await p.multiselect({
-      message: 'Which agents should join? (space toggles, enter confirms)',
-      options: adapters.map((a) => ({
-        value: a.id,
-        label: labels[a.id] ?? a.id,
-        ...(installed.has(a.id) ? {} : { hint: 'pending — not installed here' }),
-      })),
-      initialValues: adapters.filter((a) => installed.has(a.id)).map((a) => a.id),
-      required: false,
-    }),
-  ) as string[];
+  // ADR 643: only installed agents are offered — the scan above already named the rest.
+  const adapters = harnessAdapters().filter((a) => a.id !== 'musterd' && installed.has(a.id));
+  const desired =
+    adapters.length === 0
+      ? []
+      : (guard(
+          await p.multiselect({
+            message: 'Which agents should join? (space toggles, enter confirms)',
+            options: adapters.map((a) => ({ value: a.id, label: labels[a.id] ?? a.id })),
+            initialValues: adapters.map((a) => a.id),
+            required: false,
+          }),
+        ) as string[]);
 
   const now = Date.now();
   const here = realOr(input.cwd);
