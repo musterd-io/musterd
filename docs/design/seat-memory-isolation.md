@@ -235,12 +235,30 @@ On the `security` Goal, in order:
    increment. Depends on lane `01M4VYT6JW` (the OS sandbox) for code a seat runs.
 8. **Canary, OS half** on the hosted image. Depends on lane 7.
 
-## Open questions for nick
+## Decisions (nick, 2026-10-17)
 
-Answered 2026-10-17: humans see everything except another human's personal stuff (the read rule
-above). Per-seat encryption is limited to human seats and unparked (lane 6). Agent pollution gets
-lanes 2 and 3.
+- **Read rule:** humans see everything except another human's personal stuff (above).
+- **Human-note encryption (lane 6):** after lanes 1 to 4, before launch.
+- **Public sentence:** nick will say the laptop tier's "courtesy wall" sentence.
+- **Agent notes are not encrypted.** Encryption only helps against someone who has the ciphertext
+  but not the key. On a laptop, a polluting agent runs as the same user, so it has the key too. On
+  the hosted tier, separate OS users already keep a seat out of the database. The read rule makes
+  every human a reader, so every human's machines would need to be recipients, re-encrypted
+  whenever a human joins. The server also builds wake packets from the body (ADR 430), so it would
+  have to move to the client. What encryption would buy is narrower: the hub, Cloud and their
+  backups would hold ciphertext. The existing lane `01M3Z43BQE` (per-team encryption of captured
+  trace content, after Cloud v1) is the right place to extend at-rest encryption to agent notes,
+  if Cloud needs it.
 
-1. Does lane 6 (human-note encryption) ship before launch, or after lanes 1 to 4?
-2. Is the laptop tier's "courtesy wall" sentence something nick will say publicly, or does the
-   pitch wait for the hosted tier?
+## Lanes opened 2026-10-17 (`security` Goal)
+
+| # | Lane | Depends on |
+| - | ---- | ---------- |
+| 1 | `01M561XY7H` Who reads a note | none |
+| 2 | `01M561Y23A` Seat mismatch refused | none |
+| 3 | `01M561Y8QF` A note knows who wrote it | 2 |
+| 4 | `01M561YJYQ` Canary, API half | 1, 2, 3 |
+| 5 | `01M561YQN3` Laptop deny rules | none |
+| 6 | `01M561YWP0` Human notes encrypted to their machines | 1, 2, 3, 4 (nick: before launch) |
+| 7 | `01M561Z0W3` Hosted tier spec + ADR | `01M4VYT6JW` (OS sandbox) |
+| 8 | `01M561ZCDS` Canary, OS half | 7 |
