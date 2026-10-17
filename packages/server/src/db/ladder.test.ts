@@ -61,7 +61,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(103);
+    expect(runMigrations(s)).toBe(104);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
@@ -92,7 +92,7 @@ describe('the portable ladder (spec §12.2)', () => {
       `INSERT INTO tool_call_stats (team_id, seat, role, tool, outcome, bucket_start, calls,
          total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','team_send','ok',3600000,4,40,20)`,
     );
-    expect(runMigrations(s)).toBe(103);
+    expect(runMigrations(s)).toBe(104);
     expect(s.prepare('SELECT rail, calls, role FROM tool_call_stats').get()).toEqual({
       rail: 'stdio',
       calls: 4,
@@ -111,5 +111,133 @@ describe('the portable ladder (spec §12.2)', () => {
       .pluck()
       .all();
     expect(idx).toContain('idx_tool_call_stats_team_bucket');
+  });
+
+  it('v104 admits a muse presence, keeps the lease, and still refuses an unknown surface', () => {
+    const s = new Database(':memory:');
+    s.pragma('foreign_keys = ON');
+    for (const m of MIGRATIONS) {
+      if (m.version > 103) break;
+      m.up(s);
+    }
+    s.exec(
+      "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('T','t','T',1,1)",
+    );
+    s.exec(
+      "INSERT INTO members (id, team_id, name, kind, created_at, updated_at) VALUES ('M','T','m','agent',1,1)",
+    );
+    s.exec(
+      `INSERT INTO presence (
+         id, member_id, team_id, surface, status, conn_id, last_seen_at, created_at,
+         held_until, provenance, workspace, driver, model, build, epoch, wake_lease,
+         model_source, node, guidance_epoch, style_epoch
+       ) VALUES (
+         'P','M','T','cli','online','c1',1,1,
+         9,'session','~/w','nick','gpt','b1',3,'lease',
+         'observed','n1',4,'abcdef01'
+       )`,
+    );
+    s.exec(
+      `INSERT INTO session_leases (id, team_id, member_id, presence_id, token_hash, expires_at, created_at)
+       VALUES ('L','T','M','P','hash',99,1)`,
+    );
+    s.prepare(
+      "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '103') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run();
+
+    expect(runMigrations(s)).toBe(104);
+
+    expect(s.prepare('SELECT * FROM presence WHERE id = ?').get('P')).toMatchObject({
+      id: 'P',
+      member_id: 'M',
+      team_id: 'T',
+      surface: 'cli',
+      conn_id: 'c1',
+      held_until: 9,
+      provenance: 'session',
+      workspace: '~/w',
+      driver: 'nick',
+      model: 'gpt',
+      build: 'b1',
+      epoch: 3,
+      wake_lease: 'lease',
+      model_source: 'observed',
+      node: 'n1',
+      guidance_epoch: 4,
+      style_epoch: 'abcdef01',
+    });
+    expect(s.prepare('SELECT presence_id FROM session_leases WHERE id = ?').get('L')).toEqual({
+      presence_id: 'P',
+    });
+    expect(() =>
+      s
+        .prepare(
+          `INSERT INTO presence (id, member_id, team_id, surface, status, last_seen_at, created_at)
+           VALUES ('Pm','M','T','muse','online',1,1)`,
+        )
+        .run(),
+    ).not.toThrow();
+    expect(() =>
+      s
+        .prepare(
+          `INSERT INTO presence (id, member_id, team_id, surface, status, last_seen_at, created_at)
+           VALUES ('Px','M','T','holodeck','online',1,1)`,
+        )
+        .run(),
+    ).toThrow(/CHECK constraint failed/);
+    const idx = s
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'presence'")
+      .pluck()
+      .all();
+    expect(idx).toEqual(
+      expect.arrayContaining([
+        'idx_presence_member',
+        'idx_presence_last_seen',
+        'idx_presence_node',
+        'idx_presence_team',
+      ]),
+    );
+    expect(s.pragma('foreign_key_check')).toEqual([]);
+
+    // A rewind replays the rebuild. The lease must still be there: fkOff is the whole point.
+    s.prepare("UPDATE schema_meta SET value = '103' WHERE key = 'schema_version'").run();
+    expect(runMigrations(s)).toBe(104);
+    expect(s.prepare('SELECT presence_id FROM session_leases WHERE id = ?').get('L')).toEqual({
+      presence_id: 'P',
+    });
+    expect(s.prepare('SELECT surface FROM presence WHERE id = ?').get('Pm')).toEqual({
+      surface: 'muse',
+    });
+    expect(s.pragma('foreign_key_check')).toEqual([]);
+  });
+
+  it('v104 on Postgres replaces the surface CHECK and admits muse', async () => {
+    const p = await pgliteDriver();
+    const owner = p.asOwner();
+    await migratePostgres(owner);
+    await owner.exec(
+      "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('T','t','T',1,1)",
+    );
+    await owner.exec(
+      "INSERT INTO members (id, team_id, name, kind, created_at, updated_at) VALUES ('M','T','m','agent',1,1)",
+    );
+    await owner.exec(
+      `INSERT INTO presence (id, member_id, team_id, surface, status, last_seen_at, created_at)
+       VALUES ('Pm','M','T','muse','online',1,1)`,
+    );
+    await expect(
+      owner.exec(
+        `INSERT INTO presence (id, member_id, team_id, surface, status, last_seen_at, created_at)
+         VALUES ('Px','M','T','holodeck','online',1,1)`,
+      ),
+    ).rejects.toThrow(/check constraint/i);
+    const def = await owner.get<{ def: string }>(
+      `SELECT pg_get_constraintdef(c.oid) AS def
+         FROM pg_constraint c
+         JOIN pg_class r ON r.oid = c.conrelid
+        WHERE r.relname = 'presence' AND c.conname = 'presence_surface_check'`,
+    );
+    expect(def?.def).toContain('muse');
+    await p.close();
   });
 });
