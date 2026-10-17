@@ -11,7 +11,7 @@ import {
   describeSyncWedge,
   type RosterSyncState,
 } from '@musterd/protocol';
-import { readBuildStamp } from '@musterd/protocol/build-stamp';
+import { readBuildStamp, sameCommit } from '@musterd/protocol/build-stamp';
 import { packageRoot } from '../packageRoot.js';
 
 /**
@@ -599,14 +599,15 @@ export async function buildSkewOf(
   const mine = client.build;
   if (!mine) return null;
   const daemon = await client.daemonBuild();
-  if (!daemon || daemon === mine) return null;
+  // `<sha>` vs `<sha>-dirty` is one commit, not skew (sameCommit).
+  if (!daemon || sameCommit(daemon, mine)) return null;
   // Lane 01M3TWWQST: the remedy depends on the dist ON DISK, not on the seat's worktree. The adapter
   // runs from its own checkout — on a dogfood machine `~/.musterd/runtime`, which the auto-refresher
   // rebuilt before the daemon bounced — so the usual case needs only a reload, and "rebuild this
   // worktree" sent every seat to build a checkout the adapter never loads.
   const disk = onDisk();
   const remedy =
-    disk.build === daemon
+    disk.build !== undefined && sameCommit(disk.build, daemon)
       ? 'The rebuilt adapter is already on disk — /mcp reload to pick it up.'
       : `Rebuild the adapter's checkout (pnpm -C ${disk.checkout} build), then /mcp reload.`;
   return {

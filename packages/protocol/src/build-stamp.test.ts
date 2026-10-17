@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readBuildStamp } from './build-stamp.js';
+import { readBuildStamp, sameCommit } from './build-stamp.js';
 
 // All fixtures are temp dirs shaped like a package (package.json + dist/build.json). Never read the
 // repo's real ambient dist/build.json — a dev worktree has one, and asserting on it would couple the
@@ -49,5 +49,19 @@ describe('readBuildStamp (ADR 135)', () => {
     expect(readBuildStamp(at('src/build-stamp.ts'))).toBeUndefined(); // no build.json at all
     writeFileSync(join(root, 'dist', 'build.json'), 'not json{{');
     expect(readBuildStamp(at('src/build-stamp.ts'))).toBeUndefined();
+  });
+});
+
+describe('sameCommit — the -dirty marker is not skew', () => {
+  const a = 'a'.repeat(40);
+  it('treats <sha> and <sha>-dirty as one commit, either way round', () => {
+    expect(sameCommit(a, `${a}-dirty`)).toBe(true);
+    expect(sameCommit(`${a}-dirty`, a)).toBe(true);
+    expect(sameCommit(a, a)).toBe(true);
+  });
+  it('still tells two commits apart, with or without the marker', () => {
+    const b = 'b'.repeat(40);
+    expect(sameCommit(a, b)).toBe(false);
+    expect(sameCommit(`${a}-dirty`, b)).toBe(false);
   });
 });

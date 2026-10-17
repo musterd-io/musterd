@@ -10,6 +10,7 @@ import {
   type MemberSummary,
   type PresenceStatus,
 } from '@musterd/protocol';
+import { sameCommit } from '@musterd/protocol/build-stamp';
 import { clock, dayLabel, sinceLabel, theme } from './theme.js';
 import { heading, hint, padEndVisible, sym, termWidth, visibleLen, wrapText } from './ui.js';
 
@@ -234,7 +235,7 @@ export function renderStatusHeader(head: StatusHead): string {
   // an unstamped CLI or a daemon without provenance stays silent. "differs", never "behind": this
   // CLI may legitimately be ahead (a feature-branch build).
   const cli = head.cliBuild;
-  if (cli && health?.build && cli !== health.build) {
+  if (cli && health?.build && !sameCommit(cli, health.build)) {
     lines.push(
       theme.warn(
         `⚠ your CLI build (${cli.slice(0, 7)}) differs from the daemon (${health.build.slice(0, 7)}) — rebuild your checkout (pnpm build)`,
@@ -406,7 +407,7 @@ function memberFacets(
   // ADR 135: a member running a different build than the daemon is worth a warn facet; a matching or
   // unknown build is silence (most rows, most of the time — this only speaks when something's off).
   const build = m.presences[0]?.build?.trim();
-  if (build && daemonBuild && build !== daemonBuild) {
+  if (build && daemonBuild && !sameCommit(build, daemonBuild)) {
     parts.push(theme.warn(`build ${build.slice(0, 7)}`));
   }
   // ADR 514 inc 4 (spec §4.4): the style epoch a live seat attested, and `style stale` when the

@@ -54,3 +54,17 @@ export function readBuildStamp(metaUrl: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Do two build refs name the same commit, ignoring the `-dirty` uncommitted-work marker
+ * (`scripts/stamp-build.mjs`)?
+ *
+ * A checkout with uncommitted edits builds `<sha>-dirty`. Against a clean `<sha>` that is not skew:
+ * the code is the same commit, both refs read alike once truncated for display ("your adapter
+ * (5734ac5) differs from the daemon (5734ac5)"), and a rebuild cannot change it. Every ADR 135
+ * skew line compares through this one rule; a different commit still differs with or without the
+ * marker. Pure, so it lives beside the stamp reader rather than in the browser-safe barrel's way.
+ */
+export function sameCommit(a: string, b: string): boolean {
+  return a.replace(/-dirty$/, '') === b.replace(/-dirty$/, '');
+}
