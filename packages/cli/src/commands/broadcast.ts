@@ -61,6 +61,12 @@ const OptionsSchema = z.object({
    * Hosted-Linux only (ADR 228): the macOS arm has no Pulse, and adding one was explicitly out of
    * scope. Off by default, so every existing invocation keeps producing byte-identical ffmpeg args. */
   audio: z.boolean().default(false),
+  /** Where frames come from. `screencast` (the default) is CDP JPEG frames re-clocked by the pump;
+   * `x11` records an Xvfb display with ffmpeg's x11grab, so Chrome stops JPEG-encoding every frame
+   * and ffmpeg stops decoding them (smooth-capture spec, lever 1; measured 2026-10-13 and -14 in
+   * docs/perf/broadcast-baseline.md). Linux only. The default flips only by an ADR, after a box run
+   * passes the spec's 30 fps bar. */
+  capture: z.enum(['screencast', 'x11']).default('screencast'),
 });
 export type BroadcastOptions = z.infer<typeof OptionsSchema>;
 
@@ -98,7 +104,14 @@ export function parseOptions(
     // VideoToolbox is the whole point on the laptop (hardware encode); libx264 elsewhere.
     encoder: str('encoder') ?? (platform === 'darwin' ? 'videotoolbox' : 'libx264'),
     resolution: str('resolution'),
+    capture: str('capture'),
   });
+  if (opts.capture === 'x11' && platform === 'darwin') {
+    throw new CliError(
+      '--capture x11 needs Linux (an Xvfb display) — on macOS use the default screencast',
+      2,
+    );
+  }
   const sinks = [opts.out, opts.rtmp, opts.twitch ? 'twitch' : undefined].filter(Boolean).length;
   if (sinks !== 1) {
     throw new CliError(
@@ -410,8 +423,34 @@ export const PULSE_SINK = 'musterd';
 export function ffmpegArgs(
   opts: BroadcastOptions,
   sink: { kind: 'file' | 'rtmp'; target: string },
+  /** The X display to grab, as Xvfb reported it (`:N`). Required for `--capture x11`. */
+  display?: string,
 ): string[] {
   const vcodec = opts.encoder === 'videotoolbox' ? 'h264_videotoolbox' : 'libx264';
+  if (opts.capture === 'x11' && !display) {
+    throw new CliError('--capture x11 has no display to grab — Xvfb did not report one', 1);
+  }
+  const stage = stagePixels(opts.resolution);
+  const video =
+    opts.capture === 'x11'
+      ? // x11grab samples the display on its own fixed clock, so there is no pump and no pipe:
+        // stdin is left for ffmpeg's interactive commands (`stopEncoder` sends `q`). The cursor is
+        // off because x11grab draws it by default, and Xvfb parks one mid-screen.
+        [
+          ...INPUT_QUEUE,
+          '-f',
+          'x11grab',
+          '-framerate',
+          String(opts.fps),
+          '-video_size',
+          `${stage.width}x${stage.height}`,
+          '-draw_mouse',
+          '0',
+          '-i',
+          display!,
+        ]
+      : // image frames on stdin (codec sniffed per-frame), already constant-rate via the pump
+        [...INPUT_QUEUE, '-f', 'image2pipe', '-framerate', String(opts.fps), '-i', '-'];
   const args = [
     '-hide_banner',
     '-loglevel',
@@ -422,14 +461,7 @@ export function ffmpegArgs(
     '-stats',
     '-stats_period',
     '10',
-    // video: image frames on stdin (codec sniffed per-frame), already constant-rate via the pump
-    ...INPUT_QUEUE,
-    '-f',
-    'image2pipe',
-    '-framerate',
-    String(opts.fps),
-    '-i',
-    '-',
+    ...video,
     // audio: the page's own output when --audio (a Pulse null sink the entrypoint created), else
     // silence — ingests require an audio track either way.
     ...(opts.audio
@@ -460,8 +492,10 @@ export function ffmpegArgs(
     // Two clocks with no shared reference: image2pipe synthesizes video timestamps from frame COUNT
     // while pulse timestamps are wall-clock, so over a four-hour stream they separate. This makes
     // audio the follower and lets ffmpeg absorb the difference. Only meaningful with a real source.
+    // x11grab stamps wall clock too, so the two agree by construction there; the resampler stays
+    // because it costs nothing and keeps one audio path for both captures.
     ...(opts.audio ? ['-af', 'aresample=async=1'] : []),
-    // End when the *video* pipe ends. `anullsrc` is an infinite source, so without this ffmpeg keeps
+    // End when the *video* pipe ends. (Under x11 the video never ends on its own; `-t` or `q` does.) `anullsrc` is an infinite source, so without this ffmpeg keeps
     // muxing silence after stdin closes and never exits — which made the graceful stop unreachable:
     // every Ctrl-C fell through to the 5s force-kill, and a file capture lost its moov atom because
     // the container was never finalized. The stop path was only ever as graceful as this flag.
@@ -472,6 +506,78 @@ export function ffmpegArgs(
   else args.push('-f', 'flv', sink.target);
   return args;
 }
+
+/**
+ * Ask the encoder to finish the container and exit. With frames on stdin the end of stdin IS the end
+ * of the video, so closing it is the stop. With x11grab the video never ends on its own, and closing
+ * stdin says nothing to ffmpeg, so it gets its interactive `q` instead: the same graceful finalize,
+ * and exit code 0. SIGINT would also finalize but exits 255, which the run would read as the sink
+ * dropping. stdin is closed after the `q` in both modes: ffmpeg reads end-of-input on stdin as a null
+ * key, not a quit, and an open pipe is a handle the process would otherwise keep.
+ */
+export function stopEncoder(
+  stdin: { write: (s: string) => unknown; end: () => unknown } | null | undefined,
+  capture: BroadcastOptions['capture'],
+): void {
+  if (!stdin) return;
+  if (capture === 'x11') stdin.write('q');
+  stdin.end();
+}
+
+/**
+ * Xvfb's argv for one run: a single screen at the stage size, 24-bit, local connections only, and a
+ * black root window, which is what a viewer sees in the seconds a Chrome relaunch takes (the default
+ * root is a grey weave).
+ *
+ * `-displayfd 3` makes Xvfb choose a free display itself and write its number to fd 3 once it is
+ * accepting connections. That is the readiness signal and the collision guard in one: a fixed `:99`
+ * fails on a stale lock file from a killed run, and "sleep and hope" was the A/B harness's answer.
+ */
+export function xvfbArgs(stage: { width: number; height: number }): string[] {
+  return [
+    '-displayfd',
+    '3',
+    '-screen',
+    '0',
+    `${stage.width}x${stage.height}x24`,
+    '-nolisten',
+    'tcp',
+    '-br',
+  ];
+}
+
+/** The display Xvfb wrote to its `-displayfd`, as `:N` — or `undefined` until a whole line is in. */
+export function parseDisplayFd(text: string): string | undefined {
+  const m = /^(\d+)\n/.exec(text);
+  return m ? `:${m[1]}` : undefined;
+}
+
+/**
+ * Has the room moved since the last reading? The x11 freeze watchdog's question.
+ *
+ * Under x11grab no frame ever "arrives" — ffmpeg samples the display on its own clock, and a frozen
+ * page is sampled as faithfully as a live one. So the watchdog reads the page's own counters instead
+ * (the ones the draw floor already reads): a new draw is progress, and so is a new heartbeat beat,
+ * because a parked room ticks `beats` every 250 ms instead of drawing. Counters that went backwards
+ * are a reloaded page, which is alive. Only both standing still is the freeze.
+ */
+export function drawAdvanced(
+  prev: { draws: number; beats: number } | undefined,
+  next: { draws: number; beats: number },
+): boolean {
+  if (!prev) return true;
+  return next.draws !== prev.draws || next.beats !== prev.beats;
+}
+
+/**
+ * How often the x11 watchdog reads the page's counters. Five readings to a stall window, so a freeze
+ * is called within a second of FRAME_STALL_MS.
+ */
+export const DRAW_WATCH_SAMPLE_MS = 1_000;
+
+/** How long Xvfb gets to report its display. It is ready in well under a second on the bench box; a
+ * cold container that has not answered in ten is not going to. */
+const XVFB_READY_MS = 10_000;
 
 /**
  * The constant-frame-rate pump. CDP screencast frames arrive only when pixels change; the encoder
@@ -836,7 +942,8 @@ const PERF_SAMPLE_MS = 1000;
  */
 function startPerfRecording(
   page: Cdp,
-  ffmpeg: ChildProcess,
+  /** A getter, because under `--capture x11` the encoder starts after the first page is ready. */
+  encoder: () => ChildProcess | undefined,
   chrome: ChildProcess,
   emitted: () => number,
 ): { frame: (bytes: number) => void; tick: () => Promise<void> } | undefined {
@@ -847,7 +954,7 @@ function startPerfRecording(
   writeFileSync(out, ''); // truncate: one file per capture, never an append of two runs' numbers
   process.stdout.write(theme.meta(`  perf → ${out}\n`));
   return makePerfRecorder({
-    queueBytes: () => ffmpeg.stdin?.writableLength ?? 0,
+    queueBytes: () => encoder()?.stdin?.writableLength ?? 0,
     emitted,
     office: async () => {
       try {
@@ -871,9 +978,10 @@ function startPerfRecording(
         // already contains both — they are not peers of it. Everything else on the box is `other`,
         // and that is what decides whether the run was contaminated.
         const pipeline = cpuOfTree(ps, process.pid);
+        const ffmpeg = encoder();
         return {
           chrome: chrome.pid ? cpuOfTree(ps, chrome.pid) : 0,
-          ffmpeg: ffmpeg.pid ? cpuOfTree(ps, ffmpeg.pid) : 0,
+          ffmpeg: ffmpeg?.pid ? cpuOfTree(ps, ffmpeg.pid) : 0,
           pipeline,
           other: Math.max(0, cpuTotal(ps) - pipeline),
         };
@@ -1258,9 +1366,15 @@ export function chromeArgs(
   platform: NodeJS.Platform = process.platform,
   stage: { width: number; height: number } = { width: 1920, height: 1080 },
   audio = false,
+  capture: BroadcastOptions['capture'] = 'screencast',
 ): string[] {
   return [
-    '--headless=new',
+    // Under x11 Chrome is a normal browser on the Xvfb display, full-screen at the stage size, and
+    // ffmpeg records the screen. These are the flags the 2026-10-13 A/B arm ran with, whose eye-check
+    // frame showed no browser chrome, infobar or restore bubble.
+    ...(capture === 'x11'
+      ? ['--kiosk', '--window-position=0,0', '--disable-infobars', '--noerrdialogs']
+      : ['--headless=new']),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     '--no-first-run',
@@ -1457,6 +1571,8 @@ interface Capture {
   drawFloor?: ReturnType<typeof makeDrawRateFloor>;
   perfTimer?: NodeJS.Timeout;
   drawFloorTimer?: NodeJS.Timeout;
+  /** `--capture x11` only: the freeze watchdog's page-counter probe (see `drawAdvanced`). */
+  drawWatchTimer?: NodeJS.Timeout;
   /** Taken down on purpose — the exit and the closed socket that follow are not failures. */
   retired: boolean;
 }
@@ -1494,6 +1610,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     theme.meta(
       `${sink.kind === 'file' ? `capturing to ${sink.target}` : 'streaming (rtmps)'} · ` +
         `${opts.fps}fps · ${opts.bitrate} · ${opts.encoder}` +
+        (opts.capture === 'x11' ? ' · x11' : '') +
         (opts.duration ? ` · ${opts.duration}s` : ' · Ctrl-C to stop'),
     ) + '\n',
   );
@@ -1541,8 +1658,9 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
    */
   let flushScrubbedStderr: () => void = () => {};
   const forceStop = (code: number): never => {
-    killGroup(ffmpeg, 'SIGKILL');
+    if (ffmpeg) killGroup(ffmpeg, 'SIGKILL');
     if (current) killGroup(current.chrome, 'SIGKILL');
+    if (xvfb) killGroup(xvfb, 'SIGKILL');
     flushScrubbedStderr(); // before exit: the last lines say why the stream died
     process.exit(code);
   };
@@ -1572,7 +1690,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   const gracefulStop = () => {
     disarmFrameWatch();
     if (pumpTimer) clearInterval(pumpTimer);
-    ffmpeg.stdin?.end(); // let ffmpeg finalize the container (moov atom in file mode)
+    stopEncoder(ffmpeg?.stdin, opts.capture); // let ffmpeg finalize the container (moov atom in file mode)
     // If ffmpeg never exits (wedged RTMP socket), the stop must still stop. unref'd: it never
     // holds the process open, it only fires if something else still is.
     setTimeout(
@@ -1607,10 +1725,15 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
    */
   const onFrameStall = (sinceMs: number) => {
     if (stopping || recovering) return;
+    const secs = (sinceMs / 1000).toFixed(1);
     void relaunchCapture(
-      `no screencast frame for ${(sinceMs / 1000).toFixed(1)}s — the picture is frozen (ffmpeg keeps ` +
-        `reporting a healthy rate because the pump re-emits the last frame, so this is the only counter ` +
-        `that can see it)`,
+      opts.capture === 'x11'
+        ? `the page has not drawn for ${secs}s and its heartbeat is still — the picture is frozen ` +
+            `(x11grab samples the display on its own clock, so the encoder keeps reporting a healthy ` +
+            `rate and this is the only counter that can see it)`
+        : `no screencast frame for ${secs}s — the picture is frozen (ffmpeg keeps reporting a ` +
+            `healthy rate because the pump re-emits the last frame, so this is the only counter ` +
+            `that can see it)`,
     );
   };
   /**
@@ -1647,7 +1770,8 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   process.on('SIGTERM', onSignal);
   process.on('SIGHUP', onSignal);
   process.on('exit', () => {
-    killGroup(ffmpeg);
+    if (ffmpeg) killGroup(ffmpeg);
+    if (xvfb) killGroup(xvfb);
     if (current) {
       killGroup(current.chrome);
       // The profile has to be removed here, not only at teardown. Every forced stop reaches
@@ -1662,67 +1786,82 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     clearRunState(process.pid); // only if it is still ours — see clearRunState
   });
 
-  // `detached: true` makes each child its own process-group leader, which is what lets the
-  // stop path kill *everything* it spawned with one group signal — see killGroup.
-  const ffmpeg: ChildProcess = spawn('ffmpeg', ffmpegArgs(opts, sink), {
-    // stderr is piped (not inherited) so a secret scrubber sits between ffmpeg and our own
-    // stderr: ffmpeg prints its RTMPS output URL — stream key and all — verbatim on error, and an
-    // inherited stderr put that straight into the machine logs where `fly logs` re-exposes it.
-    stdio: ['pipe', 'inherit', 'pipe'],
-    detached: true,
-  });
-  const scrubStderr = makeSecretScrubber(sink);
-  // A StringDecoder, not `d.toString()`: ffmpeg emits UTF-8, and a codepoint straddling a read
-  // boundary would decode as U+FFFD — which also destroys the two halves for the string matcher.
-  const stderrDecoder = new StringDecoder('utf8');
-  ffmpeg.stderr?.on('data', (d: Buffer) => {
-    const clean = scrubStderr(stderrDecoder.write(d));
-    if (clean) process.stderr.write(clean);
-  });
-  // `close` is the ordinary path. It does NOT run when the process is torn down with
-  // `process.exit()`, which is why `flushScrubbedStderr` below is called on every forced path —
-  // piping stderr made this process responsible for bytes `inherit` used to deliver for free.
-  ffmpeg.stderr?.on('close', () => {
-    const rest = scrubStderr.flush();
-    if (rest) process.stderr.write(rest);
-  });
+  /** The encoder. Spawned before the first Chrome under screencast (a bad sink fails fast) and after
+   *  the first page is ready under x11 (x11grab records whatever is on screen, so starting it earlier
+   *  would stream Xvfb's empty root while Chrome loads). */
+  let ffmpeg: ChildProcess | undefined;
+  let resolveEncoderExit: (code: number) => void = () => {};
   /**
-   * Flush the scrubber's buffered tail SYNCHRONOUSLY. `process.exit()` truncates pending async
-   * writes, and `process.stderr` is async when stderr is a pipe — exactly the `fly logs` case this
-   * redaction exists for. Without this, a forced stop drops ffmpeg's last lines, which are the ones
-   * that say why the stream died.
-   */
-  flushScrubbedStderr = () => {
-    const rest = scrubStderr.flush();
-    if (rest) {
-      try {
-        writeSync(2, rest);
-      } catch {
-        /* stderr already gone — nothing useful left to do */
-      }
-    }
-  };
-  // ffmpeg closes its stdin the moment `-t <duration>` is satisfied (or its sink dies) — a pump tick
-  // racing that close is an EPIPE, which on a Socket is an *emitted* error that would crash the
-  // process. It's the normal end-of-stream handshake here, not a failure: swallow it and let the
-  // `exit` handler below report ffmpeg's real verdict.
-  ffmpeg.stdin?.on('error', () => {});
-
-  /**
-   * ffmpeg's exit is captured **here**, next to its spawn — not at the point we finally
-   * want to await them.
+   * ffmpeg's exit is captured **here**, before anything awaits — not at the point we finally want to
+   * await it.
    *
    * The old code registered `ffmpeg.once('exit')` after `connectCdp` (≤10s of polling) and
    * `waitBroadcastReady` (≤30s), so ffmpeg dying inside that window emitted `exit` with nobody
    * listening. `once` does not replay: the promise then never resolved, the `finally` never ran, and
-   * the command hung holding a profile directory. A bad stream key does exactly that.
+   * the command hung holding a profile directory. A bad stream key does exactly that. The listener is
+   * attached in `startEncoder`, next to the spawn.
    */
   const ffmpegExit = new Promise<number>((resolve) => {
-    ffmpeg.once('exit', (code) => {
-      if (pumpTimer) clearInterval(pumpTimer); // encoder gone — stop feeding a closed pipe
-      resolve(code ?? 1);
-    });
+    resolveEncoderExit = resolve;
   });
+  const encoderGone = (): boolean =>
+    ffmpeg !== undefined && (ffmpeg.exitCode !== null || ffmpeg.signalCode !== null);
+
+  const startEncoder = (display?: string): ChildProcess => {
+    // `detached: true` makes each child its own process-group leader, which is what lets the
+    // stop path kill *everything* it spawned with one group signal — see killGroup.
+    const child: ChildProcess = spawn('ffmpeg', ffmpegArgs(opts, sink, display), {
+      // stderr is piped (not inherited) so a secret scrubber sits between ffmpeg and our own
+      // stderr: ffmpeg prints its RTMPS output URL — stream key and all — verbatim on error, and an
+      // inherited stderr put that straight into the machine logs where `fly logs` re-exposes it.
+      stdio: ['pipe', 'inherit', 'pipe'],
+      detached: true,
+    });
+    ffmpeg = child;
+    const scrubStderr = makeSecretScrubber(sink);
+    // A StringDecoder, not `d.toString()`: ffmpeg emits UTF-8, and a codepoint straddling a read
+    // boundary would decode as U+FFFD — which also destroys the two halves for the string matcher.
+    const stderrDecoder = new StringDecoder('utf8');
+    child.stderr?.on('data', (d: Buffer) => {
+      const clean = scrubStderr(stderrDecoder.write(d));
+      if (clean) process.stderr.write(clean);
+    });
+    // `close` is the ordinary path. It does NOT run when the process is torn down with
+    // `process.exit()`, which is why `flushScrubbedStderr` below is called on every forced path —
+    // piping stderr made this process responsible for bytes `inherit` used to deliver for free.
+    child.stderr?.on('close', () => {
+      const rest = scrubStderr.flush();
+      if (rest) process.stderr.write(rest);
+    });
+    /**
+     * Flush the scrubber's buffered tail SYNCHRONOUSLY. `process.exit()` truncates pending async
+     * writes, and `process.stderr` is async when stderr is a pipe — exactly the `fly logs` case this
+     * redaction exists for. Without this, a forced stop drops ffmpeg's last lines, which are the ones
+     * that say why the stream died.
+     */
+    flushScrubbedStderr = () => {
+      const rest = scrubStderr.flush();
+      if (rest) {
+        try {
+          writeSync(2, rest);
+        } catch {
+          /* stderr already gone — nothing useful left to do */
+        }
+      }
+    };
+    // ffmpeg closes its stdin the moment `-t <duration>` is satisfied (or its sink dies) — a pump
+    // tick racing that close is an EPIPE, which on a Socket is an *emitted* error that would crash
+    // the process. It's the normal end-of-stream handshake here, not a failure: swallow it and let
+    // the `exit` handler below report ffmpeg's real verdict.
+    child.stdin?.on('error', () => {});
+    child.once('exit', (code) => {
+      if (pumpTimer) clearInterval(pumpTimer); // encoder gone — stop feeding a closed pipe
+      resolveEncoderExit(code ?? 1);
+    });
+    return child;
+  };
+  if (opts.capture === 'screencast') startEncoder();
+
   /** ffmpeg dying *before* the stream is live is terminal, and must beat the startup awaits. */
   const diedDuringStartup = new Promise<never>((_, reject) => {
     void ffmpegExit.then((code) => {
@@ -1740,8 +1879,64 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   // promise may reject later with nobody looking — claim it so Node doesn't call it unhandled.
   diedDuringStartup.catch(() => {});
 
+  /** `--capture x11` only: the display server, and the display it chose. Both outlive every Chrome
+   *  relaunch; ffmpeg records that display for the whole run. */
+  let xvfb: ChildProcess | undefined;
+  let display: string | undefined;
+  /** The run's own teardown is killing Xvfb — its exit then is not a failure. */
+  let cleaningUp = false;
+  const startXvfb = (): Promise<{ child: ChildProcess; display: string }> =>
+    new Promise((resolve, reject) => {
+      const child = spawn('Xvfb', xvfbArgs(stage), {
+        // fd 3 is `-displayfd`: Xvfb writes the display it chose there once it accepts connections.
+        stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
+        detached: true,
+      });
+      xvfb = child; // set now, so a stop mid-start still finds it and takes it down
+      let settled = false;
+      let tail = '';
+      const fail = (why: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        killGroup(child, 'SIGKILL');
+        reject(new CliError(why + (tail.trim() ? `: ${tail.trim().slice(-300)}` : ''), 1));
+      };
+      const timer = setTimeout(
+        () => fail(`Xvfb did not report a display within ${XVFB_READY_MS / 1000}s`),
+        XVFB_READY_MS,
+      );
+      child.once('error', (e) =>
+        fail(`could not start Xvfb (${e.message}) — is the xvfb package installed?`),
+      );
+      child.stderr?.on('data', (d: Buffer) => {
+        tail = (tail + d.toString()).slice(-2048); // drained, or a chatty Xvfb blocks on a full pipe
+      });
+      let fd3 = '';
+      (child.stdio[3] as NodeJS.ReadableStream | null)?.on('data', (d: Buffer) => {
+        fd3 += d.toString();
+        const found = parseDisplayFd(fd3);
+        if (!found || settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ child, display: found });
+      });
+      child.once('exit', (code) => {
+        if (!settled) {
+          fail(`Xvfb exited (code ${code}) before reporting a display`);
+          return;
+        }
+        // Mid-run, the display ffmpeg records and Chrome draws on is gone with it. Nothing in this
+        // process can bring a display back under a running x11grab, so the stream ends — through
+        // giveUp, which asks the supervisor for a fresh run once this one has proven itself.
+        if (stopping || cleaningUp) return;
+        void giveUp(`Xvfb exited (code ${code}) — the display the stream records is gone.`);
+      });
+    });
+
   let exitCode = 0;
-  const pump = makeFramePump(makeEncoderFeed(ffmpeg.stdin, onStall), opts.fps);
+  // Screencast only: under x11 nothing feeds the pump and its timer never starts.
+  const pump = makeFramePump(makeEncoderFeed(ffmpeg?.stdin, onStall), opts.fps);
   let emitted = 0;
   const frameWatch = makeFrameWatchdog(onFrameStall);
   disarmFrameWatch = () => {
@@ -1754,6 +1949,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     cap.retired = true;
     if (cap.perfTimer) clearInterval(cap.perfTimer);
     if (cap.drawFloorTimer) clearInterval(cap.drawFloorTimer);
+    if (cap.drawWatchTimer) clearInterval(cap.drawWatchTimer);
     cap.drawFloor?.disarm();
     cap.cdp?.close(); // an open DevTools socket is a live handle; nothing else closes it
     killGroup(cap.chrome, 'SIGKILL'); // a frozen Chrome ignores SIGTERM, and this one is not coming back
@@ -1777,8 +1973,12 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     // `detached: true` — see above: one group signal reaches Chrome and everything it spawned.
     const chrome = spawn(
       chromeBin,
-      chromeArgs(debugPort, profile, process.platform, stage, opts.audio),
-      { stdio: 'ignore', detached: true },
+      chromeArgs(debugPort, profile, process.platform, stage, opts.audio, opts.capture),
+      {
+        stdio: 'ignore',
+        detached: true,
+        ...(display ? { env: { ...process.env, DISPLAY: display } } : {}),
+      },
     );
     const cap: Capture = { chrome, profile, retired: false };
     current = cap;
@@ -1802,13 +2002,16 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
         await cdp.send('Runtime.enable');
         // `--window-size` is the *window*; even headless, the viewport comes up short of it (~88px of
         // phantom window chrome → 1920×992 frames). The emulation override pins the viewport itself, so
-        // the screencast delivers exactly the 1920×1080 stage.
-        await cdp.send('Emulation.setDeviceMetricsOverride', {
-          width: stage.width,
-          height: stage.height,
-          deviceScaleFactor: 1,
-          mobile: false,
-        });
+        // the screencast delivers exactly the 1920×1080 stage. Under x11 the kiosk window IS the
+        // screen, and the measured arm ran without the override, so it stays off there.
+        if (opts.capture === 'screencast') {
+          await cdp.send('Emulation.setDeviceMetricsOverride', {
+            width: stage.width,
+            height: stage.height,
+            deviceScaleFactor: 1,
+            mobile: false,
+          });
+        }
         await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: seatInjection(seat) });
         await cdp.send('Page.navigate', { url });
         await waitBroadcastReady(cdp, 30_000);
@@ -1821,7 +2024,14 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     // Capture-perf instrumentation — dark unless MUSTERD_BROADCAST_PERF names a JSONL path, and only
     // for the first capture: the recorder truncates its file, so a relaunch would erase the run.
     // See broadcast-perf.ts for why queue *growth*, not ffmpeg's `speed=`, is the margin metric.
-    const perf = initial ? startPerfRecording(page, ffmpeg, chrome, () => emitted) : undefined;
+    const perf = initial
+      ? startPerfRecording(
+          page,
+          () => ffmpeg,
+          chrome,
+          () => emitted,
+        )
+      : undefined;
     const ackRefused = makeAckRefusalReporter(
       () => stopping || cap.retired,
       (message) =>
@@ -1841,31 +2051,61 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
           `${opts.fps}fps.\n`,
       ),
     ));
-    page.on('Page.screencastFrame', (p) => {
-      const frame = Buffer.from(String(p['data']), 'base64');
-      perf?.frame(frame.byteLength);
-      pump.frame(frame);
-      frameWatch.arrived();
-      // NOT `void` — see makeAckRefusalReporter. An unobserved rejection here exits 1 and ends a
-      // machine the supervisor was standing by to restart, discarding the code socketLossExitCode
-      // had already chosen and attached to the error.
-      page.send('Page.screencastFrameAck', { sessionId: p['sessionId'] }).catch(ackRefused);
-    });
-    // JPEG, and this is load-bearing: Chrome encodes screencast frames on the compositor thread,
-    // and 1080p PNG is so expensive there that delivery measured 4.7fps — a slideshow the pump then
-    // padded with duplicates (the residual stutter after the cadence fixes). JPEG@85 measured
-    // 35.3fps at ~181KB/frame on the same scene. Visually lossless here (flat colors, no gradients
-    // worth 9× the bytes), and ffmpeg's image2pipe sniffs the codec per-frame, so nothing else
-    // changes.
-    await page.send('Page.startScreencast', {
-      format: 'jpeg',
-      quality: 85,
-      maxWidth: stage.width,
-      maxHeight: stage.height,
-      // Deliver at the encode rate, not at every composited frame — the JPEG encode above is the
-      // single largest cost in the pipeline, and feeding 60/s into a 30fps encode pays for it twice.
-      everyNthFrame: screencastEveryNthFrame(opts.fps),
-    });
+    if (opts.capture === 'screencast') {
+      page.on('Page.screencastFrame', (p) => {
+        const frame = Buffer.from(String(p['data']), 'base64');
+        perf?.frame(frame.byteLength);
+        pump.frame(frame);
+        frameWatch.arrived();
+        // NOT `void` — see makeAckRefusalReporter. An unobserved rejection here exits 1 and ends a
+        // machine the supervisor was standing by to restart, discarding the code socketLossExitCode
+        // had already chosen and attached to the error.
+        page.send('Page.screencastFrameAck', { sessionId: p['sessionId'] }).catch(ackRefused);
+      });
+      // JPEG, and this is load-bearing: Chrome encodes screencast frames on the compositor thread,
+      // and 1080p PNG is so expensive there that delivery measured 4.7fps — a slideshow the pump then
+      // padded with duplicates (the residual stutter after the cadence fixes). JPEG@85 measured
+      // 35.3fps at ~181KB/frame on the same scene. Visually lossless here (flat colors, no gradients
+      // worth 9× the bytes), and ffmpeg's image2pipe sniffs the codec per-frame, so nothing else
+      // changes.
+      await page.send('Page.startScreencast', {
+        format: 'jpeg',
+        quality: 85,
+        maxWidth: stage.width,
+        maxHeight: stage.height,
+        // Deliver at the encode rate, not at every composited frame — the JPEG encode above is the
+        // single largest cost in the pipeline, and feeding 60/s into a 30fps encode pays for it twice.
+        everyNthFrame: screencastEveryNthFrame(opts.fps),
+      });
+    } else {
+      // x11: no frame ever arrives, so the freeze watchdog reads the page's own counters instead —
+      // see `drawAdvanced`. One CDP round-trip a second, never two in flight: a wedged page that
+      // stops answering must not pile up evaluations, and the check runs first, outside the reply,
+      // so a probe that never comes back is still judged by the clock.
+      let prev: { draws: number; beats: number } | undefined;
+      let probing = false;
+      cap.drawWatchTimer = setInterval(() => {
+        frameWatch.check();
+        if (probing) return;
+        probing = true;
+        void page
+          .send('Runtime.evaluate', {
+            expression: 'JSON.stringify(window.__office?.stats?.() ?? null)',
+            returnByValue: true,
+          })
+          .then((r) => {
+            const stats = parseOfficeStats((r['result'] as { value?: unknown } | undefined)?.value);
+            if (!stats) return;
+            if (drawAdvanced(prev, stats)) frameWatch.arrived();
+            prev = stats;
+          })
+          .catch(() => {}) // an unanswered probe is not progress, and the clock above judges it
+          .finally(() => {
+            probing = false;
+          });
+      }, DRAW_WATCH_SAMPLE_MS);
+      cap.drawWatchTimer.unref(); // measurement never holds the stream open
+    }
     if (perf) {
       cap.perfTimer = setInterval(() => void perf.tick(), PERF_SAMPLE_MS);
       cap.perfTimer.unref(); // measurement never holds the stream open
@@ -1900,7 +2140,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
    * failing, still falls back to.
    */
   const relaunchCapture = async (reason: string): Promise<void> => {
-    if (recovering || stopping || ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
+    if (recovering || stopping || encoderGone()) return;
     recovering = true;
     disarmFrameWatch(); // nothing arrives from a Chrome that is being replaced — that is not a freeze
     try {
@@ -1926,7 +2166,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       );
     } catch (err) {
       // The stream ending (a signal, ffmpeg gone) is what pulled Chrome out from under this launch.
-      if (stopping || ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
+      if (stopping || encoderGone()) return;
       await giveUp(
         `Chrome would not come back (${err instanceof Error ? err.message : String(err)}).`,
       );
@@ -1936,14 +2176,23 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   };
 
   const cleanup = () => {
+    cleaningUp = true;
     disarmFrameWatch();
     if (pumpTimer) clearInterval(pumpTimer);
-    ffmpeg.stdin?.end();
+    stopEncoder(ffmpeg?.stdin, opts.capture);
     if (current) retire(current);
+    if (xvfb) killGroup(xvfb);
   };
 
   try {
+    if (opts.capture === 'x11') {
+      const x = await startXvfb();
+      xvfb = x.child;
+      display = x.display;
+    }
     await Promise.race([launchCapture(true), diedDuringStartup]);
+    // x11: the page is on screen now, so the first frame ffmpeg grabs is the office, not Xvfb's root.
+    if (opts.capture === 'x11') startEncoder(display);
 
     // Tick at 2× frame cadence: the pump owes frames by wall clock, so the timer only needs to
     // fire *often enough* — late ticks emit catch-up frames instead of losing them.
@@ -1953,13 +2202,15 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     // to ask whether anything has arrived.
     runStartedAt = Date.now();
     frameWatch.arm();
-    pumpTimer = setInterval(
-      () => {
-        emitted += pump.tick();
-        frameWatch.check();
-      },
-      Math.max(1, Math.round(500 / opts.fps)),
-    );
+    if (opts.capture === 'screencast') {
+      pumpTimer = setInterval(
+        () => {
+          emitted += pump.tick();
+          frameWatch.check();
+        },
+        Math.max(1, Math.round(500 / opts.fps)),
+      );
+    }
     live = true; // signals now stop gracefully — there are frames worth finalizing
 
     baselineBuild = await fetchDaemonBuild(opts.server);

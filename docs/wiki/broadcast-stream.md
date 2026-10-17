@@ -458,6 +458,13 @@ So neither a cheaper capture nor a bigger box clears 30 fps. The cut is to the d
 sprite cache measuring each cached item once instead of every frame (#2568, not yet measured on the
 bench), then dirty-rect repaint (lane `01M4VS1SJQ`). The spec is `docs/superpowers/specs/2026-10-13-broadcast-smooth-capture-design.md` (#2539).
 
+_(Added 2026-10-17, lane `01M4VS1F2V`.)_ The x11 path is now a real capture mode,
+`musterd broadcast --capture x11`, and the hosted image carries Xvfb. The default stays screencast:
+nothing above was measured through the CLI mode, only through the A/B harness's ad-hoc arm. Its first
+reading against the 30 fps bar is increment 4's (lane `01M4VS22F1`). Falsify: a bench run of the CLI
+mode that lands outside the ad-hoc arm's pipeline CPU by more than the 30-point A/B margin means the
+mode is not the arm that was measured.
+
 ## Every health signal the capture had measured the encoder, and the encoder is downstream of the freeze (2026-09-16; falsify: `Page.stopScreencast` mid-run and watch ffmpeg keep reporting a healthy rate) <!-- claim: defect -->
 
 A frozen source keeps ffmpeg perfectly fed, because the pump re-emits `latest` by design. So every
