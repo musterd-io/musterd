@@ -763,3 +763,8 @@ ffmpeg's buffered stats reach the log only as the box goes down. Unverified caus
 a non-interactive bash running the CLI in the foreground, and bash defers a `SIGINT` sent only to
 itself until that child exits, so the CLI never sees it.
 
+
+Since lane `01M55X5NG0` the entrypoint starts the CLI in the background and its INT, TERM and HUP
+traps pass the signal on, then wait until the CLI has really exited. A local run of the same bash
+pattern confirmed the forward reaches a node `SIGINT` listener (2026-10-17). It is unverified on the
+box until the next `musterd stream build` and stop, and the heading's falsifier is that check.

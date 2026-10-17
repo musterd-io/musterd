@@ -423,15 +423,23 @@ describe('the capture hands its tailnet node back on the way out', () => {
     expect(entrypoint()).toMatch(/trap 'rc=\$\?;.*exit \$rc' EXIT/);
   });
 
-  it('traps EXIT only — not INT or TERM', () => {
-    // Trapping signals here would put bash in front of the path the broadcast CLI uses for its own
-    // graceful stop (finalise the container, drain ffmpeg). Tidying a device record is not worth
-    // reordering that.
-    const trapLines = entrypoint()
+  it('tidies up on EXIT only', () => {
+    const tidy = entrypoint()
       .split('\n')
-      .filter((l) => l.trimStart().startsWith('trap '));
-    expect(trapLines).toHaveLength(1);
-    expect(trapLines[0]).not.toMatch(/\b(INT|TERM|HUP)\b/);
+      .filter((l) => l.trimStart().startsWith('trap ') && l.includes('tailscale'));
+    expect(tidy).toHaveLength(1);
+    expect(tidy[0]).not.toMatch(/\b(INT|TERM|HUP)\b/);
+  });
+
+  it('passes the stop signals on to the CLI and waits for it to really exit', () => {
+    // Measured 2026-10-17 (ADR 642 trial): `stream stop` SIGINTs the entrypoint, a foreground CLI
+    // never saw it, and Fly SIGTERMed the box 30 s later. Each signal trap only forwards.
+    const src = entrypoint();
+    expect(src).toMatch(/\$\{BROADCAST_ARGS:-\} &\n\s+cli=\$!/);
+    for (const sig of ['INT', 'TERM', 'HUP']) {
+      expect(src).toContain(`trap 'kill -${sig} "$cli" 2>/dev/null' ${sig}`);
+    }
+    expect(src).toMatch(/wait "\$cli"\n\s+code=\$\?\n\s+kill -0 "\$cli" 2>\/dev\/null \|\| break/);
   });
 });
 
