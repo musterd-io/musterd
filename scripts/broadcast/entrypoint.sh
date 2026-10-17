@@ -172,9 +172,15 @@ short_runs=0
 
 while :; do
   started=$SECONDS
-  # The measured passing configuration — change it in the spec before changing it here.
+  # The measured configuration — change it in an ADR before changing it here.
   #
-  # 1080p15 (2026-09-30, lane 01M3STFRSD) — see the dated note in docs/perf/broadcast-baseline.md.
+  # x11 at 1080p30 (ADR 642, 2026-10-17, lane 01M55N47KJ). `--capture x11` records an Xvfb display
+  # instead of JPEG screencast frames, and with dirty-rect repaint (ADR 625) the bench box drew
+  # ~25 distinct frames/s with a ~57 ms p95 hold, against 15 at most for the screencast at 15 below.
+  # It is short of the spec's 30 fps bar, and ADR 642 keeps it only after a live trial. Revert without
+  # a rebuild: BROADCAST_ARGS="--capture screencast --fps 15" (the CLI's last flag wins).
+  #
+  # Before that, 1080p15 (2026-09-30, lane 01M3STFRSD) — see the dated note in docs/perf/broadcast-baseline.md.
   # The 20 below was chosen by eye against a 20 that was never delivered: the office draws 9-11
   # frames/s on this box (the draw floor fires on every relaunch), so a 20fps stream was ~half
   # repeats. 15 carries the same real motion in fewer padded frames and frees capture CPU.
@@ -206,7 +212,8 @@ while :; do
     --server "$SERVER" \
     --twitch \
     --resolution 1080p \
-    --fps 15 \
+    --capture x11 \
+    --fps 30 \
     --encoder libx264 \
     --audio \
     ${BROADCAST_ARGS:-}

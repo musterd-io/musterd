@@ -1,6 +1,7 @@
 # /broadcast at a steady 30 fps on the CPU box — design
 
 **Status:** approved 2026-10-13: the design in chat section by section, and the written spec by nick.
+_(2026-10-17: levers 1 and 2 reached ~25 draws/s and a ~57 ms p95 at 30 fps on the bench, short of the bar. The hosted stream moved to x11 at 30 as a step ([ADR 642](../../decisions/642-hosted-stream-x11-30fps.md)), and lever 3 is lane `01M55MAQ9M`.)_
 Plan: [`2026-10-13-broadcast-smooth-capture.md`](../plans/2026-10-13-broadcast-smooth-capture.md). Lane `01M4VR55VNTPDMCCBBEM2G70TB`. Goal: `launch`.
 
 ## What nick asked for (2026-10-13)
