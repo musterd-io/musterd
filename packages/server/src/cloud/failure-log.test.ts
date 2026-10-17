@@ -5,7 +5,7 @@ import { log, type LogFields } from '../log.js';
 import { addMember, mintCredential } from '../store/members.js';
 import { mintTokenPair, registerClient } from '../store/oauth.js';
 import { createTeam } from '../store/teams.js';
-import { resetMcpHandlersForTest } from '../transport/mcpHttp.js';
+import { type RemoteMcpFactory, resetMcpHandlersForTest } from '../transport/mcpHttp.js';
 import { hostRequest, stubCloudEnv } from './testing.js';
 
 /**
@@ -16,7 +16,10 @@ import { hostRequest, stubCloudEnv } from './testing.js';
  */
 
 /** A cloud server whose next statement matching `match` fails with `error`, once `arm()` is called. */
-async function bootCloudWithQueryFault(fault: { match: RegExp; error: Error }) {
+async function bootCloudWithQueryFault(
+  fault: { match: RegExp; error: Error },
+  remoteMcp?: RemoteMcpFactory,
+) {
   stubCloudEnv();
   const seed = await openTestDriver('pglite');
   await openTestDriver('pglite', { store: 'trace' });
@@ -45,7 +48,12 @@ async function bootCloudWithQueryFault(fault: { match: RegExp; error: Error }) {
       end: () => p.end(),
     };
   };
-  const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
+  const s = createServer({
+    cloudPools: { ...pools, main },
+    rosterRoots: [],
+    port: 0,
+    ...(remoteMcp ? { remoteMcp } : {}),
+  });
   await s.listen();
   return { s, seed, url: `http://127.0.0.1:${s.port}`, arm: () => void (armed = true) };
 }
@@ -101,24 +109,25 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
     }
   });
 
-  it('keeps the raw query off a remote-MCP result and on its request log line', async () => {
+  it('keeps a remote-MCP factory failure off the response and on its request log line', async () => {
+    // ADR 630: the daemon implements no MCP tools, so what fails inside a tool is an ordinary
+    // loopback request, logged as the first test here pins. What the daemon still owns is the
+    // factory: a throw there must be answered through the same sanitizing boundary (lane 01M3ZC3G35).
     resetMcpHandlersForTest();
     const errorLog = vi.spyOn(log, 'error');
-    const statement = 'SELECT * FROM private_schema.messages WHERE team_id = ?';
+    const statement = 'SELECT * FROM private_schema.members WHERE team_id = ?';
     const queryError = Object.assign(new Error(`relation lookup failed\n  in: ${statement}`), {
       code: '42P01',
     });
-    const { s, seed, url, arm } = await bootCloudWithQueryFault({
-      match: /from messages/i,
-      error: queryError,
-    });
+    const { s, seed, url } = await bootCloudWithQueryFault(
+      { match: /^$/, error: queryError },
+      () => {
+        throw queryError;
+      },
+    );
     try {
       const team = await createTeam(seed, { slug: 'revive' });
-      const { row } = await addMember(seed, team, {
-        name: 'ada',
-        kind: 'human',
-        role: '',
-      });
+      const { row } = await addMember(seed, team, { name: 'ada', kind: 'human', role: '' });
       const { client_id } = await registerClient(seed, {
         teamId: team.id,
         clientName: 'error-sanitization-test',
@@ -129,31 +138,26 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
         memberId: row.id,
         clientId: client_id,
       });
-      const call = (id: number, method: string, params: unknown) =>
-        hostRequest(url, '/mcp/revive', 'revive.musterd.test', {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${pair.access_token}`,
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-            'x-forwarded-proto': 'https',
+      const r = await hostRequest(url, '/mcp/revive', 'revive.musterd.test', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${pair.access_token}`,
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'x-forwarded-proto': 'https',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'error-test', version: '0' },
           },
-          body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-        });
-
-      const initialized = await call(1, 'initialize', {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'error-test', version: '0' },
+        }),
       });
-      expect(initialized.status, initialized.body).toBe(200);
-
-      arm();
-      const r = await call(2, 'tools/call', {
-        name: 'team_inbox_check',
-        arguments: {},
-      });
-      expect(r.status, r.body).toBe(200); // Streamable HTTP returns tool failures in the MCP result.
+      expect(r.status, r.body).toBe(500);
       expect(r.body).toContain('internal server error');
       expect(r.body).not.toContain('in:');
       expect(r.body).not.toContain(statement);
@@ -163,13 +167,13 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
           .map(([fields]) => fields)
           .find(
             (f: LogFields) =>
-              f.msg === 'http_request' && f.path === '/mcp/[redacted]' && f.status === 200,
+              f.msg === 'http_request' && f.path === '/mcp/[redacted]' && f.status === 500,
           );
         expect(found).toBeDefined();
         return found!;
       });
       expect(line).toMatchObject({ err_class: 'Error', sqlstate: '42P01' });
-      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.messages');
+      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.members');
     } finally {
       resetMcpHandlersForTest();
       await s.close();

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { McpServer } from '@modelcontextprotocol/server';
 import { OAUTH_RATE_LIMITS, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
@@ -6,10 +7,14 @@ import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { __setInviteKeyForTest } from '../store/invites.js';
 import { addMember } from '../store/members.js';
-import { recordHostSeen } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { CimdResolverCapacityError } from './cimd.js';
-import { resetMcpHandlersForTest } from './mcpHttp.js';
+import {
+  REMOTE_MCP_NOT_CONFIGURED,
+  type RemoteMcpFactory,
+  type RemoteMcpSeat,
+  resetMcpHandlersForTest,
+} from './mcpHttp.js';
 import {
   __oauthBucketSizeForTest,
   __resetOAuthBucketsForTest,
@@ -33,6 +38,34 @@ withDrivers('oauth-http', (_o, kind) => {
   const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
   const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
   const REDIRECT = 'https://app.example/cb';
+
+  /**
+   * The server implements no MCP tools (ADR 630): these tests cover OAuth and the transport, so
+   * the factory is a stub with one tool that reports the seat it was handed. The adapter's real
+   * tools are tested end to end in the CLI package, which depends on both.
+   */
+  let seats: RemoteMcpSeat[] = [];
+  const stubFactory: RemoteMcpFactory = (seat) => {
+    seats.push(seat);
+    const mcp = new McpServer({ name: 'musterd', version: '0.0.0' });
+    mcp.registerTool(
+      'whoami',
+      { description: 'the seat this request was built for' },
+      async () => ({
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              team: seat.team,
+              member: seat.member,
+              can_coordinate: seat.capabilities.can_coordinate,
+            }),
+          },
+        ],
+      }),
+    );
+    return mcp;
+  };
 
   async function postJson(path: string, body: unknown, headers: Record<string, string> = {}) {
     const res = await fetch(base + path, {
@@ -149,7 +182,8 @@ withDrivers('oauth-http', (_o, kind) => {
     __setCimdResolverForTest();
     resetMcpHandlersForTest();
     __setInviteKeyForTest(randomBytes(32));
-    server = createServer({ db: await openTestDriver(kind), port: 0 });
+    seats = [];
+    server = createServer({ db: await openTestDriver(kind), port: 0, remoteMcp: stubFactory });
     const { port } = await server.listen();
     base = `http://127.0.0.1:${port}`;
     const team = await postJson('/teams', {
@@ -938,7 +972,7 @@ withDrivers('oauth-http', (_o, kind) => {
   });
 
   describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
-    it('join → inbox → send works over MCP frames', async () => {
+    it('initialize → tools/list → tools/call reach the factory with the bearer’s seat (ADR 630)', async () => {
       const { pair } = await signInPair(nickCred);
 
       const init = await mcpCall(pair.access_token, 'initialize', {
@@ -950,130 +984,61 @@ withDrivers('oauth-http', (_o, kind) => {
       expect(init.json.result.serverInfo.name).toBe('musterd');
 
       const list = await mcpCall(pair.access_token, 'tools/list', {}, 2);
-      const names = list.json.result.tools.map((t: any) => t.name).sort();
-      expect(names).toEqual([
-        'team_agent_connect',
-        'team_agent_create',
-        'team_inbox_check',
-        'team_join',
-        'team_send',
-      ]);
+      expect(list.json.result.tools.map((t: any) => t.name)).toEqual(['whoami']);
 
-      const join = await mcpCall(
+      const who = await mcpCall(
         pair.access_token,
         'tools/call',
-        {
-          name: 'team_join',
-          arguments: {},
-        },
+        { name: 'whoami', arguments: {} },
         3,
       );
-      expect(JSON.stringify(join.json.result)).toContain('Already joined dawn as nick');
-
-      const send = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        {
-          name: 'team_send',
-          arguments: { act: 'message', body: 'hello from the phone' },
-        },
-        4,
-      );
-      expect(JSON.stringify(send.json.result)).toContain('sent');
-
-      const inbox = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        {
-          name: 'team_inbox_check',
-          arguments: { unread_only: true },
-        },
-        5,
-      );
-      // Our own send is excluded from our inbox (from_member != me) — the cursor proves the read.
-      expect(inbox.json.result.content[0].text).toContain('cursor');
+      expect(JSON.parse(who.json.result.content[0].text)).toEqual({
+        team: 'dawn',
+        member: 'nick',
+        can_coordinate: true,
+      });
+      const seat = seats.at(-1)!;
+      // The factory calls this daemon back on the socket the phone used, with the phone's bearer.
+      expect(seat.server).toBe(base);
+      expect(seat.bearer).toBe(pair.access_token);
     });
 
-    it('team_agent_create leads with the sponsor’s host when one is live (ADR 463 §2)', async () => {
+    it('the factory is handed the phone’s edge headers and nothing else of its request', async () => {
       const { pair } = await signInPair(nickCred);
-      await mcpCall(pair.access_token, 'initialize', {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'phone', version: '0' },
+      await fetch(base + '/mcp/dawn', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${pair.access_token}`,
+          'x-forwarded-proto': 'https',
+          'cf-connecting-ip': '203.0.113.9',
+          cookie: 'session=never-forwarded',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       });
-      const dawn = (await getTeamBySlug(server.store, 'dawn'))!;
-      const nick = (await server.store.get(
-        "SELECT id FROM members WHERE team_id = ? AND name = 'nick'",
-        [dawn.id],
-      )) as { id: string };
-      await recordHostSeen(server.store, dawn.id, 'nick-mbp', Date.now(), nick.id);
-      const made = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        { name: 'team_agent_create', arguments: { name: 'nick-scout' } },
-        2,
-      );
-      const text: string = made.json.result.content[0].text;
-      expect(text).toContain('Created agent "nick-scout"');
-      expect(text).toContain('Your host nick-mbp is setting it up; it will greet you shortly.');
-      expect(text).not.toMatch(/\/join\//);
+      // No trustProxy here, so no limiter reads cf-connecting-ip and it is not handed on either.
+      expect(seats.at(-1)!.headers).toEqual({
+        host: new URL(base).host,
+        'x-forwarded-proto': 'https',
+      });
     });
 
-    it('team_agent_create over MCP frames mints a sponsored agent and returns a connect link (ADR 449 §3)', async () => {
+    it('with no factory, tool traffic answers 503 and OAuth still works (ADR 630 §8)', async () => {
+      await server.close();
+      resetMcpHandlersForTest();
+      server = createServer({ db: await openTestDriver(kind), port: 0 });
+      const { port } = await server.listen();
+      base = `http://127.0.0.1:${port}`;
+      nickCred = (
+        await postJson('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } })
+      ).json.human_credential;
       const { pair } = await signInPair(nickCred);
-      await mcpCall(pair.access_token, 'initialize', {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'phone', version: '0' },
-      });
-      const made = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        { name: 'team_agent_create', arguments: { name: 'nick-scout', role: 'research' } },
-        2,
-      );
-      const text: string = made.json.result.content[0].text;
-      expect(made.json.result.isError).toBeUndefined();
-      expect(text).toContain('Created agent "nick-scout"');
-      expect(text).toMatch(/\/join\/dawn#n=[A-Za-z0-9_-]{43}/);
-      expect(text).not.toMatch(/ms(cr|ac|at|kd)_/);
-      const row = (await server.store.get(
-        "SELECT kind, sponsored_by FROM members WHERE name = 'nick-scout'",
-      )) as { kind: string; sponsored_by: string };
-      const dawn = (await getTeamBySlug(server.store, 'dawn'))!;
-      const nick = (await server.store.get(
-        "SELECT id FROM members WHERE team_id = ? AND name = 'nick'",
-        [dawn.id],
-      )) as { id: string };
-      expect(row).toEqual({ kind: 'agent', sponsored_by: nick.id });
-      expect(await audits('member.sponsored_agent_created')).toHaveLength(1);
-
-      // Lane 01M3FBK3S6: the team is told, in the sponsor's voice, and the creator's reply says so.
-      expect(text).toContain('The team has been told');
-      const notices = async () =>
-        (await server.store.all(
-          "SELECT m.body, m.meta, f.name AS sender FROM messages m JOIN members f ON f.id = m.from_member WHERE m.team_id = ? AND m.meta LIKE '%agent_created%'",
-          [dawn.id],
-        )) as { body: string; meta: string; sender: string }[];
-      const [notice, ...rest] = await notices();
-      expect(rest).toHaveLength(0);
-      expect(notice!.sender).toBe('nick');
-      expect(notice!.body).toBe('nick created agent nick-scout');
-      expect(JSON.parse(notice!.meta).agent_created).toEqual({
-        agent: 'nick-scout',
-        sponsor: 'nick',
-      });
-
-      const dup = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        { name: 'team_agent_create', arguments: { name: 'nick-scout' } },
-        3,
-      );
-      expect(dup.json.result.isError).toBe(true);
-      expect(dup.json.result.content[0].text).toContain('already exists');
-      // A refused mint announces nothing.
-      expect(await notices()).toHaveLength(1);
+      expect(pair.access_token).toMatch(/^msat_/);
+      const res = await mcpCall(pair.access_token, 'tools/list', {});
+      expect(res.status).toBe(503);
+      expect(res.json.error.message).toBe(REMOTE_MCP_NOT_CONFIGURED);
+      expect((await get('/.well-known/oauth-protected-resource/mcp/dawn')).status).toBe(200);
     });
 
     it('missing bearer is 401; unknown team is 404', async () => {
@@ -1195,11 +1160,11 @@ withDrivers('oauth-http', (_o, kind) => {
       expect(authz.status).toBe(302);
       const tok = await tokenFor(authz, client_id);
       expect(tok.status).toBe(200);
-      const inbox = await mcpCall(tok.json.access_token, 'tools/call', {
-        name: 'team_inbox_check',
+      const who = await mcpCall(tok.json.access_token, 'tools/call', {
+        name: 'whoami',
         arguments: {},
       });
-      expect(inbox.error).toBeUndefined();
+      expect(JSON.parse(who.json.result.content[0].text).member).toBe('ada');
 
       const team = (await getTeamBySlug(server.store, 'dawn'))!;
       const ada = (await server.store.get(
@@ -1242,28 +1207,31 @@ withDrivers('oauth-http', (_o, kind) => {
       expect((await audits('member.invite_admitted'))[0]).toMatchObject({ actor: 'gia' });
       expect(JSON.stringify((await audits('member.invite_admitted'))[0])).toContain('guest');
 
-      // The phone is offered the talk tools only (§8).
-      const list = await mcpCall(tok, 'tools/list', {}, 2);
-      expect(list.json.result.tools.map((t: any) => t.name).sort()).toEqual([
-        'team_inbox_check',
-        'team_join',
-        'team_send',
-      ]);
-      // It can talk…
-      const said = await mcpCall(
-        tok,
-        'tools/call',
-        { name: 'team_send', arguments: { act: 'message', body: 'hi from the room' } },
-        3,
-      );
-      expect(JSON.stringify(said.json.result)).toContain('sent');
-      // …but not coordinate: a coordination act and a coordination route are refused (§2).
-      const handoff = await mcpCall(
-        tok,
-        'tools/call',
-        { name: 'team_send', arguments: { act: 'handoff', to: 'nick', body: 'take this' } },
-        4,
-      );
+      // The factory is told the seat is talk-only, so the phone is offered the talk tools only (§8;
+      // the adapter's listing is tested in the CLI package).
+      await mcpCall(tok, 'tools/list', {}, 2);
+      expect(seats.at(-1)!.capabilities.can_coordinate).toBe(false);
+      // It can talk, but not coordinate: a coordination act and a coordination route are refused
+      // by the routes the adapter's tools call (§2).
+      const act = (a: string, body: string) => ({
+        envelope: {
+          id: `g-${a}-${Date.now()}`,
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          from: 'gia',
+          to: a === 'handoff' ? { kind: 'member', name: 'nick' } : { kind: 'team' },
+          act: a,
+          body,
+          ts: Date.now(),
+        },
+      });
+      const said = await postJson('/teams/dawn/messages', act('message', 'hi from the room'), {
+        authorization: `Bearer ${tok}`,
+      });
+      expect(said.status).toBeLessThan(300);
+      const handoff = await postJson('/teams/dawn/messages', act('handoff', 'take this'), {
+        authorization: `Bearer ${tok}`,
+      });
       expect(JSON.stringify(handoff.json)).toContain('talk-only seat');
       const lane = await postJson(
         '/teams/dawn/lanes',
@@ -1523,21 +1491,14 @@ withDrivers('oauth-http', (_o, kind) => {
     }
 
     async function joinedAs(bearer: string): Promise<string> {
-      const r = await mcpCall(bearer, 'tools/call', { name: 'team_join', arguments: {} }, 9);
+      const r = await mcpCall(bearer, 'tools/call', { name: 'whoami', arguments: {} }, 9);
       return JSON.stringify(r.json?.result ?? r.json);
     }
 
     it('the pasted link signs the agent in: the chain is bound to the agent seat', async () => {
       const link = await createAgent(nickCred, 'nick-scout');
       const { pair } = await connect(link);
-      expect(await joinedAs(pair.access_token)).toContain('Already joined dawn as nick-scout');
-      const send = await mcpCall(
-        pair.access_token,
-        'tools/call',
-        { name: 'team_send', arguments: { act: 'message', body: 'hello from the agent' } },
-        2,
-      );
-      expect(JSON.stringify(send.json.result)).toContain('sent');
+      expect(await joinedAs(pair.access_token)).toContain('nick-scout');
       const row = (await audits('member.agent_connected'))[0]!;
       expect(row.actor).toBe('nick');
       expect(row.target).toBe('nick-scout');
@@ -1744,32 +1705,6 @@ withDrivers('oauth-http', (_o, kind) => {
         );
         expect(r.status, policy).toBe(403);
       }
-    });
-
-    it('team_agent_connect on /mcp hands a teammate the link under any_member, and refuses under sponsor', async () => {
-      const dana = await human('dana');
-      await createAgent(nickCred, 'nick-scout');
-      const { pair } = await signInPair(dana, 'dana');
-      await mcpCall(pair.access_token, 'initialize', {
-        protocolVersion: '2025-06-18',
-        capabilities: {},
-        clientInfo: { name: 'phone', version: '0' },
-      });
-      const call = async () =>
-        await mcpCall(
-          pair.access_token,
-          'tools/call',
-          { name: 'team_agent_connect', arguments: { name: 'nick-scout' } },
-          7,
-        );
-      const refused = await call();
-      expect(refused.json.result.isError).toBe(true);
-      expect(refused.json.result.content[0].text).toMatch(/sponsor or an admin/);
-      await setAgentConnect('any_member');
-      const ok = await call();
-      expect(ok.json.result.isError).toBeUndefined();
-      expect(ok.json.result.content[0].text).toMatch(/\/join\/dawn#n=[A-Za-z0-9_-]{43}/);
-      expect(ok.json.result.content[0].text).not.toMatch(/ms(cr|ac|at|kd)_/);
     });
   });
 });

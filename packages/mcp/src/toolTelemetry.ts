@@ -9,7 +9,7 @@ import type {
 } from '@musterd/protocol';
 import type { MusterdClient } from './client.js';
 import { wasCoerced } from './coerce.js';
-import { TOOL_NAMES } from './toolNames.js';
+import { REMOTE_TOOL_NAMES, TOOL_NAMES } from './toolNames.js';
 
 /**
  * First-party tool-call telemetry (ADR 144 increment 1) — distinct from the OTel spans in
@@ -27,7 +27,7 @@ import { TOOL_NAMES } from './toolNames.js';
 
 /** Tool names outside our registered surface collapse to one bucket — a hallucinated tool name
  * must not mint an aggregation key per typo. */
-const KNOWN_TOOLS: ReadonlySet<string> = new Set<string>(TOOL_NAMES);
+const KNOWN_TOOLS: ReadonlySet<string> = new Set<string>([...TOOL_NAMES, ...REMOTE_TOOL_NAMES]);
 const UNKNOWN_TOOL = '(unknown)';
 
 /** The SDK reports an input-schema bounce as an in-band error result (it never reaches the tool

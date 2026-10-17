@@ -126,19 +126,17 @@ describe('a full pool is not an outage (lane 01M3ZC3G35)', () => {
 
   it("/mcp answers a store failure inside the SDK's per-request factory 503, not the SDK's bare 500", async () => {
     resetMcpHandlersForTest();
-    const actual = await vi.importActual<typeof import('../store/teams.js')>('../store/teams.js');
-    const limit = Error.stackTraceLimit;
-    Error.stackTraceLimit = 50;
-    vi.mocked(requireTeam).mockImplementation(async (db, slug) => {
-      // Only the factory's read fails; the route's own team and auth reads run as normal.
-      if (new Error().stack?.includes('buildRemoteServer'))
+    // ADR 630: the factory is the embedder's (`musterd serve` composes the adapter); here it is a
+    // stub whose store read fails, as the adapter's would on a saturated pool. The route's own team
+    // and auth reads run as normal.
+    const { s, seed, url } = await bootCloudWithOutage({
+      remoteMcp: () => {
         throw new DriverError(
           `${POOL_EXHAUSTED_SENTENCE}: ${PG_POOL_ACQUIRE_TIMEOUT}`,
           'saturated',
         );
-      return actual.requireTeam(db, slug);
+      },
     });
-    const { s, seed, url } = await bootCloudWithOutage();
     try {
       const revive = await createTeam(seed, { slug: 'revive' });
       const bearer = await oauthBearer(seed, revive);
@@ -146,7 +144,6 @@ describe('a full pool is not an outage (lane 01M3ZC3G35)', () => {
       expect(r.status, r.body).toBe(503);
       expect(JSON.parse(r.body)).toEqual(exhaustedBody);
     } finally {
-      Error.stackTraceLimit = limit;
       await s.close();
     }
   });

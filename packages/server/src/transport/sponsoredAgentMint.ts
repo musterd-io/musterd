@@ -20,8 +20,8 @@ import { getPolicy, getTeamById } from '../store/teams.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 
 /**
- * The one mint path for member-created agents (ADR 449 §3), shared by `POST …/members/agents` and
- * the remote `team_agent_create` tool so the two surfaces cannot drift: the file-backed refusal,
+ * The one mint path for member-created agents (ADR 449 §3), behind `POST …/members/agents` — which
+ * the adapter's remote `team_agent_create` calls (ADR 630), so there is one surface: the file-backed refusal,
  * the store's invariants (human-only, inherited expiry, cap, no revived names), the audit row, the
  * team notice, and the connect link.
  */
@@ -83,8 +83,8 @@ export async function mintSponsoredAgent(
 }
 
 /**
- * Issue a connect link for a live sponsored agent (ADR 456 §2), shared by
- * `POST …/members/agents/:name/connect` and the remote `team_agent_connect` tool: the team's
+ * Issue a connect link for a live sponsored agent (ADR 456 §2), behind
+ * `POST …/members/agents/:name/connect` (the adapter's remote `team_agent_connect` calls it): the team's
  * `agent_connect` policy decides who may (`connectRefusal`), the issuer is recorded on the nonce so
  * it bounds the session it starts (§3), and the issue is audited with the issuer as actor (§4).
  */

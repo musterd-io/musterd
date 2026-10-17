@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import { PG_POOL_ACQUIRE_TIMEOUT } from '../db/pgDriver.js';
 import { openTestDriver, testCloudPools } from '../db/testing.js';
 import { createServer } from '../index.js';
+import type { RemoteMcpFactory } from '../transport/mcpHttp.js';
 import type { AffinityOptions } from './affinity.js';
 
 /**
@@ -50,7 +51,7 @@ export async function bootCloud(
  *  refuses every new connection on the main store's pools (app and operator alike);
  *  `setExhausted(true)` answers every checkout as pg-pool does when no pooled client came back in
  *  time — the database is fine, the pool is full (lane 01M3ZC3G35). */
-export async function bootCloudWithOutage() {
+export async function bootCloudWithOutage(opts: { remoteMcp?: RemoteMcpFactory } = {}) {
   stubCloudEnv();
   const seed = await openTestDriver('pglite');
   await openTestDriver('pglite', { store: 'trace' });
@@ -71,7 +72,12 @@ export async function bootCloudWithOutage() {
       end: () => p.end(),
     };
   };
-  const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
+  const s = createServer({
+    cloudPools: { ...pools, main },
+    rosterRoots: [],
+    port: 0,
+    ...(opts.remoteMcp ? { remoteMcp: opts.remoteMcp } : {}),
+  });
   await s.listen();
   return {
     s,

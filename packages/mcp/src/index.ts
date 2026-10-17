@@ -28,6 +28,7 @@ import {
   abstainEvidence,
   abstainReconcile,
   abstainVerify,
+  edgeFetch,
   remoteConfig,
   remoteProject,
   type RemoteSeat,
@@ -36,6 +37,7 @@ import { instrumentToolRepair } from './repair.js';
 import { scopeToolSurface } from './scope.js';
 import { instrumentTools, recordAdapterInitialization, startMcpTelemetry } from './telemetry.js';
 import { HOT_TOOLS } from './toolNames.js';
+import { registerAgents } from './tools/agents.js';
 import { registerAvailability } from './tools/availability.js';
 import { registerGoals } from './tools/goals.js';
 import { registerInboxCheck } from './tools/inboxCheck.js';
@@ -60,6 +62,8 @@ import { ADAPTER_VERSION } from './version.js';
 
 export { MusterdClient } from './client.js';
 export { remoteConfig, type RemoteSeat } from './remote.js';
+// The talk surface (ADR 621 §8), for the CLI's end-to-end pin of the remote listing (ADR 630).
+export { TALK_ONLY_TOOLS } from './scope.js';
 export { loadMcpConfig, type McpConfig } from './config.js';
 export { bind } from './bind.js';
 export { resolveWorkspace, resolveProvenance } from './workspace.js';
@@ -133,7 +137,7 @@ export function primerInstructions(config: McpConfig): string {
 
 /** The canonical registered-tool names (ADR 085) — kept in a dependency-free module so the guidance
  * drift check can import it without the MCP SDK; re-exported here for normal consumers. */
-export { HOT_TOOLS, TOOL_NAMES } from './toolNames.js';
+export { HOT_TOOLS, REMOTE_TOOL_NAMES, TOOL_NAMES } from './toolNames.js';
 
 /* `measureToolSurface` is deliberately NOT re-exported here. It lives in `surfaceMeasure.ts`, which
  * imports `@modelcontextprotocol/client` — a devDependency, because measuring the surface means
@@ -347,6 +351,8 @@ export function buildMcpServer(
   } else registerLanes(server, client);
   registerGoals(server, client);
   registerInsights(server, client);
+  // ADR 630: the phone's agent tools exist on the remote rail only (`REMOTE_TOOL_NAMES`).
+  if (remote) registerAgents(server, client, config);
   return server;
 }
 
@@ -373,7 +379,7 @@ export function buildMcpServer(
  */
 export function buildRemoteMcpServer(seat: RemoteSeat): McpServer {
   const config = remoteConfig(seat);
-  const client = new MusterdClient(config, { remote: true });
+  const client = new MusterdClient(config, { remote: true, fetch: edgeFetch(seat.headers) });
   // No startup measure (`surface: null`): ADR 584's timings are an adapter launch's, and this is
   // a request inside a daemon that has been up for days.
   const recorder: ToolCallRecorder = new ToolCallRecorder({

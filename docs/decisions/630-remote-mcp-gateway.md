@@ -65,6 +65,8 @@ already depends on `@musterd/server` for its tests).
    cap and the protected-resource metadata stay in `mcpHttp.ts`. In Cloud mode the host allowlist
    exempts loopback peers, so the factory's own calls are not refused by `hostAllows`. ADR 608 needs
    nothing new: the request is already on the owning machine, and loopback stays on it.
+   _(Amended 2026-10-17: no loopback exemption was built. The calls present the phone's own edge
+   headers instead; see the 2026-10-17 increments 2–3 note in Consequences.)_
 6. **`tools/list` follows the seat.** The factory fetches the seat's effective capabilities and the
    adapter's `scopeToolSurface` renders only what the seat may call (ADR 621 §8).
 7. **Remote calls are counted.** The adapter's tool-call recorder posts with surface `remote`, so
@@ -111,6 +113,24 @@ already depends on `@musterd/server` for its tests).
   rail (`stdio` or `remote`), `tool_call_stats` keys on it, and `GET /report` splits a tool by rail
   when it saw both. Decision 7 holds as amended once that lands. The buckets keep a sum and a max,
   so the Experiment below is restated on mean and max; nick ordered this before increments 2 and 3.
+- _2026-10-17, increments 2 and 3 (lanes `01M51GQNG1`, `01M51GQSJF`), shipped as one change:_
+  - **One PR, not two.** The daemon refreshes itself on every merge, so increment 2 alone (the
+    daemon's tools deleted, no factory wired yet) would have answered phones 503 until increment 3
+    landed.
+  - **No loopback exemption (amends decision 5).** Spec §5.1 and `cloud/loopbackAudit.test.ts`
+    forbid trusting a peer address on Cloud, where every request arrives from the proxy; an
+    exemption would have let anything appearing as loopback past the host gate. Instead the daemon
+    hands the factory the phone's `host`, `x-forwarded-proto` and `cf-connecting-ip`, and the
+    adapter presents them on each loopback call (`edgeFetch`, over `node:http`, since `fetch`
+    drops `Host`). The host gate then passes on the team's own host. A sponsored agent's connect
+    link names the public host, where a loopback `Host` would have produced a `127.0.0.1` link. And
+    ADR 634's per-client budget charges each phone, instead of every phone sharing one budget
+    keyed on `127.0.0.1`.
+  - **The agent tools moved, not deleted.** `team_agent_create` and `team_agent_connect` existed
+    only in the daemon's copy, which the join page and the demo use. They are now adapter tools
+    on the remote rail only (`REMOTE_TOOL_NAMES`).
+  - **The factory gets the seat's capabilities from the daemon,** read off the member row the
+    bearer already resolved (`resolveCapabilities`), rather than fetching them itself.
 
 ## Observability & Evaluation
 

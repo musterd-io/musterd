@@ -50,6 +50,7 @@ import { startTracePush } from './sync/tracePush.js';
 import { registerRuntimeGauges, startTelemetry, telemetryEnabled } from './telemetry.js';
 import { handleHttp } from './transport/http.js';
 import { Hub } from './transport/hub.js';
+import type { RemoteMcpFactory } from './transport/mcpHttp.js';
 import { broadcastReconciled } from './transport/memberAdded.js';
 import { startProvisionSweep, sweepProvisionsPass } from './transport/sponsoredAgentMint.js';
 import { attachWsServer } from './transport/ws.js';
@@ -113,6 +114,13 @@ export interface ServerOptions {
   cloudPools?: { main: PoolFactory; trace: PoolFactory };
   /** Tests only: the ADR 608 affinity (this machine's id and the peer list) instead of the env's. */
   affinity?: AffinityOptions;
+  /**
+   * ADR 630 §2: builds the remote MCP server for one `/mcp/:team` request. The server implements
+   * no MCP tools of its own and never imports the adapter; `musterd serve` composes this from
+   * `@musterd/mcp`. Absent, tool traffic answers 503 "remote MCP not configured" and the OAuth
+   * routes still work.
+   */
+  remoteMcp?: RemoteMcpFactory;
 }
 
 export interface RunningServer {
@@ -245,6 +253,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     affinity,
     config,
     rosterRoots: opts.rosterRoots ?? resolveRosterRoots(),
+    remoteMcp: opts.remoteMcp,
   };
   // Spec §12.1: the transports scope `ctx` per request/connection; everything the daemon does on its
   // own behalf — the loops, telemetry, reconcile, the sweeps — is about every team and runs as the
@@ -648,6 +657,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
 export { resolveConfig } from './config.js';
 export { openDb, openDriver } from './db/open.js';
 export type { Driver, Params } from './db/driver.js';
+// ADR 630: the seam `musterd serve` composes the remote MCP through.
+export type { RemoteMcpFactory, RemoteMcpSeat } from './transport/mcpHttp.js';
 export { DriverError } from './db/driver.js';
 export { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 // The machine's node credentials (ADR 328 §2) — exported so the CLI's tests can assert what the
