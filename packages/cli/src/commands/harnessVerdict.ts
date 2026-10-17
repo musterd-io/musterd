@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import {
   CLASSIFIED_DETAIL,
   type FragmentInspection,
@@ -92,8 +93,70 @@ export function receiptVerdict(r: ReconcileResult): string {
   }
 }
 
-function targetOf(r: ReconcileResult): string {
-  return r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
+interface ResourceRow {
+  harness: string;
+  fragmentKey: string;
+  resourceKey: string;
+}
+
+/**
+ * When one harness prints the same fragment key twice, name the row's repository or folder path
+ * (ADR 638). A unique key returns null, so the one-row frame stays character-compatible. Paths
+ * that match fall back to the registration id.
+ */
+export function fragmentDisambiguator(
+  row: ResourceRow,
+  peers: readonly ResourceRow[],
+  home: string = homedir(),
+): string | null {
+  if (!row.fragmentKey) return null;
+  const same = peers.filter((p) => p.harness === row.harness && p.fragmentKey === row.fragmentKey);
+  if (same.length < 2) return null;
+  const located = same.map((p) => locateResource(p.resourceKey));
+  const mine = locateResource(row.resourceKey);
+  const roots = new Set(located.map((l) => l.root ?? `\0${l.scope}`));
+  if (roots.size > 1) return mine.root ? shrinkHome(mine.root, home) : mine.scope;
+  const regs = new Set(located.map((l) => l.registration).filter((r): r is string => r !== null));
+  if (regs.size > 1 && mine.registration) return mine.registration;
+  return null;
+}
+
+function locateResource(resourceKey: string): {
+  scope: string;
+  root: string | null;
+  registration: string | null;
+} {
+  const parts = resourceKey.split('\u0000');
+  const scope = parts[0] ?? '';
+  if (scope === 'repo-shared') {
+    return { scope, root: parts[1] || null, registration: parts[2] || null };
+  }
+  if (scope === 'folder') return { scope, root: parts[1] || null, registration: null };
+  return { scope: scope || 'resource', root: null, registration: null };
+}
+
+function shrinkHome(path: string, home: string): string {
+  if (home !== '' && (path === home || path.startsWith(`${home}/`))) {
+    return `~${path.slice(home.length)}`;
+  }
+  return path;
+}
+
+/** Status row. Columns stay fragment key, scope, verdict; a collision adds a dim path after. */
+export function statusFragmentLine(
+  f: FragmentInspection,
+  peers: readonly FragmentInspection[],
+): string {
+  const where = fragmentDisambiguator(f, peers);
+  const suffix = where ? `  ${theme.meta(where)}` : '';
+  return `  ${f.fragmentKey.padEnd(13)} ${f.scope.padEnd(12)} ${verdictOf(f)}${suffix}`;
+}
+
+function targetOf(r: ReconcileResult, peers: readonly ReconcileResult[]): string {
+  const where = fragmentDisambiguator(r, peers);
+  if (!where) return r.fragmentKey ? `${r.harness} (${r.fragmentKey})` : r.harness;
+  if (!r.fragmentKey) return `${r.harness} @ ${where}`;
+  return `${r.harness} (${r.fragmentKey} @ ${where})`;
 }
 
 function actionOf(r: ReconcileResult): string {
@@ -101,12 +164,17 @@ function actionOf(r: ReconcileResult): string {
 }
 
 /** Configure's historical two-space receipt. One fragment, no column. */
-export function renderConfigureReceipt(r: ReconcileResult): string {
-  return `  ${targetOf(r)}  ${actionOf(r)}${receiptVerdict(r)}`;
+export function renderConfigureReceipt(
+  r: ReconcileResult,
+  peers: readonly ReconcileResult[] = [r],
+): string {
+  return `  ${targetOf(r, peers)}  ${actionOf(r)}${receiptVerdict(r)}`;
 }
 
 /** Wire rows. Every target pads to the widest label in this report, then one space, then the verdict. */
 export function renderWireReceipts(results: ReconcileResult[]): string[] {
-  const width = results.reduce((n, r) => Math.max(n, targetOf(r).length), 0);
-  return results.map((r) => `  ${targetOf(r).padEnd(width)} ${actionOf(r)}${receiptVerdict(r)}`);
+  const width = results.reduce((n, r) => Math.max(n, targetOf(r, results).length), 0);
+  return results.map(
+    (r) => `  ${targetOf(r, results).padEnd(width)} ${actionOf(r)}${receiptVerdict(r)}`,
+  );
 }
