@@ -5,6 +5,7 @@ import {
   type SyncPullLaneEvent,
   isWireAttestationSource,
   LANE_TERMINAL_STATES,
+  LanePreRegisteredSchema,
   LaneRequestedSchema,
   requestedRecordJson,
   type LaneState,
@@ -183,8 +184,9 @@ async function projectLaneEvent(
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
         requested.success ? requestedRecordJson(requested.data) : null,
         typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
-        d['pre_registered'] && typeof d['pre_registered'] === 'object'
-          ? JSON.stringify(d['pre_registered'])
+        // ADR 645: parsed, never trusted — a row that fails the schema folds as undeclared.
+        LanePreRegisteredSchema.safeParse(d['pre_registered']).success
+          ? JSON.stringify(LanePreRegisteredSchema.parse(d['pre_registered']))
           : null,
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -299,11 +301,13 @@ async function projectLaneEvent(
           field === 'follows_up' ||
           field === 'unfinished_todos' ||
           field === 'declined' ||
-          field === 'read_verdict' ||
-          field === 'pre_registered'
+          field === 'read_verdict'
         )
           value = value === null ? null : JSON.stringify(value);
-        else if (field === 'requested') {
+        else if (field === 'pre_registered') {
+          const parsed = LanePreRegisteredSchema.safeParse(value);
+          value = parsed.success ? JSON.stringify(parsed.data) : null;
+        } else if (field === 'requested') {
           if (value === null) value = null;
           else {
             const parsed = LaneRequestedSchema.safeParse(value);

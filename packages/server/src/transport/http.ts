@@ -6267,7 +6267,7 @@ export async function handleHttp(
         }
         await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncPullRequestSchema, await readJson(req));
-        const answer = await offerPull(ctx, team, body.host, Date.now());
+        const answer = await offerPull(ctx, team, body.host, Date.now(), node.id);
         if (answer.offer) await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, answer);
       }

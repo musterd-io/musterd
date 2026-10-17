@@ -22,6 +22,7 @@ import {
   listMembers,
   memberStandingRefusal,
 } from './members.js';
+import { seatBindings } from './nodes.js';
 import { listHostSeen, listResidency } from './residency.js';
 import { type MemberRow, type TeamRow, parseRoles, resolveCapabilities } from './rows.js';
 import { getPolicy } from './teams.js';
@@ -220,6 +221,10 @@ export async function offerPull(
   team: TeamRow,
   host: string,
   now = Date.now(),
+  /** The node the poll came from (a joiner's forward, §6). Only seats bound to it (ADR 358
+   *  `seat_nodes`) may be offered: a machine credential speaks for its own residents, never for
+   *  a host label it does not hold. Undefined on the hub's own host poll. */
+  nodeId?: string,
 ): Promise<PullPollResponse> {
   const db = ctx.db;
   const inFlight = await inFlightForHost(db, team.id, host);
@@ -231,6 +236,11 @@ export async function offerPull(
   for (const r of (await listResidency(db, team.id)).filter((r) => r.host === host)) {
     const member = await getMemberById(db, r.member_id);
     if (!member || member.kind === 'service' || memberStandingRefusal(member, now)) continue;
+    if (
+      nodeId !== undefined &&
+      !(await seatBindings(db, member.id)).some((b) => b.node_id === nodeId)
+    )
+      continue;
     if ((await offersToday(db, team.id, member.name, now)) >= policy.daily_cap_per_seat) continue;
     seats.push({
       member,
@@ -258,11 +268,13 @@ export async function offerPull(
     const id = ulid();
     const askId = ulid();
     const minutes = Math.round(windowMs / 60_000);
-    const run = lane.pre_registered!.run;
+    // The opener reads EXACTLY what the seat's work order will carry (no clipping): a declaration
+    // smuggled past the announcement is the one thing the window exists to let a human stop.
+    const pre = lane.pre_registered!;
     const body =
-      `host ${host} proposes seat ${chosen.member.name} for lane ${lane.id} "${lane.title}" ` +
-      `(pre-registered: ${run.length > 200 ? `${run.slice(0, 200)}…` : run}; ` +
-      `expected spend $${lane.pre_registered!.expected_spend}). ` +
+      `host ${host} proposes seat ${chosen.member.name} for lane ${lane.id} "${lane.title}", ` +
+      `declared pre-registered by ${pre.by} (expected spend $${pre.expected_spend}).\n` +
+      `Run: ${pre.run}\nVerdict rule: ${pre.verdict_rule}\nRecord in: ${pre.record}\n` +
       `Answer in ${minutes} min to stop it — a steer or decline here, or any change to the lane, ` +
       `holds it; silence lets ${chosen.member.name} claim it (ADR 645).`;
     await routeEnvelope(

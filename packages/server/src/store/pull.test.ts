@@ -5,9 +5,11 @@ import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { routeEnvelope } from '../protocol/route.js';
+import { decideLanePatch } from '../sync/claim.js';
 import { listAuditByAction } from './audit.js';
 import { getLane, openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
+import { bindNode, bindSeatToNode } from './nodes.js';
 import {
   PULL_GRANT_TTL_MS,
   afterPullClaim,
@@ -147,6 +149,45 @@ withDrivers('pull', (o) => {
           actor: 'stanley',
         }),
       ).rejects.toThrow(/is claimed/);
+    });
+  });
+
+  describe('who may declare, and which node may be offered (security review, 2026-10-17)', () => {
+    it('only the opener or an admin sets, replaces or withdraws the declaration', async () => {
+      const { db, team } = await fixture();
+      await addMember(db, team, { name: 'dolly', kind: 'agent' });
+      const plain = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'nick',
+        { title: 'p', project: 'runtime' },
+        T0,
+      );
+      const dolly = { name: 'dolly', kind: 'agent' };
+      await expect(
+        decideLanePatch(db, team.id, dolly, plain, { pre_registered: DECL }, 60_000),
+      ).rejects.toThrow(/only the opener/);
+      await expect(
+        decideLanePatch(
+          db,
+          team.id,
+          { name: 'nick', kind: 'human' },
+          plain,
+          { pre_registered: DECL },
+          60_000,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it("a joiner's forwarded poll is offered only seats bound to that node", async () => {
+      const { db, team, ctx, open, seat, nick } = await fixture();
+      await open();
+      await bindNode(db, team.id, 'node-a', 'laptop', 'msnode_node-a', nick.name);
+      await bindNode(db, team.id, 'node-b', 'other', 'msnode_node-b', nick.name);
+      await bindSeatToNode(db, team.id, seat.id, 'node-a', T0);
+      expect((await offerPull(ctx, team, HOST, T0, 'node-b')).offer).toBeNull();
+      expect((await offerPull(ctx, team, HOST, T0, 'node-a')).offer?.seat).toBe('stanley');
     });
   });
 

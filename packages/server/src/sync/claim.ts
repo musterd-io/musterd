@@ -389,6 +389,17 @@ export async function decideLanePatch(
         `"${body.owner_seat}" is a service seat — a lane cannot be handed to a ledger seat (ADR 232)`,
       );
   }
+  // ADR 645 §1: the declaration is the opener's (or an admin's) — it is what a host will run
+  // unprompted, so a teammate cannot set or replace it on someone else's lane.
+  if (body.pre_registered !== undefined && member.name !== before.created_by) {
+    const row = await getMemberByName(db, teamId, member.name);
+    if (!(row && resolveCapabilities(row).is_admin))
+      throw new MusterdError(
+        'forbidden',
+        `only the opener of lane "${before.id}" (${before.created_by}) or an admin may declare ` +
+          `it pre-registered or withdraw the declaration (ADR 645)`,
+      );
+  }
   decideParkPatch(member, before, body);
   decidePickPatch(member, before, body);
   // ADR 645 §4: a pull claim is the seat's own, and only the (lane, seat) pair the hub granted
