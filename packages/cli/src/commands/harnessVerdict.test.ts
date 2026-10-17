@@ -4,10 +4,13 @@ import {
   type FragmentInspection,
   type ReconcileResult,
 } from '../onboard/reconcile/engine.js';
+import { repoSharedResourceKey } from '../onboard/reconcile/fragments.js';
 import {
+  fragmentDisambiguator,
   receiptVerdict,
   renderConfigureReceipt,
   renderWireReceipts,
+  statusFragmentLine,
   verdictOf,
 } from './harnessVerdict.js';
 
@@ -110,5 +113,109 @@ describe('frame-9 glyphs, one mapper for status and receipts', () => {
     const mark = (line: string) => line.indexOf('✓');
     expect(mark(lines[0]!)).toBe(mark(lines[1]!));
     expect(mark(lines[0]!)).toBeGreaterThan('  claude-code (mcp.musterd)'.length);
+  });
+
+  it('a unique fragment key gains no path, and a collision names the resource after the verdict', () => {
+    const oldKey = repoSharedResourceKey('/repo-old', 'musterd', 'claude-code', 'mcp.musterd');
+    const newKey = repoSharedResourceKey('/repo-new', 'musterd', 'claude-code', 'mcp.musterd');
+    const row = (resourceKey: string, planned: FragmentInspection['planned']): FragmentInspection =>
+      inspection({
+        harness: 'claude-code',
+        resourceKey,
+        fragmentKey: 'mcp.musterd',
+        scope: 'repo-shared',
+        observation: 'owned-exact',
+        planned,
+        plan: planned === 'applied' ? 'create' : 'none',
+        ownedHere: true,
+        owners: ['/w'],
+      });
+    const live = row(newKey, 'applied');
+    const stale = row(oldKey, 'unchanged');
+    const peers = [live, stale];
+    expect(statusFragmentLine(live, [live])).toBe('  mcp.musterd   repo-shared  → needs wire');
+    expect(statusFragmentLine(stale, peers)).toBe(
+      '  mcp.musterd   repo-shared  ✓ in place  /repo-old',
+    );
+    expect(statusFragmentLine(live, peers)).toBe(
+      '  mcp.musterd   repo-shared  → needs wire  /repo-new',
+    );
+    expect(
+      fragmentDisambiguator(
+        { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: oldKey },
+        [
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: oldKey },
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: newKey },
+        ],
+        '/Users/ada',
+      ),
+    ).toBe('/repo-old');
+    const homeKey = repoSharedResourceKey(
+      '/Users/ada/repo-old',
+      'musterd',
+      'claude-code',
+      'mcp.musterd',
+    );
+    const homeNew = repoSharedResourceKey(
+      '/Users/ada/repo-new',
+      'musterd',
+      'claude-code',
+      'mcp.musterd',
+    );
+    expect(
+      fragmentDisambiguator(
+        { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: homeKey },
+        [
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: homeKey },
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: homeNew },
+        ],
+        '/Users/ada',
+      ),
+    ).toBe('~/repo-old');
+    const sameRootA = repoSharedResourceKey('/repo', 'old-reg', 'claude-code', 'mcp.musterd');
+    const sameRootB = repoSharedResourceKey('/repo', 'new-reg', 'claude-code', 'mcp.musterd');
+    expect(
+      fragmentDisambiguator(
+        { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: sameRootA },
+        [
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: sameRootA },
+          { harness: 'claude-code', fragmentKey: 'mcp.musterd', resourceKey: sameRootB },
+        ],
+      ),
+    ).toBe('old-reg');
+  });
+
+  it('configure and wire receipts name a colliding fragment, and a different harness does not', () => {
+    const oldKey = repoSharedResourceKey('/repo-old', 'musterd', 'claude-code', 'mcp.musterd');
+    const newKey = repoSharedResourceKey('/repo-new', 'musterd', 'claude-code', 'mcp.musterd');
+    const stale = receipt({
+      harness: 'claude-code',
+      fragmentKey: 'mcp.musterd',
+      resourceKey: oldKey,
+      result: 'unchanged',
+      action: 'none',
+    });
+    const live = receipt({
+      harness: 'claude-code',
+      fragmentKey: 'mcp.musterd',
+      resourceKey: newKey,
+      result: 'unchanged',
+      action: 'none',
+    });
+    const lines = renderWireReceipts([stale, live]);
+    expect(lines[0]).toContain('claude-code (mcp.musterd @ /repo-old)');
+    expect(lines[1]).toContain('claude-code (mcp.musterd @ /repo-new)');
+    const mark = (line: string) => line.indexOf('✓');
+    expect(mark(lines[0]!)).toBe(mark(lines[1]!));
+    expect(renderConfigureReceipt(live, [stale, live])).toContain(
+      'claude-code (mcp.musterd @ /repo-new)',
+    );
+    const otherHarness = receipt({
+      harness: 'muse',
+      fragmentKey: 'mcp.musterd',
+      resourceKey: 'machine\u0000muse\u0000mcp.musterd',
+      result: 'unchanged',
+    });
+    expect(renderWireReceipts([live, otherHarness]).every((l) => !l.includes(' @ '))).toBe(true);
   });
 });

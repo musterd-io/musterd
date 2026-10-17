@@ -86,6 +86,9 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
    `✗ container unreadable` · `journal pending — re-run musterd wire`.
    Exit code annotation: **0** only when every desired fragment is usable and every undesired owned
    contribution is released (pending unavailability still exits 0); otherwise **1**.
+   When two rows in one harness share a fragment key, each row keeps those columns and adds the
+   resource's repository or folder path after the verdict, dim. A unique key gains nothing. When
+   those paths match, the row adds the registration id instead.
 10. `state/harness-legacy` — status/wire over a version-1 identity: red
     `✗ this worktree is pre-ADR-281 (version-1 identity) — run musterd harness configure to convert it`,
     exit **1** (wire exits **6** when no selection exists at all:

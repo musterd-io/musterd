@@ -165,8 +165,11 @@ interface Classified {
 }
 
 /**
- * The frozen action matrix (ADR 282 §6). Pure: desired × observation × ledger ownership → the one
- * planned action and its result classification. `legacyRepair` gates the single marker repair.
+ * The frozen action matrix (ADR 282 §6), plus the superseded-key rule (ADR 638). Pure: desired ×
+ * observation × ledger ownership → the one planned action and its result classification.
+ * `legacyRepair` gates the single marker repair. `supersededSibling` is set when this ledger key
+ * is no longer named by the current desired fragments while the harness stays selected: a string
+ * is that sibling's intent fingerprint, and `null` means no desired fragment shares the key.
  */
 export function classifyFragment(
   desired: boolean,
@@ -175,9 +178,38 @@ export function classifyFragment(
   worktreeRoot: string,
   intentFingerprint: string | null,
   legacyRepair: boolean,
+  supersededSibling?: string | null,
 ): Classified {
   if (observed.state === 'invalid-container') {
     return { observation: 'invalid-container', plan: 'none', planned: 'invalid-container' };
+  }
+  // A desired sibling that already has this content — or an absent fragment this workspace is the
+  // only owner of — drops the ledger row and does not call apply. Content that still differs falls
+  // through; the caller passes desired=true for that case so the shared registration is not removed.
+  if (supersededSibling !== undefined && supersededSibling !== null) {
+    const fp = observedFingerprint(observed);
+    if (!ledger) {
+      return {
+        observation: fp === null ? 'absent' : 'owned-exact',
+        plan: 'none',
+        planned: 'unchanged',
+      };
+    }
+    if (fp === null || fp === supersededSibling) {
+      const others = ledger.owners.filter((o) => o !== worktreeRoot);
+      if (fp === null && others.length > 0) {
+        return { observation: 'owned-drifted', plan: 'none', planned: 'conflict' };
+      }
+      const drifted = fp !== ledger.fingerprint;
+      return {
+        observation: fp === null ? 'absent' : drifted ? 'owned-drifted' : 'owned-exact',
+        plan: 'release-owner',
+        planned: 'applied',
+      };
+    }
+    if (observed.state === 'legacy-launch-marker') {
+      return { observation: 'legacy-launch-marker', plan: 'none', planned: 'repair-needed' };
+    }
   }
   if (observed.state === 'legacy-launch-marker') {
     return legacyRepair && desired
@@ -320,27 +352,72 @@ function releaseIntent(resourceKey: string, entry: LedgerFragment): FragmentInte
   };
 }
 
+interface AnswerableFragment {
+  intent: FragmentIntent;
+  desired: boolean;
+  /**
+   * ADR 638. Set only when this ledger key is no longer named by the current desired fragments
+   * while the harness stays selected and available. `null` — no desired fragment shares the
+   * fragment key, so ADR 282's release rules apply. A string is the sibling intent fingerprint.
+   */
+  supersededSibling?: string | null;
+}
+
+/** Desired bit the matrix should see. A superseded key whose sibling has not converged stays
+ *  desired, so status keeps "in place" and reconcile does not remove the shared registration. */
+function matrixDesired(
+  enumeratedDesired: boolean,
+  supersededSibling: string | null | undefined,
+  observed: ObservedFragment,
+): boolean {
+  if (supersededSibling === undefined || supersededSibling === null) return enumeratedDesired;
+  const fp = observedFingerprint(observed);
+  if (fp === null || fp === supersededSibling) return false;
+  return true;
+}
+
 /** Enumerate the fragments one adapter is answerable for: its desired intents plus every ledger
- *  fragment of its harness this worktree still owns (the release candidates). */
+ *  fragment of its harness this workspace still owns. A selected, available harness treats a ledger
+ *  key the desired set no longer names as superseded (ADR 638). An unavailable harness does not. */
 async function fragmentsFor(
   ctx: HarnessContext,
   adapter: HarnessAdapter,
   desired: boolean,
   available: boolean,
-): Promise<{ intent: FragmentIntent; desired: boolean }[]> {
-  const out: { intent: FragmentIntent; desired: boolean }[] = [];
+): Promise<AnswerableFragment[]> {
+  const out: AnswerableFragment[] = [];
   const seen = new Set<string>();
+  const desiredIntents: FragmentIntent[] = [];
   if (desired && available) {
     const target = await adapter.target(ctx);
     for (const intent of await adapter.desiredFragments(ctx, target)) {
       out.push({ intent, desired: true });
       seen.add(intent.resourceKey);
+      desiredIntents.push(intent);
     }
   }
+  const superseded = desired && available;
   for (const [resourceKey, entry] of Object.entries(ledgerFragments(ctx))) {
     if (entry.harness !== adapter.id || seen.has(resourceKey)) continue;
     if (!entry.owners.includes(ctx.worktreeRoot)) continue;
-    out.push({ intent: releaseIntent(resourceKey, entry), desired });
+    const intent = releaseIntent(resourceKey, entry);
+    if (!superseded) {
+      out.push({ intent, desired });
+      continue;
+    }
+    const siblings = desiredIntents.filter((i) => i.fragmentKey === entry.fragmentKey);
+    const fingerprints = new Set(siblings.map((i) => i.fingerprint));
+    if (siblings.length > 0 && fingerprints.size !== 1) {
+      // Two desired payloads for one fragment key. Leave the old key desired so nothing removes it.
+      out.push({ intent, desired: true });
+      continue;
+    }
+    const sibling = siblings.length === 1 ? siblings[0] : undefined;
+    out.push({
+      intent,
+      desired: false,
+      supersededSibling: sibling ? sibling.fingerprint : null,
+    });
   }
   return out;
 }
@@ -357,16 +434,13 @@ export async function inspectHarnesses(
   for (const { adapter, desired: isDesired } of enginePlan(desired, opts)) {
     const availability = await adapter.availability(ctx);
     const fragments: FragmentInspection[] = [];
-    for (const { intent, desired: fragmentDesired } of await fragmentsFor(
-      ctx,
-      adapter,
-      isDesired,
-      availability.available,
-    )) {
+    for (const fragment of await fragmentsFor(ctx, adapter, isDesired, availability.available)) {
+      const { intent, supersededSibling } = fragment;
       const span = tracer.startSpan(OP_SPAN);
       try {
         const entry = ledgerFragments(ctx)[intent.resourceKey];
         const observed = await adapter.observe(ctx, intent);
+        const fragmentDesired = matrixDesired(fragment.desired, supersededSibling, observed);
         const classified = classifyFragment(
           fragmentDesired,
           observed,
@@ -374,6 +448,7 @@ export async function inspectHarnesses(
           ctx.worktreeRoot,
           fragmentDesired ? intent.fingerprint : null,
           false,
+          supersededSibling,
         );
         const journalState = loadJournal(ctx.fs, ctx.machineConfigRoot, intent.containerKey);
         const lockState = loadLockRecord(ctx.fs, ctx.machineConfigRoot, intent.containerKey);
@@ -492,7 +567,10 @@ async function recoverJournal(
   const fp = observedFingerprint(observed);
 
   const finalize = (): void => {
-    if (journal.intendedFingerprint === null) {
+    // Empty owners deletes the row. A superseded key's sole owner journals `release-owner` with
+    // `intendedOwners: []` and the observed fingerprint, so recovery drops the ledger and does not
+    // retry a physical remove (ADR 638). A `remove` still journals a null fingerprint.
+    if (journal.intendedFingerprint === null || journal.intendedOwners.length === 0) {
       applyLedgerDelta(ctx, { resourceKey: journal.resourceKey, entry: null });
       applyContribution(ctx, journal.harness, journal.resourceKey, false);
     } else {
@@ -594,13 +672,14 @@ export async function reconcileHarnesses(
     const intentsByResource = new Map(
       fragments.filter((f) => f.desired).map((f) => [f.intent.resourceKey, f.intent]),
     );
-    for (const { intent, desired: fragmentDesired } of fragments) {
+    for (const { intent, desired: enumeratedDesired, supersededSibling } of fragments) {
       const span = tracer.startSpan(OP_SPAN);
       let observation: ObservationKind | 'unknown' = 'unknown';
       let action: PlannedAction = 'none';
       let recovery: JournalRecovery = 'none';
       let result: FragmentResultKind = 'failed';
       let lockRecovery: 'none' | 'reclaimed' | 'busy' | 'invalid' = 'none';
+      let reportedDesired = enumeratedDesired;
       let lease: HarnessLease | undefined;
       try {
         // 1. Acquire or safely reclaim the recoverable container lease.
@@ -667,6 +746,8 @@ export async function reconcileHarnesses(
         // 3. Re-read the latest container state and 4. plan from the matrix.
         const entry = ledgerFragments(ctx)[intent.resourceKey];
         const observed = await adapter.observe(ctx, intent);
+        const fragmentDesired = matrixDesired(enumeratedDesired, supersededSibling, observed);
+        reportedDesired = fragmentDesired;
         const classified = classifyFragment(
           fragmentDesired,
           observed,
@@ -674,6 +755,7 @@ export async function reconcileHarnesses(
           ctx.worktreeRoot,
           fragmentDesired ? intent.fingerprint : null,
           opts.legacyRepair,
+          supersededSibling,
         );
         observation = classified.observation;
         action = classified.plan;
@@ -708,7 +790,17 @@ export async function reconcileHarnesses(
               return [];
           }
         })();
-        const intendedFingerprint = classified.plan === 'remove' ? null : intent.fingerprint;
+        const observedFp = observedFingerprint(observed);
+        // `release-owner` journals the observed fingerprint. For an ordinary shared release that
+        // equals the ledger receipt. For a superseded key it equals the sibling (or null when the
+        // fragment is already absent), so recovery finalizes instead of planning a remove (ADR 638).
+        const intendedFingerprint =
+          classified.plan === 'remove' ||
+          (classified.plan === 'release-owner' && observedFp === null)
+            ? null
+            : classified.plan === 'release-owner'
+              ? observedFp
+              : intent.fingerprint;
         const record: ReconcileJournal = {
           version: 1,
           operationId: randomUUID(),
@@ -742,8 +834,13 @@ export async function reconcileHarnesses(
           await adapter.apply(ctx, { kind: 'repair-launch-marker', intent });
         }
 
-        // 8. Persist ledger evidence and this worktree's contribution.
-        if (classified.plan === 'remove') {
+        // 8. Persist ledger evidence and this workspace's contribution. Empty owners deletes the
+        // row: a superseded key's sole owner releases the ledger and leaves the registration (ADR 638).
+        const receiptFingerprint =
+          classified.plan === 'release-owner' && observedFp !== null
+            ? observedFp
+            : intent.fingerprint;
+        if (classified.plan === 'remove' || intendedOwners.length === 0) {
           applyLedgerDelta(ctx, { resourceKey: intent.resourceKey, entry: null });
         } else {
           applyLedgerDelta(ctx, {
@@ -753,7 +850,7 @@ export async function reconcileHarnesses(
               scope: intent.scope,
               containerKey: intent.containerKey,
               fragmentKey: intent.fragmentKey,
-              fingerprint: intent.fingerprint,
+              fingerprint: receiptFingerprint,
               owners: intendedOwners,
               adapterVersion: adapter.adapterVersion,
             },
@@ -794,7 +891,7 @@ export async function reconcileHarnesses(
         setOperationAttributes(span, {
           harness: adapter.id,
           scope: intent.scope,
-          desired: fragmentDesired,
+          desired: reportedDesired,
           availability: availability.available ? 'available' : 'unavailable',
           observation,
           action,

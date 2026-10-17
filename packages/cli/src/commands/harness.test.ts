@@ -512,6 +512,7 @@ describe('musterd harness status', () => {
     const fakeA = parsed.harnesses.find((h: { harness: string }) => h.harness === 'fake-a');
     expect(fakeA.fragments[0]).toMatchObject({
       fragmentKey: 'entry',
+      resourceKey: expect.stringContaining('folder'),
       scope: 'folder',
       desired: true,
       observation: 'absent',

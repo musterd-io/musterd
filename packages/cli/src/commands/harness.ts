@@ -27,7 +27,7 @@ import {
 import { registryOrder, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
 import { withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
-import { renderConfigureReceipt, verdictOf } from './harnessVerdict.js';
+import { renderConfigureReceipt, statusFragmentLine } from './harnessVerdict.js';
 
 /**
  * `musterd harness` — the desired-set front door (ADR 281/282/286).
@@ -135,7 +135,7 @@ async function statusCommand(parsed: Parsed, deps?: HarnessDeps): Promise<number
   for (const h of inspections) {
     out(harnessHeadline(h));
     for (const f of h.fragments) {
-      out(`  ${f.fragmentKey.padEnd(13)} ${f.scope.padEnd(12)} ${verdictOf(f)}`);
+      out(statusFragmentLine(f, h.fragments));
     }
   }
   return statusExitCode(inspections);
@@ -154,7 +154,7 @@ function harnessHeadline(h: HarnessInspection): string {
   return `${h.harness.padEnd(13)} ${selection} · ${avail}`;
 }
 
-export { verdictOf };
+export { verdictOf } from './harnessVerdict.js';
 
 function fragmentHealthy(f: FragmentInspection): boolean {
   if (f.journal !== 'none' || f.lock === 'invalid') return false;
@@ -185,6 +185,7 @@ function jsonInspection(h: HarnessInspection): Record<string, unknown> {
     ...(h.availability.detail !== undefined ? { detail: h.availability.detail } : {}),
     fragments: h.fragments.map((f) => ({
       fragmentKey: f.fragmentKey,
+      resourceKey: f.resourceKey,
       scope: f.scope,
       desired: f.desired,
       observation: f.observation,
@@ -283,7 +284,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
     legacyRepair: true, // the ONE caller allowed to: the human just confirmed the complete set
     ...(deps?.registry ? { registry: deps.registry } : {}),
   });
-  for (const r of report.results) out(renderConfigureReceipt(r));
+  for (const r of report.results) out(renderConfigureReceipt(r, report.results));
   if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
   if (report.ok) {
     out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);

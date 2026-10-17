@@ -15,7 +15,7 @@ import {
   repoSharedResourceKey,
   type HarnessAdapter,
 } from './fragments.js';
-import { loadJournal, loadLedger, saveJournal } from './store.js';
+import { loadJournal, loadLedger, saveJournal, saveLedger } from './store.js';
 
 const MACHINE = '/machine/.musterd';
 
@@ -543,5 +543,257 @@ describe('inspectHarnesses is read-only', () => {
     expect(fake.fragments[0]!.lock).toBe('free');
     const prov = loadProvisioning('/w/a', fs);
     expect(prov.kind === 'valid' && prov.value.contributions).toEqual({});
+  });
+});
+
+describe('superseded resource keys (ADR 638)', () => {
+  const CONTAINER = '/repo/.mcp.json';
+  const containerKey = `repo-shared ${CONTAINER}`;
+  const oldPayload = { command: 'old' };
+  const newPayload = { command: 'new' };
+  const oldFp = canonicalFingerprint(oldPayload);
+  const newFp = canonicalFingerprint(newPayload);
+  const oldKey = repoSharedResourceKey('/repo-old', 'musterd', 'fake', 'musterd');
+  const newKey = repoSharedResourceKey('/repo-new', 'musterd', 'fake', 'musterd');
+
+  function entry(fingerprint: string, owners: string[]) {
+    return {
+      harness: 'fake' as const,
+      scope: 'repo-shared' as const,
+      containerKey,
+      fragmentKey: 'musterd',
+      fingerprint,
+      owners,
+      adapterVersion: 1,
+    };
+  }
+
+  function watching(fragments: Record<string, unknown>, resourceKey: string) {
+    const removes: string[] = [];
+    const base = jsonAdapter({
+      id: 'fake',
+      containerPath: CONTAINER,
+      scope: 'repo-shared',
+      fragments,
+      resourceKeyOf: () => resourceKey,
+    });
+    const adapter: HarnessAdapter = {
+      ...base,
+      apply: async (ctx, mutation) => {
+        if (mutation.kind === 'remove') removes.push(mutation.intent.resourceKey);
+        return base.apply(ctx, mutation);
+      },
+    };
+    return { adapter, removes };
+  }
+
+  it('drops the stale ledger key once the desired sibling has the observed content, and leaves the registration', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: oldPayload })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: {
+        [oldKey]: entry(oldFp, ['/w/a']),
+        [newKey]: entry(oldFp, ['/w/a']),
+      },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+
+    const seen = await inspectHarnesses(ctxOf(fs), ['fake'], { registry: [adapter] });
+    const frags = seen.find((h) => h.harness === 'fake')!.fragments;
+    const live = frags.find((f) => f.resourceKey === newKey)!;
+    const stale = frags.find((f) => f.resourceKey === oldKey)!;
+    expect(live.plan).toBe('create');
+    expect(live.desired).toBe(true);
+    expect(stale.plan).toBe('none');
+    expect(stale.planned).toBe('unchanged');
+    expect(stale.desired).toBe(true);
+
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(report.ok).toBe(true);
+    expect(removes).toEqual([]);
+    expect(JSON.parse(fs.readFile(CONTAINER)!)['musterd']).toEqual(newPayload);
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind).toBe('valid');
+    if (ledger.kind !== 'valid') return;
+    expect(ledger.value.fragments[oldKey]).toBeUndefined();
+    expect(ledger.value.fragments[newKey]?.fingerprint).toBe(newFp);
+    expect(ledger.value.fragments[newKey]?.owners).toEqual(['/w/a']);
+    expect(report.results.find((r) => r.resourceKey === oldKey)?.action).toBe('release-owner');
+  });
+
+  it('a stale key whose content matches neither receipt nor sibling is retained, and the registration is not overwritten', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    const human = { command: 'human' };
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: human })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: {
+        [oldKey]: entry(oldFp, ['/w/a']),
+        [newKey]: entry(oldFp, ['/w/a']),
+      },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(report.ok).toBe(false);
+    expect(removes).toEqual([]);
+    expect(JSON.parse(fs.readFile(CONTAINER)!)['musterd']).toEqual(human);
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]?.fingerprint).toBe(oldFp);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[newKey]?.fingerprint).toBe(oldFp);
+    expect(report.results.every((r) => r.result === 'conflict')).toBe(true);
+  });
+
+  it('keeps a co-owner on the stale key and still does not remove the registration', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: newPayload })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: {
+        [oldKey]: entry(oldFp, ['/w/a', '/w/b']),
+        [newKey]: entry(newFp, ['/w/a']),
+      },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(report.ok).toBe(true);
+    expect(removes).toEqual([]);
+    expect(JSON.parse(fs.readFile(CONTAINER)!)['musterd']).toEqual(newPayload);
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]?.owners).toEqual(['/w/b']);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]?.fingerprint).toBe(newFp);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[newKey]?.owners).toEqual(['/w/a']);
+  });
+
+  it('an absent stale key with a co-owner keeps the receipt when the sibling write does not land', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, '{}\n', 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: {
+        // A different container from the desired key, so the sibling's failed journal is not
+        // recovered under this row's lease.
+        [oldKey]: {
+          ...entry(oldFp, ['/w/a', '/w/b']),
+          containerKey: 'repo-shared /repo-old/.mcp.json',
+        },
+      },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+    const failing: HarnessAdapter = {
+      ...adapter,
+      apply: async () => {
+        throw new Error('injected stop at external write');
+      },
+    };
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [failing],
+    });
+    expect(removes).toEqual([]);
+    expect(fs.readFile(CONTAINER)).toBe('{}\n');
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]?.owners).toEqual([
+      '/w/a',
+      '/w/b',
+    ]);
+    expect(report.results.find((r) => r.resourceKey === oldKey)?.result).toBe('conflict');
+  });
+
+  it('a stop after the ledger-only journal finalizes on the next run and does not remove', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: newPayload })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: {
+        [oldKey]: entry(oldFp, ['/w/a']),
+        [newKey]: entry(newFp, ['/w/a']),
+      },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+    fs.failNext({ op: 'writeFile', pathIncludes: 'harness-ledger' });
+    const first = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(first.results.map((r) => r.result)).toEqual(['unchanged', 'failed']);
+    expect(loadJournal(fs, MACHINE, containerKey).kind).toBe('valid');
+    expect(removes).toEqual([]);
+
+    const second = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(second.ok).toBe(true);
+    expect(removes).toEqual([]);
+    expect(JSON.parse(fs.readFile(CONTAINER)!)['musterd']).toEqual(newPayload);
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]).toBeUndefined();
+    expect(ledger.kind === 'valid' && ledger.value.fragments[newKey]?.fingerprint).toBe(newFp);
+    expect(second.results.some((r) => r.recovery === 'finalized')).toBe(true);
+  });
+
+  it('an unavailable selected harness does not release a ledger key', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: oldPayload })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: { [oldKey]: entry(oldFp, ['/w/a']) },
+    });
+    const { adapter, removes } = watching({ musterd: newPayload }, newKey);
+    const quiet: HarnessAdapter = {
+      ...adapter,
+      availability: async () => ({ available: false, detail: 'not installed here' }),
+    };
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [quiet],
+    });
+    expect(report.results.map((r) => r.result)).toEqual(['pending', 'unchanged']);
+    expect(removes).toEqual([]);
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]?.fingerprint).toBe(oldFp);
+  });
+
+  it('a ledger key with no desired sibling is still physically removed', async () => {
+    const fs = memoryFs();
+    seedProvisioning(fs, '/w/a', ['fake']);
+    fs.mkdirp('/repo');
+    fs.writeFile(CONTAINER, `${JSON.stringify({ musterd: oldPayload })}\n`, 0o600);
+    saveLedger(fs, MACHINE, {
+      version: 1,
+      fragments: { [oldKey]: entry(oldFp, ['/w/a']) },
+    });
+    const { adapter, removes } = watching({}, newKey);
+    const report = await reconcileHarnesses(ctxOf(fs), ['fake'], {
+      legacyRepair: false,
+      registry: [adapter],
+    });
+    expect(report.ok).toBe(true);
+    expect(removes).toEqual([oldKey]);
+    expect(JSON.parse(fs.readFile(CONTAINER)!)['musterd']).toBeUndefined();
+    const ledger = loadLedger(fs, MACHINE);
+    expect(ledger.kind === 'valid' && ledger.value.fragments[oldKey]).toBeUndefined();
   });
 });

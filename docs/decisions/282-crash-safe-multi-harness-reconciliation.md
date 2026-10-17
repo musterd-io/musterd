@@ -102,6 +102,7 @@ ids but neither imports the installed registry nor sorts selections.
 For a desired harness, an absent fragment is created, an `owned-exact` fragment is unchanged, and an
 `unmanaged-equivalent` fragment is reported as `satisfied-unmanaged`. `owned-drifted` and
 `unmanaged-conflict` stop with a repair diagnostic; musterd does not overwrite them.
+_(Amended 2026-10-16: a ledger key that the current desired fragments no longer name is not desired, even while its harness stays selected. When a desired fragment of the same fragment key already has the observed content, releasing that key changes the ledger only. See ADR 638.)_
 
 For a deselected harness, releasing a non-final shared owner changes only contribution state. The
 final owner removes a fragment only when its observed fingerprint is still `owned-exact`. A final
@@ -175,6 +176,7 @@ harness state, ledger ownership, or managed registration fragments.
   re-stamped (owner-only), and an absent fragment is recreated. Only content musterd did not write
   still stops. A stale receipt on the repo-shared Claude Code `mcp.musterd` entry had blocked every
   seat's provisioning, and the doctor's delete-then-`wire` repair could not clear it.
+- 2026-10-16: [ADR 638](638-superseded-harness-resource-key.md). A ledger key the current desired fragments no longer name drops out of the ledger once a desired fragment of the same fragment key already has the observed content. The physical registration stays. A key whose content still differs stays until that matches. An owned file that matches neither the receipt nor the intent is still retained.
 
 ## Observability & Evaluation
 
