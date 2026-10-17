@@ -143,6 +143,15 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   `reads_on` and `pre_registered`; one a person will run carries `reads_on` alone. The spec's §4.1
   carries the superseded note. Until ADR 644's increment 1 (lane `01M55WJXNP`) adds `reads_on` to
   the schema, `pullEligible` reads it as a loose optional string.
+- _(2026-10-17, lane `01M55PDWM99YFPHAPDKGN4ZT9S`, increment 2.)_ The enrollment checks are built:
+  `musterd residency on` verifies the harness binary, the harness login (existence of its login
+  artifact, a provider key in env, or the Keychain item; for the native engine the key and a
+  declared model), the seat's own binding with a credential in the named workspace, and the
+  workspace, before the enroll request, and refuses on any miss with nothing written
+  (`packages/cli/src/commands/residencyChecks.ts`). Only when `--host` is this machine; another
+  host's state cannot be probed from here, so that case warns and proceeds as before. `/live`
+  shows an enrolled offline seat's node from `residence`. No server change: the row is still
+  one host per seat (ADR 358 §3), and a daemon never checks a machine.
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 

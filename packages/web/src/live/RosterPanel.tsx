@@ -234,7 +234,11 @@ export function SeatDetail({
   // Falls back to silence rather than the raw id when the label has not synced — `node_label` is a
   // LEFT JOIN onto `nodes`, so a node this daemon has not replicated yet joins to null, and a ULID
   // in the roster would be worse than not naming the machine at all.
-  const nodeLabel = m.presences?.[0]?.node_label?.trim() || undefined;
+  // The live presence's node first; for an enrolled seat with no live session, the node its
+  // residency binds it to (ADR 503 `residence`, ADR 645 §4.2: /live shows a seat's host), so an
+  // offline wakeable seat still says which machine would wake it.
+  const nodeLabel =
+    m.presences?.[0]?.node_label?.trim() || m.residence?.node_label?.trim() || undefined;
   // Why this seat is in the room at all (ADR 131) — a wake, or a person opening a session. Rides
   // ALONGSIDE the posture chip rather than replacing it: posture is what the seat is doing,
   // provenance is why it is here, and a woken seat is `working` or `active` like any other.

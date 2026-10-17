@@ -1051,7 +1051,12 @@ export const CATALOG: readonly CommandEntry[] = [
       '(reverses all three); `status` cross-checks the stores, names drift, and renders the effective ' +
       'wake policy (seat overrides starred). Two different flags: --seat = WHAT gets enrolled (an ' +
       'agent seat; defaults to this workspace’s binding), --workspace = WHERE its grant lands (the ' +
-      'seat’s own folder). Who authorizes is the folder you run from — an admin’s Workspace (ADR 442). Knobs ' +
+      'seat’s own folder). Who authorizes is the folder you run from — an admin’s Workspace (ADR 442). ' +
+      'Before the row is written, `on` verifies four things on this machine (ADR 645): the harness ' +
+      'binary resolves, the harness is logged in (or --key-env is set and a model declared, for ' +
+      '--harness musterd), the workspace holds the seat’s own binding with a credential, and the ' +
+      'workspace exists; any miss refuses with the fix, and nothing is enrolled. A --host naming ' +
+      'another machine skips them with a warning. Knobs ' +
       '(inc 5) — on `on` they override THIS seat, on `policy` they set the TEAM defaults: ' +
       '--lane both|interrupt|batched, --cooldown 15m, --hourly-cap N, --attempt-cap N, ' +
       '--tool-policy reply-only|seat-policy, --timeout 5m, --work-timeout 30m, --flow manual|auto, ' +

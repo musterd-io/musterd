@@ -29,6 +29,7 @@ import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
 import { seatReachLines } from '../roster.js';
 import { findWorkspaceDir, resolve, resolveRead } from './helpers.js';
+import { enrollmentChecks, enrollmentRefusal } from './residencyChecks.js';
 
 /**
  * `musterd residency on|off|status` (ADR 131) — enroll this workspace's seat into harness
@@ -414,6 +415,34 @@ async function onCommand(parsed: Parsed): Promise<number> {
   }
   const host = flagStr(parsed.flags, 'host') ?? hostname();
   const policy = collectPolicyFlags(parsed);
+
+  // ADR 645 §4.2: verify the four things this host must hold BEFORE the row is written, so an
+  // enrollment never promises a wake the machine cannot serve. Only when the host being enrolled is
+  // this machine: another machine's binaries, logins and folders cannot be probed from here.
+  const thisMachine = host === hostname();
+  if (thisMachine) {
+    const checks = await enrollmentChecks({
+      seat,
+      harness,
+      dir: target?.dir ?? null,
+      keyEnv,
+      model: binding?.model ?? process.env['MUSTERD_MODEL'],
+    });
+    const refusal = enrollmentRefusal(checks, seat);
+    if (refusal) throw new CliError(refusal, 2);
+    if (!parsed.flags['json']) {
+      for (const c of checks) {
+        process.stdout.write(theme.meta(`  ${sym.ok} ${c.name}: ${c.detail}`) + '\n');
+      }
+    }
+  } else if (!parsed.flags['json']) {
+    process.stdout.write(
+      theme.warn(
+        `  ! --host ${host} is not this machine (${hostname()}): the ADR 645 enrollment checks ` +
+          `(harness, login, binding, workspace) were not run — run \`residency on\` there to verify`,
+      ) + '\n',
+    );
+  }
 
   const res = await http.enrollResidency(team, {
     seat,
