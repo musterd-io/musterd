@@ -180,8 +180,7 @@ depends on this brainstorm and is re-scoped by phase.
 4. **Phase 2b** (lane `01M55Y5E28EPF6RNTCREYKQ6CP`): laptop-hub joiner, delta's friction list
    discharged.
 5. **Phase 2c** (lane `01M55Y5E5S6TM5JW9TW8AB7Y46`): subscription-login seats.
-6. **Later (own ADR):** musterd-billed / musterd-native models; a shared pool.
-   Follows-up: deferred — taken only on a phase 1–2 reading that calls for them (2026-10-17)
+6. **Later (own ADR):** musterd-billed / musterd-native models; a shared pool. Follows-up: deferred — taken only on a phase 1–2 reading that calls for them (2026-10-17)
 
 ## 7. Open questions settled in the brainstorm (nick, 2026-10-17)
 
