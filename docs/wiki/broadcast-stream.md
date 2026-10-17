@@ -465,6 +465,14 @@ reading against the 30 fps bar is increment 4's (lane `01M4VS22F1`). Falsify: a 
 mode that lands outside the ad-hoc arm's pipeline CPU by more than the 30-point A/B margin means the
 mode is not the arm that was measured.
 
+_(2026-10-17, lane `01M4VS22F1`.)_ Measured: the CLI mode landed within 4 points of the ad-hoc arm, so
+it is the measured arm. With dirty-rect repaint it drew **26.2/s with a 56 ms p95** on the bench,
+against 20.3/s for screencast on the same build. That is the best the stream has done, and it is short of
+the 30/s and 40 ms bar, with a third of the box idle. The single-thread draw is still the wall. The
+default stays screencast, and lever 3 (an `OffscreenCanvas` worker) is next.
+
+Follows-up: 01M55MAQ9MSK5JP45XK3V3GM6Z
+
 ## Every health signal the capture had measured the encoder, and the encoder is downstream of the freeze (2026-09-16; falsify: `Page.stopScreencast` mid-run and watch ffmpeg keep reporting a healthy rate) <!-- claim: defect -->
 
 A frozen source keeps ffmpeg perfectly fed, because the pump re-emits `latest` by design. So every

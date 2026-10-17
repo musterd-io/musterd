@@ -308,6 +308,53 @@ Readings:
 - **The choreographed room is the hard case:** `/office-preview`'s loop walks most of the room at once, so a third of the canvas changes per frame. The bench fixture's one act every 3 s sits between the two rooms.
 - **Correctness:** `node scripts/perf/scene-pixel-check.mjs <dev> --dirty` — four moving rooms, worst frame 134 differing bytes, max Δ53, flat over the run. A partial frame is never byte-identical on Chrome; ADR 625 records why and the accepted bound.
 
+## Against the 30 fps bar: x11 CLI mode + dirty-rect repaint (Fly `performance-4x`, sjc, 2026-10-17)
+
+Increment 4 of the smooth-capture spec (lane `01M4VS22F1`). `scripts/perf/capture-ab.mjs` on the bench
+image, built from `4d9cf6db` (#2784, `--capture x11`; dirty-rect repaint on by default since ADR 625)
+plus this lane's harness change. Same fixture and method as the two A/B runs above: 1080p at `fps=30`,
+7 seats online, 60 s windows, one in-page probe for draws and gaps, `/proc` CPU per process tree. Arms
+in run order. `x11-cli` is the real `musterd broadcast --capture x11`, and `x11-adhoc` is increment 1's
+hand-built arm, kept to check the mode is the arm that was measured. `floor` is whether the CLI's
+12/s draw floor reported. Falsify: a re-run on the same build and box size puts `x11-cli` at 30 draws/s
+or more, or under 23.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| screencast | 20.3 | 47.0 | 74.8 | 223.6 | 71.8 | — | 8.4 | 303.8 | 18.8 | silent |
+| x11-cli#1 | 26.3 | 35.5 | 55.7 | 163.1 | 71.7 | 3.9 | 0.2 | 238.9 | 35.0 | silent |
+| x11-adhoc | 26.3 | 35.8 | 53.5 | 167.8 | 70.6 | 4.3 | — | 242.7 | 34.2 | — |
+| x11-adhoc `&dirty=0` | 19.4 | 49.3 | 67.1 | 156.1 | 71.2 | 4.7 | — | 232.0 | 36.5 | — |
+| x11-cli#2 | 26.1 | 35.7 | 56.8 | 164.0 | 71.3 | 4.2 | 0.1 | 239.6 | 34.5 | silent |
+
+Against the spec's bar:
+
+| Measure | Pass | x11-cli (both runs) | Verdict |
+| --- | --- | --- | --- |
+| Draws/s over 60 s | ≥ 30 | 26.1–26.3 | **fails** |
+| Gap p95 | < 40 ms | 55.7–56.8 ms | **fails** |
+| Encoder queue growth | flat | no queue (no pipe under x11) | passes |
+| Draw floor (12/s) | silent | silent | passes |
+| Box CPU | some idle | ~35 % idle | passes |
+
+Readings:
+
+- **The bar is not met.** The best configuration draws ~26/s with a ~56 ms p95. That is the best the
+  stream has measured (screencast was 13.7 on 2026-10-13), and it is still four draws short, with a tail
+  half again over the 40 ms line.
+- **The CLI mode is the arm that was measured.** `x11-cli` and `x11-adhoc` agree within 4 points of
+  pipeline CPU and 0.2 draws/s, inside the wiki's 30-point falsifier.
+- **Dirty-rect repaint is real on the box:** 19.4 → 26.3 draws/s (+36 %), gap p95 67 → 54 ms, against
+  ADR 625's falsifier of "within 10 %". It costs ~12 points of Chrome CPU, which is the measure pass.
+- **x11 still pays for itself:** against screencast on the same build it is +6 draws/s, −19 ms p95 and
+  65 points of pipeline CPU freed, and the box sits a third idle.
+- **The wall is one thread again.** A third of the box is idle while draws stop at ~26/s. Per the spec,
+  the default stays screencast (no flip ADR) and lever 3 (drawing in an `OffscreenCanvas` worker) is
+  opened as its own brainstorm. The live-stream half of this increment would only have confirmed a
+  pass, so it is not run.
+
+Follows-up: 01M55MAQ9MSK5JP45XK3V3GM6Z
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being

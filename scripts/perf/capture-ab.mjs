@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 /**
- * Capture A/B: today's CDP screencast pipeline against Xvfb + `ffmpeg -f x11grab`, on one box, against
- * the synthetic bench fixture. Increment 1 of docs/superpowers/specs/2026-10-13-broadcast-smooth-capture-design.md
- * (plan: docs/superpowers/plans/2026-10-13-broadcast-smooth-capture.md). Measurement only — the x11 arm
- * is an ad-hoc invocation, not a capture mode.
+ * Capture A/B: the CDP screencast pipeline against Xvfb + `ffmpeg -f x11grab`, on one box, against
+ * the synthetic bench fixture. Written for increment 1 of
+ * docs/superpowers/specs/2026-10-13-broadcast-smooth-capture-design.md, when the x11 arm was an ad-hoc
+ * invocation; increment 4 (lane 01M4VS22F1) adds the real `musterd broadcast --capture x11` mode as its
+ * own arm, and runs the ad-hoc arm with and without dirty-rect repaint (`&dirty=0`, ADR 625).
  *
  *   node scripts/perf/capture-ab.mjs [--secs 60] [--server http://127.0.0.1:4877] [--team bench]
  *
- * Arms run S, X, S, so the box's warm-up does not favour whichever arm goes second. Each arm prints one
- * `CAPTURE_AB {json}` line to stdout, which is what `fly logs` is read for, so nobody has to ssh in.
+ * Arms run screencast, x11-cli, x11-adhoc, x11-adhoc dirty=0, x11-cli, so the x11 CLI mode is read at
+ * both ends of the box's warm-up. Each arm prints one `CAPTURE_AB {json}` line to stdout, which is what
+ * `fly logs` is read for, so nobody has to ssh in.
  *
- * Both arms share one in-page probe: a rAF loop that timestamps every change of `__office.stats().draws`,
+ * Every arm shares one in-page probe: a rAF loop that timestamps every change of `__office.stats().draws`,
  * so "draws/s" and the draw-to-draw gap (p50/p95) mean the same thing in both. CPU is the delta of
  * utime+stime from /proc over each process tree during the measured window. `ps`'s %cpu is a lifetime
  * average, which would fold launch cost into the arm.
@@ -163,8 +165,8 @@ function kill(proc) {
   if (proc && proc.exitCode === null) proc.kill('SIGTERM');
 }
 
-// ── Arm S: the real `musterd broadcast` screencast pipeline ─────────────────────────────────────
-async function armScreencast(label) {
+// ── Arms S and X: the real `musterd broadcast` pipeline, screencast or `--capture x11` ──────────────
+async function armCli(label, capture = 'screencast') {
   const out = join(mkdtempSync(join(tmpdir(), 'cab-s-')), 's.mp4');
   const cli = spawn(
     'node',
@@ -181,9 +183,16 @@ async function armScreencast(label) {
       String(SECS + 40),
       '--out',
       out,
+      ...(capture === 'x11' ? ['--capture', 'x11'] : []),
     ],
-    { stdio: ['ignore', 'ignore', 'inherit'] },
+    { stdio: ['ignore', 'ignore', 'pipe'] },
   );
+  // Forwarded as it arrives, and read for the draw floor's one-shot report — the bar wants it silent.
+  let floorFired = false;
+  cli.stderr.on('data', (d) => {
+    process.stderr.write(d);
+    if (/under the \d+\/s floor/.test(String(d))) floorFired = true;
+  });
   try {
     // Its Chromium picks a random debug port; read it back from the process table.
     let port;
@@ -202,20 +211,29 @@ async function armScreencast(label) {
         .toString()
         .trim(),
     );
-    const r = await measure(page, { chrome: chromePid, ffmpeg: ffmpegPid, cli: cli.pid });
-    // the CLI tree contains chrome and ffmpeg; report it as its own residue, not double-counted
-    r.cpu.cli = round(r.cpu.cli - r.cpu.chrome - r.cpu.ffmpeg);
-    r.cpu.pipeline = round(r.cpu.chrome + r.cpu.ffmpeg + r.cpu.cli);
+    const xvfbPid =
+      capture === 'x11' ? Number(execFileSync('pgrep', ['-n', 'Xvfb']).toString().trim()) : 0;
+    const r = await measure(page, {
+      chrome: chromePid,
+      ffmpeg: ffmpegPid,
+      ...(xvfbPid ? { xvfb: xvfbPid } : {}),
+      cli: cli.pid,
+    });
+    // the CLI tree contains chrome, ffmpeg and (x11) Xvfb; report it as its own residue, not
+    // double-counted
+    r.cpu.cli = round(r.cpu.cli - r.cpu.chrome - r.cpu.ffmpeg - (r.cpu.xvfb ?? 0));
+    r.cpu.pipeline = round(r.cpu.chrome + r.cpu.ffmpeg + (r.cpu.xvfb ?? 0) + r.cpu.cli);
     page.close();
-    return { arm: label, ...r };
+    return { arm: label, ...r, floorFired };
   } finally {
     kill(cli);
     await waitExit(cli);
   }
 }
 
-// ── Arm X: Xvfb + headful Chromium + ffmpeg x11grab ──────────────────────────────────────────────
-async function armX11(label) {
+// ── Arm XA: the ad-hoc Xvfb + headful Chromium + ffmpeg x11grab of increment 1 ──────────────────
+// `query` is appended to the page URL: `&dirty=0` is ADR 625's A/B arm.
+async function armX11(label, query = '') {
   const DISPLAY = ':99';
   const xvfb = spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
     stdio: 'ignore',
@@ -250,7 +268,7 @@ async function armX11(label) {
     await page.send('Page.addScriptToEvaluateOnNewDocument', {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
-    await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30` });
+    await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30${query}` });
     if (!(await waitForRoom(page))) {
       // Say what the page saw, so an empty room is a reading rather than a guess.
       const seen = await page.evaluate(
@@ -337,26 +355,29 @@ async function armX11(label) {
 }
 
 const results = [];
-for (const [fn, label] of [
-  [armScreencast, 'screencast#1'],
-  [armX11, 'x11grab'],
-  [armScreencast, 'screencast#2'],
+// S first and X-cli last, so neither CLI arm only ever sees a warm or a cold box.
+for (const [fn, label, arg] of [
+  [armCli, 'screencast', 'screencast'],
+  [armCli, 'x11-cli#1', 'x11'],
+  [armX11, 'x11-adhoc', ''],
+  [armX11, 'x11-adhoc dirty=0', '&dirty=0'],
+  [armCli, 'x11-cli#2', 'x11'],
 ]) {
-  const r = await fn(label).catch((e) => ({ arm: label, invalid: String(e?.message ?? e) }));
+  const r = await fn(label, arg).catch((e) => ({ arm: label, invalid: String(e?.message ?? e) }));
   console.log(`CAPTURE_AB ${JSON.stringify(r)}`);
   results.push(r);
   await sleep(5000);
 }
 console.log(
-  '| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % |',
+  '| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |',
 );
-console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
 for (const r of results) {
   if (r.invalid) console.log(`| ${r.arm} | invalid: ${r.invalid} |`);
   else {
     const c = r.cpu;
     console.log(
-      `| ${r.arm} | ${r.drawsPerSec} | ${r.gapP50Ms} | ${r.gapP95Ms} | ${c.chrome} | ${c.ffmpeg} | ${c.xvfb ?? '—'} | ${c.cli ?? '—'} | ${c.pipeline} | ${c.idlePct} |`,
+      `| ${r.arm} | ${r.drawsPerSec} | ${r.gapP50Ms} | ${r.gapP95Ms} | ${c.chrome} | ${c.ffmpeg} | ${c.xvfb ?? '—'} | ${c.cli ?? '—'} | ${c.pipeline} | ${c.idlePct} | ${r.floorFired === undefined ? '—' : r.floorFired ? 'fired' : 'silent'} |`,
     );
   }
 }
