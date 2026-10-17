@@ -142,6 +142,9 @@ export function registerLanes(
   gather: typeof gatherClaimEvidence = gatherClaimEvidence,
   /** ADR 612: the landed diff's change class; injected so the submit suites stay hermetic. */
   changeLabel: typeof readChangeLabel = readChangeLabel,
+  /** The project a new lane belongs to: the explicit argument, else this workspace's repo. A
+   *  remote server (ADR 630 §3) has no workspace and passes the team default instead. */
+  project: (explicit: string | undefined) => string = (explicit) => resolveProject({ explicit }),
 ): void {
   // ADR 585: the claims this seat files, judged by the one rule in @musterd/protocol from the SHA
   // tier `verify` produced plus whatever `gather` could read. The daemon stamps `checked_by`.
@@ -236,7 +239,7 @@ export function registerLanes(
         // running in the seat's own workspace — knows which repo the lane belongs to.
         const { lane, warnings } = await client.openLane({
           ...args,
-          project: resolveProject({ explicit: args.project }),
+          project: project(args.project),
         });
         const hint = lane.requested ? undefined : `\n${LANE_REQUESTED_NUDGE}`;
         return laneResult('lane opened', lane, warnings, hint);

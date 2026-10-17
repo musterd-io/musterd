@@ -465,6 +465,30 @@ The table is **measured, never speculative** — each rule comes from a bounce o
 
 Whitespace trimming is normalization, not repair, so it is applied silently and never counted. Everything else increments the **`coerced`** outcome (`tool-telemetry.ts`), reported beside bounces and never folded into them — the bounce rate has to keep meaning "cost the agent a turn". A `coerced` rate that stays high on one field is the evidence that would promote an alias to a rename; forgiveness without measurement is just drift.
 
+## Remote-bearer mode (ADR 630)
+
+The remote MCP a phone reaches at `/mcp/:team` serves **these** tools — one implementation for desk
+and phone ([ADR 630](../decisions/630-remote-mcp-gateway.md)). `buildRemoteMcpServer(seat)`
+(`index.ts`) builds the server for one request from `{ server, team, member, bearer, capabilities }`;
+the daemon's composition root calls it per request once ADR 630's later increments wire it in.
+
+- **The bearer is the seat.** `remoteConfig` (`remote.ts`) builds the config from the request alone —
+  no binding file, no environment. The phone's `msat_` rides as the `Authorization` bearer on every
+  daemon call, so each call is re-authenticated by `authMember` like any other client's.
+- **No session machinery.** `new MusterdClient(config, { remote: true })` holds the seat from the
+  start (`holdsSeat`), opens no WebSocket, takes no session lease, reads and writes no binding file,
+  attaches no idle-wake core, and never runs the liveness ladder or the dormant watch. Its
+  `workspaceDir` is undefined, so the provisioning-drift reads stay silent.
+- **`team_join` and `team_leave`** report the seat the bearer names; neither claims nor releases.
+- **The git and gh checks abstain** (`remote.ts`): a SHA verifies `fetch_failed`, branch and PR
+  checks read nothing, `team_next` reconciles nothing — the daemon's folder is nobody's clone. A new
+  lane takes an explicit `project` or the team default, never the daemon's repo.
+- **`tools/list` follows the seat**: `capabilities` reach `scopeToolSurface`, so a talk-only guest is
+  offered `TALK_ONLY_TOOLS` only.
+- **Calls are counted**: each call is flushed to `POST /telemetry/tool-calls` as it finishes
+  (`ToolCallRecorder` `afterRecord`), with no surface attestation and no startup measure — those
+  describe an adapter launch, not a request.
+
 ## File tree `packages/mcp/src/`
 
 ```
@@ -473,6 +497,7 @@ src/
                   //   installShutdownHandlers (drop presence + exit on host teardown);
                   //   autojoin(): claim+join on launch when a default claim exists (ADR 032);
                   //   when unclaimed: writes a pending marker (ADR 033) + startResolutionWatcher (ADR 034)
+                  //   buildRemoteMcpServer(seat): the same tools for one remote MCP request (ADR 630)
   launch.ts       // the bundle's entry (dist/index.js): enables Node's compile cache, then imports index.ts and calls runAdapter() when launched (ADR 577)
   toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085); HOT_TOOLS: the four marked anthropic/alwaysLoad
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
@@ -530,6 +555,7 @@ src/
     insights.ts   // team_report — the insight report at ic/team/exec altitudes (ADR 050/084/125)
     format.ts     // compact text rendering of a message for an agent to read; buildSkewWarning (ADR 135); tracedLine (ADR 445 §4); the ToolWarning union — build_skew, sync_wedge and provisioningDriftOf's provisioning_drift (ADR 408 inc 4), which READS `.musterd/drift.json` from client.workspaceDir (the seat's folder, not process.cwd() — a shared workspace-family entry runs from the family's primary checkout) and never imports @musterd/cli; syncWedgeWarning also reads `sync.hub_stopped` (ADR 591)
   bind.ts         // reachability check only (GET /health) — claims no presence
+  remote.ts       // ADR 630 §3: remoteConfig — a remote MCP request's config from its `msat_` bearer alone; the abstaining git/gh checks and the team-default project a remote server passes to the lane and send tools
 ```
 
 ## Reconnect behavior

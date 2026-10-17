@@ -69,6 +69,20 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
       },
     },
     async (args) => {
+      // ADR 630 §3: the bearer already named the seat, and the daemon authenticated it before this
+      // call existed. Report that seat; a remote connector cannot claim a different one.
+      if (client.remote) {
+        const other = args.as && args.as !== config.member ? args.as : undefined;
+        return textResult(
+          `Joined ${config.team} as ${config.member} through a remote connector — the connector's ` +
+            `sign-in is the seat.` +
+            (other
+              ? ` It cannot claim "${other}"; sign the connector in as that member instead.`
+              : '') +
+            `\n\nIMPORTANT — stay in sync: call team_inbox_check now, then again whenever you ` +
+            `finish a task or a reply.`,
+        );
+      }
       if (client.joined) {
         // The flag is in-process state and the two things that die are elsewhere (ADR 471): the
         // Presence is server-side (a daemon bounce, a reaped row — lane 01M2GP25R3), and the lease

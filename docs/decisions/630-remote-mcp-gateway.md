@@ -68,7 +68,9 @@ already depends on `@musterd/server` for its tests).
 6. **`tools/list` follows the seat.** The factory fetches the seat's effective capabilities and the
    adapter's `scopeToolSurface` renders only what the seat may call (ADR 621 §8).
 7. **Remote calls are counted.** The adapter's tool-call recorder posts with surface `remote`, so
-   `tool_call_stats` and `GET /report` carry phone usage, which ADR 446 promised.
+   `tool_call_stats` and `GET /report` carry phone usage, which ADR 446 promised. _(Amended 2026-10-17: `tool_call_stats`
+   has no surface column, so remote calls are counted per seat but cannot yet be told apart from
+   the same seat's desk calls; see the 2026-10-17 note in Consequences.)_
 8. **No factory, no tools.** A server created without `remoteMcp` (embedders, the server's own
    tests) answers `/mcp/:team` tool traffic with 503 "remote MCP not configured"; the OAuth routes
    still work. The server's tests cover OAuth and transport with a stub factory. Tool-level remote
@@ -97,6 +99,14 @@ already depends on `@musterd/server` for its tests).
   Follows-up: 01M51GQGG58E112A735F51VEWQ
   Follows-up: 01M51GQNG1QTTT7KV6MC2YACAM
   Follows-up: 01M51GQSJFMST225D56CKNBGS0
+- _2026-10-17, building increment 1 (lane `01M51GQGG5`):_ decision 7 assumed a surface the
+  telemetry does not carry. `tool_call_stats` is keyed by team, seat, tool, outcome and hour, and
+  `ToolTelemetryReport` names a surface only on its once-per-launch `startup` block. The remote
+  adapter does count every call, flushed as it finishes, so a phone member's usage shows on
+  `GET /report` under that seat. What it cannot do yet is separate one seat's remote calls from
+  its desk calls, which the Experiment below needs. That is a protocol and schema change with its
+  own ADR, not part of this one's increments.
+  Follows-up: 01M55K7KA9PCC34F4JR8Y0A0JA
 
 ## Observability & Evaluation
 
