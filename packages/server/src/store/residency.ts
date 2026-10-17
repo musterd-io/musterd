@@ -1383,8 +1383,11 @@ export interface DispatchNudge {
 
 /**
  * Who voices a dispatch nudge to this lane's owner — never the owner (a self-send never reaches
- * an inbox, per the incident precedent). Null when no second voice exists: suppression still
- * holds, the nudge is skipped and the audit says so.
+ * an inbox, per the incident precedent), and never a seat bound to another node: the nudge is
+ * minted by whichever daemon served the poll, stamped with that node, and the hub refuses a push
+ * as a seat that is bound elsewhere (`bound_elsewhere`), which wedges every later event from the
+ * node. Null when no eligible second voice exists: suppression still holds, the nudge is skipped
+ * and the audit says so.
  */
 async function dispatchNudgeVoice(
   db: Driver,
@@ -1393,13 +1396,26 @@ async function dispatchNudgeVoice(
   createdBy: string,
   owner: string,
 ): Promise<string | null> {
-  if (createdBy !== owner) return createdBy;
-  const row = await db.get<{ actor: string }>(
+  const recent = await db.all<{ actor: string }>(
     `SELECT actor FROM audit WHERE team_id = ? AND target = ? AND actor IS NOT NULL AND actor != ?
-     ORDER BY ts DESC, id DESC LIMIT 1`,
+     ORDER BY ts DESC, id DESC LIMIT 20`,
     [teamId, laneId, owner],
   );
-  return row?.actor ?? null;
+  const candidates = [...(createdBy !== owner ? [createdBy] : []), ...recent.map((r) => r.actor)];
+  const local = await db.get<{ node_id: string }>(
+    'SELECT node_id FROM local_node WHERE team_id = ?',
+    [teamId],
+  );
+  for (const name of new Set(candidates)) {
+    if (local === undefined) return name;
+    const bound = await db.all<{ node_id: string }>(
+      `SELECT s.node_id FROM seat_nodes s JOIN members m ON m.id = s.member_id
+         WHERE s.team_id = ? AND m.name = ?`,
+      [teamId, name],
+    );
+    if (bound.length === 0 || bound.some((b) => b.node_id === local.node_id)) return name;
+  }
+  return null;
 }
 
 /**

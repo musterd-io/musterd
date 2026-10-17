@@ -59,6 +59,11 @@ the silence is what made it wasteful rather than merely redundant.
 - The nudge sender is whoever the lane's record names, daemon-composed and marked
    (`meta.dispatch_nudge`); like the incident notices it is advisory and best-effort — a failed
    send never blocks the suppression.
+- _2026-10-17 (lane 01M55WS37R):_ the nudge is minted by whichever daemon served the poll and
+   stamped with that node, and the hub refuses a push as a seat bound to another node
+   (`bound_elsewhere`), which wedged a joiner's whole sync. The voice is now the first of the lane
+   creator, then recent non-owner actors, that is unbound or bound to the serving node; none
+   eligible reads as `no_voice`, and suppression still holds.
 
 ## Observability & Evaluation
 
