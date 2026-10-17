@@ -86,6 +86,13 @@ work.
 - Increment 3 (scene): one pin per read on the office corkboard, colored by `read_status`. The
   Experiments section is its text equivalent.
   Follows-up: 01M55WK0N22SN8ASEDZGG4PX2Z
+- _2026-10-17 (lane 01M55WJXNP, increment 1 built):_ three points the Decision left to the build.
+  An acceptance `accept` closes a lane `done`, so it meets the same refusal as any close: a dated
+  read with no verdict is refused with `validation`, and the owner gives the verdict and the accept
+  is sent again. The abandoned-acceptance sweep leaves such a lane where it is, visibly `overdue`,
+  rather than closing it without a verdict. On MCP the verdict is one undescribed string,
+  `"<met|missed|inconclusive>: <note>"` (the `follows_up` shape), because tools/list is budgeted:
+  the three tools that carry it cost +185 B in all (`docs/perf/context-budgets.json`).
 - Wiki falsifiers marked "Revisit YYYY-MM-DD" do not appear on their own. To be on the panel, a
   revisit becomes a lane with `reads_on`. That is deliberate: a revisit nobody owns is not a read.
 - One day of `due` is narrow. A read due on a Saturday shows `overdue` on Sunday. That is the
