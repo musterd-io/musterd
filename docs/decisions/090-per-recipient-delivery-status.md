@@ -43,7 +43,7 @@ Per (act, recipient), the status is the furthest rung reached:
 | State      | Meaning                                                                  | Derived from                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `logged`   | persisted to the append-only log = durably delivered to the seat's inbox | `messages` row (always true once routed — see "failed", below)                                                                                                       |
-| `seen`     | an inbox read advanced the recipient's cursor past the act               | `inbox_cursors.last_read_ts >= message.ts`                                                                                                                           |
+| `seen`     | an inbox read advanced the recipient's cursor past the act _(Amended 2026-10-17: the report says "past cursor" and names the cursor row. ADR 652.)_ | `inbox_cursors.last_read_ts >= message.ts`                                                                                                                           |
 | `answered` | the loop closed                                                          | an `accept`/`decline` whose `meta.in_reply_to` names the act, or a `resolve` on its thread — the exact predicate `countOpenLoops`/`recordLoopClosure` already encode |
 | `stale`    | unseen (or seen-but-unanswered for loop-opening acts) past a threshold   | derived label over the above + age; diagnostic, never stored                                                                                                         |
 
@@ -92,7 +92,7 @@ raw name as label):
   ledger folded into the existing report payload — both server-derived so every client shares one
   implementation.
 - **CLI:** `musterd report delivery [<id>]` — no id: the open directed ledger ("what's waiting on
-  whom, how long, seen or ignored"); with id: the per-act journey.
+  whom, how long, seen or ignored"); with id: the per-act journey. _(Amended 2026-10-17: the CLI and MCP say "past cursor" and name the cursor row. ADR 652.)_
 - **MCP:** the same ledger block on `team_report`, so an agent can check whether its handoff was
   seen before assuming silence means consent.
 - Notification tiers, nudges and the interrupt line stay the _actuators_; this is the _instrument_
@@ -101,6 +101,9 @@ raw name as label):
 
 ## Consequences
 
+- _(2026-10-17, ADR 652.)_ The CLI and `team_report` say "past cursor" and name `cursor_on`,
+  the cursor's `last_read_message_id`. The wire state stays `seen`. A read still marks every older
+  act; the line now says so.
 - The ~70 h-class failure becomes diagnosable in one query, and the inc3 MAST views (unanswered
   `request_help`, stalled threads) get their substrate — the open directed ledger _is_ the
   ignored-input detector's data.

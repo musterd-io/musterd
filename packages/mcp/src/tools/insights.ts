@@ -272,8 +272,8 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       );
   }
 
-  // The open directed ledger (ADR 090): loop-opening acts not yet answered, with per-recipient
-  // seen/unseen state — so silence is legible (ignored vs unread) before anyone assumes consent.
+  // The open directed ledger (ADR 090, ADR 652): loop-opening acts not yet answered. `seen` on
+  // the wire is the inbox cursor, so the line says "past cursor" and names that row.
   if (r.open_directed.length > 0) {
     lines.push('\nopen directed acts:');
     for (const d of r.open_directed) {
@@ -282,7 +282,13 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
         `  ${d.id} ${d.act}${d.urgent ? ' [urgent]' : ''} from ${d.from} → ${to} · ${ago(d.age_ms)} ago`,
       );
       for (const rec of d.recipients) {
-        const state = rec.answered ? `answered (${rec.answered.act})` : rec.state;
+        const state = rec.answered
+          ? `answered (${rec.answered.act})`
+          : rec.state === 'seen'
+            ? rec.cursor_on
+              ? `past cursor on ${rec.cursor_on}`
+              : 'past cursor'
+            : rec.state;
         const raises = rec.interrupt_raises > 0 ? ` · ${rec.interrupt_raises} raise(s)` : '';
         lines.push(`    ${rec.seat}: ${state}${raises}`);
       }

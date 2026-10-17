@@ -495,6 +495,8 @@ async function recipientLedger(
     seat_id: normalizeSeatName(recipient.name),
     state: answered ? 'answered' : seen ? 'seen' : 'logged',
     seen_by: seen ? cursor.updated_at : null,
+    // ADR 652: the row the cursor sits on, shared by every act this position passed.
+    cursor_on: seen ? cursor.last_read_message_id : null,
     answered,
     interrupt_raises: tallies
       ? (tallies.raises.get(raiseKey(recipient.name, msg.id)) ?? 0)

@@ -10,6 +10,7 @@ import { HttpClient } from '../client.js';
 import { loadConfig } from '../config.js';
 import { setColorEnabled } from '../render/theme.js';
 import { sweepSeriesPath } from '../session/sweep-series.js';
+import { claimAgentHttp } from '../test-auth.js';
 import { goalCommand } from './goal.js';
 import { renderTraceReport, reportCommand } from './report.js';
 import { teamCommand } from './team.js';
@@ -270,9 +271,43 @@ describe('report command', () => {
     expect(list.out).toContain('request_help');
     expect(list.out).toContain('Ada');
     const one = await capture(() => reportCommand(parseArgs(['delivery', envelope.id, '--json'])));
-    const ledger = JSON.parse(one.out) as { id: string; recipients: unknown[] };
+    const ledger = JSON.parse(one.out) as {
+      id: string;
+      recipients: { state: string; cursor_on: string | null }[];
+    };
     expect(ledger.id).toBe(envelope.id);
     expect(ledger.recipients.length).toBeGreaterThan(0);
+    expect(ledger.recipients[0]).toMatchObject({ state: 'logged', cursor_on: null });
+    expect(list.out).toContain('unseen');
+  });
+
+  it('report delivery says past cursor and names the cursor row (ADR 652)', async () => {
+    const admin = new HttpClient({ server: serverUrl, key: adminKey });
+    await admin.addMember('dawn', { name: 'Ada', kind: 'agent' });
+    const adaAuth = await claimAgentHttp(
+      serverUrl,
+      'dawn',
+      loadConfig().agentKeys['dawn']!,
+      adminKey,
+      'Ada',
+    );
+    const ada = new HttpClient({ server: serverUrl, ...adaAuth });
+    const envelope = makeEnvelope({
+      id: ulid(),
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'member', name: 'Ada' },
+      act: 'request_help',
+      body: 'need a hand',
+      thread: null,
+      meta: null,
+    });
+    await admin.send('dawn', envelope);
+    await ada.markRead('dawn', envelope.id);
+    const list = await capture(() => reportCommand(parseArgs(['delivery'])));
+    expect(list.out).toContain('past cursor');
+    expect(list.out).toContain(envelope.id);
+    expect(list.out).not.toMatch(/\bseen\b/);
   });
 
   it('report coordination renders the MAST page (and --json)', async () => {

@@ -340,10 +340,8 @@ tell them apart, which is why the rule is written here and not in the report.
   `request_help`, 6 `handoff`), the oldest about 64 days; 16 `request_help` to him from 10-02 to
   10-14 were unanswered (12 from gptbot, 3 from big-body, 1 from stanley). The 2026-10-08
   report's "about 35 unanswered for 36–82 days" does not match that count; use the new one.
-- **Do not read the report's `seen` as "a human looked".** The report derives `seen` from the
-  recipient's inbox cursor (`delivery.ts`), so every act older than the cursor reads seen. nick's
-  cursor stands at 2026-10-09 20:48Z, and he says none of those 16 came through `/live` and he
-  never opened them. Lane `01M562594H7X2DC9XVBRBPKASC` is open for it. This run reads only the
-  two refusal counts in `peer_demand`, which do not depend on the cursor, so the rule above
-  stands; any "unanswered" or "ignored" figure quoted from the report in the findings file
-  carries this caveat.
+- **The report says "past cursor" and names the cursor row** (ADR 652). Until that change it
+  printed `seen` for every act older than the inbox cursor, which is how the 16 unanswered
+  `request_help` above read as seen. nick's cursor stands at 2026-10-09 20:48Z, and he says none
+  of those 16 came through `/live` and he never opened them. This run reads only the two refusal
+  counts in `peer_demand`, which do not depend on the cursor.

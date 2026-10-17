@@ -81,6 +81,7 @@ withDrivers('delivery', (o) => {
         seat_id: 'ada',
         state: 'logged',
         seen_by: null,
+        cursor_on: null,
         answered: null,
       });
       expect(d.age_ms).toBe(9_000);
@@ -90,6 +91,7 @@ withDrivers('delivery', (o) => {
       d = (await actDelivery(db, team.id, 'h1', 10_000))!;
       expect(d.recipients[0]!.state).toBe('seen');
       expect(d.recipients[0]!.seen_by).not.toBeNull();
+      expect(d.recipients[0]!.cursor_on).toBe('h1');
 
       // Answered: ada's accept names the act via meta.in_reply_to.
       await msg(db, team, ada, nick, 'accept', 'a1', 2_000, { meta: { in_reply_to: 'h1' } });
@@ -111,10 +113,14 @@ withDrivers('delivery', (o) => {
 
       await setCursor(db, ada.id, 'h1'); // ada read h1, and only h1
 
-      expect((await actDelivery(db, team.id, 'h1', 10_000))!.recipients[0]!.state).toBe('seen');
+      expect((await actDelivery(db, team.id, 'h1', 10_000))!.recipients[0]).toMatchObject({
+        state: 'seen',
+        cursor_on: 'h1',
+      });
       const tied = (await actDelivery(db, team.id, 'h2', 10_000))!.recipients[0]!;
       expect(tied.state).toBe('logged');
       expect(tied.seen_by).toBeNull();
+      expect(tied.cursor_on).toBeNull();
     });
 
     it('a resolve on the thread answers for every recipient', async () => {
