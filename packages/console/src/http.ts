@@ -5,10 +5,20 @@ import { appendAudit } from './audit.js';
 import { clientIp, type ClientIpOptions } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import { hostCookie } from './cookies.js';
-import { csrfTokenValid, originAllowed } from './csrf.js';
+import { csrfTokenFor, csrfTokenValid, originAllowed } from './csrf.js';
 import { DATABASE_UNREACHABLE_SENTENCE, type Queryable } from './db.js';
 import { sendSignInEmail } from './email.js';
 import type { Log } from './log.js';
+import {
+  accountPage,
+  assetFor,
+  checkEmailPage,
+  errorPages,
+  finishPage,
+  PAGE_CSP,
+  signInPage,
+  wrongBrowserPage,
+} from './pages.js';
 import {
   finishFlow,
   PROVIDERS,
@@ -33,10 +43,11 @@ import {
 } from './transactions.js';
 
 /**
- * The console's HTTP boundary (ADR 615). The skeleton serves exactly two routes — `GET /health`
- * and `GET /.well-known/jwks.json` (an empty key set) — and refuses everything else. No sign-in,
- * signing, identity binding or team provisioning route exists until its own lane, and there is no
- * development issuer or test key to fall back to: an empty JWKS authenticates no one.
+ * The console's HTTP boundary (ADR 615). It serves `GET /health` and
+ * `GET /.well-known/jwks.json` (an empty key set), the ADR 620 sign-in flows, and the sign-in
+ * screens those flows render (pages.ts) — and refuses everything else. No signing, identity
+ * binding or team provisioning route exists until its own lane, and there is no development
+ * issuer or test key to fall back to: an empty JWKS authenticates no one.
  *
  * What the boundary holds from day one (big-body's security read, 2026-10-15):
  * - Host: answered only on the configured hosts; anything else is 404 (never a hint which exist).
@@ -187,6 +198,23 @@ function send(
 
 const err = (code: string, message: string) => ({ error: { code, message } });
 
+function sendHtml(
+  res: ServerResponse,
+  status: number,
+  html: string,
+  extra: Record<string, string | string[]> = {},
+): void {
+  res.writeHead(status, {
+    ...SECURITY_HEADERS,
+    'content-security-policy': PAGE_CSP,
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(html),
+    'cache-control': 'no-store',
+    ...extra,
+  });
+  res.end(res.req.method === 'HEAD' ? undefined : html);
+}
+
 export function createConsoleServer(deps: ConsoleDeps): Server {
   const { config, db, log } = deps;
   const now = deps.now ?? Date.now;
@@ -245,9 +273,7 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                   t,
                 ))
               )
-                return send(res, 429, err('too_many_requests', 'too many requests'), {
-                  'retry-after': '60',
-                });
+                return sendHtml(res, 429, errorPages.rate(), { 'retry-after': '60' });
               const flow = await startFlow(p, creds, config.issuer, deps.providers);
               const txValue = await createOAuthTx(
                 db,
@@ -279,11 +305,27 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               route = 'auth_start_email';
               if (!config.email) return send(res, 404, err('not_found', 'not found'));
               const t = now();
-              const address = emailAddress(form.get('email'));
+              const rawEmail = form.get('email') ?? '';
+              const address = emailAddress(rawEmail);
               // The answer never says whether the address has an account — there is no lookup to
-              // reveal. A malformed address is the one thing refused here.
+              // reveal. A malformed address is the one thing refused here, on the sign-in page
+              // with the field error the copy spec names (empty is its own string).
               if (!address)
-                return send(res, 400, err('invalid_email', 'enter a valid email address'));
+                return sendHtml(
+                  res,
+                  400,
+                  signInPage({
+                    providers: PROVIDERS.filter((x) => config.providers[x]),
+                    email: true,
+                    error: {
+                      message:
+                        rawEmail.trim() === ''
+                          ? 'Enter an email address.'
+                          : 'Enter a full email address.',
+                      value: rawEmail,
+                    },
+                  }),
+                );
               const client = clientKey(req);
               const addr = hashSecret(inboxKey(address));
               const allowed =
@@ -322,13 +364,7 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 ))
               )
                 log.warn('signin_email_volume_high', { rid, per_hour_over: EMAIL_SEND_WATCH });
-              if (!allowed)
-                return send(
-                  res,
-                  429,
-                  err('too_many_requests', 'too many sign-in emails; try again later'),
-                  { 'retry-after': '900' },
-                );
+              if (!allowed) return sendHtml(res, 429, errorPages.rate(), { 'retry-after': '900' });
               const token = newSecret();
               const txValue = await createMagicTx(
                 db,
@@ -347,12 +383,11 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 t,
               );
               if (!sent) log.warn('signin_email_not_sent', { rid });
-              return send(
-                res,
-                200,
-                { ok: true, state: 'check_email' },
-                { 'set-cookie': txCookie(txValue, MAGIC_TTL_MS / 1000) },
-              );
+              // Copy spec §3: check-your-email is also the answer when the send failed for any
+              // reason other than the rate limit — the page never says whether it sent.
+              return sendHtml(res, 200, checkEmailPage(address), {
+                'set-cookie': txCookie(txValue, MAGIC_TTL_MS / 1000),
+              });
             }
             if (path === '/auth/email/confirm') {
               route = 'auth_confirm_email';
@@ -370,15 +405,7 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                   },
                   t,
                 );
-                return send(
-                  res,
-                  400,
-                  err(
-                    'link_invalid',
-                    'this link has expired, was already used, or belongs to another browser',
-                  ),
-                  clearTx,
-                );
+                return sendHtml(res, 400, errorPages.link(), clearTx);
               }
               const identity = {
                 provider: 'email' as const,
@@ -386,8 +413,7 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 email: done.email,
               };
               const account = await accountFor(db, identity, t);
-              if (!account)
-                return send(res, 403, err('account_disabled', 'this account is disabled'), clearTx);
+              if (!account) return sendHtml(res, 403, errorPages.disabled(), clearTx);
               const sid = await createSession(
                 db,
                 {
@@ -465,7 +491,9 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
             if (!config.email) return send(res, 404, err('not_found', 'not found'));
             const token = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('t');
             const state = await lookupMagic(db, token, cookie(req, TX_COOKIE), now());
-            return send(res, 200, { state });
+            if (state === 'confirm') return sendHtml(res, 200, finishPage(token!));
+            if (state === 'other_browser') return sendHtml(res, 200, wrongBrowserPage());
+            return sendHtml(res, 200, errorPages.link());
           }
           const callback = CALLBACK.exec(path);
           if (callback) {
@@ -486,13 +514,11 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 t,
               ))
             )
-              return send(res, 429, err('too_many_requests', 'too many requests'), {
-                'retry-after': '60',
-              });
+              return sendHtml(res, 429, errorPages.rate(), { 'retry-after': '60' });
             const query = (req.url ?? '').split('?')[1] ?? '';
             const params = new URLSearchParams(query);
             const tx = await consumeOAuthTx(db, cookie(req, TX_COOKIE), p, params.get('state'), t);
-            const fail = async (code: string, message: string, status = 400) => {
+            const fail = async (code: string, status = 400) => {
               await appendAudit(
                 db,
                 {
@@ -502,11 +528,24 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 },
                 t,
               );
-              return send(res, status, err(code, message), clearTx);
+              // A failed sign-in never redirects to a caller-chosen path (ADR 620 decision 8);
+              // it renders its error page here. The provider's own error text stays off it.
+              const page =
+                code === 'account_disabled'
+                  ? errorPages.disabled()
+                  : code === 'signin_expired'
+                    ? signInPage({
+                        providers: PROVIDERS.filter((x) => config.providers[x]),
+                        email: Boolean(config.email),
+                        expired: true,
+                      })
+                    : p === 'github'
+                      ? errorPages.github()
+                      : errorPages.google();
+              return sendHtml(res, status, page, clearTx);
             };
-            if (!tx) return fail('signin_expired', 'this sign-in has expired or was already used');
-            if (params.has('error'))
-              return fail('provider_refused', 'the provider did not sign you in');
+            if (!tx) return fail('signin_expired');
+            if (params.has('error')) return fail('provider_refused');
             let identity;
             try {
               identity = await finishFlow(p, creds, config.issuer, query, tx, deps.providers);
@@ -516,10 +555,10 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 provider: p,
                 kind: e instanceof Error ? e.name : typeof e,
               });
-              return fail('provider_refused', 'the provider did not sign you in');
+              return fail('provider_refused');
             }
             const account = await accountFor(db, identity, t);
-            if (!account) return fail('account_disabled', 'this account is disabled', 403);
+            if (!account) return fail('account_disabled', 403);
             const sid = await createSession(
               db,
               {
@@ -556,8 +595,54 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
             ]);
             return send(res, 303, { ok: true }, { location: tx.returnPath });
           }
+          const asset = assetFor(path);
+          if (asset && (req.method === 'GET' || req.method === 'HEAD')) {
+            route = 'asset';
+            res.writeHead(200, {
+              ...SECURITY_HEADERS,
+              'content-security-policy': PAGE_CSP,
+              'content-type': asset.type,
+              'content-length': asset.body.length,
+              'cache-control': asset.cache,
+            });
+            return res.end(req.method === 'HEAD' ? undefined : asset.body);
+          }
+          if (path === '/' || path === '/account') {
+            route = path === '/' ? 'signin_page' : 'account_page';
+            const sid = cookie(req, SESSION_COOKIE);
+            const session = await loadSession(db, sid, now());
+            if (path === '/account') {
+              if (!session)
+                return sendHtml(res, 303, '', {
+                  location: '/',
+                  'set-cookie': hostCookie('session', '', 0),
+                });
+              return sendHtml(
+                res,
+                200,
+                accountPage({
+                  methods: await methodsOf(db, session.accountId),
+                  csrf: csrfTokenFor(sid!),
+                }),
+              );
+            }
+            if (session) return sendHtml(res, 303, '', { location: '/account' });
+            // A session cookie that no longer loads is an expired sign-in (copy spec §2):
+            // show the banner once and clear it, so a fresh visit never sees it.
+            const stale = sid !== undefined;
+            return sendHtml(
+              res,
+              200,
+              signInPage({
+                providers: PROVIDERS.filter((x) => config.providers[x]),
+                email: Boolean(config.email),
+                expired: stale,
+              }),
+              stale ? { 'set-cookie': hostCookie('session', '', 0) } : {},
+            );
+          }
           if (path === '/me') {
-            // Temporary: a JSON view of who is signed in, until slippy's signed-in page lands.
+            // The JSON view of who is signed in; the signed-in page itself is GET /account.
             route = 'me';
             const session = await loadSession(db, cookie(req, SESSION_COOKIE), now());
             if (!session) return send(res, 401, err('signed_out', 'not signed in'));
@@ -587,7 +672,14 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
           return send(res, 404, err('not_found', 'not found'));
         } catch (e) {
           log.error('http_error', { rid, route, kind: e instanceof Error ? e.name : typeof e });
-          if (!res.headersSent) send(res, 500, err('internal', 'internal error'));
+          if (!res.headersSent) {
+            // Browser flows get the unknown-failure page with the request id (copy spec §7);
+            // the JSON routes keep the one error shape. Never the exception's text either way.
+            const p = (req.url ?? '').split('?')[0] ?? '';
+            if (p === '/' || p === '/account' || p.startsWith('/auth/') || p === '/logout')
+              sendHtml(res, 500, errorPages.unknown(rid));
+            else send(res, 500, err('internal', 'internal error'));
+          }
         }
       })();
     },

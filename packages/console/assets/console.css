@@ -1,0 +1,406 @@
+/*
+ * app.musterd.io — the console's one stylesheet (reference for lane 01M3Z43QYB; design lane 01M51E8397).
+ * Spec: docs/superpowers/specs/2026-10-15-console-signin-design.md. Served from the console's own
+ * origin under its CSP (style-src 'self'; font-src 'self'; img-src 'self'). No inline styles anywhere:
+ * every state is a class.
+ *
+ * Product chrome (ADR 037): minimal, warm, one accent. Tokens are the web's paper and dusk palettes
+ * (packages/web/src/styles/tokens.css) and brand.md §2–3, by role. Paper only, as /live is: the
+ * product chrome has no dark theme (musterd.io and /live both pin data-theme="light"), and the site's
+ * dusk palette is the marketing surface's, cool where the product is warm (PRODUCT.md principle 1).
+ */
+
+@font-face {
+  font-family: 'Recursive';
+  src: url('fonts/recursive-linear.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Recursive Casual';
+  src: url('fonts/recursive-casual.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+/* Only the pages that show a code or a request id use mono, and a face downloads only when text on
+   the page uses it, so sign-in itself never fetches this one. */
+@font-face {
+  font-family: 'Recursive Mono';
+  src: url('fonts/recursive-mono.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Paper (light) — tokens.css :root[data-theme='light'] */
+  --c-ground: #f7efe2;
+  --c-field: #fffaf1;
+  --c-text: #2a2118;
+  --c-text-dim: #4a3f30;
+  --c-text-faint: #6b5637;
+  --c-rule: rgba(60, 40, 20, 0.14);
+  --c-edge: #8c7e6d; /* control borders, opaque: 3.46:1 on the ground, 3.8:1 on the field (WCAG 1.4.11). An
+                         alpha edge measured 2.38 here, 2026-10-15. */
+  --c-accent: #e1ad01; /* mustard-500: a FILL, behind dark text */
+  --c-accent-hover: #efc94c; /* mustard-300 */
+  --c-on-accent: #2a2118;
+  --c-accent-ink: #7a5a12; /* accent as text or a mark on paper */
+  --c-danger-ink: #a3241b;
+  --c-success-ink: #1f6f45; /* presence: online — brand success, deepened for paper */
+  --c-focus: #2a2118;
+
+  --font-sans: 'Recursive', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Recursive Casual', 'Recursive', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Recursive Mono', ui-monospace, Menlo, monospace;
+
+  /* Type ramp — brand.md §3 */
+  --t-h1: 700 28px/36px var(--font-display);
+  --t-body: 400 15px/24px var(--font-sans);
+  --t-small: 400 13px/20px var(--font-sans);
+  --t-label: 600 13px/20px var(--font-sans);
+  --t-button: 600 15px/20px var(--font-sans);
+  --t-code: 600 28px/36px var(--font-mono);
+  --t-mono-sm: 400 12px/18px var(--font-mono);
+
+  /* Space — one scale */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  --r-control: 8px;
+  --h-control: 44px;
+  --column: 380px;
+
+  /* Motion — /live's scale (Live.css, ADR 329): 120 ms, ease-out. Colour only; nothing moves. */
+  --m-short: 120ms;
+  --m-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--c-ground);
+  color: var(--c-text);
+  font: var(--t-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(var(--s-6), 12vh, 128px) 20px var(--s-6);
+}
+
+/* The one column. Everything sits on the paper; no card around it. */
+.c-shell {
+  width: 100%;
+  max-width: var(--column);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* ── the lockup ─────────────────────────────────────────────────────────────────────────────── */
+
+.c-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  align-self: flex-start;
+  margin: 0 0 var(--s-7);
+  color: var(--c-text);
+  text-decoration: none;
+  font: 700 18px/24px var(--font-display);
+  border-radius: 6px;
+}
+.c-brand svg {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+/* ── type ───────────────────────────────────────────────────────────────────────────────────── */
+
+h1 {
+  font: var(--t-h1);
+  margin: 0 0 var(--s-2);
+  text-wrap: balance;
+}
+.c-lede {
+  margin: 0 0 var(--s-6);
+  color: var(--c-text-dim);
+  text-wrap: pretty;
+}
+.c-lede strong {
+  color: var(--c-text);
+  font-weight: 600;
+  overflow-wrap: anywhere; /* a very long address wraps; it is never cut */
+}
+.c-note {
+  margin: var(--s-5) 0 0;
+  font: var(--t-small);
+  color: var(--c-text-faint);
+}
+
+a {
+  color: var(--c-accent-ink);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* A notice above the heading: the one carried-over state (the session expired). A tinted strip with
+   the accent as a mark down its edge; the words carry it, the colour repeats it. */
+.c-notice {
+  margin: 0 0 var(--s-5);
+  padding: var(--s-3) var(--s-4);
+  border-left: 3px solid #b8860b; /* mustard-700: a mark on paper, 3.3:1 */
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: #fbf3d5; /* mustard-50 */
+  color: var(--c-text);
+  font: var(--t-small);
+  font-weight: 600;
+}
+
+/* ── controls ───────────────────────────────────────────────────────────────────────────────── */
+
+.c-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.c-button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--h-control);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-control);
+  border: 1px solid var(--c-edge);
+  background: var(--c-field);
+  color: var(--c-text);
+  font: var(--t-button);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--m-short) var(--m-ease),
+    border-color var(--m-short) var(--m-ease);
+}
+.c-button:hover {
+  border-color: var(--c-text-dim);
+}
+.c-button svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.c-button--primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-on-accent);
+}
+.c-button--primary:hover {
+  background: var(--c-accent-hover);
+  border-color: var(--c-accent-hover);
+}
+/* A plain text action: "use a different email", "back to sign in". Underlined, so it reads as a
+   link, and padded to the 24 px target floor. */
+.c-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font: var(--t-small);
+}
+
+.c-or {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-5) 0;
+  color: var(--c-text-faint);
+  font: var(--t-small);
+}
+.c-or::before,
+.c-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--c-rule);
+}
+
+.c-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.c-field label {
+  font: var(--t-label);
+}
+.c-field input {
+  width: 100%;
+  min-height: var(--h-control);
+  padding: 0 var(--s-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--c-edge);
+  background: var(--c-field);
+  color: var(--c-text);
+  font: var(--t-body);
+}
+.c-field input::placeholder {
+  color: var(--c-text-faint);
+}
+.c-field--error input {
+  border-color: var(--c-danger-ink);
+  border-width: 2px;
+  padding: 0 calc(var(--s-3) - 1px);
+}
+.c-field__error {
+  display: flex;
+  gap: var(--s-2);
+  margin: 0;
+  font: var(--t-small);
+  color: var(--c-danger-ink);
+}
+.c-field__error::before {
+  content: '!';
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--c-danger-ink);
+  color: var(--c-ground);
+  font: 700 11px/1 var(--font-sans);
+}
+
+/* Focus: a 2 px ring in the text colour, offset from the control, on every focusable thing. */
+:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 3px;
+}
+.c-field input:focus-visible {
+  outline-offset: 1px;
+}
+
+/* ── the account list ───────────────────────────────────────────────────────────────────────── */
+
+.c-section-label {
+  margin: var(--s-5) 0 var(--s-2);
+  font: var(--t-label);
+  color: var(--c-text-dim);
+}
+.c-list {
+  list-style: none;
+  margin: 0 0 var(--s-6);
+  padding: 0;
+  border-top: 1px solid var(--c-rule);
+}
+.c-list li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: var(--s-3);
+  row-gap: 2px;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--c-rule);
+}
+.c-list svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  grid-row: span 2;
+}
+.c-list__who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.c-list__now {
+  font: var(--t-small);
+  font-weight: 600;
+  color: var(--c-success-ink);
+}
+/* The roll-call dot (brand.md §2, the CLI's presence glyph): the sign-in way this session used.
+   Always beside the words, never instead of them. */
+.c-list__now::before {
+  content: '●';
+  margin-right: var(--s-1);
+}
+.c-list__meta {
+  font: var(--t-small);
+  color: var(--c-text-faint);
+}
+
+/* ── codes and references ───────────────────────────────────────────────────────────────────── */
+
+.c-code {
+  margin: 0 0 var(--s-5);
+  padding: var(--s-4) 0;
+  border-top: 1px solid var(--c-rule);
+  border-bottom: 1px solid var(--c-rule);
+  font: var(--t-code);
+  letter-spacing: 0.08em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.c-ref {
+  margin: 0 0 var(--s-6);
+  color: var(--c-text-dim);
+}
+.c-ref code {
+  display: block;
+  margin-top: var(--s-2);
+  font: 600 14px/22px var(--font-mono);
+  color: var(--c-text);
+  user-select: all; /* one click selects the whole id for pasting */
+  overflow-wrap: anywhere;
+}
+
+/* ── footer ─────────────────────────────────────────────────────────────────────────────────── */
+
+.c-foot {
+  margin-top: auto;
+  padding-top: var(--s-7);
+  display: flex;
+  gap: var(--s-4);
+  font: var(--t-small);
+}
+.c-foot a {
+  color: var(--c-text-faint);
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+/* At 320 px the column is 280 px; nothing scrolls sideways (WCAG 1.4.10). */
+@media (max-width: 360px) {
+  body {
+    padding-left: var(--s-4);
+    padding-right: var(--s-4);
+  }
+}

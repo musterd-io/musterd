@@ -248,7 +248,7 @@ describe('GitHub and Google sign-in (ADR 620)', () => {
     fake.state.nonce = 'not-the-nonce';
     const cb = await callback('google', `code=good-code&state=${s.state}`, s.tx);
     expect(cb.status).toBe(400);
-    expect(JSON.parse(cb.body).error.code).toBe('provider_refused');
+    expect(cb.body).toContain("Google didn't complete sign-in.");
   });
 
   it('the same identity twice is one account; another provider is another account, even with the same email', async () => {
@@ -271,7 +271,7 @@ describe('GitHub and Google sign-in (ADR 620)', () => {
     expect((await callback('github', `code=good-code&state=${s3.state}`, s3.tx)).status).toBe(303);
     const replay = await callback('github', `code=good-code&state=${s3.state}`, s3.tx);
     expect(replay.status).toBe(400);
-    expect(JSON.parse(replay.body).error.code).toBe('signin_expired');
+    expect(replay.body).toContain('Your sign-in expired. Sign in again.');
   });
 
   it('a provider error or a bad code is "provider refused", never a redirect', async () => {
