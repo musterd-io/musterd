@@ -111,12 +111,13 @@ slot. `{address}` and `{request_id}` are server-filled.
 | `check-email.html` | §3 | The address in `<strong>`, wrapping anywhere: a very long address wraps; it is never cut. |
 | `finish.html` | §5 ready | Sign in is the POST that consumes the token; Cancel is a link and consumes nothing. |
 | `wrong-browser.html` | §5 wrong browser | No button, by design (ADR 620 decision 6). |
-| `account.html` | §6 | `h2.c-section-label` + a `ul` of methods, one row per identity: icon + provider name (GitHub, Google) or "Email · {address}". The session marker sits on the row whose identity the session used — pending alfie's string. Sign out is a secondary button: leaving is not the reason this page exists. |
-| `error-*.html` | §7 | Heading, body (where the spec has one), primary Back to sign-in. `<title>` is the heading plus " — musterd". `error-unknown` puts "Quote this if you ask for help:" and the id, in selectable mono (`user-select: all`), between the heading and the button. |
+| `account.html` | §6 | `h2.c-section-label` + a `ul` of methods, one row per identity: icon + provider name (GitHub, Google) or "Email · {address}". The session marker sits on the row whose identity the session used. The words are `Signed in with this` (copy spec §6, confirmed 2026-10-17). The row has no date. Sign out is a secondary button: leaving is not the reason this page exists. |
+| `error-*.html` | §7 | Heading, body, primary Back to sign-in. The heading ends on the last word. `<title>` is the heading plus " — musterd". `error-unknown` puts the body and the id, in selectable mono (`user-select: all`), between the heading and the button. |
 | `device.html`, `handback.html` | not yet in the copy spec | Later lanes (device code, spec §4.1; team hand-back, §4.4). The layout is settled — the code sits between rules, in mono, centred, with `aria-label` spelling it out — and every string is a draft for alfie. |
 
-**Open with alfie** (thread `01M50ZHN7R`): whether a §7 "Exact string" is the heading with "Next line" as the
-body, and whether headings keep their full stop. The reference build reads it that way.
+**Settled with alfie** (2026-10-17, thread `01M50ZHN7R`, message `01M52XTTEHYC5AJ46Z1T1HDNAW`): a §7
+heading is the first sentence and ends on the last word. The body is the remainder of that row.
+The current-session marker is `Signed in with this`.
 
 **States that are not screens.** Loading: none — every response is a full server render, under a
 second. Partial and stale: the account list is read per request, so it is never stale; a provider

@@ -248,7 +248,7 @@ describe('GitHub and Google sign-in (ADR 620)', () => {
     fake.state.nonce = 'not-the-nonce';
     const cb = await callback('google', `code=good-code&state=${s.state}`, s.tx);
     expect(cb.status).toBe(400);
-    expect(cb.body).toContain("Google didn't complete sign-in.");
+    expect(cb.body).toContain("<h1>Google didn't complete sign-in</h1>");
   });
 
   it('the same identity twice is one account; another provider is another account, even with the same email', async () => {

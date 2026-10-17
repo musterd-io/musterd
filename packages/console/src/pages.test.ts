@@ -6,6 +6,7 @@ import type { Queryable } from './db.js';
 import { signInMessage } from './email.js';
 import { createConsoleServer } from './http.js';
 import { makeLog } from './log.js';
+import { accountPage } from './pages.js';
 
 const config: ConsoleConfig = {
   databaseUrl: 'postgres://x@db.test/console',
@@ -182,6 +183,23 @@ describe('console sign-in pages (design 2026-10-15, copy spec)', () => {
     });
     expect(r.body).not.toContain('a"<b>');
     expect(r.body).toContain('a&quot;&lt;b&gt;@example.test');
+  });
+});
+
+describe('account page marker (copy spec §6)', () => {
+  it('puts Signed in with this on the session row only', () => {
+    const html = accountPage({
+      csrf: 'tok',
+      methods: [
+        { provider: 'github', email: null, current: true },
+        { provider: 'email', email: 'ada@example.test', current: false },
+      ],
+    });
+    expect(html).toContain(
+      '<span class="c-list__who">GitHub</span><span class="c-list__now">Signed in with this</span>',
+    );
+    expect(html).toContain('<span class="c-list__who">Email · ada@example.test</span></li>');
+    expect(html.match(/Signed in with this/g)).toHaveLength(1);
   });
 });
 

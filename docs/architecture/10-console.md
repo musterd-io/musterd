@@ -33,15 +33,15 @@ Two routes, and everything else is refused:
 | `GET /me` | JSON view of the signed-in account and its methods |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
 | `GET /` | the sign-in page (design `2026-10-15-console-signin-design.md`, words `console-signin-copy-spec.md`): provider POST forms to the start routes above and the email form, each way shown only when configured; a signed-in browser is sent to `/account`, a stale session cookie shows the expired banner once and is cleared |
-| `GET /account` | the signed-in page: the account's sign-in methods and the sign-out POST form (with its CSRF field); no session is a `303 /` |
+| `GET /account` | the signed-in page: the account's sign-in methods, `Signed in with this` on the identity this session used, and the sign-out POST form (with its CSRF field); no session is a `303 /` |
 | `GET /console.css`, `/favicon.svg`, `/fonts/*.woff2` | the screens' own assets (in `packages/console/assets/`), under the page CSP below; fonts are immutable, the rest cache for 300 s |
 
 The browser flows answer in pages, not JSON: a bad email address re-renders the sign-in page
 with its field error, a sent (or silently failed) send renders check-your-email, the magic
 link's GET renders finish / wrong-browser / link-no-longer-valid, and a failed callback renders
 its provider, disabled, expired or too-many-attempts page — a failed sign-in never redirects to
-a caller-chosen path. The session marker the design puts on the account row this session used
-waits on its words from the copy owner, so the row is unmarked for now.
+a caller-chosen path. The session marker on the account row this session used is
+`Signed in with this` (copy spec §6). The row has no date.
 
 No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
 `01M3Z43QYB`, KMS tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create-team `01M3Z44MTV`.
@@ -130,7 +130,7 @@ exposes to the machine as `FLY_IMAGE_REF`.
 
 ```
 src/
-  accounts.ts     // accountFor(db, identity, now): the account an identity (provider, subject) belongs to, or a new one — never by email; null when disabled; methodsOf(account)
+  accounts.ts     // accountFor(db, identity, now): the account an identity (provider, subject) belongs to, or a new one — never by email; null when disabled; methodsOf(account, session identity) marks that one row current and keeps subjects off the result
   audit.ts        // appendAudit(db, {action, requestId, actorAccountId, detail}, now): one INSERT; detail goes through log.ts's redact, so no secret lands in audit
   bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL; the /health build is the dist stamp, else the FLY_IMAGE_REF git-<sha> label (the image has no .git)
   config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
