@@ -86,7 +86,8 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
       'leaked secrets and dependency questions to you. The role grants no admin, infrastructure or ' +
       'production access: scan only inside an authorized lane, and hand a finding on running ' +
       'services to the platform role. A weakness stays private until its fix ships; disclosure ' +
-      'timing belongs to the human who owns the project.',
+      'timing belongs to the human who owns the project. The security skill is the playbook; its ' +
+      'team file holds local systems, decisions and approved channels.',
     capabilities: {},
   },
   courier: {

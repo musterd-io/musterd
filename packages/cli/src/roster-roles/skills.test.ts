@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -40,6 +47,20 @@ describe('built-in role skills (ADR 586 §4–6)', () => {
     expect(shippedSkillFiles(root, METHOD_SKILL).has(join('skeleton', 'SKILL.md'))).toBe(true);
   });
 
+  it('installs the portable security source under the security role name', () => {
+    const files = shippedSkillFiles(root, 'security');
+    const core = files.get('SKILL.md')?.toString('utf8') ?? '';
+    const evals = JSON.parse(files.get(join('evals', 'evals.json'))!.toString('utf8')) as {
+      skill_name: string;
+    };
+    const blank = readFileSync(join(root, METHOD_SKILL, 'skeleton', 'references', 'team.md'));
+
+    expect(core).toMatch(/^name: security$/m);
+    expect(core).not.toBe(readFileSync(join(root, 'security', 'SKILL.md'), 'utf8'));
+    expect(evals.skill_name).toBe('security');
+    expect(files.get(join('references', 'team.md'))?.equals(blank)).toBe(true);
+  });
+
   it('the build bundle is the shipped files, skill by skill', () => {
     const dest = mkdtempSync(join(tmpdir(), 'musterd-role-skills-'));
     const names = bundleRoleSkills(root, dest);
@@ -52,6 +73,20 @@ describe('built-in role skills (ADR 586 §4–6)', () => {
 });
 
 describe('installing a skill stays inside the repo', () => {
+  it("keeps a team's existing security skill when the built-in is created", () => {
+    const repo = mkdtempSync(join(tmpdir(), 'musterd-skill-repo-'));
+    const skills = join(repo, '.agents', 'skills');
+    const existing = join(skills, 'security');
+    mkdirSync(existing, { recursive: true });
+    const original = Buffer.from('team-owned skill\n');
+    writeFileSync(join(existing, 'SKILL.md'), original);
+
+    const result = installSkill(skills, 'security', shippedSkillFiles(root, 'security'));
+
+    expect(result.status).toBe('kept');
+    expect(readFileSync(join(existing, 'SKILL.md'))).toEqual(original);
+  });
+
   it('refuses a skill directory reached through a symlink out of the repo', () => {
     const repo = mkdtempSync(join(tmpdir(), 'musterd-skill-repo-'));
     const outside = mkdtempSync(join(tmpdir(), 'musterd-skill-out-'));

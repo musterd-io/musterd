@@ -19,8 +19,8 @@ import { SKILL_NAME_RE } from '@musterd/protocol';
  * out again into a team's repo.
  *
  * Only a role whose skill has a recorded blind-graded eval run ships one (decision 6). The
- * product-communications skill's run 1 was graded blind, and its brand sources now sit in
- * `references/team.md` (#2657), so it ships like the others.
+ * security source lives at `security-portable/` so the built-in never bundles this team's
+ * `.agents/skills/security/`; it is installed with the role's name and a blank team file.
  */
 export const BUILTIN_ROLE_SKILLS: readonly string[] = [
   'designer',
@@ -28,6 +28,7 @@ export const BUILTIN_ROLE_SKILLS: readonly string[] = [
   'planner',
   'platform',
   'product-communications',
+  'security',
   'steward',
 ];
 
@@ -37,6 +38,11 @@ export const METHOD_SKILL = 'building-a-role-skill';
 /** A role skill's team-specific layer (ADR 586, amended §1); shipped blank, from the skeleton. */
 const TEAM_FILE = join('references', 'team.md');
 const SKELETON = 'skeleton';
+
+/** A portable source tree may have its own directory name while installing as a built-in role. */
+const BUILTIN_ROLE_SKILL_SOURCES: Record<string, string> = {
+  security: 'security-portable',
+};
 
 /**
  * Where the shipped skills are: `dist/role-skills/` in a built CLI, else the repo's own
@@ -68,10 +74,26 @@ function walk(dir: string, base = dir): string[] {
  */
 export function shippedSkillFiles(root: string, skill: string): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
-  const dir = join(root, skill);
+  const source = BUILTIN_ROLE_SKILL_SOURCES[skill] ?? skill;
+  const dir = join(root, source);
   for (const rel of walk(dir)) files.set(rel, readFileSync(join(dir, rel)));
   if (skill !== METHOD_SKILL && files.has(TEAM_FILE))
     files.set(TEAM_FILE, readFileSync(join(root, METHOD_SKILL, SKELETON, TEAM_FILE)));
+  if (source !== skill) {
+    const core = files.get('SKILL.md');
+    if (core)
+      files.set(
+        'SKILL.md',
+        Buffer.from(core.toString('utf8').replace(/^name: [^\n]+$/m, `name: ${skill}`)),
+      );
+    const evalsPath = join('evals', 'evals.json');
+    const evals = files.get(evalsPath);
+    if (evals) {
+      const document = JSON.parse(evals.toString('utf8')) as { skill_name?: string };
+      document.skill_name = skill;
+      files.set(evalsPath, Buffer.from(`${JSON.stringify(document, null, 2)}\n`));
+    }
+  }
   return files;
 }
 

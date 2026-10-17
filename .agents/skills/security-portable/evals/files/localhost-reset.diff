@@ -1,0 +1,13 @@
+Fictional diff for this skill evaluation; the endpoint does not exist.
+
+```diff
+ app.get('/reset', (req, res) => {
+   db.exec(`DELETE FROM records WHERE tenant = '${req.query.tenant}'`);
+   res.setHeader('Access-Control-Allow-Origin', '*');
+   res.end('done');
+ });
+ server.listen(8080, '127.0.0.1');
+```
+
+There is no authentication middleware on this route. The server is installed on a developer's
+machine and runs while they work.
