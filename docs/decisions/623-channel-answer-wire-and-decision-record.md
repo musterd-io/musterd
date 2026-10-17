@@ -107,7 +107,7 @@ binding store arrives with the pairing lane. Until it does, redemption **fails c
 
 `channel.answer.advisory` (an A1 answer recorded) and `channel.answer.refused` (with a reason: `expired`,
 `consumed`, `stale_revision`, `class_changed`, `binding_stale`, `no_binding_store`, `conflict`,
-`wrong_team`, `assurance`). `channel.answer.accepted` is reserved for the first class that can release
+`wrong_team`, `assurance`). _(Amended 2026-10-17: as built, a cross-team token is refused as `unknown_token` and `wrong_team` is never produced; the closed set is in the lane 2c note under Consequences.)_ `channel.answer.accepted` is reserved for the first class that can release
 work. Each row's detail carries the human authorizer and the delivery actor separately, the ask id and
 digest, the binding id and generation, and the assurance. Never the token, nonce, signature or body. The
 rows are added to the audit action map.
