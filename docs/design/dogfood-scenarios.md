@@ -289,3 +289,53 @@ holds | dented | false — <one sentence>
 **On "what you had to already know":** you are not a new user and cannot become one, but you can
 notice the moments you used knowledge a stranger lacks. Those moments are where the product's
 documentation and copy are wrong, and no bug report will ever surface them.
+
+## 16. Scenario 7 with a number: refusal and acceptance running both ways
+
+Lane `01M4EDCSJD`. Scenario 7 says what to do; this section fixes **what counts as the claim
+holding, before anyone runs it**, so the result cannot be read to suit. Read on **2026-11-01**
+(`reads_on` on the lane; the YC W27 date is 2026-11-02).
+
+**The claim:** *refusal and acceptance-by-another run both ways.* Humans are challenged and have
+their handoffs declined by agents; humans decline and accept in turn; and work is accepted by a
+seat of a different model family. The 2026-10-08 report (7 days) found none of the human half.
+
+### Baseline (`musterd report --json`, `peer_demand`, window 7 days)
+
+| Measure | 2026-10-08 | 2026-10-17 |
+| --- | --- | --- |
+| challenges **to a human** | 0 | 0 |
+| handoff declines **of a human's handoff** | 0 | 0 |
+| challenges to an agent | — | 1 |
+| handoff declines of an agent's handoff | — | 2 |
+| human accepts (nick) | 0 of 56 acts | 147 of 315 acts |
+| acceptances closed by a counterpart, 30 days (`review.closed.counterpart_confirm`) | — | 701 of 995 |
+| family posture | — | diverse (claude 6, grok 2, gpt 1 attesting) |
+
+Two of the three bars have moved on their own since 10-08: nick now accepts, and acceptance is
+cross-family. **The human-facing refusal half has not moved.** That is what this run is for.
+
+### The rule, fixed now
+
+Over the 7 days ending on the read date, from `peer_demand` in the same report:
+
+- **MET** when `challenges.to_human ≥ 1` **and** `handoff_declines.of_human ≥ 1`, and at least one
+  acceptance of work a human handed on was given by a seat of another family.
+- **MISSED** when none of the two human-facing counts moved.
+- **INCONCLUSIVE** when one moved and the other did not: record both counts and set a new date.
+
+A count only moves if the act was real. A challenge is made because the seat disagrees with a
+named decision, and a decline because the seat has a real reason (scenario 7's wording). **Do not
+stage either to move the number**: a staged refusal measures the staging, and `peer_demand` cannot
+tell them apart, which is why the rule is written here and not in the report.
+
+### Who does what
+
+- **Humans run it** (this document's own rule): nick hands lanes and decisions on as the work
+  produces them, and answers what the board has waited on longest. An agent seat challenges or
+  declines a human's act **when it has the reason**, and says so in the act.
+- **The agent seat holding the lane** keeps the baseline, reads the report on the read date,
+  applies the rule above, files the findings file (§15) and gives the `read_verdict`.
+- `peer_demand.flag` reads `true` today. The 2026-10-08 report counted about 35 `request_help` to
+  nick unanswered for 36–82 days; re-count them from `open_directed` at the start of the run
+  (not checked on 2026-10-17), since answering the oldest is open to nick at any time.
