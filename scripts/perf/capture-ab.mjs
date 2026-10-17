@@ -17,9 +17,13 @@
  * so "draws/s" and the draw-to-draw gap (p50/p95) mean the same thing in both. CPU is the delta of
  * utime+stime from /proc over each process tree during the measured window. `ps`'s %cpu is a lifetime
  * average, which would fold launch cost into the arm.
+ *
+ * Lever 3 (lane 01M55MAQ9M) adds two readings to the CLI arms: CPU per Chrome thread over the same
+ * window (`threads`), and, after it, a 5 s trace of the renderer main thread (`main`: busy %, the
+ * rAF callbacks' share and per-frame cost), which says whether that thread is what caps the draws.
  */
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -64,11 +68,14 @@ async function cdpPage(port, urlPart = '/broadcast') {
   await new Promise((res, rej) => ((ws.onopen = res), (ws.onerror = rej)));
   let id = 0;
   const pending = new Map();
+  const listeners = new Map();
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
+    if (m.method) for (const fn of listeners.get(m.method) ?? []) fn(m.params);
     if (m.id && pending.has(m.id)) pending.get(m.id)(m);
     pending.delete(m.id);
   };
+  const on = (method, fn) => listeners.set(method, [...(listeners.get(method) ?? []), fn]);
   const send = (method, params = {}) =>
     new Promise((res, rej) => {
       const n = ++id;
@@ -79,7 +86,7 @@ async function cdpPage(port, urlPart = '/broadcast') {
     });
   const evaluate = async (expression) =>
     (await send('Runtime.evaluate', { expression, returnByValue: true }))?.result?.value;
-  return { send, evaluate, close: () => ws.close() };
+  return { send, evaluate, on, close: () => ws.close() };
 }
 
 const PROBE = `(() => {
@@ -135,6 +142,128 @@ function boxIdle() {
   const n = v.map(Number);
   return { idle: n[3] + n[4], total: n.reduce((a, b) => a + b, 0) };
 }
+// ── Lever 3's question: is the main thread the wall? (lane 01M55MAQ9M) ────────────────────────────
+// An OffscreenCanvas worker moves the room's drawing off the renderer's main thread. That only buys
+// draws if the main thread is what caps them; if Chrome's compositor or raster threads are saturated
+// instead, the worker moves the work and the cap stays. Two readings answer it.
+
+/** utime+stime per thread across a process tree, keyed `<process type>/<thread name>`. */
+function threadTicks(pids) {
+  const out = {};
+  for (const p of pids) {
+    let type = 'browser';
+    try {
+      const cmd = readFileSync(`/proc/${p}/cmdline`, 'utf8');
+      type = /--type=([\w-]+)/.exec(cmd)?.[1] ?? (cmd.includes('chrom') ? 'browser' : 'other');
+    } catch {
+      continue;
+    }
+    let tids = [];
+    try {
+      tids = readdirSync(`/proc/${p}/task`);
+    } catch {
+      continue;
+    }
+    for (const t of tids) {
+      try {
+        const f = readFileSync(`/proc/${p}/task/${t}/stat`, 'utf8');
+        const name = f.slice(f.indexOf('(') + 1, f.lastIndexOf(')'));
+        const rest = f.slice(f.lastIndexOf(')') + 2).split(' ');
+        const k = `${type}/${name}`;
+        out[k] = (out[k] ?? 0) + Number(rest[11]) + Number(rest[12]);
+      } catch {
+        // a thread that exited mid-window contributes what it had
+      }
+    }
+  }
+  return out;
+}
+
+const TRACE_MS = 5000;
+// Inclusive time per event name on the renderer main thread (nested names overlap, so these do not
+// sum): the room's own drawing is FireAnimationFrame; the rest is what a worker would leave behind.
+const MAIN_NAMES = [
+  'FireAnimationFrame',
+  'FunctionCall',
+  'TimerFire',
+  'EventDispatch',
+  'UpdateLayoutTree',
+  'Layout',
+  'PrePaint',
+  'Paint',
+  'Layerize',
+  'Commit',
+  'MinorGC',
+  'MajorGC',
+  'V8.GC_SCAVENGER',
+  'ParseHTML',
+];
+
+/** Trace TRACE_MS after the measured window (so tracing cost never touches its numbers) and split
+ * the renderer main thread: busy %, the rAF callbacks' share, and their per-frame cost. */
+async function mainThreadSplit(page) {
+  const events = [];
+  page.on('Tracing.dataCollected', (p) => events.push(...p.value));
+  const done = new Promise((res) => page.on('Tracing.tracingComplete', res));
+  await page.send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      includedCategories: [
+        'toplevel',
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+        'v8',
+      ],
+    },
+  });
+  await sleep(TRACE_MS);
+  await page.send('Tracing.end');
+  await done;
+  const names = new Map();
+  for (const e of events)
+    if (e.ph === 'M' && e.name === 'thread_name') names.set(`${e.pid}:${e.tid}`, e.args?.name);
+  // The page's main thread is the CrRendererMain that ran animation frames.
+  const rafBy = new Map();
+  for (const e of events)
+    if (e.name === 'FireAnimationFrame' && names.get(`${e.pid}:${e.tid}`) === 'CrRendererMain')
+      rafBy.set(`${e.pid}:${e.tid}`, (rafBy.get(`${e.pid}:${e.tid}`) ?? 0) + 1);
+  const main = [...rafBy.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!main) return { invalid: 'no CrRendererMain with animation frames in the trace' };
+  const on = events.filter((e) => `${e.pid}:${e.tid}` === main && e.ph === 'X' && e.dur);
+  const ts = on.map((e) => e.ts);
+  const span = (Math.max(...ts) - Math.min(...ts)) / 1000 || TRACE_MS;
+  // Busy = the union of top-level tasks, so a nested task is not counted twice.
+  const top = on
+    .filter((e) => e.name === 'RunTask' || e.name === 'ThreadControllerImpl::RunTask')
+    .sort((a, b) => a.ts - b.ts);
+  let busy = 0;
+  let end = -Infinity;
+  for (const e of top) {
+    const s0 = Math.max(e.ts, end);
+    const e1 = e.ts + e.dur;
+    if (e1 > s0) busy += e1 - s0;
+    end = Math.max(end, e1);
+  }
+  const inclusive = {};
+  for (const n of MAIN_NAMES) {
+    const d = on.filter((e) => e.name === n).reduce((a, e) => a + e.dur, 0);
+    if (d) inclusive[n] = round((100 * d) / 1000 / span);
+  }
+  const raf = on
+    .filter((e) => e.name === 'FireAnimationFrame')
+    .map((e) => e.dur / 1000)
+    .sort((a, b) => a - b);
+  const q = (p) => round(raf[Math.min(raf.length - 1, Math.floor(p * raf.length))]);
+  return {
+    spanMs: round(span),
+    busyPct: round((100 * busy) / 1000 / span),
+    inclusivePct: inclusive,
+    rafPerSec: round((1000 * raf.length) / span),
+    rafMsP50: q(0.5),
+    rafMsP95: q(0.95),
+  };
+}
+
 /** Measure one window: CPU % of a core per named root (tree resolved at window start), and box idle %. */
 async function measure(page, roots) {
   const trees = Object.fromEntries(
@@ -143,6 +272,7 @@ async function measure(page, roots) {
   await page.evaluate(PROBE);
   const d0 = await page.evaluate('__office.stats().draws');
   const c0 = Object.fromEntries(Object.entries(trees).map(([k, p]) => [k, ticks(p)]));
+  const th0 = threadTicks(trees.chrome ?? []);
   const b0 = boxIdle();
   const t0 = Date.now();
   await sleep(SECS * 1000);
@@ -150,6 +280,14 @@ async function measure(page, roots) {
   const d1 = await page.evaluate('__office.stats().draws');
   const gaps = (await page.evaluate('JSON.stringify(window.__gaps)')) ?? '[]';
   const b1 = boxIdle();
+  const th1 = threadTicks(trees.chrome ?? []);
+  const threads = Object.fromEntries(
+    Object.entries(th1)
+      .map(([k, v]) => [k, round((100 * (v - (th0[k] ?? 0))) / HZ / secs)])
+      .filter(([, v]) => v >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12),
+  );
   const cpu = {};
   for (const [k, p] of Object.entries(trees))
     cpu[k] = round((100 * (ticks(p) - c0[k])) / HZ / secs);
@@ -162,6 +300,7 @@ async function measure(page, roots) {
     gapP50Ms: q(0.5),
     gapP95Ms: q(0.95),
     cpu,
+    threads,
     secs: round(secs),
   };
 }
@@ -232,6 +371,7 @@ async function armCli(label, capture = 'screencast', fps = FPS) {
     // double-counted
     r.cpu.cli = round(r.cpu.cli - r.cpu.chrome - r.cpu.ffmpeg - (r.cpu.xvfb ?? 0));
     r.cpu.pipeline = round(r.cpu.chrome + r.cpu.ffmpeg + (r.cpu.xvfb ?? 0) + r.cpu.cli);
+    r.main = await mainThreadSplit(page).catch((e) => ({ invalid: String(e?.message ?? e) }));
     page.close();
     return { arm: label, ...r, floorFired };
   } finally {

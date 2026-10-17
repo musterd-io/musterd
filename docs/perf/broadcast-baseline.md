@@ -431,6 +431,40 @@ Readings:
 - **The bench fixture does not under-represent the room** on the one reading the live run has (the
   draw floor). The spec's third falsifier did not fire.
 
+## Lever 3's question: is the main thread the wall? (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55MAQ9M`. Build `f32bf28` plus this lane's harness change, arms `x11-cli#1, x11-cli#2,
+screencast` at 30 fps. `capture-ab.mjs` now also reads CPU per Chrome thread over the measured window
+(`threads`), and after it a 5 s trace of the renderer main thread (`main`). Lever 3 (an
+`OffscreenCanvas` worker) only buys draws if the main thread is what caps them. Falsify: a re-run on
+the same build where the renderer main thread is over 85 % busy on the x11 arm.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | main busy % | rAF share % | rAF p95 ms | Commit % | Viz compositor thread % | renderer main thread % | box idle % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| x11-cli#1 | 29.7 | 31.1 | 56.9 | 55.1 | 25.7 | 9.8 | 19.9 | 77.0 | 49.3 | 44.7 |
+| x11-cli#2 | 29.6 | 31.5 | 56.7 | 53.3 | 25.5 | 9.8 | 20.3 | 77.5 | 48.1 | 45.4 |
+| screencast | 26.7 | 35.6 | 63.2 | 61.4 | 30.4 | 16.8 | 22.7 | 86.6 | 44.7 | 22.3 |
+
+"main busy" is the union of top-level tasks on `CrRendererMain` in the trace; "rAF share" is
+`FireAnimationFrame`'s inclusive time (the room's drawing plus the harness's own probe); "renderer
+main thread %" is the same thread's CPU from `/proc` over the 60 s window (it shows as `chromium`).
+
+Readings:
+
+- **The main thread is not the wall.** It is busy about 55 % of the time, the room's drawing is about
+  a quarter of it, and a frame's rAF work is under 10 ms at p95 against a 33 ms budget. A worker would
+  free that quarter, but the thread already has nearly half its time spare, so lever 3 as written
+  does not reach the tail. This is a reading for lever 3's design, not the end of it.
+- **The hottest thread is the GPU process's software compositor** (`VizCompositorThread`, ~77 % of a
+  core on x11, ~87 % on screencast). The tail is two frame intervals (57 ms ≈ 1.7 × 33) while the rAF
+  work itself is short, which reads as frames the compositor did not schedule, not frames the page
+  was too slow to draw. Unmeasured: whether the Viz thread saturates in bursts that the 60 s average
+  hides.
+- **Draws reached 29.6–29.7/s on x11**, against 24.4–26.3 on the earlier 2026-10-17 runs of the same
+  arm. The p95 did not move (56.7–56.9 against 56–59). The cause of the rate change is unknown: the
+  build is newer and this is a different box, and this file already records box-to-box variance of
+  that size. The draws half of the bar is now within 0.4/s; the p95 half (< 40 ms) is not close.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
