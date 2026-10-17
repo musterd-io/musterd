@@ -224,6 +224,17 @@ up() {
   as_admin lane update "$(ids 'stuck behind something')" --state blocked >/dev/null
   as_admin lane update "$(ids 'a lane on no goal at all')" --state awaiting_acceptance >/dev/null
 
+  # Dated reads (ADR 644), one per status the Experiments section paints: overdue carries the only
+  # accent ink in that section, due its 600 weight, waiting the muted mark, read the verdict note.
+  # Dates are relative to today in the team's calendar zone, so the statuses hold on any run day.
+  day() { node -e "const d=new Date(Date.now()+($1)*864e5);process.stdout.write(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(d))"; }
+  as_admin lane open "a read that slipped"   --reads-on "$(day -2)" --claim >/dev/null
+  as_admin lane open "a read due today"      --reads-on "$(day 0)"  --claim >/dev/null
+  as_admin lane open "a read two weeks out"  --reads-on "$(day 16)" >/dev/null
+  as_admin lane open "a read with a verdict" --reads-on "$(day -1)" --claim >/dev/null
+  as_admin lane update "$(ids 'a read with a verdict')" \
+    --read-verdict missed --read-note "lost to the baseline on 3 of 12" >/dev/null
+
   # ── the room, occupied ────────────────────────────────────────────────────────────────────────
   #
   # Everything above paints the BOARD. `/live` is mostly a stream of acts, a rail of asks and a work

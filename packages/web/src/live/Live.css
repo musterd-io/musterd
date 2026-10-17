@@ -8134,3 +8134,151 @@
   padding: 0.1em 0.7em;
   white-space: nowrap;
 }
+
+/* Experiments (ADR 644, spec 2026-10-17-experiments-panel-design.md): the team's dated reads at the
+   foot of the team column. Rows, not cards — set off by a hairline, the column's own rule. Overdue
+   is the only accent, and it is the ink shade: --lc-accent is 2.66:1 here and fails the 3:1 mark
+   floor. A `missed` verdict gets no red: it is a result, not an error. */
+.lc-xp {
+  margin: 0 var(--lc-5);
+  padding-bottom: var(--lc-5);
+  border-top: 1px solid var(--lc-border);
+}
+.lc-xp__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  /* The title lines up with "The team" above: the section's 12px margin plus 4px is the head's 16. */
+  padding: var(--lc-5) var(--lc-2) var(--lc-3);
+}
+.lc-xp__empty {
+  margin: 0;
+  padding: 0 var(--lc-5);
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-xp__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lc-xp__row {
+  border-bottom: 1px solid var(--lc-border);
+}
+.lc-xp__row:last-child {
+  border-bottom: none;
+}
+.lc-xp__row.is-changed {
+  animation: lc-xp-flash var(--lc-dur-4) var(--lc-ease-out);
+}
+@keyframes lc-xp-flash {
+  50% {
+    background: var(--lc-surface);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-xp__row.is-changed {
+    animation: none;
+  }
+}
+.lc-xp__hit {
+  display: grid;
+  row-gap: 1px;
+  padding: var(--lc-3) var(--lc-5);
+  color: inherit;
+  text-decoration: none;
+}
+a.lc-xp__hit:hover {
+  background: var(--lc-surface);
+}
+a.lc-xp__hit:focus-visible {
+  position: relative;
+  z-index: var(--lc-z-rail);
+  outline: 2px solid var(--lc-focus);
+  outline-offset: -2px;
+}
+.lc-xp__line1 {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-3);
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-xp__mark {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  padding: 1px;
+  box-sizing: border-box;
+}
+.lc-xp__date {
+  margin-left: auto;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+}
+.lc-xp__row--overdue :is(.lc-xp__mark, .lc-xp__status) {
+  color: var(--lc-accent-ink);
+}
+.lc-xp__row--due :is(.lc-xp__mark, .lc-xp__status),
+.lc-xp__row--read .lc-xp__status {
+  color: var(--lc-text);
+}
+.lc-xp__row--due .lc-xp__status {
+  font-weight: 600;
+}
+.lc-xp__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--lc-text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.lc-xp__meta {
+  font-size: 12px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Stale: the marks dim, never the words (local rule 2026-08-13). */
+.lc-xp.is-stale .lc-xp__mark {
+  opacity: 0.45;
+}
+.lc-xp__more {
+  margin: var(--lc-3) var(--lc-5) 0;
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-xp__toggle {
+  min-height: 24px;
+  margin: var(--lc-3) var(--lc-5) 0;
+  padding: 0 var(--lc-2);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--lc-dim);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.lc-xp__toggle:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+/* Folded column: the overdue count rides under the rail cap — the hint pill is a 56px column's
+   width, too narrow for "· 1 overdue" in words, so the title and label carry the words. */
+.lc-team__overdue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin: var(--lc-3) 0 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lc-accent-ink);
+}

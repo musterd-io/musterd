@@ -6,6 +6,8 @@ import type { LiveConfig } from './client';
 import { acceptanceCapacity, initial, memberAvatar, memberColor } from './format';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
+import { Experiments, ReadMark } from './Experiments';
+import { experimentEntries } from './experimentReads';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { TeamCard } from './TeamCard';
 import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
@@ -89,11 +91,23 @@ export function TeamColumn({
 }) {
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
+  const reads = loading ? [] : experimentEntries(board, now);
   if (collapsed) {
+    const overdue = reads.filter((e) => e.status === 'overdue').length;
     return (
       <aside className="lc-team is-collapsed" aria-label="The team">
         {onCollapse && (
           <PanelRail side="mid" label="Team" hint={String(cards.length)} onExpand={onCollapse} />
+        )}
+        {overdue > 0 && (
+          <p
+            className="lc-team__overdue"
+            title={`${overdue} overdue read${overdue === 1 ? '' : 's'}`}
+            aria-label={`${overdue} overdue read${overdue === 1 ? '' : 's'}`}
+          >
+            <ReadMark status="overdue" />
+            {overdue}
+          </p>
         )}
         <ul className="lc-team__rail">
           {cards.map((c) => {
@@ -170,6 +184,7 @@ export function TeamColumn({
       </ul>
       {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
       {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
+      {board && !loading && <Experiments entries={reads} still={still} stale={stale} />}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
   );

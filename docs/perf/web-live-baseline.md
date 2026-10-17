@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-17 — `totalJsGzipBytes` 324,000 → 325,400 B and `liveCssGzipBytes` 22,500 → 22,850 B: the Experiments section (lane `01M55KZF5M`, ADR 644)
+
+| Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |
+| -------- | ----------------------------- | ------------------- | -------------------------- |
+| total JS | 323,369 B                     | 324,907 B           | RAISED 324,000 → 325,400 B |
+| live CSS | 22,323 B                      | 22,677 B            | RAISED 22,500 → 22,850 B   |
+
+The section is +1,538 B gzip of JS, all of it in the `TeamColumn` chunk: `experimentReads.ts` (which lanes show, their order, the day counts in the team's calendar zone, the phrases and the screen-reader label), `Experiments.tsx` (the rows, the cap and toggle, the once-only status flash) and the four inline SVG marks, plus the folded rail's overdue count. Every other chunk moved by gzip noise. Live CSS +354 B is the section's rows in `Live.css`, after folding the per-status colour rules into two `:is()` selectors. The section sits in the team column on `/live` and `/broadcast`, which renders on first paint, so it cannot be lazy; lazy-loading cannot move total anyway (ADR 183). The web imports protocol types only, so no zod joins the eager graph. JS is local 324,907 plus the ~450 B CI gap; CSS is measured plus ~150 B.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 324,000 B and live CSS at or under 22,500 B with this change in.
+
 ### 2026-10-16 — `totalJsGzipBytes` 323,400 → 324,000 B and `liveCssGzipBytes` 22,400 → 22,500 B: one lane read end to end (lane `01M534RA2H`, ADR 629)
 
 | Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |

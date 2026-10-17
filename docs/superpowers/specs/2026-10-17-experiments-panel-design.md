@@ -3,7 +3,8 @@
 **Date:** 2026-10-17
 **Seat:** slippy (designer)
 **Status:** source and placement agreed with nick in chat on 2026-10-17. Alfie confirmed the §5
-strings on 2026-10-17 (ask `01M55WR8AR9E74MYWW9RR65X41`). Nothing is built.
+strings on 2026-10-17 (ask `01M55WR8AR9E74MYWW9RR65X41`). Increment 2 (the web section) built
+2026-10-17 in `packages/web/src/live/Experiments.tsx` + `experimentReads.ts`.
 **Lane:** `01M55KZF5M41HBR7CWSC5PHFHD` (goal `launch`), asked by nick
 **Decision:** [ADR 644](../../decisions/644-lane-reads-on-and-read-verdict.md): a lane declares
 `reads_on`, its close gives `read_verdict`, and the server derives `read_status`
@@ -141,8 +142,10 @@ section. It is a separate lane because it has to pass `scene:pixel-check` and th
 - **`/live` rows are links** to `/board?lane=<id>` (the acceptance deep link, ADR 200 §3), each a
   single focusable element with a visible focus ring above the column's sticky head. `/broadcast`
   rows are not interactive (`still`).
-- **Collapsed column.** The rail's `hint` adds the overdue count when it is above 0, for example
-  `2 working · 1 overdue`.
+- **Collapsed column.** The overdue count, when it is above 0, rides under the rail cap as the
+  overdue mark and the number, with `1 overdue read` as its label and title. _(Amended 2026-10-17,
+  slippy, building it: the rail's `hint` pill sits in a 56 px column and cannot hold
+  `2 working · 1 overdue` in words.)_
 - **Motion.** When a row changes status (a verdict lands, or midnight moves a read to `due`), its
   ground flashes once to `--lc-surface` and back over `--lc-dur-4` / `--lc-ease-out`. A new order is
   applied with no slide, because rows sliding on the stream read as noise. Under reduced motion,

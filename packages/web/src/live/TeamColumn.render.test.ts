@@ -162,4 +162,92 @@ describe('TeamColumn', () => {
   it('says when this page cannot read every seat', () => {
     expect(render({ roster: [m('a')], unreadable: 1 })).toContain('reload to meet');
   });
+
+  describe('Experiments (ADR 644)', () => {
+    // Sat 2026-10-17, 15:00 in Los Angeles.
+    const NOW = Date.UTC(2026, 9, 17, 22, 0);
+    const read = (id: string, status: string, readsOn: string, over: object = {}) => ({
+      id,
+      title: `Read ${id}`,
+      owner_seat: 'stanley',
+      state: 'claimed',
+      reads_on: readsOn,
+      read_status: status,
+      ...over,
+    });
+    const dated = (...lanes: object[]) => ({ lanes, warnings: [] }) as unknown as LaneBoard;
+    const four = dated(
+      read('w', 'waiting', '2026-11-02'),
+      read('r', 'read', '2026-10-16', {
+        read_verdict: { outcome: 'missed', note: 'lost to baseline', by: 'stanley', at: NOW },
+      }),
+      read('d', 'due', '2026-10-17'),
+      read('o', 'overdue', '2026-10-15'),
+    );
+
+    it('lists overdue, due, waiting, read — in words, with the urgent count in the head', () => {
+      const html = render({ roster: [m('ryder')], board: four, now: NOW });
+      expect(html).toContain('Experiments');
+      expect(html).toContain('1 overdue · 1 due');
+      const order = ['overdue · 2 days', 'due today', 'in 16 days', 'missed'].map((p) =>
+        html.indexOf(p),
+      );
+      expect(order.every((i) => i > 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      expect(html).toContain('Mon 11-02');
+      expect(html).toContain('&quot;lost to baseline&quot;');
+    });
+
+    it('/live rows link to the lane on the board', () => {
+      const html = render({ roster: [m('ryder')], board: four, now: NOW });
+      expect(html).toContain('href="/board?lane=o"');
+      expect(html).toMatch(/aria-label="Read o, overdue · 2 days, reads Thursday, October 15, owner stanley"/);
+    });
+
+    it('caps at five but never hides an urgent row; /live toggles, the stream says how many more', () => {
+      const many = dated(
+        ...Array.from({ length: 6 }, (_, i) => read(`o${i}`, 'overdue', '2026-10-1' + i)),
+        read('w1', 'waiting', '2026-10-30'),
+        read('w2', 'waiting', '2026-10-31'),
+      );
+      const live = render({ roster: [m('ryder')], board: many, now: NOW });
+      expect(live.match(/lc-xp__row /g)).toHaveLength(6);
+      expect(live).toContain('Show all 8');
+      const stream = render({ roster: [m('ryder')], board: many, now: NOW, still: true });
+      expect(stream.match(/lc-xp__row /g)).toHaveLength(6);
+      expect(stream).toContain('+2 more on the board');
+      expect(stream).not.toContain('href="/board');
+    });
+
+    it('empty: one line on /live, nothing on the stream', () => {
+      expect(render({ roster: [m('ryder')], board, now: NOW })).toContain(
+        'No dated reads. Open a lane with --reads-on to add one.',
+      );
+      expect(render({ roster: [m('ryder')], board, now: NOW, still: true })).not.toContain(
+        'Experiments',
+      );
+    });
+
+    it('absent while the board loads', () => {
+      expect(render({ roster: [m('ryder')], board: null, now: NOW })).not.toContain('Experiments');
+      expect(render({ roster: [], board: four, now: NOW, loading: true })).not.toContain(
+        'Experiments',
+      );
+    });
+
+    it('never derives a status from the date: the server says waiting, the row says waiting', () => {
+      const html = render({
+        roster: [m('ryder')],
+        board: dated(read('x', 'waiting', '2026-10-01')),
+        now: NOW,
+      });
+      expect(html).toContain('lc-xp__row--waiting');
+      expect(html).not.toContain('overdue');
+    });
+
+    it('collapsed: the overdue count rides under the rail', () => {
+      const html = render({ roster: [m('ryder')], board: four, now: NOW, collapsed: true, onCollapse: () => {} });
+      expect(html).toContain('aria-label="1 overdue read"');
+    });
+  });
 });
