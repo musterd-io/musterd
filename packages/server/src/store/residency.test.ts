@@ -11,7 +11,8 @@ import { appendAudit, listAudit } from './audit.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
 import { saveMemory } from './memory.js';
-import { countOpenLoops, insertMessage } from './messages.js';
+import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
+import { bindSeatToNode, upsertForeignNode } from './nodes.js';
 import { attach } from './presence.js';
 import {
   OWNER_ENGAGEMENT_MS,
@@ -2101,6 +2102,70 @@ withDrivers('residency', (o, kind) => {
       // Voice is the creator (not the owner): a self-send never reaches an inbox.
       expect(nudges).toHaveLength(1);
       expect(nudges[0]).toMatchObject({ laneId: lane.id, owner: 'Ada', voice: 'nick' });
+    });
+
+    it('never voices a nudge as a seat bound to another node: that push is refused and wedges the node', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      await dispatchLane(db, team, nick, ada);
+      await localNodeForTeam(db, team.id);
+      await upsertForeignNode(db, team.id, {
+        id: 'NODE-HUB',
+        label: 'mac.lan',
+        last_seen_at: null,
+      });
+      await bindSeatToNode(db, team.id, nick.id, 'NODE-HUB');
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: Array<{ voice: string | null }> = [];
+      await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        now,
+        undefined,
+        null,
+        null,
+        {
+          onNudge: (n) => nudges.push(n),
+        },
+      );
+      expect(nudges).toHaveLength(0);
+      const rows = await suppressedRows(db, team);
+      expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
+        nudge_sent: false,
+        no_voice: true,
+      });
+    });
+
+    it('still voices a nudge as a seat bound to this node', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      await dispatchLane(db, team, nick, ada);
+      const local = await localNodeForTeam(db, team.id);
+      await bindSeatToNode(db, team.id, nick.id, local.id);
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: Array<{ voice: string | null }> = [];
+      await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        now,
+        undefined,
+        null,
+        null,
+        {
+          onNudge: (n) => nudges.push(n),
+        },
+      );
+      expect(nudges).toMatchObject([{ voice: 'nick' }]);
     });
 
     it('a second poll inside the window suppresses again but does not re-nudge', async () => {
