@@ -129,6 +129,14 @@ describe('provisionOnce (ADR 463 §3)', () => {
     expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', { state: 'ready' });
   });
 
+  it('records key_env on the registry entry when one is named (ADR 648)', async () => {
+    const t = deps({ keyEnv: 'ANTHROPIC_API_KEY' });
+    await provisionOnce(t.d);
+    expect(t.upsertHostEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ key_env: 'ANTHROPIC_API_KEY' }),
+    );
+  });
+
   it('passes --clone through to the workspace', async () => {
     const t = deps({ clone: true });
     await provisionOnce(t.d);

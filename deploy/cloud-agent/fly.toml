@@ -1,0 +1,33 @@
+# The cloud agent machine (ADR 647 phase 1). Deploy with:
+#
+#   fly deploy --config deploy/cloud-agent/fly.toml --app musterd-agent-<seat>
+#
+# The app name is per seat (one machine = one hosted seat). Secrets are NEVER here — see
+# README.md for the `fly secrets set` line.
+app = "musterd-agent"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+  # Build context is the repo root; pass --dockerfile and run from the repo root (README line).
+
+# No [[services]] / [http_service]: nothing listens. The host loop dials OUT to the hosted
+# team's server over HTTPS. Fly auto-stop keys on inbound traffic, so parking is explicit
+# (`fly machine stop`); a parked seat costs the volume only (ADR 647 §4.4).
+
+[[mounts]]
+  source = "agent_data"
+  destination = "/data"
+  initial_size = "3gb"
+
+[[vm]]
+  # Resident engine + git + a node build in the seat's workspace; 2 GB is the comfortable
+  # floor carried over from the cloud-seat measurement.
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+[env]
+  # Non-secret config only. Per-seat values are set at creation (README) — these are the shape.
+  MUSTERD_SERVER = "https://musterd.io"
+  MUSTERD_TEAM = "revive"
+  MUSTERD_HOST = "cloud-1"
