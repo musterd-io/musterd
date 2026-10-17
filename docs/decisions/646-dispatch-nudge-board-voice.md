@@ -65,6 +65,8 @@ should leave one row per decision, not one per poll.
   applies to them; changing them is a separate decision, not this one.
 - A reply to the nudge goes to the `board` seat's inbox, which nobody reads, as with replies to
   `digest`. The nudge asks the owner to act on the lane, not to reply.
+- _2026-10-17 (ADR 649):_ the incident notices now speak as the same `board` seat, which settles the
+  separate decision named above. The seat module moved to `store/boardSeat.ts`.
 
 ## Observability & Evaluation
 
