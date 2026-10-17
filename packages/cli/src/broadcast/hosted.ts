@@ -16,8 +16,19 @@
  * Everything is injected (`Exec`, `probeUpgrade`) so the whole ladder is unit-testable without a
  * tailnet, a daemon, or a Fly account.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { CliError } from '../errors.js';
 import {
   type TailnetSelf,
   type UpgradeVerdict,
@@ -530,6 +541,76 @@ export function findRepoRoot(from: string): string | null {
     if (up === dir) return null;
     dir = up;
   }
+}
+
+/** What `stream build` uploads: a directory, the commit it holds, and how to tidy it away. */
+export interface BuildSource {
+  dir: string;
+  commit: string | null;
+  /** One line for the operator: which code this image is about to carry. */
+  label: string;
+  cleanup: () => void;
+}
+
+/**
+ * Where `stream build` uploads from. By default a clean export of a freshly fetched `origin/main`,
+ * never the caller's folder: on 2026-10-17 a human's folder sat at 71f1759 and its build came back
+ * fully cached, three capture fixes short of main. The folder itself is not switched, because a
+ * human's folder can hold uncommitted work or a branch. The export carries tracked files only, so a
+ * stray local edit cannot reach a published image either. `here` builds the checkout as it stands.
+ */
+export function prepareBuildSource(a: {
+  exec: Exec;
+  root: string;
+  here: boolean;
+  mkTemp?: () => string;
+  rm?: (dir: string) => void;
+}): BuildSource {
+  if (a.here) {
+    const head = a.exec('git', ['-C', a.root, 'rev-parse', 'HEAD']);
+    const dirty = a.exec('git', ['-C', a.root, 'status', '--porcelain']);
+    const commit = head.code === 0 ? head.stdout.trim() : null;
+    const edits = dirty.code === 0 && dirty.stdout.trim() !== '' ? ' plus uncommitted edits' : '';
+    return {
+      dir: a.root,
+      commit,
+      label: `this folder (--here): ${commit ? commit.slice(0, 7) : 'unknown commit'}${edits}`,
+      cleanup: () => {},
+    };
+  }
+  const fetch = a.exec('git', ['-C', a.root, 'fetch', 'origin', 'main']);
+  if (fetch.code !== 0) {
+    throw new CliError(
+      `could not fetch origin/main: ${fetch.stderr.trim() || 'git fetch failed'} ` +
+        '(build this folder as it stands with --here)',
+      1,
+    );
+  }
+  const tip = a.exec('git', ['-C', a.root, 'rev-parse', 'origin/main']);
+  if (tip.code !== 0) throw new CliError('could not resolve origin/main after fetching it', 1);
+  const commit = tip.stdout.trim();
+  const tmp = (a.mkTemp ?? (() => mkdtempSync(join(tmpdir(), 'musterd-stream-build-'))))();
+  const rm = a.rm ?? ((dir: string) => rmSync(dir, { recursive: true, force: true }));
+  const dir = join(tmp, 'src');
+  const tar = join(tmp, 'src.tar');
+  const steps: Array<[string, string[]]> = [
+    ['git', ['-C', a.root, 'archive', '--format=tar', '-o', tar, commit]],
+    ['mkdir', ['-p', dir]],
+    ['tar', ['-xf', tar, '-C', dir]],
+  ];
+  for (const [cmd, args] of steps) {
+    const r = a.exec(cmd, args);
+    if (r.code !== 0) {
+      rm(tmp);
+      throw new CliError(`could not export origin/main to build: ${r.stderr.trim()}`, 1);
+    }
+  }
+  return {
+    dir,
+    commit,
+    label: `origin/main at ${commit.slice(0, 7)} (a clean export; this folder is untouched)`,
+    cleanup: () => rm(tmp),
+  };
 }
 
 export function digestPath(repoRoot: string): string {

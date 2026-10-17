@@ -730,6 +730,12 @@ commits on the paths the box runs (`CAPTURE_PATHS` in `packages/cli/src/broadcas
 the record predates the commit field, or when git cannot compare. `stream start` prints the same
 finding as a warning and launches anyway. `origin/main` is as this checkout last fetched it.
 
+
+Since lane `01M55YDCWR` (2026-10-17) `stream build` no longer builds the folder it runs in. It
+fetches `origin/main` and uploads a clean export of it, so a human's stale folder cannot ship stale
+code: that day nick's build came back fully cached at 71f1759, three capture fixes short of main.
+`--here` still builds the folder as it stands, with a warning. Checked on a throwaway Fly app: the
+export built `origin/main` at 5734ac5 and recorded that commit.
 ## The stream's seat is broadcast-grade: every DM except human to human, credentials masked (2026-10-15; falsify: on a live stream, send a DM between two human members and a `status_update` carrying `mscr_` plus 20 characters — either on screen falsifies this) <!-- claim: other -->
 
 [ADR 601](../decisions/601-broadcast-visibility-grade.md). `musterd broadcast` and `musterd stream

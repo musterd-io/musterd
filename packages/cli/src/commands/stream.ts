@@ -27,6 +27,7 @@ import {
   describeStaleness,
   findRepoRoot,
   imageStaleness,
+  prepareBuildSource,
   formatFlyExit,
   parseFlyExit,
   parseLaunchedMachine,
@@ -59,7 +60,7 @@ import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.
 import { resolveRead } from './helpers.js';
 
 const USAGE =
-  'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--once] [--reason <text>] [--json]';
+  'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--here] [--once] [--reason <text>] [--json]';
 
 export interface StreamDeps {
   exec?: Exec;
@@ -142,7 +143,15 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
         ...(deps.server ? {} : { provenance: serverProvenance(cwd) }),
       });
     case 'build':
-      return buildVerb({ exec, app, repoRoot, statePath, now, out });
+      return buildVerb({
+        exec,
+        app,
+        repoRoot,
+        statePath,
+        now,
+        out,
+        here: parsed.flags['here'] === true,
+      });
     case 'start':
       return startVerb({ exec, app, repoRoot, parsed, out, err, ...sup });
     case 'stop':
@@ -235,6 +244,9 @@ function renderCheck(c: Check): string {
  * machines silently streamed month-old code; `start` runs the recorded digest, which cannot be stale.
  * `-c hosted.fly.toml` is not optional either — `--build-only` still validates an app config, and a
  * fresh app has no machines to infer one from.
+ *
+ * It builds `origin/main` from a clean export unless `--here` says to build this folder
+ * (`prepareBuildSource`), and records the commit it built either way.
  */
 async function buildVerb(a: {
   exec: Exec;
@@ -243,8 +255,26 @@ async function buildVerb(a: {
   statePath: string;
   now: () => number;
   out: (s: string) => void;
+  here: boolean;
 }): Promise<number> {
   const root = requireRepo(a.repoRoot);
+  const source = prepareBuildSource({ exec: a.exec, root, here: a.here });
+  try {
+    a.out(theme.meta(`building ${source.label}`) + '\n');
+    if (a.here)
+      a.out(theme.warn('⚠ --here ships this folder as it stands, not origin/main') + '\n');
+    return await buildFrom(a, root, source.dir, source.commit);
+  } finally {
+    source.cleanup();
+  }
+}
+
+async function buildFrom(
+  a: { app: string; statePath: string; now: () => number; out: (s: string) => void },
+  root: string,
+  dir: string,
+  commit: string | null,
+): Promise<number> {
   a.out(theme.meta('building on fly remote builders…') + '\n');
   // BOTH streams are scanned for the digest, and that is not defensive coding — flyctl prints the
   // `capture@sha256:…` line on stderr, so watching stdout alone found nothing and the guard below
@@ -267,7 +297,7 @@ async function buildVerb(a: {
         '--image-label',
         'capture',
       ],
-      { cwd: root, stdio: ['inherit', 'pipe', 'pipe'] },
+      { cwd: dir, stdio: ['inherit', 'pipe', 'pipe'] },
     );
     let text = '';
     child.stdout?.on('data', (d: Buffer) => {
@@ -293,14 +323,13 @@ async function buildVerb(a: {
   // Recorded ONCE PER MACHINE, beside `state.json` — not in this checkout. Whichever worktree ran
   // the build, `start`, `ensure` and the supervisor all read the same record (lane 01M2RAJ0JK).
   // The commit too, so `doctor` can tell an image built before the capture code it needs (lane
-  // 01M50D71N1). The build uploads the working tree, so this is HEAD as of the upload.
-  const head = a.exec('git', ['-C', root, 'rev-parse', 'HEAD']);
+  // 01M50D71N1). That is the commit the source held: origin/main's tip, or HEAD under --here.
   writeCaptureImage({
     statePath: a.statePath,
     digest,
     repoRoot: root,
     now: a.now(),
-    ...(head.code === 0 ? { commit: head.stdout.trim() } : {}),
+    ...(commit ? { commit } : {}),
   });
   a.out(`${theme.ok('✓')} built ${theme.meta(digest.slice(0, 19))} — recorded for this machine\n`);
   return 0;

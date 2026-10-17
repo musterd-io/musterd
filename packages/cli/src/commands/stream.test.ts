@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseArgs } from '../args.js';
-import { writeCaptureImage } from '../broadcast/hosted.js';
+import { prepareBuildSource, writeCaptureImage } from '../broadcast/hosted.js';
 import { readStreamState, writeStreamState } from '../broadcast/streamState.js';
 import { CliError } from '../errors.js';
 import type { Exec, ExecResult } from '../process.js';
@@ -1124,5 +1124,74 @@ describe('musterd stream', () => {
       expect(await run(['ensure'], sup({ launch: () => ({ code: 1, output: 'boom' }) }))).toBe(0);
       expect(readStreamState(statePath)!.restarts).toEqual([NOW]);
     });
+  });
+});
+
+describe('stream build uploads origin/main, not the folder it runs in', () => {
+  const TIP = 'b40e5716f0000000000000000000000000000000';
+  const record = (over: Record<string, ExecResult> = {}) => {
+    const calls: string[] = [];
+    const exec: Exec = (cmd, args) => {
+      const key = [cmd, ...args].join(' ');
+      calls.push(key);
+      for (const [prefix, r] of Object.entries(over)) if (key.startsWith(prefix)) return r;
+      if (key.endsWith('rev-parse origin/main')) return ok(`${TIP}\n`);
+      if (key.endsWith('rev-parse HEAD')) return ok('71f1759000000000000000000000000000000000\n');
+      return ok();
+    };
+    return { exec, calls };
+  };
+  const removed: string[] = [];
+  const base = { root: '/folder', mkTemp: () => '/tmp/x', rm: (d: string) => void removed.push(d) };
+
+  beforeEach(() => {
+    removed.length = 0;
+  });
+
+  it('fetches, exports the fetched tip into a temp dir, and records that commit', () => {
+    // 2026-10-17: a human's folder sat at 71f1759 and `stream build` came back fully cached, three
+    // capture fixes short of main.
+    const { exec, calls } = record();
+    const src = prepareBuildSource({ ...base, exec, here: false });
+    expect(calls).toEqual([
+      'git -C /folder fetch origin main',
+      'git -C /folder rev-parse origin/main',
+      `git -C /folder archive --format=tar -o /tmp/x/src.tar ${TIP}`,
+      'mkdir -p /tmp/x/src',
+      'tar -xf /tmp/x/src.tar -C /tmp/x/src',
+    ]);
+    expect(src.dir).toBe('/tmp/x/src');
+    expect(src.commit).toBe(TIP);
+    expect(src.label).toContain('origin/main at b40e571');
+    src.cleanup();
+    expect(removed).toEqual(['/tmp/x']);
+  });
+
+  it('never switches or writes the folder itself', () => {
+    const { exec, calls } = record();
+    prepareBuildSource({ ...base, exec, here: false });
+    expect(calls.some((c) => / (switch|checkout|reset|pull|stash)\b/.test(c))).toBe(false);
+  });
+
+  it('refuses when origin/main cannot be fetched, and names --here', () => {
+    const { exec } = record({
+      'git -C /folder fetch': { code: 128, stdout: '', stderr: 'offline' },
+    });
+    expect(() => prepareBuildSource({ ...base, exec, here: false })).toThrow(/offline.*--here/);
+  });
+
+  it('removes the temp dir when the export fails', () => {
+    const { exec } = record({ tar: { code: 2, stdout: '', stderr: 'disk full' } });
+    expect(() => prepareBuildSource({ ...base, exec, here: false })).toThrow(/disk full/);
+    expect(removed).toEqual(['/tmp/x']);
+  });
+
+  it('--here builds the folder as it stands and says when it carries uncommitted edits', () => {
+    const { exec, calls } = record({ 'git -C /folder status --porcelain': ok(' M a.ts\n') });
+    const src = prepareBuildSource({ ...base, exec, here: true });
+    expect(src.dir).toBe('/folder');
+    expect(src.commit).toBe('71f1759000000000000000000000000000000000');
+    expect(src.label).toBe('this folder (--here): 71f1759 plus uncommitted edits');
+    expect(calls.some((c) => c.includes('fetch'))).toBe(false);
   });
 });
