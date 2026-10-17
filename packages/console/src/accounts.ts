@@ -66,8 +66,6 @@ export async function methodsOf(
     provider: row.provider,
     email: row.email,
     current:
-      current !== undefined &&
-      row.provider === current.provider &&
-      row.subject === current.subject,
+      current !== undefined && row.provider === current.provider && row.subject === current.subject,
   }));
 }
