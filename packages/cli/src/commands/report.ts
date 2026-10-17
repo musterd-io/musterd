@@ -271,12 +271,27 @@ export function renderDisputes(d: NonNullable<Report['disputes']>, w: (s: string
 
 const SPEND_CAP_NOTE = 'measured wake cost, not payments';
 
+/** ADR 641. Both caps over: the measurement lines stay, and one notice names each cap. */
+function bothCapsOver(k: NonNullable<Report['wake']>): boolean {
+  return (
+    k.spend_over_cap === true &&
+    k.unpriced_over_cap === true &&
+    k.spend_cap_usd !== undefined &&
+    k.cost_usd_total !== null &&
+    k.unpriced_wake_cap !== undefined &&
+    k.unpriced_wake_count !== undefined
+  );
+}
+
 /** ADR 602. Empty when the cap is unset or the priced total is null, so the cost line stays put. */
 function spendCapBound(k: NonNullable<Report['wake']>): string {
   if (k.spend_cap_usd === undefined || k.cost_usd_total === null) return '';
   const state = k.spend_over_cap ? theme.warn('OVER') : theme.ok('under');
-  // ADR 611. Under stays the ADR 602 line. Over names the hold and the window.
-  const held = k.spend_over_cap ? theme.meta(` · agent wakes held · window ${k.window_days}d`) : '';
+  // ADR 611. Under stays the ADR 602 line. Over names the hold, unless both caps are over (ADR 641).
+  const held =
+    k.spend_over_cap && !bothCapsOver(k)
+      ? theme.meta(` · agent wakes held · window ${k.window_days}d`)
+      : '';
   return ` · cap $${k.spend_cap_usd.toFixed(2)} ${state}${held} ${theme.meta(`· ${SPEND_CAP_NOTE}`)}`;
 }
 
@@ -294,12 +309,33 @@ function writeSpendApproval(k: NonNullable<Report['wake']>, w: (s: string) => vo
   );
 }
 
-/** ADR 639. Empty when the count cap is unset. The line names the count. It holds nothing. */
+/** ADR 639. Empty when the count cap is unset. Over holds, unless both caps are over (ADR 641). */
 function writeUnpricedCap(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
   if (k.unpriced_wake_cap === undefined || k.unpriced_wake_count === undefined) return;
   const state = k.unpriced_over_cap ? theme.warn('OVER') : theme.ok('under');
+  const held =
+    k.unpriced_over_cap && !bothCapsOver(k)
+      ? theme.meta(` · agent wakes held · window ${k.window_days}d`)
+      : '';
+  w(`  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${state}${held}\n`);
+}
+
+/** ADR 641. One notice when both caps are over. Each measurement line stays free of this hold. */
+function writeBothHold(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
+  if (
+    k.spend_over_cap !== true ||
+    k.unpriced_over_cap !== true ||
+    k.spend_cap_usd === undefined ||
+    k.cost_usd_total === null ||
+    k.unpriced_wake_cap === undefined ||
+    k.unpriced_wake_count === undefined
+  ) {
+    return;
+  }
   w(
-    `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${state} ${theme.meta('· display only')}\n`,
+    `  ${theme.warn('agent wakes held')}${theme.meta(
+      ` · window ${k.window_days}d · cap $${k.spend_cap_usd.toFixed(2)} total $${k.cost_usd_total.toFixed(2)} · unpriced wakes ${k.unpriced_wake_count} cap ${k.unpriced_wake_cap}`,
+    )}\n`,
   );
 }
 
@@ -310,6 +346,7 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
     writeSpendCapWithoutCost(k, w);
     writeSpendApproval(k, w);
     writeUnpricedCap(k, w);
+    writeBothHold(k, w);
     return;
   }
   const rate = k.answer_rate === null ? '' : ` (${Math.round(k.answer_rate * 100)}%)`;
@@ -329,6 +366,7 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
   writeSpendCapWithoutCost(k, w);
   writeSpendApproval(k, w);
   writeUnpricedCap(k, w);
+  writeBothHold(k, w);
   // ADR 252: spend the cost line structurally cannot show. Printed only when there is some — a zero
   // here would read as "nothing went unpriced", which the token cannot yet promise.
   if ((k.unpriced_sessions ?? 0) > 0) {

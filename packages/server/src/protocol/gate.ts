@@ -14,13 +14,13 @@ import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
-import { pricedWakeCostUsd, WAKE_WINDOW_DAYS } from '../store/insights.js';
+import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
 import { laneCoveringPath } from '../store/lanes.js';
 import { listMembers } from '../store/members.js';
 import { unblockerReachable } from '../store/reachability.js';
 import { getRoleSkill } from '../store/roles.js';
 import { type MemberRow, type TeamRow, toMember } from '../store/rows.js';
-import { getPolicy, spendCapUsd } from '../store/teams.js';
+import { getPolicy, spendCapUsd, unpricedWakeCap } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -426,6 +426,38 @@ export async function readSpendCapBreach(
   } catch (err) {
     log.warn({
       msg: 'spend cap read failed open',
+      team: teamId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/** ADR 641. What one wake poll found when the 7-day unpriced count is at or over the cap. */
+export interface UnpricedWakeBreach {
+  cap: number;
+  count: number;
+  windowDays: number;
+}
+
+/**
+ * ADR 641. Null when the cap is unset or the count is under the cap. Equality is over, including
+ * a cap of 0 with a count of 0. A throw is a failed read: log it and let the poll proceed.
+ */
+export async function readUnpricedWakeBreach(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<UnpricedWakeBreach | null> {
+  try {
+    const cap = unpricedWakeCap(await getPolicy(db, teamId));
+    if (cap === null) return null;
+    const count = await unpricedWakeCount(db, teamId, now);
+    if (count < cap) return null;
+    return { cap, count, windowDays: WAKE_WINDOW_DAYS };
+  } catch (err) {
+    log.warn({
+      msg: 'unpriced wake cap read failed open',
       team: teamId,
       err: err instanceof Error ? err.message : String(err),
     });

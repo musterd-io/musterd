@@ -225,7 +225,9 @@ describe('team policy command', () => {
     );
     expect(zero.code).toBe(0);
     expect(zero.out).toContain('unpriced wake cap: 0 wakes / 7d');
-    expect(zero.out).toContain('display only');
+    expect(zero.out).toContain('agent wakes are held');
+    expect(zero.out).toContain('a human still passes');
+    expect(zero.out).not.toContain('display only');
     const zeroView = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
     expect(zeroView).toContain('unpriced wake cap: 0 wakes / 7d');
     expect(zeroView.split('\n').find((line) => line.includes('unpriced wake cap:'))).not.toContain(

@@ -454,7 +454,7 @@ export const WakeMetricsSchema = z.object({
   /**
    * ADR 639. Copied from team policy so the report can show the count cap without an admin
    * policy read. Omitted, together with the count and the over flag, when the key is unset.
-   * Display only. Nothing is denied. 0 is a real cap.
+   * 0 is a real cap. A set key holds new agent wakes (ADR 641).
    */
   unpriced_wake_cap: z.number().int().min(0).max(UNPRICED_WAKE_CAP_MAX).optional(),
   /**

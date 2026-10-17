@@ -35,6 +35,44 @@ function goalFlowLine(g: GoalFlow): string {
   return `  ${goalLabel(g.goal_id)} — ${parts.join(' · ')}`;
 }
 
+function bothCapsOver(k: NonNullable<Report['wake']>): boolean {
+  return (
+    k.spend_over_cap === true &&
+    k.unpriced_over_cap === true &&
+    k.spend_cap_usd !== undefined &&
+    k.cost_usd_total !== null &&
+    k.unpriced_wake_cap !== undefined &&
+    k.unpriced_wake_count !== undefined
+  );
+}
+
+/** ADR 639. Over holds, unless both caps are over (ADR 641). */
+function unpricedCapLine(k: NonNullable<Report['wake']>): string | null {
+  if (k.unpriced_wake_cap === undefined || k.unpriced_wake_count === undefined) return null;
+  const state = k.unpriced_over_cap ? 'OVER' : 'under';
+  const held =
+    k.unpriced_over_cap && !bothCapsOver(k) ? ` · agent wakes held · window ${k.window_days}d` : '';
+  return `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${state}${held}`;
+}
+
+/** ADR 641. One notice when both caps are over. */
+function bothHoldLine(k: NonNullable<Report['wake']>): string | null {
+  if (
+    k.spend_over_cap !== true ||
+    k.unpriced_over_cap !== true ||
+    k.spend_cap_usd === undefined ||
+    k.cost_usd_total === null ||
+    k.unpriced_wake_cap === undefined ||
+    k.unpriced_wake_count === undefined
+  ) {
+    return null;
+  }
+  return (
+    `  agent wakes held · window ${k.window_days}d · cap $${k.spend_cap_usd.toFixed(2)} ` +
+    `total $${k.cost_usd_total.toFixed(2)} · unpriced wakes ${k.unpriced_wake_count} cap ${k.unpriced_wake_cap}`
+  );
+}
+
 export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
   const shipped = r.goals.filter((g) => g.status === 'shipped').length;
   const inFlight = r.goals.filter((g) => g.status === 'in-flight').length;
@@ -125,7 +163,10 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       );
       if (k.cost_usd_total !== null) {
         // ADR 602. Empty unless a cap is set, so an unset team keeps today's line.
-        const held = k.spend_over_cap ? ` · agent wakes held · window ${k.window_days}d` : '';
+        const held =
+          k.spend_over_cap && !bothCapsOver(k)
+            ? ` · agent wakes held · window ${k.window_days}d`
+            : '';
         const bound =
           k.spend_cap_usd === undefined
             ? ''
@@ -144,11 +185,10 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
           `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
         );
       }
-      if (k.unpriced_wake_cap !== undefined && k.unpriced_wake_count !== undefined) {
-        lines.push(
-          `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${k.unpriced_over_cap ? 'OVER' : 'under'} · display only`,
-        );
-      }
+      const unpricedLine = unpricedCapLine(k);
+      if (unpricedLine) lines.push(unpricedLine);
+      const bothLine = bothHoldLine(k);
+      if (bothLine) lines.push(bothLine);
       if (k.exhausted > 0) lines.push(`  ⚠ ${k.exhausted} act(s) exhausted their wake attempts`);
       for (const seat of k.by_seat.filter((b) => b.over_budget))
         lines.push(`  ⚠ ${seat.seat} — a wake exceeded its $${seat.budget_usd} report bound`);
@@ -159,7 +199,7 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
     ) {
       // Quiet window. The digest stays silent when none of the three numbers is set.
       lines.push('\nwake:');
-      if (k.spend_cap_usd !== undefined) {
+      if (k.spend_cap_usd !== undefined && !bothCapsOver(k)) {
         lines.push(
           `  cap $${k.spend_cap_usd.toFixed(2)} no priced spend · measured wake cost, not payments`,
         );
@@ -169,11 +209,10 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
           `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
         );
       }
-      if (k.unpriced_wake_cap !== undefined && k.unpriced_wake_count !== undefined) {
-        lines.push(
-          `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${k.unpriced_over_cap ? 'OVER' : 'under'} · display only`,
-        );
-      }
+      const quietUnpriced = unpricedCapLine(k);
+      if (quietUnpriced) lines.push(quietUnpriced);
+      const quietBoth = bothHoldLine(k);
+      if (quietBoth) lines.push(quietBoth);
     }
     // Tool-call telemetry (ADR 144 inc 1) — the surface-redesign instrument panel, rendered only
     // once something has landed. Full per-tool detail lives in `musterd report tools`.

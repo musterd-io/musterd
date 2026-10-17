@@ -29,19 +29,20 @@ Without a stored key, the notice lane has nothing to read, and the team cannot s
 
 4. `deriveReport` copies `unpriced_wake_cap`, `unpriced_wake_count`, and `unpriced_over_cap` onto `wake` only when the key is set. The count is read then, from those audit rows. When the key is unset, all three fields are omitted, so the report JSON matches a report from before this field. `deriveWakeMetrics` does not read the key.
 
-5. The CLI report prints `unpriced wakes N · cap N OVER|under · display only` when the key is set, on a quiet window and on an active one. OVER uses the warn state. The line does not say `agent wakes held`. The ADR 252 unpriced-sessions sentence is unchanged. `musterd report residency` uses the same renderer. The MCP report digest prints the same words, without color, and a quiet window that has only this key still prints the line.
+5. The CLI report prints `unpriced wakes N · cap N OVER|under · display only` when the key is set, on a quiet window and on an active one. OVER uses the warn state. The line does not say `agent wakes held`. The ADR 252 unpriced-sessions sentence is unchanged. `musterd report residency` uses the same renderer. The MCP report digest prints the same words, without color, and a quiet window that has only this key still prints the line. _(Amended 2026-10-17: ADR 641 drops `display only`. A count at or over the cap adds `agent wakes held` on that line, unless the dollar cap is also over, in which case one following line names both caps, each total, and the window. See ADR 641.)_
 
 6. `musterd team policy --unpriced-wake-cap <n|off>` is the human write path, the same read-merge-write `POST /policy` as the other knobs. `off` deletes the key. The policy view always shows the line: `unset`, or `N wakes / 7d`. It does not say `default`. Absence is not a shipped number.
 
 7. No feature-epoch bump. The fields are optional. An older client strips them. An older daemon omits them. No new audit action. A set or cleared cap is the existing `policy.change` row, and the stored detail is the sparse doc.
 
-8. Nothing is denied. Lane `01M50M90ST4TQWKEBP5TQ56V0B` is the deny path and the one notice that names each cap, its total, and the window when both trip.
+8. Nothing is denied. _(Amended 2026-10-17: ADR 641 holds new non-human wakes on the wake-lease poll when the key is set. A human still passes. See ADR 641.)_ Lane `01M50M90ST4TQWKEBP5TQ56V0B` is the deny path and the one notice that names each cap, its total, and the window when both trip.
 
 9. A count is coarse. It cannot tell a cheap Codex wake from an expensive one, and a crashed wake that never reported sits in the same count. The number is a count bound.
 
 ## Consequences
 
 - An admin sets one integer, or leaves the key absent. The report shows the count beside the cap and says nothing is denied.
+- _(2026-10-17.)_ [ADR 641](641-unpriced-wake-cap-holds-wakes.md) holds new agent wakes when the key is set. The report line drops `display only`. When only the count is over, the line says `agent wakes held`. When both caps are over, one following line names each cap, its total, and the window.
 - The dollar-cap line and the approval line are unchanged. Setting this key does not move `spend_over_cap`.
 - The policy view gains one line on every team. The report text and the report JSON do not, until a cap is set.
 - A cap of 0 on a quiet window prints OVER. Decision 3 is the comparison the deny path reads.
@@ -50,5 +51,5 @@ Without a stored key, the notice lane has nothing to read, and the team cannot s
 ## Observability & Evaluation
 
 - **Traces:** a set or cleared cap is the existing `policy.change` audit row. No new audit action. No new trace event.
-- **Eval:** the protocol accepts 0 and 10_000, rejects -1, 1.5, NaN, Infinity, and 10_001, and `parse({})` leaves the key unset. `sparsifyPolicy` keeps 0. The report omits the three fields when the key is unset. With the cap set, a captured unpriced lease, a settled lease with no cost, and a printed 0 each count once; a positive cost, an in-flight `woke`, and a deferral do not. Count 3 against cap 2 and against cap 3 is over; against cap 4 it is under. Cap 0 with count 0 is over. `deriveWakeMetrics` does not carry the fields. The CLI line contains `display only` and does not contain `agent wakes held`.
+- **Eval:** the protocol accepts 0 and 10_000, rejects -1, 1.5, NaN, Infinity, and 10_001, and `parse({})` leaves the key unset. `sparsifyPolicy` keeps 0. The report omits the three fields when the key is unset. With the cap set, a captured unpriced lease, a settled lease with no cost, and a printed 0 each count once; a positive cost, an in-flight `woke`, and a deferral do not. Count 3 against cap 2 and against cap 3 is over; against cap 4 it is under. Cap 0 with count 0 is over. `deriveWakeMetrics` does not carry the fields. The CLI line contains `display only` and does not contain `agent wakes held`. _(2026-10-17: that line assertion is the display commit. ADR 641's tests expect the hold words.)_
 - **Experiment:** none. Whether a team sets a number, and whether the count changes what it spends, is outside this decision. The deny path is lane `01M50M90ST4TQWKEBP5TQ56V0B`.

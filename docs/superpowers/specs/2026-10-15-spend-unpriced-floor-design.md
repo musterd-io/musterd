@@ -81,8 +81,11 @@ Nick chose this shape on 2026-10-17.
    to the dollar cap, same warn state. Lane `01M50M8W8FJ5EQ15RF934F6BHS`
    ([ADR 639](../../decisions/639-unpriced-wake-cap-display.md)). This step stores the key and
    prints the line.
-3. The deny path and one notice naming both caps. Lane `01M50M90ST4TQWKEBP5TQ56V0B`. Depends on
-   step 2. Increment 2 has landed ([ADR 611](../../decisions/611-spend-cap-holds-wakes.md)).
+3. The deny path and one notice naming both caps. Lane `01M50M90ST4TQWKEBP5TQ56V0B`
+   ([ADR 641](../../decisions/641-unpriced-wake-cap-holds-wakes.md)). A set key holds new
+   agent wakes on the same poll as [ADR 611](../../decisions/611-spend-cap-holds-wakes.md).
+   Humans pass. One notice names each cap, its total, and the window when both trip. The
+   key stays unset. No number is set on the revive team.
 
 ## Testing
 

@@ -1897,33 +1897,101 @@ type SpendCapBreach = {
   windowDays: number;
 };
 
-function spendHoldEntry(seat: string, breach: SpendCapBreach): AuditEntry {
+/** ADR 641. The poll already counted this. Residency applies it and does not read the audit fold. */
+type UnpricedWakeBreach = {
+  cap: number;
+  count: number;
+  windowDays: number;
+};
+
+function wakeHoldEntry(
+  seat: string,
+  spend: SpendCapBreach | null,
+  unpriced: UnpricedWakeBreach | null,
+): AuditEntry {
+  if (spend && unpriced) {
+    const windowDays = spend.windowDays;
+    return {
+      actor: null,
+      action: 'action.gate',
+      target: seat,
+      result: 'deny',
+      detail: {
+        cause: 'wake_spend',
+        outcome: 'denied_held',
+        cap_usd: spend.capUsd,
+        total_usd: spend.totalUsd,
+        unpriced_cap: unpriced.cap,
+        unpriced_count: unpriced.count,
+        window_days: windowDays,
+        reason:
+          `window ${windowDays}d. spend cap $${spend.capUsd.toFixed(2)}: measured wake cost ` +
+          `$${spend.totalUsd.toFixed(2)}. unpriced wake cap ${unpriced.cap}: ` +
+          `${unpriced.count} unpriced wakes. New agent wakes are held. A human still passes.`,
+      },
+    };
+  }
+  if (unpriced) {
+    return {
+      actor: null,
+      action: 'action.gate',
+      target: seat,
+      result: 'deny',
+      detail: {
+        cause: 'unpriced_wake_cap',
+        outcome: 'denied_held',
+        cap: unpriced.cap,
+        count: unpriced.count,
+        window_days: unpriced.windowDays,
+        reason:
+          `unpriced wake cap ${unpriced.cap}: ${unpriced.windowDays}d unpriced wakes ` +
+          `${unpriced.count} is at the cap. New agent wakes are held. A human still passes.`,
+      },
+    };
+  }
+  if (spend) {
+    return {
+      actor: null,
+      action: 'action.gate',
+      target: seat,
+      result: 'deny',
+      detail: {
+        cause: 'spend_cap',
+        outcome: 'denied_held',
+        cap_usd: spend.capUsd,
+        total_usd: spend.totalUsd,
+        window_days: spend.windowDays,
+        reason:
+          `spend cap $${spend.capUsd.toFixed(2)}: ${spend.windowDays}d measured wake cost ` +
+          `$${spend.totalUsd.toFixed(2)} is at the cap. New agent wakes are held. A human still passes. ` +
+          'Measured wake cost, not payments.',
+      },
+    };
+  }
   return {
     actor: null,
     action: 'action.gate',
     target: seat,
     result: 'deny',
     detail: {
-      cause: 'spend_cap',
+      cause: 'unpriced_wake_cap',
       outcome: 'denied_held',
-      cap_usd: breach.capUsd,
-      total_usd: breach.totalUsd,
-      window_days: breach.windowDays,
-      reason:
-        `spend cap $${breach.capUsd.toFixed(2)}: ${breach.windowDays}d measured wake cost ` +
-        `$${breach.totalUsd.toFixed(2)} is at the cap. New agent wakes are held. A human still passes. ` +
-        'Measured wake cost, not payments.',
+      cap: 0,
+      count: 0,
+      window_days: 7,
+      reason: 'New agent wakes are held. A human still passes.',
     },
   };
 }
 
-/** Open while this seat's newest local spend-cap deny has no later lease. A lease closes it. */
+/** Open while this seat's newest local wake-hold deny has no later lease. A lease closes it. */
 async function spendCapEpisodeOpen(db: Driver, teamId: string, seat: string): Promise<boolean> {
   const row = await db.get<{ action: string }>(
     `SELECT action FROM audit
       WHERE team_id = ? AND target = ?
         AND (
-          (action = 'action.gate' AND json_extract(detail, '$.cause') = 'spend_cap')
+          (action = 'action.gate' AND json_extract(detail, '$.cause') IN
+            ('spend_cap', 'unpriced_wake_cap', 'wake_spend'))
           OR action = 'residency.wake_leased'
         )
         ${MINTED_HERE}
@@ -1934,16 +2002,18 @@ async function spendCapEpisodeOpen(db: Driver, teamId: string, seat: string): Pr
 }
 
 /** Drop a non-human plan before a lease is minted, so a dream night and a first wake are not spent. */
-async function applySpendCap(
+async function applyWakeHold(
   db: Driver,
   teamId: string,
   pass: SeatPass,
-  breach: SpendCapBreach | null,
+  spend: SpendCapBreach | null,
+  unpriced: UnpricedWakeBreach | null,
 ): Promise<void> {
-  if (breach === null || pass.member.kind === 'human' || pass.plan === null) return;
+  if ((spend === null && unpriced === null) || pass.member.kind === 'human' || pass.plan === null)
+    return;
   pass.plan = null;
   if (await spendCapEpisodeOpen(db, teamId, pass.member.name)) return;
-  pass.spendHold = spendHoldEntry(pass.member.name, breach);
+  pass.spendHold = wakeHoldEntry(pass.member.name, spend, unpriced);
 }
 
 /**
@@ -1952,7 +2022,8 @@ async function applySpendCap(
  * its own short transaction. On a large team the derivation is hundreds of awaited statements, and
  * on SQLite every other write on the daemon queued behind it while it ran inside one transaction.
  *
- * `breach` (ADR 611) is the poll's spend-cap read. Null withholds nothing.
+ * `breach` (ADR 611) is the poll's dollar-cap read. `unpriced` (ADR 641) is the count-cap read.
+ * Either one withholds a non-human plan. Both null withhold nothing.
  */
 export async function claimWakeLeases(
   db: Driver,
@@ -1963,6 +2034,7 @@ export async function claimWakeLeases(
   now = Date.now(),
   scope: HostScope = TEAM_WIDE_HOST,
   breach: SpendCapBreach | null = null,
+  unpriced: UnpricedWakeBreach | null = null,
 ): Promise<WakeOrder[]> {
   // Lane 01M4VJNEX2: the backlog is rows already written, one per poll. Drop the repeats once
   // per process, before this poll's scans. A failure here must not stop the poll.
@@ -1976,6 +2048,7 @@ export async function claimWakeLeases(
     now,
     scope,
     breach,
+    unpriced,
   );
   const orders: WakeOrder[] = [];
   for (const pass of passes) {
@@ -1995,6 +2068,7 @@ async function deriveSeatPasses(
   now: number,
   scope: HostScope,
   breach: SpendCapBreach | null,
+  unpriced: UnpricedWakeBreach | null,
 ): Promise<SeatPass[]> {
   const passes: SeatPass[] = [];
   const reclaimable = await listReclaimableMemberIds(db, teamId, now);
@@ -2043,7 +2117,7 @@ async function deriveSeatPasses(
     if (provisioned) {
       const sponsorName = (await getMemberById(db, provisioned.sponsor_id))?.name ?? '?';
       pass.plan = { kind: 'provisioned', provisionId: provisioned.id, sponsorName };
-      await applySpendCap(db, teamId, pass, breach);
+      await applyWakeHold(db, teamId, pass, breach, unpriced);
       continue;
     }
     if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) continue;
@@ -2227,7 +2301,7 @@ async function deriveSeatPasses(
       });
       if (blocker === null) pass.plan = { kind: 'dream' };
     }
-    await applySpendCap(db, teamId, pass, breach);
+    await applyWakeHold(db, teamId, pass, breach, unpriced);
   }
   return passes.filter((p) => p.plan !== null || p.exhausted.length > 0 || p.spendHold !== null);
 }
