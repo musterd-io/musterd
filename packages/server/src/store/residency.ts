@@ -2386,7 +2386,7 @@ async function deriveSeatPasses(
           const recentNudge = await db.get<{ id: string }>(
             `SELECT id FROM audit WHERE team_id = ? AND action = 'residency.dispatch_suppressed'
              AND json_extract(detail, '$.lane_id') = ?
-             AND json_extract(detail, '$.nudge_sent') IS TRUE AND ts > ?`,
+             AND json_extract(detail, '$.nudge_sent') = 1 AND ts > ?`,
             [teamId, candidate.lane_id, now - OWNER_ENGAGEMENT_MS],
           );
           const voice =
