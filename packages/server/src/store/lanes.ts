@@ -290,7 +290,12 @@ async function recordLaneEdges(
   ownerPatched: boolean,
   audit: LaneAudit,
   /** ADR 624: the patch fields the edges record — the pick on a claim, the reason on a release. */
-  edge: { pick?: UpdateLane['pick']; release_reason?: string | undefined } = {},
+  edge: {
+    pick?: UpdateLane['pick'];
+    release_reason?: string | undefined;
+    /** ADR 644: the patch carried a verdict — the write itself is what the trace row counts. */
+    read_verdict_written?: boolean;
+  } = {},
 ): Promise<void> {
   const claimed =
     ownerPatched && after.owner_seat !== null && after.owner_seat !== before.owner_seat;
@@ -314,9 +319,11 @@ async function recordLaneEdges(
       changes: laneFieldDiff(before, after),
     });
   }
-  // ADR 644 §2: one row per verdict written, carrying what it replaced. `lane.updated` above already
-  // replicates the verdict itself; this row is the trace the 30-day eval counts.
-  if (after.read_verdict && after.read_verdict.at !== before.read_verdict?.at) {
+  // ADR 644 §2: one row per verdict WRITE, carrying what it replaced. Keyed on the write, not on the
+  // stamp: `at` comes from the request clock, so two writes in one millisecond (or a repeat of the
+  // same verdict) would otherwise leave no row, and the 30-day eval counts these rows.
+  // `lane.updated` above already replicates the verdict itself.
+  if (edge.read_verdict_written && after.read_verdict) {
     await laneAuditRow(db, teamId, audit, 'lane.read_recorded', after.id, {
       lane: after.id,
       reads_on: after.reads_on ?? null,
@@ -898,6 +905,7 @@ async function updateLaneInTx(
     await recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit, {
       pick: patch.pick,
       release_reason: patch.release_reason,
+      read_verdict_written: patch.read_verdict !== undefined,
     });
   // ADR 487 §5.1: a named follow-up with no goal joins this lane's goal, in the same transaction —
   // so the local path and the hub's arbitration both attach it, and a refused write attaches
