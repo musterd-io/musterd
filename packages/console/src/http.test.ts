@@ -90,7 +90,7 @@ describe('console HTTP boundary (ADR 615)', () => {
 
   it('exposes nothing else: unknown routes 404, non-GET 405, a foreign host 404', async () => {
     const { call } = await boot();
-    for (const p of ['/login', '/token', '/teams', '/.well-known/openid-configuration', '/'])
+    for (const p of ['/login', '/token', '/teams', '/.well-known/openid-configuration'])
       expect((await call(p)).status, p).toBe(404);
     const post = await call('/health', { method: 'POST' });
     expect(post.status).toBe(405);

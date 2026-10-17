@@ -30,8 +30,18 @@ Two routes, and everything else is refused:
 | `POST /auth/email/start` | ADR 620: exact Origin; a valid address (domain case-folded, local part kept); limits per client, per inbox-and-client, and per inbox (20 an hour) — an inbox being the address case-folded, `+tag` dropped, Gmail dots removed — none global; a single-use magic transaction bound to this browser's `__Host-tx` cookie, 15 minutes; emails `issuer/auth/email/confirm?t=…` through Cloudflare Email Service; always answers "check your email" |
 | `GET /auth/email/confirm` | shows `confirm`, `other_browser` or `expired` — never consumes, so a mail scanner following the link changes nothing |
 | `POST /auth/email/confirm` | exact Origin; consumes the token only together with the browser's tx cookie, in one atomic UPDATE; issues a session; `303` to the allowlisted return path |
-| `GET /me` | temporary JSON view of the signed-in account and its methods, until the signed-in page lands |
+| `GET /me` | JSON view of the signed-in account and its methods |
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
+| `GET /` | the sign-in page (design `2026-10-15-console-signin-design.md`, words `console-signin-copy-spec.md`): provider POST forms to the start routes above and the email form, each way shown only when configured; a signed-in browser is sent to `/account`, a stale session cookie shows the expired banner once and is cleared |
+| `GET /account` | the signed-in page: the account's sign-in methods and the sign-out POST form (with its CSRF field); no session is a `303 /` |
+| `GET /console.css`, `/favicon.svg`, `/fonts/*.woff2` | the screens' own assets (in `packages/console/assets/`), under the page CSP below; fonts are immutable, the rest cache for 300 s |
+
+The browser flows answer in pages, not JSON: a bad email address re-renders the sign-in page
+with its field error, a sent (or silently failed) send renders check-your-email, the magic
+link's GET renders finish / wrong-browser / link-no-longer-valid, and a failed callback renders
+its provider, disabled, expired or too-many-attempts page — a failed sign-in never redirects to
+a caller-chosen path. The session marker the design puts on the account row this session used
+waits on its words from the copy owner, so the row is unmarked for now.
 
 No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
 `01M3Z43QYB`, KMS tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create-team `01M3Z44MTV`.
@@ -50,7 +60,10 @@ There is no development issuer or test key to fall back to.
 - **Request id:** an inbound `x-request-id` is kept only if it is an 8–64 character safe token, else
   replaced; every response carries one.
 - **Headers on every response:** HSTS, `nosniff`, `no-referrer`, a `default-src 'none'` CSP,
-  frame-ancestors none, `cache-control: no-store` unless a route says otherwise.
+  frame-ancestors none, `cache-control: no-store` unless a route says otherwise. The screens
+  and their assets answer under the page CSP instead
+  (`default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; form-action 'self';
+  frame-ancestors 'none'; base-uri 'none'`): no script, nothing inline, nothing third-party.
 - **One error shape:** `{error: {code, message}}` with stable messages.
 - **Cookies** (none set by the skeleton): `hostCookie` is the one writer — `__Host-` prefixed, Secure,
   `Path=/`, HttpOnly, SameSite=Lax, no Domain, and no option to weaken any of it.
@@ -125,8 +138,9 @@ src/
   clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16; bucketOf keys IPv6 by its /64
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
-  email.ts        // sendSignInEmail(cfg, {to, link, expiresMinutes}): one POST to Cloudflare Email Service's REST endpoint, no SDK, no tracking; signInMessage (placeholder words until the copy spec lands)
-  http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, one error shape, one log line per request by route label
+  email.ts        // sendSignInEmail(cfg, {to, link, expiresMinutes}): one POST to Cloudflare Email Service's REST endpoint, no SDK, no tracking; signInMessage (copy spec §4, text only)
+  http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, the sign-in and account pages and their assets, one error shape, one log line per request by route label
+  pages.ts        // the sign-in screens (design 2026-10-15, copy spec words): shell, signInPage, checkEmailPage, finishPage, wrongBrowserPage, errorPages, accountPage; PAGE_CSP and assetFor for assets/ — no script, nothing inline
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
   providers.ts    // PINNED GitHub/Google endpoints, startFlow (state, PKCE S256, Google nonce; pinned callback), finishFlow (openid-client code exchange; Google ID token claims; GitHub numeric id from /user); ProviderOverrides for tests only
   ratelimit.ts    // hit(db, {bucket, max, windowMs}, now): one atomic upsert per hit, held across servers; pruneRateLimits

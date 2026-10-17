@@ -19,21 +19,18 @@ export interface SignInEmail {
 }
 
 /**
- * The words are placeholders until alfie's copy spec lands (lane 01M3Z43QYB); the shape — a bare
- * link, the expiry, and what to do if you did not ask — is ADR 620's.
+ * The words are the copy spec §4 (docs/design/console-signin-copy-spec.md), character for
+ * character; the email is text only, one link on its own line, no tracking (ADR 620 decision 2).
+ * If the built link lifetime changes, the "15 minutes" strings change in the same commit.
  */
-export function signInMessage(m: SignInEmail): { subject: string; text: string; html: string } {
-  const subject = 'Your musterd sign-in link';
+export function signInMessage(m: SignInEmail): { subject: string; text: string } {
+  const subject = 'Sign in to musterd';
   const text =
-    `Use this link to sign in to musterd. It works once, in the browser where you asked for it, ` +
-    `for ${m.expiresMinutes} minutes:\n\n${m.link}\n\n` +
-    `If you didn't ask to sign in, you can ignore this email. Nobody can use it without this link.`;
-  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-  const html =
-    `<p>Use this link to sign in to musterd. It works once, in the browser where you asked for it, ` +
-    `for ${m.expiresMinutes} minutes:</p><p><a href="${esc(m.link)}">${esc(m.link)}</a></p>` +
-    `<p>If you didn't ask to sign in, you can ignore this email.</p>`;
-  return { subject, text, html };
+    `Sign in to your musterd account.\n\n` +
+    `This link works for ${m.expiresMinutes} minutes, and only in the browser where you asked for it.\n\n` +
+    `${m.link}\n\n` +
+    `Didn't ask for this? Ignore this email.`;
+  return { subject, text };
 }
 
 export async function sendSignInEmail(
@@ -51,7 +48,6 @@ export async function sendSignInEmail(
       from: { address: cfg.fromAddress, name: cfg.fromName },
       subject: msg.subject,
       text: msg.text,
-      html: msg.html,
     }),
   });
   return res.ok;

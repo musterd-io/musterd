@@ -127,7 +127,8 @@ describe('magic links (ADR 620 decision 6)', () => {
     const { ask, sent } = await boot();
     const { r, tx, token } = await ask();
     expect(r.status).toBe(200);
-    expect(JSON.parse(r.body)).toEqual({ ok: true, state: 'check_email' });
+    expect(r.body).toContain('<h1>Check your email</h1>');
+    expect(r.body).toContain('<strong>Nick@example.test</strong>');
     expect(tx).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(sent[0]!.to).toBe('Nick@example.test');
     expect(sent[0]!.link).toBe(`${ISSUER}/auth/email/confirm?t=${token}`);
@@ -138,8 +139,8 @@ describe('magic links (ADR 620 decision 6)', () => {
     const { ask, view, confirm } = await boot();
     const { tx, token } = await ask();
     for (let i = 0; i < 3; i++)
-      expect(JSON.parse((await view(token)).body).state).toBe('other_browser');
-    expect(JSON.parse((await view(token, tx)).body).state).toBe('confirm');
+      expect((await view(token)).body).toContain('Open this in the browser where you started');
+    expect((await view(token, tx)).body).toContain('<h1>Finish signing in</h1>');
     expect((await confirm(token, tx)).status).toBe(303);
   });
 
@@ -153,7 +154,7 @@ describe('magic links (ADR 620 decision 6)', () => {
     const me = JSON.parse((await call('GET', '/me', { cookie: `__Host-session=${sid}` })).body);
     expect(me.methods).toEqual([{ provider: 'email', email: 'Nick@example.test' }]);
     expect((await confirm(token, tx)).status).toBe(400);
-    expect(JSON.parse((await view(token, tx)).body).state).toBe('expired');
+    expect((await view(token, tx)).body).toContain('This link is no longer valid.');
   });
 
   it('another browser — or no browser binding — cannot use the link', async () => {
@@ -249,7 +250,7 @@ describe('magic links (ADR 620 decision 6)', () => {
     const { ask } = await boot({ failSend: true });
     const { r } = await ask();
     expect(r.status).toBe(200);
-    expect(JSON.parse(r.body)).toEqual({ ok: true, state: 'check_email' });
+    expect(r.body).toContain('<h1>Check your email</h1>');
   });
 
   it('no token, link, address, tx cookie or session id reaches the log or the audit', async () => {
