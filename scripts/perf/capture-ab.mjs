@@ -31,7 +31,8 @@ const flag = (n, d) => {
 const SECS = Number(flag('secs', '60'));
 // The encode and page rate for every arm. 30 is the spec's bar; 24 is the sub-bar rung (lane 01M55N47KJ).
 const FPS = Number(flag('fps', '30'));
-// A comma list of arm labels to run, in order; default is the full increment 4 set.
+// A comma list of arm labels to run, in order; default is the full increment 4 set. `label@20` runs
+// that arm at 20 fps instead of --fps, so two rungs can share one box (lane 01M55N47KJ).
 const ONLY = flag('arms', '')
   .split(',')
   .map((a) => a.trim())
@@ -174,7 +175,7 @@ function kill(proc) {
 }
 
 // ── Arms S and X: the real `musterd broadcast` pipeline, screencast or `--capture x11` ──────────────
-async function armCli(label, capture = 'screencast') {
+async function armCli(label, capture = 'screencast', fps = FPS) {
   const out = join(mkdtempSync(join(tmpdir(), 'cab-s-')), 's.mp4');
   const cli = spawn(
     'node',
@@ -186,7 +187,7 @@ async function armCli(label, capture = 'screencast') {
       '--server',
       SERVER,
       '--fps',
-      String(FPS),
+      String(fps),
       '--duration',
       String(SECS + 40),
       '--out',
@@ -241,7 +242,7 @@ async function armCli(label, capture = 'screencast') {
 
 // ── Arm XA: the ad-hoc Xvfb + headful Chromium + ffmpeg x11grab of increment 1 ──────────────────
 // `query` is appended to the page URL: `&dirty=0` is ADR 625's A/B arm.
-async function armX11(label, query = '') {
+async function armX11(label, query = '', fps = FPS) {
   const DISPLAY = ':99';
   const xvfb = spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
     stdio: 'ignore',
@@ -277,7 +278,7 @@ async function armX11(label, query = '') {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
     await page.send('Page.navigate', {
-      url: `${SERVER}/broadcast?team=${TEAM}&fps=${FPS}${query}`,
+      url: `${SERVER}/broadcast?team=${TEAM}&fps=${fps}${query}`,
     });
     if (!(await waitForRoom(page))) {
       // Say what the page saw, so an empty room is a reading rather than a guess.
@@ -297,7 +298,7 @@ async function armX11(label, query = '') {
         '-f',
         'x11grab',
         '-framerate',
-        String(FPS),
+        String(fps),
         '-video_size',
         '1920x1080',
         '-i',
@@ -317,7 +318,7 @@ async function armX11(label, query = '') {
         '-bufsize',
         '9000k',
         '-g',
-        String(FPS * 2),
+        String(fps * 2),
         '-pix_fmt',
         'yuv420p',
         '-c:a',
@@ -366,15 +367,28 @@ async function armX11(label, query = '') {
 
 const results = [];
 // S first and X-cli last, so neither CLI arm only ever sees a warm or a cold box.
-for (const [fn, label, arg] of [
+const ARMS = [
   [armCli, 'screencast', 'screencast'],
   [armCli, 'x11-cli#1', 'x11'],
   [armX11, 'x11-adhoc', ''],
   [armX11, 'x11-adhoc dirty=0', '&dirty=0'],
   [armCli, 'x11-cli#2', 'x11'],
   [armCli, 'x11-cli#3', 'x11'],
-].filter(([, label]) => (ONLY.length ? ONLY.includes(label) : label !== 'x11-cli#3'))) {
-  const r = await fn(label, arg).catch((e) => ({ arm: label, invalid: String(e?.message ?? e) }));
+  [armCli, 'x11-cli#4', 'x11'],
+];
+const plan = ONLY.length
+  ? ONLY.map((want) => {
+      const [base, at] = want.split('@');
+      const arm = ARMS.find(([, l]) => l === base);
+      if (!arm) throw new Error(`unknown arm ${base}`);
+      return [arm[0], at ? `${base}@${at}` : base, arm[2], at ? Number(at) : FPS];
+    })
+  : ARMS.slice(0, 5).map(([fn, l, a]) => [fn, l, a, FPS]);
+for (const [fn, label, arg, fps] of plan) {
+  const r = await fn(label, arg, fps).catch((e) => ({
+    arm: label,
+    invalid: String(e?.message ?? e),
+  }));
   console.log(`CAPTURE_AB ${JSON.stringify(r)}`);
   results.push(r);
   await sleep(5000);
