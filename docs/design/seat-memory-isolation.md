@@ -15,6 +15,21 @@ per seat. It belongs to the seat, not to whoever occupies it
 path — team admins included". This doc checks that promise against the code. It also records
 every path the note actually takes, and decides what each tier needs.
 
+## Who may read what (nick, 2026-10-17)
+
+**Humans can see everything except another human's personal stuff.** For a seat's note that
+means three rules:
+
+- **An agent seat's note:** the seat itself and **any human** on the team can read it. No other
+  agent can.
+- **A human seat's note:** only that human can read it. Not another human, not an admin, not an
+  agent.
+- **Writing a note:** only the seat itself can.
+
+This replaces ADR 093 §4's "no cross-seat read path, team admins included" for agent seats, and
+keeps it for human seats. The risk nick named for agents is **pollution**: one agent reads, or
+overwrites, another agent's note, and the next session acts on it.
+
 ## What is true today (verified 2026-10-17, origin/main `1a2a1206`)
 
 The 2026-10-01 brief listed four paths. All four still exist. Two more turned up.
@@ -75,12 +90,13 @@ other seats' bindings can be denied only at the file-tool layer.
 **Goal.** No musterd surface hands one seat another seat's note. An agent's file tools are pointed
 away from musterd's files. Nothing claims to stop a determined process running as the same user.
 
-1. **Redact the note on read, not on write.** `GET /audit`, `musterd audit` and the web audit page
-   show `continuity.memory_saved` as `{headline_len, body_len, saved_at}`. The stored event keeps
-   the body, because the audit row is the replicated event (path 5), and replication is what
-   carries the note to the seat's second machine (ADR 366). Redacting on write would break
-   continuity. This closes path 2 and keeps ADR 093's promise that admins cannot read a note. The
-   headline is redacted too: it is content, and it is just what a passing reader would latch onto.
+1. **Apply the read rule when the note is read.** For a **human** seat's note, `GET /audit`,
+   `musterd audit` and the web audit page show only `{headline_len, body_len, saved_at}` to anyone
+   but that human. **Agent** seats' notes stay readable to humans there, and humans also get a
+   direct, human-only read of any agent seat's note, so they don't have to dig through audit
+   rows. The stored event keeps the body, because the audit row is the replicated event (path 5),
+   and replication is what carries the note to the seat's second machine (ADR 366). Redacting on
+   write would break continuity. The headline is redacted along with the body: it is content.
 2. **Deny rules where a harness can enforce them.** At provisioning, musterd adds:
    - **Claude Code:** `permissions.deny` `Read(~/.musterd/**)` and `Read(<roster home>/**/.musterd/**)`
      for the file tools, plus sandbox `denyRead` on `~/.musterd/musterd.db*` and `trace.db*`.
@@ -88,7 +104,20 @@ away from musterd's files. Nothing claims to stop a determined process running a
    - **Everyone else:** `04-cli.md` records the harness as **file-tool only** or **none**, so the
      gap is written down, not implied. This narrows path 3 for two harnesses, and path 4 for the
      file tools only. At this tier that is enough: the risk is stumbling, not breaking in.
-3. **Not doing on a laptop: a daemon service user (P2).** A `_musterd` user would close path 3
+3. **Refuse a seat mismatch.** The CLI acts as the seat whose folder it runs in. So an agent
+   launched as seat A that runs `musterd` inside seat B's folder reads and writes **B's** note.
+   That is the most likely accident on a laptop. When the session's own seat is known (the
+   harness launch env, or the presence this process holds) and differs from the folder's seat,
+   memory reads and writes are refused, with a message naming both seats. This closes the
+   accidental half of path 4.
+4. **Stamp who wrote the note, and warn on read.** Today a save records only the seat
+   (`continuity.memory_saved` actor). Each save also records the presence and session that made
+   it. When the last writer is not one of this seat's own sessions, `team_memory_read`, the
+   session-start summary and the wake packet say so plainly ("your note was last written by a
+   session that wasn't yours"), and mark the note suspect instead of trusted. Pollution through a
+   copied credential (path 4) cannot be stopped on a laptop, but it stops being silent. ADR 522's
+   checks on read already limit what a polluted claim in a note can do.
+5. **Not doing on a laptop: a daemon service user (P2).** A `_musterd` user would close path 3
    against every harness. But it needs root at `service install`. It also reshapes autorefresh, the
    guardian and the plist, and it still leaves path 4 open, because the bindings stay readable as
    the human. That cost buys hostile-grade protection on a tier whose threat model is accidental.
@@ -108,16 +137,41 @@ seat, through musterd or through the file system.
 2. **Code a seat runs is confined** by the OS sandbox lane `01M4VYT6JW`: workspace only, with
    network access only to the gateway. Without it, a resident seat's `pnpm test` is just another
    process running as the host user.
-3. **Replication stays at machine trust, and says so.** An enrolled machine holds every seat's
-   note (path 5). Enrolment is a human admin's invite (`/nodes/invite`), so the tier sentence names
-   the machines, not just "admins". The other option is per-seat encryption of the note body, with
-   the key held by the seat. That would make path 5 safe, but it is a custody design of its own
-   (ADR 200), and nothing so far asks for it. It is parked as the last lane below, behind evidence.
+3. **Replication: agent notes stay readable, human notes are encrypted.** An enrolled machine
+   holds every seat's note (path 5). For agent notes that matches the read rule: humans may read
+   them anyway, and the hosted seat users cannot reach the database. A human seat's note is
+   encrypted to that human's own machines (next section), so the hub, the other machines and
+   Cloud only hold ciphertext.
+
+### Per-seat encryption, for human seats only
+
+Under the read rule, only a human's note needs encryption. Agent notes don't.
+
+- **Keys.** Each machine a human trusts (ADR 358) has its own X25519 keypair. The private half
+  stays on that machine, mode 0600 under the human's own user. The server gets only the public
+  half.
+- **Save.** The human's CLI or MCP adapter encrypts the note locally, once for each of that human's
+  machines (several recipients, like `age`), using Node's built-in `crypto`. No new dependency.
+  The server, the hub's `sync_log`, peers and Cloud hold ciphertext plus `size` and `saved_at`.
+  The audit row carries the same ciphertext, so `/audit` cannot show it to anyone.
+- **Read.** Only the human's own machines can decrypt, so `team_memory_read` decrypts locally.
+  The note still follows the human to a second laptop, which is what ADR 366 is for.
+- **Machines.** When a new machine is trusted, an existing machine re-encrypts the current note to
+  include it. A removed machine drops out of future saves, but a note it already received stays
+  readable on it. Say that out loud.
+- **Losing every machine loses the note.** It is working memory, at most 8 KiB, so that is
+  acceptable. Old ciphertext in the audit rows becomes unreadable along with it.
+- **What it does not buy.** On a laptop the human's own agents run as the human's user, so they
+  can read the private key just as they read the database today. That is the hosted tier's
+  problem. Agent seats are untouched, so the server still builds their wake packets from plain
+  text (ADR 430 unaffected).
 
 ### The test that proves it (P4)
 
-The canary is one seat trying every path against another seat's note. It fails if any path
-returns the body. The API half (paths 1 and 2, and path 4 with a fresh credential) runs as a
+The canary is one agent seat trying every path against another seat's note: to **read** it, and
+to **overwrite** it. It fails if any read returns the body, or if any write lands without the
+owner's next read flagging it. A second case checks the human rule: one human cannot read another
+human's note. The API half (paths 1 and 2, and path 4 with a fresh credential) runs as a
 server test in `gates`. The OS half (paths 3 and 4 on disk) runs on the hosted image, and on a
 laptop to **document** that it succeeds there. That success is the honest form of the laptop
 claim. If the canary passes on the hosted image, the hosted sentence below is allowed. If it
@@ -127,12 +181,13 @@ fails, the sentence is withdrawn.
 
 - **Today:** "No musterd tool hands one agent another's notes. Anything running as you on your
   machine can read your musterd files, and right now that includes your agents."
-- **Laptop tier, after its lanes:** "musterd never shows one seat another seat's notes, not even to
-  admins. Where the harness supports it, agents' file tools are told to stay out of musterd's files.
-  It's a courtesy wall, not a security boundary: anything running as you can still read them."
+- **Laptop tier, after its lanes:** "No musterd tool hands one agent another agent's notes, and if
+  something else overwrites a seat's note, the seat is told the next time it reads it. Your
+  personal notes are encrypted to your own machines. It's a courtesy wall, not a security
+  boundary: anything running as you can still read your musterd files."
 - **Hosted tier, after its lanes and a passing canary:** "On a hosted seat, each agent runs as its
-  own user with its own credential. It can't read another seat's notes or act as another seat. The
-  machines your team enrols can."
+  own user with its own credential. It can't read or overwrite another seat's notes. Your team's
+  humans can read your agents' notes. Nobody but you can read yours."
 
 ## Positioning tension (flagged, not resolved)
 
@@ -144,13 +199,18 @@ to say so, or the hosted sentence contradicts the positioning page.
 
 ## ADRs to write
 
-1. **The memory note is redacted on read** (server). `/audit` and every render of it show sizes,
-   not the note. The stored event is unchanged. This restores ADR 093 §4 "admins included" by
-   amending ADR 366 decision 2's consequence, not the replication itself.
+1. **Who reads a note** (server). The seat itself and any human, for an agent seat; only that
+   human, for a human seat. Applied on every read: `/audit` and its renders, plus a new
+   human-only read of an agent seat's note. The stored event is unchanged. Supersedes ADR 093 §4 in
+   part and amends ADR 366 decision 2's consequence, not the replication itself.
 2. **Laptop-tier deny rules and the per-harness capability matrix** (CLI). Which harnesses get which
    denies, written on top of the ADR 261 floor (deny beats allow). The matrix lives in `04-cli.md`.
 3. **The hosted tier: one OS user per seat, and the daemon under its own user, on hosts musterd
    provisions.** This builds ADR 341 decision 2 for that scope, with a dated amendment to ADR 320.
+4. **A note knows who wrote it** (server, CLI, MCP). The seat-mismatch refusal, plus the writer
+   stamp and the suspect-note warning on read.
+5. **A human's note is encrypted to that human's machines** (CLI, MCP, server stores ciphertext).
+   Lives next to ADR 200 credential custody and ADR 358 machine trust.
 
 Dated notes, not ADRs:
 
@@ -163,23 +223,24 @@ Dated notes, not ADRs:
 
 On the `security` Goal, in order:
 
-1. **Redact the note on read** (ADR 1 + server + CLI/web renders + the dated notes above).
-   Independent; first.
-2. **Canary, API half** (server test in `gates`). Pairs with lane 1.
-3. **Laptop deny rules** (ADR 2 + the Claude Code and Codex writers + the `04-cli.md` matrix). Verify
+1. **Who reads a note** (ADR 1 + server + CLI/web renders + the dated notes above). First.
+2. **Seat mismatch refused** (part of ADR 4, CLI + MCP). Independent.
+3. **Writer stamp and suspect-note warning** (part of ADR 4, server + CLI + MCP + wake packet).
+4. **Canary, API half** (server test in `gates`): reads, overwrites and the human rule. Pairs with
+   lanes 1 to 3.
+5. **Laptop deny rules** (ADR 2 + the Claude Code and Codex writers + the `04-cli.md` matrix). Verify
    that no agent-side `musterd` command opens `musterd.db` before denying it.
-4. **Hosted tier spec + ADR 3**: brainstorm first, with the ADR 341 prototype as its first
+6. **Human notes encrypted to their machines** (ADR 5). After lane 1.
+7. **Hosted tier spec + ADR 3**: brainstorm first, with the ADR 341 prototype as its first
    increment. Depends on lane `01M4VYT6JW` (the OS sandbox) for code a seat runs.
-5. **Canary, OS half** on the hosted image. Depends on lane 4.
-6. **Parked: per-seat note encryption.** Only on evidence that machine-level trust for replication
-   is not enough.
+8. **Canary, OS half** on the hosted image. Depends on lane 7.
 
 ## Open questions for nick
 
-1. Is "the machines your team enrols can read every note" acceptable on both tiers? Or is per-seat
-   encryption (lane 6) a launch need rather than parked?
-2. Should a seat's **own** human (the occupant's driver) still see their seat's note in `/audit`,
-   with only other people's notes redacted? This doc redacts it for everyone. The occupant has
-   `team_memory_read`.
-3. Is the laptop tier's "courtesy wall" sentence something nick will say publicly, or does the
+Answered 2026-10-17: humans see everything except another human's personal stuff (the read rule
+above). Per-seat encryption is limited to human seats and unparked (lane 6). Agent pollution gets
+lanes 2 and 3.
+
+1. Does lane 6 (human-note encryption) ship before launch, or after lanes 1 to 4?
+2. Is the laptop tier's "courtesy wall" sentence something nick will say publicly, or does the
    pitch wait for the hosted tier?
