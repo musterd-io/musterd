@@ -51,12 +51,14 @@ import { recordToolCalls } from '../store/toolCalls.js';
 /**
  * ADR 645: a replicated declaration is parsed, never trusted, and `by` is the event's audited
  * actor — the seat the origin daemon authenticated — not whatever the payload says. A value that
- * fails the schema folds as undeclared.
+ * fails the schema, or arrives with no audited actor, folds as undeclared.
  */
 function foldedPreRegistered(value: unknown, actor: string | null): string | null {
   const parsed = LanePreRegisteredSchema.safeParse(value);
   if (!parsed.success) return null;
-  return JSON.stringify({ ...parsed.data, by: actor ?? parsed.data.by });
+  // No audited actor means nobody to attribute it to; it never falls back to the payload's claim.
+  if (actor === null) return null;
+  return JSON.stringify({ ...parsed.data, by: actor });
 }
 
 export type FoldStop =

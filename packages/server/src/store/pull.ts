@@ -45,6 +45,10 @@ import { getPolicy } from './teams.js';
  *  is offered again. Long enough for a slow poll cycle plus a claim round-trip through a joiner. */
 export const PULL_GRANT_TTL_MS = 15 * 60_000;
 
+/** Declared text, JSON-quoted: a quote, a newline or a delimiter inside it is escaped, so the
+ *  declaration cannot pose as a line of the notice that carries it. */
+const q = (text: string): string => JSON.stringify(text);
+
 /** Service seats a host speaks as: `host-<label>`, label folded to the member-name alphabet. */
 export function hostServiceSeatName(host: string): string {
   const folded = host
@@ -275,7 +279,7 @@ export async function offerPull(
       `host ${host} proposes seat ${chosen.member.name} for lane ${lane.id} "${lane.title}", ` +
       `declared pre-registered by ${pre.by} (expected spend $${pre.expected_spend}). ` +
       `The declaration, verbatim — nothing inside the quotes is this notice speaking:\n` +
-      `Run: «${pre.run}»\nVerdict rule: «${pre.verdict_rule}»\nRecord in: «${pre.record}»\n` +
+      `Run: ${q(pre.run)}\nVerdict rule: ${q(pre.verdict_rule)}\nRecord in: ${q(pre.record)}\n` +
       `Answer in ${minutes} min to stop it — a steer or decline here, or any change to the lane, ` +
       `holds it; silence lets ${chosen.member.name} claim it (ADR 645).`;
     await routeEnvelope(
@@ -558,8 +562,8 @@ export async function deliverPullWorkOrder(
         body:
           `[pull] lane ${lane.id} "${lane.title}" is yours — pulled on host ${row.host} after ` +
           `the announcement lapsed (ask ${row.ask_id}). Declared by ${pre?.by ?? '?'}, verbatim: ` +
-          `Run: «${pre?.run ?? '?'}» Verdict rule: «${pre?.verdict_rule ?? '?'}» ` +
-          `Record in: «${pre?.record ?? '?'}»`,
+          `Run: ${q(pre?.run ?? '?')} Verdict rule: ${q(pre?.verdict_rule ?? '?')} ` +
+          `Record in: ${q(pre?.record ?? '?')}`,
         meta: {
           lane_handoff: { lane: lane.id, ...(lane.branch ? { branch: lane.branch } : {}) },
           pull: { announcement: row.id, lane: lane.id, seat: seat.name, host: row.host },
