@@ -396,13 +396,81 @@ export type LanePark = z.infer<typeof LaneParkSchema>;
  * refuses one that says so.
  */
 export const PickSchema = z.object({
-  via: z.enum(['terminal', 'live']),
+  /**
+   * `terminal` / `live` are ADR 624. `pull` is ADR 645: the claim a host makes for one of its
+   * enrolled seats after the pre-registered announcement lapsed. `requested_by` is then the host's
+   * service seat that announced, `attested` is false (nobody signed as the seat), and `ask` names
+   * the announcement act so the claim and the announcement join in one query.
+   */
+  via: z.enum(['terminal', 'live', 'pull']),
   requested_by: z.string().min(1).max(64),
   attested: z.boolean(),
   harness: z.string().max(32).optional(),
+  /** ADR 645: the announcement act a `pull` claim followed. Meaningless off `via: 'pull'`. */
+  ask: z.string().min(1).max(64).optional(),
   at: z.number().int(),
 });
 export type Pick = z.infer<typeof PickSchema>;
+
+/**
+ * ADR 645: the pre-registered declaration — a lane whose work and verdict are fixed in advance, so
+ * a host may take it unprompted (spec 2026-10-17 §4.1 "band 2"). Declared by the opener, never
+ * inferred from title or detail (ADR 530/536); the three text parts are the declaration, not a
+ * check against free text. `expected_spend` is USD the run is expected to cost in model calls;
+ * `0` is unmetered work. A `not_before` (ms) withholds the lane from a pull until then — a person
+ * may still claim it early (the date gates the machine, not the human). `by` / `at` are stamped by
+ * the daemon from the authenticated writer.
+ */
+export const LanePreRegisteredSchema = z.object({
+  run: z.string().min(1).max(2000),
+  verdict_rule: z.string().min(1).max(2000),
+  record: z.string().min(1).max(500),
+  not_before: z.number().int().optional(),
+  expected_spend: z.number().min(0).max(100000),
+  by: z.string().min(1).max(80),
+  at: z.number().int(),
+});
+export type LanePreRegistered = z.infer<typeof LanePreRegisteredSchema>;
+
+/** What `lane_open` / `lane_update` accept for the declaration; the daemon stamps `by` and `at`. */
+export const OpenPreRegisteredSchema = LanePreRegisteredSchema.omit({ by: true, at: true });
+export type OpenPreRegistered = z.infer<typeof OpenPreRegisteredSchema>;
+
+/**
+ * ADR 645 §2: why a lane may NOT carry the pre-registered declaration, or null when it may. A
+ * risk tag, `stakes: 'high'` or `user-facing` refuses it at the declaration, so the anti-goal (a
+ * machine takes judgement work) is enforced once, at open, and the pull never filters for it.
+ * Pure, shared by the daemon's open/update check and the CLI's refusal text.
+ */
+export function preRegisteredRefusal(lane: {
+  risk?: readonly string[] | null | undefined;
+  stakes?: string | null | undefined;
+}): string | null {
+  const risk = lane.risk ?? [];
+  if (risk.includes('user-facing')) return 'a user-facing lane cannot be pre-registered';
+  if (risk.length > 0) return `a lane tagged ${risk.join(', ')} cannot be pre-registered`;
+  if (lane.stakes === 'high') return 'a high-stakes lane cannot be pre-registered';
+  return null;
+}
+
+/**
+ * ADR 645 §3: whether a pull may offer this lane now — open and unowned, declared, and past its
+ * `not_before`. Role fit is the caller's (the host knows its seats); this answers only the lane's
+ * side. Pure, so the pull and the picker agree.
+ */
+export function pullEligible(
+  lane: {
+    state: string;
+    owner_seat: string | null;
+    pre_registered?: LanePreRegistered | null | undefined;
+  },
+  now: number,
+): boolean {
+  if (lane.state !== 'open' || lane.owner_seat !== null) return false;
+  const pr = lane.pre_registered;
+  if (!pr) return false;
+  return pr.not_before === undefined || pr.not_before <= now;
+}
 
 /** ADR 624: the most recent decline — a release that gave a reason. Any later claim clears it. */
 export const LaneDeclinedSchema = z.object({
@@ -662,6 +730,11 @@ export const LaneSchema = z.object({
    * Optional like `source_ref`, so a daemon that predates the field stays assignable.
    */
   requested: LaneRequestedSchema.optional(),
+  /**
+   * ADR 645: the pre-registered declaration, or absent/null for an ordinary lane. Optional like
+   * `parked`, so older daemons and fixtures stay assignable; absent reads as not declared.
+   */
+  pre_registered: LanePreRegisteredSchema.nullable().optional(),
   /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
   unfinished_todos: LaneTodosSchema.nullable().optional(),
   /** ADR 585: the claims filed at submit and re-checked at accept, each with its verdict and the
@@ -766,6 +839,8 @@ export const OpenLaneSchema = z.object({
   stakes: LaneStakesSchema.optional(),
   /** Lane kind (spec 2026-08-14): only the daemon sets 'incident'; omitted ⇒ ordinary lane. */
   kind: z.enum(['incident']).optional(),
+  /** ADR 645: declare the lane pre-registered. Refused (400) when {@link preRegisteredRefusal} says why. */
+  pre_registered: OpenPreRegisteredSchema.optional(),
   claim: z.boolean().optional(),
 });
 export type OpenLane = z.infer<typeof OpenLaneSchema>;
@@ -800,6 +875,12 @@ export const UpdateLaneSchema = z.object({
   source_ref: LaneSourceRefSchema.optional(),
   /** Fill who asked (ADR 629), only while the lane has none. A different value is a 409. */
   requested: OpenRequestedSchema.optional(),
+  /**
+   * ADR 645: set or replace the pre-registered declaration, or `null` to withdraw it. Refused
+   * (400) when {@link preRegisteredRefusal} says why, and refused (409) on a lane that is not
+   * open — a declaration is made before the work, never on work in flight.
+   */
+  pre_registered: OpenPreRegisteredSchema.nullable().optional(),
   /** Transfer ownership to this seat (lane_handoff / lane_claim sets it to the caller). */
   owner_seat: z.string().optional(),
   /**
