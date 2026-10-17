@@ -168,7 +168,9 @@ Provisioning is ADR 463 with a musterd-operated host:
 ## 6. Increments
 
 Each is a lane under goal `cloud-agents`. Cloud increment 8 (`01M3TTZP5HF8QZZW0SA8VZAXSJ`)
-depends on this brainstorm and is re-scoped by phase.
+depends on this brainstorm and is re-scoped by phase (abandoned as a build lane 2026-10-17;
+the phase lanes below carry the work, and phase 1 builds its credits on Cloud increment 7's
+billing, lane `01M3TTZJGXAGF3S0KKFST1YXYM`).
 
 1. **ADR 647** (this design's decision; lane `01M50SQBJGHRY9HKPDH8WMDBDK`).
 2. **Phase 1 build** (lane `01M55Y58R3D1CCBERNJCXBJZQ9`): per-seat Fly Machine, BYOK, hosted
