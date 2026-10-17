@@ -4,6 +4,7 @@ import type {
   SurfaceRender,
   ToolCallEvent,
   ToolCallOutcome,
+  ToolCallRail,
   ToolTelemetryReport,
 } from '@musterd/protocol';
 import type { MusterdClient } from './client.js';
@@ -85,6 +86,8 @@ export class ToolCallRecorder {
       attestSurface?: boolean;
       /** Called after each recorded call. A remote server flushes here: it has no process timer. */
       afterRecord?: () => void;
+      /** How these calls arrive (ADR 640). Omitted on the wire for `stdio`, which absence means. */
+      rail?: ToolCallRail;
     } = {},
   ) {}
 
@@ -192,6 +195,7 @@ export class ToolCallRecorder {
       events,
       ...(surface ? { surface } : {}),
       ...(startup ? { startup } : {}),
+      ...(this.opts.rail && this.opts.rail !== 'stdio' ? { rail: this.opts.rail } : {}),
     };
     try {
       await client.reportToolTelemetry(report);

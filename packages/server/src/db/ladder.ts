@@ -375,6 +375,53 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS requested_json TEXT');
     },
   },
+  {
+    // v103 — ADR 640 (lane 01M55K7KA9): how a tool call arrived (`rail`: `stdio` or `remote`), part
+    // of the aggregate's key so a seat's phone calls and desk calls land in separate rows. Every
+    // existing row came from a stdio adapter, so the default is true of all of them. SQLite cannot
+    // change a primary key in place, so it rebuilds the table; Postgres swaps the key.
+    version: 103,
+    sqlite: (db) => {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('tool_call_stats')")
+        .pluck()
+        .all();
+      if (cols.includes('rail')) return;
+      db.exec(`
+        CREATE TABLE tool_call_stats_v103 (
+          team_id           TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          seat              TEXT NOT NULL,
+          role              TEXT,
+          rail              TEXT NOT NULL DEFAULT 'stdio',
+          tool              TEXT NOT NULL,
+          outcome           TEXT NOT NULL,
+          bucket_start      INTEGER NOT NULL,
+          calls             INTEGER NOT NULL DEFAULT 0,
+          total_duration_ms INTEGER NOT NULL DEFAULT 0,
+          max_duration_ms   INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (team_id, seat, rail, tool, outcome, bucket_start)
+        );
+        INSERT INTO tool_call_stats_v103
+          (team_id, seat, role, rail, tool, outcome, bucket_start, calls, total_duration_ms,
+           max_duration_ms)
+          SELECT team_id, seat, role, 'stdio', tool, outcome, bucket_start, calls,
+                 total_duration_ms, max_duration_ms
+          FROM tool_call_stats;
+        DROP TABLE tool_call_stats;
+        ALTER TABLE tool_call_stats_v103 RENAME TO tool_call_stats;
+        CREATE INDEX idx_tool_call_stats_team_bucket ON tool_call_stats(team_id, bucket_start);
+      `);
+    },
+    postgres: async (d) => {
+      await d.exec(
+        "ALTER TABLE tool_call_stats ADD COLUMN IF NOT EXISTS rail TEXT NOT NULL DEFAULT 'stdio'",
+      );
+      await d.exec('ALTER TABLE tool_call_stats DROP CONSTRAINT IF EXISTS tool_call_stats_pkey');
+      await d.exec(
+        'ALTER TABLE tool_call_stats ADD PRIMARY KEY (team_id, seat, rail, tool, outcome, bucket_start)',
+      );
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

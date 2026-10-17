@@ -5,6 +5,8 @@ import type {
   SurfaceRender,
   ToolCallEvent,
   ToolCallMetrics,
+  ToolCallRail,
+  ToolRailUsage,
   ToolUsageRow,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
@@ -26,7 +28,8 @@ const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
  * Fold one adapter flush into the hourly aggregate. Events are deltas accumulated adapter-side;
  * the whole batch lands in the arrival hour (a flush window is ≤ a minute — sub-bucket precision
  * isn't worth per-event timestamps on the wire). `role` is the caller's role at ingest,
- * server-resolved: it annotates the row (last write wins), it never keys it.
+ * server-resolved: it annotates the row (last write wins), it never keys it. `rail` keys it (ADR
+ * 640): one seat's phone calls and desk calls are separate rows.
  */
 export async function recordToolCalls(
   db: Driver,
@@ -35,13 +38,15 @@ export async function recordToolCalls(
   role: string | null,
   events: ToolCallEvent[],
   now: number = Date.now(),
+  rail: ToolCallRail = 'stdio',
 ): Promise<void> {
   if (events.length === 0) return;
   const bucket = now - (now % BUCKET_MS);
   const UPSERT = `INSERT INTO tool_call_stats
-       (team_id, seat, role, tool, outcome, bucket_start, calls, total_duration_ms, max_duration_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (team_id, seat, tool, outcome, bucket_start) DO UPDATE SET
+       (team_id, seat, role, rail, tool, outcome, bucket_start, calls, total_duration_ms,
+        max_duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (team_id, seat, rail, tool, outcome, bucket_start) DO UPDATE SET
        calls = tool_call_stats.calls + excluded.calls,
        total_duration_ms = tool_call_stats.total_duration_ms + excluded.total_duration_ms,
        max_duration_ms = MAX(tool_call_stats.max_duration_ms, excluded.max_duration_ms),
@@ -52,6 +57,7 @@ export async function recordToolCalls(
         teamId,
         seat,
         role,
+        rail,
         e.tool,
         e.outcome,
         bucket,
@@ -78,16 +84,18 @@ export async function applyToolCalls(
   role: string | null,
   events: ToolCallEvent[],
   now: number = Date.now(),
+  rail: ToolCallRail = 'stdio',
 ): Promise<void> {
   if (events.length === 0) return;
   await db.tx(async (t) => {
-    await recordToolCalls(t, teamId, seat, role, events, now);
+    await recordToolCalls(t, teamId, seat, role, events, now, rail);
     await appendReplicatedEvent(t, teamId, {
       actor: seat,
       action: 'record.tool_calls',
       target: seat,
       result: 'allow',
-      detail: { seat, role, bucket_start: now - (now % BUCKET_MS), events },
+      // `rail` rides the record (ADR 640); a fold that finds none counts it as stdio.
+      detail: { seat, role, rail, bucket_start: now - (now % BUCKET_MS), events },
     });
   });
 }
@@ -188,9 +196,26 @@ export async function deriveStartupDistribution(
   );
 }
 
+/** ADR 640: one tool's per-rail aggregate, as the report carries it. */
+function railSplit(
+  byRail: Map<string, { calls: number; total_ms: number; max_ms: number }>,
+): Partial<Record<ToolCallRail, ToolRailUsage>> {
+  const out: Partial<Record<ToolCallRail, ToolRailUsage>> = {};
+  for (const [rail, a] of byRail) {
+    if (rail !== 'stdio' && rail !== 'remote') continue;
+    out[rail] = {
+      calls: a.calls,
+      avg_duration_ms: a.calls > 0 ? Math.round(a.total_ms / a.calls) : null,
+      max_duration_ms: a.calls > 0 ? a.max_ms : null,
+    };
+  }
+  return out;
+}
+
 interface StatRow {
   seat: string;
   role: string | null;
+  rail: string;
   tool: string;
   outcome: string;
   calls: number;
@@ -210,14 +235,14 @@ export async function deriveToolCallMetrics(
 ): Promise<ToolCallMetrics> {
   const since = now - WINDOW_MS;
   const rows = await db.all<StatRow>(
-    `SELECT seat, role, tool, outcome,
+    `SELECT seat, role, rail, tool, outcome,
               -- CAST: SUM over 64-bit columns is numeric (a string) on Postgres.
               CAST(SUM(calls) AS INTEGER) AS calls,
               CAST(SUM(total_duration_ms) AS INTEGER) AS total_duration_ms,
               MAX(max_duration_ms) AS max_duration_ms
          FROM tool_call_stats
         WHERE team_id = ? AND bucket_start > ?
-        GROUP BY seat, role, tool, outcome`,
+        GROUP BY seat, role, rail, tool, outcome`,
     [teamId, since],
   );
 
@@ -229,6 +254,7 @@ export async function deriveToolCallMetrics(
     total_ms: number;
     max_ms: number;
     by_role: Record<string, number>;
+    by_rail: Map<string, { calls: number; total_ms: number; max_ms: number }>;
   }
   const byTool = new Map<string, ToolAcc>();
   for (const r of rows) {
@@ -244,6 +270,7 @@ export async function deriveToolCallMetrics(
           total_ms: 0,
           max_ms: 0,
           by_role: {},
+          by_rail: new Map(),
         }),
       );
     acc.calls += r.calls;
@@ -256,6 +283,11 @@ export async function deriveToolCallMetrics(
     acc.max_ms = Math.max(acc.max_ms, r.max_duration_ms);
     const role = r.role ?? 'unroled';
     acc.by_role[role] = (acc.by_role[role] ?? 0) + r.calls;
+    let rail = acc.by_rail.get(r.rail);
+    if (!rail) acc.by_rail.set(r.rail, (rail = { calls: 0, total_ms: 0, max_ms: 0 }));
+    rail.calls += r.calls;
+    rail.total_ms += r.total_duration_ms;
+    rail.max_ms = Math.max(rail.max_ms, r.max_duration_ms);
   }
 
   const tools: ToolUsageRow[] = [...byTool.entries()]
@@ -269,6 +301,8 @@ export async function deriveToolCallMetrics(
       avg_duration_ms: a.calls > 0 ? Math.round(a.total_ms / a.calls) : null,
       max_duration_ms: a.calls > 0 ? a.max_ms : null,
       by_role: a.by_role,
+      // ADR 640 §5: split only when the tool was reached more than one way in the window.
+      ...(a.by_rail.size > 1 ? { by_rail: railSplit(a.by_rail) } : {}),
     }))
     .sort((x, y) => y.calls - x.calls || x.tool.localeCompare(y.tool));
 

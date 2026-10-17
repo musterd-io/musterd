@@ -175,6 +175,11 @@ describe('a phone on the remote-bearer adapter (ADR 630)', () => {
         if (counted < 2) await new Promise((r) => setTimeout(r, 50));
       }
       expect(counted).toBe(2);
+      // ADR 640: they land on the remote rail, apart from any desk calls the same seat makes.
+      const rails = await server.store.all<{ rail: string }>(
+        'SELECT DISTINCT rail FROM tool_call_stats',
+      );
+      expect(rails.map((r) => r.rail)).toEqual(['remote']);
     } finally {
       await s.close();
     }

@@ -76,6 +76,16 @@ export const AdapterStartupSchema = z.object({
 });
 export type AdapterStartup = z.infer<typeof AdapterStartupSchema>;
 
+/**
+ * How a tool call reached the adapter (ADR 640): `stdio` is the adapter a harness launches as a
+ * process on the seat's machine, `remote` the adapter serving one request inside the daemon at
+ * `/mcp/:team` (ADR 630). Not a Surface: a Surface is the harness, and a phone's harness is an app
+ * the daemon cannot see.
+ */
+export const TOOL_CALL_RAILS = ['stdio', 'remote'] as const;
+export const ToolCallRailSchema = z.enum(TOOL_CALL_RAILS);
+export type ToolCallRail = z.infer<typeof ToolCallRailSchema>;
+
 /** `POST /teams/:slug/telemetry/tool-calls` — the adapter's periodic flush. The seat comes from
  * the authenticated request and the caller's role is stamped server-side at ingest (the
  * `from_provenance` rule: a caller cannot supply either). `surface` rides the first flush only. */
@@ -84,10 +94,21 @@ export const ToolTelemetryReportSchema = z.object({
   surface: SurfaceRenderSchema.optional(),
   /** ADR 584: rides the first flush only, like `surface`. */
   startup: AdapterStartupSchema.optional(),
+  /** ADR 640: how these calls arrived. Absent means `stdio` — every adapter that predates it. */
+  rail: ToolCallRailSchema.optional(),
 });
 export type ToolTelemetryReport = z.infer<typeof ToolTelemetryReportSchema>;
 
 // ── Report-engine projections (`Report.tool_calls`) ────────────────────────────────────────────
+
+/** One tool's calls on one rail (ADR 640). A mean and a max: the hourly buckets keep a sum and a
+ * max, so percentiles cannot be read from them. */
+export const ToolRailUsageSchema = z.object({
+  calls: z.number().int(),
+  avg_duration_ms: z.number().nullable(),
+  max_duration_ms: z.number().nullable(),
+});
+export type ToolRailUsage = z.infer<typeof ToolRailUsageSchema>;
 
 /** One tool's aggregate over the report window — the "is it earning its bytes" row. */
 export const ToolUsageRowSchema = z.object({
@@ -107,6 +128,9 @@ export const ToolUsageRowSchema = z.object({
   /** Calls per caller role — "which tools does each role actually call". Unroled seats count
    * under `"unroled"`. */
   by_role: z.record(z.string(), z.number().int()),
+  /** ADR 640: the same aggregate per rail — present only when the tool saw calls on more than
+   * one rail in the window, so a team with no remote use sees no new bytes. */
+  by_rail: z.record(ToolCallRailSchema, ToolRailUsageSchema).optional(),
 });
 export type ToolUsageRow = z.infer<typeof ToolUsageRowSchema>;
 
