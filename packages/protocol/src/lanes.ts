@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CalendarDateSchema } from './calendar.js';
 import { ClaimCheckSchema } from './claimCheck.js';
 import { LaneClaimsSchema } from './claims.js';
 import { GoalSchema } from './goals.js';
@@ -8,6 +9,9 @@ import {
   EMPTY_POOL_KINDS,
   EMPTY_POOL_LIVE_EXCLUSIONS,
   LANE_STAKES,
+  READ_NOTE_MAX_CHARS,
+  READ_OUTCOMES,
+  READ_STATUSES,
   LANE_STAKES_PROVENANCE,
   LANE_STATES,
   type EmptyPool,
@@ -59,6 +63,13 @@ export {
   EMPTY_POOL_LIVE_EXCLUSIONS,
   emptyPoolFromCandidates,
   isAwaitingAcceptance,
+  dayInZone,
+  deriveReadStatus,
+  READ_NOTE_MAX_CHARS,
+  READ_OUTCOMES,
+  READ_STATUSES,
+  type ReadOutcome,
+  type ReadStatus,
   laneAckAck,
   laneEscalationAck,
   laneSupersededAck,
@@ -496,6 +507,22 @@ export const LaneFollowsUpSchema = z.union([
 export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
 
 /**
+ * ADR 644: the result a seat gives a read. `note` says what was read. On the wire a client sends
+ * {@link ReadVerdictInputSchema}; the daemon stamps `by` from the authenticated sender and `at`
+ * from its own clock, so a stored verdict always names who gave it and when.
+ */
+export const ReadVerdictInputSchema = z.object({
+  outcome: z.enum(READ_OUTCOMES),
+  note: z.string().min(1).max(READ_NOTE_MAX_CHARS),
+});
+export type ReadVerdictInput = z.infer<typeof ReadVerdictInputSchema>;
+export const ReadVerdictSchema = ReadVerdictInputSchema.extend({
+  by: z.string().min(1),
+  at: z.number().int(),
+});
+export type ReadVerdict = z.infer<typeof ReadVerdictSchema>;
+
+/**
  * ADR 561: the issue a lane came from (`acme/app#12`, `ENG-42`) — the key `musterd import` re-sync
  * matches on. One lane that is neither done nor abandoned per ref per team; the store refuses a second.
  */
@@ -723,6 +750,15 @@ export const LaneSchema = z.object({
    * nullable (like `parked`): absent or null reads as none, so older daemons stay assignable.
    */
   follows_up: LaneFollowsUpSchema.nullable().optional(),
+  /**
+   * ADR 644: the day this lane's read is due (`YYYY-MM-DD`, wall-clock in the Team's calendar
+   * zone), the verdict that answers it, and the derived status. All optional like `parked`, so a
+   * daemon behind ADR 644 still parses and a reader treats the lane as undated.
+   */
+  reads_on: CalendarDateSchema.nullable().optional(),
+  read_verdict: ReadVerdictSchema.nullable().optional(),
+  /** Derived by the server on every projection; never stored, never accepted from a client. */
+  read_status: z.enum(READ_STATUSES).optional(),
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
   abandon_reason: z.string().nullable().optional(),
   /** ADR 561: the issue this lane came from. Absent reads as none (skew posture, like `follows_up`). */
@@ -834,6 +870,8 @@ export const OpenLaneSchema = z.object({
   goal_id: z.string().optional(),
   /** The issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
   source_ref: LaneSourceRefSchema.optional(),
+  /** ADR 644: the day this lane's read is due. Never inferred from a title or detail. */
+  reads_on: CalendarDateSchema.optional(),
   /** Who asked (ADR 629). Omitted leaves the field missing; the lane still opens. */
   requested: OpenRequestedSchema.optional(),
   /** Declared risk tags (ADR 169). Which of them ask a human is {@link humanReviewRequired} (ADR 631). */
@@ -876,6 +914,14 @@ export const UpdateLaneSchema = z.object({
   goal_id: z.string().nullable().optional(),
   /** Set the issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
   source_ref: LaneSourceRefSchema.optional(),
+  /** ADR 644: set, move or clear (with `null`) the day this lane's read is due. */
+  reads_on: CalendarDateSchema.nullable().optional(),
+  /**
+   * ADR 644: the read's verdict. The daemon stamps `by` and `at`; a later verdict replaces an
+   * earlier one. Rides an update, a submit or a resolve. A lane with `reads_on` and no verdict is
+   * refused a move to `done`.
+   */
+  read_verdict: ReadVerdictInputSchema.optional(),
   /** Fill who asked (ADR 629), only while the lane has none. A different value is a 409. */
   requested: OpenRequestedSchema.optional(),
   /**
@@ -1519,6 +1565,13 @@ export function laneDetailLines(d: LaneDetail): string[] {
   }
   if (l.follows_up) {
     out.push(`follows up: ${l.follows_up === 'none' ? 'none' : l.follows_up.join(', ')}`);
+  }
+  if (l.reads_on) {
+    out.push(`reads on: ${l.reads_on}${l.read_status ? ` (${l.read_status})` : ''}`);
+    if (l.read_verdict)
+      out.push(
+        `read verdict: ${l.read_verdict.outcome} — ${l.read_verdict.note} (${l.read_verdict.by})`,
+      );
   }
   if (l.abandon_reason) out.push(`abandoned: ${l.abandon_reason}`);
   if (d.acceptance_ask) {

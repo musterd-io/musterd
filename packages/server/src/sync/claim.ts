@@ -34,6 +34,7 @@ import { readNodeState } from '../node/state.js';
 import { appendAudit, reviewRouting } from '../store/audit.js';
 import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
+  decideReadVerdict,
   getLane,
   LaneConflictError,
   type LaneExpectation,
@@ -387,6 +388,7 @@ export async function decideLanePatch(
   decidePickPatch(member, before, body);
   await decideRiskyClosePendingHuman(db, teamId, member, before, body);
   await decideFollowsUp(db, teamId, member, before, body);
+  decideReadVerdict(before, body);
   // A CLAIM is distinguishable from a HANDOFF by who the new owner is: taking it for yourself is
   // a claim; naming someone else is a deliberate give-away that must keep working. Only a
   // self-directed takeover of a LIVE incumbent is refused — an offline or departed owner stays

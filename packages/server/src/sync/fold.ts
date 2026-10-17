@@ -104,6 +104,8 @@ const LANE_VERBS = new Set([
   'lane.claimed',
   'lane.released',
   'lane.updated',
+  // ADR 644: the trace of a read verdict; the verdict itself rides `lane.updated`.
+  'lane.read_recorded',
   'lane.state_changed',
   'lane.ready_for_review',
   'lane.closed',
@@ -158,8 +160,8 @@ async function projectLaneEvent(
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          requested_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, reads_on, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -180,6 +182,7 @@ async function projectLaneEvent(
         // already holds lands anyway (each daemon refuses at its own write; re-sync names the rest).
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
         requested.success ? requestedRecordJson(requested.data) : null,
+        typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -275,6 +278,8 @@ async function projectLaneEvent(
         source_ref: 'source_ref',
         declined: 'declined_json',
         requested: 'requested_json',
+        reads_on: 'reads_on',
+        read_verdict: 'read_verdict_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -289,7 +294,8 @@ async function projectLaneEvent(
           field === 'parked' ||
           field === 'follows_up' ||
           field === 'unfinished_todos' ||
-          field === 'declined'
+          field === 'declined' ||
+          field === 'read_verdict'
         )
           value = value === null ? null : JSON.stringify(value);
         else if (field === 'requested') {

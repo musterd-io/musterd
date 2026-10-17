@@ -31,16 +31,16 @@ import { claimSeams, renderClaims } from './laneClaims.js';
 const USAGE =
   'usage:\n' +
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id> [--reason "<why>"]\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
-  '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--read-verdict met|missed|inconclusive --read-note "<what was read>"] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '                          [--branch b]\n' +
-  '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
+  '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '  musterd lanes [--project p] [--mine] [--open] [--history] [--json]';
 
 /**
@@ -109,6 +109,10 @@ export function renderLane(l: Lane): string {
   const asked = l.requested
     ? theme.meta(` asked:${plainTerminalText(l.requested.by)} (${l.requested.basis})`)
     : '';
+  // ADR 644: the read's day and where it stands, derived by the daemon.
+  const reads = l.reads_on
+    ? theme.meta(` reads:${l.reads_on} (${l.read_status ?? 'undated'})`)
+    : '';
   // ADR 466: a parked lane shows who shelved it and why where an owner would be.
   const parked = l.parked
     ? theme.meta(
@@ -118,7 +122,7 @@ export function renderLane(l: Lane): string {
             : ''),
       )
     : '';
-  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${areas}${src}${asked}${surface}${deps}${branch}${parked}`;
+  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${areas}${src}${asked}${reads}${surface}${deps}${branch}${parked}`;
 }
 
 /** ADR 629: one of --self, --by, --act, --seed. None means the lane opens with the asker missing. */
@@ -238,6 +242,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(requestedFromFlags(parsed.flags, identity.name) !== undefined
         ? { requested: requestedFromFlags(parsed.flags, identity.name)! }
         : {}),
+      // ADR 644: the day this lane's read is due.
+      ...(flagStr(parsed.flags, 'reads-on') !== undefined
+        ? { reads_on: flagStr(parsed.flags, 'reads-on')! }
+        : {}),
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
         : {}),
@@ -328,6 +336,8 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
             // ADR 487 §5.1: what is left after this lane. Refused as missing only when the lane
             // declares itself one part of several; the daemon's refusal names this flag.
             ...followsUpFlag(flagStr(parsed.flags, 'follows-up')),
+            // ADR 644: the read's verdict, which a lane with `reads_on` needs before it closes done.
+            ...readVerdictFlags(parsed.flags),
           },
     );
     const label = sub === 'claim' ? 'claimed' : submit ? 'submitted for acceptance' : 'done';
@@ -482,6 +492,16 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(requestedFromFlags(parsed.flags, identity.name) !== undefined
         ? { requested: requestedFromFlags(parsed.flags, identity.name)! }
         : {}),
+      // ADR 644: move the read's day (`none` clears it) and give its verdict.
+      ...(flagStr(parsed.flags, 'reads-on') !== undefined
+        ? {
+            reads_on:
+              flagStr(parsed.flags, 'reads-on')!.toLowerCase() === 'none'
+                ? null
+                : flagStr(parsed.flags, 'reads-on')!,
+          }
+        : {}),
+      ...readVerdictFlags(parsed.flags),
       // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE — a lane stamped with the
       // wrong merge had no way back. Owner or admin only; the daemon refuses a counterpart.
       ...(parsed.flags['clear-merged'] === true ? { merged: null } : {}),
@@ -612,6 +632,27 @@ export function renderSubmitReport(res: Awaited<ReturnType<HttpClient['updateLan
       ) + '\n',
     );
   }
+}
+
+/**
+ * `--read-verdict met|missed|inconclusive --read-note "<what was read>"` → the ADR 644 patch field.
+ * Both flags or neither: a verdict without a note, or a note without an outcome, fails here with the
+ * repair rather than reaching the daemon half-formed. A typo in the outcome fails too.
+ */
+export function readVerdictFlags(flags: Parsed['flags']): {
+  read_verdict?: { outcome: 'met' | 'missed' | 'inconclusive'; note: string };
+} {
+  const outcome = flagStr(flags, 'read-verdict');
+  const note = flagStr(flags, 'read-note');
+  if (outcome === undefined && note === undefined) return {};
+  if (outcome === undefined || note === undefined)
+    throw new CliError(
+      'a read verdict needs both --read-verdict <outcome> and --read-note "<what was read>"',
+      2,
+    );
+  if (outcome !== 'met' && outcome !== 'missed' && outcome !== 'inconclusive')
+    throw new CliError(`--read-verdict is met, missed or inconclusive — got "${outcome}"`, 2);
+  return { read_verdict: { outcome, note } };
 }
 
 /** `--follows-up a,b` / `--follows-up none` → the ADR 487 patch field; absent sends nothing. */

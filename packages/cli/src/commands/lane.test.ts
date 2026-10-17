@@ -568,6 +568,43 @@ describe('lane commands', () => {
     expect(l3.declared_areas).toBeUndefined();
   });
 
+  it('a lane that reads on a day is refused done until it has a verdict (ADR 644)', async () => {
+    const id = await openLane(['dated read', '--claim', '--reads-on', '2001-01-01']);
+    const shown = await capture(() => laneCommand(parseArgs(['show', id])));
+    expect(shown.out).toContain('reads:2001-01-01 (overdue)');
+    expect(shown.out).toContain('reads on: 2001-01-01 (overdue)');
+
+    // Silence is the only shape refused: the daemon names the day and the flags that fix it.
+    await expect(laneCommand(parseArgs(['resolve', id]))).rejects.toThrow(
+      /reads on 2001-01-01: give read_verdict/,
+    );
+
+    // The verdict can ride the close itself, and the lane then shows as read.
+    const closed = await capture(() =>
+      laneCommand(
+        parseArgs(['resolve', id, '--read-verdict', 'missed', '--read-note', 'below baseline']),
+      ),
+    );
+    expect(closed.code).toBe(0);
+    const after = await capture(() => laneCommand(parseArgs(['show', id])));
+    expect(after.out).toContain('reads on: 2001-01-01 (read)');
+    expect(after.out).toContain('read verdict: missed — below baseline (nick)');
+  });
+
+  it('--reads-on none clears the day, and the verdict flags must come as a pair', async () => {
+    const id = await openLane(['to clear', '--claim', '--reads-on', '2999-01-01']);
+    const cleared = await capture(() =>
+      laneCommand(parseArgs(['update', id, '--reads-on', 'none'])),
+    );
+    expect(cleared.out).not.toContain('reads:');
+    await expect(laneCommand(parseArgs(['update', id, '--read-verdict', 'met']))).rejects.toThrow(
+      /needs both/,
+    );
+    await expect(
+      laneCommand(parseArgs(['update', id, '--read-verdict', 'later', '--read-note', 'x'])),
+    ).rejects.toThrow(/met, missed or inconclusive/);
+  });
+
   it('rejects malformed subcommands and missing args with usage', async () => {
     await expect(laneCommand(parseArgs([]))).rejects.toThrow(/usage/);
     await expect(laneCommand(parseArgs(['open']))).rejects.toThrow(/usage/);
