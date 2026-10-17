@@ -113,6 +113,9 @@ access; roster handles and Presence remain visible.
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
+  At its foot, the Experiments section (`live/Experiments.tsx` + `experimentReads.ts`, ADR 644): every
+  lane carrying `reads_on`, grouped by the server's `read_status` (overdue, due, waiting, read for 7
+  days), so an overdue read is seen by the room; the folded rail carries the overdue count.
   `/broadcast` mounts the same column `still` beside the room (ADR 464 lane 5): no hover, no
   expanding, no operator notes, sized off the 16:9 stage rather than the window.
 - **Room framing** (2026-10-01): `/live` and `/broadcast` fit the *furnished* room (`furnishedBox` in
@@ -234,6 +237,8 @@ live/
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)
+  Experiments.tsx               // the team column's Experiments section (ADR 644): the dated reads as rows with shape marks, capped at five (urgent never hidden), linked to /board on /live, still on /broadcast
+  experimentReads.ts            // lane board → the dated reads in group order, phrases and day counts in the team's calendar zone; status is the server's read_status, never derived here (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
   briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
   NowOverlay.tsx                // the Now card's shell (lazy chunk): overlay / full screen, docked into the topbar's "Now" chip (portalled); opens itself once per period (nowWhen.ts)
