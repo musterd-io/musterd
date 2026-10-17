@@ -171,14 +171,17 @@ Each is a lane under goal `cloud-agents`. Cloud increment 8 (`01M3TTZP5HF8QZZW0S
 depends on this brainstorm and is re-scoped by phase.
 
 1. **ADR 647** (this design's decision; lane `01M50SQBJGHRY9HKPDH8WMDBDK`).
-2. **Phase 1 build:** per-seat Fly Machine, BYOK, hosted team — provisioning via ADR 463's
-   provisions with a musterd-minted sponsor host key, resident engine, gateway metering,
-   park/wake/stop, per-seat cost in `/report`. Ends with one real sponsored seat living on
-   musterd compute for a week (the pilot reading).
-3. **Phase 2a:** per-team agent machine, if phase 1's cost data calls for it.
-4. **Phase 2b:** laptop-hub joiner, delta's friction list discharged.
-5. **Phase 2c:** subscription-login seats.
+2. **Phase 1 build** (lane `01M55Y58R3D1CCBERNJCXBJZQ9`): per-seat Fly Machine, BYOK, hosted
+   team — provisioning via ADR 463's provisions with a musterd-minted sponsor host key,
+   resident engine, gateway metering, park/wake/stop, per-seat cost in `/report`. Ends with one
+   real sponsored seat living on musterd compute for a week (the pilot reading).
+3. **Phase 2a** (lane `01M55Y5DQHKY2235KKA79T06NH`): per-team agent machine, if phase 1's cost
+   data calls for it.
+4. **Phase 2b** (lane `01M55Y5E28EPF6RNTCREYKQ6CP`): laptop-hub joiner, delta's friction list
+   discharged.
+5. **Phase 2c** (lane `01M55Y5E5S6TM5JW9TW8AB7Y46`): subscription-login seats.
 6. **Later (own ADR):** musterd-billed / musterd-native models; a shared pool.
+   Follows-up: deferred — taken only on a phase 1–2 reading that calls for them (2026-10-17)
 
 ## 7. Open questions settled in the brainstorm (nick, 2026-10-17)
 
