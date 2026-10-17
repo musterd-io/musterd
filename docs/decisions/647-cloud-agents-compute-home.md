@@ -62,6 +62,10 @@ isolation and spend-risk budget before any reading exists; starting on laptop hu
 
 - Cloud increment 8 (`01M3TTZP5HF8QZZW0SA8VZAXSJ`) is re-scoped by phase; its dependency on
   Cloud increment 6 stands. The lanes in the design's §6 carry the build.
+  _(2026-10-17: increment 8 was abandoned as a build lane the same day — it stays the Cloud
+  spec §9 #8 sequence marker, and the phase lanes carry the work. Phase 1 also gained an
+  explicit dependency on Cloud increment 7's billing (`01M3TTZJGXAGF3S0KKFST1YXYM`), so its
+  compute credits ride ADR 461's one ledger rather than a second one.)_
 - The keychain on a Fly machine is not ADR 605's local keychain; its equivalent and threat
   model are phase 1's security read with the security role.
 - Per-seat cost is measured before pricing: the credit price of a seat-day is proposed to nick
