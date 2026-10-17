@@ -34,6 +34,7 @@ import { holdExpiry, holdForProposal, setHold } from '../store/holds.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
 import { recordLaneClose } from '../store/laneClose.js';
 import {
+  decideReadVerdict,
   deriveHandoffLane,
   getLane,
   type HandoffLaneBasis,
@@ -1628,6 +1629,11 @@ async function applyAcceptanceVerdict(
     });
     return;
   }
+
+  // ADR 644 §3: an accept closes the lane `done`, so it meets the same rule as any close: a lane
+  // that reads on a day cannot close without a verdict. The refusal tells the acceptor why; the
+  // owner gives the verdict (`lane_update {read_verdict}`) and the accept can be sent again.
+  if (act === 'accept') decideReadVerdict(before, { state: 'done' });
 
   // ADR 585: the acceptor's independent re-check of the submitter's claims, run in the acceptor's
   // own clone and carried on the verdict act as `meta.claims`. Stamped with the decider's name

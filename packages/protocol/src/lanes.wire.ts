@@ -31,6 +31,47 @@ export type LaneState = (typeof LANE_STATES)[number];
 export const LANE_STAKES = ['low', 'normal', 'high'] as const;
 export type LaneStakes = (typeof LANE_STAKES)[number];
 
+/** ADR 644: what a read found. `inconclusive` is an answer too: the date came and went unread. */
+export const READ_OUTCOMES = ['met', 'missed', 'inconclusive'] as const;
+export type ReadOutcome = (typeof READ_OUTCOMES)[number];
+
+/** ADR 644: where a lane's read stands today. Derived on the projection, never stored. */
+export const READ_STATUSES = ['read', 'dropped', 'waiting', 'due', 'overdue'] as const;
+export type ReadStatus = (typeof READ_STATUSES)[number];
+
+/** ADR 644: the verdict note's bounds. */
+export const READ_NOTE_MAX_CHARS = 280;
+
+/** Today as `YYYY-MM-DD` in `tz` (wall-clock, like a calendar entry). */
+export function dayInZone(nowMs: number, tz: string): string {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(nowMs));
+  const get = (t: string) => p.find((x) => x.type === t)!.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/**
+ * ADR 644 §4: the status of a lane's read, or `undefined` when it declares none. `read` when a
+ * verdict exists, else `dropped` when the lane is abandoned, else `waiting` / `due` / `overdue`
+ * as today (in `tz`) is before, on or after `reads_on`. Plain-string dates compare correctly.
+ */
+export function deriveReadStatus(
+  lane: { reads_on?: string | null; read_verdict?: unknown; state: string },
+  nowMs: number,
+  tz: string,
+): ReadStatus | undefined {
+  if (!lane.reads_on) return undefined;
+  if (lane.read_verdict) return 'read';
+  if (lane.state === 'abandoned') return 'dropped';
+  const today = dayInZone(nowMs, tz);
+  if (today < lane.reads_on) return 'waiting';
+  return today === lane.reads_on ? 'due' : 'overdue';
+}
+
 export const LANE_STAKES_PROVENANCE = ['declared', 'defaulted'] as const;
 export type LaneStakesProvenance = (typeof LANE_STAKES_PROVENANCE)[number];
 

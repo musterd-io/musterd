@@ -263,6 +263,8 @@ export type AuditAction =
   // move not already recorded as claimed/released/ready_for_review/closed (detail: { lane, from,
   // to }) — e.g. active↔blocked, or acceptance sent back by its owner.
   | 'lane.updated'
+  // ADR 644: one row per read verdict written — { lane, reads_on, outcome, by, at, previous_outcome }.
+  | 'lane.read_recorded'
   | 'lane.state_changed'
   // Lane-replication slice, Finding 4: the log had no first event. `lane.opened` is written by
   // `openLane` inside the insert transaction and carries the whole declaration (title, project,
@@ -706,6 +708,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.claimed': 'actor',
   'next.offer': 'actor',
   'lane.updated': 'actor',
+  'lane.read_recorded': 'actor',
   'lane.state_changed': 'actor',
   'lane.opened': 'actor',
   'seed.ingested': 'actor',

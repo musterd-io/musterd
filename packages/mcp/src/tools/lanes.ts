@@ -51,6 +51,24 @@ const requestedArg = z
   })
   .optional();
 
+// ADR 644. One undescribed string "<met|missed|inconclusive>: <what was read>", like FOLLOWS_UP_INPUT:
+// tools/list has no spare bytes, and the daemon's refusal of a `done` close with no verdict names the
+// field and its shape at the moment it matters.
+const READ_VERDICT_INPUT = z.string().optional();
+
+/** `"met: hit rate above baseline"` → the ADR 644 patch field; absent sends nothing. */
+export function readVerdictPatch(raw: string | undefined): {
+  read_verdict?: { outcome: 'met' | 'missed' | 'inconclusive'; note: string };
+} {
+  if (raw === undefined) return {};
+  const m = /^\s*(met|missed|inconclusive)\s*:\s*([\s\S]+?)\s*$/.exec(raw);
+  if (!m)
+    throw new Error(
+      `read_verdict is "<met|missed|inconclusive>: <what was read>" (note 1–280 characters) — got "${raw}"`,
+    );
+  return { read_verdict: { outcome: m[1] as 'met' | 'missed' | 'inconclusive', note: m[2]! } };
+}
+
 function fmtLane(l: Lane): string {
   const owner = l.owner_seat ?? 'unowned';
   const scopeGlobs = l.scope ?? [];
@@ -61,12 +79,14 @@ function fmtLane(l: Lane): string {
   const areas = l.areas?.length ? ` areas=[${l.areas.join(', ')}]` : '';
   const src = l.source_ref ? ` src=${l.source_ref}` : '';
   const asked = l.requested ? ` asked=${l.requested.by} (${l.requested.basis})` : '';
+  // ADR 644: the read's day and where it stands (derived by the daemon).
+  const reads = l.reads_on ? ` reads=${l.reads_on} (${l.read_status ?? 'undated'})` : '';
   // ADR 466: a parked lane says who shelved it and why, in place of an owner.
   const parked = l.parked
     ? ` parked by ${l.parked.by}: "${l.parked.reason}"` +
       (l.parked.until ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})` : '')
     : '';
-  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${areas}${src}${asked}${scope}${deps}${branch}${parked}`;
+  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${areas}${src}${asked}${reads}${scope}${deps}${branch}${parked}`;
 }
 
 function fmtWarnings(warnings: LaneWarning[]): string {
@@ -205,6 +225,7 @@ export function registerLanes(
           .optional()
           .describe('issue it came from (acme/app#12); one open lane per ref'),
         requested: requestedArg,
+        reads_on: z.string().optional(),
         role: z.string().optional().describe('assignment hint (advisory)'),
         stakes: z
           .enum(['low', 'normal', 'high'])
@@ -420,6 +441,9 @@ export function registerLanes(
         source_ref: z.string().min(1).max(200).optional(),
         // ADR 629 — same shape as lane_open. Fills a missing requester; a second value is a 409.
         requested: requestedArg,
+        // ADR 644 — the day this lane's read is due (null clears) and the read's verdict.
+        reads_on: z.string().nullable().optional(),
+        read_verdict: READ_VERDICT_INPUT,
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),
@@ -439,11 +463,15 @@ export function registerLanes(
     },
     async (args) => {
       try {
-        const { id, park_until, ...rest } = args;
+        const { id, park_until, read_verdict, ...rest } = args;
         const until = park_until !== undefined ? Date.parse(park_until) : undefined;
         if (until !== undefined && Number.isNaN(until))
           throw new Error(`park_until "${park_until}" is not a date (try 2026-10-15)`);
-        const patch = { ...rest, ...(until !== undefined ? { park_until: until } : {}) };
+        const patch = {
+          ...rest,
+          ...(until !== undefined ? { park_until: until } : {}),
+          ...readVerdictPatch(read_verdict),
+        };
         const { lane, warnings } = await client.updateLane(id, patch);
         return laneResult('lane updated', lane, warnings);
       } catch (err) {
@@ -460,6 +488,7 @@ export function registerLanes(
     branch?: string | undefined;
     acceptor?: string | undefined;
     follows_up?: string | undefined;
+    read_verdict?: string | undefined;
   }) => {
     try {
       // Merge-verified submit: awaiting_acceptance MEANS landed. The repo is the source of
@@ -528,6 +557,7 @@ export function registerLanes(
         // server-composed ask to answer, so the owner self-closed reviewed work as unverified.
         ...(args.acceptor !== undefined ? { acceptor: args.acceptor } : {}),
         ...followsUpPatch(args.follows_up),
+        ...readVerdictPatch(args.read_verdict),
       });
       // ADR 235. The old advice — "wait ≤5m; on silence, lane_resolve yourself" — was correct while
       // an unaccepted lane hung forever: self-close was the only escape. With a backstop armed it
@@ -620,6 +650,7 @@ export function registerLanes(
             'route the acceptance ask to THIS seat instead of the picker\'s choice; recorded as route "named"',
           ),
         follows_up: FOLLOWS_UP_INPUT,
+        read_verdict: READ_VERDICT_INPUT,
       },
     },
     laneSubmitHandler,
@@ -649,6 +680,7 @@ export function registerLanes(
           .optional()
           .describe('the human whose authority the merge ran under'),
         follows_up: FOLLOWS_UP_INPUT,
+        read_verdict: READ_VERDICT_INPUT,
       },
     },
     async (args) => {
@@ -699,6 +731,7 @@ export function registerLanes(
           ...(Object.keys(merged).length ? { merged } : {}),
           ...(claims.length > 0 ? { claims } : {}),
           ...followsUpPatch(args.follows_up),
+          ...readVerdictPatch(args.read_verdict),
         });
         // ADR 192 advisory nudge: closing your own lane is an unconfirmed close — legal, honest,
         // and worth one line. A counterpart closing someone else's lane accepts it; no nudge.

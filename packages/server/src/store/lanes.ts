@@ -2,9 +2,11 @@ import { execFileSync } from 'node:child_process';
 import {
   mergeClaims,
   ACCEPTANCE_STALE_MS,
+  CALENDAR_DEFAULT_TZ,
   compareGoals,
   DEFAULT_PROJECT,
   deriveLaneAreas,
+  deriveReadStatus,
   emptyPoolFromCandidates,
   isAwaitingAcceptance,
   LANE_CONTENDING_STATES,
@@ -71,6 +73,10 @@ interface LaneRow {
   source_ref: string | null;
   /** Who asked for the lane (ADR 629, v102): JSON `{by, basis, ref?}`; null = missing. */
   requested_json: string | null;
+  /** The day the lane's read is due (ADR 644, v105): `YYYY-MM-DD`; null = undated. */
+  reads_on: string | null;
+  /** The read's verdict (ADR 644, v105): JSON `{outcome, note, by, at}`; null = none given. */
+  read_verdict_json: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
@@ -167,10 +173,19 @@ async function resolveRequested(
   throw new MusterdError('bad_request', 'say who asked with basis self, stated, act, or seed');
 }
 
-function rowToLane(row: LaneRow, teamSlug: string): Lane {
+function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): Lane {
   const scope = JSON.parse(row.surface_globs) as string[];
   const declaredAreas = row.areas_json ? (JSON.parse(row.areas_json) as string[]) : undefined;
   const requested = requestedFromJson(row.requested_json);
+  const readVerdict = row.read_verdict_json
+    ? (JSON.parse(row.read_verdict_json) as Lane['read_verdict'])
+    : null;
+  // ADR 644 §4: derived on every projection, never stored. Absent without `reads_on`.
+  const readStatus = deriveReadStatus(
+    { reads_on: row.reads_on, read_verdict: readVerdict, state: row.state },
+    nowMs,
+    CALENDAR_DEFAULT_TZ,
+  );
   return {
     id: row.id,
     team: teamSlug,
@@ -207,6 +222,9 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
       : {}),
     ...(row.source_ref ? { source_ref: row.source_ref } : {}),
     ...(requested ? { requested } : {}),
+    ...(row.reads_on ? { reads_on: row.reads_on } : {}),
+    ...(readVerdict ? { read_verdict: readVerdict } : {}),
+    ...(readStatus ? { read_status: readStatus } : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
@@ -294,6 +312,18 @@ async function recordLaneEdges(
       lane: after.id,
       fields: changed,
       changes: laneFieldDiff(before, after),
+    });
+  }
+  // ADR 644 §2: one row per verdict written, carrying what it replaced. `lane.updated` above already
+  // replicates the verdict itself; this row is the trace the 30-day eval counts.
+  if (after.read_verdict && after.read_verdict.at !== before.read_verdict?.at) {
+    await laneAuditRow(db, teamId, audit, 'lane.read_recorded', after.id, {
+      lane: after.id,
+      reads_on: after.reads_on ?? null,
+      outcome: after.read_verdict.outcome,
+      by: after.read_verdict.by,
+      at: after.read_verdict.at,
+      previous_outcome: before.read_verdict?.outcome ?? null,
     });
   }
   const released = before.owner_seat !== null && after.state === 'open' && before.state !== 'open';
@@ -385,6 +415,8 @@ export async function openLane(
     declined_json: null,
     source_ref: input.source_ref ?? null,
     requested_json: requestedRecordJson(requested),
+    reads_on: input.reads_on ?? null,
+    read_verdict_json: null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -392,8 +424,8 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
@@ -416,6 +448,7 @@ export async function openLane(
       row.areas_json,
       row.source_ref,
       row.requested_json,
+      row.reads_on,
       row.state,
       row.created_by,
       row.created_at,
@@ -443,6 +476,7 @@ export async function openLane(
       stakes_provenance: row.stakes_provenance ?? 'declared',
       ...(row.source_ref !== null ? { source_ref: row.source_ref } : {}),
       ...(requested ? { requested } : {}),
+      ...(row.reads_on !== null ? { reads_on: row.reads_on } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -738,6 +772,23 @@ async function updateLaneInTx(
       requestedJson = nextJson;
     }
   }
+  // ADR 644: the read date is a declared field (`null` clears it); the verdict is stamped here from
+  // the authenticated sender and this clock, so a stored verdict always says who gave it and when.
+  // A later verdict replaces an earlier one.
+  const readsOn = patch.reads_on !== undefined ? patch.reads_on : (existing.reads_on ?? null);
+  let readVerdict = existing.read_verdict ?? null;
+  if (patch.read_verdict !== undefined) {
+    if (readsOn === null)
+      throw new MusterdError(
+        'bad_request',
+        `read_verdict answers a read, and lane "${id}" has no reads_on — declare the day first ` +
+          `(lane_update {reads_on: 'YYYY-MM-DD'})`,
+      );
+    const actor = audit?.actor;
+    if (!actor)
+      throw new MusterdError('bad_request', 'recording a read verdict needs the seat doing it');
+    readVerdict = { ...patch.read_verdict, by: actor, at: now };
+  }
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -770,6 +821,8 @@ async function updateLaneInTx(
     declined_json: declined !== null ? JSON.stringify(declined) : null,
     source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
     requested_json: requestedJson,
+    reads_on: readsOn,
+    read_verdict_json: readVerdict !== null ? JSON.stringify(readVerdict) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -825,6 +878,8 @@ async function updateLaneInTx(
     'unfinished_todos_json',
     'source_ref',
     'requested_json',
+    'reads_on',
+    'read_verdict_json',
     'claims_json',
     'areas_json',
     'declined_json',
@@ -889,6 +944,8 @@ const AUDITED_LANE_FIELDS = [
   'source_ref',
   'declined',
   'requested',
+  'reads_on',
+  'read_verdict',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */
@@ -914,6 +971,26 @@ export function laneFieldDiff(
     out[f] = { from: before[key] ?? null, to: after[key] ?? null };
   }
   return out;
+}
+
+/**
+ * ADR 644 §3: a lane that declares `reads_on` cannot close `done` while no read has a verdict —
+ * the same posture as ADR 487's `follows_up`: silence is the only shape refused. `abandoned` is
+ * unaffected (an abandoned read is `dropped`, not overdue). The verdict may ride this same patch,
+ * and a patch that clears `reads_on` also lifts the refusal. Shared by the local and hub paths.
+ */
+export function decideReadVerdict(before: Lane, body: UpdateLane): void {
+  if (body.state !== 'done' || LANE_TERMINAL_STATES.has(before.state)) return;
+  const readsOn = body.reads_on !== undefined ? body.reads_on : (before.reads_on ?? null);
+  if (readsOn === null) return;
+  if (body.read_verdict !== undefined || before.read_verdict) return;
+  throw new MusterdError(
+    'validation',
+    `lane "${before.id}" reads on ${readsOn}: give read_verdict (outcome met|missed|inconclusive ` +
+      `and a note of what was read) before closing it done (ADR 644). CLI: --read-verdict ` +
+      `<outcome> --read-note "<what was read>". An older adapter has no such field — rebuild ` +
+      `(pnpm build) and reload.`,
+  );
 }
 
 export interface LaneFilter {

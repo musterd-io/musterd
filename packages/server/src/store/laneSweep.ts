@@ -62,6 +62,9 @@ export async function sweepAbandonedAcceptance(
     if (!isAwaitingAcceptance(before.state)) continue;
     const waited = now - before.updated_at;
     if (waited < graceMs) continue;
+    // ADR 644 §3: a sweep is a close like any other. A lane whose read has no verdict stays where it
+    // is, visibly `overdue` on the board, for its owner to answer; the sweep never invents one.
+    if (before.reads_on && !before.read_verdict) continue;
 
     const lane: Lane | null = await updateLane(
       db,

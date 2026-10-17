@@ -529,6 +529,22 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       );
     },
   },
+  {
+    // v105 — ADR 644 (lane 01M55WJXNP): the day a lane's read is due (`reads_on`, `YYYY-MM-DD`) and
+    // the verdict that answers it (`read_verdict_json`: `{outcome, note, by, at}`). Both nullable,
+    // no backfill: a lane opened before this is undated. `read_status` is derived, never stored.
+    version: 105,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('reads_on')) db.exec('ALTER TABLE lanes ADD COLUMN reads_on TEXT');
+      if (!cols.includes('read_verdict_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN read_verdict_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS reads_on TEXT');
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS read_verdict_json TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

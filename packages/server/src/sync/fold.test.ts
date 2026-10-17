@@ -402,6 +402,39 @@ withDrivers('fold', (_o, kind) => {
       await db.close();
     });
 
+    it('carries reads_on on a birth, and reads_on and the verdict on updates, without stopping on lane.read_recorded (ADR 644)', async () => {
+      const { db, team } = await seed();
+      const verdict = { outcome: 'met', note: 'n', by: 'ada', at: 9 };
+      const res = await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', {
+          lane: 'L1',
+          title: 'dated',
+          reads_on: '2026-10-20',
+        }),
+        foreignLane('e-2', 2, 2, 'lane.opened', { lane: 'L2', title: 'undated' }),
+        foreignLane('e-3', 3, 3, 'lane.updated', {
+          lane: 'L2',
+          changes: { reads_on: { from: null, to: '2026-10-21' } },
+        }),
+        foreignLane('e-4', 4, 4, 'lane.updated', {
+          lane: 'L1',
+          changes: { read_verdict: { from: null, to: verdict } },
+        }),
+        foreignLane('e-5', 5, 5, 'lane.read_recorded', { lane: 'L1', outcome: 'met' }),
+      ]);
+      expect(res).toMatchObject({ applied: 5, skipped: 0, stop: null });
+      expect(
+        await db.all(
+          'SELECT id, reads_on, read_verdict_json FROM lanes WHERE team_id = ? ORDER BY id',
+          [team.id],
+        ),
+      ).toEqual([
+        { id: 'L1', reads_on: '2026-10-20', read_verdict_json: JSON.stringify(verdict) },
+        { id: 'L2', reads_on: '2026-10-21', read_verdict_json: null },
+      ]);
+      await db.close();
+    });
+
     it('blocks on a verb it cannot project — the wire outran the reader', async () => {
       const { db, team } = await seed();
       const res = await foldBatch(db, team.id, [
