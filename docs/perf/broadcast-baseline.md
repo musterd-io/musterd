@@ -355,6 +355,30 @@ Readings:
 
 Follows-up: 01M55MAQ9MSK5JP45XK3V3GM6Z
 
+## x11 at 24 fps, the sub-bar rung (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55N47KJ`. Same build, fixture and method as the run above, at `--fps 24`
+(`CAPTURE_AB_FPS=24`). Pre-registered before the run: ≥ 23 draws/s, gap p95 < 50 ms, draw floor
+silent, box idle > 0. Falsify: a re-run on the same build and box size puts x11's gap p95 under 50 ms
+at 24 fps.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| screencast | 19.5 | 49.1 | 80.1 | 226.9 | 61.6 | — | 8.0 | 296.5 | 20.4 | silent |
+| x11-cli#1 | 23.4 | 36.8 | 73.3 | 149.3 | 55.9 | 3.2 | 0.1 | 208.5 | 42.4 | silent |
+| x11-cli#2 | 23.4 | 37.7 | 74.0 | 153.4 | 57.0 | 3.4 | 0.2 | 214.0 | 41.0 | silent |
+| x11-cli#3 | 23.3 | 37.6 | 73.3 | 151.2 | 56.8 | 3.4 | 0.1 | 211.5 | 41.8 | silent |
+
+Readings:
+
+- **The rung fails its own pre-registered bar** on the tail. Draws (23.3–23.4), floor and idle pass;
+  the gap p95 (73–74 ms) does not.
+- **The tail is worse at 24 than at 30** (56 ms above). That is unmeasured as to cause; the likely one is
+  cadence: the page draws on rAF ticks of 16.7 ms, and 41.7 ms is not a whole number of them, so gaps
+  alternate 33/50 ms and a missed draw lands at 67+. 30 (two ticks) and 20 (three) divide evenly.
+- x11 is still the better pipeline at this rung: +3.9 draws/s and ~85 points of pipeline CPU freed
+  against screencast.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being

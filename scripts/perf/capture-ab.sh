@@ -18,5 +18,7 @@ BENCH="${BENCH_ROOT:-${TMPDIR:-/tmp}/musterd-bench}"
 MUSTERD_BROADCAST_SEAT="$(cd "$BENCH/admin" && MUSTERD_CONFIG="$BENCH/admin/config.json" \
   node "$ROOT/packages/cli/dist/bin.js" broadcast --mint-seat --team bench --server http://127.0.0.1:4877)"
 export MUSTERD_BROADCAST_SEAT
-node scripts/perf/capture-ab.mjs --secs "${CAPTURE_AB_SECS:-60}" || echo "CAPTURE_AB_FAILED $?"
+# CAPTURE_AB_FPS / CAPTURE_AB_ARMS pick the rung and the arms (`fly deploy --env …`); unset is increment 4's run.
+node scripts/perf/capture-ab.mjs --secs "${CAPTURE_AB_SECS:-60}" --fps "${CAPTURE_AB_FPS:-30}" \
+  ${CAPTURE_AB_ARMS:+--arms "$CAPTURE_AB_ARMS"} || echo "CAPTURE_AB_FAILED $?"
 exec sleep infinity

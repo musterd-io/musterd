@@ -6,7 +6,8 @@
  * invocation; increment 4 (lane 01M4VS22F1) adds the real `musterd broadcast --capture x11` mode as its
  * own arm, and runs the ad-hoc arm with and without dirty-rect repaint (`&dirty=0`, ADR 625).
  *
- *   node scripts/perf/capture-ab.mjs [--secs 60] [--server http://127.0.0.1:4877] [--team bench]
+ *   node scripts/perf/capture-ab.mjs [--secs 60] [--fps 30] [--arms screencast,x11-cli#1] \
+ *     [--server http://127.0.0.1:4877] [--team bench]
  *
  * Arms run screencast, x11-cli, x11-adhoc, x11-adhoc dirty=0, x11-cli, so the x11 CLI mode is read at
  * both ends of the box's warm-up. Each arm prints one `CAPTURE_AB {json}` line to stdout, which is what
@@ -28,6 +29,13 @@ const flag = (n, d) => {
   return i >= 0 ? args[i + 1] : d;
 };
 const SECS = Number(flag('secs', '60'));
+// The encode and page rate for every arm. 30 is the spec's bar; 24 is the sub-bar rung (lane 01M55N47KJ).
+const FPS = Number(flag('fps', '30'));
+// A comma list of arm labels to run, in order; default is the full increment 4 set.
+const ONLY = flag('arms', '')
+  .split(',')
+  .map((a) => a.trim())
+  .filter(Boolean);
 const SERVER = flag('server', 'http://127.0.0.1:4877');
 const TEAM = flag('team', 'bench');
 const CHROME = process.env.CHROME_BIN ?? '/usr/bin/chromium';
@@ -178,7 +186,7 @@ async function armCli(label, capture = 'screencast') {
       '--server',
       SERVER,
       '--fps',
-      '30',
+      String(FPS),
       '--duration',
       String(SECS + 40),
       '--out',
@@ -268,7 +276,9 @@ async function armX11(label, query = '') {
     await page.send('Page.addScriptToEvaluateOnNewDocument', {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
-    await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30${query}` });
+    await page.send('Page.navigate', {
+      url: `${SERVER}/broadcast?team=${TEAM}&fps=${FPS}${query}`,
+    });
     if (!(await waitForRoom(page))) {
       // Say what the page saw, so an empty room is a reading rather than a guess.
       const seen = await page.evaluate(
@@ -287,7 +297,7 @@ async function armX11(label, query = '') {
         '-f',
         'x11grab',
         '-framerate',
-        '30',
+        String(FPS),
         '-video_size',
         '1920x1080',
         '-i',
@@ -307,7 +317,7 @@ async function armX11(label, query = '') {
         '-bufsize',
         '9000k',
         '-g',
-        '60',
+        String(FPS * 2),
         '-pix_fmt',
         'yuv420p',
         '-c:a',
@@ -362,12 +372,14 @@ for (const [fn, label, arg] of [
   [armX11, 'x11-adhoc', ''],
   [armX11, 'x11-adhoc dirty=0', '&dirty=0'],
   [armCli, 'x11-cli#2', 'x11'],
-]) {
+  [armCli, 'x11-cli#3', 'x11'],
+].filter(([, label]) => (ONLY.length ? ONLY.includes(label) : label !== 'x11-cli#3'))) {
   const r = await fn(label, arg).catch((e) => ({ arm: label, invalid: String(e?.message ?? e) }));
   console.log(`CAPTURE_AB ${JSON.stringify(r)}`);
   results.push(r);
   await sleep(5000);
 }
+console.log(`CAPTURE_AB_FPS ${FPS}`);
 console.log(
   '| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |',
 );
