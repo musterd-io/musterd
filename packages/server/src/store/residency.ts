@@ -34,7 +34,7 @@ import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { getLane, listLanes } from './lanes.js';
-import { getMemberById } from './members.js';
+import { addMember, getMemberById, getMemberByName } from './members.js';
 import { memoryEnvelope } from './memory.js';
 import {
   deferrals,
@@ -45,7 +45,7 @@ import {
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
 import { lastActionBySubject } from './quiescence.js';
-import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
+import { type MemberRow, type MessageRow, parseWorkingHours, type TeamRow } from './rows.js';
 import { getPolicy, getTeamById } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 
@@ -1376,46 +1376,33 @@ export interface DispatchNudge {
   laneId: string;
   laneTitle: string;
   owner: string;
-  /** The voice asking — lane creator, else latest non-owner lane actor, else null (suppress-only). */
-  voice: string | null;
   evidence: string;
 }
 
 /**
- * Who voices a dispatch nudge to this lane's owner — never the owner (a self-send never reaches
- * an inbox, per the incident precedent), and never a seat bound to another node: the nudge is
- * minted by whichever daemon served the poll, stamped with that node, and the hub refuses a push
- * as a seat that is bound elsewhere (`bound_elsewhere`), which wedges every later event from the
- * node. Null when no eligible second voice exists: suppression still holds, the nudge is skipped
- * and the audit says so.
+ * The service seat a dispatch nudge speaks as (ADR 646, replacing ADR 628 decision 3): the board
+ * held the wake, so the board says so. An ADR 232 ledger seat, never a lane owner — like `digest`
+ * and `policy`, which the daemon also composes acts as. A service seat is never bound to a node
+ * (`sync/log.ts`), so a nudge minted on any node pushes cleanly: the `bound_elsewhere` wedge #2807
+ * fixed for member voices cannot occur.
  */
-async function dispatchNudgeVoice(
-  db: Driver,
-  teamId: string,
-  laneId: string,
-  createdBy: string,
-  owner: string,
-): Promise<string | null> {
-  const recent = await db.all<{ actor: string }>(
-    `SELECT actor FROM audit WHERE team_id = ? AND target = ? AND actor IS NOT NULL AND actor != ?
-     ORDER BY ts DESC, id DESC LIMIT 20`,
-    [teamId, laneId, owner],
-  );
-  const candidates = [...(createdBy !== owner ? [createdBy] : []), ...recent.map((r) => r.actor)];
-  const local = await db.get<{ node_id: string }>(
-    'SELECT node_id FROM local_node WHERE team_id = ?',
-    [teamId],
-  );
-  for (const name of new Set(candidates)) {
-    if (local === undefined) return name;
-    const bound = await db.all<{ node_id: string }>(
-      `SELECT s.node_id FROM seat_nodes s JOIN members m ON m.id = s.member_id
-         WHERE s.team_id = ? AND m.name = ?`,
-      [teamId, name],
-    );
-    if (bound.length === 0 || bound.some((b) => b.node_id === local.node_id)) return name;
-  }
-  return null;
+export const BOARD_SEAT = 'board';
+
+/**
+ * The team's `board` service seat, minted on first use. Null when the name is already held by a
+ * seat that is not a live service seat: the board never speaks as somebody's agent or person.
+ */
+export async function boardSeat(db: Driver, team: TeamRow): Promise<MemberRow | null> {
+  const existing = await getMemberByName(db, team.id, BOARD_SEAT);
+  if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
+  return (await addMember(db, team, { name: BOARD_SEAT, kind: 'service' })).row;
+}
+
+/** Whether the board can speak on this team — its seat is free to mint, or is a live service seat.
+ *  Read-only, for the derivation; the poll handler mints (`boardSeat`) when it sends. */
+async function boardCanSpeak(db: Driver, teamId: string): Promise<boolean> {
+  const existing = await getMemberByName(db, teamId, BOARD_SEAT);
+  return !existing || (existing.kind === 'service' && existing.left_at === null);
 }
 
 /**
@@ -2398,20 +2385,17 @@ async function deriveSeatPasses(
       if (edge === 'dispatch_continuation' && candidate.lane_id !== undefined) {
         const engagement = await ownerEngaged(db, teamId, member, presenceTimeoutMs, now);
         if (engagement.engaged) {
-          const lane = await getLane(db, teamId, candidate.lane_id, teamSlug);
-          const recentNudge = await db.get<{ id: string }>(
+          // ADR 646: one row per episode — the first suppression inside a window writes the row
+          // (and nudges); later polls in that window suppress silently. The eval reads episodes
+          // (resumed vs stalled), and a row per poll was ~90 rows per lane per window.
+          const episodeOpen = await db.get<{ id: string }>(
             `SELECT id FROM audit WHERE team_id = ? AND action = 'residency.dispatch_suppressed'
-             AND json_extract(detail, '$.lane_id') = ?
-             AND json_extract(detail, '$.nudge_sent') = 1 AND ts > ?`,
+             AND json_extract(detail, '$.lane_id') = ? AND ts > ?`,
             [teamId, candidate.lane_id, now - OWNER_ENGAGEMENT_MS],
           );
-          const voice =
-            lane === null
-              ? null
-              : await dispatchNudgeVoice(db, teamId, lane.id, lane.created_by, member.name);
-          const nudgeSent = voice !== null && recentNudge === undefined;
-          // Written every poll it fires (not through the exhausted trip-dedup: the eval counts
-          // suppressions, and the nudge cooldown reads their recency).
+          if (episodeOpen) continue;
+          const lane = await getLane(db, teamId, candidate.lane_id, teamSlug);
+          const nudgeSent = lane !== null && (await boardCanSpeak(db, teamId));
           pass.suppressed.push({
             actor: null,
             action: 'residency.dispatch_suppressed',
@@ -2428,7 +2412,7 @@ async function deriveSeatPasses(
                   }
                 : {}),
               nudge_sent: nudgeSent,
-              ...(voice === null ? { no_voice: true } : {}),
+              ...(nudgeSent ? {} : { no_voice: true }),
             },
           });
           if (nudgeSent && lane !== null) {
@@ -2436,7 +2420,6 @@ async function deriveSeatPasses(
               laneId: lane.id,
               laneTitle: lane.title,
               owner: member.name,
-              voice,
               evidence:
                 engagement.reason === 'live_presence'
                   ? 'live presence'

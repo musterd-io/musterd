@@ -394,6 +394,7 @@ import { reportServiceFor } from '../store/reportCache.js';
 import { createRequest, decideRequest, getRequest, listRequests } from '../store/requests.js';
 import {
   appendWakeTurn,
+  boardSeat,
   claimWakeLeases,
   listWakeTranscript,
   type DispatchNudge,
@@ -4569,9 +4570,9 @@ export async function handleHttp(
           { onNudge: (nudge) => nudges.push(nudge) },
         );
         for (const nudge of nudges) {
-          if (nudge.voice === null) continue;
           try {
-            const voice = await getMemberByName(ctx.db, team.id, nudge.voice);
+            // ADR 646: the board speaks as its own service seat, minted on first use.
+            const voice = await boardSeat(ctx.db, team);
             if (!voice) continue;
             await deliverDispatchNudge(
               ctx,
