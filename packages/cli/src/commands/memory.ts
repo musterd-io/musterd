@@ -6,11 +6,12 @@ import { success, sym, termWidth } from '../render/ui.js';
 import { resolve } from './helpers.js';
 
 /**
- * `musterd memory [show]|save|clear` — the seat's private cross-session continuity blob (ADR 093):
+ * `musterd memory [show [--seat <agent>]]|save|clear` — the seat's cross-session continuity blob (ADR 093):
  * the working state a returning occupant needs, written explicitly by the occupant at natural
  * boundaries (before a handoff, at a wrap-up, when told to wind down). One note per seat,
  * last-write-wins; headline ≤120 chars, body ≤8KB (the server rejects over-cap with the limit
- * named). Seat-scoped: readable by this seat only — no cross-seat path, admins included. The
+ * named). Read rule (ADR 651): an agent seat's note is readable by the seat and any human
+ * (`show --seat <agent>`); a human seat's note by that human only; no agent reads another's. The
  * delivery seam is envelope-on-occupy / body-on-demand: `musterd claim` / `musterd status` print
  * {@link renderMemoryLine}; `musterd memory` is the explicit body read.
  */
@@ -53,20 +54,24 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
 
   if (sub !== 'show') {
     throw new CliError(
-      'usage: musterd memory [show] | save --headline "<subject>" [body...] | clear',
+      'usage: musterd memory [show [--seat <agent>]] | save --headline "<subject>" [body...] | clear',
       2,
     );
   }
 
   // The explicit body read. A seat with nothing saved is a normal state, not an error exit.
+  // `--seat <agent>`: a human reading an agent seat's note (ADR 651); the server enforces who may.
+  const seat = flagStr(parsed.flags, 'seat');
   let mem: { headline: string; body: string; saved_at: number; checks?: ClaimCheck[] };
   try {
-    mem = await http.getMemory(team);
+    mem = seat ? await http.getMemberMemory(team, seat) : await http.getMemory(team);
   } catch (err) {
     if (err instanceof CliError && err.code === 'not_found') {
       process.stdout.write(
         theme.meta(
-          'no memory saved for this seat yet — nothing to carry over. musterd memory save --headline "<subject>"',
+          seat
+            ? `no memory saved for ${seat} (or no such member)`
+            : 'no memory saved for this seat yet — nothing to carry over. musterd memory save --headline "<subject>"',
         ) + '\n',
       );
       return 0;
@@ -78,7 +83,7 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
     return 0;
   }
   process.stdout.write(
-    `${theme.accent('memory')} ${theme.meta(`(saved ${ago(Date.now() - mem.saved_at)} ago)`)} — ${mem.headline}\n`,
+    `${theme.accent(seat ? `memory · ${seat}` : 'memory')} ${theme.meta(`(saved ${ago(Date.now() - mem.saved_at)} ago)`)} — ${mem.headline}\n`,
   );
   // ADR 522: the note's claims checked against the Team now — above the body, read first.
   for (const line of claimCheckLines(mem.checks ?? []))

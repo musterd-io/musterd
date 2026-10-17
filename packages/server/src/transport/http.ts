@@ -338,7 +338,14 @@ import {
   setMemberHue,
   teamHasAdmin,
 } from '../store/members.js';
-import { applyMemoryClear, applyMemorySave, getMemory, memoryEnvelope } from '../store/memory.js';
+import {
+  applyMemoryClear,
+  applyMemorySave,
+  getMemory,
+  mayReadNote,
+  memoryEnvelope,
+  redactedNoteDetail,
+} from '../store/memory.js';
 import {
   countInbox,
   countUnread,
@@ -3309,7 +3316,7 @@ export async function handleHttp(
       // team. Newest-first, capped; `?limit=` and `?before=<ts>` page older entries. `detail` is parsed
       // back to an object for the client.
       if (method === 'GET' && rest === '/audit') {
-        const { team } = await authAdmin(ctx, slug, req);
+        const { team, member: reader } = await authAdmin(ctx, slug, req);
         const limit = Number(url.searchParams.get('limit') ?? '');
         const before = Number(url.searchParams.get('before') ?? '');
         const authorizedBy = url.searchParams.get('authorized_by');
@@ -3318,6 +3325,18 @@ export async function handleHttp(
           ...(Number.isFinite(before) && before > 0 ? { before } : {}),
           ...(authorizedBy ? { authorized_by: authorizedBy } : {}),
         });
+        // ADR 651: since ADR 366 a `continuity.memory_saved` row carries the note (it IS the
+        // replicated event, so the stored row keeps it). The read rule applies here: another
+        // human's note leaves as sizes only.
+        const owners = rows.some((r) => r.action === 'continuity.memory_saved')
+          ? new Map((await listMembers(ctx.db, team.id)).map((m) => [m.name, m]))
+          : new Map<string, MemberRow>();
+        const detailFor = (r: (typeof rows)[number]): unknown => {
+          const detail: unknown = r.detail ? JSON.parse(r.detail) : null;
+          if (r.action !== 'continuity.memory_saved') return detail;
+          const owner = r.target ? owners.get(r.target) : undefined;
+          return mayReadNote(reader, owner) ? detail : redactedNoteDetail(detail);
+        };
         return sendJson(res, 200, {
           audit: rows.map((r) => ({
             id: r.id,
@@ -3333,7 +3352,7 @@ export async function handleHttp(
             action: r.action,
             target: r.target,
             result: r.result,
-            detail: r.detail ? JSON.parse(r.detail) : null,
+            detail: detailFor(r),
           })),
         });
       }
@@ -7101,7 +7120,8 @@ export async function handleHttp(
       }
 
       // Portable wake context (ADR 209): the recipient gets a bounded, server-derived index after
-      // occupying. It names explicit reads but never carries an Act or memory body.
+      // occupying. It names explicit reads; since ADR 430 it carries the caller's OWN memory body
+      // (bounded), never another seat's, and never an Act.
       if (method === 'POST' && rest === '/wake-context') {
         const { team, member } = await authTouch(ctx, slug, req);
         const target = parseOrBadRequest(WakeContextRequestSchema, await readJson(req));
@@ -9341,9 +9361,28 @@ export async function handleHttp(
         });
       }
 
+      // A human reads an agent seat's note (ADR 651: humans see everything except another human's
+      // personal stuff). Human-only — an agent never reads another seat's note — and a human seat's
+      // note stays its owner's alone, so this refuses one unless it is the caller's own.
+      const memberMemory = rest.match(/^\/members\/([^/]+)\/memory$/);
+      if (method === 'GET' && memberMemory) {
+        const { team, member: reader } = await authHuman(ctx, slug, req);
+        const owner = await getMemberByName(ctx.db, team.id, decodeURIComponent(memberMemory[1]!));
+        if (!owner || owner.left_at !== null) throw new MusterdError('not_found', 'no such member');
+        if (!mayReadNote(reader, owner))
+          throw new MusterdError(
+            'forbidden',
+            `${owner.name} is a human seat — its note is readable by ${owner.name} only (ADR 651)`,
+          );
+        const mem = await getMemory(ctx.db, owner.id);
+        if (!mem) throw new MusterdError('not_found', `no memory saved for ${owner.name}`);
+        const checks = await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
+        return sendJson(res, 200, { member: owner.name, ...mem, checks });
+      }
+
       // Seat memory (ADR 093): a seat's private continuity blob. All three are seat-authenticated and
-      // operate on the caller's OWN seat only — the URL carries no member name, and there is no
-      // cross-seat read path (team admins included, ADR 093 §4). `authMember` resolves the seat from
+      // operate on the caller's OWN seat only — the URL carries no member name. The one cross-seat
+      // read is the human-only route above (ADR 651, superseding ADR 093 §4 for agent seats). `authMember` resolves the seat from
       // the presented token; a mismatched/absent token is its own 401/403.
       if (method === 'PUT' && rest === '/memory') {
         const { team, member } = await authMember(

@@ -6,12 +6,39 @@ import { appendReplicatedEvent } from './audit.js';
 /**
  * Seat memory (ADR 093): a daemon-private, seat-scoped continuity blob — the working state a
  * returning occupant needs (what it was doing, decisions mid-flight, where it left off). One row per
- * member, last-write-wins, no history. The occupant writes it explicitly (`memory_save`); musterd
+ * member, last-write-wins. The occupant writes it explicitly (`memory_save`); musterd
  * stores, never composes. Delivery is envelope-on-occupy / body-on-demand: {@link memoryEnvelope}
  * rides the occupied frame (headline + age + size, never the body); {@link getMemory} is the explicit
  * read. Lives in the daemon DB, never the git seat-file — half-done context (or secrets pasted into a
  * note) must not land in repo history (the ADR 058 durable/live line).
  */
+
+/**
+ * Who reads a seat's note (ADR 651, nick 2026-10-17: humans see everything except another human's
+ * personal stuff). An agent seat's note: the seat itself and any human. A human seat's note: that
+ * human only — not another human, not an admin, not an agent. A seat this team no longer knows is
+ * treated as a human's, so a removed person's notes never resurface.
+ */
+export function mayReadNote(
+  reader: { name: string; kind: string },
+  owner: { name: string; kind: string } | undefined,
+): boolean {
+  if (owner && reader.name === owner.name) return true;
+  if (!owner || owner.kind === 'human') return false;
+  return reader.kind === 'human';
+}
+
+/** A `continuity.memory_saved` detail with the note taken out: sizes and the save time only, the
+ *  shape ADR 093's audit rule promised before ADR 366 made the row carry the body (ADR 651). */
+export function redactedNoteDetail(detail: unknown): Record<string, unknown> {
+  const d = (detail ?? {}) as { headline?: unknown; body?: unknown; saved_at?: unknown };
+  return {
+    headline_len: typeof d.headline === 'string' ? d.headline.length : 0,
+    body_len: typeof d.body === 'string' ? Buffer.byteLength(d.body, 'utf8') : 0,
+    ...(typeof d.saved_at === 'number' ? { saved_at: d.saved_at } : {}),
+    redacted: 'another human’s note',
+  };
+}
 
 /** Body cap in UTF-8 bytes — cheap per-session context, rejected above with the limit named. */
 export const MEMORY_BODY_MAX_BYTES = 8192;

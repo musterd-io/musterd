@@ -159,7 +159,7 @@ withDrivers('integration · misc', (_o, kind) => {
       expect((await req('DELETE', '/teams/dawn/memory', undefined, ada)).status).toBe(204);
     });
 
-    it('memory is self-scoped: a seat only ever reads/writes its own — no cross-seat path, admin included', async () => {
+    it("GET /memory is self-scoped: it reads the caller's own seat, admin included (cross-seat reads are ADR 651's route)", async () => {
       const { nickTok, ada } = await dawn();
       await req('PUT', '/teams/dawn/memory', { headline: "ada's note", body: 'secret' }, ada);
 
@@ -170,6 +170,46 @@ withDrivers('integration · misc', (_o, kind) => {
 
       // and Ada still sees her own
       expect((await get('/teams/dawn/memory', ada)).json.body).toBe('secret');
+    });
+
+    // ADR 651 (nick 2026-10-17): humans see everything except another human's personal stuff.
+    it("who reads a note: any human reads an agent seat's note; a human seat's note is its owner's alone; no agent reads another's", async () => {
+      const { nickTok, ada, team } = await dawn();
+      await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickTok);
+      const lin: Auth = { key: team.json.agent_key as string, seat: 'Lin' };
+      const bo = await post('/teams/dawn/members', { name: 'Bo', kind: 'human' }, nickTok);
+      const boTok = bo.json.human_credential as string;
+      await req('PUT', '/teams/dawn/memory', { headline: 'ada plan', body: 'agent note' }, ada);
+      await req('PUT', '/teams/dawn/memory', { headline: 'bo private', body: 'human note' }, boTok);
+
+      // Any human reads an agent seat's note — admin or not.
+      const nickReadsAda = await get('/teams/dawn/members/Ada/memory', nickTok);
+      expect(nickReadsAda.status).toBe(200);
+      expect(nickReadsAda.json).toMatchObject({ member: 'Ada', body: 'agent note' });
+      expect((await get('/teams/dawn/members/Ada/memory', boTok)).json.body).toBe('agent note');
+      // A human seat's note: another human (here the admin) is refused, the owner is not.
+      expect((await get('/teams/dawn/members/Bo/memory', nickTok)).status).toBe(403);
+      expect((await get('/teams/dawn/members/Bo/memory', boTok)).json.body).toBe('human note');
+      // No agent reads another seat's note through this route.
+      expect((await get('/teams/dawn/members/Ada/memory', lin)).status).toBe(403);
+      expect((await get('/teams/dawn/members/Bo/memory', ada)).status).toBe(403);
+
+      // /audit (human admins only) applies the same rule to the replicated rows.
+      const audit = await get('/teams/dawn/audit', nickTok);
+      const saved = (audit.json.audit as { action: string; target: string; detail: any }[]).filter(
+        (r) => r.action === 'continuity.memory_saved',
+      );
+      expect(saved.find((r) => r.target === 'Ada')!.detail).toMatchObject({ body: 'agent note' });
+      const boRow = saved.find((r) => r.target === 'Bo')!.detail;
+      expect(boRow).not.toHaveProperty('body');
+      expect(boRow).not.toHaveProperty('headline');
+      expect(boRow).toMatchObject({ headline_len: 10, body_len: 10 });
+      // The stored row is untouched — it is the replicated event (ADR 366).
+      const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
+      const stored = (await listAudit(h.server.store, teamId)).find(
+        (r) => r.action === 'continuity.memory_saved' && r.target === 'Bo',
+      )!;
+      expect(JSON.parse(stored.detail!)).toMatchObject({ body: 'human note' });
     });
 
     it('GET ?envelope=1 returns headline + age + size, never the body (the status one-liner read)', async () => {
