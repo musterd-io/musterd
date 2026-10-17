@@ -60,6 +60,10 @@ import {
   sweepStaleProfiles,
   type EncoderPipe,
   reportExit,
+  xvfbArgs,
+  parseDisplayFd,
+  stopEncoder,
+  drawAdvanced,
 } from './broadcast.js';
 
 describe('broadcast parseOptions', () => {
@@ -1348,5 +1352,138 @@ describe('the broadcast seat', () => {
     new Function('window', src)(win);
     expect(win.__musterdBroadcastSeat).toEqual(seat);
     expect(broadcastUrl('http://127.0.0.1:4849', 'revive')).not.toContain('mscr_');
+  });
+});
+
+// Smooth-capture increment 2 (docs/superpowers/specs/2026-10-13-broadcast-smooth-capture-design.md,
+// lever 1): record the X display instead of screencasting the page. The default stays screencast
+// until a box run passes the bar, and the flip is its own ADR.
+describe('--capture x11 (Xvfb + x11grab)', () => {
+  it('defaults to screencast, and the default ffmpeg and Chrome argv are untouched', () => {
+    const opts = parseOptions({ team: 't', twitch: true }, 'linux');
+    expect(opts.capture).toBe('screencast');
+    const sink = { kind: 'rtmp' as const, target: 'rtmps://x/app/k' };
+    expect(ffmpegArgs(opts, sink).join(' ')).toContain('-f image2pipe');
+    expect(ffmpegArgs(opts, sink).join(' ')).not.toContain('x11grab');
+    expect(chromeArgs(9222, '/tmp/p', 'linux')).toContain('--headless=new');
+  });
+
+  it('refuses x11 on macOS, and refuses a capture it does not know', () => {
+    expect(() => parseOptions({ team: 't', out: 'x.mp4', capture: 'x11' }, 'darwin')).toThrow(
+      /needs Linux/,
+    );
+    expect(() => parseOptions({ team: 't', out: 'x.mp4', capture: 'vnc' }, 'linux')).toThrow();
+  });
+
+  it('reads the display at the stage size and the encode rate, with no pipe and no cursor', () => {
+    const opts = parseOptions({ team: 't', twitch: true, capture: 'x11', fps: '30' }, 'linux');
+    const args = ffmpegArgs(opts, { kind: 'rtmp', target: 'rtmps://x/app/k' }, ':7');
+    const joined = args.join(' ');
+    expect(joined).toMatch(
+      /-thread_queue_size \d+ -f x11grab -framerate 30 -video_size 1920x1080 -draw_mouse 0 -i :7/,
+    );
+    expect(joined).not.toContain('image2pipe');
+    expect(args).not.toContain('-'); // stdin carries commands now, not frames
+    // Everything after the input is the screencast contract: codec, rate cap, keyframes, sink.
+    expect(joined).toContain('-c:v libx264 -preset veryfast');
+    expect(joined).toContain('-g 60');
+    expect(joined).toContain('-f flv rtmps://x/app/k');
+  });
+
+  it('sizes the grab to the 720p rung too', () => {
+    const opts = parseOptions(
+      { team: 't', out: 'x.mp4', capture: 'x11', resolution: '720p' },
+      'linux',
+    );
+    expect(ffmpegArgs(opts, { kind: 'file', target: 'x.mp4' }, ':1').join(' ')).toContain(
+      '-video_size 1280x720',
+    );
+  });
+
+  it('keeps the pulse audio and its resampler — both clocks are wall clock now', () => {
+    const opts = parseOptions({ team: 't', twitch: true, capture: 'x11', audio: true }, 'linux');
+    const joined = ffmpegArgs(opts, { kind: 'rtmp', target: 'rtmps://x/app/k' }, ':1').join(' ');
+    expect(joined).toMatch(/-thread_queue_size \d+ -f pulse -i musterd\.monitor/);
+    expect(joined).toContain('aresample=async=1');
+  });
+
+  it('will not build an x11 argv without a display to read', () => {
+    const opts = parseOptions({ team: 't', out: 'x.mp4', capture: 'x11' }, 'linux');
+    expect(() => ffmpegArgs(opts, { kind: 'file', target: 'x.mp4' })).toThrow(/display/);
+  });
+
+  it('runs Chrome headful and kiosk-full-screen at the stage size, as the measured arm did', () => {
+    const stage = stagePixels('1080p');
+    const args = chromeArgs(9333, '/tmp/p', 'linux', stage, false, 'x11');
+    expect(args).not.toContain('--headless=new');
+    expect(args).toContain('--kiosk');
+    expect(args).toContain('--window-position=0,0');
+    expect(args).toContain('--window-size=1920,1080');
+    expect(args).toContain('--force-device-scale-factor=1');
+    expect(args).toContain('--no-first-run');
+    expect(args).toContain('--disable-infobars');
+    expect(args).toContain('--noerrdialogs');
+    expect(args).toContain('--no-sandbox');
+    expect(args.at(-1)).toBe('about:blank');
+  });
+
+  it('asks Xvfb to pick a free display and report it, at the stage size, with a black root', () => {
+    expect(xvfbArgs(stagePixels('1080p'))).toEqual([
+      '-displayfd',
+      '3',
+      '-screen',
+      '0',
+      '1920x1080x24',
+      '-nolisten',
+      'tcp',
+      '-br',
+    ]);
+  });
+
+  it('reads the display number Xvfb writes back, and nothing else', () => {
+    expect(parseDisplayFd('99\n')).toBe(':99');
+    expect(parseDisplayFd('0\n')).toBe(':0');
+    expect(parseDisplayFd('')).toBeUndefined();
+    expect(parseDisplayFd('9')).toBeUndefined(); // no newline yet: a partial write, not an answer
+    expect(parseDisplayFd('nope\n')).toBeUndefined();
+  });
+
+  it('stops the encoder with q when frames come from the display, by closing stdin otherwise', () => {
+    const calls: string[] = [];
+    const stdin = {
+      write: (s: string) => void calls.push(`write ${s}`),
+      end: () => void calls.push('end'),
+    };
+    stopEncoder(stdin, 'x11');
+    // `q` first, then release the pipe: ffmpeg reads end-of-input on stdin as a null key, not a quit.
+    expect(calls).toEqual(['write q', 'end']);
+    calls.length = 0;
+    stopEncoder(stdin, 'screencast');
+    expect(calls).toEqual(['end']);
+    expect(() => stopEncoder(null, 'x11')).not.toThrow();
+  });
+});
+
+describe('drawAdvanced (the x11 freeze watchdog reads the page, not frames)', () => {
+  const s = (draws: number, beats: number) => ({ ticks: 0, draws, beats });
+
+  it('a new draw is progress', () => {
+    expect(drawAdvanced(s(10, 0), s(11, 0))).toBe(true);
+  });
+
+  it('a parked room ticking its heartbeat is progress — calm is not a freeze', () => {
+    expect(drawAdvanced(s(10, 4), s(10, 5))).toBe(true);
+  });
+
+  it('nothing moving is not', () => {
+    expect(drawAdvanced(s(10, 4), s(10, 4))).toBe(false);
+  });
+
+  it('counters that went backwards are a reloaded page, which is alive', () => {
+    expect(drawAdvanced(s(500, 40), s(3, 0))).toBe(true);
+  });
+
+  it('the first reading is progress — there is nothing to compare it to yet', () => {
+    expect(drawAdvanced(undefined, s(0, 0))).toBe(true);
   });
 });
