@@ -1017,10 +1017,10 @@ withDrivers('oauth-http', (_o, kind) => {
         },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       });
+      // No trustProxy here, so no limiter reads cf-connecting-ip and it is not handed on either.
       expect(seats.at(-1)!.headers).toEqual({
         host: new URL(base).host,
         'x-forwarded-proto': 'https',
-        'cf-connecting-ip': '203.0.113.9',
       });
     });
 

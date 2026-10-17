@@ -276,7 +276,7 @@ export async function handleMcpRoute(
     member: member.name,
     bearer,
     capabilities: resolveCapabilities(member),
-    headers: edgeHeaders(req),
+    headers: edgeHeaders(ctx, req),
   };
   try {
     const webReq = await toWebRequest(req, path, url);
@@ -320,10 +320,20 @@ function loopbackBase(ctx: Ctx, req: IncomingMessage): string {
   return `${scheme}://${host}:${req.socket.localPort ?? ctx.config.port}`;
 }
 
-/** The phone's edge headers, as {@link RemoteMcpSeat.headers} describes. */
-function edgeHeaders(req: IncomingMessage): Record<string, string> {
+/**
+ * The phone's edge headers, as {@link RemoteMcpSeat.headers} describes. `cf-connecting-ip` only
+ * under `trustProxy` — the only posture in which any limiter reads it (`clientIp`,
+ * `requestBudgetClient`), and the one where the Cloudflare edge wrote it, so a loopback call
+ * carries exactly the key the phone's own request was charged under and nothing a caller chose.
+ * Without `trustProxy` (a self-hosted daemon) a loopback call keys on the daemon's own address:
+ * every phone's sub-requests share that one bucket, as every tunnel-borne request already shares
+ * the `cloudflared` peer's. Separating them needs a channel a caller cannot forge; Cloud, where the
+ * budget is enforced, does not.
+ */
+function edgeHeaders(ctx: Ctx, req: IncomingMessage): Record<string, string> {
   const out: Record<string, string> = {};
   for (const name of EDGE_HEADERS) {
+    if (name === 'cf-connecting-ip' && !ctx.config.trustProxy) continue;
     const v = req.headers[name];
     const value = Array.isArray(v) ? v[0] : v;
     if (value) out[name] = value;
