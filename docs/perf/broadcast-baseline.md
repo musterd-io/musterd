@@ -355,6 +355,57 @@ Readings:
 
 Follows-up: 01M55MAQ9MSK5JP45XK3V3GM6Z
 
+## x11 at 24 fps, the sub-bar rung (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55N47KJ`. Same build, fixture and method as the run above, at `--fps 24`
+(`CAPTURE_AB_FPS=24`). Pre-registered before the run: ≥ 23 draws/s, gap p95 < 50 ms, draw floor
+silent, box idle > 0. Falsify: a re-run on the same build and box size puts x11's gap p95 under 50 ms
+at 24 fps.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| screencast | 19.5 | 49.1 | 80.1 | 226.9 | 61.6 | — | 8.0 | 296.5 | 20.4 | silent |
+| x11-cli#1 | 23.4 | 36.8 | 73.3 | 149.3 | 55.9 | 3.2 | 0.1 | 208.5 | 42.4 | silent |
+| x11-cli#2 | 23.4 | 37.7 | 74.0 | 153.4 | 57.0 | 3.4 | 0.2 | 214.0 | 41.0 | silent |
+| x11-cli#3 | 23.3 | 37.6 | 73.3 | 151.2 | 56.8 | 3.4 | 0.1 | 211.5 | 41.8 | silent |
+
+Readings:
+
+- **The rung fails its own pre-registered bar** on the tail. Draws (23.3–23.4), floor and idle pass;
+  the gap p95 (73–74 ms) does not.
+- **The tail is worse at 24 than at 30** (56 ms above). That is unmeasured as to cause. _(Corrected
+  2026-10-17: the cadence reading that follows is wrong. 20 fps divides the tick evenly and has the
+  worst tail, in the next section.)_ The likely one was cadence: the page draws on rAF ticks of 16.7 ms, and 41.7 ms is not a whole number of them, so gaps
+  alternate 33/50 ms and a missed draw lands at 67+. 30 (two ticks) and 20 (three) divide evenly.
+- x11 is still the better pipeline at this rung: +3.9 draws/s and ~85 points of pipeline CPU freed
+  against screencast.
+
+## x11 at 20 against 30, interleaved (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55N47KJ`, run after the 24 fps rung failed. Same build and method; arms
+`x11-cli#1@20, #2@30, #3@20, #4@30` on one box (`CAPTURE_AB_ARMS`, per-arm fps). Pre-registered for
+20 by the 24 rung's rule (95 % of the rate, p95 under 1.2× the interval): ≥ 19 draws/s, gap p95
+< 60 ms, floor silent, idle > 0. Falsify: a re-run on the same build and box size puts the 20 fps p95
+under 60 ms.
+
+| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| x11-cli#1@20 | 19.7 | 48.6 | 84.0 | 142.9 | 50.0 | 3.2 | 0.2 | 196.3 | 45.1 | silent |
+| x11-cli#2@30 | 24.4 | 38.3 | 58.7 | 163.4 | 71.8 | 4.8 | 0.1 | 240.1 | 34.4 | silent |
+| x11-cli#3@20 | 19.7 | 51.5 | 80.9 | 139.4 | 49.6 | 3.5 | 0.2 | 192.7 | 45.9 | silent |
+| x11-cli#4@30 | 25.3 | 37.0 | 57.3 | 164.7 | 70.3 | 4.5 | 0.1 | 239.6 | 34.5 | silent |
+
+Readings:
+
+- **20 fails its tail bar too** (81–84 ms against < 60), so the cadence explanation in the 24 fps
+  section above is wrong: 20 is three whole rAF ticks and has the worst tail of the three rungs.
+- **The tail is about 1.7× the frame interval at every rung** (20: ~1.65×, 24: ~1.75×, 30: ~1.73×).
+  A slower rate does not make the motion steadier; it makes each held frame longer.
+- **30 is the best rung on every reading that matters to a viewer:** the most distinct frames
+  (24.4–25.3/s), the shortest p95 hold (57–59 ms), and still a third of the box idle. 30's draws here
+  sit 1–2/s under the 26.1–26.3 of the earlier run on the same build, which is inside the box-to-box
+  variance this file already records.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being

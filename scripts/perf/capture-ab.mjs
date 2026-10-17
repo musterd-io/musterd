@@ -6,7 +6,8 @@
  * invocation; increment 4 (lane 01M4VS22F1) adds the real `musterd broadcast --capture x11` mode as its
  * own arm, and runs the ad-hoc arm with and without dirty-rect repaint (`&dirty=0`, ADR 625).
  *
- *   node scripts/perf/capture-ab.mjs [--secs 60] [--server http://127.0.0.1:4877] [--team bench]
+ *   node scripts/perf/capture-ab.mjs [--secs 60] [--fps 30] [--arms screencast,x11-cli#1] \
+ *     [--server http://127.0.0.1:4877] [--team bench]
  *
  * Arms run screencast, x11-cli, x11-adhoc, x11-adhoc dirty=0, x11-cli, so the x11 CLI mode is read at
  * both ends of the box's warm-up. Each arm prints one `CAPTURE_AB {json}` line to stdout, which is what
@@ -28,6 +29,14 @@ const flag = (n, d) => {
   return i >= 0 ? args[i + 1] : d;
 };
 const SECS = Number(flag('secs', '60'));
+// The encode and page rate for every arm. 30 is the spec's bar; 24 is the sub-bar rung (lane 01M55N47KJ).
+const FPS = Number(flag('fps', '30'));
+// A comma list of arm labels to run, in order; default is the full increment 4 set. `label@20` runs
+// that arm at 20 fps instead of --fps, so two rungs can share one box (lane 01M55N47KJ).
+const ONLY = flag('arms', '')
+  .split(',')
+  .map((a) => a.trim())
+  .filter(Boolean);
 const SERVER = flag('server', 'http://127.0.0.1:4877');
 const TEAM = flag('team', 'bench');
 const CHROME = process.env.CHROME_BIN ?? '/usr/bin/chromium';
@@ -166,7 +175,7 @@ function kill(proc) {
 }
 
 // ── Arms S and X: the real `musterd broadcast` pipeline, screencast or `--capture x11` ──────────────
-async function armCli(label, capture = 'screencast') {
+async function armCli(label, capture = 'screencast', fps = FPS) {
   const out = join(mkdtempSync(join(tmpdir(), 'cab-s-')), 's.mp4');
   const cli = spawn(
     'node',
@@ -178,7 +187,7 @@ async function armCli(label, capture = 'screencast') {
       '--server',
       SERVER,
       '--fps',
-      '30',
+      String(fps),
       '--duration',
       String(SECS + 40),
       '--out',
@@ -233,7 +242,7 @@ async function armCli(label, capture = 'screencast') {
 
 // ── Arm XA: the ad-hoc Xvfb + headful Chromium + ffmpeg x11grab of increment 1 ──────────────────
 // `query` is appended to the page URL: `&dirty=0` is ADR 625's A/B arm.
-async function armX11(label, query = '') {
+async function armX11(label, query = '', fps = FPS) {
   const DISPLAY = ':99';
   const xvfb = spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
     stdio: 'ignore',
@@ -268,7 +277,9 @@ async function armX11(label, query = '') {
     await page.send('Page.addScriptToEvaluateOnNewDocument', {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
-    await page.send('Page.navigate', { url: `${SERVER}/broadcast?team=${TEAM}&fps=30${query}` });
+    await page.send('Page.navigate', {
+      url: `${SERVER}/broadcast?team=${TEAM}&fps=${fps}${query}`,
+    });
     if (!(await waitForRoom(page))) {
       // Say what the page saw, so an empty room is a reading rather than a guess.
       const seen = await page.evaluate(
@@ -287,7 +298,7 @@ async function armX11(label, query = '') {
         '-f',
         'x11grab',
         '-framerate',
-        '30',
+        String(fps),
         '-video_size',
         '1920x1080',
         '-i',
@@ -307,7 +318,7 @@ async function armX11(label, query = '') {
         '-bufsize',
         '9000k',
         '-g',
-        '60',
+        String(fps * 2),
         '-pix_fmt',
         'yuv420p',
         '-c:a',
@@ -356,18 +367,33 @@ async function armX11(label, query = '') {
 
 const results = [];
 // S first and X-cli last, so neither CLI arm only ever sees a warm or a cold box.
-for (const [fn, label, arg] of [
+const ARMS = [
   [armCli, 'screencast', 'screencast'],
   [armCli, 'x11-cli#1', 'x11'],
   [armX11, 'x11-adhoc', ''],
   [armX11, 'x11-adhoc dirty=0', '&dirty=0'],
   [armCli, 'x11-cli#2', 'x11'],
-]) {
-  const r = await fn(label, arg).catch((e) => ({ arm: label, invalid: String(e?.message ?? e) }));
+  [armCli, 'x11-cli#3', 'x11'],
+  [armCli, 'x11-cli#4', 'x11'],
+];
+const plan = ONLY.length
+  ? ONLY.map((want) => {
+      const [base, at] = want.split('@');
+      const arm = ARMS.find(([, l]) => l === base);
+      if (!arm) throw new Error(`unknown arm ${base}`);
+      return [arm[0], at ? `${base}@${at}` : base, arm[2], at ? Number(at) : FPS];
+    })
+  : ARMS.slice(0, 5).map(([fn, l, a]) => [fn, l, a, FPS]);
+for (const [fn, label, arg, fps] of plan) {
+  const r = await fn(label, arg, fps).catch((e) => ({
+    arm: label,
+    invalid: String(e?.message ?? e),
+  }));
   console.log(`CAPTURE_AB ${JSON.stringify(r)}`);
   results.push(r);
   await sleep(5000);
 }
+console.log(`CAPTURE_AB_FPS ${FPS}`);
 console.log(
   '| arm | draws/s | gap p50 ms | gap p95 ms | chrome % | ffmpeg % | xvfb % | cli % | pipeline % | box idle % | floor |',
 );
