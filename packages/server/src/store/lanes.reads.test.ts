@@ -134,6 +134,35 @@ withDrivers('lane reads (ADR 644)', (o) => {
     });
   });
 
+  it('writes one row per verdict write, even for two writes at the same millisecond', async () => {
+    const { db, team } = await seed();
+    const lane = await open(db, team.id, PAST);
+    const audit = { actor: 'ryder' };
+    const give = (outcome: 'met' | 'missed', note: string) =>
+      updateLane(
+        db,
+        team.id,
+        lane.id,
+        'revive',
+        { read_verdict: { outcome, note } },
+        5_000,
+        undefined,
+        audit,
+      );
+    await give('missed', 'a');
+    const second = (await give('met', 'b'))!;
+    expect(second.read_verdict).toMatchObject({ outcome: 'met', note: 'b', at: 5_000 });
+    // The same verdict sent again is still a write, and still one row.
+    await give('met', 'b');
+    const rows = await listAuditByAction(db, team.id, 'lane.read_recorded', 10);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => JSON.parse(r.detail!).previous_outcome).sort()).toEqual([
+      'met',
+      'missed',
+      null,
+    ]);
+  });
+
   it('refuses a verdict on a lane that reads on no day, and one with no sender', async () => {
     const { db, team } = await seed();
     const plain = await open(db, team.id);
