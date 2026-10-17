@@ -64,6 +64,7 @@ import {
   parseDisplayFd,
   stopEncoder,
   drawAdvanced,
+  statsLineBreaks,
 } from './broadcast.js';
 
 describe('broadcast parseOptions', () => {
@@ -1485,5 +1486,24 @@ describe('drawAdvanced (the x11 freeze watchdog reads the page, not frames)', ()
 
   it('the first reading is progress — there is nothing to compare it to yet', () => {
     expect(drawAdvanced(undefined, s(0, 0))).toBe(true);
+  });
+});
+
+// Found on the ADR 642 live trial (2026-10-17): ffmpeg ends each -stats sample with a bare \r, and
+// fly's log collector splits on \n, so a live stream's speed= and bitrate never reached `fly logs`
+// until a warning or the stream's end flushed a whole hour of them as one line.
+describe('statsLineBreaks (ffmpeg -stats reach the machine log as they happen)', () => {
+  it('turns each bare carriage return into a newline', () => {
+    expect(statsLineBreaks('frame=  1 speed=1.0x\rframe=  2 speed=1.0x\r')).toBe(
+      'frame=  1 speed=1.0x\nframe=  2 speed=1.0x\n',
+    );
+  });
+
+  it('leaves a CRLF as one line break, not two', () => {
+    expect(statsLineBreaks('warning\r\nnext\n')).toBe('warning\r\nnext\n');
+  });
+
+  it('leaves text without a carriage return alone', () => {
+    expect(statsLineBreaks('plain\nlines\n')).toBe('plain\nlines\n');
   });
 });

@@ -742,3 +742,13 @@ handed seat and never this browser's cached observer, which is full-grade.
 A stream started before this keeps its `public` seat until the next `musterd stream start`, which
 mints a fresh seat each time. A `MUSTERD_BROADCAST_SEAT` passed in by hand keeps the grade it was
 minted with.
+
+## A live stream's `speed=` never reached `fly logs` (2026-10-17; falsify: read `fly logs -a musterd-broadcast` ten minutes into a stream on a build without `statsLineBreaks` and find a `speed=` line) <!-- claim: defect -->
+
+ffmpeg ends each `-stats` sample with a bare `\r`, so a terminal redraws it in place. Fly's log
+collector splits on `\n`, so the samples piled up unseen while the stream ran, and arrived as one
+line when something else printed a newline. Under screencast that was a steady "deprecated pixel
+format" warning, which is why the stats looked live before. Under x11 nothing else prints, and on the
+ADR 642 live trial (lane `01M55PYW9D`) six minutes in the log held no `speed=` at all. Since lane
+`01M55REABB` the CLI turns each bare `\r` into `\n` after the secret scrubber (`statsLineBreaks`), on
+the next `musterd stream build`.
