@@ -6,6 +6,7 @@ import {
   PolicyOverrideSchema,
   PolicySchema,
   SPEND_CAP_USD_MAX,
+  UNPRICED_WAKE_CAP_MAX,
   sparsifyPolicy,
 } from './credentials.js';
 import { StylePolicySchema } from './style.js';
@@ -185,5 +186,31 @@ describe('PolicySchema.spend_approval_usd (ADR 635)', () => {
 
   it('sparsifyPolicy keeps a chosen threshold — the key has no schema default to collapse into', () => {
     expect(sparsifyPolicy({ spend_approval_usd: 12.5 })).toEqual({ spend_approval_usd: 12.5 });
+  });
+});
+
+describe('PolicySchema.unpriced_wake_cap (ADR 639)', () => {
+  it('is unset on an empty policy', () => {
+    expect(PolicySchema.parse({}).unpriced_wake_cap).toBeUndefined();
+    expect(PolicyOverrideSchema.parse({}).unpriced_wake_cap).toBeUndefined();
+  });
+
+  it('accepts 0 and the ceiling', () => {
+    expect(PolicySchema.parse({ unpriced_wake_cap: 0 }).unpriced_wake_cap).toBe(0);
+    expect(PolicySchema.parse({ unpriced_wake_cap: UNPRICED_WAKE_CAP_MAX }).unpriced_wake_cap).toBe(
+      UNPRICED_WAKE_CAP_MAX,
+    );
+  });
+
+  it('rejects negatives, non-integers, non-finite values, and a fat-finger past the ceiling', () => {
+    for (const bad of [-1, 1.5, Number.POSITIVE_INFINITY, Number.NaN, UNPRICED_WAKE_CAP_MAX + 1]) {
+      expect(PolicySchema.safeParse({ unpriced_wake_cap: bad }).success).toBe(false);
+      expect(PolicyOverrideSchema.safeParse({ unpriced_wake_cap: bad }).success).toBe(false);
+    }
+  });
+
+  it('sparsifyPolicy keeps 0 and a positive integer', () => {
+    expect(sparsifyPolicy({ unpriced_wake_cap: 0 })).toEqual({ unpriced_wake_cap: 0 });
+    expect(sparsifyPolicy({ unpriced_wake_cap: 4 })).toEqual({ unpriced_wake_cap: 4 });
   });
 });

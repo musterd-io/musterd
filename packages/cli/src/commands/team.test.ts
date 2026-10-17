@@ -214,6 +214,52 @@ describe('team policy command', () => {
     );
   });
 
+  it('--unpriced-wake-cap sets the count, keeps 0, and off clears it (ADR 639)', async () => {
+    const unset = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(unset).toContain('unpriced wake cap: unset');
+    const unsetLine = unset.split('\n').find((line) => line.includes('unpriced wake cap:'));
+    expect(unsetLine).not.toContain('default');
+
+    const zero = await capture(() =>
+      teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '0'])),
+    );
+    expect(zero.code).toBe(0);
+    expect(zero.out).toContain('unpriced wake cap: 0 wakes / 7d');
+    expect(zero.out).toContain('display only');
+    const zeroView = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(zeroView).toContain('unpriced wake cap: 0 wakes / 7d');
+    expect(zeroView.split('\n').find((line) => line.includes('unpriced wake cap:'))).not.toContain(
+      'default',
+    );
+
+    const set = await capture(() =>
+      teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '12'])),
+    );
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('unpriced wake cap: 12 wakes / 7d');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'unpriced wake cap: 12 wakes / 7d',
+    );
+
+    const off = await capture(() =>
+      teamCommand(parseArgs(['policy', '--unpriced-wake-cap', 'off'])),
+    );
+    expect(off.out).toContain('unpriced wake cap off — unpriced wakes stay outside the dollar cap');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'unpriced wake cap: unset',
+    );
+
+    await expect(teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '-1']))).rejects.toThrow(
+      /--unpriced-wake-cap/,
+    );
+    await expect(teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '1.5']))).rejects.toThrow(
+      /--unpriced-wake-cap/,
+    );
+    await expect(
+      teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '10001'])),
+    ).rejects.toThrow(/--unpriced-wake-cap/);
+  });
+
   it('--acceptance-review-window sets the lane-review wait in minutes, and the view says how long (ADR 506)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'acceptance review window: 20m',

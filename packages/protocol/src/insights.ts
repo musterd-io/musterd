@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CiTrendSchema } from './ci-telemetry.js';
-import { SPEND_CAP_USD_MAX } from './credentials.js';
+import { SPEND_CAP_USD_MAX, UNPRICED_WAKE_CAP_MAX } from './credentials.js';
 import { GoalSchema } from './goals.js';
 import { FAMILY_POSTURE_STATES, WAKEABILITIES, type FamilyPosture } from './model.js';
 import { DisputeReadoutSchema } from './sycophancy.js';
@@ -451,6 +451,20 @@ export const WakeMetricsSchema = z.object({
    * without an admin policy read. Omitted when unset. Display only. Nothing is held.
    */
   spend_approval_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
+  /**
+   * ADR 639. Copied from team policy so the report can show the count cap without an admin
+   * policy read. Omitted, together with the count and the over flag, when the key is unset.
+   * Display only. Nothing is denied. 0 is a real cap.
+   */
+  unpriced_wake_cap: z.number().int().min(0).max(UNPRICED_WAKE_CAP_MAX).optional(),
+  /**
+   * Unpriced wakes in the same 7-day window: a session-captured lease with no positive cost,
+   * or a lease that settled with no positive cost. A printed 0 counts. Unique by lease.
+   * Omitted together with the cap.
+   */
+  unpriced_wake_count: z.number().int().nonnegative().optional(),
+  /** `unpriced_wake_count` is at or above `unpriced_wake_cap`, including 0 >= 0. */
+  unpriced_over_cap: z.boolean().optional(),
   /**
    * ADR 252: wakes that PAID for a session and left no price. `residency.wake_cost` is written only
    * when a host reports, so a lease that spawned a session and then expired unreported contributes

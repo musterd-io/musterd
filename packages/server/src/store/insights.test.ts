@@ -12,6 +12,7 @@ import { withDrivers } from '../db/testing.js';
 import { appendAudit } from './audit.js';
 import {
   coordinationDensity,
+  countUnpricedWakes,
   deriveReport,
   peerDemand,
   deriveSteeringMetrics,
@@ -1382,6 +1383,121 @@ withDrivers('insights', (o) => {
       expect(withCap.wake?.spend_approval_usd).toBe(12.5);
       expect(withCap.wake?.spend_cap_usd).toBe(50);
       expect(withCap.wake?.spend_over_cap).toBe(false);
+    });
+
+    it('counts a settled unpriced lease once, and a positive cost drops it (ADR 639)', () => {
+      expect(
+        countUnpricedWakes([
+          {
+            action: 'residency.wake_failed',
+            detail: { lease_id: 'L1', session_captured: true },
+          },
+          {
+            action: 'residency.wake_failed',
+            detail: { lease_id: 'L2', session_captured: true },
+          },
+          { action: 'residency.wake_cost', detail: { lease_id: 'L2', cost_usd: 0.4 } },
+          { action: 'residency.wake_failed', detail: { lease_id: 'L3' } },
+          { action: 'residency.wake_cost', detail: { lease_id: 'Lz', cost_usd: 0 } },
+          { action: 'residency.woke', detail: { lease_id: 'Lflight' } },
+          { action: 'residency.wake_deferred', detail: { lease_id: 'Ldef' } },
+          { action: 'residency.wake_exhausted', detail: {} },
+          { action: 'residency.wake_report_rejected', detail: { lease_id: 'Lrej' } },
+          { action: 'residency.woke', detail: { lease_id: 'Lwoke', cost_usd: 0 } },
+          { action: 'residency.wake_cost', detail: { lease_id: 'Lmix', cost_usd: 0 } },
+          { action: 'residency.wake_cost', detail: { lease_id: 'Lmix', cost_usd: 1 } },
+        ]),
+      ).toBe(5);
+    });
+
+    it('deriveReport carries the unpriced count only when the cap is set (ADR 639)', async () => {
+      const { db, team } = await wakeSeed();
+      const unset = await deriveReport(db, team.id, 'revive', NOW);
+      expect(unset.wake).not.toHaveProperty('unpriced_wake_cap');
+      expect(unset.wake).not.toHaveProperty('unpriced_wake_count');
+      expect(unset.wake).not.toHaveProperty('unpriced_over_cap');
+
+      await setPolicy(db, team.id, { unpriced_wake_cap: 0 });
+      const quiet = await deriveReport(db, team.id, 'revive', NOW);
+      expect(quiet.wake?.unpriced_wake_cap).toBe(0);
+      expect(quiet.wake?.unpriced_wake_count).toBe(0);
+      expect(quiet.wake?.unpriced_over_cap).toBe(true);
+      expect(await deriveWakeMetrics(db, team.id, NOW)).not.toHaveProperty('unpriced_wake_cap');
+
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_failed',
+        'ada',
+        { act: 'h1', lease_id: 'L1', reason: 'lease_expired', session_captured: true },
+        NOW - 50 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_failed',
+        'ada',
+        { act: 'h1', lease_id: 'L2', reason: 'lease_expired', session_captured: true },
+        NOW - 49 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_cost',
+        'ada',
+        { act: 'h1', lease_id: 'L2', cost_usd: 0.4 },
+        NOW - 48 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_failed',
+        'ada',
+        { act: 'h1', lease_id: 'L3', reason: 'lease_expired' },
+        NOW - 47 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_cost',
+        'ada',
+        { act: 'h1', lease_id: 'Lz', cost_usd: 0 },
+        NOW - 46 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.woke',
+        'ada',
+        { act: 'h2', lease_id: 'Lflight' },
+        NOW - 45 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_deferred',
+        'ada',
+        { act: 'h3', lease_id: 'Ldef' },
+        NOW - 44 * 60_000,
+      );
+
+      await setPolicy(db, team.id, { unpriced_wake_cap: 2 });
+      const over = await deriveReport(db, team.id, 'revive', NOW);
+      // L1 captured, L3 settled with no cost, Lz printed 0. L2 is priced. Lflight and Ldef stay out.
+      expect(over.wake?.unpriced_sessions).toBe(1);
+      expect(over.wake?.unpriced_wake_count).toBe(3);
+      expect(over.wake?.unpriced_over_cap).toBe(true);
+
+      await setPolicy(db, team.id, { unpriced_wake_cap: 3 });
+      const atCap = await deriveReport(db, team.id, 'revive', NOW);
+      expect(atCap.wake?.unpriced_wake_count).toBe(3);
+      expect(atCap.wake?.unpriced_over_cap).toBe(true);
+
+      await setPolicy(db, team.id, { unpriced_wake_cap: 4 });
+      const under = await deriveReport(db, team.id, 'revive', NOW);
+      expect(under.wake?.unpriced_wake_cap).toBe(4);
+      expect(under.wake?.unpriced_wake_count).toBe(3);
+      expect(under.wake?.unpriced_over_cap).toBe(false);
     });
 
     // The ADR 209/210 Eval split. The property that matters is NOT the counts — it is that an

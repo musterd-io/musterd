@@ -840,6 +840,14 @@ export function spendApprovalUsd(policy: Policy): number | null {
 }
 
 /**
+ * ADR 639. The team's unpriced-wake cap, or null when nobody set one. Null keeps today's
+ * behavior. 0 is a real cap and must survive: absence stays null, and a stored 0 stays 0.
+ */
+export function unpricedWakeCap(policy: Policy): number | null {
+  return policy.unpriced_wake_cap ?? null;
+}
+
+/**
  * The wait a `lane_review` ask at `tier` promises on this team (ADR 506): the tier's own timeout,
  * floored at the team's `acceptance_review_window_ms`. Every ready row and reroute records this.
  */
