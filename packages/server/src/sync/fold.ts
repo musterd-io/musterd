@@ -650,7 +650,7 @@ async function projectContinuityEvent(
 
 const PRESENCE_VERBS = new Set(['presence.attached', 'presence.detached', 'presence.reattested']);
 
-/** The surfaces this build's `presence` CHECK admits (migration 57). Keep in step with it. */
+/** The surfaces this build's `presence` CHECK admits (migration 104). Keep in step with it. */
 const STORABLE_SURFACES = new Set([
   'cli',
   'claude-code',
@@ -663,6 +663,7 @@ const STORABLE_SURFACES = new Set([
   'slack',
   'other',
   'musterd',
+  'muse',
 ]);
 
 /**

@@ -14,6 +14,12 @@ export interface PortableMigration {
   sql?: string;
   sqlite?: (db: Database.Database) => void;
   postgres?: (d: Driver) => Promise<void>;
+  /**
+   * SQLite only. Threaded onto the legacy `Migration.fkOff`: a table rebuild of an FK parent
+   * (presence, since session_leases) must drop with enforcement off or the drop cascades. Postgres
+   * never rebuilds that way, so it ignores this flag.
+   */
+  fkOff?: boolean;
 }
 
 /**
@@ -28,6 +34,34 @@ const V83_TABLES = [
   ['seat_memory', 'SELECT team_id FROM members m WHERE m.id = seat_memory.member_id'],
   ['seed_thread_entries', 'SELECT team_id FROM seeds s WHERE s.id = seed_thread_entries.seed_id'],
 ] as const;
+
+/** Live presence columns, in table order, at the moment v104 runs. Keep the CREATE in step. */
+const PRESENCE_COLUMNS = [
+  'id',
+  'member_id',
+  'surface',
+  'status',
+  'conn_id',
+  'last_seen_at',
+  'created_at',
+  'held_until',
+  'provenance',
+  'workspace',
+  'driver',
+  'model',
+  'build',
+  'epoch',
+  'wake_lease',
+  'model_source',
+  'node',
+  'guidance_epoch',
+  'team_id',
+  'style_epoch',
+] as const;
+
+/** The presence CHECK list. `fold.ts` `STORABLE_SURFACES` must name the same set. */
+const PRESENCE_SURFACES_SQL =
+  "'cli','claude-code','codex','opencode','grok','cursor','web','ios','slack','other','musterd','muse'";
 
 export const LADDER: PortableMigration[] = [
   {
@@ -422,6 +456,79 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       );
     },
   },
+  {
+    // v104 — ADR 619 storage half. SURFACES gained `muse` on 2026-10-15; the presence CHECK last
+    // grew at v57 (`grok`). A muse join then failed in the claim handler with
+    // `CHECK constraint failed: surface`. SQLite cannot ALTER a CHECK, so this is the v57
+    // copy-drop-rename. The column list is the live table (v57 + node, guidance_epoch, team_id,
+    // style_epoch); a drift from that list throws rather than dropping a column. `fkOff` because
+    // session_leases references presence ON DELETE CASCADE — a drop with enforcement on would
+    // delete every live lease. Postgres replaces the CHECK in place. v103 (ADR 640) already owns
+    // the previous number; it does not touch presence.
+    version: 104,
+    fkOff: true,
+    sqlite: (db) => {
+      const names = (db.prepare('PRAGMA table_info(presence)').all() as { name: string }[]).map(
+        (c) => c.name,
+      );
+      if (names.join(',') !== PRESENCE_COLUMNS.join(',')) {
+        throw new Error(
+          `v104 presence columns drifted from the enumerated copy: ${names.join(',')}`,
+        );
+      }
+      const cols = PRESENCE_COLUMNS.join(', ');
+      db.exec(`
+        CREATE TABLE presence_new (
+          id            TEXT PRIMARY KEY,
+          member_id     TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          surface       TEXT NOT NULL CHECK (surface IN (${PRESENCE_SURFACES_SQL})),
+          status        TEXT NOT NULL DEFAULT 'online' CHECK (status IN ('online','away','offline')),
+          conn_id       TEXT,
+          last_seen_at  INTEGER NOT NULL,
+          created_at    INTEGER NOT NULL,
+          held_until    INTEGER,
+          provenance    TEXT,
+          workspace     TEXT,
+          driver        TEXT,
+          model         TEXT,
+          build         TEXT,
+          epoch         INTEGER,
+          wake_lease    TEXT,
+          model_source  TEXT,
+          node          TEXT,
+          guidance_epoch INTEGER,
+          team_id       TEXT,
+          style_epoch   TEXT
+        );
+        INSERT INTO presence_new (${cols}) SELECT ${cols} FROM presence;
+        DROP TABLE presence;
+        ALTER TABLE presence_new RENAME TO presence;
+        CREATE INDEX IF NOT EXISTS idx_presence_member ON presence(member_id);
+        CREATE INDEX IF NOT EXISTS idx_presence_last_seen ON presence(last_seen_at);
+        CREATE INDEX IF NOT EXISTS idx_presence_node ON presence(node);
+        CREATE INDEX IF NOT EXISTS idx_presence_team ON presence(team_id);
+      `);
+    },
+    postgres: async (d) => {
+      const checks = await d.all<{ name: string }>(
+        `SELECT c.conname AS name
+           FROM pg_constraint c
+           JOIN pg_class r ON r.oid = c.conrelid
+          WHERE r.relname = 'presence'
+            AND c.contype = 'c'
+            AND pg_get_constraintdef(c.oid) ILIKE '%surface%'`,
+      );
+      for (const check of checks) {
+        if (!/^[a-z_][a-z0-9_]*$/.test(check.name)) {
+          throw new Error(`v104 refuses to drop constraint ${check.name}`);
+        }
+        await d.exec(`ALTER TABLE presence DROP CONSTRAINT ${check.name}`);
+      }
+      await d.exec(
+        `ALTER TABLE presence ADD CONSTRAINT presence_surface_check CHECK (surface IN (${PRESENCE_SURFACES_SQL}))`,
+      );
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'
@@ -479,9 +586,10 @@ const HOLDS_INDEX_SQL =
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */
 export function sqliteLadder(
   ladder: PortableMigration[] = LADDER,
-): { version: number; up: (db: Database.Database) => void }[] {
+): { version: number; up: (db: Database.Database) => void; fkOff?: boolean }[] {
   return ladder.map((m) => ({
     version: m.version,
+    ...(m.fkOff ? { fkOff: true as const } : {}),
     up: (db) => {
       if (m.sql !== undefined) db.exec(m.sql);
       else m.sqlite!(db);

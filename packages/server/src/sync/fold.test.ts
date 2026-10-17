@@ -642,6 +642,19 @@ withDrivers('fold', (_o, kind) => {
       await db.close();
     });
 
+    it('presence.attached with surface muse lands (ADR 619, migration 104)', async () => {
+      const { db, team } = await seed();
+      const att = foreignPresence('p-muse', 1, 1, 'presence.attached', {
+        presence: 'pM',
+        surface: 'muse',
+      });
+      expect((await foldBatch(db, team.id, [att])).stop).toBeNull();
+      expect(await db.get("SELECT surface FROM presence WHERE id = 'pM'")).toEqual({
+        surface: 'muse',
+      });
+      await db.close();
+    });
+
     it('an unknown presence verb or a surface this build cannot store stops as unknown_presence_event', async () => {
       const { db, team } = await seed();
       const weird = foreignPresence('p-1', 1, 1, 'presence.attached', {
