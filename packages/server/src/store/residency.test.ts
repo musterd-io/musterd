@@ -14,6 +14,7 @@ import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage } from './messages.js';
 import { attach } from './presence.js';
 import {
+  OWNER_ENGAGEMENT_MS,
   WAKE_DEFER_ACTUATOR_RESTART,
   WAKE_DEFER_SNOOZE_MS,
   WAKE_DEFER_SNOOZE_CAP_MS,
@@ -30,6 +31,7 @@ import {
   hostAsleepMs,
   leaseCapturedSession,
   listWakeableMemberIds,
+  ownerEngaged,
   parsePolicyOverride,
   recordSessionAttestation,
   revokeResidency,
@@ -2028,6 +2030,171 @@ withDrivers('residency', (o, kind) => {
     });
   });
 
+  describe('dispatch owner-engagement check (ADR 628)', async () => {
+    async function dispatchLane(db: Database, team: TeamRow, creator: MemberRow, owner: MemberRow) {
+      const { openLane } = await import('./lanes.js');
+      const lane = await openLane(db, team.id, team.slug, creator.name, {
+        title: 'needs work',
+        claim: true,
+      });
+      if (creator.name !== owner.name) {
+        const { updateLane } = await import('./lanes.js');
+        await updateLane(db, team.id, lane.id, team.slug, {
+          owner_seat: owner.name,
+          state: 'claimed',
+        });
+      }
+      return lane;
+    }
+
+    async function suppressedRows(db: Database, team: TeamRow) {
+      return (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.dispatch_suppressed',
+      );
+    }
+
+    it('ownerEngaged: live presence engages with no acts; a stale seat with no acts does not', async () => {
+      const { db, team, nick, ada } = await seed();
+      expect(await ownerEngaged(db, team.id, ada, PRESENCE_TIMEOUT_MS)).toMatchObject({
+        engaged: false,
+        reason: null,
+      });
+      await attach(db, ada.id, 'claude-code', 'conn-ada');
+      expect(await ownerEngaged(db, team.id, ada, PRESENCE_TIMEOUT_MS)).toMatchObject({
+        engaged: true,
+        reason: 'live_presence',
+      });
+      void nick;
+    });
+
+    it('suppresses a continuation for a recently-active owner: no lease, one row, one nudge', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      const lane = await dispatchLane(db, team, nick, ada);
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: Array<{ laneId: string; owner: string; voice: string | null }> = [];
+      const orders = await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        now,
+        undefined,
+        null,
+        null,
+        {
+          onNudge: (n) => nudges.push(n),
+        },
+      );
+      expect(orders).toHaveLength(0);
+      const rows = await suppressedRows(db, team);
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
+        lane_id: lane.id,
+        edge: 'dispatch_continuation',
+        reason: 'owner_active',
+        nudge_sent: true,
+      });
+      // Voice is the creator (not the owner): a self-send never reaches an inbox.
+      expect(nudges).toHaveLength(1);
+      expect(nudges[0]).toMatchObject({ laneId: lane.id, owner: 'Ada', voice: 'nick' });
+    });
+
+    it('a second poll inside the window suppresses again but does not re-nudge', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      await dispatchLane(db, team, nick, ada);
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: unknown[] = [];
+      const collect = { onNudge: (n: unknown) => nudges.push(n) };
+      expect(
+        await claimWakeLeases(
+          db,
+          team.id,
+          team.slug,
+          HOST,
+          PRESENCE_TIMEOUT_MS,
+          now,
+          undefined,
+          null,
+          null,
+          collect,
+        ),
+      ).toHaveLength(0);
+      expect(
+        await claimWakeLeases(
+          db,
+          team.id,
+          team.slug,
+          HOST,
+          PRESENCE_TIMEOUT_MS,
+          now + 1000,
+          undefined,
+          null,
+          null,
+          collect,
+        ),
+      ).toHaveLength(0);
+      expect(await suppressedRows(db, team)).toHaveLength(2);
+      expect(nudges).toHaveLength(1);
+    });
+
+    it('an idle owner still gets the continuation lease (the stalled case the loop is for)', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      const lane = await dispatchLane(db, team, nick, ada);
+      const orders = await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        Date.now() + OWNER_ENGAGEMENT_MS + 60_000,
+      );
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({ seat: 'Ada', derivation: 'work_order', lane_id: lane.id });
+      expect(await suppressedRows(db, team)).toHaveLength(0);
+    });
+
+    it('a self-opened lane with no second voice suppresses without a nudge', async () => {
+      const { db, team, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      // Created AND owned by ada: no voice but her own (which would never arrive).
+      await dispatchLane(db, team, ada, ada);
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: unknown[] = [];
+      const orders = await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        now,
+        undefined,
+        null,
+        {
+          onNudge: (n: unknown) => nudges.push(n),
+        },
+      );
+      expect(orders).toHaveLength(0);
+      const rows = await suppressedRows(db, team);
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
+        nudge_sent: false,
+        no_voice: true,
+      });
+      expect(nudges).toHaveLength(0);
+    });
+  });
+
   describe('claimWakeLeases — resume eligibility (ADR 210 exact-match continuity)', async () => {
     // The daemon may only MARK a wake resume_eligible. That mark is permission to consider a local
     // resume, never an instruction to perform one — the host still has to prove an exact match.
@@ -2270,6 +2437,14 @@ withDrivers('residency', (o, kind) => {
       await msg(db, team, ada, nick, 'accept', 'a1', 2_000, { meta: { in_reply_to: 'h1' } });
       await updateLane(db, team.id, handed.id, team.slug, { state: 'awaiting_acceptance' });
       const cont = await openLane(db, team.id, team.slug, ada.name, { title: 'c', claim: true });
+      // ADR 628: Ada's own open acts engage her; age those rows out so this idle-owner case
+      // reads idle (the rule under test is edge stamping, not engagement).
+      await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND target = ? AND actor = ?`, [
+        Date.now() - OWNER_ENGAGEMENT_MS - 60_000,
+        team.id,
+        cont.id,
+        ada.name,
+      ]);
       const contOrders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       const contLease = contOrders.find((o) => o.lane_id === cont.id);
       expect(contLease).toBeTruthy();
@@ -2510,6 +2685,13 @@ withDrivers('residency', (o, kind) => {
         // the seat woke and did work: the lane moves after the wake it answered
         await laneTouched(db, lane.id, wokeTs + 1);
       }
+      // ADR 628: age the owner's own open acts out (see above).
+      await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND target = ? AND actor = ?`, [
+        Date.now() - OWNER_ENGAGEMENT_MS - 60_000,
+        team.id,
+        lane.id,
+        ada.name,
+      ]);
       const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
     });
@@ -2552,6 +2734,13 @@ withDrivers('residency', (o, kind) => {
       const wokeTs = Date.now() - WAKE_COOLDOWN_MS - 1;
       await wokeEdge(db, team.id, lane.id, 'dispatch_continuation', wokeTs);
       await laneTouched(db, lane.id, wokeTs + 1);
+      // ADR 628: age the owner's own open acts out (see above).
+      await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND target = ? AND actor = ?`, [
+        Date.now() - OWNER_ENGAGEMENT_MS - 60_000,
+        team.id,
+        lane.id,
+        ada.name,
+      ]);
       const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
     });

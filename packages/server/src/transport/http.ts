@@ -197,6 +197,7 @@ import {
 } from '../protocol/gate.js';
 import {
   acceptanceAskBody,
+  deliverDispatchNudge,
   deliverLaneAskAct,
   deliverLaneAskSuperseded,
   followsUpNotice,
@@ -395,6 +396,7 @@ import {
   appendWakeTurn,
   claimWakeLeases,
   listWakeTranscript,
+  type DispatchNudge,
   type HostScope,
   hostMayServe,
   TEAM_WIDE_HOST,
@@ -4550,6 +4552,10 @@ export async function handleHttp(
         // ADR 611 and ADR 641. One read of each cap per poll. A throw inside a reader allows the poll.
         const breach = await readSpendCapBreach(ctx.db, team.id, now);
         const unpriced = await readUnpricedWakeBreach(ctx.db, team.id, now);
+        // ADR 628: suppressed dispatches speak now, through the normal delivery that rings
+        // live sessions and the doorbell alike. Best-effort each — a failed nudge never fails
+        // the poll that suppressed the duplicate.
+        const nudges: DispatchNudge[] = [];
         const orders = await claimWakeLeases(
           ctx.db,
           team.id,
@@ -4560,7 +4566,25 @@ export async function handleHttp(
           scope,
           breach,
           unpriced,
+          { onNudge: (nudge) => nudges.push(nudge) },
         );
+        for (const nudge of nudges) {
+          if (nudge.voice === null) continue;
+          try {
+            const voice = await getMemberByName(ctx.db, team.id, nudge.voice);
+            if (!voice) continue;
+            await deliverDispatchNudge(
+              ctx,
+              team,
+              voice,
+              nudge.owner,
+              { id: nudge.laneId, title: nudge.laneTitle },
+              nudge.evidence,
+            );
+          } catch {
+            continue;
+          }
+        }
         return sendJson(res, 200, { orders });
       }
 

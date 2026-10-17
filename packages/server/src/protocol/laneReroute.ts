@@ -174,6 +174,41 @@ export async function deliverLaneAskAct(
   }
 }
 
+/**
+ * The dispatch-suppression nudge (ADR 628): the board held a continuation wake because the lane's
+ * owner looks engaged, so no second worker started. A directed `request_help` — interrupt-class on
+ * both seams, so a live session's interrupt-check trips and an idle one rings. Voiced by someone
+ * other than the owner (a self-send never reaches an inbox, per the incident precedent);
+ * daemon-composed and marked, advisory like every lane delivery — a failed send never fails the
+ * suppression it rode in on.
+ */
+export async function deliverDispatchNudge(
+  ctx: Ctx,
+  team: TeamRow,
+  voice: MemberRow,
+  to: string,
+  lane: { id: string; title: string },
+  evidence: string,
+): Promise<boolean> {
+  try {
+    const env = makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: voice.name,
+      to: { kind: 'member', name: to },
+      act: 'request_help',
+      body:
+        `board held a continuation wake for lane ${lane.id} ("${lane.title}") — you look ` +
+        `active (${evidence}), so no second worker started. Take it up or release it.`,
+      meta: { dispatch_nudge: { lane: lane.id } },
+    });
+    await routeEnvelope(ctx, team, voice, env, undefined, true);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function deliverLaneAskSuperseded(
   ctx: Ctx,
   team: TeamRow,
