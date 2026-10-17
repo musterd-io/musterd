@@ -64,8 +64,12 @@ keeps the stream at 15 fps the whole time. Each lower rung was given a bar scale
   floor, relaunch and freeze lines never appeared. All 450 ffmpeg samples (one per 10 s) held
   `fps=30` and `speed=1.00–1.04x`. The bitrate ran 3899–4037 kbit/s, under the 4500k cap, and 48 frames
   dropped in total, all in the first 10 s. The audio sink came up and ffmpeg opened its stereo input,
-  but nobody listened, so "audio heard" is unconfirmed (nick, 2026-10-17). The stream stays on x11
-  at 30. Numbers: `docs/perf/broadcast-baseline.md`, "Live trial".
+  but nobody listened, so "audio heard" is unconfirmed. So the trial did not pass Decision 4 as
+  written. **nick kept x11 at 30 anyway, with audio unconfirmed** (in chat, 2026-10-17: told that
+  the stream stays on x11 at 30 until audio is answered, "sounds good, lets just leave the audio part
+  as unconfirmed"). This waives the listen; it does not pass it. If a later listen finds no audio, the stream reverts
+  with `BROADCAST_ARGS="--capture screencast --fps 15"`. Numbers: `docs/perf/broadcast-baseline.md`,
+  "Live trial".
 
 ## Observability & Evaluation
 
