@@ -45,6 +45,12 @@ export interface ProvisionDeps {
   /** `--clone`: a full clone instead of a `git worktree`, for isolation from the sponsor's checkout. */
   clone: boolean;
   log: (line: string) => void;
+  /**
+   * ADR 648: the environment variable holding the model key a resident (`musterd` harness)
+   * seat runs on — recorded as the registry entry's `key_env` (the NAME, never the value,
+   * ADR 588). Without it a provisioned resident seat enrols but cannot run.
+   */
+  keyEnv?: string;
   // ── injectables (tests) ──
   provisionWorkspace?: typeof provisionWorkspace;
   provisionSeat?: typeof provisionSeat;
@@ -191,6 +197,7 @@ async function standUp(deps: ProvisionDeps, row: HostProvision): Promise<void> {
       workspace: dir,
       harness: res.residency.harness,
       host: res.residency.host,
+      ...(deps.keyEnv !== undefined ? { key_env: deps.keyEnv } : {}),
     });
   } catch (err) {
     throw new StepError('enroll', err);

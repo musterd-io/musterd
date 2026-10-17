@@ -120,6 +120,10 @@ export async function buildCloudProvisioner(
     harness,
     repoRoot,
     clone: parsed.flags['clone'] !== false,
+    // The resident engine reads its key from this variable at spawn (ADR 588); the name only.
+    ...(harness.id === 'musterd'
+      ? { keyEnv: flagStr(parsed.flags, 'key-env') ?? 'ANTHROPIC_API_KEY' }
+      : {}),
   };
   return () => provisionOnce({ ...base, log });
 }
