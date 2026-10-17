@@ -417,15 +417,15 @@ export type Pick = z.infer<typeof PickSchema>;
  * a host may take it unprompted (spec 2026-10-17 §4.1 "band 2"). Declared by the opener, never
  * inferred from title or detail (ADR 530/536); the three text parts are the declaration, not a
  * check against free text. `expected_spend` is USD the run is expected to cost in model calls;
- * `0` is unmetered work. A `not_before` (ms) withholds the lane from a pull until then — a person
- * may still claim it early (the date gates the machine, not the human). `by` / `at` are stamped by
- * the daemon from the authenticated writer.
+ * `0` is unmetered work. There is no date here: a dated read carries ADR 644's `reads_on` beside
+ * this declaration, and {@link pullEligible} withholds the lane from a pull until that day — a
+ * person may still claim it early (the date gates the machine, not the human). `by` / `at` are
+ * stamped by the daemon from the authenticated writer.
  */
 export const LanePreRegisteredSchema = z.object({
   run: z.string().min(1).max(2000),
   verdict_rule: z.string().min(1).max(2000),
   record: z.string().min(1).max(500),
-  not_before: z.number().int().optional(),
   expected_spend: z.number().min(0).max(100000),
   by: z.string().min(1).max(80),
   at: z.number().int(),
@@ -454,22 +454,25 @@ export function preRegisteredRefusal(lane: {
 }
 
 /**
- * ADR 645 §3: whether a pull may offer this lane now — open and unowned, declared, and past its
- * `not_before`. Role fit is the caller's (the host knows its seats); this answers only the lane's
- * side. Pure, so the pull and the picker agree.
+ * ADR 645 §3: whether a pull may offer this lane today — open and unowned, declared, and not before
+ * its ADR 644 `reads_on` day. `today` is the `YYYY-MM-DD` day in the team's calendar zone
+ * (`CALENDAR_DEFAULT_TZ`), the same clock `read_status` is derived on, so the panel's `waiting` and
+ * the pull's "not yet" agree. Role fit is the caller's (the host knows its seats); this answers only
+ * the lane's side. Pure, so the pull and the picker agree.
  */
 export function pullEligible(
   lane: {
     state: string;
     owner_seat: string | null;
     pre_registered?: LanePreRegistered | null | undefined;
+    reads_on?: string | null | undefined;
   },
-  now: number,
+  today: string,
 ): boolean {
   if (lane.state !== 'open' || lane.owner_seat !== null) return false;
-  const pr = lane.pre_registered;
-  if (!pr) return false;
-  return pr.not_before === undefined || pr.not_before <= now;
+  if (!lane.pre_registered) return false;
+  // Real-day strings compare lexicographically; a day before today is "past" and today is "due".
+  return !lane.reads_on || lane.reads_on <= today;
 }
 
 /** ADR 624: the most recent decline — a release that gave a reason. Any later claim clears it. */
