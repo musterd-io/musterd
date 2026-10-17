@@ -15,6 +15,8 @@ import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
 import { bindSeatToNode, upsertForeignNode } from './nodes.js';
 import { attach } from './presence.js';
 import {
+  BOARD_SEAT,
+  boardSeat,
   OWNER_ENGAGEMENT_MS,
   WAKE_DEFER_ACTUATOR_RESTART,
   WAKE_DEFER_SNOOZE_MS,
@@ -2075,7 +2077,7 @@ withDrivers('residency', (o, kind) => {
       const lane = await dispatchLane(db, team, nick, ada);
       const now = Date.now();
       await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
-      const nudges: Array<{ laneId: string; owner: string; voice: string | null }> = [];
+      const nudges: Array<{ laneId: string; owner: string }> = [];
       const orders = await claimWakeLeases(
         db,
         team.id,
@@ -2099,12 +2101,16 @@ withDrivers('residency', (o, kind) => {
         reason: 'owner_active',
         nudge_sent: true,
       });
-      // Voice is the creator (not the owner): a self-send never reaches an inbox.
+      // ADR 646: the board speaks, not the lane's creator — the poll handler sends as `board`.
       expect(nudges).toHaveLength(1);
-      expect(nudges[0]).toMatchObject({ laneId: lane.id, owner: 'Ada', voice: 'nick' });
+      expect(nudges[0]).toMatchObject({ laneId: lane.id, owner: 'Ada' });
+      expect(nudges[0]).not.toHaveProperty('voice');
     });
 
-    it('never voices a nudge as a seat bound to another node: that push is refused and wedges the node', async () => {
+    it('nudges when the lane creator is bound to another node: the board is never node-bound (ADR 646, #2807)', async () => {
+      // #2807 found a nudge voiced as a member bound to the hub, minted on a joiner, refused as
+      // bound_elsewhere, wedging the node's push. The board is a service seat, which the push
+      // never binds (sync/log.ts), so where the creator lives no longer matters.
       const { db, team, nick, ada } = await seed();
       await setPolicy(db, team.id, { loops: { dispatch: true } });
       await enroll(db, team, ada, HOST, { flow: 'auto' });
@@ -2118,7 +2124,7 @@ withDrivers('residency', (o, kind) => {
       await bindSeatToNode(db, team.id, nick.id, 'NODE-HUB');
       const now = Date.now();
       await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
-      const nudges: Array<{ voice: string | null }> = [];
+      const nudges: unknown[] = [];
       await claimWakeLeases(
         db,
         team.id,
@@ -2129,46 +2135,14 @@ withDrivers('residency', (o, kind) => {
         undefined,
         null,
         null,
-        {
-          onNudge: (n) => nudges.push(n),
-        },
+        { onNudge: (n: unknown) => nudges.push(n) },
       );
-      expect(nudges).toHaveLength(0);
+      expect(nudges).toHaveLength(1);
       const rows = await suppressedRows(db, team);
-      expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
-        nudge_sent: false,
-        no_voice: true,
-      });
+      expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({ nudge_sent: true });
     });
 
-    it('still voices a nudge as a seat bound to this node', async () => {
-      const { db, team, nick, ada } = await seed();
-      await setPolicy(db, team.id, { loops: { dispatch: true } });
-      await enroll(db, team, ada, HOST, { flow: 'auto' });
-      await dispatchLane(db, team, nick, ada);
-      const local = await localNodeForTeam(db, team.id);
-      await bindSeatToNode(db, team.id, nick.id, local.id);
-      const now = Date.now();
-      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
-      const nudges: Array<{ voice: string | null }> = [];
-      await claimWakeLeases(
-        db,
-        team.id,
-        team.slug,
-        HOST,
-        PRESENCE_TIMEOUT_MS,
-        now,
-        undefined,
-        null,
-        null,
-        {
-          onNudge: (n) => nudges.push(n),
-        },
-      );
-      expect(nudges).toMatchObject([{ voice: 'nick' }]);
-    });
-
-    it('a second poll inside the window suppresses again but does not re-nudge', async () => {
+    it('a second poll inside the window suppresses silently: one row and one nudge per episode (ADR 646)', async () => {
       const { db, team, nick, ada } = await seed();
       await setPolicy(db, team.id, { loops: { dispatch: true } });
       await enroll(db, team, ada, HOST, { flow: 'auto' });
@@ -2205,8 +2179,26 @@ withDrivers('residency', (o, kind) => {
           collect,
         ),
       ).toHaveLength(0);
-      expect(await suppressedRows(db, team)).toHaveLength(2);
+      expect(await suppressedRows(db, team)).toHaveLength(1);
       expect(nudges).toHaveLength(1);
+      // Past the window the owner is still engaged: a new episode, a new row and nudge.
+      await msg(db, team, ada, null, 'status_update', 's2', now + OWNER_ENGAGEMENT_MS);
+      expect(
+        await claimWakeLeases(
+          db,
+          team.id,
+          team.slug,
+          HOST,
+          PRESENCE_TIMEOUT_MS,
+          now + OWNER_ENGAGEMENT_MS + 1000,
+          undefined,
+          null,
+          null,
+          collect,
+        ),
+      ).toHaveLength(0);
+      expect(await suppressedRows(db, team)).toHaveLength(2);
+      expect(nudges).toHaveLength(2);
     });
 
     it('an idle owner still gets the continuation lease (the stalled case the loop is for)', async () => {
@@ -2227,11 +2219,11 @@ withDrivers('residency', (o, kind) => {
       expect(await suppressedRows(db, team)).toHaveLength(0);
     });
 
-    it('a self-opened lane with no second voice suppresses without a nudge', async () => {
+    it('a self-opened lane is nudged too: the board needs no second member (ADR 646)', async () => {
       const { db, team, ada } = await seed();
       await setPolicy(db, team.id, { loops: { dispatch: true } });
       await enroll(db, team, ada, HOST, { flow: 'auto' });
-      // Created AND owned by ada: no voice but her own (which would never arrive).
+      // Created AND owned by ada. Under ADR 628 there was no voice but her own; the board is one.
       await dispatchLane(db, team, ada, ada);
       const now = Date.now();
       await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
@@ -2245,18 +2237,55 @@ withDrivers('residency', (o, kind) => {
         now,
         undefined,
         null,
-        {
-          onNudge: (n: unknown) => nudges.push(n),
-        },
+        null,
+        { onNudge: (n: unknown) => nudges.push(n) },
       );
       expect(orders).toHaveLength(0);
       const rows = await suppressedRows(db, team);
       expect(rows).toHaveLength(1);
+      const detail = JSON.parse(rows[0]!.detail ?? '{}');
+      expect(detail).toMatchObject({ nudge_sent: true });
+      expect(detail).not.toHaveProperty('no_voice');
+      expect(nudges).toHaveLength(1);
+    });
+
+    it('when `board` is a person or an agent, the board stays silent and says so', async () => {
+      const { db, team, nick, ada } = await seed();
+      await addMember(db, team, { name: BOARD_SEAT, kind: 'human' });
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enroll(db, team, ada, HOST, { flow: 'auto' });
+      await dispatchLane(db, team, nick, ada);
+      const now = Date.now();
+      await msg(db, team, ada, null, 'status_update', 's1', now - 60_000);
+      const nudges: unknown[] = [];
+      expect(
+        await claimWakeLeases(
+          db,
+          team.id,
+          team.slug,
+          HOST,
+          PRESENCE_TIMEOUT_MS,
+          now,
+          undefined,
+          null,
+          null,
+          { onNudge: (n: unknown) => nudges.push(n) },
+        ),
+      ).toHaveLength(0);
+      const rows = await suppressedRows(db, team);
       expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
         nudge_sent: false,
         no_voice: true,
       });
       expect(nudges).toHaveLength(0);
+      expect(await boardSeat(db, team)).toBeNull();
+    });
+
+    it('boardSeat mints one service seat on first use and reuses it', async () => {
+      const { db, team } = await seed();
+      const first = await boardSeat(db, team);
+      expect(first).toMatchObject({ name: BOARD_SEAT, kind: 'service' });
+      expect((await boardSeat(db, team))!.id).toBe(first!.id);
     });
   });
 

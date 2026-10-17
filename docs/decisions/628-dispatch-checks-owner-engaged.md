@@ -42,6 +42,8 @@ the silence is what made it wasteful rather than merely redundant.
    is not the owner, else the most recent non-owner lane actor, else suppress-only with the audit
    noting no voice. An engaged self-opener still gets full duplicate protection; `team_next`
    still shows them the need.
+   _(Amended 2026-10-17: superseded by [ADR 646](646-dispatch-nudge-board-voice.md): the nudge comes from a
+   `board` service seat, and a self-opener is nudged too.)_
 4. **Silence dispatches.** Engagement fades with inactivity, so a nudged owner who stays quiet
    ages out within W and the next poll dispatches normally. The loop's liveness guarantee is a
    delay of at most one window, never a refusal. Unowned and idle-owner lanes dispatch exactly as
@@ -64,6 +66,10 @@ the silence is what made it wasteful rather than merely redundant.
    (`bound_elsewhere`), which wedged a joiner's whole sync. The voice is now the first of the lane
    creator, then recent non-owner actors, that is unbound or bound to the serving node; none
    eligible reads as `no_voice`, and suppression still holds.
+
+- _2026-10-17 (ADR 646):_ the suppression row is written once per episode (the first suppression
+  of a lane inside W), not on every poll. The tuning rule above compares episodes, so it reads the
+  same rows it always meant to.
 
 ## Observability & Evaluation
 

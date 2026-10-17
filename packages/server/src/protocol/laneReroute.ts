@@ -177,10 +177,10 @@ export async function deliverLaneAskAct(
 /**
  * The dispatch-suppression nudge (ADR 628): the board held a continuation wake because the lane's
  * owner looks engaged, so no second worker started. A directed `request_help` — interrupt-class on
- * both seams, so a live session's interrupt-check trips and an idle one rings. Voiced by someone
- * other than the owner (a self-send never reaches an inbox, per the incident precedent);
- * daemon-composed and marked, advisory like every lane delivery — a failed send never fails the
- * suppression it rode in on.
+ * both seams, so a live session's interrupt-check trips and an idle one rings. Voiced by the
+ * team's `board` service seat (ADR 646), never a member who did not write it; daemon-composed and
+ * marked, advisory like every lane delivery — a failed send never fails the suppression it rode in
+ * on.
  */
 export async function deliverDispatchNudge(
   ctx: Ctx,
