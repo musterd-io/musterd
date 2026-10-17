@@ -391,3 +391,13 @@ export const ContinuityRegistry = z.object({ version:1, team, seat, bindings:Con
 
 `client-address.ts` (ADR 634) owns the local transport IP-address schema used to select Cloud
 admission counters. It does not change protocol messages or grant authorization.
+
+`lanes.ts` (ADR 645) carries the **pre-registered declaration**: `Lane.pre_registered`
+`{run, verdict_rule, record, not_before?, expected_spend, by, at}` (`LanePreRegisteredSchema`; the
+opener's form `OpenPreRegisteredSchema` omits `by`/`at`, which the daemon stamps), accepted on
+`lane_open` and `lane_update` (`null` withdraws it). Two pure rules ride beside it so the daemon,
+the CLI and a host agree: `preRegisteredRefusal(lane)` — why a lane may not be declared (any risk
+tag, `user-facing`, `stakes: 'high'`), and `pullEligible(lane, now)` — open, unowned, declared and
+past `not_before`. `PickSchema.via` gains `'pull'` with an `ask` (the announcement act), the claim a
+host makes for an enrolled seat; `attested` stays false (nobody signed as the seat). All additive;
+absent reads as not declared, no epoch bump.
