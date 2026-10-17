@@ -59,6 +59,14 @@ keeps the stream at 15 fps the whole time. Each lower rung was given a bar scale
 - Box CPU: x11 at 30 leaves about a third of the box idle against a fifth for today's screencast at
   30, so the encoder's queue watchdog has room.
 
+- _(2026-10-17, lane `01M55PYW9D`)_ **Live trial: three of four checks passed, audio unconfirmed.**
+  The trial ran 75 min (20:12–21:27 UTC) on image `71f1759` against the live revive room. The draw
+  floor, relaunch and freeze lines never appeared. All 450 ffmpeg samples (one per 10 s) held
+  `fps=30` and `speed=1.00–1.04x`. The bitrate ran 3899–4037 kbit/s, under the 4500k cap, and 48 frames
+  dropped in total, all in the first 10 s. The audio sink came up and ffmpeg opened its stereo input,
+  but nobody listened, so "audio heard" is unconfirmed (nick, 2026-10-17). The stream stays on x11
+  at 30. Numbers: `docs/perf/broadcast-baseline.md`, "Live trial".
+
 ## Observability & Evaluation
 
 - **Traces:** n/a. This changes the capture pipeline, not an agent-facing path.

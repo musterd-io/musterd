@@ -752,3 +752,14 @@ format" warning, which is why the stats looked live before. Under x11 nothing el
 ADR 642 live trial (lane `01M55PYW9D`) six minutes in the log held no `speed=` at all. Since lane
 `01M55REABB` the CLI turns each bare `\r` into `\n` after the secret scrubber (`statsLineBreaks`), on
 the next `musterd stream build`.
+
+## `stream stop` does not stop the CLI; Fly kills it 30 s later (2026-10-17; falsify: `musterd stream stop` on a live stream, and `fly logs` shows the main child exiting before the `SIGTERM` line) <!-- claim: defect -->
+
+On the ADR 642 live trial, `stream stop` at 21:26:59 UTC sent `SIGINT` to the entrypoint (`PID 663`).
+Nothing exited, so Fly sent `SIGTERM` at 21:27:29 and the machine rebooted. The 2026-10-16
+screencast run did the same (`SIGINT` 21:12:51, `SIGTERM` 21:13:21), so x11 did not cause it. The
+CLI's graceful stop (ffmpeg `q`, then the queue flush) did not run on either date. Both streams ended on the kill, and
+ffmpeg's buffered stats reach the log only as the box goes down. Unverified cause: the entrypoint is
+a non-interactive bash running the CLI in the foreground, and bash defers a `SIGINT` sent only to
+itself until that child exits, so the CLI never sees it.
+
