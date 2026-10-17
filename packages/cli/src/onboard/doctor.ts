@@ -10,7 +10,6 @@ import {
   type Binding,
   type WorkspaceRepairBody,
 } from '@musterd/protocol';
-import { sameCommit } from '@musterd/protocol/build-stamp';
 import { resolveWorkspace } from '@musterd/protocol/project';
 import { HttpClient, isSessionLeaseRefusal } from '../client.js';
 import { resolveRead } from '../commands/helpers.js';
@@ -26,6 +25,7 @@ import {
 } from '../config.js';
 import { CliError } from '../errors.js';
 import { inspectWakeMusterd } from '../host/pinnedBin.js';
+import { sameCommit } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { packagedInstallNotes } from '../runtime.js';
 import { inspectCensus } from '../service/census.js';

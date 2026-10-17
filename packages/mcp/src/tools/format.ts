@@ -11,7 +11,7 @@ import {
   describeSyncWedge,
   type RosterSyncState,
 } from '@musterd/protocol';
-import { readBuildStamp, sameCommit } from '@musterd/protocol/build-stamp';
+import { readBuildStamp } from '@musterd/protocol/build-stamp';
 import { packageRoot } from '../packageRoot.js';
 
 /**
@@ -573,6 +573,13 @@ export async function buildSkewWarning(client: {
 }): Promise<string> {
   const w = await buildSkewOf(client);
   return w ? `\n${w.text}` : '';
+}
+
+/** Same commit, ignoring the `-dirty` marker: `<sha>` vs `<sha>-dirty` is not skew. The CLI's
+ *  twin is `sameCommit` in onboard/doctor.ts; a shared copy in @musterd/protocol would be a contract
+ *  edit (hard rule 1) for a one-line string rule. */
+function sameCommit(a: string, b: string): boolean {
+  return a.replace(/-dirty$/, '') === b.replace(/-dirty$/, '');
 }
 
 /**

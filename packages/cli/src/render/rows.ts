@@ -10,9 +10,26 @@ import {
   type MemberSummary,
   type PresenceStatus,
 } from '@musterd/protocol';
-import { sameCommit } from '@musterd/protocol/build-stamp';
 import { clock, dayLabel, sinceLabel, theme } from './theme.js';
 import { heading, hint, padEndVisible, sym, termWidth, visibleLen, wrapText } from './ui.js';
+
+/**
+ * Do two build refs name the same commit, ignoring the `-dirty` uncommitted-work marker?
+ *
+ * A seat with uncommitted edits builds `<sha>-dirty` while the daemon runs a clean `<sha>`. That is
+ * not skew — it is the normal state of a worktree someone is working in, and the dist *is* the code
+ * they think it is. Reporting it was doubly wrong: both refs render identically once truncated for
+ * display, so the line literally read "your CLI build (3260685) differs from the daemon (3260685)",
+ * and its advice ("rebuild it") could not help, because the difference was the developer's own edits.
+ * A skew line that fires constantly on every active seat is the noise failure ADR 168 named.
+ *
+ * Genuine skew still reports: a different commit differs with or without the marker. Used by
+ * `musterd status`, the roster facet and the doctor; the MCP adapter keeps its own copy (tools/format.ts), since a
+ * helper in @musterd/protocol is a contract edit (hard rule 1).
+ */
+export function sameCommit(a: string, b: string): boolean {
+  return a.replace(/-dirty$/, '') === b.replace(/-dirty$/, '');
+}
 
 export type KindOf = (name: string) => MemberKind;
 
