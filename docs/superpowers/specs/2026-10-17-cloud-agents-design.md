@@ -97,6 +97,28 @@ them for you, on your key, metered and on the record.
   each in a container or microVM under the jail. Taken only with phase 1–2 isolation evidence and
   its own ADR; a shared host where the jail is the only boundary is the anti-goal.
 
+### 4.1b Database topology — no new store, no SQLite sync into Cloud
+
+The team server of record is the only store a cloud agent touches, and its engine depends on
+where the team lives: SQLite (one team per file) on a member's daemon, Postgres (Neon,
+`team_id` + row-level security, ADR 479) on musterd Cloud. A cloud agent adds no database of
+either kind:
+
+- **Phase 1 (hosted team): the agent machine runs no team daemon and holds no team store.** It
+  is a remote actuator and engine host: it claims wake leases and reports over the hosted
+  server's API, and its only local state is the seat workspace, the host registry and the
+  seat's credentials. Building it as a daemon with its own SQLite database that syncs into the
+  hosted team is refused — SQLite sync is replication between SQLite daemons, and a hosted
+  Cloud team takes no SQLite joiner into its Postgres database.
+- **Phase 2b (laptop hub) is the only sync shape:** there both hub and agent machine run SQLite
+  daemons and replicate as delta did, because the hub itself is SQLite.
+- **Metering, audit and credits are team-server records** (Postgres for a hosted team), written
+  by the server from the agent's reports; the agent machine keeps no authoritative ledger.
+- **Any new server data is dual-dialect by construction:** the portable migration ladder (or an
+  explicit `{sqlite, postgres}` pair) from v81 on, `team_id`/RLS scoping on Postgres, and store
+  tests on both drivers (`withDrivers`). Provisioning state lives on the team server, never in
+  the console's separate accounts database.
+
 ### 4.2 Whose key, what musterd charges — phased
 
 - **Phase 1 — BYOK.** The sponsor's API key, held per seat in the host keychain (ADR 605),
