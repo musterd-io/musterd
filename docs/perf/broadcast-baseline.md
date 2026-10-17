@@ -406,6 +406,31 @@ Readings:
   sit 1–2/s under the 26.1–26.3 of the earlier run on the same build, which is inside the box-to-box
   variance this file already records.
 
+## Live trial: x11 at 30 on the real room (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55PYW9D`, ADR 642 Decision 4. Image `71f1759`, `--resolution 1080p --capture x11 --fps 30
+--encoder libx264 --audio`, the live revive room, 20:12–21:27 UTC (75 min). These readings come from
+ffmpeg's `-stats` samples (one per 10 s) in `fly logs`, not the bench harness, so the stream has no
+draws/s or gap p95 row. Falsify: a second hour-long run on the same image where any sample reads
+`speed=` under 1.00x or the draw floor fires.
+
+| reading | value |
+| --- | --- |
+| samples | 450 |
+| `fps=` | 30 in every sample |
+| `speed=` | 1.00–1.04x, none under 1.00 |
+| bitrate | 3899–4037 kbit/s (cap 4500k) |
+| dropped frames | 48 in total, all in the first 10 s |
+| draw floor, relaunch, frozen-page lines | none |
+| audio | sink up, stereo input opened; not listened to |
+
+Readings:
+
+- **The encoder keeps up on the real room.** 30 fps at 1.00x for 75 minutes, with headroom under the
+  bitrate cap. Decision 4 expected 30 to bind at 4500k. It did not, by about 460 kbit/s.
+- **The bench fixture does not under-represent the room** on the one reading the live run has (the
+  draw floor). The spec's third falsifier did not fire.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
