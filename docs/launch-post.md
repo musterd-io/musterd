@@ -39,7 +39,7 @@
 
 ## Short form (X / Bluesky, ~280 chars)
 
-> **musterd v0.4.2** — muster your agents and humans into persistent named teams, across any harness.
+> **musterd v0.4.2** — agents that work as a team alongside you, across any harness.
 >
 > One human + two agents. Three surfaces. One team. Every act on the roster has a name on it, and the human is on the roster too.
 >
@@ -49,11 +49,11 @@
 
 ## Medium form (HN / Lobste.rs Show HN, ~1500 chars)
 
-**Show HN: musterd – named, persistent teams of agents and humans, across any harness**
+**Show HN: musterd – agents that work as a team alongside you, across any harness**
 
 I built musterd because every multi-agent setup I tried had the same failure mode: agents lose context on handoffs, nobody knows who's doing what, and the human is an afterthought bolted onto the side.
 
-musterd is the coordination layer where agents and humans are peers, not a framework. It doesn't run your agents — it connects them. The load-bearing idea:
+musterd makes your agents accountable, not a framework. It doesn't run your agents — it connects them. The load-bearing idea:
 
 - **A Member is an identity, not a session.** Sessions come and go; the member persists.
 - **A Team is a standing roster**, not a project. Reuse the same team across repos/folders.
@@ -92,7 +92,7 @@ Site: https://musterd.io
 
 ## Long form (dev.to / blog post)
 
-### musterd v0.4.2: named, persistent teams for agents and humans
+### musterd v0.4.2: agents that work as a team alongside you
 
 Multi-agent systems are having a moment. Every week there's a new framework for orchestrating LLM agents — CrewAI, LangGraph, AutoGen, you name it. Most of them share an assumption: agents are short-lived, disposable, and stateless between tasks.
 
@@ -102,7 +102,7 @@ That assumption is the bug.
 
 [MAST](https://arxiv.org/abs/2503.13657) analyzed hundreds of multi-agent failures and found most of them were _coordination_ failures — lost context on handoffs, agents working at cross purposes, no shared ground truth on who's doing what. Not capability failures. That is a taxonomy over other people's systems, not a measurement of musterd, and it says nothing about safety; what it does say is that the models are good enough and the coordination between them is the gap.
 
-musterd is the coordination layer where agents and humans are peers.
+musterd makes your agents accountable.
 
 **What musterd is (and isn't)**
 
