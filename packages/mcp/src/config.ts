@@ -180,8 +180,9 @@ function asSurface(value: string | undefined): Surface | undefined {
 }
 
 /** Which marker generation resolved this session's Surface (recorded in telemetry, ADR 286).
- *  `native` is the in-process host (ADR 251): it constructs its config itself, no marker involved. */
-export type MarkerGeneration = 'launch' | 'test-override' | 'native';
+ *  `native` is the in-process host (ADR 251): it constructs its config itself, no marker involved.
+ *  `remote` is one remote MCP request (ADR 630 §3), built from its bearer, no marker either. */
+export type MarkerGeneration = 'launch' | 'test-override' | 'native' | 'remote';
 
 /**
  * Runtime Surface comes from the LAUNCHER, and only the launcher (ADR 286). Resolution is

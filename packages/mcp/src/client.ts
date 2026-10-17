@@ -307,8 +307,31 @@ export class MusterdClient {
    * adapter has been replaced by a reload and should exit cleanly rather than linger dormant. Wired by
    * the MCP entrypoint to the graceful-shutdown-then-exit path; unset in tests / library use. */
   onReplaced?: () => void;
+  /** ADR 630 §3: built per request from a phone's `msat_` bearer. See {@link remote}. */
+  private readonly remoteMode: boolean;
 
-  constructor(private config: McpConfig) {}
+  constructor(
+    private config: McpConfig,
+    opts: { remote?: boolean } = {},
+  ) {
+    this.remoteMode = opts.remote === true;
+    if (this.remoteMode) {
+      // The bearer is the occupancy: the daemon authenticated the seat before this client existed,
+      // and re-authenticates every call it makes. Nothing here can lose the seat.
+      this.wantPresence = true;
+      this.joinedFlag = true;
+    }
+  }
+
+  /**
+   * ADR 630 §3: this client serves one remote MCP request, holding the seat its `msat_` bearer
+   * names. It opens no WebSocket, takes no session lease, reads and writes no binding file, and
+   * runs no idle-wake, liveness ladder or dormant watch — each of those belongs to a long-lived
+   * adapter process in a seat's own workspace, and this one lives inside the daemon for one request.
+   */
+  get remote(): boolean {
+    return this.remoteMode;
+  }
 
   /** Whether this session currently occupies its member's seat (claimed presence, got welcome). */
   get joined(): boolean {
@@ -365,7 +388,8 @@ export class MusterdClient {
    * drift as this seat's.
    */
   get workspaceDir(): string | undefined {
-    return this.config.bindingDir;
+    // A remote client runs inside the daemon, whose folder is nobody's workspace (ADR 630 §3).
+    return this.remoteMode ? undefined : this.config.bindingDir;
   }
   get claimCode(): string {
     return this.config.claimCode;
@@ -424,6 +448,7 @@ export class MusterdClient {
 
   /** ADR 558: attach the idle-wake core. Deliveries and (re)connects feed it from here on. */
   attachIdleWake(iw: IdleWake): void {
+    if (this.remoteMode) return; // ADR 630 §3: nothing idles at a prompt inside the daemon
     this.idleWake = iw;
   }
 
@@ -680,6 +705,7 @@ export class MusterdClient {
       // turned into a ping-pong between two adapters re-claiming each other. And this never fires
       // speculatively — only after the server has refused, so it cannot become the #1138 claim storm.
       if (
+        !this.remoteMode &&
         !afterLeaseRefusal &&
         parsed.success &&
         isSessionLeaseRefusal(parsed.data.error) &&
@@ -1238,6 +1264,8 @@ export class MusterdClient {
     // made `team_join` a no-op on exactly the path the deaf line prescribes it for. Clearing the
     // flag here is the same move the lease-refusal recovery in `request()` already makes, for the
     // same reason; it is never set speculatively, only when a caller asks to re-occupy.
+    // ADR 630 §3: a remote client already holds the seat its bearer names; there is no socket to open.
+    if (this.remoteMode) return Promise.resolve<JoinOutcome>('occupied');
     if (opts?.reoccupy === true) this.joinedFlag = false;
     if (this.joinedFlag) return Promise.resolve<JoinOutcome>('occupied');
     if (!this.config.agent_key && !this.config.seatCredential) {
@@ -1505,6 +1533,8 @@ export class MusterdClient {
 
   /** Release the seat (back to dormant). The server keeps a 45s reclaim grace; tools stay registered. */
   leave(): void {
+    // ADR 630 §3: a remote client holds no Presence of its own to release — the bearer is the seat.
+    if (this.remoteMode) return;
     this.releasedByLivenessFlag = false; // a deliberate release; attestSession re-sets it after
     this.disarmDormantWatch(); // …and re-arms the watch after, for the same reason
     this.wantPresence = false;

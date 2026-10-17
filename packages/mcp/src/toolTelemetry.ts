@@ -76,7 +76,17 @@ export class ToolCallRecorder {
   private toolsListMs: number | null = null;
   private startupSent = false;
 
-  constructor(private readonly opts: { surface?: string | null; uptimeMs?: () => number } = {}) {}
+  constructor(
+    private readonly opts: {
+      surface?: string | null;
+      uptimeMs?: () => number;
+      /** Measure and send the rendered surface once per session. A remote server (ADR 630 §7) is
+       *  one request long, so it would attest the same listing on every call; it turns this off. */
+      attestSurface?: boolean;
+      /** Called after each recorded call. A remote server flushes here: it has no process timer. */
+      afterRecord?: () => void;
+    } = {},
+  ) {}
 
   private uptime(): number {
     return Math.round(this.opts.uptimeMs?.() ?? process.uptime() * 1000);
@@ -121,6 +131,7 @@ export class ToolCallRecorder {
         max_duration_ms: ms,
       });
     }
+    this.opts.afterRecord?.();
   }
 
   /** Wired by {@link instrumentToolTransport}: invokes the SDK's own `tools/list` handler, so the
@@ -164,7 +175,7 @@ export class ToolCallRecorder {
    */
   async flush(client: MusterdClient): Promise<void> {
     if (!client.member) return;
-    if (!this.surfaceSent && !this.surface) {
+    if (this.opts.attestSurface !== false && !this.surfaceSent && !this.surface) {
       try {
         this.surface = await this.computeSurface();
       } catch {

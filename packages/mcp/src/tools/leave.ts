@@ -9,6 +9,13 @@ const DESCRIPTION =
 
 export function registerLeave(server: McpServer, client: MusterdClient, config: McpConfig): void {
   server.registerTool('team_leave', { description: DESCRIPTION, inputSchema: {} }, async () => {
+    // ADR 630 §3: a remote connector's seat is its token; there is no session here to end.
+    if (client.remote) {
+      return textResult(
+        `You are ${config.member} on ${config.team} through a remote connector — your seat is ` +
+          `the connector's sign-in, so there is nothing to leave. Disconnect the connector to go offline.`,
+      );
+    }
     if (!client.joined) {
       return textResult(
         `Not joined to ${config.team} — nothing to leave. team_join brings you online.`,

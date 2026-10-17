@@ -22,6 +22,16 @@ import { IdleWake } from './idleWake/decider.js';
 import { injectAdapterFor } from './idleWake/inject.js';
 import { markersFor, readIdleWakeState } from './idleWake/state.js';
 import { clearPendingMarker, readAndConsumeResolution, writePendingMarker } from './pending.js';
+import {
+  abstainChangeLabel,
+  abstainClaims,
+  abstainEvidence,
+  abstainReconcile,
+  abstainVerify,
+  remoteConfig,
+  remoteProject,
+  type RemoteSeat,
+} from './remote.js';
 import { instrumentToolRepair } from './repair.js';
 import { scopeToolSurface } from './scope.js';
 import { instrumentTools, recordAdapterInitialization, startMcpTelemetry } from './telemetry.js';
@@ -49,6 +59,7 @@ import {
 import { ADAPTER_VERSION } from './version.js';
 
 export { MusterdClient } from './client.js';
+export { remoteConfig, type RemoteSeat } from './remote.js';
 export { loadMcpConfig, type McpConfig } from './config.js';
 export { bind } from './bind.js';
 export { resolveWorkspace, resolveProvenance } from './workspace.js';
@@ -245,6 +256,10 @@ export function buildMcpServer(
     onFirstToolCall?: () => Promise<void>;
     recorder?: ToolCallRecorder;
     onHarness?: (harness: HarnessContext) => void;
+    /** ADR 630 §3: serving one remote MCP request inside the daemon — the git and gh checks
+     *  abstain, and a new lane takes the team default project, because the daemon's folder is
+     *  nobody's workspace. */
+    remote?: boolean;
   } = {},
 ): McpServer {
   const server = new McpServer(
@@ -305,9 +320,11 @@ export function buildMcpServer(
   // the listing's `_meta`, so its place among the patches does not matter; a harness that does not
   // know the key ignores it.
   markHotTools(server);
+  const remote = opts.remote === true;
   registerJoin(server, client, config);
   registerLeave(server, client, config);
-  registerSend(server, client, config);
+  if (remote) registerSend(server, client, config, abstainClaims);
+  else registerSend(server, client, config);
   registerInboxCheck(server, client);
   registerStatus(server, client);
   registerMembers(server, client);
@@ -317,10 +334,54 @@ export function buildMcpServer(
   registerWakeContext(server, client);
   registerSeeds(server, client);
   registerTeamMemory(server, client, config);
-  registerLanes(server, client);
+  if (remote) {
+    registerLanes(
+      server,
+      client,
+      abstainVerify,
+      abstainReconcile,
+      abstainEvidence,
+      abstainChangeLabel,
+      remoteProject,
+    );
+  } else registerLanes(server, client);
   registerGoals(server, client);
   registerInsights(server, client);
   return server;
+}
+
+/**
+ * The MCP server for one remote request (ADR 630): the adapter's own tools, serving a phone whose
+ * `msat_` bearer the daemon has already authenticated, each calling the daemon back over `server`
+ * with that bearer. The daemon's composition root (`musterd serve`) calls this per request.
+ *
+ * `tools/list` follows the seat (§6): `seat.capabilities` reach `scopeToolSurface` through the
+ * config, so a talk-only guest is offered the talk tools only. Calls are counted (§7): each one is
+ * flushed to `POST /telemetry/tool-calls` as it finishes, since nothing here lives long enough for
+ * the stdio adapter's timer.
+ *
+ * The process-global state of the stdio adapter stays untouched, by construction rather than by
+ * flag — each piece is wired in `main()` or by an option this never passes:
+ * - `inFlight` (the idle-wake core's busy test) counts only through `armAutojoinOnFirstToolCall`,
+ *   armed by `onFirstToolCall`, which this does not pass; so is the autojoin memo it holds.
+ * - `IdleWake` is never built, and `attachIdleWake` refuses a remote client anyway.
+ * - `onReplaced` → `process.exit` is never set; no socket exists to deliver `superseded`.
+ * - OTel startup (`startMcpTelemetry`), the telemetry flush timer, the shutdown handlers, the
+ *   pending marker and the resolution watcher are all `main()`'s. Spans still open through
+ *   `instrumentTools`, on whatever tracer provider the host process registered.
+ * - The provisioning-drift reads key on the seat's workspace, which a remote client reports none of.
+ */
+export function buildRemoteMcpServer(seat: RemoteSeat): McpServer {
+  const config = remoteConfig(seat);
+  const client = new MusterdClient(config, { remote: true });
+  // No startup measure (`surface: null`): ADR 584's timings are an adapter launch's, and this is
+  // a request inside a daemon that has been up for days.
+  const recorder: ToolCallRecorder = new ToolCallRecorder({
+    surface: null,
+    attestSurface: false,
+    afterRecord: () => void recorder.flush(client),
+  });
+  return buildMcpServer(client, config, { recorder, remote: true });
 }
 
 /**
