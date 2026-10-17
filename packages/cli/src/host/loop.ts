@@ -2,6 +2,8 @@ import {
   wakeabilityFromFacts,
   type MemberKind,
   type MemberSummary,
+  type PullAnnouncement,
+  type PullPollResponse,
   type WakeLeasesResponse,
   type WakeOrder,
   type WakeReportBody,
@@ -117,6 +119,8 @@ export interface WakeClient {
   /** ADR 583: one `wake_turns` row per metered model call (the ADR 251 §7 rail, every backend). */
   wakeTurn(team: string, body: WakeTurnBody): Promise<unknown>;
   roster(team: string): Promise<{ members: MemberSummary[] }>;
+  /** ADR 645: the band-2 poll. Optional so a test client that never pulls stays a WakeClient. */
+  pullPoll?(team: string, host: string): Promise<PullPollResponse>;
 }
 
 export interface HostPollDeps {
@@ -302,8 +306,52 @@ const defaultClientFor = (server: string, agentKey: string): WakeClient => {
     wakeProgress: (team, leaseId) => http.wakeProgress(team, { lease_id: leaseId }),
     wakeTurn: (team, body) => http.wakeTurn(team, body),
     roster: (team) => http.roster(team),
+    pullPoll: (team, host) => http.pullPoll(team, host),
   };
 };
+
+/**
+ * ADR 645 §4.3 step 3: redeem a granted pull AS the seat, under the seat's own credential from its
+ * workspace binding (enrollment check 3) — never the agent key the poll rode on. The daemon re-runs
+ * the ordinary claim checks; a refusal is logged and the hub declines the grant on its TTL.
+ */
+export async function redeemPullGrant(
+  server: string,
+  team: string,
+  workspace: string,
+  offer: PullAnnouncement,
+  deps: { log: (line: string) => void; claim?: (key: string) => Promise<unknown> },
+): Promise<boolean> {
+  const binding = findBinding(workspace, {});
+  const key = binding?.seat_credential;
+  if (!key) {
+    deps.log(
+      `! pull ${offer.lane} for ${offer.seat}: no seat credential in ${workspace} — not claimed`,
+    );
+    return false;
+  }
+  const claim =
+    deps.claim ??
+    ((k: string) =>
+      new HttpClient({ server, key: k }).presenceNeutral().updateLane(team, offer.lane, {
+        owner_seat: offer.seat,
+        pick: {
+          via: 'pull',
+          requested_by: offer.announced_by,
+          attested: false,
+          ask: offer.ask,
+          at: Date.now(),
+        },
+      }));
+  try {
+    await claim(key);
+    deps.log(`pulled: ${offer.seat} claimed lane ${offer.lane} (announcement ${offer.id})`);
+    return true;
+  } catch (err) {
+    deps.log(`! pull claim refused for ${offer.seat} on ${offer.lane}: ${(err as Error).message}`);
+    return false;
+  }
+}
 
 /** Clock slack for the freshness bar: `last_seen_at` is daemon-stamped, `sinceTs` host-stamped —
  *  same machine today, but a couple of seconds of skew must not reject honest evidence. */
@@ -489,6 +537,21 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
     } catch (err) {
       deps.log(`! wake-lease poll failed for ${group.team}: ${(err as Error).message}`);
       return;
+    }
+
+    // ADR 645: the band-2 pull rides the same tick. Best-effort and quiet: the poll's answer is
+    // an announcement in flight (nothing to do), a grant (claim as the seat now), or idle.
+    if (client.pullPoll && !deps.signal?.aborted) {
+      try {
+        const { offer } = await client.pullPoll(group.team, group.host);
+        if (offer?.state === 'granted') {
+          const entry = spawnable.get(offer.seat);
+          if (entry) await redeemPullGrant(group.server, group.team, entry.workspace, offer, deps);
+          else deps.log(`! pull granted to ${offer.seat} but its workspace is not readable here`);
+        }
+      } catch (err) {
+        deps.log(`! pull poll failed for ${group.team}: ${(err as Error).message}`);
+      }
     }
 
     // Orders this poll has not started yet. On a stop, whatever is still here is handed back.

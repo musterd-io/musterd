@@ -160,8 +160,8 @@ async function projectLaneEvent(
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          requested_json, reads_on, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, reads_on, pre_registered_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -183,6 +183,9 @@ async function projectLaneEvent(
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
         requested.success ? requestedRecordJson(requested.data) : null,
         typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
+        d['pre_registered'] && typeof d['pre_registered'] === 'object'
+          ? JSON.stringify(d['pre_registered'])
+          : null,
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -280,6 +283,7 @@ async function projectLaneEvent(
         requested: 'requested_json',
         reads_on: 'reads_on',
         read_verdict: 'read_verdict_json',
+        pre_registered: 'pre_registered_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -295,7 +299,8 @@ async function projectLaneEvent(
           field === 'follows_up' ||
           field === 'unfinished_todos' ||
           field === 'declined' ||
-          field === 'read_verdict'
+          field === 'read_verdict' ||
+          field === 'pre_registered'
         )
           value = value === null ? null : JSON.stringify(value);
         else if (field === 'requested') {

@@ -250,6 +250,13 @@ export type AuditAction =
   // assumed this row existed — it did not, and its absence is why a 2026-08-01 double-claim left
   // nothing in the audit log but the release that undid it.
   | 'lane.claimed'
+  // ADR 645 §4: the pull's record. `lane.pulled {lane, seat, host, ask}` joins the seat's claim to
+  // the announcement; `lane.pull_declined` is a window stopped (steer/decline, a claim by anyone,
+  // a change to the lane) or a grant never redeemed; `lane.pull_released` (§5) is the hub returning
+  // a pulled lane to open because its host died. Actor null on the last two — the daemon decided.
+  | 'lane.pulled'
+  | 'lane.pull_declined'
+  | 'lane.pull_released'
   // ADR 536 increment 3: one row per orientation brief read — the up_next window offered to a seat,
   // with each lane's tier, the pre-ADR-536 (oldest-first) window it would have been served, and the
   // two pool counts. Churn class (ADR 478): the densest row a seat writes, read only by
@@ -410,6 +417,10 @@ export type AuditAction =
   // ADR 588 amendment: the host read a seat's captured turns to rehydrate its next wake. Detail is
   // lease id, lease/turn counts and bytes — never a transcript body.
   | 'residency.transcript_read'
+  // ADR 645 §8: the band-2 pull's two rate rows — a host was offered a (lane, seat) pair, and the
+  // seat's own claim landed. Detail: lane, seat, host, announcement, ask — never a body.
+  | 'residency.pull_offered'
+  | 'residency.pull_claimed'
   // Goal dreaming: a seat read its own dream packet. Detail is sizes and counts only — never a body.
   | 'dream.packet_read'
   // ADR 211: a recipient postponed one directed act with a deferring `wait`. Detail is the condition
@@ -706,6 +717,9 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.dispute_answered': 'actor',
   'lane.released': 'actor',
   'lane.claimed': 'actor',
+  'lane.pulled': 'actor',
+  'lane.pull_declined': 'none',
+  'lane.pull_released': 'none',
   'next.offer': 'actor',
   'lane.updated': 'actor',
   'lane.read_recorded': 'actor',
@@ -755,6 +769,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.wake_report_rejected': 'none',
   'residency.context_read': 'actor',
   'residency.transcript_read': 'none',
+  'residency.pull_offered': 'none',
+  'residency.pull_claimed': 'none',
   'dream.packet_read': 'actor',
   'inbox.deferred': 'actor',
   'mcp.surface_rendered': 'actor',

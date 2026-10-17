@@ -10,6 +10,8 @@ import {
   WorkspaceRepairBodySchema,
   HostProvisionReportBodySchema,
   HostProvisionsClaimBodySchema,
+  PullPollBodySchema,
+  SyncPullRequestSchema,
   isWireAttestationSource,
   type Act,
   MemberKindSchema,
@@ -383,6 +385,7 @@ import {
   type DisplacedSession,
   supersededMessage,
 } from '../store/presence.js';
+import { afterPullClaim, offerPull } from '../store/pull.js';
 import {
   lastActionBySubject,
   quietestBusyMs,
@@ -529,6 +532,7 @@ import {
   styleAtHub,
   localNodeWithLabel,
   patchAtHub,
+  pullAtHub,
   SeatBoundElsewhereError,
   trustAtHub,
   TrustRefusedError,
@@ -4700,6 +4704,31 @@ export async function handleHttp(
         return sendJson(res, 200, { orders });
       }
 
+      // ADR 645 §4.3: the host's band-2 poll. Agent-key auth like the wake poll, and a heartbeat
+      // too. Decided at the hub (§6): a joiner forwards to `/sync/pull` under its node credential
+      // and relays the answer; the hub unreachable means nothing is pulled this tick.
+      if (method === 'POST' && rest === '/residency/pull') {
+        const body = parseOrBadRequest(PullPollBodySchema, await readJson(req));
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
+        const now = Date.now();
+        await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        if (enrollment) {
+          try {
+            const answer = await pullAtHub(enrollment, team.slug, body);
+            return sendJson(res, 200, answer);
+          } catch (err) {
+            if (err instanceof HubUnreachableError)
+              return sendJson(res, 200, {
+                offer: null,
+                idle_reason: `hub unreachable: ${err.message}`,
+              });
+            throw err;
+          }
+        }
+        return sendJson(res, 200, await offerPull(ctx, team, body.host, now));
+      }
+
       // ADR 463 §2: the sponsor's host claims the provisions it may serve — a sponsored seat only
       // from its sponsor's own key (`hostMayServe`) — atomically, one claimant, capped per host.
       // The claim poll is a heartbeat too. With no `agent_host.policy.budget_usd` set, a claimed
@@ -6223,6 +6252,24 @@ export async function handleHttp(
           }
           throw err;
         }
+      }
+
+      // ADR 645 §6, hub side: a joiner's host polls for band-2 work; the node credential proves the
+      // machine, and the hub decides against its own board and announcement table.
+      if (method === 'POST' && rest === '/sync/pull') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncPullRequestSchema, await readJson(req));
+        const answer = await offerPull(ctx, team, body.host, Date.now());
+        if (answer.offer) await pushTeam(ctx, team).catch(() => undefined);
+        return sendJson(res, 200, answer);
       }
 
       // Residence-2 census gap 1, hub side: a joiner forwards its admin's policy change. The node
@@ -7795,6 +7842,15 @@ export async function handleHttp(
         // the store inside the write's transaction (lane-replication spec §Hole 3): a row that
         // cannot be written fails the transition rather than leaving the log behind the table.
         // This handler keeps only the team-visible notes.
+        // ADR 645 §4: a pull claim decided HERE (the hub's own host) records the pull and sends
+        // the work order; an arbitrated one had both done at the hub.
+        if (
+          !arbitrated &&
+          body.pick?.via === 'pull' &&
+          body.pick.ask &&
+          lane.owner_seat === member.name
+        )
+          await afterPullClaim(ctx, team, lane, member.name, body.pick.ask);
         const warnings = await laneWarnings(ctx.db, team.id, team.slug, lane);
         // Directed-wake dedup (ADR 083 §4): only warnings the mutation *introduced* wake the other
         // owner — re-surfacing unchanged conditions is the board's job, not the inbox's.

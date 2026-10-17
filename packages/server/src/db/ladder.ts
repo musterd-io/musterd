@@ -545,6 +545,64 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS read_verdict_json TEXT');
     },
   },
+  {
+    // v106 — ADR 645 (lane 01M55PDKAT): the pre-registered declaration (`pre_registered_json`:
+    // `{run, verdict_rule, record, expected_spend, by, at}`, nullable, no backfill — nothing was
+    // declared before this) and the band-2 announcement table. One announcement row per (lane,
+    // seat) pull in flight; the hub transitions it atomically (announced → granted | declined →
+    // claimed), so on Cloud, where N daemons share one database, the first server to take a window
+    // owns it. Not replicated: the pull is decided at the hub and the claim it ends in is an
+    // ordinary replicated lane edge.
+    version: 106,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('pre_registered_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN pre_registered_json TEXT');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS pull_announcements (
+          id              TEXT PRIMARY KEY,
+          team_id         TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          lane_id         TEXT NOT NULL,
+          member_id       TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          host            TEXT NOT NULL,
+          ask_id          TEXT NOT NULL,
+          announced_by    TEXT NOT NULL,
+          tier            TEXT NOT NULL CHECK (tier IN ('advisory', 'standard')),
+          state           TEXT NOT NULL CHECK (state IN ('announced', 'granted', 'claimed', 'declined')),
+          lane_updated_at INTEGER NOT NULL,
+          announced_at    INTEGER NOT NULL,
+          window_ends_at  INTEGER NOT NULL,
+          decided_at      INTEGER,
+          reason          TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_pull_announcements_team_state ON pull_announcements(team_id, state);
+        CREATE INDEX IF NOT EXISTS idx_pull_announcements_lane ON pull_announcements(team_id, lane_id);
+      `);
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS pre_registered_json TEXT');
+      await d.exec(`
+        CREATE TABLE IF NOT EXISTS pull_announcements (
+          id              TEXT PRIMARY KEY,
+          team_id         TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          lane_id         TEXT NOT NULL,
+          member_id       TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          host            TEXT NOT NULL,
+          ask_id          TEXT NOT NULL,
+          announced_by    TEXT NOT NULL,
+          tier            TEXT NOT NULL CHECK (tier IN ('advisory', 'standard')),
+          state           TEXT NOT NULL CHECK (state IN ('announced', 'granted', 'claimed', 'declined')),
+          lane_updated_at INTEGER NOT NULL,
+          announced_at    INTEGER NOT NULL,
+          window_ends_at  INTEGER NOT NULL,
+          decided_at      INTEGER,
+          reason          TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_pull_announcements_team_state ON pull_announcements(team_id, state);
+        CREATE INDEX IF NOT EXISTS idx_pull_announcements_lane ON pull_announcements(team_id, lane_id);
+      `);
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

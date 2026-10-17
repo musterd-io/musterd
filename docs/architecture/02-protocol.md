@@ -400,5 +400,8 @@ and `lane_update` (`null` withdraws it). It carries no date: a dated read's day 
 `preRegisteredRefusal(lane)` — why a lane may not be declared (any risk tag, `user-facing`,
 `stakes: 'high'`), and `pullEligible(lane, today)` — open, unowned, declared and not before its
 `reads_on` day (`today` a `YYYY-MM-DD` in `CALENDAR_DEFAULT_TZ`, the clock `read_status` uses). `PickSchema.via` gains `'pull'` with an `ask` (the announcement act), the claim a
-host makes for an enrolled seat; `attested` stays false (nobody signed as the seat). All additive;
+host makes for an enrolled seat; `attested` stays false (nobody signed as the seat). `pull.ts`
+(increment 4) adds team policy `pull` (`PullPolicySchema`: the advisory and standard windows, the
+spend cap, the per-seat daily cap, the two release thresholds), the announcement row on the wire
+(`PullAnnouncementSchema`), the host's poll body / response and the joiner→hub forward. All additive;
 absent reads as not declared, no epoch bump.

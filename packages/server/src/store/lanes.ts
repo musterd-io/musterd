@@ -3,6 +3,7 @@ import {
   mergeClaims,
   ACCEPTANCE_STALE_MS,
   CALENDAR_DEFAULT_TZ,
+  preRegisteredRefusal,
   compareGoals,
   DEFAULT_PROJECT,
   deriveLaneAreas,
@@ -77,6 +78,8 @@ interface LaneRow {
   reads_on: string | null;
   /** The read's verdict (ADR 644, v105): JSON `{outcome, note, by, at}`; null = none given. */
   read_verdict_json: string | null;
+  /** ADR 645 (v106): the pre-registered declaration, JSON `{run, verdict_rule, record, expected_spend, by, at}`; null = not declared. */
+  pre_registered_json: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
@@ -225,6 +228,9 @@ function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): 
     ...(row.reads_on ? { reads_on: row.reads_on } : {}),
     ...(readVerdict ? { read_verdict: readVerdict } : {}),
     ...(readStatus ? { read_status: readStatus } : {}),
+    ...(row.pre_registered_json
+      ? { pre_registered: JSON.parse(row.pre_registered_json) as Lane['pre_registered'] }
+      : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
@@ -376,6 +382,15 @@ export async function openLane(
   // (incidents, seeds) passed nothing and were born with no first event (dolly, #1179 decline). So
   // openLane takes no audit argument at all: the store writes the birth, and no caller can omit it.
   const audit: LaneAudit = { actor: createdBy };
+  // ADR 645 §1–2: the declaration is refused where the anti-goal lives (a risk tag, user-facing,
+  // high stakes), once, at open; the daemon stamps who declared it and when.
+  const preRegistered = input.pre_registered
+    ? { ...input.pre_registered, by: createdBy, at: now }
+    : null;
+  if (preRegistered) {
+    const refusal = preRegisteredRefusal({ risk: input.risk, stakes: input.stakes });
+    if (refusal) throw new MusterdError('bad_request', `${refusal} (ADR 645)`);
+  }
   // ADR 244: an admin's default-stakes rule fires HERE, at open, and never again. Resolving it late
   // — at submit, or at close — would make a policy able to rewrite what a lane already was, which is
   // the exact trap ADR 234 increment 2 named for the close edge: only a RECORDED fact earns a label.
@@ -424,6 +439,7 @@ export async function openLane(
     requested_json: requestedRecordJson(requested),
     reads_on: input.reads_on ?? null,
     read_verdict_json: null,
+    pre_registered_json: preRegistered ? JSON.stringify(preRegistered) : null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -431,8 +447,8 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, pre_registered_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
@@ -456,6 +472,7 @@ export async function openLane(
       row.source_ref,
       row.requested_json,
       row.reads_on,
+      row.pre_registered_json,
       row.state,
       row.created_by,
       row.created_at,
@@ -484,6 +501,7 @@ export async function openLane(
       ...(row.source_ref !== null ? { source_ref: row.source_ref } : {}),
       ...(requested ? { requested } : {}),
       ...(row.reads_on !== null ? { reads_on: row.reads_on } : {}),
+      ...(preRegistered ? { pre_registered: preRegistered } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -796,6 +814,36 @@ async function updateLaneInTx(
       throw new MusterdError('bad_request', 'recording a read verdict needs the seat doing it');
     readVerdict = { ...patch.read_verdict, by: actor, at: now };
   }
+  // ADR 645 §1–2: `null` withdraws the declaration; an object replaces it, stamped from the
+  // authenticated sender. Refused on a lane that is not open (409 — a declaration is made before
+  // the work) and where the anti-goal lives (400 — the resulting risk / stakes), so a patch that
+  // tags a declared lane risky or high-stakes is refused too: the invariant holds in both orders.
+  let preRegistered = existing.pre_registered ?? null;
+  if (patch.pre_registered !== undefined) {
+    if (patch.pre_registered === null) preRegistered = null;
+    else {
+      if (existing.state !== 'open')
+        throw new MusterdError(
+          'conflict',
+          `lane "${id}" is ${existing.state} — a pre-registered declaration is made on an open ` +
+            `lane, before the work (ADR 645)`,
+        );
+      const actor = audit?.actor;
+      if (!actor)
+        throw new MusterdError(
+          'bad_request',
+          'declaring a lane pre-registered needs the seat doing it',
+        );
+      preRegistered = { ...patch.pre_registered, by: actor, at: now };
+    }
+  }
+  if (preRegistered) {
+    const refusal = preRegisteredRefusal({
+      risk: patch.risk ?? existing.risk,
+      stakes: patch.stakes ?? existing.stakes,
+    });
+    if (refusal) throw new MusterdError('bad_request', `${refusal} (ADR 645)`);
+  }
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -830,6 +878,7 @@ async function updateLaneInTx(
     requested_json: requestedJson,
     reads_on: readsOn,
     read_verdict_json: readVerdict !== null ? JSON.stringify(readVerdict) : null,
+    pre_registered_json: preRegistered !== null ? JSON.stringify(preRegistered) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -887,6 +936,7 @@ async function updateLaneInTx(
     'requested_json',
     'reads_on',
     'read_verdict_json',
+    'pre_registered_json',
     'claims_json',
     'areas_json',
     'declined_json',
@@ -954,6 +1004,7 @@ const AUDITED_LANE_FIELDS = [
   'requested',
   'reads_on',
   'read_verdict',
+  'pre_registered',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */

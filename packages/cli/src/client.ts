@@ -61,6 +61,8 @@ import {
   HuddleTraceSchema,
   type HuddleTrace,
   WakeLeasesResponseSchema,
+  type PullPollResponse,
+  PullPollResponseSchema,
   StyleDialsSchema,
   type StyleEnvelope,
   StyleEnvelopeSchema,
@@ -1592,6 +1594,20 @@ export class HttpClient {
     const parsed = WakeLeasesResponseSchema.safeParse(json);
     if (!parsed.success) {
       throw new CliError('wake-leases response did not match the protocol schema', 1);
+    }
+    return parsed.data;
+  }
+
+  /**
+   * The host's band-2 poll (ADR 645 §4.3) — `POST /teams/:slug/residency/pull`, agent-key auth
+   * like the lease poll. One announcement in flight per host; `granted` is the cue to claim as
+   * the seat.
+   */
+  async pullPoll(slug: string, host: string): Promise<PullPollResponse> {
+    const json = await this.request('POST', `/teams/${slug}/residency/pull`, { host });
+    const parsed = PullPollResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new CliError('residency/pull response did not match the protocol schema', 1);
     }
     return parsed.data;
   }
