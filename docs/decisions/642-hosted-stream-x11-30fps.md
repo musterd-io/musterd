@@ -71,6 +71,12 @@ keeps the stream at 15 fps the whole time. Each lower rung was given a bar scale
   with `BROADCAST_ARGS="--capture screencast --fps 15"`. Numbers: `docs/perf/broadcast-baseline.md`,
   "Live trial".
 
+- _(2026-10-17, lane `01M560F6P4`)_ **Audio heard: all four Decision 4 checks now stand.** On a
+  one-minute run at 22:38–22:39 UTC (image `ddf9a318eb81`, built at f32bf28), nick heard the room's
+  audio on Twitch. ffmpeg held `fps=30` and `speed=1.01–1.02x` at about 4060–4080 kbit/s. The audio
+  check was a one-minute listen, not an hour, and the hour of the other three checks was the earlier
+  run. The waiver above is no longer needed.
+
 ## Observability & Evaluation
 
 - **Traces:** n/a. This changes the capture pipeline, not an agent-facing path.

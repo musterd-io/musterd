@@ -759,6 +759,9 @@ ADR 642 live trial (lane `01M55PYW9D`) six minutes in the log held no `speed=` a
 `01M55REABB` the CLI turns each bare `\r` into `\n` after the secret scrubber (`statsLineBreaks`), on
 the next `musterd stream build`.
 
+_(2026-10-17: fixed and verified on the box. On image `ddf9a318eb81`, built at f32bf28, a `speed=`
+line reached `fly logs` every 10 s while the stream was live.)_
+
 ## `stream stop` does not stop the CLI; Fly kills it 30 s later (2026-10-17; falsify: `musterd stream stop` on a live stream, and `fly logs` shows the main child exiting before the `SIGTERM` line) <!-- claim: defect -->
 
 On the ADR 642 live trial, `stream stop` at 21:26:59 UTC sent `SIGINT` to the entrypoint (`PID 663`).
@@ -774,3 +777,8 @@ Since lane `01M55X5NG0` the entrypoint starts the CLI in the background and its 
 traps pass the signal on, then wait until the CLI has really exited. A local run of the same bash
 pattern confirmed the forward reaches a node `SIGINT` listener (2026-10-17). It is unverified on the
 box until the next `musterd stream build` and stop, and the heading's falsifier is that check.
+
+_(2026-10-17: fixed and verified on the box.)_ On image `ddf9a318eb81` (built at f32bf28), `stream stop` at 22:39:40 UTC printed
+`stopping (SIGINT) — again to force`, and the main child exited with code 0 one second later, with no
+`SIGTERM` line. ffmpeg's last sample reads `Lsize=`, so it closed the container. The same run put a
+`speed=` line in `fly logs` every 10 s while it was live.
