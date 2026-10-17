@@ -66,6 +66,10 @@ isolation and spend-risk budget before any reading exists; starting on laptop hu
   spec §9 #8 sequence marker, and the phase lanes carry the work. Phase 1 also gained an
   explicit dependency on Cloud increment 7's billing (`01M3TTZJGXAGF3S0KKFST1YXYM`), so its
   compute credits ride ADR 461's one ledger rather than a second one.)_
+- _(2026-10-17: wake-start for the pilot, decided by nick. A parked machine is started by the
+  operator — no server-held Fly API token and no inbound autostart endpoint yet; the pilot
+  measures how often a parked seat is woken before either automation is paid for. The design's
+  §4.4 lifecycle carries the same sentence.)_
 - _(2026-10-17: database topology, asked for by nick after acceptance. A cloud agent adds no
   database: phase 1's agent machine runs no team daemon and holds no team store — it is a
   remote actuator against the hosted team's Postgres-backed server, and an SQLite joiner into

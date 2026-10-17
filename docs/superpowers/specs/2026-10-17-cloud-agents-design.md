@@ -156,7 +156,10 @@ Provisioning is ADR 463 with a musterd-operated host:
 4. **Lifecycle.** Park = the sponsor parks the seat: no leases are granted and the machine
   auto-stops; parked costs nothing but storage. Wake = a directed act or pull finds the seat
   enrolled; the host starts the machine, the actuator polls, the lease is granted, the engine
-  runs. Stop = the sponsor revokes the key or the seat; the machine is destroyed, the workspace
+  runs. **For the pilot (nick, 2026-10-17), a parked machine is started by the operator** —
+  no server-held Fly API token and no inbound autostart endpoint is built yet; the pilot
+  measures how often a parked seat is actually woken before either automation is paid for.
+  Stop = the sponsor revokes the key or the seat; the machine is destroyed, the workspace
   volume kept or destroyed at the sponsor's word, recorded either way.
 5. **Cost record.** Machine uptime is metered per seat and charged in credits; model calls are
   priced per wake by the gateway. `/report` shows both, per seat, with the sponsor's caps.
