@@ -32,7 +32,9 @@ that path tells the human to install anything first.
    and its availability detail, and writes nothing. That rule also covers the headless form, so a
    script cannot add what the picker would not offer.
 
-Availability is each adapter's own check, the same one the reconcile receipt reports.
+Availability is each adapter's own check, the same one the reconcile receipt reports. Muse's
+`init` scan used to count a leftover `~/.config/muse` as an install. It now uses the binary check
+that its adapter uses, so the two agree.
 
 ## Consequences
 
