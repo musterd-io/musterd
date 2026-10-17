@@ -294,12 +294,22 @@ function writeSpendApproval(k: NonNullable<Report['wake']>, w: (s: string) => vo
   );
 }
 
+/** ADR 639. Empty when the count cap is unset. The line names the count. It holds nothing. */
+function writeUnpricedCap(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
+  if (k.unpriced_wake_cap === undefined || k.unpriced_wake_count === undefined) return;
+  const state = k.unpriced_over_cap ? theme.warn('OVER') : theme.ok('under');
+  w(
+    `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${state} ${theme.meta('· display only')}\n`,
+  );
+}
+
 /** Wake metrics (ADR 131 inc 5) — the always-on claim's instrument panel. */
 function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): void {
   if (k.wakes === 0 && k.failed === 0 && k.deferred === 0) {
     w(theme.meta(`  no wakes (${k.window_days}d)`) + '\n');
     writeSpendCapWithoutCost(k, w);
     writeSpendApproval(k, w);
+    writeUnpricedCap(k, w);
     return;
   }
   const rate = k.answer_rate === null ? '' : ` (${Math.round(k.answer_rate * 100)}%)`;
@@ -318,6 +328,7 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
   }
   writeSpendCapWithoutCost(k, w);
   writeSpendApproval(k, w);
+  writeUnpricedCap(k, w);
   // ADR 252: spend the cost line structurally cannot show. Printed only when there is some — a zero
   // here would read as "nothing went unpriced", which the token cannot yet promise.
   if ((k.unpriced_sessions ?? 0) > 0) {

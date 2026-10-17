@@ -202,6 +202,45 @@ describe('report command', () => {
     expect(residency.out).toContain('display only');
   });
 
+  it('shows the unpriced-wake count beside its cap, and says nothing when unset (ADR 639)', async () => {
+    const quiet = await capture(() => reportCommand(parseArgs([])));
+    expect(quiet.out).not.toContain('unpriced wakes');
+    const before = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake?: Record<string, unknown>;
+    };
+    expect(before.wake).not.toHaveProperty('unpriced_wake_cap');
+    expect(before.wake).not.toHaveProperty('unpriced_wake_count');
+    expect(before.wake).not.toHaveProperty('unpriced_over_cap');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '5'])));
+    expect(set.code).toBe(0);
+    const shown = await capture(() => reportCommand(parseArgs([])));
+    expect(shown.out).toContain('no wakes');
+    expect(shown.out).toContain('unpriced wakes 0 · cap 5');
+    expect(shown.out).toContain('under');
+    expect(shown.out).toContain('display only');
+    expect(shown.out).not.toContain('OVER');
+    expect(shown.out).not.toContain('agent wakes held');
+
+    const after = JSON.parse((await capture(() => reportCommand(parseArgs(['--json'])))).out) as {
+      wake: {
+        unpriced_wake_cap?: number;
+        unpriced_wake_count?: number;
+        unpriced_over_cap?: boolean;
+      };
+    };
+    expect(after.wake.unpriced_wake_cap).toBe(5);
+    expect(after.wake.unpriced_wake_count).toBe(0);
+    expect(after.wake.unpriced_over_cap).toBe(false);
+
+    await capture(() => teamCommand(parseArgs(['policy', '--unpriced-wake-cap', '0'])));
+    const blocked = await capture(() => reportCommand(parseArgs(['residency'])));
+    expect(blocked.out).toContain('unpriced wakes 0 · cap 0');
+    expect(blocked.out).toContain('OVER');
+    expect(blocked.out).toContain('display only');
+    expect(blocked.out).not.toContain('agent wakes held');
+  });
+
   it('rejects an unknown altitude', async () => {
     await expect(reportCommand(parseArgs(['--altitude', 'bogus']))).rejects.toThrow(/usage/);
   });

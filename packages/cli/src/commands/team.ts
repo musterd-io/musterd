@@ -17,6 +17,7 @@ import {
   serializeSeat,
   serializeTeam,
   SPEND_CAP_USD_MAX,
+  UNPRICED_WAKE_CAP_MAX,
   type StakesDefault,
   TOKEN_PREFIXES,
   GuardianClassSchema,
@@ -530,7 +531,8 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * [--ask-slack-webhook <url|off>] [--stakes-default <surface>=<low|normal|high>|off]
  * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
  * [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]
- * [--sponsored-agent-cap <1–100>] [--spend-cap <usd|off>] [--spend-approval <usd|off>] [--acceptance-review-window <1–1440 minutes>]` — show or set the
+ * [--sponsored-agent-cap <1–100>] [--spend-cap <usd|off>] [--spend-approval <usd|off>]
+ * [--unpriced-wake-cap <n|off>] [--acceptance-review-window <1–1440 minutes>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -552,6 +554,8 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * 7-day measured-wake-cost cap (`off` clears it; unset is unbounded). At the cap, new agent wakes are held
  * and a human still passes. ADR 635: `--spend-approval <usd>` sets the per-wake gateway threshold
  * (`off` clears it). This change shows the number. It holds nothing.
+ * ADR 639: `--unpriced-wake-cap <n>` sets the 7-day unpriced-wake count (`off` clears it; unset
+ * keeps today's behavior; 0 blocks unpriced harnesses). The report shows the count. It denies nothing.
  * ADR 506: `--acceptance-review-window <min>`
  * sets how long a lane-review ask waits before its owner may self-close on silence (default 20). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
@@ -583,6 +587,7 @@ const POLICY_FLAGS = new Set([
   'sponsored-agent-cap',
   'spend-cap',
   'spend-approval',
+  'unpriced-wake-cap',
   'acceptance-review-window',
   'ask-slack-webhook',
   'seeds-relay',
@@ -795,6 +800,23 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     }
     changed = true;
   }
+  // ADR 639: the 7-day unpriced-wake count. `off` deletes the key. 0 is a real cap.
+  const unpricedCap = flagStr(parsed.flags, 'unpriced-wake-cap');
+  if (unpricedCap !== undefined) {
+    if (unpricedCap === 'off') {
+      delete merged.unpriced_wake_cap;
+    } else {
+      const n = Number(unpricedCap);
+      if (!Number.isInteger(n) || n < 0 || n > UNPRICED_WAKE_CAP_MAX) {
+        throw new CliError(
+          `usage: musterd team policy --unpriced-wake-cap <n | off>  (integer, 0 through ${UNPRICED_WAKE_CAP_MAX})`,
+          2,
+        );
+      }
+      merged.unpriced_wake_cap = n;
+    }
+    changed = true;
+  }
   // ADR 506: how long a lane-review ask waits before the owner may self-close on silence. Taken in
   // minutes (how people say it), stored in ms (how every other clock in the protocol is kept).
   const reviewWindow = flagStr(parsed.flags, 'acceptance-review-window');
@@ -937,6 +959,14 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
             : `spend approval: $${updated.spend_approval_usd.toFixed(2)} per wake at the gateway — shown on the report, display only`,
         ) + '\n',
       );
+    if (unpricedCap !== undefined)
+      process.stdout.write(
+        hint(
+          updated.unpriced_wake_cap === undefined
+            ? 'unpriced wake cap off — unpriced wakes stay outside the dollar cap (ADR 639)'
+            : `unpriced wake cap: ${updated.unpriced_wake_cap} wakes / 7d — shown on the report, display only`,
+        ) + '\n',
+      );
     if (reviewWindow !== undefined)
       process.stdout.write(
         hint(
@@ -1046,6 +1076,12 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     current.spend_approval_usd === undefined
       ? `  spend approval: ${theme.meta('unset')}\n`
       : `  spend approval: $${current.spend_approval_usd.toFixed(2)} per wake at the gateway\n`,
+  );
+  // ADR 639. Absence keeps today's behavior, so this line does not use inherited().
+  process.stdout.write(
+    current.unpriced_wake_cap === undefined
+      ? `  unpriced wake cap: ${theme.meta('unset')}\n`
+      : `  unpriced wake cap: ${current.unpriced_wake_cap} wakes / 7d\n`,
   );
   process.stdout.write(
     `  acceptance review window: ${Math.round(current.acceptance_review_window_ms / 60_000)}m${inherited(stored, 'acceptance_review_window_ms')}\n`,

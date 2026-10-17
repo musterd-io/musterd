@@ -144,11 +144,20 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
           `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
         );
       }
+      if (k.unpriced_wake_cap !== undefined && k.unpriced_wake_count !== undefined) {
+        lines.push(
+          `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${k.unpriced_over_cap ? 'OVER' : 'under'} · display only`,
+        );
+      }
       if (k.exhausted > 0) lines.push(`  ⚠ ${k.exhausted} act(s) exhausted their wake attempts`);
       for (const seat of k.by_seat.filter((b) => b.over_budget))
         lines.push(`  ⚠ ${seat.seat} — a wake exceeded its $${seat.budget_usd} report bound`);
-    } else if (k?.spend_cap_usd !== undefined || k?.spend_approval_usd !== undefined) {
-      // Quiet window. The digest stays silent when neither number is set.
+    } else if (
+      k?.spend_cap_usd !== undefined ||
+      k?.spend_approval_usd !== undefined ||
+      k?.unpriced_wake_cap !== undefined
+    ) {
+      // Quiet window. The digest stays silent when none of the three numbers is set.
       lines.push('\nwake:');
       if (k.spend_cap_usd !== undefined) {
         lines.push(
@@ -158,6 +167,11 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       if (k.spend_approval_usd !== undefined) {
         lines.push(
           `  approval $${k.spend_approval_usd.toFixed(2)} per wake · gateway running cost · display only`,
+        );
+      }
+      if (k.unpriced_wake_cap !== undefined && k.unpriced_wake_count !== undefined) {
+        lines.push(
+          `  unpriced wakes ${k.unpriced_wake_count} · cap ${k.unpriced_wake_cap} ${k.unpriced_over_cap ? 'OVER' : 'under'} · display only`,
         );
       }
     }

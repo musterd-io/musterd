@@ -124,6 +124,13 @@ export type AgentHostPolicy = z.infer<typeof AgentHostPolicySchema>;
  */
 export const SPEND_CAP_USD_MAX = 1_000_000;
 
+/**
+ * ADR 639. Fat-finger ceiling on a team's unpriced-wake count. The key is optional and has no
+ * default: unset keeps today's behavior. Zero is a real cap (block unpriced harnesses), so it is
+ * inside the range. The count is an integer.
+ */
+export const UNPRICED_WAKE_CAP_MAX = 10_000;
+
 export const PolicySchema = z.object({
   allow_pre_issued_grants: z.boolean().default(false),
   /**
@@ -242,6 +249,13 @@ export const PolicySchema = z.object({
    * {@link SPEND_CAP_USD_MAX}.
    */
   spend_approval_usd: z.number().finite().positive().max(SPEND_CAP_USD_MAX).optional(),
+  /**
+   * ADR 639. How many unpriced wakes a team allows in the report's 7-day window. No default:
+   * absent keeps today's behavior. 0 is a real cap (block unpriced harnesses). Integer, 0 through
+   * {@link UNPRICED_WAKE_CAP_MAX}. Display only in this record. The deny path is lane
+   * `01M50M90ST4TQWKEBP5TQ56V0B`.
+   */
+  unpriced_wake_cap: z.number().int().min(0).max(UNPRICED_WAKE_CAP_MAX).optional(),
   /**
    * Sponsor-hosted agents (ADR 463 §2). `max_per_host` bounds live enrolled sponsored seats per
    * host label; `policy` is the residency override every provisioned seat enrolls with. `budget_usd`

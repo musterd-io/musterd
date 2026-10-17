@@ -35,7 +35,7 @@ import { listTeamMessages, longDeferred } from './messages.js';
 import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
 import { teamFamilyPosture } from './review.js';
 import type { MessageRow } from './rows.js';
-import { getPolicy, spendApprovalUsd, spendCapUsd } from './teams.js';
+import { getPolicy, spendApprovalUsd, spendCapUsd, unpricedWakeCap } from './teams.js';
 import { deriveToolCallMetrics } from './toolCalls.js';
 
 /** Matches the inbox/wake reads' bound (ADR 211 §3). */
@@ -732,6 +732,58 @@ function foldLeaseCosts(rows: WakeAuditRow[]): Map<string, { seat: string; cost:
  * ADR 611. The 7-day priced total `deriveWakeMetrics` reports as `cost_usd_total`, without the
  * per-act message walk. Null when the window has no priced lease. A lone `wake_cost` row counts.
  */
+const UNPRICED_SETTLED_ACTIONS = new Set([
+  'residency.wake_failed',
+  'residency.wake_cost',
+  'residency.wake_exhausted',
+  'residency.wake_report_rejected',
+]);
+
+/**
+ * ADR 639. Unpriced wakes in the window, unique by lease. A lease counts when it has no
+ * positive `cost_usd` and either a session attested it or it settled. A printed 0 is unpriced
+ * (ADR 236). An in-flight `residency.woke` with no cost and no session token does not count.
+ * `wake_deferred` does not count. Rows with no `lease_id` are skipped.
+ */
+export function countUnpricedWakes(
+  rows: ReadonlyArray<{
+    action: string;
+    detail: { lease_id?: string; cost_usd?: number; session_captured?: boolean };
+  }>,
+): number {
+  const byLease = new Map<string, { positive: boolean; captured: boolean; settled: boolean }>();
+  for (const r of rows) {
+    const lease = r.detail.lease_id;
+    if (lease === undefined) continue;
+    const acc = byLease.get(lease) ?? { positive: false, captured: false, settled: false };
+    const cost = r.detail.cost_usd;
+    if (cost !== undefined && cost > 0) acc.positive = true;
+    if (r.detail.session_captured === true) acc.captured = true;
+    if (
+      UNPRICED_SETTLED_ACTIONS.has(r.action) ||
+      (r.action === 'residency.woke' && cost !== undefined) ||
+      cost === 0
+    ) {
+      acc.settled = true;
+    }
+    byLease.set(lease, acc);
+  }
+  let n = 0;
+  for (const acc of byLease.values()) {
+    if (!acc.positive && (acc.captured || acc.settled)) n += 1;
+  }
+  return n;
+}
+
+/** The 7-day unpriced-wake count. Called only when `unpriced_wake_cap` is set (ADR 639). */
+export async function unpricedWakeCount(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<number> {
+  return countUnpricedWakes(await loadWakeAuditRows(db, teamId, now));
+}
+
 export async function pricedWakeCostUsd(
   db: Driver,
   teamId: string,
@@ -985,6 +1037,19 @@ export async function deriveReport(
     };
   }
   if (approval !== null) wake = { ...wake, spend_approval_usd: approval };
+  // ADR 639. The count is a second read of the same audit rows, and only when an admin set
+  // the key, so an unset team keeps today's report bytes. deriveWakeMetrics stays free of it.
+  // Over is count >= cap, including a stored 0 against a quiet window.
+  const unpricedCap = unpricedWakeCap(policy);
+  if (unpricedCap !== null) {
+    const unpricedCount = await unpricedWakeCount(db, teamId, now);
+    wake = {
+      ...wake,
+      unpriced_wake_cap: unpricedCap,
+      unpriced_wake_count: unpricedCount,
+      unpriced_over_cap: unpricedCount >= unpricedCap,
+    };
+  }
 
   return {
     team: teamSlug,

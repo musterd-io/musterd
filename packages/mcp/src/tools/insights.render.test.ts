@@ -219,3 +219,52 @@ describe('fmtReport — spend approval (ADR 635)', () => {
     expect(quiet).not.toContain('cap $');
   });
 });
+
+describe('fmtReport — unpriced wake cap (ADR 639)', () => {
+  it('says nothing about a count cap that was never set', () => {
+    const quiet = fmtReport(report({ wake: wake() }), 'team');
+    expect(quiet).not.toContain('unpriced wakes');
+    const active = fmtReport(
+      report({
+        wake: wake({ wakes: 1, cost_usd_total: 4, cost_usd_per_wake: 4, cost_reported: 1 }),
+      }),
+      'team',
+    );
+    expect(active).toContain('cost $4.00');
+    expect(active).not.toContain('unpriced wakes');
+  });
+
+  it('prints the count on an active wake and on a quiet window', () => {
+    const under = fmtReport(
+      report({
+        wake: wake({
+          wakes: 1,
+          cost_usd_total: 4,
+          cost_usd_per_wake: 4,
+          cost_reported: 1,
+          unpriced_wake_cap: 5,
+          unpriced_wake_count: 1,
+          unpriced_over_cap: false,
+        }),
+      }),
+      'team',
+    );
+    expect(under).toContain('unpriced wakes 1 · cap 5 under · display only');
+    expect(under).not.toContain('OVER');
+    expect(under).not.toContain('agent wakes held');
+
+    const over = fmtReport(
+      report({
+        wake: wake({
+          unpriced_wake_cap: 0,
+          unpriced_wake_count: 0,
+          unpriced_over_cap: true,
+        }),
+      }),
+      'team',
+    );
+    expect(over).toContain('unpriced wakes 0 · cap 0 OVER · display only');
+    expect(over).toContain('wake:');
+    expect(over).not.toContain('agent wakes held');
+  });
+});
