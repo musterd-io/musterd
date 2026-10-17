@@ -150,8 +150,8 @@ export type PeerDemand = z.infer<typeof PeerDemandSchema>;
 /**
  * One recipient's rung on the delivery ladder (ADR 090): `logged` (persisted to the inbox — in
  * musterd durability IS delivery, so there is no local `failed`) → `seen` (their read cursor crossed
- * the act) → `answered` (their accept/decline named it, or a resolve closed its thread). Derived from
- * the log + cursors + the interrupt audit — never stored.
+ * the act; the report says "past cursor", ADR 652) → `answered` (their accept/decline named it, or a
+ * resolve closed its thread). Derived from the log + cursors + the interrupt audit — never stored.
  */
 export const DeliveryRecipientSchema = z.object({
   seat: z.string(),
@@ -163,6 +163,13 @@ export const DeliveryRecipientSchema = z.object({
    * by every act that update crossed), NOT a per-message receipt. Null while unseen.
    */
   seen_by: z.number().int().nullable(),
+  /**
+   * The cursor row that position sits on: `inbox_cursors.last_read_message_id` when the cursor is
+   * past the act, otherwise null. One id covers every act that position passed (ADR 652). The server
+   * always sets it. Optional so a client newer than a pre-652 daemon still parses the report;
+   * absence is not a receipt.
+   */
+  cursor_on: z.string().nullable().optional(),
   /** The closing act, when the loop closed. */
   answered: z.object({ act: z.string(), id: z.string(), ts: z.number().int() }).nullable(),
   /** ADR 088 interrupt raises recorded for this (act, recipient) — the attempt history. */

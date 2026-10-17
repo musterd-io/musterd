@@ -183,6 +183,43 @@ describe('fmtReport — spend cap (ADR 602)', () => {
   });
 });
 
+describe('fmtReport — delivery says past cursor (ADR 652)', () => {
+  it('names the cursor row instead of printing seen', () => {
+    const out = fmtReport(
+      report({
+        open_directed: [
+          {
+            id: 'h1',
+            act: 'request_help',
+            from: 'ada',
+            to_kind: 'member',
+            thread: null,
+            ts: 1,
+            age_ms: 5_000,
+            urgent: false,
+            recipients: [
+              {
+                seat: 'nick',
+                seat_id: 'nick',
+                state: 'seen',
+                seen_by: 1_000,
+                cursor_on: 'h1',
+                answered: null,
+                interrupt_raises: 0,
+                ccd_nudges: 0,
+                ccd_nudges_verbatim: 0,
+              },
+            ],
+          },
+        ],
+      }),
+      'team',
+    );
+    expect(out).toContain('nick: past cursor on h1');
+    expect(out).not.toContain('nick: seen');
+  });
+});
+
 describe('fmtReport — spend approval (ADR 635)', () => {
   it('says nothing about a threshold that was never set', () => {
     const quiet = fmtReport(report({ wake: wake() }), 'team');

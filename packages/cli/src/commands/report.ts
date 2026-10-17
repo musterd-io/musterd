@@ -437,12 +437,15 @@ function renderSteering(r: Report, w: (s: string) => void): void {
   );
 }
 
-/** One recipient's rung, compactly: `stanley seen 2h` / `nick answered (accept)` / `izzo unseen 3d`. */
+/** One recipient's rung: `stanley past cursor on h1 ~2h` / `nick answered (accept)` / `izzo unseen`. */
 function renderRecipient(r: ActDelivery['recipients'][number], sentTs: number): string {
   if (r.answered)
     return `${theme.memberName(r.seat, 'agent')} ${theme.ok('answered')} ${theme.meta(`(${r.answered.act}, ${ago(r.answered.ts - sentTs)} after send)`)}`;
-  if (r.state === 'seen')
-    return `${theme.memberName(r.seat, 'agent')} seen${r.seen_by ? theme.meta(` ~${ago(Date.now() - r.seen_by)} ago`) : ''}`;
+  if (r.state === 'seen') {
+    // ADR 652: "seen" is the cursor watermark. Name the row it sits on.
+    const detail = `${r.cursor_on ? ` on ${r.cursor_on}` : ''}${r.seen_by ? ` ~${ago(Date.now() - r.seen_by)} ago` : ''}`;
+    return `${theme.memberName(r.seat, 'agent')} past cursor${detail ? theme.meta(detail) : ''}`;
+  }
   const raises =
     r.interrupt_raises > 0 ? theme.meta(` · ${r.interrupt_raises} interrupt raise(s)`) : '';
   return `${theme.memberName(r.seat, 'agent')} ${theme.warn('unseen')}${raises}`;
@@ -457,9 +460,9 @@ function renderActDelivery(d: ActDelivery, w: (s: string) => void): void {
 }
 
 /**
- * `musterd report delivery [<id>]` (ADR 090): no id — the open directed ledger (what's waiting on
- * whom, seen or ignored); with id — one act's per-recipient journey. Derived server-side from the
- * log + cursors + the interrupt audit; a diagnostic instrument, never a score.
+ * `musterd report delivery [<id>]` (ADR 090, ADR 652): no id — the open directed ledger (what's
+ * waiting on whom, past cursor or unseen); with id — one act's per-recipient journey. Derived
+ * server-side from the log + cursors + the interrupt audit; a diagnostic instrument, never a score.
  */
 async function deliveryReport(parsed: Parsed, id: string | undefined): Promise<number> {
   const { team, http } = resolve(parsed.flags);

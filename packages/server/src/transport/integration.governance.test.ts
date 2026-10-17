@@ -1009,7 +1009,13 @@ withDrivers('integration · governance', (_o, kind) => {
       expect(ledger.status).toBe(200);
       expect(ledger.json).toMatchObject({ id: 'h-1', act: 'handoff', urgent: true });
       expect(ledger.json.recipients).toEqual([
-        expect.objectContaining({ seat: 'Bob', seat_id: 'bob', state: 'logged', seen_by: null }),
+        expect.objectContaining({
+          seat: 'Bob',
+          seat_id: 'bob',
+          state: 'logged',
+          seen_by: null,
+          cursor_on: null,
+        }),
       ]);
       let report = await get('/teams/dawn/report', nickTok);
       expect(report.json.open_directed.map((d: { id: string }) => d.id)).toContain('h-1');
@@ -1017,7 +1023,7 @@ withDrivers('integration · governance', (_o, kind) => {
       // Bob's cursor crosses the act → seen (watermark timestamp, not a receipt).
       await post('/teams/dawn/inbox/cursor', { last_read_message_id: 'h-1' }, bobTok);
       ledger = await get('/teams/dawn/messages/h-1/delivery', bobTok);
-      expect(ledger.json.recipients[0]).toMatchObject({ state: 'seen' });
+      expect(ledger.json.recipients[0]).toMatchObject({ state: 'seen', cursor_on: 'h-1' });
       expect(ledger.json.recipients[0].seen_by).not.toBeNull();
 
       // Bob accepts → answered, and the open directed ledger empties.
