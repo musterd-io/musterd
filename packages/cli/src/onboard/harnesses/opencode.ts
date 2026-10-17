@@ -163,9 +163,10 @@ export const opencode: Harness = {
   },
 
   async detect() {
-    const installed =
-      existsSync(join(homedir(), '.local', 'share', 'opencode')) ||
-      existsSync(join(homedir(), '.config', 'opencode'));
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const bin = await resolveOpencodeBin();
+    const installed = bin !== null;
     const conflict = jsoncConflict();
     if (conflict) {
       return {
@@ -187,8 +188,8 @@ export const opencode: Harness = {
         ? 'registered in ~/.config/opencode/opencode.json (machine-global — musterd writes the project file)'
         : conflict
           ? conflict
-          : installed
-            ? '~/.local/share/opencode present'
+          : bin
+            ? `opencode on PATH (${bin})`
             : 'opencode install not found',
       ...(entry ? registeredFromEnv(entry.environment) : {}),
       ...(inGlobal ? { registeredElsewhere: globalConfigPath() } : {}),
@@ -342,12 +343,12 @@ export const opencodeAdapter: HarnessAdapter = {
   },
 
   async availability(ctx) {
-    const home = ctx.env['HOME'] ?? homedir();
-    const present =
-      existsSync(join(home, '.local', 'share', 'opencode')) ||
-      existsSync(join(home, '.config', 'opencode'));
-    return present
-      ? { available: true, detail: '~/.local/share/opencode present' }
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const exec = ctx.exec;
+    const bin = await resolveOpencodeBin(exec ? (c, a) => exec.run(c, a) : undefined);
+    return bin
+      ? { available: true, detail: `opencode on PATH (${bin})` }
       : { available: false, detail: 'opencode install not found' };
   },
 

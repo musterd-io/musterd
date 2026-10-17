@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { codexCandidates, probeCodexCli, resetCodexBinCache, resolveCodexBin } from './codexBin.js';
 
 describe('resolveCodexBin', () => {
-  it('probes PATH without a shell and caches a runnable executable', async () => {
+  it('probes PATH without a shell; an injected runnable is never cached (ADR 643)', async () => {
     resetCodexBinCache();
     const calls: string[] = [];
     const runnable = async (cmd: string) => {
@@ -11,7 +11,8 @@ describe('resolveCodexBin', () => {
     };
     expect(await resolveCodexBin(runnable)).toBe('codex');
     expect(await resolveCodexBin(runnable)).toBe('codex');
-    expect(calls).toEqual(['codex']);
+    // A reconcile ctx.exec or a test fake must not answer for the next caller.
+    expect(calls).toEqual(['codex', 'codex']);
   });
 
   it('does not cache a miss, so a later installation becomes visible', async () => {
