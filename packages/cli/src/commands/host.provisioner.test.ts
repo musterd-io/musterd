@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { findBinding, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
-import { buildProvisioner, hostCommand } from './host.js';
+import { buildCloudProvisioner, buildProvisioner, hostCommand } from './host.js';
 
 /** ADR 463 §3 — how `musterd host` decides it is a sponsor's host, and runs the provisioner. */
 let repo: string;
@@ -112,6 +112,34 @@ describe('buildProvisioner (ADR 463 §3)', () => {
     const log = vi.fn();
     expect(await buildProvisioner(parseArgs([]), log, s.opts)).toBeNull();
     expect(log).toHaveBeenCalledWith(expect.stringContaining('provisioning is off: ECONNRESET'));
+  });
+});
+
+describe('buildCloudProvisioner (ADR 648)', () => {
+  it('builds from flags + MUSTERD_HOST_KEY with no sponsor binding, and ticks under the one client', async () => {
+    const claim = vi.fn(async () => ({ provisions: [] }));
+    const log = vi.fn();
+    const tick = await buildCloudProvisioner(
+      parseArgs(['--server', 'https://cloud.test', '--team', 'acme', '--host', 'cloud-1']),
+      log,
+      {
+        cwd: repo,
+        env: { MUSTERD_HOST_KEY: 'msak_host' },
+        clientFor: () => ({ claimProvisions: claim, reportProvision: vi.fn() }) as never,
+      },
+    );
+    expect(tick).not.toBeNull();
+    await tick!();
+    expect(claim).toHaveBeenCalledWith('acme', 'cloud-1');
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining('msak_host'));
+  });
+
+  it('is off with a named reason when a required input is missing', async () => {
+    const log = vi.fn();
+    expect(
+      await buildCloudProvisioner(parseArgs(['--team', 'acme']), log, { cwd: repo, env: {} }),
+    ).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('required'));
   });
 });
 

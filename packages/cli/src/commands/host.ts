@@ -63,6 +63,67 @@ function parseOptions(flags: Record<string, string | boolean>): z.infer<typeof H
  * binding, not a repo, a credential the daemon refuses to mint — returns null: the wake half runs
  * exactly as it always did, and the host says nothing.
  */
+/**
+ * ADR 648: the cloud host's provisioner. No sponsor binding exists on musterd compute — and
+ * must never — so one host-key client performs the claim, the provisioning steps and the
+ * report, under the authority ADR 648 scopes to the key creator's sponsored seats. The key
+ * arrives in `MUSTERD_HOST_KEY` (a machine secret, never logged); server, team and host label
+ * are flags, the harness defaults to the resident engine (`musterd`).
+ */
+export async function buildCloudProvisioner(
+  parsed: Parsed,
+  log: (line: string) => void,
+  seams: {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    clientFor?: (server: string, key: string) => HttpClient;
+  } = {},
+): Promise<((now?: number) => ReturnType<typeof provisionOnce>) | null> {
+  const env = seams.env ?? process.env;
+  const server = flagStr(parsed.flags, 'server');
+  const team = flagStr(parsed.flags, 'team');
+  const host = flagStr(parsed.flags, 'host');
+  const hostKey = env['MUSTERD_HOST_KEY'];
+  if (!server || !team || !host || !hostKey) {
+    log('! cloud provisioning is off: --server, --team, --host and MUSTERD_HOST_KEY are required');
+    return null;
+  }
+  const cwd = seams.cwd ?? process.cwd();
+  const repoRoot = gitToplevel(cwd);
+  if (!repoRoot) {
+    log('! cloud provisioning is off: this folder is not a git checkout');
+    return null;
+  }
+  const harnessId = flagStr(parsed.flags, 'harness') ?? 'musterd';
+  // The resident engine is not in the selectable HARNESSES list; provisioning uses only its id
+  // (the enrolment's harness and the wiring label), so the native row is named directly.
+  const harness =
+    harnessId === 'musterd'
+      ? ({ id: 'musterd', label: 'musterd (resident engine)' } as ProvisionDeps['harness'])
+      : HARNESSES.find((h) => h.id === harnessId);
+  if (!harness) {
+    log(`! cloud provisioning is off: unknown harness "${harnessId}"`);
+    return null;
+  }
+  const client = (
+    seams.clientFor ??
+    ((s: string, key: string) => new HttpClient({ server: s, key }).presenceNeutral())
+  )(server, hostKey);
+  const base: Omit<ProvisionDeps, 'log'> = {
+    client: client as ProvisionDeps['client'],
+    // ADR 648: the host key itself is the provisioning caller — no sponsor identity here.
+    sponsor: client as ProvisionDeps['sponsor'],
+    team,
+    server,
+    host,
+    hostKey,
+    harness,
+    repoRoot,
+    clone: parsed.flags['clone'] !== false,
+  };
+  return () => provisionOnce({ ...base, log });
+}
+
 export async function buildProvisioner(
   parsed: Parsed,
   log: (line: string) => void,
@@ -153,7 +214,7 @@ async function provisionsCommand(parsed: Parsed): Promise<number> {
 }
 
 const HOST_USAGE =
-  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--no-gateway] [--clone] — ' +
+  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--cloud-provision --server <url> --team <slug>] [--no-gateway] [--clone] — ' +
   '`musterd host` runs the wake actuator; `musterd host provisions` lists claimable provisions. ' +
   'There is no `host status`: read ~/.musterd/host.log, or `musterd service status --wake`.';
 
@@ -218,7 +279,9 @@ export async function hostCommand(
       ? null
       : deps.provisioner !== undefined
         ? deps.provisioner
-        : await buildProvisioner(parsed, log);
+        : parsed.flags['cloud-provision'] === true
+          ? await buildCloudProvisioner(parsed, log)
+          : await buildProvisioner(parsed, log);
   let provisioning: Promise<unknown> | null = null;
   // Its own catch, like the doorbell: a provisioning failure never stops a wake, and a slow
   // provision (a clone, a harness install) never delays one — the tick does not await it.
