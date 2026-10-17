@@ -309,12 +309,19 @@ export class MusterdClient {
   onReplaced?: () => void;
   /** ADR 630 §3: built per request from a phone's `msat_` bearer. See {@link remote}. */
   private readonly remoteMode: boolean;
+  /** How `request()` reaches the daemon: global fetch, or (remote) one that keeps the edge. */
+  private readonly send: typeof fetch;
 
   constructor(
     private config: McpConfig,
-    opts: { remote?: boolean } = {},
+    opts: {
+      remote?: boolean;
+      /** Remote only: the transport for loopback calls (`edgeFetch`, which can present `Host`). */
+      fetch?: typeof fetch;
+    } = {},
   ) {
     this.remoteMode = opts.remote === true;
+    this.send = opts.fetch ?? ((input, init) => fetch(input, init));
     if (this.remoteMode) {
       // The bearer is the occupancy: the daemon authenticated the seat before this client existed,
       // and re-authenticates every call it makes. Nothing here can lose the seat.
@@ -654,7 +661,7 @@ export class MusterdClient {
       try {
         // Built inside the loop so each attempt gets a FRESH abort signal — a timeout signal hoisted
         // out would already be spent by the time a retry used it, aborting instantly.
-        res = await fetch(this.config.server + path, {
+        res = await this.send(this.config.server + path, {
           method,
           headers: {
             'content-type': 'application/json',
@@ -831,6 +838,28 @@ export class MusterdClient {
       accepted_handoff?: AcceptedHandoffWire;
       evidence_notice?: string;
     }>;
+  }
+
+  /** ADR 449 §3: a human member mints an agent they sponsor (`POST /members/agents`). */
+  createSponsoredAgent(input: { name: string; role?: string | undefined }): Promise<{
+    member: { name: string };
+    hosting: string;
+    host: string | null;
+    connect_url: string;
+  }> {
+    return this.request('POST', `/teams/${this.config.team}/members/agents`, {
+      name: input.name,
+      ...(input.role !== undefined ? { role: input.role } : {}),
+    });
+  }
+
+  /** ADR 456 §2: issue a sponsored agent's connect link, under the team's `agent_connect` policy. */
+  connectSponsoredAgent(name: string): Promise<{ member: string; connect_url: string }> {
+    return this.request(
+      'POST',
+      `/teams/${this.config.team}/members/agents/${encodeURIComponent(name)}/connect`,
+      {},
+    );
   }
 
   roster(role?: string): Promise<{

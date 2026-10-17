@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
+import { buildRemoteMcpServer } from '@musterd/mcp';
 import { readBuildStamp } from '@musterd/protocol/build-stamp';
-import { createServer } from '@musterd/server';
+import { createServer, type RemoteMcpFactory } from '@musterd/server';
 import { flagStr, type Parsed } from '../args.js';
 import { renderBanner } from '../render/rows.js';
 import { theme } from '../render/theme.js';
@@ -26,8 +27,17 @@ function resolveBuildRef(): string | undefined {
 }
 
 /**
+ * The remote MCP as the daemon serves it (ADR 630 §2): the adapter's own tools for each
+ * `/mcp/:team` request, composed here because the CLI depends on both packages and the server on
+ * neither. Exported so the end-to-end tests exercise this exact composition.
+ */
+export const remoteMcp: RemoteMcpFactory = (seat) => buildRemoteMcpServer(seat);
+
+/**
  * Launch the daemon in the foreground. This is the one place the CLI imports
- * @musterd/server (ADR 002); every other command talks over the wire.
+ * @musterd/server (ADR 002); every other command talks over the wire. It is also where the remote
+ * MCP is composed in (ADR 630 §2): the daemon serves `/mcp/:team` with the adapter's own tools,
+ * built per request by `@musterd/mcp`, which the server package never imports.
  */
 export async function serveCommand(parsed: Parsed): Promise<number> {
   const portFlag = flagStr(parsed.flags, 'port');
@@ -46,6 +56,7 @@ export async function serveCommand(parsed: Parsed): Promise<number> {
     ...(trustProxy ? { trustProxy: true } : {}),
     ...(webRoot ? { webRoot } : {}),
     ...(buildRef ? { buildRef } : {}),
+    remoteMcp,
   });
   const { port, host: boundHost } = await server.listen();
 

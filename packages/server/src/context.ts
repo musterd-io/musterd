@@ -2,6 +2,7 @@ import type { Affinity } from './cloud/affinity.js';
 import type { ResolvedConfig } from './config.js';
 import type { Driver } from './db/driver.js';
 import type { Hub } from './transport/hub.js';
+import type { RemoteMcpFactory } from './transport/mcpHttp.js';
 
 /** Shared server context threaded through transports and the router. */
 export interface Ctx {
@@ -22,6 +23,8 @@ export interface Ctx {
    * roster roots) the stop stands until the next tick, as before.
    */
   onUnresolvedSeat?: (team: { id: string; slug: string }, seat: string) => Promise<boolean>;
+  /** ADR 630 §2: builds the remote MCP's tools per request; absent, `/mcp/:team` tools answer 503. */
+  remoteMcp?: RemoteMcpFactory | undefined;
 }
 
 /**

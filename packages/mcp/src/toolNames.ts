@@ -49,6 +49,13 @@ export const TOOL_NAMES = [
 ] as const;
 
 /**
+ * Tools registered on the remote rail only (ADR 630), beside {@link TOOL_NAMES}: a phone's human
+ * sponsors and connects agents here, while a desk does it with `musterd agent`, so no desk seat
+ * pays their standing context.
+ */
+export const REMOTE_TOOL_NAMES = ['team_agent_create', 'team_agent_connect'] as const;
+
+/**
  * The tools a session needs before it can do anything else (lane 01M4S53E79): join the team, read
  * what waits, say what it is doing, see the room. A harness that defers MCP tools behind a schema
  * search (Claude Code's ToolSearch) is asked to load these four up front, via `_meta`

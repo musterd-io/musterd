@@ -1,49 +1,67 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createRequire } from 'node:module';
-import { McpServer, createMcpHandler, type McpHttpHandler } from '@modelcontextprotocol/server';
-import { ACTS, ActSchema, makeEnvelope, type Act, type Recipient } from '@musterd/protocol';
-import { ulid } from 'ulid';
-import { z } from 'zod';
+import {
+  createMcpHandler,
+  type McpHttpHandler,
+  type McpServer,
+} from '@modelcontextprotocol/server';
+import type { Capabilities } from '@musterd/protocol';
 import { teamCtx, type Ctx } from '../context.js';
-import { asMusterdHttpError, MusterdError } from '../errors.js';
+import { asMusterdHttpError, MusterdError, ServiceUnavailable } from '../errors.js';
 import { noteRequestFailure } from '../log.js';
-import { routeEnvelope } from '../protocol/route.js';
-import { getCursor } from '../store/cursors.js';
-import { rowsToEnvelopes } from '../store/hydrate.js';
-import { authMember, getMemberByName, touchSeen } from '../store/members.js';
-import { listInbox } from '../store/messages.js';
+import { authMember, touchSeen } from '../store/members.js';
 import { touchAmbientPresence } from '../store/presence.js';
-import { isTalkOnly } from '../store/rows.js';
-import { requireTeam } from '../store/teams.js';
+import { resolveCapabilities } from '../store/rows.js';
 import { isTlsPeer, requireTeamRedacted } from './oauth.js';
-import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
+import { originFrom } from './sponsoredAgentMint.js';
 
 /**
  * The remote-MCP rail (ADR 446 §1): the musterd adapter served as Streamable HTTP at
  * `POST|GET /mcp/:team`, so a phone app adds one connector URL and signs in as a seat.
  *
- * Two deliberate shapes, both from the ADR:
+ * The daemon keeps the edge and implements no tools (ADR 630). It owns OAuth (`oauth.ts`), bearer
+ * verification, the per-team handler, the 1 MiB body cap and the challenge; the tools are the
+ * adapter's own, built per request by the {@link RemoteMcpFactory} the embedder composes in
+ * (`musterd serve` passes `@musterd/mcp`'s `buildRemoteMcpServer`, ADR 002's launcher exception).
+ * They call this daemon back over loopback with the phone's bearer, so a phone gets every route's
+ * whole behaviour, and nothing here can drift from the desk adapter.
  *
- * 1. **Framing owned by the SDK, decisions owned by the store.** `createMcpHandler` serves the
- *    Streamable HTTP exchange (initialize handshake, tools/list, tools/call, session ids) with a
- *    per-request factory — each request builds a fresh `McpServer` bound to the bearer, never a
- *    shared client. The tool handlers below call the SAME store paths the REST routes use
- *    (`routeEnvelope` for sends, `listInbox` for reads), so there is one semantics, not two.
- * 2. **Remote-bearer mode, not a socket.** Tool calls authenticate per request (no WS, no
- *    `wantPresence`, no session lease) and stamp ambient presence (`touchAmbientPresence`, ADR
- *    057) — last-OAuth-use is what the roster reads. `team_join` is a no-op success when the
- *    bearer already names the seat (the apps' setup prompts call it; failing there fails the
- *    demo).
- *
- * Increment 1 registers the Done-line tools only (`team_join` / `team_inbox_check` / `team_send`
- * — the join-page prompt's whole vocabulary). Converging the rest of the adapter surface rides
- * increment 3, after rehearsal says which tools a phone actually reaches for. The input shapes
- * mirror the adapter's (`packages/mcp/src/tools/*`) so the prompt works unchanged.
+ * The SDK's `createMcpHandler` serves the Streamable HTTP exchange (initialize, tools/list,
+ * tools/call, session ids) and asks the factory for a fresh `McpServer` per request — never one
+ * shared across callers.
  */
 
+/** One remote request's seat, as the factory receives it (ADR 630 §2). */
+export interface RemoteMcpSeat {
+  /** This daemon, as the factory's loopback calls reach it: the socket the phone arrived on. */
+  server: string;
+  team: string;
+  member: string;
+  /** The phone's `msat_`, re-presented on every loopback call so each is re-authenticated. */
+  bearer: string;
+  /** The seat's effective capabilities (ADR 621 §8) — `tools/list` is scoped by them. */
+  capabilities: Capabilities;
+  /**
+   * The phone's edge, to present on every loopback call (ADR 630, 2026-10-17 note): `host` and
+   * `x-forwarded-proto` so the Cloud host gate and the connect-link origin see the team's public
+   * host rather than an IP, and `cf-connecting-ip` so the per-client budget charges the phone, not
+   * the daemon. Only headers the phone's own request carried; never a credential.
+   */
+  headers: Record<string, string>;
+}
+
+/** Builds the MCP server for one remote request. Absent, `/mcp/:team` tool traffic answers 503. */
+export type RemoteMcpFactory = (seat: RemoteMcpSeat) => McpServer | Promise<McpServer>;
+
+/** The stable sentence a daemon with no factory answers (ADR 630 §8). */
+export const REMOTE_MCP_NOT_CONFIGURED = 'remote MCP not configured';
+
+/** The edge headers a loopback call re-presents. Allowlisted: nothing else of the phone's crosses. */
+const EDGE_HEADERS = ['host', 'x-forwarded-proto', 'cf-connecting-ip'] as const;
+
 const handlers = new Map<string, McpHttpHandler>();
-const requestResponse = new AsyncLocalStorage<ServerResponse>();
+/** The request being served: its seat and the factory to build it with (read by the SDK factory). */
+const requestSeat = new AsyncLocalStorage<{ seat: RemoteMcpSeat; factory: RemoteMcpFactory }>();
 /**
  * What the per-request factory threw, if it threw (lane 01M3ZC3G35). The factory runs inside the
  * SDK, which answers a factory throw with its own bare 500 — so a store that was unreachable or out
@@ -53,383 +71,17 @@ const requestResponse = new AsyncLocalStorage<ServerResponse>();
  */
 const factoryFailure = new AsyncLocalStorage<{ err?: unknown }>();
 
-/**
- * Bridge a zod-v3 object schema to what SDK 2.0.0's `registerTool` accepts: the Standard Schema
- * `~standard` face (Zod v4, ArkType, Valibot all implement it; zod v3 predates the `jsonSchema`
- * half). Validation runs the real zod schema; the JSON Schema is hand-authored beside it and is
- * what `tools/list` advertises — one source per tool, kept adjacent so they cannot drift.
- */
-function asMcpSchema<T>(schema: z.ZodType<T>, jsonSchema: Record<string, unknown>) {
-  return {
-    '~standard': {
-      version: 1 as const,
-      vendor: 'zod',
-      validate: (
-        value: unknown,
-      ): { value: T } | { issues: { message: string; path: PropertyKey[] }[] } => {
-        const parsed = schema.safeParse(value);
-        if (parsed.success) return { value: parsed.data };
-        return {
-          issues: parsed.error.issues.map((i) => ({ message: i.message, path: [...i.path] })),
-        };
-      },
-      jsonSchema: {
-        input: () => jsonSchema,
-        output: () => jsonSchema,
-      },
-    },
-  };
-}
-
-/**
- * The daemon's own package version for MCP `serverInfo` — read from `package.json` at load so
- * it can never drift (the ADR 175 posture, same as the adapter's `ADAPTER_VERSION`).
- */
-const DAEMON_VERSION: string = (() => {
-  try {
-    const pkg = createRequire(import.meta.url)('../../package.json') as { version?: unknown };
-    return typeof pkg.version === 'string' && pkg.version ? pkg.version : '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-})();
-
-function textResult(text: string) {
-  return { content: [{ type: 'text' as const, text }] };
-}
-
-function toolError(text: string) {
-  return { content: [{ type: 'text' as const, text }], isError: true as const };
-}
-
-function remoteToolError(err: unknown, includeCode = false) {
-  const me = asMusterdHttpError(err);
-  if (me.httpStatus >= 500) {
-    const res = requestResponse.getStore();
-    if (res) noteRequestFailure(res, err);
-  }
-  return toolError(includeCode ? `${me.code}: ${me.message}` : me.message);
-}
-
-async function withRemoteToolErrors<T>(run: () => Promise<T>) {
-  try {
-    return await run();
-  } catch (err) {
-    return remoteToolError(err);
-  }
-}
-
-/** The audience parser, mirroring the adapter's `normalizeTo` (same rules, no shared import). */
-function parseRecipient(
-  to: string | string[],
-  act: Act,
-): { to: Recipient; eligible: string[] | null } {
-  const names = (Array.isArray(to) ? to : [to]).map((n) => n.trim()).filter((n) => n.length > 0);
-  if (names.length === 0) return { to: { kind: 'team' }, eligible: null };
-  if (names.length === 1) {
-    const only = names[0]!;
-    if (only === '@team') return { to: { kind: 'team' }, eligible: null };
-    if (only === '@broadcast') return { to: { kind: 'broadcast' }, eligible: null };
-    return { to: { kind: 'member', name: only }, eligible: null };
-  }
-  if (names.length > 4)
-    throw new Error(`too many recipients (${names.length}) — name at most 4 seats, or use @team`);
-  const alias = names.find((n) => n.startsWith('@'));
-  if (alias)
-    throw new Error(`"${alias}" cannot appear in a list of seats — send to ${alias} on its own`);
-  if (act !== 'message' && act !== 'request_help' && act !== 'challenge')
-    throw new Error(
-      `a list of seats can only take message, request_help, or challenge — not ${act}`,
-    );
-  return { to: { kind: 'team' }, eligible: names };
-}
-
-const TeamJoinInput = z.object({}).passthrough();
-const TeamInboxInput = z.object({
-  ids: z.union([z.string(), z.array(z.string())]).optional(),
-  limit: z.number().int().positive().max(500).optional(),
-  unread_only: z.boolean().optional(),
-});
-const TeamSendInput = z.object({
-  to: z.union([z.string(), z.array(z.string())]).default('@team'),
-  act: z.enum(ACTS),
-  body: z.string(),
-  thread: z.string().optional(),
-  reply_to: z.string().optional(),
-  meta: z.record(z.string(), z.unknown()).optional(),
-});
-
-const TeamAgentConnectInput = z.object({ name: z.string().min(1).max(64) });
-
-const TeamAgentCreateInput = z.object({
-  name: z.string().min(1).max(64),
-  role: z.string().max(64).optional(),
-});
-
-/** One request's seat, read by the factory off the bridged request's identity headers. */
-function requestSeat(webReq: Request): { team: string; member: string } {
-  const team = webReq.headers.get('x-musterd-remote-team');
-  const member = webReq.headers.get('x-musterd-remote-member');
-  if (!team || !member) throw new Error('remote MCP request lost its seat identity');
-  return { team, member };
-}
-
-async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> {
-  const { team: slug, member: memberName } = requestSeat(webReq);
-  const team = await requireTeam(ctx.db, slug);
-  // ADR 621 §8: a talk-only seat (a guest) is offered the talk tools only. The server refuses the
-  // rest regardless (route.ts, the talk-only route guard); this keeps a phone from being offered
-  // what it would be refused.
-  const seatRow = await getMemberByName(ctx.db, team.id, memberName);
-  const talkOnly = seatRow ? isTalkOnly(seatRow) : false;
-  const server = new McpServer(
-    { name: 'musterd', version: DAEMON_VERSION },
-    {
-      instructions:
-        `You are joined to the musterd team "${slug}" as ${memberName} over a phone connector. ` +
-        `Call team_join first, then team_inbox_check; send with team_send.` +
-        (talkOnly
-          ? ' You are a guest: you can talk with the team, not change its work.'
-          : ' team_agent_create adds an agent you sponsor; team_agent_connect starts a team agent.'),
-    },
-  );
-
-  server.registerTool(
-    'team_join',
-    {
-      description: 'Join the team — a no-op success when the bearer already names the seat.',
-      inputSchema: asMcpSchema(TeamJoinInput, { type: 'object', properties: {} }),
-    },
-    async () =>
-      textResult(
-        `Already joined ${slug} as ${memberName} (remote bearer seat — no presence socket; your activity marks you present).`,
-      ),
-  );
-
-  server.registerTool(
-    'team_inbox_check',
-    {
-      description: 'Read the inbox: recent team traffic and acts directed at this seat.',
-      inputSchema: asMcpSchema(TeamInboxInput, {
-        type: 'object',
-        properties: {
-          ids: {
-            anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-            description: 'read named acts back and nothing else',
-          },
-          limit: { type: 'integer', minimum: 1, maximum: 500 },
-          unread_only: { type: 'boolean' },
-        },
-      }),
-    },
-    (rawArgs: unknown) =>
-      withRemoteToolErrors(async () => {
-        const parsed = TeamInboxInput.safeParse(rawArgs ?? {});
-        if (!parsed.success)
-          return toolError('invalid input: ids (string|string[]) | limit | unread_only');
-        const args = parsed.data;
-        const member = await getMemberByName(ctx.db, team.id, memberName);
-        if (!member) return toolError('seat is gone — sign in again');
-        if (args.ids !== undefined) {
-          const ids = (Array.isArray(args.ids) ? args.ids : args.ids.split(',')).filter(
-            (s) => s.length > 0,
-          );
-          const rows = await listInbox(ctx.db, member, { ids });
-          return textResult(
-            JSON.stringify({
-              messages: await rowsToEnvelopes(ctx.db, slug, rows),
-              cursor: await getCursor(ctx.db, member.id),
-            }),
-          );
-        }
-        const cursor = await getCursor(ctx.db, member.id);
-        const rows = await listInbox(ctx.db, member, {
-          unreadOnly: args.unread_only ?? false,
-          cursorTs: cursor.last_read_ts,
-          cursorId: cursor.last_read_message_id,
-          ...(args.limit ? { limit: args.limit } : { headLimit: 200 }),
-        });
-        return textResult(
-          JSON.stringify({
-            messages: await rowsToEnvelopes(ctx.db, slug, rows),
-            cursor: await getCursor(ctx.db, member.id),
-          }),
-        );
-      }),
-  );
-
-  // ADR 449 §3: a human member creates an agent they sponsor — the same mint as
-  // `POST …/members/agents` (one helper, so the surfaces cannot drift). The result carries a
-  // one-time connect link and no secret: the human opens it on the device that will run the agent.
-  if (!talkOnly)
-    server.registerTool(
-      'team_agent_create',
-      {
-        description:
-          'Create an agent on this team that you sponsor. Returns a one-time connect link (15 minutes) ' +
-          'to open on the device that will run it. It expires when you do, and removing you removes it. ' +
-          'At most 3 live agents each.',
-        inputSchema: asMcpSchema(TeamAgentCreateInput, {
-          type: 'object',
-          required: ['name'],
-          properties: {
-            name: { type: 'string', description: "the agent's member name (no spaces)" },
-            role: { type: 'string', description: 'optional role, e.g. research' },
-          },
-        }),
-      },
-      (rawArgs: unknown) =>
-        withRemoteToolErrors(async () => {
-          const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
-          if (!parsed.success) return toolError('invalid input: name | role?');
-          const sponsor = await getMemberByName(ctx.db, team.id, memberName);
-          if (!sponsor) return toolError('seat is gone — sign in again');
-          try {
-            const origin = originFrom(
-              webReq.headers.get('host'),
-              webReq.headers.get('x-forwarded-proto'),
-            );
-            const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
-            // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
-            // here is the link to open on the device that will run it.
-            return textResult(
-              minted.hosting === 'sponsor_host'
-                ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                    `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
-                    "(If it doesn't within 15 minutes you'll get a connect link.)"
-                : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                    `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
-                    `${minted.connect_url}`,
-            );
-          } catch (err) {
-            return remoteToolError(err);
-          }
-        }),
-    );
-
-  // ADR 456 §2: a teammate starts a team agent from their phone — the same issue path as
-  // `POST …/members/agents/:name/connect`, gated by the team's `agent_connect` policy.
-  if (!talkOnly)
-    server.registerTool(
-      'team_agent_connect',
-      {
-        description:
-          "Get a one-time connect link (15 minutes) for one of the team's member-created agents, to open " +
-          'on the device that will run it. Connecting takes the agent over from whatever device ' +
-          "held it; the agent's sponsor is told. Who may is team policy.",
-        inputSchema: asMcpSchema(TeamAgentConnectInput, {
-          type: 'object',
-          required: ['name'],
-          properties: { name: { type: 'string', description: "the agent's member name" } },
-        }),
-      },
-      (rawArgs: unknown) =>
-        withRemoteToolErrors(async () => {
-          const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
-          if (!parsed.success) return toolError('invalid input: name');
-          const caller = await getMemberByName(ctx.db, team.id, memberName);
-          if (!caller) return toolError('seat is gone — sign in again');
-          try {
-            const origin = originFrom(
-              webReq.headers.get('host'),
-              webReq.headers.get('x-forwarded-proto'),
-            );
-            const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
-            return textResult(
-              `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
-                `${issued.connect_url}`,
-            );
-          } catch (err) {
-            return remoteToolError(err);
-          }
-        }),
-    );
-
-  server.registerTool(
-    'team_send',
-    {
-      description:
-        'Send an act to the team or a seat (message, status_update, request_help, handoff, accept, decline, …).',
-      inputSchema: asMcpSchema(TeamSendInput, {
-        type: 'object',
-        required: ['act', 'body'],
-        properties: {
-          to: {
-            anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-            description: "member name, '@team', '@broadcast', or 2-4 names",
-          },
-          act: { type: 'string', enum: ACTS },
-          body: { type: 'string' },
-          thread: { type: 'string', description: 'thread id to reply within' },
-          reply_to: { type: 'string', description: 'message id this accepts/declines' },
-          meta: { type: 'object', description: 'act-specific fields, e.g. {progress:0.5}' },
-        },
-      }),
-    },
-    (rawArgs: unknown) =>
-      withRemoteToolErrors(async () => {
-        const parsed = TeamSendInput.safeParse(rawArgs ?? {});
-        if (!parsed.success)
-          return toolError('invalid input: to | act | body | thread? | reply_to? | meta?');
-        const args = parsed.data;
-        const parsedAct = ActSchema.safeParse(args.act);
-        if (!parsedAct.success) return toolError(`unknown act "${args.act}"`);
-        const act = parsedAct.data;
-        let addressed: { to: Recipient; eligible: string[] | null };
-        try {
-          addressed = parseRecipient(args.to, act);
-        } catch (err) {
-          return toolError(asMusterdHttpError(err).message);
-        }
-        const member = await getMemberByName(ctx.db, team.id, memberName);
-        if (!member) return toolError('seat is gone — sign in again');
-        const meta: Record<string, unknown> = { ...(args.meta ?? {}) };
-        if (args.reply_to) meta['in_reply_to'] = args.reply_to;
-        if (addressed.eligible) meta['eligible'] = addressed.eligible;
-        try {
-          const envelope = makeEnvelope({
-            id: ulid(),
-            team: slug,
-            from: memberName,
-            to: addressed.to,
-            act,
-            body: args.body,
-            thread: args.thread ?? null,
-            meta: Object.keys(meta).length > 0 ? meta : null,
-          });
-          // The ONE validate+persist+deliver path (routeEnvelope) — a remote send is a send.
-          // No sender occupancy id by design (stateless, like POST /messages): the model stamp
-          // falls back to the member's newest attested presence.
-          const result = await routeEnvelope(ctx, team, member, envelope);
-          return textResult(
-            JSON.stringify({
-              sent: envelope.id,
-              ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
-              ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
-              ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
-              ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
-              ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
-            }),
-          );
-        } catch (err) {
-          return remoteToolError(err, true);
-        }
-      }),
-  );
-
-  return server;
-}
-
-async function getHandler(ctx: Ctx, slug: string): Promise<McpHttpHandler> {
+function getHandler(slug: string): McpHttpHandler {
   let handler = handlers.get(slug);
   if (!handler) {
-    // The factory runs per request with that request's seat (ADR 446 §1); sessions the SDK
-    // holds are keyed by its own session ids, and this map is keyed by team — bounded by the
-    // team count, never by callers. Rehearsal measures the SDK-owned session growth (inc 3).
-    handler = createMcpHandler(async (fctx: { requestInfo?: Request }) => {
-      if (!fctx.requestInfo) throw new Error('remote MCP factory needs the request');
+    // The factory runs per request with that request's seat (ADR 446 §1); sessions the SDK holds
+    // are keyed by its own session ids, and this map is keyed by team — bounded by the team count,
+    // never by callers.
+    handler = createMcpHandler(async () => {
+      const current = requestSeat.getStore();
+      if (!current) throw new Error('remote MCP factory ran outside a request');
       try {
-        return await buildRemoteServer(ctx, fctx.requestInfo);
+        return await current.factory(current.seat);
       } catch (err) {
         const failure = factoryFailure.getStore();
         if (failure && failure.err === undefined) failure.err = err;
@@ -441,12 +93,7 @@ async function getHandler(ctx: Ctx, slug: string): Promise<McpHttpHandler> {
   return handler;
 }
 
-async function toWebRequest(
-  req: IncomingMessage,
-  path: string,
-  url: URL,
-  seat: { team: string; member: string },
-): Promise<Request> {
+async function toWebRequest(req: IncomingMessage, path: string, url: URL): Promise<Request> {
   // Decline 2: the bridged exchange is bounded — MCP frames carry tool args (message bodies),
   // so the cap is generous (1 MiB), but an unbounded public endpoint is a memory-exhaustion bug.
   const chunks: Buffer[] = [];
@@ -466,10 +113,6 @@ async function toWebRequest(
       continue;
     headers.set(name, Array.isArray(v) ? v.join(', ') : v);
   }
-  // Seat identity for the per-request factory — in-memory only, never logged (the redaction
-  // lane owns the daemon log; this header never reaches it).
-  headers.set('x-musterd-remote-team', seat.team);
-  headers.set('x-musterd-remote-member', seat.member);
   const hasBody =
     body.length > 0 && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH');
   return new Request(`http://localhost${path}${url.search}`, {
@@ -579,8 +222,7 @@ export async function handleMcpRoute(
   }
   const actingSeat = req.headers['x-musterd-seat'];
   const seatHeader = Array.isArray(actingSeat) ? actingSeat[0] : actingSeat;
-  let memberName: string;
-  let memberId: string;
+  let member: Awaited<ReturnType<typeof authMember>>['member'];
   try {
     const auth = await authMember(
       ctx.db,
@@ -588,8 +230,7 @@ export async function handleMcpRoute(
       bearer,
       seatHeader && seatHeader.length > 0 ? seatHeader : undefined,
     );
-    memberName = auth.member.name;
-    memberId = auth.member.id;
+    member = auth.member;
   } catch (err) {
     const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
@@ -614,15 +255,34 @@ export async function handleMcpRoute(
   // Ambient presence (ADR 057 §4): the tool call IS the heartbeat — stamp it, and announce the
   // flip like authTouch does. Humans stamp no model/provenance (ADR 121); the surface reads
   // `other` (no remote surface in the enum; rehearsal may name one).
-  await touchSeen(ctx.db, memberId);
-  if (await touchAmbientPresence(ctx.db, memberId, 'other', ctx.config.presenceTimeoutMs)) {
-    ctx.hub.broadcastTeam(team.id, { type: 'presence', member: memberName, status: 'online' });
+  await touchSeen(ctx.db, member.id);
+  if (await touchAmbientPresence(ctx.db, member.id, 'other', ctx.config.presenceTimeoutMs)) {
+    ctx.hub.broadcastTeam(team.id, { type: 'presence', member: member.name, status: 'online' });
   }
+  // ADR 630 §8: no factory, no tools. The OAuth routes (oauth.ts) answer either way.
+  const factory = ctx.remoteMcp;
+  if (!factory) {
+    const me = new ServiceUnavailable(REMOTE_MCP_NOT_CONFIGURED);
+    res.writeHead(me.httpStatus, {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    });
+    res.end(JSON.stringify(me.toBody()));
+    return true;
+  }
+  const seat: RemoteMcpSeat = {
+    server: loopbackBase(ctx, req),
+    team: slug,
+    member: member.name,
+    bearer,
+    capabilities: resolveCapabilities(member),
+    headers: edgeHeaders(req),
+  };
   try {
-    const webReq = await toWebRequest(req, path, url, { team: slug, member: memberName });
+    const webReq = await toWebRequest(req, path, url);
     const failure: { err?: unknown } = {};
-    const webRes = await requestResponse.run(res, () =>
-      factoryFailure.run(failure, async () => (await getHandler(ctx, slug)).fetch(webReq)),
+    const webRes = await requestSeat.run({ seat, factory }, () =>
+      factoryFailure.run(failure, async () => getHandler(slug).fetch(webReq)),
     );
     if (failure.err !== undefined) {
       // The SDK's own answer to the factory throw is a bare 500; answer the cause instead.
@@ -644,6 +304,31 @@ export async function handleMcpRoute(
     }
   }
   return true;
+}
+
+/**
+ * This daemon as its own loopback calls reach it: the local end of the socket the phone arrived
+ * on, which is a listening address of this process by construction — whatever the bind (loopback,
+ * a tailnet IP, `0.0.0.0` on Fly). Native TLS keeps the scheme; the edge `host` the calls present
+ * is the name the certificate was issued for.
+ */
+function loopbackBase(ctx: Ctx, req: IncomingMessage): string {
+  const raw = req.socket.localAddress ?? '127.0.0.1';
+  const addr = raw.replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1');
+  const host = addr.includes(':') ? `[${addr}]` : addr;
+  const scheme = ctx.config.tls ? 'https' : 'http';
+  return `${scheme}://${host}:${req.socket.localPort ?? ctx.config.port}`;
+}
+
+/** The phone's edge headers, as {@link RemoteMcpSeat.headers} describes. */
+function edgeHeaders(req: IncomingMessage): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of EDGE_HEADERS) {
+    const v = req.headers[name];
+    const value = Array.isArray(v) ? v[0] : v;
+    if (value) out[name] = value;
+  }
+  return out;
 }
 
 /** Test seam: drop cached handlers (per-team singletons) between isolated test servers. */
