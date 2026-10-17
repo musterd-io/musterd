@@ -1,0 +1,10 @@
+Fictional scanner output for this skill evaluation; package names and advisories are invented.
+
+1. `dev-linter` — high severity parser denial of service; used only in the lint script.
+2. `test-preview` — high severity local file read; imported only by the test harness.
+3. `config-merge` — high severity prototype pollution; production API parses user JSON, then passes
+   selected fields to `config-merge` in the request handler.
+4. `doc-render` — moderate severity path traversal; used by a release-only documentation task.
+
+The report suggests `package-manager audit fix --force`. It does not include a call graph, fixed
+versions, exploitability data or a lockfile diff.

@@ -1,0 +1,15 @@
+Fictional workflow diff for this skill evaluation; it is not a real GitHub Actions workflow.
+
+```diff
+ on: pull_request_target
+ jobs:
+   label:
+     permissions: write-all
+     steps:
+       - run: echo "${{ github.event.pull_request.title }}" | ./scripts/label.sh
+       - uses: actions/checkout@v4
+       - run: npm test
+```
+
+The repository accepts pull requests from people without write access. The script writes labels to
+the repository. The contributor controls the pull request title and the source branch.

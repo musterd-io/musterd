@@ -16,7 +16,7 @@ holds your team's roster, the folder with `.musterd/team.toml`.
 | `platform` | The one seat that touches running infrastructure | Yes |
 | `steward` | Keeps the declared record honest: roadmap, decision statuses, doc prose | Yes |
 | `observer` | Reads team state for dashboards and digests; holds no lanes, sends no acts | Yes |
-| `security` | Owns the team's security evidence: threat models, scans, findings, disclosure | Role file only |
+| `security` | Owns the team's security evidence: threat models, scans, findings, disclosure | Yes |
 | `courier` | Moves team material between the team's machines | Role file only |
 | `product-communications` | Owns the product's voice: messaging, public docs, release notes | Yes |
 | `admin` | The team's governance authority, held by a person | Role file only |
