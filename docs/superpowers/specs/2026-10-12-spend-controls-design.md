@@ -103,8 +103,9 @@ speaker described becomes something an admin can grant and the team can read.
    unpriced harnesses, plus one notice naming both caps when both trip. Ask `01M50H0C2E`
    (2026-10-15) was an empty Approve and selected no option. The key and the report line are
    lane `01M50M8W8FJ5EQ15RF934F6BHS`
-   ([ADR 639](../../decisions/639-unpriced-wake-cap-display.md)). The notice is lane
-   `01M50M90ST4TQWKEBP5TQ56V0B`. Options:
+   ([ADR 639](../../decisions/639-unpriced-wake-cap-display.md)). The hold and the one
+   notice are lane `01M50M90ST4TQWKEBP5TQ56V0B`
+   ([ADR 641](../../decisions/641-unpriced-wake-cap-holds-wakes.md)). Options:
    [2026-10-15-spend-unpriced-floor-design.md](2026-10-15-spend-unpriced-floor-design.md).
 
 ## Testing

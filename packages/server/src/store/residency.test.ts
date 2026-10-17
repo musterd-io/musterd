@@ -6,7 +6,7 @@ import type { PgliteDriver } from '../db/pgliteDriver.js';
 import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { withDrivers } from '../db/testing.js';
 import { log } from '../log.js';
-import { readSpendCapBreach } from '../protocol/gate.js';
+import { readSpendCapBreach, readUnpricedWakeBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
@@ -2999,6 +2999,177 @@ withDrivers('residency', (o, kind) => {
       await priced(db, team, 'Ada', 9);
       await setPolicy(db, team.id, { spend_cap_usd: 10 });
       expect(await readSpendCapBreach(db, team.id)).toBeNull();
+    });
+  });
+
+  describe('claimWakeLeases — unpriced wake cap holds new agent wakes (ADR 641)', async () => {
+    async function zeroCost(db: Driver, team: TeamRow, seat: string, leaseId: string) {
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: seat,
+        result: 'allow',
+        detail: { lease_id: leaseId, cost_usd: 0 },
+      });
+    }
+
+    async function gatesFor(db: Driver, teamId: string, cause: string) {
+      return (await listAudit(db, teamId)).filter((r) => {
+        if (r.action !== 'action.gate' || r.detail === null) return false;
+        return (JSON.parse(r.detail) as { cause?: string }).cause === cause;
+      });
+    }
+
+    async function claim(db: Driver, team: TeamRow) {
+      const breach = await readSpendCapBreach(db, team.id);
+      const unpriced = await readUnpricedWakeBreach(db, team.id);
+      return claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        Date.now(),
+        undefined,
+        breach,
+        unpriced,
+      );
+    }
+
+    it('cap 0 denies the first agent wake and a human on the same poll still leases', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await enroll(db, team, nick);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await msg(db, team, ada, nick, 'request_help', 'help-nick', Date.now());
+      await setPolicy(db, team.id, { unpriced_wake_cap: 0 });
+
+      const breach = await readUnpricedWakeBreach(db, team.id);
+      expect(breach).toMatchObject({ cap: 0, count: 0, windowDays: 7 });
+      const orders = await claim(db, team);
+      expect(orders.map((o) => o.seat)).toEqual(['nick']);
+      const gates = await gatesFor(db, team.id, 'unpriced_wake_cap');
+      expect(gates).toHaveLength(1);
+      expect(JSON.parse(gates[0]!.detail!)).toMatchObject({
+        cause: 'unpriced_wake_cap',
+        outcome: 'denied_held',
+        cap: 0,
+        count: 0,
+        window_days: 7,
+      });
+      expect(await claim(db, team)).toEqual([]);
+      expect(await gatesFor(db, team.id, 'unpriced_wake_cap')).toHaveLength(1);
+    });
+
+    it('lets one unpriced wake through a cap of 1, then denies the next', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await setPolicy(db, team.id, { unpriced_wake_cap: 1 });
+      expect(await readUnpricedWakeBreach(db, team.id)).toBeNull();
+      const [order] = await claim(db, team);
+      expect(order?.seat).toBe('Ada');
+
+      await db.run(`UPDATE wake_leases SET status = 'reported' WHERE id = ?`, [order!.lease_id]);
+      await zeroCost(db, team, 'Ada', order!.lease_id);
+      const over = await readUnpricedWakeBreach(db, team.id);
+      expect(over).toMatchObject({ cap: 1, count: 1 });
+      expect(await claim(db, team)).toEqual([]);
+      expect(await gatesFor(db, team.id, 'unpriced_wake_cap')).toHaveLength(1);
+      expect(await claim(db, team)).toEqual([]);
+      expect(await gatesFor(db, team.id, 'unpriced_wake_cap')).toHaveLength(1);
+    });
+
+    it('an unset cap does not deny a settled zero-cost wake', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await zeroCost(db, team, 'Ada', 'L-zero');
+      expect(await readUnpricedWakeBreach(db, team.id)).toBeNull();
+      expect(await claim(db, team)).toHaveLength(1);
+      expect(await gatesFor(db, team.id, 'unpriced_wake_cap')).toHaveLength(0);
+    });
+
+    it('a positive cost does not spend the unpriced cap', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await setPolicy(db, team.id, { unpriced_wake_cap: 1 });
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: 'Ada',
+        result: 'allow',
+        detail: { lease_id: 'L-priced', cost_usd: 0.4 },
+      });
+      expect(await readUnpricedWakeBreach(db, team.id)).toBeNull();
+      expect(await claim(db, team)).toHaveLength(1);
+    });
+
+    it('both caps write one row that names each cap', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: 'Ada',
+        result: 'allow',
+        detail: { lease_id: 'L-both', cost_usd: 10 },
+      });
+      await setPolicy(db, team.id, { spend_cap_usd: 10, unpriced_wake_cap: 0 });
+      expect(await claim(db, team)).toEqual([]);
+      const rows = (await listAudit(db, team.id)).filter((r) => r.action === 'action.gate');
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0]!.detail!)).toMatchObject({
+        cause: 'wake_spend',
+        outcome: 'denied_held',
+        cap_usd: 10,
+        total_usd: 10,
+        unpriced_cap: 0,
+        unpriced_count: 0,
+        window_days: 7,
+      });
+      expect(String(JSON.parse(rows[0]!.detail!).reason)).toContain('unpriced wake cap 0');
+      expect(String(JSON.parse(rows[0]!.detail!).reason)).toContain('spend cap $10.00');
+      expect(await claim(db, team)).toEqual([]);
+      expect((await listAudit(db, team.id)).filter((r) => r.action === 'action.gate')).toHaveLength(
+        1,
+      );
+    });
+
+    it('a lease minted under the cap stays leased after a later zero-cost row', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'request_help', 'help-ada', Date.now());
+      await setPolicy(db, team.id, { unpriced_wake_cap: 1 });
+      const [order] = await claim(db, team);
+      expect(order?.seat).toBe('Ada');
+      await zeroCost(db, team, 'Ada', order!.lease_id);
+      expect(await claim(db, team)).toEqual([]);
+      expect(
+        await db.get<{ status: string }>('SELECT status FROM wake_leases WHERE id = ?', [
+          order!.lease_id,
+        ]),
+      ).toMatchObject({ status: 'leased' });
+      expect(await gatesFor(db, team.id, 'unpriced_wake_cap')).toHaveLength(0);
+    });
+
+    it('a thrown count read allows the poll', async () => {
+      const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const db = {
+        get: async () => {
+          throw new Error('read down');
+        },
+        all: async () => {
+          throw new Error('read down');
+        },
+      } as unknown as Driver;
+      await expect(readUnpricedWakeBreach(db, 'team-1')).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ msg: 'unpriced wake cap read failed open', team: 'team-1' }),
+      );
+      warn.mockRestore();
     });
   });
 });

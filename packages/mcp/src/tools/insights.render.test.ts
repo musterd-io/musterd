@@ -249,7 +249,8 @@ describe('fmtReport — unpriced wake cap (ADR 639)', () => {
       }),
       'team',
     );
-    expect(under).toContain('unpriced wakes 1 · cap 5 under · display only');
+    expect(under).toContain('unpriced wakes 1 · cap 5 under');
+    expect(under).not.toContain('display only');
     expect(under).not.toContain('OVER');
     expect(under).not.toContain('agent wakes held');
 
@@ -263,8 +264,35 @@ describe('fmtReport — unpriced wake cap (ADR 639)', () => {
       }),
       'team',
     );
-    expect(over).toContain('unpriced wakes 0 · cap 0 OVER · display only');
+    expect(over).toContain('unpriced wakes 0 · cap 0 OVER · agent wakes held · window 7d');
     expect(over).toContain('wake:');
-    expect(over).not.toContain('agent wakes held');
+    expect(over).not.toContain('display only');
+  });
+
+  it('names both caps in one notice when both are over', () => {
+    const text = fmtReport(
+      report({
+        wake: wake({
+          wakes: 2,
+          cost_usd_total: 12,
+          cost_usd_per_wake: 6,
+          cost_reported: 2,
+          spend_cap_usd: 10,
+          spend_over_cap: true,
+          unpriced_wake_cap: 2,
+          unpriced_wake_count: 3,
+          unpriced_over_cap: true,
+        }),
+      }),
+      'team',
+    );
+    const held = text.split('\n').filter((line) => line.includes('agent wakes held'));
+    expect(held).toHaveLength(1);
+    expect(text).toContain(
+      'agent wakes held · window 7d · cap $10.00 total $12.00 · unpriced wakes 3 cap 2',
+    );
+    expect(text).toContain('cap $10.00 OVER');
+    expect(text).toContain('unpriced wakes 3 · cap 2 OVER');
+    expect(text).not.toContain('display only');
   });
 });

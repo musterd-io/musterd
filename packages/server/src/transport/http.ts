@@ -189,7 +189,12 @@ import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
-import { adjudicateGate, readSpendCapBreach, recordActorAttestation } from '../protocol/gate.js';
+import {
+  adjudicateGate,
+  readSpendCapBreach,
+  readUnpricedWakeBreach,
+  recordActorAttestation,
+} from '../protocol/gate.js';
 import {
   acceptanceAskBody,
   deliverLaneAskAct,
@@ -4542,8 +4547,9 @@ export async function handleHttp(
         // is derived from it.
         const now = Date.now();
         await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
-        // ADR 611. One read per poll. A throw inside the reader allows the poll.
+        // ADR 611 and ADR 641. One read of each cap per poll. A throw inside a reader allows the poll.
         const breach = await readSpendCapBreach(ctx.db, team.id, now);
+        const unpriced = await readUnpricedWakeBreach(ctx.db, team.id, now);
         const orders = await claimWakeLeases(
           ctx.db,
           team.id,
@@ -4553,6 +4559,7 @@ export async function handleHttp(
           now,
           scope,
           breach,
+          unpriced,
         );
         return sendJson(res, 200, { orders });
       }

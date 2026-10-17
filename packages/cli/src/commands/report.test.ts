@@ -218,7 +218,7 @@ describe('report command', () => {
     expect(shown.out).toContain('no wakes');
     expect(shown.out).toContain('unpriced wakes 0 · cap 5');
     expect(shown.out).toContain('under');
-    expect(shown.out).toContain('display only');
+    expect(shown.out).not.toContain('display only');
     expect(shown.out).not.toContain('OVER');
     expect(shown.out).not.toContain('agent wakes held');
 
@@ -237,8 +237,9 @@ describe('report command', () => {
     const blocked = await capture(() => reportCommand(parseArgs(['residency'])));
     expect(blocked.out).toContain('unpriced wakes 0 · cap 0');
     expect(blocked.out).toContain('OVER');
-    expect(blocked.out).toContain('display only');
-    expect(blocked.out).not.toContain('agent wakes held');
+    expect(blocked.out).toContain('agent wakes held');
+    expect(blocked.out).toContain('window 7d');
+    expect(blocked.out).not.toContain('display only');
   });
 
   it('rejects an unknown altitude', async () => {

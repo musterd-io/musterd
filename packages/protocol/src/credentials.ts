@@ -252,8 +252,7 @@ export const PolicySchema = z.object({
   /**
    * ADR 639. How many unpriced wakes a team allows in the report's 7-day window. No default:
    * absent keeps today's behavior. 0 is a real cap (block unpriced harnesses). Integer, 0 through
-   * {@link UNPRICED_WAKE_CAP_MAX}. Display only in this record. The deny path is lane
-   * `01M50M90ST4TQWKEBP5TQ56V0B`.
+   * {@link UNPRICED_WAKE_CAP_MAX}. A set key holds new agent wakes (ADR 641).
    */
   unpriced_wake_cap: z.number().int().min(0).max(UNPRICED_WAKE_CAP_MAX).optional(),
   /**

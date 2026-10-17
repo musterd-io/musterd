@@ -555,7 +555,8 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * and a human still passes. ADR 635: `--spend-approval <usd>` sets the per-wake gateway threshold
  * (`off` clears it). This change shows the number. It holds nothing.
  * ADR 639: `--unpriced-wake-cap <n>` sets the 7-day unpriced-wake count (`off` clears it; unset
- * keeps today's behavior; 0 blocks unpriced harnesses). The report shows the count. It denies nothing.
+ * keeps today's behavior; 0 blocks unpriced harnesses). The report shows the count. A set key
+ * holds new agent wakes when the count reaches it. A human still passes (ADR 641).
  * ADR 506: `--acceptance-review-window <min>`
  * sets how long a lane-review ask waits before its owner may self-close on silence (default 20). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
@@ -964,7 +965,7 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
         hint(
           updated.unpriced_wake_cap === undefined
             ? 'unpriced wake cap off — unpriced wakes stay outside the dollar cap (ADR 639)'
-            : `unpriced wake cap: ${updated.unpriced_wake_cap} wakes / 7d — shown on the report, display only`,
+            : `unpriced wake cap: ${updated.unpriced_wake_cap} wakes / 7d — agent wakes are held when the 7-day count reaches the cap; a human still passes`,
         ) + '\n',
       );
     if (reviewWindow !== undefined)
