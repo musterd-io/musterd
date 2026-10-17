@@ -156,6 +156,19 @@ describe('buildSkewOf — the remedy matches what is on disk', () => {
     expect(w?.text).not.toMatch(/pnpm build|rebuild/i);
   });
 
+  it('a dirty daemon build of the same commit is not skew (the 2026-10-17 false alarm)', async () => {
+    const dirtyDaemon = { build: sha('a'), daemonBuild: async () => `${sha('a')}-dirty` };
+    expect(await buildSkewOf(dirtyDaemon, () => ({ build: sha('a'), checkout: '/x' }))).toBeNull();
+    const dirtyMe = { build: `${sha('a')}-dirty`, daemonBuild: async () => sha('a') };
+    expect(await buildSkewOf(dirtyMe, () => ({ build: sha('a'), checkout: '/x' }))).toBeNull();
+  });
+
+  it('a dirty dist on disk of the daemon commit still counts as already rebuilt', async () => {
+    const w = await buildSkewOf(client, () => ({ build: `${sha('b')}-dirty`, checkout: '/x' }));
+    expect(w?.text).toContain('/mcp reload');
+    expect(w?.text).not.toMatch(/pnpm -C/);
+  });
+
   it('dist on disk is stale too → names the checkout to rebuild, then reload', async () => {
     const w = await buildSkewOf(client, () => ({ build: sha('a'), checkout: '/x/runtime' }));
     expect(w?.text).toContain('pnpm -C /x/runtime build');

@@ -665,6 +665,13 @@ describe('renderStatusHeader (the orientation card)', () => {
     expect(warned).toContain('pnpm build');
     // matching → silence; unstamped CLI → silence; daemon without provenance → silence
     expect(renderStatusHeader({ ...head, cliBuild: daemon })).not.toContain('your CLI build');
+    // the same commit built dirty on either side is not skew
+    expect(renderStatusHeader({ ...head, cliBuild: `${daemon}-dirty` })).not.toContain(
+      'your CLI build',
+    );
+    expect(
+      renderStatusHeader({ ...head, health: { build: `${daemon}-dirty` }, cliBuild: daemon }),
+    ).not.toContain('your CLI build');
     expect(renderStatusHeader(head)).not.toContain('your CLI build');
     expect(renderStatusHeader({ ...head, health: {}, cliBuild: 'c'.repeat(40) })).not.toContain(
       'your CLI build',

@@ -13,6 +13,24 @@ import {
 import { clock, dayLabel, sinceLabel, theme } from './theme.js';
 import { heading, hint, padEndVisible, sym, termWidth, visibleLen, wrapText } from './ui.js';
 
+/**
+ * Do two build refs name the same commit, ignoring the `-dirty` uncommitted-work marker?
+ *
+ * A seat with uncommitted edits builds `<sha>-dirty` while the daemon runs a clean `<sha>`. That is
+ * not skew — it is the normal state of a workspace someone is working in, and the dist *is* the code
+ * they think it is. Reporting it was doubly wrong: both refs render identically once truncated for
+ * display, so the line literally read "your CLI build (3260685) differs from the daemon (3260685)",
+ * and its advice ("rebuild it") could not help, because the difference was the developer's own edits.
+ * A skew line that fires constantly on every active seat is the noise failure ADR 168 named.
+ *
+ * Genuine skew still reports: a different commit differs with or without the marker. Used by
+ * `musterd status`, the roster facet and the doctor; the MCP adapter keeps its own copy (tools/format.ts), since a
+ * helper in @musterd/protocol is a contract edit (hard rule 1).
+ */
+export function sameCommit(a: string, b: string): boolean {
+  return a.replace(/-dirty$/, '') === b.replace(/-dirty$/, '');
+}
+
 export type KindOf = (name: string) => MemberKind;
 
 /** A status older than this is shown with its age (`working: x · Nm`) to signal it may be stale. */
@@ -234,7 +252,7 @@ export function renderStatusHeader(head: StatusHead): string {
   // an unstamped CLI or a daemon without provenance stays silent. "differs", never "behind": this
   // CLI may legitimately be ahead (a feature-branch build).
   const cli = head.cliBuild;
-  if (cli && health?.build && cli !== health.build) {
+  if (cli && health?.build && !sameCommit(cli, health.build)) {
     lines.push(
       theme.warn(
         `⚠ your CLI build (${cli.slice(0, 7)}) differs from the daemon (${health.build.slice(0, 7)}) — rebuild your checkout (pnpm build)`,
@@ -406,7 +424,7 @@ function memberFacets(
   // ADR 135: a member running a different build than the daemon is worth a warn facet; a matching or
   // unknown build is silence (most rows, most of the time — this only speaks when something's off).
   const build = m.presences[0]?.build?.trim();
-  if (build && daemonBuild && build !== daemonBuild) {
+  if (build && daemonBuild && !sameCommit(build, daemonBuild)) {
     parts.push(theme.warn(`build ${build.slice(0, 7)}`));
   }
   // ADR 514 inc 4 (spec §4.4): the style epoch a live seat attested, and `style stale` when the
