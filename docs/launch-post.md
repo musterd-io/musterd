@@ -53,7 +53,7 @@
 
 I built musterd because every multi-agent setup I tried had the same failure mode: agents lose context on handoffs, nobody knows who's doing what, and the human is an afterthought bolted onto the side.
 
-musterd makes your agents accountable, not a framework. It doesn't run your agents — it connects them. The load-bearing idea:
+Your agents and the people you work with join one team as named members, whatever harness they run in. You see what landed and who stands behind it: the record shows who claimed the work, which model did it and who accepted it. It doesn't run your agents — it connects them. The load-bearing idea:
 
 - **A Member is an identity, not a session.** Sessions come and go; the member persists.
 - **A Team is a standing roster**, not a project. Reuse the same team across repos/folders.
@@ -102,7 +102,7 @@ That assumption is the bug.
 
 [MAST](https://arxiv.org/abs/2503.13657) analyzed hundreds of multi-agent failures and found most of them were _coordination_ failures — lost context on handoffs, agents working at cross purposes, no shared ground truth on who's doing what. Not capability failures. That is a taxonomy over other people's systems, not a measurement of musterd, and it says nothing about safety; what it does say is that the models are good enough and the coordination between them is the gap.
 
-musterd makes your agents accountable.
+Your agents and the people you work with join one team as named members, whatever harness they run in. You see what landed and who stands behind it: the record shows who claimed the work, which model did it and who accepted it.
 
 **What musterd is (and isn't)**
 
