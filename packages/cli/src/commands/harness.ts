@@ -16,6 +16,7 @@ import { flagStr, type Parsed } from '../args.js';
 import { loadBinding, loadWorkspace } from '../config.js';
 import { CliError } from '../errors.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
+import { MUSTERD_CORE_ID } from '../onboard/harnesses/musterd.js';
 import { loadProvisioning, readProvisionManifest, saveProvisioning } from '../onboard/manifest.js';
 import { defaultHarnessContext, type HarnessContext } from '../onboard/reconcile/context.js';
 import {
@@ -250,13 +251,25 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
     out(pc.dim('no changes made'));
     return 0;
   }
-  const unknown = selected.filter((id) => !registry.some((a) => a.id === id));
-  if (unknown.length > 0) {
-    throw new CliError(
-      `unknown harness id(s): ${unknown.join(', ')} — this build's registry is ` +
-        `${registry.map((a) => a.id).join(', ')}`,
-      2,
-    );
+  const known = new Set(registry.map((a) => a.id));
+  // musterd-core is desired whenever the set is nonempty. Status prints it as selected, and it is
+  // not a selectable id. Naming it here must not read as a typo against the registry (ADR 281).
+  const internal = selected.filter((id) => id === MUSTERD_CORE_ID && !known.has(id));
+  const unknown = selected.filter((id) => !known.has(id) && id !== MUSTERD_CORE_ID);
+  if (unknown.length > 0 || internal.length > 0) {
+    const parts: string[] = [];
+    if (unknown.length > 0) {
+      parts.push(
+        `unknown harness id(s): ${unknown.join(', ')} — this build's registry is ` +
+          `${registry.map((a) => a.id).join(', ')}`,
+      );
+    }
+    if (internal.length > 0) {
+      parts.push(
+        `${MUSTERD_CORE_ID} is internal guidance, kept while any harness is selected — leave it out of --select`,
+      );
+    }
+    throw new CliError(parts.join('\n'), 2);
   }
   const desired = registry.map((a) => a.id).filter((id) => selected.includes(id));
 

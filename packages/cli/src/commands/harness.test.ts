@@ -562,4 +562,33 @@ describe('musterd harness configure --select --yes (the headless form)', () => {
       }),
     ).rejects.toThrow(/unknown harness id.*fake-a/s);
   });
+
+  it('names musterd-core as internal guidance and writes nothing', async () => {
+    writeV2Identity();
+    writeV3Provisioning(['fake-a']);
+    const before = readFileSync(join(cwd, '.musterd', 'provisioned.json'), 'utf8');
+    const a = fakeAdapter('fake-a');
+    await expect(
+      run(['configure', '--select', 'fake-a,musterd-core', '--yes'], {
+        ctx: ctxOf(),
+        registry: [a],
+      }),
+    ).rejects.toThrow(
+      'musterd-core is internal guidance, kept while any harness is selected — leave it out of --select',
+    );
+    expect(a.state.applied).toEqual([]);
+    expect(readFileSync(join(cwd, '.musterd', 'provisioned.json'), 'utf8')).toBe(before);
+  });
+
+  it('names a real unknown id and musterd-core in the same refusal', async () => {
+    writeV2Identity();
+    await expect(
+      run(['configure', '--select', 'emacs,musterd-core', '--yes'], {
+        ctx: ctxOf(),
+        registry: [fakeAdapter('fake-a')],
+      }),
+    ).rejects.toThrow(
+      /unknown harness id\(s\): emacs — this build's registry is fake-a\nmusterd-core is internal guidance/,
+    );
+  });
 });
