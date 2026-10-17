@@ -49,14 +49,23 @@ async function existing(db: Queryable, id: ProviderIdentity) {
   return row ? { accountId: row.account_id, disabled: row.disabled_at !== null } : null;
 }
 
-/** The sign-in methods an account holds, for the signed-in page. Never the subjects. */
+/**
+ * The sign-in methods an account holds, for the signed-in page. Subjects stay off the result.
+ * Pass the session's identity and `current` is true on that one row (copy spec §6).
+ */
 export async function methodsOf(
   db: Queryable,
   accountId: string,
-): Promise<{ provider: string; email: string | null }[]> {
-  const r = await db.query<{ provider: string; email: string | null }>(
-    'SELECT provider, email FROM identities WHERE account_id = $1 ORDER BY created_at',
+  current?: { provider: string; subject: string },
+): Promise<{ provider: string; email: string | null; current: boolean }[]> {
+  const r = await db.query<{ provider: string; email: string | null; subject: string }>(
+    'SELECT provider, email, subject FROM identities WHERE account_id = $1 ORDER BY created_at',
     [accountId],
   );
-  return r.rows;
+  return r.rows.map((row) => ({
+    provider: row.provider,
+    email: row.email,
+    current:
+      current !== undefined && row.provider === current.provider && row.subject === current.subject,
+  }));
 }

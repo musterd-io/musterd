@@ -2,6 +2,8 @@
 
 - Status: spec (product-communications, alfie), 2026-10-15. Slippy owns the layout.
   Fifty builds it on lane `01M3Z43QYB`. These strings are the copy, character for character.
+  Confirmed 2026-10-17: the session marker in §6, and the heading and body in §7
+  (lane `01M55YZ4VF1SK65P240SKRFT5X`).
 - Lane: `01M51E51TZCAHQ0SWRF20BBYQD`. Asked by fifty, for nick, in place of sloane.
 - Derives from: [ADR 620](../decisions/620-console-sign-in.md), [ADR 615](../decisions/615-console-skeleton.md),
   Cloud spec §4.1–§4.4, `docs/architecture/10-console.md`, `docs/design/brand.md` §4–§5.
@@ -113,18 +115,21 @@ Another browser, or a browser that did not ask. `<title>` Open this in the brows
 | Row | GitHub identity | GitHub | One row per identity on the account. Show the provider name alone. Leave off any login name, and leave off any email GitHub or Google returned. |
 | Row | Google identity | Google | |
 | Row | email identity | Email · {address} | `{address}` is that identity's address. |
+| Marker | current session | Signed in with this | On the one row for the method and identity this session used. The words carry the meaning. A mark may sit beside them. The row has no date. |
 | Button | signed in | Sign out | POST. Then the sign-in page, with no banner. |
 
 ## 7. Errors
 
-Each error page has one heading, one body where the table has one, and the button
-`Back to sign-in`. `<title>` is the heading plus ` — musterd`.
+Each error page has one heading, one body, and the button `Back to sign-in`.
+The heading is the first sentence and ends on the last word, the same way
+Sign in and Check your email do. The body is the rest of that row.
+`<title>` is the heading plus ` — musterd`.
 
-| State | Exact string | Notes |
-| --- | --- | --- |
-| Link expired or already used | This link is no longer valid. It works once, for 15 minutes. | One string for both causes, so the page does not say which. Next line: `Ask for a new one.` |
-| GitHub refused | GitHub didn't complete sign-in. You can try again. | The provider's own error text stays off the page. |
-| Google refused | Google didn't complete sign-in. You can try again. | Same. |
-| Account disabled | This account is disabled. | Next line: `You can't sign in with it.` Shown only after a redemption or a provider callback resolved to a disabled account. The check-your-email page stays the sent strings. ADR 620 names no support address, so the page shows none. |
-| Too many attempts | Too many attempts. Try again in a little while. | A pause on this request (decision 9). ADR 620 names no window, so the string names none. The account is unchanged. Do not say locked or disabled. |
-| Unknown failure | Something went wrong. | Next line: `Quote this if you ask for help: {request_id}` `{request_id}` is the server-generated id (decision 10), as selectable text. This is the unknown-cause state. A known cause uses its own row. |
+| State | Heading | Body | Notes |
+| --- | --- | --- | --- |
+| Link expired or already used | This link is no longer valid | It works once, for 15 minutes. Ask for a new one. | One page covers both causes, so the page does not say which. |
+| GitHub refused | GitHub didn't complete sign-in | You can try again. | The provider's own error text stays off the page. |
+| Google refused | Google didn't complete sign-in | You can try again. | Same. |
+| Account disabled | This account is disabled | You can't sign in with it. | Shown only after a redemption or a provider callback resolved to a disabled account. The check-your-email page stays the sent strings. ADR 620 names no support address, so the page shows none. |
+| Too many attempts | Too many attempts | Try again in a little while. | A pause on this request (decision 9). ADR 620 names no window, so the string names none. The account is unchanged. Do not say locked or disabled. |
+| Unknown failure | Something went wrong | Quote this if you ask for help: {request_id} | `{request_id}` is the server-generated id (decision 10), as selectable text. This is the unknown-cause state. A known cause uses its own row. |

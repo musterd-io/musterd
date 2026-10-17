@@ -140,21 +140,21 @@ function errorPage(heading: string, body: string | null, extra = ''): string {
 
 export const errorPages = {
   link: () =>
-    errorPage('This link is no longer valid.', 'It works once, for 15 minutes. Ask for a new one.'),
-  github: () => errorPage("GitHub didn't complete sign-in.", 'You can try again.'),
-  google: () => errorPage("Google didn't complete sign-in.", 'You can try again.'),
-  disabled: () => errorPage('This account is disabled.', "You can't sign in with it."),
-  rate: () => errorPage('Too many attempts.', 'Try again in a little while.'),
+    errorPage('This link is no longer valid', 'It works once, for 15 minutes. Ask for a new one.'),
+  github: () => errorPage("GitHub didn't complete sign-in", 'You can try again.'),
+  google: () => errorPage("Google didn't complete sign-in", 'You can try again.'),
+  disabled: () => errorPage('This account is disabled', "You can't sign in with it."),
+  rate: () => errorPage('Too many attempts', 'Try again in a little while.'),
   unknown: (requestId: string) =>
     errorPage(
-      'Something went wrong.',
+      'Something went wrong',
       null,
       `<p class="c-ref">Quote this if you ask for help: <code>${esc(requestId)}</code></p>\n`,
     ),
 };
 
 export function accountPage(o: {
-  methods: { provider: string; email: string | null }[];
+  methods: { provider: string; email: string | null; current?: boolean }[];
   csrf: string;
 }): string {
   const rows = o.methods
@@ -167,7 +167,8 @@ export function accountPage(o: {
           : m.provider === 'google'
             ? 'Google'
             : `Email · ${esc(m.email ?? '')}`;
-      return `<li>${icon}<span class="c-list__who">${who}</span></li>`;
+      const now = m.current === true ? '<span class="c-list__now">Signed in with this</span>' : '';
+      return `<li>${icon}<span class="c-list__who">${who}</span>${now}</li>`;
     })
     .join('\n');
   return shell(

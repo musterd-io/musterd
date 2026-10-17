@@ -153,8 +153,14 @@ describe('magic links (ADR 620 decision 6)', () => {
     const sid = cookieOf(c.headers['set-cookie'], '__Host-session')!;
     const me = JSON.parse((await call('GET', '/me', { cookie: `__Host-session=${sid}` })).body);
     expect(me.methods).toEqual([{ provider: 'email', email: 'Nick@example.test' }]);
+    const page = await call('GET', '/account', { cookie: `__Host-session=${sid}` });
+    expect(page.status).toBe(200);
+    expect(page.body).toContain(
+      '<span class="c-list__who">Email · Nick@example.test</span><span class="c-list__now">Signed in with this</span>',
+    );
+    expect(page.body.match(/Signed in with this/g)).toHaveLength(1);
     expect((await confirm(token, tx)).status).toBe(400);
-    expect((await view(token, tx)).body).toContain('This link is no longer valid.');
+    expect((await view(token, tx)).body).toContain('<h1>This link is no longer valid</h1>');
   });
 
   it('another browser — or no browser binding — cannot use the link', async () => {

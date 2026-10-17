@@ -621,7 +621,10 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                 res,
                 200,
                 accountPage({
-                  methods: await methodsOf(db, session.accountId),
+                  methods: await methodsOf(db, session.accountId, {
+                    provider: session.identityProvider,
+                    subject: session.identitySubject,
+                  }),
                   csrf: csrfTokenFor(sid!),
                 }),
               );
@@ -650,7 +653,10 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               account_id: session.accountId,
               method: session.method,
               authenticated_at: session.authenticatedAt,
-              methods: await methodsOf(db, session.accountId),
+              methods: (await methodsOf(db, session.accountId)).map(({ provider, email }) => ({
+                provider,
+                email,
+              })),
               providers: PROVIDERS.filter((x) => config.providers[x]),
             });
           }
