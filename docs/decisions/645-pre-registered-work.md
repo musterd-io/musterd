@@ -52,13 +52,11 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
 ## Decision
 
 1. **A lane may carry a `pre_registered` declaration.** `Lane.pre_registered` is
-   `{run, verdict_rule, record, expected_spend, by, at}` (`LanePreRegisteredSchema`,
-   `@musterd/protocol` `lanes.ts`). The opener sets `run`, `verdict_rule`, `record` and
-   `expected_spend` (USD, `0` = unmetered work); the daemon stamps `by` and `at` from the
-   authenticated writer. It carries no date: the day a read is due is
-   [ADR 644](644-lane-reads-on-and-read-verdict.md)'s `reads_on`, declared beside it, and the
-   verdict a read records is ADR 644's `read_verdict` (`verdict_rule` says how to reach it,
-   `record` where it is written up). It rides `lane_open` and `lane_update`; `null` on an
+   `{run, verdict_rule, record, not_before?, expected_spend, by, at}` (`LanePreRegisteredSchema`,
+   `@musterd/protocol` `lanes.ts`). The opener sets `run`, `verdict_rule`, `record`,
+   `expected_spend` (USD, `0` = unmetered work) and optionally `not_before` (ms); the daemon stamps
+   `by` and `at` from the authenticated writer. _(Amended 2026-10-17: there is no `not_before`;
+   the day a read is due is ADR 644's `reads_on`. See the 2026-10-17 note in Consequences.)_ It rides `lane_open` and `lane_update`; `null` on an
    update withdraws it. It is a struct, not a value on `kind`, because the three text parts need
    storage and `kind` is a daemon-set enum. The declaration is the only source of truth: nothing
    reads a title or a detail to decide a lane is pre-registered (ADR 530/536).
@@ -66,10 +64,10 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
    a lane with any risk tag, with `user-facing`, or with `stakes: 'high'` (400, naming which), and
    the daemon refuses it on a lane that is not `open` (409). The rule is enforced once, at the
    declaration; the pull never filters for it.
-3. **A pull offers only an eligible lane.** `pullEligible(lane, today)`: open, unowned, declared,
-   and not before its `reads_on` day, with `today` the day in the team's calendar zone that ADR 644
-   derives `read_status` on, so the panel's `waiting` and the pull's "not yet" agree. The date gates
-   the machine, not the human: a person may claim early, and the claim reply says the date. The pull itself (a host with room asking the hub for one such lane
+3. **A pull offers only an eligible lane.** `pullEligible(lane, now)`: open, unowned, declared, and
+   past `not_before`. _(Amended 2026-10-17: `pullEligible(lane, today)`, gating on `reads_on`; see
+   Consequences.)_ The date gates the machine, not the human: a person may claim early, and the
+   claim reply says the date. The pull itself (a host with room asking the hub for one such lane
    for one of its enrolled seats, ranked by the ADR 536 order) is lane `01M55PDKAT7368RQATDG70FSYB`
    under this ADR; this ADR fixes what it may offer.
 4. **The hub never acts as the seat.** The announcement is sent by the **host's service seat**
@@ -114,10 +112,9 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   reviewers (dolly, big-body, fifty) refused it from different angles.
 - **`@team` as the announcement's addressee.** Four pulls a day per seat is noise in every inbox,
   and with dispatch on it could wake other seats on someone else's announcement.
-- **A `not_before` date on the declaration.** The spec proposed one; ADR 644 landed `reads_on`
-  the same afternoon for the same lanes. Two dates on one lane would disagree, so the pull reads
-  `reads_on`. `park_until` was rejected for the same job earlier: parked means a person chose "not
-  now" and withholds the lane from everyone; a read's day withholds it from the pull only.
+- **Reusing `park_until` for `not_before`.** Parked means a person chose "not now" and withholds
+  the lane from everyone; `not_before` withholds it from the pull only. _(Amended 2026-10-17:
+  `not_before` itself is gone; the same reasoning now keeps `park_until` apart from `reads_on`.)_
 - **Widening the acceptance backstop to every lane** in this ADR. The spec's §4.4 (a lapsed
   acceptance ask moves to a live-presence seat of a different family) is scoped to pulled lanes
   (lane `01M55PDNY5APFDP27CR9MET224`); the team-wide change is its own ADR.
@@ -135,9 +132,17 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   (enrollment checks), `01M55PDKAT7368RQATDG70FSYB` (the pull), `01M55PDNY5APFDP27CR9MET224` (the
   backstop) and `01M55PDR9ZPQH55GF0S38K9B69` (the dogfood readout), in that order. Nothing in this
   ADR's increment changes daemon behaviour.
-- The Experiments panel (ADR 644, slippy) and the pull read one date, `reads_on`. A dated read
-  that should also be taken unprompted carries both `reads_on` and `pre_registered`; a dated read a
-  person will run carries `reads_on` alone. The spec's `not_before` is superseded by this ADR.
+- _(2026-10-17, same day, lane `01M55PDB32NG2B863DXSZSR5WT`, follow-up PR.)_ **One date, and it is
+  ADR 644's.** #2803 merged at 14:55 with `not_before` on the declaration; ADR 644 (#2800) had
+  landed `reads_on` (a `YYYY-MM-DD` day in the team's calendar zone) and `read_verdict` an hour
+  earlier for the same dated reads, and two dates on one lane would disagree. So Decision 1's
+  `not_before` is removed from `LanePreRegisteredSchema`, and Decision 3's `pullEligible` becomes
+  `pullEligible(lane, today)`: open, unowned, declared, and not before the lane's `reads_on` day,
+  with `today` the day ADR 644 derives `read_status` on, so the panel's `waiting` and the pull's
+  "not yet" use one clock. A dated read that should also be taken unprompted carries both
+  `reads_on` and `pre_registered`; one a person will run carries `reads_on` alone. The spec's §4.1
+  carries the superseded note. Until ADR 644's increment 1 (lane `01M55WJXNP`) adds `reads_on` to
+  the schema, `pullEligible` reads it as a loose optional string.
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 
