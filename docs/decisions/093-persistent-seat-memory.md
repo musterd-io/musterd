@@ -83,6 +83,8 @@ the context tax above.
   admins included**. This deliberately narrows the v0.3 rule that `visibility_level: admin` sees
   everything (ADR 071): memory is a note-to-self, not team state. The platform operator (who runs
   the daemon) inspects via the DB file or telemetry they already control; no API pretends otherwise.
+  _(Amended 2026-10-17: for agent seats, any human may now read the note. A human seat's note
+  stays its owner's alone. See ADR 651.)_
 - **Memory belongs to the seat, not the occupant.** A new occupant adopting the seat inherits the
   note — the agent=seat ontology, and exactly right for handoff continuity.
 

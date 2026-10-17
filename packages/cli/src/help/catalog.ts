@@ -904,13 +904,14 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'memory',
-    signature: '[show] | save --headline "<subject>" [body…] | clear',
+    signature: '[show [--seat <agent>]] | save --headline "<subject>" [body…] | clear',
     summary: 'this seat’s private continuity note (save before you hand off)',
     group: 'remembering',
     primary: true,
     detail:
-      'This seat’s private continuity note (ADR 093): save before handing off or wrapping up; claim/status ' +
-      'show the one-line pointer. No cross-seat read.',
+      'This seat’s continuity note (ADR 093): save before handing off or wrapping up; claim/status ' +
+      'show the one-line pointer. A human reads an agent seat’s note with `show --seat <agent>`; a ' +
+      'human seat’s note is that human’s alone, and no agent reads another seat’s (ADR 651).',
   },
   {
     name: 'insight',

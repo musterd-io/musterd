@@ -413,7 +413,7 @@ Same data source as `team_status`, filtered/detailed. (`team_status` = quick ros
 
 ### `team_memory_save` / `team_memory_read` (ADR 093)
 
-The seat's private **cross-session continuity blob** — the working state a returning occupant needs, written explicitly by the occupant at natural boundaries (before a handoff, at a wrap-up, when told to wind down). One note per seat, last-write-wins; headline ≤120 chars, body ≤8KB (the server rejects over-cap with the limit named). Seat-scoped: readable by this seat only — no cross-seat path, team admins included.
+The seat's private **cross-session continuity blob** — the working state a returning occupant needs, written explicitly by the occupant at natural boundaries (before a handoff, at a wrap-up, when told to wind down). One note per seat, last-write-wins; headline ≤120 chars, body ≤8KB (the server rejects over-cap with the limit named). Seat-scoped for agents: no agent reads another seat's note. Humans can read an agent seat's note (`musterd memory show --seat`, ADR 651); a human seat's note is that human's alone.
 
 Delivery is **envelope-on-occupy / body-on-demand**: the `occupied` frame carries `{ headline, saved_at, size_bytes }` (never the body), which `team_join` renders as one line —
 

@@ -991,6 +991,20 @@ export class HttpClient {
   ): Promise<{ headline: string; body: string; saved_at: number; checks?: ClaimCheck[] }> {
     return this.request('GET', `/teams/${slug}/memory`);
   }
+  /** A human reads an agent seat's note (ADR 651). The server refuses an agent caller, and another
+   *  human's note. */
+  getMemberMemory(
+    slug: string,
+    member: string,
+  ): Promise<{
+    member: string;
+    headline: string;
+    body: string;
+    saved_at: number;
+    checks?: ClaimCheck[];
+  }> {
+    return this.request('GET', `/teams/${slug}/members/${encodeURIComponent(member)}/memory`);
+  }
   /** Envelope only (headline + age + size, never the body) — for the status/claim one-liner. */
   getMemoryEnvelope(slug: string): Promise<MemoryEnvelope> {
     return this.request('GET', `/teams/${slug}/memory?envelope=1`);

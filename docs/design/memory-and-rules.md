@@ -30,7 +30,7 @@ take it back.** This doc is about closing that, now and at scale.
 
 | Store                                                                     | Author        | Expiry                     | Retract / supersede        | Checked against current state on read                   |
 | ------------------------------------------------------------------------- | ------------- | -------------------------- | -------------------------- | ------------------------------------------------------- |
-| Seat memory ([ADR 093](../decisions/093-persistent-seat-memory.md))       | implicit      | none                       | overwrite only, no history | carried lanes vs `origin/main` only, at orient          |
+| Seat memory ([ADR 093](../decisions/093-persistent-seat-memory.md))       | implicit      | none                       | overwrite; history in audit rows (ADR 366) | carried lanes vs `origin/main` only, at orient          |
 | Insights ([ADR 327](../decisions/327-team-insight-act.md))                | yes           | none                       | **none**                   | no — dreams re-read them, the digest re-posts them      |
 | Handoff notes, digest posts                                               | yes           | none                       | none                       | advisory (ADR 505 §6 is prose)                          |
 | Lane detail                                                               | audit only    | none                       | overwrite, no history      | no                                                      |

@@ -49,6 +49,19 @@ describe('memory command (ADR 093)', () => {
     await capture(() => teamCommand(parseArgs(['create', 'dawn', '--member', 'nick'])));
   }
 
+  it('show --seat reads a named seat through the ADR 651 route, and a missing one is a normal exit', async () => {
+    await setupTeam();
+    await capture(() => memoryCommand(parseArgs(['save', '--headline', 'own note', 'body'])));
+    // A human may read their own seat by name; the server applies the rest of the read rule.
+    const own = await capture(() => memoryCommand(parseArgs(['show', '--seat', 'nick'])));
+    expect(own.code).toBe(0);
+    expect(own.out).toContain('memory · nick');
+    expect(own.out).toContain('own note');
+    const none = await capture(() => memoryCommand(parseArgs(['show', '--seat', 'ghost'])));
+    expect(none.code).toBe(0);
+    expect(none.out).toContain('no memory saved for ghost');
+  });
+
   it('save → show round-trips the note; clear empties it', async () => {
     await setupTeam();
     const saved = await capture(() =>
