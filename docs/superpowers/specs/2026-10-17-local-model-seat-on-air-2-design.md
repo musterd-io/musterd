@@ -2,8 +2,10 @@
 
 **Date:** 2026-10-17
 **Seat:** stanley
-**Status:** design agreed with nick in chat on 2026-10-17. This document is the written form; nick
-has not yet approved it. Nothing is built or run.
+**Status:** design agreed with nick in chat on 2026-10-17. This document is the written form.
+**Amended 2026-10-17 (lane `01M55WM708DDZGW7442GQ946JW`)** from dolly's, big-body's and fifty's
+reads, applied on nick's "apply all"; the amendments are marked _(review 2026-10-17)_ where they
+land. Nothing is built or run.
 **Lane:** `01M55QY0K5KP5QN53KNHMH1P4E` (goal `research-corpus`)
 **Sibling:** [pre-registered work and seats on N machines](2026-10-17-floating-seats-and-pre-registered-work-design.md)
 (thread 1 of the same brainstorm). This is thread 2.
@@ -29,9 +31,10 @@ acceptance rate by frontier peers over a day of ordinary traffic, the time and m
 two known gaps (G1, G2) confirmed or cleared, and a one-line verdict on the "any model" claim.
 **The cheap-seat rule, fixed now:** the seat stays on if every lane it submitted in the main run
 (the real lane and the pre-registered read, n = 2) was accepted without a human fixing an act, and
-at least two of its three routed reviews were upheld by the lane's outcome. Anything less sends the
-cheap-seat question to the hosted arm. N is small and the readout says so; the rule is still fixed
-before the run.
+at least two of its three routed reviews were upheld. _(review 2026-10-17, dolly)_ **Upheld** means:
+no dispute, reopen, revert or follow-up fix on that lane within seven days of the seat's verdict.
+Anything less sends the cheap-seat question to the hosted arm. N is small and the readout says so;
+the rule is still fixed before the run.
 
 **Goals**
 
@@ -125,17 +128,24 @@ Ollama on Air 2, with every bound set before the first wake and recorded in the 
 - **A small context window.** The standstill was `num_ctx 32768`. The gauntlet starts at 8k and
   raises it only if an act fails for length; the value used is recorded per candidate.
 - **A memory ceiling** the seats always win against, as a number: macOS memory pressure
-  (`memory_pressure` / `vm_stat`) must stay out of **critical** while the model is loaded, and
-  swap-ins must not climb during an act. A small script on Air 2 samples both every 30 s while a
-  model is loaded, writes a timestamped line, and on a critical reading runs `ollama stop` and
-  tells nick; that script is the kill rule's eyes (§4.5). Peak per candidate goes in the readout.
-  The 7–8B trial's "room" condition is: the 4B candidates never left the **normal** level.
+  (`memory_pressure` / `vm_stat`) must stay at **normal** while the model is loaded, and swap-ins
+  must not climb during an act. _(review 2026-10-17, dolly 4)_ A small script on Air 2 samples both
+  **every 5 s** while a model is loaded (30 s was too slow: the stall it watches for starves the
+  watcher, which is what the ADR 169 note describes), writes a timestamped line, and on the first
+  **warn** reading, or on two consecutive missed samples, runs `ollama stop` and tells nick; that
+  script is the kill rule's eyes (§4.5). Peak per candidate goes in the readout. The 7–8B trial's
+  "room" condition is: the 4B candidates never left normal.
 - **The seat.** One new roster seat (name is nick's; a new seat rather than a renamed one, so its
   history is only this run). OpenCode harness, `opencode.json` pinned to `provider: ollama`, the
   bare model tag as `model`, base URL `http://127.0.0.1:11434/v1`. The declaration is
   `binding.model` on the new seat's binding (per seat; `MUSTERD_MODEL` in the actuator env would
-  leak to all five Air 2 seats, and the doctor flags it in an MCP entry as stale). The gauntlet's
-  first check is that attestation comes back `observed` with the same tag and no `drift`.
+  leak to all five Air 2 seats, and the doctor flags it in an MCP entry as stale), and the same
+  binding declares the seat **local** (`binding.local: true`, the ADR's name for it). _(review
+  2026-10-17, dolly 3)_ The pin goes in the seat's **workspace** `opencode.json`, never the global
+  `~/.config/opencode/opencode.json`: Air 2 runs five seats, and a global pin would relabel every
+  one of them. Which file OpenCode 2.x reads first is verified on Air 2 before the gauntlet. The
+  gauntlet's first check is that attestation comes back `observed` with the same tag and no
+  `drift`.
 - **The gateway** is not in the path for this phase: OpenCode talks to Ollama directly. What
   marks the wake local is §4.4's change to the OpenCode backend, not the gateway. Naming a local
   upstream in the ADR 583 gateway is the engine's step, not this one.
@@ -173,7 +183,20 @@ Run 13's run sheet, as written, with these fixed:
 - **Where:** Air 2, the seat from §4.1, in ordinary traffic for at least a day (run 13 says an
   hour; a day gives the slow-seat failure class room to show).
 - **Band-1 work:** at least three acceptance reviews on docs-only lanes routed to it by the
-  ordinary picker (no human steering it there), and every directed ask it receives.
+  ordinary picker (no human steering it there), and every directed ask it receives. _(review
+  2026-10-17, dolly 2)_ **The seat's acceptances are advisory for the whole run: they never close a
+  lane.** The picker (ADR 260/158) does not read `change_class`, so it will route code and
+  high-stakes lanes to the seat too, and under ADR 202 an accept IS the verdict. The seat is
+  therefore enrolled with an acceptance scope of `advisory` (a per-seat policy key the ADR adds):
+  its `accept`/`decline` is recorded against the lane and counted for the cheap-seat rule, the ask
+  is then re-routed to the next eligible acceptor, and the lane closes on that one. The readout
+  compares the seat's verdicts with the closing ones. If the run passes, lifting the scope to
+  docs-only lanes is the ADR's second step.
+- **If G1 reproduces** (the model stamp goes null after the first acts), the picker grades the seat
+  `unknown_grade` and stops routing it reviews, and the measure above starves quietly. _(review
+  2026-10-17, dolly 7)_ Decided now: the gauntlet's attest step is re-checked after the drain; if
+  the stamp is null there, the main run starts anyway, the readout records G1 as reproduced, and
+  the three reviews are routed to the seat by name (`acceptor:` on submit) so the measure exists.
 - **Band-2 work:** one pre-registered read taken and submitted.
 - **One real lane:** small, code or docs, claimed, branch pushed, submitted, judged by a frontier
   seat. And one acceptance routed the other way: the seat judges a frontier seat's lane.
@@ -190,26 +213,37 @@ the first draft also added a zero price row, which the builder check showed does
 price table is read only by the gateway and the resident engine, and the OpenCode backend does not
 know the model), and which would have made `local` a reason that never appears. Dropped.
 
-- **The OpenCode backend marks a wake `local`.** At settle, it reads the provider block of the
-  seat's `opencode.json` (the same file it already edits for the MCP entry); a loopback base URL
-  (`127.0.0.1` / `localhost`) means the model was served on this host, and the completion carries
-  `unpriced_reason: 'local'` with no `cost_usd`. Any other base URL keeps today's
-  `harness_price_unverified`. This is the only signal needed, and it is declared in a file, not
-  inferred from output.
+- **The OpenCode backend marks a wake `local`.** _(review 2026-10-17, dolly 1, big-body 1)_ As
+  first written the signal was a loopback base URL. That is a configuration claim, not evidence:
+  the ADR 583 gateway itself binds loopback, so any seat routed through it would have matched, and
+  so would a local proxy in front of a paid API; and a file read at settle leaves a start/settle
+  TOCTOU. The signal is now **three things that must agree, read at spawn**: the seat's binding
+  declares `local: true`; the workspace `opencode.json`'s provider for the pinned model is `ollama`
+  (or a provider the ADR lists as local-serving); and that provider's base URL is loopback. The
+  backend snapshots the provider block at spawn and stamps the completion with it, so the record
+  carries the exact configuration the wake ran under. Any disagreement keeps today's
+  `harness_price_unverified`. This still cannot prove where inference ran, which is why the
+  exemption below is gone.
 - **`local` is a fourth `unpriced_reason`** (the closed set in `packages/protocol/src/residency.ts`
   grows by one; the ADR amends ADR 364 and notes ADR 583). It means: served on the host itself, no
   metered cost; the price is known to be zero.
 - **`local` is excluded from the ADR 436 trigger's denominator**, not counted as priced: the rail
   prints it as its own line (`local ×N`) and judges "none priced" over the remaining wakes, so one
   local wake can neither trip nor silence the trigger for the harness's metered wakes.
-- **`local` does not count against `unpriced_wake_cap`.** The counter in
-  `packages/server/src/store/insights.ts` excludes leases whose reason is `local`; the ADR records
-  this as a dated note on ADR 639 and ADR 236 (a printed 0 stays unpriced; a declared local is not
-  a printed 0). This is the one server-side line, and it is why increment 1 is an ADR rather than
-  a patch.
+- **`local` still counts against `unpriced_wake_cap`.** _(review 2026-10-17, dolly 1, big-body 1,
+  fifty)_ The first draft exempted it. Both reads showed the signal is spoofable (a local listener
+  can forward to a metered endpoint), so an exemption would turn a spend guard off for paid calls;
+  big-body called it a design blocker. The experiment does not need the exemption: the cap is a
+  team policy nick sets, and a run on revive sets it with the local seat's wakes in mind. `local`
+  is therefore a named reason that is **counted and shown** (its own line in `/report` and on the
+  rail), never a free pass. fifty's builder note: `countUnpricedWakes` counts leases by cost alone
+  and `WakeAuditRow.detail` does not yet carry `unpriced_reason` (the `wake_cost` audit row does),
+  so the per-reason line needs the reason plumbed into the wake audit row; that plumbing is what
+  gives the rail its `local ×N` line. ADR 639 and ADR 236 are untouched.
 - **No price row, no `cost_usd: 0`.** `/report` shows the seat's wakes under their own `local`
-  count beside cost, never inside it. The `budget_usd` refusal is gateway-only and stays blind to
-  these wakes, which is correct: there is nothing to spend.
+  count beside cost, never inside it (`pricedWakeCostUsd` already sums positive costs only, fifty).
+  The `budget_usd` refusal is gateway-only and stays blind to these wakes; the cap above is the
+  guard that still sees them.
 - **No change to `modelFamily` or `normalizeModelId`.** A provider-prefixed id (`ollama/qwen3:4b`),
   if ever observed, is recorded as observed and named in the readout; the fix is the seat's
   configuration, not the protocol's grading of every seat.
@@ -219,9 +253,10 @@ know the model), and which would have made `local` a reason that never appears. 
 The run stops, and the stop is the result, the moment any of these holds while the model is
 loaded:
 
-- the sampler (§4.1) reads memory pressure **critical** while a model is loaded, or a wake for
-  another Air 2 seat fails (`residency.wake_failed`, watchdog timeout or spawn error: no memory
-  reason code exists today, so any failure on Air 2 while the model is loaded counts);
+- the sampler (§4.1) reads memory pressure **warn** while a model is loaded, or misses two
+  consecutive samples, or a wake for another Air 2 seat fails (`residency.wake_failed`, watchdog
+  timeout or spawn error: no memory reason code exists today, so any failure on Air 2 while the
+  model is loaded counts);
 - Air 2's sync pull from the hub times out (the shape of lane
   "Sync: Air 2's pull from the hub has timed out", 2026-10-08);
 - Air 2's load average stays above 8 for five minutes (the hub's "every seat resident" reading was
@@ -234,7 +269,9 @@ lanes say so. Stopped runs are written up the same as finished ones, with the tr
 ### 4.6 What the record shows
 
 - The seat's acts, stamped with the bare tag, `observed`.
-- Each wake's `residency.wake_cost` row with `unpriced_reason: local`, its duration, and the host.
+- Each wake's `residency.wake_cost` row with `unpriced_reason: local` and the provider snapshot it
+  ran under, its duration, and the host.
+- The seat's advisory verdicts beside the closing verdicts on the same lanes.
 - The acceptance asks it answered and the ones it received, with the reviewer grade
   (`cross_family` against Claude/GPT/Grok workers).
 - The readout page in `docs/dogfood/runs/2026-MM-DD-13-<tester>.md` on run 13's template, plus a
@@ -247,16 +284,25 @@ lanes say so. Stopped runs are written up the same as finished ones, with the tr
 - The other 4B candidates (nick picks on the day; the readout names them).
 - How peak memory is sampled at each act (a small script on Air 2 is fine; what matters is that
   the number has a time beside it).
-- Whether OpenCode's Ollama provider needs anything beyond `opencode.json` on 2.x; verify on Air 2.
+- Whether OpenCode's Ollama provider needs anything beyond `opencode.json` on 2.x, and which
+  `opencode.json` wins when both global and workspace exist; verify on Air 2.
+- The OpenCode wake watchdog against 50–60 s per act (dolly 6): a drain of ten acts in one
+  `opencode run` may exceed it, and a timeout would be read as a model failure. Raise it for this
+  seat or split the drain; decide before the gauntlet, record which.
+- The `acceptance_scope: advisory` policy key and the re-route after an advisory verdict.
 - The ADR's exact text for the `local` reason and how the rail and `/report` print it.
-- Tests: the enum accepts `local`; a loopback provider base URL yields `local` and a remote one
-  does not; the rail excludes `local` from the trigger's denominator; the cap counter excludes
-  `local`; a bare-tag attestation grades `qwen`.
+- Tests: the enum accepts `local`; the three-part signal yields `local` only when all three agree
+  (binding without the provider, provider without loopback, loopback without the binding each
+  stay `harness_price_unverified`); the snapshot is taken at spawn so an edit mid-wake changes
+  nothing; the rail excludes `local` from the trigger's denominator and prints its own line; the
+  cap counter still counts `local`; an advisory accept records and re-routes without closing the
+  lane; a bare-tag attestation grades `qwen`.
 
 ## 6. Increments
 
-1. **ADR + plumbing** (lane `01M55R1B9PXSETR31YD5AVN7C2`): the OpenCode backend marks loopback-served wakes `local`; the
-   enum, the rail, `/report` and the cap counter honour it.
+1. **ADR + plumbing** (lane `01M55R1B9PXSETR31YD5AVN7C2`): the OpenCode backend marks a wake `local` on the three-part
+   signal at spawn; the enum, the rail and `/report` show it; the cap still counts it; the
+   per-seat `acceptance_scope: advisory` key and its re-route.
 2. **Gauntlet** (lane `01M55R1FN3M1BPFQ5J5RH2QGX1`): Air 2 bounded serving, the new seat, candidates run through §4.2;
    pre-registered with §4.2's verdict rule. Ends with one chosen model or "none passed".
 3. **Main run** (lane `01M2M6NV4C2CNBJYVYQTFMAQRW`, dogfood run 13 as already on the board): §4.3
@@ -274,9 +320,14 @@ lanes say so. Stopped runs are written up the same as finished ones, with the tr
 - A new seat, not a renamed one, so the run's history is clean.
 - The gauntlet is its own pre-registered lane rather than a step inside run 13, because run 13's
   run sheet assumes a chosen model and says not to re-run the floor.
-- One mechanism (`local` from the OpenCode backend, keyed on a loopback base URL) rather than a
-  zero price row, because the price table is never read on this path and two mechanisms would have
-  left `local` unreachable.
+- One mechanism (`local` from the OpenCode backend) rather than a zero price row, because the price
+  table is never read on this path and two mechanisms would have left `local` unreachable.
+- _(review 2026-10-17)_ `local` is counted, not exempted. Three reads agreed the signal is a claim;
+  a claim can name a wake but must not switch off a spend guard.
+- _(review 2026-10-17)_ The seat's acceptances are advisory for the run, because the picker cannot
+  keep it to docs-only lanes and an accept closes a lane.
+- _(review 2026-10-17)_ Kill at warn, sampled every 5 s, missed samples count: the watcher must act
+  before the stall it watches for can starve it.
 - `local` is a new unpriced reason rather than reuse of `no_price_row`, because the ADR 436 trigger
   reads "none priced" as "cannot be priced", and a free local call is the opposite case.
 - A day rather than run 13's hour, so "never drains its inbox" has time to show.
