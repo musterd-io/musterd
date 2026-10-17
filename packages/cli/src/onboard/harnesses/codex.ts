@@ -106,7 +106,10 @@ export const codex: Harness = {
     payload.transcript_path ? readModelFromTranscript(payload.transcript_path) : undefined,
 
   async detect() {
-    const installed = existsSync(join(homedir(), '.codex'));
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const bin = await resolveCodexBin();
+    const installed = bin !== null;
     const projectToml = readToml(projectConfigPath());
     // The project file is what musterd writes, so it is what an entry here MEANS — the global file
     // is the fallback, and only when the folder has none of its own. Getting this order wrong would
@@ -126,9 +129,9 @@ export const codex: Harness = {
       configured,
       detail: inGlobal
         ? 'registered in ~/.codex/config.toml (machine-global — musterd writes the project file)'
-        : installed
-          ? '~/.codex present'
-          : '~/.codex not found',
+        : bin
+          ? `codex on PATH (${bin})`
+          : 'codex install not found',
       // Read the entry's env back so the doctor can flag a baked legacy value here too. Before this,
       // only Claude Code's entry was ever inspected, so a per-seat secret or a stale MUSTERD_SURFACE
       // in `.codex/config.toml` was invisible by construction.
@@ -314,11 +317,13 @@ export const codexAdapter: HarnessAdapter = {
   },
 
   async availability(ctx) {
-    const home = ctx.env['HOME'] ?? homedir();
-    const present = existsSync(join(home, '.codex'));
-    return present
-      ? { available: true, detail: '~/.codex present' }
-      : { available: false, detail: '~/.codex not found' };
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const exec = ctx.exec;
+    const bin = await resolveCodexBin(exec ? (c, a) => exec.run(c, a) : undefined);
+    return bin
+      ? { available: true, detail: `codex on PATH (${bin})` }
+      : { available: false, detail: 'codex install not found' };
   },
 
   async target(ctx) {

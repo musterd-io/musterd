@@ -44,6 +44,11 @@ that its adapter uses, so the two agree.
   get the native host.
 - The `pending` reconcile result still exists for selections made before this ADR, and for a
   harness uninstalled after it was selected.
+- **2026-10-17: Codex, OpenCode and Grok read the binary too.** Their check was a config dir
+  (`~/.codex`, `~/.config/opencode` or `~/.local/share/opencode`, `~/.grok`). So after an uninstall
+  the pickers still offered them. `detect()` and `availability()` now use each launcher's own
+  resolver. `availability()` goes through the reconcile `ctx.exec` seam, and an injected probe is
+  never cached. Cursor keeps its `~/.cursor` check: it is an editor, with no CLI to probe.
 
 ## Observability & Evaluation
 

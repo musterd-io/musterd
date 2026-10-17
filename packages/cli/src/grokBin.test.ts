@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { grokCandidates, probeGrokCli, resetGrokBinCache, resolveGrokBin } from './grokBin.js';
 
 describe('resolveGrokBin', () => {
-  it('probes PATH without a shell and caches a runnable executable', async () => {
+  it('probes PATH without a shell; an injected runnable is never cached (ADR 643)', async () => {
     resetGrokBinCache();
     const calls: string[] = [];
     const runnable = async (cmd: string) => {
@@ -11,7 +11,8 @@ describe('resolveGrokBin', () => {
     };
     expect(await resolveGrokBin(runnable)).toBe('grok');
     expect(await resolveGrokBin(runnable)).toBe('grok');
-    expect(calls).toEqual(['grok']);
+    // A reconcile ctx.exec or a test fake must not answer for the next caller.
+    expect(calls).toEqual(['grok', 'grok']);
   });
 
   it('does not cache a miss, so a later installation becomes visible', async () => {

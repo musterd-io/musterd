@@ -44,11 +44,15 @@ export async function probeOpencodeCli(
 export async function resolveOpencodeBin(
   runnable: (cmd: string, args: string[]) => Promise<{ ok: boolean }> = hasRunnable,
 ): Promise<string | null> {
-  if (opencodeBinCache !== undefined) return opencodeBinCache;
-  if ((await runnable('opencode', ['--version'])).ok) return (opencodeBinCache = 'opencode');
+  // Only the real probe is cached: an injected runnable (a test, a reconcile ctx.exec) always
+  // re-resolves, so one caller's fake can never answer for another.
+  const cache = runnable === hasRunnable;
+  if (cache && opencodeBinCache !== undefined) return opencodeBinCache;
+  if ((await runnable('opencode', ['--version'])).ok)
+    return cache ? (opencodeBinCache = 'opencode') : 'opencode';
   for (const candidate of opencodeCandidates()) {
     if (existsSync(candidate) && (await runnable(candidate, ['--version'])).ok)
-      return (opencodeBinCache = candidate);
+      return cache ? (opencodeBinCache = candidate) : candidate;
   }
   return null;
 }

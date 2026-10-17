@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
-import { grokCandidates, resolveGrokBin } from '../../grokBin.js';
+import { resolveGrokBin } from '../../grokBin.js';
 import { isDeclined } from '../declined.js';
 import {
   registeredFromEnv,
@@ -455,8 +455,10 @@ export const grok: Harness = {
   },
 
   async detect() {
-    const home = join(homedir(), '.grok');
-    const installed = existsSync(home) || grokCandidates().some((p) => existsSync(p));
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const bin = await resolveGrokBin();
+    const installed = bin !== null;
     const projectToml = readText(projectConfigPath()) ?? '';
     const inProject = hasServer(projectToml, 'musterd');
     const globalToml = inProject ? '' : (readText(globalConfigPath()) ?? '');
@@ -471,8 +473,8 @@ export const grok: Harness = {
       configured: inProject || inGlobal,
       detail: inGlobal
         ? 'registered in ~/.grok/config.toml (machine-global — musterd writes the project file)'
-        : installed
-          ? '~/.grok present'
+        : bin
+          ? `grok on PATH (${bin})`
           : 'grok install not found',
       ...registeredFromEnv(env),
       hookDrift: inspectGrokHookDrift(process.cwd()),
@@ -567,10 +569,12 @@ export const grokAdapter: HarnessAdapter = {
   },
 
   async availability(ctx) {
-    const home = ctx.env['HOME'] ?? homedir();
-    const present = existsSync(join(home, '.grok'));
-    return present
-      ? { available: true, detail: '~/.grok present' }
+    // ADR 643: installed means the binary resolves (the launcher's own resolver). A config dir
+    // left behind by an uninstall is not an install.
+    const exec = ctx.exec;
+    const bin = await resolveGrokBin(exec ? (c, a) => exec.run(c, a) : undefined);
+    return bin
+      ? { available: true, detail: `grok on PATH (${bin})` }
       : { available: false, detail: 'grok install not found' };
   },
 

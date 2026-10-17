@@ -59,11 +59,15 @@ export function resetCodexBinCache(): void {
 export async function resolveCodexBin(
   runnable: (cmd: string, args: string[]) => Promise<{ ok: boolean }> = hasRunnable,
 ): Promise<string | null> {
-  if (codexBinCache !== undefined) return codexBinCache;
-  if ((await runnable('codex', ['--version'])).ok) return (codexBinCache = 'codex');
+  // Only the real probe is cached: an injected runnable (a test, a reconcile ctx.exec) always
+  // re-resolves, so one caller's fake can never answer for another.
+  const cache = runnable === hasRunnable;
+  if (cache && codexBinCache !== undefined) return codexBinCache;
+  if ((await runnable('codex', ['--version'])).ok)
+    return cache ? (codexBinCache = 'codex') : 'codex';
   for (const candidate of codexCandidates()) {
     if (existsSync(candidate) && (await runnable(candidate, ['--version'])).ok)
-      return (codexBinCache = candidate);
+      return cache ? (codexBinCache = candidate) : candidate;
   }
   return null;
 }

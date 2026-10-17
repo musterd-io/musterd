@@ -42,11 +42,14 @@ export async function probeGrokCli(
 export async function resolveGrokBin(
   runnable: (cmd: string, args: string[]) => Promise<{ ok: boolean }> = hasRunnable,
 ): Promise<string | null> {
-  if (grokBinCache !== undefined) return grokBinCache;
-  if ((await runnable('grok', ['--version'])).ok) return (grokBinCache = 'grok');
+  // Only the real probe is cached: an injected runnable (a test, a reconcile ctx.exec) always
+  // re-resolves, so one caller's fake can never answer for another.
+  const cache = runnable === hasRunnable;
+  if (cache && grokBinCache !== undefined) return grokBinCache;
+  if ((await runnable('grok', ['--version'])).ok) return cache ? (grokBinCache = 'grok') : 'grok';
   for (const candidate of grokCandidates()) {
     if (existsSync(candidate) && (await runnable(candidate, ['--version'])).ok)
-      return (grokBinCache = candidate);
+      return cache ? (grokBinCache = candidate) : candidate;
   }
   return null;
 }
