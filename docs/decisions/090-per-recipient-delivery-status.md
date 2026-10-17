@@ -92,7 +92,7 @@ raw name as label):
   ledger folded into the existing report payload — both server-derived so every client shares one
   implementation.
 - **CLI:** `musterd report delivery [<id>]` — no id: the open directed ledger ("what's waiting on
-  whom, how long, seen or ignored") _(Amended 2026-10-17: the CLI and MCP say "past cursor" and name the cursor row. ADR 652.)_; with id: the per-act journey.
+  whom, how long, seen or ignored"); with id: the per-act journey. _(Amended 2026-10-17: the CLI and MCP say "past cursor" and name the cursor row. ADR 652.)_
 - **MCP:** the same ledger block on `team_report`, so an agent can check whether its handoff was
   seen before assuming silence means consent.
 - Notification tiers, nudges and the interrupt line stay the _actuators_; this is the _instrument_
