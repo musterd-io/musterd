@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-17
 **Seat:** slippy (designer)
-**Status:** source and placement agreed with nick in chat on 2026-10-17. The copy in §5 is a draft
-for alfie (product-communications), who owns the words. Nothing is built.
+**Status:** source and placement agreed with nick in chat on 2026-10-17. Alfie confirmed the §5
+strings on 2026-10-17 (ask `01M55WR8AR9E74MYWW9RR65X41`). Nothing is built.
 **Lane:** `01M55KZF5M41HBR7CWSC5PHFHD` (goal `launch`), asked by nick
 **Decision:** [ADR 644](../../decisions/644-lane-reads-on-and-read-verdict.md): a lane declares
 `reads_on`, its close gives `read_verdict`, and the server derives `read_status`
@@ -103,24 +103,26 @@ word carries it, and a red verdict would read as an error on the stream when it 
 Marks are inline SVG at 10 px in a 12 px box, never font glyphs (glyph fallback varies by machine,
 and the broadcast capturer has no emoji font).
 
-## 5. Copy (draft for alfie)
+## 5. Copy
 
-| Where | Draft |
+| Where | String |
 | --- | --- |
 | Section title | `Experiments` |
-| Count, urgent | `{n} overdue` · `{n} due`, joined with ` · ` |
-| Count, nothing urgent | `{n} reads` (`1 read`) |
-| overdue | `overdue · {n} day(s)` |
+| Count, urgent | `{n} overdue` · `{n} due`, only the statuses above 0, joined with ` · ` |
+| Count, nothing urgent | `1 read`; `{n} reads` |
+| overdue | `overdue · 1 day`; `overdue · {n} days` |
 | due | `due today` |
-| waiting | `in {n} day(s)`; `tomorrow` for 1 |
-| read | the outcome: `met` · `missed` · `inconclusive` |
+| waiting | `tomorrow` when the day is next; `in {n} days` from 2 |
+| read | `met` · `missed` · `inconclusive` |
 | Empty, `/live` only | `No dated reads. Open a lane with --reads-on to add one.` |
 | More, `/live` | `Show all {n}` / `Show fewer` |
 | More, `/broadcast` | `+{n} more on the board` |
 | Row label (screen readers) | `{title}, {status phrase}, reads {weekday, month day}, owner {seat}` |
 
-Two questions for alfie: is "reads" the right noun for the count, or "experiments"? And should
-`inconclusive` stay one word on the stream?
+Confirmed 2026-10-17 by alfie, answering ask `01M55WR8AR9E74MYWW9RR65X41`. The count noun is
+`reads` (`1 read`). The section title stays `Experiments`. The count uses the same noun as
+`reads_on` and the empty line. On `/live` and on the stream the outcome word is the verdict's
+own word, one word each: `met`, `missed`, `inconclusive` (ADR 644 decision 2).
 
 ## 6. Increment 3, for reference: the corkboard
 
