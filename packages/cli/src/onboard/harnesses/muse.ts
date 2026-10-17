@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
@@ -292,9 +292,10 @@ export const muse: Harness = {
   },
 
   async detect() {
-    const home = homedir();
-    const installed =
-      existsSync(join(home, '.config', 'muse')) || (await resolveMuseBin()) !== null;
+    // ADR 643: installed means the muse binary resolves — the same check the adapter's
+    // availability makes. A leftover ~/.config/muse alone is not an install.
+    const bin = await resolveMuseBin();
+    const installed = bin !== null;
     const settings = readMuseSettings() ?? {};
     const block = museServersBlock(settings);
     const inSettings = block !== null && 'musterd' in block.servers;
@@ -309,7 +310,7 @@ export const muse: Harness = {
     return {
       installed,
       configured: inSettings,
-      detail: installed ? '~/.config/muse present' : 'muse install not found',
+      detail: bin ? `muse on PATH (${bin})` : 'muse install not found',
       ...registeredFromEnv(env),
     };
   },

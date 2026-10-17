@@ -55,6 +55,7 @@ require more special cases instead of one lifecycle contract.
    unavailable harnesses to be selected as pending. `musterd harness configure` edits the same
    set. The selection and reconciliation receipts live in the ignored local provisioning manifest;
    they are never committed or synchronized through a Team.
+   _(Amended 2026-10-17: an uninstalled harness can no longer be newly selected. Only one already in the set stays pending. See ADR 643.)_
 
 3. **Configuration is reconciled, not switched.** `musterd wire` is a deterministic,
    non-interactive reconciler from the saved desired set to machine state. It configures every
@@ -86,6 +87,11 @@ require more special cases instead of one lifecycle contract.
 
 ## Consequences
 
+- **2026-10-17 — pending-select narrowed by ADR 643.** A human picked muse with no muse CLI on the
+  machine, and `configure` printed `pending (muse install not found)` and then `✓ worktree
+  configured`. The pickers in `init`, `connect` and `harness configure` now offer only installed
+  harnesses, plus any already in the set. `--select` refuses a new uninstalled one. Decision 3's
+  reconciliation of a pending selection is unchanged.
 - **2026-08-19 — ownership and recovery superseded by ADR 282.** Independent pre-implementation
   review showed that one receipt per harness cannot represent several worktree contributions to a
   repository-shared registration, and atomic JSON replacement cannot recover a crash between an

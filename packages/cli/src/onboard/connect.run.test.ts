@@ -117,8 +117,8 @@ describe('runConnect', () => {
 
     const [agents, repos] = h.multiCalls;
     expect(agents!.initialValues).toEqual(['claude-code', 'cursor']);
-    expect(agents!.options.map((o) => o.value)).toEqual(['claude-code', 'cursor', 'codex']);
-    expect(agents!.options.find((o) => o.value === 'codex')?.hint).toContain('pending');
+    // codex is not installed, so it is not offered (ADR 643).
+    expect(agents!.options.map((o) => o.value)).toEqual(['claude-code', 'cursor']);
     expect(repos!.options.map((o) => o.value)).toEqual([here, web]);
     expect(repos!.initialValues).toEqual([here]);
     expect(repos!.options[1]!.hint).toBe('Cursor · 2h ago');

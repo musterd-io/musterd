@@ -246,7 +246,7 @@ src/
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
-    harness.ts        // musterd harness configure|status: the ONE desired-set editor/legacy converter + the read-only fragment inspection (ADR 281/282/286). Both resolve role-skill bridges (ADR 586) before they plan, so a missing bridge reads `→ needs wire`
+    harness.ts        // musterd harness configure|status: the ONE desired-set editor/legacy converter + the read-only fragment inspection (ADR 281/282/286). Offers only installed harnesses plus those already selected, and refuses `--select` of an uninstalled one not already in the set (ADR 643). Both resolve role-skill bridges (ADR 586) before they plan, so a missing bridge reads `→ needs wire`
     harnessVerdict.ts // frame-9 fragment glyphs shared by harness status, harness configure, and wire (figma-brief-terminal.md §8-9). A repeated fragment key in one harness appends its resource path after the verdict (ADR 638)
     codexHook.ts      // musterd codex-hook start|end|post-tool-use --stdin: causal local session/model evidence; SessionStart runs the shared self-heal probe; PostToolUse returns a raised daemon line only as Codex hookSpecificOutput additional context (ADR 249/397); start also emits the ADR 326 orientation block on stdout (ADR 333); each subcommand taps its ADR 445 event as `codex` (post-tool-use adds the interrupt probe's HookOutcome)
     sessionProbe.ts   // lazy, fail-open SessionStart self-heal seam shared by harness capture/observe handlers (ADR 419)
@@ -473,8 +473,9 @@ move it, `setup` points at the picker.
 - Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
   repair, a live seat without `--force`, or a harness that is not installed. That last error names the
   adapter's `interactive.installHint` (when it declares one) and the way out — `--harness <name>`, or
-  `musterd harness configure` to change the seat's set; a harness can be *selected* without being installed
-  (ADR 281/282/286), so the miss surfaces only at launch.
+  `musterd harness configure` to change the seat's set. Since ADR 643 a harness can no longer be *newly*
+  selected while it is not installed, but one selected earlier (or before ADR 643) stays in the set as
+  `pending`, so the miss can still surface only at launch.
 
 ### `musterd seats [--json]`
 

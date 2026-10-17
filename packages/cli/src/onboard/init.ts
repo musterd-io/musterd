@@ -744,7 +744,7 @@ export async function runInit(): Promise<number> {
 
   for (const { h, d } of detected) {
     const tag = !d.installed
-      ? pc.dim('not installed')
+      ? pc.dim('not installed — `musterd harness configure` adds it once installed')
       : d.configured
         ? pc.green('installed · musterd already configured')
         : pc.yellow('installed');
@@ -754,11 +754,12 @@ export async function runInit(): Promise<number> {
   const installed = detected.filter((x) => x.d.installed);
 
   // The ADR 281 multi-select: any SUBSET of the registry (Claude Code, Cursor, Codex, the native
-  // musterd host), chosen once per worktree and machine. Available harnesses start selected;
-  // unavailable ones stay selectable as `pending` (the selection survives the install); empty is
-  // valid (the seat stays reachable through the native host or a later configure).
-  const adapters = harnessAdapters();
+  // musterd host), chosen once per worktree and machine. Available harnesses start selected; an
+  // uninstalled one is not offered (ADR 643) — the scan above already named it, and `musterd
+  // harness configure` adds it once installed. Empty is valid (the seat stays reachable through the
+  // native host or a later configure).
   const installedIds = new Set(installed.map((x) => x.h.id));
+  const adapters = harnessAdapters().filter((a) => a.id === 'musterd' || installedIds.has(a.id));
   const picked = guard(
     await p.multiselect({
       message: 'Which harnesses should launch this agent? (space toggles, enter confirms)',
@@ -767,14 +768,9 @@ export async function runInit(): Promise<number> {
         return {
           value: a.id,
           label: a.id === 'musterd' ? 'musterd (native host)' : (legacyHarness?.label ?? a.id),
-          ...(a.id !== 'musterd' && !installedIds.has(a.id)
-            ? { hint: 'pending — not installed here' }
-            : {}),
         };
       }),
-      initialValues: adapters
-        .filter((a) => a.id === 'musterd' || installedIds.has(a.id))
-        .map((a) => a.id),
+      initialValues: adapters.map((a) => a.id),
       required: false,
     }),
   ) as string[];

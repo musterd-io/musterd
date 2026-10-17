@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
@@ -331,6 +331,19 @@ describe('muse Harness detect/configure (hermetic HOME + cwd)', () => {
   it('uninstalled and unconfigured reads honestly', async () => {
     const d = await muse.detect();
     expect(d.configured).toBe(false);
+  });
+
+  it('a leftover ~/.config/muse without the binary is not an install (ADR 643)', async () => {
+    mkdirSync(join(dir, '.config', 'muse'), { recursive: true });
+    const prevPath = process.env['PATH'];
+    process.env['PATH'] = dir;
+    try {
+      const d = await muse.detect();
+      expect(d.installed).toBe(false);
+      expect(d.detail).toBe('muse install not found');
+    } finally {
+      process.env['PATH'] = prevPath;
+    }
   });
 
   it('configure writes settings + hooks, detect reads them back configured', async () => {

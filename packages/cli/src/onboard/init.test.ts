@@ -770,7 +770,7 @@ describe('runInit — intent branches', () => {
     expect(h.http.addMember).not.toHaveBeenCalled();
   });
 
-  it('an uninstalled harness stays selectable as pending; native-only init still completes', async () => {
+  it('an uninstalled harness is not offered (ADR 643); native-only init still completes', async () => {
     h.harness.detect.mockResolvedValue({ installed: false, configured: false });
     h.textQueue.push('dawn', 'nick', '', 'Ada', 'backend');
     h.selectQueue.push('new', 'generalist');
@@ -778,11 +778,9 @@ describe('runInit — intent branches', () => {
     h.confirmQueue.push(true, true, true); // autojoin, wire, primer
     expect(await runInit()).toBe(0);
     expect(h.http.addMember).toHaveBeenCalled();
-    // The uninstalled harness was OFFERED (selection survives installation state, ADR 281)…
-    const offered = h.selectOptions.find((opts) =>
-      (opts as { value: string; hint?: string }[]).some((o) => o.value === 'claude-code'),
-    ) as { value: string; hint?: string }[];
-    expect(offered.find((o) => o.value === 'claude-code')?.hint).toContain('pending');
+    // The uninstalled harness was NOT offered — only installed ones are (ADR 643)…
+    const offered = h.selectOptions.flat() as { value: string }[];
+    expect(offered.some((o) => o.value === 'claude-code')).toBe(false);
     // …and nothing external was configured.
     expect(h.adapters['claude-code']?.apply).not.toHaveBeenCalled();
   });

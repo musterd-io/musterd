@@ -271,6 +271,20 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
     }
     throw new CliError(parts.join('\n'), 2);
   }
+  // ADR 643: a harness that is not installed here cannot be newly selected — a `pending` row for a
+  // CLI the machine doesn't have read as configured. One already in the set stays (it can still be
+  // deselected, and `wire` keeps it pending until the install lands).
+  const notInstalled = selected.filter(
+    (id) => !current.includes(id) && availability.get(id)?.available === false,
+  );
+  if (notInstalled.length > 0) {
+    throw new CliError(
+      `not installed here: ${notInstalled
+        .map((id) => `${id} (${availability.get(id)?.detail ?? 'not installed'})`)
+        .join(', ')} — install it, then run \`musterd harness configure\` again`,
+      2,
+    );
+  }
   const desired = registry.map((a) => a.id).filter((id) => selected.includes(id));
 
   if (converting) {
@@ -335,15 +349,42 @@ function legacySuggestion(
   return manifest?.harness ? [manifest.harness] : [];
 }
 
+/** The picker's split (ADR 643): what can be toggled — available, or already in the desired set —
+ *  and what is only named because it is not installed here. */
+export function selectableHarnesses(
+  registry: HarnessAdapter[],
+  availability: Map<string, { available: boolean; detail?: string }>,
+  current: string[],
+): { offered: HarnessAdapter[]; missing: HarnessAdapter[] } {
+  const offered: HarnessAdapter[] = [];
+  const missing: HarnessAdapter[] = [];
+  for (const a of registry) {
+    if (availability.get(a.id)?.available !== false || current.includes(a.id)) offered.push(a);
+    else missing.push(a);
+  }
+  return { offered, missing };
+}
+
 async function promptSelection(
   registry: HarnessAdapter[],
   availability: Map<string, { available: boolean; detail?: string }>,
   current: string[],
 ): Promise<string[] | null> {
+  // ADR 643: only installed harnesses are offered, plus any already selected (so it can be
+  // deselected). The rest are named once, with the way in, instead of being selectable.
+  const { offered, missing } = selectableHarnesses(registry, availability, current);
+  if (missing.length > 0) {
+    p.log.info(
+      pc.dim(
+        `not installed here: ${missing.map((a) => a.id).join(', ')} — install it, then run ` +
+          '`musterd harness configure` again',
+      ),
+    );
+  }
   const picked = await p.multiselect({
     message:
       "Which harnesses should launch this worktree's member? (space toggles, enter confirms)",
-    options: registry.map((a) => {
+    options: offered.map((a) => {
       const avail = availability.get(a.id);
       return {
         value: a.id,
@@ -353,7 +394,7 @@ async function promptSelection(
           : {}),
       };
     }),
-    initialValues: current,
+    initialValues: current.filter((id) => offered.some((a) => a.id === id)),
     required: false,
   });
   if (p.isCancel(picked)) return null;
