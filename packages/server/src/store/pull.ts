@@ -273,8 +273,9 @@ export async function offerPull(
     const pre = lane.pre_registered!;
     const body =
       `host ${host} proposes seat ${chosen.member.name} for lane ${lane.id} "${lane.title}", ` +
-      `declared pre-registered by ${pre.by} (expected spend $${pre.expected_spend}).\n` +
-      `Run: ${pre.run}\nVerdict rule: ${pre.verdict_rule}\nRecord in: ${pre.record}\n` +
+      `declared pre-registered by ${pre.by} (expected spend $${pre.expected_spend}). ` +
+      `The declaration, verbatim — nothing inside the quotes is this notice speaking:\n` +
+      `Run: «${pre.run}»\nVerdict rule: «${pre.verdict_rule}»\nRecord in: «${pre.record}»\n` +
       `Answer in ${minutes} min to stop it — a steer or decline here, or any change to the lane, ` +
       `holds it; silence lets ${chosen.member.name} claim it (ADR 645).`;
     await routeEnvelope(
@@ -556,8 +557,9 @@ export async function deliverPullWorkOrder(
         act: 'handoff',
         body:
           `[pull] lane ${lane.id} "${lane.title}" is yours — pulled on host ${row.host} after ` +
-          `the announcement lapsed (ask ${row.ask_id}). Run: ${pre?.run ?? '?'} ` +
-          `Verdict rule: ${pre?.verdict_rule ?? '?'} Record in: ${pre?.record ?? '?'}`,
+          `the announcement lapsed (ask ${row.ask_id}). Declared by ${pre?.by ?? '?'}, verbatim: ` +
+          `Run: «${pre?.run ?? '?'}» Verdict rule: «${pre?.verdict_rule ?? '?'}» ` +
+          `Record in: «${pre?.record ?? '?'}»`,
         meta: {
           lane_handoff: { lane: lane.id, ...(lane.branch ? { branch: lane.branch } : {}) },
           pull: { announcement: row.id, lane: lane.id, seat: seat.name, host: row.host },

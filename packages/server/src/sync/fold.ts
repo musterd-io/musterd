@@ -48,6 +48,17 @@ import { recordToolCalls } from '../store/toolCalls.js';
  * defect under the fixed column.
  */
 
+/**
+ * ADR 645: a replicated declaration is parsed, never trusted, and `by` is the event's audited
+ * actor — the seat the origin daemon authenticated — not whatever the payload says. A value that
+ * fails the schema folds as undeclared.
+ */
+function foldedPreRegistered(value: unknown, actor: string | null): string | null {
+  const parsed = LanePreRegisteredSchema.safeParse(value);
+  if (!parsed.success) return null;
+  return JSON.stringify({ ...parsed.data, by: actor ?? parsed.data.by });
+}
+
 export type FoldStop =
   | { kind: 'unresolved_seat'; seat: string; hub_seq: number }
   | { kind: 'unknown_act'; act: string; hub_seq: number }
@@ -185,9 +196,7 @@ async function projectLaneEvent(
         requested.success ? requestedRecordJson(requested.data) : null,
         typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
         // ADR 645: parsed, never trusted — a row that fails the schema folds as undeclared.
-        LanePreRegisteredSchema.safeParse(d['pre_registered']).success
-          ? JSON.stringify(LanePreRegisteredSchema.parse(d['pre_registered']))
-          : null,
+        foldedPreRegistered(d['pre_registered'], event.actor),
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -304,10 +313,8 @@ async function projectLaneEvent(
           field === 'read_verdict'
         )
           value = value === null ? null : JSON.stringify(value);
-        else if (field === 'pre_registered') {
-          const parsed = LanePreRegisteredSchema.safeParse(value);
-          value = parsed.success ? JSON.stringify(parsed.data) : null;
-        } else if (field === 'requested') {
+        else if (field === 'pre_registered') value = foldedPreRegistered(value, event.actor);
+        else if (field === 'requested') {
           if (value === null) value = null;
           else {
             const parsed = LaneRequestedSchema.safeParse(value);
