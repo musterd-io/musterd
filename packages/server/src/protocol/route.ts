@@ -43,6 +43,7 @@ import {
 } from '../store/lanes.js';
 import { getMemberByName, getMemberById } from '../store/members.js';
 import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js';
+import { seatBindings } from '../store/nodes.js';
 import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
 import {
@@ -198,6 +199,33 @@ function isHumanPair(a: MemberRow, b: MemberRow): boolean {
   return a.kind === 'human' && a.observer === 0 && b.kind === 'human' && b.observer === 0;
 }
 
+/**
+ * A joiner's daemon pushes every event it mints to the hub, and the hub refuses one voiced as a seat
+ * bound to ANOTHER node (`bound_elsewhere`, ADR 328 §4). The cursor only moves past an acked batch,
+ * so that one event blocks everything the machine writes after it (wedged twice on 2026-10-17: a
+ * dispatch nudge voiced as `alfie`, who lives on the hub). A daemon-composed act is the only way a
+ * daemon speaks as a seat without that seat's own session on this node, so the refusal sits here,
+ * on the one path they all take, instead of in each composer. The composers are best-effort and
+ * already swallow it; a hub, an unenrolled daemon, an unbound seat and a seat bound here are
+ * untouched.
+ */
+async function refuseVoiceBoundElsewhere(
+  ctx: Ctx,
+  team: TeamRow,
+  sender: MemberRow,
+): Promise<void> {
+  const joiner = await joinerEnrollment(ctx.db, team.id, team.slug);
+  if (!joiner) return;
+  const bound = await seatBindings(ctx.db, sender.id);
+  if (bound.length === 0 || bound.some((b) => b.node_id === joiner.node_id)) return;
+  throw new MusterdError(
+    'bound_elsewhere',
+    `"${sender.name}" is bound to another machine (${bound.map((b) => b.label).join(', ')}), so ` +
+      `this node cannot voice an act as that seat — the hub would refuse the push and wedge ` +
+      `this machine's sync`,
+  );
+}
+
 export async function routeEnvelope(
   ctx: Ctx,
   team: TeamRow,
@@ -216,6 +244,7 @@ export async function routeEnvelope(
    *  only it. An HTTP send has none, and every firehose connection of the sender gets the act. */
   senderConnId?: string,
 ): Promise<RouteResult> {
+  if (daemonComposed) await refuseVoiceBoundElsewhere(ctx, team, sender);
   return withEnvelopeSpan(
     env,
     async () =>
