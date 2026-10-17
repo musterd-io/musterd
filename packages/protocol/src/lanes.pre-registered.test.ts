@@ -42,8 +42,7 @@ const declaration = {
 
 describe('pre-registered declaration (ADR 645)', () => {
   it('an opener declares the three parts and a spend; the daemon stamps by/at', () => {
-    const open = OpenPreRegisteredSchema.parse({ ...declaration, not_before: 1_792_000_000_000 });
-    expect(open.not_before).toBe(1_792_000_000_000);
+    const open = OpenPreRegisteredSchema.parse(declaration);
     const stored = LanePreRegisteredSchema.parse({ ...open, by: 'lazara', at: 2 });
     expect(stored.by).toBe('lazara');
     expect(LaneSchema.parse({ ...base, pre_registered: stored }).pre_registered?.run).toBe(
@@ -61,6 +60,11 @@ describe('pre-registered declaration (ADR 645)', () => {
     // by/at are the daemon's; an opener sending them is stripped, never trusted.
     const parsed = OpenPreRegisteredSchema.parse({ ...declaration, by: 'nick', at: 1 });
     expect('by' in parsed).toBe(false);
+  });
+
+  it('carries no date of its own: the day a read is due is ADR 644 reads_on', () => {
+    const parsed = OpenPreRegisteredSchema.parse({ ...declaration, not_before: 1 });
+    expect('not_before' in parsed).toBe(false);
   });
 
   it('rides lane_open, and lane_update may set or withdraw it with null', () => {
@@ -91,28 +95,29 @@ describe('preRegisteredRefusal (ADR 645 §2: the anti-goal is enforced at the de
 
 describe('pullEligible (ADR 645 §3: the lane side of a pull offer)', () => {
   const declared = { ...declaration, by: 'lazara', at: 1 };
-  it('only an open, unowned, declared lane past its not_before', () => {
-    const now = 1_792_000_000_000;
-    expect(pullEligible({ state: 'open', owner_seat: null, pre_registered: declared }, now)).toBe(
+  const today = '2026-10-20';
+  it('only an open, unowned, declared lane', () => {
+    expect(pullEligible({ state: 'open', owner_seat: null, pre_registered: declared }, today)).toBe(
       true,
     );
-    expect(pullEligible({ state: 'open', owner_seat: null }, now)).toBe(false);
-    expect(pullEligible({ state: 'open', owner_seat: null, pre_registered: null }, now)).toBe(
+    expect(pullEligible({ state: 'open', owner_seat: null }, today)).toBe(false);
+    expect(pullEligible({ state: 'open', owner_seat: null, pre_registered: null }, today)).toBe(
       false,
     );
     expect(
-      pullEligible({ state: 'claimed', owner_seat: 'izzo', pre_registered: declared }, now),
+      pullEligible({ state: 'claimed', owner_seat: 'izzo', pre_registered: declared }, today),
     ).toBe(false);
-    expect(pullEligible({ state: 'parked', owner_seat: null, pre_registered: declared }, now)).toBe(
-      false,
-    );
+    expect(
+      pullEligible({ state: 'parked', owner_seat: null, pre_registered: declared }, today),
+    ).toBe(false);
   });
 
-  it('not_before gates the machine: before the date no offer, on the date an offer', () => {
-    const dated = { ...declared, not_before: 1_792_000_000_000 };
-    const lane = { state: 'open', owner_seat: null, pre_registered: dated };
-    expect(pullEligible(lane, 1_791_999_999_999)).toBe(false);
-    expect(pullEligible(lane, 1_792_000_000_000)).toBe(true);
+  it('reads_on gates the machine: waiting before the day, offered on it and after', () => {
+    const lane = { state: 'open', owner_seat: null, pre_registered: declared, reads_on: today };
+    expect(pullEligible(lane, '2026-10-19')).toBe(false);
+    expect(pullEligible(lane, '2026-10-20')).toBe(true);
+    expect(pullEligible(lane, '2026-10-21')).toBe(true);
+    expect(pullEligible({ ...lane, reads_on: null }, '2026-01-01')).toBe(true);
   });
 });
 

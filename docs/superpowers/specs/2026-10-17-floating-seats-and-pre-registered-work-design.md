@@ -144,13 +144,14 @@ model-call arms. A pull whose `expected_spend` is over the team's cap for a pull
 default 0 = unmetered work only) is announced as a **standard** ask (5 min), not advisory. The
 exact schema is the ADR's.
 
-A pre-registered lane may also carry a **not-before date**, since most of today's examples are
-dated reads. Before that date the lane is visible and not offered to a pull; a person may still
-claim it early, and the claim reply says the date (stanley's call: the date gates the machine, not
-the human). It is a millisecond timestamp like `park_until`, shown in the viewer's local time.
-There is no lane field for this today; the Experiments-panel lane (`01M55KZF5M`, slippy) needs the
-same field and the two designs should agree on it. It is not `park_until`: parked means a person
-chose "not now", and a parked lane is withheld from everyone; not-before withholds only the pull.
+_(Superseded 2026-10-17 by ADR 645 §1/§3.)_ A pre-registered lane was to carry its own
+**not-before date**. The same afternoon the Experiments panel's ADR 644 landed `reads_on` (a
+`YYYY-MM-DD` day in the team's calendar zone) and `read_verdict` on every lane, for exactly these
+dated reads. Two dates on one lane would disagree, so the declaration carries none: a dated read
+carries `reads_on` beside `pre_registered`, and the pull withholds the lane until that day
+(`pullEligible`). A person may still claim it early, and the claim reply says the date (the date
+gates the machine, not the human). It is not `park_until`: parked means a person chose "not now",
+and a parked lane is withheld from everyone; a read's day withholds it from the pull only.
 
 ### 4.2 Enrollment: verified when made
 
