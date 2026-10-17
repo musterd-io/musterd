@@ -1864,6 +1864,53 @@ async function authAdminOrSponsorCaller(
   return { team, member, sponsorScoped: true };
 }
 
+/**
+ * ADR 648: the provisioning caller — a member (admin or the sponsor, via
+ * {@link authAdminOrSponsorOf}) or a sponsor host key finishing a provision for a seat its
+ * creator sponsors. A host key is tried first: its scope is resolved per request by
+ * {@link hostKeyScope} (a creator who left, lost standing or lost `can_create_agents` fails
+ * closed), and the target must satisfy {@link assertSponsorOf} against the creator, so the
+ * key's reach is exactly its sponsor's sponsored seats — never team-wide, never another
+ * sponsor's. `hostLabel`, when given, must equal the key's own label (the enroll rule).
+ */
+async function authProvisionCaller(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+  hostLabel?: string,
+): Promise<{
+  team: TeamRow;
+  member: MemberRow;
+  sponsorScoped: boolean;
+  viaHostKey: boolean;
+  host: string | null;
+}> {
+  const team = await requireTeam(ctx.db, slug);
+  const credential = await findBootstrapCredential(ctx.db, team.id, bearer(req));
+  if (credential?.use_kind === 'host') {
+    if (hostLabel !== undefined && credential.target !== hostLabel)
+      throw new MusterdError(
+        'forbidden',
+        `this host key serves host "${credential.target}", not "${hostLabel}" (ADR 648)`,
+      );
+    const scope = await hostKeyScope(ctx, team, credential.created_by);
+    const creator = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
+    if (!creator) throw new MusterdError('unauthorized', 'this host credential’s creator is gone');
+    await assertSponsorOf(ctx.db, team, creator, agentName);
+    await recordBootstrapCredentialUse(ctx.db, credential.id);
+    return {
+      team,
+      member: creator,
+      sponsorScoped: true,
+      viaHostKey: true,
+      host: credential.target,
+    };
+  }
+  const r = await authAdminOrSponsorOf(ctx, slug, req, agentName);
+  return { ...r, viaHostKey: false, host: null };
+}
+
 /** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
 async function authGovernanceOrSponsorOf(
   ctx: Ctx,
@@ -3680,10 +3727,16 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/grants') {
         const body = parseOrBadRequest(IssueGrantSchema, await readJson(req));
         // ADR 463 §1: a sponsor may issue a SEAT grant for an agent they sponsor; all else is admin.
-        const { team, member, sponsorScoped } =
+        // ADR 648: a sponsor host key may do the same for its creator's sponsored seats.
+        const { team, member, sponsorScoped, viaHostKey, host } =
           body.scope === 'seat'
-            ? await authAdminOrSponsorOf(ctx, slug, req, body.target)
-            : { ...(await authAdmin(ctx, slug, req)), sponsorScoped: false };
+            ? await authProvisionCaller(ctx, slug, req, body.target)
+            : {
+                ...(await authAdmin(ctx, slug, req)),
+                sponsorScoped: false,
+                viaHostKey: false,
+                host: null,
+              };
         const mint = await issueGrant(ctx.db, team.id, body, member.name);
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -3696,6 +3749,7 @@ export async function handleHttp(
             grant_id: mint.grant.id,
             authorized_by: member.name,
             sponsor_scoped: sponsorScoped,
+            ...(viaHostKey ? { via: 'host_key', host } : {}),
           },
         });
         return sendJson(res, 201, mint);
@@ -3776,12 +3830,22 @@ export async function handleHttp(
         const body = parseOrBadRequest(BootstrapCredentialBody, await readJson(req));
         // ADR 463 §1: a sponsor may mint a `claim_seat` credential for an agent they sponsor.
         // …and a `host` key, which the wake/doorbell routes then scope to that sponsor's seats.
-        const { team, member, sponsorScoped } =
+        // ADR 648: a sponsor host key may mint the `claim_seat` credential (never a host key).
+        const { team, member, sponsorScoped, viaHostKey, host } =
           body.use === 'claim_seat'
-            ? await authAdminOrSponsorOf(ctx, slug, req, body.target)
+            ? await authProvisionCaller(ctx, slug, req, body.target)
             : body.use === 'host'
-              ? await authAdminOrSponsorCaller(ctx, slug, req)
-              : { ...(await authAdmin(ctx, slug, req)), sponsorScoped: false };
+              ? {
+                  ...(await authAdminOrSponsorCaller(ctx, slug, req)),
+                  viaHostKey: false,
+                  host: null,
+                }
+              : {
+                  ...(await authAdmin(ctx, slug, req)),
+                  sponsorScoped: false,
+                  viaHostKey: false,
+                  host: null,
+                };
         if (body.use === 'claim_seat' && !(await getMemberByName(ctx.db, team.id, body.target))) {
           throw new MusterdError('not_found', `no seat "${body.target}" in team "${slug}"`);
         }
@@ -3807,7 +3871,12 @@ export async function handleHttp(
           action: 'bootstrap_credential.minted',
           target: minted.credential.id,
           result: 'allow',
-          detail: { use: body.use, target: body.target, sponsor_scoped: sponsorScoped },
+          detail: {
+            use: body.use,
+            target: body.target,
+            sponsor_scoped: sponsorScoped,
+            ...(viaHostKey ? { via: 'host_key', host } : {}),
+          },
         });
         for (const predecessorId of minted.rotated) {
           await appendAudit(ctx.db, team.id, {
@@ -3948,18 +4017,41 @@ export async function handleHttp(
       const bootstrapCredentialMatch = rest.match(/^\/agent-bootstrap-credentials\/([^/]+)$/);
       if (method === 'DELETE' && bootstrapCredentialMatch) {
         const credentialId = decodeURIComponent(bootstrapCredentialMatch[1]!);
-        const { team, member } = await authAdmin(ctx, slug, req);
-        if (!(await revokeBootstrapCredential(ctx.db, team.id, credentialId))) {
+        // ADR 648: a sponsor host key may revoke a `claim_seat` credential for a seat its
+        // creator sponsors (the provisioner's failure cleanup); admins keep the general path.
+        const delTeam = await requireTeam(ctx.db, slug);
+        const hostCred = await findBootstrapCredential(ctx.db, delTeam.id, bearer(req));
+        let member: MemberRow;
+        let viaHostKey = false;
+        let host: string | null = null;
+        if (hostCred?.use_kind === 'host') {
+          const row = (await listBootstrapCredentials(ctx.db, delTeam.id)).find(
+            (c) => c.id === credentialId,
+          );
+          if (!row || row.use_kind !== 'claim_seat' || !row.target)
+            throw new MusterdError(
+              'not_found',
+              `no active scoped bootstrap credential "${credentialId}" on ${slug}`,
+            );
+          const prov = await authProvisionCaller(ctx, slug, req, row.target);
+          member = prov.member;
+          viaHostKey = true;
+          host = prov.host;
+        } else {
+          member = (await authAdmin(ctx, slug, req)).member;
+        }
+        if (!(await revokeBootstrapCredential(ctx.db, delTeam.id, credentialId))) {
           throw new MusterdError(
             'not_found',
             `no active scoped bootstrap credential "${credentialId}" on ${slug}`,
           );
         }
-        await appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, delTeam.id, {
           actor: member.name,
           action: 'bootstrap_credential.revoked',
           target: credentialId,
           result: 'allow',
+          detail: viaHostKey ? { via: 'host_key', host } : {},
         });
         return sendJson(res, 200, { ok: true });
       }
@@ -4381,12 +4473,29 @@ export async function handleHttp(
       // daemon never holds it.
       if (method === 'POST' && rest === '/residency/enroll') {
         const body = parseOrBadRequest(EnrollResidencyBodySchema, await readJson(req));
+        // ADR 648: a sponsor host key enrols its creator's sponsored seats, under its own label.
+        const hostCred = await findBootstrapCredential(
+          ctx.db,
+          (await requireTeam(ctx.db, slug)).id,
+          bearer(req),
+        );
         const {
           team,
           member: authorizer,
           viaFallback,
           sponsorScoped,
-        } = await authGovernanceOrSponsorOf(ctx, slug, req, body.seat);
+          viaHostKey,
+          host: enrollHost,
+        } = hostCred?.use_kind === 'host'
+          ? {
+              ...(await authProvisionCaller(ctx, slug, req, body.seat, body.host)),
+              viaFallback: false,
+            }
+          : {
+              ...(await authGovernanceOrSponsorOf(ctx, slug, req, body.seat)),
+              viaHostKey: false,
+              host: null as string | null,
+            };
         const target = await getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
@@ -4441,6 +4550,7 @@ export async function handleHttp(
             ...(previous ? { previous_host: previous.host } : {}),
             ...(viaFallback ? { fallback: 'no-admin' } : {}),
             sponsor_scoped: sponsorScoped,
+            ...(viaHostKey ? { via: 'host_key', host: enrollHost } : {}),
           },
         });
         await appendAudit(ctx.db, team.id, {
@@ -4455,6 +4565,7 @@ export async function handleHttp(
             via: 'residency.enroll',
             authorized_by: authorizer.name,
             sponsor_scoped: sponsorScoped,
+            ...(viaHostKey ? { host_key: enrollHost } : {}),
           },
         });
         // Grant-rotation trap (dogfood 2026-07-13): a re-enroll revokes the previous standing
