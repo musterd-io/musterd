@@ -1,6 +1,6 @@
 # 647 — Cloud agents: a hosted seat runs on musterd compute, on the sponsor's key
 
-- Status: proposed
+- Status: accepted — 2026-10-17 (nick, accepting lane `01M50SQBJGHRY9HKPDH8WMDBDK`)
 - Date: 2026-10-17
 - Lane: `01M50SQBJGHRY9HKPDH8WMDBDK` (goal `cloud-agents`)
 - Deciders: nick, in the 2026-10-17 brainstorm with fifty
