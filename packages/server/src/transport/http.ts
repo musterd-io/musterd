@@ -7052,7 +7052,15 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(ToolTelemetryReportSchema, await readJson(req));
         // Stamped and replicated (ADR 371 §1): the report on every machine counts this flush.
-        await applyToolCalls(ctx.db, team.id, member.name, member.role || null, body.events);
+        await applyToolCalls(
+          ctx.db,
+          team.id,
+          member.name,
+          member.role || null,
+          body.events,
+          undefined,
+          body.rail ?? 'stdio', // ADR 640: absent is every adapter that predates the rail
+        );
         if (body.surface) await recordSurfaceRender(ctx.db, team.id, member.name, body.surface);
         if (body.startup) await recordAdapterStartup(ctx.db, team.id, member.name, body.startup);
         return sendJson(res, 200, {});

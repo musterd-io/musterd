@@ -130,7 +130,7 @@ export const ToolUsageRowSchema = z.object({
   by_role: z.record(z.string(), z.number().int()),
   /** ADR 640: the same aggregate per rail — present only when the tool saw calls on more than
    * one rail in the window, so a team with no remote use sees no new bytes. */
-  by_rail: z.partialRecord(ToolCallRailSchema, ToolRailUsageSchema).optional(),
+  by_rail: z.record(ToolCallRailSchema, ToolRailUsageSchema).optional(),
 });
 export type ToolUsageRow = z.infer<typeof ToolUsageRowSchema>;
 

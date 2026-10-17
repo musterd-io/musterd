@@ -107,6 +107,10 @@ already depends on `@musterd/server` for its tests).
   its desk calls, which the Experiment below needs. That is a protocol and schema change with its
   own ADR, not part of this one's increments.
   Follows-up: 01M55K7KA9PCC34F4JR8Y0A0JA
+- _2026-10-17:_ [ADR 640](640-tool-call-rail.md) adds the missing dimension: a tool call has a
+  rail (`stdio` or `remote`), `tool_call_stats` keys on it, and `GET /report` splits a tool by rail
+  when it saw both. Decision 7 holds as amended once that lands. The buckets keep a sum and a max,
+  so the Experiment below is restated on mean and max; nick ordered this before increments 2 and 3.
 
 ## Observability & Evaluation
 
@@ -115,7 +119,8 @@ already depends on `@musterd/server` for its tests).
 - **Eval:** the CLI end-to-end tests named above, including the checks that close the old tools'
   bugs: a second unread-only inbox check returns nothing new, and a steer read on a phone is
   discharged.
-- **Experiment:** p50 and p95 duration of `team_inbox_check` and `team_send` over the remote surface
-  against the same tools from a desk adapter on the same daemon, read from `tool_call_stats` after a
-  week of use. Falsifier: remote p95 more than 2× desk p95 means the loopback design needs the
-  per-request auth cache or an in-process route call.
+- **Experiment:** mean and max duration of `team_inbox_check` and `team_send` on the `remote` rail
+  against the `stdio` rail on the same daemon, read from `GET /report`'s per-rail split (ADR 640)
+  after a week of use. _(Restated 2026-10-17: it asked for p50 and p95, which hourly sum-and-max
+  buckets cannot give.)_ Falsifier: a remote mean more than 2× the stdio mean means the loopback
+  design needs the per-request auth cache or an in-process route call.

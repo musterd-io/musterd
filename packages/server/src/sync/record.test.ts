@@ -268,6 +268,44 @@ withDrivers('record', (_o, kind) => {
       expect((await deriveToolCallMetrics(hub.store, (await hubTeam()).id)).calls).toBe(4);
     });
 
+    it('the rail crosses with the record; a flush without one folds as stdio (ADR 640)', async () => {
+      const ev = {
+        tool: 'team_send',
+        outcome: 'ok',
+        calls: 1,
+        total_duration_ms: 9,
+        max_duration_ms: 9,
+      };
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/telemetry/tool-calls',
+            { events: [ev] },
+            nickOnJoiner,
+          )
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/telemetry/tool-calls',
+            { events: [ev], rail: 'remote' },
+            nickOnJoiner,
+          )
+        ).status,
+      ).toBe(200);
+      await roundTrip();
+      const rails = (
+        await hub.store.all('SELECT rail, calls FROM tool_call_stats ORDER BY rail')
+      ).map((r: { rail: string; calls: number }) => [r.rail, r.calls]);
+      expect(rails).toEqual([
+        ['remote', 1],
+        ['stdio', 1],
+      ]);
+    });
+
     it('the raw primitive still ships nothing — the seam is the stamped writer', async () => {
       await recordToolCalls(joiner.store, (await joinerTeam()).id, 'nick', null, [
         { tool: 'team_send', outcome: 'ok', calls: 7, total_duration_ms: 70, max_duration_ms: 10 },

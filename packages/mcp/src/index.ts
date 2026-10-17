@@ -380,6 +380,7 @@ export function buildRemoteMcpServer(seat: RemoteSeat): McpServer {
     surface: null,
     attestSurface: false,
     afterRecord: () => void recorder.flush(client),
+    rail: 'remote',
   });
   return buildMcpServer(client, config, { recorder, remote: true });
 }

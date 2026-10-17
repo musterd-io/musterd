@@ -26,6 +26,47 @@ withDrivers('toolCalls', (o) => {
 
   const HOUR = 60 * 60 * 1000;
 
+  describe('the rail (ADR 640)', async () => {
+    const send = (calls: number, total: number, max: number) => [
+      {
+        tool: 'team_send',
+        outcome: 'ok' as const,
+        calls,
+        total_duration_ms: total,
+        max_duration_ms: max,
+      },
+    ];
+
+    it('defaults to stdio, and the report adds no split for a single rail', async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      await recordToolCalls(db, team.id, 'ada', null, send(2, 40, 30), now);
+      const rows = await db.all<{ rail: string }>('SELECT rail FROM tool_call_stats');
+      expect(rows.map((r) => r.rail)).toEqual(['stdio']);
+      const row = (await deriveToolCallMetrics(db, team.id, now)).tools[0]!;
+      expect(row.calls).toBe(2);
+      expect(row.by_rail).toBeUndefined();
+    });
+
+    it("keeps one seat's remote and stdio calls apart and splits them in the report", async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      await recordToolCalls(db, team.id, 'nick', null, send(3, 30, 20), now, 'stdio');
+      await recordToolCalls(db, team.id, 'nick', null, send(2, 400, 300), now, 'remote');
+      expect(
+        (await db.all('SELECT rail FROM tool_call_stats ORDER BY rail')).map(
+          (r: { rail: string }) => r.rail,
+        ),
+      ).toEqual(['remote', 'stdio']);
+      const row = (await deriveToolCallMetrics(db, team.id, now)).tools[0]!;
+      expect(row.calls).toBe(5);
+      expect(row.by_rail).toEqual({
+        stdio: { calls: 3, avg_duration_ms: 10, max_duration_ms: 20 },
+        remote: { calls: 2, avg_duration_ms: 200, max_duration_ms: 300 },
+      });
+    });
+  });
+
   describe('recordToolCalls (ADR 144 inc 1 — the hourly aggregate)', async () => {
     it('upserts into one row per (seat, tool, outcome, hour) — never one row per call', async () => {
       const { db, team } = await seed();

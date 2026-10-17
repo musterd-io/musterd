@@ -61,7 +61,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(102);
+    expect(runMigrations(s)).toBe(103);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
@@ -76,5 +76,40 @@ describe('the portable ladder (spec §12.2)', () => {
     const presenceCols = s.prepare("SELECT name FROM pragma_table_info('presence')").pluck().all();
     expect(memberCols).toContain('style_prefs');
     expect(presenceCols).toContain('style_epoch');
+  });
+
+  it('v103 on SQLite keeps every existing tool-call row as stdio and keys the rail (ADR 640)', () => {
+    const s = new Database(':memory:');
+    s.pragma('foreign_keys = ON');
+    runMigrations(
+      s,
+      MIGRATIONS.filter((m) => m.version <= 102),
+    );
+    s.exec(
+      "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('T','t','T',1,1)",
+    );
+    s.exec(
+      `INSERT INTO tool_call_stats (team_id, seat, role, tool, outcome, bucket_start, calls,
+         total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','team_send','ok',3600000,4,40,20)`,
+    );
+    expect(runMigrations(s)).toBe(103);
+    expect(s.prepare('SELECT rail, calls, role FROM tool_call_stats').get()).toEqual({
+      rail: 'stdio',
+      calls: 4,
+      role: 'backend',
+    });
+    // The same seat, tool, outcome and hour on the other rail is a second row, not a conflict.
+    s.exec(
+      `INSERT INTO tool_call_stats (team_id, seat, role, rail, tool, outcome, bucket_start, calls,
+         total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','remote','team_send','ok',3600000,1,90,90)`,
+    );
+    expect(s.prepare('SELECT COUNT(*) AS n FROM tool_call_stats').get()).toEqual({ n: 2 });
+    const idx = s
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'tool_call_stats'",
+      )
+      .pluck()
+      .all();
+    expect(idx).toContain('idx_tool_call_stats_team_bucket');
   });
 });

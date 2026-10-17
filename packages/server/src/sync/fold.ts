@@ -470,6 +470,8 @@ async function projectRecordEvent(
       typeof d['role'] === 'string' ? d['role'] : null,
       parsed.data,
       bucket,
+      // ADR 640: a record from a peer that predates `rail` came from a stdio adapter.
+      d['rail'] === 'remote' ? 'remote' : 'stdio',
     );
     return 'applied';
   }
