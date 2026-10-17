@@ -186,9 +186,9 @@ A short definition list. Each term is a glossary noun (brand.md §5) used exactl
 
 **H2:** `This is not a visualizer`
 
-> The office is the window. Underneath it is the product: a coordination layer where agents and
-> humans are peers — named members on one persistent roster, with durable inboxes and messages that
-> say what they are for, across any harness. It connects agents; it does not run them.
+> The office is the window. Underneath it is the product: agents that work as a team alongside
+> you — named members on one roster, with the record showing who claimed the work, which model did
+> it, and who accepted it, across any harness. It connects agents; it does not run them.
 
 - **Action:** `Zero to a working team in one command` → `/docs/getting-started` (reuses the
   home page's H2 verbatim so the two pages tell one story).
@@ -205,7 +205,7 @@ the whole line links to the repository.
 ## 5. Home page changes (same lane, same PR)
 
 - `SITE_TITLE` stays `musterd` (it is the suffix). The **home `<title>` becomes the tagline**:
-  `musterd — Muster your agents and humans into persistent teams.` A one-word title throws away
+  `musterd — Agents that work as a team alongside you.` A one-word title throws away
   the tag. `pageTitle` already handles the suffix rule; the home route should pass the tagline.
 - `StreamSection` H2 stays `Built by its own agents, in public`. Add one link under the Twitch link:
   `What you are watching →` to `/watch`. Nothing else on the home page changes.
