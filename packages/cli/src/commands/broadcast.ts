@@ -364,6 +364,17 @@ function maskRtmpUrl(url: string): string {
  * segments (up to the last CR or LF — ffmpeg's progress uses CR, its errors LF, so live output
  * still streams). Call `flush()` when the stream closes to scrub and emit the final partial line.
  */
+/**
+ * ffmpeg ends each `-stats` sample with a bare `\r` so a terminal redraws it in place. A machine log
+ * splits on `\n`, so on the hosted box those samples never reached `fly logs` while the stream ran:
+ * an hour of `speed=` and bitrate arrived as one line when the stream ended (ADR 642 live trial,
+ * 2026-10-17). Runs after the secret scrubber, on text that is already clean. A `\r` split from
+ * its `\n` across two reads becomes a blank line, which ffmpeg on Linux does not produce anyway.
+ */
+export function statsLineBreaks(text: string): string {
+  return text.replace(/\r(?!\n)/g, '\n');
+}
+
 export function makeSecretScrubber(sink: { kind: 'file' | 'rtmp'; target: string }): {
   (chunk: string): string;
   flush(): string;
@@ -1824,14 +1835,14 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     const stderrDecoder = new StringDecoder('utf8');
     child.stderr?.on('data', (d: Buffer) => {
       const clean = scrubStderr(stderrDecoder.write(d));
-      if (clean) process.stderr.write(clean);
+      if (clean) process.stderr.write(statsLineBreaks(clean));
     });
     // `close` is the ordinary path. It does NOT run when the process is torn down with
     // `process.exit()`, which is why `flushScrubbedStderr` below is called on every forced path —
     // piping stderr made this process responsible for bytes `inherit` used to deliver for free.
     child.stderr?.on('close', () => {
       const rest = scrubStderr.flush();
-      if (rest) process.stderr.write(rest);
+      if (rest) process.stderr.write(statsLineBreaks(rest));
     });
     /**
      * Flush the scrubber's buffered tail SYNCHRONOUSLY. `process.exit()` truncates pending async
@@ -1843,7 +1854,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       const rest = scrubStderr.flush();
       if (rest) {
         try {
-          writeSync(2, rest);
+          writeSync(2, statsLineBreaks(rest));
         } catch {
           /* stderr already gone — nothing useful left to do */
         }
