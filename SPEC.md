@@ -925,3 +925,23 @@ daemon decides what rings; the adapter decides when (ADR 558 §2).
   `{act, outcome: 'injected'|'failed'|'capped', harness, reason?, cap?: 'sender'|'session'}` and
   records `idle_wake.injected` or `idle_wake.capped`. It MUST refuse any other field (no line, no
   body).
+
+## A.23 Read dates on Lanes (unreleased — ADR 644)
+
+A Lane may declare the day its read is due, and carry the read's verdict. Both are declared; neither
+is ever inferred from a title, a detail or a document.
+
+- `reads_on` is a `YYYY-MM-DD` real day (A.16's date rule), wall-clock in the Team's calendar zone.
+  It is accepted on open and on update; `null` on update clears it.
+- `read_verdict` is `{outcome: 'met'|'missed'|'inconclusive', note, by, at}`, with `note` 1–280
+  characters. A server MUST stamp `by` from the authenticated sender and `at` from its own clock. It
+  rides an update, a submit or a resolve. A later verdict replaces an earlier one, and each write is
+  one `lane.read_recorded` audit row.
+- A server MUST refuse, with `validation`, a move to `done` on a Lane that has `reads_on` and no
+  `read_verdict`. A move to `abandoned` is unaffected.
+- A server MUST derive `read_status` on the Lane projection when `reads_on` is set: `read` (a
+  verdict exists), else `dropped` (the Lane is `abandoned`), else `waiting` / `due` / `overdue` as
+  today in the calendar zone is before, on or after `reads_on`. It is never stored, and a
+  client-supplied copy is stripped. It is absent when `reads_on` is.
+- A passed date raises nothing: no Act, no state change, no wake. A server behind this appendix
+  sends neither field, and a reader treats that Lane as undated.
