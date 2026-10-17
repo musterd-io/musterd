@@ -5,6 +5,7 @@ import {
   type SyncPullLaneEvent,
   isWireAttestationSource,
   LANE_TERMINAL_STATES,
+  LanePreRegisteredSchema,
   LaneRequestedSchema,
   requestedRecordJson,
   type LaneState,
@@ -46,6 +47,19 @@ import { recordToolCalls } from '../store/toolCalls.js';
  * for exactly that reason (spec §"The ts-cursor defect"); a wire value here would reintroduce the
  * defect under the fixed column.
  */
+
+/**
+ * ADR 645: a replicated declaration is parsed, never trusted, and `by` is the event's audited
+ * actor — the seat the origin daemon authenticated — not whatever the payload says. A value that
+ * fails the schema, or arrives with no audited actor, folds as undeclared.
+ */
+function foldedPreRegistered(value: unknown, actor: string | null): string | null {
+  const parsed = LanePreRegisteredSchema.safeParse(value);
+  if (!parsed.success) return null;
+  // No audited actor means nobody to attribute it to; it never falls back to the payload's claim.
+  if (actor === null) return null;
+  return JSON.stringify({ ...parsed.data, by: actor });
+}
 
 export type FoldStop =
   | { kind: 'unresolved_seat'; seat: string; hub_seq: number }
@@ -160,8 +174,8 @@ async function projectLaneEvent(
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          requested_json, reads_on, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, reads_on, pre_registered_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -183,6 +197,8 @@ async function projectLaneEvent(
         typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
         requested.success ? requestedRecordJson(requested.data) : null,
         typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
+        // ADR 645: parsed, never trusted — a row that fails the schema folds as undeclared.
+        foldedPreRegistered(d['pre_registered'], event.actor),
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -280,6 +296,7 @@ async function projectLaneEvent(
         requested: 'requested_json',
         reads_on: 'reads_on',
         read_verdict: 'read_verdict_json',
+        pre_registered: 'pre_registered_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -298,6 +315,7 @@ async function projectLaneEvent(
           field === 'read_verdict'
         )
           value = value === null ? null : JSON.stringify(value);
+        else if (field === 'pre_registered') value = foldedPreRegistered(value, event.actor);
         else if (field === 'requested') {
           if (value === null) value = null;
           else {

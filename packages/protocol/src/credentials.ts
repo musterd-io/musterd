@@ -6,6 +6,7 @@ import { GuardianTiersSchema } from './guardian.js';
 import { IncidentPolicySchema } from './incident.js';
 import { StakesDefaultSchema } from './lanes.js';
 import { LoopsPolicySchema } from './loops.js';
+import { PullPolicySchema } from './pull.js';
 import { ResidencyPolicyOverrideSchema, ResidencyPolicySchema } from './residency.js';
 import { StylePolicyOverrideSchema, StylePolicySchema } from './style.js';
 import { TracePolicySchema } from './trace.js';
@@ -194,6 +195,8 @@ export const PolicySchema = z.object({
    * target seat's residency `flow` is `auto`.
    */
   loops: LoopsPolicySchema.default({}),
+  /** ADR 645: the band-2 pull — announcement window, spend cap, per-seat daily cap, release rule. */
+  pull: PullPolicySchema.default({}),
   /**
    * Admin-set default stakes by surface (ADR 244) — the configurable half of "front-end changes
    * default to low". First match wins; a lane whose declared surfaces all fall under a rule opens at
@@ -326,6 +329,7 @@ export const PolicyOverrideSchema = PolicySchema.partial().extend({
   residency: ResidencyPolicyOverrideSchema.optional(),
   enforcement: EnforcementPolicySchema.partial().optional(),
   loops: LoopsPolicySchema.partial().optional(),
+  pull: PullPolicySchema.partial().optional(),
   incident: IncidentPolicySchema.partial().optional(),
   doorbell: DoorbellPolicySchema.partial().optional(),
   trace: TracePolicySchema.partial().optional(),
@@ -348,6 +352,7 @@ const POLICY_SUB_SCHEMAS = {
   residency: ResidencyPolicySchema,
   enforcement: EnforcementPolicySchema,
   loops: LoopsPolicySchema,
+  pull: PullPolicySchema,
   incident: IncidentPolicySchema,
   doorbell: DoorbellPolicySchema,
   trace: TracePolicySchema,

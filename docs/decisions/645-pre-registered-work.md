@@ -152,6 +152,20 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   host's state cannot be probed from here, so that case warns and proceeds as before. `/live`
   shows an enrolled offline seat's node from `residence`. No server change: the row is still
   one host per seat (ADR 358 §3), and a daemon never checks a machine.
+- _(2026-10-17, lane `01M55PDKAT7368RQATDG70FSYB`, increment 4.)_ The pull is built, and with it
+  the daemon side of the declaration that increment 1 left to this lane: `lanes.pre_registered_json`
+  (v106), stamped `by`/`at` from the writer, refused 400 by `preRegisteredRefusal` at open and
+  update (a patch that tags a declared lane risky is refused the same way) and 409 on a lane that
+  is not open; the fold carries it. On the MCP surface it rides `lane_update` only — a declaration
+  is a second call after the open — because the undescribed object costs the tools-list budget
+  257 B once and would cost it twice on `lane_open` (`docs/perf/context-budgets.json`). The pull:
+  `POST /residency/pull` on the host's tick (joiner → `/sync/pull`), `store/pull.ts` (the offer,
+  the window sweep and the release in the reaper, hub only), the host's service seat `host-<label>`
+  as the announcer, `pick {via:'pull', ask}` checked in `decideLanePatch`, `redeemPullGrant` on
+  the host with the seat's own credential, and the five audit rows named in Decision 4, 5 and 8.
+  Policy keys are `pull.*` (`PullPolicySchema`). A grant nobody redeems in 15 minutes is declined
+  and the lane offered again. Not built here: the CLI flags for the declaration (the MCP tool and
+  the HTTP body carry it), and the acceptance backstop (increment 5).
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 

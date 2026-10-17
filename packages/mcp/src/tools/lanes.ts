@@ -56,6 +56,19 @@ const requestedArg = z
 // field and its shape at the moment it matters.
 const READ_VERDICT_INPUT = z.string().optional();
 
+/**
+ * ADR 645: the pre-registered declaration, undescribed and unbounded for the tools-list budget —
+ * the daemon's refusals (a risk tag, high stakes, a lane not open, the field bounds) teach the rule
+ * at the moment it matters. On `lane_update` only: a declaration is a second call after the open,
+ * which costs the budget one copy of the shape rather than two.
+ */
+const PRE_REGISTERED_INPUT = z.object({
+  run: z.string(),
+  verdict_rule: z.string(),
+  record: z.string(),
+  expected_spend: z.number(),
+});
+
 /** `"met: hit rate above baseline"` → the ADR 644 patch field; absent sends nothing. */
 export function readVerdictPatch(raw: string | undefined): {
   read_verdict?: { outcome: 'met' | 'missed' | 'inconclusive'; note: string };
@@ -444,6 +457,7 @@ export function registerLanes(
         // ADR 644 — the day this lane's read is due (null clears) and the read's verdict.
         reads_on: z.string().nullable().optional(),
         read_verdict: READ_VERDICT_INPUT,
+        pre_registered: PRE_REGISTERED_INPUT.nullable().optional(),
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),

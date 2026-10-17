@@ -10,6 +10,7 @@ import { releaseDepartedSeatClaims } from '../store/lanes.js';
 import { sweepAbandonedAcceptance } from '../store/laneSweep.js';
 import { getMemberById, reapExcessIdleObservers, reapStaleObservers } from '../store/members.js';
 import { hasLivePresence, reapStale } from '../store/presence.js';
+import { releaseDeadPulls, sweepPullWindows } from '../store/pull.js';
 import { expireRequests } from '../store/requests.js';
 import type { RequestRow } from '../store/requests.js';
 import {
@@ -237,6 +238,23 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
       if (joinerTeams.has(team.id)) continue;
       for (const lane of await sweepReapedAcceptances(ctx, team, presenceWatchedSince, now)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
+      }
+    }
+
+    // ADR 645 §4.2/§5: the band-2 announcement windows and the dead-host release. Hub only (§6:
+    // one daemon decides; a joiner's copy of the thread can lag). Neither closes a lane: a window
+    // decision grants or declines an offer, and a release returns redo-able work to open.
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
+      const teamRow = await getTeamBySlug(ctx.db, team.slug);
+      if (!teamRow) continue;
+      try {
+        for (const d of await sweepPullWindows(ctx, teamRow, now))
+          log.info({ msg: 'pull_window_decided', team: team.slug, ...d });
+        for (const r of await releaseDeadPulls(ctx, teamRow, now))
+          log.info({ msg: 'pull_released', team: team.slug, ...r });
+      } catch (err) {
+        log.warn({ msg: 'pull_sweep_failed', team: team.slug, err: String(err) });
       }
     }
 

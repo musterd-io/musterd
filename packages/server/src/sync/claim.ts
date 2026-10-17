@@ -17,9 +17,12 @@ import {
   type SyncLanePatchRequest,
   type Policy,
   type PolicyOverride,
+  type PullPollResponse,
+  PullPollResponseSchema,
   type SyncHaltRequest,
   type SyncHoldRequest,
   type SyncPolicyRequest,
+  type SyncPullRequest,
   type SyncStyleRequest,
   type SyncTrustRequest,
   type UpdateLane,
@@ -45,8 +48,10 @@ import { getMemberByName } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode, seatBinding, seatBindings, trustNodeForSeat } from '../store/nodes.js';
 import { hasLivePresence } from '../store/presence.js';
+import { afterPullClaim, assertPullGranted } from '../store/pull.js';
 import { humanAskOutstanding, peerConfirmedPending } from '../store/review.js';
 import { type MemberRow, resolveCapabilities } from '../store/rows.js';
+import { getTeamById } from '../store/teams.js';
 import { peekPullStop } from './pull.js';
 
 /**
@@ -384,8 +389,32 @@ export async function decideLanePatch(
         `"${body.owner_seat}" is a service seat — a lane cannot be handed to a ledger seat (ADR 232)`,
       );
   }
+  // ADR 645 §1: the declaration is the opener's (or an admin's) — it is what a host will run
+  // unprompted, so a teammate cannot set or replace it on someone else's lane.
+  if (body.pre_registered !== undefined && member.name !== before.created_by) {
+    const row = await getMemberByName(db, teamId, member.name);
+    if (!(row && resolveCapabilities(row).is_admin))
+      throw new MusterdError(
+        'forbidden',
+        `only the opener of lane "${before.id}" (${before.created_by}) or an admin may declare ` +
+          `it pre-registered or withdraw the declaration (ADR 645)`,
+      );
+  }
   decideParkPatch(member, before, body);
   decidePickPatch(member, before, body);
+  // ADR 645 §4: a pull claim is the seat's own, and only the (lane, seat) pair the hub granted
+  // after the announcement window lapsed. Decided here so the hub's arbitration (a joiner's host)
+  // and the local path (the hub's own host) refuse identically.
+  if (body.pick?.via === 'pull') {
+    if (body.owner_seat !== member.name)
+      throw new MusterdError(
+        'bad_request',
+        'a pull claim is made as the enrolled seat itself — owner_seat is the caller (ADR 645)',
+      );
+    const row = await getMemberByName(db, teamId, member.name);
+    if (!row) throw new MusterdError('unauthorized', `no such seat "${member.name}"`);
+    await assertPullGranted(db, teamId, before.id, row, body.pick);
+  }
   await decideRiskyClosePendingHuman(db, teamId, member, before, body);
   await decideFollowsUp(db, teamId, member, before, body);
   decideReadVerdict(before, body);
@@ -573,8 +602,9 @@ export async function arbitrateLanePatch(
     }
     throw err;
   }
+  let arbitrated: ArbitratedLanePatch;
   try {
-    return await ctx.db.tx(async (t): Promise<ArbitratedLanePatch> => {
+    arbitrated = await ctx.db.tx(async (t): Promise<ArbitratedLanePatch> => {
       const lane = (await updateLane(
         t,
         team.id,
@@ -614,6 +644,14 @@ export async function arbitrateLanePatch(
     }
     throw err;
   }
+  // ADR 645 §4: a pull claim's record and work order, on the hub — the joiner's PATCH handler
+  // sees an arbitrated answer and runs no post-effects of its own for it.
+  if (decided.patch.pick?.via === 'pull' && decided.patch.pick.ask) {
+    const teamRow = await getTeamById(ctx.db, team.id);
+    if (teamRow)
+      await afterPullClaim(ctx, teamRow, arbitrated.lane, req.seat, decided.patch.pick.ask, now);
+  }
+  return arbitrated;
 }
 
 /** The claim, as the special case of `arbitrateLanePatch` it always was (ADR 355). */
@@ -702,6 +740,36 @@ export async function patchAtHub(
     lane: LaneSchema.parse(answer.lane),
     ...(closed.success ? { closed: closed.data } : {}),
   };
+}
+
+/**
+ * ADR 645 §6, joiner side of the band-2 poll: ask the hub, write nothing. The hub's answer is
+ * relayed as-is; `HubUnreachableError` when no answer came, so the host sees an idle tick.
+ */
+export async function pullAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncPullRequest,
+): Promise<PullPollResponse> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/pull`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_pull_hub_unreachable', team: slug, host: req.host, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok)
+    throw new Error(`the hub answered ${res.status} to the pull poll: ${JSON.stringify(body)}`);
+  return PullPollResponseSchema.parse(body);
 }
 
 /** The claim, forwarded as the lane patch it is. Kept for callers that speak the claim shape. */
