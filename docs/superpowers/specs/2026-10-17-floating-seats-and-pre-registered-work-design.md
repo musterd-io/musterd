@@ -83,9 +83,20 @@ accepted.
   seat that _leaves_ has its lanes released (`releaseDepartedSeatClaims`). A dead wake lease retries
   the same seat on the same host, and no other host can take it because enrollment is one host per
   seat and leases are filtered by host.
-- **Lane claims are already decided at the hub.** A joiner forwards a lane patch to the hub
-  (`packages/server/src/sync/claim.ts`); the hub's answer is the one that counts. Leases must do the
-  same or two hosts take one wake.
+- **An agent seat is bound to one node.** ADR 358 §3 ("agents stay one-node") binds every agent
+  seat to exactly one node through `seat_nodes`; the hub refuses a claim or lane patch from any
+  other node with `403 bound_elsewhere` (`assertSeatResident`, `packages/server/src/sync/claim.ts`),
+  and the reaper records what happened when a joiner tried (2026-10-02: every later push wedged
+  behind the first refusal). The reason is ADR 042's parallel-minds hazard: one seat must never run
+  live in two places. Floating seats reverse this, so the ADR in increment 1 amends ADR 358 §3 as
+  well, and the guard that replaces the one-node binding is the hub-granted lease (§4.3). The
+  identity authorisation checks is the node id; `residency.host` is a hostname string that goes
+  stale after a move, so "host" in this document means the node.
+- **Lane claims are already decided at the hub; wake leases are not.** A joiner forwards a lane
+  patch to the hub (`sync/claim.ts`) and the hub's answer counts. `wake_leases` is never
+  replicated: each daemon derives due wakes from its own copy and expires its own leases, and the
+  wake-budget counters (ADR 236's 6 h ceiling, attempts per act) are local audit rows. A seat on
+  several hosts therefore needs the hub to own the lease, not only to forward it.
 - **Credentials are not all portable.** A seat on Claude Code or Codex under a subscription login
   depends on a human having logged that harness in on that machine; the session cannot be copied. A
   key-bound seat (the resident engine, keys in the keychain, ADR 605) can run wherever the key is.
@@ -108,22 +119,26 @@ Every lane is in exactly one band. The band decides who may start it.
 | 2    | Pre-registered work: fully specified, judged by a fixed rule, safe to redo                             | An enrolled host, unprompted, after an advisory ask lapses              | New: the pull (§4.3)                                                    |
 | 3    | Everything else: brainstorms, user-facing or risk-tagged lanes, dogfood runs, open-ended feature work  | A person, or a seat a person is talking to (`musterd pick`, a handoff) | Unchanged                                                               |
 
-Band 1 needs no new mechanism. It needs `loops.dispatch`, `loops.review` and the seat's `flow:
-'auto'` switched on for the seats that should answer unprompted. They are off by default (ADR 199
-§1) and stay so; a team turns them on per seat.
+Band 1 needs no new mechanism. It needs `loops.dispatch` and `loops.review` switched on for the
+team (they are team policy, off by default, ADR 199 §1) and `flow: 'auto'` on each seat that should
+answer unprompted. Both stay off by default.
 
 **Band 2 is declared, never inferred.** A lane is pre-registered because the opener said so. The
 declaration carries three things the lane must already contain: what to run, the rule that turns the
 result into a verdict, and where the verdict is recorded. A lane missing any of the three is refused
 the declaration at open time (a `lane_open` / `lane_update` check, the same shape as
-`decidePickPatch`). The field is left to the ADR; the recommendation is a value on the existing
-`Lane.kind` (today only `incident`), because the incident path is the one place the daemon already
-gives an unowned lane an owner, and this is its second case.
+`decidePickPatch`). A lane that carries a risk tag, `stakes: high` or `user-facing` is refused the
+declaration at the same check, so the anti-goal is enforced once, at open, and the pull never has
+to filter for it (stanley's call). The field is left to the ADR; the recommendation is a value on
+the existing `Lane.kind` (today only `incident`). Note that today only the daemon sets `kind`, so
+letting an opener set it is a protocol change, not a new enum value; the ADR covers it either way.
 
 A pre-registered lane may also carry a **not-before date**, since most of today's examples are
-dated reads. Before that date the lane is visible and not offered. There is no lane field for this
-today; the Experiments-panel lane (`01M55KZF5M`, slippy) needs the same field and the two designs
-should agree on it.
+dated reads. Before that date the lane is visible and not offered to a pull; a person may still
+claim it early, and the claim reply says the date (stanley's call: the date gates the machine, not
+the human). It is a millisecond timestamp like `park_until`, shown in the viewer's local time.
+There is no lane field for this today; the Experiments-panel lane (`01M55KZF5M`, slippy) needs the
+same field and the two designs should agree on it.
 
 ### 4.2 Enrollment: one row per (seat, host), verified when made
 
@@ -152,29 +167,44 @@ Nothing pushes. Each host polls its daemon as today. The changes are at the gran
 - A due wake for a seat is **offered to every host enrolled for that seat**. The first host to
   claim the lease runs it. A busy host (its own concurrency cap) does not claim, so load spreads
   without a balancer.
-- **The grant is decided at the hub.** A joiner forwards a lease claim to the hub the way it
-  forwards a lane patch. One atomicity point, no host-to-host traffic. The hub down means nothing
-  new is leased; work already leased continues on the host that holds it (sloane's lane
-  `A joiner keeps working through a hub outage` is the precedent).
+- **The hub owns the lease.** For a seat enrolled on more than one host, the hub derives the due
+  wake, stores the lease and keeps the counters (hourly cap, attempts, the 6 h ceiling). A host on a
+  joiner polls the hub for leases through its own daemon, which forwards the poll and the claim the
+  way it forwards a lane patch today. One atomicity point, no host-to-host traffic. A seat enrolled
+  on one host keeps today's local path unchanged. The hub down means nothing new is leased; work
+  already leased continues on the host that holds it (sloane's lane `A joiner keeps working through
+  a hub outage` is the precedent).
+- **The lease is the one-live guard.** With ADR 358's one-node binding relaxed for enrolled seats,
+  what stops a seat running live in two places is that the hub grants one lease per seat at a time
+  and refuses acts from a node that holds no lease and no live presence for that seat. The
+  `bound_elsewhere` refusal stays for nodes the seat is not enrolled on.
 - **A lost lease is re-offered.** When a lease expires because the host was unreachable or died
   (`expireWakeLeases`), the wake is due again on the next poll and any other enrolled host may take
   it. The lane keeps its owner (the seat); only the host changes. This replaces "retry the same host
   until the 6 h ceiling" with "retry anywhere the seat is enrolled, then the ceiling."
 - **Branch rule.** A seat with unpushed work on a lane branch resumes on the host holding that
   branch while that host is awake. Otherwise it resumes anywhere, because the branch was pushed with
-  the lane (the handoff contract). The host records which it did; a resume elsewhere with an
-  unpushed branch is refused, not guessed.
-- **Band 2 pull.** A host with room asks its daemon for a pre-registered lane it may take: open,
-  unowned, not-before date passed, and the seat enrolled on this host holds any `role` the lane
-  names. The daemon ranks by the ADR 536 order (goal motion, then age) and answers with one lane.
-  The host then:
-  1. sends an **advisory ask** to the team on the seat's behalf: "taking `<lane>` (pre-registered:
-     `<what it runs>`); say so in 3 min to stop me";
-  2. on a `steer`, `decline` or a claim by someone else, drops it and records
-     `residency.pull_declined`;
-  3. on silence, claims the lane as the seat (an ordinary `lane_claim`, `takeover_of_offline_owner`
-     never set, because the lane was unowned) and starts the wake. The claim's `requested` is
-     `{basis: 'self', ref: <the ask id>}` so the record shows the announcement.
+  the lane (the handoff contract). The host reports at settle whether the lane branch is pushed,
+  and the hub stores that on the lease; a resume elsewhere while the record says unpushed is
+  deferred (logged `residency.wake_deferred`, reason `branch_elsewhere`, not counted toward the
+  ceiling) until the branch-holding host wakes or pushes. Never guessed.
+- **Band 2 pull.** A host with room asks the hub (through its daemon) for a pre-registered lane
+  one of its enrolled seats may take: open, unowned, not-before date passed, and the seat holds any
+  `role` the lane names. The hub ranks by the ADR 536 order (goal motion, then age), picks the seat
+  (the one holding the role; among several, the least recently woken), and answers with one (lane,
+  seat) pair. The host acts under that seat's own credential for this host (enrollment check 3),
+  never under a machine credential, so every row names the seat. The hub then:
+  1. sends an **advisory ask** (`species: consult`, `tier: advisory`, to `@team`) as the seat:
+     "taking `<lane>` (pre-registered: `<what it runs>`); answer in 3 min to stop me". It goes out
+     whether or not a human is live; advisory means silence proceeds (ADR 153);
+  2. watches the window itself, so replication lag cannot let a host claim over an objection it
+     has not seen. A `steer` or `decline` on the ask's thread, or a claim of the lane by anyone,
+     stops it; the hub records `lane.pull_declined` with the reason;
+  3. on silence, claims the lane as the seat (an ordinary `lane_claim`; `takeover_of_offline_owner`
+     never set, because the lane was unowned) and grants the lease. The claim's ADR 624 attestation
+     is `attested: false` (a self-claim), and an audit row `lane.pulled {lane, seat, host, ask}`
+     joins the claim to the announcement. `requested` is untouched: it records who asked for the
+     lane, which is still the opener.
 - **Rate.** One band-2 pull in flight per host at a time, and a per-seat daily cap set by team
   policy (default: 4). Both are declared, both audited (`residency.pull_offered`,
   `residency.pull_claimed`).
@@ -184,9 +214,12 @@ Nothing pushes. Each host polls its daemon as today. The changes are at the gran
 The reviewer picker (ADR 260) chooses as it does today. The change is at the window:
 
 - When a submit arms no backstop and the acceptance window lapses (ADR 506, default 20 min), the
-  ask is moved to an awake seat on any enrolled host, **preferring a seat of a different model
-  family from the worker**, before the worker may self-close. `sweepReapedAcceptances` already
-  moves an ask on a reap; this moves it on the window as well.
+  hub moves the ask to a seat with **live presence** (not merely an awake host; the move never
+  starts a paid wake), **preferring a seat of a different model family from the worker**, and the
+  worker gets a second window of the same length before it may self-close. `sweepReapedAcceptances`
+  already moves an ask on a reap and runs on the hub only; this moves it on the window as well, on
+  the hub only. The submit reply (ADR 235) changes to say so, so the worker and the sweep do not
+  race: "an acceptor asked, a backstop will be tried at <time>; self-close only after <time + window>".
 - A self-close is still possible, still recorded unconfirmed, but only after the backstop was also
   silent.
 - An always-awake host is never preferred at first pick. Availability does not decide who judges.
@@ -196,7 +229,7 @@ The reviewer picker (ADR 260) chooses as it does today. The change is at the win
 Every band-2 pickup leaves the same chain as a human-started lane, plus the announcement:
 
 - the advisory ask (who announced, when, the lane);
-- the claim, with `requested.basis = self` and `ref` = the ask;
+- the claim (`attested: false`) and the `lane.pulled` audit row naming the ask;
 - the wake rows (`residency.woke`, `wake_cost`, the host that ran it);
 - the submit and the acceptance, by the ordinary path.
 
@@ -207,6 +240,9 @@ shows a seat's enrolled hosts and which one holds its current lease.
 
 - The exact field for the pre-registered declaration and the not-before date (ADR; agree with the
   Experiments-panel lane).
+- The ADR 358 §3 amendment: how `seat_nodes` holds a set for an enrolled agent seat, how a (seat,
+  host) row folds to the hub and is revoked (today enrollments are last-enrolled-wins upserts, ADR
+  393, and grants never cross nodes), and whether unenrolling a host narrows the `seat_nodes` set.
 - The migration from one-host-per-seat `residency` to (seat, host) rows, and what `musterd
   residency` prints for a seat enrolled on several hosts.
 - The enrollment checks' exact probes per harness (how "logged in" is detected for Claude Code,
@@ -248,3 +284,11 @@ declarations and are abandoned if the design is rejected.
   anti-goal is a seat taking judgement work, and a per-seat switch cannot see the lane.
 - The announcement is an advisory ask (3 min) rather than standard (5 min), because the work is
   redo-able by definition; nick asked for a light moment.
+- The hub, not the host, watches the announcement window and decides the claim, because the host's
+  copy of the thread can lag.
+- The pull record is an audit row plus the claim attestation, not `requested`, because `requested`
+  already means "who asked for this lane" (ADR 629) and the opener still did.
+- The not-before date gates pulls only. A person claiming early is a decision the record can show.
+- Band 2 refuses risk-tagged, high-stakes and user-facing lanes at declaration time rather than
+  filtering them at pull time, so there is one place the rule lives.
+- Backstop "awake" means live presence, so a backstop never costs a wake.
