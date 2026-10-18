@@ -14,8 +14,9 @@ import { theme } from '../render/theme.js';
  * disagree exactly when someone checked out a newer commit but forgot to rebuild, the "but I merged
  * it" lie this whole mechanism exists to kill. ADR 130 originally declined build-time stamping as a
  * non-goal; ADR 135 supersedes that with the stamp as the primary source. The rev-parse fallback
- * covers dists built before the stamp landed. Best-effort throughout: an npm-installed CLI has
- * neither, and the daemon simply omits `build` from `/health`.
+ * covers dists built before the stamp landed. A Cloud machine has neither (the image is built
+ * without `.git`), so the last source is its Fly image label. Best-effort throughout: an
+ * npm-installed CLI has none of these, and the daemon simply omits `build` from `/health`.
  */
 function resolveBuildRef(): string | undefined {
   const stamped = readBuildStamp(import.meta.url);
@@ -23,7 +24,18 @@ function resolveBuildRef(): string | undefined {
   const repoRoot = resolvePath(process.argv[1] ?? '', '../../../..');
   const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
   const ref = r.status === 0 ? r.stdout.trim() : '';
-  return /^[0-9a-f]{40}$/.test(ref) ? ref : undefined;
+  if (/^[0-9a-f]{40}$/.test(ref)) return ref;
+  return buildFromFlyImage(process.env['FLY_IMAGE_REF']);
+}
+
+/**
+ * The commit in a Fly image label: `scripts/cloud/deploy.mjs` and `bench-run.mjs` tag each image
+ * `git-<full sha>`, and Fly hands every machine its image as `FLY_IMAGE_REF`, possibly followed by
+ * an `@sha256:` digest. Only a full 40-char sha counts: an older 12-char label, or a hand-run
+ * `fly deploy`'s `deployment-…`, reports no build rather than one every skew check would misread.
+ */
+export function buildFromFlyImage(imageRef: string | undefined): string | undefined {
+  return /:git-([0-9a-f]{40})(?:@|$)/.exec(imageRef?.trim() ?? '')?.[1];
 }
 
 /**

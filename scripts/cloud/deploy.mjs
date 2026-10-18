@@ -119,7 +119,7 @@ function exitCodeOf(machineId) {
 }
 
 try {
-  const sha = run('git', ['rev-parse', '--short=12', 'HEAD'], { capture: true }).trim();
+  const sha = run('git', ['rev-parse', 'HEAD'], { capture: true }).trim();
   if (run('git', ['status', '--porcelain'], { capture: true }).trim() !== '') {
     throw new Error('the working tree is dirty; deploy a commit, not uncommitted edits');
   }
