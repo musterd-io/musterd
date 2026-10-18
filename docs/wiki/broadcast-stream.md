@@ -471,6 +471,14 @@ against 20.3/s for screencast on the same build. That is the best the stream has
 the 30/s and 40 ms bar, with a third of the box idle. The single-thread draw is still the wall. The
 default stays screencast, and lever 3 (an `OffscreenCanvas` worker) is next.
 
+_(2026-10-17, lane `01M55MAQ9M`, #2851.)_ The bigger-box half, seen a second time with the new capture. A
+GCP L4 running Xorg on the NVIDIA driver with `x11grab` and NVENC put **26.1–26.5 distinct frames/s**
+on the screen, against 25.4–26.3 on Fly's software box. The GPU took the compositor from 87 % of a core
+to 5–6 %, and the GPU process's main thread (91–93 %) became the next single-thread wall. So the 10-13
+reading holds at the new rate: a bigger box moves the wall but does not lift it, and ~26 is the
+ceiling for this page on every host measured. The table is in `docs/perf/broadcast-baseline.md`. Falsify:
+any host that puts ≥ 30 distinct source frames/s on the screen at 1080p30 with this page.
+
 Follows-up: 01M55MAQ9MSK5JP45XK3V3GM6Z
 
 ## Every health signal the capture had measured the encoder, and the encoder is downstream of the freeze (2026-09-16; falsify: `Page.stopScreencast` mid-run and watch ffmpeg keep reporting a healthy rate) <!-- claim: defect -->
