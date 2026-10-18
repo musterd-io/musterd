@@ -160,6 +160,15 @@ when it sees nothing at all.
 - `sync_log.id` now holds audit ULIDs beside envelope ids. Both are unique per origin; the
   `SyncDuplicateIdError` classification covers both.
 - 3c can now be built: the hub holds every joiner's claims in its own `audit` and `lanes`.
+- _2026-10-18 (lane `01M56NXFFB1PRRAZD0Z9V9AQAP`)._ A `lane.updated` naming a field the fold has no
+  column for is no longer applied around: the fold stops at the event as `unknown_lane_event`
+  (`action` is `lane.updated:<field>`), applies none of it, and the cursor holds until this daemon
+  is upgraded and the event is pulled again. Before, the unmapped field was skipped, the rest was
+  applied and the event counted as applied, so a hub 31 commits behind lost three `reads_on` dates
+  for good on 2026-10-17. The cost is the one every unknown verb already carries: a peer ahead of the
+  hub holds the hub's lane replication until the hub refreshes, loudly (`sync_fold_unknown_event`)
+  instead of silently. `fold.test.ts` holds the fold's column map to the writer's audited fields.
+  Not covered: extra keys on a `lane.opened` birth, which the fold reads by name and ignores.
 
 ## Observability & Evaluation
 

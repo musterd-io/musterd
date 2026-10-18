@@ -2,10 +2,11 @@ import { makeEnvelope, type SyncPullEvent } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { type Database } from '../db/open.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
+import { AUDITED_LANE_FIELDS } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
-import { foldBatch, foldNodeLiveness, readPullCursor } from './fold.js';
+import { foldBatch, foldNodeLiveness, LANE_UPDATE_COLUMNS, readPullCursor } from './fold.js';
 
 withDrivers('fold', (_o, kind) => {
   /**
@@ -432,6 +433,62 @@ withDrivers('fold', (_o, kind) => {
         { id: 'L1', reads_on: '2026-10-20', read_verdict_json: JSON.stringify(verdict) },
         { id: 'L2', reads_on: '2026-10-21', read_verdict_json: null },
       ]);
+      await db.close();
+    });
+
+    it('every field the writer audits on a lane has a column here, so a field cannot be added to one side only', () => {
+      expect(AUDITED_LANE_FIELDS.filter((f) => !Object.hasOwn(LANE_UPDATE_COLUMNS, f))).toEqual([]);
+    });
+
+    it('stops on a field it has no column for, applies none of that event, and folds it once the field is known (lane 01M56NXFFB)', async () => {
+      const { db, team } = await seed();
+      const events = [
+        foreignLane('e-1', 1, 1, 'lane.opened', { lane: 'L1', title: 'before' }),
+        foreignLane('e-2', 2, 2, 'lane.updated', {
+          lane: 'L1',
+          changes: {
+            title: { from: 'before', to: 'after' },
+            future_field: { from: null, to: 'kept' },
+          },
+        }),
+        foreignLane('e-3', 3, 3, 'lane.updated', {
+          lane: 'L1',
+          changes: { detail: { from: null, to: 'later' } },
+        }),
+      ];
+      // The hub predates `future_field`: the event is NOT applied and NOT counted, the field is
+      // named, the event after it waits behind it, and the cursor holds before it.
+      const res = await foldBatch(db, team.id, events);
+      expect(res.applied).toBe(1);
+      expect(res.stop).toEqual({
+        kind: 'unknown_lane_event',
+        action: 'lane.updated:future_field',
+        hub_seq: 2,
+      });
+      expect(await readPullCursor(db, team.id)).toBe(1);
+      expect(await db.get('SELECT title, detail FROM lanes WHERE id = ?', ['L1'])).toEqual({
+        title: 'before',
+        detail: null,
+      });
+      expect(
+        await db.get('SELECT COUNT(*) AS n FROM audit WHERE origin_node = ? AND origin_seq = 2', [
+          FOREIGN,
+        ]),
+      ).toEqual({ n: 0 });
+
+      // The hub upgrades (the column map gains the field) and the same events are pulled again.
+      (LANE_UPDATE_COLUMNS as Record<string, string>)['future_field'] = 'branch';
+      try {
+        const again = await foldBatch(db, team.id, events);
+        expect(again).toMatchObject({ applied: 2, stop: null });
+      } finally {
+        delete (LANE_UPDATE_COLUMNS as Record<string, string>)['future_field'];
+      }
+      expect(await db.get('SELECT title, branch, detail FROM lanes WHERE id = ?', ['L1'])).toEqual({
+        title: 'after',
+        branch: 'kept',
+        detail: 'later',
+      });
       await db.close();
     });
 

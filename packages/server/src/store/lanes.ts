@@ -983,7 +983,7 @@ async function updateLaneInTx(
 
 /** Fields a `lane.updated` audit row reports (ADR 325 prereq). Ownership and state are excluded —
  *  those edges have their own audit verbs — as are derived stamps (claimed_at &c.). */
-const AUDITED_LANE_FIELDS = [
+export const AUDITED_LANE_FIELDS = [
   'project',
   'title',
   'detail',

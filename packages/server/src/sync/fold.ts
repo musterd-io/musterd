@@ -113,6 +113,47 @@ export type FoldStop =
   // seat-fact kind.
   | { kind: 'unknown_seed_event'; action: string; hub_seq: number };
 
+/**
+ * Each audited lane field a `lane.updated` carries, mapped to its column; `scope` keeps its
+ * historical `surface_globs` column name. A field NOT here is one this build cannot project: the
+ * fold stops at the event (`unknown_lane_event`, `lane.updated:<field>`) rather than apply the rest
+ * and mark it applied, which lost `reads_on` on a hub that predated it for good (lane 01M56NXFFB).
+ * `fold.test.ts` holds this to the writer's AUDITED_LANE_FIELDS, so a field added there without a
+ * column here fails the build that adds it.
+ */
+export const LANE_UPDATE_COLUMNS: Readonly<Record<string, string>> = {
+  title: 'title',
+  detail: 'detail',
+  project: 'project',
+  role: 'role',
+  scope: 'surface_globs',
+  depends_on: 'depends_on',
+  branch: 'branch',
+  goal_id: 'goal_id',
+  risk: 'risk',
+  stakes: 'stakes',
+  kind: 'kind',
+  merged: 'merged_json',
+  parked: 'parked_json',
+  follows_up: 'follows_up_json',
+  abandon_reason: 'abandon_reason',
+  unfinished_todos: 'unfinished_todos_json',
+  declared_areas: 'areas_json',
+  source_ref: 'source_ref',
+  declined: 'declined_json',
+  requested: 'requested_json',
+  reads_on: 'reads_on',
+  read_verdict: 'read_verdict_json',
+  pre_registered: 'pre_registered_json',
+};
+
+/** The fields of a `lane.updated` this build has no column for, in the event's order. */
+function unmappedLaneFields(detail: unknown): string[] {
+  const changes = (detail as { changes?: unknown } | null | undefined)?.changes;
+  if (changes === null || typeof changes !== 'object') return [];
+  return Object.keys(changes).filter((f) => !Object.hasOwn(LANE_UPDATE_COLUMNS, f));
+}
+
 /** The `lane.*` verbs the fold can project. Anything else stops as `unknown_lane_event`. */
 const LANE_VERBS = new Set([
   'lane.opened',
@@ -274,34 +315,9 @@ async function projectLaneEvent(
       // `changes: { field: { from, to } }` — values since hole 2. Each audited field maps to its
       // column; `scope` keeps its historical `surface_globs` column name.
       const changes = (d['changes'] ?? {}) as Record<string, { to?: unknown }>;
-      const column: Record<string, string> = {
-        title: 'title',
-        detail: 'detail',
-        project: 'project',
-        role: 'role',
-        scope: 'surface_globs',
-        depends_on: 'depends_on',
-        branch: 'branch',
-        goal_id: 'goal_id',
-        risk: 'risk',
-        stakes: 'stakes',
-        kind: 'kind',
-        merged: 'merged_json',
-        parked: 'parked_json',
-        follows_up: 'follows_up_json',
-        abandon_reason: 'abandon_reason',
-        unfinished_todos: 'unfinished_todos_json',
-        declared_areas: 'areas_json',
-        source_ref: 'source_ref',
-        declined: 'declined_json',
-        requested: 'requested_json',
-        reads_on: 'reads_on',
-        read_verdict: 'read_verdict_json',
-        pre_registered: 'pre_registered_json',
-      };
       for (const [field, change] of Object.entries(changes)) {
-        const col = column[field];
-        if (!col) continue;
+        const col = LANE_UPDATE_COLUMNS[field];
+        if (!col) continue; // unreachable for a pulled event: the caller stops on an unmapped field first
         let value: unknown = change.to ?? null;
         if (field === 'scope' || field === 'depends_on') value = JSON.stringify(value ?? []);
         else if (field === 'risk' || field === 'declared_areas')
@@ -1352,6 +1368,18 @@ export async function foldBatch(
         const e = event.event;
         if (!LANE_VERBS.has(e.action)) {
           stop = { kind: 'unknown_lane_event', action: e.action, hub_seq: event.hub_seq };
+          return await finish();
+        }
+        // A field this build has no column for belongs to a newer peer. Stop BEFORE anything of the
+        // event is applied: the rest would land, the event would count as applied, and the field
+        // would be gone for good once this daemon upgraded. Retried each tick, like an unknown verb.
+        const unmapped = e.action === 'lane.updated' ? unmappedLaneFields(e.detail) : [];
+        if (unmapped.length > 0) {
+          stop = {
+            kind: 'unknown_lane_event',
+            action: `lane.updated:${unmapped.join(',')}`,
+            hub_seq: event.hub_seq,
+          };
           return await finish();
         }
         const laneId =
