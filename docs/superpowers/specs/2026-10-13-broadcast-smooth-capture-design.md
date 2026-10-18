@@ -38,6 +38,10 @@ Ruled out on the evidence, so not part of this design:
 
 ## The bar: what "steady 30 fps" means
 
+_(2026-10-17: the bar below was replaced by distinct source frames on screen, ≥ 25 a second, read
+with the fingerprint method; the page's draws/s and gap p95 are diagnostics now. The hosted stream
+meets it, and lever 3 is not built — [ADR 655](../../decisions/655-smooth-bar-distinct-frames.md).)_
+
 These are read on Fly `performance-4x` against the synthetic fixture
 (`scripts/perf/broadcast-bench-fixture.sh`, 6 seats, an act every 3 s), then on the live stream.
 
