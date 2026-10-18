@@ -141,7 +141,11 @@ Humans go last within their group. Offline seats fold into "+N offline", which e
 
 - **Avatar and name** in the member's hue, the same hue the character and handoff threads use.
   Hovering or focusing the card highlights the character; hovering the character highlights the
-  card.
+  card. _(Amended 2026-10-18, slippy, lane `01M57WJRV2`, goal `live-delight`: the avatar is the
+  member's face as the office draws them (`MemberFace`), with a small static dot for the state —
+  success fill working, warn fill asking, accent in review, danger blocked, none away; no glow, no
+  pulse. The model badge's provider fill and border colours left it: the logo keeps its colour, the
+  words and frame are the column's quiet ink, so the person leads and the model reads as a fact.)_
 - **Model badge: provider logo + readable model name.**
   - Logo: the `modelProviderIcon` set (claude, openai, gemini, xai, meta, mistral, qwen, deepseek,
     kimi, minimax, nova, glm, unknown).
