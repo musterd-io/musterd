@@ -10,7 +10,7 @@ import {
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
-import { appendLaneEventRequired, laneOwnerHistory } from '../store/audit.js';
+import { appendLaneEventRequired, laneOwnerHistory, reviewRouting } from '../store/audit.js';
 import { getLane, listLanes } from '../store/lanes.js';
 import { getMemberByName } from '../store/members.js';
 import {
@@ -24,7 +24,7 @@ import {
   selectReviewCounterpart,
 } from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
-import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
+import { acceptanceTimeoutMs, getPolicy, getTeamBySlug } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 import { routeEnvelope } from './route.js';
 
@@ -237,8 +237,9 @@ export async function deliverLaneAskSuperseded(
   }
 }
 
-/** How the daemon came to know the reviewer was gone. Recorded on the audit row. */
-export type DepartureRoute = 'departed' | 'reaped';
+/** How the daemon came to know the reviewer was gone — or, for `lapsed` (ADR 645 §4.4), that the
+ *  acceptance window closed in silence on a pulled lane. Recorded on the audit row. */
+export type DepartureRoute = 'departed' | 'reaped' | 'lapsed';
 
 /**
  * ADR 595: what the human reads on a capped acceptance — why it reached them rather than a peer.
@@ -451,4 +452,92 @@ export async function sweepReapedAcceptances(
     out.push(...(await rerouteAcceptances(ctx, team, gone, stranded, 'reaped')));
   }
   return out;
+}
+
+/**
+ * ADR 645 §4.4 — the acceptance backstop on the window, band-2 lanes only.
+ *
+ * A pulled lane's submit arms no sweep on a team without `loops.sweep`, so its ask could hang on a
+ * seat that is present but silent, and the worker's only escape was a self-close. Here, once the
+ * promised window (ADR 506) lapses with the ask still open, the hub moves it ONCE to a seat with
+ * live presence — the picker's ladder prefers a different family from the worker — and the worker
+ * gets one more window before self-close is sanctioned (the submit reply says both times). Never a
+ * paid wake: the ask waits in an inbox, as at submit. Human-stage asks are waited on, not moved.
+ *
+ * Scoped to lanes with a `lane.pulled` row (the class is on the lane, Decision 1); widening it is
+ * its own ADR. Hub only, like the reaped sweep. On Cloud, N daemons share one database: the
+ * guarded `UPDATE lanes … WHERE updated_at = ?` is the fence, so the first server to take the
+ * window owns the move and the rest see `changes = 0`.
+ */
+export async function sweepLapsedPulledAcceptances(
+  ctx: Ctx,
+  ref: TeamRef,
+  now = Date.now(),
+): Promise<string[]> {
+  const team = await getTeamBySlug(ctx.db, ref.slug);
+  if (!team) return [];
+  if (await joinerEnrollment(ctx.db, team.id, team.slug)) return [];
+  // A sweep-armed team has ADR 229's backstop; §4.4 is for the submit that armed none.
+  if ((await getPolicy(ctx.db, team.id)).loops?.sweep) return [];
+  const out: string[] = [];
+  for (const lane of await listLanes(ctx.db, team.id, team.slug, {
+    states: ['awaiting_acceptance'],
+  })) {
+    if (!(await wasPulled(ctx.db, team.id, lane.id))) continue;
+    const open = await openAcceptanceAsk(ctx.db, team.id, lane.id);
+    if (!open) continue;
+    if (await isHumanStageAsk(ctx.db, team.id, open.id)) continue;
+    if (await movedOnWindow(ctx.db, team.id, lane.id)) continue;
+    const asked = await ctx.db.get<{ ts: number }>(
+      'SELECT ts FROM messages WHERE team_id = ? AND id = ?',
+      [team.id, open.id],
+    );
+    if (!asked) continue;
+    const window =
+      (await reviewRouting(ctx.db, team.id, lane.id)).promised_ms ??
+      (await acceptanceTimeoutMs(ctx.db, team.id, 'standard'));
+    if (now < asked.ts + window) continue;
+    const holder = await getMemberByName(ctx.db, team.id, open.to);
+    if (!holder) continue;
+    const fence = await ctx.db.run(
+      'UPDATE lanes SET updated_at = ? WHERE id = ? AND team_id = ? AND updated_at = ?',
+      [now, lane.id, team.id, lane.updated_at],
+    );
+    if (fence.changes !== 1) continue;
+    out.push(
+      ...(await rerouteAcceptances(
+        ctx,
+        team,
+        holder,
+        [{ lane: lane.id, ask: open.id, holder: holder.name }],
+        'lapsed',
+      )),
+    );
+  }
+  return out;
+}
+
+/** The class is on the lane: a `lane.pulled` row names the claim ADR 645 made for it. */
+export async function wasPulled(db: Driver, teamId: string, laneId: string): Promise<boolean> {
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM audit WHERE team_id = ? AND action = 'lane.pulled' AND target = ? LIMIT 1`,
+    [teamId, laneId],
+  );
+  return row !== undefined && row !== null;
+}
+
+/** One move per submission: a `lapsed` re-route since the newest `lane.ready_for_review` row. */
+async function movedOnWindow(db: Driver, teamId: string, laneId: string): Promise<boolean> {
+  const ready = await db.get<{ ts: number }>(
+    `SELECT ts FROM audit WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
+      ORDER BY ts DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM audit
+      WHERE team_id = ? AND action = 'lane.review_rerouted' AND target = ? AND ts >= ?
+        AND json_extract(detail, '$.route') = 'lapsed' LIMIT 1`,
+    [teamId, laneId, ready?.ts ?? 0],
+  );
+  return row !== undefined && row !== null;
 }

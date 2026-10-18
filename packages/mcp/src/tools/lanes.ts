@@ -629,9 +629,17 @@ export function registerLanes(
                     `${Math.round(review.backstop.grace_ms / 3_600_000)}h anyway. lane_resolve still works ` +
                     `if you genuinely need it shut now, and records unconfirmed. Acceptor judges ` +
                     `intent/principles/usable/feel — not the diff.`
-                  : `\n\nacceptance asked of ${review.reviewer} (${review.route}) — wait ≤${reviewWaitMinutes(review.wait_ms)}m; ` +
-                    `accept closes the lane, reject resumes it; on silence, lane_resolve yourself ` +
-                    `(recorded unconfirmed). Acceptor judges intent/principles/usable/feel — not the diff.`;
+                  : review.backstop && review.backstop.move_at && review.backstop.self_close_after
+                    ? // ADR 645 §4.4: a pulled lane — the hub moves a silent ask once at the window's
+                      // end to a live seat of another family; self-close only after that window too.
+                      `\n\nacceptance asked of ${review.reviewer} (${review.route}) — a backstop will be ` +
+                      `tried at ${new Date(review.backstop.move_at).toISOString()} (the ask moves to a ` +
+                      `live seat of another family); self-close only after ` +
+                      `${new Date(review.backstop.self_close_after).toISOString()} (recorded unconfirmed). ` +
+                      `Acceptor judges intent/principles/usable/feel — not the diff.`
+                    : `\n\nacceptance asked of ${review.reviewer} (${review.route}) — wait ≤${reviewWaitMinutes(review.wait_ms)}m; ` +
+                      `accept closes the lane, reject resumes it; on silence, lane_resolve yourself ` +
+                      `(recorded unconfirmed). Acceptor judges intent/principles/usable/feel — not the diff.`;
       const claimsText =
         lane.claims && lane.claims.length > 0 ? `\n\nclaims: ${claimsLine(lane.claims)}` : '';
       return laneResult('lane submitted for acceptance', lane, warnings, claimsText + hint);

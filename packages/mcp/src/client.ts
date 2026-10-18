@@ -1001,7 +1001,14 @@ export class MusterdClient {
       /** ADR 235: the team has an acceptance backstop, so silence no longer means self-close.
        *  Absent from an older daemon and from the no-acceptor branch — absent means "no backstop
        *  to rely on", which is the pre-235 advice, so the fallback is the safe one. */
-      backstop?: { armed: boolean; grace_ms: number };
+      backstop?: {
+        armed: boolean;
+        grace_ms: number;
+        /** ADR 645 §4.4, pulled lanes: when the hub moves a silent ask to a live seat of another
+         *  family, and the earliest a self-close is sanctioned (one more window after that). */
+        move_at?: number;
+        self_close_after?: number;
+      };
       /** ADR 506: how long the acceptor was promised (the team's review window). Absent on older
        *  daemons and when nobody was asked; `reviewWaitMinutes` falls back to the default. */
       wait_ms?: number;

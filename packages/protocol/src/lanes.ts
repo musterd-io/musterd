@@ -1088,7 +1088,15 @@ export const LaneResultSchema = z.object({
        * toward telling a seat to wait for a sweep that will never run.
        */
       backstop: z
-        .object({ armed: z.boolean(), grace_ms: z.number().int().nonnegative() })
+        .object({
+          armed: z.boolean(),
+          grace_ms: z.number().int().nonnegative(),
+          /** ADR 645 §4.4, pulled lanes only: when the hub will move a still-open ask to a
+           *  live-presence seat of another family (`armed: false` — no sweep closes it), and the
+           *  earliest the worker may self-close (one more window after the move). */
+          move_at: z.number().int().nonnegative().optional(),
+          self_close_after: z.number().int().nonnegative().optional(),
+        })
         .optional(),
       /**
        * ADR 506: how long the acceptor was promised — the team's `acceptance_review_window_ms`
