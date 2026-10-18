@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-18 — `totalJsGzipBytes` 327,000 → 328,300 B and `liveCssGzipBytes` 24,300 → 24,500 B: the log, the office key and the phone band, measured stacked (lanes `01M57WK2AR`, `01M57WK4A2`, `01M57WJMBD`)
+
+| Budget   | main `ab7a3733` (local) | The three stacked (local) | Ceiling                    |
+| -------- | ----------------------- | ------------------------- | -------------------------- |
+| total JS | 326,531 B               | 327,808 B                 | RAISED 327,000 → 328,300 B |
+| live CSS | 24,109 B                | 24,288 B                  | RAISED 24,300 → 24,500 B   |
+
+Three `live-delight` PRs carry this same raise, measured with all three applied, so each passes alone and they merge in any order — the previous entry is what happens when a stack is measured one PR at a time. JS +1,277 B: the team log draws senders as faces, says a minute once down a run, and names a huddle's lane by its title; the office key draws each state; the tour's agent chips wear faces; the phone gets an inert office band. CSS +179 B. JS is local plus the ~450 B CI gap; CSS is measured plus about 210 B.
+
+- Falsify: `pnpm perf:check` in CI on main after all three land reports total JS at or under 327,000 B or live CSS at or under 24,300 B.
+
 ### 2026-10-18 — `liveCssGzipBytes` 23,850 → 24,300 B and `totalJsGzipBytes` 326,500 → 327,000 B: the live-delight pass lands together (lane `01M57WJV9F`)
 
 | Budget   | main `a37c1ee0` (local) | This branch (local) | Ceiling                    |

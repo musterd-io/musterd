@@ -1033,7 +1033,7 @@
   left: var(--lc-5);
   bottom: var(--lc-4);
   z-index: var(--lc-z-overlay);
-  max-width: 220px;
+  max-width: 280px;
   padding: var(--lc-4) var(--lc-5);
   border-radius: var(--lc-r-md);
   border: 1px solid var(--lc-border);
@@ -1077,16 +1077,24 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 3px;
+  gap: 5px;
 }
 .lc-office__key li {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--lc-3);
+}
+/* Each state's little picture, in the scene's own colours (2026-10-18, goal live-delight). */
+.lc-office__key-pic {
+  flex: none;
+  width: 24px;
+  height: 20px;
+  margin-right: 2px;
 }
 .lc-office__key b {
   font-weight: 600;
   color: var(--lc-dim);
+  white-space: nowrap;
 }
 .lc-office__corner {
   position: absolute;
