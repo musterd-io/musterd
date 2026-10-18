@@ -679,8 +679,12 @@ export const BEAM_SHEAR = 46;
  * as one crowded strip rather than as a window and a board (nick, 2026-08-02: "very snug against the
  * window"). At 0.885 the gap is ~22 — a hand's breadth of bare wall — and the far edge still stops
  * ~28 short of the wall's end, so it is a shift, not a slide into the corner.
+ *
+ * `h` 88 (was 74) is the read strip along the bottom (ADR 644 increment 3): 14 units of cork under an
+ * oak rail, one pin per dated read. It grew downward, so `uc` came down by half of it and the top edge
+ * and every column stayed where they hung.
  */
-export const WALL_BOARD = { wall: 1 as const, tc: 0.885, uc: 0.6, w: 150, h: 74 };
+export const WALL_BOARD = { wall: 1 as const, tc: 0.885, uc: 0.5628, w: 150, h: 88 };
 
 /** What sits on a shelf top. A credenza-height top is a real surface — leaving it bare repeats the
  *  same uniformity problem one shelf down. */

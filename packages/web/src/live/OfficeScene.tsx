@@ -15,6 +15,7 @@ import type { RoomEntry } from './workingOn';
 import { dreamingSeat, lingerUntil, wokenSeat } from './wokenSeat';
 import { blockedOwners, type OfficeRoomProps } from './officeRoom';
 import { stalledLaneIds } from './briefing';
+import { experimentEntries } from './experimentReads';
 import { projectWallBoard } from './office-scene/wallboard';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
@@ -74,7 +75,13 @@ function computeData(
     teamName,
     teamWorkingHours,
     // A stopped plan's cards fade on the wall (lane 01M4V9YKMG) — the Now card's rule, at lane level.
-    wallBoard: projectWallBoard(board, stalledLaneIds(board, now), now),
+    // The corkboard's read pins (ADR 644 inc 3) are the Experiments section's entries, same order.
+    wallBoard: projectWallBoard(
+      board,
+      stalledLaneIds(board, now),
+      now,
+      experimentEntries(board, now).map((e) => e.status),
+    ),
     laneOwners: laneOwnersOf(board),
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
     // already holds, so both surfaces gather without either route wiring anything.

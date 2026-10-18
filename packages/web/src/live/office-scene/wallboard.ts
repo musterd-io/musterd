@@ -1,4 +1,5 @@
 import type { LaneBoard, LaneState } from '@musterd/protocol';
+import type { ReadStatus } from '../experimentReads';
 
 /**
  * The wall board's data shape — the real lane board squinted at from across the room.
@@ -37,7 +38,26 @@ export interface WallBoardColumn {
   held?: number;
 }
 
-export type WallBoard = WallBoardColumn[];
+/**
+ * The columns, plus the team's dated reads (ADR 644 increment 3): one pin each along the cork strip
+ * under the columns, in the Experiments section's order. Status only, never titles: the section is
+ * the pins' text equivalent. Absent = no reads.
+ */
+export type WallBoard = WallBoardColumn[] & { reads?: readonly ReadStatus[] };
+
+/** How many read pins the strip holds. Past this, the last slot is a "+" card. */
+export const READ_PIN_CAP = 8;
+
+/** The pins the strip shows, in order: every read when they fit, else the first seven and a "+". */
+export function readPins(reads: readonly ReadStatus[] | undefined): (ReadStatus | 'more')[] {
+  if (!reads?.length) return [];
+  return reads.length <= READ_PIN_CAP ? [...reads] : [...reads.slice(0, READ_PIN_CAP - 1), 'more'];
+}
+
+/** A column-wise rewrite keeps the reads riding along with it. */
+function keepReads(from: WallBoard, cols: WallBoardColumn[]): WallBoard {
+  return from.reads ? Object.assign(cols, { reads: from.reads }) : cols;
+}
 
 /** Column order on the wall — one-to-one with Board.tsx COLUMNS. */
 export const WALL_COLUMNS: readonly LaneState[] = [
@@ -71,11 +91,11 @@ export function laneSeed(id: string): number {
 export function withTaken(board: WallBoard | null, taken: readonly number[]): WallBoard | null {
   if (!board || taken.length === 0) return board;
   const t = new Set(taken);
-  return board.map((col) =>
+  return keepReads(board, board.map((col) =>
     col.key !== 'open' || !col.stickies.some((s) => t.has(s.seed))
       ? col
       : { ...col, stickies: col.stickies.map((s) => (t.has(s.seed) ? { ...s, taken: true as const } : s)) },
-  );
+  ));
 }
 
 /** Project the real lane board down to what the wall can carry. Null in, null out. */
@@ -98,7 +118,7 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
   if (!board || pinned.length === 0) return board;
   const moved = new Map(pinned.map((p) => [p.seed, p.state]));
   const ages = new Map(pinned.filter((p) => p.age !== undefined).map((p) => [p.seed, p.age!]));
-  return board.map((col) => {
+  return keepReads(board, board.map((col) => {
     const stickies = [
       // A card the board already shows here still swings if it only just landed (`age`).
       ...col.stickies
@@ -111,7 +131,7 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
     const same =
       stickies.length === col.stickies.length && stickies.every((s, i) => s === col.stickies[i]);
     return same ? col : { ...col, stickies };
-  });
+  }));
 }
 
 /** How far back a lane that moved on still leaves its holes (lane 01M50WEBTC). */
@@ -131,6 +151,8 @@ export function projectWallBoard(
   board: LaneBoard | null,
   stalled: ReadonlySet<string> = new Set(),
   now: number = Date.now(),
+  /** The Experiments section's statuses, in its order (`experimentEntries`). */
+  reads: readonly ReadStatus[] = [],
 ): WallBoard | null {
   if (!board) return null;
   const byState = new Map<LaneState, WallBoardColumn>(
@@ -162,11 +184,12 @@ export function projectWallBoard(
       });
     }
   }
-  return WALL_COLUMNS.map((key) => {
+  const cols = WALL_COLUMNS.map((key) => {
     const col = byState.get(key)!;
     const held = Math.min(STICKY_CAP, col.count + (passed.get(key) ?? 0));
     return held > 0 ? { ...col, held } : col;
   });
+  return reads.length ? Object.assign(cols, { reads }) : cols;
 }
 
 /** How long a landed card swings before it hangs still, in seconds. */
