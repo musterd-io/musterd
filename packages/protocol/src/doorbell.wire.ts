@@ -76,8 +76,17 @@ export function idleRingable(env: IdleRingInput, seat: string): boolean {
   const named = eligibleOf(env.meta);
   const directed = named ? named.includes(seat) : env.to.kind === 'member' && env.to.name === seat;
   if (!directed) return false;
+  // ADR 645 §4.3: a band-2 pull announcement sits in the opener's inbox but is excluded from wake
+  // triggers — an idle opener (mostly an agent) must not pay a turn for every advisory pull.
+  if (env.act === 'ask' && isPullAnnouncement(env.meta)) return false;
   if (env.meta?.['urgent'] === true) return true;
   return IDLE_RINGS.has(env.act);
+}
+
+/** ADR 645: the host's service seat stamps `meta.pull` on the announcement ask. */
+export function isPullAnnouncement(meta: Record<string, unknown> | null | undefined): boolean {
+  const pull = meta?.['pull'];
+  return typeof pull === 'object' && pull !== null;
 }
 
 /** The adapter's cheap pre-filter: {@link idleRingable}, or any threaded act (a possible huddle
