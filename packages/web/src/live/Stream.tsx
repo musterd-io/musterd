@@ -1,4 +1,4 @@
-import type { Envelope, MemberSummary } from '@musterd/protocol';
+import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { eligibleOf } from '@musterd/protocol/wire';
 import {
   Fragment,
@@ -38,6 +38,7 @@ import { REVEAL_EVENT, scrollToMessage } from './reveal';
 import { morningDigest } from './digest';
 import { StreamDigestCard } from './StreamDigestCard';
 import { StreamHuddleCard } from './StreamHuddleCard';
+import { MemberFace } from './MemberFace';
 import {
   INITIAL_WINDOW,
   anchoredScrollTop,
@@ -58,6 +59,7 @@ export function Stream({
   collapsed = false,
   onCollapse,
   cfg,
+  board,
 }: {
   envelopes: Envelope[];
   roster: MemberSummary[];
@@ -66,8 +68,14 @@ export function Stream({
   onCollapse?: () => void;
   /** The viewer's daemon config — lets a huddle card open a seat's path (ADR 493). */
   cfg?: LiveConfig | undefined;
+  /** The lane board, when loaded: a huddle on `lane:<id>` is named by the lane's title. */
+  board?: LaneBoard | null | undefined;
 }) {
   const idx = rosterIndex(roster);
+  const laneTitles = useMemo(
+    () => new Map((board?.lanes ?? []).map((l) => [l.id, l.title] as const)),
+    [board],
+  );
   const lastId = envelopes.length ? envelopes[envelopes.length - 1]!.id : null;
   // Index by id over the FULL array (not the rendered window) so a reply quote can still show the
   // text of a parent whose row is currently above the window.
@@ -269,6 +277,7 @@ export function Stream({
               {card ? (
                 <StreamHuddleCard
                   view={card}
+                  laneTitle={laneTitleOf(card.topic, laneTitles)}
                   byId={byId}
                   idx={idx}
                   now={isNow}
@@ -276,7 +285,14 @@ export function Stream({
                   cfg={cfg}
                 />
               ) : (
-                <Row env={e} idx={idx} byId={byId} now={isNow} animate={liveIds.has(e.id)} />
+                <Row
+                  env={e}
+                  idx={idx}
+                  byId={byId}
+                  now={isNow}
+                  animate={liveIds.has(e.id)}
+                  sameMinute={!newDay && !!prev && !cardAt.get(prev.id) && !folded.has(prev.id) && clock(prev.ts) === clock(e.ts)}
+                />
               )}
             </Fragment>
           );
@@ -284,6 +300,11 @@ export function Stream({
       </div>
     </section>
   );
+}
+
+/** A `lane:<id>` topic's title from the board, or undefined (not a lane, or not on the board). */
+export function laneTitleOf(topic: string, titles: ReadonlyMap<string, string>): string | undefined {
+  return topic.startsWith('lane:') ? titles.get(topic.slice(5)) : undefined;
 }
 
 // The reveal request lives in `./reveal` (ADR 464 lane 2); re-exported so existing callers keep
@@ -304,12 +325,15 @@ function Row({
   byId,
   now,
   animate,
+  sameMinute = false,
 }: {
   env: Envelope;
   idx: Map<string, MemberSummary>;
   byId: Map<string, Envelope>;
   now: boolean;
   animate: boolean;
+  /** The row above was sent in the same minute: the clock is said once. */
+  sameMinute?: boolean;
 }) {
   // Freeze the typewriter decision at mount: a backfilled row never types, a live row types once even
   // if props later change.
@@ -345,14 +369,23 @@ function Row({
       data-tone={tone}
     >
       <div className="lc-row__head">
-        <time className="lc-row__ts">{clock(env.ts)}</time>
+        {/* A run of rows in one minute says the minute once; the rest keep its place so the column
+            still lines up (2026-10-18, goal live-delight: "9:09 AM" down every row read as noise). */}
+        <time className={`lc-row__ts${sameMinute ? ' is-same' : ''}`}>{clock(env.ts)}</time>
         <span className={`lc-chip lc-chip--${kind}`}>
-          <span
-            className="lc-chip__avatar"
-            style={{ background: memberAvatar(env.from, kind, hue) }}
-          >
-            {initial(env.from)}
-          </span>
+          {idx.has(env.from) ? (
+            // The sender as the office draws them, the same face as on the floor and in the column.
+            <span className="lc-chip__face" aria-hidden="true">
+              <MemberFace name={env.from} roster={idx} size={20} />
+            </span>
+          ) : (
+            <span
+              className="lc-chip__avatar"
+              style={{ background: memberAvatar(env.from, kind, hue) }}
+            >
+              {initial(env.from)}
+            </span>
+          )}
           <span className="lc-chip__name">{env.from}</span>
         </span>
         <span className={`lc-badge lc-badge--${tone}`}>
