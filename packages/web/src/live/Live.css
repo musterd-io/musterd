@@ -1800,20 +1800,35 @@
    white is ~7:1. Indigo is the lane family already in the palette, and here it is the night colour:
    woken, dozing, dreaming. The plate's paper goes moonlit to match (`.is-woken`, below). */
 /* The walk tag (ADR 464 §3.2): the verb a walker wears — "handing off → dolly" — in the act's own
-   family colour on the plate's paper, gone the frame the walk ends. */
+   family colour on the plate's paper, gone the frame the walk ends. Said in the casual cut, a size
+   up from the classification tags, because it is what the walker is DOING — a phrase you read, not
+   a code you decode (2026-10-18, goal live-delight: the 7.5px mono verb was the most crowded thing
+   on a plate). It pops on once as the walk starts. */
 .lc-gl-label__walk {
   flex: none;
   margin-left: 4px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--lc-handoff-ink) 40%, transparent);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--lc-type-tag);
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 9.5px;
+  font-style: italic;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1;
+  line-height: 1.1;
   color: var(--lc-handoff-ink);
   white-space: nowrap;
+  animation: lc-walk-in var(--lc-dur-3) var(--lc-ease-pop);
+}
+@keyframes lc-walk-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-gl-label__walk {
+    animation: none;
+  }
 }
 /* A replayed walk's age (lane 01M50TZA8X): "claiming X · 4m ago". It's set quieter by weight, not
    by opacity or a lighter ink, so it keeps the verb's measured contrast on the plate's paper. */
