@@ -80,10 +80,14 @@ _(Amended 2026-10-17, slippy, lane `01M56P1JDY`: nick found the rows below "extr
 section was redrawn to the anatomy here.)_
 
 - **Calendar leaf.** Each read's date is a leaf torn off a desk calendar, tacked up the way the
-  corkboard's read tags are: a weekday band, the day in the casual cut, the month. The band is
-  accent ink for overdue, ink for due, muted for waiting and pale for read. Leaves sit a hair off
-  true. An overdue leaf has slipped on its tack, as its tag has on the corkboard. A verdict is
-  stamped across the leaf's corner.
+  corkboard's read tags are: a month band over the day in the casual cut, 24px wide, with the
+  weekday in its tooltip. The band is accent ink for overdue, ink for due, muted for waiting and
+  pale for read. Leaves sit a hair off true. An overdue leaf has slipped on its tack, as its tag has
+  on the corkboard. A verdict is a small seal on the leaf's corner: a slashed ring for missed, a
+  filled ring for met, a dashed ring for inconclusive. _(Amended 2026-10-18, slippy, lane
+  `01M57WJFBV`: nick found the first leaves took "too much real estate"; the leaf shrank from 38px,
+  the weekday band became the month band, the worded stamp became the seal, and rows, strip and
+  type tightened, so four reads take about 40% less height.)_
 - **Fortnight strip.** Under the head, a strip runs from today to fourteen days out, with weekends
   shaded and overdue reads in a gutter before today. Each read is a paper token at its day carrying
   its §4 mark. It is decorative: every fact on it is in the rows. On `/live`, hovering a token lights

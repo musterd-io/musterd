@@ -194,8 +194,8 @@ describe('TeamColumn', () => {
       );
       expect(order.every((i) => i > 0)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
-      // The date rides a calendar leaf: weekday band, day, month.
-      expect(html).toMatch(/lc-xp__leaf-wd">MON<.*lc-xp__leaf-day">2<.*lc-xp__leaf-mo">Nov</);
+      // The date rides a calendar leaf: the month on its band, the day under it, the weekday in its tooltip.
+      expect(html).toMatch(/title="MON 2 Nov"><span class="lc-xp__tack"><\/span><span class="lc-xp__leaf-mo">Nov<.*lc-xp__leaf-day">2</);
       expect(html).toContain('“lost to baseline”');
       // A verdict is stamped on its leaf.
       expect(html).toContain('lc-xp__stamp lc-xp__stamp--missed');
