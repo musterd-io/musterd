@@ -311,5 +311,11 @@ teammate's session. Consequences worth internalising:
   design; it is not drift to "fix" with `musterd service refresh` (which bounces the shared daemon).
 - `~/.musterd/live/build.log` is the source of truth for what the UI is serving (`published <sha>`).
 - A failed web build keeps the **previously published** bundle — the viewer never goes blank on a bad merge.
+- An **open tab survives a publish** (lane 01M58JC1EF). The swap carries the outgoing bundle's hashed
+  chunks into the new web-root and keeps them for an hour after they are retired (`.own-assets` lists
+  which chunks the live bundle owns). A tab on the old build can still lazy-load, for example, the team
+  log. Build-sync (`live/buildSync.ts`) moves the tab onto the new build: it polls `build.json` and
+  checks again when the tab comes back into view. If a chunk still fails to load (`vite:preloadError`),
+  the page reloads once per build, and does not loop.
 - `:5173` (the retired ADR 124 `pnpm dev` viewer) is dead; dev servers now bind `:5174`, so a stale link
   fails fast rather than silently resolving to somebody's WIP.

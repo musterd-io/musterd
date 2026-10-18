@@ -63,6 +63,10 @@ export interface BuildSyncDeps {
   reload: () => void;
   /** Hidden pages skip polls entirely — idle cost is paid by every viewer, forever. */
   isVisible: () => boolean;
+  /** Call back when the page comes into view; returns an unsubscribe. A tab left in the background
+   * across a publish asks at once on its return, before a click can reach for a chunk that is gone,
+   * rather than up to a whole interval later. */
+  onVisible?: (check: () => void) => () => void;
   intervalMs?: number;
 }
 
@@ -88,8 +92,27 @@ export function startBuildSync(deps: BuildSyncDeps): () => void {
       });
   };
   const timer = setInterval(tick, deps.intervalMs ?? POLL_MS);
-  return () => clearInterval(timer);
+  const unsubscribe = deps.onVisible?.(tick);
+  return () => {
+    clearInterval(timer);
+    unsubscribe?.();
+  };
 }
+
+const STALE_CHUNK_KEY = 'musterd-stale-chunk-reloaded-for';
+
+/**
+ * The last line of defence when a lazy chunk will not load (lane 01M58JC1EF). The publisher keeps a
+ * retired bundle's chunks for an hour and build-sync usually moves the tab on first, so this fires
+ * only when both missed: reload once, onto whatever is served now. The guard is the page's own build
+ * id. A reload that lands on the SAME build (the chunk really is missing, or the network is down)
+ * may not try again, so the error screen shows instead of a loop. A reload onto a new build gets
+ * its own attempt later. A dev page has no build id and never reloads, so the real error shows.
+ */
+export function shouldReloadForStaleChunk(page: string | null, triedFor: string | null): boolean {
+  return page !== null && triedFor !== page;
+}
+
 
 /**
  * Did THIS page load happen because a build landed? — the honest signal behind the "just shipped"
@@ -196,6 +219,31 @@ export function ensureBuildSync(): void {
     },
     reload: () => window.location.reload(),
     isVisible: () => document.visibilityState === 'visible',
+    onVisible: (check) => {
+      const onChange = () => {
+        if (document.visibilityState === 'visible') check();
+      };
+      document.addEventListener('visibilitychange', onChange);
+      return () => document.removeEventListener('visibilitychange', onChange);
+    },
     intervalMs: pollMs(window.location.search),
+  });
+  // Vite dispatches this when a lazy chunk fails to load, then rethrows. The rethrow is left alone:
+  // the reload is already under way, and on a guarded build the error screen is the honest answer.
+  window.addEventListener('vite:preloadError', () => {
+    const page = bundleBuild();
+    let triedFor: string | null = null;
+    try {
+      triedFor = sessionStorage.getItem(STALE_CHUNK_KEY);
+    } catch {
+      /* no memory: the one reload still happens, and a page that cannot remember only gets it once */
+    }
+    if (!shouldReloadForStaleChunk(page, triedFor)) return;
+    try {
+      sessionStorage.setItem(STALE_CHUNK_KEY, page as string);
+    } catch {
+      return; // cannot record the attempt, so do not risk a loop: let the error show
+    }
+    window.location.reload();
   });
 }

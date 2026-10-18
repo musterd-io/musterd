@@ -1,16 +1,20 @@
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  CARRY_RETIRED_ASSETS,
   buildLiveBuildPlist,
   buildLiveBuildScript,
   LIVE_LABEL,
@@ -100,6 +104,77 @@ describe('buildLiveBuildScript', () => {
     expect(s).toContain('/opt/node/bin');
     expect(s).toContain('/opt/git/bin');
     expect(s).toContain('${HOME}/Library/pnpm');
+  });
+});
+
+// ---- the swap keeps an open tab's lazy chunks (lane 01M58JC1EF) — run for real in bash ----
+
+describe('carry_retired_assets', () => {
+  let dir: string;
+  const webroot = () => join(dir, 'web');
+  const stage = () => join(dir, '.web.next');
+  const put = (root: string, name: string, minutesAgo = 0) => {
+    mkdirSync(join(root, 'assets'), { recursive: true });
+    const f = join(root, 'assets', name);
+    writeFileSync(f, name);
+    const t = (Date.now() - minutesAgo * 60_000) / 1000;
+    utimesSync(f, t, t);
+  };
+  const carry = () => {
+    const r = spawnSync('bash', ['-c', `set -u\n${CARRY_RETIRED_ASSETS}\ncarry_retired_assets`], {
+      env: { HOME: dir, PATH: '/usr/bin:/bin', WEBROOT: webroot(), STAGE: stage(), SRC: stage() },
+      encoding: 'utf8',
+    });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    return readdirSync(join(stage(), 'assets')).sort();
+  };
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'musterd-carry-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("keeps the outgoing bundle's chunks, however long that bundle served", () => {
+    put(webroot(), 'LogDrawer-old.js', 2 * 24 * 60); // published two days ago, retired now
+    put(webroot(), 'shared-same.js', 2 * 24 * 60);
+    writeFileSync(join(webroot(), '.own-assets'), 'LogDrawer-old.js\nshared-same.js\n');
+    put(stage(), 'LogDrawer-new.js');
+    put(stage(), 'shared-same.js');
+    expect(carry()).toEqual(['LogDrawer-new.js', 'LogDrawer-old.js', 'shared-same.js']);
+    // The retired chunk's grace clock starts now, so the next swap still carries it.
+    const age = Date.now() - statSync(join(stage(), 'assets', 'LogDrawer-old.js')).mtimeMs;
+    expect(age).toBeLessThan(60_000);
+  });
+
+  it('lets a chunk carried earlier age out after the grace window', () => {
+    put(webroot(), 'recent-carry.js', 10);
+    put(webroot(), 'stale-carry.js', 2 * 60);
+    writeFileSync(join(webroot(), '.own-assets'), '');
+    put(stage(), 'new.js');
+    expect(carry()).toEqual(['new.js', 'recent-carry.js']);
+  });
+
+  it("records the new bundle's own chunks, and a first publish carries nothing", () => {
+    put(stage(), 'a.js');
+    put(stage(), 'b.js');
+    expect(carry()).toEqual(['a.js', 'b.js']);
+    expect(readFileSync(join(stage(), '.own-assets'), 'utf8')).toBe('a.js\nb.js\n');
+  });
+
+  it('is called between staging and the swap', () => {
+    const s = buildLiveBuildScript({
+      worktree: '/w',
+      sourceRepo: '/r',
+      webRoot: '/x/web',
+      nodeDir: '/n',
+      gitDir: '/g',
+    });
+    const staged = s.indexOf('cp -R "$SRC" "$STAGE"');
+    const carried = s.indexOf('  carry_retired_assets');
+    expect(staged).toBeGreaterThan(0);
+    expect(carried).toBeGreaterThan(staged);
+    expect(s.indexOf('mv "$STAGE" "$WEBROOT"')).toBeGreaterThan(carried);
   });
 });
 
