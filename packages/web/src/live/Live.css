@@ -931,6 +931,12 @@
   font-weight: 700;
 }
 
+.lc-huddle__face {
+  display: inline-flex;
+}
+.lc-huddle__face + .lc-huddle__face {
+  margin-left: -4px;
+}
 .lc-huddle__who {
   color: var(--lc-dim);
 }
@@ -6529,6 +6535,14 @@
 .lc-asks__who {
   position: relative;
 }
+/* With a face, the disc is the face's own: no avatar fill behind the drawing. */
+.lc-asks__who.has-face {
+  width: 22px;
+  height: 22px;
+  background: none !important;
+  /* The face's <title> names the member: ink, not the initial's white on a fill that is gone. */
+  color: var(--lc-text);
+}
 .lc-asks__who.is-timed::after,
 .lc-asks__who.is-over::after {
   content: '';
@@ -6566,12 +6580,39 @@
   flex: none;
   font-size: 15px;
   line-height: 1;
-  animation: lc-asks-hand var(--lc-dur-5) var(--lc-ease-out) 1;
+  transform-origin: 60% 90%;
+  animation: lc-asks-hand calc(var(--lc-dur-5) * 2) var(--lc-ease-out) 1;
 }
+/* The hand goes up and waves twice — the asker at their desk, catching your eye — then holds still:
+   what waits does not stop waiting, so nothing loops (the Now chip's rule). */
 @keyframes lc-asks-hand {
-  from {
+  0% {
     transform: translateY(6px) rotate(-12deg);
     opacity: 0;
+  }
+  25% {
+    transform: none;
+    opacity: 1;
+  }
+  40% {
+    transform: rotate(16deg);
+  }
+  55% {
+    transform: rotate(-10deg);
+  }
+  70% {
+    transform: rotate(12deg);
+  }
+  85% {
+    transform: rotate(-4deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-asks__hand {
+    animation: none;
   }
 }
 /* Settled: the verdict, said once, then the pill shrinks back (askPhrase SETTLED_MS). */

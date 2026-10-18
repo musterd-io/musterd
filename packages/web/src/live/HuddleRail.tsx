@@ -3,6 +3,7 @@ import type { Envelope, HuddleView, MemberSummary } from '@musterd/protocol';
 import { deriveHuddles } from '@musterd/protocol/wire';
 import { huddleBudget, openHuddles, type HuddleBudgetView } from './huddles';
 import { initial, kindOf, hueOf, memberAvatar } from './format';
+import { MemberFace } from './MemberFace';
 
 /**
  * The huddle rail (ADR 378 increment 2) — several seats on one topic, shown as one row each.
@@ -23,9 +24,12 @@ export function HuddleRail({
   now: nowProp,
   roomLink = true,
   onShow,
+  laneTitles,
 }: {
   envelopes: Envelope[];
   roster: MemberSummary[];
+  /** lane id → title, from the board: a `lane:<id>` topic reads as the lane's title, not its id. */
+  laneTitles?: ReadonlyMap<string, string> | undefined;
   /** Fixed clock (tests, and any caller that owns the tick). Absent → the rail keeps its own. */
   now?: number;
   /** `/live` links out to the whiteboard room; a stream drops the link nobody can click. */
@@ -57,7 +61,15 @@ export function HuddleRail({
   return (
     <section className="lc-huddles" aria-label="huddles">
       {open.map((h) => (
-        <Huddle key={h.id} h={h} idx={idx} now={now} roomLink={roomLink} onShow={onShow} />
+        <Huddle
+          key={h.id}
+          h={h}
+          idx={idx}
+          now={now}
+          roomLink={roomLink}
+          onShow={onShow}
+          topic={topicTitle(h.topic, laneTitles)}
+        />
       ))}
     </section>
   );
@@ -69,8 +81,10 @@ function Huddle({
   now,
   roomLink,
   onShow,
+  topic,
 }: {
   h: HuddleView;
+  topic: string;
   idx: Map<string, MemberSummary>;
   now: number;
   roomLink: boolean;
@@ -87,7 +101,9 @@ function Huddle({
           competing items on a row that is only as wide as the office. What the huddle IS goes on
           top; who is in it and where its output lands go underneath. */}
       <div className="lc-huddle__head">
-        <span className="lc-huddle__topic">{h.topic}</span>
+        <span className="lc-huddle__topic" title={topic === h.topic ? undefined : h.topic}>
+          {topic}
+        </span>
         <span className="lc-huddle__line">{h.body}</span>
         <span className="lc-huddle__count">{turnCount(budget)}</span>
         {/* The whole room, in order, is one card in the log (huddle replay increment 1) — this
@@ -105,20 +121,28 @@ function Huddle({
       </div>
       <div className="lc-huddle__meta">
         <span className="lc-huddle__seats">
-          {h.spoke.map((name) => (
-            <i
-              key={name}
-              className="lc-huddle__seat"
-              title={name}
-              style={
-                {
-                  '--lc-huddle-hue': memberAvatar(name, kindOf(name, idx), hueOf(name, idx)),
-                } as CSSProperties
-              }
-            >
-              {initial(name)}
-            </i>
-          ))}
+          {h.spoke.map((name) =>
+            // Who is in the room, as the office draws them; a seat the roster does not know keeps
+            // its initial on its hue.
+            idx.has(name) ? (
+              <span key={name} className="lc-huddle__face" title={name}>
+                <MemberFace name={name} roster={idx} size={17} />
+              </span>
+            ) : (
+              <i
+                key={name}
+                className="lc-huddle__seat"
+                title={name}
+                style={
+                  {
+                    '--lc-huddle-hue': memberAvatar(name, kindOf(name, idx), hueOf(name, idx)),
+                  } as CSSProperties
+                }
+              >
+                {initial(name)}
+              </i>
+            ),
+          )}
           <span className="lc-huddle__who">{h.spoke.join(', ')}</span>
         </span>
         {silent.length > 0 && (
@@ -130,6 +154,12 @@ function Huddle({
       </div>
     </article>
   );
+}
+
+/** A `lane:<id>` topic named by its lane's title when the board knows it; anything else as written. */
+export function topicTitle(topic: string, titles: ReadonlyMap<string, string> | undefined): string {
+  const id = topic.startsWith('lane:') ? topic.slice(5) : null;
+  return (id && titles?.get(id)) || topic;
 }
 
 /** The turn count as words. Over is said, not hidden — and never rounded back to the declaration. */

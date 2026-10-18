@@ -75,6 +75,12 @@ describe('HuddleRail', () => {
     expect(out).toContain('the asks rail arc');
   });
 
+  it('names a lane topic by its title when the board knows it, the id kept as its tooltip', () => {
+    const out = html([huddle()], { laneTitles: new Map([['01LANE7', 'Asks rail with presence']]) });
+    expect(out).toContain('title="lane:01LANE7">Asks rail with presence<');
+    expect(html([huddle()], { laneTitles: new Map() })).toContain('>lane:01LANE7<');
+  });
+
   it('shows who is gathered and who was named but has not spoken', () => {
     const out = html([
       huddle({}, { eligible: ['miley', 'nick'] }),

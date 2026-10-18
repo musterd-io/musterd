@@ -55,6 +55,18 @@ function laneOwnersOf(board: LaneBoard | null): ReadonlyMap<string, string> | nu
   return owners;
 }
 
+/** lane id → title, one map per board object: the huddle rail names a lane topic by its title. */
+const titlesByBoard = new WeakMap<LaneBoard, ReadonlyMap<string, string>>();
+function laneTitlesOf(board: LaneBoard | null): ReadonlyMap<string, string> | undefined {
+  if (!board) return undefined;
+  let titles = titlesByBoard.get(board);
+  if (!titles) {
+    titles = new Map(board.lanes.map((l) => [l.id, l.title] as const));
+    titlesByBoard.set(board, titles);
+  }
+  return titles;
+}
+
 function computeData(
   teamName: string,
   teamWorkingHours: WorkingHours | null,
@@ -432,6 +444,7 @@ export function OfficeScene({
             <HuddleRail
               envelopes={envelopes}
               roster={roster}
+              laneTitles={laneTitlesOf(board)}
               roomLink={!broadcast}
               {...(broadcast || !onActClick ? {} : { onShow: onActClick })}
             />
