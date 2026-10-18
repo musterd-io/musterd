@@ -32,6 +32,16 @@ const store = (): NowStorage | null => {
 
 const PHONE_QUERY = '(max-width: 880px)';
 
+/** The card's head says hello the way a person at the next desk would: "Good morning, ada", and the
+ *  day under it. An observer gets the greeting without a name. */
+export function greeting(now: number, viewer: string | null): { hello: string; day: string } {
+  const d = new Date(now);
+  const h = d.getHours();
+  const part = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const day = d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+  return { hello: viewer ? `${part}, ${viewer}` : part, day };
+}
+
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d={d} />
@@ -70,8 +80,10 @@ export function NowOverlay({
   const [mode, setMode] = useState<NowMode>('docked');
   const [still, setStill] = useState(false);
   const [phone, setPhone] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const isStill = stillMode();
     const isPhone = window.matchMedia(PHONE_QUERY).matches;
     setStill(isStill);
@@ -159,6 +171,21 @@ export function NowOverlay({
     };
   }, [slot, mode]);
 
+  // The card steps aside when the reader turns to the room: a press anywhere on the floor — not the
+  // asks strip, where an ask is answered, and not the card itself — docks it into its chip, the way
+  // a sheet is put down to look up (nick, 2026-10-18: the card should be out of the room's way).
+  useEffect(() => {
+    if (mode !== 'overlay') return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (!t?.closest || card.current?.contains(t)) return;
+      if (!t.closest('.lc-office__stage') || t.closest('.lc-office__asks')) return;
+      setMode('docked');
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [mode]);
+
   // A goal row lights its people in the room; docking must not leave them lit.
   useEffect(() => {
     if (mode === 'docked') onLight(null);
@@ -166,6 +193,8 @@ export function NowOverlay({
 
   const now = Date.now();
   const open = mode !== 'docked';
+  // "Now" until mounted: the hour is the reader's, and a prerender's clock and zone are not.
+  const hi = mounted ? greeting(now, viewer) : { hello: 'Now', day: '' };
   const yours = waitingFor(brief, viewer).mine.length;
   const cls = (base: string) => `${base}${still ? ' is-still' : ''}`;
 
@@ -200,8 +229,14 @@ export function NowOverlay({
         inert={!open}
         ref={card}
       >
+        {/* Two tacks hold the sheet to the room, the same tacks as the corkboard and the leaves. */}
+        <i className="now-ov__tack now-ov__tack--l" aria-hidden="true" />
+        <i className="now-ov__tack now-ov__tack--r" aria-hidden="true" />
         <header className="now-ov__head">
-          <p className="now-ov__k">Now</p>
+          <div className="now-ov__hi">
+            <p className="now-ov__hello">{hi.hello}</p>
+            {hi.day && <p className="now-ov__k">{hi.day}</p>}
+          </div>
           <div className="now-ov__ctl">
             {mode === 'full' ? (
               <button

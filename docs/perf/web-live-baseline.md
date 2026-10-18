@@ -1406,6 +1406,16 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-18 — `liveCssGzipBytes` 23,650 → 23,850 B: the Now briefing as a tacked sheet (lane `01M57WJJ2R`)
+
+| Budget   | main `bb84e5bf` (local, Live.css swapped back) | This branch (local) | Ceiling                  |
+| -------- | ---------------------------------------------- | ------------------- | ------------------------ |
+| live CSS | 23,482 B                                       | 23,674 B            | RAISED 23,650 → 23,850 B |
+
+nick: everything on `/live` should feel warm and delightful. The Now card becomes a sheet tacked to the room with two tacks, opens with a greeting ("Good morning, ada" and the day), and its rows rise in and its goal bars fill once per opening, still under reduced motion and on the stream. +192 B of live CSS. The card's JS is a lazy chunk, but its rules live in `Live.css`, which `/live` loads whole. CSS is measured plus about 170 B.
+
+- Falsify: `pnpm perf:check` in CI reports live CSS at or under 23,650 B with this change in.
+
 ### 2026-10-17 — `totalJsGzipBytes` 325,900 → 326,500 B and `liveCssGzipBytes` 22,850 → 23,650 B: the Experiments section made delightful (lane `01M56P1JDY`)
 
 | Budget   | main `20ae0953` (local, built beside it) | This branch (local) | Ceiling                    |
