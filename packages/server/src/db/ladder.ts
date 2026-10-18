@@ -616,6 +616,20 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       await d.exec('ALTER TABLE seat_memory ADD COLUMN IF NOT EXISTS writer TEXT');
     },
   },
+  {
+    // v108 — lane 01M57Y2E7Z: v106 typed `pull_announcements`' epoch-ms columns INTEGER on
+    // Postgres, which is 32-bit there, so the first announcement overflowed it ("out of range for
+    // type integer"). SQLite's INTEGER is 64-bit and was never affected. Widen them in place.
+    version: 108,
+    sqlite: () => {},
+    postgres: async (d) => {
+      await d.exec(`ALTER TABLE pull_announcements
+        ALTER COLUMN lane_updated_at TYPE BIGINT,
+        ALTER COLUMN announced_at TYPE BIGINT,
+        ALTER COLUMN window_ends_at TYPE BIGINT,
+        ALTER COLUMN decided_at TYPE BIGINT`);
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'
