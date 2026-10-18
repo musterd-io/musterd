@@ -189,6 +189,7 @@ Each re-route sends a `resolve` to the old holder ("the ask you held is closed")
 - **2026-10-07** (dolly insight `01M4D34ZD185AVYM90TXQVV0HM`): lanes `01M46YWG8Y` and `01M49C49BS` hopped nick → ghost → miley in under 2 minutes. 20 minutes later the submitter posted that the lane was "awaiting nick", who no longer held it.
 - **2026-10-12** (dolly insight `01M4WEDMX53GXNSKANPVP6RN5R`): lane `01M4Q7PMAP` hopped gptbot → ghost → lazara → wallow. It was submitted at 12:47 and closed at 14:39. 1h44m of that was one holder before they passed it on. The seat that decided took 2 minutes.
 - **2026-10-12 → 10-13** (lane `01M4RGKRKS`, owner alfie, built and submitted by miley): six re-routes. The ask went nick → dreamy → sloane. Then a human-required ask went nick → sloane → **miley, the lane's own submitter** → fifty. There were two peer accepts, and 23h20m from submit to close. The closing human read took 5 minutes. No act in that span told alfie or miley who held the ask.
+- **2026-10-17** (lane `01M55N47KJ`, miley, x11 at 24 fps arm): submitted 12:56:04, re-routed big-body → ghost at 13:01:59 and ghost → stanley at 13:19:39. stanley accepted, the human-required ask was minted at 13:21:18, and nick closed it at 13:34:22. 38m18s from submit to close; 23m35s of it was the two hops. The packet's acts for this lane show no act to miley naming stanley (falsify: an act on lane `01M55N47KJ` between 12:56:04 and 13:21:18 addressed to miley that names ghost or stanley).
 
 Two shapes from the third case are worth checking for before you re-route:
 
