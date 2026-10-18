@@ -134,15 +134,16 @@ function ExperimentRow({
   );
 }
 
-/** The tear-off leaf: weekday band, the day in the casual cut, the month, a tack at the top — and,
- *  once a read is in, its verdict stamped across it. Decoration over words the row already says. */
+/** The tear-off leaf, desk-calendar small: the month on its band, the day under it, a tack at the
+ *  top — and, once a read is in, its verdict stamped across it. Decoration over words the row
+ *  already says; the weekday rides the leaf's tooltip (nick, 2026-10-18: the first leaves took "too
+ *  much real estate"). */
 function Leaf({ entry }: { entry: ExperimentEntry }) {
   return (
-    <span className="lc-xp__leaf" aria-hidden="true">
+    <span className="lc-xp__leaf" aria-hidden="true" title={`${entry.leaf.weekday} ${entry.leaf.day} ${entry.leaf.month}`}>
       <span className="lc-xp__tack" />
-      <span className="lc-xp__leaf-wd">{entry.leaf.weekday}</span>
-      <span className="lc-xp__leaf-day">{entry.leaf.day}</span>
       <span className="lc-xp__leaf-mo">{entry.leaf.month}</span>
+      <span className="lc-xp__leaf-day">{entry.leaf.day}</span>
       {entry.status === 'read' && (
         <span className={`lc-xp__stamp lc-xp__stamp--${entry.phrase}`}>{entry.phrase}</span>
       )}
