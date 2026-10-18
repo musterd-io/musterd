@@ -61,6 +61,14 @@ describe('jailPath', () => {
     expect(jailPath('/real/ws', '.git/HEAD', {}, fs).ok).toBe(true);
   });
 
+  it('compares the protected names case-insensitively: on APFS .MUSTERD is .musterd', () => {
+    for (const p of ['.MUSTERD/binding.json', '.Musterd/Binding.JSON'])
+      expect(jailPath('/real/ws', p, {}, fs).ok).toBe(false);
+    expect(jailPath('/real/ws', '.MUSTERD/skill/x.md', { write: true }, fs).ok).toBe(false);
+    expect(jailPath('/real/ws', '.GIT/hooks/pre-commit', { write: true }, fs).ok).toBe(false);
+    expect(jailPath('/real/ws', 'src/.MusterD/x', {}, fs).ok).toBe(true); // only the top-level names
+  });
+
   it('refuses an empty path and an unresolvable workspace', () => {
     expect(jailPath('/real/ws', '', {}, fs).ok).toBe(false);
     expect(jailPath('/nowhere', 'a', {}, fs).ok).toBe(false);
@@ -127,7 +135,7 @@ describe('bashAllowed', () => {
       'gh pr merge 12 --squash --auto --delete-branch',
       'musterd lane submit --pr 12',
       'ls -la src | head -20',
-      'grep -rn "foo" src ; wc -l src/a.ts',
+      'rg -n "foo" src ; wc -l src/a.ts',
       'cd packages/cli && pnpm test',
       'sed -n 1,20p src/a.ts',
       'musterd inbox',
@@ -225,6 +233,70 @@ describe('bashAllowed', () => {
     expect(bashAllowed('sed -n 3p a.txt', policy)).toEqual({ ok: true });
   });
 
+  it('refuses .MUSTERD/ and .GIT/ in an argument too (APFS is case-insensitive)', () => {
+    expect(deny('cat .MUSTERD/binding.json')).toMatch(/\.musterd/);
+    expect(deny('cat src/.Musterd/binding.json')).toMatch(/\.musterd/);
+    expect(deny('cat .GIT/config')).toMatch(/\.git/);
+  });
+
+  it('refuses the recursive readers that walk into .musterd and .git', () => {
+    for (const c of [
+      'grep -r x .',
+      'grep -R x .',
+      'grep -rn x .',
+      'grep -nr x .',
+      'grep --recursive x .',
+      'grep --directories=recurse x .',
+      'grep -d recurse x .',
+      'rg --hidden x .',
+      'rg -. x .',
+      'rg -u x .',
+      'rg -uu x .',
+      'rg --no-ignore x .',
+      'rg --no-ignore-vcs x .',
+      'diff -r . copy',
+      'diff -ru a b',
+      'diff --recursive a b',
+    ])
+      expect(deny(c), c).toMatch(/executes or writes/);
+    expect(bashAllowed('grep -n needle src/a.ts', policy)).toEqual({ ok: true });
+    expect(bashAllowed('rg -n needle src', policy)).toEqual({ ok: true });
+    expect(bashAllowed('diff a.txt b.txt', policy)).toEqual({ ok: true });
+  });
+
+  it('judges the value joined onto a short flag as a path', () => {
+    for (const c of [
+      'gh pr create -F.musterd/binding.json',
+      'git commit -F.musterd/binding.json',
+      'git commit -aF.musterd/binding.json',
+      'gh pr create -F/etc/passwd',
+      'git commit -F~/x',
+      'git commit -F../x',
+      'git commit -F=.musterd/binding.json',
+      'git commit -F.git/config',
+    ])
+      expect(deny(c), c).toMatch(/\.musterd|\.git|leaves the workspace/);
+    expect(bashAllowed('git log -n5 --oneline', policy)).toEqual({ ok: true });
+    expect(bashAllowed('head -n10 README.md', policy)).toEqual({ ok: true });
+    expect(bashAllowed('git commit -m x', policy)).toEqual({ ok: true });
+  });
+
+  it('cd takes exactly one path: `cd --`, `-P`, `-L` and `-` land in HOME or OLDPWD', () => {
+    for (const c of ['cd --', 'cd -P', 'cd -L', 'cd -', 'cd -- -P', 'cd a b'])
+      expect(deny(c), c).toMatch(/exactly one path/);
+    expect(bashAllowed('cd src', policy)).toEqual({ ok: true });
+    expect(bashAllowed('cd -P src', policy)).toEqual({ ok: true });
+    expect(bashAllowed('cd -- src', policy)).toEqual({ ok: true });
+  });
+
+  it('keeps gh to the repository it was started in: -R and --repo are refused', () => {
+    expect(deny('gh pr view 1 -R other/repo')).toMatch(/executes or writes/);
+    expect(deny('gh pr view 1 -Rother/repo')).toMatch(/leaves the workspace/);
+    expect(deny('gh pr view 1 --repo other/repo')).toMatch(/executes or writes/);
+    expect(deny('gh pr view 1 --repo=other/repo')).toMatch(/executes or writes/);
+    expect(bashAllowed('gh pr view 1', policy)).toEqual({ ok: true });
+  });
+
   it('keeps musterd to the seat half of the CLI', () => {
     expect(deny('musterd residency on --harness musterd')).toMatch(/not a seat command/);
     expect(deny('musterd team grant list')).toMatch(/not a seat command/);
@@ -258,7 +330,7 @@ describe('bashAllowed', () => {
     expect(deny('find . -name "*.log" -delete')).toMatch(/executes or writes/);
     expect(deny('cd ../other')).toMatch(/leaves the workspace/);
     expect(deny('cd /tmp')).toMatch(/leaves the workspace/);
-    expect(deny('cd')).toMatch(/needs a path/);
+    expect(deny('cd')).toMatch(/exactly one path/);
     expect(deny('node -e 1')).toMatch(/node is not on the allowlist/);
     expect(deny('rm -rf .')).toMatch(/rm is not on the allowlist/);
     expect(deny('   ')).toMatch(/non-empty/);
