@@ -192,6 +192,24 @@ withDrivers('continuity', (_o, kind) => {
       ).toBe(origin.saved_at);
     });
 
+    it("the folded row keeps the ORIGIN's writer stamp — the second machine knows where it was saved (ADR 654)", async () => {
+      await call(
+        'PUT',
+        joinerBase,
+        '/teams/bravo/memory',
+        { headline: 'h', body: 'b' },
+        nickOnJoiner,
+      );
+      const origin = (await getMemory(
+        joiner.store,
+        (await nickOn(joiner.store, await joinerTeam())).id,
+      ))!;
+      expect(origin.writer?.node).toEqual(expect.any(String));
+      await roundTrip();
+      const onHub = await getMemory(hub.store, (await nickOn(hub.store, await hubTeam())).id);
+      expect(onHub?.writer).toEqual(origin.writer);
+    });
+
     it('a newer save wins over an older one whichever direction it travels (LWW on the origin clock)', async () => {
       // Save on the hub first, then a NEWER one on the joiner. The joiner's must win on the hub even
       // though the hub's own row was written by a seat credential the hub authenticated itself.

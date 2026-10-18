@@ -1,6 +1,11 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { type ClaimCheck, claimCheckLines, type MemoryEnvelope } from '@musterd/protocol';
+import {
+  type ClaimCheck,
+  claimCheckLines,
+  type MemoryEnvelope,
+  type MemoryProvenance,
+} from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
 import { type Config, seatsHoldingSession } from '../config.js';
 import { CliError } from '../errors.js';
@@ -67,7 +72,13 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
   // The explicit body read. A seat with nothing saved is a normal state, not an error exit.
   // `--seat <agent>`: a human reading an agent seat's note (ADR 651); the server enforces who may.
   const seat = flagStr(parsed.flags, 'seat');
-  let mem: { headline: string; body: string; saved_at: number; checks?: ClaimCheck[] };
+  let mem: {
+    headline: string;
+    body: string;
+    saved_at: number;
+    checks?: ClaimCheck[];
+    provenance?: MemoryProvenance;
+  };
   try {
     mem = seat ? await http.getMemberMemory(team, seat) : await http.getMemory(team);
   } catch (err) {
@@ -90,6 +101,13 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(
     `${theme.accent(seat ? `memory · ${seat}` : 'memory')} ${theme.meta(`(saved ${ago(Date.now() - mem.saved_at)} ago)`)} — ${mem.headline}\n`,
   );
+  // ADR 654: who saved it — a warning when the note reads as suspect, a plain fact otherwise.
+  if (mem.provenance)
+    process.stdout.write(
+      (mem.provenance.suspect
+        ? theme.warn(`⚠ ${mem.provenance.line}`)
+        : theme.meta(mem.provenance.line)) + '\n',
+    );
   // ADR 522: the note's claims checked against the Team now — above the body, read first.
   for (const line of claimCheckLines(mem.checks ?? []))
     process.stdout.write(theme.warn(line) + '\n');

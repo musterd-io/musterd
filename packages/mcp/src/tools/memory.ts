@@ -89,7 +89,11 @@ export function registerMemory(server: McpServer, client: MusterdClient): void {
       if (!client.holdsSeat) return textResult(notReadyMessage(client, 'read memory'));
       try {
         const mem = await client.readMemory();
-        const header = `memory (saved ${ago(Date.now() - mem.saved_at)} ago): ${mem.headline}`;
+        // ADR 654: who saved it, right under the headline — a suspect note says so before anything.
+        const who = mem.provenance
+          ? `\n${mem.provenance.suspect ? '⚠ ' : ''}${mem.provenance.line}`
+          : '';
+        const header = `memory (saved ${ago(Date.now() - mem.saved_at)} ago): ${mem.headline}${who}`;
         // ADR 522: what the note says, checked against the Team now — above the body, so it is read
         // before the note is acted on. The verdicts are conclusive; no further checking is needed.
         const checks = mem.checks?.length

@@ -342,6 +342,7 @@ async function defaultOrientationFetcher(
             headline: memory.headline,
             saved_at: memory.saved_at,
             size_bytes: memory.size_bytes,
+            ...(memory.provenance?.suspect === true ? { suspect: true } : {}),
           },
         }
       : {}),

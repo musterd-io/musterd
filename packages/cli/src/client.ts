@@ -122,6 +122,7 @@ import {
   type MemberKind,
   type MemberSummary,
   type MemoryEnvelope,
+  type MemoryProvenance,
   type NextBrief,
   type NextSummary,
   type OpenLane,
@@ -988,9 +989,14 @@ export class HttpClient {
   saveMemory(slug: string, input: { headline: string; body?: string }): Promise<void> {
     return this.request('PUT', `/teams/${slug}/memory`, input);
   }
-  getMemory(
-    slug: string,
-  ): Promise<{ headline: string; body: string; saved_at: number; checks?: ClaimCheck[] }> {
+  getMemory(slug: string): Promise<{
+    headline: string;
+    body: string;
+    saved_at: number;
+    checks?: ClaimCheck[];
+    /** ADR 654: absent from an older daemon. */
+    provenance?: MemoryProvenance;
+  }> {
     return this.request('GET', `/teams/${slug}/memory`);
   }
   /** A human reads an agent seat's note (ADR 651). The server refuses an agent caller, and another
@@ -1004,11 +1010,12 @@ export class HttpClient {
     body: string;
     saved_at: number;
     checks?: ClaimCheck[];
+    provenance?: MemoryProvenance;
   }> {
     return this.request('GET', `/teams/${slug}/members/${encodeURIComponent(member)}/memory`);
   }
   /** Envelope only (headline + age + size, never the body) — for the status/claim one-liner. */
-  getMemoryEnvelope(slug: string): Promise<MemoryEnvelope> {
+  getMemoryEnvelope(slug: string): Promise<MemoryEnvelope & { provenance?: MemoryProvenance }> {
     return this.request('GET', `/teams/${slug}/memory?envelope=1`);
   }
   clearMemory(slug: string): Promise<void> {

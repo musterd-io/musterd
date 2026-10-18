@@ -224,8 +224,30 @@ withDrivers('integration · misc', (_o, kind) => {
         headline: 'mid-refactor',
         saved_at: expect.any(Number),
         size_bytes: 6, // '€€' = 6 UTF-8 bytes
+        provenance: expect.objectContaining({ suspect: false }), // ADR 654
       });
       expect(env.json.body).toBeUndefined();
+    });
+
+    it('a note says who saved it (ADR 654): the save stamps its place, the read and the replicated row carry it', async () => {
+      const { nickTok, ada } = await dawn();
+      await req('PUT', '/teams/dawn/memory', { headline: 'stamped', body: 'b' }, ada);
+      const own = await get('/teams/dawn/memory', ada);
+      expect(own.status).toBe(200);
+      expect(own.json).not.toHaveProperty('writer');
+      const prov = own.json.provenance as { writer: any; suspect: boolean; line: string };
+      expect(prov.suspect).toBe(false);
+      expect(prov.writer).toMatchObject({ node: expect.any(String) });
+      expect(prov.line).toMatch(/^last saved from /);
+      // A human reading the agent seat's note gets the fact, never a verdict.
+      const human = await get('/teams/dawn/members/Ada/memory', nickTok);
+      expect(human.json.provenance).toMatchObject({ suspect: false, writer: prov.writer });
+      // The replicated row carries the stamp, so a peer folding it knows who saved it.
+      const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
+      const stored = (await listAudit(h.server.store, teamId)).find(
+        (r) => r.action === 'continuity.memory_saved' && r.target === 'Ada',
+      )!;
+      expect(JSON.parse(stored.detail!).writer).toEqual(prov.writer);
     });
 
     it('banned = inert: a disabled seat cannot read, write, or clear its memory (defense-in-depth)', async () => {

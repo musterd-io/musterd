@@ -200,6 +200,8 @@ withDrivers('wakeContextBody', (o) => {
       expect((await deriveContext(db, team, ada, {})).context.memory).toEqual({
         body: 'carrying nothing',
         truncated: false,
+        // ADR 654: saved by the store directly, so no writer was stamped.
+        provenance: expect.objectContaining({ writer: null, suspect: false }),
       });
       await saveMemory(db, ada.id, { headline: 'long', body: 'z'.repeat(5_000) });
       const { context, fetch } = await deriveContext(db, team, ada, {});

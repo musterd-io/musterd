@@ -160,6 +160,36 @@ export const MemoryEnvelopeSchema = z
   .strict();
 export type MemoryEnvelope = z.infer<typeof MemoryEnvelopeSchema>;
 
+/**
+ * Who saved a seat's note (ADR 654): the saving session's surface and Workspace label, and the
+ * daemon's node it was saved on (`node` compares, `machine` is its label for people). Every field is
+ * what the saving client reported or this daemon knew — facts to read, never proof of who it was.
+ */
+export const MemoryWriterSchema = z
+  .object({
+    surface: z.string().min(1).max(40).optional(),
+    workspace: z.string().min(1).max(120).optional(),
+    node: z.string().min(1).max(64).optional(),
+    machine: z.string().min(1).max(120).optional(),
+  })
+  .strict();
+export type MemoryWriter = z.infer<typeof MemoryWriterSchema>;
+
+/**
+ * A note's writer as its reader sees it (ADR 654). `writer` null: the save predates the stamp.
+ * `suspect`: an agent seat's note last saved from another folder or machine than the reader's —
+ * a session that wasn't this seat's may have written it. Not suspect never means verified. `line`
+ * is the one sentence a surface prints.
+ */
+export const MemoryProvenanceSchema = z
+  .object({
+    writer: MemoryWriterSchema.nullable(),
+    suspect: z.boolean(),
+    line: z.string().min(1).max(400),
+  })
+  .strict();
+export type MemoryProvenance = z.infer<typeof MemoryProvenanceSchema>;
+
 /** `occupied` (server → client) — the claim succeeded; this session holds the seat. `charter` is
  *  identity metadata the server serves but never enforces; `memory` is the seat-scoped continuity
  *  envelope (ADR 093) — headline + age, or null when the seat has saved nothing. The body is fetched
