@@ -186,6 +186,13 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   will be tried at <time>; self-close only after <time + window>", so the worker and the sweep do
   not race. The second window is stated, not enforced: a self-close before it is still recorded
   unconfirmed, as before. Not built here: the dogfood readout (increment 6).
+- _(2026-10-17, lane `01M55PDR9ZPQH55GF0S38K9B69`, increment 6, setup.)_ The two dated reads on
+  the board (`01M49HHJQF`, ADR 536, reads 2026-10-20; `01M3TB1GPM`, ADR 436, reads 2026-10-21)
+  were released from stanley and their openers asked to declare them pre-registered with the
+  verdict rules the two ADRs fix. With `expected_spend: 2` over the shipped `spend_cap_usd: 0`
+  both announce as standard asks. Setup, falsifiers and the readout table:
+  [pre-registered work dogfood](../wiki/pre-registered-work-dogfood.md); the readout fills on
+  2026-10-22 or when both lanes close. Follows-up: the readout itself, on this lane.
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 
