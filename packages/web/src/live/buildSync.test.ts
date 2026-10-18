@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { pollMs, shouldReload, stampReload, startBuildSync } from './buildSync';
+import {
+  pollMs,
+  shouldReload,
+  shouldReloadForStaleChunk,
+  stampReload,
+  startBuildSync,
+} from './buildSync';
 
 /** The stale-page convergence rule: a page running build A while the daemon serves build B reloads
  * itself once onto B. Everything here is the safety envelope around that one reload — no loops, no
@@ -21,6 +27,25 @@ describe('shouldReload', () => {
   it('never reloads twice for the same served build — one attempt per build, loop-proof', () => {
     expect(shouldReload('aaa', 'bbb', 'bbb')).toBe(false);
     expect(shouldReload('aaa', 'ccc', 'bbb')).toBe(true); // a NEWER build gets its own attempt
+  });
+});
+
+/** A lazy chunk that will not load: reload once per build, never in a loop, never in dev. */
+describe('shouldReloadForStaleChunk', () => {
+  it('reloads the first time a chunk fails on this build', () => {
+    expect(shouldReloadForStaleChunk('aaa', null)).toBe(true);
+  });
+
+  it('does not reload again when the reload landed on the same build', () => {
+    expect(shouldReloadForStaleChunk('aaa', 'aaa')).toBe(false);
+  });
+
+  it('gives a newer build its own attempt', () => {
+    expect(shouldReloadForStaleChunk('bbb', 'aaa')).toBe(true);
+  });
+
+  it('never reloads a dev page, where the real error should show', () => {
+    expect(shouldReloadForStaleChunk(null, null)).toBe(false);
   });
 });
 
@@ -103,6 +128,25 @@ describe('startBuildSync', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(d.reload).not.toHaveBeenCalled();
     stop();
+  });
+
+  it('checks at once when the page comes back into view, not a whole interval later', async () => {
+    let show = () => {};
+    const unsubscribe = vi.fn();
+    const d = deps({
+      intervalMs: 60_000,
+      fetchServed: vi.fn(() => Promise.resolve('bbb')),
+      onVisible: (check) => {
+        show = check;
+        return unsubscribe;
+      },
+    });
+    const stop = startBuildSync(d);
+    show();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(d.reload).toHaveBeenCalledTimes(1);
+    stop();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('stop() ends the polling', async () => {
