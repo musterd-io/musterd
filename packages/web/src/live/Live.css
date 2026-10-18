@@ -3400,13 +3400,16 @@
 .lc-team-card.is-linked .lc-team-card__avatar {
   box-shadow: 0 0 0 2px var(--lc-ground-2), 0 0 0 4px var(--member);
 }
+.lc-team-card.is-linked .lc-team-card__avatar .mface {
+  transform: translateY(-1px) scale(1.06);
+}
 .lc-team-card__hit {
   all: unset;
   box-sizing: border-box;
   width: 100%;
   display: grid;
-  grid-template-columns: 24px 1fr;
-  column-gap: var(--lc-3);
+  grid-template-columns: 26px 1fr;
+  column-gap: var(--lc-4);
   row-gap: 1px;
   padding: var(--lc-3) var(--lc-5);
   cursor: pointer;
@@ -3416,16 +3419,47 @@
   outline-offset: 2px;
 }
 .lc-team-card__avatar {
+  position: relative;
   grid-row: span 2;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 600;
-  font-size: 12px;
+  /* The face's <title> names the member: ink on the column's paper. */
+  color: var(--lc-text);
+}
+.lc-team-card__avatar .mface {
+  transition: transform var(--lc-dur-2) var(--lc-ease-out);
+}
+/* Where they are, as a dot on the face's shoulder: FILL tokens, never read as text. */
+.lc-team-card__dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--lc-ground-2);
+  background: var(--lc-surface-3);
+}
+.lc-team-card--working .lc-team-card__dot {
+  background: var(--lc-success);
+}
+.lc-team-card--asking .lc-team-card__dot {
+  background: var(--lc-warn);
+}
+.lc-team-card--review .lc-team-card__dot {
+  background: var(--lc-accent);
+}
+.lc-team-card--blocked .lc-team-card__dot {
+  background: var(--lc-danger);
+}
+.lc-team-card--away .lc-team-card__dot {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-team-card__avatar .mface {
+    transition: none;
+  }
 }
 .lc-team-card__who {
   display: flex;
@@ -3458,12 +3492,19 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   padding: 1px 6px;
   border: 1px solid;
   border-radius: var(--lc-r-sm);
   white-space: nowrap;
+}
+/* The model is a fact about the seat, not its headline (2026-10-18: the provider-filled badges were
+   the loudest colour in the column). The provider's mark keeps its colour; the words and the frame
+   are the column's quiet ink. */
+.lc-team-card__model {
+  border-color: var(--lc-border);
+  color: var(--lc-dim);
 }
 .lc-team-card__model.is-unknown,
 .lc-team-card__model.is-human,

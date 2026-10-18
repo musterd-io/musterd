@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import type { LiveConfig } from './client';
-import { initial, isFeatureBehind, memberAvatar } from './format';
+import { isFeatureBehind } from './format';
+import { MemberFace } from './MemberFace';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
 import { elapsed, type TeamCard as Card } from './teamCards';
@@ -64,12 +65,12 @@ export function TeamCard({
     : undefined;
   const face = (
     <>
-      <span
-        className="lc-team-card__avatar"
-        style={{ background: memberAvatar(card.name, card.kind, card.member.hue) }}
-        aria-hidden="true"
-      >
-        {initial(card.name)}
+      {/* The member as the office draws them — the same head as their body on the floor — with a
+          small static dot for where they are: at work, waiting on a person, in review, blocked. No
+          glow and no pulse (the Now card's rule): the state does not turn off on its own. */}
+      <span className="lc-team-card__avatar" aria-hidden="true">
+        <MemberFace name={card.name} roster={new Map([[card.name, card.member]])} size={26} />
+        <i className="lc-team-card__dot" />
       </span>
       <span className="lc-team-card__who">
         <span className="lc-team-card__name">{card.name}</span>
@@ -83,15 +84,6 @@ export function TeamCard({
           // The readable name first, so the accessible name matches what the eye reads; the raw
           // id follows for the operator (stanley, lane-1 acceptance).
           title={badge.full ? `${badge.label} · ${badge.full}` : undefined}
-          style={
-            showLogo
-              ? {
-                  borderColor: badge.provider.border,
-                  background: badge.provider.fill,
-                  color: badge.provider.ink,
-                }
-              : undefined
-          }
         >
           {showLogo && (
             <span
