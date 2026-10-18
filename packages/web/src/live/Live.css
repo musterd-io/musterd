@@ -710,6 +710,9 @@
    of the grid entirely — the survivors would auto-flow leftward into the wrong (often 0-width) tracks
    (e.g. the stream collapsing into the hidden roster's rail while its own track sits empty). Explicit
    columns keep every visible panel in its intended track no matter which siblings are hidden. */
+.lc__office-wrap {
+  display: contents;
+}
 .lc-office {
   grid-column: 1;
 }
@@ -5114,6 +5117,43 @@
 .lc__phone-asks .lc-asks {
   margin-bottom: 0;
 }
+/* A phone's rail wraps instead of clipping (2026-10-18, goal live-delight: at 390px the question
+   itself was squeezed out and "ada · paper" cut off). The hand, the face and the question take the
+   first line; the hold, the clock and the controls — the identity chip among them, never hidden
+   (ADR 222) — flow onto the next. */
+.lc__phone-asks .lc-asks__rail {
+  flex-wrap: wrap;
+  height: auto;
+  row-gap: var(--lc-2);
+  padding-block: var(--lc-2);
+}
+.lc__phone-asks .lc-asks__lead {
+  flex: 1 1 calc(100% - 64px);
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+}
+/* With the room to wrap, the question comes back: the width ladder above hides it for a one-line
+   rail, and a phone's rail is not one line. */
+.lc__phone-asks .lc-asks__verb,
+.lc__phone-asks .lc-asks__q {
+  display: inline;
+}
+.lc__phone-asks .lc-asks__lead > * {
+  margin-right: 0.3em;
+}
+.lc__phone-asks .lc-asks {
+  border-radius: 18px;
+}
+.lc__phone-asks .lc-asks__spacer {
+  display: none;
+}
 /* The sheet's counters: the operator's numbers, one quiet line above the cards. */
 .lc-asks__counts {
   display: flex;
@@ -5125,23 +5165,36 @@
 .lc-asks__counts:empty {
   display: none;
 }
-/* A phone (spec §2): one column. The office is hidden (its scene needs width the phone does not
-   have) and the team column takes everything — expanded, never the folded rail: with the stream
+/* A phone (spec §2): one column — the team column expanded, never the folded rail: with the stream
    column gone the old rule left `0px 56px` and a blank page (dolly, lane-2 acceptance, 2026-09-29).
-   The route also un-folds the column below this width (`usePhone`), whatever the saved state. */
+   The route also un-folds the column below this width (`usePhone`), whatever the saved state.
+   The office used to be hidden here, and a phone lost the one thing that makes /live feel alive
+   (nick, 2026-10-18, goal live-delight). It is a window onto the room now: a band across the top,
+   the room framed into it, with the team scrolling under it. */
 @media (max-width: 880px) {
   .lc__canvas,
   .lc__canvas.is-team-collapsed {
     --col-office: 0px;
     --col-team: minmax(0, 1fr);
     grid-template-columns: var(--col-team);
+    grid-template-rows: clamp(200px, 34vh, 320px) minmax(0, 1fr);
   }
   .lc-office {
-    display: none;
+    grid-column: 1;
+    grid-row: 1;
+    border-bottom: 1px solid var(--lc-border);
   }
   .lc-team {
     grid-column: 1;
+    grid-row: 2;
     border-right: 0;
+  }
+  /* The band is a window, not a workspace: the key, the huddle rail (the log carries huddles) and
+     the room's collapse control stay off it, so the room is what you see. */
+  .lc-office__key,
+  .lc-office__asks,
+  .lc-office__collapse {
+    display: none;
   }
 }
 
