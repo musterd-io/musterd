@@ -701,23 +701,28 @@ function LivePage() {
             // no clicks (the AsksStrip inert precedent, promoted to page scope).
             inert={boardOpen || seedsOpen || logOpen || pickSeat !== null}
           >
-            <OfficeScene
-              {...officeRoom(team, stream, { entries, board, asks })}
-              fit="furnished"
-              collapsed={collapsed.office}
-              onCollapse={() => toggleCollapse('office')}
-              onActClick={onActClick}
-              onBoardOpen={openBoard}
-              onBoardHover={preloadBoardOverlay}
-              // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
-              // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
-              topSlot={phone ? null : asksStrip}
-              workCues={WORK_CUES}
-              onCaption={setCaption}
-              linked={lit ?? linked}
-              onPlateHover={setLinked}
-              you={signedIn ? (cfg?.as ?? null) : null}
-            />
+            {/* On a phone the room is a window to watch, not a panel to work (goal live-delight):
+                inert, so its plates — a few px apart at that scale — are not tap targets anyone
+                could hit on purpose. `display: contents` keeps it a grid child of the canvas. */}
+            <div className="lc__office-wrap" inert={phone}>
+              <OfficeScene
+                {...officeRoom(team, stream, { entries, board, asks })}
+                fit="furnished"
+                collapsed={collapsed.office}
+                onCollapse={() => toggleCollapse('office')}
+                onActClick={onActClick}
+                onBoardOpen={openBoard}
+                onBoardHover={preloadBoardOverlay}
+                // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
+                // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
+                topSlot={phone ? null : asksStrip}
+                workCues={WORK_CUES}
+                onCaption={setCaption}
+                linked={lit ?? linked}
+                onPlateHover={setLinked}
+                you={signedIn ? (cfg?.as ?? null) : null}
+              />
+            </div>
             <TeamColumn
               loading={loading}
               roster={roster}

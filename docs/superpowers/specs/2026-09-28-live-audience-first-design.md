@@ -79,7 +79,14 @@ answer these in under 10 seconds, without narration:
 - **Office fit:** raise `fitFloor`'s margin from 0.96 to ~0.99, and fit to the floor's drawn
   bounds rather than the scene box, so the room grows, not the gap around it.
 - **Phone width:** the ask banner, then the team list, then a small office. Today the office is
-  hidden below 880px, and that changes.
+  hidden below 880px, and that changes. _(Amended 2026-10-18, slippy, lane `01M57WJMBD`, goal
+  `live-delight`: built with the office ABOVE the team list, not after it — a band
+  `clamp(200px, 34vh, 320px)` tall under the ask banner, the team scrolling beneath. After a list
+  of any length the room would sit below the fold, and the room is the reason to open `/live` at
+  all. The band is a window, not a workspace: it is `inert` (its plates sit a few px apart at that
+  scale, so none is a target anyone could hit on purpose), and the key, the huddle rail and the
+  collapse control stay off it. The ask banner wraps onto a second line instead of clipping, so
+  the question and the identity chip both stay whole.)_
 
 ## 3. Motion has to mean something
 
