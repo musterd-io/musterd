@@ -35,4 +35,4 @@ Landed 2026-10-08 (lane 2/6). One `WatchReader` per harness, in `packages/cli/sr
 
 The registry lives beside the readers, not on the onboarding harness adapters as the lane first said: those hold install-time config, and importing launcher code into them would point the dependency the wrong way.
 
-Related: [dream lease file stamped wake](dream-lease-stamped-wake.md) — the lease file's `provenance` field is the literal `wake`, including on a dream.
+Related: [dream lease file stamped wake](dream-lease-stamped-wake.md) — the lease file's `provenance` field is the wake order's derivation since ADR 604 (2026-10-15).
