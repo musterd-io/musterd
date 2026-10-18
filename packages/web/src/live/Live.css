@@ -4038,6 +4038,15 @@
   align-items: center;
   gap: 7px;
 }
+/* A sender drawn as the office draws them (2026-10-18, goal live-delight); its <title> reads in ink. */
+.lc-chip__face {
+  display: inline-flex;
+  flex: none;
+  color: var(--lc-text);
+}
+.lc-row__ts.is-same {
+  visibility: hidden;
+}
 .lc-chip__avatar {
   display: inline-flex;
   align-items: center;

@@ -174,3 +174,35 @@ describe('a seat in the huddle card opens its path (replay increment 2)', () => 
     expect(render(false)).not.toContain('lc-hcard__seat-btn');
   });
 });
+
+describe('the log reads as a room, not a ledger (goal live-delight)', () => {
+  const T = new Date(2026, 9, 18, 9, 9, 5).getTime();
+  const many = (envelopes: Envelope[]) =>
+    renderToStaticMarkup(createElement(Stream, { envelopes, roster, liveIds: new Set<string>() }));
+
+  it('draws a rostered sender as a face, and a stranger as an initial', () => {
+    expect(render(env({}))).toContain('lc-chip__face');
+    const stranger = render(env({ from: 'zed' }));
+    expect(stranger).not.toContain('lc-chip__face');
+    expect(stranger).toContain('lc-chip__avatar');
+  });
+
+  it('says a minute once down a run of rows sent in it', () => {
+    const html = many([
+      env({ id: '01A', ts: T, act: 'status_update' }),
+      env({ id: '01B', ts: T + 20_000, act: 'status_update' }),
+      env({ id: '01C', ts: T + 70_000, act: 'status_update' }),
+    ]);
+    expect(html.match(/lc-row__ts is-same/g)).toHaveLength(1);
+  });
+});
+
+describe('laneTitleOf', () => {
+  it('names a lane topic the board knows and leaves the rest alone', async () => {
+    const { laneTitleOf } = await import('./Stream');
+    const titles = new Map([['01L', 'Asks rail with presence']]);
+    expect(laneTitleOf('lane:01L', titles)).toBe('Asks rail with presence');
+    expect(laneTitleOf('lane:01X', titles)).toBeUndefined();
+    expect(laneTitleOf('goal:demo', titles)).toBeUndefined();
+  });
+});

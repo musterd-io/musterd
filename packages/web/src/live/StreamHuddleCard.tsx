@@ -4,6 +4,7 @@ import type { LiveConfig } from './client';
 import { clock, hueOf, initial, kindOf, memberAvatar } from './format';
 import { PATH_MAX_LINES, fetchHuddleTrace, seatPath } from './huddleTrace';
 import { huddleBudget, sinceOpen } from './huddles';
+import { MemberFace } from './MemberFace';
 
 /**
  * A huddle as ONE card in the Stream (huddle replay increment 1, nick 2026-10-01).
@@ -23,8 +24,11 @@ export function StreamHuddleCard({
   now,
   liveIds,
   cfg,
+  laneTitle,
 }: {
   view: HuddleView;
+  /** The lane's title when the topic is `lane:<id>` and the board knows it. */
+  laneTitle?: string | undefined;
   byId: Map<string, Envelope>;
   idx: Map<string, MemberSummary>;
   /** This card holds the stream's newest row — it wears the live-edge treatment a plain row would. */
@@ -60,7 +64,7 @@ export function StreamHuddleCard({
       <div className="lc-hcard__head">
         <time className="lc-row__ts">{clock(view.openedAt)}</time>
         <span className="lc-badge lc-badge--huddle">huddle</span>
-        <Topic topic={view.topic} />
+        <Topic topic={view.topic} title={laneTitle} />
         <span className="lc-hcard__count">{turns}</span>
         <span className="lc-hcard__state">
           {/* Live only while it is: the dot goes when the room closes (motion means "now"). */}
@@ -181,13 +185,14 @@ function Path({
 }
 
 /** `goal:demo` → a quiet `goal` and the name that matters, `demo`. */
-function Topic({ topic }: { topic: string }) {
+function Topic({ topic, title }: { topic: string; title?: string | undefined }) {
   const i = topic.indexOf(':');
   if (i < 0) return <span className="lc-hcard__topic">{topic}</span>;
+  // A lane the board knows reads by its title, the id kept for the tooltip.
   return (
-    <span className="lc-hcard__topic">
+    <span className="lc-hcard__topic" title={title ? topic : undefined}>
       <span className="lc-hcard__kind">{topic.slice(0, i)}</span>
-      {topic.slice(i + 1)}
+      {title ?? topic.slice(i + 1)}
     </span>
   );
 }
@@ -195,12 +200,18 @@ function Topic({ topic }: { topic: string }) {
 function Who({ name, idx }: { name: string; idx: Map<string, MemberSummary> }) {
   return (
     <span className="lc-chip lc-hcard__who">
-      <span
-        className="lc-chip__avatar"
-        style={{ background: memberAvatar(name, kindOf(name, idx), hueOf(name, idx)) }}
-      >
-        {initial(name)}
-      </span>
+      {idx.has(name) ? (
+        <span className="lc-chip__face" aria-hidden="true">
+          <MemberFace name={name} roster={idx} size={20} />
+        </span>
+      ) : (
+        <span
+          className="lc-chip__avatar"
+          style={{ background: memberAvatar(name, kindOf(name, idx), hueOf(name, idx)) }}
+        >
+          {initial(name)}
+        </span>
+      )}
       <span className="lc-chip__name">{name}</span>
     </span>
   );

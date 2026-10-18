@@ -788,6 +788,7 @@ function LivePage() {
                     roster={roster}
                     liveIds={liveIds}
                     cfg={cfg ?? undefined}
+                    board={board}
                   />
                 </Suspense>
               </LazyLogDrawer>
