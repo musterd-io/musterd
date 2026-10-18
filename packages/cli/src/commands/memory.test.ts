@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
-import { memoryCommand, renderMemoryLine } from './memory.js';
+import { CliError } from '../errors.js';
+import { memoryCommand, refuseSeatMismatch, renderMemoryLine } from './memory.js';
 import { statusCommand } from './status.js';
 import { teamCommand } from './team.js';
 
@@ -171,5 +172,98 @@ describe('memory command (ADR 093)', () => {
     expect(line.length).toBeLessThanOrEqual(60);
     // the long prose form is NOT what the header prints
     expect(line).not.toContain('saved memory from');
+  });
+});
+
+describe('refuseSeatMismatch (ADR 653)', () => {
+  let root: string;
+  const config = (bindings: Record<string, { team: string; seat: string }> = {}) =>
+    ({ bindings }) as unknown as Parameters<typeof refuseSeatMismatch>[0]['config'];
+
+  function seatFolder(seat: string, sessionId?: string, ended = false): string {
+    const dir = join(root, seat);
+    mkdirSync(join(dir, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(dir, '.musterd', 'binding.json'),
+      JSON.stringify({
+        version: 2,
+        server: 'http://127.0.0.1:1',
+        team: 'dawn',
+        claim: { mode: 'seat', name: seat },
+        ...(sessionId
+          ? {
+              session: {
+                harness: 'claude-code',
+                id: sessionId,
+                started_at: 1,
+                ...(ended ? { ended_at: 2 } : {}),
+              },
+            }
+          : {}),
+      }),
+    );
+    return dir;
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-mismatch-'));
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it("refuses a session that holds seat A when it runs in seat B's folder, naming both", () => {
+    seatFolder('ada', 'sess-a');
+    const bob = seatFolder('bob', 'sess-b');
+    const run = () =>
+      refuseSeatMismatch({
+        config: config(),
+        team: 'dawn',
+        folderSeat: 'bob',
+        identitySource: 'binding',
+        env: { CLAUDE_CODE_SESSION_ID: 'sess-a' },
+        cwd: bob,
+      });
+    expect(run).toThrow(CliError);
+    expect(run).toThrow(/this session is seat ada, but this folder is seat bob's/);
+    try {
+      run();
+    } catch (err) {
+      expect((err as CliError).exitCode).toBe(5);
+    }
+  });
+
+  it('finds the own seat through the global registry when it is not a sibling', () => {
+    const elsewhere = join(root, 'far');
+    mkdirSync(elsewhere);
+    const old = root;
+    root = elsewhere;
+    const ada = seatFolder('ada', 'sess-a');
+    root = old;
+    const bob = seatFolder('bob');
+    expect(() =>
+      refuseSeatMismatch({
+        config: config({ [ada]: { team: 'dawn', seat: 'ada' } }),
+        team: 'dawn',
+        folderSeat: 'bob',
+        identitySource: 'binding',
+        env: { CLAUDE_CODE_SESSION_ID: 'sess-a' },
+        cwd: bob,
+      }),
+    ).toThrow(/seat ada/);
+  });
+
+  it('passes the folder its own session, an unknown session, an ended slot, an env identity, and no id', () => {
+    seatFolder('ada', 'sess-a');
+    seatFolder('cy', 'sess-c', true);
+    const bob = seatFolder('bob', 'sess-b');
+    const base = { config: config(), team: 'dawn', folderSeat: 'bob', cwd: bob } as const;
+    for (const [identitySource, env] of [
+      ['binding', { CLAUDE_CODE_SESSION_ID: 'sess-b' }],
+      ['binding', { CLAUDE_CODE_SESSION_ID: 'sess-nobody' }],
+      ['binding', { CLAUDE_CODE_SESSION_ID: 'sess-c' }],
+      ['env', { CLAUDE_CODE_SESSION_ID: 'sess-a' }],
+      ['binding', {}],
+    ] as const) {
+      expect(() => refuseSeatMismatch({ ...base, identitySource, env })).not.toThrow();
+    }
   });
 });
