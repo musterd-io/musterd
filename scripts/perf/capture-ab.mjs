@@ -21,6 +21,8 @@
  * Lever 3 (lane 01M55MAQ9M) adds two readings to the CLI arms: CPU per Chrome thread over the same
  * window (`threads`), and, after it, a 5 s trace of the renderer main thread (`main`: busy %, the
  * rAF callbacks' share and per-frame cost), which says whether that thread is what caps the draws.
+ * The ad-hoc arm takes `~<variant>` (Chromium flags, a page rate apart from the encode rate) and
+ * fingerprints every raw grabbed frame (`source`), which counts the repeats a viewer actually gets.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -92,10 +94,13 @@ async function cdpPage(port, urlPart = '/broadcast') {
 const PROBE = `(() => {
   if (!window.__office) return 'no-office';
   window.__gaps = [];
-  let d = __office.stats().draws, t = performance.now();
+  window.__ticks = [];
+  let d = __office.stats().draws, t = performance.now(), last = t;
   (function f() {
+    const n = performance.now();
+    __ticks.push(n - last); last = n;
     const s = __office.stats().draws;
-    if (s !== d) { const n = performance.now(); __gaps.push(n - t); t = n; d = s; }
+    if (s !== d) { __gaps.push(n - t); t = n; d = s; }
     requestAnimationFrame(f);
   })();
   return 'ok';
@@ -264,6 +269,27 @@ async function mainThreadSplit(page) {
   };
 }
 
+/** What a viewer gets: of the frames x11grab took off the display, how many repeat the one before.
+ * x11grab samples on its own clock, so whenever the screen has not changed since the last sample the
+ * encoder is handed the same frame twice, however many frames the page says it drew. */
+function sourceRepeats(md5File, fps) {
+  try {
+    const hashes = readFileSync(md5File, 'utf8')
+      .split('\n')
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(',').pop().trim());
+    let repeats = 0;
+    for (let i = 1; i < hashes.length; i++) if (hashes[i] === hashes[i - 1]) repeats++;
+    return {
+      frames: hashes.length,
+      distinctPerSec: round(((hashes.length - repeats) * fps) / hashes.length),
+      repeatPct: round((100 * repeats) / hashes.length),
+    };
+  } catch (e) {
+    return { invalid: String(e?.message ?? e).slice(0, 120) };
+  }
+}
+
 /** Measure one window: CPU % of a core per named root (tree resolved at window start), and box idle %. */
 async function measure(page, roots) {
   const trees = Object.fromEntries(
@@ -279,6 +305,9 @@ async function measure(page, roots) {
   const secs = (Date.now() - t0) / 1000;
   const d1 = await page.evaluate('__office.stats().draws');
   const gaps = (await page.evaluate('JSON.stringify(window.__gaps)')) ?? '[]';
+  const tickList = JSON.parse((await page.evaluate('JSON.stringify(window.__ticks)')) ?? '[]')
+    .slice(1)
+    .sort((a, b) => a - b);
   const b1 = boxIdle();
   const th1 = threadTicks(trees.chrome ?? []);
   const threads = Object.fromEntries(
@@ -295,10 +324,20 @@ async function measure(page, roots) {
   cpu.idlePct = round((100 * (b1.idle - b0.idle)) / (b1.total - b0.total));
   const g = JSON.parse(gaps).sort((a, b) => a - b);
   const q = (p) => (g.length ? round(g[Math.min(g.length - 1, Math.floor(p * g.length))]) : null);
+  const tq = (p) =>
+    tickList.length
+      ? round(tickList[Math.min(tickList.length - 1, Math.floor(p * tickList.length))])
+      : null;
   return {
     drawsPerSec: round((d1 - d0) / secs),
     gapP50Ms: q(0.5),
     gapP95Ms: q(0.95),
+    // The bar's tail, as a share: gaps a viewer sees as a held frame (> 40 ms).
+    gapsOver40Pct: g.length ? round((100 * g.filter((x) => x > 40).length) / g.length) : null,
+    // The rAF cadence the page is given (Chrome's BeginFrames), which the draw coalescer beats against.
+    rafHz: round(tickList.length / secs),
+    tickP50Ms: tq(0.5),
+    tickP95Ms: tq(0.95),
     cpu,
     threads,
     secs: round(secs),
@@ -382,7 +421,26 @@ async function armCli(label, capture = 'screencast', fps = FPS) {
 
 // ── Arm XA: the ad-hoc Xvfb + headful Chromium + ffmpeg x11grab of increment 1 ──────────────────
 // `query` is appended to the page URL: `&dirty=0` is ADR 625's A/B arm.
+//
+// `x11-adhoc~<variant>` (lane 01M55MAQ9M) runs it with extra Chromium flags and/or a page draw rate
+// apart from the encode rate, to test whether the tail comes from the BeginFrame cadence the
+// compositor gives the page rather than from the page's own drawing.
+// A variant is `+`-joined tokens: `base` (none), `novsync` (the two flags below), `pageNN` (the page
+// draws at NN while ffmpeg still encodes at --fps).
+function parseVariant(v) {
+  const out = { flags: [], pageFps: undefined };
+  for (const t of v.split('+')) {
+    if (t === 'base') continue;
+    else if (t === 'novsync') out.flags.push('--disable-gpu-vsync', '--disable-frame-rate-limit');
+    else if (/^page\d+$/.test(t)) out.pageFps = Number(t.slice(4));
+    else throw new Error(`unknown variant token ${t}`);
+  }
+  return out;
+}
 async function armX11(label, query = '', fps = FPS) {
+  const variant = parseVariant(/~(.+?)(?:@|#|$)/.exec(label)?.[1] ?? 'base');
+  const extraFlags = variant.flags;
+  const pageFps = variant.pageFps ?? fps;
   const DISPLAY = ':99';
   const xvfb = spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
     stdio: 'ignore',
@@ -403,6 +461,7 @@ async function armX11(label, query = '', fps = FPS) {
       '--remote-debugging-port=9333',
       '--disable-infobars',
       '--noerrdialogs',
+      ...extraFlags,
       // Blank first: the seat is injected over CDP before /broadcast loads (ADR 594), never in argv.
       'about:blank',
     ],
@@ -418,7 +477,7 @@ async function armX11(label, query = '', fps = FPS) {
       source: `window.__musterdBroadcastSeat = ${JSON.stringify(SEAT)};`,
     });
     await page.send('Page.navigate', {
-      url: `${SERVER}/broadcast?team=${TEAM}&fps=${fps}${query}`,
+      url: `${SERVER}/broadcast?team=${TEAM}&fps=${pageFps}${query}`,
     });
     if (!(await waitForRoom(page))) {
       // Say what the page saw, so an empty room is a reading rather than a guess.
@@ -467,14 +526,28 @@ async function armX11(label, query = '', fps = FPS) {
         String(SECS + 20),
         '-y',
         out,
+        // A second output: a fingerprint of every raw grabbed frame, before the encoder, so a repeat
+        // is exact. Scaled down first, which is cheap and still changes when any pixel block does.
+        '-map',
+        '0:v',
+        '-vf',
+        'scale=192:108:flags=area',
+        '-t',
+        String(SECS + 20),
+        '-f',
+        'framemd5',
+        '-y',
+        out.replace(/\.mp4$/, '.md5'),
       ],
       { env: { ...process.env, DISPLAY }, stdio: ['ignore', 'ignore', 'inherit'] },
     );
     await sleep(WARMUP_MS);
     const r = await measure(page, { chrome: chrome.pid, ffmpeg: ffmpeg.pid, xvfb: xvfb.pid });
+    r.main = await mainThreadSplit(page).catch((e) => ({ invalid: String(e?.message ?? e) }));
     page.close();
     kill(ffmpeg);
     await waitExit(ffmpeg);
+    r.source = sourceRepeats(out.replace(/\.mp4$/, '.md5'), fps);
     // One frame for the eye check (browser chrome in frame?) — printed as base64 so `fly logs` carries it.
     try {
       const png = join(tmpdir(), 'cab-x-frame.jpg');
@@ -519,7 +592,8 @@ const ARMS = [
 const plan = ONLY.length
   ? ONLY.map((want) => {
       const [base, at] = want.split('@');
-      const arm = ARMS.find(([, l]) => l === base);
+      const arm =
+        ARMS.find(([, l]) => l === base) ?? ARMS.find(([, l]) => l === base.replace(/~.*$/, ''));
       if (!arm) throw new Error(`unknown arm ${base}`);
       return [arm[0], at ? `${base}@${at}` : base, arm[2], at ? Number(at) : FPS];
     })

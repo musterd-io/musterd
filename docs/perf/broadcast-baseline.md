@@ -465,6 +465,45 @@ Readings:
   build is newer and this is a different box, and this file already records box-to-box variance of
   that size. The draws half of the bar is now within 0.4/s; the p95 half (< 40 ms) is not close.
 
+## Compositor experiments: what reaches the screen (Fly `performance-4x`, sjc, 2026-10-17)
+
+Lane `01M55MAQ9M`, after the main-thread reading above. The ad-hoc x11 arm gains variants
+(`x11-adhoc~<variant>`): `novsync` adds `--disable-gpu-vsync --disable-frame-rate-limit`, and `pageNN`
+has the page draw at NN while ffmpeg still encodes at 30. The arm also writes a `framemd5` of every
+raw grabbed frame (scaled to 192×108, before the encoder), so a repeat is exact: `source` counts the
+frames that equal the one before. Arms interleaved twice on one box. Falsify: a re-run on the same
+build where `novsync+page45` gives more distinct source frames per second than `base`.
+
+| arm | page draws/s | gap p95 ms | gaps > 40 ms % | rAF Hz | distinct source frames/s | source repeats % | main busy % | Viz compositor % | box idle % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base#1 | 26.4 | 50.6 | 23.6 | 26.4 | 26.3 | 12.5 | 75.2 | 87.3 | 29.3 |
+| novsync#1 | 29.3 | 49.6 | 32.3 | 58.7 | 26.4 | 12.0 | 85.9 | 94.8 | 25.6 |
+| novsync+page45#1 | 36.4 | 40.7 | 5.3 | 39.0 | 23.6 | 21.4 | 98.7 | 96.6 | 20.4 |
+| base#2 | 25.3 | 53.7 | 32.1 | 25.3 | 25.4 | 15.5 | 72.3 | 87.0 | 29.0 |
+| novsync#2 | 29.2 | 51.6 | 31.2 | 54.3 | 25.7 | 14.3 | 88.8 | 95.7 | 24.2 |
+| novsync+page45#2 | 34.4 | 42.8 | 6.8 | 35.6 | 23.1 | 23.1 | 98.5 | 96.2 | 19.3 |
+
+The fingerprint output costs ffmpeg about 40 % of a core (≈ 90 % against ≈ 53 % without it), so this
+box ran slower than the main-thread run above: the page's rAF ran at 25–26 Hz on `base`, against 41.
+Two earlier runs the same day are not tabled. One without the fingerprint (on a box whose `base` read
+the same as this one) put `novsync+page45` at 40.6–40.8 page draws/s and a 36.7–37.5 ms p95. A first
+one on a faster box put `novsync` at a 42 ms p95. Their repeat counts used `mpdecimate` on the encoded
+file, which proved unusable: with its default thresholds it counts a small change such as a clock hand
+as a repeat, and with exact thresholds it finds none, because the encoder never reproduces a frame.
+
+Readings:
+
+- **Page draws are not what the viewer gets.** `novsync+page45` draws the most and has the best page
+  gap, but it puts the fewest distinct frames on the screen (23.1–23.6/s against 25.4–26.3) and
+  repeats one sample in five. Drawing more crowds out the compositor that presents the frames.
+- **The wall is the GPU process's software compositor.** It runs at 87 % of a core on `base` and 96–98 %
+  once the page draws faster. Distinct frames on screen stop near 26/s whatever the page does.
+- **Neither flag set nor lever 3 as written reaches it.** `novsync` changes the rAF cadence and not
+  what reaches the screen. A worker would free the main thread, which is not the limit.
+- **The bar's own metric misled.** The spec reads draws/s and the draw-to-draw gap in the page. A page
+  can pass both while the screen repeats more often. The viewer's number is distinct source frames per
+  second, and it belongs beside the page's.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being
