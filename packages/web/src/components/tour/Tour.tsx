@@ -10,6 +10,7 @@ import {
   type LiveConfig,
 } from '../../live/client';
 import { Confetti, LaneTicket } from './LaneTicket';
+import { MemberFace } from '../../live/MemberFace';
 import {
   advance,
   canGoBack,
@@ -384,10 +385,10 @@ export function Tour({
                 }
               : null
           }
-          picks={agents.map((name) => ({
-            name,
-            readiness: readinessOf(roster.find((m) => m.name === name)),
-          }))}
+          picks={agents.map((name) => {
+            const member = roster.find((m) => m.name === name);
+            return { name, readiness: readinessOf(member), member };
+          })}
           suggested={suggestAgent(roster, agents)}
           detail={detail}
           note={note}
@@ -460,6 +461,8 @@ export interface TourTicket {
 export interface TourPick {
   name: string;
   readiness: Readiness;
+  /** The roster row, when there is one: the chip draws the agent as the office does. */
+  member?: MemberSummary | undefined;
 }
 
 export function TourPanel({
@@ -542,7 +545,12 @@ export function TourPanel({
             data-primary={p.name === suggested ? '' : undefined}
             onClick={() => onPick(p.name)}
           >
-            <span className="tour-chip__dot" aria-hidden="true" />
+            {/* The agent as the office draws them, readiness as a dot on the shoulder — the
+                roster's grammar, so the chip and the column read alike. */}
+            <span className="tour-chip__face" aria-hidden="true">
+              {p.member && <MemberFace name={p.name} roster={new Map([[p.name, p.member]])} size={28} />}
+              <span className="tour-chip__dot" />
+            </span>
             <span className="tour-chip__name">{p.name}</span>
             <span className="tour-chip__state">
               {p.name === suggested ? `Suggested · ${READINESS_LABEL[p.readiness]}` : READINESS_LABEL[p.readiness]}
