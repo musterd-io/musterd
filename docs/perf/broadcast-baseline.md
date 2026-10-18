@@ -504,6 +504,53 @@ Readings:
   can pass both while the screen repeats more often. The viewer's number is distinct source frames per
   second, and it belongs beside the page's.
 
+## GPU host under x11: the wall moves, the ceiling does not (GCP L4, 2026-10-17)
+
+Lane `01M55MAQ9M`. The question left by the compositor experiments: if Chrome composites on a GPU,
+do more than ~26 distinct frames a second reach the screen? Falsify: an arm on a GPU box that puts
+≥ 30 distinct source frames a second on the screen at 1080p30.
+
+The 10-13 GPU trial used the screencast. This one grabs an X display with `x11grab`. Xvfb has no GPU,
+so the box ran Xorg on the NVIDIA driver with a virtual 1920×1080 screen. The L4 has no display
+outputs, and `UseDisplayDevice None` is refused on it ("not supported with virtual display"); an empty
+initial configuration works. The setup is `scripts/perf/gpu-bench-vm.sh`. The box was a `g2-standard-4`
+(4 vCPU Xeon @ 2.20 GHz, NVIDIA L4, driver 580.178.04) in `us-central1-a`, on-demand,
+with Chrome 155.0.8059.84 and ffmpeg 6.1.1; it was deleted the same hour. A spot box in `us-west1-a` was preempted 11 minutes in, after
+two arms; its two arms read like `base` below and are not tabled.
+
+On Xorg-on-NVIDIA Chrome composites on the GPU with no flags: every arm, `base` included, reported
+`gpu_compositing: enabled` and an `ANGLE (NVIDIA … L4 …)` renderer. So `base` here is GPU compositing
+with `libx264`, and `nvenc` is the same with the GPU's own encoder (`h264_nvenc -preset p4 -tune ll`).
+Arms ran interleaved, 60 s each at 1080p30, with the fingerprint output on.
+
+| arm | distinct frames/s | repeats % | page draws/s | gap p95 ms | chrome % | ffmpeg % | box idle % | GPU main % | VizCompositor % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base#1 | 21.8 | 27.2 | 20.2 | 81.1 | 149 | 189 | 3.4 | 80.4 | 4.5 |
+| nvenc#1 | 26.5 | 11.7 | 27.6 | 57.3 | 166 | 93 | 25.5 | 90.9 | 5.9 |
+| nvenc+novsync#1 | 9.4 | 68.6 | 26.0 | 64.1 | 252 | 94 | 5.1 | 93.0 | 82.1 |
+| base#2 | 22.7 | 24.4 | 20.1 | 80.2 | 150 | 195 | 2.7 | 83.1 | 4.7 |
+| nvenc#2 | 26.1 | 13.1 | 27.5 | 58.1 | 167 | 93 | 25.5 | 91.0 | 6.1 |
+| nvenc+novsync#2 | 4.6 | 84.8 | 25.8 | 67.7 | 256 | 95 | 3.8 | 93.4 | 88.9 |
+
+Readings:
+
+- **The GPU takes the compositor off the CPU.** `VizCompositorThread` fell from 87 % of a core on the
+  Fly box to 5–6 %.
+- **The ceiling stays at ~26.** With NVENC the box has a quarter of its CPU idle, and still 26.1–26.5
+  distinct frames a second reach the screen, the same as Fly's software box (25.4–26.3). The new
+  hottest thread is the GPU process's main thread, at 91–93 % of a core: it decodes Chrome's GPU command
+  stream, and on this CPU that is the next single-thread wall.
+- **`libx264` alone fills this box.** Without NVENC ffmpeg takes 1.9 cores and the box has 3 % idle,
+  so `base` drops to 22 distinct frames a second. The g2's CPU is slower than Fly's `performance-4x`.
+- **`novsync` is harmful on the GPU path.** It sends the compositor back to 82–89 % of a core and the
+  screen repeats 69–85 % of its frames.
+
+**Verdict (2026-10-17):** a GPU host does not reach 30 distinct frames a second. It costs more and lands
+where the Fly box already is. The stream stays on Fly. The ~26 ceiling is set by single-thread
+stages inside Chrome, and moving work between them (lever 3, the frame-pacing flags, a GPU) moves the
+wall without lifting it. Falsify: a run on a host with a faster single core (or a page that issues
+less GPU work per frame) that puts ≥ 30 distinct source frames a second on the screen.
+
 ## Hypotheses already measured and rejected
 
 Recorded so nobody re-chases them. Three died before this harness existed, two of them after being

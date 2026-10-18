@@ -23,6 +23,11 @@
  * rAF callbacks' share and per-frame cost), which says whether that thread is what caps the draws.
  * The ad-hoc arm takes `~<variant>` (Chromium flags, a page rate apart from the encode rate) and
  * fingerprints every raw grabbed frame (`source`), which counts the repeats a viewer actually gets.
+ *
+ * The GPU host run (lane 01M55MAQ9M) adds a `gpu` variant token and `CAPTURE_AB_DISPLAY`: set, the
+ * ad-hoc arm grabs that already-running X server (an Xorg on the NVIDIA driver) instead of starting
+ * Xvfb, which has no GPU to composite with. Each ad-hoc arm records what Chrome says it composited
+ * with (`gpu`), so a silent fall back to software reads as such.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -46,6 +51,9 @@ const ONLY = flag('arms', '')
 const SERVER = flag('server', 'http://127.0.0.1:4877');
 const TEAM = flag('team', 'bench');
 const CHROME = process.env.CHROME_BIN ?? '/usr/bin/chromium';
+// An X server that is already up (e.g. `:0`, Xorg on the NVIDIA driver); unset, each ad-hoc arm
+// starts its own Xvfb.
+const EXT_DISPLAY = process.env.CAPTURE_AB_DISPLAY;
 const WARMUP_MS = 8000;
 // The page's observer (ADR 594): since ADR 580 /broadcast cannot mint one over loopback, so
 // capture-ab.sh mints it as the fixture's human admin. Arm S's `musterd broadcast` reads the same env.
@@ -89,6 +97,28 @@ async function cdpPage(port, urlPart = '/broadcast') {
   const evaluate = async (expression) =>
     (await send('Runtime.evaluate', { expression, returnByValue: true }))?.result?.value;
   return { send, evaluate, on, close: () => ws.close() };
+}
+
+// What Chrome composited and rasterised with, from the browser target's SystemInfo (the page target
+// has no such domain): `enabled` vs `disabled_software` is whether the GPU did the work at all.
+async function gpuInfo(port) {
+  const { webSocketDebuggerUrl } = await (
+    await fetch(`http://127.0.0.1:${port}/json/version`)
+  ).json();
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await new Promise((res, rej) => ((ws.onopen = res), (ws.onerror = rej)));
+  const m = await new Promise((res) => {
+    ws.onmessage = (e) => res(JSON.parse(e.data));
+    ws.send(JSON.stringify({ id: 1, method: 'SystemInfo.getInfo' }));
+  });
+  ws.close();
+  if (m.error) throw new Error(`SystemInfo.getInfo: ${m.error.message}`);
+  const { featureStatus = {}, auxAttributes = {} } = m.result.gpu;
+  return {
+    compositing: featureStatus.gpu_compositing,
+    raster: featureStatus.rasterization,
+    renderer: auxAttributes.glRenderer,
+  };
 }
 
 const PROBE = `(() => {
@@ -426,12 +456,22 @@ async function armCli(label, capture = 'screencast', fps = FPS) {
 // apart from the encode rate, to test whether the tail comes from the BeginFrame cadence the
 // compositor gives the page rather than from the page's own drawing.
 // A variant is `+`-joined tokens: `base` (none), `novsync` (the two flags below), `pageNN` (the page
-// draws at NN while ffmpeg still encodes at --fps).
+// draws at NN while ffmpeg still encodes at --fps), `nvenc` (encode on the GPU), `gpu` (composite on the GPU, the flags the
+// 2026-10-13 L4 trial found working).
 function parseVariant(v) {
-  const out = { flags: [], pageFps: undefined };
+  const out = { flags: [], pageFps: undefined, encoder: ['libx264', '-preset', 'veryfast'] };
   for (const t of v.split('+')) {
     if (t === 'base') continue;
     else if (t === 'novsync') out.flags.push('--disable-gpu-vsync', '--disable-frame-rate-limit');
+    // NVENC, the GPU's own encoder, instead of `libx264`, which is a full core or more at 1080p30.
+    else if (t === 'nvenc') out.encoder = ['h264_nvenc', '-preset', 'p4', '-tune', 'll'];
+    else if (t === 'gpu')
+      out.flags.push(
+        '--enable-gpu',
+        '--ignore-gpu-blocklist',
+        '--use-gl=angle',
+        '--use-angle=gl-egl',
+      );
     else if (/^page\d+$/.test(t)) out.pageFps = Number(t.slice(4));
     else throw new Error(`unknown variant token ${t}`);
   }
@@ -441,11 +481,15 @@ async function armX11(label, query = '', fps = FPS) {
   const variant = parseVariant(/~(.+?)(?:@|#|$)/.exec(label)?.[1] ?? 'base');
   const extraFlags = variant.flags;
   const pageFps = variant.pageFps ?? fps;
-  const DISPLAY = ':99';
-  const xvfb = spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
-    stdio: 'ignore',
-  });
-  await sleep(1500);
+  const DISPLAY = EXT_DISPLAY ?? ':99';
+  const xvfb = EXT_DISPLAY
+    ? undefined
+    : spawn('Xvfb', [DISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
+        stdio: 'ignore',
+      });
+  // The X server's CPU is part of the pipeline either way.
+  const xPid = xvfb?.pid ?? Number(execFileSync('pgrep', ['-o', 'Xorg']).toString().trim());
+  if (xvfb) await sleep(1500);
   const profile = mkdtempSync(join(tmpdir(), 'cab-x-profile-'));
   const chrome = spawn(
     CHROME,
@@ -507,9 +551,7 @@ async function armX11(label, query = '', fps = FPS) {
         '-i',
         'anullsrc=r=44100:cl=stereo',
         '-c:v',
-        'libx264',
-        '-preset',
-        'veryfast',
+        ...variant.encoder,
         '-b:v',
         '4500k',
         '-maxrate',
@@ -542,7 +584,8 @@ async function armX11(label, query = '', fps = FPS) {
       { env: { ...process.env, DISPLAY }, stdio: ['ignore', 'ignore', 'inherit'] },
     );
     await sleep(WARMUP_MS);
-    const r = await measure(page, { chrome: chrome.pid, ffmpeg: ffmpeg.pid, xvfb: xvfb.pid });
+    const r = await measure(page, { chrome: chrome.pid, ffmpeg: ffmpeg.pid, xvfb: xPid });
+    r.gpu = await gpuInfo(9333).catch((e) => ({ invalid: String(e?.message ?? e) }));
     r.main = await mainThreadSplit(page).catch((e) => ({ invalid: String(e?.message ?? e) }));
     page.close();
     kill(ffmpeg);
