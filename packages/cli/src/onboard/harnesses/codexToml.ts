@@ -1,5 +1,5 @@
 /**
- * A *minimal* TOML helper scoped strictly to Codex's `[mcp_servers.<name>]` tables (ADR 031). It is
+ * A *minimal* TOML helper scoped strictly to the Codex tables musterd owns (ADR 031, 323, 658). It is
  * deliberately **not** a general TOML parser — musterd hand-edits only its own MCP-server tables and
  * passes everything else in `.codex/config.toml` through verbatim, so a new TOML runtime dependency
  * (hard rule #6) is avoided and the user's other Codex settings are never reformatted or lost.
@@ -293,4 +293,96 @@ export function readServer(toml: string, name: string): CodexServer | null {
     env: readServerEnv(toml, name),
     ...(approval !== undefined ? { default_tools_approval_mode: approval } : {}),
   };
+}
+
+// ── The ADR 658 permission profile ────────────────────────────────────────────────────────────────
+// `[permissions.<name>]` (extends `:workspace`) + `[permissions.<name>.filesystem]` of `deny`
+// entries, and the top-level `default_permissions` that selects it. Same section discipline as the
+// server tables: only these two headers and that one preamble key are ever touched.
+
+/** What musterd writes as a Codex permission profile: the denied paths, and whether it is selected. */
+export interface CodexDenyProfile {
+  deny: string[];
+  selected: boolean;
+}
+
+function profileHeaders(name: string): [string, string] {
+  return [`permissions.${key(name)}`, `permissions.${key(name)}.filesystem`];
+}
+
+/** Does the file carry a table with exactly this header (e.g. `sandbox_workspace_write`)? */
+export function hasTable(toml: string, header: string): boolean {
+  return sectionHeaders(toml).includes(header);
+}
+
+/** A top-level (pre-header) string key, or null — `[profiles.x] sandbox_mode` is not top-level. */
+export function readTopLevel(toml: string, k: string): string | null {
+  const first = splitSections(toml)[0];
+  if (first === undefined || sectionHeader(first) !== null) return null;
+  const re = new RegExp(`^\\s*${k}\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"\\s*(?:#.*)?$`);
+  for (const line of first.split('\n')) {
+    const m = re.exec(line);
+    if (m) return m[1]!;
+  }
+  return null;
+}
+
+export function renderPermissionProfile(name: string, deny: readonly string[]): string {
+  const [head, fs] = profileHeaders(name);
+  return (
+    `[${head}]\n` +
+    `description = "musterd seat: the workspace profile, minus musterd's own stores (ADR 658)"\n` +
+    `extends = ":workspace"\n\n` +
+    `[${fs}]\n` +
+    deny.map((p) => `${str(p)} = "deny"\n`).join('')
+  );
+}
+
+/** The profile's `deny` paths and selection as written, or null when musterd's tables are absent. */
+export function readPermissionProfile(toml: string, name: string): CodexDenyProfile | null {
+  const [head, fs] = profileHeaders(name);
+  let seen = false;
+  const deny: string[] = [];
+  for (const section of splitSections(toml)) {
+    const h = sectionHeader(section);
+    if (h === head) seen = true;
+    if (h !== fs) continue;
+    seen = true;
+    for (const line of section.split('\n').slice(1)) {
+      const m = /^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"(?:deny|none)"\s*$/.exec(line);
+      if (m) deny.push(m[1]!.replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+    }
+  }
+  if (!seen) return null;
+  return { deny, selected: readTopLevel(toml, 'default_permissions') === name };
+}
+
+/** Write (replace) the profile; select it with `default_permissions` only when `selected`. */
+export function upsertPermissionProfile(
+  toml: string,
+  name: string,
+  profile: CodexDenyProfile,
+): string {
+  const stripped = removePermissionProfile(toml, name).replace(/\s+$/, '');
+  const block = renderPermissionProfile(name, profile.deny);
+  const body = stripped.length === 0 ? block : stripped + '\n\n' + block;
+  return profile.selected ? `default_permissions = ${str(name)}\n\n${body}` : body;
+}
+
+/** Remove the profile tables, and `default_permissions` only when it names this profile. */
+export function removePermissionProfile(toml: string, name: string): string {
+  if (toml.trim().length === 0) return toml;
+  const drop = new Set(profileHeaders(name));
+  const sections = splitSections(toml).filter((sec) => {
+    const h = sectionHeader(sec);
+    return h === null || !drop.has(h);
+  });
+  const select = new RegExp(`^\\s*default_permissions\\s*=\\s*${JSON.stringify(name)}\\s*$`);
+  if (sections[0] !== undefined && sectionHeader(sections[0]) === null) {
+    sections[0] = sections[0]
+      .split('\n')
+      .filter((line) => !select.test(line))
+      .join('\n');
+  }
+  return normalizeBlankRuns(sections.join('')).replace(/^\n+/, '');
 }

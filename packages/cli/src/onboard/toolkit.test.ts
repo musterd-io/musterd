@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readProvisionManifest, writeProvisionManifest } from './manifest.js';
-import { installSeatPermissions } from './permissions.js';
+import { installSeatPermissions, storeWall } from './permissions.js';
 import {
   BUILTIN_TOOLKITS,
   GENERALIST,
@@ -235,11 +235,19 @@ describe('round-trip: built-ins render the identical workspace', () => {
       expect(toolkit.tools.resource_scopes).toEqual(expected.resourceScopes);
 
       const dir = mkdtempSync(join(tmpdir(), `musterd-roundtrip-${name}-`));
-      const added = installSeatPermissions(dir, toolkit);
+      // The golden predates the ADR 658 store wall, which every seat gets whatever its toolkit
+      // (permissions.test.ts § the store wall); it is taken back out so this stays a rename check.
+      const wall = new Set(storeWall({}));
+      const added = installSeatPermissions(dir, toolkit, {});
+      expect([...wall].every((e) => added.deny.includes(e))).toBe(true);
+      added.deny = added.deny.filter((e) => !wall.has(e));
       expect(added).toEqual(expected.addedPermissions);
       const settings = JSON.parse(
         readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8'),
-      );
+      ) as { permissions: { deny?: string[] } };
+      const deny = (settings.permissions.deny ?? []).filter((e) => !wall.has(e));
+      if (deny.length > 0) settings.permissions.deny = deny;
+      else delete settings.permissions.deny;
       expect(settings).toEqual(expected.settings);
 
       writeProvisionManifest(dir, {

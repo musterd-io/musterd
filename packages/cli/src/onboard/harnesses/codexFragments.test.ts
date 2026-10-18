@@ -46,10 +46,62 @@ const THEIR_TOML = [
   '',
 ].join('\n');
 
+describe('codexAdapter — the ADR 658 permission set', () => {
+  it('writes the store denies as a selected profile, observes it back, and removes only its own', async () => {
+    const fs = memoryFs();
+    fs.writeFile(TOML, THEIR_TOML, 0o644);
+    const ctx = ctxOf(fs);
+    const intent = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'permissions')!;
+    const payload = intent.payload as { deny: string[]; selected: boolean };
+    expect(payload.selected).toBe(true);
+    expect(payload.deny).toContain('~/.musterd/musterd.db-wal');
+    expect(payload.deny).toContain('~/.musterd/note-key.json');
+    expect(await codexAdapter.observe(ctx, intent)).toEqual({ state: 'absent' });
+
+    await codexAdapter.apply(ctx, { kind: 'write', intent });
+    const written = fs.readFile(TOML)!;
+    expect(written).toContain('default_permissions = "musterd"');
+    expect(written).toContain('"~/.musterd/trace.db" = "deny"');
+    expect(written).toContain(THEIR_TOML.trim());
+    expect(await codexAdapter.observe(ctx, intent)).toEqual({
+      state: 'present',
+      fingerprint: intent.fingerprint,
+    });
+    // Re-deriving after the write still selects it: musterd's own default_permissions is not a
+    // human's choice to defer to.
+    const again = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'permissions')!;
+    expect(again.fingerprint).toBe(intent.fingerprint);
+
+    await codexAdapter.apply(ctx, { kind: 'remove', intent });
+    expect(fs.readFile(TOML)!.trim()).toBe(THEIR_TOML.trim());
+  });
+
+  it("defers to a human's own sandbox choice — the profile is written but not selected", async () => {
+    for (const line of [
+      'sandbox_mode = "workspace-write"',
+      'default_permissions = ":read-only"',
+      '[sandbox_workspace_write]\nnetwork_access = true',
+    ]) {
+      const fs = memoryFs();
+      fs.writeFile(TOML, `${line}\n\n${THEIR_TOML}`, 0o644);
+      const ctx = ctxOf(fs);
+      const intent = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'permissions')!;
+      expect((intent.payload as { selected: boolean }).selected).toBe(false);
+      await codexAdapter.apply(ctx, { kind: 'write', intent });
+      expect(fs.readFile(TOML)!).not.toContain('default_permissions = "musterd"');
+      expect(fs.readFile(TOML)!).toContain(line);
+    }
+  });
+});
+
 describe('codexAdapter — managed fragments', () => {
   it('exposes the musterd MCP table and the hooks as distinct fragments', async () => {
     const intents = await intentsOf(ctxOf(memoryFs()));
-    expect(intents.map((i) => i.fragmentKey).sort()).toEqual(['hooks', 'mcp.musterd']);
+    expect(intents.map((i) => i.fragmentKey).sort()).toEqual([
+      'hooks',
+      'mcp.musterd',
+      'permissions',
+    ]);
     expect(new Set(intents.map((i) => i.containerKey)).size).toBe(2);
     const payload = intents.find((i) => i.fragmentKey === 'mcp.musterd')!.payload as CodexServer;
     expect(payload.env).toEqual({ MUSTERD_LAUNCH_SURFACE: 'codex' });

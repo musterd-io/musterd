@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -7,6 +7,7 @@ import {
   installSeatPermissions,
   liftSeatPermissions,
   STANDARD_FLOOR,
+  storeWall,
 } from './permissions.js';
 import { BUILTIN_TOOLKITS } from './toolkit.js';
 
@@ -215,7 +216,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
   });
 
   it('reports a partial floor as stale, naming the count and not one line per entry', () => {
-    writeSettings({ permissions: { allow: ['Read', 'Glob'] } });
+    writeSettings({ permissions: { allow: ['Read', 'Glob'], deny: storeWall() } });
     const findings = inspectSeatPermissions(dir);
     expect(findings).toHaveLength(1);
     expect(findings[0]).toContain(String(STANDARD_FLOOR.allow.length - 2));
@@ -280,6 +281,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
     writeSettings({
       permissions: {
         allow: STANDARD_FLOOR.allow.map((e, i) => respell(e, i % 2 ? 'nospace' : 'colon')),
+        deny: storeWall(),
       },
     });
     expect(inspectSeatPermissions(dir)).toEqual([]);
@@ -289,7 +291,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
     // `Bash(git *)` matches more than `Bash(git push *)` ever would — but equivalence here is
     // SPELLING equivalence only, never subsumption: reasoning "a broader rule covers it" is the
     // harness matcher's job, and reimplementing that is the defect-3 class again.
-    writeSettings({ permissions: { allow: ['Bash(git *)'] } });
+    writeSettings({ permissions: { allow: ['Bash(git *)'], deny: storeWall() } });
     const findings = inspectSeatPermissions(dir);
     expect(findings).toHaveLength(1);
     // `Bash(git *)` is not itself a floor entry and stands in for none of them: all still missing.
@@ -342,13 +344,13 @@ describe('liftSeatPermissions — a removed role takes its ceiling with it', () 
     installSeatPermissions(dir, watcher);
     installSeatPermissions(dir, auditor);
     const before = perms();
-    expect(before.deny).toEqual(['Edit', 'Write', 'Bash(git push *)']);
+    expect(before.deny).toEqual([...storeWall(), 'Edit', 'Write', 'Bash(git push *)']);
 
     const r = liftSeatPermissions(dir, watcher, [auditor]);
     expect(r.lifted).toEqual({ deny: ['Edit', 'Write'], ask: ['WebFetch'] });
     expect(r.kept).toEqual({ deny: ['Bash(git push *)'], ask: [] });
     const after = perms();
-    expect(after.deny).toEqual(['Bash(git push *)']);
+    expect(after.deny).toEqual([...storeWall(), 'Bash(git push *)']);
     expect(after.ask).toBeUndefined();
     expect(after.allow).toEqual(before.allow);
   });
@@ -373,5 +375,57 @@ describe('liftSeatPermissions — a removed role takes its ceiling with it', () 
     writeFileSync(join(dir, '.claude', 'settings.local.json'), '{not json');
     expect(liftSeatPermissions(dir, toolkit('r', ['Edit']), []).lifted.deny).toEqual([]);
     expect(readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8')).toBe('{not json');
+  });
+});
+
+describe('the store wall (ADR 658)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'musterd-wall-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("denies the daemon's database, the trace store and the note key — and nothing an agent's CLI opens", () => {
+    const wall = storeWall({});
+    expect(wall).toEqual([
+      'Read(~/.musterd/musterd.db*)',
+      'Read(~/.musterd/trace.db*)',
+      'Read(~/.musterd/note-key.json)',
+    ]);
+    // Claude Code merges Read denies into the Bash sandbox too, so the CLI's own files stay open.
+    for (const entry of wall) {
+      expect(entry).not.toMatch(/binding\.json|config\.json|\.musterd\/\*\*|\.musterd\)/);
+    }
+  });
+
+  it('follows the dogfood overrides, home-relative under home and // elsewhere', () => {
+    const home = homedir();
+    const wall = storeWall({
+      MUSTERD_DB: '/srv/dog/musterd.db',
+      MUSTERD_NOTE_KEY: join(home, 'k', 'note-key.json'),
+    });
+    expect(wall).toContain('Read(//srv/dog/musterd.db*)');
+    expect(wall).toContain('Read(//srv/dog/trace.db*)');
+    expect(wall).toContain('Read(~/k/note-key.json)');
+    // The note key sits beside a moved config when no key override names it.
+    expect(storeWall({ MUSTERD_CONFIG: '/c/config.json' })).toContain('Read(//c/note-key.json)');
+    // A relative override names no fixed file, so it adds nothing.
+    expect(storeWall({ MUSTERD_DB: 'rel.db' })).toHaveLength(3);
+  });
+
+  it('is installed as deny on top of the floor, and the inspector reports a seat without it', () => {
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    const path = join(dir, '.claude', 'settings.local.json');
+    writeFileSync(path, JSON.stringify({ permissions: { allow: [...STANDARD_FLOOR.allow] } }));
+    const findings = inspectSeatPermissions(dir, {});
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain('ADR 658');
+    expect(findings[0]).toContain('--refresh-permissions');
+
+    expect(installSeatPermissions(dir, undefined, {}).deny).toEqual(storeWall({}));
+    const s = JSON.parse(readFileSync(path, 'utf8'));
+    expect(s.permissions.deny).toEqual(storeWall({}));
+    expect(s.permissions.allow).toContain('Read'); // deny narrows the floor, it does not replace it
+    expect(inspectSeatPermissions(dir, {})).toEqual([]);
   });
 });
