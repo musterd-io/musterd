@@ -151,6 +151,14 @@ Confirmed 2026-10-17 by alfie, answering ask `01M55WR8AR9E74MYWW9RR65X41`. The c
 `reads_on` and the empty line. On `/live` and on the stream the outcome word is the verdict's
 own word, one word each: `met`, `missed`, `inconclusive` (ADR 644 decision 2).
 
+**The title is the question, in plain words.** The row shows the lane's title to everyone in the
+room and on the stream, most of whom have never read an ADR. Title a dated-read lane as what it
+finds out ("Does ranking Up next help agents pick their work?"), never by its record ("ADR 536
+14-day read"), and put the steps, commands and ADR numbers in its detail. _(Added 2026-10-18,
+slippy, lane `01M58J0TZM`: nick found the rows said "ADR 324" and "nobody knows what ADR 324 is".
+The three lanes then carrying `reads_on` were retitled as questions, their old titles kept at the
+head of their detail.)_
+
 ## 6. Increment 3, for reference: the corkboard
 
 One pin per entry, in the same order, on the back-right corkboard. Overdue pins use the accent and
