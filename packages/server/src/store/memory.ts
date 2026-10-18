@@ -81,10 +81,35 @@ export function parseWriter(raw: unknown): MemoryWriter | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** The Presence a session lease is bound to, as it stands now (ADR 654). A route that touches must
+ *  read it BEFORE the touch: on a seat with no live socket, an ambient touch rewrites the row's
+ *  surface and Workspace label from the request, and a request names no Workspace. */
+export async function leasePresence(
+  db: Driver,
+  sessionLease: string | undefined,
+): Promise<LeasePresence | null> {
+  if (!sessionLease) return null;
+  return (
+    (await db.get<LeasePresence>(
+      `SELECT l.member_id, p.surface, p.workspace FROM session_leases l
+         JOIN presence p ON p.id = l.presence_id WHERE l.token_hash = ?`,
+      [hashToken(sessionLease)],
+    )) ?? null
+  );
+}
+
+export interface LeasePresence {
+  member_id: string;
+  surface: string;
+  workspace: string | null;
+}
+
 /**
  * Where a request came from, as the daemon can see it (ADR 654): the Presence its session lease is
  * bound to (surface and Workspace label, both client-reported at claim), and this daemon's node.
- * A human credential carries no lease, so only the surface header and the node are known.
+ * A human credential carries no lease, so only the surface header and the node are known. `seen` is
+ * a {@link leasePresence} read taken before the route touched the row; it counts for this member
+ * only.
  */
 export async function requestPlace(
   db: Driver,
@@ -92,14 +117,10 @@ export async function requestPlace(
   memberId: string,
   sessionLease: string | undefined,
   surfaceHint?: string,
+  seen?: LeasePresence | null,
 ): Promise<MemoryWriter> {
-  const presence = sessionLease
-    ? await db.get<{ surface: string; workspace: string | null }>(
-        `SELECT p.surface, p.workspace FROM session_leases l JOIN presence p ON p.id = l.presence_id
-          WHERE l.team_id = ? AND l.member_id = ? AND l.token_hash = ?`,
-        [teamId, memberId, hashToken(sessionLease)],
-      )
-    : undefined;
+  const read = seen !== undefined ? seen : await leasePresence(db, sessionLease);
+  const presence = read && read.member_id === memberId ? read : null;
   const { id: node } = await localNodeForTeam(db, teamId);
   const label = await db.get<{ label: string }>('SELECT label FROM nodes WHERE id = ?', [node]);
   const surface = presence?.surface ?? surfaceHint;
@@ -142,10 +163,12 @@ export function memoryProvenance(
     ` on ${writer.machine ?? writer.node ?? 'an unnamed machine'}` +
     (writer.surface ? ` by ${writer.surface}` : '');
   const otherMachine = Boolean(writer.node && reader?.node && writer.node !== reader.node);
+  // A writer with no folder, read by a session that has one, cannot be placed as the seat's own: a
+  // seat's live session always names its folder, and touching the row first is how the label is lost
+  // (the canary found it, lane 01M561YJYQ; ADR 654 decision 3 as amended 2026-10-18).
   const otherFolder = Boolean(
-    writer.workspace &&
     reader?.workspace &&
-    folderOf(writer.workspace) !== folderOf(reader.workspace),
+    (!writer.workspace || folderOf(writer.workspace) !== folderOf(reader.workspace)),
   );
   if (ownerKind === 'human' || !reader || (!otherMachine && !otherFolder))
     return { writer, suspect: false, line: fact };

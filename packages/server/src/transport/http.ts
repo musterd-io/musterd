@@ -345,6 +345,7 @@ import {
   getMemory,
   mayReadNote,
   memoryEnvelope,
+  leasePresence,
   memoryProvenance,
   redactedNoteDetail,
   requestPlace,
@@ -7133,6 +7134,9 @@ export async function handleHttp(
       // occupying. It names explicit reads; since ADR 430 it carries the caller's OWN memory body
       // (bounded), never another seat's, and never an Act.
       if (method === 'POST' && rest === '/wake-context') {
+        // ADR 654: the session's place, read before authTouch can rewrite it (a socketless seat's
+        // touch overwrites the Workspace label with none).
+        const seenPlace = await leasePresence(ctx.db, agentSessionLease(req));
         const { team, member } = await authTouch(ctx, slug, req);
         const target = parseOrBadRequest(WakeContextRequestSchema, await readJson(req));
         // Audit both allow and deny (ADR 209 follow-up, amended by ADR 600): an authorization
@@ -7149,6 +7153,7 @@ export async function handleHttp(
             member.id,
             agentSessionLease(req),
             surfaceHeader(req),
+            seenPlace,
           );
           const context = await buildWakeContext(ctx.db, team, member, target, reader);
           const response = WakeContextResponseSchema.parse({ context });

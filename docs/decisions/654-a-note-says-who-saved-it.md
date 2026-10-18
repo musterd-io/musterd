@@ -50,6 +50,8 @@ So the daemon can tell "saved from somewhere else" apart from "saved from here".
    Workspace label before its `@`, so a branch change or a new session in the same folder is the same
    place. A suspect line names both places and tells the seat to read the note as suspect and check
    its claims before acting on them. ADR 522's checks then limit what a polluted claim can do.
+   _(Amended 2026-10-18: a writer with no folder, read by a session that has one, also counts as
+   another folder. See Consequences.)_
 4. **No verdict where the rule does not apply.** A human seat's note gets the fact and no verdict,
    because ADR 366 carries a human's notes across that human's machines on purpose. So does a read
    whose own place is unknown, and the ADR 651 human read of an agent seat's note
@@ -79,6 +81,18 @@ So the daemon can tell "saved from somewhere else" apart from "saved from here".
   older row stores no stamp, which reads as "not recorded".
 - **ADR 651 holds.** `redactedNoteDetail` drops the stamp along with the note, so another human's
   writer stamp is not shown either.
+
+- **2026-10-18 — the canary found a way around decision 3** (lane `01M561YJYQ`). A session with
+  no live socket loses its Workspace label on its next ordinary request, because the ambient touch
+  rewrites the Presence row from the request, and a request names no folder. So an intruder that
+  claimed a fresh lease from another folder could send one GET first, and its save then read "saved
+  from an unnamed folder", not suspect. Decision 3 now treats a writer with no folder as another
+  folder whenever the reader has one: a seat's own live session (the MCP adapter's socket) always
+  names its folder, so a folderless save cannot be placed as the seat's own. A seat driven only
+  through the HTTP CLI, with no socket, will see a false warning, which is the accepted cost. The
+  same canary found that the wake-context route read the woken session's place after its own touch
+  had erased it. The route now reads the place before it touches. The cause, an ambient touch that
+  clears the label, is left as it is: that row also drives displacement and the roster.
 
 ## Observability & Evaluation
 

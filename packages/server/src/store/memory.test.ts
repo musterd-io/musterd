@@ -153,10 +153,20 @@ describe('memoryProvenance (ADR 654)', () => {
     expect(memoryProvenance('agent', elsewhere, null).suspect).toBe(false);
   });
 
-  it('a missing workspace on either side compares the machine only', () => {
+  it('a writer with no folder is another place to a reader that has one (amended 2026-10-18)', () => {
     const { workspace: _w, ...noFolder } = here;
-    expect(memoryProvenance('agent', noFolder, here).suspect).toBe(false);
-    expect(memoryProvenance('agent', { ...noFolder, node: 'N2' }, here).suspect).toBe(true);
+    const p = memoryProvenance('agent', noFolder, here);
+    expect(p.suspect).toBe(true);
+    expect(p.line).toMatch(
+      /^your note was last saved from an unnamed folder on mac-1 by claude-code, not this seat's folder \(lazara\)/,
+    );
+  });
+
+  it('a reader with no folder compares the machine only', () => {
+    const { workspace: _w, ...noFolder } = here;
+    expect(memoryProvenance('agent', here, noFolder).suspect).toBe(false);
+    expect(memoryProvenance('agent', noFolder, noFolder).suspect).toBe(false);
+    expect(memoryProvenance('agent', { ...here, node: 'N2' }, noFolder).suspect).toBe(true);
   });
 
   it('parseWriter keeps a well-formed stamp and drops anything else', () => {
