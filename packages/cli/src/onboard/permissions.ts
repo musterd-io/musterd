@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, sep } from 'node:path';
 import type { Toolkit } from './toolkit.js';
 
 /**
@@ -92,6 +93,63 @@ export const STANDARD_FLOOR: PermissionLists = {
   deny: [],
 };
 
+/**
+ * ADR 658 — the store wall: the deny entries every claude-code seat gets on top of the floor.
+ *
+ * The floor allows unscoped `Read`, so until this a seat's file tools read the daemon's database,
+ * the trace store and the machine's note key like any other file. These name only files no
+ * agent-side musterd command opens — agent commands reach the daemon over HTTP, and only the human
+ * commands `store`, `reset` and `service` open `musterd.db`; only a human seat's note opens the
+ * key (ADR 657). That narrowness is load-bearing: Claude Code merges `Read(...)` deny paths into
+ * the Bash sandbox's `denyRead` as well, so a wider entry (all of `~/.musterd`, any
+ * `binding.json`) would stop the agent's own CLI the moment the sandbox is on.
+ *
+ * A courtesy wall, not a boundary: `--dangerously-skip-permissions`, a script that reads the file
+ * indirectly with the sandbox off, or an edit to this settings file all walk past it.
+ */
+export function storeWall(env: NodeJS.ProcessEnv = process.env): string[] {
+  return storeFiles(env).map(({ path, sqlite }) => {
+    const spec = path.startsWith('~/') ? path : `/${path}`; // a single `/` is project-relative
+    return `Read(${spec}${sqlite ? '*' : ''})`;
+  });
+}
+
+/** One file the wall names: `~/…` under home, else absolute. `sqlite` = it has `-wal`/`-shm` sidecars. */
+export interface StoreFile {
+  path: string;
+  sqlite: boolean;
+}
+
+/**
+ * The files behind {@link storeWall}, harness-neutral, so the Claude Code rules and the Codex
+ * profile (`codex.ts`) are two renders of one list and cannot name different files.
+ */
+export function storeFiles(env: NodeJS.ProcessEnv = process.env): StoreFile[] {
+  const out = new Map<string, StoreFile>();
+  const add = (path: string, sqlite: boolean) => out.set(path, { path, sqlite });
+  add('~/.musterd/musterd.db', true);
+  add('~/.musterd/trace.db', true);
+  add('~/.musterd/note-key.json', false);
+  // The dogfood overrides move the files, so the wall follows them (absolute paths only — a
+  // relative override resolves against whichever folder the daemon started in).
+  const db = env['MUSTERD_DB'];
+  if (db && isAbsolute(db)) {
+    add(homeForm(db), true);
+    add(homeForm(join(dirname(db), 'trace.db')), true);
+  }
+  const trace = env['MUSTERD_TRACE_DB'];
+  if (trace && isAbsolute(trace)) add(homeForm(trace), true);
+  const config = env['MUSTERD_CONFIG'];
+  const key = env['MUSTERD_NOTE_KEY'] || (config ? join(dirname(config), 'note-key.json') : '');
+  if (key && isAbsolute(key)) add(homeForm(key), false);
+  return [...out.values()];
+}
+
+function homeForm(abs: string): string {
+  const home = homedir();
+  return abs.startsWith(home + sep) ? `~/${abs.slice(home.length + 1)}` : abs;
+}
+
 interface SeatSettings {
   permissions?: Partial<Record<keyof PermissionLists, string[]>>;
   [key: string]: unknown; // hooks and anything else a human put there — carried verbatim
@@ -113,7 +171,11 @@ const LISTS: (keyof PermissionLists)[] = ['allow', 'ask', 'deny'];
  * Returns only the entries NEWLY added per list, so the ADR 030 manifest can record an exact
  * reversal — and so idempotence is observable: a second run returns empty lists.
  */
-export function installSeatPermissions(dir: string, toolkit?: Toolkit): PermissionLists {
+export function installSeatPermissions(
+  dir: string,
+  toolkit?: Toolkit,
+  env: NodeJS.ProcessEnv = process.env,
+): PermissionLists {
   const path = join(dir, '.claude', 'settings.local.json');
   let settings: SeatSettings = {};
   if (existsSync(path)) {
@@ -128,7 +190,7 @@ export function installSeatPermissions(dir: string, toolkit?: Toolkit): Permissi
   const wanted: PermissionLists = {
     allow: [...STANDARD_FLOOR.allow, ...(toolkit?.tools.permissions.allow ?? [])],
     ask: [...(toolkit?.tools.permissions.ask ?? [])],
-    deny: [...(toolkit?.tools.permissions.deny ?? [])],
+    deny: [...storeWall(env), ...(toolkit?.tools.permissions.deny ?? [])],
   };
   settings.permissions ??= {};
   const added: PermissionLists = { allow: [], ask: [], deny: [] };
@@ -270,7 +332,10 @@ export function canonicalRuleForm(entry: string): string {
  * Returns findings; never mutates. Repair is `musterd init --refresh-permissions`, which reuses
  * {@link installSeatPermissions} so repair and provisioning cannot drift apart.
  */
-export function inspectSeatPermissions(dir: string): string[] {
+export function inspectSeatPermissions(
+  dir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
   const path = join(dir, '.claude', 'settings.local.json');
   if (!existsSync(path)) return [];
   let settings: SeatSettings;
@@ -304,6 +369,21 @@ export function inspectSeatPermissions(dir: string): string[] {
         `non-interactive session fails closed on the ones it needs. Repair: ` +
         `\`musterd init --refresh-permissions\`.`,
     );
+  }
+
+  // ADR 658: the store wall. Only for a seat that HAS a permissions block — the finding above
+  // already sends the other kind to the same repair.
+  if (settings.permissions) {
+    const denied = new Set((settings.permissions.deny ?? []).map(canonicalRuleForm));
+    const open = storeWall(env).filter((entry) => !denied.has(canonicalRuleForm(entry)));
+    if (open.length > 0) {
+      findings.push(
+        `this seat's harness permissions block (.claude/settings.local.json) does not deny ` +
+          `${String(open.length)} of musterd's own store files (ADR 658) — e.g. ` +
+          `${open.slice(0, 2).join(', ')}, so the agent's file tools can read the daemon's ` +
+          `database or this machine's note key. Repair: \`musterd init --refresh-permissions\`.`,
+      );
+    }
   }
 
   // Decision 5: surplus allows are REPORTED, never stripped. Deny already makes them inert, so this

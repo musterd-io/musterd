@@ -169,6 +169,9 @@ describe('claudeCodeAdapter — managed fragments', () => {
     expect(parsed.theirKey).toEqual({ keep: true });
     expect(parsed.permissions.allow).toContain('TheirTool');
     expect(parsed.permissions.allow).toContain('Read');
+    // ADR 658: the store wall rides the same ledger-owned fragment, as deny.
+    expect(parsed.permissions.deny).toContain('Read(~/.musterd/musterd.db*)');
+    expect(parsed.permissions.deny).toContain('Read(~/.musterd/note-key.json)');
     expect(
       parsed.hooks.PostToolUse.some((m: { hooks: { command: string }[] }) =>
         m.hooks.some((h) => h.command === 'their-hook.sh'),

@@ -12,6 +12,7 @@ import {
 } from '../harness.js';
 import type { McpServerEntry } from '../mcpEntry.js';
 import { launchEntryEnv, markerGenerationOfEnv, resolveMcpLaunch } from '../mcpEntry.js';
+import { storeFiles } from '../permissions.js';
 import { nodeFs, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
@@ -33,13 +34,19 @@ import {
 } from './codexHooks.js';
 import {
   hasServer,
+  readPermissionProfile,
   readPlugin,
   readServer,
   readServerEnv,
+  readTopLevel,
+  hasTable,
+  removePermissionProfile,
   removePlugins,
   removeServers,
+  upsertPermissionProfile,
   upsertPlugin,
   upsertServer,
+  type CodexDenyProfile,
   type CodexPlugin,
   type CodexServer,
 } from './codexToml.js';
@@ -305,6 +312,39 @@ function pluginIntent(ctx: HarnessContext, id: string): FragmentIntent {
   };
 }
 
+/** The Codex permission profile musterd owns (ADR 658). */
+const PROFILE = 'musterd';
+
+/**
+ * ADR 658: the store wall as a Codex permission profile — `:workspace` plus `deny` on each store
+ * file, exact paths (a glob deny is captured per process start on Linux, so a `-wal` that appears
+ * later would stay readable). Codex loads a project file only for a trusted project, where its
+ * implicit default is already `:workspace` (codex-rs `default_builtin_permission_profile_name`),
+ * so selecting this narrows and never widens. It is selected only when nobody else chose the
+ * seat's sandbox: a top-level `sandbox_mode` overrides profiles anyway; a human's own
+ * `default_permissions` is theirs (taking it over could widen a `:read-only` choice); and an
+ * explicit `:workspace` drops `[sandbox_workspace_write]`, so a file that tunes that table keeps
+ * it. Unselected, the profile is written but inert, and the matrix in 04-cli.md says so.
+ */
+function permissionProfile(ctx: HarnessContext): CodexDenyProfile {
+  const deny = storeFiles(ctx.env).flatMap(({ path, sqlite }) =>
+    sqlite ? [path, `${path}-wal`, `${path}-shm`] : [path],
+  );
+  const layers = [
+    ctx.fs.readFile(join(ctx.worktreeRoot, '.codex', 'config.toml')) ?? '',
+    ctx.fs.readFile(globalConfigPath()) ?? '',
+  ];
+  const selected = layers.every((toml) => {
+    const chosen = readTopLevel(toml, 'default_permissions');
+    return (
+      readTopLevel(toml, 'sandbox_mode') === null &&
+      !hasTable(toml, 'sandbox_workspace_write') &&
+      (chosen === null || chosen === PROFILE)
+    );
+  });
+  return { deny, selected };
+}
+
 export const codexAdapter: HarnessAdapter = {
   id: 'codex',
   surface: 'codex',
@@ -355,6 +395,7 @@ export const codexAdapter: HarnessAdapter = {
     };
     const hooks = [...codexHookCommands()].sort((a, b) => (a.event < b.event ? -1 : 1));
     const plugins = declaredCodexPlugins(ctx).map((id) => pluginIntent(ctx, id));
+    const profile = permissionProfile(ctx);
     return [
       {
         harness: 'codex',
@@ -373,6 +414,15 @@ export const codexAdapter: HarnessAdapter = {
         scope: 'folder',
         fingerprint: canonicalFingerprint(hooks),
         payload: hooks,
+      },
+      {
+        harness: 'codex',
+        resourceKey: folderResourceKey(ctx.worktreeRoot, 'codex', 'permissions'),
+        containerKey: `folder ${ctx.worktreeRoot} .codex/config.toml`,
+        fragmentKey: 'permissions',
+        scope: 'folder',
+        fingerprint: canonicalFingerprint(profile),
+        payload: profile,
       },
       ...plugins,
     ];
@@ -407,6 +457,12 @@ export const codexAdapter: HarnessAdapter = {
         const observed = musterdCodexHandlers(file);
         if (observed.length === 0) return { state: 'absent' };
         return { state: 'present', fingerprint: canonicalFingerprint(observed) };
+      }
+      case 'permissions': {
+        const toml = ctx.fs.readFile(join(ctx.worktreeRoot, '.codex', 'config.toml'));
+        const profile = toml === null ? null : readPermissionProfile(toml, PROFILE);
+        if (!profile) return { state: 'absent' };
+        return { state: 'present', fingerprint: canonicalFingerprint(profile) };
       }
       default: {
         const id = pluginIdFromFragmentKey(intent.fragmentKey);
@@ -498,6 +554,21 @@ export const codexAdapter: HarnessAdapter = {
         // The fragment ledger owns the workspace copy. In a real worktree, Codex reads the shared
         // git-common-dir copy instead, so refresh that runtime copy through the same epoch guard.
         if (mutation.kind !== 'remove' && ctx.fs === nodeFs) installCodexHooks(ctx.worktreeRoot);
+        return;
+      }
+      case 'permissions': {
+        const path = join(ctx.worktreeRoot, '.codex', 'config.toml');
+        const toml = ctx.fs.readFile(path) ?? '';
+        const next =
+          mutation.kind === 'remove'
+            ? removePermissionProfile(toml, PROFILE)
+            : upsertPermissionProfile(
+                toml,
+                PROFILE,
+                (intent.payload as CodexDenyProfile | undefined) ?? permissionProfile(ctx),
+              );
+        ctx.fs.mkdirp(dirname(path));
+        ctx.fs.writeFile(path, next.endsWith('\n') ? next : `${next}\n`, 0o644);
         return;
       }
       default: {

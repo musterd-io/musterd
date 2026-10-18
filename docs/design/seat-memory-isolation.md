@@ -104,6 +104,11 @@ away from musterd's files. Nothing claims to stop a determined process running a
    - **Everyone else:** `04-cli.md` records the harness as **file-tool only** or **none**, so the
      gap is written down, not implied. This narrows path 3 for two harnesses, and path 4 for the
      file tools only. At this tier that is enough: the risk is stumbling, not breaking in.
+     _(Note 2026-10-18: built as [ADR 658](../decisions/658-agent-seats-cannot-read-the-musterd-stores.md),
+     narrower than written here. Claude Code merges every `Read(...)` deny into the sandbox's
+     `denyRead`, so a file-tool-only deny on `~/.musterd/**` or other seats' bindings would stop
+     the agent's own CLI. The wall is `musterd.db*`, `trace.db*` and `note-key.json`, for both
+     harnesses.)_
 3. **Refuse a seat mismatch.** The CLI acts as the seat whose folder it runs in. So an agent
    launched as seat A that runs `musterd` inside seat B's folder reads and writes **B's** note.
    That is the most likely accident on a laptop. When the session's own seat is known (the

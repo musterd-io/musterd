@@ -24,7 +24,7 @@ import {
   resolveMcpLaunch,
   RETIRED_SURFACE_ENV,
 } from '../mcpEntry.js';
-import { canonicalRuleForm, STANDARD_FLOOR } from '../permissions.js';
+import { canonicalRuleForm, STANDARD_FLOOR, storeWall } from '../permissions.js';
 import { nodeExec, type ExecSeam, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
@@ -1323,7 +1323,7 @@ function patchHooks(
   return next;
 }
 
-/** The desired permission entries: the ADR 261 floor plus the provisioned toolkit's permissions. */
+/** The desired permission entries: the ADR 261 floor, the ADR 658 store wall, and the provisioned toolkit's permissions. */
 function permissionsPayload(ctx: HarnessContext): ProvisionPermissions {
   let toolkit: Toolkit | undefined;
   const provisioning = loadProvisioning(ctx.worktreeRoot, ctx.fs);
@@ -1346,7 +1346,13 @@ function permissionsPayload(ctx: HarnessContext): ProvisionPermissions {
       ...new Set([...STANDARD_FLOOR.allow, ...(toolkit?.tools.permissions.allow ?? [])]),
     ].sort(),
     ask: [...new Set([...STANDARD_FLOOR.ask, ...(toolkit?.tools.permissions.ask ?? [])])].sort(),
-    deny: [...new Set([...STANDARD_FLOOR.deny, ...(toolkit?.tools.permissions.deny ?? [])])].sort(),
+    deny: [
+      ...new Set([
+        ...STANDARD_FLOOR.deny,
+        ...storeWall(ctx.env),
+        ...(toolkit?.tools.permissions.deny ?? []),
+      ]),
+    ].sort(),
   };
 }
 

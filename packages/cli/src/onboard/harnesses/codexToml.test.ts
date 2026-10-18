@@ -3,13 +3,17 @@ import {
   hasPlugin,
   hasServer,
   listServers,
+  readPermissionProfile,
   readPlugin,
   readServer,
+  readTopLevel,
   readServerEnv,
+  removePermissionProfile,
   removePlugins,
   removeServers,
   renderPlugin,
   renderServer,
+  upsertPermissionProfile,
   upsertPlugin,
   upsertServer,
 } from './codexToml.js';
@@ -218,5 +222,46 @@ describe('Codex plugin tables (ADR 323)', () => {
     expect(hasPlugin(out, ID)).toBe(false);
     expect(hasServer(out, 'context7')).toBe(true);
     expect(out).toContain('model = "o3"');
+  });
+});
+
+describe('the musterd permission profile (ADR 658)', () => {
+  const deny = ['~/.musterd/musterd.db', '~/.musterd/note-key.json'];
+
+  it('writes the profile and selects it, leaving every other byte alone', () => {
+    const out = upsertPermissionProfile(USER, 'musterd', { deny, selected: true });
+    expect(out.startsWith('default_permissions = "musterd"\n')).toBe(true);
+    expect(out).toContain(USER.trim());
+    expect(out).toContain('[permissions.musterd]\n');
+    expect(out).toContain('extends = ":workspace"');
+    expect(out).toContain('[permissions.musterd.filesystem]\n"~/.musterd/musterd.db" = "deny"\n');
+    expect(readTopLevel(out, 'model')).toBe('o3');
+    expect(readPermissionProfile(out, 'musterd')).toEqual({ deny, selected: true });
+  });
+
+  it('is idempotent, and an unselected write never adds default_permissions', () => {
+    const once = upsertPermissionProfile(USER, 'musterd', { deny, selected: true });
+    expect(upsertPermissionProfile(once, 'musterd', { deny, selected: true })).toBe(once);
+    const quiet = upsertPermissionProfile(USER, 'musterd', { deny, selected: false });
+    expect(quiet).not.toContain('default_permissions');
+    expect(readPermissionProfile(quiet, 'musterd')).toEqual({ deny, selected: false });
+  });
+
+  it("removes its own tables and selection, never someone else's default_permissions", () => {
+    const written = upsertPermissionProfile(USER, 'musterd', { deny, selected: true });
+    expect(removePermissionProfile(written, 'musterd').trim()).toBe(USER.trim());
+    const theirs = 'default_permissions = ":read-only"\n\n[tui]\ntheme = "dark"\n';
+    expect(removePermissionProfile(theirs, 'musterd')).toContain(
+      'default_permissions = ":read-only"',
+    );
+    expect(readPermissionProfile(USER, 'musterd')).toBeNull();
+  });
+
+  it('reads only top-level keys — a profile-scoped sandbox_mode is not one', () => {
+    const toml = '[profiles.fast]\nsandbox_mode = "danger-full-access"\n';
+    expect(readTopLevel(toml, 'sandbox_mode')).toBeNull();
+    expect(readTopLevel('sandbox_mode = "workspace-write"\n', 'sandbox_mode')).toBe(
+      'workspace-write',
+    );
   });
 });
