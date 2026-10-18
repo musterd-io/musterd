@@ -1,5 +1,5 @@
 import { makeEnvelope, type Lane } from '@musterd/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
@@ -84,6 +84,13 @@ async function offersFor(db: Driver, teamId: string) {
 withDrivers('pull', (o) => {
   beforeEach(() => {
     openStore = o;
+    // The store stamps audit rows with the real clock, and the daily cap counts them by calendar
+    // day against the `now` a test passes. Pin the clock to T0, or the suite goes red the day after
+    // T0 (it did, 2026-10-18).
+    vi.useFakeTimers({ toFake: ['Date'], now: T0 });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('the declaration in the store (ADR 645 §1–2)', () => {
