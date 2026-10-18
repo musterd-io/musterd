@@ -132,11 +132,13 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
   it("carries the asker's hue on the rail and the clock fraction on the avatar", () => {
     const html = render([ask('a4', 'standard', 1000)]);
     expect(html).toMatch(/class="lc-asks[^"]* has-lead"[^>]*style="--lc-asks-hue:hsl\(/);
-    expect(html).toMatch(/lc-asks__who is-timed"[^>]*--lc-ask-frac:0\.9\d+/);
+    expect(html).toMatch(/lc-asks__who is-timed( has-face)?"[^>]*--lc-ask-frac:0\.9\d+/);
+    // A rostered asker is drawn as the office draws them, inside the ring, not as an initial.
+    expect(html).toMatch(/lc-asks__who is-timed has-face"[^>]*><svg class="mface"/);
   });
   it('draws a blocking ask past its clock as an empty ring in danger, never as time left', () => {
     const html = render([ask('a5', 'blocking', DAYS_3)]);
-    expect(html).toMatch(/lc-asks__who is-over"[^>]*--lc-ask-frac:0[;"]/);
+    expect(html).toMatch(/lc-asks__who is-over( has-face)?"[^>]*--lc-ask-frac:0[;"]/);
   });
 
   it('leads the rail with the live blocking ask, not the days-old lapsed one', () => {

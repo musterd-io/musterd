@@ -23,6 +23,7 @@ import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
 import { AskChoices } from './AskChoices';
+import { MemberFace } from './MemberFace';
 
 /**
  * The asks & approvals rail (ADR 149) — the above-the-fold home of the to-human ask stream (ADR 147)
@@ -310,7 +311,8 @@ export function AsksStrip({
         {/* The hand (ADR 464 §6): the same ✋ the asker raises at their desk. Settled, it is the
             verdict's mark; idle, the bell the rail always carried. */}
         {mode === 'open' ? (
-          <span className="lc-asks__hand" aria-hidden="true">
+          // Keyed on the ask, so a new question raises the hand again: it rises and waves, once.
+          <span key={lead?.env.id} className="lc-asks__hand" aria-hidden="true">
             ✋
           </span>
         ) : (
@@ -322,7 +324,7 @@ export function AsksStrip({
             <span
               className={`lc-chip__avatar lc-asks__who${
                 frac === null ? '' : frac > 0 ? ' is-timed' : ' is-over'
-              }`}
+              }${idx.has(lead.env.from) ? ' has-face' : ''}`}
               style={
                 {
                   background: memberAvatar(
@@ -335,7 +337,14 @@ export function AsksStrip({
               }
               aria-hidden="true"
             >
-              {initial(lead.env.from)}
+              {/* The asker as the office draws them — the same head as at their desk, where their
+                  hand is up — inside the tier clock's ring. A seat the roster does not know keeps
+                  its initial. */}
+              {idx.has(lead.env.from) ? (
+                <MemberFace name={lead.env.from} roster={idx} size={22} />
+              ) : (
+                initial(lead.env.from)
+              )}
             </span>
             <button
               type="button"
