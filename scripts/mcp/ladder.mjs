@@ -102,7 +102,7 @@ for (const [tag, d] of [
   const acc = Object.fromEntries(
     sides.map((s) => [
       s.label,
-      { wall: [], cpu: [], first_wall: null, first_cpu: null, tools: null },
+      { wall: [], cpu: [], first_wall: null, first_cpu: null, tools: null, bytes: null },
     ]),
   );
   const o = Object.fromEntries(sides.map((s) => [s.label, opts(s, tag)]));
@@ -111,6 +111,7 @@ for (const [tag, d] of [
     acc[s.label].first_wall = r.spawn_to_tools_list_ms;
     acc[s.label].first_cpu = r.cpu_ms;
     acc[s.label].tools = r.tools;
+    acc[s.label].bytes = r.tools_list_bytes;
   }
   for (let i = 0; i < runs; i++) {
     const order = i % 2 ? [...sides].reverse() : sides;
@@ -129,6 +130,7 @@ for (const [tag, d] of [
       first_wall_ms: acc[s.label].first_wall,
       first_cpu_ms: acc[s.label].first_cpu,
       tools: acc[s.label].tools,
+      tools_list_bytes: acc[s.label].bytes,
       wall_median_ms: r1(median(acc[s.label].wall)),
       wall_min: Math.min(...acc[s.label].wall),
       wall_max: Math.max(...acc[s.label].wall),
