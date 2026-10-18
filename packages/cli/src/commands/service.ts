@@ -436,8 +436,17 @@ export function shouldWaitForQuiet(a: {
 
 /** Committer time (epoch seconds) of `rev`, or null when it can't be read. */
 function commitTime(dir: string, rev: string, run: Runner, oldestSince?: string): number | null {
+  // Strip a stamped `-dirty` suffix, as countBehind does: git refuses `abc-dirty..`, and a null
+  // here silently disables the staleness cap.
   const args = oldestSince
-    ? ['-C', dir, 'log', '--reverse', '--format=%ct', `${oldestSince}..${rev}`]
+    ? [
+        '-C',
+        dir,
+        'log',
+        '--reverse',
+        '--format=%ct',
+        `${oldestSince.replace(/-dirty$/, '')}..${rev}`,
+      ]
     : ['-C', dir, 'log', '-1', '--format=%ct', rev];
   const r = run('git', args);
   if (r.status !== 0) return null;

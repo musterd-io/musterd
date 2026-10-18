@@ -120,6 +120,9 @@ describe('service refresh --auto (the tick)', () => {
         return { status: 0, stdout: o.tip ?? 'newtip1111', stderr: '' };
       // The two commit-time probes the settle window asks for (`git log … --format=%ct`).
       if (args.includes('log')) {
+        // Real git refuses a range on a stamped `-dirty` build: not a revision.
+        if (args.some((a) => a.includes('-dirty..')))
+          return { status: 128, stdout: '', stderr: 'fatal: ambiguous argument' };
         const oldest = args.includes('--reverse');
         const age = oldest ? (o.oldestAgeSeconds ?? o.tipAgeSeconds) : o.tipAgeSeconds;
         return { status: 0, stdout: String(now - age) + '\n', stderr: '' };
@@ -999,6 +1002,29 @@ describe('service refresh --auto (the tick)', () => {
         ctx: ctx(agedRunner({ behind: 9, tipAgeSeconds: 1000, oldestAgeSeconds: 1200 })),
         // Busy right now — but we are past the cap, so freshness wins.
         health: async () => ({ connections: 4, build: 'old111', quietest_busy_ms: 3_000 }),
+      });
+      expect(code).toBe(0);
+      expect(calls.some((c) => c.cmd === 'pnpm')).toBe(true);
+    });
+
+    it('the cap still forces through when the daemon build is stamped -dirty', async () => {
+      // 2026-10-17: a `-dirty` build went straight into `git log <build>..origin/main`, git refused
+      // it, the staleness read as unknown, and the runtime held 3.5h behind a busy team.
+      const { code } = await tick({
+        argv: [
+          'refresh',
+          '--auto',
+          '--mode',
+          'notice',
+          '--settle',
+          '600',
+          '--settle-cap',
+          '900',
+          '--quiet-floor',
+          '120',
+        ],
+        ctx: ctx(agedRunner({ behind: 9, tipAgeSeconds: 1000, oldestAgeSeconds: 1200 })),
+        health: async () => ({ connections: 4, build: 'old111-dirty', quietest_busy_ms: 3_000 }),
       });
       expect(code).toBe(0);
       expect(calls.some((c) => c.cmd === 'pnpm')).toBe(true);
