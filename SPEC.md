@@ -425,7 +425,7 @@ truncated or dropped category is named in `fetch`, which in v2 lists only what d
 canonical rows, never stored. Authorization is unchanged from A.10. `residency.context_read` records
 `version`, `used_bytes`, per-category bytes, `thread_acts`, `omitted`, and emitted `fetch` categories
 and never a body, headline, or title; a refused read records `residency.context_denied` with the
-caller and target kind only. A recipient handed `version: 1` follows A.10's fetch ritual.
+caller and target kind only. A recipient handed `version: 1` follows A.10's fetch ritual. ADR 654 adds optional `provenance: {writer, suspect, line}` to `context.memory`: who saved the note (`writer` `{surface?, workspace?, node?, machine?}`, or `null` for a save made before the stamp) and whether, on an agent seat, it was last saved from another folder or machine than the woken session (`suspect`). The stamp is client-reported at claim, so `suspect: false` never means verified.
 
 The packet is a server-derived orientation index. It MUST NOT contain an Envelope body, a seat-memory
 body, a lane title, source text, or other agent-authored free text. The full bodies remain explicit,

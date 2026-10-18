@@ -1,10 +1,15 @@
-import type { WakeContextContext, WakeContextFetch, WakeContextOpenItem } from '@musterd/protocol';
+import type {
+  MemoryWriter,
+  WakeContextContext,
+  WakeContextFetch,
+  WakeContextOpenItem,
+} from '@musterd/protocol';
 import { CLAIM_CHECKS_MAX, WAKE_CONTEXT_BUDGET as B } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { checkClaims } from './claimCheck.js';
 import { getLane } from './lanes.js';
 import { getMemberById } from './members.js';
-import { getMemory } from './memory.js';
+import { getMemory, memoryProvenance } from './memory.js';
 import type { MemberRow, MessageRow } from './rows.js';
 
 /**
@@ -61,6 +66,7 @@ export async function deriveContext(
   team: { id: string; slug: string },
   recipient: MemberRow,
   target: DeriveTarget,
+  reader: MemoryWriter | null = null,
 ): Promise<DerivedContext> {
   const fetch: WakeContextFetch[] = [];
   const bytes = { memory: 0, thread: 0, lane: 0, open: 0 };
@@ -81,7 +87,12 @@ export async function deriveContext(
   if (memory) toCheck.push({ source: 'memory', text: `${memory.headline}\n${memory.body}` });
   if (memory) {
     const cut = truncateBytes(memory.body, B.memory);
-    context.memory = { body: cut.text, truncated: cut.truncated };
+    context.memory = {
+      body: cut.text,
+      truncated: cut.truncated,
+      // ADR 654: who saved it, read against the woken session's place.
+      provenance: memoryProvenance(recipient.kind, memory.writer, reader),
+    };
     if (cut.truncated) fetch.push('seat_memory');
     bytes.memory = bytesOf(context.memory);
   }

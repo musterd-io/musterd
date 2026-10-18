@@ -224,7 +224,11 @@ withDrivers('residency', (o, kind) => {
         ['nick', 'first'],
         ['nick', 'do the thing'],
       ]);
-      expect(packet.context?.memory).toEqual({ body: 'carrying lane X', truncated: false });
+      expect(packet.context?.memory).toEqual({
+        body: 'carrying lane X',
+        truncated: false,
+        provenance: expect.objectContaining({ writer: null, suspect: false }), // ADR 654
+      });
       expect(packet.budget?.used_bytes).toBeGreaterThan(0);
       expect(packet.fetch).toEqual([]); // everything fit
       expect(WakeContextPacketSchema.parse(packet)).toEqual(packet);

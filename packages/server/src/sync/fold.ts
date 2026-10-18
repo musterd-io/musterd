@@ -17,6 +17,7 @@ import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
 import { getMemberByName } from '../store/members.js';
+import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import {
   applyFoldedEnrollment,
@@ -607,16 +608,19 @@ async function projectContinuityEvent(
       if (cleared?.t != null && cleared.t >= savedAt) return 'applied';
     }
     await db.run(
-      `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at, writer)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
-         headline = excluded.headline, body = excluded.body, saved_at = excluded.saved_at`,
+         headline = excluded.headline, body = excluded.body, saved_at = excluded.saved_at,
+         writer = excluded.writer`,
       [
         seat.id,
         seat.team_id,
         typeof detail['headline'] === 'string' ? detail['headline'] : '',
         typeof detail['body'] === 'string' ? detail['body'] : '',
         savedAt,
+        // ADR 654: the origin's writer stamp travels with the note; an older origin sends none.
+        ((w) => (w ? JSON.stringify(w) : null))(parseWriter(detail['writer'])),
       ],
     );
     return 'applied';

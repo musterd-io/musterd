@@ -323,6 +323,23 @@ describe('empty states name the next action', () => {
     expect(await text(h)).toContain('team_memory_save');
   });
 
+  it('team_memory_read says who saved the note, and warns first when it reads as suspect (ADR 654)', async () => {
+    const line =
+      "your note was last saved from dolly on mac-1 by codex, not this seat's folder (lazara).";
+    const client = {
+      ...emptyClient,
+      readMemory: async () => ({
+        headline: 'h',
+        body: 'the body',
+        saved_at: Date.now(),
+        provenance: { writer: { workspace: 'dolly' }, suspect: true, line },
+      }),
+    };
+    const out = await text(captureAll(registerMemory, client)['team_memory_read']!);
+    expect(out).toContain(`⚠ ${line}`);
+    expect(out.indexOf(line)).toBeLessThan(out.indexOf('the body'));
+  });
+
   it('team_leave when not joined points at team_join', async () => {
     const h = captureAll(registerLeave, { joined: false }, config)['team_leave']!;
     expect(await text(h)).toContain('team_join');

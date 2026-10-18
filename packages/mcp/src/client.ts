@@ -42,6 +42,7 @@ import {
   type ClaimCheck,
   type IdleWakeReport,
   type Hearing,
+  type MemoryProvenance,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
@@ -1251,6 +1252,8 @@ export class MusterdClient {
     saved_at: number;
     /** ADR 522: absent from an older daemon. */
     checks?: ClaimCheck[];
+    /** ADR 654: absent from an older daemon. */
+    provenance?: MemoryProvenance;
   }> {
     return this.request('GET', `/teams/${this.config.team}/memory`);
   }

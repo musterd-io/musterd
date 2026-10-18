@@ -9,6 +9,8 @@ import {
   MEMORY_BODY_MAX_BYTES,
   MEMORY_HEADLINE_MAX_CHARS,
   memoryEnvelope,
+  memoryProvenance,
+  parseWriter,
   saveMemory,
 } from './memory.js';
 import { createTeam } from './teams.js';
@@ -114,5 +116,54 @@ withDrivers('memory', (o) => {
         saveMemory(db, memberId, { headline: 'h', body: '€'.repeat(2731) }),
       ).rejects.toThrow(/8192/);
     });
+  });
+});
+
+describe('memoryProvenance (ADR 654)', () => {
+  const here = { surface: 'claude-code', workspace: 'lazara@feat/x', node: 'N1', machine: 'mac-1' };
+
+  it('a save before the stamp reads as not recorded, never as suspect', () => {
+    expect(memoryProvenance('agent', null, here)).toEqual({
+      writer: null,
+      suspect: false,
+      line: 'who saved this note was not recorded (saved before ADR 654)',
+    });
+  });
+
+  it('the same folder on the same machine is a plain fact, whatever the branch or surface', () => {
+    const p = memoryProvenance('agent', { ...here, workspace: 'lazara', surface: 'cli' }, here);
+    expect(p.suspect).toBe(false);
+    expect(p.line).toBe('last saved from lazara on mac-1 by cli');
+  });
+
+  it("an agent seat's note saved from another folder or machine is suspect, naming both places", () => {
+    const folder = memoryProvenance('agent', { ...here, workspace: 'dolly@main' }, here);
+    expect(folder.suspect).toBe(true);
+    expect(folder.line).toMatch(
+      /^your note was last saved from dolly on mac-1 by claude-code, not this seat's folder \(lazara\)/,
+    );
+    const machine = memoryProvenance('agent', { ...here, node: 'N2', machine: 'mac-2' }, here);
+    expect(machine.suspect).toBe(true);
+    expect(machine.line).toMatch(/not this machine \(mac-1\)/);
+  });
+
+  it("a human seat's note and an unknown reader get the fact and no verdict", () => {
+    const elsewhere = { ...here, node: 'N2', machine: 'mac-2', workspace: 'nick' };
+    expect(memoryProvenance('human', elsewhere, here).suspect).toBe(false);
+    expect(memoryProvenance('agent', elsewhere, null).suspect).toBe(false);
+  });
+
+  it('a missing workspace on either side compares the machine only', () => {
+    const { workspace: _w, ...noFolder } = here;
+    expect(memoryProvenance('agent', noFolder, here).suspect).toBe(false);
+    expect(memoryProvenance('agent', { ...noFolder, node: 'N2' }, here).suspect).toBe(true);
+  });
+
+  it('parseWriter keeps a well-formed stamp and drops anything else', () => {
+    expect(parseWriter(JSON.stringify(here))).toEqual(here);
+    expect(parseWriter(here)).toEqual(here);
+    expect(parseWriter('{not json')).toBeNull();
+    expect(parseWriter({ surface: 'x', extra: 1 })).toBeNull();
+    expect(parseWriter(undefined)).toBeNull();
   });
 });

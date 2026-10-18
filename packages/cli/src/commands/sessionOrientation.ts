@@ -14,7 +14,11 @@
 export type SessionOrientationInput = {
   seat: string;
   team: string;
-  memory?: { headline: string; saved_at: number; size_bytes: number } | undefined;
+  /** `suspect` (ADR 654): last saved from another folder or machine. A flag, never the place's
+   *  name — the folder and machine labels are client-reported free text (the ADR 088 bar). */
+  memory?:
+    | { headline: string; saved_at: number; size_bytes: number; suspect?: boolean }
+    | undefined;
   waiting: Array<{ act: string; from: string; id: string }>;
   incidents: Array<{ id: string }>;
   owed: Array<{ laneId: string; waitedMs: number }>;
@@ -74,6 +78,11 @@ export function composeSessionOrientation(
     lines.push(
       `memory (saved ${ago(now - d.memory.saved_at)} ago, ${String(d.memory.size_bytes)} bytes): ${fencedHeadline(d.memory.headline)}`,
     );
+    if (d.memory.suspect === true)
+      lines.push(
+        'memory is suspect: last saved from another folder or machine than this seat — a session ' +
+          "that wasn't yours may have written it (team_memory_read says where)",
+      );
   }
   if (d.waiting.length > 0) {
     const detail = waiting

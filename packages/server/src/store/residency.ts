@@ -3,6 +3,7 @@ import type {
   WakeabilityFacts,
   Envelope,
   LoopEdge,
+  MemoryWriter,
   Policy,
   Residency,
   ResidencyPolicy,
@@ -285,6 +286,8 @@ export async function buildWakeContext(
   team: { id: string; slug: string },
   recipient: MemberRow,
   request: WakeContextRequest,
+  /** ADR 654: where the woken session is, so the note's writer can be read against it. */
+  reader: MemoryWriter | null = null,
 ): Promise<WakeContextPacket> {
   if (request.act_id !== undefined) {
     const row = await db.get<MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?', [
@@ -313,10 +316,13 @@ export async function buildWakeContext(
     );
     const memory = await memoryEnvelope(db, recipient.id);
     const kind = meta.lane_review ? 'review' : meta.lane_handoff ? 'handoff' : 'reply';
-    const derived = await deriveContext(db, team, recipient, {
-      threadId,
-      ...(lane ? { laneId: lane.id } : {}),
-    });
+    const derived = await deriveContext(
+      db,
+      team,
+      recipient,
+      { threadId, ...(lane ? { laneId: lane.id } : {}) },
+      reader,
+    );
     return {
       version: 2,
       wake: { kind, act_id: row.id },
@@ -353,7 +359,7 @@ export async function buildWakeContext(
   if (!lane || lane.owner_seat !== recipient.name)
     throw new MusterdError('forbidden', 'forbidden wake context target');
   const memory = await memoryEnvelope(db, recipient.id);
-  const derived = await deriveContext(db, team, recipient, { laneId: lane.id });
+  const derived = await deriveContext(db, team, recipient, { laneId: lane.id }, reader);
   return {
     version: 2,
     wake: { kind: 'work_order', lane_id: lane.id },

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MemoryEnvelopeSchema } from './claim-handshake.js';
+import { MemoryEnvelopeSchema, MemoryProvenanceSchema } from './claim-handshake.js';
 import { CLAIM_CHECK_SOURCES, ClaimCheckSchema } from './claimCheck.js';
 import { WAKEABILITIES } from './model.js';
 import { type WorkingHours, isWithinWorkingHours } from './working-hours.wire.js';
@@ -434,7 +434,16 @@ export const WakeContextContextSchema = z
       })
       .strict()
       .optional(),
-    memory: z.object({ body: z.string(), truncated: z.boolean() }).strict().optional(),
+    /** `provenance` (ADR 654): who saved the note, and whether it reads as suspect. Optional: an
+     *  older daemon omits it. */
+    memory: z
+      .object({
+        body: z.string(),
+        truncated: z.boolean(),
+        provenance: MemoryProvenanceSchema.optional(),
+      })
+      .strict()
+      .optional(),
     /**
      * ADR 522: the seat's memory and any handoff in the thread, checked against the Team now —
      * an ended lane, a hold's real state, a Team rule no hold backs. Read from the WHOLE bodies,

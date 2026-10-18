@@ -146,5 +146,8 @@
 // Epoch 34 — ADR 561: lanes carry `source_ref` (open, update, `GET /lanes?source_ref=`), one open
 // lane per ref per team. A daemon behind this epoch drops the field on open and update, so a client
 // that needs the match (`musterd import` re-sync) checks the epoch first.
-export const FEATURE_EPOCH = 34 as const;
+// Epoch 35 — ADR 654: a seat's note says who saved it. `provenance` rides `GET /memory` (and its
+// envelope read) and the wake packet's `context.memory`. The wake packet schema is strict, so an
+// adapter behind this epoch refuses a new daemon's packet that carries a note until it is rebuilt.
+export const FEATURE_EPOCH = 35 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

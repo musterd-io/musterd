@@ -112,6 +112,11 @@ describe('memory command (ADR 093)', () => {
       body: 'b1',
       saved_at: expect.any(Number),
       checks: [],
+      // ADR 654: who saved it. A human seat's note gets the fact, never a verdict.
+      provenance: expect.objectContaining({
+        suspect: false,
+        line: expect.stringMatching(/^last saved from /),
+      }),
     });
   });
 

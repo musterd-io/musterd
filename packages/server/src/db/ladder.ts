@@ -603,6 +603,19 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       `);
     },
   },
+  {
+    // v107 — ADR 654 (lane 01M561Y8QF): who saved a seat's note — `writer`, a JSON stamp
+    // `{surface?, workspace?, node?, machine?}` of the saving session, nullable, no backfill: a note
+    // saved before this reads as "not recorded", never as suspect.
+    version: 107,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('seat_memory')").pluck().all();
+      if (!cols.includes('writer')) db.exec('ALTER TABLE seat_memory ADD COLUMN writer TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE seat_memory ADD COLUMN IF NOT EXISTS writer TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

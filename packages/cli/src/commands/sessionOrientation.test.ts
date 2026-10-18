@@ -28,6 +28,15 @@ describe('composeSessionOrientation', () => {
     expect(out).toContain('orient now: run the musterd-orient skill');
   });
 
+  it('a suspect note gets one fixed line, never the place it was saved from (ADR 654)', () => {
+    const quiet = composeSessionOrientation(base)!;
+    expect(quiet).not.toContain('memory is suspect');
+    const out = composeSessionOrientation({ ...base, memory: { ...base.memory!, suspect: true } })!;
+    expect(out).toContain(
+      "memory is suspect: last saved from another folder or machine than this seat — a session that wasn't yours may have written it (team_memory_read says where)",
+    );
+  });
+
   it('is composable-only: hostile free text in a headline cannot smuggle newlines or close the fence', () => {
     const hostile: SessionOrientationInput = {
       ...base,

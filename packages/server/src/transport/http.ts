@@ -345,7 +345,9 @@ import {
   getMemory,
   mayReadNote,
   memoryEnvelope,
+  memoryProvenance,
   redactedNoteDetail,
+  requestPlace,
 } from '../store/memory.js';
 import {
   countInbox,
@@ -998,6 +1000,13 @@ function actingSeat(req: IncomingMessage): string | undefined {
 }
 
 /** The short-lived agent HTTP lease (ADR 337). It has no authority without the matching credential. */
+/** The `x-musterd-surface` header when it names a real Surface (the one-shot's own label). */
+function surfaceHeader(req: IncomingMessage): string | undefined {
+  const hint = req.headers['x-musterd-surface'];
+  const parsed = SurfaceSchema.safeParse(Array.isArray(hint) ? hint[0] : hint);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function agentSessionLease(req: IncomingMessage): string | undefined {
   const h = req.headers['x-musterd-session-lease'];
   const v = Array.isArray(h) ? h[0] : h;
@@ -7133,7 +7142,15 @@ export async function handleHttp(
         // member already named on a wake lease for the act is told apart: gone is `not_found`
         // (reason `missing`), unreadable is `forbidden` with a distinct message.
         try {
-          const context = await buildWakeContext(ctx.db, team, member, target);
+          // ADR 654: the woken session's own place, so the packet can say whose note it carries.
+          const reader = await requestPlace(
+            ctx.db,
+            team.id,
+            member.id,
+            agentSessionLease(req),
+            surfaceHeader(req),
+          );
+          const context = await buildWakeContext(ctx.db, team, member, target, reader);
           const response = WakeContextResponseSchema.parse({ context });
           await appendAudit(ctx.db, team.id, {
             actor: member.name,
@@ -9398,8 +9415,11 @@ export async function handleHttp(
           );
         const mem = await getMemory(ctx.db, owner.id);
         if (!mem) throw new MusterdError('not_found', `no memory saved for ${owner.name}`);
-        const checks = await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
-        return sendJson(res, 200, { member: owner.name, ...mem, checks });
+        const { writer, ...note } = mem;
+        const checks = await checkClaims(ctx.db, team, `${note.headline}\n${note.body}`);
+        // ADR 654: who saved it, as a fact — the reader is not the seat, so there is no verdict.
+        const provenance = memoryProvenance(owner.kind, writer, null);
+        return sendJson(res, 200, { member: owner.name, ...note, checks, provenance });
       }
 
       // Seat memory (ADR 093): a seat's private continuity blob. All three are seat-authenticated and
@@ -9417,13 +9437,21 @@ export async function handleHttp(
         assertSeatCanRead(member); // inert seats (disabled/banned/archived) can't touch memory either
         const parsed = parseOrBadRequest(MemorySaveBody, await readJson(req));
         const input = { headline: parsed.headline, body: parsed.body ?? '' };
+        // ADR 654: stamp who saved it — the Presence behind the session lease, and this node.
+        const writer = await requestPlace(
+          ctx.db,
+          team.id,
+          member.id,
+          agentSessionLease(req),
+          surfaceHeader(req),
+        );
         // ADR 366: the save and its stamped `continuity.memory_saved` row are one transaction, and
         // the row CARRIES THE NOTE. This is where ADR 093's hard rule 5 ("sizes only, never the
         // content: the audit log is not a copy of the note") used to be enforced, and it is
         // overturned here by decision (nick, 2026-09-03): a headline is not continuity, and a human
         // on a second machine (ADR 358) needs the note itself. Daemon-side only, never git; bounded
         // by the 8 KiB cap `saveMemory` still enforces (it throws bad_request naming the limit).
-        await applyMemorySave(ctx.db, team.id, member, input);
+        await applyMemorySave(ctx.db, team.id, member, input, writer);
         return sendNoContent(res);
       }
 
@@ -9439,18 +9467,32 @@ export async function handleHttp(
           agentSessionLease(req),
         );
         assertSeatCanRead(member);
+        // ADR 654: who saved the note, read against where this request comes from.
+        const reader = await requestPlace(
+          ctx.db,
+          team.id,
+          member.id,
+          agentSessionLease(req),
+          surfaceHeader(req),
+        );
         if (url.searchParams.get('envelope') === '1') {
           const env = await memoryEnvelope(ctx.db, member.id);
           if (!env) throw new MusterdError('not_found', 'no memory saved for this seat');
-          return sendJson(res, 200, env);
+          const writer = (await getMemory(ctx.db, member.id))?.writer ?? null;
+          return sendJson(res, 200, {
+            ...env,
+            provenance: memoryProvenance(member.kind, writer, reader),
+          });
         }
-        const mem = await getMemory(ctx.db, member.id);
-        if (!mem) throw new MusterdError('not_found', 'no memory saved for this seat');
+        const found = await getMemory(ctx.db, member.id);
+        if (!found) throw new MusterdError('not_found', 'no memory saved for this seat');
+        const { writer, ...mem } = found;
+        const provenance = memoryProvenance(member.kind, writer, reader);
         // ADR 522: the note's claims, checked against the Team as it is now — a lane it carries that
         // has since closed, a freeze no hold backs. Computed here so every reader gets the same
         // verdict without one of its own tool calls.
         const checks = await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
-        return sendJson(res, 200, { ...mem, checks });
+        return sendJson(res, 200, { ...mem, checks, provenance });
       }
 
       if (method === 'DELETE' && rest === '/memory') {
