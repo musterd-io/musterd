@@ -1,9 +1,12 @@
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { type ClaimCheck, claimCheckLines, type MemoryEnvelope } from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
+import { type Config, seatsHoldingSession } from '../config.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { success, sym, termWidth } from '../render/ui.js';
-import { resolve } from './helpers.js';
+import { findWorkspaceDir, type IdentitySource, resolve } from './helpers.js';
 
 /**
  * `musterd memory [show [--seat <agent>]]|save|clear` — the seat's cross-session continuity blob (ADR 093):
@@ -13,11 +16,13 @@ import { resolve } from './helpers.js';
  * named). Read rule (ADR 651): an agent seat's note is readable by the seat and any human
  * (`show --seat <agent>`); a human seat's note by that human only; no agent reads another's. The
  * delivery seam is envelope-on-occupy / body-on-demand: `musterd claim` / `musterd status` print
- * {@link renderMemoryLine}; `musterd memory` is the explicit body read.
+ * {@link renderMemoryLine}; `musterd memory` is the explicit body read. Every subcommand first
+ * refuses a seat mismatch ({@link refuseSeatMismatch}, ADR 653).
  */
 export async function memoryCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0] ?? 'show';
-  const { team, http } = resolve(parsed.flags);
+  const { config, team, identity, identitySource, http } = resolve(parsed.flags);
+  refuseSeatMismatch({ config, team, folderSeat: identity.name, identitySource });
 
   if (sub === 'save') {
     const headline = flagStr(parsed.flags, 'headline');
@@ -90,6 +95,64 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
     process.stdout.write(theme.warn(line) + '\n');
   if (mem.body) process.stdout.write(mem.body + (mem.body.endsWith('\n') ? '' : '\n'));
   return 0;
+}
+
+/** The running harness session's own id, where the harness hands one to the processes it spawns.
+ *  Claude Code sets `CLAUDE_CODE_SESSION_ID`; no other harness we ship exposes one (ADR 653). */
+export function runningSessionId(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const id = env['CLAUDE_CODE_SESSION_ID']?.trim();
+  return id ? id : undefined;
+}
+
+/**
+ * ADR 653: the CLI acts as the seat whose folder it runs in, so a session launched as seat A that
+ * runs `musterd memory` inside seat B's folder would read and write B's note. When this session's
+ * own seat is known — a bound folder on this machine whose captured slot names the running session
+ * — and it is not the folder's seat, refuse, naming both. An env identity (`MUSTERD_CLAIM`) was
+ * chosen on purpose and is never second-guessed; an unknown session (no id, or no slot names it)
+ * passes, because nothing says it belongs anywhere else.
+ */
+export function refuseSeatMismatch(input: {
+  config: Config;
+  team: string;
+  folderSeat: string;
+  identitySource: IdentitySource;
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+}): void {
+  if (input.identitySource !== 'binding') return;
+  const sessionId = runningSessionId(input.env);
+  if (!sessionId) return;
+  const holders = seatsHoldingSession(
+    sessionId,
+    input.team,
+    candidateFolders(input.config, input.cwd),
+  );
+  const other = holders.find((h) => h.seat !== input.folderSeat);
+  if (!other) return;
+  throw new CliError(
+    `this session is seat ${other.seat}, but this folder is seat ${input.folderSeat}'s — ` +
+      `\`musterd memory\` here would read and write ${input.folderSeat}'s note, so it is refused ` +
+      `(ADR 653). Run it from your own folder: ${other.dir}`,
+    5,
+  );
+}
+
+/** Where a seat's folder may be: every folder the global registry records (ADR 020), plus the
+ *  siblings of this folder's Workspace (a roster home keeps seats side by side). */
+function candidateFolders(config: Config, cwd?: string): string[] {
+  const dirs = Object.keys(config.bindings);
+  const here = findWorkspaceDir(cwd);
+  if (here) {
+    const parent = dirname(here);
+    try {
+      for (const e of readdirSync(parent, { withFileTypes: true }))
+        if (e.isDirectory()) dirs.push(join(parent, e.name));
+    } catch {
+      // an unreadable parent only narrows the search
+    }
+  }
+  return dirs;
 }
 
 /**

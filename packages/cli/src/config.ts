@@ -612,6 +612,30 @@ export function readBindingAt(dir: string): Binding | null {
 }
 
 /**
+ * The seats on `team` whose captured session slot names `sessionId` (ADR 653) — which seat a running
+ * harness session belongs to, read from the bindings on this machine. Each candidate folder is read
+ * at its exact path; a slot that has ended holds nothing. One session normally holds one seat; more
+ * than one is returned as-is so the caller can refuse an ambiguous answer rather than pick.
+ */
+export function seatsHoldingSession(
+  sessionId: string,
+  team: string,
+  folders: Iterable<string>,
+): { seat: string; dir: string }[] {
+  const out: { seat: string; dir: string }[] = [];
+  const seen = new Set<string>();
+  for (const dir of folders) {
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    const b = readBindingAt(dir);
+    if (!b || b.team !== team || b.claim?.mode !== 'seat') continue;
+    if (b.session?.id !== sessionId || b.session.ended_at !== undefined) continue;
+    out.push({ seat: b.claim.name, dir });
+  }
+  return out;
+}
+
+/**
  * The paths inside a folder that must never reach a commit: the binding (a live `mscr_`/`mskey_`) and
  * the pending-claim directory beside it.
  */
