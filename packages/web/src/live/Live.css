@@ -5001,10 +5001,20 @@
   color: var(--lc-dim);
 }
 .lc-meter__spark {
-  width: 56px;
-  height: 12px;
-  fill: var(--lc-accent);
-  opacity: 0.85;
+  width: 64px;
+  height: 14px;
+  overflow: visible;
+}
+.lc-meter__area {
+  fill: color-mix(in srgb, var(--lc-accent) 32%, transparent);
+}
+.lc-meter__line {
+  fill: none;
+  stroke: var(--lc-accent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 @media (max-width: 1080px) {
   .lc-meter__span {
@@ -7663,10 +7673,12 @@
   display: flex;
 }
 .lc-holds__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font: inherit;
-  font-size: 0.72em;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.78em;
+  font-weight: 600;
   color: var(--lc-warn-ink);
   background: none;
   border: 1px solid color-mix(in srgb, var(--lc-warn) 42%, transparent);
@@ -7674,6 +7686,14 @@
   padding: 0.1em 0.7em;
   min-height: 24px;
   cursor: pointer;
+}
+.lc-holds__icon {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
 .lc-holds__btn:hover:not(:disabled) {
   border-color: currentColor;
@@ -8264,27 +8284,61 @@
 }
 
 /* Watch link grade (ADR 616): the share choice beside the link button, and the viewer's label. */
-.lc-share {
+.lc-share-wrap {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
+}
+/* The grades, as a small paper card under the button. */
+.lc-share {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--lc-z-overlay);
+  display: grid;
+  gap: 2px;
+  width: 260px;
+  padding: var(--lc-2);
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: var(--lc-r-md);
+  box-shadow: 0 2px 0 var(--lc-border);
+  animation: lc-share-in var(--lc-dur-2) var(--lc-ease-out);
+}
+@keyframes lc-share-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .lc-share__btn {
-  font: inherit;
-  font-size: 0.72em;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--lc-text);
-  background: none;
-  border: 1px solid var(--lc-border);
-  border-radius: 999px;
-  padding: 0.1em 0.7em;
-  min-height: 24px;
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+  padding: var(--lc-3) var(--lc-4);
+  border-radius: var(--lc-r-sm);
   cursor: pointer;
 }
-.lc-share__btn:hover,
+.lc-share__btn:hover {
+  background: var(--lc-surface);
+}
 .lc-share__btn:focus-visible {
-  border-color: currentColor;
+  outline: 2px solid var(--lc-focus);
+  outline-offset: -2px;
+}
+.lc-share__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.lc-share__says {
+  font-size: 11.5px;
+  color: var(--lc-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-share {
+    animation: none;
+  }
 }
 .lc-watchgrade {
   flex: none;

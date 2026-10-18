@@ -863,9 +863,19 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   const [copied, setCopied] = useState<WatchGrade | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
+  const wrap = useRef<HTMLSpanElement>(null);
   // Opening the choice moves focus to it, so a keyboard user lands on the options they just asked for.
   useEffect(() => {
     if (choosing) firstChoice.current?.focus();
+  }, [choosing]);
+  // A press anywhere else puts the card away, as any dropdown does.
+  useEffect(() => {
+    if (!choosing) return;
+    const away = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setChoosing(false);
+    };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
   }, [choosing]);
   const copy = async (grade: WatchGrade) => {
     setChoosing(false);
@@ -901,10 +911,12 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   // status sits beside the button, not in it, so the button's name stays the same while it speaks;
   // it is always mounted because a live region that appears with its text is often not announced.
   return (
-    <>
+    <span className="lc-share-wrap" ref={wrap}>
       <span className="lc-sr" role="status">
         {failed ?? (copied ? `${WATCH_GRADES.find((g) => g.grade === copied)!.label} copied` : '')}
       </span>
+      {/* The two grades drop down under the button as a small card, each saying what it shows —
+          not two more pills spilled into the topbar. */}
       {choosing && (
         <span className="lc-share" role="group" aria-label="Share a read-only watch link">
           {WATCH_GRADES.map(({ grade, label, says }, i) => (
@@ -913,13 +925,13 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
               ref={i === 0 ? firstChoice : undefined}
               type="button"
               className="lc-share__btn"
-              title={says}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setChoosing(false);
               }}
               onClick={() => void copy(grade)}
             >
-              {label}
+              <span className="lc-share__label">Copy the {label}</span>
+              <span className="lc-share__says">{says}</span>
             </button>
           ))}
         </span>
@@ -942,7 +954,7 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
           </svg>
         )}
       </button>
-    </>
+    </span>
   );
 }
 
