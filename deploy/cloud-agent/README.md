@@ -30,6 +30,20 @@ machine; ADR 648 is what lets this host finish provisioning without it.
 
 ## Create **$**
 
+One script runs the whole of this section and First boot — no secret is copy-pasted:
+
+```sh
+deploy/cloud-agent/create.sh <seat> --repo <workspace-git-url>
+# options: --org --region --team --server --host-label --key-env --skip-sponsor --dry-run
+```
+
+It creates the agent and queues its provision, mints the host key (captured into a shell
+variable, handed straight to `fly secrets set`, never printed), reads the model key and GH
+token without echo, then creates the app and volume and deploys. Run it from a folder bound
+to the team as the sponsor. `--dry-run` prints every step with secrets redacted.
+
+By hand, the same steps are:
+
 On the sponsor's machine, bound to the team:
 
 ```sh
