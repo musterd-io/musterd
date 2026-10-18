@@ -162,6 +162,8 @@ Measured on #1541 (lane `01M2RKFG60`). A 414 reap-reroute superseded wanderer's 
 
 Seen on two nights. 2026-10-07 (insight `01M4D34ZD1`): two hops in under 2 minutes, and the submitter posted "awaiting nick" 19 minutes after the ask had reached miley. 2026-10-12, lane `01M4Q7PMAP`: resubmitted 12:47:57, re-routed gptbot → ghost at 12:52:44, ghost → lazara at 12:52:51, lazara → wallow at 14:37:13, resolved by wallow at 14:39:13. Total 1h51m; the seat that decided took 2 minutes, and 1h44m was one holder sitting on the ask before passing it on.
 
+The wait can also sit after the hop. On lane `01M50M90ST` (unpriced floor increment 2), big-body re-routed the first ask to fifty 7m4s after submit, and fifty closed it 1h29m5s later: 1h36m9s submit-to-close, against 100–209s for the same submitter's un-hopped asks that day (2026-10-17; falsify: `resolve`-then-`ask` pairs on lane `01M50M90ST` at timestamps other than `1792267319307`/`1792267319309`, or a close other than `1792272664542`; alfie insight from the 2026-10-17 dream). <!-- claim: defect -->
+
 Each hop delivers a `resolve` to the old holder and a new `ask` to the next. Nothing goes to the submitter. Before reporting "awaiting <name>", read the newest `[lane] acceptance requested` act on the lane and use its addressee, not the name you passed to `lane_submit`. The relieved-acceptor side of the same gap is the section above.
 
 ## A re-reviewed lane can still close inside sixty seconds (2026-10-13; falsify: a lane whose second acceptance ask takes more than 60s despite every earlier decline being answered on the named references; read the acts-table timestamps) <!-- claim: other -->
@@ -178,7 +180,14 @@ Against this page's own evidence those fast rows are the tails of a wide distrib
 The section above is about lanes that were declined and re-submitted. This one is the first ask on a lane, answered by the seat it was sent to, with no earlier decline and no re-route. Seen on two nights, all on non-risky lanes:
 
 - 2026-10-14, lane `01M4YE8CGD` (ADR 597, #2599): ask `1792023967784`, resolved by alfie `1792024008984` — **41.2s** (lazara insight `01M4Z1HC7A`). The same night, lane `01M4W5VFAB` took **17m 3s** on the same shape, so the fast case is not every case.
-- 2026-10-15, lane `01M4S0WNZ5` (spend controls increment 1): ask `01M50DYTWC` at `1792089746316`, resolved by miley `1792089826230` — **79.9s**. Lane `01M4SB4BZB` (spend controls increment 2): ask `01M50J4TGE` at `1792094136846`, resolved by fifty `1792094236266` — **99.4s**.
+- 2026-10-15, lane `01M4S0WNZ5` (spend controls increment 1): ask `01M50DYTWC` at `1792089746316`, resolved by miley `1792089826230` — **79.9s**. Lane `01M4SB4BZB` (spend controls increment 2): ask `01M50J4TGE` at `1792094136846`, resolved by fifty `1792094236266` — **99.4s**. The same night, alfie's lanes `01M51E51TZ` (console sign-in copy, #2723) and `01M3W3EQ67` (cloud per-team rate limits) closed in **75.3s** (ryder) and **124.0s** (miley) (alfie insight `01M51K3T5D`).
+
+Two more nights put the "inside two minutes" case in proportion. Of seven first-submit asks on alfie's lanes, none re-routed or declined, three closed under two minutes and four did not (2026-10-17; falsify: on the seven lanes below, a `resolve`-then-`ask` pair before the close, or ask-to-resolve gaps other than those listed, in the acts table): <!-- claim: other -->
+
+- 2026-10-16, ryder on all three spend-approval lanes: `01M4SB4CJP` (spec) **161.7s**, `01M531GZGV` (`spend_approval_usd` key) **247.6s**, `01M531H8WG` (gateway hold) **456.8s**.
+- 2026-10-17: `01M538R4YQ` (empty Approve) **209.0s** and `01M50M8W8F` (`unpriced_wake_cap` key) **100.7s**, both ghost; `01M55XT74C` (experiments copy) **107.4s** and `01M55YZ4VF` (console sign-in strings) **102.1s**, both ryder.
+
+The copy lanes sat near 100s and the code-bearing spend lanes ran 2.7–7.6 minutes. "Can close inside two minutes" is true; quoting it as the typical first-submit time is not.
 
 Same reading as the re-reviewed case: these are the fast tail, seen when the acceptor is live and the lane needs no human stage. A risky lane does not close this way however quick the peer is — its peer accept is only stage one (see the 2026-10-15 izzo insight `01M50BPJVJ`, and ADR 603).
 
