@@ -1,7 +1,7 @@
 import type { Ctx } from '../context.js';
 import { log } from '../log.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
-import { sweepReapedAcceptances } from '../protocol/laneReroute.js';
+import { sweepLapsedPulledAcceptances, sweepReapedAcceptances } from '../protocol/laneReroute.js';
 import { announceIncidentRouted, retryPendingHumanAsks } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { pruneRings } from '../store/doorbell.js';
@@ -238,6 +238,19 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
       if (joinerTeams.has(team.id)) continue;
       for (const lane of await sweepReapedAcceptances(ctx, team, presenceWatchedSince, now)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
+      }
+    }
+
+    // ADR 645 §4.4: a pulled lane's acceptance ask that lapsed its window in silence moves once to
+    // a live-presence seat of another family. Hub only; never a wake; never closes a lane.
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
+      try {
+        for (const lane of await sweepLapsedPulledAcceptances(ctx, team, now)) {
+          log.info({ msg: 'reroute_lapsed_pulled_acceptance', team: team.slug, lane });
+        }
+      } catch (err) {
+        log.warn({ msg: 'lapsed_pull_sweep_failed', team: team.slug, err: String(err) });
       }
     }
 

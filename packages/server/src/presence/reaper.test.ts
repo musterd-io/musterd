@@ -719,6 +719,154 @@ withDrivers('reaper', (o) => {
       }
     });
   });
+
+  describe('startReaper — a pulled lane whose acceptance window lapsed in silence (ADR 645 §4.4)', async () => {
+    let db: Database;
+    let hub: Hub;
+    let config: ResolvedConfig;
+    let ctx: Ctx;
+    let stop: (() => void) | undefined;
+    const WINDOW_MS = 20 * 60_000;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      db = await openStore();
+      hub = new Hub();
+      config = resolveConfig();
+      ctx = { db: db, hub, config, rosterRoots: [] };
+    });
+
+    afterEach(() => {
+      stop?.();
+      stop = undefined;
+      vi.useRealTimers();
+      db.close();
+    });
+
+    /** Kim (claude) pulled the lane; delta (claude, live, silent) holds the ask; Lin (gpt) is live. */
+    async function pulledLaneAwaitingSilentHolder({ pulled = true, sweep = false } = {}) {
+      const team = await createTeam(db, { slug: 'dawn' });
+      if (sweep) await setPolicy(db, team.id, { loops: { sweep: true } });
+      const worker = (await addMember(db, team, { name: 'Kim', kind: 'agent' })).row;
+      const holder = (await addMember(db, team, { name: 'delta', kind: 'agent' })).row;
+      const live = (await addMember(db, team, { name: 'Lin', kind: 'agent' })).row;
+      const kim = await attach(db, worker.id, 'cli', 'conn-kim', { model: 'claude-opus-5' });
+      const del = await attach(db, holder.id, 'cli', 'conn-delta', { model: 'claude-sonnet-5' });
+      const lin = await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
+      const lane = await openLane(db, team.id, team.slug, 'Kim', {
+        title: 'pulled lane',
+        claim: true,
+      });
+      if (pulled) {
+        await appendAudit(db, team.id, {
+          actor: 'Kim',
+          action: 'lane.pulled',
+          target: lane.id,
+          result: 'allow',
+          detail: { lane: lane.id, seat: 'Kim', host: 'mac', announcement: 'a', ask: 'pull-ask' },
+        });
+      }
+      await updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
+      await appendAudit(db, team.id, {
+        actor: 'Kim',
+        action: 'lane.ready_for_review',
+        target: lane.id,
+        result: 'allow',
+        detail: { lane: lane.id, owner: 'Kim', reviewer: 'delta', ask_timeout_ms: WINDOW_MS },
+      });
+      await insertMessage(
+        db,
+        team.id,
+        worker.id,
+        holder.id,
+        makeEnvelope({
+          id: 'ask-silent',
+          team: team.slug,
+          from: 'Kim',
+          to: { kind: 'member', name: 'delta' },
+          act: 'ask',
+          body: '[lane] acceptance requested',
+          meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
+          ts: Date.now(),
+        }),
+      );
+      return { team, lane, presences: [kim.id, del.id, lin.id] };
+    }
+
+    const heartbeat = async (presenceId: string) =>
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [Date.now(), presenceId]);
+
+    async function liveFor(ms: number, presenceIds: string[]) {
+      for (let t = 0; t < ms; t += config.reaperIntervalMs) {
+        for (const id of presenceIds) await heartbeat(id);
+        await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      }
+    }
+
+    const rerouted = async (teamId: string) =>
+      (await listAudit(db, teamId)).filter((r) => r.action === 'lane.review_rerouted');
+
+    it('moves the ask once, after the window, to a live seat of another family', async () => {
+      const { team, lane, presences } = await pulledLaneAwaitingSilentHolder();
+      stop = startReaper(ctx);
+      await liveFor(WINDOW_MS - config.reaperIntervalMs * 2, presences);
+      expect(await rerouted(team.id)).toHaveLength(0);
+
+      await liveFor(config.reaperIntervalMs * 4, presences);
+      const rows = await rerouted(team.id);
+      expect(rows).toHaveLength(1);
+      const detail = JSON.parse(rows[0]!.detail as string);
+      expect(detail).toMatchObject({
+        lane: lane.id,
+        from_reviewer: 'delta',
+        superseded_ask: 'ask-silent',
+        reviewer: 'Lin',
+        route: 'lapsed',
+        review_grade: 'cross_family',
+      });
+      expect((await getLane(db, team.id, lane.id, team.slug))!.state).toBe('awaiting_acceptance');
+
+      // One move per submission, however long the second window runs in silence.
+      await liveFor(WINDOW_MS * 2, presences);
+      expect(await rerouted(team.id)).toHaveLength(1);
+    });
+
+    it('leaves a lane that was not pulled alone', async () => {
+      const { team, presences } = await pulledLaneAwaitingSilentHolder({ pulled: false });
+      stop = startReaper(ctx);
+      await liveFor(WINDOW_MS + config.reaperIntervalMs * 4, presences);
+      expect(await rerouted(team.id)).toHaveLength(0);
+    });
+
+    it('defers to the ADR 229 sweep when the team armed one', async () => {
+      const { team, presences } = await pulledLaneAwaitingSilentHolder({ sweep: true });
+      stop = startReaper(ctx);
+      await liveFor(WINDOW_MS + config.reaperIntervalMs * 4, presences);
+      expect(await rerouted(team.id)).toHaveLength(0);
+    });
+
+    it('is a hub decision: an enrolled joiner never moves it', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-reaper-lapsed-'));
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+      try {
+        const { team, presences } = await pulledLaneAwaitingSilentHolder();
+        const { id: nodeId } = await localNodeForTeam(db, team.id);
+        saveNodeEnrollment({
+          team: team.slug,
+          hub_url: 'http://hub.invalid:4849',
+          node_id: nodeId,
+          credential: 'msnode_test',
+          enrolled_at: 1,
+        });
+        stop = startReaper(ctx);
+        await liveFor(WINDOW_MS + config.reaperIntervalMs * 4, presences);
+        expect(await rerouted(team.id)).toHaveLength(0);
+      } finally {
+        delete process.env['MUSTERD_NODE_STATE'];
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
   /**
    * What only the hub decides. Which seat is gone, which incident nobody claimed, which acceptance
    * was abandoned are judgements about the WHOLE team, and an enrolled joiner holds a replica of it:

@@ -174,6 +174,18 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   an `ask` carrying `meta.pull` (`isPullAnnouncement`), urgent or not, so neither the idle-wake
   route nor the immediate wake predicate sees it; the ledger never did. The announcement still sits
   in the opener's inbox. `pull.test.ts` asserts all three.
+- _(2026-10-17, lane `01M55PDNY5APFDP27CR9MET224`, increment 5.)_ The acceptance backstop on the
+  window is built, pulled lanes only (spec §4.4): `sweepLapsedPulledAcceptances` runs on the hub's
+  reaper tick beside the reaped sweep, and on a team with no `loops.sweep` it moves a pulled
+  lane's still-open acceptance ask ONCE, when the promised window (ADR 506) has lapsed, to a seat
+  with live presence by the ordinary picker (the ladder prefers another family from the worker),
+  as a `lane.review_rerouted` row with `route: 'lapsed'`; never a wake, never a close, and a
+  human-stage ask is waited on. One move per submission; the guarded `UPDATE lanes … WHERE
+  updated_at = ?` is the Cloud single-runner fence. The submit reply on such a lane carries
+  `review.backstop {armed: false, move_at, self_close_after}` and the MCP hint says "a backstop
+  will be tried at <time>; self-close only after <time + window>", so the worker and the sweep do
+  not race. The second window is stated, not enforced: a self-close before it is still recorded
+  unconfirmed, as before. Not built here: the dogfood readout (increment 6).
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 

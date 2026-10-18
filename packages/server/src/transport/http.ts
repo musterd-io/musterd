@@ -206,6 +206,7 @@ import {
   noGoalNotice,
   priorOwnerNotice,
   rerouteDepartedAcceptances,
+  wasPulled,
 } from '../protocol/laneReroute.js';
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
@@ -8559,12 +8560,6 @@ export async function handleHttp(
         // Deliberately NOT added to the no-acceptor sanction: nobody was asked there, so no verdict
         // is coming and waiting out a 24h grace would be pure delay. That branch sets no `reviewer`,
         // which is exactly the discriminator.
-        const backstop =
-          review &&
-          typeof review['reviewer'] === 'string' &&
-          (await getPolicy(ctx.db, team.id)).loops?.sweep
-            ? { backstop: { armed: true as const, grace_ms: SWEEP_GRACE_MS } }
-            : {};
         // ADR 506: the wait the acceptor was promised, read back from the routing row rather than
         // re-derived — a standing or re-routed report must state the promise that was recorded.
         const promised =
@@ -8572,6 +8567,33 @@ export async function handleHttp(
             ? (await reviewRouting(ctx.db, team.id, lane.id)).promised_ms
             : undefined;
         const waitMs = promised !== undefined ? { wait_ms: promised } : {};
+        const sweepArmed =
+          review && typeof review['reviewer'] === 'string'
+            ? Boolean((await getPolicy(ctx.db, team.id)).loops?.sweep)
+            : null;
+        // ADR 645 §4.4: on a PULLED lane with no sweep armed, the hub moves a silent ask once at
+        // the window's end to a live-presence seat of another family, and the worker waits one more
+        // window before a self-close is sanctioned. Both times are stated here so the worker and
+        // the sweep never race (`armed: false` — nothing closes the lane).
+        const windowMove =
+          sweepArmed === false && (await wasPulled(ctx.db, team.id, lane.id))
+            ? await (async () => {
+                const window = promised ?? (await acceptanceTimeoutMs(ctx.db, team.id, 'standard'));
+                const at = Date.now();
+                return {
+                  armed: false as const,
+                  grace_ms: 2 * window,
+                  move_at: at + window,
+                  self_close_after: at + 2 * window,
+                };
+              })()
+            : null;
+        const backstop =
+          sweepArmed === true
+            ? { backstop: { armed: true as const, grace_ms: SWEEP_GRACE_MS } }
+            : windowMove
+              ? { backstop: windowMove }
+              : {};
         return sendJson(res, 200, {
           lane,
           warnings,
