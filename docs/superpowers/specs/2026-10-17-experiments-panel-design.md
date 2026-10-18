@@ -76,6 +76,27 @@ EXPERIMENTS   1 overdue · 1 due                  ← head: .lc-team__title + .l
   stanley · "14-day readout: ranked list beat baseline on 9 of 12"   ← verdict note, 1 line
 ```
 
+_(Amended 2026-10-17, slippy, lane `01M56P1JDY`: nick found the rows below "extremely bare", so the
+section was redrawn to the anatomy here.)_
+
+- **Calendar leaf.** Each read's date is a leaf torn off a desk calendar, tacked up the way the
+  corkboard's read tags are: a weekday band, the day in the casual cut, the month. The band is
+  accent ink for overdue, ink for due, muted for waiting and pale for read. Leaves sit a hair off
+  true. An overdue leaf has slipped on its tack, as its tag has on the corkboard. A verdict is
+  stamped across the leaf's corner.
+- **Fortnight strip.** Under the head, a strip runs from today to fourteen days out, with weekends
+  shaded and overdue reads in a gutter before today. Each read is a paper token at its day carrying
+  its §4 mark. It is decorative: every fact on it is in the rows. On `/live`, hovering a token lights
+  its row and hovering a row lights its token.
+- **Row.** The leaf, then a short title (the lane title without its repeated date or its
+  instructions; the full title stays in the label), then the owner's avatar in their roster colour,
+  their seat and the status phrase.
+- **Motion, all of it once.** Rows rise in, staggered, on mount; the strip's tokens drift in toward
+  today; a leaf turns over when its read changes status; a hovered leaf straightens and lifts.
+  Nothing moves under reduced motion.
+
+The rest of this section describes the first cut:
+
 - **Head.** Title in `.lc-team__title` style. The count names only the urgent statuses ("1 overdue ·
   1 due") and falls back to "3 reads" when nothing is urgent.
 - **Line 1.** The mark and the status phrase on the left. On the right is the date in the mono cut,

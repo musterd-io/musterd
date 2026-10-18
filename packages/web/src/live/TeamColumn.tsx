@@ -92,6 +92,13 @@ export function TeamColumn({
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
   const reads = loading ? [] : experimentEntries(board, now);
+  // A read's owner wears the same avatar their card does, offline seats included.
+  const avatarOf = (seat: string) => {
+    const m = roster.find((r) => r.name === seat);
+    if (!m) return null;
+    const kind = m.kind === 'human' ? 'human' : 'agent';
+    return { background: memberAvatar(m.name, kind, m.hue), initial: initial(m.name) };
+  };
   if (collapsed) {
     const overdue = reads.filter((e) => e.status === 'overdue').length;
     return (
@@ -184,7 +191,7 @@ export function TeamColumn({
       </ul>
       {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
       {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
-      {board && !loading && <Experiments entries={reads} still={still} stale={stale} />}
+      {board && !loading && <Experiments entries={reads} now={now} avatarOf={avatarOf} still={still} stale={stale} />}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
   );

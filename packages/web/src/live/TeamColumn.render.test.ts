@@ -194,8 +194,24 @@ describe('TeamColumn', () => {
       );
       expect(order.every((i) => i > 0)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
-      expect(html).toContain('Mon 11-02');
-      expect(html).toContain('&quot;lost to baseline&quot;');
+      // The date rides a calendar leaf: weekday band, day, month.
+      expect(html).toMatch(/lc-xp__leaf-wd">MON<.*lc-xp__leaf-day">2<.*lc-xp__leaf-mo">Nov</);
+      expect(html).toContain('“lost to baseline”');
+      // A verdict is stamped on its leaf.
+      expect(html).toContain('lc-xp__stamp lc-xp__stamp--missed');
+    });
+
+    it('wears the owner\'s avatar in their roster colour, and none for a seat not on the roster', () => {
+      const withOwner = render({ roster: [m('stanley')], board: four, now: NOW });
+      expect(withOwner).toMatch(/lc-xp__avatar" style="background:hsl\([^"]+\)" aria-hidden="true">S</);
+      expect(render({ roster: [m('ryder')], board: four, now: NOW })).not.toContain('lc-xp__avatar');
+    });
+
+    it('lays the reads on a fortnight strip: overdue in the gutter, a far read at the edge', () => {
+      const html = render({ roster: [m('ryder')], board: four, now: NOW });
+      expect(html).toContain('lc-xp__pin lc-xp__pin--overdue" style="--d:-1');
+      expect(html).toContain('lc-xp__pin lc-xp__pin--due" style="--d:0');
+      expect(html).toContain('lc-xp__pin lc-xp__pin--waiting" style="--d:15');
     });
 
     it('/live rows link to the lane on the board', () => {

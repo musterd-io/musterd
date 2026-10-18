@@ -12,6 +12,9 @@ export type ReadStatus = 'overdue' | 'due' | 'waiting' | 'read';
 export interface ExperimentEntry {
   id: string;
   title: string;
+  /** The title as the row shows it: the lane's name without the date it repeats or the
+   *  instructions after its colon. The full title stays in `label`. */
+  short: string;
   owner: string | null;
   status: ReadStatus;
   /** `YYYY-MM-DD`, as the lane carries it. */
@@ -20,6 +23,10 @@ export interface ExperimentEntry {
   phrase: string;
   /** Line 1, right: weekday plus `MM-DD` (`Mon 10-20`). */
   date: string;
+  /** The calendar leaf: `TUE` over `20`, and `Oct` for a screen that wants the month. */
+  leaf: { weekday: string; day: number; month: string };
+  /** Days from today to `readsOn`: negative is past, 0 is today. Places the read on the fortnight strip. */
+  offset: number;
   /** The verdict note, on a `read` entry only. */
   note: string | null;
   /** The whole row in words, for a screen reader. */
@@ -54,16 +61,41 @@ const dayNumber = (ymd: string) => {
 };
 
 /** `Mon 10-20` and, for the row label, `Monday, October 20`. A calendar day has no zone: read in UTC. */
-function dayLabels(ymd: string): { short: string; long: string } {
+function dayLabels(ymd: string): { short: string; long: string; weekday: string; month: string } {
   const at = dayNumber(ymd) * DAY_MS;
   const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(at);
+  const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(at);
   const long = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     timeZone: 'UTC',
   }).format(at);
-  return { short: `${weekday} ${ymd.slice(5)}`, long };
+  return { short: `${weekday} ${ymd.slice(5)}`, long, weekday, month };
+}
+
+/** How many days ahead the fortnight strip reaches; a read further out sits at its far edge. */
+export const STRIP_DAYS = 14;
+
+/** The strip's days, today first: whether each falls on a weekend, which the strip shades. */
+export function stripDays(now: number): { offset: number; weekend: boolean }[] {
+  // Day 0 of the epoch was a Thursday, so (day + 4) % 7 is the weekday with Sunday as 0.
+  const today = dayNumber(teamToday(now));
+  return Array.from({ length: STRIP_DAYS + 1 }, (_, offset) => {
+    const wd = (today + offset + 4) % 7;
+    return { offset, weekend: wd === 0 || wd === 6 };
+  });
+}
+
+/**
+ * A lane title as a read's name. Lane titles carry their instructions ("ADR 536 14-day read
+ * (2026-10-20): run `pnpm next:readout`…"), which a glance across a room cannot use. Keep what comes
+ * before the first colon or dash, and drop a date in brackets, since the leaf already shows it. A
+ * cut that leaves almost nothing keeps the whole title instead.
+ */
+export function shortTitle(title: string): string {
+  const head = title.split(/:\s| — | – /)[0]!.replace(/\s*\(\d{4}-\d{2}-\d{2}\)\s*$/, '').trim();
+  return head.length >= 8 ? head : title;
 }
 
 function phraseFor(status: ReadStatus, days: number, lane: Lane): string {
@@ -104,11 +136,14 @@ export function experimentEntries(board: LaneBoard | null, now: number): Experim
       entry: {
         id: lane.id,
         title: lane.title,
+        short: shortTitle(lane.title),
         owner,
         status,
         readsOn: lane.reads_on,
         phrase,
         date: date.short,
+        leaf: { weekday: date.weekday.toUpperCase(), day: Number(lane.reads_on.slice(8)), month: date.month },
+        offset: -days,
         note,
         label: `${lane.title}, ${phrase}, reads ${date.long}${owner ? `, owner ${owner}` : ''}`,
       },
