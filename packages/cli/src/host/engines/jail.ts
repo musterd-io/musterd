@@ -43,7 +43,10 @@ export function jailPath(
   opts: { write?: boolean } = {},
   deps: JailFsDeps = {},
 ): JailVerdict {
-  const realpath = deps.realpath ?? realpathSync;
+  // `.native` canonicalises case on APFS/NTFS (`.HIDDEN/x` is `.hidden/x`); the JS realpath keeps the
+  // caller's spelling. A path that does not exist yet keeps its spelling either way, so the
+  // protected names below are also compared case-insensitively.
+  const realpath = deps.realpath ?? realpathSync.native;
   const exists = deps.exists ?? existsSync;
   let root: string;
   try {
@@ -75,11 +78,11 @@ export function jailPath(
     return { ok: false, reason: `${requested} resolves outside the workspace` };
   }
   const relative = resolved === root ? '' : resolved.slice(root.length + 1);
-  const head = relative.split(sep)[0] ?? '';
+  const head = (relative.split(sep)[0] ?? '').toLowerCase();
   if (opts.write && WRITE_DENIED.includes(head)) {
     return { ok: false, reason: `${head}/ is not writable by a working tool` };
   }
-  if (relative === join('.musterd', 'binding.json')) {
+  if (relative.toLowerCase() === join('.musterd', 'binding.json')) {
     return { ok: false, reason: '.musterd/binding.json holds the seat’s credentials' };
   }
   return { ok: true, path: resolved };
@@ -172,14 +175,18 @@ const MUSTERD = new Set([
 ]);
 /** Flags that make a reader execute or write (wallow, fifty, miley on #2554). */
 const FLAG_DENIED: Record<string, RegExp> = {
-  rg: /^--pre|^--hostname-bin|^-f$|^--file(=|$)/,
-  grep: /^-f$|^--file(=|$)/,
+  // rg skips hidden directories unless told not to: `--hidden`, `-.`, `-u`/`-uu` and `--no-ignore*`
+  // walk into .musterd and .git.
+  rg: /^--pre|^--hostname-bin|^-f$|^--file(=|$)|^--hidden$|^--unrestricted$|^--no-ignore|^-[a-zA-Z]*[.u]/,
+  // grep -r/-R/-d recurse into whatever directory it is given, .musterd included.
+  grep: /^-f$|^--file(=|$)|^--recursive$|^--dereference-recursive$|^--directories(=|$)|^-[a-zA-Z]*[rRd]/,
   sort: /^-o$|^--output(=|$)|^-o./,
   find: /^-f(print|print0|printf|ls)$|^-(exec|execdir|ok|okdir|delete)$|^-D$/,
-  diff: /^--output(=|$)|^--to-file(=|$)|^--from-file(=|$)/,
+  diff: /^--output(=|$)|^--to-file(=|$)|^--from-file(=|$)|^--recursive$|^-[a-zA-Z]*r/,
   tail: /^--pid(=|$)/,
   stat: /^--printf(=|$)|^-c$/,
-  gh: /^--admin$|^--hostname(=|$)/,
+  // -R/--repo retargets a pull request command at any repository the token can reach.
+  gh: /^--admin$|^--hostname(=|$)|^-R|^--repo(=|$)/,
   pnpm: /^-C$|^--dir(=|$)|^--config(=|$)|^--store-dir(=|$)|^--workspace-root$/,
 };
 /** git options that execute, reconfigure, or retarget the repository — anywhere on the line. */
@@ -319,12 +326,21 @@ function denyPnpm(words: string[], policy: BashPolicy): string | undefined {
  * judged too.
  */
 function denyArgument(token: string, policy: BashPolicy): string | undefined {
-  const value =
+  let value =
     token.startsWith('--') && token.includes('=') ? token.slice(token.indexOf('=') + 1) : token;
-  if (value.startsWith('-') && value === token) return undefined;
+  if (value.startsWith('-') && value === token) {
+    // A single-dash token can carry its value joined on (`-F.musterd/binding.json`, `-rf../x`): the
+    // letters are the flags, whatever follows them is a path to judge. `--long` flags and bare
+    // `-x` / `-n10` / `-5` have no remainder and stay text.
+    if (token.startsWith('--')) return undefined;
+    const rest = token.replace(/^-[a-zA-Z0-9]*/, '').replace(/^=/, '');
+    if (rest === '' || !(/[/~]|\.\./.test(rest) || rest.startsWith('.'))) return undefined;
+    value = rest;
+  }
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return undefined; // a URL, not a path
   if (value.startsWith('/') || value.startsWith('~')) return `${token} leaves the workspace`;
-  const segments = value.split(/[\\/]/);
+  // Case-insensitive: on APFS `.MUSTERD/binding.json` is the same file as `.musterd/binding.json`.
+  const segments = value.toLowerCase().split(/[\\/]/);
   if (segments.includes('..')) return `${token} leaves the workspace`;
   if (segments.includes('.musterd')) return `${token} is under .musterd/ (the seat's own state)`;
   if (segments.includes('.git') && segments.length > 1) return `${token} is under .git/`;
@@ -346,7 +362,9 @@ function denySegment(words: string[], policy: BashPolicy): string | undefined {
     if (bad) return `${head} ${bad} executes or writes; not allowed`;
   }
   if (head === 'cd') {
-    if (words[1] === undefined) return 'cd needs a path inside the workspace';
+    // `cd --`, `cd -P`, `cd -L` and `cd -` take no path and land in HOME or OLDPWD.
+    const targets = words.slice(1).filter((w) => !w.startsWith('-'));
+    if (targets.length !== 1) return 'cd needs exactly one path inside the workspace';
     return undefined;
   }
   if (head === 'sed') {

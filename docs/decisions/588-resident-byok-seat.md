@@ -151,6 +151,20 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   writes and then runs under `pnpm test` — that executes as the host user by the nature of a worker
   seat, and the durable boundary is an OS sandbox around the bash child.
   Follows-up: lane `01M4VYT6JWHYG6E8ZZ9J55AS9X` (security goal) — sandbox-exec / bubblewrap around the child, workspace-only, gateway-only network.
+- _2026-10-17 (jail lane `01M4YYMD0X3XJJEYERHFATQ7PR`, the bypasses #2602 left)._ Five ways past the
+  argument check that survive globs and braces, found on the Air (APFS) on 2026-10-14 and closed
+  in `engines/jail.ts`: (1) `.musterd` and `.git` compare case-insensitively in `jailPath` and in
+  the argument check, and `jailPath` resolves with `realpathSync.native`, because on a
+  case-insensitive filesystem `.MUSTERD/binding.json` is the credential file and the JS
+  `realpathSync` keeps the caller's spelling; (2) the recursive readers are denied rather than
+  bounded — `grep -r/-R/-d` and `--recursive`/`--directories`, `rg --hidden`/`-.`/`-u*`/`--no-ignore*`,
+  `diff -r` — since each walks into `.musterd/` and `.git/` from `.`; `rg` without those flags
+  skips hidden directories and is the recursive search; (3) a single-dash token's remainder after
+  its flag letters (`-F.musterd/binding.json`, `-aF../x`, `-F=…`) is judged as a path when it
+  contains `/` or `~` or `..` or starts with `.`; (4) `cd` takes exactly one non-flag argument, so
+  `cd --`, `-P`, `-L` and `-` cannot land in HOME or OLDPWD; (5) `gh -R`/`--repo` is denied. Not
+  done here, by the lane's own split: the seat credential outside the jailed tree belongs to the
+  OS-sandbox lane `01M4VYT6JWHYG6E8ZZ9J55AS9X`.
 - _2026-10-13 (same lane, the live proof)._ Seat `resident` enrolled on this team (Haiku 5.5,
   harness `musterd`, key from launchd's environment via `--key-env`), woken three times by directed
   acts. Wake 1: occupied in 2.1 s, 24 turns, $0.0276, the gateway metered 24 calls at $0.0276; the
