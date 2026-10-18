@@ -362,9 +362,22 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   const hookSeam = HOOK_SEAMS[hookFlag];
   // The discovery verb this harness makes the model call before a named tool is callable, if any.
   const discoveryVerb = DEFERRED_TOOL_HARNESSES[hookFlag];
+  // ADR 626: a lane picked for this seat in its own terminal waits as a workspace marker. It rides
+  // the first line this probe emits — one hook run, one injection, so it is folded in, never a
+  // second JSON object — or goes out on its own at the end.
+  let pickLine: string | null = null;
   const emit = (line: string): void => {
-    const out = hookSeam ? hookSeam(line) : line;
+    const text = pickLine ? `${pickLine}\n${line}` : line;
+    pickLine = null;
+    const out = hookSeam ? hookSeam(text) : text;
     if (out !== null) process.stdout.write(out + '\n');
+  };
+  const flushPick = (): void => {
+    if (pickLine === null) return;
+    const line = pickLine;
+    pickLine = null;
+    emit(line);
+    raised = true;
   };
   // The tool boundary is also the first moment the running model is *knowable* — the transcript now
   // carries an assistant turn, which it did not when SessionStart observed (ADR 158 follow-up). Runs
@@ -423,6 +436,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
     await tap();
     return 0;
   }
+  pickLine = takePendingPick(findWorkspaceDir() ?? process.cwd());
   let seat: string | undefined;
   try {
     // The interrupt probe is hook-installed and rides every tool call — it takes the default (no
@@ -431,6 +445,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       timeoutMs: HOOK_HTTP_TIMEOUT_MS,
     });
     if (!explicit || !identity) {
+      flushPick();
       await tap();
       return 0;
     }
@@ -495,6 +510,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       deaf = true;
     }
   }
+  flushPick();
   await tap();
   return 0;
 }

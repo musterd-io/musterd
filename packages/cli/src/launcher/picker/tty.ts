@@ -6,7 +6,7 @@ import {
   type PickerOutcome,
   type PickerState,
 } from './state.js';
-import { renderPicker } from './view.js';
+import { renderPicker, type PickerSize } from './view.js';
 
 export interface PickerIO {
   input: NodeJS.ReadStream;
@@ -29,6 +29,19 @@ const CLEAR_LINE = '\u001b[K';
 const CLEAR_DOWN = '\u001b[J';
 
 /**
+ * A full-screen terminal screen (ADR 491's shell, made generic for the lane picker, ADR 624): a
+ * pure reducer over keys and the caller's own events, a pure render, and an outcome. Only the
+ * shell touches the terminal.
+ */
+export interface Screen<S, E, O> {
+  initial: S;
+  reduce: (s: S, e: E | { type: 'key'; key: Key }) => { state: S; outcome: O | null };
+  render: (s: S, size: PickerSize) => string[];
+  /** The outcome a signal ends the screen with (128 + the signal number). */
+  quit: (code: number) => O;
+}
+
+/**
  * Run the picker until it produces an outcome (ADR 491). The only code that touches the terminal:
  * alternate screen, raw mode, keypresses, repaint, and — on every exit path, a throw and process
  * exit included — restore. `start` receives a dispatcher for asynchronous answers (the catalog
@@ -41,8 +54,23 @@ export function runPicker(
   reducer: typeof reduce = reduce,
   signals: SignalSeam = process,
 ): Promise<PickerOutcome> {
+  return runScreen<PickerState, PickerEvent, PickerOutcome>(
+    { initial, reduce: reducer, render: renderPicker, quit: (code) => ({ kind: 'quit', code }) },
+    io,
+    start,
+    signals,
+  );
+}
+
+/** The shell itself: any {@link Screen}, run until it produces an outcome. */
+export function runScreen<S, E, O>(
+  screen: Screen<S, E, O>,
+  io: PickerIO,
+  start: (dispatch: (e: E | { type: 'key'; key: Key }) => void) => void,
+  signals: SignalSeam = process,
+): Promise<O> {
   return new Promise((resolve, reject) => {
-    let state = initial;
+    let state = screen.initial;
     let finished = false;
     const restore = (): void => {
       try {
@@ -54,7 +82,7 @@ export function runPicker(
       io.output.write(SHOW + ALT_OFF);
     };
     const paint = (): void => {
-      const lines = renderPicker(state, {
+      const lines = screen.render(state, {
         cols: io.output.columns || 80,
         rows: io.output.rows || 24,
       });
@@ -70,10 +98,10 @@ export function runPicker(
       restore();
       settle();
     };
-    const dispatch = (event: PickerEvent): void => {
+    const dispatch = (event: E | { type: 'key'; key: Key }): void => {
       if (finished) return;
       try {
-        const next = reducer(state, event);
+        const next = screen.reduce(state, event);
         state = next.state;
         const outcome = next.outcome;
         if (outcome) finish(() => resolve(outcome));
@@ -88,9 +116,7 @@ export function runPicker(
         ['SIGTERM', 15],
         ['SIGHUP', 1],
       ] as const
-    ).map(
-      ([sig, n]) => [sig, () => finish(() => resolve({ kind: 'quit', code: 128 + n }))] as const,
-    );
+    ).map(([sig, n]) => [sig, () => finish(() => resolve(screen.quit(128 + n)))] as const);
     const onKey = (str: string | undefined, key: Key | undefined): void =>
       dispatch({ type: 'key', key: key ?? { sequence: str } });
 
