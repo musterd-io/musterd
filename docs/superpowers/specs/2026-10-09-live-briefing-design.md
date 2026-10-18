@@ -158,6 +158,16 @@ huddle row in the first capture). Top to bottom:
 4. Nothing else. The headline sentence, the In review section and the Blocked section are gone from the
    card: the counts live in the goal rows, and blocked lanes show inside their goal.
 
+_(Amended 2026-10-18, slippy, lane `01M57WJJ2R`, goal `live-delight`: nick, "everything on /live and
+/broadcast needs to look and feel extremely magical, fun, warm … delightful". Inside the colour rule
+above: the card is a **sheet tacked to the room** by two mustard tacks at its top corners (flat light
+and shade, no gradient; hidden full screen). The header row's "Now" becomes a **greeting** — "Good
+morning, ada" in Recursive Casual, the day under it in mono; an observer gets no name; "Now" until
+mounted, since the hour is the reader's. Each opening, the rows **rise in** one after another and each
+goal's **bar fills** to where it stands, once, none of it under reduced motion or `?still`. And the
+card **steps aside**: a press anywhere on the room's floor — not the asks strip, not the card — docks
+it into its chip, as a sheet is put down to look up.)_
+
 **Faces.** A new `MemberFace` (inline SVG, about 26 px) draws a member's head and shoulders from
 `office-scene/appearance.ts` (`appearanceOf`, already pure and stable per name): skin, hair and hat as
 on the floor, and shoulders in the member's identity colour, which is the colour of their top in the

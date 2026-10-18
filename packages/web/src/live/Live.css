@@ -7665,15 +7665,42 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--lc-4);
-  padding: var(--lc-3) var(--lc-6) var(--lc-2);
+  padding: var(--lc-5) var(--lc-6) var(--lc-2);
+}
+/* The sheet is tacked to the room at its two top corners, the corkboard's and the leaves' tacks. */
+.now-ov__tack {
+  position: absolute;
+  top: 8px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  /* A domed head in flat light and shade (no gradient: the card's colour rule), and its drop. */
+  background: var(--lc-accent);
+  box-shadow: inset 1.5px 1.5px 0 rgba(255, 255, 255, 0.4), inset -1.5px -1.5px 0 rgba(0, 0, 0, 0.25),
+    1px 2px 0 rgba(60, 40, 20, 0.18);
+}
+.now-ov__tack--l {
+  left: 14px;
+}
+.now-ov__tack--r {
+  right: 14px;
+}
+.now-ov--full .now-ov__tack {
+  display: none;
+}
+.now-ov__hi > p {
+  margin: 0;
+}
+.now-ov__hello {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--lc-text);
 }
 .now-ov__k {
   margin: 0;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .now-ov__ctl {
@@ -7885,8 +7912,10 @@
   box-sizing: border-box;
   display: grid;
   width: 100%;
-  padding: 10px var(--lc-3);
+  padding: 8px var(--lc-3);
+  border-radius: var(--lc-r-sm);
   cursor: pointer;
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
 }
 .nowc-goal:hover,
 .nowc-shiprow:hover {
@@ -7938,15 +7967,52 @@
 }
 .nowc-bar {
   grid-area: bar;
-  height: 6px;
-  border-radius: 3px;
+  height: 8px;
+  border-radius: 4px;
   background: var(--lc-surface-3);
   overflow: hidden;
 }
 .nowc-bar > i {
   display: block;
   height: 100%;
+  border-radius: 4px;
   background: var(--lc-accent);
+  transform-origin: 0 50%;
+}
+/* Opening the sheet, its rows rise in one after another and each goal's bar fills to where it is:
+   once per opening, none of it when docked, still under reduced motion and on the stream. */
+.now-ov:not(.now-ov--docked):not(.is-still) .nowc-list > li {
+  animation: now-row-in var(--lc-dur-4) var(--lc-ease-out) both;
+  animation-delay: 120ms;
+}
+.now-ov:not(.now-ov--docked):not(.is-still) .nowc-list > li:nth-child(2) {
+  animation-delay: 170ms;
+}
+.now-ov:not(.now-ov--docked):not(.is-still) .nowc-list > li:nth-child(3) {
+  animation-delay: 220ms;
+}
+.now-ov:not(.now-ov--docked):not(.is-still) .nowc-list > li:nth-child(n + 4) {
+  animation-delay: 270ms;
+}
+@keyframes now-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.now-ov:not(.now-ov--docked):not(.is-still) .nowc-bar > i {
+  animation: now-bar-fill var(--lc-dur-5) var(--lc-ease-out) var(--lc-dur-3) both;
+}
+@keyframes now-bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .now-ov .nowc-list > li,
+  .now-ov .nowc-bar > i {
+    animation: none !important;
+  }
 }
 .nowc-goal__of {
   grid-area: of;
