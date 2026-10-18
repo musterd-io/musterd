@@ -72,7 +72,7 @@ node scripts/cloud/deploy.mjs                              # from a clean checko
 CLOUD_DEPLOY_STRATEGY=rolling node scripts/cloud/deploy.mjs   # with N ≥ 2 machines (ADR 608)
 ```
 
-One image per commit (`registry.fly.io/musterd-cloud:git-<sha>`):
+One image per commit (`registry.fly.io/musterd-cloud:git-<sha>`, the full 40-character sha, which the team server's `/health` reports as its `build`):
 
 1. It is built on Fly's remote builder. The script then waits for the tag to appear in the registry: the push lands after `fly deploy --build-only --push` returns.
 2. The migrate app runs `scripts/cloud/migrate.mjs` on that image as a one-shot machine, created through the Machines API because `fly machine run` looks images up inside its own app. The script reads the machine's exit event. Fly leaves out a zero `exit_code`, so a missing code means 0.

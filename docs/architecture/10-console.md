@@ -123,8 +123,10 @@ console's secrets never include a team database URL. The provisioning steps are 
 [cloud-ops](../guides/cloud-ops.md).
 
 The image is built without `.git`, so its `dist/build.json` stamp is `ref: null`. `/health` then
-reports the 12-character sha from the image label deploy.mjs pushed (`git-<sha>`), which Fly
-exposes to the machine as `FLY_IMAGE_REF`.
+reports the sha from the image label deploy.mjs pushed (`git-<sha>`, the full 40 characters since
+lane `01M52ZRYG0`; older images carry 12), which Fly exposes to the machine as `FLY_IMAGE_REF`. The
+Cloud team server reads the same label (`buildFromFlyImage` in the CLI's `serve.ts`), but only a
+full sha: a 12-character build would never match an adapter's 40-character stamp.
 
 ## File tree `packages/console/src/`
 

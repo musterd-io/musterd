@@ -154,7 +154,7 @@ function machine(id) {
 
 try {
   const { secretsFrom, cmd } = parseArgs(process.argv.slice(2));
-  const sha = run('git', ['rev-parse', '--short=12', 'HEAD'], { capture: true }).trim();
+  const sha = run('git', ['rev-parse', 'HEAD'], { capture: true }).trim();
   if (run('git', ['status', '--porcelain'], { capture: true }).trim() !== '') {
     throw new Error('the working tree is dirty; the bench runs a commit, not uncommitted edits');
   }
