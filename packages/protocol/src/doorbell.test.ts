@@ -284,6 +284,11 @@ describe('idleRingable (ADR 558 §1)', () => {
     expect(idleRingable(e, 'izzo')).toBe(true);
     expect(idleRingable(e, 'stanley')).toBe(false);
   });
+  it('a pull announcement ask never rings (ADR 645 §4.3), even flagged urgent', () => {
+    const pull = { announcement: 'a', lane: 'l', seat: 'dolly', host: 'h' };
+    expect(idleRingable(env({ meta: { pull } }), 'izzo')).toBe(false);
+    expect(idleRingable(env({ meta: { pull, urgent: true } }), 'izzo')).toBe(false);
+  });
   it('the seat never rings itself', () => {
     expect(idleRingable(env({ from: 'izzo' }), 'izzo')).toBe(false);
   });

@@ -166,6 +166,14 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
   Policy keys are `pull.*` (`PullPolicySchema`). A grant nobody redeems in 15 minutes is declined
   and the lane offered again. Not built here: the CLI flags for the declaration (the MCP tool and
   the HTTP body carry it), and the acceptance backstop (increment 5).
+- _(2026-10-17, lane `01M55PDKAT7368RQATDG70FSYB`, acceptance follow-up.)_ The acceptor found the
+  one rule increment 4 missed: Decision 4 says the announcement is excluded from wake triggers, and
+  the landed code had no exemption — offline openers were safe only because a non-urgent ask never
+  reaches the paid rail, but a live opener idle at its prompt was rung through the idle seam
+  (`idleRingable` admits any directed `ask`). Fixed in `@musterd/protocol`: `idleRingable` refuses
+  an `ask` carrying `meta.pull` (`isPullAnnouncement`), urgent or not, so neither the idle-wake
+  route nor the immediate wake predicate sees it; the ledger never did. The announcement still sits
+  in the opener's inbox. `pull.test.ts` asserts all three.
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 

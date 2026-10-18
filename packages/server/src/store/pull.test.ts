@@ -7,8 +7,10 @@ import { withDrivers } from '../db/testing.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { decideLanePatch } from '../sync/claim.js';
 import { listAuditByAction } from './audit.js';
+import { openDirectedLedger } from './delivery.js';
 import { getLane, openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
+import { listTeamMessages, pendingInterrupts, rowToEnvelope } from './messages.js';
 import { bindNode, bindSeatToNode } from './nodes.js';
 import {
   PULL_GRANT_TTL_MS,
@@ -220,6 +222,27 @@ withDrivers('pull', (o) => {
       expect(voice.kind).toBe('service');
       expect(ask?.from_member).toBe(voice.id);
       expect((await offersFor(db, team.id)).length).toBe(1);
+    });
+
+    it('the announcement sits in the inbox but raises neither the idle interrupt nor a wake (§4.3)', async () => {
+      const { db, team, ctx, open } = await fixture();
+      await open();
+      const res = await offerPull(ctx, team, HOST, T0);
+      expect(res.offer).not.toBeNull();
+      const nick = (await getMemberByName(db, team.id, 'nick'))!;
+      const voice = hostServiceSeatName(HOST);
+      const rows = await listTeamMessages(db, team.id, { forMemberId: nick.id });
+      const envelopes = rows.map((r) =>
+        rowToEnvelope(r, team.slug, r.from_member === nick.id ? 'nick' : voice, 'nick'),
+      );
+      expect(envelopes.some((e) => e.id === res.offer!.ask)).toBe(true);
+      // The live idle seam (ADR 558) — what the idle-wake route reads.
+      expect(pendingInterrupts(envelopes, 'nick', { directed: true })).toEqual([]);
+      // The paid rail: neither the immediate predicate nor the batched ledger.
+      expect(pendingInterrupts(envelopes, 'nick', {})).toEqual([]);
+      expect((await openDirectedLedger(db, team.id, T0)).map((d) => d.id)).not.toContain(
+        res.offer!.ask,
+      );
     });
 
     it('withholds a dated read until its day, then offers it', async () => {
