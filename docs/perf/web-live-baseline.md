@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-18 — `liveCssGzipBytes` 23,850 → 24,300 B and `totalJsGzipBytes` 326,500 → 327,000 B: the live-delight pass lands together (lane `01M57WJV9F`)
+
+| Budget   | main `a37c1ee0` (local) | This branch (local) | Ceiling                    |
+| -------- | ----------------------- | ------------------- | -------------------------- |
+| total JS | 326,255 B               | 326,554 B           | RAISED 326,500 → 327,000 B |
+| live CSS | 23,948 B                | 24,109 B            | RAISED 23,850 → 24,300 B   |
+
+Five `live-delight` PRs (#2866 compact Experiments, #2867 Now sheet, #2868 asks rail faces and wave, #2870 roster faces and state dot, #2872 walk tags) each fit under the ceiling alone and merged within the hour; together they put main's live CSS at 23,948 B, over its 23,850 B ceiling, so every web PR after them read red. This raise carries main back under and adds this PR's own cost: +161 B CSS for the share card, the activity hill and the pause glyph, +299 B JS for `sparkPath` and the share card's outside-press close. JS is local plus the ~450 B CI gap; CSS is measured plus about 190 B. Lesson for a stack of web PRs from one seat: measure the stack, not each PR.
+
+- Falsify: `pnpm perf:check` in CI on main after this lands reports live CSS at or under 23,850 B or total JS at or under 326,500 B.
+
 ### 2026-10-18 — `liveCssGzipBytes` 23,650 → 23,850 B: the Now briefing as a tacked sheet (lane `01M57WJJ2R`)
 
 | Budget   | main `bb84e5bf` (local, Live.css swapped back) | This branch (local) | Ceiling                  |

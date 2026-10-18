@@ -188,7 +188,8 @@ freshest in-flight lane per member, and the card view-model extends it.
 
 - the team name;
 - a heartbeat: "last act 3s ago", with a dot that pulses on every envelope;
-- an acts-per-hour sparkline over what is loaded;
+- an acts-per-hour sparkline over what is loaded, drawn as a filled hill under a soft mustard line
+  _(amended 2026-10-18, lane `01M57WJV9F`: it was a row of 1px ticks that read as an empty line)_;
 - counts: "6 working · 2 idle · 1 human".
 
 The envelope buffer is capped at 1,000 (#328). When the loaded span is under an hour, the label

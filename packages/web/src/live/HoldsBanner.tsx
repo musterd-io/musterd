@@ -139,6 +139,9 @@ function SetControl({ cfg, onChanged }: { cfg: LiveConfig; onChanged?: (() => vo
           title="Pause something for the Team, by you, until a time — every seat sees it"
           onClick={() => setAsking(true)}
         >
+          <svg className="lc-holds__icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M4 2.5v7M8 2.5v7" />
+          </svg>
           pause…
         </button>
         {error && <span className="lc-holds__err">{error}</span>}

@@ -2,7 +2,7 @@ import type { MemberSummary } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { TopMeter } from './TopMeter';
+import { sparkPath, TopMeter } from './TopMeter';
 
 const roster = [
   { name: 'ann', kind: 'agent', presence: 'online', posture: 'working' },
@@ -19,5 +19,16 @@ describe('TopMeter', () => {
     expect(html).not.toContain('working');
     expect(html).not.toContain('between tasks');
     expect(html).not.toContain('lc-meter__who');
+  });
+});
+
+describe('sparkPath', () => {
+  it('runs through the middle of each bucket and closes to the baseline for the fill', () => {
+    expect(sparkPath([0, 2, 1], 2, false)).toBe('M2 11.5 L6 1.5 L10 6.5');
+    expect(sparkPath([0, 2, 1], 2, true)).toBe('M2 11.5 L6 1.5 L10 6.5 L10 12 L2 12 Z');
+  });
+  it('draws flat ground for one bucket and nothing for none', () => {
+    expect(sparkPath([1], 1, false)).toBe('M0 1.5 L2 1.5');
+    expect(sparkPath([], 1, false)).toBe('');
   });
 });

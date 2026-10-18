@@ -54,16 +54,27 @@ export function TopMeter({
           aria-hidden="true"
           preserveAspectRatio="none"
         >
-          {b.buckets.map((n, i) => {
-            const h = Math.max(1, Math.round((n / peak) * 12));
-            return <rect key={i} x={i * 4} y={12 - h} width={3} height={h} />;
-          })}
+          {/* A hill of the day's acts, not a row of ticks: the filled ground under a soft line,
+              so a busy hour reads as a rise and a quiet one as flat ground. */}
+          <path className="lc-meter__area" d={sparkPath(b.buckets, peak, true)} />
+          <path className="lc-meter__line" d={sparkPath(b.buckets, peak, false)} />
         </svg>
         <span className="lc-meter__span">{refreshing ? 'refreshing…' : b.spanLabel}</span>
       </span>
       )}
     </div>
   );
+}
+
+/** The sparkline's path through each bucket's middle, 4 units a bucket, 12 tall (1 is the floor, so
+ *  an empty hour still draws ground). `area` closes it down to the baseline for the fill. */
+export function sparkPath(buckets: readonly number[], peak: number, area: boolean): string {
+  const pts = buckets.map((n, i) => [i * 4 + 2, 11.5 - (n / peak) * 10] as const);
+  if (pts.length === 0) return '';
+  if (pts.length === 1) pts.unshift([0, pts[0]![1]]);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y.toFixed(1)}`).join(' ');
+  if (!area) return line;
+  return `${line} L${pts[pts.length - 1]![0]} 12 L${pts[0]![0]} 12 Z`;
 }
 
 /** A once-a-second clock, paused while the tab is hidden (a background dashboard costs nothing). */
