@@ -5,6 +5,8 @@ import {
   experimentEntries,
   experimentsCount,
   READ_SHOWN_MS,
+  shortTitle,
+  stripDays,
   teamToday,
 } from './experimentReads';
 
@@ -102,6 +104,9 @@ describe('experimentEntries', () => {
     expect(by.w1!.phrase).toBe('tomorrow');
     expect(by.w16!.phrase).toBe('in 16 days');
     expect(by.w16!.date).toBe('Mon 11-02');
+    expect(by.w16!.leaf).toEqual({ weekday: 'MON', day: 2, month: 'Nov' });
+    expect(by.w16!.offset).toBe(16);
+    expect(by.o2!.offset).toBe(-2);
     expect(by.r!.phrase).toBe('met');
     expect(by.r!.note).toBe('beat it');
     expect(by.d!.note).toBeNull();
@@ -153,5 +158,27 @@ describe('experimentsCount', () => {
   it('falls back to reads when nothing is urgent', () => {
     expect(experimentsCount([e('waiting')])).toBe('1 read');
     expect(experimentsCount([e('waiting'), e('read'), e('read')])).toBe('3 reads');
+  });
+});
+
+describe('shortTitle', () => {
+  it('keeps the name, drops the repeated date and the instructions', () => {
+    expect(shortTitle('ADR 536 14-day read (2026-10-20): run `pnpm next:readout`')).toBe('ADR 536 14-day read');
+    expect(shortTitle('Dogfood the accountability claims: humans receive real handoffs')).toBe(
+      'Dogfood the accountability claims',
+    );
+    expect(shortTitle('Wake rail — binding read')).toBe('Wake rail');
+  });
+  it('keeps the whole title when the cut would leave almost nothing', () => {
+    expect(shortTitle('Inc 2: the pins')).toBe('Inc 2: the pins');
+    expect(shortTitle('a plain title')).toBe('a plain title');
+  });
+});
+
+describe('stripDays', () => {
+  it('runs today through fourteen days out, weekends marked in the team zone', () => {
+    const days = stripDays(NOW); // Sat 2026-10-17
+    expect(days).toHaveLength(15);
+    expect(days.filter((d) => d.weekend).map((d) => d.offset)).toEqual([0, 1, 7, 8, 14]);
   });
 });

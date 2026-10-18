@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-17 — `totalJsGzipBytes` 325,900 → 326,500 B and `liveCssGzipBytes` 22,850 → 23,650 B: the Experiments section made delightful (lane `01M56P1JDY`)
+
+| Budget   | main `20ae0953` (local, built beside it) | This branch (local) | Ceiling                    |
+| -------- | ---------------------------------------- | ------------------- | -------------------------- |
+| total JS | 325,378 B                                | 326,050 B           | RAISED 325,900 → 326,500 B |
+| live CSS | 22,677 B                                 | 23,482 B            | RAISED 22,850 → 23,650 B   |
+
+nick, on the first cut: "they look extremely bare". The rework is +672 B gzip of JS, all in the `TeamColumn` chunk: each read's date on a tear-off calendar leaf, a fortnight strip that places the reads against today, the owner's avatar, short titles, and a shared hover between strip and rows. Live CSS is +805 B: the leaf with its tack and weekday band, the verdict stamp, the strip, and the motion, each of which runs once and is off under reduced motion. The section renders on first paint in the team column, so it cannot be lazy; lazy-loading cannot move total anyway (ADR 183). JS is local 326,050 plus the ~450 B CI gap; CSS is measured plus about 170 B.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 325,900 B and live CSS at or under 22,850 B with this change in.
+
 ### 2026-10-17 — `totalJsGzipBytes` 325,400 → 325,900 B: the corkboard read pins (lane `01M55WK0N2`, ADR 644 increment 3)
 
 | Budget   | main `5895c173` (local, built beside it) | This branch (local) | Ceiling                    |

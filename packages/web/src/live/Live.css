@@ -8135,10 +8135,12 @@
   white-space: nowrap;
 }
 
-/* Experiments (ADR 644, spec 2026-10-17-experiments-panel-design.md): the team's dated reads at the
-   foot of the team column. Rows, not cards — set off by a hairline, the column's own rule. Overdue
-   is the only accent, and it is the ink shade: --lc-accent is 2.66:1 here and fails the 3:1 mark
-   floor. A `missed` verdict gets no red: it is a result, not an error. */
+/* Experiments (ADR 644, spec 2026-10-17-experiments-panel-design.md §4): the team's dated reads at
+   the foot of the team column. Each read is a leaf torn off a desk calendar and tacked up, the same
+   paper and tack as the corkboard's read tags in the room, under a fortnight strip that shows the
+   reads coming toward today. Overdue is the only accent, in its ink shade (--lc-accent is 2.66:1
+   here). A `missed` verdict gets no red: it is a result, not an error. Every motion runs once, on a
+   mount or a change, and none of it runs under reduced motion. */
 .lc-xp {
   margin: 0 var(--lc-5);
   padding-bottom: var(--lc-5);
@@ -8157,38 +8159,114 @@
   font-size: 12px;
   color: var(--lc-muted);
 }
+
+/* The fortnight strip: a gutter for overdue, today, then fourteen days. `--d` is a day offset
+   (-1 is the gutter, 15 is "further out"); one day is 1/17 of the track. */
+.lc-xp__strip {
+  margin: 0 var(--lc-2) var(--lc-4);
+  padding: 0 var(--lc-3);
+}
+.lc-xp__track {
+  position: relative;
+  height: 32px;
+  border-bottom: 1.5px solid var(--lc-surface-3);
+}
+.lc-xp__day,
+.lc-xp__pin {
+  position: absolute;
+  left: calc((var(--d) + 1.5) / 17 * 100%);
+}
+.lc-xp__day {
+  bottom: 0;
+  width: calc(100% / 17);
+  height: 5px;
+  transform: translateX(-50%);
+  border-left: 1px solid var(--lc-border);
+}
+.lc-xp__day.is-weekend {
+  height: 9px;
+  border: 0;
+  border-radius: 3px 3px 0 0;
+  background: var(--lc-surface-2);
+}
+.lc-xp__day.is-today {
+  height: 100%;
+  width: 0;
+  border-left: 1.5px solid var(--lc-accent);
+}
+/* Each read is a paper token on the line, its mark inside: the same tack-on-paper as the leaves. */
+.lc-xp__pin {
+  bottom: calc(4px + var(--n) * 12px);
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--lc-ground-2);
+  box-shadow: 0 1px 3px rgba(60, 40, 20, 0.25);
+  transform: translateX(-50%);
+  color: var(--lc-muted);
+  transition: transform var(--lc-dur-2) var(--lc-ease-out);
+  animation: lc-xp-arrive var(--lc-dur-5) var(--lc-ease-out) both;
+  animation-delay: calc(var(--i) * 60ms);
+}
+/* The marks drift in from further out and settle at their day: the reads coming toward today. */
+@keyframes lc-xp-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-50% + 24px));
+  }
+}
+.lc-xp__pin.is-hot {
+  transform: translateX(-50%) scale(1.5);
+}
+.lc-xp__pin--overdue {
+  color: var(--lc-accent-ink);
+}
+.lc-xp__pin--due {
+  color: var(--lc-text);
+}
+.lc-xp__scale > :first-child {
+  color: var(--lc-accent-ink);
+}
+.lc-xp__scale {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  /* "today" sits under its line, "2 wks" under day 14. */
+  padding: 3px calc(100% / 17 * 0.5) 0 calc(100% / 17 * 0.9);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--lc-muted);
+}
+
 .lc-xp__rows {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .lc-xp__row {
-  border-bottom: 1px solid var(--lc-border);
+  animation: lc-xp-in var(--lc-dur-4) var(--lc-ease-out) both;
+  animation-delay: calc(var(--i) * 50ms);
 }
-.lc-xp__row:last-child {
-  border-bottom: none;
-}
-.lc-xp__row.is-changed {
-  animation: lc-xp-flash var(--lc-dur-4) var(--lc-ease-out);
-}
-@keyframes lc-xp-flash {
-  50% {
-    background: var(--lc-surface);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lc-xp__row.is-changed {
-    animation: none;
+@keyframes lc-xp-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 .lc-xp__hit {
   display: grid;
-  row-gap: 1px;
-  padding: var(--lc-3) var(--lc-5);
+  grid-template-columns: 38px 1fr;
+  column-gap: var(--lc-5);
+  align-items: start;
+  padding: var(--lc-4) var(--lc-3);
+  border-radius: 10px;
   color: inherit;
   text-decoration: none;
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
 }
-a.lc-xp__hit:hover {
+.lc-xp__row.is-hot .lc-xp__hit {
   background: var(--lc-surface);
 }
 a.lc-xp__hit:focus-visible {
@@ -8197,34 +8275,121 @@ a.lc-xp__hit:focus-visible {
   outline: 2px solid var(--lc-focus);
   outline-offset: -2px;
 }
-.lc-xp__line1 {
-  display: flex;
-  align-items: center;
-  gap: var(--lc-3);
-  font-size: 12px;
-  color: var(--lc-muted);
+
+/* The leaf: a weekday band over paper, tacked at the top. Each sits a hair off true, the way a hand
+   pins paper; an overdue one has slipped on its tack, like its tag on the corkboard. */
+.lc-xp__leaf {
+  --band: var(--lc-muted);
+  --tack: var(--lc-dim);
+  position: relative;
+  display: grid;
+  justify-items: center;
+  margin-top: 3px;
+  padding-bottom: 3px;
+  border-radius: 4px 4px 6px 6px;
+  background: var(--lc-ground-2);
+  box-shadow: 0 1px 0 var(--lc-surface-3), 0 3px 6px rgba(60, 40, 20, 0.16);
+  transform: rotate(-1.5deg);
+  transform-origin: 50% 2px;
+  transition: transform var(--lc-dur-3) var(--lc-ease-out), box-shadow var(--lc-dur-3) var(--lc-ease-out);
 }
-.lc-xp__mark {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  padding: 1px;
-  box-sizing: border-box;
+.lc-xp__row:nth-child(even) .lc-xp__leaf {
+  transform: rotate(1.25deg);
 }
-.lc-xp__date {
-  margin-left: auto;
+.lc-xp__row--overdue .lc-xp__leaf {
+  --band: var(--lc-accent-ink);
+  --tack: var(--lc-accent);
+  transform: rotate(-7deg) translateX(-1px);
+}
+.lc-xp__row--due .lc-xp__leaf {
+  --band: var(--lc-text);
+  --tack: var(--lc-text);
+}
+.lc-xp__row--read .lc-xp__leaf {
+  --band: var(--lc-surface-3);
+}
+.lc-xp__row.is-hot .lc-xp__leaf {
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 0 1px 0 var(--lc-surface-3), 0 8px 14px rgba(60, 40, 20, 0.2);
+}
+.lc-xp__tack {
+  position: absolute;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tack);
+  box-shadow: inset -1px -1px 0 rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+.lc-xp__leaf-wd {
+  width: 100%;
+  padding: 3px 0 1px;
+  border-radius: 4px 4px 0 0;
+  background: var(--band);
+  color: var(--lc-ground-2);
   font-family: var(--font-mono, monospace);
-  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
 }
-.lc-xp__row--overdue :is(.lc-xp__mark, .lc-xp__status) {
-  color: var(--lc-accent-ink);
-}
-.lc-xp__row--due :is(.lc-xp__mark, .lc-xp__status),
-.lc-xp__row--read .lc-xp__status {
+.lc-xp__row--read .lc-xp__leaf-wd {
   color: var(--lc-text);
 }
-.lc-xp__row--due .lc-xp__status {
-  font-weight: 600;
+.lc-xp__leaf-day {
+  font-family: var(--font-display, sans-serif);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--lc-text);
+}
+.lc-xp__leaf-mo {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--lc-muted);
+}
+/* A verdict is a rubber stamp across the leaf. */
+.lc-xp__stamp {
+  position: absolute;
+  right: -9px;
+  bottom: -5px;
+  padding: 0 3px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  background: var(--lc-ground-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-text);
+  transform: rotate(-14deg);
+}
+.lc-xp__stamp--met {
+  color: var(--lc-success-ink);
+}
+.lc-xp__stamp--inconclusive {
+  color: var(--lc-muted);
+  font-size: 0;
+}
+.lc-xp__stamp--inconclusive::after {
+  content: '?';
+  font-size: 9px;
+}
+/* A status that moves turns the leaf over, a page torn to the next day. */
+.lc-xp__row.is-changed .lc-xp__leaf {
+  animation: lc-xp-turn var(--lc-dur-5) var(--lc-ease-out);
+}
+@keyframes lc-xp-turn {
+  from {
+    transform: perspective(160px) rotateX(-100deg);
+  }
+}
+
+.lc-xp__body {
+  display: grid;
+  row-gap: 3px;
+  min-width: 0;
 }
 .lc-xp__title {
   font-size: 14px;
@@ -8238,15 +8403,59 @@ a.lc-xp__hit:focus-visible {
   overflow: hidden;
 }
 .lc-xp__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--lc-muted);
+  white-space: nowrap;
+}
+.lc-xp__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+.lc-xp__owner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-xp__owner + .lc-xp__status::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--lc-muted);
+}
+.lc-xp__row--overdue .lc-xp__status {
+  color: var(--lc-accent-ink);
+  font-weight: 600;
+}
+.lc-xp__row--due .lc-xp__status {
+  color: var(--lc-text);
+  font-weight: 600;
+}
+.lc-xp__note {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--lc-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* Stale: the marks dim, never the words (local rule 2026-08-13). */
-.lc-xp.is-stale .lc-xp__mark {
+.lc-xp.is-stale :is(.lc-xp__pin, .lc-xp__tack) {
   opacity: 0.45;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-xp :is(.lc-xp__row, .lc-xp__pin, .lc-xp__leaf, .lc-xp__hit) {
+    animation: none !important;
+    transition: none;
+  }
 }
 .lc-xp__more {
   margin: var(--lc-3) var(--lc-5) 0;
