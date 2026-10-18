@@ -7,8 +7,8 @@
 # Options:
 #   --org <org>          Fly org (default: personal)
 #   --region <region>    Fly region (default: sjc)
-#   --team <slug>        team slug (default: revive)
-#   --server <url>       hosted team server URL (default: https://musterd.io)
+#   --team <slug>        hosted team slug (default: revive-staging)
+#   --server <url>       hosted team server URL (default: https://<team>.musterd.dev)
 #   --repo <git-url>     workspace repo the seat clones on first boot (required)
 #   --host-label <label> host label the provision is queued for (default: cloud-<seat>)
 #   --key-env <VAR>      env var holding the sponsor's model key (default: ANTHROPIC_API_KEY)
@@ -25,8 +25,8 @@ SEAT="${1:-}"
 shift || true
 ORG=personal
 REGION=sjc
-TEAM=revive
-SERVER=https://musterd.io
+TEAM=revive-staging
+SERVER=""
 REPO_URL=""
 HOST_LABEL=""
 KEY_ENV=ANTHROPIC_API_KEY
@@ -51,6 +51,7 @@ done
 [ -n "$SEAT" ] || { echo "usage: create.sh <seat> --repo <git-url> [options]" >&2; exit 2; }
 [ -n "$REPO_URL" ] || { echo "--repo <git-url> is required (the seat's workspace clone source)" >&2; exit 2; }
 HOST_LABEL="${HOST_LABEL:-cloud-$SEAT}"
+SERVER="${SERVER:-https://$TEAM.musterd.dev}"   # a hosted team lives at <slug>.musterd.dev (cloud-ops.md)
 APP="musterd-agent-$SEAT"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 

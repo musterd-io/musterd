@@ -35,6 +35,8 @@ One script runs the whole of this section and First boot — no secret is copy-p
 ```sh
 deploy/cloud-agent/create.sh <seat> --repo <workspace-git-url>
 # options: --org --region --team --server --host-label --key-env --skip-sponsor --dry-run
+# --server defaults to https://<team>.musterd.dev, where a hosted team lives (cloud-ops.md);
+# --team defaults to revive-staging, the staging team the pilot runs against.
 ```
 
 It creates the agent and queues its provision, mints the host key (captured into a shell
