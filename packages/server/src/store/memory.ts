@@ -1,12 +1,17 @@
+import { createHash } from 'node:crypto';
 import {
   type MemoryEnvelope,
   type MemoryProvenance,
   type MemoryWriter,
   MemoryWriterSchema,
+  type NoteRecipients,
+  parseSealedNote,
+  SEALED_NOTE_HEADLINE,
+  SEALED_NOTE_MAX_BYTES,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
-import { appendReplicatedEvent } from './audit.js';
+import { appendAudit, appendReplicatedEvent } from './audit.js';
 import { hashToken } from './members.js';
 import { localNodeForTeam } from './messages.js';
 
@@ -206,11 +211,10 @@ export async function saveMemory(
     );
   }
   const bodyBytes = Buffer.byteLength(input.body, 'utf8');
-  if (bodyBytes > MEMORY_BODY_MAX_BYTES) {
-    throw new MusterdError(
-      'bad_request',
-      `memory body is ${bodyBytes} bytes; the limit is ${MEMORY_BODY_MAX_BYTES}`,
-    );
+  // ADR 657: a sealed body carries its own cap — the 8 KiB plain text is the client's to enforce.
+  const cap = parseSealedNote(input.body) ? SEALED_NOTE_MAX_BYTES : MEMORY_BODY_MAX_BYTES;
+  if (bodyBytes > cap) {
+    throw new MusterdError('bad_request', `memory body is ${bodyBytes} bytes; the limit is ${cap}`);
   }
   await db.run(
     `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at, writer)
@@ -222,6 +226,107 @@ export async function saveMemory(
        writer   = excluded.writer`,
     [headline, input.body, Date.now(), writer ? JSON.stringify(writer) : null, memberId],
   );
+}
+
+/**
+ * ADR 657: a human seat's note arrives sealed to that human's machines, or not at all — the server
+ * must never hold it in plain text, and a readable headline would leak what the body hides. An
+ * agent seat's note stays plain text, because the wake packet is built from it (ADR 430).
+ */
+export function assertNoteShape(kind: string, input: { headline: string; body: string }): void {
+  const sealed = parseSealedNote(input.body) !== null;
+  if (kind === 'human') {
+    if (!sealed) {
+      throw new MusterdError(
+        'bad_request',
+        "a human seat's note is sealed to your own machines before it is saved (ADR 657) — " +
+          'save it with an up-to-date `musterd memory save` on one of them',
+      );
+    }
+    if (input.headline !== SEALED_NOTE_HEADLINE) {
+      throw new MusterdError(
+        'bad_request',
+        `a sealed note's headline is "${SEALED_NOTE_HEADLINE}" — the real one rides inside the seal (ADR 657)`,
+      );
+    }
+    return;
+  }
+  if (sealed) {
+    throw new MusterdError(
+      'bad_request',
+      "an agent seat's note is not sealed — the wake packet is built from it (ADR 430, ADR 657)",
+    );
+  }
+}
+
+/** A public note key's short fingerprint for the ledger — enough to tell two keys apart. */
+function keyFingerprint(publicKey: string): string {
+  return createHash('sha256').update(publicKey).digest('hex').slice(0, 16);
+}
+
+/**
+ * Record `publicKey` as node `nodeId`'s note key (ADR 657). A repeat of the same key writes
+ * nothing; a new or changed key writes `node.note_key_set`. A changed key is allowed — a machine
+ * that lost its key file makes a new one — and notes sealed to the old key stop opening there.
+ */
+export async function setNodeNoteKey(
+  db: Driver,
+  teamId: string,
+  nodeId: string,
+  publicKey: string,
+  actor: string,
+): Promise<void> {
+  const row = await db.get<{ note_key: string | null }>(
+    'SELECT note_key FROM nodes WHERE id = ? AND team_id = ?',
+    [nodeId, teamId],
+  );
+  if (!row) throw new MusterdError('not_found', `no node ${nodeId} on this team`);
+  if (row.note_key === publicKey) return;
+  await db.run('UPDATE nodes SET note_key = ? WHERE id = ?', [publicKey, nodeId]);
+  await appendAudit(db, teamId, {
+    actor,
+    action: 'node.note_key_set',
+    target: nodeId,
+    result: 'allow',
+    detail: {
+      node: nodeId,
+      fingerprint: keyFingerprint(publicKey),
+      replaced: row.note_key !== null,
+    },
+  });
+}
+
+/**
+ * The machines a human seat's note is sealed to (ADR 657): every node in the seat's trusted set
+ * (ADR 358) with its public note key, or null for one that has never registered a key. A seat no
+ * node has spoken for yet has the asking node as its whole set. An agent seat's note is not sealed.
+ */
+export async function noteRecipients(
+  db: Driver,
+  seat: { id: string; kind: string },
+  askingNode: string,
+): Promise<NoteRecipients> {
+  if (seat.kind !== 'human') return { seal: false };
+  const rows = await db.all<{ node_id: string; label: string; note_key: string | null }>(
+    `SELECT s.node_id, n.label, n.note_key FROM seat_nodes s JOIN nodes n ON n.id = s.node_id
+      WHERE s.member_id = ? AND n.revoked_at IS NULL ORDER BY s.bound_at, s.node_id`,
+    [seat.id],
+  );
+  const set = rows.length
+    ? rows
+    : await db.all<{ node_id: string; label: string; note_key: string | null }>(
+        'SELECT id AS node_id, label, note_key FROM nodes WHERE id = ?',
+        [askingNode],
+      );
+  return {
+    seal: true,
+    node_id: askingNode,
+    recipients: set.map((r) => ({
+      node_id: r.node_id,
+      label: (r.label ?? '').slice(0, 120),
+      public_key: r.note_key,
+    })),
+  };
 }
 
 /** The full note for a seat — the explicit body read — or null if nothing is saved. */

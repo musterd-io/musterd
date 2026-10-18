@@ -419,7 +419,7 @@ Delivery is **envelope-on-occupy / body-on-demand**: the `occupied` frame carrie
 
 > Saved memory from 2h ago: "mid-refactor of ws.ts eviction, tests red" — `team_memory_read` to load it (512 bytes).
 
-— so a fresh session pays ~30 tokens and makes an informed fetch decision. `team_memory_read` prints who saved the note right under the headline, prefixed `⚠` when the daemon marks it suspect (last saved from another folder or machine than this seat — ADR 654). Both tools require a live join (the seat is resolved from the session's occupancy). HTTP surface: `PUT`/`GET` `/teams/:slug/memory`.
+— so a fresh session pays ~30 tokens and makes an informed fetch decision. `team_memory_read` prints who saved the note right under the headline, prefixed `⚠` when the daemon marks it suspect (last saved from another folder or machine than this seat — ADR 654). Both tools require a live join (the seat is resolved from the session's occupancy). A human seat's note is sealed to that human's machines (ADR 657): both tools post this machine's note key to `POST /teams/:slug/memory/recipients` and seal or open the note through the shared `@musterd/protocol/note-seal` flow, the same one `musterd memory` uses. An agent seat's note passes through as written. HTTP surface: `PUT`/`GET` `/teams/:slug/memory`, `POST /teams/:slug/memory/recipients`.
 
 ### `team_wake_context` (ADR 209)
 

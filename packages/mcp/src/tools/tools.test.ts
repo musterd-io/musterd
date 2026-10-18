@@ -8,6 +8,8 @@ import {
   type Envelope,
   type Lane,
   type MemberSummary,
+  parseSealedNote,
+  SEALED_NOTE_HEADLINE,
 } from '@musterd/protocol';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MusterdClient } from '../client.js';
@@ -1294,6 +1296,7 @@ describe('team_memory handlers (ADR 093)', () => {
     const handlers = captureAll(registerMemory, {
       joined: true,
       holdsSeat: true,
+      noteRecipients: (async () => ({ seal: false })) as any,
       saveMemory: saveMemory as any,
     });
     const out = text(
@@ -1304,10 +1307,46 @@ describe('team_memory handlers (ADR 093)', () => {
     expect(out).toContain('"wrapping up"');
   });
 
+  it("a human seat's note is sealed before it leaves, and opens on read (ADR 657)", async () => {
+    const dir = mkdtempSync(pathJoin(tmpdir(), 'mcp-seal-'));
+    vi.stubEnv('MUSTERD_NOTE_KEY', pathJoin(dir, 'note-key.json'));
+    let mine: string | null = null;
+    let stored: { headline: string; body?: string } | undefined;
+    const handlers = captureAll(registerMemory, {
+      joined: true,
+      holdsSeat: true,
+      noteRecipients: (async (pk?: string) => {
+        if (pk) mine = pk;
+        return {
+          seal: true,
+          node_id: 'nA',
+          recipients: [{ node_id: 'nA', label: 'air', public_key: mine }],
+        };
+      }) as any,
+      saveMemory: (async (input: { headline: string; body?: string }) => {
+        stored = input;
+      }) as any,
+      readMemory: (async () => ({ ...stored, saved_at: Date.now() })) as any,
+    });
+    try {
+      await handlers['team_memory_save']!({ headline: 'private plan', body: 'the secret body' });
+      expect(stored!.headline).toBe(SEALED_NOTE_HEADLINE);
+      expect(parseSealedNote(stored!.body!)).not.toBeNull();
+      expect(JSON.stringify(stored)).not.toContain('secret');
+      const out = text(await handlers['team_memory_read']!({}));
+      expect(out).toContain('private plan');
+      expect(out).toContain('the secret body');
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('save surfaces the server cap error (limit named, not swallowed)', async () => {
     const handlers = captureAll(registerMemory, {
       joined: true,
       holdsSeat: true,
+      noteRecipients: (async () => ({ seal: false })) as any,
       saveMemory: (async () => {
         throw new Error('memory body is 9000 bytes; the limit is 8192');
       }) as any,
@@ -1321,6 +1360,7 @@ describe('team_memory handlers (ADR 093)', () => {
     const handlers = captureAll(registerMemory, {
       joined: true,
       holdsSeat: true,
+      noteRecipients: (async () => ({ seal: false })) as any,
       readMemory: (async () => ({
         headline: 'mid-refactor',
         body: 'tests red in ws.test.ts',
@@ -1339,6 +1379,7 @@ describe('team_memory handlers (ADR 093)', () => {
     const handlers = captureAll(registerMemory, {
       joined: true,
       holdsSeat: true,
+      noteRecipients: (async () => ({ seal: false })) as any,
       readMemory: (async () => {
         throw new Error('no memory saved for this seat');
       }) as any,
@@ -1353,6 +1394,7 @@ describe('team_memory handlers (ADR 093)', () => {
     const handlers = captureAll(registerMemory, {
       joined: true,
       holdsSeat: true,
+      noteRecipients: (async () => ({ seal: false })) as any,
       readMemory: (async () => {
         throw new Error('daemon unreachable');
       }) as any,

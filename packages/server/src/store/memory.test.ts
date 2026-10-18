@@ -1,18 +1,24 @@
+import { SEALED_NOTE_HEADLINE } from '@musterd/protocol';
+import { generateNoteKey, sealNote } from '@musterd/protocol/note-seal';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { MusterdError } from '../errors.js';
 import { addMember } from './members.js';
 import {
+  assertNoteShape,
   clearMemory,
   getMemory,
   MEMORY_BODY_MAX_BYTES,
   MEMORY_HEADLINE_MAX_CHARS,
   memoryEnvelope,
   memoryProvenance,
+  noteRecipients,
   parseWriter,
   saveMemory,
+  setNodeNoteKey,
 } from './memory.js';
+import { localNodeForTeam } from './messages.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -175,5 +181,79 @@ describe('memoryProvenance (ADR 654)', () => {
     expect(parseWriter('{not json')).toBeNull();
     expect(parseWriter({ surface: 'x', extra: 1 })).toBeNull();
     expect(parseWriter(undefined)).toBeNull();
+  });
+});
+
+withDrivers('memory · sealed notes (ADR 657)', (o) => {
+  const key = generateNoteKey();
+  const sealed = {
+    headline: SEALED_NOTE_HEADLINE,
+    body: sealNote({ headline: 'h', body: 'b' }, [{ node: 'n', pk: key.public_key }]),
+  };
+
+  it("assertNoteShape: a human's note arrives sealed with the fixed headline; an agent's never sealed", () => {
+    expect(() => assertNoteShape('human', sealed)).not.toThrow();
+    expect(() => assertNoteShape('human', { headline: 'h', body: 'b' })).toThrow(/sealed/);
+    expect(() => assertNoteShape('human', { ...sealed, headline: 'leaks' })).toThrow(/headline/);
+    expect(() => assertNoteShape('agent', { headline: 'h', body: 'b' })).not.toThrow();
+    expect(() => assertNoteShape('agent', sealed)).toThrow(/not sealed/);
+  });
+
+  it('a sealed body may exceed the plain-text cap, up to its own', async () => {
+    const db = await o();
+    const team = await createTeam(db, { slug: 'revive' });
+    const id = (await addMember(db, team, { name: 'nick', kind: 'human' })).row.id;
+    const big = sealNote({ headline: 'h', body: 'x'.repeat(MEMORY_BODY_MAX_BYTES) }, [
+      { node: 'n', pk: key.public_key },
+    ]);
+    expect(Buffer.byteLength(big)).toBeGreaterThan(MEMORY_BODY_MAX_BYTES);
+    await saveMemory(db, id, { headline: SEALED_NOTE_HEADLINE, body: big });
+    expect((await getMemory(db, id))?.body).toBe(big);
+  });
+
+  it('noteRecipients: the trusted set with keys; the asking node when unbound; no seal for an agent', async () => {
+    const db = await o();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+    const { id: local } = await localNodeForTeam(db, team.id);
+    expect(await noteRecipients(db, ada, local)).toEqual({ seal: false });
+
+    // Unbound: the asking node is the whole set, keyless until it registers.
+    expect(await noteRecipients(db, nick, local)).toMatchObject({
+      seal: true,
+      node_id: local,
+      recipients: [{ node_id: local, public_key: null }],
+    });
+    await setNodeNoteKey(db, team.id, local, key.public_key, 'nick');
+    await setNodeNoteKey(db, team.id, local, key.public_key, 'nick'); // a repeat writes nothing
+    const rows = await db.all<{ detail: string }>(
+      "SELECT detail FROM audit WHERE action = 'node.note_key_set'",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.detail).not.toContain(key.public_key);
+
+    // Bound to two nodes: both listed, the second keyless.
+    await db.run('INSERT INTO nodes (id, team_id, label, next_seq) VALUES (?, ?, ?, 1)', [
+      'n-mini',
+      team.id,
+      'mini',
+    ]);
+    for (const [node, at] of [
+      [local, 1],
+      ['n-mini', 2],
+    ] as const)
+      await db.run(
+        'INSERT INTO seat_nodes (member_id, team_id, node_id, bound_at) VALUES (?, ?, ?, ?)',
+        [nick.id, team.id, node, at],
+      );
+    expect(await noteRecipients(db, nick, local)).toEqual({
+      seal: true,
+      node_id: local,
+      recipients: [
+        { node_id: local, label: expect.any(String), public_key: key.public_key },
+        { node_id: 'n-mini', label: 'mini', public_key: null },
+      ],
+    });
   });
 });

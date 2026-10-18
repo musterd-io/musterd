@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ErrorBodySchema,
+  type NoteRecipients,
+  NoteRecipientsSchema,
   SeedListSchema,
   SeedResultSchema,
   PROTOCOL_VERSION,
@@ -1244,6 +1246,21 @@ export class MusterdClient {
       saved_at: Date.now(),
       size_bytes: Buffer.byteLength(input.body ?? '', 'utf8'),
     };
+  }
+
+  /** ADR 657: record this machine's public note key (when given) and list the machines this seat's
+   *  note is sealed to; null from a daemon older than ADR 657 (no such route), which never seals. */
+  async noteRecipients(publicKey?: string): Promise<NoteRecipients | null> {
+    try {
+      return NoteRecipientsSchema.parse(
+        await this.request('POST', `/teams/${this.config.team}/memory/recipients`, {
+          ...(publicKey ? { public_key: publicKey } : {}),
+        }),
+      );
+    } catch (err) {
+      if (err instanceof Error && /^no route for /.test(err.message)) return null;
+      throw err;
+    }
   }
 
   readMemory(): Promise<{

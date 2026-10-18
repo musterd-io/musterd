@@ -1,9 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseSealedNote, SEALED_NOTE_HEADLINE } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
+import { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { memoryCommand, refuseSeatMismatch, renderMemoryLine } from './memory.js';
 import { statusCommand } from './status.js';
@@ -11,10 +13,12 @@ import { teamCommand } from './team.js';
 
 describe('memory command (ADR 093)', () => {
   let server: RunningServer;
+  let db: ReturnType<typeof openDb>;
   let dir: string;
 
   beforeEach(async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    db = openDb(':memory:');
+    server = createServer({ db, port: 0 });
     const { port } = await server.listen();
     process.env['MUSTERD_SERVER'] = `http://127.0.0.1:${port}`;
     dir = mkdtempSync(join(tmpdir(), 'musterd-memory-'));
@@ -122,9 +126,22 @@ describe('memory command (ADR 093)', () => {
 
   it('show prints the checks above the body (ADR 522)', async () => {
     await setupTeam();
-    await capture(() =>
-      memoryCommand(parseArgs(['save', '--headline', 'demo', 'Nobody merges until the demo.'])),
-    );
+    // The server can check only a plain-text note — an agent seat's (ADR 657). Stand the daemon's
+    // answer in for one: no seal, and a note whose claim no Team hold backs.
+    vi.spyOn(HttpClient.prototype, 'noteRecipients').mockResolvedValue({ seal: false });
+    vi.spyOn(HttpClient.prototype, 'getMemory').mockResolvedValue({
+      headline: 'demo',
+      body: 'Nobody merges until the demo.',
+      saved_at: Date.now(),
+      checks: [
+        {
+          kind: 'rule',
+          ref: 'Nobody merges until the demo.',
+          verdict: 'unsourced',
+          line: '"Nobody merges until the demo." — no active Team hold says this',
+        },
+      ],
+    });
     const res = await capture(() => memoryCommand(parseArgs(['show'])));
     expect(res.out).toMatch(/⚠ "Nobody merges until the demo\." — no active Team hold says this/);
     expect(res.out.indexOf('no active Team hold')).toBeLessThan(
@@ -142,9 +159,62 @@ describe('memory command (ADR 093)', () => {
     // prose one, where it is the only line on screen. Same facts, and the ADR 093 guarantee holds:
     // headline + age, never the body.
     expect(res.out).toContain('memory');
-    expect(res.out).toContain('"mid-refactor"');
+    // nick is a human seat, so the daemon holds his note sealed (ADR 657): the pointer can only say
+    // that a sealed note exists. `musterd memory` opens it on his machine.
+    expect(res.out).toContain('"sealed note"');
+    expect(res.out).not.toContain('mid-refactor');
     expect(res.out).toContain('musterd memory');
     expect(res.out).not.toContain('the secret body');
+  });
+
+  /** nick's stored note row, as the daemon holds it. */
+  const storedNote = () =>
+    db
+      .prepare(
+        "SELECT m.headline, m.body FROM seat_memory m JOIN members b ON b.id = m.member_id WHERE b.name = 'nick'",
+      )
+      .get() as { headline: string; body: string } | undefined;
+
+  it("a human's note leaves this machine sealed: the daemon holds ciphertext, show opens it (ADR 657)", async () => {
+    await setupTeam();
+    await capture(() =>
+      memoryCommand(parseArgs(['save', '--headline', 'private plan', 'the secret body'])),
+    );
+    const row = storedNote()!;
+    expect(row.headline).toBe(SEALED_NOTE_HEADLINE);
+    expect(parseSealedNote(row.body)).not.toBeNull();
+    expect(JSON.stringify(row)).not.toContain('secret');
+    expect(statSync(join(dir, 'note-key.json')).mode & 0o777).toBe(0o600);
+
+    const shown = await capture(() => memoryCommand(parseArgs([])));
+    expect(shown.out).toContain('private plan');
+    expect(shown.out).toContain('the secret body');
+    // The plain-text cap still holds, measured before sealing.
+    await expect(
+      memoryCommand(parseArgs(['save', '--headline', 'h', 'x'.repeat(8193)])),
+    ).rejects.toThrow(/limit is 8192/);
+  });
+
+  it('a plain-text note saved before sealing is sealed the first time its human reads it', async () => {
+    await setupTeam();
+    db.prepare(
+      `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at)
+         SELECT id, team_id, 'old plan', 'from before ADR 657', ? FROM members WHERE name = 'nick'`,
+    ).run(Date.now());
+    const shown = await capture(() => memoryCommand(parseArgs([])));
+    expect(shown.out).toContain('from before ADR 657');
+    expect(shown.out).toContain('sealed this note to your 1 machine');
+    expect(parseSealedNote(storedNote()!.body)).not.toBeNull();
+  });
+
+  it('a machine the note was not sealed to says so instead of showing ciphertext', async () => {
+    await setupTeam();
+    await capture(() => memoryCommand(parseArgs(['save', '--headline', 'h', 'b'])));
+    rmSync(join(dir, 'note-key.json')); // this machine lost its key: it is a new machine now
+    const shown = await capture(() => memoryCommand(parseArgs([])));
+    expect(shown.code).toBe(0);
+    expect(shown.out).toMatch(/your note is sealed to .* not this machine/);
+    expect(shown.out).not.toContain('mssealed1.');
   });
 
   it('status stays silent on the memory line when nothing is saved', async () => {

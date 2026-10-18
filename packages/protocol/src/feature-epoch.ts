@@ -149,5 +149,8 @@
 // Epoch 35 — ADR 654: a seat's note says who saved it. `provenance` rides `GET /memory` (and its
 // envelope read) and the wake packet's `context.memory`. The wake packet schema is strict, so an
 // adapter behind this epoch refuses a new daemon's packet that carries a note until it is rebuilt.
-export const FEATURE_EPOCH = 35 as const;
+// Epoch 36 — ADR 657: a human seat's note is sealed to that human's machines. The daemon refuses a
+// plain-text save from a human seat and serves `POST /memory/recipients`; a client behind this epoch
+// cannot save a human's note until it is rebuilt.
+export const FEATURE_EPOCH = 36 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

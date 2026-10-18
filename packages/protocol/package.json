@@ -40,6 +40,10 @@
       "types": "./dist/model.d.ts",
       "default": "./dist/model.js"
     },
+    "./note-seal": {
+      "types": "./dist/note-seal.d.ts",
+      "default": "./dist/note-seal.js"
+    },
     "./posture": {
       "types": "./dist/posture.d.ts",
       "default": "./dist/posture.js"

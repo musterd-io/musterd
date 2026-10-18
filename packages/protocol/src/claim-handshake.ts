@@ -190,6 +190,87 @@ export const MemoryProvenanceSchema = z
   .strict();
 export type MemoryProvenance = z.infer<typeof MemoryProvenanceSchema>;
 
+/**
+ * A human seat's note, sealed to that human's machines (ADR 657). The stored body is
+ * {@link SEALED_NOTE_PREFIX} + base64url JSON of {@link SealedNoteSchema}; the headline is the fixed
+ * {@link SEALED_NOTE_HEADLINE}, the real one rides inside `ct` with the body. Seal and open live in
+ * the Node-only `@musterd/protocol/note-seal` subpath; this is the shape every holder can parse.
+ */
+export const SEALED_NOTE_PREFIX = 'mssealed1.';
+export const SEALED_NOTE_HEADLINE = 'sealed note';
+/** The stored sealed body's cap in bytes — the 8 KiB plain-text cap, sealed to a few dozen machines. */
+export const SEALED_NOTE_MAX_BYTES = 16384;
+
+const B64URL = /^[A-Za-z0-9_-]+$/;
+/** One recipient stanza: the node it is for, that node's public key, the ephemeral key, the wrapped
+ *  content key. `node` and `pk` are what a re-seal compares against the seat's current machines. */
+export const SealedNoteStanzaSchema = z
+  .object({
+    node: z.string().min(1).max(64),
+    pk: z.string().regex(B64URL).length(43),
+    epk: z.string().regex(B64URL).length(43),
+    wrap: z.string().regex(B64URL).length(64),
+  })
+  .strict();
+export const SealedNoteSchema = z
+  .object({
+    v: z.literal(1),
+    to: z.array(SealedNoteStanzaSchema).min(1).max(64),
+    iv: z.string().regex(B64URL).length(16),
+    ct: z.string().regex(B64URL).min(1),
+  })
+  .strict();
+export type SealedNote = z.infer<typeof SealedNoteSchema>;
+
+/** Parse a stored body as a sealed note; null when it is plain text (or anything malformed). */
+export function parseSealedNote(body: string): SealedNote | null {
+  if (!body.startsWith(SEALED_NOTE_PREFIX)) return null;
+  try {
+    const json: unknown = JSON.parse(
+      Buffer.from(body.slice(SEALED_NOTE_PREFIX.length), 'base64url').toString('utf8'),
+    );
+    const parsed = SealedNoteSchema.safeParse(json);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A machine that can be a recipient of a human's note (ADR 657): a node in the seat's trusted set,
+ *  with its public note key, or null when that machine has never registered one. */
+export const NoteRecipientSchema = z
+  .object({
+    node_id: z.string().min(1).max(64),
+    label: z.string().max(120),
+    public_key: z.string().regex(B64URL).length(43).nullable(),
+  })
+  .strict();
+export type NoteRecipient = z.infer<typeof NoteRecipientSchema>;
+
+/** `POST /teams/:slug/memory/recipients` (and the hub's `sync/note-recipients`) answer: an agent
+ *  seat's note is not sealed; a human's names every trusted machine and which one is asking. */
+export const NoteRecipientsSchema = z.discriminatedUnion('seal', [
+  z.object({ seal: z.literal(false) }).strict(),
+  z
+    .object({
+      seal: z.literal(true),
+      node_id: z.string().min(1).max(64),
+      recipients: z.array(NoteRecipientSchema).max(64),
+    })
+    .strict(),
+]);
+export type NoteRecipients = z.infer<typeof NoteRecipientsSchema>;
+
+export const NoteRecipientsRequestSchema = z
+  .object({ public_key: z.string().regex(B64URL).length(43).optional() })
+  .strict();
+export const SyncNoteRecipientsRequestSchema = z
+  .object({
+    seat: z.string().min(1).max(64),
+    public_key: z.string().regex(B64URL).length(43).optional(),
+  })
+  .strict();
+
 /** `occupied` (server → client) — the claim succeeded; this session holds the seat. `charter` is
  *  identity metadata the server serves but never enforces; `memory` is the seat-scoped continuity
  *  envelope (ADR 093) — headline + age, or null when the seat has saved nothing. The body is fetched
@@ -237,3 +318,4 @@ export const PendingFrame = z.object({
   message: z.string(),
 });
 export type PendingFrame = z.infer<typeof PendingFrame>;
+export type SyncNoteRecipientsRequest = z.infer<typeof SyncNoteRecipientsRequestSchema>;

@@ -98,6 +98,8 @@ const emptyClient: any = {
   readMemory: async () => {
     throw new Error('no memory saved for this seat');
   },
+  // ADR 657: an agent seat — its note is not sealed.
+  noteRecipients: async () => ({ seal: false }),
 };
 
 async function text(h: Handler, args: any = {}): Promise<string> {
@@ -387,6 +389,9 @@ describe('a known failure class carries its repair line', () => {
       throw new Error('fetch failed');
     },
     saveMemory: async () => {
+      throw new Error('fetch failed');
+    },
+    noteRecipients: async () => {
       throw new Error('fetch failed');
     },
     readMemory: async () => {

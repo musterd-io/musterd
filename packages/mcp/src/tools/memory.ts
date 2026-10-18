@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { claimCheckLines, type MemoryEnvelope } from '@musterd/protocol';
+import { type NoteSealClient, openForSeat, sealForSeat } from '@musterd/protocol/note-seal';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, notReadyMessage, textResult } from './format.js';
@@ -52,6 +53,15 @@ export function memoryLine(env: MemoryEnvelope, now = Date.now()): string {
   );
 }
 
+/** The seat-side seal flow (ADR 657) over this adapter's client: a human seat's note is sealed to
+ *  that human's machines here, before it leaves; an agent seat's passes through as written. */
+function noteClient(client: MusterdClient): NoteSealClient {
+  return {
+    recipients: (publicKey) => client.noteRecipients(publicKey),
+    save: (input) => client.saveMemory(input),
+  };
+}
+
 export function registerMemory(server: McpServer, client: MusterdClient): void {
   server.registerTool(
     'team_memory_save',
@@ -69,10 +79,9 @@ export function registerMemory(server: McpServer, client: MusterdClient): void {
     async (args) => {
       if (!client.holdsSeat) return textResult(notReadyMessage(client, 'save memory'));
       try {
-        await client.saveMemory({
-          headline: args.headline,
-          ...(args.body ? { body: args.body } : {}),
-        });
+        await client.saveMemory(
+          await sealForSeat(noteClient(client), { headline: args.headline, body: args.body ?? '' }),
+        );
         return textResult(
           `memory saved — your next occupy of this seat will show: "${args.headline}"`,
         );
@@ -88,12 +97,17 @@ export function registerMemory(server: McpServer, client: MusterdClient): void {
     async () => {
       if (!client.holdsSeat) return textResult(notReadyMessage(client, 'read memory'));
       try {
-        const mem = await client.readMemory();
+        let mem = await client.readMemory();
+        // ADR 657: a human seat's note opens only on that human's machines.
+        const opened = await openForSeat(noteClient(client), mem);
+        if (opened.kind === 'closed') return textResult(opened.line);
+        const sealLine = opened.kind === 'open' && opened.line ? `\n${opened.line}` : '';
+        if (opened.kind === 'open') mem = { ...mem, headline: opened.headline, body: opened.body };
         // ADR 654: who saved it, right under the headline — a suspect note says so before anything.
         const who = mem.provenance
           ? `\n${mem.provenance.suspect ? '⚠ ' : ''}${mem.provenance.line}`
           : '';
-        const header = `memory (saved ${ago(Date.now() - mem.saved_at)} ago): ${mem.headline}${who}`;
+        const header = `memory (saved ${ago(Date.now() - mem.saved_at)} ago): ${mem.headline}${who}${sealLine}`;
         // ADR 522: what the note says, checked against the Team now — above the body, so it is read
         // before the note is acted on. The verdicts are conclusive; no further checking is needed.
         const checks = mem.checks?.length

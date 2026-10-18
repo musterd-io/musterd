@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION, SEALED_NOTE_HEADLINE } from '@musterd/protocol';
+import { generateNoteKey, openNote, sealNote } from '@musterd/protocol/note-seal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
@@ -180,7 +181,17 @@ withDrivers('integration · misc', (_o, kind) => {
       const bo = await post('/teams/dawn/members', { name: 'Bo', kind: 'human' }, nickTok);
       const boTok = bo.json.human_credential as string;
       await req('PUT', '/teams/dawn/memory', { headline: 'ada plan', body: 'agent note' }, ada);
-      await req('PUT', '/teams/dawn/memory', { headline: 'bo private', body: 'human note' }, boTok);
+      // Bo is a human seat: his note is sealed to his machine before it is saved (ADR 657).
+      const boKey = generateNoteKey();
+      const boSealed = sealNote({ headline: 'bo private', body: 'human note' }, [
+        { node: 'n-bo', pk: boKey.public_key },
+      ]);
+      await req(
+        'PUT',
+        '/teams/dawn/memory',
+        { headline: SEALED_NOTE_HEADLINE, body: boSealed },
+        boTok,
+      );
 
       // Any human reads an agent seat's note — admin or not.
       const nickReadsAda = await get('/teams/dawn/members/Ada/memory', nickTok);
@@ -189,7 +200,8 @@ withDrivers('integration · misc', (_o, kind) => {
       expect((await get('/teams/dawn/members/Ada/memory', boTok)).json.body).toBe('agent note');
       // A human seat's note: another human (here the admin) is refused, the owner is not.
       expect((await get('/teams/dawn/members/Bo/memory', nickTok)).status).toBe(403);
-      expect((await get('/teams/dawn/members/Bo/memory', boTok)).json.body).toBe('human note');
+      const boOwn = (await get('/teams/dawn/members/Bo/memory', boTok)).json.body as string;
+      expect(openNote(boOwn, boKey)?.body).toBe('human note');
       // No agent reads another seat's note through this route.
       expect((await get('/teams/dawn/members/Ada/memory', lin)).status).toBe(403);
       expect((await get('/teams/dawn/members/Bo/memory', ada)).status).toBe(403);
@@ -203,13 +215,16 @@ withDrivers('integration · misc', (_o, kind) => {
       const boRow = saved.find((r) => r.target === 'Bo')!.detail;
       expect(boRow).not.toHaveProperty('body');
       expect(boRow).not.toHaveProperty('headline');
-      expect(boRow).toMatchObject({ headline_len: 10, body_len: 10 });
+      expect(boRow).toMatchObject({
+        headline_len: SEALED_NOTE_HEADLINE.length,
+        body_len: Buffer.byteLength(boSealed),
+      });
       // The stored row is untouched — it is the replicated event (ADR 366).
       const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
       const stored = (await listAudit(h.server.store, teamId)).find(
         (r) => r.action === 'continuity.memory_saved' && r.target === 'Bo',
       )!;
-      expect(JSON.parse(stored.detail!)).toMatchObject({ body: 'human note' });
+      expect(JSON.parse(stored.detail!)).toMatchObject({ body: boSealed });
     });
 
     it('GET ?envelope=1 returns headline + age + size, never the body (the status one-liner read)', async () => {
