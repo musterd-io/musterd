@@ -34,7 +34,9 @@ keeps the stream at 15 fps the whole time. Each lower rung was given a bar scale
 1. **The hosted stream captures with `--capture x11` at `--fps 30`**, 1080p, libx264 `veryfast`,
    4500k, `--audio`, as before in every other flag (`scripts/broadcast/entrypoint.sh`).
 2. **It is a step, not the bar.** The spec's 30 fps bar stands, and lever 3 (`01M55MAQ9M`) still goes
-   after it. This ADR does not mark the smooth-capture goal met.
+   after it. This ADR does not mark the smooth-capture goal met. _(Amended 2026-10-17: the bar is now distinct
+   frames on screen, ≥ 25 a second, which this configuration meets; lever 3 is not built —
+   [ADR 655](655-smooth-bar-distinct-frames.md).)_
 3. **The CLI default stays `screencast`.** Only the hosted entrypoint changes. x11 needs Linux, and a
    laptop capture keeps today's behaviour.
 4. **It is kept only after a live trial.** The bench room is synthetic, and x11 has not yet carried
