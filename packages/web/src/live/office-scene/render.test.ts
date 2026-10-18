@@ -346,6 +346,23 @@ describe('the wall agile board', () => {
     for (const n of nodes) expect(paints).not.toContain(n.color);
   });
 
+  it('pins one tag per dated read on the strip, overdue in the accent (ADR 644 inc 3)', () => {
+    const paints: string[] = [];
+    scene(textCtx(paints, []), Object.assign(wallData(), { reads: ['overdue', 'waiting', 'read'] as const }));
+    expect(paints).toContain('#F6DFA4'); // the overdue tag's amber wash
+    expect(paints).toContain('#B8860B'); // and its tack, the accent itself
+    expect(paints).toContain('#EDE6D8'); // a waiting tag's plain paper
+    expect(paints).toContain('#5E5446'); // the read tag's tick
+  });
+
+  it('hangs a bare strip when nothing is dated', () => {
+    const paints: string[] = [];
+    scene(textCtx(paints, []), wallData());
+    expect(paints).not.toContain('#F6DFA4');
+    expect(paints).not.toContain('#EDE6D8');
+    expect(paints).not.toContain('#5E5446');
+  });
+
   it('hangs an empty board when no team is connected: face and caps, zero paper', () => {
     const paints: string[] = [];
     scene(textCtx(paints, []), null);

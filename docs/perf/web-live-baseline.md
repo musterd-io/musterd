@@ -1406,6 +1406,16 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-17 — `totalJsGzipBytes` 325,400 → 325,900 B: the corkboard read pins (lane `01M55WK0N2`, ADR 644 increment 3)
+
+| Budget   | main `5895c173` (local, built beside it) | This branch (local) | Ceiling                    |
+| -------- | ---------------------------------------- | ------------------- | -------------------------- |
+| total JS | 324,939 B                                | 325,377 B           | RAISED 325,400 → 325,900 B |
+
+The pins are +438 B gzip of JS. The office scene's `render` chunk is +342: the oak rail, the tags with their tacks, the overdue tag's slip, the tick and the "+" card. `wallboard` is +78: the reads riding the wall board through a card in hand and a card being pinned, and the eight-pin cap. `TeamColumn` is +28, which is the entries handed to the scene. Other chunks moved by gzip noise. The strip paints inside the always-on scene, so it cannot be lazy; lazy-loading cannot move total anyway (ADR 183). CSS is unchanged. Local 325,377 is 23 B under the old ceiling, and CI reads about 450 B higher, so CI would have gone red. JS is local 325,377 plus the ~450 B CI gap.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 325,400 B with this change in.
+
 ### 2026-10-17 — `totalJsGzipBytes` 324,000 → 325,400 B and `liveCssGzipBytes` 22,500 → 22,850 B: the Experiments section (lane `01M55KZF5M`, ADR 644)
 
 | Budget   | main (local, built beside it) | This branch (local) | Ceiling                    |

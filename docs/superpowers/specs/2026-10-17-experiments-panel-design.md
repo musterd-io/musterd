@@ -4,7 +4,8 @@
 **Seat:** slippy (designer)
 **Status:** source and placement agreed with nick in chat on 2026-10-17. Alfie confirmed the §5
 strings on 2026-10-17 (ask `01M55WR8AR9E74MYWW9RR65X41`). Increment 2 (the web section) built
-2026-10-17 in `packages/web/src/live/Experiments.tsx` + `experimentReads.ts`.
+2026-10-17 in `packages/web/src/live/Experiments.tsx` + `experimentReads.ts`. Increment 3 (the
+corkboard pins) built 2026-10-17 in `office-scene/render.ts` + `wallboard.ts`.
 **Lane:** `01M55KZF5M41HBR7CWSC5PHFHD` (goal `launch`), asked by nick
 **Decision:** [ADR 644](../../decisions/644-lane-reads-on-and-read-verdict.md): a lane declares
 `reads_on`, its close gives `read_verdict`, and the server derives `read_status`
@@ -132,6 +133,14 @@ the rest are neutral, with shape matching §4 where a pin's size allows. At most
 the eighth is a "+" card. The idle bake (`office-scene/index.ts`) re-renders only when the set of
 `(lane, read_status)` pairs changes, never per frame. The scene's text equivalent points at this
 section. It is a separate lane because it has to pass `scene:pixel-check` and the scene budget.
+
+_(Amended 2026-10-17, slippy, building it: the board's six columns fill the cork, so the pins hang on
+a strip of their own. The board grew 14 units downward, its top edge and columns unmoved, and an oak
+rail divides the strip from the columns. Each read is a small paper tag on a tack, left to right.
+Overdue is an amber tag on an accent tack that has slipped crooked on its pin; due has a dark tack;
+waiting is the plainest paper with a pale tack; read carries a tick. Past 8, the eighth tag carries a
+"+". The board is a live wall fixture, painted every frame outside the sprite cache, so the pins add
+no bake.)_
 
 ## 7. Behavior
 

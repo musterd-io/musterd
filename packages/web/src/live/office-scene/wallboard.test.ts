@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
+import { laneSeed, projectWallBoard, READ_PIN_CAP, readPins, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -232,5 +232,32 @@ describe('pin holes, derived from the board (lane 01M50WEBTC)', () => {
     const lanes = [lane({ id: 'A', state: 'awaiting_acceptance', updated_at: NOW - DAY }), lane({ id: 'B', state: 'open' })];
     expect(wb(lanes)).toEqual(wb(lanes));
     expect(heldOf(wb(lanes), 'open')).toBe(2);
+  });
+});
+
+describe('read pins (ADR 644 inc 3)', () => {
+  const board: LaneBoard = { lanes: [lane({ id: 'a', state: 'open' })], warnings: [] } as unknown as LaneBoard;
+
+  it('carries the reads it is given, in order, and none when there are none', () => {
+    expect(projectWallBoard(board, new Set(), 1, ['due', 'waiting'])!.reads).toEqual(['due', 'waiting']);
+    expect(projectWallBoard(board, new Set(), 1)!.reads).toBeUndefined();
+  });
+
+  it('keeps the reads through a card in hand and a card being pinned', () => {
+    const wb = projectWallBoard(board, new Set(), 1, ['overdue'])!;
+    const seed = laneSeed('a');
+    expect(withTaken(wb, [seed])!.reads).toEqual(['overdue']);
+    expect(withPinned(wb, [{ seed, state: 'claimed' }])!.reads).toEqual(['overdue']);
+  });
+
+  it('pins every read that fits, and past the cap makes the last slot a "+"', () => {
+    expect(readPins(undefined)).toEqual([]);
+    const eight = Array<'waiting'>(READ_PIN_CAP).fill('waiting');
+    expect(readPins(eight)).toEqual(eight);
+    const nine = ['overdue', ...eight] as const;
+    const pins = readPins(nine);
+    expect(pins).toHaveLength(READ_PIN_CAP);
+    expect(pins[0]).toBe('overdue');
+    expect(pins.at(-1)).toBe('more');
   });
 });

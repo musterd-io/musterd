@@ -48,7 +48,8 @@ import {
   type DeskSlot,
   type Rug,
 } from './layout';
-import { STICKY_CAP, stickySway, type WallBoard } from './wallboard';
+import type { ReadStatus } from '../experimentReads';
+import { READ_PIN_CAP, readPins, STICKY_CAP, stickySway, type WallBoard } from './wallboard';
 import { DAY_ENV, sunBeam, type LightEnv } from './lighting';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
@@ -946,6 +947,36 @@ function wallLaneBoard(
     }
   }
 
+  // The read strip (ADR 644 increment 3): an oak rail across the board, and under it one tag per dated
+  // read, left to right in the Experiments section's order. Status only, and by paper and pin rather
+  // than by words: an overdue tag is amber and has slipped on its pin, a read tag carries a tick, a
+  // waiting one is the plainest paper on the board. The section beside the room says the rest.
+  const RAIL = H / 2 - 71; // where the old board's cork ended: the columns above are untouched
+  rect(-W / 2 + FR, RAIL - 1.6, W / 2 - FR, RAIL, PINBOARD.oak);
+  stroke([[-W / 2 + FR, RAIL], [W / 2 - FR, RAIL]], 0.7, PINBOARD.oakLit);
+  stroke([[-W / 2 + FR, RAIL - 1.6], [W / 2 - FR, RAIL - 1.6]], 0.7, PINBOARD.inner);
+  const pins = readPins(data?.reads);
+  const slotW = (W - M * 2) / READ_PIN_CAP;
+  for (let i = 0; i < pins.length; i++) {
+    const pin = pins[i]!;
+    const look = READ_TAGS[pin];
+    const c = -W / 2 + M + (i + 0.5) * slotW + ((i * 7) % 3) - 1; // a hand's placement, not a grid
+    const top = RAIL - 3.4;
+    const tw = 10;
+    const th = 8;
+    const slip = pin === 'overdue' ? 2.6 : 0; // hung from one pin, the tag swings out of true
+    quad(ctx, [p(c - tw / 2 + 0.8, top - 0.8), p(c + tw / 2 + 0.8, top - 0.8), p(c + tw / 2 + 0.8 + slip, top - th - 0.8), p(c - tw / 2 + 0.8 + slip, top - th - 0.8)], PINBOARD.noteCast);
+    quad(ctx, [p(c - tw / 2, top), p(c + tw / 2, top), p(c + tw / 2 + slip, top - th), p(c - tw / 2 + slip, top - th)], look.tag);
+    const mid = c + slip / 2;
+    if (pin === 'read')
+      stroke([[mid - 2.4, top - 4.2], [mid - 0.8, top - 5.8], [mid + 2.6, top - 2.4]], 1, look.mark!);
+    if (pin === 'more') {
+      stroke([[mid - 2.4, top - 4.2], [mid + 2.4, top - 4.2]], 1, look.mark!);
+      stroke([[mid, top - 1.8], [mid, top - 6.6]], 1, look.mark!);
+    }
+    rect(c - 1.2, top - 1.8, c + 1.2, top + 0.6, look.pin); // the tack's head
+  }
+
   // Frame thickness — the outer edge of the oak, so the board reads as an object standing off the wall.
   stroke([[-W / 2, -H / 2], [W / 2, -H / 2], [W / 2, H / 2], [-W / 2, H / 2], [-W / 2, -H / 2]], 0.9, PINBOARD.oakShade);
 }
@@ -979,6 +1010,20 @@ const WALLBOARD_TONES: ReadonlyArray<{ cap: string; note: string; tape: string; 
   // done — --lc-success
   { cap: '#2F9E6A', note: '#D5ECDF', tape: 'rgba(47, 158, 106, 0.75)', faded: '#D8DFD4', fadedTape: 'rgba(47, 158, 106, 0.35)' },
 ];
+
+/**
+ * The read strip's tags (ADR 644 increment 3), one per `read_status` plus the "+" card. Overdue is
+ * the only accent, as in the Experiments section: the wash is `--lc-accent` pulled toward paper and
+ * the tack is the accent itself. The rest are neutral paper told apart by the tack: dark ink for
+ * due, pale for waiting, mid for read (which also carries a tick).
+ */
+const READ_TAGS: Record<ReadStatus | 'more', { tag: string; pin: string; mark?: string }> = {
+  overdue: { tag: '#F6DFA4', pin: '#B8860B' },
+  due: { tag: '#FFFDF6', pin: '#3B3026' },
+  waiting: { tag: '#EDE6D8', pin: '#D9CFBE' },
+  read: { tag: '#FFFDF6', pin: '#8E8578', mark: '#5E5446' },
+  more: { tag: '#FFFDF6', pin: '#8E8578', mark: '#5E5446' },
+};
 
 /**
  * The pin board's materials: pale oak, cork, and the shadows that seat one inside the other.
