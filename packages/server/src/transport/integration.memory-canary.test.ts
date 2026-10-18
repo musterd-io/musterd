@@ -1,3 +1,5 @@
+import { type NoteRecipients, parseSealedNote, SEALED_NOTE_HEADLINE } from '@musterd/protocol';
+import { generateNoteKey, keyedRecipients, openNote, sealNote } from '@musterd/protocol/note-seal';
 import { describe, expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
 import { integrationHarness, type Auth } from './integration.helpers.js';
@@ -9,7 +11,7 @@ import { integrationHarness, type Auth } from './integration.helpers.js';
  * carries the note's text, or if a write lands without the owner's next read flagging it.
  *
  * The rules under test: ADR 093 (own-seat routes), ADR 651 (who reads a note), ADR 654 (a note says
- * who saved it). The sweep scans every GET route a seat can reach, so a new route that leaks a note
+ * who saved it), ADR 657 (a human's note is sealed to that human's machines). The sweep scans every GET route a seat can reach, so a new route that leaks a note
  * fails here without anyone having to remember to add it. The OS half (the database file and the
  * binding on disk) is lane 01M561ZCDS, on the hosted image.
  */
@@ -66,6 +68,26 @@ withDrivers('integration · memory canary', (_o, kind) => {
   const ADA_BODY = 'ada-body-canary-7f3e';
   const BO_HEADLINE = 'BO-HEADLINE-CANARY';
   const BO_BODY = 'bo-body-canary-91c2';
+  /** Bo's machine key and nick's (ADR 657): a human's note is sealed client-side before the save. */
+  const BO_KEY = generateNoteKey();
+  const NICK_KEY = generateNoteKey();
+
+  /** Seal a human's note the way the CLI does: register this machine's key, ask for the seat's
+   *  machines, seal to every keyed one. */
+  async function sealedAs(tok: Auth, key: typeof BO_KEY, note: { headline: string; body: string }) {
+    const r = await req(
+      'POST',
+      '/teams/dawn/memory/recipients',
+      { public_key: key.public_key },
+      tok,
+    );
+    const rec = r.json as NoteRecipients;
+    if (!rec.seal) throw new Error('a human seat is sealed');
+    return {
+      headline: SEALED_NOTE_HEADLINE,
+      body: sealNote(note, keyedRecipients(rec.recipients)),
+    };
+  }
 
   /** Claim `seat` as a session in `workspace`, the way a harness does, and return its auth. A seat's
    *  credential is shown once, on its first claim; a later claim returns only a fresh lease, used
@@ -112,8 +134,14 @@ withDrivers('integration · memory canary', (_o, kind) => {
         .status,
     ).toBe(204);
     expect(
-      (await req('PUT', '/teams/dawn/memory', { headline: BO_HEADLINE, body: BO_BODY }, boTok))
-        .status,
+      (
+        await req(
+          'PUT',
+          '/teams/dawn/memory',
+          await sealedAs(boTok, BO_KEY, { headline: BO_HEADLINE, body: BO_BODY }),
+          boTok,
+        )
+      ).status,
     ).toBe(204);
     const lane = await post('/teams/dawn/lanes', { title: 'ada work', claim: true }, ada);
     const act = await post(
@@ -277,15 +305,55 @@ withDrivers('integration · memory canary', (_o, kind) => {
       const boRow = (audit.json.audit as { action: string; target: string; detail: any }[]).find(
         (r) => r.action === 'continuity.memory_saved' && r.target === 'Bo',
       )!;
-      expect(boRow.detail).toMatchObject({ headline_len: BO_HEADLINE.length });
+      expect(boRow.detail).toMatchObject({ headline_len: SEALED_NOTE_HEADLINE.length });
       expect(boRow.detail).not.toHaveProperty('writer');
     });
 
     it("cannot overwrite another human's note: a save lands on the caller's own seat", async () => {
       const s = await seed();
-      await req('PUT', '/teams/dawn/memory', { headline: 'nick own', body: 'nick' }, s.nickTok);
+      const own = await sealedAs(s.nickTok, NICK_KEY, { headline: 'nick own', body: 'nick' });
+      expect((await req('PUT', '/teams/dawn/memory', own, s.nickTok)).status).toBe(204);
       const bo = await get('/teams/dawn/memory', s.boTok);
-      expect(bo.json).toMatchObject({ headline: BO_HEADLINE, body: BO_BODY });
+      expect(openNote(bo.json.body as string, BO_KEY)).toEqual({
+        headline: BO_HEADLINE,
+        body: BO_BODY,
+      });
+      // And nick's machine cannot open Bo's note even holding its ciphertext.
+      expect(openNote(bo.json.body as string, NICK_KEY)).toBeNull();
+    });
+
+    it("holds a human's note only as ciphertext: the row, its audit row, every envelope (ADR 657)", async () => {
+      const s = await seed();
+      const rows = await h.db.all<{ headline: string; body: string }>(
+        "SELECT m.headline, m.body FROM seat_memory m JOIN members b ON b.id = m.member_id WHERE b.name = 'Bo'",
+      );
+      const audit = await h.db.all<{ detail: string }>(
+        "SELECT detail FROM audit WHERE action = 'continuity.memory_saved' AND target = 'Bo'",
+      );
+      const env = await get('/teams/dawn/memory?envelope=1', s.boTok);
+      const bo = await get('/teams/dawn/memory', s.boTok);
+      for (const text of [
+        JSON.stringify(rows),
+        JSON.stringify(audit),
+        JSON.stringify(env.json),
+        JSON.stringify(bo.json),
+      ]) {
+        expect(text).not.toContain(BO_HEADLINE);
+        expect(text).not.toContain(BO_BODY);
+      }
+      expect(rows[0]!.headline).toBe(SEALED_NOTE_HEADLINE);
+      expect(parseSealedNote(rows[0]!.body)).not.toBeNull();
+      // A plain-text save from a human is refused, and so is a readable headline on a sealed body.
+      const plain = await req('PUT', '/teams/dawn/memory', { headline: 'h', body: 'b' }, s.boTok);
+      expect(plain.status).toBe(400);
+      const sealed = await sealedAs(s.boTok, BO_KEY, { headline: 'h', body: 'b' });
+      const leaky = await req('PUT', '/teams/dawn/memory', { ...sealed, headline: 'h' }, s.boTok);
+      expect(leaky.status).toBe(400);
+      // An agent seat's note is never sealed: its wake packet is built from it (ADR 430).
+      const asAgent = await req('PUT', '/teams/dawn/memory', sealed, s.ada);
+      expect(asAgent.status).toBe(400);
+      const rec = await req('POST', '/teams/dawn/memory/recipients', {}, s.ada);
+      expect(rec.json).toEqual({ seal: false });
     });
   });
 });

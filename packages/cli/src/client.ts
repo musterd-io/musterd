@@ -8,6 +8,8 @@ import {
   AuditResponseSchema,
   DecideResponseSchema,
   ErrorBodySchema,
+  type NoteRecipients,
+  NoteRecipientsSchema,
   ActDeliverySchema,
   GoalListSchema,
   NodeInviteMintSchema,
@@ -1020,6 +1022,15 @@ export class HttpClient {
   }
   clearMemory(slug: string): Promise<void> {
     return this.request('DELETE', `/teams/${slug}/memory`);
+  }
+  /** ADR 657: record this machine's public note key (when given) and list the machines the seat's
+   *  note is sealed to — `{ seal: false }` for an agent seat. */
+  async noteRecipients(slug: string, publicKey?: string): Promise<NoteRecipients> {
+    return NoteRecipientsSchema.parse(
+      await this.request('POST', `/teams/${slug}/memory/recipients`, {
+        ...(publicKey ? { public_key: publicKey } : {}),
+      }),
+    );
   }
   // ── Team memory (ADR 327): the read side of `insight` acts, via the daemon's derived FTS fold
   // (a rebuildable cache — never a source of truth). Writes travel as ordinary acts.

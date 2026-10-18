@@ -945,3 +945,31 @@ is ever inferred from a title, a detail or a document.
   client-supplied copy is stripped. It is absent when `reads_on` is.
 - A passed date raises nothing: no Act, no state change, no wake. A server behind this appendix
   sends neither field, and a reader treats that Lane as undated.
+
+## A.24 A human seat's note is sealed to that human's machines (unreleased — ADR 657)
+
+A human seat's note is encrypted on the human's own machines before it is saved. No server, hub or
+peer holds it in plain text.
+
+- A sealed note's stored `body` is `mssealed1.` + base64url JSON `SealedNote`
+  `{v: 1, to: [{node, pk, epk, wrap}], iv, ct}`, and its `headline` is the fixed `sealed note`. `ct`
+  is AES-256-GCM over `{headline, body}` under a random content key. Each `to` stanza wraps that key
+  for one machine: X25519 between a fresh ephemeral key (`epk`) and the machine's public key (`pk`),
+  HKDF-SHA256, then AES-256-GCM. Both keys are raw 32 bytes, base64url.
+- `POST /teams/:slug/memory/recipients` `{public_key?}` (seat-authenticated) records the calling
+  machine's public key on its node, and answers the strict `NoteRecipients`:
+  - `{seal: true, node_id, recipients: [{node_id, label, public_key | null}]}` for a human seat,
+    covering every node in the seat's trusted set, or just the asking node when the set is empty;
+  - `{seal: false}` for an agent seat, with nothing recorded.
+
+  An enrolled joiner forwards it to the hub as `POST /teams/:slug/sync/note-recipients`
+  `{seat, public_key?}` under its machine credential. The hub records the key only for the node that
+  authenticated.
+- A server MUST refuse, with `bad_request`:
+  - a human seat's save whose body is not a sealed note, or whose headline is not `sealed note`;
+  - an agent seat's save whose body is a sealed note.
+- A sealed body may be up to 16384 bytes. The 120-character headline and 8192-byte body caps apply
+  to the plain text, and the client checks them before sealing.
+- `checks` (A.17) are empty for a sealed note.
+- A client that can open the note re-seals it when a keyed machine in the seat's set is missing from
+  `to`. A machine not in `to` cannot open the note.

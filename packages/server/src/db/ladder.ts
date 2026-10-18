@@ -630,6 +630,19 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
         ALTER COLUMN decided_at TYPE BIGINT`);
     },
   },
+  {
+    // v109 — ADR 657 (lane 01M561YWP0): a machine's public note key — the raw X25519 public half,
+    // base64url — a human seat's note is sealed to. Nullable: a machine has one only once a human
+    // seat on it has needed it.
+    version: 109,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('nodes')").pluck().all();
+      if (!cols.includes('note_key')) db.exec('ALTER TABLE nodes ADD COLUMN note_key TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE nodes ADD COLUMN IF NOT EXISTS note_key TEXT');
+    },
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

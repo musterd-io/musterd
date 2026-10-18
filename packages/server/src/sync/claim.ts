@@ -9,6 +9,8 @@ import {
   type Lane,
   LaneSchema,
   leftoverSignal,
+  type NoteRecipients,
+  NoteRecipientsSchema,
   SeatBoundElsewhereRefusalSchema,
   type SeatNodeTrusted,
   SeatNodeTrustedSchema,
@@ -21,6 +23,7 @@ import {
   PullPollResponseSchema,
   type SyncHaltRequest,
   type SyncHoldRequest,
+  type SyncNoteRecipientsRequest,
   type SyncPolicyRequest,
   type SyncPullRequest,
   type SyncStyleRequest,
@@ -1025,6 +1028,45 @@ export async function styleAtHub(
     throw new Error(`the hub answered ${res.status} to the style change: ${JSON.stringify(body)}`);
   }
   return body;
+}
+
+/**
+ * Joiner side of the note-recipients call (ADR 657): the hub holds the seat's set of machines
+ * (ADR 358), so it records this machine's public note key against the node that authenticated and
+ * answers from that set. The joiner writes nothing.
+ */
+export async function noteRecipientsAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncNoteRecipientsRequest,
+): Promise<NoteRecipients> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/note-recipients`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_note_recipients_hub_unreachable', team: slug, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const b = body as { error?: { code?: string; message?: string } } | null;
+    const code = b?.error?.code;
+    if (code === 'forbidden' || code === 'not_found' || code === 'validation') {
+      throw new MusterdError(code, b?.error?.message ?? 'the hub refused the note-recipients call');
+    }
+    throw new Error(
+      `the hub answered ${res.status} to the note-recipients call: ${JSON.stringify(body)}`,
+    );
+  }
+  return NoteRecipientsSchema.parse(body);
 }
 
 /** States a lane may be parked from (ADR 466): live, not-yet-submitted work. */

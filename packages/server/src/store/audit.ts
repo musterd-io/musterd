@@ -590,6 +590,9 @@ export type AuditAction =
   // it (detail: { node, by_node, by_label }). A refused trust is `seat.bound_elsewhere` with
   // detail.act = 'trust' — one row shape for every probe from a machine outside the set.
   | 'seat.node_trusted'
+  // ADR 657: a machine's public note key recorded or changed (detail: { node, fingerprint,
+  // replaced }) — the key a human seat's note is sealed to. Never the key itself in full.
+  | 'node.note_key_set'
   // Spec 2026-09-16 (workspace self-heal), ADR 408: what a SessionStart repair wrote, skipped, left.
   | 'workspace.repaired'
   // Lane 01M52Z987280: the broadcast's last words — the stream posted its exit reason
@@ -815,6 +818,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.bound_elsewhere': 'actor',
   'seat.unbound': 'actor',
   'seat.node_trusted': 'actor',
+  'node.note_key_set': 'actor',
   'workspace.repaired': 'actor',
   // The stream's observer seat posted its own epitaph — the row is about the stream's end and was
   // acted by the seat itself, like any self-report.

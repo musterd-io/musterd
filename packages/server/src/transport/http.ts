@@ -121,6 +121,9 @@ import {
   SyncPolicyRequestSchema,
   SyncStyleRequestSchema,
   SyncTrustRequestSchema,
+  NoteRecipientsRequestSchema,
+  parseSealedNote,
+  SyncNoteRecipientsRequestSchema,
   SyncPushRequestSchema,
   SyncPushResponseSchema,
   wakeabilityFromFacts,
@@ -342,13 +345,16 @@ import {
 import {
   applyMemoryClear,
   applyMemorySave,
+  assertNoteShape,
   getMemory,
   mayReadNote,
   memoryEnvelope,
   leasePresence,
   memoryProvenance,
+  noteRecipients,
   redactedNoteDetail,
   requestPlace,
+  setNodeNoteKey,
 } from '../store/memory.js';
 import {
   countInbox,
@@ -539,6 +545,7 @@ import {
   haltAtHub,
   holdAtHub,
   joinerEnrollment,
+  noteRecipientsAtHub,
   policyAtHub,
   styleAtHub,
   localNodeWithLabel,
@@ -6515,6 +6522,26 @@ export async function handleHttp(
         }
       }
 
+      // ADR 657, hub side: a joiner's note-recipients call. The authenticated node is the machine
+      // whose key is recorded — a node can set only its own — and the answer is the hub's set.
+      if (method === 'POST' && rest === '/sync/note-recipients') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncNoteRecipientsRequestSchema, await readJson(req));
+        const seat = await getMemberByName(ctx.db, team.id, body.seat);
+        if (!seat) throw new MusterdError('not_found', `no seat "${body.seat}" on this roster`);
+        if (seat.kind === 'human' && body.public_key)
+          await setNodeNoteKey(ctx.db, team.id, node.id, body.public_key, seat.name);
+        return sendJson(res, 200, await noteRecipients(ctx.db, seat, node.id));
+      }
+
       // ADR 358, the seat-facing act: "trust this node for my seat". Authenticated as the seat, for
       // the caller's own seat only; the daemon this request lands on is the vouching node. On an
       // enrolled joiner it is forwarded to the hub (the binding lives there); otherwise it is
@@ -9442,6 +9469,7 @@ export async function handleHttp(
         assertSeatCanRead(member); // inert seats (disabled/banned/archived) can't touch memory either
         const parsed = parseOrBadRequest(MemorySaveBody, await readJson(req));
         const input = { headline: parsed.headline, body: parsed.body ?? '' };
+        assertNoteShape(member.kind, input); // ADR 657: a human's note arrives sealed, an agent's not
         // ADR 654: stamp who saved it — the Presence behind the session lease, and this node.
         const writer = await requestPlace(
           ctx.db,
@@ -9496,8 +9524,49 @@ export async function handleHttp(
         // ADR 522: the note's claims, checked against the Team as it is now — a lane it carries that
         // has since closed, a freeze no hold backs. Computed here so every reader gets the same
         // verdict without one of its own tool calls.
-        const checks = await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
+        // A sealed note (ADR 657) is ciphertext to this daemon: nothing to check.
+        const checks = parseSealedNote(mem.body)
+          ? []
+          : await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
         return sendJson(res, 200, { ...mem, checks, provenance });
+      }
+
+      // ADR 657: the machines a human seat's note is sealed to. One call records this machine's
+      // public note key (when sent) and returns the seat's trusted set (ADR 358) with each machine's
+      // key. On an enrolled joiner the set lives at the hub, so the call is forwarded there under the
+      // machine credential. An agent seat's note is not sealed: `{ seal: false }`, nothing recorded.
+      if (method === 'POST' && rest === '/memory/recipients') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          agentSessionLease(req),
+        );
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(NoteRecipientsRequestSchema, await readJson(req));
+        if (member.kind !== 'human') return sendJson(res, 200, { seal: false });
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        if (enrollment) {
+          try {
+            return sendJson(
+              res,
+              200,
+              await noteRecipientsAtHub(enrollment, team.slug, {
+                seat: member.name,
+                ...(body.public_key ? { public_key: body.public_key } : {}),
+              }),
+            );
+          } catch (err) {
+            if (err instanceof HubUnreachableError)
+              throw new MusterdError('hub_unreachable', err.message);
+            throw err;
+          }
+        }
+        const { id: node } = await localNodeForTeam(ctx.db, team.id);
+        if (body.public_key)
+          await setNodeNoteKey(ctx.db, team.id, node, body.public_key, member.name);
+        return sendJson(res, 200, await noteRecipients(ctx.db, member, node));
       }
 
       if (method === 'DELETE' && rest === '/memory') {

@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeEnvelope } from '@musterd/protocol';
+import { makeEnvelope, SEALED_NOTE_HEADLINE } from '@musterd/protocol';
+import { generateNoteKey, openNote, sealNote } from '@musterd/protocol/note-seal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
@@ -9,13 +10,26 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getCursor } from '../store/cursors.js';
 import { getMemberByName } from '../store/members.js';
-import { getMemory } from '../store/memory.js';
+import { getMemory as storedMemory } from '../store/memory.js';
 import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
+
+// nick is a human seat, so his note crosses sealed (ADR 657): saves go through `sealed`, and reads
+// open it with the same key, so every assertion below still speaks of the note's own words.
+const NOTE_KEY = generateNoteKey();
+const sealed = (n: { headline: string; body: string }) => ({
+  headline: SEALED_NOTE_HEADLINE,
+  body: sealNote(n, [{ node: 'n-test', pk: NOTE_KEY.public_key }]),
+});
+async function getMemory(...args: Parameters<typeof storedMemory>) {
+  const m = await storedMemory(...args);
+  const o = m && openNote(m.body, NOTE_KEY);
+  return m && o ? { ...m, ...o } : m;
+}
 
 withDrivers('continuity', (_o, kind) => {
   /**
@@ -155,10 +169,10 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        {
+        sealed({
           headline: 'left off here',
           body: 'mid-flight: the cursor half is designed, memory half blocked',
-        },
+        }),
         nickOnJoiner,
       );
       expect(saved.status).toBe(204);
@@ -174,12 +188,45 @@ withDrivers('continuity', (_o, kind) => {
       expect(onHub?.body).toBe('mid-flight: the cursor half is designed, memory half blocked');
     });
 
+    it("a joiner's note-recipients call is answered by the hub, which records the joiner's key (ADR 657)", async () => {
+      await roundTrip(); // nick speaks from the joiner first, so the joiner is in his set
+      const joinerKey = generateNoteKey();
+      const res = await call(
+        'POST',
+        joinerBase,
+        '/teams/bravo/memory/recipients',
+        { public_key: joinerKey.public_key },
+        nickOnJoiner,
+      );
+      expect(res.status).toBe(200);
+      const body = res.json as {
+        seal: boolean;
+        node_id: string;
+        recipients: { node_id: string; public_key: string | null }[];
+      };
+      expect(body.seal).toBe(true);
+      // The hub answered from its own set, and the key landed on the hub's row for the joiner.
+      const onHub = await hub.store.get<{ note_key: string | null }>(
+        'SELECT note_key FROM nodes WHERE id = ?',
+        [body.node_id],
+      );
+      expect(onHub?.note_key).toBe(joinerKey.public_key);
+      expect(body.recipients).toContainEqual(
+        expect.objectContaining({ node_id: body.node_id, public_key: joinerKey.public_key }),
+      );
+      // The joiner wrote nothing of its own: the set and its keys are the hub's.
+      const onJoiner = await joiner.store.get<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM nodes WHERE note_key IS NOT NULL',
+      );
+      expect(onJoiner?.n).toBe(0);
+    });
+
     it('the folded row keeps the ORIGIN’s saved_at — one clock per fact', async () => {
       await call(
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'h', body: 'b' },
+        sealed({ headline: 'h', body: 'b' }),
         nickOnJoiner,
       );
       const origin = (await getMemory(
@@ -197,7 +244,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'h', body: 'b' },
+        sealed({ headline: 'h', body: 'b' }),
         nickOnJoiner,
       );
       const origin = (await getMemory(
@@ -217,7 +264,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         hubBase,
         '/teams/bravo/memory',
-        { headline: 'older', body: 'o' },
+        sealed({ headline: 'older', body: 'o' }),
         nickOnHub,
       );
       await new Promise((r) => setTimeout(r, 5));
@@ -225,7 +272,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'newer', body: 'n' },
+        sealed({ headline: 'newer', body: 'n' }),
         nickOnJoiner,
       );
       await roundTrip();
@@ -244,7 +291,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'h', body: 'b' },
+        sealed({ headline: 'h', body: 'b' }),
         nickOnJoiner,
       );
       await roundTrip();
@@ -280,7 +327,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'stale', body: 'minted before the clear' },
+        sealed({ headline: 'stale', body: 'minted before the clear' }),
         nickOnJoiner,
       );
       await new Promise((r) => setTimeout(r, 5));
@@ -311,14 +358,20 @@ withDrivers('continuity', (_o, kind) => {
     it('a save made AFTER a clear survives the clear arriving late', async () => {
       // Clear on the hub, then a newer save on the joiner, then both cross. The clear is a fact with
       // a clock; it is about the note that the new note replaced, and must lose to the newer save.
-      await call('PUT', hubBase, '/teams/bravo/memory', { headline: 'old', body: 'o' }, nickOnHub);
+      await call(
+        'PUT',
+        hubBase,
+        '/teams/bravo/memory',
+        sealed({ headline: 'old', body: 'o' }),
+        nickOnHub,
+      );
       await call('DELETE', hubBase, '/teams/bravo/memory', undefined, nickOnHub);
       await new Promise((r) => setTimeout(r, 5));
       await call(
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'fresh', body: 'f' },
+        sealed({ headline: 'fresh', body: 'f' }),
         nickOnJoiner,
       );
       await roundTrip();
@@ -337,16 +390,21 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'sensitive subject', body: 'PASSWORD=hunter2' },
+        sealed({ headline: 'sensitive subject', body: 'PASSWORD=hunter2' }),
         nickOnJoiner,
       );
       await roundTrip();
       const row = await hub.store.get(
         "SELECT detail, origin_seq FROM audit WHERE action = 'continuity.memory_saved'",
       )!;
-      // Stated, not discovered: the audit log now holds memory bodies, daemon-side only, bounded by
-      // the 8 KiB cap. This is the consequence ADR 366 writes down.
-      expect(JSON.parse(row.detail)).toMatchObject({
+      // Stated, not discovered: the audit log holds memory bodies, daemon-side only, bounded by the
+      // cap (ADR 366). For a human seat that body is the sealed note (ADR 657): the row crosses, the
+      // words do not.
+      const detail = JSON.parse(row.detail) as { headline: string; body: string };
+      expect(detail.headline).toBe(SEALED_NOTE_HEADLINE);
+      expect(row.detail).not.toContain('hunter2');
+      expect(row.detail).not.toContain('sensitive subject');
+      expect(openNote(detail.body, NOTE_KEY)).toEqual({
         headline: 'sensitive subject',
         body: 'PASSWORD=hunter2',
       });
@@ -485,7 +543,7 @@ withDrivers('continuity', (_o, kind) => {
         'PUT',
         joinerBase,
         '/teams/bravo/memory',
-        { headline: 'mine', body: 'm' },
+        sealed({ headline: 'mine', body: 'm' }),
         nickOnJoiner,
       );
       await roundTrip();

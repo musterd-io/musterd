@@ -6,7 +6,14 @@ import {
   type MemoryEnvelope,
   type MemoryProvenance,
 } from '@musterd/protocol';
+import {
+  type NoteSealClient,
+  NoteSealError,
+  openForSeat,
+  sealForSeat,
+} from '@musterd/protocol/note-seal';
 import { flagStr, type Parsed } from '../args.js';
+import type { HttpClient } from '../client.js';
 import { type Config, seatsHoldingSession } from '../config.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
@@ -35,7 +42,7 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
       throw new CliError('usage: musterd memory save --headline "<subject>" [body...]', 2);
     }
     const body = parsed.positionals.slice(1).join(' ');
-    await http.saveMemory(team, { headline, ...(body ? { body } : {}) });
+    await http.saveMemory(team, await sealOrRefuse(noteClient(http, team), { headline, body }));
     if (parsed.flags['json']) {
       process.stdout.write(JSON.stringify({ ok: true, headline }) + '\n');
       return 0;
@@ -94,6 +101,20 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
     }
     throw err;
   }
+  // ADR 657: a human's own note is sealed to their machines — open it here, and re-seal it when a
+  // newly trusted machine (or a note saved before sealing) is not reached yet.
+  let sealLine: string | undefined;
+  if (!seat || seat === identity.name) {
+    const opened = await openForSeat(noteClient(http, team), mem);
+    if (opened.kind === 'closed') {
+      process.stdout.write(theme.warn(opened.line) + '\n');
+      return 0;
+    }
+    if (opened.kind === 'open') {
+      mem = { ...mem, headline: opened.headline, body: opened.body };
+      sealLine = opened.line;
+    }
+  }
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(mem) + '\n');
     return 0;
@@ -108,11 +129,44 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
         ? theme.warn(`⚠ ${mem.provenance.line}`)
         : theme.meta(mem.provenance.line)) + '\n',
     );
+  if (sealLine) process.stdout.write(theme.meta(sealLine) + '\n');
   // ADR 522: the note's claims checked against the Team now — above the body, read first.
   for (const line of claimCheckLines(mem.checks ?? []))
     process.stdout.write(theme.warn(line) + '\n');
   if (mem.body) process.stdout.write(mem.body + (mem.body.endsWith('\n') ? '' : '\n'));
   return 0;
+}
+
+/** The seat-side seal flow (ADR 657) bound to this team, over the CLI's client. A daemon older than
+ *  ADR 657 has no recipients route (404), and never seals. */
+function noteClient(
+  http: Pick<HttpClient, 'noteRecipients' | 'saveMemory'>,
+  team: string,
+): NoteSealClient {
+  return {
+    recipients: async (publicKey) => {
+      try {
+        return await http.noteRecipients(team, publicKey);
+      } catch (err) {
+        if (err instanceof CliError && err.code === 'not_found') return null;
+        throw err;
+      }
+    },
+    save: (input) => http.saveMemory(team, input),
+  };
+}
+
+/** {@link sealForSeat} with its refusals as CLI errors: a cap is a usage error, no machine a state one. */
+async function sealOrRefuse(
+  client: NoteSealClient,
+  note: { headline: string; body: string },
+): Promise<{ headline: string; body?: string }> {
+  try {
+    return await sealForSeat(client, note);
+  } catch (err) {
+    if (err instanceof NoteSealError) throw new CliError(err.message, err.kind === 'cap' ? 2 : 5);
+    throw err;
+  }
 }
 
 /** The running harness session's own id, where the harness hands one to the processes it spawns.
