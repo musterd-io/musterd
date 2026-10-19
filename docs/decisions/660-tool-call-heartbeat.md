@@ -1,7 +1,8 @@
 # 660 — Tool-call heartbeat: the office shows a seat is working, from counts and kinds only
 
-- Status: proposed — draft skeleton, 2026-10-18. nick asked for the draft only; nothing is built.
-- Date: 2026-10-18
+- Status: accepted — 2026-10-19, nick ("approve the ADR, start the heartbeat lane"). Drafted
+  2026-10-18 as a skeleton at his request, with nothing built until he had read it.
+- Date: 2026-10-19
 - Lane: `01M597Z3K6K0KN8FZRVYWVG3K5` (goal `live-delight`)
 - Builds on: [ADR 445](445-agent-traces-captured-local-first.md) (harness tool calls already reach
   the daemon's `trace.db`, batched, local-first, research substrate),
@@ -45,8 +46,6 @@ The surface is also public: `/broadcast` streams to strangers. A filename, a com
 fragment from a hook is content, and content must never reach it.
 
 ## Decision
-
-_(Proposed — to be judged with nick before it is accepted.)_
 
 1. **A per-seat heartbeat, from counts and kinds only.** The daemon derives, per occupied seat, an
    _intensity_ (harness tool-call events per minute, from ADR 445's batches) and the _kind_ of the
