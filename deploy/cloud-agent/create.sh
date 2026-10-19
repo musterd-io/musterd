@@ -134,7 +134,10 @@ fi
 unset HOST_KEY MODEL_KEY GH_TOKEN
 
 say "-- fly: deploy (first boot provisions the seat)"
-run fly deploy --config "$ROOT/deploy/cloud-agent/fly.toml" \
+# The checkout is the build context (the Dockerfile's `COPY . .`), named explicitly: by default fly
+# uses the config's folder, and the first pilot run (2026-10-19) built from deploy/cloud-agent/ alone —
+# 292 bytes, "No projects matched the filters". The sponsor steps above may also have cd'd away.
+run fly deploy "$ROOT" --config "$ROOT/deploy/cloud-agent/fly.toml" \
   --dockerfile "$ROOT/deploy/cloud-agent/Dockerfile" \
   --app "$APP" --ha=false \
   --env "MUSTERD_SERVER=$SERVER" \
