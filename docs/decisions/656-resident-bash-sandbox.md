@@ -48,6 +48,11 @@ preflight errors. No runtime dependency or protocol schema is added.
 
 ## Consequences
 
+- 2026-10-19: Ubuntu 24.04's AppArmor unprivileged-user-namespace restriction can prevent
+  bubblewrap from setting up the network namespace. Load Ubuntu's `bwrap-userns-restrict` profile
+  to permit bubblewrap while retaining the system-wide restriction; CI installs and loads that
+  profile.
+
 - Workspace scripts and tests may read and write project files, but the bash process cannot use the
   host home or host credentials. The pnpm store is available read-only.
 - A child can reach only the resident gateway ports supplied by the host. Arbitrary loopback and
