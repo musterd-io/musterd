@@ -712,6 +712,30 @@ CREATE INDEX IF NOT EXISTS idx_pairing_nonces_team_member ON pairing_nonces(team
       await d.exec(LANE_SAMPLES_TABLE_SQL);
     },
   },
+  {
+    // Human authority (ADR 662, lane 01M5ANFFVHY07ZTYEECTRSTXTN): device keys bound to a
+    // human (public half only — the private key never leaves the authenticator), and the
+    // one-use approval nonces the server mints with each descriptor. A nonce row is spent
+    // exactly once, on a verified presentation or not at all.
+    version: 113,
+    sql: `CREATE TABLE IF NOT EXISTS device_keys (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  revoked_at BIGINT
+);
+CREATE TABLE IF NOT EXISTS approval_nonces (
+  nonce TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  descriptor_digest TEXT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT
+)`,
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

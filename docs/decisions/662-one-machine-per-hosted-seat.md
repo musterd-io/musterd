@@ -134,6 +134,15 @@ All four converged on one shape, and nick directed it be written as this ADR.
   the human's credential can no longer perform a listed act with it.
 - Dated notes go into ADRs 200, 341, 647 and 320 in the same commit, with markers beside the text
   they qualify.
+- _(2026-10-19: human authority 1 landed the descriptor, the closed list in protocol code
+  (`HIGH_AUTHORITY_ACTS`, pinned by test), and the server gate (`requireAuthority`), with
+  activation per-human on enrollment (nick's call): an agent-kind credential is refused for a
+  listed act outright, and a human's listed acts require A2 once that human has an enrolled
+  device key — enrollment latches, so revoking every key is the lost-device case, never a
+  reopening of the Bearer path. Guarded surfaces: team and governed policy, admin-path grant
+  issue, agent create, human counterpart lane closes, `merged.authorized_by`, and human
+  verdicts on the act path. Enrollment (lane 2) and the authenticators (lane 3) follow; the
+  gate closes when all three have landed and humans are enrolled.)_
 
 ## Observability & Evaluation
 
