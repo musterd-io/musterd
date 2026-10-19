@@ -42,6 +42,8 @@ const row = (
 const ANTHROPIC_SRC = 'platform.claude.com/docs/en/about-claude/pricing, read 2026-10-13';
 const OPENAI_SRC = 'developers.openai.com/api/docs/pricing, read 2026-10-13';
 const XAI_SRC = 'docs.x.ai/developers/pricing, read 2026-10-13 (<200k-prompt tier)';
+const OPENCODE_SRC =
+  'models.dev/api.json `opencode` (Zen) / `opencode-go` provider cost, read 2026-10-19 (≤200k-context tier)';
 const MUSE_SRC =
   'dev.meta.ai/docs/pricing-rate-limits (Muse Wonder $4/$20/$0.20 standard; contributor n/a) + /products/muse-code (Muse Spark), read 2026-10-16';
 
@@ -86,6 +88,18 @@ export const PRICE_ROWS: readonly PriceRow[] = [
   // Longest-prefix keeps the two rows apart.
   row('muse-wonder-1.0-contributor', 4.0, 20.0, 0.05, 0, MUSE_SRC),
   row('muse-wonder-1.0', 4.0, 20.0, 0.05, 0, MUSE_SRC),
+  // OpenCode-hosted models our OpenCode seats run (presence attestations, 2026-10-05..19), as the
+  // gateway's opencode / opencode-go routes see them. A `-free` model is $0 there; its row also
+  // keeps it from falling into a paid prefix (`muse-spark-1.3-contributor-free` priced as the paid
+  // contributor row before this). Cache read is the listed cached rate over the input rate.
+  row('muse-spark-1.3-contributor-free', 0, 0, 0, 0, OPENCODE_SRC),
+  row('muse-spark-1.2-contributor-free', 0, 0, 0, 0, OPENCODE_SRC),
+  row('minimax-m3.1-flash-free', 0, 0, 0, 0, OPENCODE_SRC),
+  row('beam-free', 0, 0, 0, 0, OPENCODE_SRC),
+  row('cat-jam-free', 0, 0, 0, 0, OPENCODE_SRC),
+  row('gemini-4-argon-contributor', 4, 20, 0.05, 0, OPENCODE_SRC),
+  row('gemini-3.8-flash', 1.5, 7.5, 0.1, 0, OPENCODE_SRC),
+  row('kimi-k3', 3, 15, 0.1, 0, OPENCODE_SRC),
 ];
 
 /** The row a model id prices by: the longest matching prefix, or undefined. */
