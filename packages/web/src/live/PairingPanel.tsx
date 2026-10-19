@@ -135,7 +135,10 @@ export function PairingPanel({ cfg }: { cfg: LiveConfig }) {
                 />
               </label>
               <label className="pair-card__row">
-                <span className="pair-card__key">Answer from here</span>
+                <span className="pair-card__key">
+                  Answer from here
+                  {!s.deliver && s.answer ? ' — off while delivery is off' : ''}
+                </span>
                 <input
                   type="checkbox"
                   checked={s.answer}

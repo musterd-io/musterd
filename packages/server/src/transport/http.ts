@@ -1241,7 +1241,10 @@ const PairingStartBody = z.object({
 });
 
 // Channel settings (away channels 6): the human's own per-channel switches. Nothing is on by
-// default; presence gating defaults on; tier floor is optional.
+// default; presence gating defaults on; tier floor is optional. The channel itself is parsed
+// against the adapters that exist — slack is the only one in v1 — so an arbitrary string from
+// the URL never reaches the store or the audit log as a channel.
+const ChannelSettingsChannel = z.enum(['slack']);
 const ChannelSettingsBody = z.object({
   deliver: z.boolean(),
   answer: z.boolean(),
@@ -4383,13 +4386,17 @@ export async function handleHttp(
         }
         const settingsMatch = /^\/channels\/settings\/([^/]+)$/.exec(rest);
         if (method === 'PUT' && settingsMatch) {
+          const channel = parseOrBadRequest(
+            ChannelSettingsChannel,
+            decodeURIComponent(settingsMatch[1]!),
+          );
           const body = parseOrBadRequest(ChannelSettingsBody, await readJson(req));
           const saved = await setChannelSettings(ctx.db, {
             teamId: team.id,
             memberId: member.id,
             actor: member.name,
             settings: {
-              channel: decodeURIComponent(settingsMatch[1]!),
+              channel,
               deliver: body.deliver,
               answer: body.answer,
               presenceGating: body.presence_gating,
