@@ -59,12 +59,17 @@ export const RETIRED_INSTALL_COMMANDS = [
   'pnpm add -g @musterd/cli',
 ] as const;
 
-/** The install as one shell block, for markdown surfaces (README, the launch post). */
+/**
+ * The install as one shell block, for markdown surfaces (README, the launch post). Each step's title
+ * rides as a comment above its commands: without them the block read `musterd init` then straight
+ * `musterd tour`, and skipped "start a chat with your agent there" — the step the tour needs
+ * (sloane, #2939 review).
+ */
 export function installShellBlock(): string {
   const lines: string[] = [];
   INSTALL.steps.forEach((step, i) => {
     if (i > 0) lines.push('');
-    lines.push(...step.commands);
+    lines.push(`# ${i + 1}. ${step.title}`, ...step.commands);
     if (i === 0) {
       for (const alt of INSTALL.alternatives) lines.push(`# ${alt.lead} ${alt.command}`);
     }
