@@ -60,6 +60,20 @@ describe('host price table (ADR 583 Consequences — one table, dated provenance
     ).toBeCloseTo(4.0, 6);
   });
 
+  it("prices OpenCode's free models at $0, never as the paid prefix they share (lane 01M5B20JY7)", () => {
+    const u = {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_input_tokens: 1_000_000,
+    };
+    for (const m of ['muse-spark-1.3-contributor-free', 'minimax-m3.1-flash-free', 'beam-free'])
+      expect(priceUsage(m, u)).toBe(0);
+    // The paid contributor row still prices the paid id.
+    expect(priceUsage('muse-spark-1.3-contributor', { input_tokens: 1_000_000 })).toBe(0.1);
+    // A listed paid OpenCode model: $3 in, $15 out, cached at $0.30.
+    expect(priceUsage('kimi-k3', u)).toBeCloseTo(18.3, 6);
+  });
+
   it('every row names where its number was read', () => {
     for (const row of PRICE_ROWS) expect(row.source).toMatch(/20\d\d/);
   });
