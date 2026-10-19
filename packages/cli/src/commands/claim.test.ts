@@ -647,4 +647,33 @@ describe('claim --detach (ADR 377 increment 1 — the one-shot HTTP path `join` 
     expect(after.seat_credential).toMatch(/^msac_/);
     expect(after.claim).toEqual({ mode: 'seat', name: 'bo' });
   });
+
+  // A hosted team serves no roster to an anonymous caller, so a fresh folder on <slug>.musterd.dev
+  // failed before it ever claimed ("missing bearer token", cloud-agent pilot 2026-10-18).
+  describe('the roster read before a claim carries the credential the claim will use', () => {
+    const rosterKeys: Array<string | undefined> = [];
+    beforeEach(() => {
+      rosterKeys.length = 0;
+      const original = HttpClient.prototype.roster;
+      vi.spyOn(HttpClient.prototype, 'roster').mockImplementation(function (
+        this: HttpClient,
+        ...args: Parameters<typeof original>
+      ) {
+        rosterKeys.push((this as unknown as { opts: { key?: string } }).opts.key);
+        return original.apply(this, args);
+      });
+    });
+
+    it('a human credential (mscr_) authenticates the read', async () => {
+      process.env['MUSTERD_AGENT_KEY'] = adminToken;
+      expect((await run(['nick', '--team', 'dawn', '--detach'])).code).toBe(0);
+      expect(rosterKeys).toEqual([adminToken]);
+    });
+
+    it('a bootstrap key (mskey_) stays off the read — the server refuses it on routine calls', async () => {
+      await declareSeat('bo');
+      expect((await run(['bo', '--team', 'dawn', '--detach'])).code).toBe(0);
+      expect(rosterKeys).toEqual([undefined]);
+    });
+  });
 });
