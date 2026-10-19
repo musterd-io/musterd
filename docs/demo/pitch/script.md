@@ -113,7 +113,7 @@ musterd.io.
 | 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 10 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |
 | 11 | Free local, subscription, credits; Cloud and orgs coming soon | Business plan spec above; no prices exist yet. Goal `cloud` in flight, no date quoted |
-| 12 | Each category: what it gives you, what it leaves out; musterd: any harness, then the message | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row carries [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1's sentence (2026-10-19; it replaced "members who can say no" and "another member accepts", the mechanism chips of 2026-10-13) and the harness line; its limit (it is not a sandbox and does not run your agents) is in the questions below. "A person at both ends" is a section title in the ADR and is never said as a sentence; "in one read" waits for the one-page chain on `lane show` (lane `01M5AX030T`) |
+| 12 | Each category: what it gives you, what it leaves out; musterd: any harness, then the message | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row carries [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1's sentence (2026-10-19; it replaced "members who can say no" and "another member accepts", the mechanism chips of 2026-10-13) and the harness line; its limit (it is not a sandbox and does not run your agents) is in the questions below. "A person at both ends" is a section title in the ADR and is never said as a sentence. The chain of one piece of work is printed by `musterd lane show <id>` (ADR 629, #2771): asked, claimed, model, accepted, authorized, each marked verified, stated or missing; checked 2026-10-19 on lane 01M5AMG9C3 |
 | 12 | Competitor logos | Each is the icon the company serves on its own site, fetched 2026-10-09: Plane, Conductor, Band, CrewAI, Multica, Omnigent, Party and Agent Relay from their own domains. Two are indirect: **qm** shows YC's own "Y" because qm is a YC project and its page serves only that mark; **Hermes Bot Mode** shows the Nous Research icon, since Hermes Agent is a Nous product. Used only to identify each product. CrewAI's is a 32 px favicon, so it is soft at large sizes |
 
 ## Questions to expect, and plain answers
@@ -144,7 +144,9 @@ number has a row in the Q&A ledger below; re-read it before each event.
   standing team on any harness: nothing counts as done until another member accepts it, and the record
   shows who did it, who accepted it, and which model. In October I read about forty products. Three
   things were missing in every one: an act where an agent declines or challenges the work, acceptance
-  enforced from a different member, and a record of which model did the work.
+  enforced from a different member, and a record of which model did the work. One command prints the
+  whole chain for any piece of work: who asked, who claimed it, which model, who accepted, who
+  authorised the merge, each marked verified, stated or missing.
 - **Who are your competitors, and how do you beat them?** Band is the closest and the best funded, at
   $17 million. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
   inside one tool. Linear and Jira are adding agents as delegates; Linear's own guidelines say "an agent
@@ -214,5 +216,6 @@ number has a row in the Q&A ledger below; re-read it before each event.
 | 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
 | SecurityHQ + Datadog: n=204, 45%, 49%, 17% within minutes | SecurityHQ press release, 2026-10-15 |
 | One in ten landed lanes sent back on review; 922 of 967 name the person who authorised the merge | `./chain.sh`, read 2026-10-19; ADR 665 Context |
+| One command prints the chain, each link verified / stated / missing | `musterd lane show <id>` (ADR 629, #2771); checked 2026-10-19 on lane 01M5AMG9C3. Whether the acceptance was independent (review grade) is ADR 670, lane `01M5AXKX01`, and is not claimed until it lands |
 | Hosted subscription with caps and credits; org tier; no prices | `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 461 §5 for the price rule |
 | No account, no cloud, no analytics in the product; telemetry off by default; bodies never in it | `PRIVACY.md` |
