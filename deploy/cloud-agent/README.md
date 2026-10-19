@@ -84,8 +84,12 @@ fly secrets set --app musterd-agent-$SEAT \
 ```
 
 Set the machine's non-secret env in `fly.toml` (`MUSTERD_SERVER`, `MUSTERD_TEAM`,
-`MUSTERD_HOST` — the host label must match the label the provision was queued for), and
-`REPO_URL` to the workspace repo the seat clones on first boot.
+`MUSTERD_HOST` — the host label must match the label the provision was queued for,
+`MUSTERD_MODEL` — the model the seat runs on), and `REPO_URL` to the workspace repo the seat
+clones on first boot. The model is a declaration (ADR 101): the resident engine never picks one,
+and with it unset every wake is **deferred**, which the host log does not show (a deferral is the
+local-session guard's quiet path). The third pilot run (2026-10-19) provisioned and woke the seat,
+then sat there on exactly that; `musterd report` on the team counts the deferrals.
 
 ## First boot **$**
 
