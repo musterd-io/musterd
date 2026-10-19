@@ -59,8 +59,14 @@ musterd team bootstrap mint --host cloud-$SEAT   # or your label; keep it consis
 The agent itself is minted **last**, after the machine's host is polling (First boot below):
 
 ```sh
+musterd team policy --hosted-budget 5    # agent_host.policy.budget_usd — required, or the claim fails no_budget
 musterd agent $SEAT --hosted             # sponsored mint — the one path that queues a provision
 ```
+
+The budget is the per-wake report bound every hosted seat enrolls with (ADR 463 §2). The team
+has no default: a host that claims a provision while it is unset fails the row `no_budget` on the
+spot, logs nothing on the machine, and the sponsor gets one inbox message naming the setting. The
+second pilot run (2026-10-19) hit exactly that.
 
 A provision is queued only while a host key of yours polled in the last ten minutes (ADR 463 §2);
 minted earlier, the agent exists but nothing is queued and the host polls an empty queue. Plain

@@ -532,7 +532,8 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
  * [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]
  * [--sponsored-agent-cap <1–100>] [--spend-cap <usd|off>] [--spend-approval <usd|off>]
- * [--unpriced-wake-cap <n|off>] [--acceptance-review-window <1–1440 minutes>]` — show or set the
+ * [--unpriced-wake-cap <n|off>] [--acceptance-review-window <1–1440 minutes>]
+ * [--hosted-budget <usd|off>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -557,6 +558,8 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * ADR 639: `--unpriced-wake-cap <n>` sets the 7-day unpriced-wake count (`off` clears it; unset
  * keeps today's behavior; 0 blocks unpriced harnesses). The report shows the count. A set key
  * holds new agent wakes when the count reaches it. A human still passes (ADR 641).
+ * ADR 463 §2: `--hosted-budget <usd>` sets `agent_host.policy.budget_usd`, the per-wake report bound every
+ * sponsor-hosted seat enrolls with; without it a host's claim fails `no_budget` at once (`off` clears it).
  * ADR 506: `--acceptance-review-window <min>`
  * sets how long a lane-review ask waits before its owner may self-close on silence (default 20). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
@@ -588,6 +591,7 @@ const POLICY_FLAGS = new Set([
   'sponsored-agent-cap',
   'spend-cap',
   'spend-approval',
+  'hosted-budget',
   'unpriced-wake-cap',
   'acceptance-review-window',
   'ask-slack-webhook',
@@ -804,6 +808,27 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     }
     changed = true;
   }
+  // ADR 463 §2: the hosted-seat budget. A provision claimed without it fails `no_budget` at once, so
+  // this is the knob a sponsor is told to set. `off` deletes the key; 0 is rejected like the caps.
+  const hostedBudget = flagStr(parsed.flags, 'hosted-budget');
+  if (hostedBudget !== undefined) {
+    const agentHost = { ...(merged.agent_host ?? {}) };
+    const override = { ...(agentHost.policy ?? {}) };
+    if (hostedBudget === 'off') {
+      delete override.budget_usd;
+    } else {
+      const n = Number(hostedBudget);
+      if (!Number.isFinite(n) || n <= 0 || n > SPEND_CAP_USD_MAX) {
+        throw new CliError(
+          `usage: musterd team policy --hosted-budget <usd | off>  (positive, at most ${SPEND_CAP_USD_MAX})`,
+          2,
+        );
+      }
+      override.budget_usd = n;
+    }
+    merged.agent_host = { ...agentHost, policy: override };
+    changed = true;
+  }
   // ADR 639: the 7-day unpriced-wake count. `off` deletes the key. 0 is a real cap.
   const unpricedCap = flagStr(parsed.flags, 'unpriced-wake-cap');
   if (unpricedCap !== undefined) {
@@ -995,6 +1020,14 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
             : `spend approval: $${updated.spend_approval_usd.toFixed(2)} per wake at the gateway — shown on the report, display only`,
         ) + '\n',
       );
+    if (hostedBudget !== undefined)
+      process.stdout.write(
+        hint(
+          updated.agent_host.policy.budget_usd === undefined
+            ? 'hosted budget off — a host claiming a sponsored seat fails no_budget (ADR 463 §2)'
+            : `hosted budget: $${updated.agent_host.policy.budget_usd.toFixed(2)} per wake for sponsor-hosted seats`,
+        ) + '\n',
+      );
     if (unpricedCap !== undefined)
       process.stdout.write(
         hint(
@@ -1112,6 +1145,12 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     current.spend_approval_usd === undefined
       ? `  spend approval: ${theme.meta('unset')}\n`
       : `  spend approval: $${current.spend_approval_usd.toFixed(2)} per wake at the gateway\n`,
+  );
+  // ADR 463 §2. Required for hosted seats; absence is a refused claim, not a default.
+  process.stdout.write(
+    current.agent_host.policy.budget_usd === undefined
+      ? `  hosted budget: ${theme.meta('unset (a host claim fails no_budget)')}\n`
+      : `  hosted budget: $${current.agent_host.policy.budget_usd.toFixed(2)} per wake for sponsor-hosted seats\n`,
   );
   // ADR 639. Absence keeps today's behavior, so this line does not use inherited().
   process.stdout.write(
