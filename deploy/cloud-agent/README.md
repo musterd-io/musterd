@@ -52,10 +52,19 @@ On the sponsor's machine, bound to the team:
 
 ```sh
 SEAT=<name>        # the hosted seat this machine will run
-musterd agent $SEAT                      # sponsors + queues the provision for a host
 # a host key for this machine's label, minted by the sponsor (shown once — copy it now):
 musterd team bootstrap mint --host cloud-$SEAT   # or your label; keep it consistent below
 ```
+
+The agent itself is minted **last**, after the machine's host is polling (First boot below):
+
+```sh
+musterd agent $SEAT --hosted             # sponsored mint — the one path that queues a provision
+```
+
+A provision is queued only while a host key of yours polled in the last ten minutes (ADR 463 §2);
+minted earlier, the agent exists but nothing is queued and the host polls an empty queue. Plain
+`musterd agent $SEAT` (no `--hosted`) never queues one: it provisions a folder on this machine.
 
 On the operator's machine:
 

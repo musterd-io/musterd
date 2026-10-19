@@ -12,14 +12,19 @@
 #   --repo <git-url>     workspace repo the seat clones on first boot (required)
 #   --host-label <label> host label the provision is queued for (default: cloud-<seat>)
 #   --key-env <VAR>      env var holding the sponsor's model key (default: ANTHROPIC_API_KEY)
-#   --skip-sponsor       skip the sponsor steps (agent already created, host key in MUSTERD_HOST_KEY)
+#   --skip-sponsor       skip the sponsor steps (host key in MUSTERD_HOST_KEY; no agent is minted)
+#   --skip-fly           the app, volume, secrets and machine already exist — only mint the agent
 #   --dry-run            print every step (secrets redacted), change nothing
 #
 # Sponsor steps run as the sponsor. From a folder already bound to the team they run there; from
 # anywhere else the script binds a scratch folder to the team itself, as the member whose
 # credential staging-issuer saved in ~/.musterd/cloud/teams/<team>.json (`create-team`), so the
 # whole thing is ONE command. The host key is minted, captured into a shell variable, and handed
-# straight to `fly secrets set` — it is never printed. The model key and GH token are read without echo (or taken from the environment
+# straight to `fly secrets set` — it is never printed.
+#
+# Order matters (ADR 463 §2): the agent is minted LAST, through the sponsored path, once the machine's
+# host is polling — that is the only moment a provision is queued for it. The first pilot run
+# (2026-10-19) minted the agent first and the host polled an empty queue. The model key and GH token are read without echo (or taken from the environment
 # variables named by --key-env / GH_TOKEN when already set).
 set -euo pipefail
 
@@ -33,6 +38,7 @@ REPO_URL=""
 HOST_LABEL=""
 KEY_ENV=ANTHROPIC_API_KEY
 SKIP_SPONSOR=0
+SKIP_FLY=0
 DRY_RUN=0
 
 while [ $# -gt 0 ]; do
@@ -45,6 +51,7 @@ while [ $# -gt 0 ]; do
     --host-label) HOST_LABEL="$2"; shift 2 ;;
     --key-env) KEY_ENV="$2"; shift 2 ;;
     --skip-sponsor) SKIP_SPONSOR=1; shift ;;
+    --skip-fly) SKIP_FLY=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -95,8 +102,6 @@ if [ "$SKIP_SPONSOR" = 0 ]; then
         musterd claim "$SPONSOR" --team "$TEAM" --detach
     fi
   fi
-  say "-- sponsor: create the agent and queue its provision"
-  run musterd agent "$SEAT"
   say "-- sponsor: mint the host key for '$HOST_LABEL' (captured, never printed)"
   if [ "$DRY_RUN" = 1 ]; then
     HOST_KEY="<host key>"
@@ -118,6 +123,7 @@ if [ -z "${GH_TOKEN:-}" ] && [ "$DRY_RUN" = 0 ]; then
 fi
 
 # ── fly steps ─────────────────────────────────────────────────────────────────────────────────
+if [ "$SKIP_FLY" = 0 ]; then
 say "-- fly: app + volume"
 run fly apps create "$APP" --org "$ORG" || true
 run fly volumes create agent_data --app "$APP" --region "$REGION" --size 3 --yes || true
@@ -144,6 +150,25 @@ run fly deploy "$ROOT" --config "$ROOT/deploy/cloud-agent/fly.toml" \
   --env "MUSTERD_TEAM=$TEAM" \
   --env "MUSTERD_HOST=$HOST_LABEL" \
   --env "REPO_URL=$REPO_URL"
+fi
+
+# ── the agent, minted once the host is polling ────────────────────────────────────────────────
+if [ "$SKIP_SPONSOR" = 0 ]; then
+  say "-- host: waiting for '$HOST_LABEL' to poll (the provision is queued only while it does)"
+  if [ "$DRY_RUN" = 1 ]; then
+    printf '  (poll `fly logs --app %s` for "◉ polling", then one tick)\n' "$APP"
+  else
+    seen=0
+    for _ in $(seq 1 24); do
+      if fly logs --app "$APP" --no-tail 2>/dev/null | grep -q '◉ polling'; then seen=1; break; fi
+      sleep 10
+    done
+    [ "$seen" = 1 ] || { echo "host '$HOST_LABEL' never reported polling — fly logs --app $APP" >&2; exit 1; }
+    sleep 15   # one poll tick, so the server has seen the host before the mint
+  fi
+  say "-- sponsor: mint the agent (sponsored path — this is what queues its provision)"
+  run musterd agent "$SEAT" --hosted
+fi
 
 say ""
 say "done. Watch it stand the seat up:"

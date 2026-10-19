@@ -679,6 +679,26 @@ export class HttpClient {
   }> {
     return this.request('POST', `/teams/${slug}/members`, body);
   }
+  /**
+   * ADR 449 §3 / ADR 463 §2: a member mints an agent they sponsor (`POST /members/agents`). Unlike
+   * {@link addMember} this is the path that QUEUES a provision — when a host key of the sponsor's
+   * polled in the last ten minutes, `hosting` is `sponsor_host` and that host stands the seat up;
+   * otherwise nothing is queued and `connect_url` is the way in. `musterd agent --hosted`.
+   */
+  mintSponsoredAgent(
+    slug: string,
+    body: { name: string; role?: string | undefined },
+  ): Promise<{
+    member: MemberSummary;
+    hosting: 'sponsor_host' | 'connect_link';
+    host: string | null;
+    connect_url: string;
+  }> {
+    return this.request('POST', `/teams/${slug}/members/agents`, {
+      name: body.name,
+      ...(body.role !== undefined ? { role: body.role } : {}),
+    });
+  }
   /** ADR 374: set a member's hue on a DB-only team (a file-backed team edits the seat file). */
   setHue(
     slug: string,

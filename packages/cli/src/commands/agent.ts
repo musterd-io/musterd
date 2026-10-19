@@ -36,7 +36,7 @@ export async function agentCommand(
   const name = parsed.positionals[0];
   if (!name || /\s/.test(name)) {
     throw new CliError(
-      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <id[,id…]>] [--driver <you>] [--here | --path <dir>]',
+      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <id[,id…]>] [--driver <you>] [--here | --path <dir>] | --hosted [--json]',
       2,
     );
   }
@@ -81,6 +81,44 @@ export async function agentCommand(
 
   // Adding a member is an admin act — needs an active identity, like `team add`.
   const { team, http, config } = resolve(parsed.flags);
+
+  // `--hosted` (ADR 463 §2 / ADR 647): the seat lives on a host of the sponsor's, not in a folder
+  // here. The sponsored mint is the ONE path that queues a provision, and only while a host key of
+  // the sponsor's has polled in the last ten minutes — so stand the host up first (the cloud-agent
+  // pilot ran these the other way round on 2026-10-19 and the host polled an empty queue forever).
+  // No workspace, no wiring: the host clones and wires on its own machine.
+  if (parsed.flags['hosted'] === true) {
+    const minted = await http.mintSponsoredAgent(team, { name, ...(role ? { role } : {}) });
+    if (parsed.flags['json']) {
+      process.stdout.write(
+        JSON.stringify({
+          team,
+          member: minted.member.name,
+          hosting: minted.hosting,
+          host: minted.host,
+          connect_url: minted.connect_url,
+        }) + '\n',
+      );
+      return minted.hosting === 'sponsor_host' ? 0 : 1;
+    }
+    process.stdout.write(
+      `${theme.ok(sym.ok)} added ${theme.memberName(minted.member.name, 'agent')} (agent) to ${theme.accent(team)}\n`,
+    );
+    if (minted.hosting === 'sponsor_host') {
+      process.stdout.write(
+        `${theme.ok(sym.ok)} provision queued — host ${theme.accent(minted.host ?? '?')} stands it up on its next poll\n`,
+      );
+      return 0;
+    }
+    process.stdout.write(
+      `${theme.warn(sym.warn)} ${theme.warn('nothing queued: no host of yours polled in the last 10 minutes')}\n` +
+        theme.meta(
+          `  start the host first (\`musterd host --cloud-provision …\`), then \`musterd team remove ${name}\` and run this again;\n`,
+        ) +
+        theme.meta(`  or open the connect link on the agent's machine: ${minted.connect_url}\n`),
+    );
+    return 1;
+  }
 
   // The warn-only infra-touch gate (ADR 227 inc 2): wiring writes harness config other seats on this
   // repo root launch through. One added line for a non-`platform` seat, then proceed.
