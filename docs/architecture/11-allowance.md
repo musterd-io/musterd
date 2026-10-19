@@ -25,9 +25,11 @@ A number is drawn only from a body the provider's own client reads:
   `used_percent` over a length of `limit_window_seconds` (18000 seconds is the 5-hour window,
   604800 is the weekly window). `reset_at` is unix seconds. `plan_type` is shown only when it is a
   short plan word. Email, user id and account id are never copied out.
-- Claude, from `CLAUDE_CODE_OAUTH_TOKEN` or `claudeAiOauth.accessToken` in
-  `~/.claude/.credentials.json`: `GET https://api.anthropic.com/api/oauth/usage`. `five_hour` and
-  `seven_day` carry `utilization` and `resets_at`. A key containing `overage` is not a window.
+- Claude, from `CLAUDE_CODE_OAUTH_TOKEN`, or `claudeAiOauth.accessToken` in
+  `~/.claude/.credentials.json`, or on macOS the keychain item Claude Code stores
+  (`Claude Code-credentials`, which is that same JSON): `GET https://api.anthropic.com/api/oauth/usage`.
+  `five_hour` and `seven_day` carry `utilization` and `resets_at`. `resets_at` may be unix seconds
+  or an ISO timestamp. A key containing `overage` is not a window, and neither is any other key.
 - Cursor, from `accessToken` in `~/.cursor/auth.json`, or on macOS the keychain item the Cursor CLI
   stores (`cursor-access-token` / `cursor-user`):
   `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with an empty
@@ -51,7 +53,7 @@ A sign-in is read in the server and never written into the HTML, the JSON, or th
 bin.ts            // shebang: Node 22 gate, ALLOWANCE_PORT, start on loopback, print the url
 board.ts          // readBoard: the accounts the user turned on; a token stays inside its fetch
 catalog.ts        // every account the page can offer, and the reason when it has no read
-claude.ts         // Claude Code's usage read: oauth/usage, overage skipped, token from env or file
+claude.ts         // Claude Code's usage read: oauth/usage, overage skipped, token from env, file, or keychain
 codex.ts          // Codex's usage read: wham/usage windows, identity fields never copied out
 config.ts         // the saved account ids: parse, the form, ~/.allowance/config.json mode 0600
 css.ts            // percentCss: .p0–.p100 so a bar width is a class, not an inline style

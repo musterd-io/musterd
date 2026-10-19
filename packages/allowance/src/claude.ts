@@ -1,5 +1,12 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { shareWindow, type ShareMiss, type ShareRead } from './codex.js';
 import type { LiveProvider } from './types.js';
+
+const execFileAsync = promisify(execFile);
+
+/** The keychain item Claude Code writes on macOS. The account is the OS user. */
+const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 
 const URL = 'https://api.anthropic.com/api/oauth/usage';
 
@@ -17,6 +24,10 @@ function labelFor(key: string): string | null {
 }
 
 function resetsAt(value: unknown): number | null {
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
   if (value > 1_000_000_000_000) return Math.round(value);
   if (value > 1_000_000_000) return Math.round(value * 1000);
@@ -68,6 +79,49 @@ export function claudeTokenFromEnv(env: NodeJS.ProcessEnv, file: unknown): strin
   const fromEnv = env['CLAUDE_CODE_OAUTH_TOKEN']?.trim() ?? '';
   if (fromEnv !== '') return fromEnv;
   return claudeToken(file);
+}
+
+/**
+ * Explicit token wins, including an explicit null that means "do not look".
+ * Otherwise the environment, then the credentials file, then the lookup.
+ */
+export async function resolveClaudeToken(
+  explicit: string | null | undefined,
+  env: NodeJS.ProcessEnv,
+  file: unknown,
+  lookup: () => Promise<string | null>,
+): Promise<string | null> {
+  if (explicit !== undefined) return explicit === '' ? null : explicit;
+  const fromEnv = claudeTokenFromEnv(env, file);
+  if (fromEnv !== null) return fromEnv;
+  return lookup();
+}
+
+/**
+ * Claude Code's macOS keychain item. It holds the credentials JSON.
+ * Stdout is that JSON and is never logged. Only the access token is returned.
+ */
+export async function claudeTokenFromKeychain(): Promise<string | null> {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const { stdout } = await execFileAsync(
+      '/usr/bin/security',
+      ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w'],
+      { timeout: 3_000, maxBuffer: 65_536 },
+    );
+    const text = stdout.trim();
+    if (text === '') return null;
+    if (text.startsWith('{')) {
+      try {
+        return claudeToken(JSON.parse(text));
+      } catch {
+        return null;
+      }
+    }
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 export async function readClaude(
