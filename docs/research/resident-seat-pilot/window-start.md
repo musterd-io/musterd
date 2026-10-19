@@ -286,3 +286,16 @@ wakes from that point fail at the provider. The finding reports any such failure
 funding stop and does not count it as a seat failure, as it would treat crossing the $100 ceiling.
 nick turned auto-reload back on at about 10:55 PDT on 2026-10-19. B had no credit failure in the
 gap.
+
+## Readout tool (2026-10-19)
+
+`pnpm pilot:readout [--db <path>] [--json]` (`scripts/research/resident-pilot-readout.ts`) derives
+the six measures from the rows, with the attestation check first. Arm membership is this page's
+allocation tables, copied into the script. It prints PROVISIONAL until the acceptance tail ends. The
+finding runs it against the hub's db.
+
+A dry run on this joiner's replica turned up one structural problem for measure 2. Only one of arm
+C's eight in-class lanes has a priced wake by a C seat. The others were done in attended sessions,
+which lease nothing and so leave no `residency.wake_cost` row to price. Unless the hub shows
+otherwise, C's dollars per accepted lane rest on one lane. The script prints that count beside the
+kill criterion. The finding reports it as the honest-N caveat, and does not read it as a comparison.

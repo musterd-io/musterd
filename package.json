@@ -65,6 +65,7 @@
     "next:readout": "node --disable-warning=ExperimentalWarning scripts/research/next-readout.ts",
     "critique:experiment": "node --disable-warning=ExperimentalWarning scripts/research/critique-channel-experiment.ts",
     "wake:rail": "node --disable-warning=ExperimentalWarning scripts/research/wake-contract-rail.ts",
+    "pilot:readout": "node --disable-warning=ExperimentalWarning scripts/research/resident-pilot-readout.ts",
     "corpus:snapshot": "node --disable-warning=ExperimentalWarning scripts/corpus/snapshot.ts",
     "dataset:export": "node --disable-warning=ExperimentalWarning scripts/dataset/export.ts",
     "dataset:exn-snapshot": "node --disable-warning=ExperimentalWarning scripts/dataset/exn-snapshot.ts",
