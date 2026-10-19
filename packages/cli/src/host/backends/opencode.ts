@@ -3,7 +3,7 @@ import {
   spawn as nodeSpawn,
   type ChildProcess,
 } from 'node:child_process';
-import type { WakeUsage } from '@musterd/protocol';
+import type { LocalServing, WakeUsage } from '@musterd/protocol';
 import { z } from 'zod';
 import { findBinding, saveBinding } from '../../config.js';
 import { resolveOpencodeBin } from '../../opencodeBin.js';
@@ -18,6 +18,7 @@ import type {
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { addUsage } from './codex.js';
+import { readLocalServing } from './opencodeLocal.js';
 
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
@@ -160,6 +161,8 @@ export interface OpencodeDeps {
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
   /** Injectable process-table scan for {@link opencodeServePid} (ADR 613): `ps -ax -o pid=,uid=,args=`. */
   ps?: () => Promise<string>;
+  /** ADR 663: the three-part `local` read, taken once at spawn (tests inject the answer). */
+  readLocalServing?: (workspace: string) => LocalServing | null;
 }
 
 /**
@@ -232,6 +235,7 @@ async function attempt(
   label: 'fresh' | 'resumed',
   timeoutMs: number,
   pinnedDir: string | undefined,
+  local: LocalServing | null,
 ): Promise<Attempt> {
   const startedAt = Date.now();
   let child: ChildProcess;
@@ -313,12 +317,15 @@ async function attempt(
         `${timedOut ? ' (watchdog)' : ''} wall=${(duration_ms / 1000).toFixed(1)}s`,
     );
     // ADR 364: tokens ride the row; the price opencode printed rides beside them as ITS claim —
-    // `cost_usd` stays absent because the host holds no table to check it against.
+    // `cost_usd` stays absent because the host holds no table to check it against. ADR 663: a wake
+    // whose three local signals agreed at spawn is `local`, carrying the snapshot it ran under.
     return {
       duration_ms,
       ...(usage ? { usage } : {}),
       ...(harnessCost !== undefined ? { harness_cost_usd: harnessCost } : {}),
-      unpriced_reason: 'harness_price_unverified',
+      ...(local
+        ? { unpriced_reason: 'local' as const, local_serving: local }
+        : { unpriced_reason: 'harness_price_unverified' as const }),
       // ADR 436 clause 4: the capture this run made or resumed — the loop stamps it ended.
       captures: [{ harness: 'opencode', ids: [sessionId, expectedId] }],
       ...(yielded ? { yielded: true } : {}),
@@ -419,6 +426,10 @@ export function opencodeBackend(deps: OpencodeDeps = {}): ActuatorBackend {
         node: process.execPath,
         binJs: process.argv[1] ?? '',
       });
+      // ADR 663: read once, before any spawn, so an edit mid-wake changes nothing on the record.
+      const local = (
+        deps.readLocalServing ?? ((ws: string) => readLocalServing(ws, findBinding(ws, {})))
+      )(spec.workspace);
       const deadline = Date.now() + spec.bounds.timeout_ms;
       // Absent is legacy: mixed daemon/host versions retain the existing resume path. An explicit
       // portable/fresh order bypasses resume and spawns fresh immediately (ADR 209).
@@ -446,6 +457,7 @@ export function opencodeBackend(deps: OpencodeDeps = {}): ActuatorBackend {
           'resumed',
           spec.bounds.timeout_ms,
           pinnedDir,
+          local,
         );
         if (resumed.occupied)
           return {
@@ -497,6 +509,7 @@ export function opencodeBackend(deps: OpencodeDeps = {}): ActuatorBackend {
         'fresh',
         Math.max(1, deadline - Date.now()),
         pinnedDir,
+        local,
       );
       return {
         outcome: {

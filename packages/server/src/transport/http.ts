@@ -5099,6 +5099,10 @@ export async function handleHttp(
                 // them; `harness_cost_usd` is its claim and never enters the totals.
                 ...(body.usage ? { usage: body.usage } : {}),
                 ...(body.unpriced_reason ? { unpriced_reason: body.unpriced_reason } : {}),
+                // ADR 663: the provider configuration a `local` wake claimed, as the host read it.
+                ...(body.unpriced_reason === 'local' && body.local_serving
+                  ? { local_serving: body.local_serving }
+                  : {}),
                 ...(body.harness_cost_usd !== undefined
                   ? { harness_cost_usd: body.harness_cost_usd }
                   : {}),

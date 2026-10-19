@@ -518,6 +518,53 @@ describe('the completion record — every settled run reports what the host meas
     expect(completion?.cost_usd).toBeUndefined();
   });
 
+  it('a wake whose three local signals agreed at spawn settles as `local` with the snapshot (ADR 663)', async () => {
+    const child = new Child();
+    const snapshot = {
+      provider: 'ollama',
+      model: 'qwen3:4b',
+      base_url: 'http://127.0.0.1:11434/v1',
+    };
+    let reads = 0;
+    const wake = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      spawn: (() => child) as never,
+      recordFreshSession: () => undefined,
+      readLocalServing: () => {
+        reads += 1;
+        return snapshot;
+      },
+    }).wake(spec, ctx);
+    await Promise.resolve();
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    child.out(STEP_FINISH);
+    child.exit(0);
+    const completion = await result.settled;
+    expect(completion?.unpriced_reason).toBe('local');
+    expect(completion?.local_serving).toEqual(snapshot);
+    expect(completion?.cost_usd).toBeUndefined();
+    // Read once, at spawn — not again at settle.
+    expect(reads).toBe(1);
+  });
+
+  it('without the local snapshot the reason stays harness_price_unverified and carries none', async () => {
+    const child = new Child();
+    const wake = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      spawn: (() => child) as never,
+      recordFreshSession: () => undefined,
+      readLocalServing: () => null,
+    }).wake(spec, ctx);
+    await Promise.resolve();
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    child.exit(0);
+    const completion = await result.settled;
+    expect(completion?.unpriced_reason).toBe('harness_price_unverified');
+    expect(completion?.local_serving).toBeUndefined();
+  });
+
   it('a woke run that exits cleanly carries duration_ms', async () => {
     const child = new Child();
     const wake = fresh(child).wake(spec, ctx);

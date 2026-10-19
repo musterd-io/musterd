@@ -171,7 +171,14 @@ export function readTrigger(rows: HarnessRow[]): TriggerRead {
   const perHarness = new Map<string, { settled: number; priced: number }>();
   for (const r of rows) {
     const h = perHarness.get(r.harness) ?? { settled: 0, priced: 0 };
-    perHarness.set(r.harness, { settled: h.settled + r.settled, priced: h.priced + r.priced });
+    // ADR 663: a `local` wake is neither priced nor unpriceable — it is out of the denominator, so
+    // a local seat can neither trip this clause nor silence it for the harness's metered wakes. It
+    // still prints, as `local ×N` on the unpriced line.
+    const local = r.unpricedReasons['local'] ?? 0;
+    perHarness.set(r.harness, {
+      settled: h.settled + r.settled - local,
+      priced: h.priced + r.priced,
+    });
   }
   for (const [harness, h] of perHarness) {
     if (h.settled > 0 && h.priced === 0) {

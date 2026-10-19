@@ -173,6 +173,14 @@ export const BindingSchema = WorkspaceSpecSchema.extend({
    *  the WHOLE family as driven. Per-machine, kept out of `workspace.json`; `MUSTERD_DRIVER` env stays
    *  the manual override above it. */
   driver: z.string().min(1).max(80).optional(),
+  /** ADR 663: the human's declaration that this seat runs a model served on this host. One of the
+   *  three things that must agree, at wake spawn, for the wake to settle as `local` (with the
+   *  pinned provider being local-serving and its base URL loopback). Set by hand on the seat's own
+   *  binding, never by `MUSTERD_*` env (which would reach every seat on the host). Per-machine,
+   *  kept out of `workspace.json`; merge-guarded like `host_key`, so a rebuilding writer keeps it.
+   *  Set it only once this host's CLI and adapter carry ADR 663: the schema is strict, and an
+   *  older reader refuses a binding with a key it does not know. */
+  local: z.boolean().optional(),
 }).strict();
 
 export type Binding = z.infer<typeof BindingSchema>;

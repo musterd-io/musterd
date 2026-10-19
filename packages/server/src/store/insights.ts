@@ -664,6 +664,8 @@ interface WakeAuditRow {
     /** ADR 252: a session attested THIS lease before it expired — the wake was paid for. Present
      *  only when true; absence is silence, not a denial. */
     session_captured?: boolean;
+    /** ADR 364/663: why the wake carries no price, on its `wake_cost` row. */
+    unpriced_reason?: string;
   };
 }
 
@@ -773,6 +775,18 @@ export function countUnpricedWakes(
     if (!acc.positive && (acc.captured || acc.settled)) n += 1;
   }
   return n;
+}
+
+/** ADR 663: leases whose `wake_cost` row settled as `local`, unique by lease. */
+export function countLocalWakes(
+  rows: ReadonlyArray<{ action: string; detail: { lease_id?: string; unpriced_reason?: string } }>,
+): number {
+  const leases = new Set<string>();
+  for (const r of rows) {
+    if (r.action !== 'residency.wake_cost' || r.detail.unpriced_reason !== 'local') continue;
+    if (r.detail.lease_id !== undefined) leases.add(r.detail.lease_id);
+  }
+  return leases.size;
 }
 
 /** The 7-day unpriced-wake count. Called only when `unpriced_wake_cap` is set (ADR 639). */
@@ -885,6 +899,10 @@ export async function deriveWakeMetrics(
       !costByLease.has(r.detail.lease_id),
   ).length;
 
+  // ADR 663: wakes that settled on a model served on the host. Shown beside cost, never inside it,
+  // and never subtracted from the unpriced-wake cap count: the signal is a configuration claim.
+  const localWakes = countLocalWakes(rows);
+
   // The ADR 209/210 Eval split, over the SAME attempt-deduped act set as every other wake number
   // here — so the cohorts are comparable by construction rather than by a reader's assumption.
   // Counted from the classifying (last) woke row; a supplementary wake_cost row re-states the same
@@ -926,6 +944,7 @@ export async function deriveWakeMetrics(
     cost_usd_per_wake: costTotal !== null ? costTotal / costs.length : null,
     cost_reported: costs.length,
     unpriced_sessions: unpricedSessions,
+    ...(localWakes > 0 ? { local_wakes: localWakes } : {}),
     reports_rejected: reportsRejected,
     by_seat,
   };

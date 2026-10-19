@@ -734,13 +734,30 @@ const HostMeasuredCount = z.number().nonnegative().transform(Math.round);
  *    `step_finish.cost`, computed from a table the host does not hold; a literal `0` is the common
  *    case). The figure rides as `harness_cost_usd`, labelled as the harness's claim, never as ours.
  *  - `no_price_row`: the metering gateway (ADR 583) metered the wake's calls but at least one model
- *    id has no row in the host's price table — tokens are recorded, dollars are not guessed. */
+ *    id has no row in the host's price table — tokens are recorded, dollars are not guessed.
+ *  - `local` (ADR 663): the wake ran a model served on the host itself — three things agreed at
+ *    spawn (the binding declares `local`, the pinned model's provider is a local-serving one, its
+ *    base URL is loopback), and `local_serving` carries the snapshot. A claim, not proof of where
+ *    inference ran: it is counted against `unpriced_wake_cap` like every other reason. */
 export const UNPRICED_REASONS = [
   'harness_prints_no_price',
   'harness_price_unverified',
   'no_price_row',
+  'local',
 ] as const;
 export type UnpricedReason = (typeof UNPRICED_REASONS)[number];
+
+/** ADR 663: the provider configuration a `local` wake ran under, snapshotted at spawn — what the
+ *  host read, so the record carries the exact claim. Names only: never a key or a header. */
+export const LocalServingSchema = z.object({
+  /** The OpenCode provider id the pinned model resolves to (`ollama`, `llama.cpp`). */
+  provider: z.string().min(1).max(64),
+  /** The pinned model as configured (`qwen3:4b`). */
+  model: z.string().min(1).max(120),
+  /** The provider's base URL — loopback by construction, or there is no snapshot. */
+  base_url: z.string().min(1).max(200),
+});
+export type LocalServing = z.infer<typeof LocalServingSchema>;
 
 const TokenCount = z.number().int().nonnegative();
 /** Token usage the harness printed at turn end (ADR 364) — copied from its typed JSON event, summed
@@ -799,6 +816,8 @@ export const WakeReportBodySchema = z.object({
   usage: WakeUsageSchema.optional(),
   /** ADR 364: why `cost_usd` is absent on a run that settled — a fact about the harness's output. */
   unpriced_reason: z.enum(UNPRICED_REASONS).optional(),
+  /** ADR 663: present exactly when `unpriced_reason` is `local` — the configuration snapshot. */
+  local_serving: LocalServingSchema.optional(),
   /** ADR 364: a price the HARNESS printed and the host did not verify. Never folded into totals. */
   harness_cost_usd: z.number().nonnegative().optional(),
   /** ADR 583: which path priced the wake — the host's metering gateway (every call seen and priced

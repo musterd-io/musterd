@@ -1,4 +1,10 @@
-import type { UnpricedReason, WakeOrder, WakeReportBody, WakeUsage } from '@musterd/protocol';
+import type {
+  LocalServing,
+  UnpricedReason,
+  WakeOrder,
+  WakeReportBody,
+  WakeUsage,
+} from '@musterd/protocol';
 
 /**
  * The actuator seam (ADR 131 §7): the host loop drives this interface and knows nothing about CLI
@@ -54,6 +60,9 @@ export interface WakeCompletion {
   usage?: WakeUsage;
   /** ADR 364: why `cost_usd` is absent — a fact about the harness's output, set by the adapter. */
   unpriced_reason?: UnpricedReason;
+  /** ADR 663: the provider snapshot a `local` wake ran under; present exactly when the reason is
+   *  `local`. */
+  local_serving?: LocalServing;
   /** ADR 364: a price the harness printed that the host cannot attest (opencode). */
   harness_cost_usd?: number;
   /** ADR 583: which path priced this wake — the gateway's metered calls, or the harness's own
