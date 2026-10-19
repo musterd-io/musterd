@@ -73,6 +73,18 @@ describe('away relay pure rules (ADR 659)', () => {
     );
   });
 
+  it('a rotated or revoked socket no longer receives callbacks', () => {
+    // The callback route runs this same check before forwarding: callback bodies carry ask
+    // tokens, so a silent revoked socket must get a 503 (provider retries), never the body.
+    const oldHash = 'a'.repeat(64);
+    const newHash = 'b'.repeat(64);
+    expect(socketCredentialLive(oldHash, oldHash)).toBe(true);
+    expect(socketCredentialLive(oldHash, newHash)).toBe(false);
+    expect(socketCredentialLive(oldHash, credentialHashFor(JSON.stringify({}), 'revive'))).toBe(
+      false,
+    );
+  });
+
   it("rotation or revocation refuses the old socket's next frame", () => {
     const oldHash = 'a'.repeat(64);
     const newHash = 'b'.repeat(64);
