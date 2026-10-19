@@ -466,6 +466,7 @@ import {
   REVIEW_LOOP_BREAKER_N,
   reviewLoopBounceCount,
   selectReviewCounterpart,
+  advisorySeats,
   workerFamily,
   teamFamilyPosture,
   annotateClose,
@@ -6131,6 +6132,8 @@ export async function handleHttp(
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
           // ADR 545: a reply on an ask a re-route already closed — moved nothing, and which binds now.
           ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
+          // ADR 667: a verdict on an advisory ask — recorded, moved nothing.
+          ...(result.lane_advisory ? { lane_advisory: result.lane_advisory } : {}),
           // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason;
           // and the note an accepted handoff carried, returned where it was accepted (§6).
           ...(result.dispute ? { dispute: result.dispute } : {}),
@@ -8151,7 +8154,26 @@ export async function handleHttp(
                   worker,
                   ctx.config.presenceTimeoutMs,
                 );
-          const peerPick = named ?? peerSelection.pick;
+          // ADR 667: the ordinary pick (named, or the ladder's) may be an ADVISORY seat — one whose
+          // verdict is recorded and never binds. It keeps its ask, marked advisory, and the binding
+          // acceptor is picked beside it with every advisory seat excluded, so the lane closes on a
+          // verdict that can. An exempt, un-named submit consults nobody, so it reads nothing here.
+          const advisory =
+            exemption.exempt && !named ? new Set<string>() : await advisorySeats(ctx.db, team.id);
+          const firstPick = named ?? peerSelection.pick;
+          const advisoryPick = firstPick && advisory.has(firstPick.reviewer) ? firstPick : null;
+          const peerPick = advisoryPick
+            ? (
+                await selectReviewCounterpart(
+                  ctx.db,
+                  team.id,
+                  lane,
+                  worker,
+                  ctx.config.presenceTimeoutMs,
+                  { advisory },
+                )
+              ).pick
+            : firstPick;
           const humanFallback =
             humanReviewRequired(lane) && !peerPick
               ? await pickHumanReviewer(ctx.db, team.id, worker, ctx.config.presenceTimeoutMs)
@@ -8182,7 +8204,8 @@ export async function handleHttp(
               // is sanctioned self-close with breaker_tripped, same as no_candidate.
             } else if (teamPolicy.loops?.review === true) {
               const wakePick = await pickWakeReviewer(ctx.db, team.id, worker, posture);
-              if (wakePick) {
+              // ADR 667: an advisory seat is never the binding acceptor, by the wake path either.
+              if (wakePick && !advisory.has(wakePick.reviewer)) {
                 const wakeMember = await getMemberByName(ctx.db, team.id, wakePick.reviewer);
                 const enrollment = wakeMember
                   ? await getResidency(ctx.db, team.id, wakeMember.id)
@@ -8204,7 +8227,7 @@ export async function handleHttp(
           // human review, so the ask goes to an offline human — admin first, then most recently
           // seen. The ADR 191 wake path above is non-risky only (ADR 253), so for a risky lane the
           // ladder here reads: live human, then offline human. A named acceptor never reaches this.
-          if (!pick && !exemption.exempt && humanReviewRequired(lane) && !named) {
+          if (!pick && !exemption.exempt && humanReviewRequired(lane) && (!named || advisoryPick)) {
             const offline = await humanReviewerFor(
               ctx.db,
               team.id,
@@ -8358,6 +8381,16 @@ export async function handleHttp(
               // row — which is what forced the read to serve a legacy row as a confident no. With
               // the boolean always present, absence means exactly "legacy", and the read can abstain.
               human_required: humanRequired,
+              // ADR 667: the advisory seat asked beside the binding acceptor, if any.
+              ...(advisoryPick
+                ? {
+                    advisory: {
+                      reviewer: advisoryPick.reviewer,
+                      route: advisoryPick.route,
+                      review_grade: advisoryPick.grade,
+                    },
+                  }
+                : {}),
               // ADR 217: the promised wait, written only where an ask was actually sent — a
               // `no_candidate` row promised nobody anything, and stamping a window on it would
               // invite the close edge to grade a wait that never began.
@@ -8379,6 +8412,38 @@ export async function handleHttp(
                 : {}),
             },
           });
+          // ADR 667: the advisory ask, minted first so the binding ask is always the newer one.
+          // Standard tier; marked `lane_review.advisory`, which every binding reader filters out.
+          if (advisoryPick) {
+            const advisoryMinted = await deliverLaneAskAct(
+              ctx,
+              team,
+              member,
+              advisoryPick.reviewer,
+              `${acceptanceAskBody(lane.title, {
+                change: lane.merged,
+                noGoalNotice: noGoalNotice(lane.goal_id),
+                followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
+              })}\n\nADVISORY (ADR 667): your acceptance scope is advisory. Judge it as you ` +
+                `would any acceptance; your accept or decline is recorded against the lane and ` +
+                `does not close or reopen it. A binding acceptor is asked beside you.`,
+              {
+                species: 'approve',
+                tier: 'standard',
+                lane_review: {
+                  lane: lane.id,
+                  wait_ms: acceptanceWaitMs,
+                  title: lane.title,
+                  branch: lane.branch,
+                  ...(lane.merged ? { merged: lane.merged } : {}),
+                  route: advisoryPick.route,
+                  grade: advisoryPick.grade,
+                  advisory: true,
+                },
+              },
+            );
+            if (named && named.reviewer === advisoryPick.reviewer) namedAskMinted = advisoryMinted;
+          }
           if (pick && !breakerTripped) {
             // Name the overlap when the picked acceptor previously owned this lane (see
             // `priorOwnerNotice`). Read from the `lane.claimed` ledger, so it costs one indexed
@@ -8415,7 +8480,7 @@ export async function handleHttp(
                 },
               },
             );
-            if (named) namedAskMinted = minted;
+            if (named && !advisoryPick) namedAskMinted = minted;
             review = {
               reviewer: pick.reviewer,
               route: pick.route,
@@ -9220,9 +9285,11 @@ export async function handleHttp(
         for (const m of messages) {
           if (m.act !== 'ask') continue;
           const review = (m.meta as Record<string, unknown> | null)?.['lane_review'] as
-            | { lane?: unknown }
+            | { lane?: unknown; advisory?: unknown }
             | undefined;
-          if (review && typeof review.lane === 'string') laneOfAsk.set(m.id, review.lane);
+          // ADR 667: an advisory ask stays owed after its lane closes (see laneSettledSql).
+          if (review && review.advisory !== true && typeof review.lane === 'string')
+            laneOfAsk.set(m.id, review.lane);
         }
         const laneClosed: { id: string; reason: 'lane_closed' }[] = [];
         if (laneOfAsk.size > 0) {

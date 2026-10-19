@@ -1764,6 +1764,7 @@ export async function builtOn(
          JOIN messages r ON r.team_id = a.team_id AND r.in_reply_to = a.id AND r.act = 'accept'
           AND r.from_member = a.to_member
         WHERE a.team_id = ? AND a.act = 'ask' AND json_extract(a.meta, '$.lane_review.lane') = ?
+          AND json_extract(a.meta, '$.lane_review.advisory') IS NULL
         ORDER BY r.created_at DESC, r.id DESC LIMIT 1`,
       [teamId, dep.id],
     );

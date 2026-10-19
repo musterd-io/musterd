@@ -335,6 +335,32 @@ export function laneSupersededAck(s: LaneSupersededWire): LaneSupersededAck {
   };
 }
 
+/** ADR 667: an accept / decline that answered an ADVISORY acceptance ask, on the wire. */
+export interface LaneAdvisoryWire {
+  lane: string;
+  /** The advisory ask the reply answered. */
+  ask: string;
+  verdict: 'accept' | 'decline';
+}
+export interface LaneAdvisoryAck extends LaneAdvisoryWire {
+  guidance: string;
+}
+
+/**
+ * ADR 667: the ack for a verdict on an advisory ask. The seat's acceptance scope is advisory, so its
+ * answer was recorded against the lane and moved nothing; a binding acceptor was asked beside it, and
+ * that verdict closes the lane. Said on the spot so an advisory seat never believes it closed work.
+ */
+export function laneAdvisoryAck(a: LaneAdvisoryWire): LaneAdvisoryAck {
+  return {
+    ...a,
+    guidance:
+      `Lane ${a.lane}: your ${a.verdict} was recorded as an ADVISORY verdict (ADR 667) — it did ` +
+      `not ${a.verdict === 'accept' ? 'close' : 'reopen'} the lane. A binding acceptor was asked ` +
+      `beside you; their verdict decides. Nothing more is owed on this ask.`,
+  };
+}
+
 /**
  * Why an acceptance submit asked nobody (ADR 404). The historical sentence "no eligible acceptor
  * is live" named both an empty room and a room full of busy / same-model / human-only seats.

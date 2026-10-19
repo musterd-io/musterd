@@ -16,6 +16,7 @@ import {
   disputeAnswerAck,
   laneAckAck,
   laneEscalationAck,
+  laneAdvisoryAck,
   laneSupersededAck,
   laneVerdictAck,
   threadHintFor,
@@ -367,6 +368,11 @@ export function registerSend(
           ? laneSupersededAck(ackBody.lane_superseded)
           : undefined;
         const supersededGuidance = laneSuperseded ? ` ${laneSuperseded.guidance}` : '';
+        // ADR 667: a verdict on an advisory ask — recorded, closed nothing; said on the spot.
+        const laneAdvisory = ackBody?.lane_advisory
+          ? laneAdvisoryAck(ackBody.lane_advisory)
+          : undefined;
+        const advisoryGuidance = laneAdvisory ? ` ${laneAdvisory.guidance}` : '';
         // ADR 505: the owner's answer to a review dispute — what the daemon did with it (recorded
         // the concession; held and re-routed to a tiebreak, or could not), said on the spot.
         const disputeAck = ackBody?.dispute ? disputeAnswerAck(ackBody.dispute) : undefined;
@@ -402,6 +408,7 @@ export function registerSend(
           claimsGuidance +
           escalationGuidance +
           supersededGuidance +
+          advisoryGuidance +
           ackGuidance +
           disputeGuidance +
           handoffAcceptGuidance +
@@ -425,6 +432,7 @@ export function registerSend(
             ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
             ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
+            ...(laneAdvisory ? { lane_advisory: laneAdvisory } : {}),
             ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
             ...(threadHint ? { thread_hint: threadHint } : {}),
           },
