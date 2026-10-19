@@ -17,10 +17,11 @@ import { bindingRefusal } from './guard.js';
 
 /**
  * Repo suggestions for `musterd init`'s connect path (lane 01M4FDBVGB): the folders each harness has
- * already recorded working in, read from its own plain files. Read-only and never throws — a harness
+ * already recorded working in, read from its own store. Read-only and never throws — a harness
  * whose file is missing or unreadable contributes nothing. The Claude Code, Codex, Cursor and Grok
- * formats were checked on a real machine on 2026-10-11; opencode's was not installed there, so its
- * reader follows opencode's storage layout and is tested only against a fixture.
+ * formats were checked on a real machine on 2026-10-11; opencode's was checked on 2026-10-19 (lane
+ * 01M4PHMBGY: opencode migrated from `storage/project/*.json` to `opencode.db`'s `project` table, so
+ * the reader reads `opencode.db` first and falls back to the pre-SQLite JSON files).
  */
 export interface FolderSeen {
   dir: string;
@@ -150,16 +151,79 @@ function grok(home: string): FolderSeen[] {
   return out;
 }
 
-/** opencode's `storage/project/<id>.json` records each project's worktree (`/` is its global one). */
+/**
+ * opencode keeps its projects in `~/.local/share/opencode/opencode.db` (`project` table: `worktree`,
+ * `time_active`, `time_updated`, `time_created`; `/` is its global project). Pre-SQLite installs
+ * wrote `storage/project/<id>.json` instead; read both so either version works.
+ */
 function opencode(home: string): FolderSeen[] {
-  const root = join(home, '.local', 'share', 'opencode', 'storage', 'project');
   const out: FolderSeen[] = [];
+  const dbPath = join(home, '.local', 'share', 'opencode', 'opencode.db');
+  if (existsSync(dbPath)) {
+    try {
+      const raw = execFileSync(
+        'sqlite3',
+        [
+          '-readonly',
+          '-json',
+          dbPath,
+          "SELECT worktree AS dir, COALESCE(NULLIF(time_active, 0), time_updated, time_created) AS at FROM project WHERE worktree != '' AND worktree != '/';",
+        ],
+        { encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+      const rows = raw ? (JSON.parse(raw) as { dir?: unknown; at?: unknown }[]) : [];
+      for (const r of rows) {
+        if (typeof r.dir === 'string' && r.dir !== '' && r.dir !== '/') {
+          out.push({
+            dir: r.dir,
+            at: typeof r.at === 'number' && Number.isFinite(r.at) ? Math.round(r.at) : 0,
+          });
+        }
+      }
+    } catch {
+      // sqlite3 absent, schema without time_active, or corrupt db — try the basic columns, then files
+      try {
+        const raw = execFileSync(
+          'sqlite3',
+          [
+            '-readonly',
+            '-json',
+            dbPath,
+            "SELECT worktree AS dir, COALESCE(time_updated, time_created) AS at FROM project WHERE worktree != '' AND worktree != '/';",
+          ],
+          { encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] },
+        ).trim();
+        const rows = raw ? (JSON.parse(raw) as { dir?: unknown; at?: unknown }[]) : [];
+        for (const r of rows) {
+          if (typeof r.dir === 'string' && r.dir !== '' && r.dir !== '/') {
+            out.push({
+              dir: r.dir,
+              at: typeof r.at === 'number' && Number.isFinite(r.at) ? Math.round(r.at) : 0,
+            });
+          }
+        }
+      } catch {
+        // fall through to storage/project/*.json
+      }
+    }
+  }
+  const root = join(home, '.local', 'share', 'opencode', 'storage', 'project');
   for (const f of ls(root)) {
     if (!f.endsWith('.json')) continue;
     const path = join(root, f);
     try {
-      const wt = (JSON.parse(readFileSync(path, 'utf8')) as { worktree?: unknown }).worktree;
-      if (typeof wt === 'string' && wt !== '' && wt !== '/') out.push({ dir: wt, at: mtime(path) });
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
+        worktree?: unknown;
+        time?: { updated?: unknown; created?: unknown };
+      };
+      const wt = parsed.worktree;
+      if (typeof wt === 'string' && wt !== '' && wt !== '/') {
+        const t = parsed.time?.updated ?? parsed.time?.created;
+        out.push({
+          dir: wt,
+          at: typeof t === 'number' && Number.isFinite(t) ? Math.round(t) : mtime(path),
+        });
+      }
     } catch {
       // skip a corrupt project file
     }

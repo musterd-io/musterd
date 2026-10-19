@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -78,8 +79,33 @@ describe('RECENT_READERS', () => {
     expect(RECENT_READERS['opencode']!(home)).toEqual([{ dir: '/code/cli', at: 50_000 }]);
   });
 
+  it('opencode reads project rows from opencode.db and skips /', () => {
+    const db = join(home, '.local/share/opencode/opencode.db');
+    mkdirSync(join(db, '..'), { recursive: true });
+    execFileSync('sqlite3', [
+      db,
+      `CREATE TABLE project (
+        id text PRIMARY KEY,
+        worktree text NOT NULL,
+        time_created integer NOT NULL,
+        time_updated integer NOT NULL,
+        sandboxes text NOT NULL,
+        time_active integer DEFAULT 0 NOT NULL
+      );
+      INSERT INTO project VALUES
+        ('p1', '/code/runtime', 1000, 2000, '[]', 7000),
+        ('p2', '/code/legacy', 1000, 5000, '[]', 0),
+        ('global', '/', 1000, 9000, '[]', 9000);`,
+    ]);
+    expect(RECENT_READERS['opencode']!(home)).toEqual([
+      { dir: '/code/runtime', at: 7000 },
+      { dir: '/code/legacy', at: 5000 },
+    ]);
+  });
+
   it('a corrupt or missing file yields [] rather than throwing', () => {
     put(opencodeFile('a'), '{not json');
+    put(join(home, '.local/share/opencode/opencode.db'), 'not a sqlite db');
     put(join(home, '.grok/trusted_folders.toml'), '\u0000\u0000');
     expect(RECENT_READERS['opencode']!(home)).toEqual([]);
     expect(RECENT_READERS['grok']!(home)).toEqual([]);
