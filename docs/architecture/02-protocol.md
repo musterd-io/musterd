@@ -394,6 +394,8 @@ export const ContinuityRegistry = z.object({ version:1, team, seat, bindings:Con
 `client-address.ts` (ADR 634) owns the local transport IP-address schema used to select Cloud
 admission counters. It does not change protocol messages or grant authorization.
 
+`boardQuery.ts` (ADR 582 §1) owns the **board query grammar**: `BoardQuerySchema` (the one argument, trimmed, 1–200 characters), `parseBoardQuery` (space-separated terms — `key:value` for a field, bare words for text, a quoted run kept as one phrase), `LANE_QUERY_KEYS` / `GOAL_QUERY_KEYS` (what each board understands) and `unknownQueryKey`. The grammar is parsed here, at the boundary, so the daemon and the MCP tools read one definition (hard rule 4); the *matching* lives on the server, over the board it already read (`store/boardQuery.ts`). An unknown key is refused by name — a query must never quietly become a text search the seat did not mean.
+
 `lanes.ts` (ADR 645) carries the **pre-registered declaration**: `Lane.pre_registered`
 `{run, verdict_rule, record, expected_spend, by, at}` (`LanePreRegisteredSchema`; the opener's
 form `OpenPreRegisteredSchema` omits `by`/`at`, which the daemon stamps), accepted on `lane_open`

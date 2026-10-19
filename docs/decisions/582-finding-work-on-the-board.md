@@ -132,6 +132,26 @@ and `pnpm context:check` refuses a raise without a stated rent and falsifier.
   (and `declared_areas` when overridden), rendered on the board, `musterd lanes`, `musterd next` /
   `team_next`, `/board` cards and `/live` team cards. `GET /lanes?brief=1` computes `areas` before
   stripping `scope`, so `/live` keeps them.
+- 2026-10-19, lane `01M4VKRXEX`: the query grammar shipped. The grammar is parsed in
+  `@musterd/protocol` (`boardQuery.ts`: `BoardQuerySchema`, `parseBoardQuery`, `LANE_QUERY_KEYS`,
+  `GOAL_QUERY_KEYS`, `unknownQueryKey`) and matched on the server (`store/boardQuery.ts`:
+  `matchLaneQuery`, `matchGoalQuery`, `readBoardQuery`), so the daemon and the MCP tools read one
+  definition (AGENTS.md hard rule 4). `GET /lanes?q=` and `GET /goals?q=` read it; `lane_board {q}`
+  and `team_goals {q}` send it; `musterd lanes [query…]` and `musterd goal list [query…]` take it as
+  positional text. Every term must match, repeats of one key are OR'd, `path:` uses the daemon's own
+  `globsOverlap`, and a lane's `area:` matches its effective areas (declared or derived). An unknown
+  key is a 400 naming the known ones, and a key with no value is a 400 — a query never quietly
+  becomes a text search the seat did not mean. One reading of Decision 1 was made literal rather than
+  loose: `word:…` is always a field term, so a bare word that happens to contain a colon (a URL) is
+  refused as an unknown key instead of being searched for — the same rule that makes an unknown key an
+  error. The `q` argument cost 155 B of tool list over the budget (21078 B), recorded with its
+  justification in `docs/perf/context-budgets.json`. The baseline the eval asks for was measured
+  from the trace store before this landed: in the seven days to 2026-10-19, seats ran 86 shell
+  commands that opened `musterd.db` and queried lanes, goals or messages, across 15 seat-days
+  (ryder 42 over 6 days, sloane 23 over 2, slippy 10 over 2, lazara 6 over 3, TJ 5 over 2) — 361
+  `musterd.db` touches in all. The adapter now records each query's key names
+  (`musterd.query.keys`) and never its free text, so the after-reading is countable from the same
+  place.
 
 ## Observability & Evaluation
 

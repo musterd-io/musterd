@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { Goal } from '@musterd/protocol';
+import { BoardQuerySchema, type Goal } from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, textResult } from './format.js';
@@ -34,11 +34,18 @@ export function registerGoals(server: McpServer, client: MusterdClient): void {
         'hide unless include_retracted is set.',
       inputSchema: {
         include_retracted: z.boolean().optional().describe('also list retracted (withdrawn) goals'),
+        // ADR 582 §1: the one board query — bare words over the id, the title and the story, plus
+        // `status:`. Parsed with @musterd/protocol's schema in the handler (hard rule 4).
+        q: z
+          .string()
+          .optional()
+          .describe('status: terms, or bare words over the id, title and story'),
       },
     },
     async (args) => {
       try {
-        const { goals: allGoals } = await client.goals();
+        if (args.q !== undefined) BoardQuerySchema.parse(args.q);
+        const { goals: allGoals } = await client.goals(args.q);
         // goal-retract design: hidden by default, but counted — never silently gone (ADR 257 scar).
         const retractedCount = allGoals.filter((g) => g.retracted !== undefined).length;
         const goals = args.include_retracted
@@ -46,9 +53,11 @@ export function registerGoals(server: McpServer, client: MusterdClient): void {
           : allGoals.filter((g) => g.retracted === undefined);
         if (goals.length === 0)
           return textResult(
-            retractedCount > 0
-              ? `no live goals (${retractedCount} retracted — include_retracted lists them)`
-              : 'no declared goals — team_goal_declare to add one',
+            args.q !== undefined
+              ? `no goals match ${JSON.stringify(args.q)}`
+              : retractedCount > 0
+                ? `no live goals (${retractedCount} retracted — include_retracted lists them)`
+                : 'no declared goals — team_goal_declare to add one',
           );
         const footer =
           !args.include_retracted && retractedCount > 0

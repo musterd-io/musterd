@@ -1045,6 +1045,8 @@ export class MusterdClient {
       open?: boolean | undefined;
       goal?: string | undefined;
       state?: string[] | undefined;
+      /** ADR 582 §1: the one board query — `area:ui goal:launch`, or bare words. */
+      q?: string | undefined;
     } = {},
   ): Promise<{ lanes: Lane[]; warnings: LaneWarning[] }> {
     const params = new URLSearchParams();
@@ -1052,6 +1054,7 @@ export class MusterdClient {
     if (q.mine) params.set('mine', '1');
     if (q.open) params.set('open', '1');
     if (q.goal) params.set('goal', q.goal);
+    if (q.q) params.set('q', q.q);
     for (const s of q.state ?? []) params.append('state', s);
     const qs = params.toString();
     return this.request('GET', `/teams/${this.config.team}/lanes${qs ? `?${qs}` : ''}`);
@@ -1132,8 +1135,9 @@ export class MusterdClient {
   }
 
   /** Declared Goals (ADR 048's general-team seam, resolved by ADR 084). */
-  goals(): Promise<{ goals: Goal[] }> {
-    return this.request('GET', `/teams/${this.config.team}/goals`);
+  goals(q?: string): Promise<{ goals: Goal[] }> {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return this.request('GET', `/teams/${this.config.team}/goals${qs}`);
   }
 
   declareGoal(body: unknown): Promise<{ goal: Goal }> {

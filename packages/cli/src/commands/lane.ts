@@ -4,6 +4,7 @@ import {
   emptyPoolHint,
   LANE_REQUESTED_NUDGE,
   laneDetailLines,
+  laneIdQuery,
   LaneStakesSchema,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -41,7 +42,7 @@ const USAGE =
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
-  '  musterd lanes [--project p] [--mine] [--open] [--history] [--json]';
+  '  musterd lanes [--project p] [--mine] [--open] [--history] [--json] [query…]';
 
 /**
  * Parse `--stakes` (ADR 234). A typo must FAIL rather than silently fall back to the default: the
@@ -521,6 +522,26 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
 /** `musterd lanes` — the board: who owns what, in what state, with live contention warnings. */
 export async function lanesCommand(parsed: Parsed): Promise<number> {
   const { team, identity, http } = resolve(parsed.flags);
+  // ADR 582 §1: the query is positional text — `musterd lanes area:ui goal:launch`, or bare words.
+  // A lone lane id answers with that lane in full, the same as `musterd lane show <id>`.
+  const query = parsed.positionals.join(' ').trim();
+  const loneId = query === '' ? null : laneIdQuery(query);
+  if (loneId) {
+    const d = await http.laneShow(team, loneId);
+    if (parsed.flags['json']) {
+      process.stdout.write(JSON.stringify(d) + '\n');
+      return 0;
+    }
+    process.stdout.write(renderLane(d.lane) + '\n');
+    for (const line of laneDetailLines(d)) {
+      const text = plainTerminalLines(line);
+      process.stdout.write(
+        (line.startsWith('  ') || line === 'history:' ? theme.meta(text) : text) + '\n',
+      );
+    }
+    renderWarnings(d.warnings);
+    return 0;
+  }
   const board = await http.laneBoard(team, {
     ...(flagStr(parsed.flags, 'project') !== undefined
       ? { project: flagStr(parsed.flags, 'project')! }
@@ -528,6 +549,7 @@ export async function lanesCommand(parsed: Parsed): Promise<number> {
     ...(parsed.flags['mine'] === true ? { mine: true } : {}),
     ...(parsed.flags['open'] === true ? { open: true } : {}),
     ...(parsed.flags['history'] === true ? { history: true } : {}),
+    ...(query !== '' ? { q: query } : {}),
   });
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(board) + '\n');
@@ -538,7 +560,10 @@ export async function lanesCommand(parsed: Parsed): Promise<number> {
   );
   if (board.lanes.length === 0) {
     process.stdout.write(
-      theme.meta('no lanes — `musterd lane open "<title>" --claim` to declare your work') + '\n',
+      (query !== ''
+        ? theme.meta(`no lanes match ${JSON.stringify(query)} — every term must match`)
+        : theme.meta('no lanes — `musterd lane open "<title>" --claim` to declare your work')) +
+        '\n',
     );
     return 0;
   }

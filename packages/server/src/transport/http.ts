@@ -78,6 +78,9 @@ import {
   LaneDetailSchema,
   CiRunBatchSchema,
   LaneStateSchema,
+  LANE_QUERY_KEYS,
+  GOAL_QUERY_KEYS,
+  type BoardQueryTerm,
   humanReviewRequired,
   isAwaitingAcceptance,
   makeEnvelope,
@@ -228,6 +231,7 @@ import {
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
+import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import {
   createCalendarEntry,
   deleteCalendarEntry,
@@ -7242,6 +7246,18 @@ export async function handleHttp(
             },
           });
         }
+        // ADR 582 §1: one query string over the board — `?q=area:ui goal:launch state:open`, or
+        // bare words over the title and detail. An unknown key is a 400 that names the known ones,
+        // so a query never quietly becomes a text search the seat did not mean.
+        const qRaw = url.searchParams.get('q');
+        let qTerms: BoardQueryTerm[] | null = null;
+        if (qRaw !== null) {
+          const read = readBoardQuery(qRaw, LANE_QUERY_KEYS);
+          if (!read.ok) {
+            return sendJson(res, 400, { error: { code: 'bad_request', message: read.message } });
+          }
+          qTerms = read.terms;
+        }
         // One board read per request (lane 01M3ANEQVR): the filtered view, the contention pass and
         // the staleness pass all derive from it. It used to be read 16 times here — 116 ms of the
         // endpoint's 267 ms on the live copy.
@@ -7261,8 +7277,11 @@ export async function handleHttp(
             : {}),
           ...(states.length > 0 ? { states } : {}),
         });
+        // ADR 582 §1: the query is a filter over the same in-memory board, so it costs no extra read.
+        const queried =
+          qTerms === null ? filtered : filtered.filter((l) => matchLaneQuery(l, qTerms!));
         // Contention and staleness still read the whole board; only the response is windowed.
-        const lanes = history === 'all' ? filtered : withinHistoryWindow(filtered, Date.now());
+        const lanes = history === 'all' ? queried : withinHistoryWindow(queried, Date.now());
         // Contention warnings (ADR 083) + staleness warnings (ADR 111 §5), one board read. Staleness is
         // team-wide (a Goal's epoch is a team fact); intersect it with the lanes this filtered view shows
         // so `?mine=1` / `?goal=` scopes carry only their own stale flags.
@@ -7741,11 +7760,23 @@ export async function handleHttp(
       // never stored, same as everything else in the orientation spine.
       if (method === 'GET' && rest === '/goals') {
         const { team, member } = await authTouch(ctx, slug, req);
+        // ADR 582 §1: Goals take the same `?q=` — bare words over the id, the title and the story,
+        // plus `status:`. The known keys differ from a lane's: a Goal has no surface.
+        const qRaw = url.searchParams.get('q');
+        let qTerms: BoardQueryTerm[] | null = null;
+        if (qRaw !== null) {
+          const read = readBoardQuery(qRaw, GOAL_QUERY_KEYS);
+          if (!read.ok) {
+            return sendJson(res, 400, { error: { code: 'bad_request', message: read.message } });
+          }
+          qTerms = read.terms;
+        }
+        const goals = await listGoals(ctx.db, team.id, team.slug);
         return sendJson(
           res,
           200,
           scrubForReader(messageVisibilityOf(member), {
-            goals: await listGoals(ctx.db, team.id, team.slug),
+            goals: qTerms === null ? goals : goals.filter((g) => matchGoalQuery(g, qTerms!)),
           }),
         );
       }

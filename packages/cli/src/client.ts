@@ -1441,6 +1441,8 @@ export class HttpClient {
       history?: boolean;
       /** ADR 561: only the lanes carrying this exact issue ref. */
       source_ref?: string;
+      /** ADR 582 §1: the one board query — `area:ui goal:launch`, or bare words. */
+      q?: string;
     } = {},
   ): Promise<LaneBoard> {
     const params = new URLSearchParams();
@@ -1449,6 +1451,7 @@ export class HttpClient {
     if (q.open) params.set('open', '1');
     if (q.goal) params.set('goal', q.goal);
     if (q.source_ref) params.set('source_ref', q.source_ref);
+    if (q.q) params.set('q', q.q);
     // ADR 534: without it, closed lanes older than 14 days are left out.
     if (q.history) params.set('history', 'all');
     const qs = params.toString();
@@ -1591,8 +1594,9 @@ export class HttpClient {
     return parsed.data;
   }
 
-  async goals(slug: string): Promise<GoalList> {
-    const json = await this.request('GET', `/teams/${slug}/goals`);
+  async goals(slug: string, q?: string): Promise<GoalList> {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    const json = await this.request('GET', `/teams/${slug}/goals${qs}`);
     const parsed = GoalListSchema.safeParse(json);
     if (!parsed.success) throw new CliError('goals response did not match the protocol schema', 1);
     return parsed.data;
