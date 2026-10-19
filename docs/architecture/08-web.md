@@ -161,7 +161,11 @@ access; roster handles and Presence remain visible.
   instead of Approve, and the sheet and the composer list every option in full as its own answer
   (`live/AskChoices.tsx`), with the asker's recommendation tagged and nothing pre-selected. The
   pick is sent as `accept` with the option as its body ("C — …", `choiceReply`), the ask records
-  `AskView.chose`, and the rail settles on "nick chose C ✓" (lane 01M511XNQC). The strip's machinery is unchanged
+  `AskView.chose`, and the rail settles on "nick chose C ✓" (lane 01M511XNQC). Two things are never a
+  choice (lane 01M5AVXZ9B): a lane review (`meta.lane_review` — an acceptance ask, whose answers are
+  accept / decline; `askChoicesOf` is what every surface calls), and numbered lines inside a quoted
+  passage, which are someone else's words — the ADR 603 human-acceptance ask quotes the peer's
+  findings verbatim, and on 2026-10-19 the rail offered them to nick as "pick one". The strip's machinery is unchanged
   underneath — derivation and tier clock (`asks.ts`), answers, the sheet with the operator terms,
   the review queue, browser notifications (ADR 443), sign-in offers (ADR 222). The room plays the
   same ask (ADR 464 §3.3): `OfficeData.asks` raises the asker's hand with a `?` cue and rests an

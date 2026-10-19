@@ -11,7 +11,7 @@ import { clock } from './format';
 import { MemberFace } from './MemberFace';
 import { displayModel } from './modelBadge';
 import { AskChoices } from './AskChoices';
-import { askChoices, choiceReply } from './askPhrase';
+import { askChoicesOf, choiceReply } from './askPhrase';
 
 /**
  * The thread panel over the composer (lane 01M4KY55N1). The viewer's sentence comes first, on the
@@ -199,7 +199,7 @@ function AskCard({
   onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding', body?: string) => void;
 }) {
   const mine = ask.to === viewer || ask.to === null;
-  const choices = askChoices(ask.env.body ?? '');
+  const choices = askChoicesOf(ask.env);
   const open = ask.state === 'open' || ask.state === 'held'; // askIsLoud, inlined for the same reason
   return (
     <div className={`cthread__col cthread__ask${open ? ' is-open' : ''}`}>

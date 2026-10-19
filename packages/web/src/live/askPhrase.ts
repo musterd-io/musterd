@@ -183,8 +183,14 @@ export function askChoices(
   let open: AskChoice | null = null;
   let firstOption = -1;
   const lines = body.split('\n');
+  // Quoted passages are someone ELSE's words (lane 01M5AVXZ9B): a human-acceptance ask quotes the
+  // peer's review verbatim, and a review that says "(1) … (2) … (3) …" on its own lines is findings,
+  // not options. A line that opens inside an unclosed quote therefore never starts or joins a run.
+  let quoted = false;
   for (const [n, line] of lines.entries()) {
-    const m = MARK.exec(line);
+    const insideQuote = quoted;
+    for (const ch of line) if (ch === '"' || ch === '“' || ch === '”') quoted = !quoted;
+    const m = insideQuote ? null : MARK.exec(line);
     const key = m ? m[1]!.toUpperCase() : null;
     const expected = options.length === 0 ? null : nextKey(options[options.length - 1]!.key);
     if (m && key !== null && (options.length === 0 ? key === 'A' || key === '1' : key === expected)) {
@@ -207,6 +213,20 @@ export function askChoices(
   // the rest, so nobody reads the options twice.
   const question = lines.slice(0, firstOption).join(' ').replace(/\s+/g, ' ').trim();
   return { options, recommended: options.some((o) => o.key === recommended) ? recommended : null, question };
+}
+
+/**
+ * The choices of an ask as the rail, the card and the composer must all read them: by its body,
+ * EXCEPT for a lane review (`meta.lane_review` — an acceptance ask, ADR 202/603), whose only answers
+ * are accept and decline. On 2026-10-19 a human-acceptance ask to nick quoted the peer's three
+ * numbered findings and the rail offered them as "pick one" (lane 01M5AVXZ9B).
+ */
+export function askChoicesOf(env: {
+  body?: string | null | undefined;
+  meta?: Record<string, unknown> | null | undefined;
+}): ReturnType<typeof askChoices> {
+  if (env.meta && env.meta['lane_review'] !== undefined && env.meta['lane_review'] !== null) return null;
+  return askChoices(env.body ?? '');
 }
 
 function nextKey(key: string): string {
