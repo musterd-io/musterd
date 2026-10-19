@@ -170,9 +170,11 @@ export async function spawnLinuxSandboxedBash(
   }
   addDirArgs(args, workspace);
   if (pnpmRoot && pnpm && pnpmRelative) {
-    args.push('--dir', '/pnpm');
-    args.push('--ro-bind', pnpmRoot, '/pnpm');
-    args.push('--symlink', `/pnpm/${pnpmRelative}`, '/runtime/pnpm');
+    // Keep pnpm's real absolute location so its CJS launcher resolves the package relative to
+    // the same path it was installed under. Only the package directory is mounted, read-only.
+    addDirArgs(args, pnpmRoot);
+    args.push('--ro-bind', pnpmRoot, pnpmRoot);
+    args.push('--symlink', pnpm, '/runtime/pnpm');
   }
   args.push('--ro-bind', realpathSync(corepackHome), '/corepack');
   if (existsSync(pnpmStore)) {
