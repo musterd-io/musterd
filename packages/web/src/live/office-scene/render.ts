@@ -54,7 +54,8 @@ import { DAY_ENV, sunBeam, type LightEnv } from './lighting';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
-import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst } from './skeleton';
+import { pulseIntensity, pulseLive, runGlow } from '../pulse';
+import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
@@ -3180,7 +3181,11 @@ function skelFor(pose: Pose, node: OfficeNode, t: number) {
   // members at desks and idle members on the furniture, so keying typing off it means only a member the
   // floor placed at a desk types. The `sit > 0.9` guard still holds — no typing while rising from a chair.
   // And no typing *through a gesture* — a member mid-stretch or mid-sip has their hands anywhere but the keys.
-  const typing = node.posture === 'working' && pose.sit > 0.9 && pose.gesture === 0 ? typingBurst(seed, t) : 0;
+  // ADR 660: the amplitude is the seat's PULSE — distinct harness tool calls in the last minute, read
+  // against the wall clock — not posture alone. A `working` seat with no live pulse (no hooks, or
+  // idle since) sits still at its lit screen; `typingBurst`'s seeded loop no longer plays at a desk.
+  const typing =
+    pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
   return solveSkeleton({
     // A deskless seat poses the hands in the lap instead of on a keyboard (nick, 2026-08-31): the
     // couch, the meeting chairs and reception's waiting chair have nothing in front of them.
@@ -3578,6 +3583,9 @@ function screenPanel(
   h: number,
   curved: boolean,
   t = 0,
+  /** ADR 660: whether the screen is ALIVE (animated desktop + bloom — only while the owner's pulse is
+   * live) and how hard a `run` lights it. Absent: alive follows `working` (the receptionist's desk). */
+  life?: ScreenLife,
 ): void {
   const sn = dir === 'S' || dir === 'N';
   // 3 deep, not 5: at this camera angle the panel's own side face is what made a monitor read as a
@@ -3602,10 +3610,14 @@ function screenPanel(
   if (BL && BR) {
     const bl = BL;
     const br = BR;
+    const alive = life ? life.alive : working;
+    const glow = life?.glow ?? 0;
     if (working) {
       const map: FaceMap = (u, v) => ({ x: bl.x + u * (br.x - bl.x), y: bl.y + u * (br.y - bl.y) - lo - v * (hi - lo) });
       const wPx = Math.abs(br.x - bl.x);
-      drawScreenLife(ctx, map, wPx, fit.scale, Math.abs(Math.round(mx * 7 + my * 13)), t, wAcross >= 30 ? 2 : 1);
+      // A lit screen is a fact of sitting at the desk; a MOVING one is a fact of working (ADR 660 §3):
+      // with no live pulse the desktop is drawn once, still (`t` pinned), and nothing blooms.
+      drawScreenLife(ctx, map, wPx, fit.scale, Math.abs(Math.round(mx * 7 + my * 13)), alive ? t : 0, wAcross >= 30 ? 2 : 1);
     } else {
       quad(ctx, [dn(bl, lo), dn(br, lo), dn(br, hi), dn(bl, hi)], SCREEN_IDLE);
     }
@@ -3616,7 +3628,7 @@ function screenPanel(
       quad(ctx, [dn(bl, lo), dn(L2, lo), dn(L2, hi), dn(bl, hi)], 'rgba(6, 20, 22, 0.22)');
       quad(ctx, [dn(R2, lo), dn(br, lo), dn(br, hi), dn(R2, hi)], 'rgba(6, 20, 22, 0.22)');
     }
-    if (working) {
+    if (working && alive) {
       // Light *emitted* from the lit screen: an additive bloom over the face plus a softer spill onto the
       // desk in front of it. Drawn here, inside the workstation's own depth item, so a monitor standing in
       // front occludes it — unlike the old DOM overlay, which always painted above the canvas and let a
@@ -3629,14 +3641,15 @@ function screenPanel(
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const bloom = ctx.createRadialGradient(cx, cyBottom - chh * 0.5, 0, cx, cyBottom - chh * 0.5, cw * 0.66);
-      bloom.addColorStop(0, 'rgba(154, 228, 240, 0.38)');
+      // A `run` pushes the bloom up to ~2.5× for three seconds, easing out (`runGlow`).
+      bloom.addColorStop(0, `rgba(154, 228, 240, ${Math.min(1, 0.38 * (1 + 1.5 * glow)).toFixed(3)})`);
       bloom.addColorStop(1, 'rgba(154, 228, 240, 0)');
       ctx.fillStyle = bloom;
       ctx.beginPath();
       ctx.ellipse(cx, cyBottom - chh * 0.5, cw * 0.66, chh * 0.74, 0, 0, Math.PI * 2);
       ctx.fill();
       const spill = ctx.createRadialGradient(cx, cyBottom + chh * 0.34, 0, cx, cyBottom + chh * 0.34, cw * 0.9);
-      spill.addColorStop(0, 'rgba(122, 210, 226, 0.2)');
+      spill.addColorStop(0, `rgba(122, 210, 226, ${Math.min(1, 0.2 * (1 + 1.5 * glow)).toFixed(3)})`);
       spill.addColorStop(1, 'rgba(122, 210, 226, 0)');
       ctx.fillStyle = spill;
       ctx.beginPath();
@@ -3645,6 +3658,17 @@ function screenPanel(
       ctx.restore();
     }
   }
+}
+
+/** What a desk's screen does this frame (ADR 660): alive while the owner's pulse is live; `glow` is the run bloom, 0..1. */
+export interface ScreenLife {
+  alive: boolean;
+  glow: number;
+}
+
+/** The screen life for a desk's owner, read against the wall clock — the only clock a pulse's `ts` shares. */
+export function screenLifeFor(node: OfficeNode | null | undefined, now = Date.now()): ScreenLife {
+  return { alive: pulseLive(node?.pulse, now), glow: runGlow(node?.pulse, now) };
 }
 
 /** How far above the desk the panel's bottom edge floats — the height of the stand's neck. */
@@ -3687,6 +3711,7 @@ function monitor(
   surfaceUp: number,
   id: number | null,
   t = 0,
+  life?: ScreenLife,
 ): void {
   const setup = id == null ? 'single' : monitorSetupFor(id);
   const sn = dir === 'S' || dir === 'N';
@@ -3696,14 +3721,14 @@ function monitor(
     // side so they read as two real screens, not two half-screens. `[-1,1]` order paints the nearer last.
     monitorStand(ctx, fit, mx, my, sn, surfaceUp, 22); // shared dual-arm foot, wide enough for two
     for (const s of [-1, 1] as const) {
-      screenPanel(ctx, fit, mx + p[0] * s * 18, my + p[1] * s * 18, dir, working, surfaceUp, 34, 22, false, t);
+      screenPanel(ctx, fit, mx + p[0] * s * 18, my + p[1] * s * 18, dir, working, surfaceUp, 34, 22, false, t, life);
     }
   } else if (setup === 'ultrawide') {
     monitorStand(ctx, fit, mx, my, sn, surfaceUp, 20);
-    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 54, 20, true, t);
+    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 54, 20, true, t, life);
   } else {
     monitorStand(ctx, fit, mx, my, sn, surfaceUp, 15);
-    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 34, 22, false, t);
+    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 34, 22, false, t, life);
   }
 }
 
@@ -4222,7 +4247,7 @@ export function drawWorkstation(
   const ownedEmpty = node != null && owned;
 
   if (phase === 'monitor') {
-    monitor(ctx, fit, lx + f[0] * MONITOR_ALONG, ly + f[1] * MONITOR_ALONG, dir, working, up, id, t);
+    monitor(ctx, fit, lx + f[0] * MONITOR_ALONG, ly + f[1] * MONITOR_ALONG, dir, working, up, id, t, screenLifeFor(node));
     return;
   }
 
@@ -4299,7 +4324,7 @@ export function drawWorkstation(
   at(
     MONITOR_ALONG,
     0,
-    (ix, iy) => monitor(ctx, fit, ix, iy, dir, working, up, id, t),
+    (ix, iy) => monitor(ctx, fit, ix, iy, dir, working, up, id, t, screenLifeFor(node)),
     true,
   );
   // The dock, beside and behind the monitor on every desk — not a hashed personality prop and not
@@ -4459,7 +4484,7 @@ function benchStation(
   const props: { sum: number; fn: () => void }[] = [
     { sum: benchPropSort(slot, benchMonitorAt(slot)), fn: () => {
       const m = benchMonitorAt(slot);
-      monitor(ctx, fit, m.lx, m.ly, slot.dir, atWork, DESK_UP, slot.id, t);
+      monitor(ctx, fit, m.lx, m.ly, slot.dir, atWork, DESK_UP, slot.id, t, screenLifeFor(node));
     } },
     { sum: benchPropSort(slot, benchDockAt(slot)), fn: () => {
       const d = benchDockAt(slot);

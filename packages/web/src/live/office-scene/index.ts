@@ -1,5 +1,6 @@
 import type { Posture } from '@musterd/protocol';
 import { preloadCanvasFont } from '../canvasFont';
+import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
 import { roomTone, screenPan, type LifeContext } from '../sound';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
@@ -2125,9 +2126,14 @@ export function mountOffice(
     // It now reads the pose too (`workingAtDesk`), because a desk is only alive once its owner has
     // sat down at it. A member still walking in keeps the loop running on their walk, and their sit
     // blend is itself reported as motion, so the loop cannot park between "seated" and `sit > 0.9`.
+    //
+    // ADR 660: and it reads the PULSE — a seated `working` seat with no live tool-call pulse is drawn
+    // still (no typing, static screen), so it must not keep the loop awake either; the room parks
+    // within fifteen seconds of the last call, and `pulse()` wakes it on the next.
     const poses = actors.poses();
+    const now = Date.now();
     for (const n of actors.nodes().values())
-      if (workingAtDesk(n, poses.get(n.name)?.sit)) return true;
+      if (workingAtDesk(n, poses.get(n.name)?.sit) && pulseLive(n.pulse, now)) return true;
     return false;
   }
 
@@ -2357,7 +2363,8 @@ export function mountOffice(
           // sitters are exactly the "near each other" pair the room tone listens for.
           zone = slot.kind === 'pod' ? `pod-${slot.pod}` : slot.kind;
           at = { lx: slot.lx, ly: slot.ly };
-          if (!parked && workingAtDesk(node, actorPoses.get(name)?.sit)) {
+          // Typing is heard only while it is seen: the seat's pulse gates the room tone too (ADR 660).
+          if (!parked && workingAtDesk(node, actorPoses.get(name)?.sit) && pulseIntensity(node.pulse, Date.now()) > 0) {
             working.push({ x: toX(slot.lx, slot.ly), seed: audioSeed(name) });
           }
         }
@@ -2660,7 +2667,23 @@ export function mountOffice(
     replayAt = null;
     if (!actors.active()) tempo = 1; // nobody of theirs is in the room — nothing to catch up on
   }
+  /** Latest pulse per member (ADR 660) — kept here because `update` replaces the node objects. */
+  const pulses = new Map<string, SeatPulse>();
+
+  function pulse(member: string, p: SeatPulse) {
+    pulses.set(member, p);
+    const n = actors.nodes().get(member);
+    if (!n) return;
+    n.pulse = p;
+    // A parked room (no acts, nobody walking) must start moving when a seat starts working.
+    if (!reduced) ensureLoop();
+  }
+
   function update(next: OfficeData) {
+    for (const n of next.nodes) {
+      const p = pulses.get(n.name);
+      if (p) n.pulse = p;
+    }
     const nextOnline = new Set(
       next.nodes.filter((n) => n.presence === 'online').map((n) => n.name),
     );
@@ -3286,6 +3309,7 @@ export function mountOffice(
     ...(import.meta.env.DEV ? { spriteParity, spriteCrops, spriteImages, dirtyParity } : {}),
     update,
     emit,
+    pulse,
     replay: (evs) => {
       if (reduced || STILL || evs.length === 0) return;
       replayPending = evs;

@@ -1,4 +1,5 @@
 import type { LaneState, Posture, WorkingHours } from '@musterd/protocol';
+import type { SeatPulse } from '../pulse';
 import type { Caption } from '../captions';
 import type { ActTone } from '../format';
 import type { Addressee, SpeechMarking } from './speech';
@@ -49,6 +50,10 @@ export interface OfficeNode {
   blocked?: boolean;
   /** Self-set do-not-disturb (ADR 044) — at their desk, headphones on, never walked to (§4). */
   dnd: boolean;
+  /** The seat's latest tool-call pulse (ADR 660), attached by the scene from `OfficeHandle.pulse` —
+   *  the desk types and its screen lives off this, read against the wall clock at draw time
+   *  (`live/pulse.ts`). Absent: no pulse ever arrived (no hooks, or idle since the page opened). */
+  pulse?: SeatPulse;
   /** Why the seat is dark (ADR 141/315) — drives the owned-desk texture and the left_team exit. */
   offline_reason: string | null;
   /** Last seen (wire fact) — the warm-desk fade and the desk-capacity tiebreak read it. */
@@ -310,6 +315,10 @@ export interface SpriteParity {
 export interface OfficeHandle {
   update: (data: OfficeData) => void;
   emit: (ev: OfficeEvent) => void;
+  /** A `seat_pulse` for one member (ADR 660): remembered by name across roster updates, attached to
+   * the live node, and it wakes a parked loop — a working desk must move even when nothing else does.
+   * Nothing is drawn here; the renderer reads `OfficeNode.pulse` against the clock each frame. */
+  pulse: (member: string, pulse: SeatPulse) => void;
   /** Replay on open (nick, 2026-10-12): play these lane walks once, in order, at REPLAY_TEMPO× — the
    * last ten minutes the viewer missed. Queued and drained by the frame loop once someone is placed —
    * never played inside update() (#2429's fault); a no-op under reduced motion and in still mode. */

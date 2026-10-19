@@ -310,6 +310,27 @@ export function typingBurst(seed: number, t: number): number {
   return Math.min(1, smooth(p / 0.35), smooth((on - p) / 0.5));
 }
 
+/** The pulse-driven burst's period, s. Shorter than `typingBurst`'s: the pauses are now the seat's own. */
+export const PULSE_TYPING_PERIOD_S = 6;
+
+/**
+ * Typing amplitude from the seat's pulse (ADR 660 §3.3) — `intensity` is distinct harness tool
+ * calls in the last minute, 0 when the pulse is stale or the seat has no hooks. Returns 0 for 0:
+ * every tap traces to a real call, and a `working` posture alone no longer types (that was
+ * `typingBurst`'s seeded loop, which this replaces at the desk). From one call a minute upward the
+ * burst's duty cycle rises with intensity — about a quarter of each period at 1–2/min, about 85% at
+ * twelve or more — still phase-seeded per member so neighbours don't type in lockstep, with the same
+ * ramps as `typingBurst` so hands settle onto the keys rather than snapping.
+ */
+export function typingFromPulse(intensity: number, seed: number, t: number): number {
+  if (intensity <= 0) return 0;
+  const duty = clamp(0.25 + (0.6 * (intensity - 1)) / 11, 0.25, 0.85);
+  const on = duty * PULSE_TYPING_PERIOD_S;
+  const p = (t + seed * 40) % PULSE_TYPING_PERIOD_S;
+  if (p > on) return 0;
+  return Math.min(1, smooth(p / 0.35), smooth((on - p) / 0.5));
+}
+
 /** The rest (standing, arms down) pose — every other pose is authored as a deviation from this. */
 function restPose(): Skel {
   const C = CHAR;

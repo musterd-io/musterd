@@ -18,6 +18,7 @@ import type {
   OpenLane,
   Report,
   Request,
+  SeatPulseFrame,
   UpdateLane,
   WorkingHours,
 } from '@musterd/protocol';
@@ -810,6 +811,9 @@ export async function provisionObserver(
 export interface LiveHandlers {
   onEnvelope: (env: Envelope) => void;
   onPresence: (member: string, status: string, surface?: string) => void;
+  /** A seat's tool-call pulse (ADR 660, SPEC A.25) — counts and a kind, at most every ~5 s per seat,
+   * and nothing while the seat is idle; `live/pulse.ts` decides liveness from the frame's `ts`. */
+  onPulse?: (pulse: SeatPulseFrame) => void;
   onStatus: (status: ConnStatus) => void;
   onError?: (message: string) => void;
   /** The WS `claim` was refused for a stale/invalid credential — recoverable by re-provisioning a fresh
@@ -894,6 +898,9 @@ export class LiveClient {
             frame.status as string,
             frame.surface as string | undefined,
           );
+          break;
+        case 'seat_pulse':
+          this.h.onPulse?.(frame as SeatPulseFrame);
           break;
         case 'refused': {
           // A bad/stale credential (e.g. a wiped DB, an expired observer TTL, or the seat reclaimed).

@@ -1,6 +1,7 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
 import type { AskView } from './asks';
 import type { ConnStatus } from './client';
+import type { SeatPulse } from './pulse';
 import type { RoomEntry } from './workingOn';
 
 /**
@@ -30,6 +31,8 @@ export interface OfficeRoomProps {
   /** The derived asks with the tier clock applied (ADR 464 §3.3) — the room's ask moment reads them. */
   asks: readonly AskView[];
   status: ConnStatus;
+  /** The latest `seat_pulse` per member (ADR 660) — the desk types and its screen lives off this. */
+  pulses?: ReadonlyMap<string, SeatPulse> | undefined;
 }
 
 /**
@@ -51,6 +54,7 @@ export interface RoomStream {
   envelopes: Envelope[];
   liveIds: Set<string>;
   status: ConnStatus;
+  pulses?: ReadonlyMap<string, SeatPulse> | undefined;
 }
 
 /**
@@ -72,5 +76,6 @@ export function officeRoom(
     board: derived.board,
     asks: derived.asks,
     status: stream.status,
+    pulses: stream.pulses,
   };
 }
