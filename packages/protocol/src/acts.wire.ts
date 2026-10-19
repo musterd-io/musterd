@@ -141,7 +141,13 @@ export function normalizeActivity(a: (typeof ACTIVITIES_ON_WIRE)[number]): Activ
 }
 
 /**
- * Provenance (musterd/0.2): *why* a presence exists, captured as a fact at attach time — never
+ * Idle-at-prompt wake (ADR 558): can this session be pushed while idle? `deaf` carries a reason.
+ */
+export const HEARINGS = ['idle', 'deaf'] as const;
+export type Hearing = (typeof HEARINGS)[number];
+
+/**
+ *Provenance (musterd/0.2): *why* a presence exists, captured as a fact at attach time — never
  * guessed (human-agent-dynamics §2). `session` = a human opened a harness session; `asked` = a
  * member was asked to do something; `hook` = a harness hook/function fired; `scheduled` = a timer
  * started it; `daemon` = an always-on process. It dissolves the driving-posture confusion without

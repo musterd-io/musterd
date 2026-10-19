@@ -208,6 +208,34 @@ describe('renderRoster', () => {
     expect(renderRoster([local], 0, 120)).not.toContain('@');
   });
 
+  it('a live deaf seat shows `live · deaf` with its reason (ADR 558 §5)', () => {
+    const deaf: MemberSummary = {
+      ...base,
+      id: 'ada',
+      name: 'ada',
+      kind: 'agent',
+      role: '',
+      presence: 'online',
+      activity: 'active',
+      presences: [
+        {
+          surface: 'cursor',
+          status: 'online',
+          last_seen_at: 0,
+          model: 'claude-opus-5',
+          hearing: 'deaf',
+          hearing_reason: 'no-inject:cursor',
+        },
+      ],
+    };
+    expect(renderRoster([deaf], 0, 120)).toContain('live · deaf (no-inject:cursor)');
+    const hearing: MemberSummary = {
+      ...deaf,
+      presences: [{ ...deaf.presences[0]!, hearing: 'idle', hearing_reason: null }],
+    };
+    expect(renderRoster([hearing], 0, 120)).not.toContain('deaf');
+  });
+
   // ADR 135: a member whose attested build differs from the daemon gets a warn facet; matching or
   // unknown builds are silence (the roster must not turn into a wall of hashes).
   it('marks a member whose build differs from the daemon, stays silent when matching/unknown', () => {

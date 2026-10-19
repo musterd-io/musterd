@@ -84,4 +84,35 @@ describe('team_send surfaces the acknowledge structurally', () => {
     const res = await handlerFor(undefined)({ to: '@team', act: 'wait', body: 'x' });
     expect(res.structuredContent.lane_ack).toBeUndefined();
   });
+
+  it('names a deaf recipient in prose and structuredContent (ADR 558 §5)', async () => {
+    const handlers: Record<string, (a: any) => Promise<any>> = {};
+    const server = {
+      registerTool: (name: string, _s: unknown, h: (a: any) => Promise<any>) => {
+        handlers[name] = h;
+      },
+    };
+    const client: any = {
+      joined: true,
+      holdsSeat: true,
+      member: 'Ada',
+      markSeen: () => undefined,
+      sendEnvelope: async () => ({
+        deaf_recipient: { recipient: 'ghost', reason: 'no-inject:cursor' },
+      }),
+    };
+    registerSend(server as any, client, config as any);
+    const res = await handlers['team_send']!({
+      to: 'ghost',
+      act: 'request_help',
+      body: 'can you check this?',
+    });
+    expect(res.content[0].text).toContain(
+      'ghost is live · deaf (no-inject:cursor) — lands at its next tool call or prompt',
+    );
+    expect(res.structuredContent.deaf_recipient).toEqual({
+      recipient: 'ghost',
+      reason: 'no-inject:cursor',
+    });
+  });
 });

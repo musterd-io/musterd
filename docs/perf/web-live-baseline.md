@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-19 — `initialJsGzipBytes` 147,500 → 148,000 B and `totalJsGzipBytes` 335,000 → 335,400 B: a live deaf seat reads `live · deaf` on `/live` (lane `01M4M6QP2J`, ADR 558 §5)
+
+| Budget     | Before (main `3809094e`, same laptop) | This branch (laptop) | Ceiling                    |
+| ---------- | ------------------------------------- | -------------------- | -------------------------- |
+| initial JS | 147,387 B                             | 147,482 B (+95)      | RAISED 147,500 → 148,000 B |
+| total JS   | 334,637 B                             | 334,732 B (+95)      | RAISED 335,000 → 335,400 B |
+
+`readPresence` in `guards.ts` validates `hearing` (`'idle' | 'deaf'`) and `hearing_reason`, and `SeatDetail` in `RosterPanel.tsx` renders the `live · deaf (<reason>)` chip when a live session cannot be pushed a turn while idle. Both sit on `/live`'s eager graph (`guards.ts` in the entry chunk, `SeatDetail` in `TeamColumn`), adding +95 B gzipped, which puts local initial at 147,482 B (18 B under the 147,500 B ceiling) and total at 334,732 B (268 B under 335,000 B), within the ~450 B CI gzip gap. Raised to local + the ~450 B CI gap.
+
+- Falsify: `pnpm perf:check` in CI reports initial JS at or under 147,500 B and total JS at or under 335,000 B with this change in.
+
 ### 2026-10-19 — `totalJsGzipBytes` 330,200 → 334,000 B, `appCssGzipBytes` 13,300 → 14,000 B: the pairing confirmation panel (lane `01M50XPYZ9`)
 
 | Budget   | Ceiling before | This branch, stacked on `b2b30fe1` (local) | Ceiling                    |

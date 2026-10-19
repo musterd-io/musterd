@@ -991,6 +991,33 @@ withDrivers('review', (o) => {
       expect(sel.snapshot.selected?.tie_decided_by).toBe('roster');
     });
 
+    it('among equal grades, a hearing seat beats a deaf seat, and tie_decided_by is hearing (ADR 558 §5)', async () => {
+      const { selectReviewCounterpart } = await import('./review.js');
+      const { db, team, lane } = await room();
+      const firstPres = await db.get<{ id: string }>(
+        'SELECT id FROM presence WHERE member_id = (SELECT id FROM members WHERE team_id = ? AND name = ?)',
+        [team.id, 'first'],
+      );
+      const now = Date.now() + 10;
+      await db.run(
+        `INSERT INTO audit (id, team_id, actor, action, target, result, detail, ts, created_at)
+         VALUES ('h-first', ?, 'first', 'presence.hearing', 'first', 'allow', ?, ?, ?)`,
+        [
+          team.id,
+          JSON.stringify({ occupancy: firstPres!.id, hearing: 'deaf', reason: 'no-inject:cursor' }),
+          now,
+          now,
+        ],
+      );
+      const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+      expect(sel.pick?.reviewer).toBe('second');
+      expect(sel.snapshot.selected).toEqual({
+        reviewer: 'second',
+        grade: 'cross_family',
+        tie_decided_by: 'hearing',
+      });
+    });
+
     it('no equal-grade rival: decided by grade, and load never reorders across rungs', async () => {
       const { selectReviewCounterpart } = await import('./review.js');
       // Built here rather than from await room(): `second` must be cross_model from its FIRST attestation.

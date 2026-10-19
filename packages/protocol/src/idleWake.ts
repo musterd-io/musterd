@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HEARINGS, type Hearing } from './acts.wire.js';
 
 /**
  * Idle-at-prompt wake (ADR 558). The daemon decides what rings (`seam=idle` on interrupt-check);
@@ -11,9 +12,15 @@ export const InterruptSeamSchema = z.enum(['boundary', 'idle']);
 export type InterruptSeam = z.infer<typeof InterruptSeamSchema>;
 
 /** Can this session be pushed while idle? `deaf` carries a reason. */
-export const HearingSchema = z.enum(['idle', 'deaf']);
-export type Hearing = z.infer<typeof HearingSchema>;
+export const HearingSchema = z.enum(HEARINGS);
+export { HEARINGS, type Hearing };
 export const HearingReasonSchema = z.string().min(1).max(80);
+
+/** ADR 558 §5 (increment 5): the `team_send` / `musterd send` line when a directed recipient is live and deaf. */
+export function deafRecipientNotice(recipient: string, reason?: string | null): string {
+  const detail = reason ? ` (${reason})` : '';
+  return `${recipient} is live · deaf${detail} — lands at its next tool call or prompt`;
+}
 
 /** The adapter's outcome report (`POST …/inbox/idle-wake`). Structured fields only — never the line. */
 export const IdleWakeReportSchema = z

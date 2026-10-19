@@ -50,7 +50,7 @@ import { getMemberByName, getMemberById } from '../store/members.js';
 import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js';
 import { seatBindings } from '../store/nodes.js';
 import { answerPolicyReview } from '../store/policyReview.js';
-import { currentAttestation } from '../store/presence.js';
+import { currentAttestation, liveDeafReason } from '../store/presence.js';
 import {
   bindingAskSql,
   isAdvisoryReviewMeta,
@@ -112,6 +112,9 @@ export interface RouteResult {
   /** ADR 505 §6 — this `accept` answered a `handoff`: the note the receiver just took on, returned
    *  where they accepted so the "re-run it before you build on it" line sits beside it. */
   accepted_handoff?: AcceptedHandoffWire;
+  /** ADR 558 §5 (increment 5) — a directed recipient that is currently live and deaf: the sender's
+   *  ack says it lands at its next tool call or prompt. */
+  deaf_recipient?: { recipient: string; reason: string | null };
 }
 
 /**
@@ -293,6 +296,7 @@ async function routeEnvelopeInner(
   let laneAdvisory: RouteResult['lane_advisory'];
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
+  let deafRecipient: RouteResult['deaf_recipient'];
   /** ADR 243: which evidence answered — audited, never on the wire. */
   let handoffBasis: HandoffLaneBasis | undefined;
   if (env.act === 'handoff' && !(env.meta as { lane_handoff?: unknown } | null)?.lane_handoff) {
@@ -639,6 +643,7 @@ async function routeEnvelopeInner(
   // set that gets validated from the set that gets persisted.
   const eligible = eligibleOf(outgoingEnv.meta);
   if (eligible) {
+    const eligibleMembers: MemberRow[] = [];
     for (const name of eligible) {
       const seat = await getMemberByName(ctx.db, team.id, name);
       if (!seat || seat.left_at !== null) {
@@ -655,6 +660,23 @@ async function routeEnvelopeInner(
       if (seat.id === sender.id) {
         throw new MusterdError('validation', `meta.eligible cannot name the sender ("${name}")`);
       }
+      eligibleMembers.push(seat);
+    }
+    // ADR 558 §5 (increment 5): the eligible-set picker prefers a hearing seat over a deaf one at
+    // otherwise equal rank — hearing seats are ordered ahead of live-but-deaf seats, preserving the
+    // caller's order within each group.
+    const deafEligible = new Set<string>();
+    for (const seat of eligibleMembers) {
+      if (await liveDeafReason(ctx.db, team.id, seat, ctx.config.presenceTimeoutMs)) {
+        deafEligible.add(seat.name);
+      }
+    }
+    if (deafEligible.size > 0 && deafEligible.size < eligible.length) {
+      const ordered = [
+        ...eligible.filter((n) => !deafEligible.has(n)),
+        ...eligible.filter((n) => deafEligible.has(n)),
+      ];
+      outgoingEnv = { ...outgoingEnv, meta: { ...outgoingEnv.meta, eligible: ordered } };
     }
   }
 
@@ -679,6 +701,8 @@ async function routeEnvelopeInner(
     recipients = [target.id];
     recipientNames.set(target.id, target.name);
     humanPair = isHumanPair(sender, target);
+    const deaf = await liveDeafReason(ctx.db, team.id, target, ctx.config.presenceTimeoutMs);
+    if (deaf) deafRecipient = { recipient: target.name, reason: deaf.reason };
   } else {
     // team or broadcast: every participant currently in the team except the sender. Observers (ADR
     // 063) aren't participants — they receive it via the firehose, not as addressed recipients.
@@ -984,6 +1008,7 @@ async function routeEnvelopeInner(
     ...(laneAdvisory ? { lane_advisory: laneAdvisory } : {}),
     ...(dispute ? { dispute } : {}),
     ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
+    ...(deafRecipient ? { deaf_recipient: deafRecipient } : {}),
   };
 }
 

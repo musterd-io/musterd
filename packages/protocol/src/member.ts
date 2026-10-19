@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   ActivitySchema,
+  HEARINGS,
   LifecycleSchema,
   MemberKindSchema,
   PresenceStatusSchema,
@@ -176,6 +177,10 @@ export const PresenceSchema = z.object({
    *  null/absent for a row on this daemon. `node_label` is that node's human label. */
   node: z.string().nullish(),
   node_label: z.string().nullish(),
+  /** ADR 558 §5 (increment 5): whether this live session can be pushed a turn while idle (`idle`),
+   *  or is `deaf` (with `hearing_reason`). Null/absent when the client has not attested hearing. */
+  hearing: z.enum(HEARINGS).nullish(),
+  hearing_reason: z.string().min(1).max(80).nullish(),
 });
 export type Presence = z.infer<typeof PresenceSchema>;
 

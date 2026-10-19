@@ -453,8 +453,11 @@ function renderRecipient(r: ActDelivery['recipients'][number], sentTs: number): 
     const detail = `${r.cursor_on ? ` on ${r.cursor_on}` : ''}${r.seen_by ? ` ~${ago(Date.now() - r.seen_by)} ago` : ''}`;
     return `${theme.memberName(r.seat, 'agent')} past cursor${detail ? theme.meta(detail) : ''}`;
   }
+  const idleDetail = (r.idle_raises ?? 0) > 0 ? ` (${r.idle_raises} idle)` : '';
   const raises =
-    r.interrupt_raises > 0 ? theme.meta(` · ${r.interrupt_raises} interrupt raise(s)`) : '';
+    r.interrupt_raises > 0
+      ? theme.meta(` · ${r.interrupt_raises} interrupt raise(s)${idleDetail}`)
+      : '';
   return `${theme.memberName(r.seat, 'agent')} ${theme.warn('unseen')}${raises}`;
 }
 

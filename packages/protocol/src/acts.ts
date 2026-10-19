@@ -20,6 +20,7 @@ export {
   ACTIVITIES,
   ACTIVITIES_ON_WIRE,
   ACTS,
+  HEARINGS,
   LIFECYCLES,
   MEMBER_KINDS,
   OBLIGATION_ACTS_ANY,
@@ -33,6 +34,7 @@ export {
 export type {
   Activity,
   Act,
+  Hearing,
   Lifecycle,
   MemberKind,
   PresenceStatus,

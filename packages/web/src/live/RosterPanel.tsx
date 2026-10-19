@@ -280,6 +280,18 @@ export function SeatDetail({
             {wokenBadge().label}
           </span>
         )}
+        {online && m.presences?.[0]?.hearing === 'deaf' && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title={
+              `Live but deaf${m.presences[0].hearing_reason ? ` (${m.presences[0].hearing_reason})` : ''} — ` +
+              'a directed act lands at its next tool call or prompt (ADR 558)'
+            }
+          >
+            live · deaf
+            {m.presences[0].hearing_reason ? ` (${m.presences[0].hearing_reason})` : ''}
+          </span>
+        )}
         {accountEx && (
           <span
             className={`lc-stat lc-stat--${accountEx.tone}`}

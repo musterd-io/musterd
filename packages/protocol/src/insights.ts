@@ -174,6 +174,9 @@ export const DeliveryRecipientSchema = z.object({
   answered: z.object({ act: z.string(), id: z.string(), ts: z.number().int() }).nullable(),
   /** ADR 088 interrupt raises recorded for this (act, recipient) — the attempt history. */
   interrupt_raises: z.number().int(),
+  /** ADR 558 §5: `interrupt.raised` rows on the `idle` seam for this (act, recipient). Optional for
+   *  back-compat with older daemons. */
+  idle_raises: z.number().int().optional(),
   /** ADR 167 delivery-rail relays confirmed for this act — `actor.session_message` rows whose
    *  `nudge_ref` names it (same derived-attempt pattern as `interrupt_raises`); `_verbatim` is the
    *  subset whose fingerprint matched the recomposed line (the injection guard holding). */

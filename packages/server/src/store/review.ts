@@ -17,7 +17,7 @@ import {
 import type { Driver } from '../db/driver.js';
 import { isDreaming } from './dream.js';
 import { getMemberById, getMemberByName, listMembers } from './members.js';
-import { hasLivePresence, teamOccupancy } from './presence.js';
+import { hasLivePresence, latestHearingByMember, teamOccupancy } from './presence.js';
 import {
   lastActionBySubject,
   resolveQuiescence,
@@ -152,12 +152,13 @@ export interface ReviewSelectionCandidate {
 }
 
 /**
- * What separated the winner from an equal-grade rival (lane 01M1S6GZ96). `grade` when nothing
- * tied. Otherwise the first rung of the tie-break that differed: `load` (fewest open acceptance
- * asks held), `recency` (least recently picked), or `roster` — the listMembers order that used to
- * decide EVERY tie, measured 32 of 32 in the 30 days to 2026-09-05, always to the earlier seat.
+ * What separated the winner from an equal-grade rival (lane 01M1S6GZ96, ADR 558 §5). `grade` when
+ * nothing tied. Otherwise the first rung of the tie-break that differed: `hearing` (a session that
+ * hears at idle beats a deaf one, ADR 558), `load` (fewest open acceptance asks held), `recency`
+ * (least recently picked), or `roster` — the listMembers order that used to decide EVERY tie,
+ * measured 32 of 32 in the 30 days to 2026-09-05, always to the earlier seat.
  */
-export type TieDecidedBy = 'grade' | 'load' | 'recency' | 'roster';
+export type TieDecidedBy = 'grade' | 'hearing' | 'load' | 'recency' | 'roster';
 
 /** Decision-time evidence persisted with `lane.ready_for_review` (ADR 303). */
 export interface ReviewSelectionSnapshot {
@@ -601,29 +602,34 @@ export async function lastPickedAt(db: Driver, teamId: string): Promise<Map<stri
 
 /**
  * The tie-break behind both pickers, applied only AMONG EQUAL GRADES — the ADR 188 ladder still
- * decides first and this never reorders across rungs. Fewest open acceptance asks, then least
- * recently picked, then whatever order the caller already had (roster). Returns the comparator and
- * a way to name which rung separated two seats, so the snapshot can say it.
+ * decides first and this never reorders across rungs. Hearing first (a seat that is not deaf beats
+ * a deaf one, ADR 558 §5), then fewest open acceptance asks, then least recently picked, then
+ * whatever order the caller already had (roster). Returns the comparator and a way to name which
+ * rung separated two seats, so the snapshot can say it.
  */
 function tieBreaker(
   load: Map<string, number>,
   last: Map<string, number>,
+  deaf: ReadonlySet<string> = new Set(),
 ): {
   compare: (a: string, b: string) => number;
   decidedBy: (winner: string, runnerUp: string | undefined) => TieDecidedBy;
 } {
+  const d = (n: string) => (deaf.has(n) ? 1 : 0);
   const l = (n: string) => load.get(n) ?? 0;
   const t = (n: string) => last.get(n) ?? 0;
   return {
-    compare: (a, b) => l(a) - l(b) || t(a) - t(b),
+    compare: (a, b) => d(a) - d(b) || l(a) - l(b) || t(a) - t(b),
     decidedBy: (winner, runnerUp) =>
       runnerUp === undefined
         ? 'grade'
-        : l(winner) !== l(runnerUp)
-          ? 'load'
-          : t(winner) !== t(runnerUp)
-            ? 'recency'
-            : 'roster',
+        : d(winner) !== d(runnerUp)
+          ? 'hearing'
+          : l(winner) !== l(runnerUp)
+            ? 'load'
+            : t(winner) !== t(runnerUp)
+              ? 'recency'
+              : 'roster',
   };
 }
 
@@ -742,13 +748,36 @@ export async function selectReviewCounterpart(
   // all-ungraded — the worker is attested or it is not — but the order is stated so the ladder
   // reads as one list, not as a rule plus an exception.
   const LADDER: SnapshotGrade[] = ['cross_family', 'cross_model', UNGRADED];
-  // Grade first (ADR 188), and among equal grades the load rung (lane 01M1S6GZ96). Array.sort is
-  // stable, so a full tie still falls to roster order — the pre-ADR-303 policy — but now it is the
-  // LAST resort, not the only one, and the snapshot says which rung decided.
-  const tie = tieBreaker(await openAcceptanceLoad(db, teamId), await lastPickedAt(db, teamId));
+  // Grade first (ADR 188), and among equal grades hearing (ADR 558 §5), then load (lane 01M1S6GZ96),
+  // then recency, then roster order as the last resort — and the snapshot says which rung decided.
+  const pool = selectable.length > 0 ? selectable : busySelectable;
+  const deafNames = new Set<string>();
+  if (pool.length > 1) {
+    const byMember = new Map<string, { id: string; created_at: number }[]>();
+    for (const option of pool) {
+      const p = await db.get<{ id: string; created_at: number }>(
+        'SELECT id, created_at FROM presence WHERE member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+        [option.member.id],
+      );
+      if (p) byMember.set(option.member.id, [p]);
+    }
+    const hearings = await latestHearingByMember(
+      db,
+      teamId,
+      pool.map((o) => o.member),
+      byMember,
+    );
+    for (const option of pool) {
+      if (hearings.get(option.member.id)?.hearing === 'deaf') deafNames.add(option.member.name);
+    }
+  }
+  const tie = tieBreaker(
+    await openAcceptanceLoad(db, teamId),
+    await lastPickedAt(db, teamId),
+    deafNames,
+  );
   // Quiet peers win when any exist. If the only live gradeable peers are busy, ask one of them
   // anyway (ADR 404) — busy is a preference, not a hard miss.
-  const pool = selectable.length > 0 ? selectable : busySelectable;
   pool.sort(
     (a, b) =>
       LADDER.indexOf(a.grade) - LADDER.indexOf(b.grade) ||

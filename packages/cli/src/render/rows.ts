@@ -444,6 +444,12 @@ function memberFacets(
     // local row is silent — the machine you are on is not news.
     parts.push(p.node_label ? `${p.surface} @ ${p.node_label}` : p.surface);
   }
+  // ADR 558 §5 (increment 5): a live agent seat whose session cannot be pushed while idle says so,
+  // with its reason when one was attested. Hearing (`idle`) or unknown is silence.
+  if (group !== 'out' && m.presences[0]?.hearing === 'deaf') {
+    const r = m.presences[0].hearing_reason?.trim();
+    parts.push(`live ${sym.dot} deaf${r ? ` (${r})` : ''}`);
+  }
   // A huddle is the one thing on this roster that is a GATHERING rather than a seat, and until now
   // it was the only thing `status` could not see: a seat in a room looked like any other busy seat.
   // Accented rather than dim — where the work is happening is context, but who is in a room with

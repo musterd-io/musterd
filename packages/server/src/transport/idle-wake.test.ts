@@ -240,5 +240,121 @@ withDrivers('idle-wake', (_o, kind) => {
         expect.objectContaining({ hearing: 'idle', reason: null }),
       ]);
     });
+
+    it('projects live · deaf onto the roster, orders hearing ahead of deaf in eligible sets, and returns deaf_recipient on a directed send (increment 5)', async () => {
+      await post('/teams/dawn/members', { name: 'Bob', kind: 'agent' }, nickCred);
+      const grantAda = await post(
+        '/teams/dawn/grants',
+        { scope: 'seat', target: 'Ada', lifetime: 'standing' },
+        nickCred,
+      );
+      const grantBob = await post(
+        '/teams/dawn/grants',
+        { scope: 'seat', target: 'Bob', lifetime: 'standing' },
+        nickCred,
+      );
+      const openSeat = async (seat: string, token: string, hb: Record<string, unknown>) => {
+        const ws = new WebSocket(base.replace('http', 'ws') + '/ws');
+        const frames: WSServerFrame[] = [];
+        ws.on('message', (d) => frames.push(JSON.parse(d.toString()) as WSServerFrame));
+        await new Promise<void>((r, rej) => (ws.on('open', () => r()), ws.on('error', rej)));
+        ws.send(
+          JSON.stringify({
+            type: 'claim',
+            v: PROTOCOL_VERSION,
+            team: 'dawn',
+            key: agentKey,
+            target: { seat },
+            grant: token,
+            surface: 'cursor',
+          }),
+        );
+        for (let i = 0; i < 40 && !frames.some((f) => f.type === 'occupied'); i++)
+          await new Promise((r) => setTimeout(r, 25));
+        ws.send(JSON.stringify({ type: 'heartbeat', status: 'online', ...hb }));
+        await new Promise((r) => setTimeout(r, 50));
+        return ws;
+      };
+      const wsAda = await openSeat('Ada', grantAda.json.token, {
+        hearing: 'deaf',
+        hearing_reason: 'no-inject:cursor',
+      });
+      const wsBob = await openSeat('Bob', grantBob.json.token, { hearing: 'idle' });
+      try {
+        const rosterRes = await fetch(`${base}/teams/dawn/members`, { headers: headers(nickCred) });
+        const roster = (await rosterRes.json()) as {
+          members: { name: string; presences: { hearing?: string; hearing_reason?: string }[] }[];
+        };
+        const adaRow = roster.members.find((m) => m.name === 'Ada');
+        const bobRow = roster.members.find((m) => m.name === 'Bob');
+        expect(adaRow?.presences[0]).toMatchObject({
+          hearing: 'deaf',
+          hearing_reason: 'no-inject:cursor',
+        });
+        expect(bobRow?.presences[0]).toMatchObject({
+          hearing: 'idle',
+          hearing_reason: null,
+        });
+
+        // Directed send to deaf Ada names deaf_recipient on the ack; to hearing Bob does not.
+        const toDeaf = await post(
+          '/teams/dawn/messages',
+          {
+            envelope: makeEnvelope({
+              id: 'm-deaf-1',
+              team: 'dawn',
+              from: 'nick',
+              ts: (clock += 100),
+              to: { kind: 'member', name: 'Ada' },
+              act: 'message',
+              body: 'hello',
+            }),
+          },
+          nickCred,
+        );
+        expect(toDeaf.json.deaf_recipient).toEqual({
+          recipient: 'Ada',
+          reason: 'no-inject:cursor',
+        });
+        const toHearing = await post(
+          '/teams/dawn/messages',
+          {
+            envelope: makeEnvelope({
+              id: 'm-hear-1',
+              team: 'dawn',
+              from: 'nick',
+              ts: (clock += 100),
+              to: { kind: 'member', name: 'Bob' },
+              act: 'message',
+              body: 'hello',
+            }),
+          },
+          nickCred,
+        );
+        expect(toHearing.json.deaf_recipient).toBeUndefined();
+
+        // Eligible set ['Ada', 'Bob'] reorders hearing Bob ahead of deaf Ada.
+        const elig = await post(
+          '/teams/dawn/messages',
+          {
+            envelope: makeEnvelope({
+              id: 'm-elig-1',
+              team: 'dawn',
+              from: 'nick',
+              ts: (clock += 100),
+              to: { kind: 'team' },
+              act: 'request_help',
+              body: 'either of you',
+              meta: { eligible: ['Ada', 'Bob'] },
+            }),
+          },
+          nickCred,
+        );
+        expect(elig.json.ack.meta.eligible).toEqual(['Bob', 'Ada']);
+      } finally {
+        wsAda.close();
+        wsBob.close();
+      }
+    });
   });
 });

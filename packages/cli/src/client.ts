@@ -959,6 +959,8 @@ export class HttpClient {
     };
     /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
     accepted_handoff?: { lane?: string; branch?: string | null; note: string };
+    /** ADR 558 §5 (increment 5): the directed recipient is currently live and deaf. */
+    deaf_recipient?: { recipient: string; reason: string | null };
     /** ADR 484: the challenge-evidence rail's one line, sender-only. Absent when off. */
     evidence_notice?: string;
   }> {
@@ -978,6 +980,7 @@ export class HttpClient {
         tiebreak?: { reviewer: string; grade: string } | null;
       };
       accepted_handoff?: { lane?: string; branch?: string | null; note: string };
+      deaf_recipient?: { recipient: string; reason: string | null };
       evidence_notice?: string;
     }>;
   }
