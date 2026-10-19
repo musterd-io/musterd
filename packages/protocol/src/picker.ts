@@ -90,6 +90,28 @@ function group(rows: PickerRow[]): PickerGroup[] {
     .map(([goal, rs]) => ({ goal, rows: rs }));
 }
 
+/**
+ * What a pick asks of the seat (spec 2026-10-16 decision 6, §5.7, §10; lane 01M5162W38). Both ways
+ * in end with it, and the musterd skill's "When a human picks a lane for you" section explains it:
+ * a short plan, then work, with no wait for a yes. A decline is a release with a reason.
+ */
+export const PICK_ASK = 'Reply with a 3–5 line plan, then start unless redirected.';
+
+/** The words both pick texts share, so a seat (and the skill) can tell a pick from a plain handoff. */
+export const PICK_PHRASE = 'picked this lane for you in the lane picker';
+
+/** The note on a /live pick's handoff act (spec §5.5, §10). The human is signed in, so the act is
+ *  theirs; the lane title is already on the handoff line, so the note does not repeat it. */
+export function pickHandoffNote(by: string): string {
+  return `${by} ${PICK_PHRASE} (/live, signed in). ${PICK_ASK}`;
+}
+
+/** The line a terminal pick's workspace marker shows once at the seat's interrupt check (ADR 626
+ *  Decision 2, which fixes this wording). The pick is the seat's own claim, so it says unattested. */
+export function terminalPickNotice(p: { requested_by: string; title: string }): string {
+  return `${p.requested_by} ${PICK_PHRASE} (terminal, unattested): "${p.title}". ${PICK_ASK}`;
+}
+
 /** Every word must appear in the row's id, title, goal or areas, case-insensitively. Groups left
  *  empty are dropped; blank text returns the view unchanged. */
 export function filterPicker(view: PickerView, text: string): PickerView {

@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 52;
+export const GUIDANCE_CONTENT_VERSION = 53;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -201,6 +201,22 @@ export function renderSkillBody(opts: { team: string }): string {
     "not re-derive it. Pair it with `team_send {act:'handoff'}` / `musterd send --act handoff` naming the",
     'artifact. The receiver answers with `accept`/`decline` (set `reply_to`), and — importantly — accepting',
     'is not finishing: close the thread with `resolve` when the work actually lands.',
+    '',
+    '## When a human picks a lane for you (the lane picker)',
+    '',
+    'A human can pick your next lane from the board with the lane picker, in a terminal or in /live.',
+    'From /live the pick is a handoff act from that human. From a terminal it is a line your interrupt',
+    'check shows once, labelled unattested. Both say "picked this lane for you in the lane picker", and',
+    'either way the lane is already yours, so never ask whether to take it.',
+    '',
+    '1. Post a `status_update` naming the lane.',
+    '2. Reply to the human who picked (on a handoff, `accept` with `reply_to` the handoff act) with a',
+    '   3–5 line plan: what you will build, the open decisions you see, and your default for each.',
+    '3. Start. Do not wait for a yes. If a reply redirects you, it wins over your plan.',
+    '4. To decline, `lane_release` / `musterd lane release <id>` with a reason, then tell the human (on',
+    '   a handoff, `decline` with `reply_to`). The reason is recorded in the lane history, and the picker',
+    '   shows it beside the lane to the next person who opens it, so write it for them: what the lane',
+    '   needs that you lack.',
     '',
     '## Closing a lane — outcome acceptance (ADR 192)',
     '',
