@@ -131,7 +131,16 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
   const surface = (flagStr(flags, 'surface') ?? 'cli') as Surface;
 
   const http = new HttpClient({ server, surface });
-  const { members } = await http.roster(team);
+  // A hosted team serves no roster to an anonymous caller (cloud: a credential for the team on every
+  // read), so a fresh folder claiming on `<slug>.musterd.dev` presents the credential it will claim
+  // with. A bootstrap key (`mskey_`) is left off: the server refuses it on routine reads ("a bootstrap
+  // key only claims a seat"), and a self-hosted roster is public on loopback anyway.
+  const readKey = claimKey.startsWith(TOKEN_PREFIXES.agent_key) ? undefined : claimKey;
+  const { members } = await new HttpClient({
+    server,
+    surface,
+    ...(readKey ? { key: readKey } : {}),
+  }).roster(team);
   const workspace = resolveWorkspace();
 
   // Consolidated self-service (ADR 087): a bare `musterd claim` (no seat/role given) in a folder whose
