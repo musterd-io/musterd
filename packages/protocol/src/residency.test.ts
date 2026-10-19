@@ -39,6 +39,7 @@ describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE p
       exact_match_resume: false,
       resume_eligible_ms: 300_000,
       flow: 'manual',
+      acceptance_scope: 'binding',
       // ADR 214: a raised deferral is not a wake reason until a seat opts in.
       raised_deferral_wakes: false,
       // ADR 386: dark at launch like every other rollout gate here, though for a different reason.
