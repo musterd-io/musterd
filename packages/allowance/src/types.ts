@@ -6,6 +6,11 @@ export interface Window {
   limit: number;
   /** Unix ms, or null when the provider did not say when it resets. */
   resetsAt: number | null;
+  /**
+   * When set, the sentence is a share of this window ("67% left of the 5-hour window")
+   * and `used` / `limit` are that share, out of 100.
+   */
+  label?: string;
 }
 
 export interface LiveProvider {
@@ -31,11 +36,12 @@ export interface QuietProvider {
   reason: string;
 }
 
-export type ActiveProvider = LiveProvider | HeldProvider;
+export type ProviderCard = LiveProvider | HeldProvider | QuietProvider;
 
 export interface Board {
   readAt: number;
   timeZone: string;
-  active: ActiveProvider[];
-  quiet: QuietProvider[];
+  /** Account ids the user has turned on, in catalog order. */
+  chosen: string[];
+  providers: ProviderCard[];
 }

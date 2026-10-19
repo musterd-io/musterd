@@ -87,9 +87,24 @@ export function windowSentence(
   resetsAt: number | null,
   now: number,
   timeZone: string,
+  label?: string,
 ): string {
   const left = limit - used;
   const back = resetsAt == null ? '' : ` Back ${formatWhen(resetsAt, now, timeZone)}.`;
+  if (label !== undefined && label !== '') {
+    if (left < 0) return `${formatCount(Math.round(-left))}% over the ${label}.${back}`;
+    if (Math.round(left) === 0) return `None left of the ${label}.${back}`;
+    return `${formatCount(Math.round(left))}% left of the ${label}.${back}`;
+  }
+  if (unit === 'dollars') {
+    const leftCents = Math.round(left * 100);
+    const word = Math.abs(leftCents) === 100 ? 'dollar' : 'dollars';
+    if (leftCents < 0) {
+      return `${formatCount(-leftCents / 100)} ${word} of on-demand over ${formatCount(limit)}.${back}`;
+    }
+    if (leftCents === 0) return `None left of ${formatCount(limit)} dollars of on-demand.${back}`;
+    return `${formatCount(leftCents / 100)} ${word} of on-demand left of ${formatCount(limit)}.${back}`;
+  }
   if (left < 0) {
     return `${formatCount(-left)} ${unitWord(left, unit)} over ${formatCount(limit)}.${back}`;
   }

@@ -162,6 +162,70 @@ section {
   color: var(--c-text-dim);
 }
 
+.empty {
+  margin: 28px 0 0;
+  color: var(--c-text-dim);
+}
+
+.accounts {
+  margin: 36px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.accounts legend {
+  margin: 0 0 4px;
+  padding: 0;
+  font: 600 13px/20px var(--font-sans);
+  color: var(--c-text-dim);
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font: 600 16px/24px var(--font-display);
+  cursor: pointer;
+}
+
+.account input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--c-accent);
+}
+
+.account input:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+
+.save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 18px;
+  border: 1px solid var(--c-edge);
+  border-radius: 8px;
+  background: var(--c-field);
+  color: var(--c-text);
+  font: 600 15px/20px var(--font-sans);
+  cursor: pointer;
+}
+
+.save:hover {
+  background: var(--c-hover);
+}
+
+.save:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+
 .foot {
   display: flex;
   align-items: center;
@@ -220,7 +284,8 @@ section {
     align-items: stretch;
   }
 
-  .refresh {
+  .refresh,
+  .save {
     width: 100%;
   }
 }
