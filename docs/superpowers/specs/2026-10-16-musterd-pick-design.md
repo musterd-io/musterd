@@ -246,3 +246,8 @@ Lanes 2 and 3 run in parallel after lane 1. Nothing waits on find-work's grammar
   probably right, because a picker should not make N calls.
 - **The handoff note:** the wording of the /live handoff note, which the seat reads as its
   instruction. Lane 5 settles it together with the skill text.
+  _(Settled 2026-10-17, lane `01M5162W38`: "<human> picked this lane for you in the lane picker
+  (/live, signed in). Reply with a 3–5 line plan, then start unless redirected." It matches ADR 626's
+  terminal line word for word except the label and the title. Both texts live in
+  `@musterd/protocol` (`pickHandoffNote`, `terminalPickNotice`). The musterd skill's "When a human
+  picks a lane for you" section quotes their shared phrase and teaches the plan and the decline.)_
