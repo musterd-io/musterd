@@ -92,6 +92,9 @@ export interface LaneVerdictWire {
 /** ADR 539: the daemon's raw escalation field — `laneEscalationAck()` renders the sentence. */
 export type LaneEscalationWire = { lane: string; human: string | null };
 /** ADR 545: a reply on a superseded acceptance ask — `laneSupersededAck()` renders the sentence. */
+/** ADR 667, mirrored like the others: an advisory verdict, recorded and moving nothing. */
+export type LaneAdvisoryWire = { lane: string; ask: string; verdict: 'accept' | 'decline' };
+
 export type LaneSupersededWire = {
   lane: string;
   ask: string;
@@ -824,6 +827,8 @@ export class MusterdClient {
     lane_ack?: { lane: string };
     /** ADR 545: this reply answered an acceptance ask a re-route had closed; which binds now. */
     lane_superseded?: LaneSupersededWire;
+    /** ADR 667: this reply answered an advisory acceptance ask — recorded, moved nothing. */
+    lane_advisory?: LaneAdvisoryWire;
     /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */
     dispute?: DisputeAnswerWire;
     /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
@@ -837,6 +842,7 @@ export class MusterdClient {
       lane_escalation?: LaneEscalationWire;
       lane_ack?: { lane: string };
       lane_superseded?: LaneSupersededWire;
+      lane_advisory?: LaneAdvisoryWire;
       dispute?: DisputeAnswerWire;
       accepted_handoff?: AcceptedHandoffWire;
       evidence_notice?: string;

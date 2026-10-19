@@ -16,15 +16,23 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { isDreaming } from './dream.js';
-import { getMemberByName, listMembers } from './members.js';
+import { getMemberById, getMemberByName, listMembers } from './members.js';
 import { hasLivePresence, teamOccupancy } from './presence.js';
 import {
   lastActionBySubject,
   resolveQuiescence,
   QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
 } from './quiescence.js';
-import { listWakeableMemberIds, seatWakeabilityFacts, wakeabilityInputs } from './residency.js';
+import {
+  effectiveWakePolicy,
+  listResidency,
+  listWakeableMemberIds,
+  seatWakeabilityFacts,
+  seatWakeDefaults,
+  wakeabilityInputs,
+} from './residency.js';
 import { type MemberRow, resolveCapabilities } from './rows.js';
+import { getPolicy } from './teams.js';
 
 /**
  * The review counterpart picker (ADR 169 §4) — who gets the standard-tier `approve` ask when a lane
@@ -111,6 +119,9 @@ export type ReviewSelectionExclusion =
    *  moves it. The seat is live-but-ineligible, like `busy`, but unlike `busy` there is no point
    *  asking it at all tonight. */
   | 'dreaming'
+  /** ADR 667: an advisory seat, while the binding acceptor is being picked — it already holds the
+   *  submission's advisory ask, and its verdict could not close the lane. */
+  | 'advisory'
   | 'not_agent'
   | 'busy'
   /** The WORKER's live occupancy attests nothing, so no candidate can be graded against it. This is
@@ -479,6 +490,44 @@ export async function pickReviewCounterpart(
 }
 
 /**
+ * ADR 667: an acceptance ask is BINDING unless the daemon marked it `lane_review.advisory`. Every
+ * reader that means "the ask whose answer moves the lane" — the open ask, who the board says the lane
+ * waits on, the held asks a re-route moves, the newest ask a verdict binds to — filters with this,
+ * so an advisory ask can be woken, shown to its holder and answered, and never stand in for the
+ * binding one. `lane_review` is daemon-stamped (ADR 225), so the mark cannot be forged.
+ */
+export function bindingAskSql(alias: string): string {
+  return `json_extract(${alias}.meta, '$.lane_review.advisory') IS NULL`;
+}
+
+/** ADR 667: the same rule over a parsed `meta`. */
+export function isAdvisoryReviewMeta(meta: unknown): boolean {
+  if (typeof meta !== 'object' || meta === null) return false;
+  const review = (meta as { lane_review?: unknown }).lane_review;
+  return (
+    typeof review === 'object' &&
+    review !== null &&
+    (review as { advisory?: unknown }).advisory === true
+  );
+}
+
+/**
+ * ADR 667: the team's seats whose acceptance is advisory — enrolled seats whose effective wake policy
+ * (team defaults, sponsor block, the seat's own override) says `acceptance_scope: advisory`.
+ */
+export async function advisorySeats(db: Driver, teamId: string): Promise<Set<string>> {
+  const policy = await getPolicy(db, teamId);
+  const out = new Set<string>();
+  for (const row of await listResidency(db, teamId)) {
+    const member = await getMemberById(db, row.member_id);
+    if (!member) continue;
+    const effective = effectiveWakePolicy(seatWakeDefaults(policy, member), row.policy);
+    if (effective.acceptance_scope === 'advisory') out.add(member.name);
+  }
+  return out;
+}
+
+/**
  * Open acceptance asks per holder (lane 01M1S6GZ96): daemon-composed `lane_review` asks with no
  * accept/decline naming them, no `resolve` on their thread, and a lane still awaiting acceptance.
  * The picker's load rung — measured 2026-09-05, gptbot held 14 of these at once while the picker
@@ -589,7 +638,7 @@ export async function selectReviewCounterpart(
   _lane: Lane,
   worker: string,
   presenceTimeoutMs: number,
-  opts: { departing?: string } = {},
+  opts: { departing?: string; advisory?: ReadonlySet<string> } = {},
 ): Promise<ReviewSelection> {
   const lastWork = await lastActionBySubject(db, teamId, {
     // Claims, credentials, and leases establish authority/Presence; none is work that should make
@@ -628,6 +677,10 @@ export async function selectReviewCounterpart(
     }
     if (opts.departing !== undefined && member.name === opts.departing) {
       candidate.exclusion = 'departing';
+      continue;
+    }
+    if (opts.advisory?.has(member.name)) {
+      candidate.exclusion = 'advisory';
       continue;
     }
     if (member.observer || member.kind === 'service') {
@@ -962,6 +1015,7 @@ export async function openAcceptanceAsk(
          LEFT JOIN members mem ON mem.id = m.to_member
         WHERE m.team_id = ? AND m.act = 'ask'
           AND json_extract(m.meta, '$.lane_review.lane') = ?
+          AND ${bindingAskSql('m')}
           AND NOT EXISTS (
             SELECT 1 FROM messages r
              WHERE r.team_id = m.team_id
@@ -1085,6 +1139,7 @@ export async function acceptanceWaits(
          FROM messages m
          LEFT JOIN members mem ON mem.id = m.to_member
         WHERE m.team_id = ? AND m.act = 'ask' AND m.meta LIKE '%lane_review%'
+          AND ${bindingAskSql('m')}
         ORDER BY m.ts, m.id`,
     [teamId],
   );

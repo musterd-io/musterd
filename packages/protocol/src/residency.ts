@@ -73,6 +73,14 @@ export const ResidencyPolicySchema = z.object({
    */
   flow: z.enum(['manual', 'auto']).default('manual'),
   /**
+   * ADR 667: does this seat's acceptance verdict BIND? `binding` (the default) is every seat today:
+   * an accept closes the lane, a decline sends it back (ADR 202). `advisory` is for a seat under
+   * test (a local model, ADR 663): when the ordinary picker chooses it, it gets an ask marked
+   * `lane_review.advisory`, a binding acceptor is picked beside it in the same submit, and its
+   * answer is recorded against the lane and moves nothing.
+   */
+  acceptance_scope: z.enum(['binding', 'advisory']).default('binding'),
+  /**
    * ADR 214 (ADR 211 increment 2). When a Member defers an act (`wait` + `meta.defer_ref`) it stops being a
    * wake reason — they said "not now". When its condition later fires the act becomes pending
    * again; this knob decides whether that also makes it wake-eligible. Off (launch default) means a

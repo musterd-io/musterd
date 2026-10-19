@@ -14,6 +14,7 @@ import {
   humanReviewRequired,
   isAwaitingAcceptance,
   type Lane,
+  type LaneAdvisoryWire,
   type LaneSupersededWire,
   makeEnvelope,
   modelFamily,
@@ -49,6 +50,8 @@ import { seatBindings } from '../store/nodes.js';
 import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
 import {
+  bindingAskSql,
+  isAdvisoryReviewMeta,
   openAcceptanceAsk,
   humanReviewerFor,
   pendingHumanReviews,
@@ -97,6 +100,9 @@ export interface RouteResult {
   /** ADR 545 — this accept/decline/wait answered an acceptance ask a re-route had already closed:
    *  it moved nothing, escalated nothing, and the ack says which ask (and whose) binds now. */
   lane_superseded?: LaneSupersededWire;
+  /** ADR 667 — the reply answered an ADVISORY acceptance ask: recorded against the lane, moved
+   *  nothing. Reported on the ack so the advisory seat learns its verdict did not close the lane. */
+  lane_advisory?: LaneAdvisoryWire;
   /** ADR 505 — what the daemon did with the lane owner's answer to a review dispute: a recorded
    *  concession, or a hold that re-routed the lane to a tiebreak reviewer (or could not). Absent
    *  when the act answered no dispute of the sender's. Reported on the ack as `lane_verdict` is. */
@@ -282,6 +288,7 @@ async function routeEnvelopeInner(
   let laneEscalation: RouteResult['lane_escalation'];
   let laneAck: RouteResult['lane_ack'];
   let laneSuperseded: RouteResult['lane_superseded'];
+  let laneAdvisory: RouteResult['lane_advisory'];
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
   /** ADR 243: which evidence answered — audited, never on the wire. */
@@ -711,7 +718,17 @@ async function routeEnvelopeInner(
     // ADR 545: an answer to an ask a re-route already closed binds to nothing — no verdict AND no
     // stage-two escalation (the escalation hook never asked, so a peer answering a moved ask woke
     // the human for a review nobody held). Checked once, first; the sender is told on the ack.
+    // ADR 667: an answer on an ADVISORY ask is recorded and moves nothing — checked before every
+    // other branch, so it can never be read as superseded, as the ADR 188 peer stage, as the
+    // verdict, or as an owner's dispute answer.
     if (typeof ref === 'string') {
+      try {
+        laneAdvisory = await recordAdvisoryVerdict(ctx, team, sender, ref, env.act, message.id);
+      } catch (err) {
+        log.warn({ msg: 'advisory_verdict_failed', err: String(err) });
+      }
+    }
+    if (typeof ref === 'string' && !laneAdvisory) {
       try {
         laneSuperseded = await supersededLaneReview(ctx, team, ref);
       } catch (err) {
@@ -732,7 +749,8 @@ async function routeEnvelopeInner(
       env.act === 'accept' &&
       typeof ref === 'string' &&
       sender.kind !== 'human' &&
-      !laneSuperseded
+      !laneSuperseded &&
+      !laneAdvisory
     ) {
       try {
         if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
@@ -761,7 +779,7 @@ async function routeEnvelopeInner(
     // demanded, and that human's verdict is the one that closes.
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
-        if (!escalatedToHuman && !laneSuperseded)
+        if (!escalatedToHuman && !laneSuperseded && !laneAdvisory)
           laneVerdict = await applyAcceptanceVerdict(
             ctx,
             team,
@@ -778,7 +796,7 @@ async function routeEnvelopeInner(
       // A reply that was a verdict cannot also be an answer, so this runs only when nothing moved
       // above. Best-effort for the same reason the verdict is: a failure here must never fail the
       // act that carries the owner's evidence.
-      if (!laneVerdict && !laneSuperseded) {
+      if (!laneVerdict && !laneSuperseded && !laneAdvisory) {
         try {
           dispute = await applyDisputeAnswer(ctx, team, sender, ref, env.act, message.id);
         } catch (err) {
@@ -817,8 +835,12 @@ async function routeEnvelopeInner(
     const ref = env.meta?.['in_reply_to'];
     if (typeof ref === 'string') {
       try {
-        laneSuperseded = await supersededLaneReview(ctx, team, ref);
-        if (!laneSuperseded) laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
+        // ADR 667: a `wait` on an advisory ask is neither superseded nor an acknowledge of the
+        // binding review — it records nothing.
+        if (!(await isAdvisoryAsk(ctx, team, ref))) {
+          laneSuperseded = await supersededLaneReview(ctx, team, ref);
+          if (!laneSuperseded) laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
+        }
       } catch (err) {
         log.warn({ msg: 'acceptance_ack_failed', err: String(err) });
       }
@@ -957,6 +979,7 @@ async function routeEnvelopeInner(
     ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
+    ...(laneAdvisory ? { lane_advisory: laneAdvisory } : {}),
     ...(dispute ? { dispute } : {}),
     ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
   };
@@ -1072,6 +1095,8 @@ export async function handleFoldedMessages(
       const ref = (JSON.parse(row.meta) as { in_reply_to?: unknown }).in_reply_to;
       if (typeof ref !== 'string') continue;
       try {
+        // ADR 667: an advisory ask's accept is never the peer stage, on fold too.
+        if (await isAdvisoryAsk(ctx, team, ref)) continue;
         // ADR 545: an accept on an ask a re-route already closed escalates nothing, on fold too.
         if (await supersededLaneReview(ctx, team, ref)) continue;
         await fireGatedHumanAsk(ctx, team, sender, ref, row.body, row.id);
@@ -1313,6 +1338,8 @@ async function gatedLane(
     return null;
   }
   if (!laneReview?.lane) return null;
+  // ADR 667: an advisory ask's accept is never the peer stage.
+  if ((laneReview as { advisory?: unknown }).advisory === true) return null;
   const lane = await getLane(ctx.db, team.id, laneReview.lane, team.slug);
   if (!lane || !humanReviewRequired(lane) || !isAwaitingAcceptance(lane.state)) return null;
   const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
@@ -1513,6 +1540,8 @@ async function applyAcceptanceAck(
     return;
   }
   if (!laneId) return;
+  // ADR 667: an advisory ask's `wait` acknowledges nothing the lane waits on.
+  if (isAdvisoryReviewMeta(safeParse(replied.meta))) return;
   const lane = await getLane(ctx.db, team.id, laneId, team.slug);
   if (!lane || !isAwaitingAcceptance(lane.state)) return;
   if ((await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId)) return;
@@ -1524,6 +1553,65 @@ async function applyAcceptanceAck(
     detail: { lane: lane.id, ask: repliedToId, acceptor: acceptor.name },
   });
   return { lane: lane.id };
+}
+
+function safeParse(raw: string | null): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** ADR 667: is `askId` an acceptance ask the daemon marked advisory? */
+async function isAdvisoryAsk(ctx: Ctx, team: TeamRow, askId: string): Promise<boolean> {
+  const row = await ctx.db.get<{ meta: string | null }>(
+    `SELECT meta FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'`,
+    [team.id, askId],
+  );
+  return isAdvisoryReviewMeta(safeParse(row?.meta ?? null));
+}
+
+/**
+ * ADR 667 — an accept/decline answering an ADVISORY acceptance ask: recorded against the lane as
+ * `lane.review_advisory` (the answer's id, so the readout joins the verdict to its words), and
+ * nothing else. Recorded in any lane state, a closed lane included: the advisory seat can be the
+ * slower reviewer, and its late verdict is exactly what is being measured. Only the holder's own
+ * answer counts — a bystander replying on someone else's advisory ask records nothing.
+ */
+async function recordAdvisoryVerdict(
+  ctx: Ctx,
+  team: TeamRow,
+  sender: MemberRow,
+  repliedToId: string,
+  act: 'accept' | 'decline',
+  answerId: string,
+): Promise<RouteResult['lane_advisory']> {
+  const ask = await ctx.db.get<{ meta: string | null; to_member: string | null }>(
+    `SELECT meta, to_member FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'`,
+    [team.id, repliedToId],
+  );
+  if (!ask) return;
+  const meta = safeParse(ask.meta);
+  if (!isAdvisoryReviewMeta(meta)) return;
+  const laneId = (meta as { lane_review: { lane?: unknown } }).lane_review.lane;
+  if (typeof laneId !== 'string') return;
+  if (ask.to_member === sender.id)
+    await appendAudit(ctx.db, team.id, {
+      actor: sender.name,
+      action: 'lane.review_advisory',
+      target: laneId,
+      result: 'allow',
+      detail: {
+        lane: laneId,
+        ask: repliedToId,
+        reviewer: sender.name,
+        verdict: act,
+        answer: answerId,
+      },
+    });
+  return { lane: laneId, ask: repliedToId, verdict: act };
 }
 
 /**
@@ -1577,9 +1665,10 @@ async function newestLaneReviewAsk(
   laneId: string,
 ): Promise<string | undefined> {
   const row = await ctx.db.get<{ id: string }>(
-    `SELECT id FROM messages
-        WHERE team_id = ? AND act = 'ask' AND json_extract(meta, '$.lane_review.lane') = ?
-        ORDER BY ts DESC, id DESC LIMIT 1`,
+    `SELECT id FROM messages m
+        WHERE m.team_id = ? AND m.act = 'ask' AND json_extract(m.meta, '$.lane_review.lane') = ?
+          AND ${bindingAskSql('m')}
+        ORDER BY m.ts DESC, m.id DESC LIMIT 1`,
     [team.id, laneId],
   );
   return row?.id;
@@ -1627,6 +1716,9 @@ async function applyAcceptanceVerdict(
     return;
   }
   if (!laneId) return;
+  // ADR 667: belt and braces — the caller already routed an advisory answer elsewhere, and an
+  // advisory ask must never close or reopen a lane by any path.
+  if (isAdvisoryReviewMeta(safeParse(replied.meta))) return;
   const before = await getLane(ctx.db, team.id, laneId, team.slug);
   if (!before || !isAwaitingAcceptance(before.state)) return;
   // A re-route (lane 01M1QYHJFY) told this seat the acceptance moved to someone else and closed

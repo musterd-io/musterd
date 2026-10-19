@@ -1205,15 +1205,20 @@ async function dueReviewWorkOrders(
   const out: WakeCandidate[] = [];
   for (const row of rows) {
     let laneId: string | undefined;
+    let advisory = false;
     try {
-      laneId = (JSON.parse(row.meta ?? '{}') as { lane_review?: { lane?: string } }).lane_review
-        ?.lane;
+      const review = (
+        JSON.parse(row.meta ?? '{}') as { lane_review?: { lane?: string; advisory?: boolean } }
+      ).lane_review;
+      laneId = review?.lane;
+      advisory = review?.advisory === true;
     } catch {
       continue;
     }
     if (!laneId) continue;
     const lane = await getLane(db, teamId, laneId, teamSlug);
-    if (!lane || !isAwaitingAcceptance(lane.state)) continue;
+    // ADR 667: an advisory ask is still owed on a closed lane; a binding one only while it waits.
+    if (!lane || (!advisory && !isAwaitingAcceptance(lane.state))) continue;
     const sender = await getMemberById(db, row.from_member);
     out.push({
       act_id: row.id,

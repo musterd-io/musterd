@@ -9,7 +9,9 @@ import { withDrivers } from '../db/testing.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { handleFoldedMessages, retryPendingHumanAsks } from '../protocol/route.js';
 import { appendAudit, listAudit } from '../store/audit.js';
+import { getMemberByName } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
+import { enrollResidency } from '../store/residency.js';
 import { REVIEW_LOOP_BREAKER_N } from '../store/review.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from './hub.js';
@@ -1509,6 +1511,175 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(
           (await send(ada, 'ada', 'message', 'hi', m.id)).json.evidence_notice,
         ).toBeUndefined();
+      });
+    });
+
+    describe('an advisory acceptance scope (ADR 667)', () => {
+      /** The shared fixture plus `loc`, a local-model seat enrolled with an advisory scope. */
+      async function advisorySetup() {
+        const base = await setup();
+        await post('/teams/dawn/members', { name: 'loc', kind: 'agent' }, base.nickTok);
+        const loc = (await resolveAuth('/teams/dawn/inbox', { key: base.agentKey, seat: 'loc' }))!;
+        await reattestAgentModel('dawn', loc, 'qwen3:4b');
+        const team = (await getTeamBySlug(h.db, 'dawn'))!;
+        const member = await getMemberByName(h.db, team.id, 'loc');
+        await enrollResidency(h.db, team.id, {
+          member_id: member!.id,
+          harness: 'opencode',
+          host: 'air-2',
+          grant_id: null,
+          authorized_by: 'nick',
+          policy: { acceptance_scope: 'advisory' },
+        });
+        return { ...base, loc };
+      }
+
+      async function answer(who: Auth | string, from: string, askId: string, act: string) {
+        return await post(
+          '/teams/dawn/messages',
+          {
+            envelope: {
+              id: ulid(),
+              v: PROTOCOL_VERSION,
+              team: 'dawn',
+              from,
+              to: { kind: 'team' },
+              act,
+              body: `${act} — read it`,
+              meta: { in_reply_to: askId },
+              ts: Date.now(),
+            },
+          },
+          who,
+        );
+      }
+
+      async function reviewAsk(auth: Auth | string, laneId: string) {
+        const inbox = await get('/teams/dawn/inbox?unread=1', auth);
+        return (
+          inbox.json.messages as {
+            id: string;
+            act: string;
+            discharged?: unknown;
+            meta?: { lane_review?: { lane?: string; advisory?: boolean } };
+          }[]
+        ).find((m) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId);
+      }
+
+      async function submitNamedLoc(ada: Auth, extra: Record<string, unknown> = {}) {
+        const lane = await post(
+          '/teams/dawn/lanes',
+          { title: 'an advisory lane', claim: true, ...extra },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        const ready = await patchLane(
+          laneId,
+          { state: 'awaiting_acceptance', acceptor: 'loc' },
+          ada,
+        );
+        return { laneId, ready };
+      }
+
+      it('the advisory seat gets an ask marked advisory, and a binding acceptor is asked beside it', async () => {
+        const { nickTok, ada, gee, loc } = await advisorySetup();
+        const { laneId, ready } = await submitNamedLoc(ada);
+        expect(ready.status).toBe(200);
+        expect(ready.json.review.reviewer).toBe('gee');
+        const locAsk = await reviewAsk(loc, laneId);
+        expect(locAsk?.meta?.lane_review?.advisory).toBe(true);
+        const geeAsk = await reviewAsk(gee, laneId);
+        expect(geeAsk?.meta?.lane_review?.advisory).toBeUndefined();
+        const row = (await auditRows(nickTok, 'lane.ready_for_review')).at(-1) as {
+          detail: { reviewer?: string; advisory?: { reviewer: string } };
+        };
+        expect(row.detail.reviewer).toBe('gee');
+        expect(row.detail.advisory?.reviewer).toBe('loc');
+      });
+
+      it('an advisory accept is recorded and moves nothing; the binding accept closes the lane', async () => {
+        const { nickTok, ada, gee, loc } = await advisorySetup();
+        const { laneId } = await submitNamedLoc(ada);
+        const locAsk = (await reviewAsk(loc, laneId))!;
+        const sent = await answer(loc, 'loc', locAsk.id, 'accept');
+        expect(sent.status).toBe(201);
+        expect(sent.json.lane_verdict).toBeUndefined();
+        expect(sent.json.lane_superseded).toBeUndefined();
+        expect(sent.json.lane_advisory).toEqual({
+          lane: laneId,
+          ask: locAsk.id,
+          verdict: 'accept',
+        });
+        const lanes = await get('/teams/dawn/lanes', nickTok);
+        const still = (lanes.json.lanes as { id: string; state: string }[]).find(
+          (l) => l.id === laneId,
+        );
+        expect(isAwaitingAcceptance(still!.state)).toBe(true);
+        const recorded = await auditRows(nickTok, 'lane.review_advisory');
+        expect(recorded).toHaveLength(1);
+        expect((recorded[0] as { detail: Record<string, unknown> }).detail).toMatchObject({
+          lane: laneId,
+          ask: locAsk.id,
+          reviewer: 'loc',
+          verdict: 'accept',
+        });
+
+        const geeAsk = (await reviewAsk(gee, laneId))!;
+        const bound = await answer(gee, 'gee', geeAsk.id, 'accept');
+        expect(bound.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+      });
+
+      it('an advisory decline opens no dispute and does not reopen the lane', async () => {
+        const { nickTok, ada, loc } = await advisorySetup();
+        const { laneId } = await submitNamedLoc(ada);
+        const locAsk = (await reviewAsk(loc, laneId))!;
+        const sent = await answer(loc, 'loc', locAsk.id, 'decline');
+        expect(sent.json.lane_advisory).toMatchObject({ verdict: 'decline' });
+        expect(sent.json.lane_verdict).toBeUndefined();
+        const lanes = await get('/teams/dawn/lanes', nickTok);
+        const still = (lanes.json.lanes as { id: string; state: string }[]).find(
+          (l) => l.id === laneId,
+        );
+        expect(isAwaitingAcceptance(still!.state)).toBe(true);
+        expect(await auditRows(nickTok, 'lane.review_sent_back')).toHaveLength(0);
+      });
+
+      it('the advisory ask stays owed after the binding verdict closes the lane, and still records', async () => {
+        const { nickTok, ada, gee, loc } = await advisorySetup();
+        const { laneId } = await submitNamedLoc(ada);
+        const geeAsk = (await reviewAsk(gee, laneId))!;
+        await answer(gee, 'gee', geeAsk.id, 'accept');
+        const locAsk = await reviewAsk(loc, laneId);
+        expect(locAsk).toBeDefined();
+        expect(locAsk!.discharged).toBeUndefined();
+        const late = await answer(loc, 'loc', locAsk!.id, 'accept');
+        expect(late.json.lane_advisory).toMatchObject({ lane: laneId, verdict: 'accept' });
+        expect(await auditRows(nickTok, 'lane.review_advisory')).toHaveLength(1);
+      });
+
+      it('the ladder routes an advisory seat when it ranks first, and re-picks the binding acceptor without it', async () => {
+        const { nickTok, ada, gee, loc } = await advisorySetup();
+        // gee shares ada's family now, so loc (qwen) is the only cross-family candidate.
+        await reattestAgentModel('dawn', gee, 'claude-sonnet-5');
+        const lane = await post('/teams/dawn/lanes', { title: 'ladder lane', claim: true }, ada);
+        const laneId = lane.json.lane.id as string;
+        const ready = await patchLane(laneId, { state: 'awaiting_acceptance' }, ada);
+        expect(ready.json.review.reviewer).toBe('gee');
+        expect((await reviewAsk(loc, laneId))?.meta?.lane_review?.advisory).toBe(true);
+        const row = (await auditRows(nickTok, 'lane.ready_for_review')).at(-1) as {
+          detail: { advisory?: { reviewer: string } };
+        };
+        expect(row.detail.advisory?.reviewer).toBe('loc');
+      });
+
+      it('an advisory accept on a risky lane is never the ADR 188 peer stage', async () => {
+        const { nickTok, ada, loc } = await advisorySetup();
+        const { laneId } = await submitNamedLoc(ada, { risk: ['security'] });
+        const locAsk = (await reviewAsk(loc, laneId))!;
+        const sent = await answer(loc, 'loc', locAsk.id, 'accept');
+        expect(sent.json.lane_escalation).toBeUndefined();
+        expect(sent.json.lane_advisory).toMatchObject({ lane: laneId });
+        expect(await auditRows(nickTok, 'lane.review_peer_confirmed')).toHaveLength(0);
       });
     });
 

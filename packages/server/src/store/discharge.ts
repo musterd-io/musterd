@@ -77,6 +77,11 @@ export function repliedByRecipientWhere(alias: string, recipient: string): strin
 }
 
 /**
+ * ADR 667: an ADVISORY acceptance ask is not discharged by its lane closing. The advisory seat is
+ * often the slower reviewer (a 4B seat ran 50–60 s per act), so the binding verdict can land first; discharging on close
+ * would leave the seat nothing to answer and starve the measure its scope exists to take. It is
+ * discharged by its own answer, like any ask.
+ *
  * The fifth shape, for the two acts a lane's own lifecycle answers (lane 01M4YYQCAP):
  *   5a. an acceptance `ask` (`meta.lane_review.lane`) whose lane has LEFT awaiting_acceptance — some
  *       seat's accept/decline moved it, or it was reopened; either way this ask asks nothing now;
@@ -101,6 +106,7 @@ export function laneSettledSql(alias: string): string {
         AND (
           (${alias}.act = 'ask'
              AND ln.id = json_extract(${alias}.meta, '$.lane_review.lane')
+             AND json_extract(${alias}.meta, '$.lane_review.advisory') IS NULL
              AND ln.state NOT IN ('awaiting_acceptance','ready_for_review'))
           OR (${alias}.act = 'handoff'
              AND ln.id = json_extract(${alias}.meta, '$.lane_handoff.lane')

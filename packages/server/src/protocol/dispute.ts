@@ -40,7 +40,11 @@ import { log } from '../log.js';
 import { appendAudit, appendLaneEventRequired, laneOwnerHistory } from '../store/audit.js';
 import { LaneConflictError, getLane, listLanes, updateLane } from '../store/lanes.js';
 import { getMemberById } from '../store/members.js';
-import { selectReviewCounterpart, supersededAcceptanceAsks } from '../store/review.js';
+import {
+  isAdvisoryReviewMeta,
+  selectReviewCounterpart,
+  supersededAcceptanceAsks,
+} from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { acceptanceTimeoutMs } from '../store/teams.js';
 import {
@@ -114,8 +118,10 @@ export async function stampDispute(
     if (typeof ref !== 'string') return env;
     const parent = await parentOf(ctx, team.id, ref);
     if (!parent || parent.act !== 'ask') return env;
-    const laneId = (parseMeta(parent.meta) as { lane_review?: { lane?: unknown } }).lane_review
-      ?.lane;
+    const parentMeta = parseMeta(parent.meta);
+    // ADR 667: an advisory ask's decline is recorded, never a rejection — it opens no dispute.
+    if (isAdvisoryReviewMeta(parentMeta)) return env;
+    const laneId = (parentMeta as { lane_review?: { lane?: unknown } }).lane_review?.lane;
     if (typeof laneId !== 'string') return env;
     // Mirror `applyAcceptanceVerdict`'s guard exactly: the decline is a REJECTION only if it is
     // the verdict on the standing ask of a lane still in acceptance, from someone other than the

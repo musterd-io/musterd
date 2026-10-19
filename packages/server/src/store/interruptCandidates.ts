@@ -294,8 +294,10 @@ async function dischargeOutsideTheWindow(
   const laneOf = new Map<string, string>();
   for (const r of rows) {
     if (r.act !== 'ask') continue;
-    const review = metaOf(r)['lane_review'] as { lane?: unknown } | undefined;
-    if (review && typeof review.lane === 'string') laneOf.set(r.id, review.lane);
+    const review = metaOf(r)['lane_review'] as { lane?: unknown; advisory?: unknown } | undefined;
+    // ADR 667: an advisory ask stays owed after its lane closes (see laneSettledSql).
+    if (review && review.advisory !== true && typeof review.lane === 'string')
+      laneOf.set(r.id, review.lane);
   }
   if (laneOf.size > 0) {
     const laneIds = [...new Set(laneOf.values())];

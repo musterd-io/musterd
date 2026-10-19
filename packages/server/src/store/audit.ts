@@ -234,6 +234,9 @@ export type AuditAction =
   // ask — "I have this, I have not judged it yet". Carries no state and does NOT discharge the ask;
   // the verdict is still owed. detail: { lane, ask, acceptor }.
   | 'lane.review_acknowledged'
+  // ADR 667: an ADVISORY seat's verdict on its advisory acceptance ask — recorded, moves nothing.
+  // detail: { lane, ask, reviewer, verdict: 'accept'|'decline', answer }.
+  | 'lane.review_advisory'
   // A hand re-route of a STANDING acceptance (lane 01M1QYHJFY): the lane was already
   // awaiting_acceptance and the owner (or an admin) named a different acceptor. Its own verb, not a
   // second `lane.ready_for_review` — that row is the submit, and the review-loop breaker and the
@@ -730,6 +733,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.review_peer_confirmed': 'actor',
   'lane.review_human_asked': 'none',
   'lane.review_acknowledged': 'actor',
+  'lane.review_advisory': 'actor',
   'lane.review_rerouted': 'actor',
   'lane.dispute_answered': 'actor',
   'lane.released': 'actor',
