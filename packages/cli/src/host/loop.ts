@@ -783,6 +783,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
                 laneId: order.lane_id,
                 signal: req.signal,
                 seatClient,
+                log: deps.log,
               });
           } catch (err) {
             deps.log(

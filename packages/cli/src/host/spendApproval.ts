@@ -58,6 +58,9 @@ export interface AwaitSpendApprovalInput {
   laneId?: string | undefined;
   signal: AbortSignal;
   seatClient: SpendApprovalSeat;
+  /** One narrator line when the ask cannot be sent — the verdict is `decline` either way, and a
+   *  decline with no reason in `host.log` is what hid the ADR 672 gap for a week. */
+  log?: (line: string) => void;
   now?: () => number;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   pollMs?: number;
@@ -120,8 +123,12 @@ export async function awaitSpendApproval(
       }),
     );
     if (ack.ask_contract && ack.ask_contract.timeout_ms > 0) windowMs = ack.ask_contract.timeout_ms;
-  } catch {
+  } catch (err) {
     if (input.signal.aborted) return 'wake_ended';
+    input.log?.(
+      `spend approval ask failed for ${input.seat} (lease ${input.leaseId}) — declining: ` +
+        `${(err as Error).message}`,
+    );
     return 'decline';
   }
   if (input.signal.aborted) return 'wake_ended';

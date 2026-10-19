@@ -193,7 +193,7 @@ describe('awaitSpendApproval', () => {
     expect(w.sent).toHaveLength(0);
   });
 
-  it('a thrown ask send declines', async () => {
+  it('a thrown ask send declines, and says why', async () => {
     const w = world({ inbox: () => [] });
     const seat: SpendApprovalSeat = {
       send: async () => {
@@ -201,7 +201,9 @@ describe('awaitSpendApproval', () => {
       },
       inbox: async () => ({ messages: [] }),
     };
-    await expect(w.run({ seatClient: seat })).resolves.toBe('decline');
+    const lines: string[] = [];
+    await expect(w.run({ seatClient: seat, log: (l) => lines.push(l) })).resolves.toBe('decline');
+    expect(lines).toEqual(['spend approval ask failed for scout (lease L1) — declining: down']);
   });
 
   it('an inbox throw keeps the call held', async () => {
