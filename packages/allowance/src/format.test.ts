@@ -34,6 +34,21 @@ describe('sentences', () => {
     );
   });
 
+  it('names a share of a window, and dollars of on-demand', () => {
+    expect(windowSentence(12, 100, 'percent', null, now, 'UTC', '5-hour window')).toBe(
+      '88% left of the 5-hour window.',
+    );
+    expect(windowSentence(100, 100, 'percent', null, now, 'UTC', 'weekly window')).toBe(
+      'None left of the weekly window.',
+    );
+    expect(windowSentence(5, 20, 'dollars', null, now, 'UTC')).toBe(
+      '15 dollars of on-demand left of 20.',
+    );
+    expect(windowSentence(19, 20, 'dollars', null, now, 'UTC')).toBe(
+      '1 dollar of on-demand left of 20.',
+    );
+  });
+
   it('names a weekday inside the week and a date after it', () => {
     expect(formatWhen(Date.UTC(2026, 9, 22, 15, 0), now, 'UTC')).toBe('Thursday at 3:00 PM');
     expect(formatWhen(Date.UTC(2026, 10, 3, 15, 0), now, 'UTC')).toBe('November 3');
