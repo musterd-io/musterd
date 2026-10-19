@@ -14,6 +14,7 @@ export interface ReadDeps {
   chosen: readonly string[];
   codexAuth: unknown;
   claudeToken: string | null;
+  claudePlan: string | null;
   cursorToken: string | null;
 }
 
@@ -45,7 +46,9 @@ export async function readBoard(deps: ReadDeps): Promise<Board> {
     }
     if (account.id === 'claude') {
       const read = await readClaude(deps.claudeToken, deps.fetchSub, deps.signal);
-      providers.push(read.state === 'live' ? asClaude(read) : held('claude', 'Claude', read));
+      providers.push(
+        read.state === 'live' ? asClaude(read, deps.claudePlan) : held('claude', 'Claude', read),
+      );
       continue;
     }
     if (account.id === 'cursor') {

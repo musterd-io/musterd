@@ -10,7 +10,7 @@ Then open `http://127.0.0.1:4877`. The process binds to loopback. A sign-in stay
 
 The page shows the accounts you check. A fresh machine starts with ElevenLabs. The choice is saved at `~/.allowance/config.json` (account ids only, mode 0600).
 
-ElevenLabs reads `ELEVENLABS_API_KEY` (the character window, and voice slots when both counts are present). OpenAI reads the Codex sign-in in `~/.codex/auth.json` and shows the windows Codex reports. Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, or on macOS the keychain item Claude Code stored. Cursor reads `~/.cursor/auth.json`, or on macOS the keychain item the Cursor CLI stored, and shows the included window and on-demand dollars. OpenCode, Grok, Muse, Hume and Exa stay on the list with the reason a number is absent.
+ElevenLabs reads `ELEVENLABS_API_KEY` (the character window, and voice slots when both counts are present). OpenAI reads the Codex sign-in in `~/.codex/auth.json` and shows the windows Codex reports. Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, `~/.claude/.credentials.json`, or on macOS the keychain item Claude Code stored. The card names the plan, and a model with its own weekly window gets its own bar. Cursor reads `~/.cursor/auth.json`, or on macOS the keychain item the Cursor CLI stored, and shows the included window and on-demand dollars. OpenCode, Grok, Muse, Hume and Exa stay on the list with the reason a number is absent.
 
 `ALLOWANCE_PORT` chooses the port. Node 22 or newer.
 

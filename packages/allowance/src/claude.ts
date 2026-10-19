@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { shareWindow, type ShareMiss, type ShareRead } from './codex.js';
-import type { LiveProvider } from './types.js';
+import type { LiveProvider, Window } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,6 +14,27 @@ const NAMED: Record<string, string> = {
   five_hour: '5-hour window',
   seven_day: 'weekly window',
 };
+
+/** Plan words Claude Code shows. An unknown subscription or tier is not printed. */
+const PLAN: Record<string, string> = {
+  max: 'Claude Max',
+  pro: 'Claude Pro',
+  team: 'Claude Team',
+  enterprise: 'Claude Enterprise',
+};
+
+const MAX_TIER: Record<string, string> = {
+  default_claude_max_5x: 'Claude Max 5x',
+  default_claude_max_20x: 'Claude Max 20x',
+};
+
+/** A server model name, such as Fable. Anything else is dropped. */
+const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9 .+-]{0,40}$/;
+
+export interface ClaudeSignIn {
+  token: string;
+  plan: string | null;
+}
 
 function labelFor(key: string): string | null {
   if (key.includes('overage')) return null;
@@ -34,16 +55,49 @@ function resetsAt(value: unknown): number | null {
   return null;
 }
 
+function modelName(scope: unknown): string | null {
+  if (scope === null || typeof scope !== 'object') return null;
+  const model = (scope as Record<string, unknown>)['model'];
+  if (model === null || typeof model !== 'object') return null;
+  const name = (model as Record<string, unknown>)['display_name'];
+  if (typeof name !== 'string') return null;
+  const word = name.trim();
+  return MODEL_NAME.test(word) ? word : null;
+}
+
 /**
- * The body Claude Code reads for /usage.
- * `five_hour` and `seven_day` carry utilization and resets_at. Overage is not a window.
+ * `limits` is the list Claude Code classifies by `kind`.
+ * `session` and `weekly_all` are the same meters as `five_hour` and `seven_day`.
+ * `weekly_scoped` is one model's own weekly window. Null means the list was absent or empty.
  */
-export function parseClaude(body: unknown): ShareRead | ShareMiss {
-  if (body === null || typeof body !== 'object') {
-    return { state: 'error', reason: 'Claude sent something we could not read.' };
-  }
-  const row = body as Record<string, unknown>;
-  const windows = Object.keys(row)
+function windowsFromLimits(row: Record<string, unknown>): Window[] | null {
+  const limits = row['limits'];
+  if (!Array.isArray(limits)) return null;
+  const windows = limits
+    .map((item, index) => {
+      if (item === null || typeof item !== 'object') return null;
+      const limit = item as Record<string, unknown>;
+      const kind = limit['kind'];
+      if (kind !== 'session' && kind !== 'weekly_all' && kind !== 'weekly_scoped') return null;
+      const label =
+        kind === 'session'
+          ? '5-hour window'
+          : kind === 'weekly_all'
+            ? 'weekly window'
+            : modelName(limit['scope']);
+      if (label === null) return null;
+      const percent = limit['percent'];
+      if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0) return null;
+      const id = kind === 'weekly_scoped' ? `weekly_scoped_${index}` : kind;
+      const text = kind === 'weekly_scoped' ? `${label} weekly window` : label;
+      return shareWindow(id, text, percent, resetsAt(limit['resets_at']));
+    })
+    .filter((window) => window !== null);
+  return windows.length === 0 ? null : windows;
+}
+
+function windowsFromKeys(row: Record<string, unknown>): Window[] {
+  return Object.keys(row)
     .map((key) => {
       const label = labelFor(key);
       const raw = row[key];
@@ -60,10 +114,38 @@ export function parseClaude(body: unknown): ShareRead | ShareMiss {
       );
     })
     .filter((window) => window !== null);
+}
+
+/**
+ * The body Claude Code reads for /usage.
+ * When `limits` is present, those rows are the windows. Otherwise `five_hour` and `seven_day`
+ * carry utilization and resets_at. Overage is not a window.
+ */
+export function parseClaude(body: unknown): ShareRead | ShareMiss {
+  if (body === null || typeof body !== 'object') {
+    return { state: 'error', reason: 'Claude sent something we could not read.' };
+  }
+  const row = body as Record<string, unknown>;
+  const windows = windowsFromLimits(row) ?? windowsFromKeys(row);
   if (windows.length === 0) {
     return { state: 'error', reason: 'Claude left out the windows.' };
   }
   return { state: 'live', detail: null, windows };
+}
+
+/** The plan word from a Claude Code credentials file. The token is not read here. */
+export function claudePlan(body: unknown): string | null {
+  if (body === null || typeof body !== 'object') return null;
+  const oauth = (body as Record<string, unknown>)['claudeAiOauth'];
+  if (oauth === null || typeof oauth !== 'object') return null;
+  const row = oauth as Record<string, unknown>;
+  const subscription =
+    typeof row['subscriptionType'] === 'string' ? row['subscriptionType'].trim() : '';
+  if (subscription === 'max') {
+    const tier = typeof row['rateLimitTier'] === 'string' ? row['rateLimitTier'].trim() : '';
+    return MAX_TIER[tier] ?? 'Claude Max';
+  }
+  return PLAN[subscription] ?? null;
 }
 
 /** The access token from a Claude Code credentials file. The token stays with the caller. */
@@ -75,33 +157,40 @@ export function claudeToken(body: unknown): string | null {
   return typeof token === 'string' && token.trim() !== '' ? token.trim() : null;
 }
 
-export function claudeTokenFromEnv(env: NodeJS.ProcessEnv, file: unknown): string | null {
-  const fromEnv = env['CLAUDE_CODE_OAUTH_TOKEN']?.trim() ?? '';
-  if (fromEnv !== '') return fromEnv;
-  return claudeToken(file);
+/** Token plus plan from a credentials body. Null when there is no access token. */
+export function claudeSignInFromBody(body: unknown): ClaudeSignIn | null {
+  const token = claudeToken(body);
+  if (token === null) return null;
+  return { token, plan: claudePlan(body) };
 }
 
 /**
  * Explicit token wins, including an explicit null that means "do not look".
  * Otherwise the environment, then the credentials file, then the lookup.
+ * A plan is taken from the credentials body when that body has one.
  */
-export async function resolveClaudeToken(
+export async function resolveClaudeSignIn(
   explicit: string | null | undefined,
   env: NodeJS.ProcessEnv,
   file: unknown,
-  lookup: () => Promise<string | null>,
-): Promise<string | null> {
-  if (explicit !== undefined) return explicit === '' ? null : explicit;
-  const fromEnv = claudeTokenFromEnv(env, file);
-  if (fromEnv !== null) return fromEnv;
+  lookup: () => Promise<ClaudeSignIn | null>,
+): Promise<ClaudeSignIn | null> {
+  if (explicit !== undefined) {
+    if (explicit === null || explicit === '') return null;
+    return { token: explicit, plan: claudePlan(file) };
+  }
+  const fromEnv = env['CLAUDE_CODE_OAUTH_TOKEN']?.trim() ?? '';
+  const fromFile = claudeSignInFromBody(file);
+  if (fromEnv !== '') return { token: fromEnv, plan: fromFile?.plan ?? null };
+  if (fromFile !== null) return fromFile;
   return lookup();
 }
 
 /**
  * Claude Code's macOS keychain item. It holds the credentials JSON.
- * Stdout is that JSON and is never logged. Only the access token is returned.
+ * Stdout is that JSON and is never logged. Only the access token and the plan word come back.
  */
-export async function claudeTokenFromKeychain(): Promise<string | null> {
+export async function claudeSignInFromKeychain(): Promise<ClaudeSignIn | null> {
   if (process.platform !== 'darwin') return null;
   try {
     const { stdout } = await execFileAsync(
@@ -113,12 +202,12 @@ export async function claudeTokenFromKeychain(): Promise<string | null> {
     if (text === '') return null;
     if (text.startsWith('{')) {
       try {
-        return claudeToken(JSON.parse(text));
+        return claudeSignInFromBody(JSON.parse(text) as unknown);
       } catch {
         return null;
       }
     }
-    return text;
+    return { token: text, plan: null };
   } catch {
     return null;
   }
@@ -163,12 +252,12 @@ export async function readClaude(
   }
 }
 
-export function asClaude(read: ShareRead): LiveProvider {
+export function asClaude(read: ShareRead, plan: string | null = null): LiveProvider {
   return {
     id: 'claude',
     name: 'Claude',
     state: 'live',
-    detail: read.detail,
+    detail: plan ?? read.detail,
     windows: read.windows,
   };
 }
