@@ -16,6 +16,12 @@ describe('install block', () => {
     expect(installShellBlock()).not.toMatch(/npx/);
   });
 
+  it('the shell block carries every step title, so no step is skipped', () => {
+    for (const [i, step] of INSTALL.steps.entries()) {
+      expect(installShellBlock()).toContain(`# ${i + 1}. ${step.title}`);
+    }
+  });
+
   it('ends at `musterd tour`, which needs `musterd` on PATH — the reason npx is out', () => {
     expect(INSTALL.steps.at(-1)?.commands).toContain('musterd tour');
     expect(INSTALL.steps[0]?.commands).toEqual([INSTALL.primary]);
