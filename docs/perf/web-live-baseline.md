@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-19 — `totalJsGzipBytes` 328,600 → 330,200 B, `liveCssGzipBytes` 24,600 → 24,700 B: model names and logos (lane `01M5AJXMWV`)
+
+| Budget   | main `d85557c9` (local) | This PR (local) | Ceiling                    |
+| -------- | ----------------------- | --------------- | -------------------------- |
+| total JS | 328,089 B               | 329,608 B       | RAISED 328,600 → 330,200 B |
+| live CSS | 24,353 B                | 24,426 B        | RAISED 24,600 → 24,700 B   |
+
+JS +1,519 B: four lab logos inlined beside the eleven already there (StepFun, LongCat, Ant Group for Ling, Z.ai for GLM, each flattened to one fill) and a label rule that keeps a model's whole name ("GPT 6 Luna", "Kimi K3") instead of family plus version. CSS +73 B: the stone pin a lab with no logo wears its model's initial in. nick asked for this directly (2026-10-19: "No more question mark logos"). JS is local plus the ~450 B CI gap; CSS is measured plus about 210 B.
+
+- Falsify: `pnpm perf:check` in CI on main after this lands reports total JS at or under 328,600 B.
+
 ### 2026-10-18 — `totalJsGzipBytes` 328,300 → 328,600 B: a speech bubble stays inside the scene (lane `01M5977YVQ`)
 
 | Budget   | main `96413b91` (local) | This PR (local) | With #2879 stacked (local) | Ceiling                    |

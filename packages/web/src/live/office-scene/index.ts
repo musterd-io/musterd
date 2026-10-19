@@ -1078,7 +1078,7 @@ export function mountOffice(
           icon.className = 'lc-gl-label__provider';
           icon.style.borderColor = provider.border;
           icon.style.background = provider.fill;
-          icon.innerHTML = providerIconHtml(provider);
+          icon.innerHTML = providerIconHtml(provider, node.model);
           plate.appendChild(icon);
           // ADR 464: the model's short name beside its logo — a room reads "Opus 5.5", not a mark.
           // Lane titles stay OFF the plate; that is the team column's job (spec §4).

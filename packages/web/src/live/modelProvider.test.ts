@@ -71,14 +71,42 @@ describe('providerIconHtml', () => {
     expect(openai).toContain('#10A37F');
   });
 
-  it('returns a letter mark for glm (no deck logo)', () => {
-    const html = providerIconHtml(modelProvider('glm-5.2'));
-    expect(html).toContain('G');
-    expect(html).not.toMatch(/<svg[\s\S]*path/i);
+  it.each([
+    ['glm-5.2', 'glm'],
+    ['step-5-preview-free', 'stepfun'],
+    ['longcat-2.5-preview-free', 'longcat'],
+    ['ling-3.1-flash-free', 'ant'],
+    ['moonshotai/kimi-k3', 'kimi'],
+  ])('%s wears its lab logo (%s)', (id, provider) => {
+    const p = modelProvider(id);
+    expect(p.id).toBe(provider);
+    expect(providerIconHtml(p, id)).toMatch(/<svg[\s\S]*path/i);
   });
 
-  it('returns a neutral mark for unknown', () => {
-    const html = providerIconHtml(modelProvider(null));
-    expect(html.length).toBeGreaterThan(0);
+  it('does not read ordinary words as a lab', () => {
+    expect(modelProvider('kling-2').id).toBe('unknown');
+    expect(modelProvider('stepper-1').id).toBe('unknown');
+  });
+
+  // nick, 2026-10-19: "No more question mark logos." A lab with no logo (opencode's stealth models)
+  // wears the model's initial; a seat with no model at all wears an empty ring.
+  it.each([
+    ['beam-free', 'B'],
+    ['fledge-alpha-free', 'F'],
+    ['space-bunny-free', 'S'],
+  ])('%s → a %s monogram, never "?"', (id, letter) => {
+    const html = providerIconHtml(modelProvider(id), id);
+    expect(html).toContain(`>${letter}<`);
+    expect(html).not.toContain('?');
+  });
+
+  it('no model at all → an empty ring, never "?"', () => {
+    for (const html of [
+      providerIconHtml(modelProvider(null)),
+      providerIconHtml(modelProvider('unknown'), 'unknown'),
+    ]) {
+      expect(html).toContain('<svg');
+      expect(html).not.toContain('?');
+    }
   });
 });

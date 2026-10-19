@@ -1760,6 +1760,33 @@
   font-weight: 700;
   line-height: 1;
 }
+/* The placeholder for a lab with no logo yet: the model's initial, a size under the name so it sits
+   inside the 11px pin instead of touching its rim (nick, 2026-10-19: "no more question mark logos"). */
+.lc-gl-label__provider .lc-gl-label__provider-letter {
+  font-size: 7px;
+}
+.lc-gl-label__provider-none {
+  display: contents;
+}
+/* Outside the plate's pin (team card, folded rail) the initial wears its own stone pin, so it reads as
+   a badge in a row of logos rather than a stray capital. Same stone as modelProvider's `unknown`. */
+.lc-team-card__logo .lc-gl-label__provider-letter,
+.lc-team__pip-logo .lc-gl-label__provider-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid #a8a29e;
+  background: #f5f5f4;
+  font-size: 8px;
+}
+.lc-team__pip-logo .lc-gl-label__provider-letter {
+  width: 11px;
+  height: 11px;
+  font-size: 7px;
+}
 /* A human's mark in the provider slot: a person glyph, chip rimmed and tinted in their own hue
    (`--lc-plate-hue`, a FILL — it carries no text here either). Before this every human plate showed
    the unknown-"?" mark, which read as a broken attestation on the one seat that attests nothing. */
@@ -2055,9 +2082,11 @@
 .lc-gl-label.is-broadcast .lc-gl-label__seg--role {
   display: none;
 }
-/* Back-compat alias — prefer .lc-gl-label__seg */
+/* Back-compat alias — prefer .lc-gl-label__seg. The plate keeps the model lowercase (nick's call,
+   2026-10-19 — the team column and cards wear the lab's casing), but shows the whole name: a 5.5rem
+   cut turned big-body's GPT 6 Luna into "gpt 6…" on every plate. */
 .lc-gl-label__model {
-  max-width: 5.5rem;
+  max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

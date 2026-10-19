@@ -34,20 +34,41 @@ export function shortModel(model: string | null | undefined): string {
     const ver = anthropic[3] ? `${anthropic[2]}.${anthropic[3]}` : anthropic[2]!;
     return `${anthropic[1]} ${ver}`;
   }
-  // gpt-5.6-… → gpt 5.6
-  const gpt = lower.match(/\bgpt[- ]?(\d+(?:\.\d+)?)/);
-  if (gpt) return `gpt ${gpt[1]}`;
-  // grok-4.5 → grok 4.5
-  const grok = lower.match(/\bgrok[- ]?(\d+(?:\.\d+)?)/);
-  if (grok) return `grok ${grok[1]}`;
-  // muse-spark-1.3-contributor-free → muse spark 1.3. Without this the generic fallback keeps the
-  // first two segments ("muse spark") and drops the version — the plate names the family but not
-  // the rev, and every rev looks identical on the roster.
-  const muse = lower.match(/\bmuse[- ]spark[- ]?(\d+(?:\.\d+)?)/);
-  if (muse) return `muse spark ${muse[1]}`;
-  // fallback: first two hyphen segments, spaces
-  return lower.split('-').slice(0, 2).join(' ').slice(0, 18);
+  // Everything else reads as its own words: family, version, and the named variant the lab gave it
+  // ("gpt-6-luna" → "gpt 6 luna", "gemini-4-argon-contributor" → "gemini 4 argon"). Two things the
+  // old rules lost (nick, 2026-10-19): a per-family rule kept family + version only, so GPT 6 Luna
+  // read "gpt 6"; and the fallback kept the vendor prefix, so moonshotai/kimi-k3 read
+  // "moonshotai/kimi k3". What is dropped is only what describes the route, not the model.
+  const words = lower
+    .slice(lower.lastIndexOf('/') + 1)
+    .split(/[-_\s]+/)
+    .filter((w) => w && !ROUTE_WORDS.has(w) && !/^\d{6,8}$/.test(w));
+  const kept: string[] = [];
+  for (const w of words) {
+    if (kept.length && [...kept, w].join(' ').length > MAX_SHORT) break;
+    kept.push(w);
+  }
+  return kept.join(' ');
 }
+
+/** The plate's width, in characters — whole words only, never a cut mid-word. */
+const MAX_SHORT = 20;
+
+/** Words about how a model was reached, not which one: price tier, programme, preview flag, the
+ *  reasoning effort a harness appends. The raw id keeps them on hover. */
+const ROUTE_WORDS = new Set([
+  'free',
+  'contributor',
+  'preview',
+  'latest',
+  'exp',
+  'experimental',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+]);
 
 /**
  * Short model label for the nameplate. Collapsed `/live` shows the provider icon instead; broadcast

@@ -10,6 +10,9 @@ export type ModelProviderId =
   | 'kimi'
   | 'minimax'
   | 'glm'
+  | 'stepfun'
+  | 'longcat'
+  | 'ant'
   | 'nova'
   | 'catjam'
   | 'unknown';
@@ -33,10 +36,15 @@ const CHIPS: Record<ModelProviderId, Omit<ModelProvider, 'id'>> = {
   deepseek: { border: '#4D6BFE', fill: '#EBF0FF', ink: '#2A3FBF' },
   kimi: { border: '#6366F1', fill: '#EEF0FF', ink: '#3730A3' },
   minimax: { border: '#E11D48', fill: '#FDE8EF', ink: '#9F1239' },
-  glm: { border: '#E11D48', fill: '#FDE8EF', ink: '#9F1239' },
+  glm: { border: '#1F1F1F', fill: '#F2F2F2', ink: '#111' },
+  stepfun: { border: '#0160FF', fill: '#E8F0FF', ink: '#0B3FA8' },
+  longcat: { border: '#1FB846', fill: '#E9FBEE', ink: '#0B5C24' },
+  ant: { border: '#1677FF', fill: '#E8F1FF', ink: '#0B4FB3' },
   nova: { border: '#FF9900', fill: '#FFF4E5', ink: '#9A5C00' },
   catjam: { border: '#7C3AED', fill: '#F3E8FF', ink: '#5B21B6' },
-  unknown: { border: 'transparent', fill: 'transparent', ink: 'currentColor' },
+  // No logo yet — a quiet stone pin that wears the model's initial (`modelProviderIcon.ts`), never a
+  // "?": an unrecognised lab is not a broken attestation.
+  unknown: { border: '#A8A29E', fill: '#F5F5F4', ink: '#44403C' },
 };
 
 function chip(id: ModelProviderId): ModelProvider {
@@ -66,6 +74,11 @@ export function modelProvider(model: string | null | undefined): ModelProvider {
   if (lower.includes('kimi') || lower.includes('moonshot')) return chip('kimi');
   if (lower.includes('minimax')) return chip('minimax');
   if (/\bglm\b/.test(lower) || lower.includes('zai')) return chip('glm');
+  // StepFun's Step family (step-5-preview-free), Meituan's LongCat, Ant Group's Ling — all seen on
+  // opencode seats. `step` and `ling` are ordinary words, so match them only as the leading token.
+  if (/^(?:[\w.-]+\/)?step[- ]?\d/.test(lower) || lower.includes('stepfun')) return chip('stepfun');
+  if (lower.includes('longcat')) return chip('longcat');
+  if (/^(?:[\w.-]+\/)?ling[- ]?\d/.test(lower) || lower.includes('inclusionai')) return chip('ant');
   if (lower.includes('nova')) return chip('nova');
   // CatJam models run on opencode (e.g. cat-jam-free) and their own seat attests them —
   // match before the fallback so the plate gets a mark instead of "?".

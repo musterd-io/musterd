@@ -26,13 +26,32 @@ export function livePresence(m: MemberSummary) {
 
 const UPPER = new Set(['gpt', 'glm']);
 
-/** `shortModel`'s lower-case "opus 5.5" / "gpt 6", cased for a projector: "Opus 5.5" / "GPT 6". */
+/** Families whose lab writes a capital mid-word. */
+const CASED: Record<string, string> = {
+  deepseek: 'DeepSeek',
+  minimax: 'MiniMax',
+  longcat: 'LongCat',
+};
+
+/** A letter-and-number version the lab writes in capitals: Kimi "K3", DeepSeek "V4", MiniMax "M3".
+ *  OpenAI's o-series stays lower-case ("o3"), as OpenAI writes it. */
+const CAPS_VERSION = /^[a-np-z]\d[\d.]*$/;
+
+/** `shortModel`'s lower-case "opus 5.5" / "gpt 6 luna", cased for a projector: "Opus 5.5" / "GPT 6 Luna". */
 export function displayModel(model: string | null | undefined): string {
   const short = shortModel(model);
   if (!short) return '';
   return short
     .split(' ')
-    .map((w) => (UPPER.has(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map((w) =>
+      CASED[w]
+        ? CASED[w]
+        : UPPER.has(w) || CAPS_VERSION.test(w)
+          ? w.toUpperCase()
+          : /^o\d/.test(w)
+            ? w
+            : w.charAt(0).toUpperCase() + w.slice(1),
+    )
     .join(' ');
 }
 

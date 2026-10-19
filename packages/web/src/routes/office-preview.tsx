@@ -160,14 +160,14 @@ const WOKEN: ReadonlySet<string> = new Set(['Dev']);
  */
 const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; role?: string }> = {
   Ada: { surface: 'claude-code', model: 'claude-opus-5', role: 'lead' },
-  Bo: { surface: 'cursor', model: 'claude-sonnet-4-5' },
+  Bo: { surface: 'codex', model: 'gpt-6-luna' },
   Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium' },
   Dev: { surface: 'cli', model: null },
   Eli: { surface: 'claude-code', model: 'gemini-3.2-pro' },
   Fen: { surface: 'web', model: 'grok-4.5' },
-  Gus: { surface: 'slack', model: 'llama-4-maverick' },
-  Hana: { surface: 'opencode', model: 'deepseek-v4-pro' },
-  Ivy: { surface: 'cursor', model: 'mistral-large-3', role: 'design' },
+  Gus: { surface: 'opencode', model: 'beam-free' },
+  Hana: { surface: 'opencode', model: 'moonshotai/kimi-k3' },
+  Ivy: { surface: 'opencode', model: 'longcat-2.5-preview-free', role: 'design' },
   // The service seat: no model BY KIND (pure code, nothing to attest) — distinct from Dev's
   // null-model agent, which is a seat that merely has nothing to report.
   Jib: { surface: 'cli', model: null, role: 'platform' },
