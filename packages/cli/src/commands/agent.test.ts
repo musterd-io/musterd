@@ -7,6 +7,12 @@ import { CliError } from '../errors.js';
 
 const h = vi.hoisted(() => ({
   addMember: vi.fn(async () => ({ member: { name: 'June' }, token: 'mskd_tok' })),
+  mintSponsoredAgent: vi.fn(async () => ({
+    member: { name: 'June' },
+    hosting: 'sponsor_host' as 'sponsor_host' | 'connect_link',
+    host: 'cloud-June' as string | null,
+    connect_url: 'http://localhost:4849/teams/ritual/connect/n0nce',
+  })),
   roster: vi.fn(async () => ({ members: [] as Array<{ name: string; kind: string }> })),
   issueGrant: vi.fn(async () => ({
     grant: { id: 'g1', target: 'June', scope: 'seat', lifetime: 'standing' },
@@ -44,6 +50,7 @@ vi.mock('./helpers.js', () => ({
     config: { server: 'http://localhost:4849', agentKeys: h.agentKeys },
     http: {
       addMember: h.addMember,
+      mintSponsoredAgent: h.mintSponsoredAgent,
       roster: h.roster,
       issueGrant: h.issueGrant,
       mintBootstrapCredential: h.mintBootstrapCredential,
@@ -101,6 +108,51 @@ describe('musterd agent <name>', () => {
   afterEach(() => {
     process.chdir(cwd0); // safety: command restores cwd, but guard the suite if it ever throws mid-way
     rmSync(h.workspace.dir, { recursive: true, force: true });
+  });
+
+  // ADR 463 §2 / ADR 647: a hosted seat is minted through the sponsored path, the one that queues a
+  // provision — never `POST /members`, which the 2026-10-19 cloud pilot used and which queued nothing.
+  describe('--hosted mints the sponsored agent and provisions nothing here', () => {
+    const capture = async (argv: string[]) => {
+      const chunks: string[] = [];
+      const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
+        chunks.push(String(c));
+        return true;
+      });
+      try {
+        return {
+          code: await agentCommand(parseArgs(argv), { infraGate: async () => null }),
+          out: chunks.join(''),
+        };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    it('queued on a live sponsor host: exit 0, names the host, no workspace or wiring', async () => {
+      const { code, out } = await capture(['June', '--hosted', '--role', 'infra']);
+      expect(code).toBe(0);
+      expect(h.mintSponsoredAgent).toHaveBeenCalledWith('ritual', { name: 'June', role: 'infra' });
+      expect(h.addMember).not.toHaveBeenCalled();
+      expect(h.reconcile).not.toHaveBeenCalled();
+      expect(out).toContain('cloud-June');
+    });
+
+    it('no host polled: exit 1 and says what to do, --json carries hosting for a script', async () => {
+      h.mintSponsoredAgent.mockResolvedValueOnce({
+        member: { name: 'June' },
+        hosting: 'connect_link',
+        host: null,
+        connect_url: 'http://localhost:4849/teams/ritual/connect/n0nce',
+      });
+      const { code, out } = await capture(['June', '--hosted', '--json']);
+      expect(code).toBe(1);
+      expect(JSON.parse(out)).toMatchObject({
+        member: 'June',
+        hosting: 'connect_link',
+        host: null,
+      });
+    });
   });
 
   describe('the infra-touch gate (ADR 227 inc 2) — this verb rewrites the machine-shared MCP entry', () => {
