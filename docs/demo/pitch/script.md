@@ -135,20 +135,19 @@ number has a row in the Q&A ledger below; re-read it before each event.
 - **Is the 0.9% real?** It is our own team's git history, one team, one read in July and one in
   September. It is not a controlled study.
 - **How is this different from Claude calling Codex for a review?** That works, and I do it. OpenAI
-  ships a Codex plugin for Claude Code, and Claude Code's Projects beta has a coordinator that splits a
-  goal into threads and then reviews their output itself. In both, the review lands under the caller's
-  name: Codex has no seat, nothing records which model looked, and the agent that asked decides whether
-  to take the advice. On musterd nothing counts as done until another member accepts it. The reviewer is
+  ships a Codex plugin for Claude Code. The review lands under the caller's name: Codex has no seat,
+  nothing records which model looked, and the agent that asked decides whether to take the advice. On musterd nothing counts as done until another member accepts it. The reviewer is
   a separate member, its model is on the record, and the one who did the work never grades it.
-- **How is musterd different from competitors?** The four categories on slide 12. musterd is the
-  standing team on any harness: nothing counts as done until another member accepts it, and the record
-  shows who did it, who accepted it, and which model. In October I read about forty products. Three
-  things were missing in every one: an act where an agent declines or challenges the work, acceptance
-  enforced from a different member, and a record of which model did the work. One command prints the
-  whole chain for any piece of work: who asked, who claimed it, which model, who accepted, who
-  authorised the merge, each marked verified, stated or missing.
-- **Who are your competitors, and how do you beat them?** Band is the closest and the best funded, at
-  $17 million. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
+- **How is musterd different from competitors?** The four categories on slide 12, and most of what
+  is in them is one person running several sessions inside one vendor's tool. I build for teams that
+  mix tools. That layer is one neither Anthropic nor OpenAI will build, because each only sees its own
+  agents. On musterd nothing counts as done until another member accepts it, and the record shows who
+  did it, who accepted it, and which model, across every tool the team uses. One command prints that
+  chain for any piece of work. And we run our own team on it: every day for the past month, 100 of the
+  110 days since July 2, with 29,158 acts and 2,063 pieces of work closed as of October 19, by agents
+  on five model families and one person.
+- **Who are your competitors, and how do you beat them?** Band raised a $17 million seed and is the
+  closest. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
   inside one tool. Linear and Jira are adding agents as delegates; Linear's own guidelines say "an agent
   cannot be held accountable", so a person stays the assignee. I win where a team mixes tools and needs
   one record: any harness, acceptance from another member, the model on the record, and running it
@@ -179,20 +178,21 @@ number has a row in the Q&A ledger below; re-read it before each event.
   record lives on our servers, and the page that sells it will say so. Self-hosting stays for anyone
   whose record must never leave their machines.
 - **New models fix old problems. What sticks, and how do you adapt?** Agreed. Every new model absorbs
-  more of what used to take several agents on one task, and I do not compete there; a member runs all
-  of that inside its seat. What a better model has not fixed is working together. Stanford's
-  CooperBench put pairs of today's best coding agents on 650 real tasks, and they lost nearly half
+  more of what used to take several agents on one task, and a member runs all of that inside its seat.
+  Working together is still unsolved. Stanford's CooperBench put pairs of today's best coding agents
+  on 652 real tasks, and they lost nearly half
   their capability against one agent alone. The failures were about where to edit, who promised what,
   and questions that went unanswered. The authors' fixes are contract-like agreements, checks that an
   agent followed through, and integration checks before declaring safety. That is a lane, an accepted
   handoff, and acceptance by another member. They also say prompting will not fix it and that models
   will have to be trained to collaborate. Our team's record of 24,768 acts is what that training needs.
 - **Everyone and their mama is building agent collaboration platforms, no?** Yes. YC asked for it this
-  batch, and I counted about forty products in October. The platforms shipped the live shared session
-  themselves within four months: Claude Code's agent teams and Projects, Codex cloud environments,
-  Cursor cloud agents. I am not in that slice. Across the forty, nobody had a decline act, acceptance
-  from a different member, or a model on the record. The crowd tells me the problem is real. It also
-  tells me where I am behind: a ten-minute install.
+  batch, and I counted about forty products in October. Most of it is one person running several
+  sessions, and the platforms shipped that live shared session themselves within four months: Claude
+  Code's agent teams, Codex cloud environments, Cursor cloud agents. I build for teams that mix tools,
+  which neither Anthropic nor OpenAI will build, because each only sees its own agents. And we have
+  run our own team on it every day for the past month and nearly every day since July. The crowd tells
+  me the problem is real. It also tells me where I am behind: a ten-minute install.
 - **For an enterprise room only, the accountability number:** SecurityHQ and Datadog surveyed 204
   security leaders, published 2026-10-15. Nearly half, 45%, had already had an incident with an AI
   agent where accountability was unclear, and only half, 49%, could fully reconstruct what an agent
@@ -203,17 +203,18 @@ number has a row in the Q&A ledger below; re-read it before each event.
 
 | Claim | Source |
 | --- | --- |
-| Codex plugin for Claude Code; Claude Code Projects beta, coordinator reviews its threads | OpenAI's Codex plugin, and press coverage of Anthropic's 2026-09-17 Projects announcement; Anthropic's own post not retrieved. Re-check against code.claude.com before quoting |
+| Codex plugin for Claude Code: review, challenge and handoff commands, installed from Claude Code's plugin marketplace | github.com/openai/codex-plugin-cc (OpenAI's repository, the primary); announced 2026-03-30 per press. Claude Code Projects' coordinator was cut from the answer on 2026-10-19: Anthropic's own page was not retrieved, and press coverage is not a source for a claim about Anthropic's product |
 | About forty products; three things absent in all | `docs/design/landscape.md` §14, sweep of 2026-10-08 |
-| Band $17 million seed | landscape.md §5, unite.ai 2026-04-23 |
+| Band $17 million seed | landscape.md §5, unite.ai 2026-04-23. The seed figure only; "best funded" is not supported and is not said |
 | Linear: "an agent cannot be held accountable", delegate vs assignee | linear.app/now/our-approach-to-building-the-agent-interaction-sdk, verbatim |
 | Claude memory import by paste, all plans, "experimental"; Gemini imports launched 2026-03-26 | support.claude.com article 12123587; press coverage of Google's launch |
 | Band free / $17.99 Pro / Enterprise quote, "single user account" | band.ai/pricing |
 | Party $0 / $20 / $200 a month, "No per-seat fees" | party.build |
-| Conductor free / $50 Pro / $60 per user Teams | third-party reviews dated Aug 2026; confirm on conductor.build before quoting |
+| Conductor $0 / $50 a month Pro ("billed per person") / $60 per user per month Teams; bring your own keys | conductor.build/pricing, read 2026-10-19 |
 | Agent Relay hosted "free to start", open-source self-host; owner and harness shown, no acceptance | agentrelay.com |
 | CooperBench: 652 tasks, 12 libraries; GPT-5 0.48 solo → 0.28 coop; Claude Sonnet 4.5 0.47 → 0.26; causes expectation 42% / commitment 32% / communication 26%; "lose nearly half their capability" | arXiv 2601.13295 (Khatua, Zhu, … Yang), cooperbench.com; hai.stanford.edu news, June 2026 |
 | 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
+| Daily use: first act 2026-07-02; 29,158 acts; 2,063 lanes done; acts on 100 of the 110 days since, and on all 30 of the last 30; senders in the last 30 days: 23 agent seats, 1 person, 7 services; acts stamped with models from five families (Anthropic, OpenAI, xAI, Google, Muse) | the daemon's database, read 2026-10-19: `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
 | SecurityHQ + Datadog: n=204, 45%, 49%, 17% within minutes | SecurityHQ press release, 2026-10-15 |
 | One in ten landed lanes sent back on review; 922 of 967 name the person who authorised the merge | `./chain.sh`, read 2026-10-19; ADR 665 Context |
 | One command prints the chain, each link verified / stated / missing | `musterd lane show <id>` (ADR 629, #2771); checked 2026-10-19 on lane 01M5AMG9C3. Whether the acceptance was independent (review grade) is ADR 670, lane `01M5AXKX01`, and is not claimed until it lands |
