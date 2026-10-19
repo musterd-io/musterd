@@ -28,6 +28,7 @@ import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendLaneEventRequired, type AuditAction, type AuditRow } from './audit.js';
+import { stalledContinuationWarning } from './continuationStall.js';
 import { listGoals } from './goals.js';
 import { getPolicy } from './teams.js';
 
@@ -1912,6 +1913,8 @@ export async function laneWarnings(
   // Independent of the CONTENDING gate: awaiting states are the review queue, not contention.
   const stale = await staleAcceptanceWarning(db, teamId, lane, now);
   if (stale) warnings.push(stale);
+  const stalled = await stalledContinuationWarning(db, teamId, lane, now);
+  if (stalled) warnings.push(stalled);
   return warnings;
 }
 

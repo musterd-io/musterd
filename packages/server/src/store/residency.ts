@@ -32,6 +32,7 @@ import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { type AuditEntry, appendAudit } from './audit.js';
 import { BOARD_SEAT } from './boardSeat.js';
+import { laneMovedSinceLastWoke, MINTED_HERE } from './continuationStall.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
 import { memberAvailability } from './doorbell.js';
@@ -642,25 +643,6 @@ export async function listHostSeen(db: Driver, teamId: string): Promise<Map<stri
  * landed since. The daemon cannot stat a path on the host's filesystem; it can read what the host
  * last reported and whether anything newer contradicts it.
  */
-/**
- * ADR 365 §3 — the deciding readers of the wake ledger stay on rows THIS machine minted.
- *
- * The six wake verbs now cross the wire as `ledger` events so `musterd report` can count a team's
- * whole wake economy (ADR 365 §1). But those same rows are the rate policy's state (ADR 131 §4):
- * the hourly cap, the attempt cap, ADR 262's re-spend breaker and ADR 357's `workspace_readable`
- * all COUNT them. Folding a peer's rows into those counts would make wake caps team-wide — a
- * decision crossing the wire, which is residence 3, and not this ADR's to make. So every deciding
- * read carries this predicate and behaves exactly as it did before replication existed.
- *
- * `''` is a row minted here before the stamp existed (every pre-v58 row, and any row whose stamp
- * failed); the subquery is this daemon's node id for the team, absent on a machine that has never
- * enrolled — which is then simply the `''` case. A folded row matches neither.
- *
- * Falsifier: fold a peer's `residency.woke` rows past the hourly cap and poll for a wake here — it
- * must still be ordered. `residency.test.ts` "ignores a peer machine's wake rows" pins it; drop the
- * predicate from `wakesSince` and that case fails.
- */
-const MINTED_HERE = `AND origin_node IN ('', COALESCE((SELECT node_id FROM local_node l WHERE l.team_id = audit.team_id), ''))`;
 
 export interface SeatWakeabilityFacts {
   enrolled: true;
@@ -1115,44 +1097,6 @@ async function workOrderEdgeWokeCount(
     [teamId, laneId, edge],
   );
   return row?.n ?? 0;
-}
-
-/**
- * ADR 306: has the lane moved since the last successful wake on this edge? A continuation wake that
- * changed nothing does not buy the next one (ADR 247 — progress is not an outcome; ADR 250 §2 — no
- * heartbeat that burns spend while nothing changed). No prior woke ⇒ nothing to have stalled since,
- * so the first firing is always permitted. ADR 661: the owner's away running out after that woke
- * counts as movement, once.
- */
-async function laneMovedSinceLastWoke(
-  db: Driver,
-  teamId: string,
-  laneId: string,
-  edge: LoopEdge,
-  owner: MemberRow,
-  now: number,
-): Promise<boolean> {
-  const last = await db.get<{ ts: number }>(
-    `SELECT ts FROM audit
-        WHERE team_id = ? AND action = 'residency.woke'
-          AND json_extract(detail, '$.lane_id') = ? ${MINTED_HERE}
-          AND json_extract(detail, '$.edge') = ?
-        ORDER BY ts DESC, id DESC LIMIT 1`,
-    [teamId, laneId, edge],
-  );
-  if (!last) return true;
-  const lane = await db.get<{ updated_at: number }>(
-    'SELECT updated_at FROM lanes WHERE team_id = ? AND id = ?',
-    [teamId, laneId],
-  );
-  if (!lane) return false;
-  if (lane.updated_at > last.ts) return true;
-  // ADR 661: an away that ran out after the last wake is the owner coming back. A wake inside the
-  // away moved nothing because the seat was standing down, so the lane re-arms once, at `until`.
-  // The next woke lands after `until`, and the rule above governs again.
-  const away = memberAvailability(owner);
-  const back = away?.status === 'away' ? (away.until ?? null) : null;
-  return back !== null && back > last.ts && back <= now;
 }
 
 async function workOrderEdgeStillTrue(
@@ -2365,7 +2309,16 @@ async function deriveSeatPasses(
           // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
           // still-true skip: a stalled lane is the normal resting state of a claimed board, not
           // an event worth a row on every poll.
-          if (!(await laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge, member, now)))
+          if (
+            !(await laneMovedSinceLastWoke(
+              db,
+              teamId,
+              candidate.lane_id,
+              edge,
+              memberAvailability(member),
+              now,
+            ))
+          )
             continue;
         }
       }
