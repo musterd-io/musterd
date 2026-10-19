@@ -4,7 +4,6 @@ import {
   PULSE_WINDOW_MS,
   type PulseInput,
   type SeatPulseFrame,
-  type TraceEvent,
 } from '@musterd/protocol';
 
 /**
@@ -26,6 +25,18 @@ const PULSE_RING_CAP = 2_048;
 /** Only completed harness tool calls count, each once by its `tool_use_id` (ADR 660). */
 const PULSE_EVENT_KINDS: ReadonlySet<string> = new Set(['PostToolUse', 'PostToolUseFailure']);
 
+/**
+ * What one call needs to count: a local `TraceEvent` (`/trace/events`) or a joiner's `SyncTraceRow`
+ * (`/sync/trace`, whose ids and names are nullable rather than absent) both fit.
+ */
+export interface PulseEvent {
+  kind: string;
+  ts: number;
+  harness: string;
+  tool_name?: string | null | undefined;
+  tool_use_id?: string | null | undefined;
+}
+
 export interface SeatPulsesDeps {
   now: () => number;
   /** Run `fn` after `ms`; returns its cancel. */
@@ -44,7 +55,7 @@ export class SeatPulses {
   constructor(private readonly deps: SeatPulsesDeps) {}
 
   /** Feed one ingested trace batch for `seat`; anything that is not a counted tool call is ignored. */
-  feed(teamId: string, seat: string, events: readonly TraceEvent[]): void {
+  feed(teamId: string, seat: string, events: readonly PulseEvent[]): void {
     const inputs: PulseInput[] = [];
     for (const ev of events) {
       if (!PULSE_EVENT_KINDS.has(ev.kind) || !ev.tool_use_id) continue;

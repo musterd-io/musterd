@@ -144,6 +144,8 @@ export interface RunningServer {
   readonly store: Driver;
   /** The trace store, operator-scoped. */
   readonly traceStore: Driver;
+  /** ADR 660: the seat-pulse rings — exposed so tests can read what a feed produced. */
+  readonly pulses: SeatPulses;
   /** One provision sweep pass now (ADR 463 §2) — the 60 s loop's body, for tests. */
   runProvisionSweep: (now?: number) => Promise<number>;
   /** One policy review pass now (ADR 533) — the hourly loop's body, with its real send, for tests. */
@@ -419,6 +421,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     },
     store: opDb,
     traceStore: opTraceDb,
+    pulses,
     runProvisionSweep: (now?: number) => sweepProvisionsPass(opCtx, now),
     runPolicyReviewSweep: (now?: number) => policyReviewTick(opDb, now, policyReviewSend),
     get port() {

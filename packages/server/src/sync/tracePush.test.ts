@@ -231,6 +231,21 @@ withDrivers('tracePush', (_o, kind) => {
       expect(await readSyncTraceCursor(joiner.traceStore, (await joinerTeam()).id)).toBe(2);
     });
 
+    it('a joiner seat’s admitted rows pulse on the hub (ADR 660)', async () => {
+      await send('m-1');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      expect(hub.pulses.snapshot((await hubTeam()).id)).toEqual([]);
+      await trace('nick', [
+        ev({ ts: Date.now() }),
+        ev({ ts: Date.now(), tool_use_id: 'toolu_02' }),
+      ]);
+      await pushTraceTeam(joinerCtx, await joinerTeam());
+      expect(hub.pulses.snapshot((await hubTeam()).id)).toEqual([
+        expect.objectContaining({ type: 'seat_pulse', member: 'nick', intensity: 2, kind: 'run' }),
+      ]);
+    });
+
     it('a re-push is ignored, not duplicated; a digest collision under a new id is counted apart', async () => {
       await send('m-1');
       await enrollJoiner();

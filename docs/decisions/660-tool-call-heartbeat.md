@@ -85,6 +85,13 @@ fragment from a hook is content, and content must never reach it.
   content. A later lane adds a client-side classifier (`detail.run_class`) and amends here.
   Design: `docs/superpowers/specs/2026-10-19-tool-call-heartbeat-design.md`.
   Follows-up: deferred — the three heartbeat lanes landed and the desk seen moving (2026-10-19)
+- _2026-10-19 (lane `01M5AQ1DDHFM4VMKPQQ534RTZ6`):_ seats on a joiner node pulse too. On
+  2026-10-19 four of the ten working seats (ryder, lazara, slippy, dreamy) reached the hub only
+  over `/sync/trace` (ADR 453) and pulsed nothing; the hub now feeds each seat's **admitted** rows
+  into the same rings after `ingestSyncedTraceRows`, so a refused or held row never pulses. Their
+  pulses run up to the trace push's 60 s cadence late, and a row older than the 60 s window by the
+  time it lands counts for nothing: a joiner seat's desk moves in bursts, honestly late, rather
+  than not at all.
 
 ## Observability & Evaluation
 
