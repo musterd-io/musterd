@@ -1406,6 +1406,25 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-19 — `initialJsGzipBytes` 144,600 → 145,400 B: the seat pulse reaches the office (lane `01M5AJ9T16`, ADR 660)
+
+| Budget     | Before (main 735ae52c, same laptop) | This branch (laptop)  | Ceiling                    |
+| ---------- | ----------------------------------- | --------------------- | -------------------------- |
+| initial JS | 144,624 B                           | 144,826 B (+202)      | RAISED 144,600 → 145,400 B |
+| total JS   | 321.6 KB                            | 322.3 KB (+~700 B)    | 330,200 B, unchanged       |
+
+The desk now moves only from the seat's own harness tool calls (ADR 660): a `seat_pulse` case in the
+live client, a `pulses` Map in `useLiveStream`, and the `OfficeScene` effect that hands a changed pulse
+to the scene — that is the +202 B on the eager graph, and it cannot be lazy-loaded: the socket handler
+and the hook state are the entry. The rest (`live/pulse.ts` liveness, `typingFromPulse`, the screen
+life and bloom) is inside the already-lazy office chunk. Main itself measured 24 B over the old ceiling
+locally, so the raise is measured + the ~450 B CI gap + ~100 B.
+
+Runtime cost went the other way: a seated `working` seat used to keep the rAF loop awake forever on
+a seeded typing loop; now the loop parks within fifteen seconds of the last tool call.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 144,600 B with this change in.
+
 ### 2026-10-19 — `totalJsGzipBytes` 328,600 → 330,200 B, `liveCssGzipBytes` 24,600 → 24,700 B: model names and logos (lane `01M5AJXMWV`)
 
 | Budget   | main `d85557c9` (local) | This PR (local) | Ceiling                    |

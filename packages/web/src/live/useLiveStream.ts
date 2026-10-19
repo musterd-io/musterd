@@ -10,6 +10,7 @@ import {
 } from './client';
 import { ensureBuildSync } from './buildSync';
 import { loadSnapshot, resumeSnapshot } from './liveCache';
+import type { SeatPulse } from './pulse';
 import { coalesce } from './coalesce';
 import { firehoseSound } from './sound';
 import { capNewest } from './window';
@@ -35,6 +36,10 @@ export interface LiveState {
   error: string | null;
   /** Ids that arrived live over the socket (vs the initial backfill) — drives the typewriter. */
   liveIds: Set<string>;
+  /** The latest `seat_pulse` per member (ADR 660) — a new Map on every frame, so the office sees a
+   *  changed reference; a seat that stops working stops appearing in new frames and its last pulse
+   *  simply ages out (`live/pulse.ts`). Never persisted or replayed. */
+  pulses: ReadonlyMap<string, SeatPulse>;
   /** The daemon's build ref (ADR 130/135) — an operator detail, surfaced in the roster tooltip. */
   daemonBuild?: string | undefined;
   /** The daemon's feature epoch (ADR 148) — the reference the roster compares member epochs against
@@ -74,6 +79,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
   const [status, setStatus] = useState<ConnStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
+  const [pulses, setPulses] = useState<ReadonlyMap<string, SeatPulse>>(new Map());
   const [rosterUnreadable, setRosterUnreadable] = useState(0);
   const [rosterStale, setRosterStale] = useState(false);
   const [fresh, setFresh] = useState(false);
@@ -208,6 +214,14 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
       onPresence: () => {
         if (alive) rosterRefetch.trigger();
       },
+      onPulse: (p) => {
+        if (!alive) return;
+        setPulses((prev) => {
+          const next = new Map(prev);
+          next.set(p.member, { ts: p.ts, intensity: p.intensity, kind: p.kind, last_ts: p.last_ts });
+          return next;
+        });
+      },
       onStatus: (s) => alive && setStatus(s),
       onError: (msg) => alive && setError(msg),
       onCredentialInvalid: () => alive && hooksRef.current.onCredentialInvalid?.(),
@@ -228,6 +242,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     status,
     error,
     liveIds,
+    pulses,
     daemonBuild,
     daemonEpoch,
     rosterUnreadable,

@@ -188,6 +188,7 @@ export function OfficeScene({
   roster,
   envelopes,
   liveIds,
+  pulses,
   collapsed = false,
   onCollapse,
   onActClick,
@@ -418,6 +419,19 @@ export function OfficeScene({
       h.emit(speechEventFor(e));
     }
   }, [envelopes, liveIds]);
+
+  // The tool-call pulse (ADR 660): hand the scene only the entries whose `ts` moved since the last
+  // frame — a Map arrives per pulse, so a room of ten working seats would otherwise re-send ten.
+  const pulsedRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const h = handleRef.current;
+    if (!h || !pulses) return;
+    for (const [member, p] of pulses) {
+      if (pulsedRef.current.get(member) === p.ts) continue;
+      pulsedRef.current.set(member, p.ts);
+      h.pulse(member, p);
+    }
+  }, [pulses]);
 
   const agents = roster.filter((m) => m.kind === 'agent').length;
   const humans = roster.filter((m) => m.kind === 'human').length;

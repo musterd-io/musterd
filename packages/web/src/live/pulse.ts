@@ -8,23 +8,15 @@
  * extrapolation — the rAF loop is the only clock, and a hookless seat, which never pulses, sits
  * still at a lit screen honestly.
  *
- * `SeatPulse` is the frame minus its `type` and `member`; it is declared structurally here so the
- * office can be built against it before the protocol frame lands (lane 01M5AJ8VRN), and pinned to
- * `SeatPulseFrame` in the client once it has.
+ * `SeatPulse` is the `seat_pulse` frame (SPEC A.25) minus its `type` and `member`: `ts` is the
+ * daemon clock when the pulse was computed, `intensity` the distinct tool calls in the trailing
+ * 60 s, `kind` the latest call's kind (null for e.g. musterd's own tools), `last_ts` that call's
+ * producer time.
  */
+import type { PulseKind, SeatPulseFrame } from '@musterd/protocol';
 
-export type PulseKind = 'read' | 'edit' | 'run' | 'test';
-
-export interface SeatPulse {
-  /** Daemon clock, ms, when the pulse was computed. Liveness is read from this. */
-  ts: number;
-  /** Distinct tool calls in the trailing 60 s. */
-  intensity: number;
-  /** Kind of the latest call in the window; null when none had a kind (e.g. musterd's own tools). */
-  kind: PulseKind | null;
-  /** Producer clock, ms, of that latest call. The run glow eases out from here. */
-  last_ts: number;
-}
+export type { PulseKind };
+export type SeatPulse = Pick<SeatPulseFrame, 'ts' | 'intensity' | 'kind' | 'last_ts'>;
 
 /** A pulse older than this is stale: three missed ~5 s pulses. */
 export const PULSE_TTL_MS = 15_000;

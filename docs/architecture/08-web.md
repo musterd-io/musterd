@@ -317,5 +317,13 @@ teammate's session. Consequences worth internalising:
   log. Build-sync (`live/buildSync.ts`) moves the tab onto the new build: it polls `build.json` and
   checks again when the tab comes back into view. If a chunk still fails to load (`vite:preloadError`),
   the page reloads once per build, and does not loop.
+- **The desk moves from the seat's pulse, not its posture** (ADR 660, lane 01M5AJ9T16). The daemon
+  sends one `seat_pulse` per seat at most every ~5 s — distinct harness tool calls in the last minute
+  and the latest call's kind — and nothing while a seat is idle. `live/pulse.ts` decides liveness from
+  the frame's own `ts` (15 s, three missed pulses) at draw time; there is no interval. In the scene the
+  typing amplitude is `typingFromPulse(intensity)`, the monitor stays lit while the owner sits but its
+  desktop moves and blooms only while a pulse is live, a `run` brightens the bloom for three seconds,
+  and `living()` parks the loop once no seat pulses. A seat on a harness with no hooks, or one that is
+  truly idle, sits still at a lit screen — honestly.
 - `:5173` (the retired ADR 124 `pnpm dev` viewer) is dead; dev servers now bind `:5174`, so a stale link
   fails fast rather than silently resolving to somebody's WIP.
