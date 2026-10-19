@@ -83,7 +83,11 @@ The supporting message under the tagline, on every surface that argues the case 
 investor notes, the site's record section), is:
 
 > **Nothing your agents do counts as done until another member checks it.** The record shows who
-> did it, who checked it, and which model.
+> did it, who checked it, and which model. _(Amended 2026-10-19: the verb is "accepts" and the
+> link "who accepted it", as brand.md §1's subhead, the README, the registry line and the launch
+> post already say; nick, via sloane, the same day. The sentence as spoken: "Nothing your agents do
+> counts as done until another member accepts it. The record shows who did it, who accepted it,
+> and which model.")_
 
 Chosen by nick on 2026-10-19 from three candidates (Consequences). It rests on the verified link,
 acceptance by a different member, and says the record's contents in the order a buyer asks for
@@ -199,6 +203,10 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   proof. wanderer's points on the CooperBench pilot (a frozen manifest, a solo arm so the gap is the
   pool's own, a per-task verdict, guardrails pinned to the paper's scorer) went into lane
   `01M5AQEG23ANGVWR5F9EQGHPPH`'s brief.
+- **2026-10-19, after acceptance: "checks" becomes "accepts".** The launch post (#2933) and the
+  public strings say "accepts / who accepted" (brand.md §1, ADR 563); the ADR's sentence said
+  "checks". nick's direction through sloane: one verb everywhere. §1 carries the dated marker; the
+  Decision is otherwise unchanged.
 - No code changes. No glossary changes. No protocol changes.
 
 ## Falsifiers
