@@ -147,6 +147,27 @@ describe('team policy command', () => {
     ).rejects.toThrow(/--sponsored-agent-cap <1–100>/);
   });
 
+  it('--hosted-budget sets agent_host.policy.budget_usd, and off clears it (ADR 463 §2)', async () => {
+    const unset = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(unset).toContain('hosted budget: unset (a host claim fails no_budget)');
+
+    const set = await capture(() => teamCommand(parseArgs(['policy', '--hosted-budget', '5'])));
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('hosted budget: $5.00 per wake for sponsor-hosted seats');
+    const view = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
+    expect(view).toContain('hosted budget: $5.00 per wake for sponsor-hosted seats');
+
+    const off = await capture(() => teamCommand(parseArgs(['policy', '--hosted-budget', 'off'])));
+    expect(off.out).toContain('hosted budget off');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'hosted budget: unset',
+    );
+
+    await expect(teamCommand(parseArgs(['policy', '--hosted-budget', '0']))).rejects.toThrow(
+      /--hosted-budget/,
+    );
+  });
+
   it('--spend-cap sets the measured-wake cap, and off clears it (ADR 602)', async () => {
     const unset = (await capture(() => teamCommand(parseArgs(['policy'])))).out;
     expect(unset).toContain('spend cap: unset (unbounded)');

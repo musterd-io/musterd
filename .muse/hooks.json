@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v musterd >/dev/null 2>&1 && musterd init --check-build 2>/dev/null; musterd session orient-nudge 2>/dev/null || true # musterd-muse-start e34"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v musterd >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && node -e 'const fs=require(\"fs\");const {spawnSync}=require(\"child_process\");let raw=\"\";try{raw=fs.readFileSync(0,\"utf8\")}catch{}let ev={};try{ev=JSON.parse(raw)}catch{}if(ev.stop_hook_active)process.exit(0);let line=\"\";try{const r=spawnSync(\"musterd\",[\"inbox\",\"--interrupt-check\",\"--hook\",\"muse\"],{encoding:\"utf8\",input:raw,stdio:[\"pipe\",\"pipe\",\"ignore\"]});if(r.status===0&&r.stdout)line=r.stdout.trim()}catch{}if(line)console.log(JSON.stringify({decision:\"block\",reason:line}))' || true # musterd-muse-stop e34"
+          }
+        ]
+      }
+    ]
+  }
+}

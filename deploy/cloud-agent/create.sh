@@ -15,6 +15,7 @@
 #   --skip-sponsor       skip the sponsor steps (host key in MUSTERD_HOST_KEY; no agent is minted)
 #   --skip-fly           the app, volume, secrets and machine already exist — only mint the agent
 #   --dry-run            print every step (secrets redacted), change nothing
+#   HOSTED_BUDGET_USD    env: per-wake budget set on the team for hosted seats (default: 5)
 #
 # Sponsor steps run as the sponsor. From a folder already bound to the team they run there; from
 # anywhere else the script binds a scratch folder to the team itself, as the member whose
@@ -60,6 +61,7 @@ done
 [ -n "$SEAT" ] || { echo "usage: create.sh <seat> --repo <git-url> [options]" >&2; exit 2; }
 [ -n "$REPO_URL" ] || { echo "--repo <git-url> is required (the seat's workspace clone source)" >&2; exit 2; }
 HOST_LABEL="${HOST_LABEL:-cloud-$SEAT}"
+HOSTED_BUDGET_USD="${HOSTED_BUDGET_USD:-5}"
 SERVER="${SERVER:-https://$TEAM.musterd.dev}"   # a hosted team lives at <slug>.musterd.dev (cloud-ops.md)
 APP="musterd-agent-$SEAT"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -166,6 +168,8 @@ if [ "$SKIP_SPONSOR" = 0 ]; then
     [ "$seen" = 1 ] || { echo "host '$HOST_LABEL' never reported polling — fly logs --app $APP" >&2; exit 1; }
     sleep 15   # one poll tick, so the server has seen the host before the mint
   fi
+  say "-- sponsor: hosted budget \$$HOSTED_BUDGET_USD per wake (ADR 463 §2 — a claim without one fails no_budget)"
+  run musterd team policy --hosted-budget "$HOSTED_BUDGET_USD"
   say "-- sponsor: mint the agent (sponsored path — this is what queues its provision)"
   run musterd agent "$SEAT" --hosted
 fi
