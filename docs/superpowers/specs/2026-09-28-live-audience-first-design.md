@@ -87,6 +87,11 @@ answer these in under 10 seconds, without narration:
   scale, so none is a target anyone could hit on purpose), and the key, the huddle rail and the
   collapse control stay off it. The ask banner wraps onto a second line instead of clipping, so
   the question and the identity chip both stay whole.)_
+  _(Amended 2026-10-18, slippy, lane `01M596F88W`: "the team scrolling beneath" now means the
+  whole column — cards, "+ N offline" and Experiments — scrolls as one, so no row is squeezed to a
+  sliver. The topbar's controls (pause…, seeds, log, share, sound) are one group that wraps to a
+  second row of the bar when the first cannot hold it, the way `/board`'s bar already does; at
+  390px none sits off-screen.)_
 
 ## 3. Motion has to mean something
 

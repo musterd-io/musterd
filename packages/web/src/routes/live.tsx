@@ -633,45 +633,49 @@ function LivePage() {
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
         {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
-        {/* ADR 516 inc 4: an admin's "pause…" lives here, not on an always-on banner. */}
-        {cfg && canSetHold && (
-          <Suspense fallback={null}>
-            <HoldsPause cfg={cfg} onChanged={refreshHolds} />
-          </Suspense>
-        )}
-        {connected && (
-          <button
-            type="button"
-            className={`lc__pbtn${seedsOpen ? ' lc__pbtn--on' : ''}`}
-            onClick={() => setSeedsOpen(true)}
-            aria-pressed={seedsOpen}
-            title="Shared Seeds — Team ideas before they become Lanes"
-          >
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M8 13V7M8 8C5.4 8 3.4 6.6 3 4c2.7-.2 4.7 1 5 4ZM8 10c2.6 0 4.6-1.4 5-4-2.7-.2-4.7 1-5 4Z" />
-            </svg>
-          </button>
-        )}
-        {connected && (
-          <button
-            type="button"
-            className={`lc__pbtn${logOpen ? ' lc__pbtn--on' : ''}`}
-            onClick={() => setLogOpen(true)}
-            aria-pressed={logOpen}
-            aria-label="Open the team log"
-            title="Every message — the team log (L)"
-          >
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 4h10M3 8h10M3 12h6" />
-            </svg>
-          </button>
-        )}
-        {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
-            watching page does not hold, so offering it there would only ever fail. */}
-        {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
-        {connected && <RoomToneToggle />}
-        {connected && <SoundToggle />}
-        <Clock />
+        {/* One group, so a narrow topbar wraps the controls to a row of their own instead of
+            pushing them off-screen (Live.css `.lc__tools`). */}
+        <span className="lc__tools">
+          {/* ADR 516 inc 4: an admin's "pause…" lives here, not on an always-on banner. */}
+          {cfg && canSetHold && (
+            <Suspense fallback={null}>
+              <HoldsPause cfg={cfg} onChanged={refreshHolds} />
+            </Suspense>
+          )}
+          {connected && (
+            <button
+              type="button"
+              className={`lc__pbtn${seedsOpen ? ' lc__pbtn--on' : ''}`}
+              onClick={() => setSeedsOpen(true)}
+              aria-pressed={seedsOpen}
+              title="Shared Seeds — Team ideas before they become Lanes"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 13V7M8 8C5.4 8 3.4 6.6 3 4c2.7-.2 4.7 1 5 4ZM8 10c2.6 0 4.6-1.4 5-4-2.7-.2-4.7 1-5 4Z" />
+              </svg>
+            </button>
+          )}
+          {connected && (
+            <button
+              type="button"
+              className={`lc__pbtn${logOpen ? ' lc__pbtn--on' : ''}`}
+              onClick={() => setLogOpen(true)}
+              aria-pressed={logOpen}
+              aria-label="Open the team log"
+              title="Every message — the team log (L)"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3 4h10M3 8h10M3 12h6" />
+              </svg>
+            </button>
+          )}
+          {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
+              watching page does not hold, so offering it there would only ever fail. */}
+          {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
+          {connected && <RoomToneToggle />}
+          {connected && <SoundToggle />}
+          <Clock />
+        </span>
       </header>
 
       {!connected ? (
