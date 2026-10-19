@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { BackendContext, WakeSpec } from '../backend.js';
 import {
   buildOpencodeFreshArgs,
+  opencodeStandaloneArgs,
   buildOpencodeResumeArgs,
   opencodeBackend,
   opencodeWakeEnv,
@@ -546,6 +547,79 @@ describe('the completion record — every settled run reports what the host meas
     expect(completion?.cost_usd).toBeUndefined();
     // Read once, at spawn — not again at settle.
     expect(reads).toBe(1);
+  });
+
+  /** ADR 583 note (2026-10-19): a gateway wake runs on a private server that reads the override. */
+  it('a metered wake runs --standalone with its hosted providers pointed at the gateway', async () => {
+    const child = new Child();
+    const seen: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
+    let scans = 0;
+    const wake = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      spawn: ((_bin: string, args: string[], opts: { env: NodeJS.ProcessEnv }) => {
+        seen.push({ args, env: opts.env });
+        return child;
+      }) as never,
+      ps: (() => {
+        scans += 1;
+        return Promise.resolve('');
+      }) as never,
+      recordFreshSession: () => undefined,
+      readLocalServing: () => null,
+    }).wake(
+      { ...spec, gateway: { env: { OPENAI_BASE_URL: 'x' }, origin: 'http://127.0.0.1:9' } },
+      ctx,
+    );
+    await Promise.resolve();
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    expect(seen[0]!.args).toEqual(opencodeStandaloneArgs(buildOpencodeFreshArgs('wake line')));
+    expect(seen[0]!.args.slice(0, 2)).toEqual(['run', '--standalone']);
+    expect(JSON.parse(seen[0]!.env.OPENCODE_CONFIG_CONTENT!)).toEqual({
+      provider: {
+        opencode: { options: { baseURL: 'http://127.0.0.1:9/opencode' } },
+        'opencode-go': { options: { baseURL: 'http://127.0.0.1:9/opencode-go' } },
+      },
+    });
+    expect(seen[0]!.env.OPENAI_BASE_URL).toBe('x');
+    // The adapter descends from the standalone run, so the background serve is never looked up.
+    expect(scans).toBe(0);
+    child.exit(0);
+    await result.settled;
+  });
+
+  it('a wake with no gateway, or on a local model, keeps the background service and no override', async () => {
+    for (const s of [
+      spec,
+      { ...spec, gateway: { env: {}, origin: 'http://127.0.0.1:9' } },
+    ] as WakeSpec[]) {
+      const child = new Child();
+      const seen: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
+      const local = s.gateway !== undefined;
+      const wake = opencodeBackend({
+        resolveBin: async () => '/opencode',
+        spawn: ((_bin: string, args: string[], opts: { env: NodeJS.ProcessEnv }) => {
+          seen.push({ args, env: opts.env });
+          return child;
+        }) as never,
+        recordFreshSession: () => undefined,
+        readLocalServing: () =>
+          local
+            ? ({
+                provider: 'ollama',
+                model: 'qwen3:4b',
+                base_url: 'http://127.0.0.1:11434/v1',
+              } as never)
+            : null,
+      }).wake(s, ctx);
+      await Promise.resolve();
+      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      const result = await wake;
+      expect(seen[0]!.args).toEqual(buildOpencodeFreshArgs('wake line'));
+      expect(seen[0]!.env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
+      child.exit(0);
+      await result.settled;
+    }
   });
 
   it('without the local snapshot the reason stays harness_price_unverified and carries none', async () => {

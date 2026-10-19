@@ -188,6 +188,30 @@ describe('UsageParser', () => {
 });
 
 describe('startMeteringGateway (ADR 583)', () => {
+  it('routes and meters a file-configured provider by origin, and puts no variable for it in env', async () => {
+    const f = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'minimax-m3.1-flash-free',
+        usage: { prompt_tokens: 700, completion_tokens: 3 },
+      }),
+      headers: { 'content-type': 'application/json' },
+    }));
+    up = f.server;
+    const calls: MeteredCall[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L1',
+      upstreams: [{ name: 'opencode-go', url: f.url }],
+      onCall: (c) => calls.push(c),
+    });
+    expect(gw.env).toEqual({});
+    expect(gw.origin).toBe(`http://127.0.0.1:${String(gw.port)}`);
+    const r = await post(`${gw.origin}/opencode-go`, '/chat/completions', '{}');
+    expect(r.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ provider: 'opencode-go', model: 'minimax-m3.1-flash-free' });
+    expect(calls[0]!.usage.input_tokens).toBe(700);
+  });
+
   it('relays a JSON call unchanged, forwards headers byte-for-byte, meters and prices it', async () => {
     const f = await fakeUpstream(() => ({
       body: anthropicJson(1000, 100),

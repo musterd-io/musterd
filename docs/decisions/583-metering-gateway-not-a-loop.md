@@ -150,6 +150,20 @@ the agent loop, and without holding or reading any credential.
   **(b)** Cache-read multipliers differ per model (0.1× standard, 0.05× Opus/Sonnet 5.5, 0.025×
   Fable 5.1, 0.25× xAI), so the table carries them per row. Long-context tiers are not modelled.
 
+- _OpenCode note (dated, 2026-10-19, lane `01M4VQ3JDCPHTH6BTT928C84MK`)._ OpenCode now runs behind
+  the gateway. OpenCode 2.x hands a plain `opencode run` to the user's background `opencode serve`,
+  whose provider config a wake cannot reach. A metered wake therefore runs `opencode run
+  --standalone`, a private server that reads the wake's environment, with `OPENCODE_CONFIG_CONTENT`
+  pointing OpenCode's hosted providers (`opencode` Zen and `opencode-go`, both OpenAI-compatible,
+  upstreams from models.dev) at `<gateway origin>/<id>`. OpenCode merges that over the seat's own
+  `opencode.json`, which is never edited. `--session` resume works the same from a private server.
+  The lease names the run's pid, because the adapter descends from it and not from `serve`
+  (ADR 613's fallback). A local model (ADR 663) is not re-pointed. Other OpenCode providers
+  (anthropic, openai, xai) are not re-pointed either, since their SDK base paths differ from the
+  gateway's upstreams, and they stay on the artifact. Checked live on 2026-10-19: one free-model
+  wake on this machine metered 2 calls, 0 unmetered. A model with no row in the price table is
+  metered and left unpriced (`no_price_row`) instead of being guessed.
+
 ## Observability & Evaluation
 
 - **Traces.** Per metered call: a `wake_turns` row (lease, turn, usage, cost, model) through the

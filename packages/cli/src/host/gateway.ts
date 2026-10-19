@@ -41,8 +41,10 @@ export interface GatewayUpstream {
   name: string;
   /** The real base URL, including any `/v1` the vendor's env convention carries. */
   url: string;
-  /** The variable the harness reads its base URL from. */
-  envVar: string;
+  /** The variable the harness reads its base URL from. Absent for a provider a harness configures
+   *  only by file (OpenCode's hosted providers, ADR 583 note 2026-10-19): the backend writes that
+   *  file's override from {@link MeteringGateway.origin} instead. */
+  envVar?: string;
 }
 
 /**
@@ -54,9 +56,11 @@ export interface GatewayUpstream {
  * - Grok Build honours `GROK_MODELS_BASE_URL` ("custom inference base URL"); with browser login
  *   its own default is `https://cli-chat-proxy.grok.com/v1`, with an API key `https://api.x.ai/v1`.
  * - Codex reads no base-URL variable (`openai_base_url` lives in user-level config.toml and the
- *   built-in provider also speaks WebSocket); OpenCode reads only `opencode.json`. Both are
- *   handed `OPENAI_BASE_URL` here for a harness that does honour it, and otherwise stay priced by
- *   their own artifact (ADR 583 Decision 2) until their config paths get a lane of their own.
+ *   built-in provider also speaks WebSocket). It is handed `OPENAI_BASE_URL` here for a harness
+ *   that does honour it, and otherwise stays priced by its own artifact (ADR 583 Decision 2).
+ * - OpenCode reads base URLs only from config. Its backend runs a metered wake `--standalone` with
+ *   `OPENCODE_CONFIG_CONTENT` pointing its hosted providers (`opencode`, `opencode-go`) at
+ *   `<origin>/<id>` (ADR 583 note 2026-10-19). Other OpenCode providers are not re-pointed.
  *
  * The host's OWN setting of each variable becomes the upstream (chaining an operator's gateway,
  * Bedrock, or a pinned endpoint) instead of being bypassed.
@@ -81,8 +85,18 @@ export function defaultUpstreams(env: NodeJS.ProcessEnv = process.env): GatewayU
       url: env['GROK_MODELS_BASE_URL'] ?? env['GROK_XAI_API_BASE_URL'] ?? xaiDefault,
       envVar: 'GROK_MODELS_BASE_URL',
     },
+    // OpenCode's hosted providers, as models.dev lists their `api` (2026-10-19). OpenCode reads no
+    // base-URL variable; its backend points them here through OPENCODE_CONFIG_CONTENT.
+    ...OPENCODE_HOSTED_UPSTREAMS,
   ];
 }
+
+/** OpenCode's own hosted providers (Zen and Go), both OpenAI-compatible. The route name is the
+ *  provider id OpenCode configures them under, so the backend's override is `<origin>/<id>`. */
+export const OPENCODE_HOSTED_UPSTREAMS: GatewayUpstream[] = [
+  { name: 'opencode', url: 'https://opencode.ai/inference/openai/v1' },
+  { name: 'opencode-go', url: 'https://opencode.ai/inference/go/openai/v1' },
+];
 
 /** Usage in the `wake_turns` shape (ADR 251 §7): cached input is split OUT of `input_tokens` for
  *  every provider, so one price formula and one floor definition hold across vendors. */
@@ -147,6 +161,8 @@ export interface MeteringGatewayOptions {
 
 export interface MeteringGateway {
   port: number;
+  /** `http://127.0.0.1:<port>` — a file-configured harness builds `<origin>/<provider>` from it. */
+  origin: string;
   /** The variables to put in the child's environment. */
   env: Record<string, string>;
   summary(): GatewaySummary;
@@ -557,10 +573,12 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   const env: Record<string, string> = {};
-  for (const u of upstreams) env[u.envVar] = `http://127.0.0.1:${String(port)}/${u.name}`;
+  const origin = `http://127.0.0.1:${String(port)}`;
+  for (const u of upstreams) if (u.envVar) env[u.envVar] = `${origin}/${u.name}`;
 
   return {
     port,
+    origin,
     env,
     summary: () => {
       const usage = calls.reduce<GatewayUsage>(
