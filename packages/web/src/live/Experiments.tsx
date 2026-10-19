@@ -1,6 +1,7 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
   capEntries,
+  clockPhrase,
   experimentsCount,
   STRIP_DAYS,
   stripDays,
@@ -41,6 +42,7 @@ export function Experiments({
   // The read under the pointer, on the strip or in the list: both light up together.
   const [hot, setHot] = useState<string | null>(null);
   const changed = useStatusChanges(entries);
+  const tick = useMinuteTick(now);
   if (still && entries.length === 0) return null;
   const capped = capEntries(entries);
   const shown = all && !still ? entries : capped;
@@ -68,7 +70,7 @@ export function Experiments({
               >
                 {still ? (
                   <div className="lc-xp__hit">
-                    <ExperimentRow entry={e} avatarOf={avatarOf} still />
+                    <ExperimentRow entry={e} now={tick} avatarOf={avatarOf} still />
                   </div>
                 ) : (
                   <a
@@ -78,7 +80,7 @@ export function Experiments({
                     onFocus={() => hover(e.id)}
                     onBlur={() => hover(null)}
                   >
-                    <ExperimentRow entry={e} avatarOf={avatarOf} />
+                    <ExperimentRow entry={e} now={tick} avatarOf={avatarOf} />
                   </a>
                 )}
               </li>
@@ -100,10 +102,13 @@ export function Experiments({
 
 function ExperimentRow({
   entry,
+  now,
   avatarOf,
   still = false,
 }: {
   entry: ExperimentEntry;
+  /** The minute tick: the row's clock counts toward (or from) the read day against it. */
+  now: number;
   avatarOf?: AvatarOf | undefined;
   still?: boolean;
 }) {
@@ -122,7 +127,7 @@ function ExperimentRow({
             </span>
           )}
           {entry.owner && <span className="lc-xp__owner">{entry.owner}</span>}
-          <span className="lc-xp__status">{entry.phrase}</span>
+          <span className="lc-xp__status lc-xp__clock">{clockPhrase(entry, now)}</span>
         </span>
         {entry.note && (
           <span className="lc-xp__note" title={!still ? entry.note : undefined}>
@@ -252,4 +257,44 @@ function useStatusChanges(entries: readonly ExperimentEntry[]): ReadonlySet<stri
     setMoved(next);
   }
   return moved;
+}
+
+
+/**
+ * A `now` that moves once a minute, on the wall minute (lane 01M5AXHFZT) — the countdowns' clock.
+ * One timeout re-armed to the next :00, never setInterval (it drifts off the minute and the column
+ * of clocks stutters); paused while the tab is hidden and re-aligned on return, because an interval
+ * nobody sees is cost every viewer pays forever (packages/web/AGENTS.md). Under reduced motion it
+ * still ticks: a clock is information, not motion. Sixty times gentler than the second clock the
+ * header deliberately does NOT run on the stream (`Clock.tsx`), so the stream ticks too.
+ */
+function useMinuteTick(initial: number): number {
+  const [now, setNow] = useState(initial);
+  useEffect(() => {
+    let timer: number | undefined;
+    const arm = () => {
+      const t = Date.now();
+      timer = window.setTimeout(() => {
+        setNow(Date.now());
+        arm();
+      }, 60_000 - (t % 60_000) + 50);
+    };
+    const onVisible = () => {
+      if (document.hidden) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        timer = undefined;
+      } else {
+        setNow(Date.now());
+        if (timer === undefined) arm();
+      }
+    };
+    if (!document.hidden) arm();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+  // A fresh board render (a lane act) carries a newer `now`; never let the clock run backwards.
+  return Math.max(now, initial);
 }

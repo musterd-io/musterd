@@ -2,7 +2,9 @@ import type { LaneBoard } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import {
   capEntries,
+  clockPhrase,
   experimentEntries,
+  readDayStart,
   experimentsCount,
   READ_SHOWN_MS,
   shortTitle,
@@ -180,5 +182,37 @@ describe('stripDays', () => {
     const days = stripDays(NOW); // Sat 2026-10-17
     expect(days).toHaveLength(15);
     expect(days.filter((d) => d.weekend).map((d) => d.offset)).toEqual([0, 1, 7, 8, 14]);
+  });
+});
+
+
+describe('the countdown (lane 01M5AXHFZT) — toward the team\'s read day, read every minute', () => {
+  it('a read day begins at 00:00 in the team zone, DST included', () => {
+    expect(new Date(readDayStart('2026-10-20')).toISOString()).toBe('2026-10-20T07:00:00.000Z'); // PDT
+    expect(new Date(readDayStart('2026-12-01')).toISOString()).toBe('2026-12-01T08:00:00.000Z'); // PST
+  });
+
+  it('waiting counts down in the units that matter', () => {
+    const start = readDayStart('2026-10-22');
+    const e = { status: 'waiting' as const, readsOn: '2026-10-22', phrase: 'in 2 days' };
+    expect(clockPhrase(e, start - (2 * 86_400_000 + 14 * 3_600_000 + 5 * 60_000))).toBe('2d 14h 05m');
+    expect(clockPhrase(e, start - (14 * 3_600_000 + 5 * 60_000))).toBe('14h 05m');
+    expect(clockPhrase(e, start - 5 * 60_000)).toBe('05m');
+    // The midnight seam: the server still says waiting, the clock already says due.
+    expect(clockPhrase(e, start + 1)).toBe('due today');
+  });
+
+  it('due counts what is left of the day; overdue counts up', () => {
+    const start = readDayStart('2026-10-19');
+    expect(clockPhrase({ status: 'due', readsOn: '2026-10-19', phrase: 'due today' }, start + 15 * 3_600_000)).toBe(
+      'today · 9h 00m left',
+    );
+    const od = { status: 'overdue' as const, readsOn: '2026-10-17', phrase: 'overdue · 2 days' };
+    expect(clockPhrase(od, start + 4 * 3_600_000 + 12 * 60_000)).toBe('overdue · 2d 04h');
+    expect(clockPhrase(od, readDayStart('2026-10-17') + 4 * 3_600_000 + 12 * 60_000)).toBe('overdue · 4h 12m');
+  });
+
+  it('a read row keeps its verdict word', () => {
+    expect(clockPhrase({ status: 'read', readsOn: '2026-10-10', phrase: 'met' }, Date.now())).toBe('met');
   });
 });

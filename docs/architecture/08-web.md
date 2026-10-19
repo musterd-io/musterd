@@ -326,6 +326,11 @@ teammate's session. Consequences worth internalising:
   stock it replaces sat one step from the mustard floor and nick read the plates as blending in; the
   tint lifts them by lightness (never darkness, his standing line) and keeps the recede ranking under
   the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
+- **Every experiment read carries a live countdown** (lane 01M5AXHFZT, 2026-10-19):
+  `experimentReads.clockPhrase` counts toward the read day's 00:00 in the team zone
+  (`readDayStart`, DST from Intl) — `2d 14h 05m`, `today · 9h 12m left`, `overdue · 2d 04h` — read
+  against a minute tick in `Experiments.tsx` (`useMinuteTick`: one timeout re-armed to the wall
+  minute, paused while hidden, ticking on the stream too). The status itself stays the server's.
 - **The desk moves from the seat's pulse, not its posture** (ADR 660, lane 01M5AJ9T16). The daemon
   sends one `seat_pulse` per seat at most every ~5 s — distinct harness tool calls in the last minute
   and the latest call's kind — and nothing while a seat is idle. `live/pulse.ts` decides liveness from

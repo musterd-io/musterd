@@ -1418,6 +1418,21 @@ The /live channel-pairing confirmation panel (ADR 618 §7: `PairingPanel` + `pai
 
 - Falsify: `pnpm perf:check` in CI on main after this lands reports total JS at or under 330,200 B.
 
+### 2026-10-19 — `initialJsGzipBytes` 145,400 → 146,200 B: a live countdown on every experiment read (lane `01M5AXHFZT`)
+
+| Budget     | Before (main 418b5944, same laptop) | This branch (laptop) | Ceiling                    |
+| ---------- | ----------------------------------- | -------------------- | -------------------------- |
+| initial JS | 145,185 B                           | 145,631 B (+446)     | RAISED 145,400 → 146,200 B |
+
+nick: "a countdown clock to make it more exciting for the viewer." Each read's row now counts toward
+the read day's 00:00 in the team zone — `2d 14h 05m`, `today · 9h 12m left`, `overdue · 2d 04h` —
+against a minute tick. The cost is `readDayStart` (an Intl round trip so DST comes from the platform,
+not a table), `clockPhrase`, and the `useMinuteTick` hook, all on the eager TeamColumn graph on /live
+and /broadcast; nothing here can be lazy-loaded without lazy-loading the team column itself. Runtime:
+one timeout per page re-armed to the wall minute, paused while hidden — one text node per row per minute.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 145,400 B with this change in.
+
 ### 2026-10-19 — `initialJsGzipBytes` 144,600 → 145,400 B: the seat pulse reaches the office (lane `01M5AJ9T16`, ADR 660)
 
 | Budget     | Before (main 735ae52c, same laptop) | This branch (laptop)  | Ceiling                    |
