@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, randomBytes, verify as cryptoVerify } from 'node:crypto';
 import {
   descriptorSigningBytes,
+  isHighAuthorityAct,
   payloadDigest,
   type ApprovalDescriptor,
   type ApprovalProof,
@@ -11,6 +12,7 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
+import { extractAuthData, verifyAssertion, verifyRegistration } from './webauthn.js';
 
 /**
  * Human authority (ADR 662, lane 01M5ANFFVHY07ZTYEECTRSTXTN): the device keys a human's
@@ -31,6 +33,8 @@ export interface DeviceKey {
   memberId: string;
   publicKey: string;
   kind: AuthenticatorKind;
+  /** Passkeys only: the WebAuthn credential id (base64url) this key answers to. */
+  credentialId: string | null;
   createdAt: number;
   revokedAt: number | null;
 }
@@ -40,6 +44,7 @@ interface DeviceKeyRow {
   member_id: string;
   public_key: string;
   kind: string;
+  credential_id: string | null;
   created_at: number;
   revoked_at: number | null;
 }
@@ -49,6 +54,7 @@ const toKey = (r: DeviceKeyRow): DeviceKey => ({
   memberId: r.member_id,
   publicKey: r.public_key,
   kind: r.kind as AuthenticatorKind,
+  credentialId: r.credential_id,
   createdAt: Number(r.created_at),
   revokedAt: r.revoked_at === null ? null : Number(r.revoked_at),
 });
@@ -62,6 +68,7 @@ export async function enrollDeviceKey(
     memberId: string;
     publicKey: string;
     kind: AuthenticatorKind;
+    credentialId?: string | null;
     now?: number;
   },
 ): Promise<DeviceKey> {
@@ -71,13 +78,14 @@ export async function enrollDeviceKey(
     memberId: input.memberId,
     publicKey: input.publicKey,
     kind: input.kind,
+    credentialId: input.credentialId ?? null,
     createdAt: now,
     revokedAt: null,
   };
   await db.run(
-    `INSERT INTO device_keys (id, team_id, member_id, public_key, kind, created_at, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-    [key.id, input.teamId, key.memberId, key.publicKey, key.kind, now],
+    `INSERT INTO device_keys (id, team_id, member_id, public_key, kind, credential_id, created_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    [key.id, input.teamId, key.memberId, key.publicKey, key.kind, key.credentialId, now],
   );
   return key;
 }
@@ -88,7 +96,7 @@ export async function listDeviceKeys(
   memberId: string,
 ): Promise<DeviceKey[]> {
   const rows = await db.all<DeviceKeyRow>(
-    `SELECT id, member_id, public_key, kind, created_at, revoked_at FROM device_keys
+    `SELECT id, member_id, public_key, kind, credential_id, created_at, revoked_at FROM device_keys
       WHERE team_id = ? AND member_id = ? ORDER BY created_at`,
     [teamId, memberId],
   );
@@ -110,7 +118,7 @@ export async function getDeviceKey(
   keyId: string,
 ): Promise<DeviceKey | null> {
   const row = await db.get<DeviceKeyRow>(
-    `SELECT id, member_id, public_key, kind, created_at, revoked_at FROM device_keys
+    `SELECT id, member_id, public_key, kind, credential_id, created_at, revoked_at FROM device_keys
       WHERE team_id = ? AND id = ?`,
     [teamId, keyId],
   );
@@ -367,17 +375,61 @@ export async function buildDescriptor(
     nonce: randomBytes(32).toString('base64url'),
   };
   await db.run(
-    `INSERT INTO approval_nonces (nonce, team_id, member_id, descriptor_digest, expires_at, used_at)
-     VALUES (?, ?, ?, ?, ?, NULL)`,
+    `INSERT INTO approval_nonces
+       (nonce, team_id, member_id, descriptor_digest, expires_at, used_at, actor, act, target, payload_digest)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
     [
       descriptor.nonce,
       input.teamId,
       input.memberId,
       payloadDigest(descriptorSigningBytes(descriptor)),
       descriptor.expiry,
+      descriptor.actor,
+      descriptor.act,
+      descriptor.target,
+      descriptor.payload_digest,
     ],
   );
   return descriptor;
+}
+
+/**
+ * What the server built for one nonce — what the daemon's approval page renders (decision 5:
+ * from server data, never caller wording). Null once the nonce is spent or expired.
+ */
+export async function getDescriptorByNonce(
+  db: Driver,
+  teamId: string,
+  audience: string,
+  nonce: string,
+  now = Date.now(),
+): Promise<ApprovalDescriptor | null> {
+  const row = await db.get<{
+    member_id: string;
+    actor: string | null;
+    act: string | null;
+    target: string | null;
+    payload_digest: string | null;
+    expires_at: number;
+    used_at: number | null;
+  }>(
+    `SELECT member_id, actor, act, target, payload_digest, expires_at, used_at
+       FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+    [teamId, nonce],
+  );
+  if (!row || row.used_at !== null || now > Number(row.expires_at)) return null;
+  if (!row.actor || !row.act || !row.target || !row.payload_digest) return null;
+  if (!isHighAuthorityAct(row.act)) return null;
+  return {
+    v: 1,
+    actor: row.actor,
+    act: row.act,
+    target: row.target,
+    payload_digest: row.payload_digest,
+    audience,
+    expiry: Number(row.expires_at),
+    nonce,
+  };
 }
 
 export type AuthorityCheck =
@@ -459,20 +511,34 @@ export async function requireAuthority(
     return refuse('descriptor_mismatch');
   }
   let valid = false;
-  try {
-    const publicKey = createPublicKey({
-      key: Buffer.from(key.publicKey, 'base64url'),
-      format: 'der',
-      type: 'spki',
-    });
-    valid = cryptoVerify(
-      null,
-      Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
-      publicKey,
-      Buffer.from(proof.signature, 'base64url'),
-    );
-  } catch {
-    valid = false;
+  if (key.kind === 'passkey') {
+    // A passkey never signs our bytes: it signs an assertion whose challenge is the nonce.
+    valid =
+      proof.authenticator_data !== undefined &&
+      proof.client_data_json !== undefined &&
+      verifyAssertion({
+        authenticatorData: Buffer.from(proof.authenticator_data, 'base64url'),
+        clientDataJson: proof.client_data_json,
+        signature: Buffer.from(proof.signature, 'base64url'),
+        publicKeySpki: key.publicKey,
+        expectedChallenge: proof.nonce,
+      });
+  } else {
+    try {
+      const publicKey = createPublicKey({
+        key: Buffer.from(key.publicKey, 'base64url'),
+        format: 'der',
+        type: 'spki',
+      });
+      valid = cryptoVerify(
+        null,
+        Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
+        publicKey,
+        Buffer.from(proof.signature, 'base64url'),
+      );
+    } catch {
+      valid = false;
+    }
   }
   if (!valid) return refuse('descriptor_mismatch');
 
@@ -485,4 +551,151 @@ export async function requireAuthority(
     detail: { act: input.act, assurance: 'A2', key_id: key.id, kind: key.kind },
   });
   return { ok: true, assurance: 'A2', keyId: key.id, kind: key.kind };
+}
+
+/**
+ * Park a verified passkey proof on its nonce row for the waiting surface to collect. The
+ * signature is verified HERE, against the stored descriptor and the enrolled credential —
+ * parking never grants anything; the act re-verifies at presentation.
+ */
+export async function storePasskeyProof(
+  db: Driver,
+  input: {
+    teamId: string;
+    audience: string;
+    proof: ApprovalProof;
+    now?: number;
+  },
+): Promise<boolean> {
+  const descriptor = await getDescriptorByNonce(
+    db,
+    input.teamId,
+    input.audience,
+    input.proof.nonce,
+  );
+  if (!descriptor) return false;
+  const key = await getDeviceKey(db, input.teamId, input.proof.key_id);
+  if (!key || key.kind !== 'passkey' || key.revokedAt !== null) return false;
+  if (
+    input.proof.authenticator_data === undefined ||
+    input.proof.client_data_json === undefined ||
+    !verifyAssertion({
+      authenticatorData: Buffer.from(input.proof.authenticator_data, 'base64url'),
+      clientDataJson: input.proof.client_data_json,
+      signature: Buffer.from(input.proof.signature, 'base64url'),
+      publicKeySpki: key.publicKey,
+      expectedChallenge: input.proof.nonce,
+    })
+  ) {
+    return false;
+  }
+  await db.run(
+    `UPDATE approval_nonces
+        SET proof_key_id = ?, proof_signature = ?, proof_authenticator_data = ?, proof_client_data_json = ?
+      WHERE team_id = ? AND nonce = ?`,
+    [
+      input.proof.key_id,
+      input.proof.signature,
+      input.proof.authenticator_data,
+      input.proof.client_data_json,
+      input.teamId,
+      input.proof.nonce,
+    ],
+  );
+  return true;
+}
+
+/** The enrolled passkeys a descriptor's human can approve it with (page allow-list). */
+export async function getPasskeysForDescriptor(
+  db: Driver,
+  teamId: string,
+  nonce: string,
+): Promise<{ key_id: string; credential_id: string }[]> {
+  const row = await db.get<{ member_id: string }>(
+    `SELECT member_id FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+    [teamId, nonce],
+  );
+  if (!row) return [];
+  const keys = await activeDeviceKeys(db, teamId, row.member_id);
+  return keys
+    .filter((k) => k.kind === 'passkey' && k.credentialId !== null)
+    .map((k) => ({ key_id: k.id, credential_id: k.credentialId! }));
+}
+
+/** The parked proof for a nonce, once the human has approved on the passkey page. */
+export async function getParkedProof(
+  db: Driver,
+  teamId: string,
+  nonce: string,
+): Promise<ApprovalProof | null> {
+  const row = await db.get<{
+    proof_key_id: string | null;
+    proof_signature: string | null;
+    proof_authenticator_data: string | null;
+    proof_client_data_json: string | null;
+  }>(
+    `SELECT proof_key_id, proof_signature, proof_authenticator_data, proof_client_data_json
+       FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+    [teamId, nonce],
+  );
+  if (!row?.proof_key_id || !row.proof_signature) return null;
+  return {
+    key_id: row.proof_key_id,
+    nonce,
+    signature: row.proof_signature,
+    ...(row.proof_authenticator_data ? { authenticator_data: row.proof_authenticator_data } : {}),
+    ...(row.proof_client_data_json ? { client_data_json: row.proof_client_data_json } : {}),
+  };
+}
+
+/**
+ * Enroll a passkey by enrollment code (decision 6's human path, in the browser). The
+ * registration ceremony's challenge IS the enrollment code, so the code's one use and the
+ * credential's birth are the same event; the code is spent only on a verified registration.
+ */
+export async function enrollPasskeyGuarded(
+  db: Driver,
+  input: {
+    teamId: string;
+    member: { id: string; name: string; kind: string };
+    code: string;
+    registration: { attestationObject: Uint8Array; clientDataJson: string };
+    now?: number;
+  },
+): Promise<EnrollKeyResult> {
+  const now = input.now ?? Date.now();
+  if (input.member.kind !== 'human') return { ok: false, reason: 'agent_credential' };
+  let verified: { credentialId: string; publicKeySpki: string };
+  try {
+    verified = verifyRegistration({
+      authenticatorData: extractAuthData(input.registration.attestationObject),
+      clientDataJson: input.registration.clientDataJson,
+      expectedChallenge: Buffer.from(input.code, 'utf8').toString('base64url'),
+    });
+  } catch {
+    return { ok: false, reason: 'bad_registration' };
+  }
+  const spent = await consumeEnrollmentCode(db, {
+    teamId: input.teamId,
+    memberId: input.member.id,
+    code: input.code,
+    now,
+  });
+  if (!spent) return { ok: false, reason: 'bad_code' };
+  const key = await enrollDeviceKey(db, {
+    teamId: input.teamId,
+    memberId: input.member.id,
+    publicKey: verified.publicKeySpki,
+    kind: 'passkey',
+    credentialId: verified.credentialId,
+    now,
+  });
+  await appendAudit(db, input.teamId, {
+    actor: input.member.name,
+    action: 'device_key.enrolled',
+    target: input.member.name,
+    result: 'allow',
+    detail: { key_id: key.id, kind: 'passkey', via: 'code' },
+  });
+  return { ok: true, key, via: 'code' };
 }

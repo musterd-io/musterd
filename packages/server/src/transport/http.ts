@@ -239,10 +239,15 @@ import {
 import {
   buildDescriptor,
   enrollKeyGuarded,
+  enrollPasskeyGuarded,
+  getDescriptorByNonce,
+  getParkedProof,
+  getPasskeysForDescriptor,
   issueEnrollmentCode,
   listDeviceKeys,
   requireAuthority,
   revokeKeyGuarded,
+  storePasskeyProof,
 } from '../store/authority.js';
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import {
@@ -609,6 +614,7 @@ import {
   recordTraceNormalized,
   recordTraceReplicated,
 } from '../telemetry.js';
+import { passkeyApprovePage, passkeyEnrollPage } from './authorityPages.js';
 import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { scrubForReader } from './broadcastScrub.js';
 import { isReloadOf } from './hub.js';
@@ -1285,6 +1291,17 @@ const EnrollKeyBody = z.object({
 const RevokeKeyBody = z.object({
   enrollment_code: z.string().min(1).optional(),
   approval: ApprovalProofSchema.optional(),
+});
+
+// Passkey enrollment (decision 5): the browser's registration, authorized by the enrollment
+// code alone — the code was minted by the human's credential and is spent by this one call.
+const PasskeyEnrollBody = z.object({
+  actor: z.string().min(1),
+  enrollment_code: z.string().min(1),
+  registration: z.object({
+    attestation_object: z.string().min(1),
+    client_data_json: z.string().min(1),
+  }),
 });
 const ChannelSettingsBody = z.object({
   deliver: z.boolean(),
@@ -2774,6 +2791,13 @@ export async function handleHttp(
     }
     // Negotiate response compression once; sendJson consults this for bodies over the size threshold.
     negotiatedEncoding.set(res, pickEncoding(req.headers['accept-encoding']));
+
+    // ADR 662 decision 5: the passkey pages, on the daemon's own origin (never the relay).
+    if (method === 'GET' && (path === '/authority/passkey' || path === '/authority/approve')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(path === '/authority/passkey' ? passkeyEnrollPage : passkeyApprovePage);
+      return;
+    }
 
     if (method === 'GET' && path === '/health') {
       // Cloud (spec §5.5): ok, or one stable sentence — nothing about the machine.
@@ -4583,6 +4607,64 @@ export async function handleHttp(
           payload: body.payload ?? null,
         });
         return sendJson(res, 201, { descriptor });
+      }
+
+      // ADR 662 decision 5 — the passkey ceremony endpoints. The nonce is the capability
+      // for reading a descriptor and parking a proof (32 random bytes, five minutes, one
+      // use); collecting the proof takes the human's own credential.
+      const descriptorMatch = /^\/authority\/descriptors\/([^/]+)$/.exec(rest);
+      if (method === 'GET' && descriptorMatch) {
+        const team = await requireTeam(ctx.db, slug);
+        const nonce = decodeURIComponent(descriptorMatch[1]!);
+        const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
+        if (!descriptor) throw new MusterdError('not_found', 'no live descriptor for that nonce');
+        const passkeys = await getPasskeysForDescriptor(ctx.db, team.id, nonce);
+        return sendJson(res, 200, { descriptor, passkeys });
+      }
+      if (method === 'POST' && rest === '/authority/approvals') {
+        const team = await requireTeam(ctx.db, slug);
+        const proof = parseOrBadRequest(ApprovalProofSchema, await readJson(req));
+        const parked = await storePasskeyProof(ctx.db, {
+          teamId: team.id,
+          audience: team.slug,
+          proof,
+        });
+        if (!parked) {
+          throw new MusterdError('validation', 'that approval does not verify for its descriptor');
+        }
+        return sendJson(res, 200, { ok: true });
+      }
+      const approvalMatch = /^\/authority\/approvals\/([^/]+)$/.exec(rest);
+      if (method === 'GET' && approvalMatch) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const proof = await getParkedProof(ctx.db, team.id, decodeURIComponent(approvalMatch[1]!));
+        if (!proof) throw new MusterdError('not_found', 'no approval parked for that nonce yet');
+        return sendJson(res, 200, { proof });
+      }
+      if (method === 'POST' && rest === '/authority/passkeys') {
+        const team = await requireTeam(ctx.db, slug);
+        const body = parseOrBadRequest(PasskeyEnrollBody, await readJson(req));
+        const member = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!member || member.left_at !== null) {
+          throw new MusterdError('validation', `no member "${body.actor}" on ${slug}`);
+        }
+        const result = await enrollPasskeyGuarded(ctx.db, {
+          teamId: team.id,
+          member,
+          code: body.enrollment_code,
+          registration: {
+            attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
+            clientDataJson: body.registration.client_data_json,
+          },
+        });
+        if (!result.ok) {
+          throw new MusterdError(
+            result.reason === 'agent_credential' ? 'forbidden' : 'validation',
+            `passkey enrollment refused (${result.reason})`,
+          );
+        }
+        return sendJson(res, 201, { key: { id: result.key.id, kind: result.key.kind } });
       }
 
       // ADR 662 decision 6 — the device-key lifecycle. Every step names the caller's own

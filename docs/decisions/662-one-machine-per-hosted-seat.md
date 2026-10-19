@@ -150,6 +150,18 @@ All four converged on one shape, and nick directed it be written as this ADR.
   is by a different standing key or by code, and a key never revokes itself. An agent member
   can never enroll. `musterd authority enroll|keys|revoke` is the terminal surface; the
   authenticators (lane 3) replace its file-stored private half.)_
+- _(2026-10-19: human authority 3 landed the authenticators (decision 5). The passkey path is
+  end to end: the daemon serves enroll and approve pages from its own origin (never the
+  relay); enrollment is a WebAuthn registration whose challenge is the enrollment code;
+  approval renders the server-built descriptor (descriptor rows now remember what they were
+  built for), takes an assertion whose challenge is the descriptor nonce, verifies it
+  against the enrolled credential, and parks the proof for the waiting surface — the act
+  re-verifies at presentation. The verifier is hand-rolled CBOR/COSE (EdDSA and ES256, no
+  new dependency) and possession-grade: no attestation statement is checked, because no
+  authenticator allowlist exists. The terminal helper fetches the descriptor itself and
+  signs with the local key; the code-signed Secure Enclave helper rides the same protocol
+  once a signing identity exists.)_
+  Follows-up: 01M5B73NG2E2A4XXBW9FG9ND8Z
 
 ## Observability & Evaluation
 

@@ -749,6 +749,50 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
   used_at BIGINT
 )`,
   },
+  {
+    // Authenticators (ADR 662 decision 5, lane 01M5ANFZEQJN69EEV9T8EHT66S): passkeys name
+    // their credential, and a descriptor row remembers what it was built for so the
+    // daemon's own approval page can render it from server data. A presented passkey proof
+    // is parked on the nonce row for the waiting surface to collect; the act still verifies
+    // it cryptographically at presentation, the parked copy is only transport.
+    version: 115,
+    sqlite: (db) => {
+      const keyCols = db.prepare("SELECT name FROM pragma_table_info('device_keys')").pluck().all();
+      if (!keyCols.includes('credential_id'))
+        db.exec('ALTER TABLE device_keys ADD COLUMN credential_id TEXT');
+      const nonceCols = db
+        .prepare("SELECT name FROM pragma_table_info('approval_nonces')")
+        .pluck()
+        .all();
+      for (const col of [
+        'actor',
+        'act',
+        'target',
+        'payload_digest',
+        'proof_key_id',
+        'proof_signature',
+        'proof_authenticator_data',
+        'proof_client_data_json',
+      ]) {
+        if (!nonceCols.includes(col)) db.exec(`ALTER TABLE approval_nonces ADD COLUMN ${col} TEXT`);
+      }
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE device_keys ADD COLUMN IF NOT EXISTS credential_id TEXT');
+      for (const col of [
+        'actor',
+        'act',
+        'target',
+        'payload_digest',
+        'proof_key_id',
+        'proof_signature',
+        'proof_authenticator_data',
+        'proof_client_data_json',
+      ]) {
+        await d.exec(`ALTER TABLE approval_nonces ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+      }
+    },
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

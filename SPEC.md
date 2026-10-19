@@ -1049,3 +1049,15 @@ enrollment_code? | approval?}` enrolls: the first key, and recovery when every k
   lists the caller's own keys; `POST /teams/:slug/authority/keys/:id/revoke` retires one by
   enrollment code or by a different standing key's signature — a key never revokes itself.
   Lifecycle writes audit `device_key.enrolled|revoked|enrollment_code`, never a code or key.
+- Authenticators (decision 5): `GET /authority/passkey` and `GET /authority/approve` are
+  small pages the daemon serves from its own origin — never the relay. Passkey enrollment
+  is `POST /teams/:slug/authority/passkeys` `{actor, enrollment_code, registration}`: a
+  WebAuthn registration whose challenge is the enrollment code, verified server-side
+  (challenge, rpId from the browser's actual origin, attested credential extracted from
+  the attestation object; possession-grade, no attestation statement checked). A passkey
+  proof carries `authenticator_data` and `client_data_json` beside the signature; the
+  server checks the assertion's challenge is the descriptor nonce. `GET
+/teams/:slug/authority/descriptors/:nonce` returns the server-built descriptor and the
+  human's enrolled passkeys; `POST /teams/:slug/authority/approvals` verifies and parks a
+  passkey proof on the nonce for the waiting surface to collect with its own credential
+  (`GET …/authority/approvals/:nonce`). The act always re-verifies at presentation.

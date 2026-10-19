@@ -1349,6 +1349,45 @@ export class HttpClient {
     }>;
   }
 
+  /** ADR 662 decision 5: read back what the server built for one descriptor nonce. */
+  async getAuthorityDescriptor(
+    slug: string,
+    nonce: string,
+  ): Promise<{
+    descriptor: AuthorityDescriptor;
+    passkeys: { key_id: string; credential_id: string }[];
+  }> {
+    return this.request(
+      'GET',
+      `/teams/${slug}/authority/descriptors/${encodeURIComponent(nonce)}`,
+    ) as Promise<{
+      descriptor: AuthorityDescriptor;
+      passkeys: { key_id: string; credential_id: string }[];
+    }>;
+  }
+
+  /** ADR 662 decision 5: collect a proof the human parked from the passkey page. */
+  async getParkedApproval(slug: string, nonce: string): Promise<{ proof: AuthorityProof }> {
+    return this.request(
+      'GET',
+      `/teams/${slug}/authority/approvals/${encodeURIComponent(nonce)}`,
+    ) as Promise<{ proof: AuthorityProof }>;
+  }
+
+  /** ADR 662 decision 5: enroll a passkey with an enrollment code (browser ceremony). */
+  async enrollPasskey(
+    slug: string,
+    body: {
+      actor: string;
+      enrollment_code: string;
+      registration: { attestation_object: string; client_data_json: string };
+    },
+  ): Promise<{ key: { id: string; kind: string } }> {
+    return this.request('POST', `/teams/${slug}/authority/passkeys`, body) as Promise<{
+      key: { id: string; kind: string };
+    }>;
+  }
+
   /** ADR 662 decision 6: mint a one-time device-key enrollment code (shown once). */
   async issueEnrollmentCode(slug: string): Promise<{ code: string; expires_at: number }> {
     return this.request('POST', `/teams/${slug}/authority/enrollment-codes`) as Promise<{

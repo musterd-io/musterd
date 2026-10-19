@@ -27,6 +27,7 @@ vi.mock('./helpers.js', () => ({
     team: 'revive',
     identity: { name: 'nick' },
     http: {
+      server: 'http://localhost:4849',
       issueEnrollmentCode: h.issueEnrollmentCode,
       enrollDeviceKey: h.enrollDeviceKey,
       listDeviceKeys: h.listDeviceKeys,
@@ -51,6 +52,18 @@ describe('musterd authority (ADR 662 decision 6)', () => {
       'revive',
       expect.objectContaining({ kind: 'platform', enrollment_code: 'code-once' }),
     );
+  });
+
+  it('enroll --passkey prints the daemon page and the one-time code', async () => {
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => {
+      out.push(String(s));
+      return true;
+    });
+    expect(await authorityCommand(parsed(['enroll'], { passkey: true }))).toBe(0);
+    expect(out.join('')).toContain('/authority/passkey?team=revive&member=nick');
+    expect(out.join('')).toContain('code-once');
+    vi.restoreAllMocks();
   });
 
   it('keys lists the daemon keys', async () => {

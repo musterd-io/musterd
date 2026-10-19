@@ -109,10 +109,17 @@ export function descriptorSigningBytes(d: ApprovalDescriptor): string {
   ].join('\n');
 }
 
-/** A presented proof: which key, over which descriptor nonce, signed how (base64url). */
+/**
+ * A presented proof: which key, over which descriptor nonce, signed how (base64url).
+ * Platform and phone keys sign the descriptor's signing bytes directly. A passkey signs
+ * the WebAuthn assertion instead, so its proof also carries the authenticator data and
+ * client data (base64url / utf8) the server needs to check the challenge and origin.
+ */
 export const ApprovalProofSchema = z.object({
   key_id: z.string().min(1),
   nonce: z.string().min(16),
   signature: z.string().min(1),
+  authenticator_data: z.string().min(1).optional(),
+  client_data_json: z.string().min(1).optional(),
 });
 export type ApprovalProof = z.infer<typeof ApprovalProofSchema>;

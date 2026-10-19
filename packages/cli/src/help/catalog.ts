@@ -849,7 +849,8 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'authority',
-    signature: 'enroll [--kind platform] | keys | revoke <key-id>',
+    signature:
+      'enroll [--kind platform | --passkey] | keys | revoke <key-id> | approve --act <act> --target <t> --payload <json> [--passkey]',
     summary: 'your device keys for high-authority acts (ADR 662)',
     group: 'team',
     detail:
