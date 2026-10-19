@@ -45,8 +45,7 @@ human or a coordination seat who would steer the owner has nothing to steer on.
 
 - `lane_board` and the lane detail show a stalled resident lane, with how long ago its last
   continuation wake was, and so does the result of any lane verb on it. A steer, or any lane
-  update, clears it. `team_next` does not carry lane warnings today, so the owner's brief does not
-  show it yet.
+  update, clears it.
 - The warning narrows nothing in ADR 306. A seat that wakes, moves nothing, and is left alone still
   costs nothing. It is now visible instead of silent.
 - A stale CLI fails its lane reads on a team where a resident lane is stalled, until it is rebuilt.
@@ -54,6 +53,12 @@ human or a coordination seat who would steer the owner has nothing to steer on.
   warning already tells a seat to rebuild.
 - The web `/live` grid does not render the new kind yet. It switches on the kinds it knows and
   ignores the rest, as with `branch_overlap`.
+
+- _2026-10-19:_ the owner's brief carries it too. big-body declined the first landing (#2907)
+  because the lane asked for `team_next` and the board alone was shipped. `NextBriefSchema` gains an
+  optional `stalled_continuations` (the same warnings, for the lanes in `in_flight`). `team_next`
+  and `musterd next` print `↳ NO WAKE DUE — …` under the stalled carried lane. The field is optional,
+  so a client from before it ignores it and needs no epoch.
 
 ## Observability & Evaluation
 

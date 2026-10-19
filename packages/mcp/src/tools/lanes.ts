@@ -939,8 +939,12 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
   }
   if (b.in_flight.length) {
     lines.push(`\ncarrying (${b.in_flight.length}):`);
+    // ADR 664: carried work no wake will reach. Same copy as `musterd next`.
+    const stalled = new Map((b.stalled_continuations ?? []).map((x) => [x.subject, x.detail]));
     for (const l of b.in_flight) {
       lines.push('  ' + fmtLane(l));
+      const why = stalled.get(l.id);
+      if (why) lines.push(`    ↳ NO WAKE DUE — ${why}`);
       // A lane whose work is on main is not carried — it is UNSUBMITTED (lane 01M2XAXRP3). Said
       // here, on the line the seat is about to repeat to the human, because seat memory said
       // "carrying" for three lanes that had shipped days earlier and orientation read the note

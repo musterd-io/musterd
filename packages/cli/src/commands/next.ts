@@ -220,7 +220,13 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     );
   if (brief.in_flight.length > 0) {
     w(`\n${theme.accent('carrying')} (${brief.in_flight.length}):\n`);
-    for (const l of brief.in_flight) w(laneLine(l) + '\n');
+    // ADR 664: carried work no wake will reach — the owner hears it here, not only on the board.
+    const stalled = new Map((brief.stalled_continuations ?? []).map((x) => [x.subject, x.detail]));
+    for (const l of brief.in_flight) {
+      w(laneLine(l) + '\n');
+      const why = stalled.get(l.id);
+      if (why) w(theme.warn(`    ↳ NO WAKE DUE — ${why}`) + '\n');
+    }
   }
   // ADR 373 increment 4: recorded intentions ABOVE the open lanes — a Seed is the same question one
   // step earlier, and the whole point of ADR 373 is that these were legible to a reader and to no

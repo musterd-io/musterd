@@ -1283,6 +1283,11 @@ export const NextBriefSchema = z.object({
   member: z.string(),
   /** Lanes you own that are live (claimed/active/blocked/awaiting_acceptance) — what you're carrying. */
   in_flight: z.array(LaneSchema),
+  /**
+   * ADR 664: the `stalled_continuation` warnings on `in_flight` lanes — carried work no wake will
+   * reach. Absent from a daemon that predates it; `[]` when none is stalled.
+   */
+  stalled_continuations: LaneWarningsSchema.optional(),
   /** Your most recently shipped lanes (done), newest first — what just landed. */
   shipped: z.array(LaneSchema),
   /**

@@ -289,6 +289,42 @@ describe('fmtNext — a carried lane whose work landed is unsubmitted, not carri
   });
 });
 
+/** ADR 664: carried work no wake will reach is said under the lane in the owner's own brief. */
+describe('fmtNext — a carried lane no wake will reach (ADR 664)', () => {
+  it('says NO WAKE DUE under the stalled lane only', () => {
+    const b = brief(null);
+    b.in_flight = [
+      { id: '01STALLED', state: 'claimed', title: 'pick 5', owner_seat: 'mason' },
+      { id: '01MOVING', state: 'active', title: 'other', owner_seat: 'mason' },
+    ].map(
+      (l) =>
+        ({
+          project: 'p',
+          scope: [],
+          depends_on: [],
+          branch: null,
+          goal_id: null,
+          merged: null,
+          ...l,
+        }) as unknown as Lane,
+    );
+    b.stalled_continuations = [
+      {
+        kind: 'stalled_continuation',
+        subject: '01STALLED',
+        with: '01STALLED',
+        owner: null,
+        detail: 'moved nothing',
+      },
+    ];
+    const lines = fmtNext(b).split('\n');
+    const at = lines.findIndex((l) => l.includes('01STALLED'));
+    expect(lines[at + 1]).toContain('NO WAKE DUE — moved nothing');
+    const other = lines.findIndex((l) => l.includes('01MOVING'));
+    expect(lines[other + 1] ?? '').not.toContain('NO WAKE DUE');
+  });
+});
+
 describe('fmtNext — review promises (ADR 490)', () => {
   const H = 3_600_000;
   const PR = { kind: 'pr', repo: 'org/repo', number: 42 } as const;
