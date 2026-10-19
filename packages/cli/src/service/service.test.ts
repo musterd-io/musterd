@@ -12,6 +12,7 @@ import {
   parseLaunchctlPrint,
   stableNodePath,
   type LaunchctlStatus,
+  installedDaemonServer,
   parsePlistProgramArguments,
   printArgs,
   SERVICE_LABEL,
@@ -405,5 +406,44 @@ describe('lifecycle ops', () => {
     expect(tailFile(p, 5)).toEqual([]);
     writeFileSync(p, 'a\nb\nc\nd\n', 'utf8');
     expect(tailFile(p, 2)).toEqual(['c', 'd']);
+  });
+});
+
+describe('installedDaemonServer (the daemon a service verb tends, by its own plist — lane 01M5AS04BS)', () => {
+  const plist = (args: string[], env: Record<string, string> = {}) =>
+    `<?xml version="1.0"?><plist><dict><key>Label</key><string>studio.sandrise.musterd</string>` +
+    `<key>ProgramArguments</key><array>${args.map((a) => `<string>${a}</string>`).join('')}</array>` +
+    (Object.keys(env).length
+      ? `<key>EnvironmentVariables</key><dict>${Object.entries(env)
+          .map(([k, v]) => `<key>${k}</key><string>${v}</string>`)
+          .join('')}</dict>`
+      : '') +
+    `</dict></plist>`;
+
+  it("defaults to loopback on the daemon's default port when serve has no flags", () => {
+    expect(
+      installedDaemonServer(plist(['/usr/bin/node', '/x/bin.js', 'serve', '--web-root', '/w'])),
+    ).toBe('http://127.0.0.1:4849');
+  });
+
+  it('reads --port and --host after `serve`', () => {
+    expect(
+      installedDaemonServer(
+        plist(['node', 'bin.js', 'serve', '--port', '4899', '--host', 'localhost']),
+      ),
+    ).toBe('http://localhost:4899');
+  });
+
+  it('a wildcard bind is reached on loopback; MUSTERD_PORT in the plist env counts as --port', () => {
+    expect(
+      installedDaemonServer(
+        plist(['node', 'bin.js', 'serve', '--host', '0.0.0.0'], { MUSTERD_PORT: '4850' }),
+      ),
+    ).toBe('http://127.0.0.1:4850');
+  });
+
+  it('is null for a plist that does not run `serve`, or is not a plist', () => {
+    expect(installedDaemonServer(plist(['node', 'bin.js', 'stream', 'ensure']))).toBeNull();
+    expect(installedDaemonServer('not a plist')).toBeNull();
   });
 });

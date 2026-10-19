@@ -21,7 +21,13 @@ import {
 import { ulid } from 'ulid';
 import { flagStr, type Parsed } from '../args.js';
 import { HttpClient } from '../client.js';
-import { configPath, loadConfig, serverProvenance, setTelemetryEndpoint } from '../config.js';
+import {
+  configPath,
+  findBinding,
+  loadConfig,
+  serverProvenance,
+  setTelemetryEndpoint,
+} from '../config.js';
 import { CliError } from '../errors.js';
 import { actOn, dischargeCleared } from '../guardian/act.js';
 import { resolveGuardianTiers, DEFAULT_TIERS } from '../guardian/classify.js';
@@ -68,6 +74,7 @@ import {
   agentFailureNote,
   intervalAgentLabel,
   parsePlistEnvironment,
+  installedDaemonServer,
   parsePlistProgramArguments,
   SERVICE_LABEL,
   serviceSupported,
@@ -645,9 +652,21 @@ export interface DaemonHealth {
   build?: string;
 }
 
+/**
+ * The daemon a service verb tends, by address: `MUSTERD_SERVER` when set (the operator's explicit
+ * word), else the INSTALLED daemon's own listen address read back from its plist
+ * (`installedDaemonServer`), else the machine default. Never the machine default first — see
+ * `installedDaemonServer` for the two incidents that ordering caused (lane 01M5AS04BS).
+ */
+export function daemonServer(ctx: Pick<ServiceCtx, 'plistPath' | 'readFile'>): string {
+  const fromEnv = process.env['MUSTERD_SERVER'];
+  if (fromEnv) return fromEnv;
+  const xml = ctx.readFile?.(ctx.plistPath) ?? null;
+  return (xml && installedDaemonServer(xml)) || loadConfig().server;
+}
+
 /** Fetch the daemon's `/health` (ADR 016 + 047): the live `connections` count drives the guard below. */
-async function fetchHealth(): Promise<DaemonHealth> {
-  const server = loadConfig().server;
+async function fetchHealth(server: string): Promise<DaemonHealth> {
   const res = await fetch(`${server}/health`, { signal: AbortSignal.timeout(2000) });
   if (!res.ok) throw new Error(`health ${res.status}`);
   return (await res.json()) as DaemonHealth;
@@ -1225,7 +1244,7 @@ export async function serviceCommand(
       otlpEndpoint,
     ),
   };
-  const health = deps.health ?? fetchHealth;
+  const health = deps.health ?? (() => fetchHealth(daemonServer(ctx)));
   const force = parsed.flags['force'] === true;
 
   const ok = (s: string) => process.stdout.write(`${theme.ok('✓')} ${s}\n`);
@@ -1887,7 +1906,12 @@ function defaultTeamHolds(parsed: Parsed): TeamHoldsApi {
   };
 }
 
-export function serviceSeatAuth(): { http: HttpClient; team: string } | null {
+export function serviceSeatAuth(
+  /** The daemon this service tends and the folder it runs in — `daemonServer(ctx)` and
+   *  `ctx.workingDir`. Absent (a bare call), the machine default and `config.current` stand, which
+   *  is the pre-2026-10-19 behaviour: a touch against whatever team the operator last joined. */
+  at?: { server?: string; dir?: string },
+): { http: HttpClient; team: string } | null {
   const tokenFile = process.env['MUSTERD_SERVICE_TOKEN_FILE'] ?? serviceTokenPath();
   let token: string;
   try {
@@ -1896,9 +1920,13 @@ export function serviceSeatAuth(): { http: HttpClient; team: string } | null {
     return null; // unprovisioned — pre-232 behaviour, silently
   }
   const config = loadConfig();
-  const team = process.env['MUSTERD_SERVICE_TEAM'] ?? config.current;
+  const team =
+    process.env['MUSTERD_SERVICE_TEAM'] ??
+    (at?.dir ? findBinding(at.dir)?.team : undefined) ??
+    config.current;
   if (!token || !team) return null;
-  return { http: new HttpClient({ server: config.server, key: token, surface: 'cli' }), team };
+  const server = at?.server ?? config.server;
+  return { http: new HttpClient({ server, key: token, surface: 'cli' }), team };
 }
 
 /**
@@ -1913,8 +1941,11 @@ export function serviceSeatAuth(): { http: HttpClient; team: string } | null {
  *
  * Best-effort like the announcement: a failed touch is one meta line, never a failed tick.
  */
-export async function touchServicePresence(ok: (s: string) => void): Promise<void> {
-  const auth = serviceSeatAuth();
+export async function touchServicePresence(
+  ok: (s: string) => void,
+  at?: { server?: string; dir?: string },
+): Promise<void> {
+  const auth = serviceSeatAuth(at);
   if (!auth) return; // unprovisioned — pre-232 behaviour, silently
   try {
     await auth.http.presence(auth.team, 'cli');
@@ -2208,7 +2239,10 @@ async function autoRefreshTick(
   blockedState: { read: () => string | null; write: (s: string) => void },
   ok: (s: string) => void,
   fail: (step: string, r: RunResult) => never,
-  touch: (ok: (s: string) => void) => Promise<void> = touchServicePresence,
+  touch: (
+    ok: (s: string) => void,
+    at?: { server?: string; dir?: string },
+  ) => Promise<void> = touchServicePresence,
   refreshSharedHooks: (dir: string) => string[] = (d) => installCodexHooks(d),
   holdState: { read: () => string | null; write: (s: string) => void } = {
     read: () => null,
@@ -2231,9 +2265,10 @@ async function autoRefreshTick(
   // interval service reads present-with-freshness instead of offline-in-minutes. Before the skew
   // gates on purpose — every no-op exit below is still a live, correctly-working service. The
   // catch enforces the amendment's contract at the seam: a heartbeat can never fail the tick.
-  await touch(ok).catch(() => {});
+  const at = daemonServer(ctx);
+  await touch(ok, { server: at, dir: ctx.workingDir }).catch(() => {});
   if (!health0.build) {
-    ok('daemon reports no build ref (not running from a checkout) — skipping');
+    ok(`daemon at ${at} reports no build ref (not running from a checkout) — skipping`);
     return 0;
   }
   const behind = countBehind(health0.build, dir, ctx.run); // fetches origin/main
@@ -2606,7 +2641,7 @@ async function runGuardianTick(ctx: ServiceCtx, parsed: Parsed): Promise<number>
   };
 
   const probeHealth = async (timeoutMs: number): Promise<HealthPayload> => {
-    const server = loadConfig().server;
+    const server = daemonServer(ctx); // the installed daemon, never the machine default (lane 01M5AS04BS)
     const res = await fetch(`${server}/health`, { signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) throw new Error(`health ${res.status}`);
     return (await res.json()) as HealthPayload;

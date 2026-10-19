@@ -109,6 +109,37 @@ export function parsePlistProgramArguments(xml: string): string[] | null {
  * lands on has exactly that shape today, and a parser that only understood our own output would
  * "preserve" nothing on the one plist that most needs preserving.
  */
+/**
+ * The URL the installed daemon itself listens on, read back from its plist the way
+ * `parsePlistProgramArguments` reads its checkout (ADR 118 hardening, lane 01M5AS04BS): `serve
+ * --host H --port N` → `http://H:N`, defaulting to the daemon's own defaults (127.0.0.1, 4849;
+ * `MUSTERD_PORT` in the plist's environment counts as `--port`). A wildcard bind (`0.0.0.0`, `::`)
+ * is reached on loopback. Null when the file isn't a parseable plist running `serve`.
+ *
+ * WHY NOT `loadConfig().server`: that is the MACHINE DEFAULT for whatever folder has no binding, and
+ * it is repointed whenever someone creates or joins a team elsewhere — on 2026-08-12 at a probe
+ * daemon, on 2026-10-19 at a hosted team (`https://revive-staging.musterd.dev`). The refresher then
+ * probed THAT daemon, read no build ref, and skipped every tick for 40 minutes while the local daemon
+ * it tends sat eight commits behind main. The daemon a service command tends is the one its plist
+ * starts, so its address comes from the plist too.
+ */
+export function installedDaemonServer(xml: string): string | null {
+  const args = parsePlistProgramArguments(xml);
+  if (!args) return null;
+  const serve = args.indexOf('serve');
+  if (serve < 0) return null;
+  const flag = (name: string): string | undefined => {
+    const i = args.indexOf(`--${name}`, serve);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const env = parsePlistEnvironment(xml) ?? {};
+  const port = flag('port') ?? env['MUSTERD_PORT'] ?? '4849';
+  const host0 = flag('host') ?? env['MUSTERD_HOST'] ?? '127.0.0.1';
+  const host = host0 === '0.0.0.0' || host0 === '::' || host0 === '[::]' ? '127.0.0.1' : host0;
+  const bracketed = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return `http://${bracketed}:${port}`;
+}
+
 /** The plist's `Label`, or null when the file isn't a parseable plist. Hand-authored files
  *  walk past `service install` (ADR 232 §4) — the census reads the Label, never the filename. */
 export function parsePlistLabel(xml: string): string | null {
