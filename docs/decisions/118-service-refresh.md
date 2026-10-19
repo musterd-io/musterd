@@ -79,6 +79,18 @@ standing daemon).
   and rebuilds the previous commit, and the daemon build leaves out `@musterd/web`, whose dist the
   daemon never serves.
 
+- _2026-10-19 (lane `01M5AS04BS`)._ The daemon a service verb tends is now found by **address** the
+  way it was already found by checkout: `daemonServer(ctx)` reads `serve --host/--port` back from the
+  installed plist (`installedDaemonServer`), with `MUSTERD_SERVER` outranking it and the machine
+  default (`loadConfig().server`) last. Before, `refresh`, the `--auto` tick's health probe, its
+  presence touch and the guardian's probe all read the machine default first — and that default is
+  repointed whenever a team is created or joined elsewhere on the machine. On 2026-10-19 it was
+  pointed at a hosted team for the cloud pilot; the refresher probed that daemon, read no build ref,
+  logged "skipping" every two minutes for 40 minutes, and the local daemon it tends sat eight commits
+  behind `main` (the same shape as the 2026-08-12 probe-daemon incident that produced
+  `serverProvenance`). The tick line now names the address it probed, and the presence touch resolves
+  the service seat's team from the daemon checkout's own binding before `config.current`.
+
 ## Observability & Evaluation
 
 **Traces** — no runtime span; this is a lifecycle command. Its effect is visible in the daemon's own

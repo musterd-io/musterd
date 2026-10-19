@@ -15,7 +15,7 @@ import {
 } from '../service/launchd.js';
 import type { LiveCtx } from '../service/live.js';
 import type { RunResult, Runner, ServiceCtx } from '../service/manage.js';
-import { blockedFailureNotice, resolveLiveCtx, serviceCommand } from './service.js';
+import { blockedFailureNotice, daemonServer, resolveLiveCtx, serviceCommand } from './service.js';
 
 describe('serviceCommand', () => {
   let dir: string;
@@ -1518,5 +1518,34 @@ describe('the auto-refresh tick does not re-alarm an unchanged blocker (lane 01M
     // an identical alarm; now the cause is what is debounced, so the operator hears nothing.
     await tick(runner, blocked, fired);
     expect(fired).toHaveLength(1);
+  });
+});
+
+describe('daemonServer — a service verb tends the INSTALLED daemon, by address (lane 01M5AS04BS)', () => {
+  const plist =
+    '<plist><dict><key>ProgramArguments</key><array><string>node</string><string>/x/packages/cli/dist/bin.js</string>' +
+    '<string>serve</string><string>--port</string><string>4899</string></array></dict></plist>';
+  const ctx = (xml: string | null) => ({ plistPath: '/p', readFile: () => xml });
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env['MUSTERD_SERVER'];
+    delete process.env['MUSTERD_SERVER'];
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env['MUSTERD_SERVER'];
+    else process.env['MUSTERD_SERVER'] = saved;
+  });
+
+  it('reads the installed plist before the machine default — a hosted-team default cannot redirect it', () => {
+    expect(daemonServer(ctx(plist))).toBe('http://127.0.0.1:4899');
+  });
+
+  it("MUSTERD_SERVER is the operator's explicit word and outranks the plist", () => {
+    process.env['MUSTERD_SERVER'] = 'http://127.0.0.1:4777';
+    expect(daemonServer(ctx(plist))).toBe('http://127.0.0.1:4777');
+  });
+
+  it('with no installed plist the machine default stands', () => {
+    expect(daemonServer(ctx(null))).toMatch(/^https?:\/\//);
   });
 });
