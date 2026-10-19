@@ -256,6 +256,33 @@ export interface ChannelPairing {
   created_at: number;
 }
 
+/** A server-built approval descriptor (ADR 662), as the wire carries it. */
+export interface AuthorityDescriptor {
+  v: 1;
+  actor: string;
+  act: string;
+  target: string;
+  payload_digest: string;
+  audience: string;
+  expiry: number;
+  nonce: string;
+}
+
+/** An A2 approval proof: which key signed, over which descriptor nonce. */
+export interface AuthorityProof {
+  key_id: string;
+  nonce: string;
+  signature: string;
+}
+
+/** One of a human's device keys, public half only (ADR 662 decision 6). */
+export interface DeviceKeySummary {
+  id: string;
+  kind: string;
+  created_at: number;
+  revoked_at: number | null;
+}
+
 /** Per-human channel settings (away channels 6): nothing is on by default. */
 export interface ChannelSettings {
   channel: string;
@@ -1310,6 +1337,59 @@ export class HttpClient {
       `/teams/${slug}/channels/settings/${encodeURIComponent(channel)}`,
       body,
     ) as Promise<{ settings: ChannelSettings }>;
+  }
+
+  /** ADR 662: ask the server to build an approval descriptor for a high-authority act. */
+  async createAuthorityDescriptor(
+    slug: string,
+    body: { act: string; target: string; payload?: unknown; actor?: string },
+  ): Promise<{ descriptor: AuthorityDescriptor }> {
+    return this.request('POST', `/teams/${slug}/authority/descriptors`, body) as Promise<{
+      descriptor: AuthorityDescriptor;
+    }>;
+  }
+
+  /** ADR 662 decision 6: mint a one-time device-key enrollment code (shown once). */
+  async issueEnrollmentCode(slug: string): Promise<{ code: string; expires_at: number }> {
+    return this.request('POST', `/teams/${slug}/authority/enrollment-codes`) as Promise<{
+      code: string;
+      expires_at: number;
+    }>;
+  }
+
+  /** ADR 662 decision 6: this human's device keys (public halves only). */
+  async listDeviceKeys(slug: string): Promise<{ keys: DeviceKeySummary[] }> {
+    return this.request('GET', `/teams/${slug}/authority/keys`) as Promise<{
+      keys: DeviceKeySummary[];
+    }>;
+  }
+
+  /** ADR 662 decision 6: enroll a device key by code, or by a standing key's signature. */
+  async enrollDeviceKey(
+    slug: string,
+    body: {
+      public_key: string;
+      kind: string;
+      enrollment_code?: string;
+      approval?: AuthorityProof;
+    },
+  ): Promise<{ key: { id: string; kind: string } }> {
+    return this.request('POST', `/teams/${slug}/authority/keys`, body) as Promise<{
+      key: { id: string; kind: string };
+    }>;
+  }
+
+  /** ADR 662 decision 6: revoke one of this human's device keys. */
+  async revokeDeviceKey(
+    slug: string,
+    keyId: string,
+    body: { enrollment_code?: string; approval?: AuthorityProof },
+  ): Promise<{ ok: true }> {
+    return this.request(
+      'POST',
+      `/teams/${slug}/authority/keys/${encodeURIComponent(keyId)}/revoke`,
+      body,
+    ) as Promise<{ ok: true }>;
   }
 
   /** ADR 618 §7: revoke every binding and outstanding token, and disconnect the relay locally. */

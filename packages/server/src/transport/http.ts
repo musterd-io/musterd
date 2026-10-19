@@ -167,6 +167,7 @@ import {
   CalendarEntryInputSchema,
   MemberCeilingSchema,
   ApprovalProofSchema,
+  AUTHENTICATOR_KINDS,
   HIGH_AUTHORITY_ACTS,
   type HighAuthorityAct,
 } from '@musterd/protocol';
@@ -235,7 +236,14 @@ import {
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
-import { buildDescriptor, requireAuthority } from '../store/authority.js';
+import {
+  buildDescriptor,
+  enrollKeyGuarded,
+  issueEnrollmentCode,
+  listDeviceKeys,
+  requireAuthority,
+  revokeKeyGuarded,
+} from '../store/authority.js';
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import {
   createCalendarEntry,
@@ -1264,6 +1272,19 @@ const DescriptorRequestBody = z.object({
   target: z.string().min(1),
   payload: z.unknown().optional(),
   actor: z.string().min(1).optional(),
+});
+
+// Device-key lifecycle (ADR 662 decision 6): the first key and recovery ride a one-time
+// enrollment code; further keys and revocations ride an existing key's signature.
+const EnrollKeyBody = z.object({
+  public_key: z.string().min(1),
+  kind: z.enum(AUTHENTICATOR_KINDS),
+  enrollment_code: z.string().min(1).optional(),
+  approval: ApprovalProofSchema.optional(),
+});
+const RevokeKeyBody = z.object({
+  enrollment_code: z.string().min(1).optional(),
+  approval: ApprovalProofSchema.optional(),
 });
 const ChannelSettingsBody = z.object({
   deliver: z.boolean(),
@@ -4562,6 +4583,77 @@ export async function handleHttp(
           payload: body.payload ?? null,
         });
         return sendJson(res, 201, { descriptor });
+      }
+
+      // ADR 662 decision 6 — the device-key lifecycle. Every step names the caller's own
+      // keys only; a human's keys are never another seat's to list, enroll or revoke.
+      if (rest === '/authority/enrollment-codes' || rest.startsWith('/authority/keys')) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        if (member.kind !== 'human') {
+          throw new MusterdError(
+            'forbidden',
+            `seat "${member.name}" is not a human; device keys bind a human's authority`,
+          );
+        }
+        if (method === 'POST' && rest === '/authority/enrollment-codes') {
+          const issued = await issueEnrollmentCode(ctx.db, {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+          });
+          // Shown once, here, to the human who asked (hard rule 5); only its sha256 is stored.
+          return sendJson(res, 201, { code: issued.code, expires_at: issued.expiresAt });
+        }
+        if (method === 'GET' && rest === '/authority/keys') {
+          const keys = await listDeviceKeys(ctx.db, team.id, member.id);
+          return sendJson(res, 200, {
+            keys: keys.map((k) => ({
+              id: k.id,
+              kind: k.kind,
+              created_at: k.createdAt,
+              revoked_at: k.revokedAt,
+            })),
+          });
+        }
+        if (method === 'POST' && rest === '/authority/keys') {
+          const body = parseOrBadRequest(EnrollKeyBody, await readJson(req));
+          const result = await enrollKeyGuarded(ctx.db, {
+            teamId: team.id,
+            audience: team.slug,
+            member,
+            publicKey: body.public_key,
+            kind: body.kind,
+            code: body.enrollment_code,
+            proof: body.approval,
+          });
+          if (!result.ok) {
+            throw new MusterdError(
+              result.reason === 'agent_credential' ? 'forbidden' : 'validation',
+              `enrollment refused (${result.reason})`,
+            );
+          }
+          return sendJson(res, 201, { key: { id: result.key.id, kind: result.key.kind } });
+        }
+        const revokeMatch = /^\/authority\/keys\/([^/]+)\/revoke$/.exec(rest);
+        if (method === 'POST' && revokeMatch) {
+          const body = parseOrBadRequest(RevokeKeyBody, await readJson(req));
+          const result = await revokeKeyGuarded(ctx.db, {
+            teamId: team.id,
+            audience: team.slug,
+            member,
+            keyId: decodeURIComponent(revokeMatch[1]!),
+            code: body.enrollment_code,
+            proof: body.approval,
+          });
+          if (!result.ok) {
+            throw new MusterdError(
+              result.reason === 'not_found' ? 'not_found' : 'validation',
+              `revocation refused (${result.reason})`,
+            );
+          }
+          return sendJson(res, 200, { ok: true });
+        }
       }
 
       // The read half of the policy verb (increment 5): `musterd residency policy` does

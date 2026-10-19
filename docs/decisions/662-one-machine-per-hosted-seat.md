@@ -143,6 +143,13 @@ All four converged on one shape, and nick directed it be written as this ADR.
   issue, agent create, human counterpart lane closes, `merged.authorized_by`, and human
   verdicts on the act path. Enrollment (lane 2) and the authenticators (lane 3) follow; the
   gate closes when all three have landed and humans are enrolled.)_
+- _(2026-10-19: human authority 2 landed the device-key lifecycle (decision 6). The first key
+  — and recovery when every key is lost — goes through a one-time enrollment code minted from
+  the human's existing credential (sha256 stored, ten minutes, one use, never audited). Once
+  any key stands, further keys enroll by that key's `device_key_admin` signature; revocation
+  is by a different standing key or by code, and a key never revokes itself. An agent member
+  can never enroll. `musterd authority enroll|keys|revoke` is the terminal surface; the
+  authenticators (lane 3) replace its file-stored private half.)_
 
 ## Observability & Evaluation
 

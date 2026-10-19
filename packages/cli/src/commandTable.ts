@@ -13,6 +13,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   agent: async () => (await import('./commands/agent.js')).agentCommand,
   archaeology: async () => (await import('./commands/archaeology.js')).archaeologyCommand,
   audit: async () => (await import('./commands/audit.js')).auditCommand,
+  authority: async () => (await import('./commands/authority.js')).authorityCommand,
   availability: async () => (await import('./commands/availability.js')).availabilityCommand,
   board: async () => (await import('./commands/board.js')).boardCommand,
   broadcast: async () => (await import('./commands/broadcast.js')).broadcastCommand,

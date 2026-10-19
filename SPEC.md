@@ -1001,7 +1001,7 @@ A dated read may declare what it measures, collect one number per day against it
 measured value on its verdict.
 
 - `metric` is `{name (1–80), unit (1–24), baseline: number|null, target: number, direction:
-  'up'|'down', source, by, at}`. It is accepted on open and on update (`null` on update clears it).
+'up'|'down', source, by, at}`. It is accepted on open and on update (`null` on update clears it).
   A server MUST stamp `by` and `at`, and MUST refuse, with `validation`, a metric on a Lane with no
   `reads_on`, or an update that clears `reads_on` under a standing metric. On input `source` is one
   of `manual` (default), `wake_latency_p50_ms` and `dispute_rate`; on read it is a plain string.
@@ -1019,6 +1019,7 @@ measured value on its verdict.
   `inconclusive` never needs it.
 - A server derives nothing from samples: no status, and no verdict. A server behind this appendix
   sends none of these fields, and a reader treats the Lane as measuring nothing.
+
 ## A.27 Human authority: A2 approval descriptors (unreleased — ADR 662)
 
 A closed list of high-authority acts (`HIGH_AUTHORITY_ACTS` in protocol code, pinned by test)
@@ -1039,3 +1040,12 @@ advisory for every listed act.
   `descriptor_mismatch`, `expired`, `nonce_reused`, `key_revoked`, `agent_credential`); an
   approval writes `authority.approved` with the assurance, authenticator kind and key id.
   No signature, nonce or descriptor payload is ever logged.
+- Device keys (decision 6): `POST /teams/:slug/authority/enrollment-codes` → `201 {code,
+expires_at}` — the code is shown once, stored only as sha256, ten minutes, one use, and a
+  human member's alone to mint. `POST /teams/:slug/authority/keys` `{public_key, kind,
+enrollment_code? | approval?}` enrolls: the first key, and recovery when every key is
+  lost, by code; a further key may instead carry an A2 approval from a standing key over
+  `device_key_admin`. An agent member can never enroll. `GET /teams/:slug/authority/keys`
+  lists the caller's own keys; `POST /teams/:slug/authority/keys/:id/revoke` retires one by
+  enrollment code or by a different standing key's signature — a key never revokes itself.
+  Lifecycle writes audit `device_key.enrolled|revoked|enrollment_code`, never a code or key.
