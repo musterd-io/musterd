@@ -174,6 +174,9 @@ export async function spawnLinuxSandboxedBash(
     // the same path it was installed under. Only the package directory is mounted, read-only.
     addDirArgs(args, pnpmRoot);
     args.push('--ro-bind', pnpmRoot, pnpmRoot);
+    // Some pnpm installers expose a launcher whose entry point resolves outside the inferred
+    // package root. Bind the resolved entry point too, so that exact absolute path is present.
+    args.push('--ro-bind', pnpm, pnpm);
     args.push('--symlink', pnpm, '/runtime/pnpm');
   }
   args.push('--ro-bind', realpathSync(corepackHome), '/corepack');
