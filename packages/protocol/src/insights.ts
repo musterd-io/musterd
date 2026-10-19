@@ -481,6 +481,12 @@ export const WakeMetricsSchema = z.object({
    */
   unpriced_sessions: z.number().int().optional(),
   /**
+   * ADR 663: wakes in the window that settled as `local` (a model served on the host, no metered
+   * cost), unique by lease. Shown beside cost, never inside it, and still counted by
+   * `unpriced_wake_count`. Optional for back-compat; omitted when zero.
+   */
+  local_wakes: z.number().int().nonnegative().optional(),
+  /**
    * ADR 273. Wake reports the daemon REFUSED — the receipt for a run that already happened and
    * already cost money, thrown away at validation. Kept out of `failed`: a refused report is not a
    * failed wake, it is a successful wake whose record was destroyed, and the lease it belonged to

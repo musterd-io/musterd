@@ -125,8 +125,14 @@ Ollama on Air 2, with every bound set before the first wake and recorded in the 
 
 - **One model loaded at a time** (`OLLAMA_MAX_LOADED_MODELS=1`), and **unloaded when idle**
   (`keep_alive` short, minutes not hours), so memory returns to the seats between acts.
-- **A small context window.** The standstill was `num_ctx 32768`. The gauntlet starts at 8k and
-  raises it only if an act fails for length; the value used is recorded per candidate.
+- **A small context window.** The standstill was `num_ctx 32768`. ~~The gauntlet starts at 8k and
+  raises it only if an act fails for length~~ _(amended 2026-10-19, stanley)_ The measured floor is
+  about 15k tokens with the prompt cut down and about 28k as configured
+  ([local model context floor](../../wiki/local-model-context-floor.md)), so 8k would fail every
+  candidate on length before testing anything. The gauntlet cuts the prompt first (no skill list,
+  only the built-in tools the seat uses, no global instruction file), sets a q8 KV cache, and
+  starts `num_ctx` at the trimmed floor rounded up to the next 4k; the value used is recorded per
+  candidate.
 - **A memory ceiling** the seats always win against, as a number: macOS memory pressure
   (`memory_pressure` / `vm_stat`) must stay at **normal** while the model is loaded, and swap-ins
   must not climb during an act. _(review 2026-10-17, dolly 4)_ A small script on Air 2 samples both
@@ -137,7 +143,8 @@ Ollama on Air 2, with every bound set before the first wake and recorded in the 
   "room" condition is: the 4B candidates never left normal.
 - **The seat.** One new roster seat (name is nick's; a new seat rather than a renamed one, so its
   history is only this run). OpenCode harness, `opencode.json` pinned to `provider: ollama`, the
-  bare model tag as `model`, base URL `http://127.0.0.1:11434/v1`. The declaration is
+  bare model tag as `model`, base URL `http://127.0.0.1:11434/v1` _(amended 2026-10-19: or
+  llama.cpp's `llama-server` on loopback; ADR 663 names both as local-serving)_. The declaration is
   `binding.model` on the new seat's binding (per seat; `MUSTERD_MODEL` in the actuator env would
   leak to all five Air 2 seats, and the doctor flags it in an MCP entry as stale), and the same
   binding declares the seat **local** (`binding.local: true`, the ADR's name for it). _(review

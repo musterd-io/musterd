@@ -12,6 +12,7 @@ import { withDrivers } from '../db/testing.js';
 import { appendAudit } from './audit.js';
 import {
   coordinationDensity,
+  countLocalWakes,
   countUnpricedWakes,
   deriveReport,
   peerDemand,
@@ -1408,6 +1409,25 @@ withDrivers('insights', (o) => {
           { action: 'residency.wake_cost', detail: { lease_id: 'Lmix', cost_usd: 1 } },
         ]),
       ).toBe(5);
+    });
+
+    it('a `local` wake is counted once as local and still counted as unpriced (ADR 663)', () => {
+      const rows = [
+        { action: 'residency.woke', detail: { lease_id: 'La' } },
+        {
+          action: 'residency.wake_cost',
+          detail: { lease_id: 'La', unpriced_reason: 'local', duration_ms: 1 },
+        },
+        { action: 'residency.wake_cost', detail: { lease_id: 'La', unpriced_reason: 'local' } },
+        {
+          action: 'residency.wake_cost',
+          detail: { lease_id: 'Lb', unpriced_reason: 'harness_price_unverified' },
+        },
+        { action: 'residency.wake_failed', detail: { lease_id: 'Lc', unpriced_reason: 'local' } },
+      ];
+      expect(countLocalWakes(rows)).toBe(1);
+      // The cap still sees it: a claim names a wake, it never switches a spend guard off.
+      expect(countUnpricedWakes(rows)).toBe(3);
     });
 
     it('deriveReport carries the unpriced count only when the cap is set (ADR 639)', async () => {

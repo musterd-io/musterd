@@ -325,6 +325,15 @@ export function saveBinding(dir: string, binding: Binding, opts?: SaveBindingOpt
     onDisk.session_lease !== undefined
       ? { session_lease: onDisk.session_lease }
       : {}),
+    // ADR 663: the seat's `local` declaration is hand-set; a writer rebuilding the binding never
+    // carries it, and dropping it would silently relabel a local seat's wakes as unverified. Same
+    // seat only — a folder re-bound to another seat does not inherit the claim.
+    ...(binding.local === undefined &&
+    onDisk != null &&
+    bindingSeat(binding) === bindingSeat(onDisk) &&
+    onDisk.local !== undefined
+      ? { local: onDisk.local }
+      : {}),
     ...(binding.session === undefined && onDisk?.session !== undefined
       ? { session: onDisk.session }
       : {}),

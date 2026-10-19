@@ -516,4 +516,36 @@ describe('ADR 583 — the metering gateway on the wake report', () => {
       }).unpriced_reason,
     ).toBe('no_price_row');
   });
+
+  it('local is an unpriced reason and carries its snapshot; a credential-shaped base_url is refused (ADR 663)', () => {
+    expect(UNPRICED_REASONS).toContain('local');
+    const local_serving = {
+      provider: 'ollama',
+      model: 'qwen3:4b',
+      base_url: 'http://127.0.0.1:11434/v1',
+    };
+    expect(
+      WakeReportBodySchema.parse({
+        lease_id: 'L1',
+        occupied: true,
+        unpriced_reason: 'local',
+        local_serving,
+      }).local_serving,
+    ).toEqual(local_serving);
+    for (const base_url of [
+      'http://user:pw@127.0.0.1:11434/v1',
+      'http://127.0.0.1:11434/v1?key=x',
+      'http://127.0.0.1:11434/v1#x',
+      'not a url',
+    ])
+      expect(
+        WakeReportBodySchema.safeParse({
+          lease_id: 'L1',
+          occupied: true,
+          unpriced_reason: 'local',
+          local_serving: { ...local_serving, base_url },
+        }).success,
+        base_url,
+      ).toBe(false);
+  });
 });

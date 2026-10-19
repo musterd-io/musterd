@@ -374,6 +374,13 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
       `  ${theme.meta('unpriced')} ${k.unpriced_sessions} wake${k.unpriced_sessions === 1 ? '' : 's'} spawned a session and died unreported — paid, cost unknown\n`,
     );
   }
+  // ADR 663: wakes that ran a model served on the host. Beside cost, never inside it — and still
+  // inside the unpriced-wake count above, because the local signal is a claim.
+  if ((k.local_wakes ?? 0) > 0) {
+    w(
+      `  ${theme.meta('local')} ${k.local_wakes} wake${k.local_wakes === 1 ? '' : 's'} on a model served on the host — no metered cost\n`,
+    );
+  }
   // ADR 273: refused reports. Loud, and phrased as a warning rather than a statistic, because a
   // non-zero here invalidates every number above it — a refused receipt is spend this report
   // cannot see, and the ADR 269 case sat unnoticed for ~3 weeks precisely because nothing said it

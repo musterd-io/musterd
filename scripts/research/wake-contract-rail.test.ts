@@ -116,6 +116,23 @@ describe('readTrigger — ADR 436 Decision 5', () => {
     expect(t.reasons).toEqual(['grok: 0/5 settled wakes priced']);
   });
 
+  it('local wakes leave the denominator: they neither trip nor silence the priced clause (ADR 663)', () => {
+    const allLocal = row({
+      harness: 'opencode',
+      settled: 3,
+      priced: 0,
+      unpricedReasons: { local: 3 },
+    });
+    expect(readTrigger([row({}), allLocal]).reasons).toEqual([]);
+    const mixed = row({
+      harness: 'opencode',
+      settled: 5,
+      priced: 0,
+      unpricedReasons: { local: 3, harness_price_unverified: 2 },
+    });
+    expect(readTrigger([row({}), mixed]).reasons).toEqual(['opencode: 0/2 settled wakes priced']);
+  });
+
   it('fires when a median floor exceeds 3× Claude Code, and holds at exactly 3×', () => {
     expect(
       readTrigger([row({}), row({ harness: 'grok', floor: { median: 300_001, n: 5 } })]).reasons,
