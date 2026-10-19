@@ -643,6 +643,43 @@ CREATE TABLE IF NOT EXISTS ask_decisions (
       await d.exec('ALTER TABLE nodes ADD COLUMN IF NOT EXISTS note_key TEXT');
     },
   },
+  {
+    // v110 — ADR 618 §7 (away channels 4 pairing, lane 01M50XPYZ9877E494X2SV1EGTB): the binding
+    // store and the pairing nonces. A binding links an immutable provider identity to a human
+    // Member in the daemon; the relay can neither create nor complete one. Only the sha256 of a
+    // pairing nonce is stored (hard rule 5); the two-digit check code is a UX check, never a
+    // secret. New tables, no backfill; both are team-owned, so row-level security covers them.
+    version: 110,
+    sql: `CREATE TABLE IF NOT EXISTS channel_bindings (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  provider_tenant_id TEXT NOT NULL,
+  provider_user_id TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  revoked_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_channel_bindings_team_member ON channel_bindings(team_id, member_id, status);
+CREATE TABLE IF NOT EXISTS pairing_nonces (
+  id TEXT PRIMARY KEY,
+  nonce_hash TEXT NOT NULL UNIQUE,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  check_code TEXT NOT NULL,
+  state TEXT NOT NULL,
+  provider_tenant_id TEXT,
+  provider_user_id TEXT,
+  attempts INTEGER NOT NULL,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_pairing_nonces_team_member ON pairing_nonces(team_id, member_id, state)`,
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

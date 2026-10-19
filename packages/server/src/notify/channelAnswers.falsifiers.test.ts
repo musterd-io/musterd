@@ -17,6 +17,15 @@ import {
   type RedemptionChecks,
 } from '../store/askChannelTokens.js';
 import { listAudit } from '../store/audit.js';
+import {
+  channelBindingStanding,
+  confirmPairing,
+  killSwitchChannels,
+  listBindings,
+  listPendingPairings,
+  recordPairingIdentity,
+  startPairing,
+} from '../store/channelBindings.js';
 import { gateAskHumanAnswer } from '../store/gateAsk.js';
 import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
@@ -219,12 +228,75 @@ withDrivers('away channels falsifiers', (o) => {
       expect(await redeem(db, other.id, tok)).toEqual({ ok: false, reason: 'unknown_token' });
     });
 
-    it.todo(
-      'pairs a different provider identity: refused without the original-surface confirmation (pairing lane 01M50XPYZ9877E494X2SV1EGTB)',
-    );
-    it.todo(
-      'lies in the confirmation UI: the daemon-held tenant and user, not the relay, are what is shown (pairing lane 01M50XPYZ9877E494X2SV1EGTB)',
-    );
+    it('pairs a different provider identity: refused without the original-surface confirmation', async () => {
+      const { db, team, nick } = await seed();
+      // The relay stages an attacker's provider identity against nick's nonce. Nothing is bound:
+      // staging is not pairing, and no binding exists for redemption to find.
+      const { nonce } = await startPairing(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        channel: 'slack',
+        now: NOW,
+      });
+      await recordPairingIdentity(db, {
+        nonce,
+        providerTenantId: 'T-attacker',
+        providerUserId: 'U-attacker',
+        now: NOW + MINUTE,
+      });
+      expect(await listBindings(db, team.id, nick.id)).toEqual([]);
+      const tok = await token(db, team.id);
+      const realChecks: RedemptionChecks = {
+        askStanding: async () => GOOD,
+        bindingStanding: channelBindingStanding,
+      };
+      expect(await redeem(db, team.id, tok, { checks: realChecks })).toEqual({
+        ok: false,
+        reason: 'binding_stale',
+      });
+    });
+
+    it('lies in the confirmation UI: the daemon-held tenant and user, not the relay, are what is shown', async () => {
+      const { db, team, nick } = await seed();
+      const { pairing, nonce } = await startPairing(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        channel: 'slack',
+        now: NOW,
+      });
+      await recordPairingIdentity(db, {
+        nonce,
+        providerTenantId: 'T-real',
+        providerUserId: 'U-real',
+        now: NOW + MINUTE,
+      });
+      // The relay's second, lying payload cannot overwrite what the daemon holds.
+      await recordPairingIdentity(db, {
+        nonce,
+        providerTenantId: 'T-lie',
+        providerUserId: 'U-lie',
+        now: NOW + MINUTE,
+      });
+      const pending = await listPendingPairings(db, team.id, nick.id, NOW + MINUTE);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        provider_tenant_id: 'T-real',
+        provider_user_id: 'U-real',
+      });
+      const confirmed = await confirmPairing(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        pairingId: pairing.id,
+        now: NOW + MINUTE,
+      });
+      expect(confirmed).toMatchObject({
+        ok: true,
+        binding: { provider_tenant_id: 'T-real', provider_user_id: 'U-real' },
+      });
+    });
     it('answers after the daemon restarted: reconciled from daemon state, expired buttons refused (ADR 659)', async () => {
       const { db, team } = await seed();
       await token(db, team.id, { askId: 'ask-live', channel: 'slack' });
@@ -394,9 +466,47 @@ withDrivers('away channels falsifiers', (o) => {
       for (const secret of [good, bad, ...hashes]) expect(blob).not.toContain(secret);
     });
 
-    it.todo(
-      'the kill switch revokes every binding generation and outstanding token without the relay (pairing lane 01M50XPYZ9877E494X2SV1EGTB)',
-    );
+    it('the kill switch revokes every binding generation and outstanding token without the relay', async () => {
+      const { db, team, nick } = await seed();
+      const { pairing, nonce } = await startPairing(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        channel: 'slack',
+        now: NOW,
+      });
+      await recordPairingIdentity(db, {
+        nonce,
+        providerTenantId: 'T1',
+        providerUserId: 'U1',
+        now: NOW + MINUTE,
+      });
+      const confirmed = await confirmPairing(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        pairingId: pairing.id,
+        now: NOW + MINUTE,
+      });
+      if (!confirmed.ok) throw new Error(confirmed.reason);
+      const tok = await token(db, team.id, { bindingId: confirmed.binding.id });
+      // Local only: no relay frame, no relay cooperation — the daemon's own rows decide.
+      await killSwitchChannels(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        now: NOW + MINUTE,
+      });
+      expect(await channelBindingStanding(db, team.id, confirmed.binding.id, 1)).toBe('stale');
+      const realChecks: RedemptionChecks = {
+        askStanding: async () => GOOD,
+        bindingStanding: channelBindingStanding,
+      };
+      const result = await redeem(db, team.id, tok, { checks: realChecks });
+      expect(result.ok).toBe(false);
+      const audit = (await listAudit(db, team.id)).filter((r) => r.action === 'channel.killswitch');
+      expect(audit).toHaveLength(1);
+    });
   });
 
   describe('shared Slack ingress and tenancy (spec: Slack ingress)', () => {

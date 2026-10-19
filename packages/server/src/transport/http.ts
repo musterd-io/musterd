@@ -193,6 +193,7 @@ import { reapOrphans } from '../footprint/reap.js';
 import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { flushHeldRings } from '../notify/doorbell.js';
+import { relayLinkFor } from '../notify/relay.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
 import {
   adjudicateGate,
@@ -234,6 +235,15 @@ import {
   listCalendarSince,
   replaceCalendarEntry,
 } from '../store/calendar.js';
+import {
+  confirmPairing,
+  killSwitchChannels,
+  listBindings,
+  listPendingPairings,
+  rejectPairing,
+  revokeBinding,
+  startPairing,
+} from '../store/channelBindings.js';
 import { recordCiRuns } from '../store/ci.js';
 import { checkClaims } from '../store/claimCheck.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
@@ -1219,6 +1229,13 @@ function huddleTopicOf(messages: Envelope[], latest: Envelope): string | undefin
 // against the live process table before any signal is sent (see footprint/reap.ts).
 const FootprintReapBody = z.object({
   pids: z.array(z.number().int().positive()).max(500),
+});
+
+// ADR 618 §7 (away channels pairing): start names only the channel; confirm/reject/revoke name
+// only the row. The provider identity is never a request field here — it is read from the
+// daemon's own pairing row, which is what the confirmation shows.
+const PairingStartBody = z.object({
+  channel: z.string().min(1).max(64),
 });
 
 const CreateTeamBody = z.object({
@@ -4267,6 +4284,94 @@ export async function handleHttp(
           const id = decodeURIComponent(idMatch[1]!);
           await deleteCalendarEntry(ctx.db, team.id, member.name, id);
           return sendJson(res, 200, { ok: true });
+        }
+      }
+
+      // ADR 618 §7 — away-channel pairing and bindings. The original surface: an authenticated
+      // human starts a pairing, the provider identity is staged daemon-side by the relay path,
+      // and only this human's confirmation — showing the tenant and user from the daemon's own
+      // row — creates a binding. Agents never pair: a binding names a human authorizer.
+      if (rest === '/channels' || rest.startsWith('/channels/')) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        if (member.kind !== 'human') {
+          throw new MusterdError(
+            'forbidden',
+            `seat "${member.name}" is not a human; channel bindings name a human authorizer`,
+          );
+        }
+        if (method === 'POST' && rest === '/channels/pairing/start') {
+          const body = parseOrBadRequest(PairingStartBody, await readJson(req));
+          const { pairing, nonce } = await startPairing(ctx.db, {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+            channel: body.channel,
+          });
+          // The nonce is shown once, here, to the human who started the pairing (hard rule 5:
+          // it is stored only as sha256 and never audited or logged).
+          return sendJson(res, 201, {
+            pairing_id: pairing.id,
+            nonce,
+            check_code: pairing.check_code,
+            expires_at: pairing.expires_at,
+          });
+        }
+        if (method === 'GET' && rest === '/channels/pairings') {
+          return sendJson(res, 200, {
+            pairings: await listPendingPairings(ctx.db, team.id, member.id),
+          });
+        }
+        const pairingMatch = /^\/channels\/pairings\/([^/]+)\/(confirm|reject)$/.exec(rest);
+        if (method === 'POST' && pairingMatch) {
+          const pairingId = decodeURIComponent(pairingMatch[1]!);
+          const input = {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+            pairingId,
+          };
+          const result =
+            pairingMatch[2] === 'confirm'
+              ? await confirmPairing(ctx.db, input)
+              : await rejectPairing(ctx.db, input);
+          if (!result.ok) {
+            throw new MusterdError(
+              result.reason === 'not_found' ? 'not_found' : 'validation',
+              `pairing ${result.reason}`,
+            );
+          }
+          return sendJson(res, 200, result);
+        }
+        if (method === 'GET' && rest === '/channels/bindings') {
+          return sendJson(res, 200, { bindings: await listBindings(ctx.db, team.id, member.id) });
+        }
+        const bindingMatch = /^\/channels\/bindings\/([^/]+)\/revoke$/.exec(rest);
+        if (method === 'POST' && bindingMatch) {
+          const result = await revokeBinding(ctx.db, {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+            bindingId: decodeURIComponent(bindingMatch[1]!),
+          });
+          if (!result.ok) {
+            throw new MusterdError(
+              result.reason === 'not_found' ? 'not_found' : 'validation',
+              `binding ${result.reason}`,
+            );
+          }
+          return sendJson(res, 200, result);
+        }
+        if (method === 'POST' && rest === '/channels/kill-switch') {
+          const result = await killSwitchChannels(ctx.db, {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+          });
+          // Disconnect the relay locally too: stopping the link needs no relay cooperation,
+          // and the scan does not reopen a stopped link whose policy is unchanged.
+          relayLinkFor(ctx, team.slug)?.stop();
+          return sendJson(res, 200, result);
         }
       }
 

@@ -234,6 +234,30 @@ export interface HttpClientOpts {
 }
 
 /** ADR 450: the redacted invite projection — never a hash, never the secret. */
+/** A staged channel pairing as the daemon holds it (ADR 618 §7) — the confirmation view. */
+export interface ChannelPairing {
+  id: string;
+  channel: string;
+  check_code: string;
+  state: string;
+  provider_tenant_id: string | null;
+  provider_user_id: string | null;
+  expires_at: number;
+  created_at: number;
+}
+
+/** A channel binding: an immutable provider identity bound to a human (ADR 618 §7). */
+export interface ChannelBinding {
+  id: string;
+  channel: string;
+  provider_tenant_id: string;
+  provider_user_id: string;
+  generation: number;
+  status: 'active' | 'revoked';
+  created_at: number;
+  revoked_at: number | null;
+}
+
 export interface TeamInviteSummary {
   id: string;
   selector: string;
@@ -1190,6 +1214,70 @@ export class HttpClient {
       await this.request('POST', `/teams/${slug}/calendar`, body),
     );
   }
+  /** ADR 618 §7: start a channel pairing; the nonce comes back once, for the human who asked. */
+  async startChannelPairing(
+    slug: string,
+    channel: string,
+  ): Promise<{ pairing_id: string; nonce: string; check_code: string; expires_at: number }> {
+    return this.request('POST', `/teams/${slug}/channels/pairing/start`, {
+      channel,
+    }) as Promise<{ pairing_id: string; nonce: string; check_code: string; expires_at: number }>;
+  }
+
+  /** ADR 618 §7: pairings staged for this human's confirmation — daemon-held identity only. */
+  async listChannelPairings(slug: string): Promise<{ pairings: ChannelPairing[] }> {
+    return this.request('GET', `/teams/${slug}/channels/pairings`) as Promise<{
+      pairings: ChannelPairing[];
+    }>;
+  }
+
+  /** ADR 618 §7: confirm a staged pairing on this original surface; creates the binding. */
+  async confirmChannelPairing(
+    slug: string,
+    pairingId: string,
+  ): Promise<{ ok: true; binding: ChannelBinding }> {
+    return this.request(
+      'POST',
+      `/teams/${slug}/channels/pairings/${encodeURIComponent(pairingId)}/confirm`,
+    ) as Promise<{ ok: true; binding: ChannelBinding }>;
+  }
+
+  /** ADR 618 §7: reject a staged pairing; binds nothing and spends the nonce. */
+  async rejectChannelPairing(slug: string, pairingId: string): Promise<{ ok: true }> {
+    return this.request(
+      'POST',
+      `/teams/${slug}/channels/pairings/${encodeURIComponent(pairingId)}/reject`,
+    ) as Promise<{ ok: true }>;
+  }
+
+  /** ADR 618 §7: this human's channel bindings, newest first. */
+  async listChannelBindings(slug: string): Promise<{ bindings: ChannelBinding[] }> {
+    return this.request('GET', `/teams/${slug}/channels/bindings`) as Promise<{
+      bindings: ChannelBinding[];
+    }>;
+  }
+
+  /** ADR 618 §7: revoke one binding and every outstanding token naming it. */
+  async revokeChannelBinding(
+    slug: string,
+    bindingId: string,
+  ): Promise<{ ok: true; tokensRevoked: number }> {
+    return this.request(
+      'POST',
+      `/teams/${slug}/channels/bindings/${encodeURIComponent(bindingId)}/revoke`,
+    ) as Promise<{ ok: true; tokensRevoked: number }>;
+  }
+
+  /** ADR 618 §7: revoke every binding and outstanding token, and disconnect the relay locally. */
+  async killChannelSwitch(
+    slug: string,
+  ): Promise<{ bindingsRevoked: number; tokensRevoked: number }> {
+    return this.request('POST', `/teams/${slug}/channels/kill-switch`) as Promise<{
+      bindingsRevoked: number;
+      tokensRevoked: number;
+    }>;
+  }
+
   /** ADR 519: replace entry `id` whole. */
   async replaceCalendarEntry(
     slug: string,

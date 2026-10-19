@@ -105,6 +105,10 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
+/** The pairing confirmation panel (ADR 618 §7): lazy — it renders only while a pairing is staged. */
+const LazyPairingPanel = lazy(() =>
+  import('../live/PairingPanel').then((m) => ({ default: m.PairingPanel })),
+);
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
@@ -696,6 +700,12 @@ function LivePage() {
             </div>
           )}
           {phone && <div className="lc__phone-asks">{asksStrip}</div>}
+          {/* ADR 618 §7: a staged channel pairing waits for this human's confirmation here. */}
+          {cfg && (
+            <Suspense fallback={null}>
+              <LazyPairingPanel cfg={cfg} />
+            </Suspense>
+          )}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +

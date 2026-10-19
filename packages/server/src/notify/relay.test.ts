@@ -72,7 +72,7 @@ withDrivers('away relay client (ADR 659)', (o) => {
     expect(await buildRelayPending(db, team.id, NOW + 61_000)).toEqual([]);
   });
 
-  it('a generic callback fails closed until a binding store exists', async () => {
+  it('a generic callback fails closed while no binding is current', async () => {
     const { team, ctx, token } = await seed();
     const result = await handleRelayCallback(
       ctx,
@@ -85,7 +85,8 @@ withDrivers('away relay client (ADR 659)', (o) => {
       },
       NOW + 1_000,
     );
-    expect(result).toEqual({ ok: false, reason: 'no_binding_store' });
+    // The token names binding bind-1, which pairing never confirmed: refused, nothing decided.
+    expect(result).toEqual({ ok: false, reason: 'binding_stale' });
     expect(
       await handleRelayCallback(
         ctx,

@@ -1406,6 +1406,18 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-19 — `totalJsGzipBytes` 330,200 → 334,000 B, `appCssGzipBytes` 13,300 → 14,000 B: the pairing confirmation panel (lane `01M50XPYZ9`)
+
+| Budget   | Ceiling before | This branch, stacked on `b2b30fe1` (local) | Ceiling                    |
+| -------- | -------------- | ------------------------------------------ | -------------------------- |
+| total JS | 322.5 KB       | 323.4 KB                                   | RAISED 330,200 → 334,000 B |
+| app CSS  | 13.0 KB        | 13.2 KB (after classification)             | RAISED 13,300 → 14,000 B   |
+| initial JS | 142.0 KB     | 141.5 KB                                   | fits — no raise            |
+
+The /live channel-pairing confirmation panel (ADR 618 §7: `PairingPanel` + `pairingClient`) renders only while a pairing is staged, so it is a lazy chunk and its stylesheet is classified `app` (an on-demand chunk, like PromptBar). /live's eager graph pays only the lazy mount; the wire helpers live in the lazy module so the eager `client` chunk pays nothing. Measured stacked on the pulse raise, which had already lifted the initial ceiling past this panel's mount. What remains is the panel itself — nothing to trim that is not the feature, and lazy-loading cannot move total (ADR 183). JS is local + the ~0.7 KB CI gap + ~1.2% per precedent; CSS is measured + the CI gap.
+
+- Falsify: `pnpm perf:check` in CI on main after this lands reports total JS at or under 330,200 B.
+
 ### 2026-10-19 — `initialJsGzipBytes` 144,600 → 145,400 B: the seat pulse reaches the office (lane `01M5AJ9T16`, ADR 660)
 
 | Budget     | Before (main 735ae52c, same laptop) | This branch (laptop)  | Ceiling                    |
