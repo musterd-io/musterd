@@ -55,9 +55,10 @@ export interface GatewayUpstream {
  *   active credential (the gateway forwards `anthropic-beta`, which carries the OAuth capability).
  * - Grok Build honours `GROK_MODELS_BASE_URL` ("custom inference base URL"); with browser login
  *   its own default is `https://cli-chat-proxy.grok.com/v1`, with an API key `https://api.x.ai/v1`.
- * - Codex reads no base-URL variable (`openai_base_url` lives in user-level config.toml and the
- *   built-in provider also speaks WebSocket). It is handed `OPENAI_BASE_URL` here for a harness
- *   that does honour it, and otherwise stays priced by its own artifact (ADR 583 Decision 2).
+ * - Codex reads no base-URL variable, but takes `-c openai_base_url=…` per invocation. Its backend
+ *   points a metered wake at `<origin>/chatgpt` under a ChatGPT login or `<origin>/openai` under an
+ *   API key. Codex tries a WebSocket upgrade on `/responses` first; the gateway does not accept the
+ *   upgrade, and Codex falls back to HTTP, which is metered (lane 01M4VQ3CMR, 2026-10-19).
  * - OpenCode reads base URLs only from config. Its backend runs a metered wake `--standalone` with
  *   `OPENCODE_CONFIG_CONTENT` pointing its hosted providers (`opencode`, `opencode-go`) at
  *   `<origin>/<id>` (ADR 583 note 2026-10-19). Other OpenCode providers are not re-pointed.
@@ -88,8 +89,16 @@ export function defaultUpstreams(env: NodeJS.ProcessEnv = process.env): GatewayU
     // OpenCode's hosted providers, as models.dev lists their `api` (2026-10-19). OpenCode reads no
     // base-URL variable; its backend points them here through OPENCODE_CONFIG_CONTENT.
     ...OPENCODE_HOSTED_UPSTREAMS,
+    CODEX_CHATGPT_UPSTREAM,
   ];
 }
+
+/** The backend Codex reaches under a ChatGPT login (not api.openai.com). Codex is pointed here by a
+ *  `-c openai_base_url` override when `codex login status` says ChatGPT (lane 01M4VQ3CMR). */
+export const CODEX_CHATGPT_UPSTREAM: GatewayUpstream = {
+  name: 'chatgpt',
+  url: 'https://chatgpt.com/backend-api/codex',
+};
 
 /** OpenCode's own hosted providers (Zen and Go), both OpenAI-compatible. The route name is the
  *  provider id OpenCode configures them under, so the backend's override is `<origin>/<id>`. */
@@ -187,6 +196,8 @@ const HOP_BY_HOP = new Set([
  *  is relayed unmetered rather than buffered — the gateway holds no bodies by design. */
 const PARSE_LIMIT_BYTES = 4 * 1024 * 1024;
 const LINE_LIMIT_BYTES = 256 * 1024;
+/** The field names an SSE stream can open with (WHATWG event stream), for the content-type sniff. */
+const SSE_FIELDS = ['event:', 'data:', 'id:', 'retry:'];
 
 const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
@@ -265,17 +276,28 @@ function foldUsage(acc: GatewayUsage | null, next: GatewayUsage): GatewayUsage {
 }
 
 /** Incremental reader over a response body: SSE `data:` lines or one JSON document. Keeps at
- *  most one line (SSE) or one bounded document (JSON) in memory, and nothing after `result()`. */
+ *  most one line (SSE) or one bounded document (JSON) in memory, and nothing after `result()`.
+ *
+ *  `sse` undefined means the response named no content type, and the body decides: a stream opens
+ *  with `event:`, `data:` or a `:` comment. The ChatGPT backend Codex reaches under a ChatGPT login
+ *  streams SSE with no `content-type` at all (lane 01M4VQ3CMR, 2026-10-19). Read as JSON, every one
+ *  of its calls was unmetered. */
 export class UsageParser {
   private usage: GatewayUsage | null = null;
   private model: string | null = null;
   private buf = '';
   private overflow = false;
-  constructor(private readonly sse: boolean) {}
+  constructor(private sse: boolean | undefined) {}
 
   push(chunk: Buffer): void {
     if (this.overflow) return;
     this.buf += chunk.toString('utf8');
+    if (this.sse === undefined) {
+      const head = this.buf.trimStart();
+      // Undecided until the head can only be one thing: `eve` may still become `event:`.
+      if (!head || SSE_FIELDS.some((f) => f.length > head.length && f.startsWith(head))) return;
+      this.sse = head.startsWith(':') || SSE_FIELDS.some((f) => head.startsWith(f));
+    }
     if (this.sse) {
       let nl = this.buf.indexOf('\n');
       while (nl >= 0) {
@@ -375,8 +397,10 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
         resHeaders[k] = v;
       }
       res.writeHead(upRes.statusCode ?? 502, resHeaders);
-      const sse = /text\/event-stream/i.test(String(upRes.headers['content-type'] ?? ''));
-      const parser = new UsageParser(sse);
+      const contentType = upRes.headers['content-type'];
+      const parser = new UsageParser(
+        contentType === undefined ? undefined : /text\/event-stream/i.test(String(contentType)),
+      );
       upRes.on('data', (chunk: Buffer) => {
         parser.push(chunk);
         res.write(chunk);
@@ -386,7 +410,8 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
         const { usage, model } = parser.result();
         const status = upRes.statusCode ?? 0;
         if (!usage || status >= 400) {
-          if (status < 400) unmetered += 1;
+          // A GET (Codex's `/models` catalog) is no model call: relayed, never counted unmetered.
+          if (status < 400 && req.method !== 'GET') unmetered += 1;
           return;
         }
         const cost = model ? price(model, usage) : undefined;

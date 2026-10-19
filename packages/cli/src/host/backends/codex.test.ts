@@ -10,6 +10,9 @@ import {
   parseCodexThreadLine,
   parseCodexUsageLine,
   addUsage,
+  codexGatewayUrl,
+  parseCodexLoginStatus,
+  withCodexBaseUrl,
 } from './codex.js';
 
 class Child extends EventEmitter {
@@ -440,6 +443,64 @@ describe('codexBackend', () => {
  * spawn, naming the CHILD's pid so only a process spawned by that codex can honour it, and cleared
  * when the run settles.
  */
+/** Lane 01M4VQ3CMR: a metered Codex wake is pointed at the gateway route its login reaches. */
+describe('Codex behind the metering gateway', () => {
+  it('reads the login from `codex login status`, and nothing else', () => {
+    expect(parseCodexLoginStatus('Logged in using ChatGPT\n')).toBe('chatgpt');
+    expect(parseCodexLoginStatus('Logged in using an API key - sk-…')).toBe('api_key');
+    expect(parseCodexLoginStatus('Not logged in')).toBeNull();
+    expect(codexGatewayUrl('http://127.0.0.1:9', 'chatgpt')).toBe('http://127.0.0.1:9/chatgpt');
+    expect(codexGatewayUrl('http://127.0.0.1:9', 'api_key')).toBe('http://127.0.0.1:9/openai');
+    expect(codexGatewayUrl('http://127.0.0.1:9', null)).toBeUndefined();
+  });
+
+  it('places the override with the other -c flags, and changes nothing without a URL', () => {
+    const fresh = buildCodexFreshArgs('line', '/ws');
+    expect(withCodexBaseUrl(fresh, undefined)).toEqual(fresh);
+    const out = withCodexBaseUrl(fresh, 'http://127.0.0.1:9/chatgpt');
+    const at = out.indexOf('-c');
+    expect(out.slice(at, at + 2)).toEqual(['-c', 'openai_base_url="http://127.0.0.1:9/chatgpt"']);
+    expect(out.slice(0, at)).toEqual(fresh.slice(0, fresh.indexOf('-c')));
+  });
+
+  it('a metered wake spawns with the override; no gateway means no login read', async () => {
+    for (const metered of [true, false]) {
+      const child = new Child();
+      const seen: string[][] = [];
+      let reads = 0;
+      const backend = codexBackend({
+        resolveBin: async () => '/codex',
+        recordFreshThread: () => undefined,
+        loginStatus: async () => {
+          reads += 1;
+          return 'Logged in using ChatGPT';
+        },
+        spawn: ((_bin: string, args: string[]) => {
+          seen.push(args);
+          return child;
+        }) as never,
+      });
+      const wake = backend.wake(
+        metered ? { ...spec, gateway: { env: {}, origin: 'http://127.0.0.1:9' } } : spec,
+        ctx,
+      );
+      await new Promise((r) => setTimeout(r, 0));
+      child.out('{"type":"thread.started","thread_id":"new"}');
+      const result = await wake;
+      const joined = seen[0]!.join(' ');
+      if (metered) {
+        expect(joined).toContain('openai_base_url="http://127.0.0.1:9/chatgpt"');
+        expect(reads).toBe(1);
+      } else {
+        expect(joined).not.toContain('openai_base_url');
+        expect(reads).toBe(0);
+      }
+      child.exit();
+      await result.settled;
+    }
+  });
+});
+
 describe('the wake-lease file — a second channel for a harness that strips the first', () => {
   const harness = (child: Child) => {
     const writes: Array<{ workspace: string; lease: Record<string, unknown> }> = [];

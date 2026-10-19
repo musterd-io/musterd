@@ -164,6 +164,19 @@ the agent loop, and without holding or reading any credential.
   wake on this machine metered 2 calls, 0 unmetered. A model with no row in the price table is
   metered and left unpriced (`no_price_row`) instead of being guessed.
 
+- _Codex note (dated, 2026-10-19, lane `01M4VQ3CMRRNRFAVH3C7WS6JZG`)._ Codex now runs behind the
+  gateway. It reads no base-URL variable, but takes `-c openai_base_url=…` per invocation under
+  either login. The backend reads `codex login status`, and never `auth.json`, which holds the
+  tokens. Under a ChatGPT login it points the wake at `<origin>/chatgpt` (upstream
+  `chatgpt.com/backend-api/codex`), under an API key at `<origin>/openai`, and with no readable
+  login it leaves the wake on the artifact. **The WebSocket question is settled:** Codex tries an
+  upgrade on `/responses` first, the gateway does not accept it, and Codex falls back to HTTP,
+  which is metered. Two gateway fixes came with it. The ChatGPT backend streams SSE with no
+  `content-type`, so a response that names no type is now sniffed from its first bytes. Before
+  that fix, every call was counted unmetered. A `GET` (Codex's `/models` catalog) is relayed and
+  no longer counted as an unmetered call. Checked live on 2026-10-19: one wake metered 1 call,
+  `gpt-6.1-sol`, 9,538 input + 12,288 cached + 5 output, $0.0204.
+
 ## Observability & Evaluation
 
 - **Traces.** Per metered call: a `wake_turns` row (lease, turn, usage, cost, model) through the
