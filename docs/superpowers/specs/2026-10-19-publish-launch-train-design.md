@@ -1,6 +1,6 @@
 # The release train — one ordered way to publish musterd, and the launch as its first big run
 
-**Status:** draft for nick's review, 2026-10-19. Lane `01M5ASVF3GAAE17TY3S3AX9SF0` (slippy), asked
+**Status:** draft, nick reviewing, 2026-10-19 — D2, D4 and D6 decided by nick the same day (§8). Lane `01M5ASVF3GAAE17TY3S3AX9SF0` (slippy), asked
 for by nick in-session: "we need a better overall unified publish/launch strategy". Nothing here is
 decided until nick marks it; the decisions in §8 become an ADR once he does. This page does not
 re-plan the launch's *message* or *calendar* — those are
@@ -84,14 +84,15 @@ the alternative), the human edit of the notes, and every car in 8–9.
 
 ## 4. Cadence
 
-- **A train leaves every two weeks** when main has user-visible change, or on demand for a fix.
-  The history says releases have come every 2–7 weeks with no rule; a fixed rhythm is what lets
-  notes stay short and a broken release stay small (0.3.0 and 0.4.0 both shipped broken and are
-  untagged).
+- **Ship as fast as it makes sense — no fixed calendar** (nick, 2026-10-19). A train leaves when main
+  has a change a user would notice, or a fix one is waiting for. The train exists so that leaving is
+  cheap and checked, which is what makes "often" safe; a timetable would add waiting, not safety.
 - **Version policy while 0.x**: minor for anything a user would notice, patch for fixes only.
   The launch train is **0.6.0**.
 - **The train never leaves on a red gate (car 0).** Run 4 is the gate because it is the first
-  minute a stranger has; nothing else in CI exercises a clean machine end to end.
+  minute a stranger has; nothing else in CI exercises a clean machine end to end. (0.3.0 and 0.4.0
+  both shipped broken and are untagged — the smoke catches unloadable tarballs; only car 0 catches
+  a first minute that does not work.)
 
 ## 5. Owners
 
@@ -139,20 +140,25 @@ train's own diagnostics):
 
 ## 8. Decisions for nick
 
-- **D1. Adopt the train** (§2's order and §5's owners) as the one way a version leaves. → ADR.
-- **D2. Cadence**: two-weekly trains, 0.x minor/patch policy, launch on 0.6.0 cut ~Oct 23.
+- **D1. Adopt the train** — nick likes it (2026-10-19); sloane and alfie review before it becomes
+  an ADR.
+- **D2. Cadence** — **decided (nick, 2026-10-19): no fixed cadence; ship as fast as it makes
+  sense** (§4). 0.x minor/patch policy; launch on 0.6.0, cut ~Oct 23.
 - **D3. npm publish stays on your laptop** (ADR 156), *or* move it to GitHub Actions with npm
   trusted publishing (OIDC, no stored token, provenance attestations on every package) gated on a
   manual approval you click. The second removes the "only on nick's laptop" dependency the train
   otherwise has, and provenance is a trust signal on the npm page; it reverses ADR 156's "no CI
   publish", so it needs its own ADR. Recommendation: stay manual for 0.6.0, revisit after launch.
-- **D4. Registry namespace**: `io.github.musterd-io/musterd` (GitHub org login — needs you to be a
-  musterd-io org member) as shipped in #2917, or `io.musterd/musterd` (DNS-verified on musterd.io,
-  a TXT record you add in Cloudflare). The second reads as the brand; the first is done.
+- **D4. Registry namespace** — **decided (nick, 2026-10-19): `io.musterd/musterd`**, verified by a
+  DNS TXT record on musterd.io (`mcp-publisher login dns --domain musterd.io`), so the listing reads
+  as the brand rather than the GitHub org. Replaces the `io.github.musterd-io/musterd` #2917
+  shipped; the key pair is generated and held by nick, the public half goes in the TXT record.
 - **D5. Release notes** as generated-then-edited `docs/releases/vX.md` → GitHub Release body, no
   CHANGELOG.md.
-- **D6. `www.musterd.dev`** serves a stale copy of the site (canonical points at musterd.io); 301 it
-  to musterd.io, or leave it. It sits on the Cloud zone, so it is fifty's to change.
+- **D6. `www.musterd.dev`** — **decided (nick, 2026-10-19): redirect it to musterd.io for now.**
+  It served a stale copy of the site. A 301 Redirect Rule on the musterd.dev zone for `www.` and
+  the bare apex only — never `*.musterd.dev`, where hosted teams live (`<team>.musterd.dev`,
+  `deploy/cloud/fly.toml`). The zone is Cloud's; fifty is told before it changes.
 
 ## 9. Not in this train, and where it lives instead
 
