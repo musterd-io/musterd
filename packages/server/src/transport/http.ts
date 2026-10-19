@@ -6603,6 +6603,8 @@ export async function handleHttp(
 
       // ADR 453: a joiner's structural trace rows, trace.db → trace.db. Machine credential, the
       // same refusal shape as /sync/push. Never touches sync_log or audit; never fans out.
+      // Nor does it feed the seat pulse (ADR 660): a joiner's rows arrive late and batched, so a
+      // seat working on a joiner node shows no pulse on the hub — a stated gap, not a bug.
       if (method === 'POST' && rest === '/sync/trace') {
         const team = await requireTeam(ctx.db, slug);
         const node = await authenticateNode(ctx.db, team.id, bearer(req));
@@ -7385,6 +7387,8 @@ export async function handleHttp(
           body.events,
           { writeContent: contentMode === 'on' },
         );
+        // ADR 660: the seat's tool-call heartbeat; the module filters what counts.
+        ctx.pulses?.feed(team.id, member.name, body.events);
         // ADR 453 §2 rule 3: the fields local ingest had to normalize, counted — a non-zero rate
         // names a tap or harness whose output drifted from the structural shape.
         recordTraceNormalized(body.events[0]?.harness ?? 'unknown', normalized);

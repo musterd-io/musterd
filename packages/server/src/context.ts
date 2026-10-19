@@ -3,6 +3,7 @@ import type { ResolvedConfig } from './config.js';
 import type { Driver } from './db/driver.js';
 import type { Hub } from './transport/hub.js';
 import type { RemoteMcpFactory } from './transport/mcpHttp.js';
+import type { SeatPulses } from './transport/seatPulses.js';
 
 /** Shared server context threaded through transports and the router. */
 export interface Ctx {
@@ -10,6 +11,8 @@ export interface Ctx {
   /** The trace store (ADR 445 §3) — a separate file; nothing joins it to `db` at write time. */
   traceDb: Driver;
   hub: Hub;
+  /** ADR 660: each seat's tool-call heartbeat, pushed over the firehose. Absent in bare test ctxs. */
+  pulses?: SeatPulses;
   /** ADR 608: which server owns a team on Cloud; null means every team is local (self-hosted). */
   affinity?: Affinity | null;
   config: ResolvedConfig;

@@ -325,6 +325,52 @@ withDrivers('broadcast grade (ADR 601)', (_o, kind) => {
       expect(frame.envelope.to).toEqual({ kind: 'member', name: 'nick' });
       s.close();
     });
+
+    it('a viewer subscribing mid-burst gets each working seat’s pulse at once, identical at every grade (ADR 660)', async () => {
+      const t = await seedTeam();
+      const ada = { key: t.key, seat: 'Ada' };
+      const ingest = await post(
+        '/teams/dawn/trace/events',
+        {
+          events: [
+            {
+              harness: 'claude-code',
+              session_digest: 'abcdef012345',
+              ts: Date.now(),
+              kind: 'PostToolUse',
+              tool_name: 'Edit',
+              tool_use_id: 'toolu_pulse',
+            },
+          ],
+        },
+        ada,
+      );
+      expect(ingest.status).toBe(202);
+
+      const full = new TestWs();
+      const stream = new TestWs();
+      await Promise.all([full.open(), stream.open()]);
+      await full.claim('dawn', t.key, 'web-1', 'web', await standingGrant(t.nickTok, 'web-1'));
+      await stream.claim(
+        'dawn',
+        t.key,
+        'stream-1',
+        'web',
+        await standingGrant(t.nickTok, 'stream-1'),
+      );
+      await full.subscribe('team-all');
+      await stream.subscribe('team-all');
+
+      const seen = (await full.waitFor('seat_pulse')) as Record<string, unknown>;
+      expect(seen).toMatchObject({ type: 'seat_pulse', member: 'Ada', intensity: 1, kind: 'edit' });
+      expect(Object.keys(seen).sort()).toEqual(
+        ['intensity', 'kind', 'last_ts', 'member', 'ts', 'type'].sort(),
+      );
+      const scrubbed = (await stream.waitFor('seat_pulse')) as Record<string, unknown>;
+      expect({ ...scrubbed, ts: 0 }).toEqual({ ...seen, ts: 0 });
+      full.close();
+      stream.close();
+    });
   });
 });
 

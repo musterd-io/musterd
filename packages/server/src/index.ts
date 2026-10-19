@@ -53,6 +53,7 @@ import { handleHttp } from './transport/http.js';
 import { Hub } from './transport/hub.js';
 import type { RemoteMcpFactory } from './transport/mcpHttp.js';
 import { broadcastReconciled } from './transport/memberAdded.js';
+import { SeatPulses } from './transport/seatPulses.js';
 import { startProvisionSweep, sweepProvisionsPass } from './transport/sponsoredAgentMint.js';
 import { attachWsServer } from './transport/ws.js';
 
@@ -221,6 +222,16 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   config.traceDbPath =
     sqliteHandle(traceDb)?.name ?? (traceDb.dialect === 'sqlite' ? config.traceDbPath : 'postgres');
   const hub = new Hub();
+  // ADR 660: the seat pulse rings each seat's last minute of tool calls and pushes a coalesced frame.
+  const pulses = new SeatPulses({
+    now: Date.now,
+    schedule: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      t.unref?.();
+      return () => clearTimeout(t);
+    },
+    push: (teamId, frame) => hub.broadcastFirehose(teamId, frame),
+  });
   // ADR 608: on Cloud under Fly, one server owns a team at a time; a lost team's sockets are closed
   // so their clients reconnect through the proxy to the new owner. Off (null) off Cloud.
   const affinity = cloud
@@ -251,6 +262,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     db,
     traceDb,
     hub,
+    pulses,
     affinity,
     config,
     rosterRoots: opts.rosterRoots ?? resolveRosterRoots(),
@@ -627,6 +639,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         affinity?.stop();
         stopSeeds?.();
         stopAwayRelay?.();
+        pulses.dispose();
         stopDigest?.();
         stopSync?.();
         stopPull?.();

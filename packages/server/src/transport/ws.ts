@@ -75,6 +75,7 @@ import {
 } from '../store/teams.js';
 import { isSyncStreamPath } from '../sync/streamHub.js';
 import { recordError, recordPresenceChurn } from '../telemetry.js';
+import { scrubForReader } from './broadcastScrub.js';
 import { isReloadOf, type Connection } from './hub.js';
 
 /** Encode a ClaimTarget to the requests table's single-string format. */
@@ -1098,6 +1099,12 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               ctx.hub.subscribeFirehose(conn.connId);
             }
             send(ws, { type: 'subscribed', scope: frame.scope });
+            // ADR 660: a viewer opening mid-burst sees each working seat's pulse at once, not after
+            // the next coalesced push. Graded exactly as `broadcastFirehose` grades the live frame.
+            if (frame.scope === 'team-all' && ctx.pulses) {
+              for (const pulse of ctx.pulses.snapshot(conn.teamId))
+                send(ws, scrubForReader(conn.visibility ?? 'public', pulse));
+            }
             break;
           }
           case 'heartbeat': {
