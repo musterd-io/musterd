@@ -90,7 +90,7 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
     // A second key by the first key's signature over device_key_admin.
     const k2 = keypair();
     await expect(
-      enrollKeyGuarded(db, { ...base, publicKey: k2.publicKey, kind: 'passkey' }),
+      enrollKeyGuarded(db, { ...base, publicKey: k2.publicKey, kind: 'phone' }),
     ).resolves.toEqual({ ok: false, reason: 'no_signature' });
     const d = await buildDescriptor(db, {
       teamId: team.id,
@@ -99,12 +99,12 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
       actor: 'nick',
       act: 'device_key_admin',
       target: 'nick',
-      payload: { action: 'enroll', public_key: k2.publicKey, kind: 'passkey' },
+      payload: { action: 'enroll', public_key: k2.publicKey, kind: 'phone' },
     });
     const second = await enrollKeyGuarded(db, {
       ...base,
       publicKey: k2.publicKey,
-      kind: 'passkey',
+      kind: 'phone',
       proof: { key_id: key1!.id, nonce: d.nonce, signature: k1.sign(d) },
     });
     expect(second.ok).toBe(true);

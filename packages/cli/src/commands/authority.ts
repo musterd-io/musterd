@@ -9,9 +9,10 @@ import { success } from '../render/ui.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd authority enroll [--kind platform]\n' +
+  'usage: musterd authority enroll [--kind platform | --passkey]\n' +
   '       musterd authority keys\n' +
-  '       musterd authority revoke <key-id>';
+  '       musterd authority revoke <key-id>\n' +
+  '       musterd authority approve --act <act> --target <target> --payload <json> [--passkey]';
 
 /**
  * ADR 662 decision 6 — the device-key lifecycle from the terminal. `enroll` is the explicit
@@ -59,6 +60,76 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
   const { team, identity, http } = resolve(parsed.flags);
   const json = parsed.flags['json'] === true;
   const member = identity.name;
+
+  if (sub === 'enroll' && parsed.flags['passkey'] === true) {
+    // The browser holds the key; the daemon page (its own origin, never the relay) runs the
+    // WebAuthn ceremony. The code is the one capability: shown once, ten minutes.
+    const { code } = await http.issueEnrollmentCode(team);
+    const url =
+      `${http.server}/authority/passkey?team=${encodeURIComponent(team)}` +
+      `&member=${encodeURIComponent(member)}`;
+    process.stdout.write(
+      `Open ${url}\n  member: ${member}\n  enrollment code (shown once): ${code}\n`,
+    );
+    return 0;
+  }
+
+  if (sub === 'approve') {
+    const act = flagStr(parsed.flags, 'act');
+    const target = flagStr(parsed.flags, 'target');
+    const payloadRaw = flagStr(parsed.flags, 'payload');
+    if (!act || !target || !payloadRaw) throw new CliError(USAGE, 2);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(payloadRaw);
+    } catch {
+      throw new CliError('--payload must be JSON', 2);
+    }
+    // The helper fetches the descriptor from the server itself (decision 5) — the words a
+    // human approves are the server's, never the caller's.
+    const { descriptor } = await http.createAuthorityDescriptor(team, { act, target, payload });
+    process.stdout.write(
+      `descriptor (built by the server):\n  actor:  ${descriptor.actor}\n  act:    ${descriptor.act}\n` +
+        `  target: ${descriptor.target}\n  expires: ${new Date(descriptor.expiry).toISOString()}\n`,
+    );
+    if (parsed.flags['passkey'] === true) {
+      const url =
+        `${http.server}/authority/approve?team=${encodeURIComponent(team)}` +
+        `&nonce=${encodeURIComponent(descriptor.nonce)}`;
+      process.stdout.write(`Approve at ${url}\nwaiting for the parked proof…\n`);
+      const deadline = Date.now() + 4 * 60 * 1000;
+      for (;;) {
+        try {
+          const { proof } = await http.getParkedApproval(team, descriptor.nonce);
+          process.stdout.write(JSON.stringify(proof) + '\n');
+          return 0;
+        } catch {
+          if (Date.now() > deadline) throw new CliError('no approval arrived in 4 minutes', 1);
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+    const stored = readStoredKey(team, member);
+    if (!stored) {
+      throw new CliError(
+        'no device key on this machine — enroll one (`musterd authority enroll`) or use --passkey',
+        1,
+      );
+    }
+    const signature = cryptoSign(
+      null,
+      Buffer.from(descriptorSigningBytes(descriptor as ApprovalDescriptor), 'utf8'),
+      createPrivateKey({
+        key: Buffer.from(stored.private_key, 'base64url'),
+        format: 'der',
+        type: 'pkcs8',
+      }),
+    ).toString('base64url');
+    process.stdout.write(
+      JSON.stringify({ key_id: stored.key_id, nonce: descriptor.nonce, signature }) + '\n',
+    );
+    return 0;
+  }
 
   if (sub === 'enroll') {
     const kind = flagStr(parsed.flags, 'kind') ?? 'platform';
