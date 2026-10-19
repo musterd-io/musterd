@@ -11,7 +11,9 @@
  *
  * Auth: the daemon presents its per-team credential as a Bearer on the socket upgrade; the Worker
  * stores only its sha256 (`TEAM_CREDENTIALS_JSON`, set by the operator). One live socket per
- * team — a second is refused 409, so a replaced socket is a credential event, not a reconnect.
+ * team — a second with the same credential is refused 409; one presenting the rotated-in
+ * credential replaces the stale socket, and every frame re-checks the credential against the
+ * operator map, so rotation or revocation refuses the old socket's next frame (§4).
  */
 
 import {
@@ -21,6 +23,8 @@ import {
   parseDaemonFrame,
   providerRefFrom,
   reconcileRelayPending,
+  secondSocketVerdict,
+  socketCredentialLive,
   RELAY_MAX_FRAME_BYTES,
   RELAY_PROVIDER_TIMEOUT_MS,
   type RelayPendingRow,
@@ -37,12 +41,24 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function daemonAuthorized(request: Request, env: Env, slug: string): Promise<boolean> {
+/** The sha256 of the presented credential when it matches the operator map for this team, else null. */
+async function presentedCredentialHash(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<string | null> {
   const expected = credentialHashFor(env.TEAM_CREDENTIALS_JSON, slug);
-  if (!expected) return false;
+  if (!expected) return null;
   const auth = request.headers.get('authorization') ?? '';
-  if (!auth.startsWith('Bearer ')) return false;
-  return hashesEqual(await sha256Hex(auth.slice('Bearer '.length)), expected);
+  if (!auth.startsWith('Bearer ')) return null;
+  const presented = await sha256Hex(auth.slice('Bearer '.length));
+  return hashesEqual(presented, expected) ? presented : null;
+}
+
+/** What a live socket presented at upgrade, kept on the socket so frames can be re-checked (§4). */
+interface SocketAttachment {
+  slug: string;
+  credentialHash: string | null;
 }
 
 // eslint-disable-next-line import/no-default-export -- the Workers runtime requires a default export
@@ -54,9 +70,13 @@ export default {
       const slug = decodeURIComponent(connect[1]!);
       if (request.headers.get('upgrade') !== 'websocket')
         return new Response('websocket upgrade required', { status: 426 });
-      if (!(await daemonAuthorized(request, env, slug)))
-        return new Response('unauthorized', { status: 401 });
-      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(request);
+      const credentialHash = await presentedCredentialHash(request, env, slug);
+      if (!credentialHash) return new Response('unauthorized', { status: 401 });
+      // Hand the object the hash that was just verified (never the credential itself): the object
+      // attaches it to the socket and re-checks it against the operator map on every frame (§4).
+      const inner = new Request(request);
+      inner.headers.set('x-relay-credential-hash', credentialHash);
+      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(inner);
     }
     const callback = /^\/callback\/([^/]+)\/([^/]+)$/.exec(url.pathname);
     if (request.method === 'POST' && callback) {
@@ -90,11 +110,27 @@ export class TeamRelay implements DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.headers.get('upgrade') === 'websocket') {
-      // One live daemon socket per team (ADR 659 §1); the second is refused, not substituted.
-      if (this.state.getWebSockets().length > 0)
-        return new Response('a daemon socket is already live for this team', { status: 409 });
+      const slug = decodeURIComponent(/^\/teams\/([^/]+)\/connect$/.exec(url.pathname)?.[1] ?? '');
+      const presented = request.headers.get('x-relay-credential-hash');
+      // One live daemon socket per team (ADR 659 §1): a second socket with the same credential
+      // is refused 409. The one exception is rotation (§4, amended 2026-10-19): a socket
+      // presenting the operator map's current credential replaces a live socket still holding
+      // the rotated-away one, instead of locking the daemon out until the stale socket dies.
+      const live = this.state.getWebSockets();
+      if (live.length > 0) {
+        const attachment = live[0]!.deserializeAttachment() as SocketAttachment | null;
+        const verdict = secondSocketVerdict(
+          attachment?.credentialHash ?? null,
+          presented,
+          credentialHashFor(this.env.TEAM_CREDENTIALS_JSON, slug),
+        );
+        if (verdict === 'refuse')
+          return new Response('a daemon socket is already live for this team', { status: 409 });
+        for (const old of live) old.close(1008, 'credential rotated');
+      }
       const pair = new WebSocketPair();
       this.state.acceptWebSocket(pair[1]);
+      pair[1].serializeAttachment({ slug, credentialHash: presented } satisfies SocketAttachment);
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
     const callback = /^\/callback\/[^/]+\/([^/]+)$/.exec(url.pathname);
@@ -121,6 +157,22 @@ export class TeamRelay implements DurableObject {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // ADR 659 §4: the credential is re-checked on every frame, not only at upgrade. Once the
+    // operator map names a different hash (rotation) or none (revocation), this socket's next
+    // frame is refused and the socket is closed; the daemon reconnects with the new credential.
+    const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+    if (
+      !socketCredentialLive(
+        attachment?.credentialHash ?? null,
+        credentialHashFor(this.env.TEAM_CREDENTIALS_JSON, attachment?.slug ?? ''),
+      )
+    ) {
+      ws.send(
+        JSON.stringify({ protocol: 1, type: 'error', reason: 'credential rotated or revoked' }),
+      );
+      ws.close(1008, 'credential rotated or revoked');
+      return;
+    }
     const raw = typeof message === 'string' ? message : new TextDecoder().decode(message);
     const frame = parseDaemonFrame(raw);
     if (!frame) {
@@ -153,7 +205,7 @@ export class TeamRelay implements DurableObject {
     const count = this.state.storage.sql
       .exec<{ n: number }>('SELECT COUNT(*) AS n FROM pending')
       .toArray()[0]!.n;
-    const verdict = deliverVerdict(Boolean(existing), count, frame.expires_at, now);
+    const verdict = deliverVerdict(existing?.status ?? null, count, frame.expires_at, now);
     if (verdict === 'expired' || verdict === 'full') {
       ws.send(
         JSON.stringify({

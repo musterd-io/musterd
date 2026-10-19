@@ -100,5 +100,18 @@ withDrivers('away relay client (ADR 659)', (o) => {
     expect(relaySocketUrl('https://relay.example/base', 'revive').href).toBe(
       'wss://relay.example/teams/revive/connect',
     );
+    // A wss:// policy URL (which the CLI accepts) stays wss — never downgraded to plaintext.
+    expect(relaySocketUrl('wss://relay.example/base', 'revive').href).toBe(
+      'wss://relay.example/teams/revive/connect',
+    );
+  });
+
+  it('a plaintext relay URL is refused, never dialed with the credential', () => {
+    expect(() => relaySocketUrl('http://relay.example/base', 'revive')).toThrow(
+      /refusing to send the relay credential/,
+    );
+    expect(() => relaySocketUrl('ws://relay.example/base', 'revive')).toThrow(
+      /refusing to send the relay credential/,
+    );
   });
 });

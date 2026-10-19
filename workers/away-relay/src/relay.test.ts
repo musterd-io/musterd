@@ -6,6 +6,8 @@ import {
   parseDaemonFrame,
   providerRefFrom,
   reconcileRelayPending,
+  secondSocketVerdict,
+  socketCredentialLive,
 } from './relay.js';
 
 describe('away relay pure rules (ADR 659)', () => {
@@ -32,10 +34,54 @@ describe('away relay pure rules (ADR 659)', () => {
   });
 
   it('a duplicate dedupe id is the same delivery; expired and full relays refuse', () => {
-    expect(deliverVerdict(true, 3, 9_999, 1_000)).toBe('duplicate');
-    expect(deliverVerdict(false, 3, 500, 1_000)).toBe('expired');
-    expect(deliverVerdict(false, 1_000, 9_999, 1_000)).toBe('full');
-    expect(deliverVerdict(false, 3, 9_999, 1_000)).toBe('store');
+    expect(deliverVerdict('delivered', 3, 9_999, 1_000)).toBe('duplicate');
+    expect(deliverVerdict('pending', 3, 9_999, 1_000)).toBe('duplicate');
+    expect(deliverVerdict(null, 3, 500, 1_000)).toBe('expired');
+    expect(deliverVerdict(null, 1_000, 9_999, 1_000)).toBe('full');
+    expect(deliverVerdict(null, 3, 9_999, 1_000)).toBe('store');
+  });
+
+  it('a failed delivery is re-sent on re-push, not answered with the stored failure', () => {
+    // ADR 659 §2: a retry is the daemon's decision, re-pushed — buildRelayPending makes the
+    // dedupe id stable per ask+channel, so without this the stored ok:false would be final.
+    expect(deliverVerdict('failed', 3, 9_999, 1_000)).toBe('retry');
+    expect(deliverVerdict('failed', 3, 500, 1_000)).toBe('expired');
+  });
+
+  it('a second live socket is refused; a rotated credential replaces the stale socket', () => {
+    const current = 'a'.repeat(64);
+    const rotated = 'b'.repeat(64);
+    // Same credential as the live socket: a second daemon is refused, not substituted.
+    expect(secondSocketVerdict(current, current, current)).toBe('refuse');
+    // The operator rotated the map: the new credential takes over from the stale socket.
+    expect(secondSocketVerdict(current, rotated, rotated)).toBe('replace');
+    // A credential the map does not name never replaces anything.
+    expect(secondSocketVerdict(current, rotated, current)).toBe('refuse');
+    expect(secondSocketVerdict(current, null, current)).toBe('refuse');
+  });
+
+  it('a cross-team credential does not authorize another team', () => {
+    const reviveHash = 'a'.repeat(64);
+    const otherHash = 'b'.repeat(64);
+    const map = JSON.stringify({ revive: reviveHash, other: otherHash });
+    // Team "other"'s credential hash is not team "revive"'s: no match, no socket, no frames.
+    expect(credentialHashFor(map, 'revive')).toBe(reviveHash);
+    expect(hashesEqual(otherHash, credentialHashFor(map, 'revive')!)).toBe(false);
+    expect(socketCredentialLive(otherHash, credentialHashFor(map, 'revive'))).toBe(false);
+    expect(secondSocketVerdict(reviveHash, otherHash, credentialHashFor(map, 'revive'))).toBe(
+      'refuse',
+    );
+  });
+
+  it("rotation or revocation refuses the old socket's next frame", () => {
+    const oldHash = 'a'.repeat(64);
+    const newHash = 'b'.repeat(64);
+    expect(socketCredentialLive(oldHash, oldHash)).toBe(true);
+    // Rotated: the map now names the new hash.
+    expect(socketCredentialLive(oldHash, newHash)).toBe(false);
+    // Revoked: the map names nothing for this team any more.
+    expect(socketCredentialLive(oldHash, null)).toBe(false);
+    expect(socketCredentialLive(null, newHash)).toBe(false);
   });
 
   it('the credential map authenticates by hash only; a bad map authenticates nobody', () => {
