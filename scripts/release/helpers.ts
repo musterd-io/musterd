@@ -128,8 +128,8 @@ export function nextStepsAfterPublish(version: string): string[] {
   return [
     `git tag v${version} && git push origin v${version}`,
     // The official MCP Registry holds metadata only, so it can list a version only once npm has it.
-    // `mcp-publisher login github` is one-time, by a member of the musterd-io org (the
-    // io.github.musterd-io/ namespace is verified against it).
+    // The io.musterd/ namespace is verified by a DNS TXT record on musterd.io: a one-time
+    // `mcp-publisher login dns --domain musterd.io --private-key <hex>` by whoever holds the key.
     `cd packages/mcp && mcp-publisher publish   # MCP Registry listing of @musterd/mcp ${version}`,
     `pnpm bump-brew-formula --version ${version}   # then push SandRiseStudio/homebrew-musterd`,
     // The npm-install smoke that used to live here now runs BEFORE publishing (release/smoke.ts):

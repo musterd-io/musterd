@@ -47,7 +47,9 @@ installer, automated brew bump in CI.
 - Docs (README Quickstart) list brew | npm | npx. First good registry cut is **0.3.1**
   (0.3.0 deprecated after a raw-`npm publish` left `workspace:*` in the tarball).
 - 2026-10-19 (lane `01M5AQGV8Y0TNVSVQ68PX9C7SY`, ADR 666's off-site half): `@musterd/mcp` carries
-  `mcpName: io.github.musterd-io/musterd` and a `packages/mcp/server.json` descriptor for the
+  `mcpName: io.musterd/musterd` (nick chose the DNS-verified `io.musterd/` namespace over the
+  GitHub-org `io.github.musterd-io/` one the same day: a TXT record on musterd.io, the key pair held
+  by nick, `mcp-publisher login dns --domain musterd.io`) and a `packages/mcp/server.json` descriptor for the
   official MCP Registry. `pnpm release` bumps `server.json` in lockstep with the package.json files,
   and `nextStepsAfterPublish` adds `mcp-publisher publish` after the npm publish — the registry
   holds metadata only and verifies it against the published package's `mcpName`, so the first

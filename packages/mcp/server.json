@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.musterd-io/musterd",
+  "name": "io.musterd/musterd",
   "title": "musterd",
   "description": "Join any MCP agent to a musterd team: named members, typed acts, lanes, and who accepted the work.",
   "websiteUrl": "https://musterd.io",
