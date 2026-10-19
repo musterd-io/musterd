@@ -378,61 +378,6 @@ async function laneMutation(
   return readLaneResult(json);
 }
 
-/** A staged channel pairing as the daemon holds it (ADR 618 §7) — the /live confirmation view. */
-export interface ChannelPairing {
-  id: string;
-  channel: string;
-  check_code: string;
-  state: string;
-  provider_tenant_id: string | null;
-  provider_user_id: string | null;
-  expires_at: number;
-  created_at: number;
-}
-
-async function channelPost<T>(cfg: LiveConfig, path: string): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${cfg.token}`, 'x-musterd-surface': 'web' },
-  });
-  const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
-  if (!res.ok) {
-    const err = (json as { error?: { code?: string; message?: string } }).error;
-    throw new LiveFetchError(
-      err?.message ?? `HTTP ${res.status}`,
-      err?.code ?? `http_${res.status}`,
-      res.status,
-    );
-  }
-  return json as T;
-}
-
-/** Pairings staged for this human's confirmation — tenant and user as the daemon holds them. */
-export async function fetchChannelPairings(cfg: LiveConfig): Promise<ChannelPairing[]> {
-  const out = await apiGet<{ pairings: ChannelPairing[] }>(
-    cfg,
-    `/teams/${encodeURIComponent(cfg.team)}/channels/pairings`,
-  );
-  return out.pairings;
-}
-
-/** Confirm a staged pairing on /live (the original surface); creates the binding. */
-export async function confirmChannelPairing(cfg: LiveConfig, pairingId: string): Promise<unknown> {
-  return channelPost(
-    cfg,
-    `/teams/${encodeURIComponent(cfg.team)}/channels/pairings/${encodeURIComponent(pairingId)}/confirm`,
-  );
-}
-
-/** Reject a staged pairing on /live; binds nothing and spends the nonce. */
-export async function rejectChannelPairing(cfg: LiveConfig, pairingId: string): Promise<unknown> {
-  return channelPost(
-    cfg,
-    `/teams/${encodeURIComponent(cfg.team)}/channels/pairings/${encodeURIComponent(pairingId)}/reject`,
-  );
-}
-
 /**
  * The insight report (`GET /teams/:slug/report`, ADR 050/084) — the one server-side projection the
  * board's rail renders (flow, waiting-on, blocked, coordination, MAST, steering). Member-authed, so

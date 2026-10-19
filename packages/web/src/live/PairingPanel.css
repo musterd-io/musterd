@@ -10,7 +10,7 @@
 }
 
 .pair-card {
-  border: 1px solid var(--line, #d8d8d8);
+  border: 1px solid var(--lc-border);
   border-radius: 10px;
   display: grid;
   gap: 6px;
@@ -49,6 +49,6 @@
 }
 
 .pair-panel__error {
-  color: var(--bad, #b3261e);
+  color: var(--lc-danger-ink);
   margin: 0;
 }

@@ -15,7 +15,6 @@ import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
 import { AsksStrip } from '../live/AsksStrip';
-import { PairingPanel } from '../live/PairingPanel';
 import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../live/MemberSignIn';
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
@@ -106,6 +105,10 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
+/** The pairing confirmation panel (ADR 618 §7): lazy — it renders only while a pairing is staged. */
+const LazyPairingPanel = lazy(() =>
+  import('../live/PairingPanel').then((m) => ({ default: m.PairingPanel })),
+);
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
@@ -698,7 +701,11 @@ function LivePage() {
           )}
           {phone && <div className="lc__phone-asks">{asksStrip}</div>}
           {/* ADR 618 §7: a staged channel pairing waits for this human's confirmation here. */}
-          {cfg && <PairingPanel cfg={cfg} />}
+          {cfg && (
+            <Suspense fallback={null}>
+              <LazyPairingPanel cfg={cfg} />
+            </Suspense>
+          )}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +

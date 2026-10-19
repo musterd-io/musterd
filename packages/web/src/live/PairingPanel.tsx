@@ -1,12 +1,12 @@
 import './PairingPanel.css';
 import { useCallback, useEffect, useState } from 'react';
+import type { LiveConfig } from './client';
 import {
   confirmChannelPairing,
   fetchChannelPairings,
   rejectChannelPairing,
   type ChannelPairing,
-  type LiveConfig,
-} from './client';
+} from './pairingClient';
 
 /**
  * ADR 618 §7 — the /live half of the original surface for channel pairing. A staged pairing

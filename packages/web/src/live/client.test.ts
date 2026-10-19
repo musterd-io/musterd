@@ -9,8 +9,6 @@ import {
   acquireWatchLinkObserver,
   broadcastSeat,
   createLane,
-  fetchChannelPairings,
-  confirmChannelPairing,
   fetchLaneBoard,
   fetchLaneChain,
   fetchLiveLaneBoard,
@@ -22,6 +20,7 @@ import {
   updateLane,
 } from './client';
 import { fetchSeeds } from './seedClient';
+import { confirmChannelPairing, fetchChannelPairings } from './pairingClient';
 
 describe('fetchSeeds', () => {
   const cfg = { team: 'revive', as: 'watcher', token: 'mscr_watch' };
