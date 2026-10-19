@@ -1,4 +1,4 @@
-import { createPublicKey, randomBytes, verify as cryptoVerify } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, verify as cryptoVerify } from 'node:crypto';
 import {
   descriptorSigningBytes,
   payloadDigest,
@@ -128,6 +128,205 @@ export async function revokeDeviceKey(
     teamId,
     keyId,
   ]);
+}
+
+const ENROLLMENT_CODE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Mint a one-time enrollment code for a human (decision 6's explicit human path). Only the
+ * sha256 is stored; the code is shown once, to the human who asked with their own credential,
+ * and never audited. Ten minutes, one use.
+ */
+export async function issueEnrollmentCode(
+  db: Driver,
+  input: { teamId: string; memberId: string; actor: string; now?: number },
+): Promise<{ code: string; expiresAt: number }> {
+  const now = input.now ?? Date.now();
+  const code = randomBytes(9).toString('base64url');
+  const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+  await db.run(
+    `INSERT INTO enrollment_codes (code_hash, team_id, member_id, expires_at, used_at)
+     VALUES (?, ?, ?, ?, NULL)`,
+    [codeHash, input.teamId, input.memberId, now + ENROLLMENT_CODE_TTL_MS],
+  );
+  await appendAudit(db, input.teamId, {
+    actor: input.actor,
+    action: 'device_key.enrollment_code',
+    target: input.actor,
+    result: 'allow',
+    detail: {},
+  });
+  return { code, expiresAt: now + ENROLLMENT_CODE_TTL_MS };
+}
+
+/** Spend a code: valid, unused, unexpired, and this member's. Marks it used on success. */
+export async function consumeEnrollmentCode(
+  db: Driver,
+  input: { teamId: string; memberId: string; code: string; now?: number },
+): Promise<boolean> {
+  const now = input.now ?? Date.now();
+  const codeHash = createHash('sha256').update(input.code, 'utf8').digest('hex');
+  const row = await db.get<{ member_id: string; expires_at: number; used_at: number | null }>(
+    `SELECT member_id, expires_at, used_at FROM enrollment_codes WHERE team_id = ? AND code_hash = ?`,
+    [input.teamId, codeHash],
+  );
+  if (!row || row.member_id !== input.memberId || row.used_at !== null) return false;
+  if (now > Number(row.expires_at)) return false;
+  await db.run(`UPDATE enrollment_codes SET used_at = ? WHERE code_hash = ?`, [now, codeHash]);
+  return true;
+}
+
+export type EnrollKeyResult =
+  | { ok: true; key: DeviceKey; via: 'code' | 'approval' }
+  | { ok: false; reason: string };
+
+/**
+ * Enroll a key for a human (decision 6: a new key never authorizes itself). The first key —
+ * and recovery when every key is lost — goes through the one-time enrollment code from the
+ * human's existing credential. Once any key exists, a further key may instead be authorized
+ * by an A2 signature from a standing key over `device_key_admin`. An agent member can never
+ * enroll: the refusal is audited like any other listed-act refusal.
+ */
+export async function enrollKeyGuarded(
+  db: Driver,
+  input: {
+    teamId: string;
+    audience: string;
+    member: { id: string; name: string; kind: string };
+    publicKey: string;
+    kind: AuthenticatorKind;
+    code?: string | undefined;
+    proof?: ApprovalProof | undefined;
+    now?: number;
+  },
+): Promise<EnrollKeyResult> {
+  const now = input.now ?? Date.now();
+  if (input.member.kind !== 'human') {
+    await appendAudit(db, input.teamId, {
+      actor: input.member.name,
+      action: 'authority.refused',
+      target: input.member.name,
+      result: 'deny',
+      detail: { act: 'device_key_admin', reason: 'agent_credential' },
+    });
+    return { ok: false, reason: 'agent_credential' };
+  }
+  if (input.code !== undefined) {
+    const spent = await consumeEnrollmentCode(db, {
+      teamId: input.teamId,
+      memberId: input.member.id,
+      code: input.code,
+      now,
+    });
+    if (!spent) return { ok: false, reason: 'bad_code' };
+    const key = await enrollDeviceKey(db, {
+      teamId: input.teamId,
+      memberId: input.member.id,
+      publicKey: input.publicKey,
+      kind: input.kind,
+      now,
+    });
+    await appendAudit(db, input.teamId, {
+      actor: input.member.name,
+      action: 'device_key.enrolled',
+      target: input.member.name,
+      result: 'allow',
+      detail: { key_id: key.id, kind: key.kind, via: 'code' },
+    });
+    return { ok: true, key, via: 'code' };
+  }
+  const enrolled = await listDeviceKeys(db, input.teamId, input.member.id);
+  if (enrolled.length === 0) return { ok: false, reason: 'code_required' };
+  const check = await requireAuthority(db, {
+    teamId: input.teamId,
+    audience: input.audience,
+    presenter: input.member,
+    credential: 'human',
+    act: 'device_key_admin',
+    target: input.member.name,
+    payload: { action: 'enroll', public_key: input.publicKey, kind: input.kind },
+    proof: input.proof,
+    now,
+  });
+  if (!check.ok) return { ok: false, reason: check.reason };
+  const key = await enrollDeviceKey(db, {
+    teamId: input.teamId,
+    memberId: input.member.id,
+    publicKey: input.publicKey,
+    kind: input.kind,
+    now,
+  });
+  await appendAudit(db, input.teamId, {
+    actor: input.member.name,
+    action: 'device_key.enrolled',
+    target: input.member.name,
+    result: 'allow',
+    detail: { key_id: key.id, kind: key.kind, via: 'approval' },
+  });
+  return { ok: true, key, via: 'approval' };
+}
+
+/**
+ * Revoke one of a human's keys: by enrollment code (the lost-device path), or by an A2
+ * signature from a DIFFERENT standing key — a key never revokes itself while another stands.
+ */
+export async function revokeKeyGuarded(
+  db: Driver,
+  input: {
+    teamId: string;
+    audience: string;
+    member: { id: string; name: string; kind: string };
+    keyId: string;
+    code?: string | undefined;
+    proof?: ApprovalProof | undefined;
+    now?: number;
+  },
+): Promise<{ ok: true; via: 'code' | 'approval' } | { ok: false; reason: string }> {
+  const now = input.now ?? Date.now();
+  const key = await getDeviceKey(db, input.teamId, input.keyId);
+  if (!key || key.memberId !== input.member.id) return { ok: false, reason: 'not_found' };
+  if (key.revokedAt !== null) return { ok: false, reason: 'key_revoked' };
+  if (input.code !== undefined) {
+    const spent = await consumeEnrollmentCode(db, {
+      teamId: input.teamId,
+      memberId: input.member.id,
+      code: input.code,
+      now,
+    });
+    if (!spent) return { ok: false, reason: 'bad_code' };
+  } else {
+    if (input.proof?.key_id === input.keyId) {
+      await appendAudit(db, input.teamId, {
+        actor: input.member.name,
+        action: 'authority.refused',
+        target: input.member.name,
+        result: 'deny',
+        detail: { act: 'device_key_admin', reason: 'descriptor_mismatch', key_id: input.keyId },
+      });
+      return { ok: false, reason: 'descriptor_mismatch' };
+    }
+    const check = await requireAuthority(db, {
+      teamId: input.teamId,
+      audience: input.audience,
+      presenter: input.member,
+      credential: input.member.kind === 'human' ? 'human' : 'agent',
+      act: 'device_key_admin',
+      target: input.member.name,
+      payload: { action: 'revoke', key_id: input.keyId },
+      proof: input.proof,
+      now,
+    });
+    if (!check.ok) return { ok: false, reason: check.reason };
+  }
+  await revokeDeviceKey(db, input.teamId, input.keyId, now);
+  await appendAudit(db, input.teamId, {
+    actor: input.member.name,
+    action: 'device_key.revoked',
+    target: input.member.name,
+    result: 'allow',
+    detail: { key_id: input.keyId, via: input.code !== undefined ? 'code' : 'approval' },
+  });
+  return { ok: true, via: input.code !== undefined ? 'code' : 'approval' };
 }
 
 interface NonceRow {

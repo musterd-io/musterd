@@ -736,6 +736,19 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
   used_at BIGINT
 )`,
   },
+  {
+    // Device-key lifecycle (ADR 662 decision 6, lane 01M5ANFKEVTENBNVG9JQKA965N): one-time
+    // enrollment codes. Only the sha256 is stored; the code itself is shown once to the
+    // human who asked for it and never audited (hard rule 5).
+    version: 114,
+    sql: `CREATE TABLE IF NOT EXISTS enrollment_codes (
+  code_hash TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT
+)`,
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

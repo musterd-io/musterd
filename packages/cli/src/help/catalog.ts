@@ -848,6 +848,19 @@ export const CATALOG: readonly CommandEntry[] = [
     group: 'insight',
   },
   {
+    name: 'authority',
+    signature: 'enroll [--kind platform] | keys | revoke <key-id>',
+    summary: 'your device keys for high-authority acts (ADR 662)',
+    group: 'team',
+    detail:
+      'A device key binds your human authority to a key only you hold. `enroll` is the explicit ' +
+      'human path: a one-time code from your own credential enrolls a fresh keypair (private half ' +
+      'in a 0600 file beside your config, never sent anywhere). Once enrolled, high-authority acts ' +
+      '— human accepts, policy, grants, minting — need that key’s signature. `revoke` retires a key ' +
+      'by another key’s signature, or by enrollment code when the device is lost.',
+    examples: ['musterd authority enroll', 'musterd authority keys'],
+  },
+  {
     name: 'trace',
     signature: 'show [<session-id | digest>] [--json]',
     summary: 'render one captured session end to end — hooks, reasoning, usage (ADR 445)',

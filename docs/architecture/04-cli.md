@@ -312,6 +312,7 @@ src/
     hold.ts           // musterd hold set|propose|lift|list (ADR 516; propose = increment 3, an approve-ask a human admin's accept activates): a human admin pauses something team-wide with an author and an end (autorefresh_paused, merges_paused, notice); every line says what the effect actually enforces; renderHolds is shared with `musterd status`
     halt.ts           // musterd halt <seat> --reason / musterd resume <seat> (ADR 501): a human withdraws an agent seat's authority at its next boundary; the daemon decides who may (admin any agent, a sponsor their own); every refusal names the next step
     notify.ts         // human-reachability nudge loop (ADR 024/035)
+    authority.ts      // musterd authority (ADR 662 decision 6): enroll (one-time code from the human's own credential enrolls a fresh Ed25519 keypair; private half in a 0600 file beside the CLI config, never sent), keys, revoke (by another standing key's signature, or by code when the device is lost)
     role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning
     toolkit.ts        // workspace equipment — list / show / create; carries no authority (ADR 296)
     tour.ts           // musterd tour [--reset] — binds tour/run.ts to the daemon (roster, lanes, timeline poll) and to @clack/prompts
