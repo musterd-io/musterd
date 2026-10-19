@@ -13,6 +13,7 @@ import { addMember, getMemberByName, setAvailability } from './members.js';
 import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
 import { bindSeatToNode, upsertForeignNode } from './nodes.js';
+import { deriveNext } from './orientation.js';
 import { attach } from './presence.js';
 import {
   BOARD_SEAT,
@@ -2931,6 +2932,12 @@ withDrivers('residency', (o, kind) => {
       it('is quiet for a seat that is not enrolled', async () => {
         const { kinds } = await stalled(false);
         expect(await kinds()).not.toContain('stalled_continuation');
+      });
+
+      it("is said in the owner's own brief, not only on the board", async () => {
+        const { db, team, lane } = await stalled();
+        const brief = await deriveNext(db, team.id, team.slug, 'Ada');
+        expect(brief.stalled_continuations?.map((w) => w.subject)).toEqual([lane.id]);
       });
     });
 

@@ -15,6 +15,7 @@ import {
 import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
 import { checkClaims } from './claimCheck.js';
+import { stalledContinuationWarning } from './continuationStall.js';
 import { handoffNamedLaneIds, handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { listActiveHolds } from './holds.js';
@@ -324,6 +325,10 @@ export async function deriveNext(
   const mine = all.filter((l) => l.owner_seat === member);
 
   const in_flight = mine.filter((l) => LIVE.has(l.state));
+  // ADR 664: carried work no wake will reach, said in the owner's own brief, not only on the board.
+  const stalled_continuations = (
+    await Promise.all(in_flight.map((l) => stalledContinuationWarning(db, teamId, l, now)))
+  ).filter((w): w is NonNullable<typeof w> => w !== null);
   // ADR 169/192: annotate what just landed with the DERIVED verified-ness of its close, exactly as
   // the `/lanes` endpoint already does (http.ts) — which is why the web board has rendered
   // accepted/unconfirmed chips since ADR 169 while this brief said only `✓`.
@@ -656,6 +661,7 @@ export async function deriveNext(
   return {
     member,
     in_flight,
+    stalled_continuations,
     shipped,
     up_next,
     up_next_total,
