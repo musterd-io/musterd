@@ -8,7 +8,7 @@ import { withDrivers } from '../db/testing.js';
 import { log } from '../log.js';
 import { readSpendCapBreach, readUnpricedWakeBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
-import { openLane, updateLane } from './lanes.js';
+import { laneWarnings, openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName, setAvailability } from './members.js';
 import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
@@ -2891,6 +2891,46 @@ withDrivers('residency', (o, kind) => {
       it('an away that ended before the no-op wake does not re-arm', async () => {
         const { derives } = await stalledInAway((woke) => woke - 1);
         expect(await derives()).toBe(false);
+      });
+    });
+
+    /** ADR 664 — the board names a lane ADR 306 §2 has stopped waking. */
+    describe('stalled_continuation warning (ADR 664)', () => {
+      async function stalled(enrolled = true) {
+        const { db, team, ada } = await seed();
+        await setPolicy(db, team.id, { loops: { dispatch: true } });
+        if (enrolled) await enroll(db, team, ada, HOST, { flow: 'auto', hourly_cap: 10 });
+        const lane = await openLane(db, team.id, team.slug, ada.name, { title: 'c', claim: true });
+        const wokeTs = Date.now() - WAKE_COOLDOWN_MS - 120_000;
+        await laneTouched(db, lane.id, wokeTs - 1_000);
+        await wokeEdge(db, team.id, lane.id, 'dispatch_continuation', wokeTs);
+        const kinds = async () =>
+          (await laneWarnings(db, team.id, team.slug, lane)).map((w) => w.kind);
+        return { db, team, ada, lane, wokeTs, kinds };
+      }
+
+      it('warns on a claimed lane whose last continuation wake moved nothing', async () => {
+        const { kinds } = await stalled();
+        expect(await kinds()).toContain('stalled_continuation');
+      });
+
+      it('clears once the lane moves', async () => {
+        const { db, lane, wokeTs, kinds } = await stalled();
+        await laneTouched(db, lane.id, wokeTs + 1);
+        expect(await kinds()).not.toContain('stalled_continuation');
+      });
+
+      it('is quiet while an ADR 661 re-arm is pending or due', async () => {
+        const { db, ada, wokeTs, kinds } = await stalled();
+        await setAvailability(db, ada.id, { status: 'away', until: Date.now() + 3_600_000 });
+        expect(await kinds()).not.toContain('stalled_continuation');
+        await setAvailability(db, ada.id, { status: 'away', until: wokeTs + 30_000 });
+        expect(await kinds()).not.toContain('stalled_continuation');
+      });
+
+      it('is quiet for a seat that is not enrolled', async () => {
+        const { kinds } = await stalled(false);
+        expect(await kinds()).not.toContain('stalled_continuation');
       });
     });
 

@@ -152,5 +152,8 @@
 // Epoch 36 — ADR 657: a human seat's note is sealed to that human's machines. The daemon refuses a
 // plain-text save from a human seat and serves `POST /memory/recipients`; a client behind this epoch
 // cannot save a human's note until it is rebuilt.
-export const FEATURE_EPOCH = 36 as const;
+// Epoch 37 — ADR 664: the `stalled_continuation` lane warning, and warnings arrays that drop a kind
+// the client cannot read instead of failing the response. A client behind this epoch fails its lane
+// and board reads while any lane carries the new kind, until it is rebuilt.
+export const FEATURE_EPOCH = 37 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

@@ -843,6 +843,9 @@ export const LaneWarningSchema = z.object({
     /** value-layer design: a lane waiting on acceptance past ACCEPTANCE_STALE_MS — review debt
      *  made visible. Advisory like `no_goal`: owner null, never a directed wake. */
     'stale_acceptance',
+    /** ADR 664: a claimed lane on an enrolled seat whose last continuation wake moved nothing, so
+     *  no wake is due (ADR 306 §2). Advisory like `stale_acceptance`: owner null, never a wake. */
+    'stalled_continuation',
   ]),
   /** The lane the acting party touched (staleness: the stale lane itself). */
   subject: z.string(),
@@ -853,6 +856,17 @@ export const LaneWarningSchema = z.object({
   detail: z.string(),
 });
 export type LaneWarning = z.infer<typeof LaneWarningSchema>;
+
+/**
+ * ADR 664: a warnings array keeps the entries this build can read and drops the rest. A warning is
+ * advisory, so a kind newer than the client must not fail the whole lane or board response.
+ */
+export const LaneWarningsSchema = z.array(z.unknown()).transform((ws) =>
+  ws.flatMap((w) => {
+    const parsed = LaneWarningSchema.safeParse(w);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 /** Body for `POST /teams/:slug/lanes` (lane_open). `claim` self-owns at create (opt-in, ADR 083). */
 export const OpenLaneSchema = z.object({
@@ -1044,7 +1058,7 @@ export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
  */
 export const LaneResultSchema = z.object({
   lane: LaneSchema,
-  warnings: z.array(LaneWarningSchema),
+  warnings: LaneWarningsSchema,
   review: z
     .object({
       reviewer: z.string().optional(),
@@ -1137,7 +1151,7 @@ export type BuiltOn = z.infer<typeof BuiltOnSchema>;
 /** `GET /teams/:slug/lanes` — the board: lanes (optionally filtered) with live warnings annotated. */
 export const LaneBoardSchema = z.object({
   lanes: z.array(LaneSchema),
-  warnings: z.array(LaneWarningSchema),
+  warnings: LaneWarningsSchema,
 });
 export type LaneBoard = z.infer<typeof LaneBoardSchema>;
 
@@ -1179,7 +1193,7 @@ export type LaneEvent = z.infer<typeof LaneEventSchema>;
  */
 export const LaneDetailSchema = z.object({
   lane: LaneSchema,
-  warnings: z.array(LaneWarningSchema),
+  warnings: LaneWarningsSchema,
   history: z.array(LaneEventSchema),
   acceptance_ask: z.object({ id: z.string(), to: z.string() }).nullable(),
 });
