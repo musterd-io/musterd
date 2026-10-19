@@ -82,6 +82,14 @@ describe('musterd notify channels (away channels 6)', () => {
     }
   });
 
+  it('refuses an unknown channel with a friendly line and writes nothing', async () => {
+    h.setChannelSettings.mockClear();
+    await expect(
+      notifyCommand(parsed(['channels', 'set', 'bogus'], { deliver: 'on' })),
+    ).rejects.toThrow("unknown channel 'bogus' (v1 supports: slack)");
+    expect(h.setChannelSettings).not.toHaveBeenCalled();
+  });
+
   it('set merges onto current settings and writes through the client', async () => {
     const out: string[] = [];
     vi.spyOn(process.stdout, 'write').mockImplementation((s) => {

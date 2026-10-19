@@ -38,6 +38,10 @@ const CHANNELS_USAGE =
   '       musterd notify channels set <channel> [--deliver on|off] [--answer on|off] ' +
   '[--presence-gating on|off] [--tier-floor advisory|standard|blocking|none]';
 
+/** The adapters that exist in v1; the daemon's settings route enforces the same list and
+ * stays the authority — this check only spares the human zod's raw enum wording. */
+const KNOWN_CHANNELS = ['slack'] as const;
+
 /** The answer switch as it actually takes effect: delivery off removes answer authority
  * (channelSettings.answerAllowed), so a stored "answer on" under "deliver off" reads as off. */
 function answerState(s: { deliver: boolean; answer: boolean }): string {
@@ -72,6 +76,9 @@ async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
   if (sub === 'set') {
     const channel = parsed.positionals[2];
     if (!channel) throw new Error(CHANNELS_USAGE);
+    if (!(KNOWN_CHANNELS as readonly string[]).includes(channel)) {
+      throw new Error(`unknown channel '${channel}' (v1 supports: ${KNOWN_CHANNELS.join(', ')})`);
+    }
     const current = (await http.getChannelSettings(team)).settings.find(
       (s) => s.channel === channel,
     ) ?? { deliver: false, answer: false, presenceGating: true, tierFloor: null };
