@@ -284,3 +284,5 @@ running. Up to this pass the rows show no credit failures. Mason's wakes on 2026
 `cost_usd`, so the provider served them. If the balance runs out before the window ends, B's
 wakes from that point fail at the provider. The finding reports any such failure as an operator
 funding stop and does not count it as a seat failure, as it would treat crossing the $100 ceiling.
+nick turned auto-reload back on at about 10:55 PDT on 2026-10-19. B had no credit failure in the
+gap.
