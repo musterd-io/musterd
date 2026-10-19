@@ -12,7 +12,7 @@ import { TRACE_LADDER } from '../db/traceLadder.js';
 import { createServer } from '../index.js';
 import { addMember, mintCredential } from '../store/members.js';
 import type { TeamRow } from '../store/rows.js';
-import { createTeam } from '../store/teams.js';
+import { createTeam, mintBootstrapCredential, revokeBootstrapCredential } from '../store/teams.js';
 import { bootCloud, bootCloudWithOutage, hostRequest, stubCloudEnv } from './testing.js';
 import { testIssuer } from './testIssuer.js';
 
@@ -330,6 +330,37 @@ describe('cloud mode — no team rows without a credential for that team (review
         });
         expect(authed.status, `${path} with a credential`).toBe(200);
       }
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('a host key reads the roster at the public grade; a claim_seat or revoked key does not (ADR 671)', async () => {
+    const { s, seed, url } = await bootCloud();
+    try {
+      const revive = await createTeam(seed!, { slug: 'revive' });
+      await humanCredential(seed!, revive, 'ada');
+      await addMember(seed!, revive, { name: 'scout', kind: 'agent', role: '' });
+      const mint = (useKind: 'host' | 'claim_seat', target: string) =>
+        mintBootstrapCredential(seed!, { teamId: revive.id, useKind, target, createdBy: 'ada' });
+      const host = await mint('host', 'cloud-pilot');
+      const seat = await mint('claim_seat', 'scout');
+      const read = (key: string, path = '/teams/revive/members') =>
+        hostRequest(url, path, 'revive.musterd.test', {
+          headers: { authorization: `Bearer ${key}` },
+        });
+      for (const path of ['/teams/revive', '/teams/revive/members']) {
+        const r = await read(host.agent_key, path);
+        expect(r.status, `${path} with a host key`).toBe(200);
+        expect(r.body, `${path} names the seat`).toContain('scout');
+        // The public projection: no credential or grant material, as for an anonymous loopback read.
+        expect(r.body).not.toMatch(/mscr_|msgr_|mskey_/);
+      }
+      // A claim_seat key only claims a seat (ADR 344); the roster is not a claim.
+      expect((await read(seat.agent_key)).status).toBe(401);
+      // Revocation is honoured on the next read, not at mint.
+      await revokeBootstrapCredential(seed!, revive.id, host.credential.id);
+      expect((await read(host.agent_key)).status).toBe(401);
     } finally {
       await s.close();
     }

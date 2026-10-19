@@ -2299,8 +2299,22 @@ async function rosterViewer(
   req: IncomingMessage,
 ): Promise<MemberRow | null> {
   if (!ctx.config.cloud) return tryAuth(ctx, slug, req);
-  return (await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req)))
-    .member;
+  const token = bearer(req);
+  // ADR 671: the wake actuator reads the roster with its host key (ADR 395) — to verify a wake's
+  // occupancy (ADR 241) and the woken seat's kind (ADR 636). The key names no member, so on a
+  // loopback daemon `tryAuth` yields the public projection; on Cloud it is a credential for THIS
+  // team, so the same read gets the same public grade. Re-checked per request like the wake
+  // routes: a revoked or expired key, or a creator who left, is refused on the next read.
+  if (token.startsWith(TOKEN_PREFIXES.agent_key)) {
+    const team = await requireTeam(ctx.db, slug);
+    const credential = await findBootstrapCredential(ctx.db, team.id, token);
+    if (credential?.use_kind === 'host') {
+      await hostKeyScope(ctx, team, credential.created_by);
+      await recordBootstrapCredentialUse(ctx.db, credential.id);
+      return null;
+    }
+  }
+  return (await authMember(ctx.db, slug, token, actingSeat(req), agentSessionLease(req))).member;
 }
 
 /** Best-effort: resolve the calling seat from a bearer token if one is present and valid, else null.
