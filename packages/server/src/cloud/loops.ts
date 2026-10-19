@@ -16,6 +16,7 @@ export const LOOPS = [
   'roster_watch',
   'digest',
   'policy_review',
+  'away_relay',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 
@@ -42,6 +43,10 @@ const NOT_ON_CLOUD: ReadonlySet<LoopName> = new Set([
   'sync_push',
   'sync_pull',
   'trace_push',
+  // ADR 659: the relay exists for loopback daemons that cannot take inbound connections. A Cloud
+  // server is already public and receives provider callbacks through the shared ingress
+  // (away-channels lane 01M50ZQQW9), so it never dials a relay.
+  'away_relay',
 ]);
 
 export function loopsFor(mode: ResolvedConfig['mode']): ReadonlySet<LoopName> {

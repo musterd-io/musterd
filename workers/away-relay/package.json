@@ -1,0 +1,16 @@
+{
+  "name": "musterd-away-relay",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Away-channels relay (ADR 659): one Durable Object per team; the daemon dials out, deliveries and callbacks transit, metadata only is stored.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
+  }
+}

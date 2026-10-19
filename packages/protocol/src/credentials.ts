@@ -176,6 +176,15 @@ export const PolicySchema = z.object({
    */
   seeds_relay_url: z.string().url().optional(),
   seeds_relay_token: z.string().optional(),
+  /**
+   * Away relay (ADR 659) — where the daemon dials out for channel deliveries, and the per-team
+   * credential it presents (only its sha256 sits at the relay). Both set = the daemon holds one
+   * WebSocket to `away_relay_url` per team; either unset (the default) = no outbound connection,
+   * the same posture as `seeds_relay_*`. The token is a secret with the same handling: policy
+   * reads are admin-only, `team export` never serializes policy, the CLI masks it on display.
+   */
+  away_relay_url: z.string().url().optional(),
+  away_relay_token: z.string().optional(),
   /** Team-wide wake-policy defaults (ADR 131 increment 5) — per-seat enrollment overrides layer on
    *  top (`ResidencyPolicyOverrideSchema` in `residency.policy`). `parse({})` yields launch defaults. */
   residency: ResidencyPolicySchema.default({}),

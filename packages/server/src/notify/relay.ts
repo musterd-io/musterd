@@ -1,0 +1,331 @@
+import {
+  classifyAskAction,
+  makeEnvelope,
+  RelayServerFrameSchema,
+  type RelayCallbackFrame,
+  type RelayDaemonFrame,
+  type RelayPending,
+} from '@musterd/protocol';
+import WebSocket from 'ws';
+import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
+import { log } from '../log.js';
+import {
+  NO_BINDING_STORE,
+  redeemAskChannelToken,
+  type AskStanding,
+  type RedemptionChecks,
+} from '../store/askChannelTokens.js';
+import { getMemberByName } from '../store/members.js';
+import { insertMessage } from '../store/messages.js';
+import { getPolicy, listActiveTeams } from '../store/teams.js';
+import { backoffMs } from '../sync/streamJoiner.js';
+
+/**
+ * The daemon's away-relay client (ADR 659): one WebSocket per configured team to its relay
+ * Durable Object, reconnect with the sync stream's backoff (ADR 552), and a `reconcile` frame on
+ * every open carrying the daemon's live pending set — the relay's rows are a cache, this daemon
+ * is the source of truth, so a restart kills every button the daemon no longer stands behind.
+ *
+ * A team with `away_relay_url` / `away_relay_token` unset (the default) never connects: no
+ * outbound call, the ADR 149 posture. Callbacks are forwarded raw by the relay; parsing a
+ * provider's payload is its adapter's job (Slack: lane 01M50XQ04M8E3X5QHY173Q18X7). The generic
+ * JSON shape (`{token, decision}`) is redeemed here and, until the pairing lane lands a binding
+ * store, fails closed with `no_binding_store` (ADR 623 §6).
+ */
+
+/** How often the client looks for teams whose relay policy appeared, changed, or went away. */
+export const AWAY_RELAY_RESCAN_MS = 15_000;
+
+/** `http(s)://relay/…` → `ws(s)://relay/teams/<slug>/connect` (ADR 659 §1). */
+export function relaySocketUrl(relayUrl: string, slug: string): URL {
+  const url = new URL(`/teams/${encodeURIComponent(slug)}/connect`, relayUrl);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url;
+}
+
+/**
+ * The daemon's live pending set for one team: one row per ask with an unconsumed, unexpired
+ * channel token and no decision yet. The dedupe id is stable per ask+channel, so a re-push after
+ * a reconnect is the same delivery, not a second one.
+ */
+export async function buildRelayPending(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<RelayPending[]> {
+  const rows = await db.all<{ ask_id: string; channel: string; expires_at: number }>(
+    `SELECT t.ask_id, t.channel, MIN(t.expires_at) AS expires_at
+       FROM ask_channel_tokens t
+      WHERE t.team_id = ? AND t.consumed_at IS NULL AND t.expires_at > ?
+        AND NOT EXISTS (SELECT 1 FROM ask_decisions d
+                         WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)
+      GROUP BY t.ask_id, t.channel
+      ORDER BY t.ask_id, t.channel`,
+    [teamId, now],
+  );
+  const byAsk = new Map<string, RelayPending>();
+  for (const row of rows) {
+    if (byAsk.has(row.ask_id)) continue;
+    byAsk.set(row.ask_id, {
+      ask_ref: row.ask_id,
+      dedupe_id: `${row.ask_id}:${row.channel}`,
+      expires_at: row.expires_at,
+    });
+  }
+  return [...byAsk.values()];
+}
+
+/** The ask as it stands NOW, for redemption (ADR 623 §6): open, digest, recomputed class. */
+async function relayAskStanding(
+  db: Driver,
+  teamId: string,
+  askId: string,
+): Promise<AskStanding | null> {
+  const token = await db.get<{ ask_digest: string }>(
+    `SELECT ask_digest FROM ask_channel_tokens
+      WHERE team_id = ? AND ask_id = ? AND consumed_at IS NULL
+      ORDER BY created_at DESC LIMIT 1`,
+    [teamId, askId],
+  );
+  if (!token) return null;
+  const ask = await db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, askId],
+  );
+  if (!ask) return null;
+  const decided = await db.get<{ ask_id: string }>(
+    'SELECT ask_id FROM ask_decisions WHERE team_id = ? AND ask_id = ?',
+    [teamId, askId],
+  );
+  let meta: Record<string, unknown> | null = null;
+  try {
+    meta = ask.meta ? (JSON.parse(ask.meta) as Record<string, unknown>) : null;
+  } catch {
+    meta = null;
+  }
+  return {
+    open: !decided,
+    digest: token.ask_digest,
+    actionClass: classifyAskAction(meta),
+  };
+}
+
+const relayChecks: RedemptionChecks = {
+  askStanding: relayAskStanding,
+  bindingStanding: NO_BINDING_STORE,
+};
+
+/**
+ * Redeem one generic callback (`{token, decision, authorizer?}` JSON). Anything else is the
+ * provider adapter's to parse and is reported back unhandled, never guessed at. A redeemed answer
+ * is written as a `message` carrying `meta.channel_answer` — never an `accept`/`decline`
+ * (ADR 618 §5) — inside the redemption transaction.
+ */
+export async function handleRelayCallback(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  frame: RelayCallbackFrame,
+  now: number = Date.now(),
+): Promise<{ ok: boolean; reason?: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(frame.body);
+  } catch {
+    return { ok: false, reason: 'unparseable_callback' };
+  }
+  const body = parsed as { token?: unknown; decision?: unknown; authorizer?: unknown } | null;
+  if (
+    !body ||
+    typeof body.token !== 'string' ||
+    (body.decision !== 'approve' && body.decision !== 'reject')
+  ) {
+    return { ok: false, reason: 'unparseable_callback' };
+  }
+  const authorizer = typeof body.authorizer === 'string' ? body.authorizer : 'unknown';
+  const decision = body.decision;
+  const result = await redeemAskChannelToken(
+    ctx.db,
+    {
+      teamId: team.id,
+      token: body.token,
+      assurance: 'A1',
+      decision,
+      answerMessageId: `relay-${frame.ask_ref}-${now}`,
+      authorizer,
+      deliveryActor: 'relay',
+      now,
+      writeAnswer: async (t) => {
+        const member = await getMemberByName(t, team.id, authorizer);
+        if (!member) throw new Error(`channel authorizer ${authorizer} is not a member`);
+        await insertMessage(
+          t,
+          team.id,
+          member.id,
+          null,
+          makeEnvelope({
+            id: `relay-${frame.ask_ref}-${now}`,
+            team: team.slug,
+            from: authorizer,
+            to: { kind: 'team' },
+            act: 'message',
+            body: decision === 'approve' ? 'Approved via channel' : 'Rejected via channel',
+            meta: {
+              in_reply_to: frame.ask_ref,
+              channel_answer: { channel: 'relay', assurance: 'A1', decision },
+            },
+            ts: now,
+          }),
+        );
+      },
+    },
+    relayChecks,
+  );
+  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+}
+
+export interface RelayLink {
+  /** Queue one daemon frame; false when no socket is live (the caller keeps its own retry). */
+  send(frame: RelayDaemonFrame): boolean;
+  stop(): void;
+}
+
+/** Live links per daemon config, so later lanes can deliver through the running client. */
+const linksByConfig = new WeakMap<Ctx['config'], Map<string, RelayLink>>();
+
+/** The live relay link for a team, or null when unconfigured/disconnected (lane 5 delivers here). */
+export function relayLinkFor(ctx: Ctx, teamSlug: string): RelayLink | null {
+  return linksByConfig.get(ctx.config)?.get(teamSlug) ?? null;
+}
+
+/** Start the relay client: one link per team whose policy names a relay. Returns a stop function. */
+export function startAwayRelay(ctx: Ctx): () => void {
+  const links = new Map<string, { url: string; credential: string; link: RelayLink }>();
+  linksByConfig.set(ctx.config, new Map());
+  let stopped = false;
+
+  const open = (team: { id: string; slug: string }, url: string, credential: string): RelayLink => {
+    let ws: WebSocket | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+    let down = false;
+    let closed = false;
+
+    const schedule = () => {
+      if (closed || stopped) return;
+      timer = setTimeout(connect, backoffMs(attempt));
+      if (typeof timer.unref === 'function') timer.unref();
+      attempt += 1;
+    };
+
+    const connect = () => {
+      timer = null;
+      if (closed || stopped) return;
+      const socket = new WebSocket(relaySocketUrl(url, team.slug), {
+        headers: { authorization: `Bearer ${credential}` },
+        handshakeTimeout: 10_000,
+      });
+      ws = socket;
+      socket.on('open', () => {
+        attempt = 0;
+        down = false;
+        log.info({ msg: 'away_relay_up', team: team.slug });
+        // Reconcile on every open: the relay drops whatever this daemon no longer stands behind.
+        void buildRelayPending(ctx.db, team.id)
+          .then((pending) => {
+            socket.send(JSON.stringify({ protocol: 1, type: 'reconcile', pending }));
+          })
+          .catch((err) =>
+            log.warn({ msg: 'away_relay_reconcile_failed', team: team.slug, err: String(err) }),
+          );
+      });
+      socket.on('message', (data) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.toString());
+        } catch {
+          return;
+        }
+        const frame = RelayServerFrameSchema.safeParse(parsed);
+        if (!frame.success) return;
+        if (frame.data.type === 'callback') {
+          void handleRelayCallback(ctx, team, frame.data).then((r) => {
+            if (!r.ok && r.reason !== 'unparseable_callback')
+              log.info({ msg: 'away_relay_callback_refused', team: team.slug, reason: r.reason });
+          });
+        } else if (frame.data.type === 'error') {
+          log.warn({ msg: 'away_relay_frame_refused', team: team.slug, reason: frame.data.reason });
+        }
+      });
+      const lost = (reason: string) => {
+        if (ws === socket) ws = null;
+        if (closed || stopped) return;
+        if (!down) {
+          down = true;
+          log.warn({ msg: 'away_relay_down', team: team.slug, reason });
+        }
+        schedule();
+      };
+      socket.on('close', () => lost('closed'));
+      socket.on('error', (error) => {
+        if (!down) log.warn({ msg: 'away_relay_error', team: team.slug, error: String(error) });
+      });
+    };
+
+    connect();
+    const link: RelayLink = {
+      send(frame) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+        ws.send(JSON.stringify(frame));
+        return true;
+      },
+      stop() {
+        closed = true;
+        if (timer) clearTimeout(timer);
+        ws?.terminate();
+      },
+    };
+    return link;
+  };
+
+  const scan = async () => {
+    if (stopped) return;
+    try {
+      const teams = await listActiveTeams(ctx.db);
+      const wanted = new Set<string>();
+      for (const team of teams) {
+        const policy = await getPolicy(ctx.db, team.id);
+        const url = policy.away_relay_url;
+        const credential = policy.away_relay_token;
+        if (!url || !credential) continue;
+        wanted.add(team.slug);
+        const have = links.get(team.slug);
+        if (have && have.url === url && have.credential === credential) continue;
+        have?.link.stop();
+        const link = open(team, url, credential);
+        links.set(team.slug, { url, credential, link });
+        linksByConfig.get(ctx.config)?.set(team.slug, link);
+      }
+      for (const [slug, entry] of links) {
+        if (!wanted.has(slug)) {
+          entry.link.stop();
+          links.delete(slug);
+          linksByConfig.get(ctx.config)?.delete(slug);
+        }
+      }
+    } catch (error) {
+      log.warn({ msg: 'away_relay_scan_failed', error: String(error) });
+    }
+  };
+
+  void scan();
+  const handle = setInterval(() => void scan(), AWAY_RELAY_RESCAN_MS);
+  if (typeof handle.unref === 'function') handle.unref();
+  return () => {
+    stopped = true;
+    clearInterval(handle);
+    for (const entry of links.values()) entry.link.stop();
+    links.clear();
+    linksByConfig.delete(ctx.config);
+  };
+}

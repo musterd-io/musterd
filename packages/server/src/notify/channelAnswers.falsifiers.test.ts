@@ -23,6 +23,7 @@ import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createRequest, decideRequest } from '../store/requests.js';
 import { createTeam } from '../store/teams.js';
+import { buildRelayPending } from './relay.js';
 
 /**
  * The away-channels falsifier suite (ADR 618, ADR 623, spec 2026-10-15-away-channels-design.md). Each
@@ -224,9 +225,20 @@ withDrivers('away channels falsifiers', (o) => {
     it.todo(
       'lies in the confirmation UI: the daemon-held tenant and user, not the relay, are what is shown (pairing lane 01M50XPYZ9877E494X2SV1EGTB)',
     );
-    it.todo(
-      'answers after the daemon restarted: reconciled from daemon state, expired buttons refused (relay lane 01M50XPXWEFMHND3GABXDSNTVW)',
-    );
+    it('answers after the daemon restarted: reconciled from daemon state, expired buttons refused (ADR 659)', async () => {
+      const { db, team } = await seed();
+      await token(db, team.id, { askId: 'ask-live', channel: 'slack' });
+      const expired = await token(db, team.id, {
+        askId: 'ask-old',
+        channel: 'slack',
+        expiresAt: NOW - MINUTE,
+      });
+      // The restarted daemon's pending set names only the live ask; the relay drops the rest.
+      const pending = await buildRelayPending(db, team.id, NOW);
+      expect(pending.map((p) => p.ask_ref)).toEqual(['ask-live']);
+      // And the expired button itself is refused at redemption, relay row or not.
+      expect(await redeem(db, team.id, expired)).toEqual({ ok: false, reason: 'expired' });
+    });
   });
 
   describe('the action class (ADR 623 §1, §6)', () => {
