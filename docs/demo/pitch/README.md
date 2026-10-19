@@ -9,6 +9,7 @@ Demo Day deck of 2026-10-09 (nick, 2026-10-13: "make it our standing pitch deck"
 | `deck.html` | The deck, and its source. Edit it in the browser (below) |
 | `script.md` | The spoken text, the source for every number, and the questions to expect |
 | `counts.sh` | Prints slide 7's two counts from the team's database |
+| `chain.sh` | Prints the chain behind ADR 665's table from the team's database: who signed off, who accepted, who asked, refusals, asks to people. Run by a person; re-read monthly |
 | `build.sh` | Renders `musterd-pitch.pdf` without the browser, with the founder slide last. Needs Chrome and poppler (`brew install poppler`) for the reorder |
 | `avatar.jpg` | nick's headshot for the founder slide. Not committed (`.gitignore`); copy one in |
 

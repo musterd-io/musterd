@@ -42,13 +42,14 @@ team revive):
 | Link in the chain                               | Last 30 days                      | Strength                                                 |
 | ----------------------------------------------- | --------------------------------- | -------------------------------------------------------- |
 | Who signed off on the merge                     | 922 of 967 done lanes name nick   | attested by the seat (ADR 109); the daemon cannot see GitHub |
-| Who accepted, enforced to be another member     | 942 accepted, 103 sent back       | verified (ADR 188, ADR 234); one in ten landed lanes is refused on review |
+| Who accepted, enforced to be another member     | 1,045 review verdicts on 742 distinct lanes: 942 accepted, 103 sent back (9.9%) | verified (ADR 188, ADR 234); of the 967 done lanes, 846 closed on a verified ancestor merge, 112 with no merge, 15 with a failed or unattested check |
 | Which model                                     | every act and presence            | observed by the harness (ADR 158, ADR 163)               |
-| Who asked for the work                          | 56 of 967, basis mostly `stated`  | ADR 629 landed this month; adoption has not started      |
+| Who asked for the work                          | 286 of 348 lanes opened since ADR 629 landed on 2026-10-16 (82%), 272 naming a person; 56 of 967 over the whole 30-day window | basis `stated` on all but 11: the seat's word, none verified against an act or seed (schmidt, 2026-10-19: the 30-day denominator spans 27 days before the column existed) |
 | A human's signature on accept, approve, grant   | none                              | ADR 662 decided 2026-10-19, not built                    |
 | Declines and challenges                         | 131 declines, 3 challenges, all agent to agent; nick answered 128 of 216 asks | real on review verdicts; rare as refusals of a handoff or a challenge to a person |
 
-So today the record shows a person at the end of 95% of our landed work and at the start of 6%.
+So today the record shows a person at the end of 95% of our landed work, attested; and since the
+column exists, a person named at the start of 78% of lanes opened, on the seat's word.
 
 The Dunford components, as this proposal reads them ([positioning-and-gtm](../../.agents/skills/product-communications/references/positioning-and-gtm.md)):
 
@@ -84,10 +85,16 @@ investor notes, the site's record section), is:
 > **Every piece of work your agents do has a person at both ends.** Someone asked for it and
 > someone signed it off, and when something goes wrong you reconstruct what happened in one read.
 
-Its "before", shown as a scene and never as a contrast sentence (brand.md §4): half of 204
-security leaders had already had an agent incident where nobody could say who was accountable,
-and half could not reconstruct what an agent had done in the last month. The sponsor and date go
-with the number every time.
+Its "before", shown as a scene and never as a contrast sentence (brand.md §4): nearly half (45%)
+of 204 security leaders had already had an agent incident where nobody could say who was
+accountable, and only half (49%) could fully reconstruct what an agent had done in the last month.
+The sponsor and date go with the number every time, and the figures are never rounded up (sloane).
+
+**Candidate for the sentence itself** (sloane, 2026-10-19; nick picks): "a person at both ends" is
+a metaphor the next sentence has to decode, and "reconstruct" is the survey's word and reads as
+forensics. Alternative: _"When something goes wrong you can show who asked, who did it, who
+checked it and who signed it off, in one read."_ with "a person at both ends" kept as a section
+title at most.
 
 ### 2. The mechanisms are the proof lines, each phrased as what it buys
 
@@ -98,9 +105,9 @@ Under the message, three lines, in this order, each with its number and its reco
    of work in ten was sent back. (ADR 188, ADR 234; the 942 / 103 read.)
 2. **You know which model touched what.** The model the harness observed is on every act, so when
    a model misbehaves you list its work. (ADR 158, ADR 163.)
-3. **A person signs off every merge, and soon the daemon refuses an acceptance without a person's
-   signature.** 922 of our last 967 landed lanes name the person who authorised the merge. The
-   signature is decided and not built; it is said as "not yet". (ADR 109; ADR 662.)
+3. **A person signs off what lands.** 922 of our last 967 landed lanes name the person who
+   authorised the merge, on the seat's word. A signature the daemon refuses the sign-off without
+   is decided and not built yet; it is said exactly so, never as "soon". (ADR 109; ADR 662.)
 
 "An agent can decline" leaves the headline lines. It appears only where the record shows it: as
 the one-in-ten review refusals, and as a fact about the protocol in technical docs. It returns to
@@ -111,12 +118,25 @@ a headline line when declines of handoffs or challenges to a person appear in ou
 
 "A person at both ends" is a guarantee. The record holds one end. So:
 
-- **Until** `requested` (ADR 629) is filled on at least nine in ten lanes opened in a 30-day window
-  **and** ADR 662's signature is enforced on accept, the spoken and written form is the first
-  sentence's weaker half: _"Every piece of work your agents do has a person who signed it off, and
-  when something goes wrong you reconstruct what happened in one read."_ "Who asked" is said as
-  "recorded from this month, not yet on every lane".
-- **From** both conditions, the full message in §1 goes on every surface.
+- **Until** `requested` (ADR 629) names a person, or carries a verified basis (`act`, `seed`), on at
+  least nine in ten lanes opened in a 30-day window (a seat's `self` does not put a person at the
+  start) **and** ADR 662's signature is enforced on `authorized_by`, and on human accept where a
+  lane requires one (schmidt: on 95% of lanes the person at the end is the merge sign-off, so a
+  gate on accept alone would never make "every" true), the spoken and written form is a weaker
+  one. Two candidates, nick picks:
+  - alfie: _"Every piece of work your agents do has a person who signed it off, and when something
+    goes wrong you reconstruct what happened in one read."_
+  - sloane: _"Nothing your agents do counts as done until another member checks it, and a person
+    approves what lands. When something goes wrong, the record shows who did it, who checked it
+    and which model, in one read."_ This one leans on the verified link (acceptance) and keeps the
+    attested one (sign-off) out of "every".
+  "Who asked" is said as "recorded from this month, on the seat's word".
+- **"In one read" is not yet.** `musterd lane show` and `lane_show` print the owner and the merge
+  sign-off; who asked and the review verdict are not on the same page (checked 2026-10-19 against
+  `packages/mcp/src/tools/laneShow.test.ts`). The phrase waits for a surface that shows the whole
+  chain of one lane on one page, named in the ledger.
+  Follows-up: a lane for the one-page chain on `lane show`, opened when this ADR is accepted.
+- **From** all three conditions, the full message in §1 goes on every surface.
 - The record "shows" the chain; it never "proves" it (ADR 550 §7, brand.md §1), and the merge
   sign-off is said as attested, never as verified, until the daemon can see the merge.
 
@@ -161,6 +181,13 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   the SecurityHQ figures and the 24,768-act count, each with its read date.
 - landscape.md cites "When More Is Less" as arXiv 2609.19759; that identifier did not resolve on
   2026-10-19. It is not quoted until found.
+- **2026-10-19, reviewed by sloane and schmidt at nick's ask** (acts `01M5ARFAZZJTF1QYCR45WZHMSA`,
+  `01M5AS1ZG9ZGBBPT7KC42D6CAE`). Taken into the text the same day: the who-asked denominator
+  (since ADR 629 landed, by basis and asker kind), the verdict unit (acts on distinct lanes) and the
+  closure kinds, the signature condition on `authorized_by`, "in one read" marked not yet, the
+  survey figures unrounded, "soon" removed. Left to nick: sloane's alternative sentence (§1) and
+  weaker form (§3). The four queries are pinned in `docs/demo/pitch/chain.sh` so the monthly re-read
+  is the same read (ADR 658 keeps agent seats off the database; the script is the human's).
 - No code changes. No glossary changes. No protocol changes.
 
 ## Falsifiers
@@ -178,9 +205,10 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
 
 - **Traces:** n/a — a positioning message emits nothing; the act log and the lanes table already
   hold what the falsifiers read.
-- **Eval:** the chain table in Context, re-read monthly with the same four queries (done lanes with
-  `merged_json.authorized_by`; lane-review verdicts by act; `requested_json` fill by basis; declines
-  and challenges by sender and recipient kind), recorded here as dated notes. Baseline: the
-  2026-10-19 row. The message test above, reported k of n after each room.
+- **Eval:** the chain table in Context, re-read monthly by running `docs/demo/pitch/chain.sh`
+  (done lanes with `merged_json.authorized_by` and their verification; lane-review verdicts as acts
+  and as distinct lanes; `requested_json` fill since ADR 629 by basis and asker kind; declines and
+  challenges by sender and recipient kind; asks to humans answered), recorded here as dated notes.
+  Baseline: the 2026-10-19 row. The message test above, reported k of n after each room.
 - **Experiment:** none scheduled for the message. CooperBench is its own goal with its own
   pre-registration and does not test this ADR.
