@@ -177,8 +177,11 @@ for two weeks; I'll sit with you for the first hour."*
 
 ## 7. Weeks 6–7 — the public launch (Oct 28 – Nov 2)
 
-What exists: three lengths of the post and the blog draft, all on-message. Two fixes before it
-ships: the version (v0.3 → whatever npm says that morning), and the recording gate — a screen
+What exists: three lengths of the post and the blog draft, all on-message, naming 0.6.0 and the
+install. The version is no longer a launch-morning step: 0.6.0 is the launch train
+([publish/launch train](../superpowers/specs/2026-10-19-publish-launch-train-design.md)), and the
+post goes out only after the train's npm, brew and site cars have landed. One fix before it ships:
+the recording gate — a screen
 recording of the 2-minute live demo beats the GIF placeholder, and is what should ship. What is
 *new* by then and goes in: the quotes and the install count from §6.
 
