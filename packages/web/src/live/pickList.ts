@@ -1,5 +1,10 @@
 import type { UpdateLane } from '@musterd/protocol';
-import { filterPicker, type PickerRow, type PickerView } from '@musterd/protocol/wire';
+import {
+  filterPicker,
+  pickHandoffNote,
+  type PickerRow,
+  type PickerView,
+} from '@musterd/protocol/wire';
 
 /**
  * The /live lane picker's state (lane 01M5162T6H, musterd pick spec §5.4). Pure: the overlay keeps
@@ -41,9 +46,10 @@ export function pickKey(
   }
 }
 
-/** What the seat reads in the handoff act: who picked, where, and what to do next (spec decision 6). */
+/** What the seat reads in the handoff act: who picked, where, and what to do next (spec decision 6).
+ *  The wording lives in protocol beside the terminal notice, so both ways in ask the same thing. */
 export function pickNote(by: string): string {
-  return `${by} picked this lane for you in /live — reply with a short plan, then start`;
+  return pickHandoffNote(by);
 }
 
 /**

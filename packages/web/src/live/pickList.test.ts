@@ -74,7 +74,9 @@ describe('the /live lane picker (lane 01M5162T6H, spec §5.4)', () => {
       owner_seat: 'izzo',
       handoff_note: pickNote('nick'),
     });
-    expect(pickNote('nick')).toBe('nick picked this lane for you in /live — reply with a short plan, then start');
+    expect(pickNote('nick')).toBe(
+      'nick picked this lane for you in the lane picker (/live, signed in). Reply with a 3–5 line plan, then start unless redirected.',
+    );
   });
 
   it('never picks a blocked lane: there is no patch, only the reason', () => {
