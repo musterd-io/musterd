@@ -1,6 +1,6 @@
 # 665 — The accountability message: a person at both ends of every piece of work
 
-- Status: proposed — 2026-10-19 (nick's acceptance; drafted by alfie in session with nick)
+- Status: accepted (2026-10-19, nick, in session with alfie after reviews by sloane, schmidt and wanderer; drafted by alfie)
 - Date: 2026-10-19
 - Lane: `01M5AQENWA3HN55WPSRXNAV7YW` (goal `accountable-agents-positioning`)
 - Amends: [ADR 550](550-positioning-accountable-agents.md) §2 (the moat is kept; its order stops
