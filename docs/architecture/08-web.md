@@ -321,11 +321,12 @@ teammate's session. Consequences worth internalising:
   log. Build-sync (`live/buildSync.ts`) moves the tab onto the new build: it polls `build.json` and
   checks again when the tab comes back into view. If a chunk still fails to load (`vite:preloadError`),
   the page reloads once per build, and does not loop.
-- **A nameplate's stock is its owner's hue** (lane 01M5AVZA7C, 2026-10-19): `.lc-gl-label__plate` is
-  the member colour at 22% into near-white with the hue drawn firmly on the rim, opaque. The paper-2
-  stock it replaces sat one step from the mustard floor and nick read the plates as blending in; the
-  tint lifts them by lightness (never darkness, his standing line) and keeps the recede ranking under
-  the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
+- **Every nameplate is one chalk stock** (lane 01M5B31024, 2026-10-19, superseding 01M5AVZA7C's
+  per-member tint the same day): `.lc-gl-label__plate` is #fffaf0 for every member, opaque, with the
+  member's hue only as a hint in the rim (55% into the paper rim). The paper-2 stock before it sat one
+  step from the mustard floor; chalk lifts the plates by lightness (never darkness, nick's standing
+  line). nick picked it from five stocks shown side by side — a tinted plate per member read as
+  twelve colours and drowned state. The stocks tried are recorded beside the rule.
 - **A walk lands before the next beat** (lane 01M5B02V4A, 2026-10-19). The per-member walk queue
   (`actors.ts` `pending` → `startNext` on walk end) and the per-member speech queue were already
   there; what cut walks short was `setHomes`, which runs on every envelope and presence frame and

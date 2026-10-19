@@ -1598,7 +1598,14 @@
      surface and the least able to spend contrast, and unlike a bubble it is pinned to a character
      who may be walking, so whatever bleeds through is also MOVING. 4%, and the read comes almost
      entirely from the specular band and the rim light. */
-  /* 2026-10-19 (lane 01M5AVZA7C): THE STOCK IS NOW THE MEMBER'S OWN HUE, 22% into near-white. nick, on
+  /* 2026-10-19 (lane 01M5B31024), superseding the note below: ONE CHALK STOCK FOR EVERY MEMBER.
+     nick saw the five stocks side by side on /office-preview (before, member tint, chalk, ink, and
+     chalk with state-only colour) and picked chalk: every plate the same near-white #fffaf0, so the
+     plates lift off the floor by lightness while colour stays free to mean something. Twelve tinted
+     plates read as twelve colours, and a woken or asking seat stopped standing out among them. The
+     member's hue survives only as a hint in the rim (55% into the paper rim, the pre-tint mix).
+     `--lc-paper-ink` on #fffaf0 measures above 15:1.
+     2026-10-19 (lane 01M5AVZA7C), superseded above: THE STOCK IS NOW THE MEMBER'S OWN HUE, 22% into near-white. nick, on
      /live: the plates "might be blending in too much with the office floor color" — and they were:
      paper-2 (#e9d3ab) at 88% sits one step from the floor's #ebae64 in the same hue family. Three
      stocks were mocked live and judged by nick: chalk (lighter paper), this tint, and ink (he ruled
@@ -1614,7 +1621,7 @@
       rgba(255, 255, 255, 0.12) 42%,
       rgba(255, 255, 255, 0) 68%
     ),
-    color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 22%, #fffaf0);
+    #fffaf0;
   /* nick, 2026-10-12, twice: "slightly more transparent", then — at a whole-plate opacity of 82% —
      "too light, they look greyed out / idle". The ink was the tell: a dimmed name reads as a dimmed
      member, because that is what the dot and the dozing plate already mean. So the stock thins
@@ -1629,9 +1636,10 @@
      there (checked at 2x on /office-preview: Ada's rose and Hana's blue were separable, Bo's and
      Cy's were not). 55% is where the plates read as different people at 1x without any of them
      shouting. Falls back to the mustard for the receptionist and anything else with no seat. */
-  /* 2026-10-19: the rim follows the tinted stock — hue at 85% into a dark bark, so the edge is the
-     member's colour drawn firmly rather than the 55%-into-paper-rim hint the paper-2 stock needed. */
-  border: 1px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 85%, #4a3418);
+  /* 2026-10-19 (lane 01M5B31024): back to the hint — hue at 55% into the paper rim — now that the
+     stock is one chalk for everyone. The tinted stock's firm 85%-into-bark rim would put twelve
+     strong outlines back on the floor, the colour-everywhere result nick turned down. */
+  border: 1px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 55%, var(--lc-paper-rim));
   font-family: var(--font-mono, monospace);
   font-size: var(--lc-type-name);
   letter-spacing: -0.01em;
