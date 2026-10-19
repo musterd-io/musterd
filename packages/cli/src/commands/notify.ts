@@ -33,10 +33,79 @@ function parseOptions(
  * while they aren't watching. Closes the (B′) "away with nothing open" hole ADR 024 named. The
  * notify sink is injectable so the loop is testable without spawning the OS notifier.
  */
+const CHANNELS_USAGE =
+  'usage: musterd notify channels [--json]\\n' +
+  '       musterd notify channels set <channel> [--deliver on|off] [--answer on|off] ' +
+  '[--presence-gating on|off] [--tier-floor advisory|standard|blocking|none]';
+
+/**
+ * `musterd notify channels` — away-channel settings (spec: Channel settings; nothing is on by
+ * default): per-channel deliver/answer switches, presence gating, and an optional tier floor
+ * for this human. The switches live in the daemon with the bindings.
+ */
+async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
+  const { team, http } = resolve(parsed.flags);
+  const json = parsed.flags['json'] === true;
+  const sub = parsed.positionals[1];
+  if (sub === undefined) {
+    const { settings } = await http.getChannelSettings(team);
+    if (json) {
+      process.stdout.write(JSON.stringify(settings, null, 2) + '\n');
+      return 0;
+    }
+    if (settings.length === 0) process.stdout.write('no channels\n');
+    for (const s of settings) {
+      process.stdout.write(
+        `${s.channel}  deliver ${s.deliver ? 'on' : 'off'}  answer ${s.answer ? 'on' : 'off'}  ` +
+          `presence-gating ${s.presenceGating ? 'on' : 'off'}  tier-floor ${s.tierFloor ?? 'none'}\n`,
+      );
+    }
+    return 0;
+  }
+  if (sub === 'set') {
+    const channel = parsed.positionals[2];
+    if (!channel) throw new Error(CHANNELS_USAGE);
+    const current = (await http.getChannelSettings(team)).settings.find(
+      (s) => s.channel === channel,
+    ) ?? { deliver: false, answer: false, presenceGating: true, tierFloor: null };
+    const onOff = (name: string, fallback: boolean): boolean => {
+      const v = parsed.flags[name];
+      if (v === undefined) return fallback;
+      if (v === 'on') return true;
+      if (v === 'off') return false;
+      throw new Error(CHANNELS_USAGE);
+    };
+    const floorRaw = parsed.flags['tier-floor'];
+    const tierFloor =
+      floorRaw === undefined
+        ? current.tierFloor
+        : floorRaw === 'none'
+          ? null
+          : floorRaw === 'advisory' || floorRaw === 'standard' || floorRaw === 'blocking'
+            ? floorRaw
+            : (() => {
+                throw new Error(CHANNELS_USAGE);
+              })();
+    const { settings } = await http.setChannelSettings(team, channel, {
+      deliver: onOff('deliver', current.deliver),
+      answer: onOff('answer', current.answer),
+      presence_gating: onOff('presence-gating', current.presenceGating),
+      tier_floor: tierFloor,
+    });
+    process.stdout.write(
+      `${settings.channel}  deliver ${settings.deliver ? 'on' : 'off'}  answer ${settings.answer ? 'on' : 'off'}  ` +
+        `presence-gating ${settings.presenceGating ? 'on' : 'off'}  tier-floor ${settings.tierFloor ?? 'none'}\n`,
+    );
+    return 0;
+  }
+  throw new Error(CHANNELS_USAGE);
+}
+
 export async function notifyCommand(
   parsed: Parsed,
   deps: { notify?: (n: NotifyItem) => void } = {},
 ): Promise<number> {
+  if (parsed.positionals[0] === 'channels') return notifyChannelsCommand(parsed);
   const { team, identity, http } = resolve(parsed.flags);
   // The notifier polls on the away human's behalf — its reads must NOT mark them present (ADR 057),
   // or isReachable would see them online and the notification would silence itself.

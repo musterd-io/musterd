@@ -246,6 +246,15 @@ export interface ChannelPairing {
   created_at: number;
 }
 
+/** Per-human channel settings (away channels 6): nothing is on by default. */
+export interface ChannelSettings {
+  channel: string;
+  deliver: boolean;
+  answer: boolean;
+  presenceGating: boolean;
+  tierFloor: 'advisory' | 'standard' | 'blocking' | null;
+}
+
 /** A channel binding: an immutable provider identity bound to a human (ADR 618 §7). */
 export interface ChannelBinding {
   id: string;
@@ -1266,6 +1275,31 @@ export class HttpClient {
       'POST',
       `/teams/${slug}/channels/bindings/${encodeURIComponent(bindingId)}/revoke`,
     ) as Promise<{ ok: true; tokensRevoked: number }>;
+  }
+
+  /** Away channels 6: this human's per-channel settings (nothing is on by default). */
+  async getChannelSettings(slug: string): Promise<{ settings: ChannelSettings[] }> {
+    return this.request('GET', `/teams/${slug}/channels/settings`) as Promise<{
+      settings: ChannelSettings[];
+    }>;
+  }
+
+  /** Away channels 6: replace one channel's settings for this human. */
+  async setChannelSettings(
+    slug: string,
+    channel: string,
+    body: {
+      deliver: boolean;
+      answer: boolean;
+      presence_gating: boolean;
+      tier_floor: 'advisory' | 'standard' | 'blocking' | null;
+    },
+  ): Promise<{ settings: ChannelSettings }> {
+    return this.request(
+      'PUT',
+      `/teams/${slug}/channels/settings/${encodeURIComponent(channel)}`,
+      body,
+    ) as Promise<{ settings: ChannelSettings }>;
   }
 
   /** ADR 618 §7: revoke every binding and outstanding token, and disconnect the relay locally. */

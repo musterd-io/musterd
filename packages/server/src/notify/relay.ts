@@ -17,6 +17,7 @@ import {
   type RedemptionChecks,
 } from '../store/askChannelTokens.js';
 import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
+import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
@@ -132,6 +133,16 @@ const relayChecks: RedemptionChecks = {
   // The pairing lane's binding store (ADR 618 §7): a binding is current only while it is active
   // at the generation the token names; revoked, re-paired or unknown bindings refuse the answer.
   bindingStanding: channelBindingStanding,
+  // Channel settings (away channels 6): the binding's human may have turned answering off for
+  // this channel (or delivery off, which ends both) — refused as answer_disabled.
+  answerEnabled: async (t, teamId, bindingId, channel) => {
+    const binding = await t.get<{ member_id: string }>(
+      'SELECT member_id FROM channel_bindings WHERE id = ? AND team_id = ?',
+      [bindingId, teamId],
+    );
+    if (!binding) return false;
+    return answerAllowed(await getChannelSettings(t, teamId, binding.member_id, channel));
+  },
 };
 
 /**

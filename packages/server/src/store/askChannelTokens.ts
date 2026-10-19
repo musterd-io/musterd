@@ -24,7 +24,8 @@ export type RefusalReason =
   | 'class_changed'
   | 'binding_stale'
   | 'no_binding_store'
-  | 'conflict';
+  | 'conflict'
+  | 'answer_disabled';
 
 export interface IssueInput {
   teamId: string;
@@ -107,6 +108,11 @@ export interface RedemptionChecks {
     bindingId: string,
     generation: number,
   ): Promise<BindingStanding>;
+  /**
+   * May the bound human answer from this channel right now (channel settings, away channels 6)?
+   * Optional: when absent, answer authority is not gated (existing callers and unit stubs).
+   */
+  answerEnabled?(t: Driver, teamId: string, bindingId: string, channel: string): Promise<boolean>;
 }
 
 /**
@@ -214,6 +220,14 @@ export async function redeemAskChannelToken(
       );
       if (standing === 'unavailable') throw new Refuse('no_binding_store', row);
       if (standing !== 'current') throw new Refuse('binding_stale', row);
+      // Channel settings: turning answer off (or delivery off) removes answer authority
+      // without touching the binding — refused here, before any decision is claimed.
+      if (
+        checks.answerEnabled &&
+        !(await checks.answerEnabled(t, input.teamId, row.binding_id, row.channel))
+      ) {
+        throw new Refuse('answer_disabled', row);
+      }
 
       // The compare-and-set: one decision per ask, whichever channel gets here first.
       const claimed = await t.run(

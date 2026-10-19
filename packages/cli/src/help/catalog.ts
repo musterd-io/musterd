@@ -547,9 +547,13 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'notify',
-    signature: '[--interval <seconds>] [--once]',
+    signature: '[--interval <seconds>] [--once] | channels [set <channel> --deliver on|off …]',
     summary: 'background OS notification when a directed act lands while away',
     group: 'waiting',
+    detail:
+      '`notify channels` is away-channel settings (spec: Channel settings — nothing is on by ' +
+      'default): your per-channel deliver/answer switches, presence gating (deliver only while ' +
+      'you are away), and an optional tier floor, stored in the daemon with your bindings.',
   },
 
   // ── Work & lanes ───────────────────────────────────────────────────────────────────────────

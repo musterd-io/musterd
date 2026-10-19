@@ -6,6 +6,7 @@ import { withDrivers } from '../db/testing.js';
 import { askDigest, issueAskChannelToken } from '../store/askChannelTokens.js';
 import { listAudit } from '../store/audit.js';
 import { confirmPairing, recordPairingIdentity, startPairing } from '../store/channelBindings.js';
+import { setChannelSettings } from '../store/channelSettings.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
@@ -72,6 +73,19 @@ async function seed() {
     now: NOW,
   });
   if (!confirmed.ok) throw new Error(confirmed.reason);
+  // Channel settings default to off; the answering human has opted in.
+  await setChannelSettings(db, {
+    teamId: team.id,
+    memberId: nick.id,
+    actor: 'nick',
+    settings: {
+      channel: 'slack',
+      deliver: true,
+      answer: true,
+      presenceGating: false,
+      tierFloor: null,
+    },
+  });
   const stored = await db.get<{ body: string; meta: string | null }>(
     'SELECT body, meta FROM messages WHERE team_id = ? AND id = ?',
     [team.id, 'ask-1'],
@@ -160,6 +174,41 @@ withDrivers('slack adapter (ADR 668)', (o) => {
     const detail = JSON.parse(audit[0]!.detail!) as Record<string, unknown>;
     expect(detail).toMatchObject({ authorizer: 'nick', delivery_actor: 'slack', channel: 'slack' });
     expect(detail).not.toHaveProperty('authorized_by');
+  });
+
+  it('turning answer off refuses the answer without touching the binding', async () => {
+    const { db, team, ctx, token } = await seed();
+    const nick = await db.get<{ id: string }>("SELECT id FROM members WHERE name = 'nick'");
+    await setChannelSettings(db, {
+      teamId: team.id,
+      memberId: nick!.id,
+      actor: 'nick',
+      settings: {
+        channel: 'slack',
+        deliver: true,
+        answer: false,
+        presenceGating: false,
+        tierFloor: null,
+      },
+    });
+    const result = await handleRelayCallback(
+      ctx,
+      team,
+      {
+        protocol: 1,
+        type: 'callback',
+        ask_ref: 'ask-1',
+        body: slackBody({
+          team: { id: 'T1' },
+          user: { id: 'U1' },
+          actions: [{ action_id: 'musterd_approve', value: token }],
+        }),
+      },
+      NOW + 1_000,
+    );
+    expect(result).toEqual({ ok: false, reason: 'answer_disabled' });
+    const decisions = await db.all('SELECT * FROM ask_decisions');
+    expect(decisions).toHaveLength(0);
   });
 
   it('a payload naming an unbound Slack user redeems nothing', async () => {

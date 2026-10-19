@@ -244,6 +244,7 @@ import {
   revokeBinding,
   startPairing,
 } from '../store/channelBindings.js';
+import { listChannelSettings, setChannelSettings } from '../store/channelSettings.js';
 import { recordCiRuns } from '../store/ci.js';
 import { checkClaims } from '../store/claimCheck.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
@@ -1237,6 +1238,15 @@ const FootprintReapBody = z.object({
 // daemon's own pairing row, which is what the confirmation shows.
 const PairingStartBody = z.object({
   channel: z.string().min(1).max(64),
+});
+
+// Channel settings (away channels 6): the human's own per-channel switches. Nothing is on by
+// default; presence gating defaults on; tier floor is optional.
+const ChannelSettingsBody = z.object({
+  deliver: z.boolean(),
+  answer: z.boolean(),
+  presence_gating: z.boolean(),
+  tier_floor: z.enum(['advisory', 'standard', 'blocking']).nullable(),
 });
 
 const CreateTeamBody = z.object({
@@ -4362,6 +4372,31 @@ export async function handleHttp(
             );
           }
           return sendJson(res, 200, result);
+        }
+        if (method === 'GET' && rest === '/channels/settings') {
+          // Every channel this human has a binding for, plus slack (the one adapter in v1).
+          const bindings = await listBindings(ctx.db, team.id, member.id);
+          const channels = [...new Set(['slack', ...bindings.map((b) => b.channel)])];
+          return sendJson(res, 200, {
+            settings: await listChannelSettings(ctx.db, team.id, member.id, channels),
+          });
+        }
+        const settingsMatch = /^\/channels\/settings\/([^/]+)$/.exec(rest);
+        if (method === 'PUT' && settingsMatch) {
+          const body = parseOrBadRequest(ChannelSettingsBody, await readJson(req));
+          const saved = await setChannelSettings(ctx.db, {
+            teamId: team.id,
+            memberId: member.id,
+            actor: member.name,
+            settings: {
+              channel: decodeURIComponent(settingsMatch[1]!),
+              deliver: body.deliver,
+              answer: body.answer,
+              presenceGating: body.presence_gating,
+              tierFloor: body.tier_floor,
+            },
+          });
+          return sendJson(res, 200, { settings: saved });
         }
         if (method === 'POST' && rest === '/channels/kill-switch') {
           const result = await killSwitchChannels(ctx.db, {
