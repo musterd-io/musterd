@@ -43,12 +43,18 @@ which, the roster, needed ADR 671 on Cloud) adds failure modes to a fact the ord
    and the seat is an `agent` or `service` (ADR 636 §1); a human seat or an unset policy carries
    none. The host arms the hold from this field alone: no roster read, no `GET /report` read. An
    absent field arms nothing. Protocol schema change: additive, optional.
-2. **The hold's acts authenticate under the wake lease.** An agent-seat credential presented with
-   `x-musterd-wake-lease` and _no_ session lease authenticates as the seat when a fresh, unreleased
-   Presence of that seat attests exactly that lease (ADR 241's row). The request is
+2. **The hold's acts authenticate under the wake lease, on two routes.** On `POST /messages`
+   (the ask, and the held-outcome `status_update` and `message`) and `GET /messages` (the inbox
+   peek) — and nowhere else — an agent-seat credential presented with `x-musterd-wake-lease` and
+   _no_ session lease authenticates as the seat when two daemon-held facts agree: a `wake_leases`
+   row with that id, minted for that member and not yet reported; and a fresh, unreleased Presence
+   of that seat attesting exactly that lease (ADR 241's row). The Presence's attestation is
+   client-side, so alone it is not evidence; the lease row is the daemon's. The request is
    presence-neutral by construction: the daemon creates and touches no Presence for it, because
-   the wake's session is the occupant. A lease no Presence attests, a released Presence, a stale
-   one, another seat's lease, or a halted seat (ADR 501) is refused with its own sentence.
+   the wake's session is the occupant. Standing is judged as for any caller (left, halted — ADR
+   501 —, disabled, banned, archived, lifecycle). A lease the daemon never minted, a reported one,
+   another seat's, one no Presence attests, a released or stale Presence, or any other route is
+   refused with its own sentence.
 3. **The host's seat client sends the lease.** `HttpClient` gains `wakeLease`, sent as the ADR 241
    header on every request of that client (agent-seat credential only, as before). The loop opens
    the spend-approval seat client with the order's `lease_id`; the ask, the inbox peek, and the
@@ -64,19 +70,23 @@ which, the roster, needed ADR 671 on Cloud) adds failure modes to a fact the ord
 
 ## Consequences
 
-- A host that holds a seat credential and knows a live wake's lease id can act as that seat
-  without a Presence for as long as the wake's session is present. The lease id is not a secret
-  (it is on the roster); the credential is, and it is the same secret the host already keeps in the
-  workspace binding. The window closes when the wake's Presence is released or goes stale.
+- A host that holds a seat credential and knows a live wake's lease id can post and read as
+  that seat on the two message routes, without a Presence, for as long as the wake's session is
+  present and the lease is unreported. The lease id is not a secret (it is on the roster); the
+  credential is, and it is the same secret the host already keeps in the workspace binding, with
+  which it could claim the seat outright. A separate host-only token minted with the order was
+  considered and declined: it would add a second secret to hold without adding an actor the
+  credential does not already admit. The window closes with the wake's Presence or its report.
 - The host loop's spend-approval dependencies shrink: `memberKind` and `readSpendApproval` are
   gone; `spendApprovalSeat(workspace, team, leaseId)` is the one seam.
 - `GET /report` keeps `wake.spend_approval_usd` for its readers (ADR 635); nothing reads it to arm.
 - Tests: the order carries the threshold for an agent seat and never for a human
   (`store/residency.test.ts`); the wake-lease authentication is pinned on both drivers
   (`transport/wake-lease-auth-http.test.ts`): refused until a Presence attests the lease, then the
-  ask posts and the inbox peeks with no Presence row added, another lease and a released Presence
-  are refused, a session lease still works beside the header; the host arms from the order and
-  opens the seat client for that lease (`host/loop.test.ts`).
+  ask posts and the inbox peeks with no Presence row added; a lease the daemon never minted, another
+  lease id, a reported lease and a released Presence are refused; any other route (`GET /report`)
+  keeps the lease rule; a session lease still works beside the header. The host arms from the
+  order and opens the seat client for that lease (`host/loop.test.ts`).
 
 ## Observability & Evaluation
 
