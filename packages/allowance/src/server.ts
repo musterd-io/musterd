@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readBoard } from './board.js';
-import { claudeTokenFromKeychain, resolveClaudeToken } from './claude.js';
+import { claudeSignInFromKeychain, resolveClaudeSignIn } from './claude.js';
 import { loadSelection, saveSelection, selectionFromForm } from './config.js';
 import { percentCss } from './css.js';
 import { cursorTokenFromKeychain, resolveCursorToken } from './cursor.js';
@@ -33,7 +33,7 @@ export interface StartOpts {
   claudeCredentialPath?: string | null;
   /**
    * Claude access token. Undefined reads the env, the credentials file, then the macOS keychain.
-   * Null skips all of those, so a test never reads a sign-in.
+   * Null skips all of those, so a test never reads a sign-in. The plan comes from the same body.
    */
   claudeToken?: string | null;
   /** Cursor auth.json. Defaults to ~/.cursor/auth.json. Null skips the file. */
@@ -194,7 +194,12 @@ export function start(opts: StartOpts): Promise<Server> {
         ? await resolveCursorToken(opts.cursorToken, cursorFile, cursorTokenFromKeychain)
         : null;
       const claude = on.has('claude')
-        ? await resolveClaudeToken(opts.claudeToken, env, claudeCredential, claudeTokenFromKeychain)
+        ? await resolveClaudeSignIn(
+            opts.claudeToken,
+            env,
+            claudeCredential,
+            claudeSignInFromKeychain,
+          )
         : null;
       return await readBoard({
         env,
@@ -204,7 +209,8 @@ export function start(opts: StartOpts): Promise<Server> {
         signal,
         chosen,
         codexAuth,
-        claudeToken: claude,
+        claudeToken: claude?.token ?? null,
+        claudePlan: claude?.plan ?? null,
         cursorToken: cursor,
       });
     } catch {

@@ -28,8 +28,15 @@ A number is drawn only from a body the provider's own client reads:
 - Claude, from `CLAUDE_CODE_OAUTH_TOKEN`, or `claudeAiOauth.accessToken` in
   `~/.claude/.credentials.json`, or on macOS the keychain item Claude Code stores
   (`Claude Code-credentials`, which is that same JSON): `GET https://api.anthropic.com/api/oauth/usage`.
-  `five_hour` and `seven_day` carry `utilization` and `resets_at`. `resets_at` may be unix seconds
-  or an ISO timestamp. A key containing `overage` is not a window, and neither is any other key.
+  That JSON also carries `subscriptionType` and `rateLimitTier`. The card names the plan the client
+  names: Claude Max, Claude Pro, Claude Team, or Claude Enterprise, and Claude Max 5x or Claude Max
+  20x when the tier says so. An unknown tier is not printed. When the body has `limits`, those rows
+  are the windows: `session` is the 5-hour window, `weekly_all` is the weekly window, and
+  `weekly_scoped` uses `scope.model.display_name` (Fable, on an account that sends it). They are the
+  same meters as `five_hour` and `seven_day`, so the page does not draw both. When `limits` is
+  absent, `five_hour` and `seven_day` carry `utilization` and `resets_at`. `resets_at` may be unix
+  seconds or an ISO timestamp. A key containing `overage` is not a window, and neither is any other
+  unnamed key. A surface split such as Claude Code, Chats, Cowork and Other is not a model window.
 - Cursor, from `accessToken` in `~/.cursor/auth.json`, or on macOS the keychain item the Cursor CLI
   stores (`cursor-access-token` / `cursor-user`):
   `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with an empty
@@ -53,7 +60,7 @@ A sign-in is read in the server and never written into the HTML, the JSON, or th
 bin.ts            // shebang: Node 22 gate, ALLOWANCE_PORT, start on loopback, print the url
 board.ts          // readBoard: the accounts the user turned on; a token stays inside its fetch
 catalog.ts        // every account the page can offer, and the reason when it has no read
-claude.ts         // Claude Code's usage read: oauth/usage, overage skipped, token from env, file, or keychain
+claude.ts         // Claude Code's usage read: plan from the sign-in, model windows from limits, token from env, file, or keychain
 codex.ts          // Codex's usage read: wham/usage windows, identity fields never copied out
 config.ts         // the saved account ids: parse, the form, ~/.allowance/config.json mode 0600
 css.ts            // percentCss: .p0–.p100 so a bar width is a class, not an inline style
