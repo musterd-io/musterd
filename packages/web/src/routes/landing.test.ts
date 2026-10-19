@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { INSTALL } from '../content/generated/install';
 
 const src = () => readFileSync(fileURLToPath(new URL('./index.tsx', import.meta.url)), 'utf8');
 
@@ -235,11 +236,16 @@ describe('the 2026-10-12 cut', () => {
   });
 
   it('Getting started is the install, in three steps with the commands themselves (ADR 568)', () => {
-    expect(start).toContain('You need Node 22 or later, and an agent tool you already use.');
-    expect(start).toContain("'npm install -g @musterd/cli'");
-    expect(start).toContain("'brew install SandRiseStudio/musterd/musterd'");
-    expect(start).toContain("'musterd init'");
-    expect(start).toContain("'musterd tour'");
+    // The commands and copy live in content/install.data.ts since ADR 669 §3.3; the section renders
+    // that one source, so it cannot drift from the README, llms.txt or the launch post.
+    expect(start).toContain("from '../../content/generated/install'");
+    expect(start).toContain('INSTALL.requires');
+    expect(INSTALL.requires).toBe('You need Node 22 or later, and an agent tool you already use.');
+    expect(INSTALL.primary).toBe('npm install -g @musterd/cli');
+    expect(INSTALL.alternatives.map((a) => a.command)).toEqual(['brew install SandRiseStudio/musterd/musterd']);
+    expect(INSTALL.steps.flatMap((s) => s.commands)).toEqual(
+      expect.arrayContaining(['musterd init', 'musterd tour']),
+    );
     expect(start).toContain('Read the source on GitHub');
     expect(start).not.toMatch(/private preview|early access|Not yet|EARLY_ACCESS/i);
     // The third capture (lane 01M4V74X9W, 2026-10-13): what step 3 leaves you looking at — the

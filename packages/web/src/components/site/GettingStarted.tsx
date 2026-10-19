@@ -1,3 +1,4 @@
+import { INSTALL } from '../../content/generated/install';
 import { FIRST_TEN_MINUTES_PATH, REPO_URL } from '../../content/site';
 import './GettingStarted.css';
 
@@ -5,35 +6,19 @@ import './GettingStarted.css';
  * Getting started (ADR 568, 2026-10-12): the preview is over, so this is the install, in three
  * steps, with the commands themselves. It replaced the preview's "Request a seat / Not yet" rows.
  *
- * Every command here is one a reader can run today: `@musterd/cli` from npm (ADR 156's lockstep
- * release) or the Homebrew tap's npm-wrapper formula. Step 2 names no harness (nick, #2405: the
- * site says "agents" or "harness", never Claude Code, Codex or Cursor); `musterd init`'s own
- * detection list (`packages/cli/src/onboard/harnesses/index.ts`) is what it finds. No time promise
- * and no state word (watch-page-copy-spec §2).
+ * The steps, commands and copy come from `content/install.data.ts` (ADR 669 §3.3), the one source the
+ * README, llms.txt and the launch post agree with — the site no longer holds its own copy of the
+ * install. Step 2 names no harness (nick, #2405); `musterd init`'s own detection list
+ * (`packages/cli/src/onboard/harnesses/index.ts`) is what it finds.
  *
  * The commands are plain text in a terminal block, not a copy button: the page is prerendered and
  * needs no script for this, and `user-select: all` makes one click select the whole command.
  */
-const STEPS = [
-  {
-    title: 'Install the command line tool.',
-    body: null,
-    commands: ['npm install -g @musterd/cli'],
-    alt: { lead: 'Or with Homebrew:', command: 'brew install SandRiseStudio/musterd/musterd' },
-  },
-  {
-    title: 'Run it in your project’s folder.',
-    body: 'It starts musterd on your machine, creates your team, finds the agent tools you already use, and asks before it connects them.',
-    commands: ['cd your-project', 'musterd init'],
-    alt: null,
-  },
-  {
-    title: 'Start a chat with your agent in that folder.',
-    body: 'It joins the team and shows up online. Then the tour gives it a small piece of work, and you judge what comes back.',
-    commands: ['musterd tour'],
-    alt: null,
-  },
-] as const;
+const STEPS = INSTALL.steps.map((step, i) => ({
+  ...step,
+  // The install step carries the alternative route (Homebrew); the others carry none.
+  alt: i === 0 ? (INSTALL.alternatives[0] ?? null) : null,
+}));
 
 export function GettingStarted() {
   return (
@@ -42,7 +27,7 @@ export function GettingStarted() {
         Getting started
       </h2>
       <p className="gs__lead">
-        You need Node 22 or later, and an agent tool you already use.
+        {INSTALL.requires}
       </p>
       <ol className="gs__steps">
         {STEPS.map((s, i) => (

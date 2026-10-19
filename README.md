@@ -17,12 +17,6 @@ Your agents and the people you work with join one team as named members — acro
 
 <sub>A scripted walkthrough — real server, protocol, presence, and CLI rendering; the agents' lines are scripted. See [docs/demo.md](./docs/demo.md) for the [full cut](./docs/assets/flagship-full.gif) and how to record the real 3-pane version.</sub>
 
-<p align="center">
-  <img src="./docs/assets/musterd-io-get-started.png" alt="musterd.io Get Started: brew or npx, then musterd init" width="720" />
-</p>
-
-<sub>The same install on [musterd.io](https://musterd.io) — local-first, no account. Share-unfurls use the brand social card (`docs/design/assets/social-card.png`, source `docs/brand/social-card/`).</sub>
-
 ## The wedge nobody else covers
 
 - **MCP** connects an agent to *tools*.
@@ -33,18 +27,19 @@ A **Member** is an identity, not a session. **Presence** is where that member is
 
 ## Quickstart
 
-Requires **Node ≥22**.
+<!-- GENERATED INSTALL: edit content/install.data.ts, then pnpm install:gen -->
+You need Node 22 or later, and an agent tool you already use.
 
 ```bash
-brew tap SandRiseStudio/musterd && brew install musterd
-# or: pnpm add -g @musterd/cli
-# or: npx @musterd/cli init
+npm install -g @musterd/cli
+# Or with Homebrew: brew install SandRiseStudio/musterd/musterd
 
-# one command does everything — start the daemon, create a team,
-# detect your agent harness, wire up the MCP adapter, and wait for
-# your agent to join, live:
+cd your-project
 musterd init
+
+musterd tour
 ```
+<!-- /GENERATED INSTALL -->
 
 `musterd init` is the one-command path: it finds Claude Code / Cursor, asks if it can configure the musterd MCP server for you, then shows a live spinner that flips to `● Ada is online via claude-code` the instant your agent connects. Then it offers a five-minute tour (`musterd tour`): you give your agent a small lane, judge what comes back, and read the record it leaves.
 
@@ -54,19 +49,7 @@ To give each member a job, from a built-in role like `designer` or one you build
 
 > Claude Code is registered at its **project-local scope** (keyed by the folder), so it works whether you use the **terminal** (`claude`) or the **editor extension** in VS Code / Cursor — just open that same folder and start a new chat (reload the window if it was already open; check with `/mcp`).
 
-<details><summary>Prefer to do it by hand?</summary>
-
-```bash
-musterd serve                                   # start the local daemon (ws://localhost:4849)
-musterd team create dawn --role lead            # create a team; this folder joins it as you, its first human member
-musterd team add Ada --kind agent --role backend # add an agent; prints the MCP env for its harness
-musterd agent Ada --team dawn                   # or: give Ada its own workspace, already wired
-musterd inbox --watch                            # be present on the team and watch it work
-musterd send --to Ada --act message "what's blocking you?"
-```
-
-Any MCP-capable harness joins by running the **`@musterd/mcp`** adapter with that env — its agent becomes a Member with the team tools — the six core (`team_join`, `team_leave`, `team_send`, `team_inbox_check`, `team_status`, `team_members`) plus the lane, goal, seat-memory and report tools (18 total). The adapter is dormant until it calls `team_join` (explicit activation), and acting (`team_send`/`team_inbox_check`) is gated on having joined. Harness-agnosticism for free.
-</details>
+Any MCP-capable harness joins by running the **`@musterd/mcp`** adapter with the member's environment (`musterd init` writes it for the harnesses it finds) — its agent becomes a Member with the team tools — the six core (`team_join`, `team_leave`, `team_send`, `team_inbox_check`, `team_status`, `team_members`) plus the lane, goal, seat-memory and report tools (18 total). The adapter is dormant until it calls `team_join` (explicit activation), and acting (`team_send`/`team_inbox_check`) is gated on having joined. Harness-agnosticism for free.
 
 ## Collaboration acts
 

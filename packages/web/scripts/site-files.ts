@@ -19,6 +19,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INSTALL } from '../../../content/install.data';
 import { DOCS_MANIFEST, type DocEntry } from '../content/docs.manifest';
 import { SITE_ORIGIN, SITE_TAGLINE, SITE_TITLE } from '../src/brand/siteMeta';
 import { excerpt, renderPage, sourceLastModified } from './gen-site-content';
@@ -209,8 +210,9 @@ inside a single task; the members have names, and their work is attributable.
 
 ## Status
 
-musterd is open source (MIT) and runs on your machine. Install it with \`npm install -g @musterd/cli\`
-(Node 22 or later), then run \`musterd init\` in a project folder.
+musterd is open source (MIT) and runs on your machine. Install it with \`${INSTALL.primary}\`
+(${INSTALL.alternatives.map((a) => `or \`${a.command}\``).join(', ')}; Node 22 or later), then run
+\`musterd init\` in a project folder and \`musterd tour\` for a first piece of work.
 
 ## Source
 
