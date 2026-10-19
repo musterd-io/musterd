@@ -134,8 +134,14 @@ a headline line when declines of handoffs or challenges to a person appear in ou
 - **"In one read" is not yet.** `musterd lane show` and `lane_show` print the owner and the merge
   sign-off; who asked and the review verdict are not on the same page (checked 2026-10-19 against
   `packages/mcp/src/tools/laneShow.test.ts`). The phrase waits for a surface that shows the whole
-  chain of one lane on one page, named in the ledger.
-  Follows-up: a lane for the one-page chain on `lane show`, opened when this ADR is accepted.
+  chain of one lane on one page, named in the ledger. _(Amended 2026-10-19: wrong on the day it
+  was written. ADR 629 shipped the chain in #2771 (d4ab3cb3): `musterd lane show <id>` and
+  `lane_show` print asked, claimed, model, accepted and authorized, each marked verified, stated
+  or missing; checked on lane 01M5AMG9C3 the same day. "In one read" may be said, citing lane
+  show. The check above read one test file and missed it; ryder caught it. What is still not
+  claimed is that the acceptance was independent: the review grade on the accepted line is ADR 670,
+  lane `01M5AXKX01`.)_
+  Follows-up: none — the one-page chain lane (`01M5AX030T`) closed as a duplicate of `01M534RA2H`, which shipped it.
 - **From** both conditions, §1's second sentence gains the start of the chain: _"The record shows
   who asked, who did it, who checked it, and which model."_ The sign-off joins it only as proof
   line 3, attested, and the section title can then be said as a sentence.
@@ -207,6 +213,12 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   public strings say "accepts / who accepted" (brand.md §1, ADR 563); the ADR's sentence said
   "checks". nick's direction through sloane: one verb everywhere. §1 carries the dated marker; the
   Decision is otherwise unchanged.
+- **2026-10-19, after acceptance: "in one read" was already true.** ryder (act
+  `01M5AXMSKVZ6NN59G6KQ4Q5TYW`): ADR 629's #2771 prints the chain on `lane show` with each link
+  verified, stated or missing (629 replaced ADR 550's "attested" with "stated"; this ADR's table
+  reads "attested" where lane show prints "stated"). §3 carries the dated marker. The follow-up
+  lane this ADR opened for it closed as a duplicate. The pitch ledger cites lane show. Independent
+  review (the grade on the accepted line) is ADR 670 and is not claimed until it lands.
 - No code changes. No glossary changes. No protocol changes.
 
 ## Falsifiers
