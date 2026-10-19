@@ -88,6 +88,40 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
     expect(after.json.bindings[0].status).toBe('revoked');
   });
 
+  it('channel settings default off and round-trip over HTTP', async () => {
+    const before = await call('GET', '/teams/dawn/channels/settings', nick);
+    expect(before.json.settings).toContainEqual({
+      channel: 'slack',
+      deliver: false,
+      answer: false,
+      presenceGating: true,
+      tierFloor: null,
+    });
+    const saved = await call('PUT', '/teams/dawn/channels/settings/slack', nick, {
+      deliver: true,
+      answer: false,
+      presence_gating: false,
+      tier_floor: 'standard',
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json.settings).toMatchObject({
+      channel: 'slack',
+      deliver: true,
+      answer: false,
+      tierFloor: 'standard',
+    });
+    const after = await call('GET', '/teams/dawn/channels/settings', nick);
+    expect(after.json.settings).toContainEqual(saved.json.settings);
+    // An agent seat has no channel settings of its own to write.
+    const refused = await call('PUT', '/teams/dawn/channels/settings/slack', ada, {
+      deliver: true,
+      answer: true,
+      presence_gating: true,
+      tier_floor: null,
+    });
+    expect(refused.status).toBe(403);
+  });
+
   it('an agent seat cannot start a pairing, and the kill switch answers over HTTP', async () => {
     const refused = await call('POST', '/teams/dawn/channels/pairing/start', ada, {
       channel: 'slack',

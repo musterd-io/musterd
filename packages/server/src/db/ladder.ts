@@ -680,6 +680,23 @@ CREATE TABLE IF NOT EXISTS pairing_nonces (
 );
 CREATE INDEX IF NOT EXISTS idx_pairing_nonces_team_member ON pairing_nonces(team_id, member_id, state)`,
   },
+  {
+    // v111 — channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8; spec: Channel
+    // settings): one row per human per channel. No row = nothing on (nothing is on by default).
+    // Team-owned; RLS covers it like the v110 tables.
+    version: 111,
+    sql: `CREATE TABLE IF NOT EXISTS member_channel_settings (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  deliver_enabled INTEGER NOT NULL,
+  answer_enabled INTEGER NOT NULL,
+  presence_gating INTEGER NOT NULL,
+  tier_floor TEXT,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, member_id, channel)
+)`,
+  },
 ];
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'

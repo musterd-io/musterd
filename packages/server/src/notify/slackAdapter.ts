@@ -9,7 +9,9 @@ import type { Ctx } from '../context.js';
 import { log } from '../log.js';
 import { askDigest, issueAskChannelToken } from '../store/askChannelTokens.js';
 import { findBindingByIdentity, listBindings } from '../store/channelBindings.js';
+import { deliverAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { getMemberById, listMembers } from '../store/members.js';
+import { humanPresent } from '../store/reachability.js';
 import { resolveCapabilities, type TeamRow } from '../store/rows.js';
 import { getPolicy } from '../store/teams.js';
 import { relayLinkFor } from './relay.js';
@@ -168,9 +170,21 @@ export async function deliverAskToSlackChannels(
       [team.id, env.id],
     );
     if (!ask) return;
-    const tier = AskTierSchema.safeParse((env.meta as { tier?: unknown } | undefined)?.tier);
-    const expiresAt = env.ts + askContract(tier.success ? tier.data : 'standard').timeout_ms;
+    const tierParsed = AskTierSchema.safeParse((env.meta as { tier?: unknown } | undefined)?.tier);
+    const askTier = tierParsed.success ? tierParsed.data : 'standard';
+    const expiresAt = env.ts + askContract(askTier).timeout_ms;
     for (const human of await askHumans(ctx, team, env)) {
+      // Channel settings (away channels 6): nothing is on by default, delivery respects the
+      // tier floor, and presence gating (default on) keeps the phone quiet while the human
+      // is at /live.
+      const settings = await getChannelSettings(ctx.db, team.id, human.id, 'slack');
+      if (!deliverAllowed(settings, askTier)) continue;
+      if (
+        settings.presenceGating &&
+        (await humanPresent(ctx.db, team.id, human, ctx.config.presenceTimeoutMs))
+      ) {
+        continue;
+      }
       const binding = (await listBindings(ctx.db, team.id, human.id)).find(
         (b) => b.channel === 'slack' && b.status === 'active',
       );

@@ -130,6 +130,10 @@ export type AuditAction =
   | 'channel.pair.rejected'
   | 'channel.pair.revoked'
   | 'channel.killswitch'
+  // Channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8): a human changing
+  // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
+  // the switch states only — never a credential.
+  | 'channel.settings.changed'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -704,6 +708,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.pair.rejected': 'actor',
   'channel.pair.revoked': 'actor',
   'channel.killswitch': 'actor',
+  'channel.settings.changed': 'actor',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
   // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.
