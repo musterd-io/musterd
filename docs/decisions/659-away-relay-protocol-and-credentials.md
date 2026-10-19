@@ -38,6 +38,11 @@ the team slug. The daemon opens one WebSocket to its team's object
 an idle team costs near zero and an answer reaches the daemon as it arrives. A second live socket
 for the same team is refused (upgrade answered 409): a replaced socket is a credential event, not
 a reconnect, and the kill switch and rotation below are how a daemon legitimately takes over.
+_(Amended 2026-10-19: one exception — a socket presenting the operator map's current credential
+replaces a live socket still holding a rotated-away credential, closing it with code 1008. Without
+it, §4's "the daemon reconnects with the new credential" deadlocked against this section's 409
+until the stale socket died on its own. A second socket with the same credential is still refused
+409, and a credential the map does not name never replaces anything.)_
 
 ### 2. Relay protocol v1 — small, versioned, parsed at both ends
 
@@ -116,6 +121,23 @@ ADR 147/153).
 
 ## Consequences
 
+- 2026-10-19 — acceptance of the first landing (PR #2882) was declined on review: four places
+  where the code did not do what this ADR says. All four are fixed in the follow-up landing, with
+  no Decision change except the dated §1 amendment above: (1) the daemon's socket-URL mapping
+  sent a `wss://` policy URL over plaintext `ws:` — it now keeps `wss:` and refuses `http:`/`ws:`
+  outright, since the credential rides the socket; (2) a failed delivery could never be retried,
+  because a re-push with the same `dedupe_id` was answered with the stored `ok:false` — a stored
+  `failed` row now re-sends on re-push (§2's "a retry is the daemon's decision, re-pushed");
+  (3) §4's rotation/revocation was not implemented — the credential was checked only at upgrade,
+  so a live socket survived rotation; the verified credential hash is now attached to the socket
+  and re-checked against the operator map on every frame, and the next frame after a rotation or
+  revocation is refused and the socket closed (1008); (4) the Eval section below named tests for
+  a second live socket and a cross-team credential that did not exist — both now exist by name in
+  `workers/away-relay/src/relay.test.ts`, alongside the failed-retry and frame-recheck rules. The
+  review also noted, non-blocking, that a half-open socket after laptop sleep could lock the
+  daemon out until Cloudflare reaped it; the §1 amendment's replacement rule covers the rotation
+  case, and a same-credential half-open socket still waits for the platform reap — accepted, since
+  the daemon's reconnect backoff retries the upgrade and reconcile makes the wait lossless.
 - Pairing (`01M50XPYZ9877E494X2SV1EGTB`) and the Slack adapter
   (`01M50XQ04M8E3X5QHY173Q18X7`) build on this protocol: pairing adds the binding store redemption
   currently fails closed without; the adapter renders the `deliver` POST and parses `callback`

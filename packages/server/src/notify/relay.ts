@@ -37,11 +37,21 @@ import { backoffMs } from '../sync/streamJoiner.js';
 /** How often the client looks for teams whose relay policy appeared, changed, or went away. */
 export const AWAY_RELAY_RESCAN_MS = 15_000;
 
-/** `http(s)://relay/…` → `ws(s)://relay/teams/<slug>/connect` (ADR 659 §1). */
+/**
+ * `https://relay/…` (or a `wss://` policy URL, which the CLI also accepts) →
+ * `wss://relay/teams/<slug>/connect` (ADR 659 §1). Anything else is refused outright: the
+ * credential rides this socket as a Bearer [REDACTED], so mapping `http:`/`ws:` to a plaintext
+ * socket would send it in cleartext.
+ */
 export function relaySocketUrl(relayUrl: string, slug: string): URL {
   const url = new URL(`/teams/${encodeURIComponent(slug)}/connect`, relayUrl);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  return url;
+  if (url.protocol === 'https:' || url.protocol === 'wss:') {
+    url.protocol = 'wss:';
+    return url;
+  }
+  throw new Error(
+    `away relay url must be https: or wss:, got ${url.protocol} — refusing to send the relay credential over a plaintext socket`,
+  );
 }
 
 /**
@@ -221,7 +231,17 @@ export function startAwayRelay(ctx: Ctx): () => void {
     const connect = () => {
       timer = null;
       if (closed || stopped) return;
-      const socket = new WebSocket(relaySocketUrl(url, team.slug), {
+      let socketUrl: URL;
+      try {
+        socketUrl = relaySocketUrl(url, team.slug);
+      } catch (err) {
+        // A plaintext (or otherwise unusable) policy URL never dials; retry on the scan's cadence
+        // in case policy is fixed, but never send the credential over it.
+        log.warn({ msg: 'away_relay_bad_url', team: team.slug, err: String(err) });
+        schedule();
+        return;
+      }
+      const socket = new WebSocket(socketUrl, {
         headers: { authorization: `Bearer ${credential}` },
         handshakeTimeout: 10_000,
       });

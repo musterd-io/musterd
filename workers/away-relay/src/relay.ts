@@ -115,17 +115,61 @@ export function reconcileRelayPending(
   return { kept, dropped };
 }
 
-/** May this `deliver` be stored? A duplicate dedupe id is the same delivery, not a second one. */
+/**
+ * May this `deliver` be stored? A duplicate dedupe id is the same delivery, not a second one —
+ * except when the stored attempt `failed`: a failed delivery is never "delivered", so the
+ * daemon's re-push (ADR 659 §2: a retry is the daemon's decision, re-pushed) re-sends it instead
+ * of being answered with the stored failure forever.
+ */
 export function deliverVerdict(
-  existingDedupe: boolean,
+  existingStatus: string | null,
   pendingCount: number,
   expiresAt: number,
   now: number,
-): 'store' | 'duplicate' | 'expired' | 'full' {
-  if (existingDedupe) return 'duplicate';
+): 'store' | 'retry' | 'duplicate' | 'expired' | 'full' {
+  if (existingStatus === 'failed') return expiresAt <= now ? 'expired' : 'retry';
+  if (existingStatus !== null) return 'duplicate';
   if (expiresAt <= now) return 'expired';
   if (pendingCount >= RELAY_MAX_PENDING) return 'full';
   return 'store';
+}
+
+/**
+ * The second-socket rule (ADR 659 §1, amended 2026-10-19): a second socket presenting the
+ * credential the live socket already holds is refused. A socket presenting the operator map's
+ * CURRENT credential while the live socket holds a different (rotated-away) one replaces it —
+ * that is the §4 rotation path, and refusing it would lock the daemon out until the stale
+ * socket happens to die.
+ */
+export function secondSocketVerdict(
+  liveCredentialHash: string | null,
+  presentedCredentialHash: string | null,
+  expectedCredentialHash: string | null,
+): 'refuse' | 'replace' {
+  if (
+    presentedCredentialHash !== null &&
+    expectedCredentialHash !== null &&
+    hashesEqual(presentedCredentialHash, expectedCredentialHash) &&
+    liveCredentialHash !== presentedCredentialHash
+  )
+    return 'replace';
+  return 'refuse';
+}
+
+/**
+ * Rotation/revocation on a live socket (ADR 659 §4): the credential hash the socket presented
+ * at upgrade is re-checked against the operator map on every frame. Once the map names a
+ * different hash (rotation) or none (revocation), the socket's next frame is refused.
+ */
+export function socketCredentialLive(
+  presentedCredentialHash: string | null,
+  expectedCredentialHash: string | null,
+): boolean {
+  return (
+    presentedCredentialHash !== null &&
+    expectedCredentialHash !== null &&
+    hashesEqual(presentedCredentialHash, expectedCredentialHash)
+  );
 }
 
 /** Provider coordinates from a provider's JSON answer (Slack: `channel` + `ts`); opaque elsewhere. */
