@@ -66,8 +66,11 @@ What does "connect the agents you already have" produce, and how does one run re
   error, so a format change costs suggestions, never the run.
 - opencode's record location was not seen on a live install (it was not installed on the machine the
   others were checked on, 2026-10-11).
-  Follows-up: confirm opencode's `storage/project/*.json` `worktree` field on the first machine
-  that has opencode, and fix the reader if it differs.
+  _(2026-10-19, lane `01M4PHMBGY6TF7WMTB3S8AX4AB`: checked on a live OpenCode install — OpenCode
+  migrated its store to `~/.local/share/opencode/opencode.db` (`project` table: `worktree`,
+  `time_active`, `time_updated`, `time_created`, with `storage/migration` = `1` and no
+  `storage/project/` directory). `recents.ts` now queries `opencode.db` first via `sqlite3` and
+  keeps the `storage/project/*.json` reader as a fallback for pre-SQLite installs.)_
 - The connect path ends without the tour offer. init offers the tour (lane `01M4FDBXPX`) only once
   the new agent is online, and this path waits for no agent; alfie owns whether and how it is
   offered here.
