@@ -2,13 +2,12 @@
 
 > Draft. Adapt for the target platform (X/Twitter, HN, dev.to, LinkedIn). The README's "wedge" and principles sections are the canonical source; this is the post form.
 >
-> **The version is set on launch morning, not here.** Published as of 2026-09-19 is **0.4.2**; the
-> launch window is Oct 28 – Nov 2 ([traction-plan](design/traction-plan.md) §7), so the number will
-> have moved. Every `v0.4.2` below is a placeholder to be re-read against `npm view @musterd/cli
-> version` the morning it ships. Writing a guess here is how a post goes out claiming a version
-> nobody can install.
+> **The version is 0.6.0, the launch train** ([publish/launch train](superpowers/specs/2026-10-19-publish-launch-train-design.md),
+> cut about Oct 23). The post goes out as a launch car, after the npm, tag, brew and site cars
+> have each landed and been checked, so the version it names is one a stranger can already install.
+> If the train is held, the post is held with it; it is never sent ahead of the release it names.
 >
-> Security boundary: v0.4.2 ships scoped credentials, authorized seat claims, Presence-bound leases,
+> Security boundary: 0.6.0 ships scoped credentials, authorized seat claims, Presence-bound leases,
 > admin-gated governance, and append-only audit records. It does not yet provide sandbox
 > enforcement, database encryption at rest, mTLS, signed audit records, or automatic credential
 > rotation. The Team-wide key minted by `team create` remains accepted as a marked legacy
@@ -16,9 +15,10 @@
 > vulnerability reports go through the repository's
 > [security advisory form](https://github.com/musterd-io/musterd/security/advisories/new).
 >
-> **Private preview (2026-10-03):** the repository is private and musterd.io carries no install
-> path or GitHub link (#2004), so the post forms below carry neither. If the repo opens before
-> launch, restore them in one pass. The security advisory link above stays deliberately.
+> **The preview is over** ([ADR 568](decisions/568-preview-over-install-path.md), 2026-10-12): the
+> repository is public and every form below carries the install and the source link. The install
+> lines follow ADR 568's three steps (npm, `musterd init`, `musterd tour`); when the single install
+> block (train spec §3.3) lands, these lines are re-read against it, not kept as a second copy.
 >
 > ~~**Ship blocker:** as of 2026-08-13 musterd.io serves nothing — do not publish until it
 > resolves.~~ CLEARED 2026-08-13: **musterd.io is live** and has since gained the `/watch` page and
@@ -39,11 +39,11 @@
 
 ## Short form (X / Bluesky, ~280 chars)
 
-> **musterd v0.4.2** — agents that work as a team alongside you, across any harness.
+> **musterd 0.6.0**: agents that work as a team alongside you, across any harness.
 >
-> One human + two agents. Three surfaces. One team. Every act on the roster has a name on it, and the human is on the roster too.
+> Nothing your agents do counts as done until another member checks it. The record shows who did it, who checked it, and which model.
 >
-> In private preview → musterd.io
+> `npm install -g @musterd/cli` → musterd.io
 
 ---
 
@@ -73,7 +73,13 @@ governance, and an append-only audit log. Sessions remain dormant until explicit
 The boundary is explicit. musterd is local-first and binds to `127.0.0.1` by default. It does not
 yet sandbox agent tools, encrypt its SQLite database at rest, use mTLS, or sign its audit log.
 
-musterd is in private preview: it runs today on the team that builds it.
+Try it (Node ≥22, open source under MIT, runs on your machine, no account):
+
+```
+npm install -g @musterd/cli    # or: brew tap SandRiseStudio/musterd && brew install musterd
+musterd init                   # in your project's folder
+musterd tour
+```
 
 <!-- NOT YET — one sentence from someone outside the team who installed it, with their name and
      what they were doing. Source: docs/design/quotes.md, filled hand-to-hand in weeks 3-6. Ship
@@ -86,13 +92,13 @@ musterd is in private preview: it runs today on the team that builds it.
 
 Tech: Node/TypeScript monorepo, SQLite + WS + HTTP, MCP adapter.
 
-Site: https://musterd.io
+Site: https://musterd.io · Source: https://github.com/musterd-io/musterd
 
 ---
 
 ## Long form (dev.to / blog post)
 
-### musterd v0.4.2: agents that work as a team alongside you
+### musterd 0.6.0: agents that work as a team alongside you
 
 Multi-agent systems are having a moment. Every week there's a new framework for orchestrating LLM agents — CrewAI, LangGraph, AutoGen, you name it. Most of them share an assumption: agents are short-lived, disposable, and stateless between tasks.
 
@@ -168,8 +174,15 @@ credentials automatically, sign audit records, or rate-limit claims. Those limit
 
 **Where it stands**
 
-musterd is in private preview. It runs today on the team that builds it; any MCP-capable harness
-joins, and it is local-first — SQLite on your disk, no account and no cloud required.
+musterd 0.6.0 is on npm and Homebrew, open source under MIT. Any MCP-capable harness joins, and it
+is local-first: SQLite on your disk, no account and no cloud required. Three steps, in your
+project's folder:
+
+```bash
+npm install -g @musterd/cli   # or: brew tap SandRiseStudio/musterd && brew install musterd
+musterd init                  # wires Claude Code, Codex or Cursor to the team
+musterd tour                  # give your agent a small lane, judge what comes back, read the record
+```
 
 **What's next**
 
@@ -182,4 +195,4 @@ act-typed log: time-to-unblock, ignored `request_help`, stalled threads, circula
 remains roadmap is **batond**, the standalone observability product built on that seam — the engine,
 not the views.
 
-→ [musterd.io](https://musterd.io)
+→ [musterd.io](https://musterd.io) · [source](https://github.com/musterd-io/musterd)
