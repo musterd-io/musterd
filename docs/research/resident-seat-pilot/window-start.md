@@ -240,3 +240,39 @@ own wait. Turn 10 completed at 11:04:02.943. Its transcript has `host_reads`: th
 `team_inbox_check` of `01M52Y54DE`, then the model's own tool `team_send`. The in-thread answer
 is message `01M52Y58DZ` ("seen") at 11:04:02.879. No model-made `team_inbox_check` of the steer
 id precedes that answer. The falsifier in ADR 627 does not fire.
+
+### Pass 4 — 2026-10-19 10:40 PDT
+
+No pass ran on 2026-10-17 or 2026-10-18. This is the first pass since pass 3. Read from this
+joiner's replica (`macbook-air-2.lan`), not the hub.
+
+**No lane was handed.** 85 open unowned lanes, 13 that passed the manifest's terms, and none
+that passed amendment 1 as well. Twelve fail the amended term for the reasons recorded at pass 3:
+`01M0FS6J5A`; dogfood runs 1, 2, 3, 5, 6, 10, 11 and 12 (`01M2H2M5S3`, `01M2H2MP1F`,
+`01M2H2NQJH`, `01M2H2P1XX`, `01M2H2PGJE`, `01M2H2QK3X`, `01M2H2R1QB`, `01M2H2RKFM`);
+`01M3AMY549`; `01M4RKQX5V`; `01M50FNNRS`. The thirteenth, `01M3TB1GPM`, is still dated
+2026-10-21. No new open lane has been in class since pass 3: everything opened since then has an
+open dependency, a guarded surface, more than three globs, a risk tag, or a non-normal stake. Arm
+C's pool was not read, because nothing was handed.
+
+**Arm B is stalled on two lanes.**
+
+| lane | state | what the rows say |
+| --- | --- | --- |
+| `01M5162W38` musterd pick 5 (pass 3) | claimed since 2026-10-16 11:03 | three `dispatch_handoff` wakes then two `dispatch_continuation` wakes, 12:24 to 12:29, each `residency.wake_failed` with `native loop ended (completed) without occupying the seat`, $0.03–0.08 apiece; `residency.wake_exhausted` (breaker, 3 attempts) at 12:25:38. No lane lease since. |
+| `01M4RX7NE2` idle-wake: deaf after `/mcp` reload (pass 2) | claimed since 2026-10-15 10:59:45 | claimed inside the arm-B outage; no lane lease since. |
+
+Mason's only leases after 2026-10-16 12:31 are the nightly ones at 22:30 on 2026-10-17 and
+2026-10-18, which name no lane. Per Run protocol step 2 neither lane is touched by hand at this
+pass. The finding reports both as handed and unfinished. A failed wake that ends without the
+seat occupying it is a host or engine reading, not a silent wake under amendment 1.
+
+**B's handed set** is still the 11 in-class lanes, against the floor of 8. Eight are `done`
+(`01M3ZC3G35`, `01M4HGY13Z`, `01M4S7N1HV`, `01M4W7HY7Z`, `01M3W6GWVN`, `01M4SB4D7R`,
+`01M3W815KR`, `01M46GR8AC`), `01M50ZB4YM` is `blocked`, and the two above are claimed. Whether
+each `done` came from an `accept` on a `lane_review` ask is measure 2's denominator, and the
+finding reads that from the hub.
+
+**Spend at the pass**: mason $27.16 across 58 `residency.wake_cost` rows, every one priced,
+against $100; resident $0.127 across 13 against $15. Neither ceiling stops dispatch. Two days of
+the window are left (it ends 2026-10-21 17:11:37 PDT).
