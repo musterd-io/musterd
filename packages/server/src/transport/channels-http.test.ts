@@ -122,6 +122,16 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
     expect(refused.status).toBe(403);
   });
 
+  it('refuses an unknown channel with 400 and stores nothing for it', async () => {
+    const body = { deliver: true, answer: true, presence_gating: true, tier_floor: null };
+    const bogus = await call('PUT', '/teams/dawn/channels/settings/bogus', nick, body);
+    expect(bogus.status).toBe(400);
+    const encoded = await call('PUT', '/teams/dawn/channels/settings/evil%2F..%2Fx', nick, body);
+    expect(encoded.status).toBe(400);
+    const after = await call('GET', '/teams/dawn/channels/settings', nick);
+    expect(after.json.settings.map((s: { channel: string }) => s.channel)).toEqual(['slack']);
+  });
+
   it('an agent seat cannot start a pairing, and the kill switch answers over HTTP', async () => {
     const refused = await call('POST', '/teams/dawn/channels/pairing/start', ada, {
       channel: 'slack',

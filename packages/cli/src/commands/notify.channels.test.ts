@@ -54,6 +54,34 @@ describe('musterd notify channels (away channels 6)', () => {
     vi.restoreAllMocks();
   });
 
+  it('shows the effective answer state when delivery is off', async () => {
+    const stored = h.settings;
+    h.settings = [
+      {
+        channel: 'slack',
+        deliver: false,
+        answer: true,
+        presenceGating: true,
+        tierFloor: null as string | null,
+      },
+    ];
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => {
+      out.push(String(s));
+      return true;
+    });
+    try {
+      expect(await notifyCommand(parsed(['channels']))).toBe(0);
+      expect(out.join('')).toContain('slack  deliver off  answer off (delivery off)');
+      out.length = 0;
+      expect(await notifyCommand(parsed(['channels', 'set', 'slack'], { deliver: 'off' }))).toBe(0);
+      expect(out.join('')).toContain('answer off (delivery off)');
+    } finally {
+      h.settings = stored;
+      vi.restoreAllMocks();
+    }
+  });
+
   it('set merges onto current settings and writes through the client', async () => {
     const out: string[] = [];
     vi.spyOn(process.stdout, 'write').mockImplementation((s) => {

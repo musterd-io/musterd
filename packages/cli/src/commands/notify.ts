@@ -38,6 +38,13 @@ const CHANNELS_USAGE =
   '       musterd notify channels set <channel> [--deliver on|off] [--answer on|off] ' +
   '[--presence-gating on|off] [--tier-floor advisory|standard|blocking|none]';
 
+/** The answer switch as it actually takes effect: delivery off removes answer authority
+ * (channelSettings.answerAllowed), so a stored "answer on" under "deliver off" reads as off. */
+function answerState(s: { deliver: boolean; answer: boolean }): string {
+  if (!s.answer) return 'off';
+  return s.deliver ? 'on' : 'off (delivery off)';
+}
+
 /**
  * `musterd notify channels` — away-channel settings (spec: Channel settings; nothing is on by
  * default): per-channel deliver/answer switches, presence gating, and an optional tier floor
@@ -56,7 +63,7 @@ async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
     if (settings.length === 0) process.stdout.write('no channels\n');
     for (const s of settings) {
       process.stdout.write(
-        `${s.channel}  deliver ${s.deliver ? 'on' : 'off'}  answer ${s.answer ? 'on' : 'off'}  ` +
+        `${s.channel}  deliver ${s.deliver ? 'on' : 'off'}  answer ${answerState(s)}  ` +
           `presence-gating ${s.presenceGating ? 'on' : 'off'}  tier-floor ${s.tierFloor ?? 'none'}\n`,
       );
     }
@@ -93,7 +100,7 @@ async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
       tier_floor: tierFloor,
     });
     process.stdout.write(
-      `${settings.channel}  deliver ${settings.deliver ? 'on' : 'off'}  answer ${settings.answer ? 'on' : 'off'}  ` +
+      `${settings.channel}  deliver ${settings.deliver ? 'on' : 'off'}  answer ${answerState(settings)}  ` +
         `presence-gating ${settings.presenceGating ? 'on' : 'off'}  tier-floor ${settings.tierFloor ?? 'none'}\n`,
     );
     return 0;
