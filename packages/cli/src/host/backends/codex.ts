@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import type { WakeLeaseFile, WakeUsage } from '@musterd/protocol';
 import { z } from 'zod';
 import { resolveCodexBin } from '../../codexBin.js';
@@ -11,6 +11,7 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
+import { CODEX_CHATGPT_UPSTREAM } from '../gateway.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease } from '../wakeLeaseFile.js';
 
@@ -63,6 +64,42 @@ export function buildCodexResumeArgs(line: string, threadId: string, workspace: 
  * valid TOML basic-string quoting for a path. */
 export function codexWorkspaceTrustArgs(workspace: string): string[] {
   return ['-c', `projects={${JSON.stringify(workspace)}={trust_level="trusted"}}`];
+}
+
+/** How this machine's Codex is signed in, from `codex login status` (never from auth.json, which
+ *  holds the tokens). Null when it cannot tell: the wake then stays on the harness artifact. */
+export type CodexLogin = 'chatgpt' | 'api_key' | null;
+
+export function parseCodexLoginStatus(text: string): CodexLogin {
+  if (/using ChatGPT/i.test(text)) return 'chatgpt';
+  if (/API key/i.test(text)) return 'api_key';
+  return null;
+}
+
+function codexLoginStatus(bin: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(bin, ['login', 'status'], { timeout: 5_000 }, (_err, stdout, stderr) =>
+      resolve(`${String(stdout)}\n${String(stderr)}`),
+    );
+  });
+}
+
+/**
+ * ADR 583, lane 01M4VQ3CMR: the metered wake's base URL, by login. A ChatGPT login talks to the
+ * ChatGPT backend, an API key to api.openai.com — each has its own gateway route.
+ */
+export function codexGatewayUrl(origin: string, login: CodexLogin): string | undefined {
+  if (login === 'chatgpt') return `${origin}/${CODEX_CHATGPT_UPSTREAM.name}`;
+  if (login === 'api_key') return `${origin}/openai`;
+  return undefined;
+}
+
+/** The per-invocation override, placed with the other `-c` flags (never written to config.toml). */
+export function withCodexBaseUrl(args: string[], url: string | undefined): string[] {
+  if (url === undefined) return args;
+  const at = args.indexOf('-c');
+  const override = ['-c', `openai_base_url=${JSON.stringify(url)}`];
+  return at < 0 ? [...args, ...override] : [...args.slice(0, at), ...override, ...args.slice(at)];
 }
 
 const ThreadStartedSchema = z.object({
@@ -176,6 +213,8 @@ export interface CodexDeps {
   resumeVerifyWindowMs?: number;
   /** Injectable pinned-shim write; wake PATH must resolve this actuator's CLI before Homebrew. */
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
+  /** Injectable `codex login status` output (lane 01M4VQ3CMR); read only on a gateway wake. */
+  loginStatus?: (bin: string) => Promise<string>;
 }
 
 function recordFreshThread(workspace: string, id: string, startedAt: number): void {
@@ -418,6 +457,16 @@ export function codexBackend(deps: CodexDeps = {}): ActuatorBackend {
         node: process.execPath,
         binJs: process.argv[1] ?? '',
       });
+      const origin = spec.gateway?.origin;
+      const baseUrl =
+        origin === undefined
+          ? undefined
+          : codexGatewayUrl(
+              origin,
+              parseCodexLoginStatus(await (deps.loginStatus ?? codexLoginStatus)(bin)),
+            );
+      if (origin !== undefined && baseUrl === undefined)
+        ctx.log(`codex login unknown for ${spec.order.seat} — wake stays on the harness artifact`);
       const deadline = Date.now() + spec.bounds.timeout_ms;
       // Absent is legacy: mixed daemon/host versions retain the existing resume path. An explicit
       // portable/fresh order bypasses resume and spawns fresh immediately (ADR 209).
@@ -446,7 +495,10 @@ export function codexBackend(deps: CodexDeps = {}): ActuatorBackend {
         const resumed = await attempt(
           deps,
           bin,
-          buildCodexResumeArgs(spec.order.composed_line, captured, spec.workspace),
+          withCodexBaseUrl(
+            buildCodexResumeArgs(spec.order.composed_line, captured, spec.workspace),
+            baseUrl,
+          ),
           captured,
           spec,
           ctx,
@@ -498,7 +550,7 @@ export function codexBackend(deps: CodexDeps = {}): ActuatorBackend {
       const fresh = await attempt(
         deps,
         bin,
-        buildCodexFreshArgs(spec.order.composed_line, spec.workspace),
+        withCodexBaseUrl(buildCodexFreshArgs(spec.order.composed_line, spec.workspace), baseUrl),
         undefined,
         spec,
         ctx,

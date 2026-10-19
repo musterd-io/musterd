@@ -1,4 +1,10 @@
-import { createServer, request, type IncomingMessage, type Server } from 'node:http';
+import {
+  createServer,
+  get as httpGet,
+  request,
+  type IncomingMessage,
+  type Server,
+} from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   budgetRefusal,
@@ -177,6 +183,20 @@ describe('UsageParser', () => {
       model: 'gpt-5.6-luna',
     });
   });
+  it('with no content type, sniffs SSE from the body, across a chunk boundary (lane 01M4VQ3CMR)', () => {
+    const completed = `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { model: 'gpt-6-luna', usage: { input_tokens: 14226, output_tokens: 5, input_tokens_details: { cached_tokens: 12288 } } } })}\n\n`;
+    const p = new UsageParser(undefined);
+    p.push(Buffer.from('\n'));
+    p.push(Buffer.from(completed.slice(0, 3)));
+    p.push(Buffer.from(completed.slice(3)));
+    expect(p.result()).toEqual({
+      usage: { input_tokens: 1938, output_tokens: 5, cache_read_input_tokens: 12288 },
+      model: 'gpt-6-luna',
+    });
+    const j = new UsageParser(undefined);
+    j.push(Buffer.from(anthropicJson(12, 3)));
+    expect(j.result().usage).toEqual({ input_tokens: 12, output_tokens: 3 });
+  });
   it('reads a JSON body at result()', () => {
     const p = new UsageParser(false);
     p.push(Buffer.from(anthropicJson(12, 3)));
@@ -188,6 +208,41 @@ describe('UsageParser', () => {
 });
 
 describe('startMeteringGateway (ADR 583)', () => {
+  it('meters an SSE stream the upstream sends with no content-type (ChatGPT backend, lane 01M4VQ3CMR)', async () => {
+    const f = await fakeUpstream(() => ({
+      headers: {},
+      body: [
+        'event: response.created\ndata: {"type":"response.created"}\n\n',
+        `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { model: 'gpt-6-luna', usage: { input_tokens: 300, output_tokens: 20 } } })}\n\n`,
+      ],
+    }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L1',
+      upstreams: [{ name: 'openai', url: f.url, envVar: 'OPENAI_BASE_URL' }],
+    });
+    const r = await post(gw.env['OPENAI_BASE_URL']!, '/responses', '{}');
+    expect(r.status).toBe(200);
+    expect(gw.summary()).toMatchObject({ calls: 1, unmetered: 0, models: ['gpt-6-luna'] });
+  });
+
+  it('relays a GET catalog read without counting it unmetered', async () => {
+    const f = await fakeUpstream(() => ({ body: '{"models":[]}' }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L1',
+      upstreams: [{ name: 'chatgpt', url: f.url }],
+    });
+    const r = await new Promise<number>((resolve) => {
+      httpGet(`${gw!.origin}/chatgpt/models?client_version=1`, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      });
+    });
+    expect(r).toBe(200);
+    expect(gw.summary()).toMatchObject({ calls: 0, unmetered: 0 });
+  });
+
   it('routes and meters a file-configured provider by origin, and puts no variable for it in env', async () => {
     const f = await fakeUpstream(() => ({
       body: JSON.stringify({
