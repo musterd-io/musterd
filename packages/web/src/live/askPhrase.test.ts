@@ -1,7 +1,7 @@
 import { ASK_TIER_DEFAULTS, PROTOCOL_VERSION, type Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { applyTierClock, deriveAsks } from './asks';
-import { askBanner, askChoices, askStatePhrase, choiceReply, SETTLED_MS } from './askPhrase';
+import { askBanner, askChoices, askChoicesOf, askStatePhrase, choiceReply, SETTLED_MS } from './askPhrase';
 
 const MIN = 60_000;
 const NOW = 100 * MIN;
@@ -191,6 +191,31 @@ I recommend C. B makes an admin who only wants a dollar bound lose every codex s
 
   it('keeps options in order and only a run that starts at A or 1', () => {
     expect(askChoices('Steps:\nB. second\nC. third')).toBeNull();
+  });
+
+  // ghost's ADR 603 human-acceptance ask to nick, 2026-10-19: the peer's review is quoted verbatim
+  // and its three findings each open a line. The rail showed "1 2 3 pick one" (lane 01M5AVXZ9B).
+  const HUMAN_ACCEPTANCE = `[lane] human acceptance required (server, 7 files): "Away channels 3: relay — Cloudflare Worker + Durable Object per team" — peer stanley accepted with: "Accept 01M50XPXWE (#2894, 8b4a918, on main, gates green). All four of my points are fixed in the landed code.
+(1) relaySocketUrl maps https/wss to wss and throws on http/ws.
+(2) deliverVerdict('failed') returns 'retry' (or 'expired' past expiry).
+(3) The verified hash is attached to the socket and re-checked on every frame.
+The d…". Judge the LANDED OUTCOME (not a code review): (1) Intent — matches the lane brief? (2) Principles? Accept → move the lane to done.`;
+
+  it('a lane review is never a choice, whatever its body quotes — its answers are accept / decline', () => {
+    expect(askChoicesOf({ body: HUMAN_ACCEPTANCE, meta: { lane_review: { lane: 'L1' } } })).toBeNull();
+    // Even a body that IS a clean numbered list: the review's shape decides, not the prose.
+    expect(askChoicesOf({ body: 'Which?\n1. ship\n2. wait', meta: { lane_review: { lane: 'L1' } } })).toBeNull();
+    // And without a lane review, the same helper reads the body as before.
+    expect(askChoicesOf({ body: MASON, meta: {} })!.options).toHaveLength(4);
+    expect(askChoicesOf({ body: MASON })!.recommended).toBe('C');
+  });
+
+  it('numbered lines inside a quoted passage are someone else\'s words, not options', () => {
+    expect(askChoices(HUMAN_ACCEPTANCE)).toBeNull();
+    expect(askChoices('ryder wrote: "Two things:\n1. the port\n2. the host"\nShould I merge?')).toBeNull();
+    // A quote that closes before the options leaves them readable.
+    const c = askChoices('nick said "pick one", so:\nA. red\nB. blue');
+    expect(c!.options.map((o) => o.key)).toEqual(['A', 'B']);
   });
 
   it('records a pick as the option itself, so the thread never needs interpreting', () => {

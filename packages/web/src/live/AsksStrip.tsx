@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { holdStateLine } from './holdState';
-import { askBanner, askChoices, choiceReply, SETTLED_MS } from './askPhrase';
+import { askBanner, askChoicesOf, choiceReply, SETTLED_MS } from './askPhrase';
 import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { askTierHolds } from '@musterd/protocol/wire';
 import {
@@ -146,7 +146,7 @@ export function AsksStrip({
   // Yours-or-anyone's: the only audiences whose asks this browser should be invited to answer.
   const leadIsOurs = leadAudience === 'you' || leadAudience === 'team';
   // Is the lead a choice (lane 01M511XNQC)? Then the rail offers Choose…, never a one-click Approve.
-  const leadChoices = lead ? askChoices(lead.env.body ?? '') : null;
+  const leadChoices = lead ? askChoicesOf(lead.env) : null;
   const yoursCount = answerableCount(loud, ctx);
 
   // The review queue (nick, 2026-08-05): every lane in acceptance and who it waits on, at a glance.
@@ -675,7 +675,7 @@ function AskCard({
   const kind = kindOf(from, idx);
   const open = askIsLoud(ask.state);
   const ours = audience === 'you' || audience === 'team';
-  const choices = askChoices(ask.env.body ?? '');
+  const choices = askChoicesOf(ask.env);
   return (
     <article className={`lc-ask lc-ask--${ask.state}${choices ? ' lc-ask--choice' : ''}`} style={style}>
       {/* Left column: who + what, stacked. The clock and the actions get their own columns so that
