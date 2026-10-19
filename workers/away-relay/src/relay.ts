@@ -200,6 +200,78 @@ export function credentialHashFor(mapJson: string | undefined, slug: string): st
   }
 }
 
+/** Slack's team id from an interactivity body (`payload=<urlencoded JSON>`); null when absent. */
+export function slackTeamIdFromBody(rawBody: string): string | null {
+  try {
+    const payload = new URLSearchParams(rawBody).get('payload');
+    if (!payload) return null;
+    const v: unknown = JSON.parse(payload);
+    if (!isRecord(v) || !isRecord(v['team'])) return null;
+    const id = v['team']['id'];
+    return typeof id === 'string' && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The operator's install mapping (Slack team id → musterd team slug); null when unmapped. */
+export function slackMappedSlug(mapJson: string | undefined, slackTeamId: string): string | null {
+  if (!mapJson) return null;
+  try {
+    const v: unknown = JSON.parse(mapJson);
+    if (!isRecord(v)) return null;
+    const slug = v[slackTeamId];
+    return typeof slug === 'string' && slug.length > 0 ? slug : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Dispatch is by the install mapping, never by the caller (ADR 668 §2): a callback is
+ * forwarded only when the payload's Slack team maps to the slug named in the URL. No request
+ * field can select a different destination.
+ */
+export function slackDispatchAllowed(
+  payloadTeamId: string | null,
+  mapJson: string | undefined,
+  urlSlug: string,
+): boolean {
+  if (!payloadTeamId) return false;
+  return slackMappedSlug(mapJson, payloadTeamId) === urlSlug;
+}
+
+/**
+ * Verify Slack's signature (ADR 668 §1): `v0=` + HMAC-SHA256 over `v0:<timestamp>:<raw body>`
+ * with the signing secret, inside a five-minute timestamp tolerance. The comparison runs over
+ * hex digests with the constant-time rule above.
+ */
+export async function slackSignatureValid(
+  secret: string,
+  timestamp: string,
+  rawBody: string,
+  signature: string,
+  nowMs: number,
+): Promise<boolean> {
+  const ts = Number(timestamp);
+  if (!Number.isInteger(ts) || Math.abs(nowMs / 1000 - ts) > 300) return false;
+  if (!signature.startsWith('v0=')) return false;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`v0:${timestamp}:${rawBody}`),
+  );
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hashesEqual(hex, signature.slice(3));
+}
+
 /** Constant-time comparison of two hex digests (both sides are hashed before this is called). */
 export function hashesEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;

@@ -32,7 +32,8 @@ import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createRequest, decideRequest } from '../store/requests.js';
 import { createTeam } from '../store/teams.js';
-import { buildRelayPending } from './relay.js';
+import { buildRelayPending, handleRelayCallback } from './relay.js';
+import { slackAuthorizer } from './slackAdapter.js';
 
 /**
  * The away-channels falsifier suite (ADR 618, ADR 623, spec 2026-10-15-away-channels-design.md). Each
@@ -510,15 +511,86 @@ withDrivers('away channels falsifiers', (o) => {
   });
 
   describe('shared Slack ingress and tenancy (spec: Slack ingress)', () => {
-    it.todo(
-      'a request field cannot select the ingress destination: only the install mapping does (Slack adapter lane 01M50XQ04M8E3X5QHY173Q18X7)',
-    );
-    it.todo(
-      'a payload naming another team or enterprise id is dispatched only to its mapped destination (Slack adapter lane 01M50XQ04M8E3X5QHY173Q18X7)',
-    );
-    it.todo(
-      'a receiver refuses a payload with a missing or invalid ingress attestation (Slack adapter lane 01M50XQ04M8E3X5QHY173Q18X7)',
-    );
+    it('a request field cannot select the ingress destination: only the install mapping does', async () => {
+      // Worker half (dispatch by SLACK_TEAM_MAP_JSON, never by a body field) is tested in
+      // workers/away-relay/src/relay.test.ts. Daemon half: a Slack payload's team/user fields
+      // select nothing here — the binding is looked up by provider identity in THIS team, and
+      // a payload naming an identity bound in another team finds no binding and redeems nothing.
+      const { db, team, nick } = await seed();
+      const other = await createTeam(db, { slug: 'other' });
+      const otherNick = (await addMember(db, other, { name: 'nick', kind: 'human' })).row;
+      const { pairing, nonce } = await startPairing(db, {
+        teamId: other.id,
+        memberId: otherNick.id,
+        actor: 'nick',
+        channel: 'slack',
+        now: NOW,
+      });
+      await recordPairingIdentity(db, {
+        nonce,
+        providerTenantId: 'T-other',
+        providerUserId: 'U-other',
+        now: NOW + MINUTE,
+      });
+      const confirmed = await confirmPairing(db, {
+        teamId: other.id,
+        memberId: otherNick.id,
+        actor: 'nick',
+        pairingId: pairing.id,
+        now: NOW + MINUTE,
+      });
+      if (!confirmed.ok) throw new Error(confirmed.reason);
+      // The token lives in `other`; presented to revive with the other team's identity, the
+      // authorizer lookup in revive finds no binding for it.
+      expect(
+        await slackAuthorizer(stubCtx(db), team.id, {
+          providerTenantId: 'T-other',
+          providerUserId: 'U-other',
+        }),
+      ).toBeNull();
+      expect(nick).toBeTruthy();
+    });
+
+    it('a payload naming another team or enterprise id is dispatched only to its mapped destination', async () => {
+      // A Slack payload whose tenant is not the tenant bound for its token's binding redeems
+      // nothing in this team: the binding lookup keys on the payload's own tenant+user.
+      const { db, team } = await seed();
+      expect(
+        await slackAuthorizer(stubCtx(db), team.id, {
+          providerTenantId: 'T-elsewhere',
+          providerUserId: 'U1',
+        }),
+      ).toBeNull();
+    });
+
+    it('a receiver refuses a payload with a missing or invalid ingress attestation', async () => {
+      // Ingress half (Slack HMAC at the Worker, never forwarded on failure) is tested in
+      // workers/away-relay/src/relay.test.ts. Receiver half: a callback whose identity cannot
+      // be resolved to a current binding — the daemon's attestation that the answer comes from
+      // the bound human — is refused before redemption.
+      const { db, team, ctx } = await seed();
+      const tok = await token(db, team.id);
+      const result = await handleRelayCallback(
+        ctx,
+        team,
+        {
+          protocol: 1,
+          type: 'callback',
+          ask_ref: 'ask-1',
+          body: `payload=${encodeURIComponent(
+            JSON.stringify({
+              team: { id: 'T1' },
+              user: { id: 'U-unbound' },
+              actions: [{ action_id: 'musterd_approve', value: tok }],
+            }),
+          )}`,
+        },
+        NOW + MINUTE,
+      );
+      expect(result).toEqual({ ok: false, reason: 'binding_stale' });
+      const decisions = await ctx.db.all('SELECT * FROM ask_decisions');
+      expect(decisions).toHaveLength(0);
+    });
     it.todo(
       'one team daemon credential, object or Slack install cannot read or answer another team (multi-tenant relay lane 01M50ZQCTWM5QBZ083782J9N6R)',
     );

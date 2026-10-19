@@ -7,6 +7,9 @@ import {
   providerRefFrom,
   reconcileRelayPending,
   secondSocketVerdict,
+  slackDispatchAllowed,
+  slackSignatureValid,
+  slackTeamIdFromBody,
   socketCredentialLive,
 } from './relay.js';
 
@@ -104,6 +107,49 @@ describe('away relay pure rules (ADR 659)', () => {
     expect(credentialHashFor(JSON.stringify({ revive: 'clear-credential' }), 'revive')).toBeNull();
     expect(hashesEqual(hash, hash)).toBe(true);
     expect(hashesEqual(hash, 'b'.repeat(64))).toBe(false);
+  });
+
+  it('a callback with a missing or invalid Slack signature is refused, never forwarded', async () => {
+    const secret = 'test-signing-secret';
+    const now = 1_800_000_000_000;
+    const body = `payload=${encodeURIComponent(JSON.stringify({ team: { id: 'T1' } }))}`;
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const mac = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(`v0:${now / 1000}:${body}`),
+    );
+    const good =
+      'v0=' + [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    expect(await slackSignatureValid(secret, String(now / 1000), body, good, now)).toBe(true);
+    // Wrong secret, stale timestamp, and a tampered body all fail.
+    expect(await slackSignatureValid('other', String(now / 1000), body, good, now)).toBe(false);
+    expect(await slackSignatureValid(secret, String(now / 1000 - 3600), body, good, now)).toBe(
+      false,
+    );
+    expect(await slackSignatureValid(secret, String(now / 1000), body + 'x', good, now)).toBe(
+      false,
+    );
+    expect(await slackSignatureValid(secret, String(now / 1000), body, '', now)).toBe(false);
+  });
+
+  it('a request field cannot select the ingress destination: only the install mapping does', () => {
+    const map = JSON.stringify({ T1: 'revive', T2: 'other' });
+    // The URL names revive and the payload's Slack team maps to revive: forwarded.
+    expect(slackDispatchAllowed('T1', map, 'revive')).toBe(true);
+    // The payload names team T2 while the URL names revive: T2 maps elsewhere — refused here,
+    // never re-routed by anything the caller sent.
+    expect(slackDispatchAllowed('T2', map, 'revive')).toBe(false);
+    // An unmapped Slack team is refused everywhere.
+    expect(slackDispatchAllowed('T9', map, 'revive')).toBe(false);
+    expect(slackDispatchAllowed(null, map, 'revive')).toBe(false);
+    expect(slackTeamIdFromBody('payload=%7Bbad')).toBeNull();
   });
 
   it('provider coordinates come from the provider JSON; reconcile drops what the daemon dropped', () => {

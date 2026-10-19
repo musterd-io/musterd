@@ -11,6 +11,7 @@ import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import {
+  askDigest,
   redeemAskChannelToken,
   type AskStanding,
   type RedemptionChecks,
@@ -20,6 +21,7 @@ import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
+import { parseSlackCallback, slackAuthorizer } from './slackAdapter.js';
 
 /**
  * The daemon's away-relay client (ADR 659): one WebSocket per configured team to its relay
@@ -101,8 +103,8 @@ async function relayAskStanding(
     [teamId, askId],
   );
   if (!token) return null;
-  const ask = await db.get<{ meta: string | null }>(
-    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+  const ask = await db.get<{ body: string; meta: string | null }>(
+    'SELECT body, meta FROM messages WHERE team_id = ? AND id = ?',
     [teamId, askId],
   );
   if (!ask) return null;
@@ -118,7 +120,9 @@ async function relayAskStanding(
   }
   return {
     open: !decided,
-    digest: token.ask_digest,
+    // Recomputed from the stored ask (ADR 668): an ask changed after delivery no longer
+    // matches the digest its token was issued against, and redemption refuses it.
+    digest: askDigest(ask.body, ask.meta),
     actionClass: classifyAskAction(meta),
   };
 }
@@ -142,11 +146,15 @@ export async function handleRelayCallback(
   frame: RelayCallbackFrame,
   now: number = Date.now(),
 ): Promise<{ ok: boolean; reason?: string }> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(frame.body);
-  } catch {
-    return { ok: false, reason: 'unparseable_callback' };
+  // A Slack interactivity payload is form-encoded, not JSON: it is tried first (ADR 668).
+  const slackBody = frame.body.startsWith('payload=') ? frame.body : null;
+  let parsed: unknown = null;
+  if (!slackBody) {
+    try {
+      parsed = JSON.parse(frame.body);
+    } catch {
+      return { ok: false, reason: 'unparseable_callback' };
+    }
   }
   const body = parsed as {
     token?: unknown;
@@ -156,6 +164,62 @@ export async function handleRelayCallback(
     provider_tenant_id?: unknown;
     provider_user_id?: unknown;
   } | null;
+  // A Slack interactivity payload (ADR 668): the authorizer is resolved from the binding the
+  // payload's provider identity names — never from a name the payload carries — and a pairing
+  // button stages its identity against the nonce, binding nothing.
+  const slack = slackBody ? parseSlackCallback(slackBody) : null;
+  if (slackBody && !slack) return { ok: false, reason: 'unparseable_callback' };
+  if (slack) {
+    if (slack.pairingNonce) {
+      const staged = await recordPairingIdentity(ctx.db, {
+        nonce: slack.pairingNonce,
+        providerTenantId: slack.providerTenantId,
+        providerUserId: slack.providerUserId,
+        now,
+      });
+      return staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
+    }
+    const resolved = await slackAuthorizer(ctx, team.id, slack);
+    if (!resolved || !slack.token || !slack.decision) return { ok: false, reason: 'binding_stale' };
+    const result = await redeemAskChannelToken(
+      ctx.db,
+      {
+        teamId: team.id,
+        token: slack.token,
+        assurance: 'A1',
+        decision: slack.decision,
+        answerMessageId: `slack-${frame.ask_ref}-${now}`,
+        authorizer: resolved.memberName,
+        deliveryActor: 'slack',
+        now,
+        writeAnswer: async (t) => {
+          const member = await getMemberByName(t, team.id, resolved.memberName);
+          if (!member) throw new Error(`channel authorizer ${resolved.memberName} is not a member`);
+          await insertMessage(
+            t,
+            team.id,
+            member.id,
+            null,
+            makeEnvelope({
+              id: `slack-${frame.ask_ref}-${now}`,
+              team: team.slug,
+              from: resolved.memberName,
+              to: { kind: 'team' },
+              act: 'message',
+              body: slack.decision === 'approve' ? 'Approved via Slack' : 'Rejected via Slack',
+              meta: {
+                in_reply_to: frame.ask_ref,
+                channel_answer: { channel: 'slack', assurance: 'A1', decision: slack.decision },
+              },
+              ts: now,
+            }),
+          );
+        },
+      },
+      relayChecks,
+    );
+    return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  }
   // A pairing identity stages against its nonce and binds nothing (spec §Pairing step 3): the
   // binding is created only by the human's confirmation on the original surface, which shows
   // the tenant and user exactly as recorded here.
@@ -296,7 +360,14 @@ export function startAwayRelay(ctx: Ctx): () => void {
         }
         const frame = RelayServerFrameSchema.safeParse(parsed);
         if (!frame.success) return;
-        if (frame.data.type === 'callback') {
+        if (frame.data.type === 'delivered') {
+          log.info({
+            msg: frame.data.ok ? 'away_slack_delivered' : 'away_slack_delivery_failed',
+            team: team.slug,
+            ask: frame.data.ask_ref,
+            status: frame.data.status,
+          });
+        } else if (frame.data.type === 'callback') {
           void handleRelayCallback(ctx, team, frame.data).then((r) => {
             if (!r.ok && r.reason !== 'unparseable_callback')
               log.info({ msg: 'away_relay_callback_refused', team: team.slug, reason: r.reason });

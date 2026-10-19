@@ -325,6 +325,25 @@ export async function listBindings(
   );
 }
 
+/** The active binding for a provider identity, if any (the Slack adapter's authorizer lookup). */
+export async function findBindingByIdentity(
+  db: Driver,
+  teamId: string,
+  channel: string,
+  providerTenantId: string,
+  providerUserId: string,
+): Promise<ChannelBinding | null> {
+  return (
+    (await db.get<ChannelBinding>(
+      `SELECT * FROM channel_bindings
+        WHERE team_id = ? AND channel = ? AND provider_tenant_id = ? AND provider_user_id = ?
+          AND status = 'active'
+        ORDER BY generation DESC LIMIT 1`,
+      [teamId, channel, providerTenantId, providerUserId],
+    )) ?? null
+  );
+}
+
 /** The binding redemption re-reads (ADR 623 §6): current generation and active, else stale. */
 export async function channelBindingStanding(
   db: Driver,
