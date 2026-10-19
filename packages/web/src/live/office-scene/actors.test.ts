@@ -207,6 +207,62 @@ describe('walk choreography', () => {
     expect(back.bubble).toBeNull();
   });
 
+  it('a roster update never cuts an act walk in flight (lane 01M5B02V4A)', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const home = actors.poses().get('Ada')!;
+    expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
+    actors.step(0.6); // well away from the desk
+    expect(actors.actWalkingFor('Ada')).toBe(true);
+    // The same roster again — what every envelope and presence frame used to do.
+    actors.setHomes(placements, byName, true);
+    expect(actors.actWalkingFor('Ada')).toBe(true); // still the help walk, not a plain walk home
+    let guard = 0;
+    while (actors.active() && guard++ < 2000) actors.step(0.05);
+    const back = actors.poses().get('Ada')!;
+    expect(Math.hypot(back.lx - home.lx, back.ly - home.ly)).toBeLessThan(8);
+  });
+
+  it('a home that moves under a walker is reached after the walk lands, then the queue drains', () => {
+    const three = [node('Ada'), node('Bo'), node('Cy')];
+    const { placements, byName } = world(three);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
+    expect(actors.walk('Ada', { kind: 'help', to: 'Cy', urgent: false })).toBe(true); // queued
+    actors.step(0.6);
+    // Ada steps away (posture idle) — her home moves to the leisure spots.
+    const idle: OfficeNode[] = three.map((n) =>
+      n.name === 'Ada' ? ({ ...n, posture: 'idle', activity: 'active' } as OfficeNode) : n,
+    );
+    const moved = world(idle);
+    actors.setHomes(moved.placements, moved.byName, true);
+    expect(actors.actWalkingFor('Ada')).toBe(true); // the help walk still stands
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) actors.step(0.05);
+    // Where the new home IS: a second, snapped actor set on the same moved world reads it off.
+    const snapped = createActors();
+    snapped.setHomes(moved.placements, moved.byName, false);
+    const home = snapped.poses().get('Ada')!;
+    const at = actors.poses().get('Ada')!;
+    expect(Math.hypot(at.lx - home.lx, at.ly - home.ly)).toBeLessThan(8); // ends at the NEW home
+  });
+
+  it('an act yields only its own member\'s ambient — a stranger\'s gesture plays out', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    for (let i = 0; i < 40; i++) actors.step(0.05); // everyone seated
+    expect(actors.gestureBeat('Cy', GESTURE.stretch)).toBe(true);
+    expect(actors.gestureBeat('Ada', GESTURE.stretch)).toBe(true);
+    actors.cancelAmbient('Ada');
+    expect(actors.ambientOnly()).toBe(true); // Cy still gesturing
+    expect(actors.active()).toBe(true);
+    actors.cancelAmbient(); // the old, unscoped form still clears everyone
+    expect(actors.active()).toBe(false);
+  });
+
   /**
    * ADR 254 eligible sets: an act addressed to 2-4 seats makes the sender walk to EACH desk, one
    * trip after another, because any of them can discharge it and the room must not rank them

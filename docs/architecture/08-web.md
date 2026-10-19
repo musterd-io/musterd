@@ -326,6 +326,14 @@ teammate's session. Consequences worth internalising:
   stock it replaces sat one step from the mustard floor and nick read the plates as blending in; the
   tint lifts them by lightness (never darkness, his standing line) and keeps the recede ranking under
   the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
+- **A walk lands before the next beat** (lane 01M5B02V4A, 2026-10-19). The per-member walk queue
+  (`actors.ts` `pending` → `startNext` on walk end) and the per-member speech queue were already
+  there; what cut walks short was `setHomes`, which runs on every envelope and presence frame and
+  used to send any walker more than 8 units from home straight back. Now an act walk in flight is
+  never touched by a roster update; if the home moved meanwhile, `step` re-homes the member with one
+  plain walk after the act lands, and only then drains the queue. `cancelAmbient(only)` yields only
+  the acting member's stroll or gesture, so a stranger's wave is not killed by someone else's act.
+  A plate wearing a walk tag is lifted (`is-tagged`, z 2) above its neighbours and under every bubble.
 - **Every experiment read carries a live countdown** (lane 01M5AXHFZT, 2026-10-19):
   `experimentReads.clockPhrase` counts toward the read day's 00:00 in the team zone
   (`readDayStart`, DST from Intl) — `2d 14h 05m`, `today · 9h 12m left`, `overdue · 2d 04h` — read

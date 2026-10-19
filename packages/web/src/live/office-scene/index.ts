@@ -1307,6 +1307,10 @@ export function mountOffice(
       const verb = walkTags.get(name);
       const show = verb !== undefined && actors.actWalkingFor(name);
       const tag = plate.querySelector('.lc-gl-label__walk');
+      // A plate wearing a tag paints above its neighbours (`is-tagged`, z 2 — under every bubble at
+      // z 3): the tag is the act's only words on the floor, and a later sibling at z auto covered it
+      // (nick, 2026-10-19, lane 01M5B02V4A).
+      el.classList.toggle('is-tagged', show);
       if (show && !tag) {
         const span = document.createElement('span');
         span.className = 'lc-gl-label__walk';
@@ -2848,7 +2852,10 @@ export function mountOffice(
     // A real act always preempts ambient filler: cancel any in-flight coffee-stroll and push the next
     // ambient slot out past this act, so ambient never delays real choreography or a speech bubble.
     if (!reduced) {
-      actors.cancelAmbient();
+      // Only the ACTING member's ambient yields to their act (lane 01M5B02V4A); everyone else's
+      // stroll or wave plays out. An event with no actor (a caption, a board pulse) yields nothing.
+      const actor = (ev as { who?: unknown; from?: unknown }).who ?? (ev as { from?: unknown }).from;
+      if (typeof actor === 'string') actors.cancelAmbient(actor);
       scheduleAmbient();
     }
     if (ev.kind === 'caption') {

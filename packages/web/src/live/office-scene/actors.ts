@@ -568,7 +568,8 @@ export interface Actors {
   ambientOnly(): boolean;
   /** Preempt any in-flight ambient stroll, gracefully returning the walker home. Called the instant a
    * real act arrives so ambient never delays real choreography. */
-  cancelAmbient(): void;
+  /** Yield ambient strolls and drop in-place gestures — for one member when `only` is named, else all. */
+  cancelAmbient(only?: string): void;
   /** Advance all walks + animation blends by dt seconds; true while any walk, gesture, or blend is live. */
   step(dt: number): boolean;
   /** True while a member is mid-blend (settling out of a stride, sitting down, standing up) — the loop
@@ -1169,6 +1170,13 @@ export function createActors(): Actors {
             if (moved(prevHomes.get(name) ?? dest, dest)) {
               walks.set(name, straightWalk(name, cur.get(name) ?? dest, dest, false));
             }
+          } else if (existing) {
+            // An ACT walk (claim, pin, deliver, help, handoff, a check-in arrival) is never cut by a
+            // roster update (lane 01M5B02V4A). `update()` runs on every envelope and every presence
+            // frame, and until 2026-10-19 this branch measured the walker's CURRENT position against
+            // the home and sent them straight back the moment they were 8 units away — so a member
+            // claiming a card lost it mid-aisle whenever anyone on the team spoke. The walk's own last
+            // leg already heads home; if the home moved meanwhile, `step` re-homes them once it lands.
           } else {
             const from = cur.get(name) ?? prevHomes.get(name)!;
             if (moved(from, dest)) walks.set(name, straightWalk(name, from, dest, false));
@@ -1689,10 +1697,11 @@ export function createActors(): Actors {
       for (const w of walks.values()) if (!w.ambient) return false;
       return true; // only ambient strolls and/or in-place gestures in flight
     },
-    cancelAmbient() {
+    cancelAmbient(only) {
       const cur = posesNow();
       for (const [name, w] of [...walks]) {
         if (!w.ambient) continue;
+        if (only !== undefined && name !== only) continue;
         const home = homes.get(name);
         const at = cur.get(name);
         // Yield gracefully: if the walker has left home, walk them straight back (a plain non-ambient
@@ -1705,7 +1714,11 @@ export function createActors(): Actors {
           walks.delete(name);
         }
       }
-      gestures.clear(); // a real act preempts in-place gestures too — they carry no motion to yield home
+      // A real act preempts in-place gestures too — they carry no motion to yield home. Scoped to the
+      // acting member when one is named (lane 01M5B02V4A): before 2026-10-19 every act cleared EVERY
+      // member's gesture, so a welcome wave or an accept-glance on an unrelated seat died on any act.
+      if (only !== undefined) gestures.delete(only);
+      else gestures.clear();
     },
     step(dt) {
       const before = posesNow();
@@ -1734,7 +1747,12 @@ export function createActors(): Actors {
             exiting.delete(name);
             ghosts.delete(name);
           } else {
-            startNext(name);
+            // The home may have moved while this walk was in flight (a reseat, a posture flip): the
+            // walk landed where the home WAS. One plain walk to where it is now, then the queue drains.
+            const home = homes.get(name);
+            const at = posesNow().get(name);
+            if (home && at && moved(at, home)) walks.set(name, straightWalk(name, at, home, false));
+            else startNext(name);
           }
         }
       }
