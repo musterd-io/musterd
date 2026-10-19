@@ -23,6 +23,18 @@
   justify-content: space-between;
 }
 
+label.pair-card__row {
+  align-items: center;
+  min-height: 32px;
+}
+
+.pair-card__row input[type='checkbox'] {
+  flex: none;
+  height: 24px;
+  margin: 0;
+  width: 24px;
+}
+
 .pair-card__key {
   opacity: 0.7;
 }
