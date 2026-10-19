@@ -65,7 +65,7 @@ Three small pieces of code, each replacing a step someone has to remember:
 
 1. **`pnpm train status [--version X]`** — reads every surface and prints one table, red or green:
    npm `latest`, the git tag, the GitHub Release, the MCP Registry entry
-   (`registry.modelcontextprotocol.io/v0/servers?search=io.github.musterd-io/musterd`), the brew
+   (`registry.modelcontextprotocol.io/v0/servers?search=io.musterd/musterd`), the brew
    formula's version, musterd.io's `build.json` ref and the version its install block shows.
    Read-only, runnable by any seat, no credentials. It turns "did we finish the release" from a
    memory into a command, and it is what car 3–7's owners run to see what is left. (`site-gap` is
