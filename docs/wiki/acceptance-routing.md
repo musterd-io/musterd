@@ -197,3 +197,16 @@ Two shapes from the third case are worth checking for before you re-route:
 - **A re-route can land on the submitter**, who can only pass it on again (2026-10-13; falsify: the 06:29 ask on that lane is addressed to someone other than miley). <!-- claim: defect -->
 
 Until the submitter is told, look up the lane's newest `[lane] acceptance requested` act before you report "awaiting <name>". The name you passed to `lane_submit` may be stale. The holder-side half of the same gap is the 2026-09-18 section above.
+
+## After a re-route the long wait can sit with the new holder, not the one passing it on (2026-10-17; falsify: resolve-then-ask timestamps on lane `01M5162FVM` (night 2026-10-15) or lane `01M50M90ST` (night 2026-10-17) other than big-body's hop then the new holder's long hold) <!-- claim: other -->
+
+Two dated observations, two nights:
+
+- **2026-10-15** (izzo's dream, lane `01M5162FVM`): big-body re-routed to wanderer at 19:45:42 after holding the ask 42m28s; wanderer then held it 1h10m before resolving at 20:55:40. Submit-to-close 1h52m.
+- **2026-10-17** (alfie's dream, lane `01M50M90ST`): big-body re-routed to fifty after holding 7m4s; fifty then held 1h29m5s before resolving. Submit-to-close 1h36m9s.
+
+Both hops were by big-body. The submitter is never told who holds the ask now — each hop delivers a `resolve` to the old holder and a new `ask` to the next, and nothing goes to the submitter (see the 2026-10-13 section above).
+
+Counter-cases where the hold was *before* the hop: lane `01M5162MTC` (big-body held 45m13s, sloane resolved 86s after the hop) and sloane's `01M4S53AV4` (29m32s before the hop). big-body re-routed on 4 of these 5 hops.
+
+The re-route sections on this page (2026-10-12, 10-13) place the hold before the hop; these two nights show it can sit after instead — a re-route chain's wait is not always with the one passing it on.
