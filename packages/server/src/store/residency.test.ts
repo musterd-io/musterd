@@ -1659,6 +1659,25 @@ withDrivers('residency', (o, kind) => {
       expect(order!.tool_policy).toBe('seat-policy');
       expect(order!.bounds).toEqual({ timeout_ms: 120_000, max_turns: 12, budget_usd: 2 });
       expect(order!.transcript_max_bytes).toBe(2_097_152);
+      // ADR 672: no team threshold ⇒ no hold on the order.
+      expect(order!.spend_approval_usd).toBeUndefined();
+    });
+
+    it('the emitted order carries the team spend-approval threshold for an agent seat (ADR 672)', async () => {
+      const { db, team, nick, ada } = await seed();
+      await setPolicy(db, team.id, { spend_approval_usd: 0.25 });
+      await enroll(db, team, ada, HOST);
+      await msg(db, team, nick, ada, 'steer', 's1', 1_000);
+      const [order] = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(order!.spend_approval_usd).toBe(0.25);
+      // A human seat never carries one (ADR 636 §1), whatever the policy says.
+      const human = (await addMember(db, team, { name: 'dana', kind: 'human' })).row;
+      await enroll(db, team, human, HOST);
+      await msg(db, team, nick, human, 'steer', 's2', 1_000);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const danas = orders.find((o) => o.seat === 'dana');
+      expect(danas).toBeDefined();
+      expect(danas!.spend_approval_usd).toBeUndefined();
     });
 
     it('re-enroll without a policy preserves the override; {} clears it', async () => {

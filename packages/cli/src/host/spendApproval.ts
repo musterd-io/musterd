@@ -1,10 +1,4 @@
-import {
-  askContract,
-  makeEnvelope,
-  type AskContract,
-  type Envelope,
-  type MemberKind,
-} from '@musterd/protocol';
+import { askContract, makeEnvelope, type AskContract, type Envelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { parseDuration } from '../service/hold.js';
 
@@ -31,12 +25,10 @@ export interface SpendApprovalSeat {
   inbox(): Promise<{ messages: Envelope[] }>;
 }
 
-export function armSpendApproval(
-  kind: MemberKind | undefined,
-  threshold: number | null,
-): number | undefined {
-  if (kind === undefined || kind === 'human') return undefined;
-  if (threshold === null || !Number.isFinite(threshold) || threshold <= 0) return undefined;
+/** ADR 672: the threshold as the order carries it (`spend_approval_usd`, agent/service seats only
+ *  — the daemon applies ADR 636 §1); absent or not a positive finite number arms nothing. */
+export function armSpendApproval(threshold: number | undefined): number | undefined {
+  if (threshold === undefined || !Number.isFinite(threshold) || threshold <= 0) return undefined;
   return threshold;
 }
 

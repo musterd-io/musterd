@@ -596,6 +596,10 @@ export const WakeOrderSchema = z
         budget_usd: z.number().optional(),
       })
       .optional(),
+    /** ADR 672: the team's spend-approval threshold (ADR 635) for this wake — present only when the
+     *  policy sets one and the seat is an agent or service (ADR 636 §1). The host arms the hold from
+     *  this field and reads nothing else for it. Absent ⇒ no hold. */
+    spend_approval_usd: z.number().positive().optional(),
     /** Effective resume-hygiene bound for this seat (increment 5). Absent ⇒ backend default. */
     transcript_max_bytes: z.number().int().optional(),
     /** ADR 209: portable (fresh) is default; transcript_required is a narrow reply-only exception. */

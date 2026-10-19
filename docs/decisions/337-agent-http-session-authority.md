@@ -36,6 +36,9 @@ request without making a shared Team secret an impersonation credential.
    on supersession, release, ban, archive, credential rotation, and expiry.
    _(Amended 2026-09-26: an agent seat that entered through ADR 452's sponsor nonce holds an OAuth
    chain instead of a lease. See the note in Consequences.)_
+   _(Amended 2026-10-19 by [ADR 672](672-wake-hold-without-session-lease.md): a wake actuator acting
+   for a live wake presents the credential with the wake lease instead, proven by the Presence that
+   attests it. See the note in Consequences.)_
 4. Reconnection uses the seat credential to make a fresh claim and receive a
    fresh lease. An ambient touch never renews or substitutes for a lease.
 5. WebSocket authority remains connection-bound after its claim. Its occupied
@@ -54,6 +57,10 @@ request without making a shared Team secret an impersonation credential.
   together. Existing `mskey_` HTTP callers are intentionally refused after the
   migration.
 
+- 2026-10-19 — [ADR 672](672-wake-hold-without-session-lease.md) amends Decision 3 for the wake
+  actuator: with `x-musterd-wake-lease` and no session lease, an agent-seat credential acts as the
+  seat while a fresh, unreleased Presence of that seat attests that lease (ADR 241). No Presence is
+  created or touched for it; the window ends with the Presence. The credential is still the secret.
 - 2026-09-26 — [ADR 452](452-agent-connect-over-oauth.md) amends Decision 3 for agent seats that
   enter over OAuth through a sponsor's one-time connect nonce (ADR 449). Their authority is the
   `msat_`/`msrt_` chain, not a seat credential plus a lease. ADR 452 §3 maps each lease guarantee to

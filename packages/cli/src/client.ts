@@ -189,6 +189,13 @@ export interface HttpClientOpts {
   /** The self-identifying Bearer secret: agent-seat (`msac_`) or human (`mscr_`) credential. */
   key?: string;
   /**
+   * ADR 672: the wake lease this client acts for, sent as `x-musterd-wake-lease` on every request
+   * in place of the env declaration. The host loop sets it on the seat-credential client that
+   * sends the spend-approval ask: the daemon accepts the credential with no session lease while
+   * that wake's session is live on the seat. Never on a human credential (the same ADR 241 gate).
+   */
+  wakeLease?: string;
+  /**
    * The seat this client acts as (v0.3, ADR 075 / SPEC A.7 §253). An agent key authenticates the
    * *harness*, not a seat, so reads (inbox/availability/audit — no envelope `from`) carry the seat in
    * `x-musterd-seat`; the server asserts that seat is occupied by this key. A `send` conveys it via the
@@ -596,7 +603,7 @@ export class HttpClient {
       // shell would let that shell claim to be a machine's wake.
       const attestedWakeLease =
         this.opts.key?.startsWith(TOKEN_PREFIXES.agent_seat) === true
-          ? resolveAttestedWakeLease(process.env)
+          ? (this.opts.wakeLease ?? resolveAttestedWakeLease(process.env))
           : undefined;
       res = await this.fetchWithRetry(path, {
         method,

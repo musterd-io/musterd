@@ -1452,7 +1452,20 @@ async function authTouch(
   slug: string,
   req: IncomingMessage,
 ): Promise<{ team: TeamRow; member: MemberRow }> {
-  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+  const leaseHeader = wakeLeaseHeader(req);
+  const auth = await authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+    leaseHeader !== undefined
+      ? { wakeLease: { id: leaseHeader, freshMs: ctx.config.presenceTimeoutMs } }
+      : {},
+  );
+  // ADR 672: the wake actuator acting for a live wake has no Presence of its own and must not be
+  // given one — the wake's session is the occupant, and the verifier reads that row.
+  if (auth.via === 'wake_lease') return auth;
   // Observer seats (ADR 063) watch without participating — never flip present, no presence event.
   if (auth.member.observer === 1) return auth;
   // A background poller (the notifier reads inbox on an away human's behalf) opts out: marking them

@@ -70,16 +70,13 @@ function world(opts: {
 }
 
 describe('armSpendApproval', () => {
-  it('arms a positive threshold for an agent or a service, and nothing else', () => {
-    expect(armSpendApproval('agent', 1.5)).toBe(1.5);
-    expect(armSpendApproval('service', 2)).toBe(2);
-    expect(armSpendApproval('human', 1.5)).toBeUndefined();
-    expect(armSpendApproval(undefined, 1.5)).toBeUndefined();
-    expect(armSpendApproval('agent', null)).toBeUndefined();
-    expect(armSpendApproval('agent', Number.NaN)).toBeUndefined();
-    expect(armSpendApproval('agent', Number.POSITIVE_INFINITY)).toBeUndefined();
-    expect(armSpendApproval('agent', 0)).toBeUndefined();
-    expect(armSpendApproval('agent', -1)).toBeUndefined();
+  it('arms the order’s positive threshold, and nothing else (ADR 672)', () => {
+    expect(armSpendApproval(1.5)).toBe(1.5);
+    expect(armSpendApproval(undefined)).toBeUndefined();
+    expect(armSpendApproval(Number.NaN)).toBeUndefined();
+    expect(armSpendApproval(Number.POSITIVE_INFINITY)).toBeUndefined();
+    expect(armSpendApproval(0)).toBeUndefined();
+    expect(armSpendApproval(-1)).toBeUndefined();
   });
 });
 
