@@ -111,9 +111,26 @@ export function bumpPackageJson(raw: string, version: string): string {
   return `${JSON.stringify(pkg, null, 2)}\n`;
 }
 
+/**
+ * The MCP Registry descriptor (packages/mcp/server.json) names the npm version it describes, twice:
+ * the server's own `version` and each package's. The registry verifies the listing against the
+ * published package's `mcpName`, so a descriptor left at the previous version lists a release that
+ * is not the latest — bumped in lockstep with the package.json files for that reason.
+ */
+export function bumpServerJson(raw: string, version: string): string {
+  const server = JSON.parse(raw) as { version?: string; packages?: { version?: string }[] };
+  server.version = version;
+  for (const pkg of server.packages ?? []) pkg.version = version;
+  return `${JSON.stringify(server, null, 2)}\n`;
+}
+
 export function nextStepsAfterPublish(version: string): string[] {
   return [
     `git tag v${version} && git push origin v${version}`,
+    // The official MCP Registry holds metadata only, so it can list a version only once npm has it.
+    // `mcp-publisher login github` is one-time, by a member of the musterd-io org (the
+    // io.github.musterd-io/ namespace is verified against it).
+    `cd packages/mcp && mcp-publisher publish   # MCP Registry listing of @musterd/mcp ${version}`,
     `pnpm bump-brew-formula --version ${version}   # then push SandRiseStudio/homebrew-musterd`,
     // The npm-install smoke that used to live here now runs BEFORE publishing (release/smoke.ts):
     // as a suggestion it could only ever confirm damage, and 0.4.0 is what that cost. What is left

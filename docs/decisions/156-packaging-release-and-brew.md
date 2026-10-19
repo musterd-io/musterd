@@ -46,6 +46,13 @@ installer, automated brew bump in CI.
 - Packaged users get clear Node/upgrade messaging instead of a crashlooping LaunchAgent.
 - Docs (README Quickstart) list brew | npm | npx. First good registry cut is **0.3.1**
   (0.3.0 deprecated after a raw-`npm publish` left `workspace:*` in the tarball).
+- 2026-10-19 (lane `01M5AQGV8Y0TNVSVQ68PX9C7SY`, ADR 666's off-site half): `@musterd/mcp` carries
+  `mcpName: io.github.musterd-io/musterd` and a `packages/mcp/server.json` descriptor for the
+  official MCP Registry. `pnpm release` bumps `server.json` in lockstep with the package.json files,
+  and `nextStepsAfterPublish` adds `mcp-publisher publish` after the npm publish — the registry
+  holds metadata only and verifies it against the published package's `mcpName`, so the first
+  listing waits for the first release that carries it (0.5.0 does not). `tests/release.test.ts`
+  pins the descriptor to the package's name, version and `mcpName`.
 
 ## Observability & Evaluation
 
