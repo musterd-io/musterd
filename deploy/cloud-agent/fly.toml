@@ -31,3 +31,5 @@ primary_region = "sjc"
   MUSTERD_SERVER = "https://revive-staging.musterd.dev"
   MUSTERD_TEAM = "revive-staging"
   MUSTERD_HOST = "cloud-1"
+  # ADR 101: the resident engine never guesses a model; unset, every wake defers (quietly).
+  MUSTERD_MODEL = "claude-sonnet-5-5"

@@ -12,6 +12,8 @@
 #   --repo <git-url>     workspace repo the seat clones on first boot (required)
 #   --host-label <label> host label the provision is queued for (default: cloud-<seat>)
 #   --key-env <VAR>      env var holding the sponsor's model key (default: ANTHROPIC_API_KEY)
+#   --model <id>         model the resident engine runs the seat on (default: claude-sonnet-5-5);
+#                        ADR 101: the engine never guesses one, so an unset model defers every wake
 #   --skip-sponsor       skip the sponsor steps (host key in MUSTERD_HOST_KEY; no agent is minted)
 #   --skip-fly           the app, volume, secrets and machine already exist — only mint the agent
 #   --dry-run            print every step (secrets redacted), change nothing
@@ -37,6 +39,7 @@ TEAM=revive-staging
 SERVER=""
 REPO_URL=""
 HOST_LABEL=""
+MODEL="claude-sonnet-5-5"
 KEY_ENV=ANTHROPIC_API_KEY
 SKIP_SPONSOR=0
 SKIP_FLY=0
@@ -50,6 +53,7 @@ while [ $# -gt 0 ]; do
     --server) SERVER="$2"; shift 2 ;;
     --repo) REPO_URL="$2"; shift 2 ;;
     --host-label) HOST_LABEL="$2"; shift 2 ;;
+    --model) MODEL="$2"; shift 2 ;;
     --key-env) KEY_ENV="$2"; shift 2 ;;
     --skip-sponsor) SKIP_SPONSOR=1; shift ;;
     --skip-fly) SKIP_FLY=1; shift ;;
@@ -151,6 +155,7 @@ run fly deploy "$ROOT" --config "$ROOT/deploy/cloud-agent/fly.toml" \
   --env "MUSTERD_SERVER=$SERVER" \
   --env "MUSTERD_TEAM=$TEAM" \
   --env "MUSTERD_HOST=$HOST_LABEL" \
+  --env "MUSTERD_MODEL=$MODEL" \
   --env "REPO_URL=$REPO_URL"
 fi
 

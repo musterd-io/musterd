@@ -43,8 +43,12 @@ cd repo
 # value is this process's env, inherited by the host loop and read at spawn — never written
 # to a file by anything here.
 export MUSTERD_KEY_ENV="${MUSTERD_KEY_ENV:-ANTHROPIC_API_KEY}"
+# The model is a declaration, never a default (ADR 101): the resident engine reads MUSTERD_MODEL
+# at spawn and DEFERS the wake — quietly, by design — when it is unset. The third pilot run
+# (2026-10-19) provisioned and woke the seat, then deferred every wake on exactly that.
+: "${MUSTERD_MODEL:?MUSTERD_MODEL (the model the seat runs on) must be set — create.sh --model}"
 
-log "host starting: server $MUSTERD_SERVER team $MUSTERD_TEAM host $MUSTERD_HOST"
+log "host starting: server $MUSTERD_SERVER team $MUSTERD_TEAM host $MUSTERD_HOST model $MUSTERD_MODEL"
 exec musterd host --cloud-provision \
   --server "$MUSTERD_SERVER" --team "$MUSTERD_TEAM" --host "$MUSTERD_HOST" \
   --key-env "$MUSTERD_KEY_ENV" >>"$LOG" 2>&1
