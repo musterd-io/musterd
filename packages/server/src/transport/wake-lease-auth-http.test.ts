@@ -52,6 +52,17 @@ withDrivers('wake-lease-auth-http', (_o, kind) => {
     }),
   });
 
+  /** The daemon's own lease row for ada (ADR 672 binds the header to it, not to the Presence alone). */
+  async function leaseRow(id: string, status: 'leased' | 'reported' = 'leased'): Promise<void> {
+    const team = await requireTeam(server.store, 'wl-t');
+    const now = Date.now();
+    await server.store.run(
+      `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at)
+         VALUES (?, ?, ?, NULL, NULL, 'h', 'immediate', ?, ?, ?)`,
+      [id, team.id, adaId, status, now, now + 120_000],
+    );
+  }
+
   async function presenceRows(): Promise<number> {
     const row = await server.store.get<{ n: number }>(
       'SELECT COUNT(*) AS n FROM presence WHERE member_id = ?',
@@ -95,12 +106,14 @@ withDrivers('wake-lease-auth-http', (_o, kind) => {
 
   describe('a seat credential under a wake lease (ADR 672)', () => {
     it('is refused until a Presence of the seat attests that lease', async () => {
+      await leaseRow('L1');
       const refused = await call('POST', '/teams/wl-t/messages', asWake('L1'), ask('a1'));
       expect(refused.status).toBe(401);
       expect(refused.json.error.message).toContain('wake lease "L1" is not live on ada');
     });
 
     it('posts the ask and peeks the inbox once the wake is live, touching no Presence', async () => {
+      await leaseRow('L1');
       await attach(server.store, adaId, 'claude-code', 'wake-conn', {
         provenance: 'wake',
         wake_lease: 'L1',
@@ -122,7 +135,17 @@ withDrivers('wake-lease-auth-http', (_o, kind) => {
       expect(inbox.json.messages.some((m: { id: string }) => m.id === 'a1')).toBe(true);
     });
 
-    it('another lease id, or a released wake Presence, is refused', async () => {
+    it('a lease the daemon never minted, another lease id, a reported lease, or a released wake Presence is refused', async () => {
+      // A Presence attesting a lease the daemon never minted: the attestation is client-side.
+      const forged = await attach(server.store, adaId, 'claude-code', 'forged', {
+        provenance: 'wake',
+        wake_lease: 'L0',
+      });
+      expect((await call('POST', '/teams/wl-t/messages', asWake('L0'), ask('a0'))).status).toBe(
+        401,
+      );
+      await release(server.store, forged.id, 60_000);
+      await leaseRow('L1');
       const row = await attach(server.store, adaId, 'claude-code', 'wake-conn', {
         provenance: 'wake',
         wake_lease: 'L1',
@@ -130,10 +153,27 @@ withDrivers('wake-lease-auth-http', (_o, kind) => {
       expect((await call('POST', '/teams/wl-t/messages', asWake('L2'), ask('a2'))).status).toBe(
         401,
       );
+      // The wake has reported: its lease no longer acts, whatever the Presence still says.
+      await server.store.run("UPDATE wake_leases SET status = 'reported' WHERE id = 'L1'");
+      expect((await call('POST', '/teams/wl-t/messages', asWake('L1'), ask('a2b'))).status).toBe(
+        401,
+      );
+      await server.store.run("UPDATE wake_leases SET status = 'leased' WHERE id = 'L1'");
       await release(server.store, row.id, 60_000);
       expect((await call('POST', '/teams/wl-t/messages', asWake('L1'), ask('a3'))).status).toBe(
         401,
       );
+    });
+
+    it('acts only on the hold’s two routes — any other route keeps the lease rule', async () => {
+      await leaseRow('L1');
+      await attach(server.store, adaId, 'claude-code', 'wake-conn', {
+        provenance: 'wake',
+        wake_lease: 'L1',
+      });
+      const report = await call('GET', '/teams/wl-t/report', asWake('L1'));
+      expect(report.status).toBe(401);
+      expect(report.json.error.message).toContain('session lease');
     });
 
     it('a session lease still authenticates as before; the header changes nothing for it', async () => {

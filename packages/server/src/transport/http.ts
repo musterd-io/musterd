@@ -1451,8 +1451,11 @@ async function authTouch(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
+  /** ADR 672: only the routes the spend-approval hold uses (the ask, the inbox peek) accept a
+   *  seat credential under a wake lease; every other route keeps ADR 337's lease rule. */
+  opts: { wakeLease?: boolean } = {},
 ): Promise<{ team: TeamRow; member: MemberRow }> {
-  const leaseHeader = wakeLeaseHeader(req);
+  const leaseHeader = opts.wakeLease ? wakeLeaseHeader(req) : undefined;
   const auth = await authMember(
     ctx.db,
     slug,
@@ -6131,7 +6134,7 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/messages') {
-        const { team, member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req, { wakeLease: true });
         const body = (await readJson(req)) as { envelope?: unknown };
         const env = parseEnvelope(body.envelope);
         // No sender occupancy id here by design (ADR 101): a POST is stateless — it authenticates a
@@ -9459,7 +9462,7 @@ export async function handleHttp(
       // `to_kind IN ('team','broadcast')` — plus anything explicitly addressed to it, which is
       // legitimately its own mail. No separate "public" query: not exempting it *is* the scoping.
       if (method === 'GET' && rest === '/messages') {
-        const { team, member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req, { wakeLease: true });
         assertSeatCanRead(member);
         const since = url.searchParams.get('since');
         const limit = url.searchParams.get('limit');

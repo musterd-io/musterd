@@ -36,7 +36,7 @@ request without making a shared Team secret an impersonation credential.
    on supersession, release, ban, archive, credential rotation, and expiry.
    _(Amended 2026-09-26: an agent seat that entered through ADR 452's sponsor nonce holds an OAuth
    chain instead of a lease. See the note in Consequences.)_
-   _(Amended 2026-10-19 by [ADR 672](672-wake-hold-without-session-lease.md): a wake actuator acting
+   _(Amended 2026-10-19: per [ADR 672](672-wake-hold-without-session-lease.md), a wake actuator acting
    for a live wake presents the credential with the wake lease instead, proven by the Presence that
    attests it. See the note in Consequences.)_
 4. Reconnection uses the seat credential to make a fresh claim and receive a

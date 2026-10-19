@@ -509,6 +509,7 @@ export async function authMember(
 ): Promise<{ team: TeamRow; member: MemberRow; via?: 'wake_lease' }> {
   const team = await requireTeam(db, teamSlug);
   let member: MemberRow;
+  let via: 'wake_lease' | undefined;
 
   if (token.startsWith(TOKEN_PREFIXES.agent_key)) {
     // A bootstrap key only claims a seat. When this one is revoked or expired — the usual reason a
@@ -529,12 +530,12 @@ export async function authMember(
     );
   } else if (token.startsWith(TOKEN_PREFIXES.agent_seat)) {
     if (!sessionLease && opts.wakeLease && !opts.leaseless) {
-      // ADR 672: the credential proves the seat; the wake's live Presence proves the lease is a
-      // wake happening now on that seat. Halt still refuses (ADR 501).
+      // ADR 672: the credential proves the seat; the daemon's own lease row and the wake's live
+      // Presence prove the lease is a wake happening now on that seat. Standing (left, halted,
+      // disabled, banned, archived, lifecycle) is judged by the common tail below like any caller.
       member = await authByAgentSeatCredential(db, team, token, actingSeat, undefined, true);
-      if (member.halted_at !== null && member.halted_at !== undefined)
-        throw new MusterdError('forbidden', haltedSentence(member));
       const live = await hasLiveWakePresence(db, {
+        teamId: team.id,
         memberId: member.id,
         leaseId: opts.wakeLease.id,
         freshMs: opts.wakeLease.freshMs,
@@ -545,16 +546,16 @@ export async function authMember(
           `wake lease "${opts.wakeLease.id}" is not live on ${member.name}: a seat credential ` +
             'with no session lease acts only for a wake whose session is occupying the seat',
         );
-      return { team, member, via: 'wake_lease' };
-    }
-    member = await authByAgentSeatCredential(
-      db,
-      team,
-      token,
-      actingSeat,
-      sessionLease,
-      opts.leaseless,
-    );
+      via = 'wake_lease';
+    } else
+      member = await authByAgentSeatCredential(
+        db,
+        team,
+        token,
+        actingSeat,
+        sessionLease,
+        opts.leaseless,
+      );
   } else if (token.startsWith(TOKEN_PREFIXES.credential)) {
     member = await authByCredential(db, team, token, actingSeat);
   } else if (token.startsWith(TOKEN_PREFIXES.oauth_access)) {
@@ -582,7 +583,7 @@ export async function authMember(
 
   const refusal = memberStandingRefusal(member);
   if (refusal) throw refusal;
-  return { team, member };
+  return via !== undefined ? { team, member, via } : { team, member };
 }
 
 /**

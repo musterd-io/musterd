@@ -433,14 +433,20 @@ export async function recordUnattestedOccupancy(
  */
 export async function hasLiveWakePresence(
   db: Driver,
-  input: { memberId: string; leaseId: string; freshMs: number },
+  input: { teamId: string; memberId: string; leaseId: string; freshMs: number },
   now = Date.now(),
 ): Promise<boolean> {
+  // Two facts, both the daemon's: the lease row it minted for THIS member and has not seen reported
+  // (a `wake_lease` on a Presence is client-attested, so alone it would let the credential holder
+  // name any string), and a fresh Presence attesting it. `expires_at` is not consulted — the row
+  // expires 120 s after issue while the wake runs on.
   const row = await db.get<{ id: string }>(
-    `SELECT id FROM presence
-       WHERE member_id = ? AND wake_lease = ? AND last_seen_at >= ? AND held_until IS NULL
+    `SELECT p.id FROM presence p
+       JOIN wake_leases w ON w.id = p.wake_lease
+       WHERE p.member_id = ? AND p.wake_lease = ? AND p.last_seen_at >= ? AND p.held_until IS NULL
+         AND w.team_id = ? AND w.member_id = ? AND w.status <> 'reported'
        LIMIT 1`,
-    [input.memberId, input.leaseId, now - input.freshMs],
+    [input.memberId, input.leaseId, now - input.freshMs, input.teamId, input.memberId],
   );
   return row !== undefined;
 }
