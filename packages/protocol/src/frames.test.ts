@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HeartbeatFrame, WSClientFrame, WSServerFrame } from './frames.js';
+import { HeartbeatFrame, SeatPulseFrame, WSClientFrame, WSServerFrame } from './frames.js';
 import { PROTOCOL_VERSION } from './version.js';
 
 describe('WS frames', () => {
@@ -98,6 +98,46 @@ describe('WS frames', () => {
       },
     });
     expect(d.type).toBe('deliver');
+  });
+
+  it('parses a seat_pulse server frame (ADR 660)', () => {
+    const p = WSServerFrame.parse({
+      type: 'seat_pulse',
+      member: 'miley',
+      ts: 1,
+      intensity: 3,
+      kind: 'run',
+      last_ts: 1,
+    });
+    expect(p.type).toBe('seat_pulse');
+    expect(
+      WSServerFrame.parse({
+        type: 'seat_pulse',
+        member: 'miley',
+        ts: 1,
+        intensity: 1,
+        kind: null,
+        last_ts: 0,
+      }).type,
+    ).toBe('seat_pulse');
+  });
+
+  it('a seat_pulse refuses a kind outside the four, a negative or fractional intensity', () => {
+    const base = { type: 'seat_pulse', member: 'miley', ts: 1, last_ts: 1 };
+    expect(() => WSServerFrame.parse({ ...base, intensity: 1, kind: 'bash' })).toThrow();
+    expect(() => WSServerFrame.parse({ ...base, intensity: -1, kind: 'run' })).toThrow();
+    expect(() => WSServerFrame.parse({ ...base, intensity: 1.5, kind: 'run' })).toThrow();
+  });
+
+  it('a seat_pulse is exactly six scalars — the whole leak surface, pinned (ADR 660 §1)', () => {
+    expect(Object.keys(SeatPulseFrame.shape)).toEqual([
+      'type',
+      'member',
+      'ts',
+      'intensity',
+      'kind',
+      'last_ts',
+    ]);
   });
 
   it('parses an error frame with a known code', () => {

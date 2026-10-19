@@ -98,7 +98,7 @@ Rules:
 
 A conforming server MUST expose the message-routing semantics of §2–§4. This repo's server offers two bindings (full detail in `docs/architecture/02-protocol.md`):
 
-- **WebSocket** for live, present clients: handshake `hello → welcome → subscribe → subscribed`, then `send`/`deliver`/`heartbeat`/`presence`/`ack`/`error` frames.
+- **WebSocket** for live, present clients: handshake `hello → welcome → subscribe → subscribed`, then `send`/`deliver`/`heartbeat`/`presence`/`ack`/`error` frames, and `seat_pulse` to firehose subscribers (A.25).
 - **HTTP/JSON** for stateless one-shot clients (team/member management, send, inbox fetch, presence ping).
 
 Both bindings MUST funnel sends through one validate→persist→route path so semantics are identical.
@@ -973,3 +973,23 @@ peer holds it in plain text.
 - `checks` (A.17) are empty for a sealed note.
 - A client that can open the note re-seals it when a keyed machine in the seat's set is missing from
   `to`. A machine not in `to` cannot open the note.
+
+## A.25 Seat pulse (unreleased — ADR 660)
+
+A seat's harness tool-call cadence reaches viewers of the team's own `/live` as counts and kinds
+only, so the office can show _that_ a seat is working and nothing of _what_.
+
+- Server → `seat_pulse`: `{ "type":"seat_pulse", "member":"miley", "ts": 1733760000000,
+  "intensity": 7, "kind": "run", "last_ts": 1733759998120 }`. `intensity` is the number of
+  distinct harness tool calls (`PostToolUse` / `PostToolUseFailure` trace rows with a
+  `tool_use_id`, ADR 445) in the trailing 60 s; `kind` is one of `read` | `edit` | `run` | `test`
+  for the latest such call that folds to a kind, or `null`; `last_ts` is that call's producer time
+  (0 when `kind` is null); `ts` is the server clock when the pulse was computed.
+- The server sends it only to `team-all` subscribers (the firehose), at most once per seat per
+  ~5 s, and **never for an idle seat**: no frame is the idle signal, and a viewer treats a pulse
+  older than ~15 s as still. On `subscribe team-all` the server MAY send the current pulse of every
+  seat with calls in its window.
+- The frame carries exactly these six fields. A server MUST NOT add a tool name, path, command,
+  session digest, harness or agent id to it.
+- Additive to `musterd/0.3`: a client that does not recognise `seat_pulse` ignores it. `test` is in
+  the enum; no server produces it until a classifier exists (ADR 660 Consequences).

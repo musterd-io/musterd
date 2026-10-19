@@ -76,6 +76,15 @@ fragment from a hook is content, and content must never reach it.
   It shows _that_ a seat acts, at a cadence, and nothing of _what_.
 - Sibling, not folded in: lane `01M4V74S9E2E72SV53HC1GPYA9` (what the stream does during a long
   quiet gap — a dated replay of the day's merges with the live clock showing).
+- _2026-10-19 (lane `01M5AJ8VRNF9EX64BMKG8XX6D1`):_ the frame is `seat_pulse` — `heartbeat` was
+  already the client→server presence frame — with exactly six fields `{type, member, ts,
+  intensity, kind, last_ts}`, recorded in SPEC A.25 and pinned by a key-set test. The fold and the
+  projection are pure functions in `@musterd/protocol` (`foldPulseKind`, `projectPulse`) so the
+  daemon and the offline eval share one arithmetic. `test` is in the kind enum but nothing
+  produces it: no structural trace row says a shell call was a test run, and the command text is
+  content. A later lane adds a client-side classifier (`detail.run_class`) and amends here.
+  Design: `docs/superpowers/specs/2026-10-19-tool-call-heartbeat-design.md`.
+  Follows-up: deferred — the three heartbeat lanes landed and the desk seen moving (2026-10-19)
 
 ## Observability & Evaluation
 

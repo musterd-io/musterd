@@ -66,6 +66,7 @@ export * from './trace.js';
 export * from './hostProvisions.js';
 export * from './traceScrub.js';
 export * from './traceSync.js';
+export * from './pulse.js';
 export * from './traceReport.js';
 export * from './memory.js';
 export * from './integrations.js';
