@@ -24,6 +24,9 @@ import {
   providerRefFrom,
   reconcileRelayPending,
   secondSocketVerdict,
+  slackDispatchAllowed,
+  slackSignatureValid,
+  slackTeamIdFromBody,
   socketCredentialLive,
   RELAY_MAX_FRAME_BYTES,
   RELAY_PROVIDER_TIMEOUT_MS,
@@ -34,6 +37,10 @@ export interface Env {
   AWAY_RELAY: DurableObjectNamespace;
   /** Secret (wrangler secret put): JSON map of team slug → sha256 hex of that team's credential. */
   TEAM_CREDENTIALS_JSON?: string;
+  /** Secret (wrangler secret put): Slack's signing secret — lives only here (ADR 668 §1). */
+  SLACK_SIGNING_SECRET?: string;
+  /** Secret (wrangler secret put): JSON map of Slack team id → musterd team slug (ADR 668 §2). */
+  SLACK_TEAM_MAP_JSON?: string;
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -81,6 +88,33 @@ export default {
     const callback = /^\/callback\/([^/]+)\/([^/]+)$/.exec(url.pathname);
     if (request.method === 'POST' && callback) {
       const slug = decodeURIComponent(callback[1]!);
+      // Slack interactivity (ADR 668): when the operator has wired Slack, the signature is
+      // verified here — the signing secret lives only at this Worker — and dispatch follows
+      // the install mapping, never a field in the request. A refused callback is never
+      // forwarded; Slack retries a 401/403 no more than it retries any refusal.
+      if (env.SLACK_SIGNING_SECRET) {
+        const rawBody = await request.text();
+        const valid = await slackSignatureValid(
+          env.SLACK_SIGNING_SECRET,
+          request.headers.get('x-slack-request-timestamp') ?? '',
+          rawBody,
+          request.headers.get('x-slack-signature') ?? '',
+          Date.now(),
+        );
+        if (!valid) return new Response('invalid slack signature', { status: 401 });
+        if (
+          env.SLACK_TEAM_MAP_JSON &&
+          !slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug)
+        )
+          return new Response('slack team not mapped to this destination', { status: 403 });
+        return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+          new Request(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: rawBody,
+          }),
+        );
+      }
       return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(request);
     }
     return new Response('not found', { status: 404 });

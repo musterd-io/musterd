@@ -185,6 +185,15 @@ export const PolicySchema = z.object({
    */
   away_relay_url: z.string().url().optional(),
   away_relay_token: z.string().optional(),
+  /**
+   * Slack adapter (ADR 668) — the bot token the daemon renders `chat.postMessage` deliveries
+   * with, for the team's own workspace. Unset (the default) = no Slack channel delivery. The
+   * Slack signing secret is deliberately NOT here: it lives only at the relay Worker, so a
+   * daemon compromise cannot mint valid Slack callbacks. Same secret handling as
+   * `away_relay_token`: admin-set, policy reads admin-only, never in `team export`, masked on
+   * CLI display. Increment 9 (per-install tokens) retires this key with its own change.
+   */
+  slack_bot_token: z.string().optional(),
   /** Team-wide wake-policy defaults (ADR 131 increment 5) — per-seat enrollment overrides layer on
    *  top (`ResidencyPolicyOverrideSchema` in `residency.policy`). `parse({})` yields launch defaults. */
   residency: ResidencyPolicySchema.default({}),

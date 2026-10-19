@@ -5,6 +5,8 @@
 #
 #   cd workers/away-relay && wrangler deploy
 #   wrangler secret put TEAM_CREDENTIALS_JSON   # {"<team-slug>": "<sha256 hex of the credential>"}
+#   wrangler secret put SLACK_SIGNING_SECRET    # Slack app signing secret (ADR 668 — lives only here)
+#   wrangler secret put SLACK_TEAM_MAP_JSON     # {"<slack-team-id>": "<team-slug>"}
 name = "musterd-away-relay"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"

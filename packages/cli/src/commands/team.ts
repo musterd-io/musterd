@@ -595,6 +595,7 @@ const POLICY_FLAGS = new Set([
   'seeds-token',
   'away-relay',
   'away-token',
+  'slack-bot-token',
   'guardian-tier',
   'stakes-default',
   'review-by',
@@ -891,6 +892,17 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     }
     changed = true;
   }
+  // ADR 668: the Slack bot token — set alone (`--slack-bot-token <token>`), `off` clears it.
+  // It is a secret: stored in team policy, never displayed after it is set.
+  const slackBotToken = flagStr(parsed.flags, 'slack-bot-token');
+  if (slackBotToken !== undefined) {
+    if (slackBotToken === 'off') {
+      delete merged.slack_bot_token;
+    } else {
+      merged.slack_bot_token = slackBotToken;
+    }
+    changed = true;
+  }
   // ADR 150: the enforcement class table — the opt-in PreToolUse gate declaration. `--enforce-surface`
   // (contended surfaces, Gate A) and `--enforce-action` (costly actions, Gate B) upsert classes by name
   // (re-declaring a name replaces it); `--enforce-clear` empties the table. Posture defaults to `block`
@@ -1121,6 +1133,10 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   // ADR 659: the away relay URL shows its host; the credential shows only that it is set.
   process.stdout.write(
     `  away relay: ${current.away_relay_url ? theme.accent(maskWebhook(current.away_relay_url)) : 'off'}${inherited(stored, 'away_relay_url')}\n`,
+  );
+  // ADR 668: the Slack bot token shows only that it is set, never its value.
+  process.stdout.write(
+    `  slack bot token: ${current.slack_bot_token ? theme.accent('set') : 'off'}${inherited(stored, 'slack_bot_token')}\n`,
   );
   // ADR 244: admin-set default stakes by surface. Empty is the shipped default (inert).
   const stakeRules = current.stakes_defaults;

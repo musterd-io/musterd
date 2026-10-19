@@ -3,7 +3,7 @@ import { beforeEach, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
-import { issueAskChannelToken } from '../store/askChannelTokens.js';
+import { askDigest, issueAskChannelToken } from '../store/askChannelTokens.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
@@ -43,10 +43,14 @@ async function seed() {
       ts: NOW,
     }),
   );
+  const stored = await db.get<{ body: string; meta: string | null }>(
+    'SELECT body, meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, 'ask-1'],
+  );
   const { token } = await issueAskChannelToken(db, {
     teamId: team.id,
     askId: 'ask-1',
-    askDigest: 'd1',
+    askDigest: askDigest(stored!.body, stored!.meta),
     actionClass: 'advisory',
     channel: 'slack',
     bindingId: 'bind-1',

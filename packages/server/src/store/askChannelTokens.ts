@@ -44,6 +44,15 @@ export interface IssueInput {
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
 /**
+ * The ask digest (ADR 623 §5): over the ask's stored body and meta, computed identically at
+ * delivery time and again at redemption from the daemon's own rows — so an ask changed after
+ * its buttons went out redeems as `stale_revision`, never as what was shown.
+ */
+export function askDigest(body: string, metaJson: string | null): string {
+  return sha256(`${body}\n${metaJson ?? ''}`);
+}
+
+/**
  * Mint a token for one ask on one channel. The plaintext is returned once, to the caller that hands it
  * to the relay; it is never stored. A privileged ask gets no token: it gets no buttons (ADR 618 §4).
  */
