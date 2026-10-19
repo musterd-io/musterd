@@ -50,6 +50,16 @@ function post(body: string, headers: Record<string, string> = {}): Request {
 }
 
 describe('away-relay callback route: Slack fails closed (ADR 668)', () => {
+  it('rejects an unconfigured callback format', async () => {
+    const { env: e, forwarded } = env({
+      SLACK_SIGNING_SECRET: 'sekret',
+      SLACK_TEAM_MAP_JSON: JSON.stringify({ T1: 'revive' }),
+    });
+    const res = await worker.fetch(post(JSON.stringify({ token: 'tok', decision: 'approve' })), e);
+    expect(res.status).toBe(400);
+    expect(forwarded).not.toHaveBeenCalled();
+  });
+
   it('refuses a Slack callback when the signing secret is unset — never forwards it', async () => {
     const { env: e, forwarded } = env({ SLACK_TEAM_MAP_JSON: JSON.stringify({ T1: 'revive' }) });
     const res = await worker.fetch(post(slackBody()), e);
@@ -106,5 +116,41 @@ describe('away-relay callback route: Slack fails closed (ADR 668)', () => {
     );
     expect(res.status).toBe(200);
     expect(forwarded).toHaveBeenCalledTimes(1);
+  });
+
+  it('verifies a Slack form payload after another form field', async () => {
+    const body = `extra=x&${slackBody()}`;
+    const ts = Math.floor(Date.now() / 1000);
+    const { env: e, forwarded } = env({
+      SLACK_SIGNING_SECRET: 'sekret',
+      SLACK_TEAM_MAP_JSON: JSON.stringify({ T1: 'revive' }),
+    });
+    const res = await worker.fetch(
+      post(body, {
+        'x-slack-request-timestamp': String(ts),
+        'x-slack-signature': await sign('sekret', body, ts),
+      }),
+      e,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a Slack signature header as a Slack signal even for a non-form body', async () => {
+    const body = JSON.stringify({ token: 'tok', decision: 'approve' });
+    const ts = Math.floor(Date.now() / 1000);
+    const { env: e, forwarded } = env({
+      SLACK_SIGNING_SECRET: 'sekret',
+      SLACK_TEAM_MAP_JSON: JSON.stringify({ T1: 'revive' }),
+    });
+    const res = await worker.fetch(
+      post(body, {
+        'x-slack-request-timestamp': String(ts),
+        'x-slack-signature': await sign('sekret', body, ts),
+      }),
+      e,
+    );
+    expect(res.status).toBe(403);
+    expect(forwarded).not.toHaveBeenCalled();
   });
 });

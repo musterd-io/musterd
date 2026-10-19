@@ -14,15 +14,15 @@ import {
   askDigest,
   redeemAskChannelToken,
   type AskStanding,
+  type BindingAuthorizer,
   type RedemptionChecks,
 } from '../store/askChannelTokens.js';
 import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
 import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
-import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
-import { parseSlackCallback, slackAuthorizer } from './slackAdapter.js';
+import { parseSlackCallback } from './slackAdapter.js';
 
 /**
  * The daemon's away-relay client (ADR 659): one WebSocket per configured team to its relay
@@ -32,11 +32,11 @@ import { parseSlackCallback, slackAuthorizer } from './slackAdapter.js';
  *
  * A team with `away_relay_url` / `away_relay_token` unset (the default) never connects: no
  * outbound call, the ADR 149 posture. Callbacks are forwarded raw by the relay; parsing a
- * provider's payload is its adapter's job (Slack: lane 01M50XQ04M8E3X5QHY173Q18X7). The generic
- * JSON shape (`{token, decision}`) is redeemed here against the pairing lane's binding store
- * (ADR 618 §7): no current binding at the token's generation, no answer (ADR 623 §6). A pairing
- * identity (`{pairing_nonce, provider_tenant_id, provider_user_id}`) is staged, never bound —
- * binding waits for the human's confirmation on the original surface.
+ * provider's payload is its adapter's job (Slack: lane 01M50XQ04M8E3X5QHY173Q18X7). The current
+ * route accepts Slack form callbacks only, redeeming them against the token's binding and ask id
+ * in the daemon store (ADR 618 §7): no current matching binding or route id, no answer (ADR 623
+ * §6). Pairing identity is staged, never bound — binding waits for the human's confirmation on
+ * the original surface.
  */
 
 /** How often the client looks for teams whose relay policy appeared, changed, or went away. */
@@ -143,10 +143,21 @@ const relayChecks: RedemptionChecks = {
     if (!binding) return false;
     return answerAllowed(await getChannelSettings(t, teamId, binding.member_id, channel));
   },
+  bindingAuthorizer: async (t, teamId, bindingId, generation, channel) =>
+    (await t.get<BindingAuthorizer>(
+      `SELECT m.id AS memberId, m.name AS memberName, b.channel,
+              b.provider_tenant_id AS providerTenantId,
+              b.provider_user_id AS providerUserId
+         FROM channel_bindings b
+         JOIN members m ON m.id = b.member_id AND m.team_id = b.team_id
+        WHERE b.id = ? AND b.team_id = ? AND b.generation = ?
+          AND b.channel = ? AND b.status = 'active'`,
+      [bindingId, teamId, generation, channel],
+    )) ?? null,
 };
 
 /**
- * Redeem one generic callback (`{token, decision, authorizer?}` JSON). Anything else is the
+ * Redeem one signed Slack callback. Unsigned JSON callbacks are refused; anything else is the
  * provider adapter's to parse and is reported back unhandled, never guessed at. A redeemed answer
  * is written as a `message` carrying `meta.channel_answer` — never an `accept`/`decline`
  * (ADR 618 §5) — inside the redemption transaction.
@@ -157,27 +168,12 @@ export async function handleRelayCallback(
   frame: RelayCallbackFrame,
   now: number = Date.now(),
 ): Promise<{ ok: boolean; reason?: string }> {
-  // A Slack interactivity payload is form-encoded, not JSON: it is tried first (ADR 668).
-  const slackBody = frame.body.startsWith('payload=') ? frame.body : null;
-  let parsed: unknown = null;
-  if (!slackBody) {
-    try {
-      parsed = JSON.parse(frame.body);
-    } catch {
-      return { ok: false, reason: 'unparseable_callback' };
-    }
-  }
-  const body = parsed as {
-    token?: unknown;
-    decision?: unknown;
-    authorizer?: unknown;
-    pairing_nonce?: unknown;
-    provider_tenant_id?: unknown;
-    provider_user_id?: unknown;
-  } | null;
-  // A Slack interactivity payload (ADR 668): the authorizer is resolved from the binding the
-  // payload's provider identity names — never from a name the payload carries — and a pairing
-  // button stages its identity against the nonce, binding nothing.
+  // Treat the whole form as Slack-shaped when it contains a `payload` field, regardless of
+  // field order or percent-encoding. The Worker verifies its signature before forwarding.
+  const slackBody = new URLSearchParams(frame.body).has('payload') ? frame.body : null;
+  if (!slackBody) return { ok: false, reason: 'unparseable_callback' };
+  // Pairing callbacks stage provider identity, binding nothing; the human confirms on the
+  // original surface. Answer callbacks must match the identity already bound to their token.
   const slack = slackBody ? parseSlackCallback(slackBody) : null;
   if (slackBody && !slack) return { ok: false, reason: 'unparseable_callback' };
   if (slack) {
@@ -190,31 +186,29 @@ export async function handleRelayCallback(
       });
       return staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
     }
-    const resolved = await slackAuthorizer(ctx, team.id, slack);
-    if (!resolved || !slack.token || !slack.decision) return { ok: false, reason: 'binding_stale' };
+    if (!slack.token || !slack.decision) return { ok: false, reason: 'binding_stale' };
     const result = await redeemAskChannelToken(
       ctx.db,
       {
         teamId: team.id,
         token: slack.token,
+        askId: frame.ask_ref,
         assurance: 'A1',
         decision: slack.decision,
         answerMessageId: `slack-${frame.ask_ref}-${now}`,
-        authorizer: resolved.memberName,
+        providerIdentity: { tenantId: slack.providerTenantId, userId: slack.providerUserId },
         deliveryActor: 'slack',
         now,
-        writeAnswer: async (t) => {
-          const member = await getMemberByName(t, team.id, resolved.memberName);
-          if (!member) throw new Error(`channel authorizer ${resolved.memberName} is not a member`);
+        writeAnswer: async (t, authorizer) => {
           await insertMessage(
             t,
             team.id,
-            member.id,
+            authorizer.memberId,
             null,
             makeEnvelope({
               id: `slack-${frame.ask_ref}-${now}`,
               team: team.slug,
-              from: resolved.memberName,
+              from: authorizer.memberName,
               to: { kind: 'team' },
               act: 'message',
               body: slack.decision === 'approve' ? 'Approved via Slack' : 'Rejected via Slack',
@@ -231,70 +225,7 @@ export async function handleRelayCallback(
     );
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
   }
-  // A pairing identity stages against its nonce and binds nothing (spec §Pairing step 3): the
-  // binding is created only by the human's confirmation on the original surface, which shows
-  // the tenant and user exactly as recorded here.
-  if (
-    body &&
-    typeof body.pairing_nonce === 'string' &&
-    typeof body.provider_tenant_id === 'string' &&
-    typeof body.provider_user_id === 'string'
-  ) {
-    const staged = await recordPairingIdentity(ctx.db, {
-      nonce: body.pairing_nonce,
-      providerTenantId: body.provider_tenant_id,
-      providerUserId: body.provider_user_id,
-      now,
-    });
-    return staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
-  }
-  if (
-    !body ||
-    typeof body.token !== 'string' ||
-    (body.decision !== 'approve' && body.decision !== 'reject')
-  ) {
-    return { ok: false, reason: 'unparseable_callback' };
-  }
-  const authorizer = typeof body.authorizer === 'string' ? body.authorizer : 'unknown';
-  const decision = body.decision;
-  const result = await redeemAskChannelToken(
-    ctx.db,
-    {
-      teamId: team.id,
-      token: body.token,
-      assurance: 'A1',
-      decision,
-      answerMessageId: `relay-${frame.ask_ref}-${now}`,
-      authorizer,
-      deliveryActor: 'relay',
-      now,
-      writeAnswer: async (t) => {
-        const member = await getMemberByName(t, team.id, authorizer);
-        if (!member) throw new Error(`channel authorizer ${authorizer} is not a member`);
-        await insertMessage(
-          t,
-          team.id,
-          member.id,
-          null,
-          makeEnvelope({
-            id: `relay-${frame.ask_ref}-${now}`,
-            team: team.slug,
-            from: authorizer,
-            to: { kind: 'team' },
-            act: 'message',
-            body: decision === 'approve' ? 'Approved via channel' : 'Rejected via channel',
-            meta: {
-              in_reply_to: frame.ask_ref,
-              channel_answer: { channel: 'relay', assurance: 'A1', decision },
-            },
-            ts: now,
-          }),
-        );
-      },
-    },
-    relayChecks,
-  );
-  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  return { ok: false, reason: 'unparseable_callback' };
 }
 
 export interface RelayLink {

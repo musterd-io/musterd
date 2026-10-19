@@ -8,9 +8,9 @@ import {
 import type { Ctx } from '../context.js';
 import { log } from '../log.js';
 import { askDigest, issueAskChannelToken } from '../store/askChannelTokens.js';
-import { findBindingByIdentity, listBindings } from '../store/channelBindings.js';
+import { listBindings } from '../store/channelBindings.js';
 import { deliverAllowed, getChannelSettings } from '../store/channelSettings.js';
-import { getMemberById, listMembers } from '../store/members.js';
+import { listMembers } from '../store/members.js';
 import { humanPresent } from '../store/reachability.js';
 import { resolveCapabilities, type TeamRow } from '../store/rows.js';
 import { getPolicy } from '../store/teams.js';
@@ -23,7 +23,7 @@ import { relayLinkFor } from './relay.js';
  * **proveIdentity** turns a pairing callback into the identity pairing stages. Slack's
  * signature is verified at the relay Worker (the signing secret never reaches the daemon);
  * what arrives here is ingress-attested transport, and the daemon still trusts nothing in it:
- * the authorizer is read from the binding the payload's provider identity names, and
+ * the token's binding supplies the authorizer, the payload identity must match that binding, and
  * redemption (ADR 623 §6) re-checks token, digest, class and binding generation.
  */
 
@@ -231,23 +231,4 @@ export async function deliverAskToSlackChannels(
   } catch (err) {
     log.warn({ msg: 'away_slack_delivery_failed', team: team.slug, ask: env.id, err: String(err) });
   }
-}
-
-/** The member a Slack callback acts for, resolved from its provider identity — never its name. */
-export async function slackAuthorizer(
-  ctx: Ctx,
-  teamId: string,
-  callback: SlackCallback,
-): Promise<{ memberName: string; bindingId: string } | null> {
-  const binding = await findBindingByIdentity(
-    ctx.db,
-    teamId,
-    'slack',
-    callback.providerTenantId,
-    callback.providerUserId,
-  );
-  if (!binding) return null;
-  const member = await getMemberById(ctx.db, binding.member_id);
-  if (!member) return null;
-  return { memberName: member.name, bindingId: binding.id };
 }

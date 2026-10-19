@@ -35,6 +35,13 @@ function checks(over: Partial<{ ask: AskStanding | null; binding: 'current' | 's
       calls.binding++;
       return over.binding ?? 'current';
     },
+    bindingAuthorizer: async (_t, _teamId, _bindingId, _generation, channel) => ({
+      memberId: 'member-nick',
+      memberName: 'nick',
+      channel,
+      providerTenantId: 'T1',
+      providerUserId: 'U1',
+    }),
   };
   return { c, calls };
 }
@@ -60,10 +67,11 @@ function redeemInput(teamId: string, token: string, over: Record<string, unknown
   const input = {
     teamId,
     token,
+    askId: 'ask-1',
     assurance: 'A1' as const,
     decision: 'approve' as const,
     answerMessageId: 'msg-1',
-    authorizer: 'nick',
+    providerIdentity: { tenantId: 'T1', userId: 'U1' },
     deliveryActor: 'relay',
     now: NOW + MINUTE,
     writeAnswer: async () => {
@@ -268,6 +276,7 @@ withDrivers('ask channel tokens and the decision record (ADR 623 §5-§7)', (ope
       const result = await redeemAskChannelToken(db, redeemInput(team.id, token).input, {
         askStanding: async () => GOOD_ASK,
         bindingStanding: NO_BINDING_STORE,
+        bindingAuthorizer: async () => null,
       });
       expect(result).toEqual({ ok: false, reason: 'no_binding_store' });
       expect(await decisionRows(db, team.id)).toHaveLength(0);

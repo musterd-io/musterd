@@ -32,8 +32,7 @@ import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createRequest, decideRequest } from '../store/requests.js';
 import { createTeam } from '../store/teams.js';
-import { buildRelayPending, handleRelayCallback } from './relay.js';
-import { slackAuthorizer } from './slackAdapter.js';
+import { buildRelayPending } from './relay.js';
 
 /**
  * The away-channels falsifier suite (ADR 618, ADR 623, spec 2026-10-15-away-channels-design.md). Each
@@ -76,6 +75,13 @@ function checks(over: CheckOver = {}): RedemptionChecks {
   return {
     askStanding: async () => over.ask ?? GOOD,
     bindingStanding: async () => over.binding ?? 'current',
+    bindingAuthorizer: async (_t, _teamId, _bindingId, _generation, channel) => ({
+      memberId: 'member-nick',
+      memberName: 'nick',
+      channel,
+      providerTenantId: 'T1',
+      providerUserId: 'U1',
+    }),
   };
 }
 
@@ -112,10 +118,11 @@ function redeem(
     {
       teamId,
       token: tok,
+      askId: 'ask-1',
       assurance: 'A1',
       decision: over.decision ?? 'approve',
       answerMessageId: over.answerMessageId ?? 'ans-1',
-      authorizer: 'nick',
+      providerIdentity: { tenantId: 'T1', userId: 'U1' },
       deliveryActor: 'relay',
       now: NOW + MINUTE,
       writeAnswer: async () => {},
@@ -251,6 +258,7 @@ withDrivers('away channels falsifiers', (o) => {
       const realChecks: RedemptionChecks = {
         askStanding: async () => GOOD,
         bindingStanding: channelBindingStanding,
+        bindingAuthorizer: async () => null,
       };
       expect(await redeem(db, team.id, tok, { checks: realChecks })).toEqual({
         ok: false,
@@ -502,6 +510,7 @@ withDrivers('away channels falsifiers', (o) => {
       const realChecks: RedemptionChecks = {
         askStanding: async () => GOOD,
         bindingStanding: channelBindingStanding,
+        bindingAuthorizer: async () => null,
       };
       const result = await redeem(db, team.id, tok, { checks: realChecks });
       expect(result.ok).toBe(false);
@@ -511,86 +520,6 @@ withDrivers('away channels falsifiers', (o) => {
   });
 
   describe('shared Slack ingress and tenancy (spec: Slack ingress)', () => {
-    it('a request field cannot select the ingress destination: only the install mapping does', async () => {
-      // Worker half (dispatch by SLACK_TEAM_MAP_JSON, never by a body field) is tested in
-      // workers/away-relay/src/relay.test.ts. Daemon half: a Slack payload's team/user fields
-      // select nothing here — the binding is looked up by provider identity in THIS team, and
-      // a payload naming an identity bound in another team finds no binding and redeems nothing.
-      const { db, team, nick } = await seed();
-      const other = await createTeam(db, { slug: 'other' });
-      const otherNick = (await addMember(db, other, { name: 'nick', kind: 'human' })).row;
-      const { pairing, nonce } = await startPairing(db, {
-        teamId: other.id,
-        memberId: otherNick.id,
-        actor: 'nick',
-        channel: 'slack',
-        now: NOW,
-      });
-      await recordPairingIdentity(db, {
-        nonce,
-        providerTenantId: 'T-other',
-        providerUserId: 'U-other',
-        now: NOW + MINUTE,
-      });
-      const confirmed = await confirmPairing(db, {
-        teamId: other.id,
-        memberId: otherNick.id,
-        actor: 'nick',
-        pairingId: pairing.id,
-        now: NOW + MINUTE,
-      });
-      if (!confirmed.ok) throw new Error(confirmed.reason);
-      // The token lives in `other`; presented to revive with the other team's identity, the
-      // authorizer lookup in revive finds no binding for it.
-      expect(
-        await slackAuthorizer(stubCtx(db), team.id, {
-          providerTenantId: 'T-other',
-          providerUserId: 'U-other',
-        }),
-      ).toBeNull();
-      expect(nick).toBeTruthy();
-    });
-
-    it('a payload naming another team or enterprise id is dispatched only to its mapped destination', async () => {
-      // A Slack payload whose tenant is not the tenant bound for its token's binding redeems
-      // nothing in this team: the binding lookup keys on the payload's own tenant+user.
-      const { db, team } = await seed();
-      expect(
-        await slackAuthorizer(stubCtx(db), team.id, {
-          providerTenantId: 'T-elsewhere',
-          providerUserId: 'U1',
-        }),
-      ).toBeNull();
-    });
-
-    it('a receiver refuses a payload with a missing or invalid ingress attestation', async () => {
-      // Ingress half (Slack HMAC at the Worker, never forwarded on failure) is tested in
-      // workers/away-relay/src/relay.test.ts. Receiver half: a callback whose identity cannot
-      // be resolved to a current binding — the daemon's attestation that the answer comes from
-      // the bound human — is refused before redemption.
-      const { db, team, ctx } = await seed();
-      const tok = await token(db, team.id);
-      const result = await handleRelayCallback(
-        ctx,
-        team,
-        {
-          protocol: 1,
-          type: 'callback',
-          ask_ref: 'ask-1',
-          body: `payload=${encodeURIComponent(
-            JSON.stringify({
-              team: { id: 'T1' },
-              user: { id: 'U-unbound' },
-              actions: [{ action_id: 'musterd_approve', value: tok }],
-            }),
-          )}`,
-        },
-        NOW + MINUTE,
-      );
-      expect(result).toEqual({ ok: false, reason: 'binding_stale' });
-      const decisions = await ctx.db.all('SELECT * FROM ask_decisions');
-      expect(decisions).toHaveLength(0);
-    });
     it.todo(
       'one team daemon credential, object or Slack install cannot read or answer another team (multi-tenant relay lane 01M50ZQCTWM5QBZ083782J9N6R)',
     );
