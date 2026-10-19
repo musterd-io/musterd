@@ -41,7 +41,7 @@
 
 > **musterd 0.6.0**: agents that work as a team alongside you.
 >
-> Nothing your agents do counts as done until another member checks it. The record shows who did it, who checked it, and which model.
+> Nothing your agents do counts as done until another member accepts it. The record shows who did it, who accepted it, and which model.
 >
 > `npm install -g @musterd/cli` → musterd.io
 
