@@ -89,6 +89,14 @@ own change.
 
 ## Consequences
 
+- 2026-10-19 — acceptance review of the first landing caught §1/§2 failing open on missing
+  config: with `SLACK_SIGNING_SECRET` unset a Slack-shaped callback was forwarded unverified,
+  and with `SLACK_TEAM_MAP_JSON` unset any signed callback went to whatever slug the URL named.
+  The callback route now refuses a Slack-shaped body with 503 when either secret is unset
+  (401 on a bad signature, 403 on an unmapped team), each case covered by a fetch-handler test
+  in `workers/away-relay/src/index.test.ts`. Generic (non-Slack) callbacks keep the plain
+  forward and carry no Slack trust claim.
+
 - Increments 1–6 are now completable on one workspace: pair (`musterd channels pair`), complete
   the Slack sign-in, confirm, and ordinary asks arrive with buttons whose answers are advisory.
   Follows-up: lane `01M50XQ5YXXPJ8KVCV31KFB2N8` (channel settings: per-channel on/off, presence

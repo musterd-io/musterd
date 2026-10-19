@@ -88,12 +88,16 @@ export default {
     const callback = /^\/callback\/([^/]+)\/([^/]+)$/.exec(url.pathname);
     if (request.method === 'POST' && callback) {
       const slug = decodeURIComponent(callback[1]!);
-      // Slack interactivity (ADR 668): when the operator has wired Slack, the signature is
-      // verified here — the signing secret lives only at this Worker — and dispatch follows
-      // the install mapping, never a field in the request. A refused callback is never
-      // forwarded; Slack retries a 401/403 no more than it retries any refusal.
-      if (env.SLACK_SIGNING_SECRET) {
-        const rawBody = await request.text();
+      const rawBody = await request.text();
+      // Slack interactivity (ADR 668 §1/§2) fails CLOSED on missing config: a Slack-shaped
+      // body (`payload=…`) is forwarded only after its signature verifies against the Worker
+      // secret and its Slack team maps to the slug in the URL. With either secret unset the
+      // callback is refused, never forwarded unverified or unmapped — the daemon treats every
+      // forwarded callback as ingress-attested. Non-Slack (generic) callbacks keep the plain
+      // forward below; they carry no Slack trust claim.
+      if (rawBody.startsWith('payload=')) {
+        if (!env.SLACK_SIGNING_SECRET)
+          return new Response('slack signing secret not configured', { status: 503 });
         const valid = await slackSignatureValid(
           env.SLACK_SIGNING_SECRET,
           request.headers.get('x-slack-request-timestamp') ?? '',
@@ -102,10 +106,9 @@ export default {
           Date.now(),
         );
         if (!valid) return new Response('invalid slack signature', { status: 401 });
-        if (
-          env.SLACK_TEAM_MAP_JSON &&
-          !slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug)
-        )
+        if (!env.SLACK_TEAM_MAP_JSON)
+          return new Response('slack team map not configured', { status: 503 });
+        if (!slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug))
           return new Response('slack team not mapped to this destination', { status: 403 });
         return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
           new Request(request.url, {
@@ -115,7 +118,13 @@ export default {
           }),
         );
       }
-      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(request);
+      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+        new Request(request.url, {
+          method: 'POST',
+          headers: request.headers,
+          body: rawBody,
+        }),
+      );
     }
     return new Response('not found', { status: 404 });
   },
