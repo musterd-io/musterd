@@ -1497,11 +1497,14 @@
      load-bearing. Measured 2026-09-02 by the sweep, first time these four have been measured at all:
      codex came out 4.43 against a 4.5 requirement — a shipped AA failure — and opencode 4.54, which
      passes by 0.04 and would not survive any paper tweak. Both moved; cursor and grok already cleared
-     it on the real paper and are untouched. The gate now measures all four (`?plates-open`). */
+     it on the real paper and are untouched. The gate now measures all four (`?plates-open`).
+     2026-10-19: plates now land on owner-hue stock (#e1c59c/#e1c59b in the gate fixture), darker
+     than #e9d3ab, and cursor/opencode slipped under AA there (4.37/4.39). Both darkened one step
+     on the same hues; codex and grok still clear it and are untouched. */
   --lc-hz-codex-ink: #0b553f; /* 5.38:1 on the plate at its 88% stock (2026-10-12: #0e6249 measured 4.48 once the paper thinned and more room showed through); was #0f6b52, 4.43 */
-  --lc-hz-cursor-ink: #4f46b8; /* 4.95:1 */
+  --lc-hz-cursor-ink: #463ea2; /* 5.13:1 on the gate's owner-hue plate; was #4f46b8, 4.37 there */
   --lc-hz-grok-ink: #8e2a7d; /* 5.17:1 — magenta, the one hue the other three leave free */
-  --lc-hz-opencode-ink: #963900; /* 4.99:1 on the plate — was #a03d00, 4.54:1, passing by 0.04 */
+  --lc-hz-opencode-ink: #843200; /* 5.19:1 on the gate's owner-hue plate; was #963900, 4.39 there */
 }
 
 .lc-gl-labels {
