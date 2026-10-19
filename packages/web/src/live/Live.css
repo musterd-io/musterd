@@ -2309,7 +2309,9 @@
 .lc-speech__inner::after {
   content: '';
   position: absolute;
-  left: 50%;
+  /* Over the speaker even when the bubble slid in from a side wall (positionSpeech), held off the
+     rounded corners. */
+  left: clamp(16px, 50% - var(--lc-speech-tail, 0px), 100% - 16px);
   transform: translateX(-50%);
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
