@@ -1,6 +1,7 @@
 # The release train — one ordered way to publish musterd, and the launch as its first big run
 
-**Status:** draft, nick reviewing, 2026-10-19 — D2, D4 and D6 decided by nick the same day (§8). Lane `01M5ASVF3GAAE17TY3S3AX9SF0` (slippy), asked
+**Status:** decided 2026-10-19 — nick took D1–D6 the same day; the decision record is
+[ADR 669](../../decisions/669-the-release-train.md). Lane `01M5ASVF3GAAE17TY3S3AX9SF0` (slippy), asked
 for by nick in-session: "we need a better overall unified publish/launch strategy". Nothing here is
 decided until nick marks it; the decisions in §8 become an ADR once he does. This page does not
 re-plan the launch's *message* or *calendar* — those are
@@ -141,11 +142,12 @@ Agent discovery is read from AI Crawl Control as ADR 666 §Observability sets ou
 
 ## 8. Decisions for nick
 
-- **D1. Adopt the train** — nick likes it (2026-10-19). sloane reviewed against the traction plan
+- **D1. Adopt the train** — **decided (nick, 2026-10-19): yes.** sloane reviewed against the traction plan
   (five fixes, folded in); alfie against the positioning ADRs (registry and package copy, #2926).
 - **D2. Cadence** — **decided (nick, 2026-10-19): no fixed cadence; ship as fast as it makes
   sense** (§4). 0.x minor/patch policy; launch on 0.6.0, cut ~Oct 23.
-- **D3. npm publish stays on your laptop** (ADR 156), *or* move it to GitHub Actions with npm
+- **D3. npm publish stays on your laptop** — **decided (nick, 2026-10-19): stays manual for
+  0.6.0; CI publish revisited after launch.** The option weighed: (ADR 156), *or* move it to GitHub Actions with npm
   trusted publishing (OIDC, no stored token, provenance attestations on every package) gated on a
   manual approval you click. The second removes the "only on nick's laptop" dependency the train
   otherwise has, and provenance is a trust signal on the npm page; it reverses ADR 156's "no CI
@@ -154,8 +156,8 @@ Agent discovery is read from AI Crawl Control as ADR 666 §Observability sets ou
   DNS TXT record on musterd.io (`mcp-publisher login dns --domain musterd.io`), so the listing reads
   as the brand rather than the GitHub org. Replaces the `io.github.musterd-io/musterd` #2917
   shipped; the key pair is generated and held by nick, the public half goes in the TXT record.
-- **D5. Release notes** as generated-then-edited `docs/releases/vX.md` → GitHub Release body, no
-  CHANGELOG.md.
+- **D5. Release notes** — **decided (nick, 2026-10-19):** generated-then-edited
+  `docs/releases/vX.md` → GitHub Release body, no CHANGELOG.md.
 - **D6. `www.musterd.dev`** — **decided (nick, 2026-10-19): redirect it to musterd.io for now.**
   It served a stale copy of the site. **Done 2026-10-19**: a 301 Redirect Rule on the musterd.dev
   zone for `www.` and the bare apex only — never `*.musterd.dev`, where hosted teams live
@@ -169,12 +171,10 @@ Agent discovery is read from AI Crawl Control as ADR 666 §Observability sets ou
   (`01M0130E00`): both are launch blockers that are nick's, and neither is a car.
 - Hosted Cloud's public story: ADR 475 is still proposed; the train carries the local product only.
 
-## 10. Follow-up lanes, if D1 is adopted
+## 10. Follow-up lanes (D1 adopted 2026-10-19)
 
 1. `pnpm train status` (read-only, every surface) — slippy.
 2. `pnpm train notes` + `docs/releases/` — slippy.
 3. One install block + the surface-agreement test; README by-hand block fixed — slippy, with
    sloane on copy.
-4. ADR for D1/D2/D5 (and D3 if you choose CI publish).
-
-Follows-up: lanes 1–4 are opened only after nick marks §8; until then this page is a proposal.
+4. ~~ADR for D1/D2/D5~~ — [ADR 669](../../decisions/669-the-release-train.md).
