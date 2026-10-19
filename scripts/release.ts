@@ -21,6 +21,7 @@ import {
   PUBLISH_ORDER,
   assertPublishable,
   bumpPackageJson,
+  bumpServerJson,
   nextStepsAfterPublish,
   parseReleaseArgs,
   type PublishPackageName,
@@ -68,6 +69,9 @@ function bumpAll(version: string): void {
     writeFileSync(path, next);
     console.log(`bumped ${name} → ${version}`);
   }
+  const serverJson = join(ROOT, 'packages', 'mcp', 'server.json');
+  writeFileSync(serverJson, bumpServerJson(readFileSync(serverJson, 'utf8'), version));
+  console.log(`bumped packages/mcp/server.json → ${version}`);
 }
 
 /** The version the working tree currently carries — the CLI is the user-facing one. */

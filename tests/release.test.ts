@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   PACKAGE_DIRS,
   assertPublishable,
   PUBLISH_ORDER,
   bumpPackageJson,
+  bumpServerJson,
   nextStepsAfterPublish,
   parseReleaseArgs,
 } from '../scripts/release/helpers.ts';
@@ -84,10 +86,31 @@ describe('release helpers (ADR 156)', () => {
     expect(JSON.parse(next)).toMatchObject({ name: '@musterd/cli', version: '0.3.0' });
   });
 
-  it('nextStepsAfterPublish mentions tag and brew', () => {
+  it('nextStepsAfterPublish mentions tag, the MCP Registry and brew', () => {
     const steps = nextStepsAfterPublish('0.3.0').join('\n');
     expect(steps).toContain('v0.3.0');
+    expect(steps).toContain('mcp-publisher publish');
     expect(steps).toContain('bump-brew-formula');
     expect(steps).toContain('SandRiseStudio/musterd');
+  });
+
+  it('bumpServerJson moves the descriptor and every package it lists to the new version', () => {
+    const raw = JSON.stringify({ name: 'x/y', version: '0.1.0', packages: [{ version: '0.1.0' }] });
+    const out = JSON.parse(bumpServerJson(raw, '0.6.0'));
+    expect(out.version).toBe('0.6.0');
+    expect(out.packages[0].version).toBe('0.6.0');
+  });
+
+  // The registry verifies a listing against the npm package's `mcpName` (lane 01M5AQGV8Y): the
+  // descriptor's name, package and version must be the package's own, or the publish is refused.
+  it('server.json describes @musterd/mcp exactly as its package.json does', () => {
+    const pkg = JSON.parse(readFileSync('packages/mcp/package.json', 'utf8'));
+    const server = JSON.parse(readFileSync('packages/mcp/server.json', 'utf8'));
+    expect(server.name).toBe(pkg.mcpName);
+    expect(server.version).toBe(pkg.version);
+    expect(server.packages).toEqual([
+      expect.objectContaining({ registryType: 'npm', identifier: pkg.name, version: pkg.version }),
+    ]);
+    expect(server.description.length).toBeLessThanOrEqual(100);
   });
 });

@@ -1,6 +1,7 @@
 {
   "name": "@musterd/mcp",
   "version": "0.5.0",
+  "mcpName": "io.github.musterd-io/musterd",
   "description": "musterd universal harness adapter: one MCP server that joins any MCP-capable agent to a team",
   "license": "MIT",
   "homepage": "https://musterd.io",

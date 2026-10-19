@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.musterd-io/musterd",
+  "title": "musterd",
+  "description": "Join any MCP agent to a musterd team: named members, typed acts, lanes, and who accepted the work.",
+  "websiteUrl": "https://musterd.io",
+  "repository": {
+    "url": "https://github.com/musterd-io/musterd",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "version": "0.5.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@musterd/mcp",
+      "version": "0.5.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MUSTERD_SERVER",
+          "description": "URL of the musterd daemon this agent joins. Defaults to http://localhost:4849, the one `musterd init` starts.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
