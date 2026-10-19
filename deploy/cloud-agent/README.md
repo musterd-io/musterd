@@ -75,7 +75,8 @@ Set the machine's non-secret env in `fly.toml` (`MUSTERD_SERVER`, `MUSTERD_TEAM`
 ## First boot **$**
 
 ```sh
-fly deploy --config deploy/cloud-agent/fly.toml --dockerfile deploy/cloud-agent/Dockerfile \
+# from the repo root — the checkout is the build context (the Dockerfile's `COPY . .`)
+fly deploy . --config deploy/cloud-agent/fly.toml --dockerfile deploy/cloud-agent/Dockerfile \
   --app musterd-agent-$SEAT --ha=false
 fly logs --app musterd-agent-$SEAT
 ```
