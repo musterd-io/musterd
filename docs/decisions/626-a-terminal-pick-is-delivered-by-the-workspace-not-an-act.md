@@ -76,6 +76,14 @@ Lane 2 found that neither sender works.
   - `pick` rides only a patch that sets `owner_seat`;
   - `attested: true` is accepted only from the human it names;
   - `release_reason` rides only a release.
+- _(Note 2026-10-19, lane `01M5162W38`, musterd pick spec §5.7 and §10.)_ The wording in Decision 2
+  now lives in `@musterd/protocol` as `terminalPickNotice`, next to `pickHandoffNote`, the note on
+  a /live pick's handoff act. The two share `PICK_PHRASE` ("picked this lane for you in the lane
+  picker") and `PICK_ASK` ("Reply with a 3–5 line plan, then start unless redirected."), so the
+  /live note now asks what the terminal line asks. The musterd skill (guidance v53) quotes the
+  phrase and teaches the reply: a status update, a 3–5 line plan, then work with no wait for a yes.
+  A decline is a release with a reason. These are new exports and the text of one handoff note. No
+  wire schema changes.
 
 ## Observability & Evaluation
 
