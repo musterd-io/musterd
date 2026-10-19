@@ -31,6 +31,144 @@ export interface ExperimentEntry {
   note: string | null;
   /** The whole row in words, for a screen reader. */
   label: string;
+  /** What the read measures (experiment-results design §2), or null — then no chart, no number. */
+  metric: ExperimentMetric | null;
+  /** The daily samples the daemon serves with the lane (§3), oldest first; empty without a metric. */
+  samples: readonly ExperimentSample[];
+  /** The verdict's measured value (§5), on a `read` entry that carries one. */
+  measured: { value: number; n: number } | null;
+  /** The verdict's evidence pointer (§5), or null. */
+  evidence: string | null;
+}
+
+/**
+ * The shapes the experiment-results design adds to a lane (lanes `01M5B1YQVH`, `01M5B1ZM80`) —
+ * declared structurally here until `@musterd/protocol` serves them, read off the lane defensively
+ * so a daemon that predates them shows today's panel exactly.
+ */
+export interface ExperimentMetric {
+  name: string;
+  unit: string;
+  baseline: number | null;
+  target: number;
+  direction: 'up' | 'down';
+}
+export interface ExperimentSample {
+  day: string;
+  value: number;
+  n: number;
+}
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function metricOf(lane: unknown): ExperimentMetric | null {
+  const m = (lane as { metric?: unknown }).metric;
+  if (!m || typeof m !== 'object') return null;
+  const o = m as Record<string, unknown>;
+  if (typeof o['name'] !== 'string' || typeof o['unit'] !== 'string' || !isNum(o['target'])) return null;
+  return {
+    name: o['name'],
+    unit: o['unit'],
+    baseline: isNum(o['baseline']) ? o['baseline'] : null,
+    target: o['target'],
+    direction: o['direction'] === 'down' ? 'down' : 'up',
+  };
+}
+
+function samplesOf(lane: unknown): ExperimentSample[] {
+  const raw = (lane as { samples?: unknown }).samples;
+  if (!Array.isArray(raw)) return [];
+  const out: ExperimentSample[] = [];
+  for (const r of raw) {
+    const o = r as Record<string, unknown>;
+    if (typeof o['day'] === 'string' && isNum(o['value'])) out.push({ day: o['day'], value: o['value'], n: isNum(o['n']) ? o['n'] : 0 });
+  }
+  return out.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+function measuredOf(lane: Lane): { value: number; n: number } | null {
+  const m = (lane.read_verdict as { measured?: unknown } | undefined)?.measured;
+  if (!m || typeof m !== 'object') return null;
+  const o = m as Record<string, unknown>;
+  return isNum(o['value']) ? { value: o['value'], n: isNum(o['n']) ? o['n'] : 0 } : null;
+}
+
+function evidenceOf(lane: Lane): string | null {
+  const e = (lane.read_verdict as { evidence?: unknown } | undefined)?.evidence;
+  return typeof e === 'string' && e.length > 0 ? e : null;
+}
+
+/** A value in its metric's unit: `%` to one decimal at most, `ms` whole, else two decimals at most. */
+export function formatValue(value: number, unit: string): string {
+  const u = unit.trim();
+  if (u === '%') return `${trimZeros(value.toFixed(1))}%`;
+  if (u === 'ms') return `${Math.round(value)} ms`;
+  const body = Math.abs(value) >= 100 ? String(Math.round(value)) : trimZeros(value.toFixed(2));
+  return u ? `${body} ${u}` : body;
+}
+const trimZeros = (s: string) => s.replace(/\.?0+$/, '');
+
+/**
+ * The result beside the word (§5): `met · 61% (target 40%, n 23)`. The word's meaning is unchanged —
+ * the number is HOW, not WHETHER — so a read without `measured` keeps the word alone, as before.
+ */
+export function resultPhrase(e: Pick<ExperimentEntry, 'status' | 'phrase' | 'metric' | 'measured'>): string {
+  if (e.status !== 'read' || !e.measured) return e.phrase;
+  const unit = e.metric?.unit ?? '';
+  const value = formatValue(e.measured.value, unit);
+  const target = e.metric ? `target ${formatValue(e.metric.target, unit)}, ` : '';
+  return `${e.phrase} · ${value} (${target}n ${e.measured.n})`;
+}
+
+/** The first sentence of a note — what the stream shows under a read row (§6). */
+export function firstSentence(note: string): string {
+  const m = /^(.+?[.!?])(\s|$)/.exec(note.trim());
+  return (m ? m[1]! : note.trim()).trim();
+}
+
+/** An evidence pointer that is a web address; a repo path or an ADR ref renders as text only. */
+export function evidenceUrl(evidence: string | null): string | null {
+  if (!evidence) return null;
+  try {
+    const u = new URL(evidence);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export const SPARK_W = 60;
+export const SPARK_H = 16;
+
+/**
+ * The sparkline's geometry (§6), pure: the series as an SVG path, the baseline and target as y
+ * positions, the latest value formatted. The y-range is the min and max of {baseline, target,
+ * samples} with 10% headroom, so the target is always in frame. Null below two samples — one point
+ * is not a trend, and a chart with no metric is decoration.
+ */
+export function sparkline(
+  metric: ExperimentMetric | null,
+  samples: readonly ExperimentSample[],
+  w = SPARK_W,
+  h = SPARK_H,
+): { path: string; targetY: number; baselineY: number | null; latest: string } | null {
+  if (!metric || samples.length < 2) return null;
+  const values = samples.map((s) => s.value);
+  const all = [...values, metric.target, ...(metric.baseline === null ? [] : [metric.baseline])];
+  let lo = Math.min(...all);
+  let hi = Math.max(...all);
+  const pad = (hi - lo || Math.abs(hi) || 1) * 0.1;
+  lo -= pad;
+  hi += pad;
+  const y = (v: number) => +(h - ((v - lo) / (hi - lo)) * h).toFixed(2);
+  const x = (i: number) => +((i / (samples.length - 1)) * w).toFixed(2);
+  const path = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)} ${y(v)}`).join(' ');
+  return {
+    path,
+    targetY: y(metric.target),
+    baselineY: metric.baseline === null ? null : y(metric.baseline),
+    latest: formatValue(values[values.length - 1]!, metric.unit),
+  };
 }
 
 /** `CALENDAR_DEFAULT_TZ` from @musterd/protocol, restated: a value import would pull zod onto the
@@ -131,6 +269,8 @@ export function experimentEntries(board: LaneBoard | null, now: number): Experim
     const date = dayLabels(lane.reads_on);
     const owner = lane.owner_seat ?? null;
     const note = status === 'read' ? (lane.read_verdict?.note ?? null) : null;
+    const metric = metricOf(lane);
+    const measured = status === 'read' ? measuredOf(lane) : null;
     entries.push({
       at,
       entry: {
@@ -145,7 +285,16 @@ export function experimentEntries(board: LaneBoard | null, now: number): Experim
         leaf: { weekday: date.weekday.toUpperCase(), day: Number(lane.reads_on.slice(8)), month: date.month },
         offset: -days,
         note,
-        label: `${lane.title}, ${phrase}, reads ${date.long}${owner ? `, owner ${owner}` : ''}`,
+        metric,
+        samples: metric ? samplesOf(lane) : [],
+        measured,
+        evidence: status === 'read' ? evidenceOf(lane) : null,
+        label:
+          `${lane.title}, ${phrase}` +
+          (measured && metric
+            ? `, measured ${formatValue(measured.value, metric.unit)} against ${formatValue(metric.target, metric.unit)}`
+            : '') +
+          `, reads ${date.long}${owner ? `, owner ${owner}` : ''}`,
       },
     });
   }
@@ -209,8 +358,11 @@ const two = (n: number) => String(n).padStart(2, '0');
  *   overdue  → `overdue · 2d 04h` · `overdue · 4h 12m`
  *   read     → the verdict word (unchanged)
  */
-export function clockPhrase(e: Pick<ExperimentEntry, 'status' | 'readsOn' | 'phrase'>, now: number): string {
-  if (e.status === 'read') return e.phrase;
+export function clockPhrase(
+  e: Pick<ExperimentEntry, 'status' | 'readsOn' | 'phrase'> & Partial<Pick<ExperimentEntry, 'metric' | 'measured'>>,
+  now: number,
+): string {
+  if (e.status === 'read') return resultPhrase({ status: e.status, phrase: e.phrase, metric: e.metric ?? null, measured: e.measured ?? null });
   const start = readDayStart(e.readsOn);
   if (e.status === 'waiting') {
     const ms = start - now;

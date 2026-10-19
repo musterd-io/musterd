@@ -2,7 +2,12 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import {
   capEntries,
   clockPhrase,
+  evidenceUrl,
   experimentsCount,
+  firstSentence,
+  SPARK_H,
+  SPARK_W,
+  sparkline,
   STRIP_DAYS,
   stripDays,
   type ExperimentEntry,
@@ -41,6 +46,15 @@ export function Experiments({
   const [all, setAll] = useState(false);
   // The read under the pointer, on the strip or in the list: both light up together.
   const [hot, setHot] = useState<string | null>(null);
+  // Rows whose note is open (the §6 disclosure, /live only) — by lane id, so a board refetch keeps it.
+  const [openNotes, setOpenNotes] = useState<ReadonlySet<string>>(new Set());
+  const toggleNote = (id: string) =>
+    setOpenNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const changed = useStatusChanges(entries);
   const tick = useMinuteTick(now);
   if (still && entries.length === 0) return null;
@@ -70,7 +84,7 @@ export function Experiments({
               >
                 {still ? (
                   <div className="lc-xp__hit">
-                    <ExperimentRow entry={e} now={tick} avatarOf={avatarOf} still />
+                    <ExperimentRow entry={e} now={tick} avatarOf={avatarOf} still noteOpen={false} />
                   </div>
                 ) : (
                   <a
@@ -80,7 +94,13 @@ export function Experiments({
                     onFocus={() => hover(e.id)}
                     onBlur={() => hover(null)}
                   >
-                    <ExperimentRow entry={e} now={tick} avatarOf={avatarOf} />
+                    <ExperimentRow
+                      entry={e}
+                      now={tick}
+                      avatarOf={avatarOf}
+                      noteOpen={openNotes.has(e.id)}
+                      onToggleNote={() => toggleNote(e.id)}
+                    />
                   </a>
                 )}
               </li>
@@ -105,14 +125,21 @@ function ExperimentRow({
   now,
   avatarOf,
   still = false,
+  noteOpen,
+  onToggleNote,
 }: {
   entry: ExperimentEntry;
   /** The minute tick: the row's clock counts toward (or from) the read day against it. */
   now: number;
   avatarOf?: AvatarOf | undefined;
   still?: boolean;
+  /** The note disclosure (§6): open shows the whole note; closed shows its first sentence. */
+  noteOpen: boolean;
+  onToggleNote?: (() => void) | undefined;
 }) {
   const av = entry.owner ? avatarOf?.(entry.owner) : null;
+  const spark = sparkline(entry.metric, entry.samples);
+  const link = still ? null : evidenceUrl(entry.evidence);
   return (
     <>
       <Leaf entry={entry} />
@@ -130,12 +157,70 @@ function ExperimentRow({
           <span className="lc-xp__status lc-xp__clock">{clockPhrase(entry, now)}</span>
         </span>
         {entry.note && (
-          <span className="lc-xp__note" title={!still ? entry.note : undefined}>
-            “{entry.note}”
+          <span className={`lc-xp__note${noteOpen ? ' is-open' : ''}`}>
+            {still || !onToggleNote ? (
+              <span className="lc-xp__note-text">“{firstSentence(entry.note)}”</span>
+            ) : (
+              <button
+                type="button"
+                className="lc-xp__note-text lc-xp__note-toggle"
+                aria-expanded={noteOpen}
+                onClick={(ev) => {
+                  // The row is a link to the board; the note opens in place instead of following it.
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  onToggleNote();
+                }}
+              >
+                “{noteOpen ? entry.note : firstSentence(entry.note)}”
+              </button>
+            )}
+            {link && (
+              <a
+                className="lc-xp__evidence"
+                href={link}
+                target="_blank"
+                rel="noopener"
+                aria-label="Evidence"
+                title={entry.evidence ?? undefined}
+                onClick={(ev) => ev.stopPropagation()}
+              >
+                ↗
+              </a>
+            )}
           </span>
         )}
       </span>
+      {spark && <Sparkline spark={spark} read={entry.status === 'read'} metricName={entry.metric!.name} />}
     </>
+  );
+}
+
+/**
+ * The data so far (§6): the series as one line, the baseline as a faint rule, the target as a dashed
+ * rule, the latest value as the only number. Ink only until the read is in — a chart must not say
+ * `met` before the rule does. Inline SVG, never a font glyph (the capturer has no emoji font).
+ */
+function Sparkline({
+  spark,
+  read,
+  metricName,
+}: {
+  spark: NonNullable<ReturnType<typeof sparkline>>;
+  read: boolean;
+  metricName: string;
+}) {
+  return (
+    <span className={`lc-xp__spark${read ? ' is-read' : ''}`} title={metricName}>
+      <svg viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} width={SPARK_W} height={SPARK_H} aria-hidden="true">
+        {spark.baselineY !== null && (
+          <line className="lc-xp__spark-base" x1="0" x2={SPARK_W} y1={spark.baselineY} y2={spark.baselineY} />
+        )}
+        <line className="lc-xp__spark-target" x1="0" x2={SPARK_W} y1={spark.targetY} y2={spark.targetY} />
+        <path className="lc-xp__spark-line" d={spark.path} />
+      </svg>
+      <span className="lc-xp__spark-latest">{spark.latest}</span>
+    </span>
   );
 }
 

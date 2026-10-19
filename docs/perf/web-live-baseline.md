@@ -1418,6 +1418,26 @@ The /live channel-pairing confirmation panel (ADR 618 §7: `PairingPanel` + `pai
 
 - Falsify: `pnpm perf:check` in CI on main after this lands reports total JS at or under 330,200 B.
 
+### 2026-10-19 — `initialJsGzipBytes` 146,200 → 147,500 B, `totalJsGzipBytes` 334,000 → 335,000 B and `liveCssGzipBytes` 24,700 → 25,000 B: the experiments panel shows the result, not just the word (lane `01M5B1ZM80`)
+
+| Budget     | Before (main b4fdbb5a, same laptop) | This branch (laptop)  | Ceiling                    |
+| ---------- | ----------------------------------- | --------------------- | -------------------------- |
+| initial JS | 145,636 B                           | 146,887 B (+1,251)    | RAISED 146,200 → 147,500 B |
+| total JS   | 332,770 B                           | 334,026 B (+1,256)    | RAISED 334,000 → 335,000 B |
+| live CSS   | ~24,470 B                           | 24,664 B (+~190)      | RAISED 24,700 → 25,000 B   |
+
+nick, 2026-10-19: a small graph of what each experiment's data shows so far, and a verdict that is
+more than one word. The row now reads `met · 61% (target 60%, n 23)` when the verdict carries a
+measured value, draws a 60×16 sparkline from the lane's daily samples (baseline rule, dashed target
+rule, latest value; ink only until `read`), shows the note's first sentence on the stream and the
+whole note on a click on `/live`, and links an evidence URL. The JS is on the eager TeamColumn graph
+(the readers are defensive so a daemon that predates ADR 673 shows today's panel exactly); the CSS is
+the disclosure, the link and the sparkline rules. Nothing here can be lazy-loaded without lazy-loading
+the team column itself.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 146,200 B, total JS at or
+  under 334,000 B, or live CSS at or under 24,700 B, with this change in.
+
 ### 2026-10-19 — `initialJsGzipBytes` 145,400 → 146,200 B: a live countdown on every experiment read (lane `01M5AXHFZT`)
 
 | Budget     | Before (main 418b5944, same laptop) | This branch (laptop) | Ceiling                    |

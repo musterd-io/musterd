@@ -3,8 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   capEntries,
   clockPhrase,
+  evidenceUrl,
   experimentEntries,
+  firstSentence,
+  formatValue,
   readDayStart,
+  resultPhrase,
+  sparkline,
   experimentsCount,
   READ_SHOWN_MS,
   shortTitle,
@@ -214,5 +219,89 @@ describe('the countdown (lane 01M5AXHFZT) — toward the team\'s read day, read 
 
   it('a read row keeps its verdict word', () => {
     expect(clockPhrase({ status: 'read', readsOn: '2026-10-10', phrase: 'met' }, Date.now())).toBe('met');
+  });
+});
+
+describe('the result beside the word (experiment-results design §5–6, lane 01M5B1ZM80)', () => {
+  const metric = { name: 'ranked pick hit rate', unit: '%', baseline: 40, target: 60, direction: 'up' as const };
+
+  it('formats a value in its unit', () => {
+    expect(formatValue(61.04, '%')).toBe('61%');
+    expect(formatValue(61.25, '%')).toBe('61.3%');
+    expect(formatValue(812.6, 'ms')).toBe('813 ms');
+    expect(formatValue(0.4567, 'per day')).toBe('0.46 per day');
+    expect(formatValue(1234, 'count')).toBe('1234 count');
+  });
+
+  it('a read with a measured value says how, not just whether; without one the word stands alone', () => {
+    expect(resultPhrase({ status: 'read', phrase: 'met', metric, measured: { value: 61, n: 23 } })).toBe(
+      'met · 61% (target 60%, n 23)',
+    );
+    expect(resultPhrase({ status: 'read', phrase: 'missed', metric: null, measured: { value: 3, n: 9 } })).toBe(
+      'missed · 3 (n 9)',
+    );
+    expect(resultPhrase({ status: 'read', phrase: 'met', metric, measured: null })).toBe('met');
+    expect(resultPhrase({ status: 'waiting', phrase: 'in 2 days', metric, measured: null })).toBe('in 2 days');
+  });
+
+  it('draws nothing without a metric or below two samples; keeps the target in frame otherwise', () => {
+    expect(sparkline(null, [{ day: '2026-10-18', value: 50, n: 3 }, { day: '2026-10-19', value: 55, n: 4 }])).toBeNull();
+    expect(sparkline(metric, [{ day: '2026-10-18', value: 50, n: 3 }])).toBeNull();
+    const s = sparkline(metric, [
+      { day: '2026-10-17', value: 42, n: 5 },
+      { day: '2026-10-18', value: 50, n: 3 },
+      { day: '2026-10-19', value: 61, n: 4 },
+    ])!;
+    expect(s.latest).toBe('61%');
+    expect(s.path.startsWith('M0 ')).toBe(true);
+    expect(s.path.split(' L')).toHaveLength(3);
+    // The target rule sits inside the box, above the baseline rule (higher value → smaller y).
+    expect(s.targetY).toBeGreaterThan(0);
+    expect(s.targetY).toBeLessThan(16);
+    expect(s.targetY).toBeLessThan(s.baselineY!);
+  });
+
+  it('the stream shows a note\'s first sentence; evidence is a link only when it is a web address', () => {
+    expect(firstSentence('Ranked picks won 61% of the time. Baseline held at 40%.')).toBe(
+      'Ranked picks won 61% of the time.',
+    );
+    expect(firstSentence('no punctuation at all')).toBe('no punctuation at all');
+    expect(evidenceUrl('https://github.com/musterd-io/musterd/pull/2961')).toBe(
+      'https://github.com/musterd-io/musterd/pull/2961',
+    );
+    expect(evidenceUrl('scripts/research/next-readout.ts')).toBeNull();
+    expect(evidenceUrl('javascript:alert(1)')).toBeNull();
+    expect(evidenceUrl(null)).toBeNull();
+  });
+
+  it('reads metric, samples, measured and evidence off a lane that carries them, and nothing off one that does not', () => {
+    const NOW = Date.UTC(2026, 9, 17, 22);
+    const board = {
+      lanes: [
+        {
+          id: 'L1',
+          title: 'Does ranking help?',
+          reads_on: '2026-10-16',
+          read_status: 'read',
+          read_verdict: { outcome: 'met', note: 'Yes. Clearly.', by: 'ryder', at: NOW, measured: { value: 61, n: 23 }, evidence: 'ADR-536' },
+          metric: { ...metric, source: 'manual', by: 'ryder', at: 1 },
+          samples: [
+            { day: '2026-10-15', value: 55, n: 2, by: 'ryder', at: 1 },
+            { day: '2026-10-14', value: 48, n: 2, by: 'ryder', at: 1 },
+          ],
+        },
+        { id: 'L2', title: 'Plain read', reads_on: '2026-10-16', read_status: 'read', read_verdict: { outcome: 'met', note: 'ok', by: 'x', at: NOW } },
+      ],
+      warnings: [],
+    } as unknown as LaneBoard;
+    const [a, b] = experimentEntries(board, NOW);
+    expect(a!.metric?.name).toBe('ranked pick hit rate');
+    expect(a!.samples.map((s) => s.day)).toEqual(['2026-10-14', '2026-10-15']); // oldest first
+    expect(a!.measured).toEqual({ value: 61, n: 23 });
+    expect(a!.evidence).toBe('ADR-536');
+    expect(a!.label).toContain('measured 61% against 60%');
+    expect(b!.metric).toBeNull();
+    expect(b!.samples).toEqual([]);
+    expect(b!.measured).toBeNull();
   });
 });
