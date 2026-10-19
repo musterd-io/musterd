@@ -134,6 +134,10 @@ ledger is append-only and the fix is in what reads it, not in what it says.
   chaining, and the ceiling is now explicit and counted rather than implicit and wrong.
 - Two guards whose thresholds must not be compared casually are now separated by role: one bounds
   failure, one bounds success. The general trap is recorded below.
+- _2026-10-19:_ §2 stalled two claimed lanes on the resident seat `mason` for three to four days.
+  The seat's wakes moved nothing during an away it set at nick's request, and nothing re-armed the
+  lanes when the away ended. [ADR 661](661-stalled-lane-rearm.md) counts an away that ran out
+  after the last wake as the lane moving, once. §2 is otherwise unchanged.
 
 ## The general trap
 
