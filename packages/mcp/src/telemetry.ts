@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { normalizeSeatName } from '@musterd/protocol';
+import { normalizeSeatName, parseBoardQuery } from '@musterd/protocol';
 import { startTelemetry, type TelemetryHandle } from '@musterd/telemetry';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import type { MusterdClient } from './client.js';
@@ -146,6 +146,14 @@ export function instrumentTools(server: McpServer, client: MusterdClient, team: 
       tracer.startActiveSpan(`musterd.tool.call`, (span) => {
         span.setAttribute('musterd.tool', name);
         span.setAttribute('musterd.team', team);
+        // ADR 582 §Observability: a board query's KEY NAMES are countable — how the board is
+        // searched, in one attribute. The free text is never telemetry: it is the seat's own words.
+        const q = (args[0] as { q?: unknown } | undefined)?.q;
+        if (typeof q === 'string') {
+          const keys = new Set<string>();
+          for (const term of parseBoardQuery(q)) keys.add(term.key ?? 'words');
+          span.setAttribute('musterd.query.keys', [...keys].sort().join(','));
+        }
         const member = client.member;
         if (member) {
           span.setAttribute('musterd.member.id', normalizeSeatName(member));

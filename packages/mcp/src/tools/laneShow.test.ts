@@ -87,20 +87,33 @@ describe('lane_board {q} (ADR 582 §4)', () => {
     expect(out).toContain('2026-10-15 10:05 TJ claimed → active');
   });
 
-  it('anything but an id is refused, never read as a search', async () => {
+  it('any other query is a search over the board, passed on as typed', async () => {
+    const asked: unknown[] = [];
     const client = {
       laneShow: async () => {
         throw new Error('not reached');
       },
-      laneBoard: async () => {
-        throw new Error('not reached');
+      laneBoard: async (q: { q?: string }) => {
+        asked.push(q.q);
+        return { lanes: [DETAIL.lane], warnings: [] };
       },
     };
-    for (const q of ['goal:launch', 'standard', 'sync']) {
+    for (const q of ['goal:launch', 'standard', 'sync', 'area:ui goal:launch']) {
       const out = (await laneBoard(client)({ q })).content[0]!.text;
-      expect(out).toMatch(/^error: q takes one lane id today/);
-      expect(out).toContain('01M4VKRXEX');
+      expect(out).toContain('01M4VKS6SFNNN5TMWQR4NJ6TXT [awaiting_acceptance]');
     }
+    expect(asked).toEqual(['goal:launch', 'standard', 'sync', 'area:ui goal:launch']);
+  });
+
+  it('says so when nothing matches the query', async () => {
+    const client = {
+      laneShow: async () => {
+        throw new Error('not reached');
+      },
+      laneBoard: async () => ({ lanes: [], warnings: [] }),
+    };
+    const out = (await laneBoard(client)({ q: 'sync' })).content[0]!.text;
+    expect(out).toContain('no lanes match "sync"');
   });
 
   it('without q the board is unchanged', async () => {

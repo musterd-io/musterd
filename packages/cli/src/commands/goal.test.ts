@@ -104,6 +104,24 @@ describe('goal command', () => {
     expect(arr[0]!.id).toBe('g');
   });
 
+  /** ADR 582 §1: Goals take the same one query — bare words over the id, the title and the story. */
+  it('list takes a query', async () => {
+    await capture(() =>
+      goalCommand(parseArgs(['declare', 'Finding work', '--goal-id', 'find-work'])),
+    );
+    await capture(() => goalCommand(parseArgs(['declare', 'Ship it', '--goal-id', 'ship'])));
+
+    const byId = await capture(() => goalCommand(parseArgs(['list', 'find-work', '--json'])));
+    const ids = (JSON.parse(byId.out) as Array<{ id: string }>).map((g) => g.id);
+    expect(ids).toEqual(['find-work']);
+
+    const byTitle = await capture(() => goalCommand(parseArgs(['list', 'Ship', '--json'])));
+    expect((JSON.parse(byTitle.out) as Array<{ id: string }>).map((g) => g.id)).toEqual(['ship']);
+
+    const none = await capture(() => goalCommand(parseArgs(['list', 'absent'])));
+    expect(none.out).toContain('no goals match "absent"');
+  });
+
   it('records an outcome note and renders it (value-layer design)', async () => {
     await capture(() => goalCommand(parseArgs(['declare', 'G', '--goal-id', 'g'])));
     const res = await capture(() => goalCommand(parseArgs(['outcome', 'g', 'users can now X'])));

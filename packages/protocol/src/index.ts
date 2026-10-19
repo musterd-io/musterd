@@ -58,6 +58,7 @@ export * from './picker.js';
 export * from './claims.js';
 export * from './lanes.js';
 export * from './laneChain.js';
+export * from './boardQuery.js';
 export * from './seeds.js';
 export * from './relay.js';
 export * from './autoTarget.js';

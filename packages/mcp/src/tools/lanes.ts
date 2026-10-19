@@ -16,6 +16,7 @@ import {
   incidentBannerLines,
   laneDetailLines,
   laneIdQuery,
+  BoardQuerySchema,
   LaneQuerySchema,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -354,33 +355,42 @@ export function registerLanes(
         // against LaneStateSchema at the boundary and its 400 names the valid values, so a typo
         // still gets a useful answer — validation lives in one place, not two.
         state: z.array(z.string()).optional().describe('only these states'),
-        // Parsed with @musterd/protocol's LaneQuerySchema in the handler (hard rule 4); declared as a
-        // plain string here because the SDK's zod is not the protocol package's.
-        q: z.string().optional().describe('a lane id: that lane in full'),
+        // Parsed with @musterd/protocol's schema in the handler (hard rule 4); declared as a plain
+        // string here because the SDK's zod is not the protocol package's.
+        q: z
+          .string()
+          .optional()
+          .describe(
+            'a lane id, or goal: area: owner: state: role: risk: project: path: terms, or bare words',
+          ),
       },
     },
     async ({ q, ...args }) => {
       try {
         // ADR 582 §4: a lone id answers with that lane in full — brief, history, merge, and the
-        // standing acceptance ask's id to reply_to. The query grammar is lane 01M4VKRXEX's; until it
-        // lands, anything but an id is refused rather than read as a search the seat did not mean.
+        // standing acceptance ask's id to reply_to. ADR 582 §1: any other query is a search over
+        // the board, read by the daemon.
         if (q !== undefined) {
           const id = laneIdQuery(LaneQuerySchema.parse(q));
-          if (!id) {
-            return errorResult(
-              new Error(
-                `q takes one lane id today (full, or 8+ characters of it) — got ${JSON.stringify(q)}. ` +
-                  'Query terms (goal:, area:, words) are not built yet (lane 01M4VKRXEX); filter with project/mine/open/state.',
-              ),
+          if (id) {
+            const d = await client.laneShow(id);
+            return textResult(
+              [fmtLane(d.lane), ...laneDetailLines(d)].join('\n') + fmtWarnings(d.warnings),
             );
           }
-          const d = await client.laneShow(id);
+          BoardQuerySchema.parse(q);
+        }
+        const { lanes, warnings } = await client.laneBoard({
+          ...args,
+          ...(q !== undefined ? { q } : {}),
+        });
+        if (lanes.length === 0) {
           return textResult(
-            [fmtLane(d.lane), ...laneDetailLines(d)].join('\n') + fmtWarnings(d.warnings),
+            q !== undefined
+              ? `no lanes match ${JSON.stringify(q)} — every term must match (a key repeats as OR)`
+              : 'no lanes — lane_open to declare your work',
           );
         }
-        const { lanes, warnings } = await client.laneBoard(args);
-        if (lanes.length === 0) return textResult('no lanes — lane_open to declare your work');
         const body = lanes.map(fmtLane).join('\n');
         return textResult(`${body}${fmtWarnings(warnings)}`);
       } catch (err) {

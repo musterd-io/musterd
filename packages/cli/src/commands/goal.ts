@@ -17,7 +17,7 @@ const USAGE =
   '  musterd goal declare "<title>" --goal-id <id> [--story "<line>"] [--wave later] [--depends <id>[,<id>…]]\n' +
   '  musterd goal outcome <id> "<what changed for a user>"\n' +
   '  musterd goal retract <id>\n' +
-  '  musterd goal list [--json] [--all]';
+  '  musterd goal list [--json] [--all] [query…]';
 
 function renderGoal(g: Goal): string {
   const status =
@@ -117,7 +117,9 @@ export async function goalCommand(parsed: Parsed): Promise<number> {
   }
 
   if (sub === 'list') {
-    const { goals: allGoals } = await http.goals(team);
+    // ADR 582 §1: the query is positional text — `musterd goal list status:shipped`, or bare words.
+    const query = parsed.positionals.slice(1).join(' ').trim();
+    const { goals: allGoals } = await http.goals(team, query !== '' ? query : undefined);
     // goal-retract design: withdrawn Goals hide by default; --all shows them, and the footer
     // counts them so a hidden Goal is never silently gone (the ADR 257 silent-delete scar).
     const showAll = Boolean(parsed.flags['all']);
@@ -129,12 +131,13 @@ export async function goalCommand(parsed: Parsed): Promise<number> {
     }
     if (goals.length === 0) {
       process.stdout.write(
-        retractedCount > 0
-          ? theme.meta(`no live goals — (${retractedCount} retracted — \`--all\` shows them)`) +
-              '\n'
-          : theme.meta(
-              'no declared goals yet — the board is clear. `musterd goal declare "<title>" --goal-id <id>`',
-            ) + '\n',
+        (query !== ''
+          ? theme.meta(`no goals match ${JSON.stringify(query)}`)
+          : retractedCount > 0
+            ? theme.meta(`no live goals — (${retractedCount} retracted — \`--all\` shows them)`)
+            : theme.meta(
+                'no declared goals yet — the board is clear. `musterd goal declare "<title>" --goal-id <id>`',
+              )) + '\n',
       );
       return 0;
     }

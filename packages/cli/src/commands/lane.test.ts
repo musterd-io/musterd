@@ -78,6 +78,58 @@ describe('lane commands', () => {
     expect(d.acceptance_ask).toBeNull();
   });
 
+  /**
+   * ADR 582 §1: the board answers one query — bare words over the title and the detail, keyed terms
+   * for the fields, repeats of a key OR'd. `musterd lanes` takes it as positional text.
+   */
+  it('lanes takes a query — bare words, keyed terms, and a lone id', async () => {
+    await capture(() =>
+      laneCommand(
+        parseArgs([
+          'open',
+          'the seat pulse',
+          '--surface',
+          'packages/web/src/**',
+          '--risk',
+          'user-facing',
+          '--claim',
+        ]),
+      ),
+    );
+    await capture(() =>
+      laneCommand(
+        parseArgs(['open', 'the away relay', '--surface', 'packages/protocol/src/**', '--claim']),
+      ),
+    );
+
+    const byWord = await capture(() => lanesCommand(parseArgs(['pulse', '--json'])));
+    const words = JSON.parse(byWord.out) as { lanes: Lane[] };
+    expect(words.lanes).toHaveLength(1);
+    expect(words.lanes[0]!.title).toBe('the seat pulse');
+
+    const byArea = await capture(() => lanesCommand(parseArgs(['area:ui', '--json'])));
+    const areas = JSON.parse(byArea.out) as { lanes: Lane[] };
+    expect(areas.lanes.map((l) => l.title)).toEqual(['the seat pulse']);
+
+    const byPath = await capture(() =>
+      lanesCommand(parseArgs(['path:packages/protocol/src/lanes.ts', '--json'])),
+    );
+    const paths = JSON.parse(byPath.out) as { lanes: Lane[] };
+    expect(paths.lanes.map((l) => l.title)).toEqual(['the away relay']);
+
+    const both = await capture(() => lanesCommand(parseArgs(['the', '--json'])));
+    const all = JSON.parse(both.out) as { lanes: Lane[] };
+    expect(all.lanes).toHaveLength(2);
+
+    const none = await capture(() => lanesCommand(parseArgs(['absent'])));
+    expect(none.out).toContain('no lanes match "absent"');
+
+    // A lone id answers with that lane in full, the same as `musterd lane show`.
+    const id = all.lanes[0]!.id;
+    const lone = await capture(() => lanesCommand(parseArgs([id.slice(0, 10)])));
+    expect(lone.out).toContain('history:');
+  });
+
   it('opens a lane and renders it with a checkmark', async () => {
     const res = await capture(() =>
       laneCommand(parseArgs(['open', 'wire the thing', '--surface', 'src/a.ts,src/b.ts'])),
