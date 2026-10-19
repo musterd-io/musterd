@@ -1669,10 +1669,27 @@ export function laneDetailLines(d: LaneDetail): string[] {
   }
   if (l.reads_on) {
     out.push(`reads on: ${l.reads_on}${l.read_status ? ` (${l.read_status})` : ''}`);
-    if (l.read_verdict)
+    // ADR 673: what the read measures, and the newest day's number.
+    if (l.metric) {
+      const m = l.metric;
+      const from = m.baseline !== null ? `from ${String(m.baseline)}${m.unit} ` : '';
       out.push(
-        `read verdict: ${l.read_verdict.outcome} — ${l.read_verdict.note} (${l.read_verdict.by})`,
+        `metric: ${m.name} — ${from}target ${String(m.target)}${m.unit} (${m.direction === 'up' ? 'higher' : 'lower'} is better)`,
       );
+      const last = l.samples?.at(-1);
+      if (last)
+        out.push(
+          `  latest sample: ${String(last.value)}${m.unit} on ${last.day} (n ${String(last.n)}, ${String(l.samples!.length)} day(s))`,
+        );
+    }
+    if (l.read_verdict) {
+      const v = l.read_verdict;
+      const measured = v.measured
+        ? ` · ${String(v.measured.value)}${l.metric?.unit ?? ''} (n ${String(v.measured.n)})`
+        : '';
+      out.push(`read verdict: ${v.outcome}${measured} — ${v.note} (${v.by})`);
+      if (v.evidence) out.push(`  evidence: ${v.evidence}`);
+    }
   }
   if (l.abandon_reason) out.push(`abandoned: ${l.abandon_reason}`);
   if (d.acceptance_ask) {

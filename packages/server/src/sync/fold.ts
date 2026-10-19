@@ -6,7 +6,9 @@ import {
   isWireAttestationSource,
   LANE_TERMINAL_STATES,
   LanePreRegisteredSchema,
+  LaneMetricSchema,
   LaneRequestedSchema,
+  LaneSampleSchema,
   requestedRecordJson,
   type LaneState,
   StylePrefsSchema,
@@ -16,6 +18,7 @@ import type { Driver } from '../db/driver.js';
 import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
+import { upsertSample } from '../store/laneSamples.js';
 import { getMemberByName } from '../store/members.js';
 import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
@@ -145,6 +148,7 @@ export const LANE_UPDATE_COLUMNS: Readonly<Record<string, string>> = {
   reads_on: 'reads_on',
   read_verdict: 'read_verdict_json',
   pre_registered: 'pre_registered_json',
+  metric: 'metric_json',
 };
 
 /** The fields of a `lane.updated` this build has no column for, in the event's order. */
@@ -162,6 +166,9 @@ const LANE_VERBS = new Set([
   'lane.updated',
   // ADR 644: the trace of a read verdict; the verdict itself rides `lane.updated`.
   'lane.read_recorded',
+  // ADR 673: a moved goalpost is held in audit; a sample projects into `lane_samples`.
+  'lane.metric_changed',
+  'lane.sample_recorded',
   'lane.state_changed',
   'lane.ready_for_review',
   'lane.closed',
@@ -217,8 +224,8 @@ async function projectLaneEvent(
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          requested_json, reads_on, pre_registered_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, reads_on, pre_registered_json, metric_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -242,6 +249,7 @@ async function projectLaneEvent(
         typeof d['reads_on'] === 'string' ? d['reads_on'] : null,
         // ADR 645: parsed, never trusted — a row that fails the schema folds as undeclared.
         foldedPreRegistered(d['pre_registered'], event.actor),
+        foldedMetric(d['metric']),
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -334,6 +342,7 @@ async function projectLaneEvent(
         )
           value = value === null ? null : JSON.stringify(value);
         else if (field === 'pre_registered') value = foldedPreRegistered(value, event.actor);
+        else if (field === 'metric') value = foldedMetric(value);
         else if (field === 'requested') {
           if (value === null) value = null;
           else {
@@ -351,9 +360,23 @@ async function projectLaneEvent(
       }
       return 'applied';
     }
+    case 'lane.sample_recorded': {
+      // ADR 673: the sample itself, parsed, never trusted — one that fails the schema is held in
+      // audit and projects nothing. Same upsert as the origin's write.
+      const sample = LaneSampleSchema.safeParse(d);
+      if (sample.success) await upsertSample(db, teamId, laneId, sample.data);
+      return 'applied';
+    }
     default:
       return 'applied';
   }
+}
+
+/** ADR 673: a replicated metric as the column stores it, or null when it does not parse. */
+function foldedMetric(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const parsed = LaneMetricSchema.safeParse(value);
+  return parsed.success ? JSON.stringify(parsed.data) : null;
 }
 
 /**

@@ -697,7 +697,33 @@ CREATE INDEX IF NOT EXISTS idx_pairing_nonces_team_member ON pairing_nonces(team
   PRIMARY KEY (team_id, member_id, channel)
 )`,
   },
+  {
+    // v112 — ADR 673 (lane 01M5B1YQVH): what a dated read measures (`lanes.metric_json`:
+    // `{name, unit, baseline, target, direction, source, by, at}`, nullable, no backfill) and its
+    // daily samples, one row per lane per day — a later write for the day replaces it. Team-owned.
+    version: 112,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('metric_json')) db.exec('ALTER TABLE lanes ADD COLUMN metric_json TEXT');
+      db.exec(LANE_SAMPLES_TABLE_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS metric_json TEXT');
+      await d.exec(LANE_SAMPLES_TABLE_SQL);
+    },
+  },
 ];
+
+const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  lane_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  value DOUBLE PRECISION NOT NULL,
+  n INTEGER NOT NULL,
+  by_name TEXT NOT NULL,
+  at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, lane_id, day)
+)`;
 
 const WAKE_LEASES_DEDUPE_SQL = `UPDATE wake_leases SET status = 'expired'
   WHERE status = 'leased'

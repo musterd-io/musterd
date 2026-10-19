@@ -6,7 +6,9 @@ import {
   type LaneClaim,
   BUILD_ON_CHECK,
   builtOnLine,
+  CALENDAR_DEFAULT_TZ,
   claimCheckLines,
+  dayInZone,
   closeReasonCopy,
   describeHoldLine,
   emptyPoolCopy,
@@ -63,6 +65,15 @@ const READ_VERDICT_INPUT = z.string().optional();
  * at the moment it matters. On `lane_update` only: a declaration is a second call after the open,
  * which costs the budget one copy of the shape rather than two.
  */
+/** ADR 673: what a dated read measures. Undescribed for the tools-list budget, like the above. */
+const METRIC_INPUT = z.object({
+  name: z.string(),
+  unit: z.string(),
+  baseline: z.number().nullable(),
+  target: z.number(),
+  direction: z.enum(['up', 'down']),
+});
+
 const PRE_REGISTERED_INPUT = z.object({
   run: z.string(),
   verdict_rule: z.string(),
@@ -467,6 +478,13 @@ export function registerLanes(
         // ADR 644 — the day this lane's read is due (null clears) and the read's verdict.
         reads_on: z.string().nullable().optional(),
         read_verdict: READ_VERDICT_INPUT,
+        // ADR 673 — undescribed for the budget; the daemon's refusals name what is missing.
+        measured: z.object({ value: z.number(), n: z.number() }).optional(),
+        evidence: z.string().optional(),
+        metric: METRIC_INPUT.nullable().optional(),
+        sample: z
+          .object({ value: z.number(), n: z.number(), day: z.string().optional() })
+          .optional(),
         pre_registered: PRE_REGISTERED_INPUT.nullable().optional(),
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
@@ -487,17 +505,44 @@ export function registerLanes(
     },
     async (args) => {
       try {
-        const { id, park_until, read_verdict, ...rest } = args;
+        const { id, park_until, read_verdict, measured, evidence, sample, ...rest } = args;
+        // ADR 673: a day's sample has its own endpoint; it rides this tool to save a tools-list
+        // entry. Alone, it is the whole call; beside a patch, the patch goes first.
+        const recordSample = async (): Promise<string> => {
+          if (!sample) return '';
+          const res = await client.laneSample(id, {
+            day: sample.day ?? dayInZone(Date.now() - 86_400_000, CALENDAR_DEFAULT_TZ),
+            value: sample.value,
+            n: sample.n,
+          });
+          const was = res.replaced ? ` (replaced ${String(res.replaced.value)})` : '';
+          return `sample ${res.sample.day} = ${String(res.sample.value)} (n ${String(res.sample.n)})${was}`;
+        };
+        if (sample && Object.keys(rest).length === 0 && read_verdict === undefined && !park_until)
+          return textResult(await recordSample());
         const until = park_until !== undefined ? Date.parse(park_until) : undefined;
         if (until !== undefined && Number.isNaN(until))
           throw new Error(`park_until "${park_until}" is not a date (try 2026-10-15)`);
+        const verdict = readVerdictPatch(read_verdict).read_verdict;
+        if ((measured !== undefined || evidence !== undefined) && !verdict)
+          throw new Error('measured and evidence ride a read_verdict ("met: <what was read>")');
         const patch = {
           ...rest,
           ...(until !== undefined ? { park_until: until } : {}),
-          ...readVerdictPatch(read_verdict),
+          // ADR 673: the number the read found, and where it came from, ride the verdict.
+          ...(verdict
+            ? {
+                read_verdict: {
+                  ...verdict,
+                  ...(measured !== undefined ? { measured } : {}),
+                  ...(evidence !== undefined ? { evidence } : {}),
+                },
+              }
+            : {}),
         };
         const { lane, warnings } = await client.updateLane(id, patch);
-        return laneResult('lane updated', lane, warnings);
+        const sampled = await recordSample();
+        return laneResult(sampled ? `lane updated; ${sampled}` : 'lane updated', lane, warnings);
       } catch (err) {
         return errorResult(err);
       }

@@ -40,6 +40,7 @@ import {
   TRACE_POLICY_FILE,
   type AcceptedHandoffWire,
   type BuiltOn,
+  type SampleResult,
   type DisputeAnswerWire,
   type ClaimCheck,
   type IdleWakeReport,
@@ -973,6 +974,15 @@ export class MusterdClient {
   // ── Coordination lanes, Phase 1 (ADR 083). Every mutation returns { lane, warnings } — warn-only.
   openLane(body: unknown): Promise<{ lane: Lane; warnings: LaneWarning[] }> {
     return this.request('POST', `/teams/${this.config.team}/lanes`, body);
+  }
+
+  /** ADR 673: one day's sample for a metric lane. */
+  laneSample(id: string, body: unknown): Promise<SampleResult> {
+    return this.request(
+      'POST',
+      `/teams/${this.config.team}/lanes/${encodeURIComponent(id)}/samples`,
+      body,
+    );
   }
 
   updateLane(

@@ -287,6 +287,10 @@ export type AuditAction =
   | 'lane.updated'
   // ADR 644: one row per read verdict written — { lane, reads_on, outcome, by, at, previous_outcome }.
   | 'lane.read_recorded'
+  // ADR 673: a metric's target or direction moved — { lane, name, from, to }.
+  | 'lane.metric_changed'
+  // ADR 673: one day's sample written — { lane, day, value, n, by, at, replaced }.
+  | 'lane.sample_recorded'
   | 'lane.state_changed'
   // Lane-replication slice, Finding 4: the log had no first event. `lane.opened` is written by
   // `openLane` inside the insert transaction and carries the whole declaration (title, project,
@@ -749,6 +753,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'next.offer': 'actor',
   'lane.updated': 'actor',
   'lane.read_recorded': 'actor',
+  'lane.metric_changed': 'actor',
+  'lane.sample_recorded': 'actor',
   'lane.state_changed': 'actor',
   'lane.opened': 'actor',
   'seed.ingested': 'actor',
