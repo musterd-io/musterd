@@ -1,7 +1,16 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { GATEWAY_BASE_URL_KEYS, gatewayEnvironment, stagePnpmCorepackCache } from './sandbox.js';
 
 export interface BashSandboxSpec {
@@ -44,6 +53,108 @@ function packageRootFor(command: string, pathValue: string): string | undefined 
     }
   }
   return undefined;
+}
+
+interface StandalonePnpmInstall {
+  version: string;
+  root: string;
+  launcher: string;
+}
+
+function standalonePnpmInstalls(pnpmHome: string | undefined): StandalonePnpmInstall[] {
+  if (!pnpmHome || !existsSync(pnpmHome)) return [];
+  const installs: StandalonePnpmInstall[] = [];
+  const layouts: Array<[string, string]> = [
+    ['pnpm', join('bin', 'pnpm')],
+    ['pnpm-exe', 'pnpm'],
+  ];
+  for (const [folder, launcher] of layouts) {
+    const installsDir = join(pnpmHome, '.tools', folder);
+    if (!existsSync(installsDir)) continue;
+    for (const version of readdirSync(installsDir)) {
+      const root = join(installsDir, version);
+      const executable = join(root, launcher);
+      if (!existsSync(executable)) continue;
+      const realRoot = existingPath(root);
+      const realLauncher = existingPath(executable);
+      if (realRoot && realLauncher)
+        installs.push({ version, root: realRoot, launcher: realLauncher });
+    }
+  }
+  return installs;
+}
+
+function firstPnpmCommand(pathValue: string): string | undefined {
+  for (const part of pathValue.split(':')) {
+    if (!part) continue;
+    const candidate = resolve(part, 'pnpm');
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function pathIsUnder(path: string | undefined, root: string): boolean {
+  if (!path) return false;
+  const real = existingPath(path);
+  if (!real) return false;
+  const fromRoot = relative(root, real);
+  return fromRoot === '' || (!fromRoot.startsWith(`..${sep}`) && fromRoot !== '..');
+}
+
+function standalonePnpmHome(pathValue: string, configured?: string): string | undefined {
+  const explicit = configured ? existingPath(configured) : undefined;
+  if (explicit) return explicit;
+  const command = firstPnpmCommand(pathValue);
+  if (command) {
+    let current = dirname(command);
+    while (current !== dirname(current)) {
+      if (
+        existsSync(join(current, '.tools', 'pnpm')) ||
+        existsSync(join(current, '.tools', 'pnpm-exe'))
+      ) {
+        return existingPath(current) ?? current;
+      }
+      current = dirname(current);
+    }
+  }
+  return undefined;
+}
+
+function standalonePnpmInstallFor(
+  workspace: string,
+  pnpmHome: string,
+  pnpmPath: string,
+): StandalonePnpmInstall | undefined {
+  const installs = standalonePnpmInstalls(pnpmHome);
+  if (!pathIsUnder(pnpmPath, pnpmHome)) return undefined;
+  let wrapper = '';
+  if (pnpmPath) {
+    try {
+      wrapper = readFileSync(pnpmPath, 'utf8');
+    } catch {
+      // A native standalone launcher has no text wrapper; use the workspace's pinned version.
+    }
+  }
+  let packageManager = '';
+  try {
+    const pkg = JSON.parse(readFileSync(join(workspace, 'package.json'), 'utf8')) as {
+      packageManager?: unknown;
+    };
+    if (typeof pkg.packageManager === 'string') packageManager = pkg.packageManager;
+  } catch {
+    // A workspace without package.json can still use its only installed standalone version.
+  }
+  const wrapperTarget = wrapper.match(/\.tools\/(pnpm(?:-exe)?)\/([^/\s"'`]+)/);
+  const version = wrapperTarget?.[2] ?? packageManager.match(/^pnpm@([^+]+)/)?.[1];
+  if (version && wrapperTarget) {
+    return installs.find(
+      (install) =>
+        install.version === version &&
+        install.root.includes(`${sep}.tools${sep}${wrapperTarget[1]}${sep}${version}`),
+    );
+  }
+  if (version) return installs.find((install) => install.version === version);
+  return installs.length === 1 ? installs[0] : undefined;
 }
 
 function nodeLibraryRoots(nodeBinary: string, nodeInstall: string): string[] {
@@ -102,7 +213,18 @@ export function macSandboxProfile(
   const workspace = realpathSync(spec.workspace);
   const nodeBinary = realpathSync(process.execPath);
   const nodeInstall = dirname(dirname(nodeBinary));
-  const pnpmRoot = packageRootFor('pnpm', spec.env['PATH'] ?? process.env['PATH'] ?? '');
+  const pathValue = spec.env['PATH'] ?? process.env['PATH'] ?? '';
+  const pnpmPath = firstPnpmCommand(pathValue);
+  const pnpmHome = standalonePnpmHome(pathValue, spec.env['PNPM_HOME']);
+  const pnpmRoot = packageRootFor('pnpm', pathValue);
+  const standaloneInstall = pnpmHome
+    ? pnpmPath
+      ? standalonePnpmInstallFor(spec.workspace, pnpmHome, pnpmPath)
+      : undefined
+    : undefined;
+  if (pnpmHome && pathIsUnder(pnpmPath, pnpmHome) && !standaloneInstall) {
+    throw new Error('could not resolve standalone pnpm install under PNPM_HOME');
+  }
   const corepackHome = spec.env['COREPACK_HOME'] ?? join(homedir(), '.cache/node/corepack');
   const readRoots = [
     '/System',
@@ -113,6 +235,7 @@ export function macSandboxProfile(
     '/private/var/select',
     nodeInstall,
     ...nodeLibraryRoots(nodeBinary, nodeInstall),
+    ...(standaloneInstall ? [standaloneInstall.root] : []),
     pnpmStore,
     corepackHome,
     workspace,
@@ -167,11 +290,19 @@ export function spawnMacSandboxedBash(spec: BashSandboxSpec, pnpmStore: string):
   const binDir = join(temporary, 'bin');
   mkdirSync(binDir, { mode: 0o700 });
   symlinkSync(realpathSync(process.execPath), join(binDir, 'node'));
-  const pnpmPath = (spec.env['PATH'] ?? process.env['PATH'] ?? '')
-    .split(':')
-    .map((part) => join(part, 'pnpm'))
-    .find((path) => existsSync(path));
-  if (pnpmPath) symlinkSync(realpathSync(pnpmPath), join(binDir, 'pnpm'));
+  const pathValue = spec.env['PATH'] ?? process.env['PATH'] ?? '';
+  const pnpmPath = firstPnpmCommand(pathValue);
+  if (pnpmPath) {
+    const pnpmHome = standalonePnpmHome(
+      spec.env['PATH'] ?? process.env['PATH'] ?? '',
+      spec.env['PNPM_HOME'],
+    );
+    const standaloneInstall = pnpmHome
+      ? standalonePnpmInstallFor(spec.workspace, pnpmHome, pnpmPath)
+      : undefined;
+    const launcher = standaloneInstall?.launcher ?? realpathSync(pnpmPath);
+    symlinkSync(launcher, join(binDir, 'pnpm'));
+  }
   const corepackSource = spec.env['COREPACK_HOME'] ?? join(homedir(), '.cache/node/corepack');
   const corepackHome = join(temporary, 'corepack');
   stagePnpmCorepackCache(corepackSource, corepackHome);
