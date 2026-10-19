@@ -1457,8 +1457,24 @@ async function authTouch(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
+  /** ADR 672: only the routes the spend-approval hold uses (the ask, the inbox peek) accept a
+   *  seat credential under a wake lease; every other route keeps ADR 337's lease rule. */
+  opts: { wakeLease?: boolean } = {},
 ): Promise<{ team: TeamRow; member: MemberRow }> {
-  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+  const leaseHeader = opts.wakeLease ? wakeLeaseHeader(req) : undefined;
+  const auth = await authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+    leaseHeader !== undefined
+      ? { wakeLease: { id: leaseHeader, freshMs: ctx.config.presenceTimeoutMs } }
+      : {},
+  );
+  // ADR 672: the wake actuator acting for a live wake has no Presence of its own and must not be
+  // given one — the wake's session is the occupant, and the verifier reads that row.
+  if (auth.via === 'wake_lease') return auth;
   // Observer seats (ADR 063) watch without participating — never flip present, no presence event.
   if (auth.member.observer === 1) return auth;
   // A background poller (the notifier reads inbox on an away human's behalf) opts out: marking them
@@ -6124,7 +6140,7 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/messages') {
-        const { team, member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req, { wakeLease: true });
         const body = (await readJson(req)) as { envelope?: unknown };
         const env = parseEnvelope(body.envelope);
         // No sender occupancy id here by design (ADR 101): a POST is stateless — it authenticates a
@@ -9494,7 +9510,7 @@ export async function handleHttp(
       // `to_kind IN ('team','broadcast')` — plus anything explicitly addressed to it, which is
       // legitimately its own mail. No separate "public" query: not exempting it *is* the scoping.
       if (method === 'GET' && rest === '/messages') {
-        const { team, member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req, { wakeLease: true });
         assertSeatCanRead(member);
         const since = url.searchParams.get('since');
         const limit = url.searchParams.get('limit');

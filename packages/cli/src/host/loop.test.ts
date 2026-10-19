@@ -1855,61 +1855,38 @@ describe('spend approval is armed once per non-human wake (ADR 636)', () => {
     return { calls, lines, started };
   }
 
-  it('a human wake does not read the threshold', async () => {
-    let reads = 0;
-    const { started } = await wake({
-      memberKind: async () => 'human',
-      readSpendApproval: async () => {
-        reads += 1;
-        return 1;
+  it('an order without spend_approval_usd arms nothing and opens no seat client', async () => {
+    let seats = 0;
+    const { started, lines } = await wake({
+      spendApprovalSeat: () => {
+        seats += 1;
+        throw new Error('seat opened');
       },
     });
-    expect(reads).toBe(0);
+    expect(seats).toBe(0);
     expect(started[0]?.spendApprovalUsd).toBeUndefined();
     expect(started[0]?.onSpendApproval).toBeUndefined();
+    expect(lines.some((l) => l.includes('spend approval'))).toBe(false);
   });
 
-  it('an unknown kind does not read the threshold', async () => {
-    let reads = 0;
-    const { started } = await wake({
-      memberKind: async () => undefined,
-      readSpendApproval: async () => {
-        reads += 1;
-        return 1;
-      },
-    });
-    expect(reads).toBe(0);
-    expect(started[0]?.spendApprovalUsd).toBeUndefined();
-  });
-
-  it('a thrown kind read logs and does not read the threshold', async () => {
-    let reads = 0;
-    const { lines, started } = await wake({
-      memberKind: async () => {
-        throw new Error('roster down');
-      },
-      readSpendApproval: async () => {
-        reads += 1;
-        return 1;
-      },
-    });
-    expect(reads).toBe(0);
-    expect(lines.some((l) => l.includes('spend approval kind unread for scout: roster down'))).toBe(
-      true,
-    );
-    expect(started[0]?.spendApprovalUsd).toBeUndefined();
-  });
-
-  it('an agent wake asks once, names the lane, and leaves budget_usd unchanged', async () => {
+  it('an agent wake asks once under its wake lease, names the lane, and leaves budget_usd unchanged', async () => {
     const { seat, sent } = acceptingSeat();
+    const opened: string[] = [];
     const { started } = await wake(
       {
-        memberKind: async () => 'agent',
-        readSpendApproval: async () => 0.5,
-        spendApprovalSeat: () => seat,
+        spendApprovalSeat: (_workspace, _team, leaseId) => {
+          opened.push(leaseId);
+          return seat;
+        },
       },
-      order({ lane_id: '01LANE', bounds: { timeout_ms: 30_000, budget_usd: 1 } }),
+      order({
+        lane_id: '01LANE',
+        spend_approval_usd: 0.5,
+        bounds: { timeout_ms: 30_000, budget_usd: 1 },
+      }),
     );
+    // ADR 672: the seat client acts for THIS wake's lease — no session lease, no claim.
+    expect(opened).toEqual(['L1']);
     expect(started[0]?.budgetUsd).toBe(1);
     expect(started[0]?.spendApprovalUsd).toBe(0.5);
     const verdict = await started[0]!.onSpendApproval!({
@@ -1927,60 +1904,54 @@ describe('spend approval is armed once per non-human wake (ADR 636)', () => {
     expect(started[0]?.budgetUsd).toBe(1);
   });
 
-  it('a thrown policy read logs and starts the gateway without a threshold', async () => {
-    let seats = 0;
-    const { lines, started } = await wake({
-      memberKind: async () => 'agent',
-      readSpendApproval: async () => {
-        throw new Error('no seat credential');
+  it('a seat client that cannot open logs and starts the gateway without a threshold', async () => {
+    const { lines, started } = await wake(
+      {
+        spendApprovalSeat: () => {
+          throw new Error('no seat credential');
+        },
       },
-      spendApprovalSeat: () => {
-        seats += 1;
-        throw new Error('seat opened');
-      },
-    });
-    expect(seats).toBe(0);
+      order({ spend_approval_usd: 1 }),
+    );
     expect(
       lines.some((l) =>
-        l.includes('spend approval policy read failed for scout: no seat credential'),
+        l.includes('spend approval seat unavailable for scout: no seat credential'),
       ),
     ).toBe(true);
     expect(started[0]?.spendApprovalUsd).toBeUndefined();
     expect(started[0]?.onSpendApproval).toBeUndefined();
   });
 
-  it('a bypassed gateway reads neither kind nor threshold', async () => {
-    let kinds = 0;
-    let reads = 0;
-    const { started } = await wake({
-      gateway: false,
-      memberKind: async () => {
-        kinds += 1;
-        return 'agent';
+  it('a bypassed gateway opens no seat client', async () => {
+    let seats = 0;
+    const { started } = await wake(
+      {
+        gateway: false,
+        spendApprovalSeat: () => {
+          seats += 1;
+          throw new Error('seat opened');
+        },
       },
-      readSpendApproval: async () => {
-        reads += 1;
-        return 1;
-      },
-    });
-    expect(kinds).toBe(0);
-    expect(reads).toBe(0);
+      order({ spend_approval_usd: 1 }),
+    );
+    expect(seats).toBe(0);
     expect(started).toEqual([]);
   });
 
   it('a gateway that fails to start records no ask', async () => {
     const { seat, sent } = acceptingSeat();
-    const { lines } = await wake({
-      memberKind: async () => 'agent',
-      readSpendApproval: async () => 1,
-      spendApprovalSeat: () => seat,
-      gateway: async () => {
-        throw new Error('EADDRINUSE');
+    const { lines } = await wake(
+      {
+        spendApprovalSeat: () => seat,
+        gateway: async () => {
+          throw new Error('EADDRINUSE');
+        },
       },
-    });
+      order({ spend_approval_usd: 1 }),
+    );
     expect(sent).toEqual([]);
     expect(lines.some((l) => l.includes('metering gateway failed to start'))).toBe(true);
-    expect(lines.some((l) => l.includes('spend approval policy read failed'))).toBe(false);
+    expect(lines.some((l) => l.includes('spend approval'))).toBe(false);
   });
 
   it('close before summary puts the wake-ended sentence on the supplement', async () => {

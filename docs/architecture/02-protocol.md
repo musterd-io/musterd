@@ -215,6 +215,9 @@ The protocol also exports three distinct delivery vocabularies: `ContinuityRequi
 `WakeDeliveryOutcome` (`fresh|resumed|fresh_fallback`). `WakeOrderSchema` and
 `WakeReportBodySchema` carry them only as optional fields for mixed-version compatibility; report
 metadata may include inspected transcript byte/age values but never a path, ID, or content.
+`WakeOrder.spend_approval_usd` (ADR 672, optional) is the team's ADR 635 threshold, set by the
+daemon for agent and service seats only; the host arms the ADR 636 hold from it and reads nothing
+else for it.
 `ResidencyPolicySchema.portable_inbox_replies` is the default-off team cohort flag: typed handoff,
 review, and work-order orders are portable/fresh regardless; ordinary inbox orders become
 portable/fresh only when the flag is enabled.

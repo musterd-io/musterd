@@ -50,7 +50,7 @@ import {
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
-import { getPolicy, getTeamById } from './teams.js';
+import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 
 /**
@@ -1740,6 +1740,10 @@ type SeatWakePolicy = ReturnType<typeof effectiveWakePolicy>;
 interface SeatPass {
   member: MemberRow;
   policy: SeatWakePolicy;
+  /** ADR 672: the team's spend-approval threshold (ADR 635), carried on the order for an agent or
+   *  service seat (ADR 636 §1). Null for a human seat or an unset policy — then the order has no
+   *  `spend_approval_usd` and the host arms no hold. */
+  spendApprovalUsd: number | null;
   plan:
     | { kind: 'provisioned'; provisionId: string; sponsorName: string }
     | { kind: 'candidate'; candidate: WakeCandidate; edge: LoopEdge | null; exhKey: string }
@@ -2155,6 +2159,8 @@ async function deriveSeatPasses(
     const pass: SeatPass = {
       member,
       policy,
+      spendApprovalUsd:
+        member.kind === 'agent' || member.kind === 'service' ? spendApprovalUsd(teamPolicy) : null,
       plan: null,
       exhausted: [],
       spendHold: null,
@@ -2503,6 +2509,9 @@ async function writeSeatPass(
         ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
         ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
       });
+      // ADR 672: the hold's threshold rides the order; the host no longer reads /report for it.
+      const hold =
+        pass.spendApprovalUsd !== null ? { spend_approval_usd: pass.spendApprovalUsd } : {};
       if (plan.kind === 'provisioned') {
         await appendAudit(t, teamId, {
           actor: null,
@@ -2527,6 +2536,7 @@ async function writeSeatPass(
           expires_at: lease.expires_at,
           tool_policy: policy.tool_policy,
           bounds: bounds(policy.timeout_ms),
+          ...hold,
           transcript_max_bytes: policy.transcript_max_bytes,
           continuity_requirement: 'portable',
           intended_delivery: 'fresh',
@@ -2561,6 +2571,7 @@ async function writeSeatPass(
           // policy; the write fence (store/dream.ts) is what keeps it to memory.
           tool_policy: 'seat-policy',
           bounds: bounds(policy.work_timeout_ms),
+          ...hold,
           transcript_max_bytes: policy.transcript_max_bytes,
           // ADR 494 §3: always fresh — a dream re-reads the record, it never resumes a life.
           continuity_requirement: 'portable',
@@ -2606,6 +2617,7 @@ async function writeSeatPass(
         expires_at: lease.expires_at,
         tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
         bounds: bounds(isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms),
+        ...hold,
         transcript_max_bytes: policy.transcript_max_bytes,
         ...(isPortable
           ? { continuity_requirement: 'portable' as const, intended_delivery: 'fresh' as const }

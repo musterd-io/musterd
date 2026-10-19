@@ -1,6 +1,5 @@
 import {
   wakeabilityFromFacts,
-  type MemberKind,
   type MemberSummary,
   type PullAnnouncement,
   type PullPollResponse,
@@ -142,12 +141,9 @@ export interface HostPollDeps {
   /** ADR 583: the per-wake metering gateway. `false` runs wakes without one (the `--no-gateway`
    *  flag, and tests that assert the bare spawn); undefined starts the real one per actuation. */
   gateway?: ((opts: MeteringGatewayOptions) => Promise<MeteringGateway>) | false;
-  /** ADR 636: seat kind from the roster. Undefined kind or a throw leaves the wake unarmed. */
-  memberKind?: (team: string, seat: string) => Promise<MemberKind | undefined>;
-  /** ADR 636: `wake.spend_approval_usd` from GET /report with the seat credential. */
-  readSpendApproval?: (workspace: string, team: string) => Promise<number | null>;
-  /** ADR 636: the seat-credential client that sends the one approve ask and reads the reply. */
-  spendApprovalSeat?: (workspace: string, team: string) => SpendApprovalSeat;
+  /** ADR 636/672: the seat-credential client that sends the one approve ask and reads the reply,
+   *  acting for `leaseId` (sent as the wake lease in place of a session lease). */
+  spendApprovalSeat?: (workspace: string, team: string, leaseId: string) => SpendApprovalSeat;
   /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
   heal?: (workspace: string) => string;
   /** The repo-server mirror run before a spawn (ADR 529; tests). */
@@ -253,20 +249,17 @@ export function gatewayCompletion(
   };
 }
 
-function memberKindFromRoster(members: MemberSummary[], seat: string): MemberKind | undefined {
-  const kind = members.find((m) => m.name === seat)?.kind;
-  return kind === 'agent' || kind === 'human' || kind === 'service' ? kind : undefined;
-}
-
-/** GET /report with the seat credential. GET /policy is admin-only; the host key receives 403. */
-export function readSpendApprovalUsd(workspace: string, team: string): Promise<number | null> {
-  const http = seatHttp(workspace);
-  return http.report(team).then((report) => report.wake?.spend_approval_usd ?? null);
-}
-
-/** The seat client the approve ask is sent as. Inbox is peeked and limited to the newest page. */
-export function openSpendApprovalSeat(workspace: string, team: string): SpendApprovalSeat {
-  const http = seatHttp(workspace);
+/**
+ * The seat client the approve ask is sent as. Inbox is peeked and limited to the newest page.
+ * ADR 672: it carries the wake lease, not a session lease — the host never claims the seat its
+ * wake is occupying; the daemon accepts the credential while that wake's session is live.
+ */
+export function openSpendApprovalSeat(
+  workspace: string,
+  team: string,
+  leaseId: string,
+): SpendApprovalSeat {
+  const http = seatHttp(workspace, leaseId);
   return {
     send: (envelope) => http.send(team, envelope),
     inbox: async () => {
@@ -276,10 +269,14 @@ export function openSpendApprovalSeat(workspace: string, team: string): SpendApp
   };
 }
 
-function seatHttp(workspace: string): HttpClient {
+function seatHttp(workspace: string, wakeLease: string): HttpClient {
   const binding = findBinding(workspace, {});
   if (!binding?.seat_credential || !binding.server) throw new Error('no seat credential');
-  return new HttpClient({ server: binding.server, key: binding.seat_credential }).presenceNeutral();
+  return new HttpClient({
+    server: binding.server,
+    key: binding.seat_credential,
+    wakeLease,
+  }).presenceNeutral();
 }
 
 /** One tick's result: how many orders were claimed, and the in-flight actuations (`host --once`
@@ -759,50 +756,37 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       // ADR 583: the metering gateway, one per wake, dies with it (closed at settle below). Every
       // metered call lands as a `wake_turns` row at once — fire-and-forget like the native row's
       // rail, one narrator line on the first failure.
-      // ADR 636: arm spend approval once, before the gateway listens. A human, a missing kind,
-      // a thrown read, or no gateway leaves the wake on today's path.
+      // ADR 636: arm spend approval once, before the gateway listens. ADR 672: the threshold is
+      // the order's own `spend_approval_usd` — the daemon sets it for agent and service seats
+      // only, so a human wake or an unset policy carries none and arms nothing. The host reads
+      // no roster and no report for it; a seat client it cannot open leaves today's path.
       let spendApprovalUsd: number | undefined;
       let onSpendApproval: MeteringGatewayOptions['onSpendApproval'];
       if (deps.gateway !== false) {
-        let kind: MemberKind | undefined;
-        try {
-          kind = deps.memberKind
-            ? await deps.memberKind(group.team, order.seat)
-            : memberKindFromRoster((await client.roster(group.team)).members, order.seat);
-        } catch (err) {
-          deps.log(`spend approval kind unread for ${order.seat}: ${(err as Error).message}`);
-        }
-        if (kind === 'agent' || kind === 'service') {
+        const thresholdUsd = armSpendApproval(order.spend_approval_usd);
+        if (thresholdUsd !== undefined) {
           try {
-            const threshold = await (deps.readSpendApproval ?? readSpendApprovalUsd)(
+            const seatClient = (deps.spendApprovalSeat ?? openSpendApprovalSeat)(
               entry.workspace,
               group.team,
+              order.lease_id,
             );
-            spendApprovalUsd = armSpendApproval(kind, threshold);
-            if (spendApprovalUsd !== undefined) {
-              const thresholdUsd = spendApprovalUsd;
-              const seatClient = (deps.spendApprovalSeat ?? openSpendApprovalSeat)(
-                entry.workspace,
-                group.team,
-              );
-              onSpendApproval = (req) =>
-                awaitSpendApproval({
-                  team: group.team,
-                  from: order.seat,
-                  seat: order.seat,
-                  leaseId: order.lease_id,
-                  spentUsd: req.spentUsd,
-                  thresholdUsd,
-                  laneId: order.lane_id,
-                  signal: req.signal,
-                  seatClient,
-                });
-            }
+            spendApprovalUsd = thresholdUsd;
+            onSpendApproval = (req) =>
+              awaitSpendApproval({
+                team: group.team,
+                from: order.seat,
+                seat: order.seat,
+                leaseId: order.lease_id,
+                spentUsd: req.spentUsd,
+                thresholdUsd,
+                laneId: order.lane_id,
+                signal: req.signal,
+                seatClient,
+              });
           } catch (err) {
-            spendApprovalUsd = undefined;
-            onSpendApproval = undefined;
             deps.log(
-              `spend approval policy read failed for ${order.seat}: ${(err as Error).message}`,
+              `spend approval seat unavailable for ${order.seat}: ${(err as Error).message}`,
             );
           }
         }

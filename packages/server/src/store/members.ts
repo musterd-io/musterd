@@ -19,6 +19,7 @@ import type { Driver } from '../db/driver.js';
 import { MusterdError, SessionLeaseRefused } from '../errors.js';
 import { releaseInFlightClaimsForSeat } from './lanes.js';
 import { verifyAccess } from './oauth.js';
+import { hasLiveWakePresence } from './presence.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { parseRoles, resolveAccountStatus, resolveCapabilities } from './rows.js';
 import { diagnoseSessionLease, hasValidSessionLease } from './session-leases.js';
@@ -496,10 +497,19 @@ export async function authMember(
      * would refuse every real post. Every other agent route keeps ADR 337's rule.
      */
     leaseless?: boolean;
+    /**
+     * ADR 672: accept an agent-seat credential with NO session lease when the request names a wake
+     * lease (`x-musterd-wake-lease`) whose wake is live on that seat — a fresh Presence attesting
+     * exactly that lease (ADR 241). The wake actuator holds the seat's credential and the lease it
+     * was handed, and nothing else: it must not claim (a claim would occupy the seat its wake is
+     * occupying). The caller is told `via: 'wake_lease'` and must touch no Presence for it.
+     */
+    wakeLease?: { id: string; freshMs: number };
   } = {},
-): Promise<{ team: TeamRow; member: MemberRow }> {
+): Promise<{ team: TeamRow; member: MemberRow; via?: 'wake_lease' }> {
   const team = await requireTeam(db, teamSlug);
   let member: MemberRow;
+  let via: 'wake_lease' | undefined;
 
   if (token.startsWith(TOKEN_PREFIXES.agent_key)) {
     // A bootstrap key only claims a seat. When this one is revoked or expired — the usual reason a
@@ -519,14 +529,33 @@ export async function authMember(
         'admin runs `musterd team bootstrap mint --seat <seat> --install` on this machine, then claim again',
     );
   } else if (token.startsWith(TOKEN_PREFIXES.agent_seat)) {
-    member = await authByAgentSeatCredential(
-      db,
-      team,
-      token,
-      actingSeat,
-      sessionLease,
-      opts.leaseless,
-    );
+    if (!sessionLease && opts.wakeLease && !opts.leaseless) {
+      // ADR 672: the credential proves the seat; the daemon's own lease row and the wake's live
+      // Presence prove the lease is a wake happening now on that seat. Standing (left, halted,
+      // disabled, banned, archived, lifecycle) is judged by the common tail below like any caller.
+      member = await authByAgentSeatCredential(db, team, token, actingSeat, undefined, true);
+      const live = await hasLiveWakePresence(db, {
+        teamId: team.id,
+        memberId: member.id,
+        leaseId: opts.wakeLease.id,
+        freshMs: opts.wakeLease.freshMs,
+      });
+      if (!live)
+        throw new MusterdError(
+          'unauthorized',
+          `wake lease "${opts.wakeLease.id}" is not live on ${member.name}: a seat credential ` +
+            'with no session lease acts only for a wake whose session is occupying the seat',
+        );
+      via = 'wake_lease';
+    } else
+      member = await authByAgentSeatCredential(
+        db,
+        team,
+        token,
+        actingSeat,
+        sessionLease,
+        opts.leaseless,
+      );
   } else if (token.startsWith(TOKEN_PREFIXES.credential)) {
     member = await authByCredential(db, team, token, actingSeat);
   } else if (token.startsWith(TOKEN_PREFIXES.oauth_access)) {
@@ -554,7 +583,7 @@ export async function authMember(
 
   const refusal = memberStandingRefusal(member);
   if (refusal) throw refusal;
-  return { team, member };
+  return via !== undefined ? { team, member, via } : { team, member };
 }
 
 /**

@@ -424,6 +424,33 @@ export async function recordUnattestedOccupancy(
 }
 
 /** Does this member currently hold a *live* (connected, non-held) presence? Drives agent single-active. */
+/**
+ * ADR 672: is the wake behind `leaseId` live on this seat — a fresh Presence of the member that
+ * attests exactly that lease (ADR 241), not released. This is the liveness the spend-approval hold's
+ * acts authenticate against in place of a session lease: the wake's own session holds the seat, and
+ * the host acting for that wake proves it by the lease the daemon minted for it. A `wake_leases`
+ * row cannot say this — it expires 120 s after issue while the wake runs on for minutes.
+ */
+export async function hasLiveWakePresence(
+  db: Driver,
+  input: { teamId: string; memberId: string; leaseId: string; freshMs: number },
+  now = Date.now(),
+): Promise<boolean> {
+  // Two facts, both the daemon's: the lease row it minted for THIS member and has not seen reported
+  // (a `wake_lease` on a Presence is client-attested, so alone it would let the credential holder
+  // name any string), and a fresh Presence attesting it. `expires_at` is not consulted — the row
+  // expires 120 s after issue while the wake runs on.
+  const row = await db.get<{ id: string }>(
+    `SELECT p.id FROM presence p
+       JOIN wake_leases w ON w.id = p.wake_lease
+       WHERE p.member_id = ? AND p.wake_lease = ? AND p.last_seen_at >= ? AND p.held_until IS NULL
+         AND w.team_id = ? AND w.member_id = ? AND w.status <> 'reported'
+       LIMIT 1`,
+    [input.memberId, input.leaseId, now - input.freshMs, input.teamId, input.memberId],
+  );
+  return row !== undefined;
+}
+
 export async function hasActivePresence(db: Driver, memberId: string): Promise<boolean> {
   const row = await db.get<{ n: number }>(
     'SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND held_until IS NULL AND conn_id IS NOT NULL',
