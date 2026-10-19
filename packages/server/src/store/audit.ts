@@ -1,4 +1,4 @@
-import { isWireAttestationSource, type LaneEvent } from '@musterd/protocol';
+import { isLaneReviewGrade, isWireAttestationSource, type LaneEvent } from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
@@ -1538,6 +1538,9 @@ export async function laneHistory(
     if (typeof d['verified'] === 'boolean') e.verified = d['verified'];
     if (str(d['reason']) !== undefined) e.reason = str(d['reason']);
     if (str(d['reviewer']) !== undefined) e.reviewer = str(d['reviewer']);
+    // ADR 670: the chain's accepted link says how independent the accept was.
+    if (r.action === 'lane.closed' && isLaneReviewGrade(d['review_grade']))
+      e.review_grade = d['review_grade'];
     // ADR 629: the chain's model link. `unknown` is not a model, and a source that is
     // not on the wire is omitted rather than guessed (ADR 101).
     const model = str(r.actor_model);

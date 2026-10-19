@@ -436,6 +436,7 @@ export function readLaneChain(json: unknown): LaneChainLink[] {
       ...(model !== undefined ? { model } : {}),
       ...(modelSource !== undefined ? { model_source: modelSource } : {}),
       ...(typeof row['verified'] === 'boolean' ? { verified: row['verified'] } : {}),
+      ...(typeof row['review_grade'] === 'string' ? { review_grade: row['review_grade'] } : {}),
     });
   }
   const by = typeof requested?.['by'] === 'string' ? requested['by'] : undefined;

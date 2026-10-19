@@ -1,4 +1,4 @@
-import { isObservedAttestation, MODEL_UNKNOWN } from './model.js';
+import { isObservedAttestation, MODEL_UNKNOWN, REVIEW_GRADES } from './model.js';
 
 /**
  * One lane read end to end (ADR 629). Five links, always, in this order. A mark is
@@ -12,11 +12,25 @@ export const LANE_CHAIN_LINKS = ['asked', 'claimed', 'model', 'accepted', 'autho
 export type LaneChainLinkName = (typeof LANE_CHAIN_LINKS)[number];
 export type LaneChainMark = 'verified' | 'stated' | 'missing';
 
+/**
+ * ADR 670: how independent the accept was of the worker — the ADR 188 spectrum, plus `human`.
+ * The daemon writes it on the closing row (`lane.closed.review_grade`); a close from before that
+ * field, or a grade this build does not know, carries none.
+ */
+export const LANE_REVIEW_GRADES = ['human', ...REVIEW_GRADES] as const;
+export type LaneReviewGrade = (typeof LANE_REVIEW_GRADES)[number];
+
+export function isLaneReviewGrade(v: unknown): v is LaneReviewGrade {
+  return typeof v === 'string' && (LANE_REVIEW_GRADES as readonly string[]).includes(v);
+}
+
 export interface LaneChainLink {
   link: LaneChainLinkName;
   /** The name or model on this link. Null when nothing is recorded. */
   value: string | null;
   mark: LaneChainMark;
+  /** `accepted` only (ADR 670): the closing row's review grade, when it recorded one. */
+  grade?: LaneReviewGrade;
 }
 
 /** The lane fields the chain reads. Extra fields are ignored. */
@@ -37,6 +51,7 @@ export interface LaneChainEvent {
   model?: string | null | undefined;
   model_source?: string | null | undefined;
   verified?: boolean | null | undefined;
+  review_grade?: string | null | undefined;
 }
 
 /** `act`, `seed`, and `self` are checked (ADR 629). Anything else named is the seat's word. */
@@ -107,7 +122,13 @@ function accepted(history: readonly LaneChainEvent[]): LaneChainLink {
     const event = history[i]!;
     if (event.action !== 'lane.closed' || event.verified !== true) continue;
     const who = named(event.actor);
-    if (who) return { link: 'accepted', value: who, mark: 'verified' };
+    if (!who) continue;
+    return {
+      link: 'accepted',
+      value: who,
+      mark: 'verified',
+      ...(isLaneReviewGrade(event.review_grade) ? { grade: event.review_grade } : {}),
+    };
   }
   return missing('accepted');
 }
@@ -141,6 +162,9 @@ export function laneChain(
 export function laneChainLines(links: readonly LaneChainLink[]): string[] {
   return [
     'chain:',
-    ...links.map((link) => `  ${link.link.padEnd(10)} ${link.value ?? '—'}  ${link.mark}`),
+    ...links.map(
+      (link) =>
+        `  ${link.link.padEnd(10)} ${link.value ?? '—'}${link.grade ? ` · ${link.grade}` : ''}  ${link.mark}`,
+    ),
   ];
 }

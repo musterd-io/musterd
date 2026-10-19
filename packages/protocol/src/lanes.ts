@@ -4,7 +4,7 @@ import { ClaimCheckSchema } from './claimCheck.js';
 import { LaneClaimsSchema } from './claims.js';
 import { GoalSchema } from './goals.js';
 import { HoldSchema } from './holds.js';
-import { laneChain, laneChainLines } from './laneChain.js';
+import { LANE_REVIEW_GRADES, laneChain, laneChainLines } from './laneChain.js';
 import {
   EMPTY_POOL_KINDS,
   EMPTY_POOL_LIVE_EXCLUSIONS,
@@ -1186,6 +1186,11 @@ export const LaneEventSchema = z.object({
   model: z.string().min(1).max(120).optional(),
   /** Which tier produced `model` (ADR 101). Omitted when the row has no wire source. */
   model_source: z.enum(WIRE_ATTESTATION_SOURCES).optional(),
+  /**
+   * ADR 670: on `lane.closed`, how independent the accept was of the worker (`human`, or the
+   * ADR 188 grade). A grade this build does not know reads as absent, never as a failed detail.
+   */
+  review_grade: z.enum(LANE_REVIEW_GRADES).optional().catch(undefined),
 });
 export type LaneEvent = z.infer<typeof LaneEventSchema>;
 

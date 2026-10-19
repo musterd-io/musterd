@@ -91,6 +91,18 @@ describe('laneChain', () => {
     );
   });
 
+  it('carries the review grade on the accepted link, and drops one it does not know (ADR 670)', () => {
+    const graded = laneChain(empty, [
+      { action: 'lane.closed', actor: 'dolly', verified: true, review_grade: 'cross_family' },
+    ])[3];
+    expect(graded).toEqual({ ...link('accepted', 'dolly', 'verified'), grade: 'cross_family' });
+    expect(laneChainLines([graded!])[1]).toBe('  accepted   dolly · cross_family  verified');
+    const unknown = laneChain(empty, [
+      { action: 'lane.closed', actor: 'dolly', verified: true, review_grade: 'next_year' },
+    ])[3];
+    expect(unknown).toEqual(link('accepted', 'dolly', 'verified'));
+  });
+
   it('states who authorized and does not promote the name because a SHA landed', () => {
     expect(
       laneChain({
@@ -113,14 +125,14 @@ describe('readLaneChain', () => {
       history: [
         { action: 'lane.claimed', actor: 'TJ', model: 'grok-4', model_source: 'observed' },
         'nope',
-        { action: 'lane.closed', actor: 'schmidt', verified: true },
+        { action: 'lane.closed', actor: 'schmidt', verified: true, review_grade: 'human' },
       ],
     });
     expect(links).toEqual([
       link('asked', 'big-body', 'stated'),
       link('claimed', 'TJ', 'verified'),
       link('model', 'grok-4', 'verified'),
-      link('accepted', 'schmidt', 'verified'),
+      { ...link('accepted', 'schmidt', 'verified'), grade: 'human' },
       link('authorized', 'nick', 'stated'),
     ]);
   });
