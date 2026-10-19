@@ -10,10 +10,203 @@
     "2609.03871",
     "2609.03818",
     "2609.03727",
-    "2609.03667"
+    "2609.03667",
+    "2610.23820",
+    "2610.23598",
+    "2610.23465",
+    "2610.23342",
+    "2610.23336",
+    "2610.23317",
+    "2610.23266",
+    "2610.23256",
+    "2610.23213",
+    "2610.23038"
   ],
   "hf": [
-    "2609.02783"
+    "2609.02783",
+    "2610.23230",
+    "2610.23839",
+    "2610.22341"
   ],
-  "exn": []
+  "exn": [],
+  "pending": [
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23845"
+        }
+      ],
+      "canonicalId": "2610.23845",
+      "title": "AI-Driven Reproducibility and Analytical Robustness in Scientific Discovery",
+      "url": "https://arxiv.org/abs/2610.23845",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "evidence_processing"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23708"
+        }
+      ],
+      "canonicalId": "2610.23708",
+      "title": "\"To Boldly Go Where No One Has Gone Before\" What Has AI Let Developers Unlock?",
+      "url": "https://arxiv.org/abs/2610.23708",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23673"
+        }
+      ],
+      "canonicalId": "2610.23673",
+      "title": "On the possibilities and limitations of LLM-based multi-agent systems for multi-criteria decision-making in healthcare operations management",
+      "url": "https://arxiv.org/abs/2610.23673",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23284"
+        }
+      ],
+      "canonicalId": "2610.23284",
+      "title": "Annotrace: A Workbench for Step-Level Annotation of Agent Traces",
+      "url": "https://arxiv.org/abs/2610.23284",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23194"
+        }
+      ],
+      "canonicalId": "2610.23194",
+      "title": "OfficeTown: Generative Organizations for Evolving Agent Intelligence",
+      "url": "https://arxiv.org/abs/2610.23194",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23153"
+        }
+      ],
+      "canonicalId": "2610.23153",
+      "title": "QuAD: Quantitative Assessment via Distribution-Alignment for Qualitative Data Quality Enabled by a Content-Aware Multi-Agent System",
+      "url": "https://arxiv.org/abs/2610.23153",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23092"
+        }
+      ],
+      "canonicalId": "2610.23092",
+      "title": "Towards High Semantic Fidelity: Hyperdimensional Symbolic Messages in Multi-Agent Communication",
+      "url": "https://arxiv.org/abs/2610.23092",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23078"
+        }
+      ],
+      "canonicalId": "2610.23078",
+      "title": "Cryptographically Secure Agent-to-Agent Communication in Multi-Agent Systems",
+      "url": "https://arxiv.org/abs/2610.23078",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.23056"
+        }
+      ],
+      "canonicalId": "2610.23056",
+      "title": "Thought Blocks: Non-Autoregressive Latent Communication for Multi-Agent Systems via Trajectory-to-State Compilation",
+      "url": "https://arxiv.org/abs/2610.23056",
+      "published": "2026-10-16",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "hf",
+          "id": "2610.21082"
+        }
+      ],
+      "canonicalId": "2610.21082",
+      "title": "SciΠvot: Benchmarking Principal-Investigator Judgment at Pivotal Moments of Scientific AutoResearch Agents",
+      "url": "https://huggingface.co/papers/2610.21082",
+      "published": "2026-10-15",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "exn",
+          "id": "c08672ca-94ad-404e-900f-c4f61c669b20"
+        }
+      ],
+      "canonicalId": "c08672ca-94ad-404e-900f-c4f61c669b20",
+      "title": "The Roadmap to Mastering Agentic AI Systems in 2026",
+      "url": "https://www.kdnuggets.com/the-roadmap-to-mastering-agentic-ai-systems-in-2026",
+      "published": "2026-10-15",
+      "episodeIds": [
+        "c08672ca-94ad-404e-900f-c4f61c669b20"
+      ],
+      "firstAttempt": "2026-10-19",
+      "lastAttempt": "2026-10-19",
+      "failure": "triage_incomplete"
+    }
+  ]
 }
