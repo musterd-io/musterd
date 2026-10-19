@@ -224,13 +224,13 @@ export async function redeemAskChannelToken(
         [hash, input.teamId],
       );
       if (!row) throw new Refuse('unknown_token');
-      if (row.ask_id !== input.askId) throw new Refuse('conflict', row);
       if (row.consumed_at !== null) throw new Refuse('consumed', row);
       if (input.now >= row.expires_at) throw new Refuse('expired', row);
       // A2 is never accepted until it exists; and a token that requires more than was presented fails.
       if (input.assurance === 'A2' || row.required_assurance !== input.assurance) {
         throw new Refuse('assurance', row);
       }
+      if (row.ask_id !== input.askId) throw new Refuse('conflict', row);
       const ask = await checks.askStanding(t, input.teamId, row.ask_id);
       if (!ask || !ask.open) throw new Refuse('conflict', row);
       if (ask.digest !== row.ask_digest) throw new Refuse('stale_revision', row);
