@@ -81,8 +81,9 @@ no prices yet; the first design partners will tell me.
 Work trackers are adding agents. Your work already lives there, but the agents are assignees, not
 teammates. Agent teams give you tight coordination, inside one tool. Relays let agents reach each other
 across tools, but they leave out who owns or accepts the work. Orchestration frameworks run powerful
-workflows in code, and their agents are not standing members. musterd is the standing team: any
-harness, members who can say no, and another member who accepts the work.
+workflows in code, and their agents are not standing members. musterd is the standing team, on any
+harness. Nothing my agents do counts as done until another member accepts it, and the record shows
+who did it, who accepted it, and which model.
 
 ## 13 · Nick Sanders, founder (0:20)
 
@@ -112,20 +113,106 @@ musterd.io.
 | 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 10 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |
 | 11 | Free local, subscription, credits; Cloud and orgs coming soon | Business plan spec above; no prices exist yet. Goal `cloud` in flight, no date quoted |
-| 12 | Each category: what it gives you, what it leaves out; musterd: three strengths | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row lists strengths only; its limit (it is not a sandbox and does not run your agents) is in the questions below |
+| 12 | Each category: what it gives you, what it leaves out; musterd: any harness, then the message | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row carries [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1's sentence (2026-10-19; it replaced "members who can say no" and "another member accepts", the mechanism chips of 2026-10-13) and the harness line; its limit (it is not a sandbox and does not run your agents) is in the questions below. "A person at both ends" is a section title in the ADR and is never said as a sentence; "in one read" waits for the one-page chain on `lane show` (lane `01M5AX030T`) |
 | 12 | Competitor logos | Each is the icon the company serves on its own site, fetched 2026-10-09: Plane, Conductor, Band, CrewAI, Multica, Omnigent, Party and Agent Relay from their own domains. Two are indirect: **qm** shows YC's own "Y" because qm is a YC project and its page serves only that mark; **Hermes Bot Mode** shows the Nous Research icon, since Hermes Agent is a Nous product. Used only to identify each product. CrewAI's is a 32 px favicon, so it is soft at large sizes |
 
 ## Questions to expect, and plain answers
+
+Each answer is in my voice and rests on [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md):
+the message first (nothing counts as done until another member accepts it; the record shows who did
+it, who accepted it, and which model), the mechanisms as proof under it. "An agent can say no" stays
+out of the headline lines until our own record shows refusals aimed at a person (ADR 665 §2). Every
+number has a row in the Q&A ledger below; re-read it before each event.
 
 - **Is anyone using it?** Only our own team so far. The first design partners start this month.
   _(Written for 2026-10-09; re-check before every event.)_
 - **Is it open source?** The packages are MIT. I decide what else to open after the first design
   partners.
-- **Who pays, and how much?** Hosted teams by subscription, with credits for model compute that
-  musterd runs. I have no prices yet; design partners tell me what they would pay.
 - **Does musterd run my agents?** Your agents keep running in Claude Code, Codex or whatever runs
   them today, and join the team from there. Isolation stays with your harness or sandbox.
 - **What if Claude Code, Codex or Cursor add this themselves?** musterd works across all of them,
   so a team that mixes tools gets one record. I have not tested anyone else's version of this.
 - **Is the 0.9% real?** It is our own team's git history, one team, one read in July and one in
   September. It is not a controlled study.
+- **How is this different from Claude calling Codex for a review?** That works, and I do it. OpenAI
+  ships a Codex plugin for Claude Code, and Claude Code's Projects beta has a coordinator that splits a
+  goal into threads and then reviews their output itself. In both, the review lands under the caller's
+  name: Codex has no seat, nothing records which model looked, and the agent that asked decides whether
+  to take the advice. On musterd nothing counts as done until another member accepts it. The reviewer is
+  a separate member, its model is on the record, and the one who did the work never grades it.
+- **How is musterd different from competitors?** The four categories on slide 12. musterd is the
+  standing team on any harness: nothing counts as done until another member accepts it, and the record
+  shows who did it, who accepted it, and which model. In October I read about forty products. Three
+  things were missing in every one: an act where an agent declines or challenges the work, acceptance
+  enforced from a different member, and a record of which model did the work.
+- **Who are your competitors, and how do you beat them?** Band is the closest and the best funded, at
+  $17 million. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
+  inside one tool. Linear and Jira are adding agents as delegates; Linear's own guidelines say "an agent
+  cannot be held accountable", so a person stays the assignee. I win where a team mixes tools and needs
+  one record: any harness, acceptance from another member, the model on the record, and running it
+  yourself is free with no caps. Where I am behind: Party and Conductor are usable in minutes, and my
+  next job is a ten-minute install.
+- **I have memory in ChatGPT, Claude and Grok. Can musterd read it?** No. Claude and Gemini already let
+  you move that memory yourself, a prompt in one assistant and a paste into the other, as a one-time
+  snapshot. That memory is about you and stays with each member's own tool, because a member joins
+  from the session it already runs. What musterd keeps is the team's memory: the board, every question
+  and its answer, each member's notes on where it left off, and the record of who did what. No single
+  assistant holds that, because it belongs to the team.
+- **How do you make money?** Running it yourself is free: MIT, your machines, no caps. musterd Cloud,
+  hosted teams with nothing to run, is a subscription with caps on teams, people and history, plus
+  credits for model compute that musterd runs. Your own keys use none. An org tier adds single sign-on,
+  signed audit export and admin across teams. Neither has shipped.
+- **Who pays?** The product and dev team: a few people running several agents across tools. The solo
+  builder gets in free and is the one who brings it to that team. Then teams doing knowledge work, up
+  to organisations buying the governance tier. Today nobody outside our team pays. _(Re-check the
+  design-partner line before every event.)_
+- **How much can you charge?** I have no prices; the design partners set them. The neighbours have
+  priced the room: Band charges $17.99 a month per user, Party $20 or $200 a month flat with no
+  per-seat fees, Conductor $50 a month and $60 per user for teams. All of them bill the person, and so
+  will I. My rule is that a hosted seat costs well under one hour a month of the agent compute it saves
+  that team.
+- **Why would people let you access their data?** Today I never have it. musterd is a daemon and a
+  SQLite file on your machine. No account, no cloud, no analytics in the product. Telemetry is off until
+  you point it at your own collector, and message bodies are never in it. When Cloud ships, the team's
+  record lives on our servers, and the page that sells it will say so. Self-hosting stays for anyone
+  whose record must never leave their machines.
+- **New models fix old problems. What sticks, and how do you adapt?** Agreed. Every new model absorbs
+  more of what used to take several agents on one task, and I do not compete there; a member runs all
+  of that inside its seat. What a better model has not fixed is working together. Stanford's
+  CooperBench put pairs of today's best coding agents on 650 real tasks, and they lost nearly half
+  their capability against one agent alone. The failures were about where to edit, who promised what,
+  and questions that went unanswered. The authors' fixes are contract-like agreements, checks that an
+  agent followed through, and integration checks before declaring safety. That is a lane, an accepted
+  handoff, and acceptance by another member. They also say prompting will not fix it and that models
+  will have to be trained to collaborate. Our team's record of 24,768 acts is what that training needs.
+- **Everyone and their mama is building agent collaboration platforms, no?** Yes. YC asked for it this
+  batch, and I counted about forty products in October. The platforms shipped the live shared session
+  themselves within four months: Claude Code's agent teams and Projects, Codex cloud environments,
+  Cursor cloud agents. I am not in that slice. Across the forty, nobody had a decline act, acceptance
+  from a different member, or a model on the record. The crowd tells me the problem is real. It also
+  tells me where I am behind: a ten-minute install.
+- **For an enterprise room only, the accountability number:** SecurityHQ and Datadog surveyed 204
+  security leaders, published 2026-10-15. Nearly half, 45%, had already had an incident with an AI
+  agent where accountability was unclear, and only half, 49%, could fully reconstruct what an agent
+  had done over the previous 30 days. A vendor survey; say the sponsor and the date with it, and never
+  round it up. It is proof under the message, never the opening (ADR 665 §1).
+
+### Q&A ledger (read 2026-10-19 unless stated)
+
+| Claim | Source |
+| --- | --- |
+| Codex plugin for Claude Code; Claude Code Projects beta, coordinator reviews its threads | OpenAI's Codex plugin, and press coverage of Anthropic's 2026-09-17 Projects announcement; Anthropic's own post not retrieved. Re-check against code.claude.com before quoting |
+| About forty products; three things absent in all | `docs/design/landscape.md` §14, sweep of 2026-10-08 |
+| Band $17 million seed | landscape.md §5, unite.ai 2026-04-23 |
+| Linear: "an agent cannot be held accountable", delegate vs assignee | linear.app/now/our-approach-to-building-the-agent-interaction-sdk, verbatim |
+| Claude memory import by paste, all plans, "experimental"; Gemini imports launched 2026-03-26 | support.claude.com article 12123587; press coverage of Google's launch |
+| Band free / $17.99 Pro / Enterprise quote, "single user account" | band.ai/pricing |
+| Party $0 / $20 / $200 a month, "No per-seat fees" | party.build |
+| Conductor free / $50 Pro / $60 per user Teams | third-party reviews dated Aug 2026; confirm on conductor.build before quoting |
+| Agent Relay hosted "free to start", open-source self-host; owner and harness shown, no acceptance | agentrelay.com |
+| CooperBench: 652 tasks, 12 libraries; GPT-5 0.48 solo → 0.28 coop; Claude Sonnet 4.5 0.47 → 0.26; causes expectation 42% / commitment 32% / communication 26%; "lose nearly half their capability" | arXiv 2601.13295 (Khatua, Zhu, … Yang), cooperbench.com; hai.stanford.edu news, June 2026 |
+| 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
+| SecurityHQ + Datadog: n=204, 45%, 49%, 17% within minutes | SecurityHQ press release, 2026-10-15 |
+| One in ten landed lanes sent back on review; 922 of 967 name the person who authorised the merge | `./chain.sh`, read 2026-10-19; ADR 665 Context |
+| Hosted subscription with caps and credits; org tier; no prices | `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 461 §5 for the price rule |
+| No account, no cloud, no analytics in the product; telemetry off by default; bodies never in it | `PRIVACY.md` |
