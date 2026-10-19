@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { connect, createServer, type Server } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -21,13 +21,25 @@ function pathCommand(name: string, pathValue: string): string | undefined {
   return undefined;
 }
 
-function packageRoot(file: string): string {
+function pnpmPackageRoot(file: string): string | undefined {
   let current = dirname(file);
   while (current !== dirname(current)) {
-    if (existsSync(join(current, 'package.json'))) return current;
+    const candidates = [current];
+    if (current.endsWith(`${sep}.bin`)) candidates.unshift(join(dirname(current), 'pnpm'));
+    for (const candidate of candidates) {
+      const manifest = join(candidate, 'package.json');
+      if (!existsSync(manifest)) continue;
+      try {
+        const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: unknown };
+        if (parsed.name === 'pnpm' && existsSync(join(candidate, 'bin', 'pnpm.cjs')))
+          return candidate;
+      } catch {
+        // Ignore unreadable manifests while looking for pnpm's own package root.
+      }
+    }
     current = dirname(current);
   }
-  return dirname(file);
+  return undefined;
 }
 
 function gatewayPort(env: Record<string, string | undefined> = {}): number | undefined {
@@ -134,11 +146,12 @@ export async function spawnLinuxSandboxedBash(
   const pathValue = spec.env['PATH'] ?? process.env['PATH'] ?? '/usr/bin:/bin';
   const pnpm = pathCommand('pnpm', pathValue);
   const node = realpathSync(process.execPath);
-  const pnpmRoot = pnpm ? packageRoot(pnpm) : undefined;
+  const pnpmRoot = pnpm ? pnpmPackageRoot(pnpm) : undefined;
   const corepackSource = spec.env['COREPACK_HOME'] ?? join(homedir(), '.cache/node/corepack');
   const corepackHome = join(temporary, 'corepack');
   stagePnpmCorepackCache(corepackSource, corepackHome);
-  const pnpmRelative = pnpm && pnpmRoot ? relative(pnpmRoot, pnpm) : undefined;
+  const pnpmLauncher = pnpmRoot ? join(pnpmRoot, 'bin', 'pnpm.cjs') : undefined;
+  const pnpmRelative = pnpmLauncher && pnpmRoot ? relative(pnpmRoot, pnpmLauncher) : undefined;
   if (pnpmRelative?.startsWith(`..${sep}`) || pnpmRelative === '..') {
     throw new Error('pnpm launcher is outside its package root');
   }
@@ -169,15 +182,12 @@ export async function spawnLinuxSandboxedBash(
     bindReadOnly(args, systemPath, systemPath);
   }
   addDirArgs(args, workspace);
-  if (pnpmRoot && pnpm && pnpmRelative) {
-    // Keep pnpm's real absolute location so its CJS launcher resolves the package relative to
-    // the same path it was installed under. Only the package directory is mounted, read-only.
-    addDirArgs(args, pnpmRoot);
-    args.push('--ro-bind', pnpmRoot, pnpmRoot);
-    // Some pnpm installers expose a launcher whose entry point resolves outside the inferred
-    // package root. Bind the resolved entry point too, so that exact absolute path is present.
-    args.push('--ro-bind', pnpm, pnpm);
-    args.push('--symlink', pnpm, '/runtime/pnpm');
+  if (pnpmRoot && pnpmLauncher && pnpmRelative) {
+    // Some installers put a wrapper in their bin directory. Mount pnpm's actual package so the
+    // wrapper's absolute /pnpm/bin/pnpm.cjs entry point exists inside the sandbox.
+    args.push('--dir', '/pnpm');
+    args.push('--ro-bind', pnpmRoot, '/pnpm');
+    args.push('--symlink', `/pnpm/${pnpmRelative}`, '/runtime/pnpm');
   }
   args.push('--ro-bind', realpathSync(corepackHome), '/corepack');
   if (existsSync(pnpmStore)) {
