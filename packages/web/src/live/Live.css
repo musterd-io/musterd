@@ -190,10 +190,11 @@
    glass — frosted chrome is designer-skill tell 9, and nothing scrolls under this bar anyway. */
 .lc__topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--lc-5);
-  height: 52px;
-  padding: 0 var(--lc-7);
+  gap: var(--lc-3) var(--lc-5);
+  min-height: 52px;
+  padding: var(--lc-4) var(--lc-7);
   border-bottom: 1px solid var(--lc-border);
   background: rgb(250, 251, 252);
   flex: 0 0 auto;
@@ -215,6 +216,21 @@
 }
 .lc__spacer {
   flex: 1;
+}
+/* The controls on the right travel as one group. A row of fixed 30px buttons cannot shrink, so on
+   a phone the bar used to run them off its right edge: at 390px the seeds, log, share and both
+   sound buttons sat at x 405–507, out of reach, and "pause…" was cut in half (ryder, accepting
+   #2875; measured 2026-10-18, lane 01M596F88W). Wrapped as a group, the bar grows a second row
+   and the group keeps to the right of it; nothing hides and every target keeps its size. The
+   group may wrap inside itself too, for the admin's open hold form. */
+.lc__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: inherit;
+  max-width: 100%;
+  margin-left: auto;
 }
 /* Every keyboard-focusable thing inside the live chrome gets this ring unless a later rule paints
    its own (the board hotspot's glow, the overlay's ink ring). global.css draws the site-wide ring
@@ -5201,10 +5217,20 @@
     grid-row: 1;
     border-bottom: 1px solid var(--lc-border);
   }
+  /* Under the band the column is one scroller. On a wide screen the cards scroll inside it and
+     the sections below keep their height; at phone height that left the cards a sliver above
+     "+ N offline" while Experiments took the rest and was itself cut off by the column's
+     overflow (ryder, accepting #2875; lane 01M596F88W). Here every row lays out at its full
+     height and the column scrolls as one. */
   .lc-team {
     grid-column: 1;
     grid-row: 2;
     border-right: 0;
+    overflow-y: auto;
+  }
+  .lc-team__cards {
+    flex: none;
+    overflow: visible;
   }
   /* The band is a window, not a workspace: the key, the huddle rail (the log carries huddles) and
      the room's collapse control stay off it, so the room is what you see. */
