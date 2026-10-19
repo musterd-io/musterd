@@ -35,6 +35,10 @@ label.pair-card__row {
   width: 24px;
 }
 
+.pair-card__row select {
+  min-height: 32px;
+}
+
 .pair-card__key {
   opacity: 0.7;
 }
