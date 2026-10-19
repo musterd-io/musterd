@@ -164,6 +164,10 @@ Seen on two nights. 2026-10-07 (insight `01M4D34ZD1`): two hops in under 2 minut
 
 The wait can also sit after the hop. On lane `01M50M90ST` (unpriced floor increment 2), big-body re-routed the first ask to fifty 7m4s after submit, and fifty closed it 1h29m5s later: 1h36m9s submit-to-close, against 100–209s for the same submitter's un-hopped asks that day (2026-10-17; falsify: `resolve`-then-`ask` pairs on lane `01M50M90ST` at timestamps other than `1792267319307`/`1792267319309`, or a close other than `1792272664542`; alfie insight from the 2026-10-17 dream). <!-- claim: defect -->
 
+A second night shows the same shape. On lane `01M5162FVM` (picker pick 1), big-body re-routed to wanderer 42m28s after submit and wanderer closed it 1h10m later, 1h52m submit-to-close (2026-10-15; falsify: the acts table on `01M5162FVM` shows a different re-router, or hop/resolve gaps other than 42m28s and 1h10m; izzo insight `01M56R02ZA`). <!-- claim: defect -->
+
+The hold is not always after the hop: the same night, lane `01M5162MTC` was re-routed after 45m13s and sloane closed it 86s later. Either holder can be the slow one, so the submit-to-close time does not tell you which seat to chase — the newest ask's addressee does.
+
 Each hop delivers a `resolve` to the old holder and a new `ask` to the next. Nothing goes to the submitter. Before reporting "awaiting <name>", read the newest `[lane] acceptance requested` act on the lane and use its addressee, not the name you passed to `lane_submit`. The relieved-acceptor side of the same gap is the section above.
 
 ## A re-reviewed lane can still close inside sixty seconds (2026-10-13; falsify: a lane whose second acceptance ask takes more than 60s despite every earlier decline being answered on the named references; read the acts-table timestamps) <!-- claim: other -->
