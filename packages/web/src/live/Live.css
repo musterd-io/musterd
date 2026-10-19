@@ -8628,7 +8628,7 @@
 }
 .lc-xp__hit {
   display: grid;
-  grid-template-columns: 24px 1fr;
+  grid-template-columns: 24px 1fr auto;
   column-gap: var(--lc-4);
   align-items: start;
   padding: var(--lc-2) var(--lc-3);
@@ -8823,6 +8823,71 @@ a.lc-xp__hit:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* The note, shown (experiment-results design §6, lane 01M5B1ZM80): closed it is the first sentence on
+   one line; open (the /live disclosure) it wraps in full. The toggle is the text itself, unstyled as a
+   button so the row keeps reading as prose. */
+.lc-xp__note.is-open {
+  white-space: normal;
+}
+.lc-xp__note-toggle {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.lc-xp__note-toggle:focus-visible {
+  outline: 2px solid var(--lc-focus, var(--lc-accent));
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.lc-xp__evidence {
+  margin-left: 6px;
+  font-style: normal;
+  color: var(--lc-muted);
+  text-decoration: none;
+}
+.lc-xp__evidence:hover {
+  color: var(--lc-text);
+}
+/* The data so far: one line, a faint baseline rule, a dashed target rule, the latest value. Ink only
+   until the read is in; then the line takes the mark's ink shade (§6). */
+.lc-xp__spark {
+  display: grid;
+  justify-items: end;
+  row-gap: 1px;
+  align-self: center;
+  color: var(--lc-text);
+}
+.lc-xp__spark svg {
+  display: block;
+  overflow: visible;
+}
+.lc-xp__spark-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.lc-xp__spark-base {
+  stroke: var(--lc-muted);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+.lc-xp__spark-target {
+  stroke: var(--lc-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.lc-xp__spark-latest {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: var(--lc-muted);
+}
+.lc-xp__spark.is-read {
+  color: var(--lc-accent-ink);
 }
 /* Stale: the marks dim, never the words (local rule 2026-08-13). */
 .lc-xp.is-stale :is(.lc-xp__pin, .lc-xp__tack) {

@@ -335,6 +335,18 @@ teammate's session. Consequences worth internalising:
   plain walk after the act lands, and only then drains the queue. `cancelAmbient(only)` yields only
   the acting member's stroll or gesture, so a stranger's wave is not killed by someone else's act.
   A plate wearing a walk tag is lifted (`is-tagged`, z 2) above its neighbours and under every bubble.
+- **A nameplate's stock is its owner's hue** (lane 01M5AVZA7C, 2026-10-19): `.lc-gl-label__plate` is
+  the member colour at 22% into near-white with the hue drawn firmly on the rim, opaque. The paper-2
+  stock it replaces sat one step from the mustard floor and nick read the plates as blending in; the
+  tint lifts them by lightness (never darkness, his standing line) and keeps the recede ranking under
+  the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
+- **An experiment row shows its result, not just the word** (lane 01M5B1ZM80, 2026-10-19;
+  [experiment results](../superpowers/specs/2026-10-19-experiment-results-design.md)). A lane that
+  carries a `metric` and two or more daily `samples` draws a sparkline (`experimentReads.sparkline`:
+  baseline rule, dashed target rule, latest value; ink only until `read`); a verdict with `measured`
+  reads `met · 61% (target 60%, n 23)` (`resultPhrase`); the note's first sentence shows under the
+  row, the whole note on a click on `/live`; an `evidence` URL is a link. The fields are read off the
+  lane defensively until `@musterd/protocol` serves them (ryder's lane 01M5B1YQVH).
 - **Every experiment read carries a live countdown** (lane 01M5AXHFZT, 2026-10-19):
   `experimentReads.clockPhrase` counts toward the read day's 00:00 in the team zone
   (`readDayStart`, DST from Intl) — `2d 14h 05m`, `today · 9h 12m left`, `overdue · 2d 04h` — read

@@ -207,6 +207,32 @@ describe('TeamColumn', () => {
       expect(render({ roster: [m('ryder')], board: four, now: NOW })).not.toContain('lc-xp__avatar');
     });
 
+    it('a metric lane draws a sparkline and its read shows the number beside the word (lane 01M5B1ZM80)', () => {
+      const metric = { name: 'ranked pick hit rate', unit: '%', baseline: 40, target: 60, direction: 'up', source: 'manual', by: 'ryder', at: NOW };
+      const board = dated(
+        read('m', 'read', '2026-10-16', {
+          read_verdict: { outcome: 'met', note: 'Ranked picks won. Baseline held.', by: 'ryder', at: NOW, measured: { value: 61, n: 23 }, evidence: 'https://example.test/readout' },
+          metric,
+          samples: [
+            { day: '2026-10-14', value: 48, n: 2, by: 'ryder', at: NOW },
+            { day: '2026-10-15', value: 55, n: 2, by: 'ryder', at: NOW },
+            { day: '2026-10-16', value: 61, n: 3, by: 'ryder', at: NOW },
+          ],
+        }),
+        read('p', 'waiting', '2026-10-30'),
+      );
+      const html = render({ roster: [m('ryder')], board, now: NOW });
+      expect(html).toContain('met · 61% (target 60%, n 23)');
+      expect(html).toContain('lc-xp__spark is-read');
+      expect(html).toContain('lc-xp__spark-target');
+      expect(html).toContain('lc-xp__spark-latest">61%');
+      // Closed, the note is its first sentence; the evidence is a link because it is a URL.
+      expect(html).toContain('“Ranked picks won.”');
+      expect(html).toContain('href="https://example.test/readout"');
+      // The plain read draws nothing.
+      expect((html.match(/lc-xp__spark /g) ?? []).length).toBe(1);
+    });
+
     it('lays the reads on a fortnight strip: overdue in the gutter, a far read at the edge', () => {
       const html = render({ roster: [m('ryder')], board: four, now: NOW });
       expect(html).toContain('lc-xp__pin lc-xp__pin--overdue" style="--d:-1');

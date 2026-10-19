@@ -140,7 +140,7 @@ and the broadcast capturer has no emoji font).
 | overdue | `overdue · 1 day`; `overdue · {n} days` |
 | due | `due today` |
 | waiting | `tomorrow` when the day is next; `in {n} days` from 2 — _(amended 2026-10-19, lane `01M5AXHFZT`: the row shows a live countdown to the read day's start in the team zone instead — `2d 14h 05m` · `14h 05m` · `05m`; `due` reads `today · 9h 12m left`; `overdue` reads `overdue · 2d 04h` / `overdue · 4h 12m`; the screen-reader label keeps the day phrases; nick: "a countdown clock to make it more exciting for the viewer")_ |
-| read | `met` · `missed` · `inconclusive` |
+| read | `met` · `missed` · `inconclusive` — _(amended 2026-10-19, lane `01M5B1ZM80`, [experiment results](2026-10-19-experiment-results-design.md) §6: a read whose verdict carries `measured` reads `{word} · {value}{unit} (target {target}{unit}, n {n})`; a lane with a `metric` and two or more `samples` draws a 60×16 sparkline at the row's right — baseline rule, dashed target rule, the latest value as the only number, ink only until `read`; the note is shown rather than hidden in a tooltip: its first sentence on the stream, and on `/live` a click opens the whole note in place; an `evidence` web address is a small link on `/live`)_ |
 | Empty, `/live` only | `No dated reads. Open a lane with --reads-on to add one.` |
 | More, `/live` | `Show all {n}` / `Show fewer` |
 | More, `/broadcast` | `+{n} more on the board` |
