@@ -268,7 +268,7 @@ export const CONTROLS: Control[] = [
       '22 `daemon_down` raises with one distinct body between them, none diagnosable after the fact — the probe swallowed its own errors. Repaired in #923; the false-raise pattern is its own ledger entry.',
     counterfactual:
       'Partly. It would have made the 22 raises READABLE, which is what it claims, but it would not have prevented them — the raises were true-positive-shaped and wrong for a different reason (the daemon was slow inside a restart window, not down). The restart-window discrimination is a separate control that does not exist yet, and this entry should not be read as covering it.',
-    lastExercised: '2026-08-19',
+    lastExercised: '2026-10-18',
     everTripped: true,
     lastTripped: '2026-08-19',
     staleAfterDays: 60,
@@ -276,6 +276,12 @@ export const CONTROLS: Control[] = [
       'PR #923',
       'docs/claims/entries/2026-08-19-guardian-daemon-down.md',
       'lane 01M0E9MRDJ',
+      // 2026-10-18 (fifty, lane 01M597437C): re-exercised when the 60d bound lapsed and reddened
+      // main. The three fixtures — refused connection, hung endpoint, slow-but-healthy — ran in
+      // signals.test.ts ("distinguishes a timeout from a refusal", the confirming-probe describe)
+      // and classify.test.ts ("daemon_down says which kind of down, and what the probe saw"):
+      // 64/64 green, each mode still yields a distinguishable body.
+      'lane 01M597437C',
     ],
   },
   {
