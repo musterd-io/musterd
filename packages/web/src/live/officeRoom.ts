@@ -32,7 +32,7 @@ export interface OfficeRoomProps {
   asks: readonly AskView[];
   status: ConnStatus;
   /** The latest `seat_pulse` per member (ADR 660) — the desk types and its screen lives off this. */
-  pulses?: ReadonlyMap<string, SeatPulse>;
+  pulses?: ReadonlyMap<string, SeatPulse> | undefined;
 }
 
 /**
@@ -54,7 +54,7 @@ export interface RoomStream {
   envelopes: Envelope[];
   liveIds: Set<string>;
   status: ConnStatus;
-  pulses?: ReadonlyMap<string, SeatPulse>;
+  pulses?: ReadonlyMap<string, SeatPulse> | undefined;
 }
 
 /**
