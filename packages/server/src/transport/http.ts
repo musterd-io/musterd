@@ -6711,9 +6711,9 @@ export async function handleHttp(
       }
 
       // ADR 453: a joiner's structural trace rows, trace.db → trace.db. Machine credential, the
-      // same refusal shape as /sync/push. Never touches sync_log or audit; never fans out.
-      // Nor does it feed the seat pulse (ADR 660): a joiner's rows arrive late and batched, so a
-      // seat working on a joiner node shows no pulse on the hub — a stated gap, not a bug.
+      // same refusal shape as /sync/push. Never touches sync_log or audit; never fans out. The
+      // admitted rows also feed the seat pulse (ADR 660): a seat working on a joiner node pulses on
+      // the hub, up to the trace push's 60 s cadence late.
       if (method === 'POST' && rest === '/sync/trace') {
         const team = await requireTeam(ctx.db, slug);
         const node = await authenticateNode(ctx.db, team.id, bearer(req));
@@ -6788,6 +6788,12 @@ export async function handleHttp(
           admitted.length > 0
             ? await ingestSyncedTraceRows(ctx.traceDb, team.id, node.id, admitted)
             : { accepted: 0, ignored: 0, collided: 0 };
+        // ADR 660: only admitted rows, grouped by seat — a refused or held row never pulses.
+        if (ctx.pulses && admitted.length > 0) {
+          const bySeat = new Map<string, typeof admitted>();
+          for (const row of admitted) bySeat.set(row.seat, [...(bySeat.get(row.seat) ?? []), row]);
+          for (const [seat, rows] of bySeat) ctx.pulses.feed(team.id, seat, rows);
+        }
         recordTraceReplicated(node.id, 'accepted', counts.accepted);
         recordTraceReplicated(node.id, 'ignored', counts.ignored);
         recordTraceReplicated(node.id, 'collided', counts.collided);

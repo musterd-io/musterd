@@ -151,6 +151,30 @@ describe('SeatPulses (ADR 660)', () => {
     expect(byTeam).toEqual({ t1: 1, t2: 2 });
   });
 
+  it('a joiner’s synced row counts like a local one; nullable ids and names are handled (ADR 660)', () => {
+    const r = rig();
+    r.pulses.feed('t1', 'ryder', [
+      {
+        kind: 'PostToolUse',
+        ts: r.now(),
+        harness: 'codex',
+        tool_name: 'apply_patch',
+        tool_use_id: 'a'.repeat(24),
+      },
+      {
+        kind: 'PostToolUse',
+        ts: r.now(),
+        harness: 'codex',
+        tool_name: null,
+        tool_use_id: 'b'.repeat(24),
+      },
+      { kind: 'PostToolUse', ts: r.now(), harness: 'codex', tool_name: 'Bash', tool_use_id: null },
+    ]);
+    expect(r.pulses.snapshot('t1')).toEqual([
+      expect.objectContaining({ member: 'ryder', intensity: 2, kind: 'edit' }),
+    ]);
+  });
+
   it('dispose cancels an armed timer', () => {
     const r = rig();
     r.pulses.feed('t1', 'miley', [call({ ts: r.now() })]);
