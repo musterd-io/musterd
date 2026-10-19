@@ -1,5 +1,5 @@
 import { ACCOUNTS } from './catalog.js';
-import { asClaude, claudeTokenFromEnv, readClaude } from './claude.js';
+import { asClaude, readClaude } from './claude.js';
 import { asCodex, codexSession, readCodex } from './codex.js';
 import { asCursor, readCursor } from './cursor.js';
 import { asLive, readElevenLabs } from './elevenlabs.js';
@@ -13,7 +13,7 @@ export interface ReadDeps {
   signal: AbortSignal;
   chosen: readonly string[];
   codexAuth: unknown;
-  claudeCredential: unknown;
+  claudeToken: string | null;
   cursorToken: string | null;
 }
 
@@ -44,11 +44,7 @@ export async function readBoard(deps: ReadDeps): Promise<Board> {
       continue;
     }
     if (account.id === 'claude') {
-      const read = await readClaude(
-        claudeTokenFromEnv(deps.env, deps.claudeCredential),
-        deps.fetchSub,
-        deps.signal,
-      );
+      const read = await readClaude(deps.claudeToken, deps.fetchSub, deps.signal);
       providers.push(read.state === 'live' ? asClaude(read) : held('claude', 'Claude', read));
       continue;
     }

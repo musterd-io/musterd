@@ -41,6 +41,7 @@ describe('start', () => {
       configPath: join(dir, 'config.json'),
       codexAuthPath: null,
       claudeCredentialPath: null,
+      claudeToken: null,
       cursorAuthPath: null,
       cursorToken: null,
     });
