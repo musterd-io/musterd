@@ -32,7 +32,7 @@ isolation and spend-risk budget before any reading exists; starting on laptop hu
    per hosted seat, auto-stopped when idle. Phase 2: one agent machine per team, on phase 1's
    cost data — never the team daemon's machine, because the daemon holds the team database.
    A shared multi-tenant pool is a later phase, only on isolation evidence and its own ADR; a
-   jail-only boundary between teams is refused at every phase.
+   jail-only boundary between teams is refused at every phase. _(Amended 2026-10-19: phase 2 parked by ADR 662. See the amendment below.)_
 2. **The executor is the resident seat, moved.** A cloud agent is ADR 588's resident seat (pi
    engine, `engines/jail.ts` working tools, ADR 605 keychain) with its wake actuator on musterd
    compute, provisioned through ADR 463's sponsor-scoped provisions and host key — the key
@@ -84,6 +84,12 @@ isolation and spend-risk budget before any reading exists; starting on laptop hu
   this record refuses to presume them beyond the gateway already pricing every call.
 - Follows-up: lane `01M50SQBJGHRY9HKPDH8WMDBDK` opens the phase lanes in the design's §6 when
   this record is accepted.
+
+- **2026-10-19: one microVM per hosted seat is the rule; phase 2 parked ([ADR 662](662-one-machine-per-hosted-seat.md)).**
+  Seats do not share a machine. Phase 2 reopens only if phase 1 measures compute at more than
+  30% of a hosted seat's total cost over its pilot week, and then through its own ADR. If
+  sharing is ever taken, the boundary is a rented hardened container, never OS users or a runtime
+  musterd configures. Lane `01M55Y5DQHKY2235KKA79T06NH` waits on that threshold.
 
 ## Observability & Evaluation
 
