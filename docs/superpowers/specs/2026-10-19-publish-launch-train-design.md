@@ -42,7 +42,7 @@ before the next leaves. Same train for a quiet patch and for the launch; the lau
 at the end.
 
 ```
- 0 Gate      clean-machine install + tour (run 4 script), on the candidate commit
+ 0 Gate      run 4 on a clean machine, on two harnesses (Claude Code + Codex), on the candidate
  1 Notes     generated release notes, reviewed by a human
  2 npm       pnpm release --version X           (nick — ADR 156, creds stay human)
  3 Tag       git tag vX + a GitHub Release carrying the notes
@@ -51,7 +51,8 @@ at the end.
  6 Site      miley deploys; the site's install block shows vX
  7 Indexes   Context7 refresh, DeepWiki re-index  (only when docs changed)
  ── launch-only cars ──
- 8 Post      blog post live, Show HN, X, Reddit next day (traction-plan §7)
+ 8 Launch    traction-plan §7, in its order (blog un-withheld first, then Show HN, X,
+             the stream live with a launch title; Reddit the next day) — not restated here
  9 Lists     awesome-mcp-servers PR, the small-things repos' pointers
 ```
 
@@ -76,8 +77,9 @@ Three small pieces of code, each replacing a step someone has to remember:
 3. **One install block** — a single typed source (`content/install.data.ts`) that the README, the
    site's Getting Started, `/start`, llms.txt and the launch post all render from, with the version
    filled at build time from the CLI's package.json. A test fails when any surface carries a
-   different command. This is the fix for §1's four disagreeing install paths, and it removes the
-   launch post's "set the version on launch morning" step.
+   different command. This is the fix for §1's four disagreeing install paths, and it **retires
+   traction-plan §7's "set the version that morning" step** — sloane edits §7 in the same lane that
+   moves the launch post to 0.6.0 (she owns the block's copy and the release notes' voice).
 
 What stays manual, deliberately: the npm publish (ADR 156 — creds stay with a human; see §8 D3 for
 the alternative), the human edit of the notes, and every car in 8–9.
@@ -89,7 +91,8 @@ the alternative), the human edit of the notes, and every car in 8–9.
   cheap and checked, which is what makes "often" safe; a timetable would add waiting, not safety.
 - **Version policy while 0.x**: minor for anything a user would notice, patch for fixes only.
   The launch train is **0.6.0**.
-- **The train never leaves on a red gate (car 0).** Run 4 is the gate because it is the first
+- **The train never leaves on a red gate (car 0).** Car 0 is run 4 on **two harnesses** — Claude
+  Code and Codex — as traction-plan §5 and §13 require. Run 4 is the gate because it is the first
   minute a stranger has; nothing else in CI exercises a clean machine end to end. (0.3.0 and 0.4.0
   both shipped broken and are untagged — the smoke catches unloadable tarballs; only car 0 catches
   a first minute that does not work.)
@@ -115,7 +118,8 @@ Working back from traction-plan §7's window (Oct 28 – Nov 2; go/no-go Oct 28)
 | Oct 21 | install block unified (§3.3); README by-hand block fixed; `train status` + `train notes` land | car 0 can't judge a path that disagrees with itself |
 | Oct 22 | run 4 on a clean machine against main → findings fixed | the gate |
 | Oct 23 | **0.6.0 train, cars 0–7.** Registry listed; Context7 + DeepWiki submitted | the launch post's links and version |
-| Oct 24–27 | launch post updated to 0.6.0 and ADR 568's install path; the 2-minute recording cut | traction-plan §7 |
+| Oct 24–27 | launch post updated to 0.6.0 and ADR 568's install path (sloane, gated on the tag); the 2-minute recording cut | traction-plan §7 |
+| Oct 27 | **trademark attorney clearance back** (lane `01M0130CYM`, nick) — a post cannot travel with an open UK conflict; domain auto-renew confirmed (`01M0130E00`) | the post travelling |
 | Oct 28 | go/no-go (traction-plan §13) | — |
 | Oct 28–Nov 2 | cars 8–9 | — |
 
@@ -125,23 +129,20 @@ reports 1–3 days for review).
 
 ## 7. Measures
 
-Read weekly into `docs/design/traction-log.tsv` (traction-plan §13 owns the targets; these are the
-train's own diagnostics):
+The launch's targets and passive proxies (npm downloads, stars) live in
+[traction-plan §13](../../design/traction-plan.md) — one fact, one home. The train adds only its
+own two numbers, logged per release:
 
 - **Train health**: days from tag to all-green `train status`. Failing: > 2 days — a car has no owner.
-- **Reach, passive**: npm weekly downloads of `@musterd/cli`; GitHub stars (0 on 10-19); MCP
-  Registry listing present.
-- **Agent discovery** (ADR 666): AI Crawl Control referrals from ChatGPT / Claude / Perplexity —
-  **0 on 10-19** with 761 crawler requests a day, 46 of them successful page reads. Fetches
-  rising with referrals flat means we are read and not cited, which points at off-site mentions,
-  not more metadata.
-- Cloudflare unique-visitor counts are **not** a readership measure — sandrise.io measured ~99.9%
-  crawler traffic in them (ADR 666 §Observability).
+- **Registry listed**: the MCP Registry entry exists at the tagged version.
+
+Agent discovery is read from AI Crawl Control as ADR 666 §Observability sets out (0 AI referrals on
+2026-10-19 against ~760 crawler requests a day).
 
 ## 8. Decisions for nick
 
-- **D1. Adopt the train** — nick likes it (2026-10-19); sloane and alfie review before it becomes
-  an ADR.
+- **D1. Adopt the train** — nick likes it (2026-10-19). sloane reviewed against the traction plan
+  (five fixes, folded in); alfie against the positioning ADRs (registry and package copy, #2926).
 - **D2. Cadence** — **decided (nick, 2026-10-19): no fixed cadence; ship as fast as it makes
   sense** (§4). 0.x minor/patch policy; launch on 0.6.0, cut ~Oct 23.
 - **D3. npm publish stays on your laptop** (ADR 156), *or* move it to GitHub Actions with npm
@@ -156,9 +157,9 @@ train's own diagnostics):
 - **D5. Release notes** as generated-then-edited `docs/releases/vX.md` → GitHub Release body, no
   CHANGELOG.md.
 - **D6. `www.musterd.dev`** — **decided (nick, 2026-10-19): redirect it to musterd.io for now.**
-  It served a stale copy of the site. A 301 Redirect Rule on the musterd.dev zone for `www.` and
-  the bare apex only — never `*.musterd.dev`, where hosted teams live (`<team>.musterd.dev`,
-  `deploy/cloud/fly.toml`). The zone is Cloud's; fifty is told before it changes.
+  It served a stale copy of the site. **Done 2026-10-19**: a 301 Redirect Rule on the musterd.dev
+  zone for `www.` and the bare apex only — never `*.musterd.dev`, where hosted teams live
+  (`<team>.musterd.dev`, `deploy/cloud/fly.toml`); team hosts verified still 200; fifty told.
 
 ## 9. Not in this train, and where it lives instead
 
