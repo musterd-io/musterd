@@ -7,17 +7,19 @@
 # Options:
 #   --org <org>          Fly org (default: personal)
 #   --region <region>    Fly region (default: sjc)
-#   --team <slug>        team slug (default: revive)
-#   --server <url>       hosted team server URL (default: https://musterd.io)
+#   --team <slug>        hosted team slug (default: revive-staging)
+#   --server <url>       hosted team server URL (default: https://<team>.musterd.dev)
 #   --repo <git-url>     workspace repo the seat clones on first boot (required)
 #   --host-label <label> host label the provision is queued for (default: cloud-<seat>)
 #   --key-env <VAR>      env var holding the sponsor's model key (default: ANTHROPIC_API_KEY)
 #   --skip-sponsor       skip the sponsor steps (agent already created, host key in MUSTERD_HOST_KEY)
 #   --dry-run            print every step (secrets redacted), change nothing
 #
-# Sponsor steps run HERE, in a folder bound to the team as the sponsor. The host key is minted,
-# captured into a shell variable, and handed straight to `fly secrets set` — it is never
-# printed. The model key and GH token are read without echo (or taken from the environment
+# Sponsor steps run as the sponsor. From a folder already bound to the team they run there; from
+# anywhere else the script binds a scratch folder to the team itself, as the member whose
+# credential staging-issuer saved in ~/.musterd/cloud/teams/<team>.json (`create-team`), so the
+# whole thing is ONE command. The host key is minted, captured into a shell variable, and handed
+# straight to `fly secrets set` — it is never printed. The model key and GH token are read without echo (or taken from the environment
 # variables named by --key-env / GH_TOKEN when already set).
 set -euo pipefail
 
@@ -25,8 +27,8 @@ SEAT="${1:-}"
 shift || true
 ORG=personal
 REGION=sjc
-TEAM=revive
-SERVER=https://musterd.io
+TEAM=revive-staging
+SERVER=""
 REPO_URL=""
 HOST_LABEL=""
 KEY_ENV=ANTHROPIC_API_KEY
@@ -51,6 +53,7 @@ done
 [ -n "$SEAT" ] || { echo "usage: create.sh <seat> --repo <git-url> [options]" >&2; exit 2; }
 [ -n "$REPO_URL" ] || { echo "--repo <git-url> is required (the seat's workspace clone source)" >&2; exit 2; }
 HOST_LABEL="${HOST_LABEL:-cloud-$SEAT}"
+SERVER="${SERVER:-https://$TEAM.musterd.dev}"   # a hosted team lives at <slug>.musterd.dev (cloud-ops.md)
 APP="musterd-agent-$SEAT"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -65,9 +68,33 @@ done
 
 say "== cloud agent for seat '$SEAT' (app $APP, host $HOST_LABEL, team $TEAM)"
 
-# ── sponsor steps ─────────────────────────────────────────────────────────────────────────────
+# ── sponsor binding ───────────────────────────────────────────────────────────────────────────
+# `musterd` acts as the folder it runs in. Unless this folder is already bound to $TEAM, bind a
+# scratch folder with the team file's saved human credential (passed through the environment,
+# never argv or stdout) and run the sponsor steps from there.
 HOST_KEY="${MUSTERD_HOST_KEY:-}"
 if [ "$SKIP_SPONSOR" = 0 ]; then
+  BOUND="$( (musterd whoami --json 2>/dev/null || true) | jq -r 'select(.source == "binding") | .team // empty')"
+  if [ "$BOUND" != "$TEAM" ]; then
+    TEAM_FILE="$HOME/.musterd/cloud/teams/$TEAM.json"
+    if [ ! -f "$TEAM_FILE" ]; then
+      echo "this folder is bound to '${BOUND:-no team}', not '$TEAM', and $TEAM_FILE is missing." >&2
+      echo "Run from a folder bound to $TEAM as the sponsor, or create the team first" >&2
+      echo "(docs/guides/cloud-ops.md § Create a team on staging), or pass --skip-sponsor." >&2
+      exit 1
+    fi
+    SPONSOR="$(jq -r '.member.name // empty' "$TEAM_FILE")"
+    [ -n "$SPONSOR" ] || { echo "$TEAM_FILE names no member" >&2; exit 1; }
+    WORK="$(mktemp -d "${TMPDIR:-/tmp}/musterd-cloud-agent.XXXXXX")"
+    say "-- sponsor: bind $WORK to $TEAM as $SPONSOR (credential from $TEAM_FILE, never printed)"
+    cd "$WORK"
+    if [ "$DRY_RUN" = 1 ]; then
+      printf '  $ MUSTERD_SERVER=%s MUSTERD_AGENT_KEY=… musterd claim %s --team %s --detach\n' "$SERVER" "$SPONSOR" "$TEAM"
+    else
+      MUSTERD_SERVER="$SERVER" MUSTERD_AGENT_KEY="$(jq -r '.human_credential' "$TEAM_FILE")" \
+        musterd claim "$SPONSOR" --team "$TEAM" --detach
+    fi
+  fi
   say "-- sponsor: create the agent and queue its provision"
   run musterd agent "$SEAT"
   say "-- sponsor: mint the host key for '$HOST_LABEL' (captured, never printed)"

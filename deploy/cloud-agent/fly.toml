@@ -28,6 +28,6 @@ primary_region = "sjc"
 
 [env]
   # Non-secret config only. Per-seat values are set at creation (README) — these are the shape.
-  MUSTERD_SERVER = "https://musterd.io"
-  MUSTERD_TEAM = "revive"
+  MUSTERD_SERVER = "https://revive-staging.musterd.dev"
+  MUSTERD_TEAM = "revive-staging"
   MUSTERD_HOST = "cloud-1"
