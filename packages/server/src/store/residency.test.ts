@@ -9,7 +9,7 @@ import { log } from '../log.js';
 import { readSpendCapBreach, readUnpricedWakeBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
 import { openLane, updateLane } from './lanes.js';
-import { addMember, getMemberByName } from './members.js';
+import { addMember, getMemberByName, setAvailability } from './members.js';
 import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
 import { bindSeatToNode, upsertForeignNode } from './nodes.js';
@@ -2841,6 +2841,57 @@ withDrivers('residency', (o, kind) => {
       ]);
       const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
+    });
+
+    /**
+     * ADR 661 — the mason replay (2026-10-16): the owner goes away, a continuation wakes inside the
+     * away and moves nothing, the away runs out. The lane re-arms at `until`, once.
+     */
+    describe('an away that runs out re-arms a stalled continuation (ADR 661)', () => {
+      async function stalledInAway(until: (wokeTs: number) => number) {
+        const { db, team, ada } = await seed();
+        await setPolicy(db, team.id, { loops: { dispatch: true } });
+        await enroll(db, team, ada, HOST, { flow: 'auto', hourly_cap: 10 });
+        const lane = await openLane(db, team.id, team.slug, ada.name, { title: 'c', claim: true });
+        // Every ts sits outside the cooldown, so only ADR 306 §2 and ADR 661 decide.
+        const wokeTs = Date.now() - WAKE_COOLDOWN_MS - 120_000;
+        await laneTouched(db, lane.id, wokeTs - 1_000);
+        await setAvailability(db, ada.id, { status: 'away', until: until(wokeTs) });
+        await wokeEdge(db, team.id, lane.id, 'dispatch_continuation', wokeTs);
+        // ADR 628: age the owner's own open acts out (see above).
+        await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND target = ? AND actor = ?`, [
+          Date.now() - OWNER_ENGAGEMENT_MS - 60_000,
+          team.id,
+          lane.id,
+          ada.name,
+        ]);
+        const derives = async () =>
+          (await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).some(
+            (o) => o.lane_id === lane.id,
+          );
+        return { db, team, ada, lane, wokeTs, derives };
+      }
+
+      it('derives once the away has run out after the no-op wake', async () => {
+        const { derives } = await stalledInAway((woke) => woke + 30_000);
+        expect(await derives()).toBe(true);
+      });
+
+      it('stays stalled while the away is still running', async () => {
+        const { derives } = await stalledInAway(() => Date.now() + 3_600_000);
+        expect(await derives()).toBe(false);
+      });
+
+      it('re-arms once: a woke after `until` puts the lane back under ADR 306 §2', async () => {
+        const { db, team, lane, wokeTs, derives } = await stalledInAway((woke) => woke + 30_000);
+        await wokeEdge(db, team.id, lane.id, 'dispatch_continuation', wokeTs + 60_000);
+        expect(await derives()).toBe(false);
+      });
+
+      it('an away that ended before the no-op wake does not re-arm', async () => {
+        const { derives } = await stalledInAway((woke) => woke - 1);
+        expect(await derives()).toBe(false);
+      });
     });
 
     /**

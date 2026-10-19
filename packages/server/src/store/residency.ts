@@ -34,6 +34,7 @@ import { type AuditEntry, appendAudit } from './audit.js';
 import { BOARD_SEAT } from './boardSeat.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
+import { memberAvailability } from './doorbell.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { getLane, listLanes } from './lanes.js';
 import { getMemberById, getMemberByName } from './members.js';
@@ -1120,13 +1121,16 @@ async function workOrderEdgeWokeCount(
  * ADR 306: has the lane moved since the last successful wake on this edge? A continuation wake that
  * changed nothing does not buy the next one (ADR 247 — progress is not an outcome; ADR 250 §2 — no
  * heartbeat that burns spend while nothing changed). No prior woke ⇒ nothing to have stalled since,
- * so the first firing is always permitted.
+ * so the first firing is always permitted. ADR 661: the owner's away running out after that woke
+ * counts as movement, once.
  */
 async function laneMovedSinceLastWoke(
   db: Driver,
   teamId: string,
   laneId: string,
   edge: LoopEdge,
+  owner: MemberRow,
+  now: number,
 ): Promise<boolean> {
   const last = await db.get<{ ts: number }>(
     `SELECT ts FROM audit
@@ -1142,7 +1146,13 @@ async function laneMovedSinceLastWoke(
     [teamId, laneId],
   );
   if (!lane) return false;
-  return lane.updated_at > last.ts;
+  if (lane.updated_at > last.ts) return true;
+  // ADR 661: an away that ran out after the last wake is the owner coming back. A wake inside the
+  // away moved nothing because the seat was standing down, so the lane re-arms once, at `until`.
+  // The next woke lands after `until`, and the rule above governs again.
+  const away = memberAvailability(owner);
+  const back = away?.status === 'away' ? (away.until ?? null) : null;
+  return back !== null && back > last.ts && back <= now;
 }
 
 async function workOrderEdgeStillTrue(
@@ -2355,7 +2365,8 @@ async function deriveSeatPasses(
           // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
           // still-true skip: a stalled lane is the normal resting state of a claimed board, not
           // an event worth a row on every poll.
-          if (!(await laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge))) continue;
+          if (!(await laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge, member, now)))
+            continue;
         }
       }
       // ADR 600: never hand a seat an act_id buildWakeContext would refuse. A missing row is the
