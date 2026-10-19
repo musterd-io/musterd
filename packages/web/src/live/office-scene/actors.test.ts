@@ -233,9 +233,8 @@ describe('walk choreography', () => {
     expect(actors.walk('Ada', { kind: 'help', to: 'Cy', urgent: false })).toBe(true); // queued
     actors.step(0.6);
     // Ada steps away (posture idle) — her home moves to the leisure spots.
-    const idle: OfficeNode[] = three.map((n) =>
-      n.name === 'Ada' ? ({ ...n, posture: 'idle', activity: 'active' } as OfficeNode) : n,
-    );
+    const idleAda: OfficeNode = { ...node('Ada'), posture: 'active', activity: 'active' };
+    const idle: OfficeNode[] = three.map((n) => (n.name === 'Ada' ? idleAda : n));
     const moved = world(idle);
     actors.setHomes(moved.placements, moved.byName, true);
     expect(actors.actWalkingFor('Ada')).toBe(true); // the help walk still stands
