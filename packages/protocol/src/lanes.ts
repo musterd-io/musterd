@@ -12,6 +12,9 @@ import {
   READ_NOTE_MAX_CHARS,
   READ_OUTCOMES,
   READ_STATUSES,
+  EVIDENCE_MAX_CHARS,
+  LANE_SAMPLES_SERVED,
+  METRIC_SOURCES,
   LANE_STAKES_PROVENANCE,
   LANE_STATES,
   type EmptyPool,
@@ -68,6 +71,10 @@ export {
   READ_NOTE_MAX_CHARS,
   READ_OUTCOMES,
   READ_STATUSES,
+  EVIDENCE_MAX_CHARS,
+  LANE_SAMPLES_SERVED,
+  METRIC_SOURCES,
+  type MetricSource,
   type ReadOutcome,
   type ReadStatus,
   laneAckAck,
@@ -517,6 +524,13 @@ export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
 export const ReadVerdictInputSchema = z.object({
   outcome: z.enum(READ_OUTCOMES),
   note: z.string().min(1).max(READ_NOTE_MAX_CHARS),
+  /**
+   * ADR 673: the number the read found. Required for `met` / `missed` on a lane with a `metric`
+   * (the transport refuses without it); accepted and shown on any other verdict.
+   */
+  measured: z.object({ value: z.number(), n: z.number().int().min(0) }).optional(),
+  /** ADR 673: a pointer to the readout — a URL, or a repo path / ADR ref. Never followed. */
+  evidence: z.string().min(1).max(EVIDENCE_MAX_CHARS).optional(),
 });
 export type ReadVerdictInput = z.infer<typeof ReadVerdictInputSchema>;
 export const ReadVerdictSchema = ReadVerdictInputSchema.extend({
@@ -524,6 +538,50 @@ export const ReadVerdictSchema = ReadVerdictInputSchema.extend({
   at: z.number().int(),
 });
 export type ReadVerdict = z.infer<typeof ReadVerdictSchema>;
+
+/**
+ * ADR 673: what a dated read measures — a number against a prediction. `direction` says which way
+ * is better. A client sends {@link MetricInputSchema}; the daemon stamps `by` and `at`. The read
+ * side keeps `source` a plain string, so a source a newer daemon knows never breaks a board.
+ */
+export const MetricInputSchema = z.object({
+  name: z.string().min(1).max(80),
+  unit: z.string().min(1).max(24),
+  baseline: z.number().nullable(),
+  target: z.number(),
+  direction: z.enum(['up', 'down']),
+  source: z.enum(METRIC_SOURCES).default('manual'),
+});
+export type MetricInput = z.input<typeof MetricInputSchema>;
+export const LaneMetricSchema = MetricInputSchema.extend({
+  source: z.string().min(1).max(40),
+  by: z.string().min(1).max(80),
+  at: z.number().int(),
+});
+export type LaneMetric = z.infer<typeof LaneMetricSchema>;
+
+/**
+ * ADR 673: one day's number for a metric lane. One per lane per day; a later write for the same
+ * day replaces the earlier one. `n` is how many observations the value summarises.
+ */
+export const SampleInputSchema = z.object({
+  day: CalendarDateSchema,
+  value: z.number(),
+  n: z.number().int().min(0),
+});
+export type SampleInput = z.infer<typeof SampleInputSchema>;
+export const LaneSampleSchema = SampleInputSchema.extend({
+  by: z.string().min(1).max(80),
+  at: z.number().int(),
+});
+export type LaneSample = z.infer<typeof LaneSampleSchema>;
+
+/** `POST /teams/:slug/lanes/:id/samples`: the stored sample, and the value it replaced if any. */
+export const SampleResultSchema = z.object({
+  sample: LaneSampleSchema,
+  replaced: LaneSampleSchema.nullable(),
+});
+export type SampleResult = z.infer<typeof SampleResultSchema>;
 
 /**
  * ADR 561: the issue a lane came from (`acme/app#12`, `ENG-42`) — the key `musterd import` re-sync
@@ -762,6 +820,10 @@ export const LaneSchema = z.object({
   read_verdict: ReadVerdictSchema.nullable().optional(),
   /** Derived by the server on every projection; never stored, never accepted from a client. */
   read_status: z.enum(READ_STATUSES).optional(),
+  /** ADR 673: what this read measures. Absent or null: no metric. Requires `reads_on`. */
+  metric: LaneMetricSchema.nullable().optional(),
+  /** ADR 673: the newest {@link LANE_SAMPLES_SERVED} daily samples, oldest first; only with `metric`. */
+  samples: z.array(LaneSampleSchema).max(LANE_SAMPLES_SERVED).optional(),
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
   abandon_reason: z.string().nullable().optional(),
   /** ADR 561: the issue this lane came from. Absent reads as none (skew posture, like `follows_up`). */
@@ -889,6 +951,8 @@ export const OpenLaneSchema = z.object({
   source_ref: LaneSourceRefSchema.optional(),
   /** ADR 644: the day this lane's read is due. Never inferred from a title or detail. */
   reads_on: CalendarDateSchema.optional(),
+  /** ADR 673: what the read measures. Refused without `reads_on`. */
+  metric: MetricInputSchema.optional(),
   /** Who asked (ADR 629). Omitted leaves the field missing; the lane still opens. */
   requested: OpenRequestedSchema.optional(),
   /** Declared risk tags (ADR 169). Which of them ask a human is {@link humanReviewRequired} (ADR 631). */
@@ -933,6 +997,8 @@ export const UpdateLaneSchema = z.object({
   source_ref: LaneSourceRefSchema.optional(),
   /** ADR 644: set, move or clear (with `null`) the day this lane's read is due. */
   reads_on: CalendarDateSchema.nullable().optional(),
+  /** ADR 673: set, replace or clear (with `null`) what the read measures. Needs `reads_on`. */
+  metric: MetricInputSchema.nullable().optional(),
   /**
    * ADR 644: the read's verdict. The daemon stamps `by` and `at`; a later verdict replaces an
    * earlier one. Rides an update, a submit or a resolve. A lane with `reads_on` and no verdict is
