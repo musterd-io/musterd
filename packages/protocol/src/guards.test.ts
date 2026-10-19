@@ -60,6 +60,8 @@ const corpus: unknown[] = [
         wake_lease: 'lease',
         node: 'n1',
         node_label: 'laptop',
+        hearing: 'deaf',
+        hearing_reason: 'no-messaging-socket',
       },
     ],
   },
@@ -103,6 +105,11 @@ const corpus: unknown[] = [
   { ...row, created_at: 'yesterday' },
   { ...row, availability: { status: 'napping' } },
   { ...row, presences: [{ surface: 'holodeck', status: 'online', last_seen_at: 1 }] },
+  { ...row, presences: [{ surface: 'cli', status: 'online', last_seen_at: 1, hearing: 'asleep' }] },
+  {
+    ...row,
+    presences: [{ surface: 'cli', status: 'online', last_seen_at: 1, hearing_reason: '' }],
+  },
   { ...row, quiescence: { state: 'busy', quiet_for_ms: 'a while', source: 'audit' } },
   {
     ...row,

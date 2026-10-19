@@ -88,6 +88,10 @@ export function formatMember(
   // an unattested seat is one ADR 158 will refuse as an acceptor. Better to see that before routing.
   else if (m.kind === 'agent' && group !== 'out' && p) facets.push('model unattested');
   if (group !== 'out' && p?.surface) facets.push(p.surface);
+  if (group !== 'out' && p?.hearing === 'deaf') {
+    const r = p.hearing_reason?.trim();
+    facets.push(`live · deaf${r ? ` (${r})` : ''}`);
+  }
   if (m.lifecycle === 'session') facets.push('session');
   // `!= null`, not truthiness: an epoch-0 timestamp is falsy and would silently drop the date.
   if (m.lifecycle === 'until' && m.lifecycle_until != null) {

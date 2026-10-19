@@ -6491,6 +6491,7 @@ export async function handleHttp(
               ),
             },
             ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
+            ...(result.deaf_recipient ? { deaf_recipient: result.deaf_recipient } : {}),
           });
         }
         // ADR 202's `lane_verdict` rides the same way (lane 01M2GQFJXG): the sender of an accept
@@ -6511,6 +6512,7 @@ export async function handleHttp(
           // and the note an accepted handoff carried, returned where it was accepted (§6).
           ...(result.dispute ? { dispute: result.dispute } : {}),
           ...(result.accepted_handoff ? { accepted_handoff: result.accepted_handoff } : {}),
+          ...(result.deaf_recipient ? { deaf_recipient: result.deaf_recipient } : {}),
           ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
         });
       }

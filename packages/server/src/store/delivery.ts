@@ -392,14 +392,16 @@ async function interruptRaises(
   db: Driver,
   msg: MessageRow,
   recipientName: string,
-): Promise<number> {
-  const row = await db.get<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM audit
+): Promise<{ total: number; idle: number }> {
+  const row = await db.get<{ total: number; idle: number }>(
+    `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN json_extract(detail, '$.seam') = 'idle' THEN 1 ELSE 0 END), 0) AS idle
+         FROM audit
         WHERE team_id = ? AND action = 'interrupt.raised' AND target = ?
           AND json_extract(detail, '$.act') = ?`,
     [msg.team_id, recipientName, msg.id],
   );
-  return row?.n ?? 0;
+  return { total: row?.total ?? 0, idle: row?.idle ?? 0 };
 }
 
 /** ADR 167 delivery-rail relays confirmed for this act — the exact `interruptRaises` pattern: an
@@ -430,21 +432,28 @@ async function ccdNudges(
  * grouped instead of probed.
  */
 interface AuditTallies {
-  raises: Map<string, number>;
+  raises: Map<string, { total: number; idle: number }>;
   nudges: Map<string, { total: number; verbatim: number }>;
 }
 
 const raiseKey = (recipientName: string, actId: string): string => `${recipientName}\0${actId}`;
 
 async function auditTallies(db: Driver, teamId: string): Promise<AuditTallies> {
-  const raises = new Map<string, number>();
-  for (const r of await db.all<{ target: string; act: string | null; n: number }>(
-    `SELECT target, json_extract(detail, '$.act') AS act, COUNT(*) AS n FROM audit
+  const raises = new Map<string, { total: number; idle: number }>();
+  for (const r of await db.all<{ target: string; act: string | null; total: number; idle: number }>(
+    `SELECT target, json_extract(detail, '$.act') AS act, COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN json_extract(detail, '$.seam') = 'idle' THEN 1 ELSE 0 END), 0) AS idle
+         FROM audit
         WHERE team_id = ? AND action = 'interrupt.raised'
         GROUP BY target, json_extract(detail, '$.act')`,
     [teamId],
   )) {
-    if (r.act !== null) raises.set(raiseKey(r.target, String(r.act)), Number(r.n));
+    if (r.act !== null) {
+      raises.set(raiseKey(r.target, String(r.act)), {
+        total: Number(r.total),
+        idle: Number(r.idle),
+      });
+    }
   }
   const nudges = new Map<string, { total: number; verbatim: number }>();
   for (const r of await db.all<{ ref: string | null; total: number; verbatim: number }>(
@@ -487,6 +496,9 @@ async function recipientLedger(
     (cursor.last_read_ts === msg.created_at &&
       cursor.last_read_message_id !== null &&
       cursor.last_read_message_id >= msg.id);
+  const raises = tallies
+    ? (tallies.raises.get(raiseKey(recipient.name, msg.id)) ?? { total: 0, idle: 0 })
+    : await interruptRaises(db, msg, recipient.name);
   const nudges = tallies
     ? (tallies.nudges.get(msg.id) ?? { total: 0, verbatim: 0 })
     : await ccdNudges(db, msg);
@@ -498,9 +510,8 @@ async function recipientLedger(
     // ADR 652: the row the cursor sits on, shared by every act this position passed.
     cursor_on: seen ? cursor.last_read_message_id : null,
     answered,
-    interrupt_raises: tallies
-      ? (tallies.raises.get(raiseKey(recipient.name, msg.id)) ?? 0)
-      : await interruptRaises(db, msg, recipient.name),
+    interrupt_raises: raises.total,
+    ...(raises.idle > 0 ? { idle_raises: raises.idle } : {}),
     ccd_nudges: nudges.total,
     ccd_nudges_verbatim: nudges.verbatim,
   };

@@ -37,6 +37,9 @@ export interface PresenceSummary {
     /** The machine this row lives on (presence replication, 2026-09-02); null = this daemon. */
     node: string | null;
     node_label: string | null;
+    /** ADR 558 §5 (increment 5): this live occupancy's latest attested hearing (`idle` | `deaf`). */
+    hearing: 'idle' | 'deaf' | null;
+    hearing_reason: string | null;
   }[];
 }
 
@@ -732,6 +735,7 @@ export async function listPresence(
     if (list) list.push(p);
     else byMember.set(p.member_id, [p]);
   }
+  const hearingByMember = await latestHearingByMember(db, teamId, members, byMember);
   return members.map((member) => {
     const presences = byMember.get(member.id) ?? [];
     const status: PresenceStatus =
@@ -740,10 +744,11 @@ export async function listPresence(
         : presences.some((p) => p.status === 'online')
           ? 'online'
           : 'away';
+    const hearing = hearingByMember.get(member.id) ?? null;
     return {
       member,
       status,
-      presences: presences.map((p) => ({
+      presences: presences.map((p, idx) => ({
         surface: p.surface as Surface,
         status: p.status,
         last_seen_at: p.last_seen_at,
@@ -771,9 +776,90 @@ export async function listPresence(
         attached_at: p.created_at,
         node: p.node ?? null,
         node_label: p.node_label ?? null,
+        hearing: idx === 0 && hearing ? hearing.hearing : null,
+        hearing_reason: idx === 0 && hearing ? hearing.reason : null,
       })),
     };
   });
+}
+
+/**
+ * ADR 558 §5 (increment 5): the latest `presence.hearing` row for each live agent's current
+ * occupancy (at or after `presence.created_at`, or matching `detail.occupancy`). One query for the
+ * team's live agents; absent for a session that never attested hearing (an older adapter, or a
+ * CLI-only presence).
+ */
+export async function latestHearingByMember(
+  db: Driver,
+  teamId: string,
+  members: readonly MemberRow[],
+  byMember: ReadonlyMap<string, readonly { id: string; created_at: number }[]>,
+): Promise<Map<string, { hearing: 'idle' | 'deaf'; reason: string | null }>> {
+  const out = new Map<string, { hearing: 'idle' | 'deaf'; reason: string | null }>();
+  const liveAgents = members.filter(
+    (m) => m.kind === 'agent' && (byMember.get(m.id)?.length ?? 0) > 0,
+  );
+  if (liveAgents.length === 0) return out;
+  const minCreated = Math.min(...liveAgents.map((m) => byMember.get(m.id)![0]!.created_at));
+  const rows = await db.all<{ target: string | null; detail: string | null; ts: number }>(
+    `SELECT target, detail, ts FROM audit
+      WHERE team_id = ? AND action = 'presence.hearing' AND ts >= ?
+      ORDER BY ts ASC, id ASC`,
+    [teamId, minCreated],
+  );
+  const byName = new Map(liveAgents.map((m) => [m.name, m]));
+  for (const r of rows) {
+    if (!r.target || !r.detail) continue;
+    const member = byName.get(r.target);
+    if (!member) continue;
+    const newest = byMember.get(member.id)?.[0];
+    if (!newest || r.ts < newest.created_at) continue;
+    try {
+      const parsed = JSON.parse(r.detail) as {
+        occupancy?: unknown;
+        hearing?: unknown;
+        reason?: unknown;
+      };
+      if (typeof parsed.occupancy === 'string' && parsed.occupancy !== newest.id) continue;
+      if (parsed.hearing !== 'idle' && parsed.hearing !== 'deaf') continue;
+      out.set(member.id, {
+        hearing: parsed.hearing,
+        reason:
+          parsed.hearing === 'deaf' && typeof parsed.reason === 'string' && parsed.reason
+            ? parsed.reason.slice(0, 80)
+            : null,
+      });
+    } catch {
+      // ignore unparseable audit detail
+    }
+  }
+  return out;
+}
+
+/**
+ * ADR 558 §5 (increment 5): is this member currently live and deaf? Returns the deaf reason (or
+ * null when deaf with no reason), or undefined when the member is offline, hearing (`idle`), or
+ * has never attested hearing.
+ */
+export async function liveDeafReason(
+  db: Driver,
+  teamId: string,
+  member: MemberRow,
+  timeoutMs: number,
+): Promise<{ deaf: true; reason: string | null } | null> {
+  if (member.kind !== 'agent') return null;
+  const [l, r] = liveCutoffs(timeoutMs);
+  const newest = await db.get<{ id: string; created_at: number }>(
+    `SELECT p.id AS id, p.created_at AS created_at
+       FROM presence p LEFT JOIN nodes n ON n.id = p.node
+      WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL}
+      ORDER BY p.last_seen_at DESC LIMIT 1`,
+    [member.id, l, r],
+  );
+  if (!newest) return null;
+  const map = await latestHearingByMember(db, teamId, [member], new Map([[member.id, [newest]]]));
+  const h = map.get(member.id);
+  return h?.hearing === 'deaf' ? { deaf: true, reason: h.reason } : null;
 }
 
 /**

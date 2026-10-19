@@ -187,6 +187,14 @@ report never fakes liveness.
   per hour per session.
 - `hearing` lives only in the audit log for now. The roster, the two pickers, and the `team_send`
   reply that tells a sender its recipient is live but deaf are increment 5.
+  _(2026-10-19, lane `01M4M6QP2JB8SPPHG3RKFFYW9P`: increment 5 shipped. `listPresence` projects each
+  live agent's latest `presence.hearing` row onto `presences[0].hearing` / `hearing_reason`, so
+  `/live`, `musterd status`, and `team_status` render `live · deaf` with its reason; the acceptance
+  picker's equal-grade tie-break (`tie_decided_by: 'hearing'`) and the eligible-set ordering in
+  `routeEnvelope` prefer hearing seats ahead of deaf ones; a directed send to a live-but-deaf
+  recipient returns `deaf_recipient` on the ack so `team_send` and `musterd send` say it "lands at
+  its next tool call or prompt"; and `musterd report delivery` shows `idle_raises` beside
+  `interrupt_raises`.)_
 - The spec and plan were corrected while planning. The spec's `rail=idle` is now `seam=idle`. The
   spec's `.musterd/session/` file is now `.musterd/idle-wake.json`, with the socket read from the
   environment. The socket's wire format is not in Claude Code's public docs; it was read from the

@@ -161,8 +161,26 @@ describe('RosterPanel — a woken seat says so', () => {
     expect(render([wokenSeatRow('session')])).not.toContain('woken');
   });
 
-  it('stays quiet when the row never said — absence is not an assertion', () => {
+  it(' stays quiet when the row never said — absence is not an assertion', () => {
     expect(render([wokenSeatRow(null)])).not.toContain('woken');
+  });
+});
+
+describe('RosterPanel — a live deaf seat says so (ADR 558 §5)', () => {
+  it('renders the `live · deaf` chip with its reason when hearing is deaf', () => {
+    const html = render([
+      seat({
+        presences: [presence({ hearing: 'deaf', hearing_reason: 'no-inject:cursor' })],
+      }),
+    ]);
+    expect(html).toContain('live · deaf (no-inject:cursor)');
+  });
+
+  it('stays quiet when hearing is idle or absent', () => {
+    expect(render([seat({ presences: [presence({ hearing: 'idle' })] })])).not.toContain(
+      'live · deaf',
+    );
+    expect(render([seat({ presences: [presence()] })])).not.toContain('live · deaf');
   });
 });
 

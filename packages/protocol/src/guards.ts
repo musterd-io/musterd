@@ -26,12 +26,14 @@
  */
 import {
   ACTIVITIES_ON_WIRE,
+  HEARINGS,
   MEMBER_KINDS,
   PRESENCE_STATUSES,
   PROVENANCES,
   SURFACES,
   normalizeActivity,
   type Activity,
+  type Hearing,
   type Lifecycle,
   type MemberKind,
   type PresenceStatus,
@@ -227,6 +229,18 @@ function readPresence(v: unknown): Presence | typeof FAIL {
   const wake_lease = nullishString(v['wake_lease']);
   const node = nullishString(v['node']);
   const node_label = nullishString(v['node_label']);
+  const hearing =
+    v['hearing'] === undefined || v['hearing'] === null
+      ? (v['hearing'] as null | undefined)
+      : (oneOf(HEARINGS, v['hearing']) ?? FAIL);
+  const hearing_reason =
+    v['hearing_reason'] === undefined || v['hearing_reason'] === null
+      ? (v['hearing_reason'] as null | undefined)
+      : typeof v['hearing_reason'] === 'string' &&
+          v['hearing_reason'].length >= 1 &&
+          v['hearing_reason'].length <= 80
+        ? v['hearing_reason']
+        : FAIL;
   if (
     failed(provenance) ||
     failed(workspace) ||
@@ -236,7 +250,9 @@ function readPresence(v: unknown): Presence | typeof FAIL {
     failed(epoch) ||
     failed(wake_lease) ||
     failed(node) ||
-    failed(node_label)
+    failed(node_label) ||
+    failed(hearing) ||
+    failed(hearing_reason)
   ) {
     return FAIL;
   }
@@ -254,6 +270,8 @@ function readPresence(v: unknown): Presence | typeof FAIL {
     wake_lease,
     node,
     node_label,
+    hearing: hearing as Hearing | null | undefined,
+    hearing_reason,
   });
 }
 

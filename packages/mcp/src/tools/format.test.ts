@@ -71,6 +71,20 @@ describe('formatRoster (the agent-facing roster)', () => {
     expect(formatRoster([out])).toContain('ryder (agent · wakeable)');
   });
 
+  it('marks a live deaf seat `live · deaf` with its reason (ADR 558 §5)', () => {
+    const deaf: MemberSummary = {
+      ...working,
+      presences: [
+        {
+          ...working.presences[0]!,
+          hearing: 'deaf',
+          hearing_reason: 'no-inject:cursor',
+        },
+      ],
+    };
+    expect(formatRoster([deaf])).toContain('live · deaf (no-inject:cursor)');
+  });
+
   it('clips a long status in the overview, but never in the detail view', () => {
     const long = { ...working, state: 'x'.repeat(400) };
     // the roster is an overview — twenty working members must not bury the reader

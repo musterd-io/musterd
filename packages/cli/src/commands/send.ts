@@ -9,6 +9,7 @@ import {
   type BlockedBy,
   type Envelope,
   acceptedHandoffAck,
+  deafRecipientNotice,
   disputeAnswerAck,
   laneAckAck,
   laneEscalationAck,
@@ -260,6 +261,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
       ...(ackBody?.lane_superseded ? { lane_superseded: ackBody.lane_superseded } : {}),
+      ...(ackBody?.deaf_recipient ? { deaf_recipient: ackBody.deaf_recipient } : {}),
       ...(ackBody?.evidence_notice ? { evidence_notice: ackBody.evidence_notice } : {}),
       ...(threadHint ? { thread_hint: threadHint } : {}),
     };
@@ -276,6 +278,12 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   }
   process.stdout.write(renderMessageRow(envelope, kindOf) + '\n');
   process.stdout.write(`${theme.ok('✓')} sent\n`);
+  if (ackBody?.deaf_recipient)
+    process.stdout.write(
+      theme.dim(
+        deafRecipientNotice(ackBody.deaf_recipient.recipient, ackBody.deaf_recipient.reason),
+      ) + '\n',
+    );
   if (askTier)
     process.stdout.write(
       theme.dim(askContractText(envelope.id, askTier, ackBody?.ask_contract?.unblocker_reachable)) +

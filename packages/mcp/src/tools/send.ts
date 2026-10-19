@@ -13,6 +13,7 @@ import {
   ELIGIBLE_ACTS,
   eligibleSetRefusal,
   acceptedHandoffAck,
+  deafRecipientNotice,
   disputeAnswerAck,
   laneAckAck,
   laneEscalationAck,
@@ -384,6 +385,11 @@ export function registerSend(
         // ADR 484: the challenge-evidence rail's one line — sender-only, never stored on the act.
         const evidenceNotice = ackBody?.evidence_notice;
         const evidenceGuidance = evidenceNotice ? ` ⚠ ${evidenceNotice}` : '';
+        // ADR 558 §5 (increment 5): when a directed recipient is live and deaf, say so on the spot.
+        const deafRecipient = ackBody?.deaf_recipient;
+        const deafGuidance = deafRecipient
+          ? ` (${deafRecipientNotice(deafRecipient.recipient, deafRecipient.reason)})`
+          : '';
         // Lane 01M3TB3C0D: a root `message` to a member with an open directed act waiting on this
         // seat — say which thread it should have joined. One inbox read, after the send, advisory.
         const threadHint =
@@ -403,6 +409,7 @@ export function registerSend(
           (askGuidance
             ? `sent ask to ${toLabel} (id=${envelope.id}). ${askGuidance}`
             : `sent ${args.act} to ${toLabel} (id=${envelope.id})`) +
+          deafGuidance +
           handoffGuidance +
           verdictGuidance +
           claimsGuidance +
@@ -433,6 +440,7 @@ export function registerSend(
             ...(laneAck ? { lane_ack: laneAck } : {}),
             ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
             ...(laneAdvisory ? { lane_advisory: laneAdvisory } : {}),
+            ...(deafRecipient ? { deaf_recipient: deafRecipient } : {}),
             ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
             ...(threadHint ? { thread_hint: threadHint } : {}),
           },
