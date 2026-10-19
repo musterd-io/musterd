@@ -98,6 +98,7 @@ import {
   enqueueSpeech,
   shapeSpeech,
   bubbleShiftOffBoard,
+  bubbleShiftIntoView,
   speechHoldMs,
   speechLength,
   speechTokens,
@@ -149,6 +150,8 @@ const SPEECH_OUT_MS = 560;
 
 /** How far above the head anchor the bubble sits (clears the name label). */
 const SPEECH_LIFT = 26;
+/** The bubble's widest (`.lc-speech__inner` max-width in Live.css); below it no edge check is needed. */
+const SPEECH_MAX_W = 260;
 /** After a real act, keep the loop alive this long so the Rive character settles into idle rather than
  * freezing mid-gesture (ADR 086 #5 afterglow) — a brief, bounded post-act tail, not a continuous loop. */
 const AFTERGLOW_MS = 2600;
@@ -262,6 +265,8 @@ function pstNowHours(): number {
 interface Speech {
   outer: HTMLDivElement;
   cancels: Array<() => void>;
+  /** The bubble's width with its whole glance shown, measured once before the typewriter empties it. */
+  w: number;
 }
 
 /** An act waiting for the speaker's current bubble to finish. Stored as the ARGUMENTS, not as a
@@ -1449,15 +1454,30 @@ export function mountOffice(
   }
 
   // ── ephemeral speech: an act's body types out over the sender's head, then fades ───────────────────
-  function positionSpeech(outer: HTMLDivElement, head: Pt, board?: { x: number; y: number; w: number; h: number }) {
+  function positionSpeech(
+    outer: HTMLDivElement,
+    head: Pt,
+    board: { x: number; y: number; w: number; h: number } | undefined,
+    fullW: number,
+  ) {
     // A bubble follows its speaker, and a speaker at the wall board puts it across the board face for
     // the whole landing — hiding the card, its sway and the flourish. While it would cover the board it
     // slides sideways to clear it (whole and readable — hiding it lost the sentence), and eases back
     // as the speaker walks off. Measured only when the head is near the board's span, so the common
     // frame pays a comparison, not a layout read.
-    const dx = board
+    let dx = board
       ? bubbleShiftOffBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board)
       : 0;
+    // And it stays inside the scene: a speaker by a side wall would otherwise carry half the sentence
+    // past the edge (lane 01M5977YVQ). Checked only near an edge — a bubble is at most SPEECH_MAX_W wide.
+    const cx = head.x + dx;
+    const inView =
+      cx < SPEECH_MAX_W / 2 + 8 || cx > width - SPEECH_MAX_W / 2 - 8
+        ? bubbleShiftIntoView(cx, fullW, width)
+        : 0;
+    dx += inView;
+    // The tail stays over the speaker for the edge slide (the board's slide moves the whole bubble aside).
+    outer.style.setProperty('--lc-speech-tail', `${inView}px`);
     outer.style.transform = `translate(-50%, -100%) translate(${head.x + dx}px, ${head.y - SPEECH_LIFT}px)`;
   }
 
@@ -1466,7 +1486,7 @@ export function mountOffice(
     const board = speeches.size ? boardAnchor(fit) : undefined;
     for (const [name, s] of speeches) {
       const head = headMap.get(name);
-      if (head) positionSpeech(s.outer, head, board);
+      if (head) positionSpeech(s.outer, head, board, s.w);
     }
   }
 
@@ -1688,9 +1708,12 @@ export function mountOffice(
     outer.appendChild(inner);
     labelHost.appendChild(outer);
 
-    const s: Speech = { outer, cancels: [] };
+    // Measured with the whole glance in it: the typewriter starts it empty, so a width read now would
+    // place a bubble that grows past the scene's edge (lane 01M5977YVQ). The reveal below rebuilds it.
+    buildTokens(glanceTokens, true);
+    const s: Speech = { outer, cancels: [], w: outer.offsetWidth };
     speeches.set(who, s);
-    positionSpeech(outer, head);
+    positionSpeech(outer, head, undefined, s.w);
 
     // ── the light-trace ───────────────────────────────────────────────────────────────────────
     // A soft arc from the bubble toward the recipient's desk, drawn once and fading as the bubble

@@ -1406,6 +1406,17 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-18 — `totalJsGzipBytes` 328,300 → 328,600 B: a speech bubble stays inside the scene (lane `01M5977YVQ`)
+
+| Budget   | main `96413b91` (local) | This PR (local) | With #2879 stacked (local) | Ceiling                    |
+| -------- | ----------------------- | --------------- | -------------------------- | -------------------------- |
+| total JS | 327,890 B               | 328,063 B       | ~328,070 B                 | RAISED 328,300 → 328,600 B |
+| live CSS | 24,288 B                | 24,313 B        | ~24,353 B                  | 24,600 B (#2879's raise)   |
+
+JS about +170 B (local builds vary by ~50 B): a bubble is measured once at its full width before the typewriter empties it, and slides in from a side wall instead of carrying half its sentence past the edge (the phone band's welcome opened at "e to the musterd office"). CSS +25 B: the tail stays over the speaker. The CSS fits the 24,600 B that #2879 set, which landed first. Main already sat within the CI gap of both ceilings. JS is local plus the ~450 B CI gap; CSS is measured plus about 210 B.
+
+- Falsify: `pnpm perf:check` in CI on main after this lands reports total JS at or under 328,300 B.
+
 ### 2026-10-18 — `liveCssGzipBytes` 24,500 → 24,600 B: the phone topbar wraps, the team column scrolls as one (lane `01M596F88W`)
 
 | Budget   | main `96413b91` (local) | This PR (local) | Ceiling                  |

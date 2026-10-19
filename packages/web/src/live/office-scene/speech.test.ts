@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bubbleCoversBoard,
+  bubbleShiftIntoView,
   bubbleShiftOffBoard,
   enqueueSpeech,
   speechHoldMs,
@@ -508,5 +509,28 @@ describe('bubbleShiftOffBoard — slide it clear, never hide it (lane 01M4VMFE3A
       last = dx;
     }
     expect(last).toBeLessThan(0);
+  });
+});
+
+describe('bubbleShiftIntoView — a bubble by a side wall stays inside the scene (lane 01M5977YVQ)', () => {
+  const VIEW = 390;
+  it('leaves a bubble that already fits where it is', () => {
+    expect(bubbleShiftIntoView(195, 200, VIEW)).toBe(0);
+  });
+  it('slides one past the left edge in to the margin', () => {
+    // The phone band's receptionist: centred at 60 a 205px bubble starts at -42.5.
+    const dx = bubbleShiftIntoView(60, 205, VIEW);
+    expect(60 + dx - 205 / 2).toBe(8);
+  });
+  it('slides one past the right edge in to the margin', () => {
+    const dx = bubbleShiftIntoView(370, 160, VIEW);
+    expect(370 + dx + 160 / 2).toBe(VIEW - 8);
+  });
+  it('centres one wider than the scene, so both ends lose the same', () => {
+    expect(100 + bubbleShiftIntoView(100, 400, VIEW)).toBe(VIEW / 2);
+  });
+  it('does nothing before the scene or the bubble has a size', () => {
+    expect(bubbleShiftIntoView(10, 200, 0)).toBe(0);
+    expect(bubbleShiftIntoView(10, 0, VIEW)).toBe(0);
   });
 });

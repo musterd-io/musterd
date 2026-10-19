@@ -427,3 +427,20 @@ export function bubbleShiftOffBoard(
   // the room (which lies to the board's left), so the bubble eases out sideways instead of flipping sides.
   return head.x <= board.x + board.w ? Math.min(0, toLeft) : Math.max(0, toRight);
 }
+
+/**
+ * How far to slide a bubble sideways so it stays inside the scene (lane 01M5977YVQ). A bubble is centred on
+ * its speaker, so a speaker near a side wall pushes half of it past the edge — on a phone's office band the
+ * receptionist's welcome opened at "e to the musterd office". It slides in to `margin` from the edge it
+ * crosses; one wider than the scene is centred, so both of its ends lose the same and the middle reads.
+ * `centerX` is where it would sit after any other shift (the board's), so the two compose.
+ */
+export function bubbleShiftIntoView(centerX: number, w: number, viewW: number, margin = 8): number {
+  if (!(viewW > 0) || !(w > 0)) return 0;
+  if (w + 2 * margin >= viewW) return viewW / 2 - centerX;
+  const left = centerX - w / 2;
+  if (left < margin) return margin - left;
+  const right = centerX + w / 2;
+  if (right > viewW - margin) return viewW - margin - right;
+  return 0;
+}
