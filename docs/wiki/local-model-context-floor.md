@@ -56,6 +56,55 @@ The spec's original "start at 8k, raise on length failure" would have failed eve
 length before testing anything. It is amended to start at the measured floor (spec §4.1, amended
 2026-10-19).
 
+## The gauntlet slate (read 2026-10-19, stanley)
+
+Context memory per token at an f16 cache is 2 (K and V) × full-attention layers × KV heads × head
+dim × 2 bytes, read from each model's `config.json` on Hugging Face. Download sizes are the Ollama
+tag sizes on ollama.com. Both were read on 2026-10-19; the 16k and 32k columns are arithmetic, not
+measurements.
+
+| Ollama tag | Download | Architecture (config.json) | KV / token | at 16k | at 32k |
+| --- | --- | --- | --- | --- | --- |
+| `qwen3:4b` | ~2.5 GB | dense, 36 layers × 8 KV × 128 | 147,456 B | 2.25 GiB | 4.5 GiB |
+| `qwen3.5:4b` | 3.3–4.0 GB | hybrid: 8 of 32 layers full attention (4 KV × 256), 24 Gated DeltaNet | 32,768 B | 0.5 GiB | 1.0 GiB |
+| `granite4.2:3b` | 2.2 GB | dense, 40 layers × 8 KV × 64 | 81,920 B | 1.25 GiB | 2.5 GiB |
+| `granite4.2:8b` | 5.3 GB | dense, 40 layers × 8 KV × 128 | 163,840 B | 2.5 GiB | 5.0 GiB |
+
+`qwen3.5:4b`'s 24 Gated DeltaNet layers also hold a fixed recurrent state that does not grow with
+the context. By my estimate from the config (32 value heads × 128 × 128 at f16 per layer) it is
+about 24 MiB, unmeasured.
+
+The recommended slate for Air 2:
+
+1. **`qwen3:4b`**, the baseline: the one model with a prior reading (finding 003's four guardrail
+   probes passed on it in July).
+2. **`qwen3.5:4b`**: the newest small Qwen, with tools and thinking. Its hybrid attention makes a
+   16k context cost a quarter of what `qwen3:4b`'s does, which matters most on 8 GB. One aggregator
+   reports BFCL v4 ≈ 50 for it and ≈ 66 for the 9B, unverified against the official leaderboard.
+   It ships a vision encoder (24 layers) the seat does not use.
+3. **`granite4.2:3b`**: the smallest download, with tools and thinking, and a family no seat on the
+   team runs, so its reviews would count as cross-family. BFCL v4 ≈ 52 is reported by one secondary
+   source. Granite 4.0 was a hybrid Mamba-2 design; 4.1 and 4.2 went back to dense attention, which
+   the config confirms (no `layer_types`).
+
+Judged out on 8 GB beside five seats:
+
+- `granite4.2:8b`, the spec's one larger trial: 5.3 GB of weights plus 2.5 GiB of context at 16k.
+  - does not fit Air 2 at 16k (2026-10-19; falsify: a run with a q8 cache holding memory pressure at normal for a whole gauntlet step on an 8 GB host) <!-- claim: other -->
+- `gemma4:e4b` (6.6–9.5 GB) and `gemma4:e2b` (4.6–7.5 GB): "E" means effective parameters, and the
+  downloads are larger than the names suggest. Both have native tool calling and would be good
+  candidates on a 16 GB machine.
+- `qwen3.5:9b` (6.6 GB) and `lfm2.5:8b` (5.2 GB): too big for 8 GB.
+
+Sources: [ollama.com/library/qwen3.5](https://ollama.com/library/qwen3.5),
+[ollama.com/library/granite4.2](https://ollama.com/library/granite4.2),
+[ollama.com/library/gemma4](https://ollama.com/library/gemma4),
+[ollama.com/library/lfm2.5](https://ollama.com/library/lfm2.5),
+the `config.json` of `Qwen/Qwen3-4B`, `Qwen/Qwen3.5-4B`, `ibm-granite/granite-4.2-3b` and
+`ibm-granite/granite-4.2-8b` on Hugging Face, and the BFCL v4 aggregations at
+[d-central.tech](https://d-central.tech/local-llm-agent-capability/) and
+[benchlm.ai](https://benchlm.ai/benchmarks/bfcl-v4).
+
 ## Candidates deferred
 
 - **NVIDIA Nemotron Labs Dory 1.0 4B**, deferred 2026-10-19. A looped 4B coding model, released
