@@ -317,6 +317,11 @@ teammate's session. Consequences worth internalising:
   log. Build-sync (`live/buildSync.ts`) moves the tab onto the new build: it polls `build.json` and
   checks again when the tab comes back into view. If a chunk still fails to load (`vite:preloadError`),
   the page reloads once per build, and does not loop.
+- **A nameplate's stock is its owner's hue** (lane 01M5AVZA7C, 2026-10-19): `.lc-gl-label__plate` is
+  the member colour at 22% into near-white with the hue drawn firmly on the rim, opaque. The paper-2
+  stock it replaces sat one step from the mustard floor and nick read the plates as blending in; the
+  tint lifts them by lightness (never darkness, his standing line) and keeps the recede ranking under
+  the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
 - **The desk moves from the seat's pulse, not its posture** (ADR 660, lane 01M5AJ9T16). The daemon
   sends one `seat_pulse` per seat at most every ~5 s — distinct harness tool calls in the last minute
   and the latest call's kind — and nothing while a seat is idle. `live/pulse.ts` decides liveness from
