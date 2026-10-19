@@ -15,6 +15,7 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
+import { OPENCODE_HOSTED_UPSTREAMS } from '../gateway.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { addUsage } from './codex.js';
@@ -34,6 +35,26 @@ export function buildOpencodeFreshArgs(line: string): string[] {
 /** Exact captured session only; opencode exits(1) up front when the id does not exist. */
 export function buildOpencodeResumeArgs(line: string, sessionId: string): string[] {
   return ['run', '--format', 'json', '--session', sessionId, line];
+}
+
+/**
+ * ADR 583 note (2026-10-19): a metered wake runs `--standalone`. Plain `opencode run` hands the
+ * prompt to the user's background `opencode serve`, whose provider config the wake cannot touch;
+ * a private server reads the wake's own environment, and so the override below. Resume by
+ * `--session` works the same from a private server (sessions live in OpenCode's shared store).
+ */
+export function opencodeStandaloneArgs(args: string[]): string[] {
+  return args[0] === 'run' ? ['run', '--standalone', ...args.slice(1)] : args;
+}
+
+/** The wake-scoped provider override: OpenCode's hosted providers point at the gateway, and
+ *  nothing else changes. OpenCode merges `OPENCODE_CONFIG_CONTENT` over the seat's own config,
+ *  so the seat's opencode.json is never edited. */
+export function opencodeGatewayConfig(origin: string): string {
+  const provider: Record<string, { options: { baseURL: string } }> = {};
+  for (const u of OPENCODE_HOSTED_UPSTREAMS)
+    provider[u.name] = { options: { baseURL: `${origin}/${u.name}` } };
+  return JSON.stringify({ provider });
 }
 
 /** Every `--format json` event line carries the acting session's id at top level (upstream
@@ -238,11 +259,19 @@ async function attempt(
   local: LocalServing | null,
 ): Promise<Attempt> {
   const startedAt = Date.now();
+  // A local model is no provider call to meter (ADR 663); everything else on a gateway wake runs
+  // on a private server that reads the override.
+  const origin = local === null ? spec.gateway?.origin : undefined;
+  const runArgs = origin !== undefined ? opencodeStandaloneArgs(args) : args;
+  const gatewayEnv =
+    origin !== undefined
+      ? { ...spec.gateway?.env, OPENCODE_CONFIG_CONTENT: opencodeGatewayConfig(origin) }
+      : spec.gateway?.env;
   let child: ChildProcess;
   try {
-    child = (deps.spawn ?? nodeSpawn)(bin, args, {
+    child = (deps.spawn ?? nodeSpawn)(bin, runArgs, {
       cwd: spec.workspace,
-      env: opencodeWakeEnv(process.env, spec.order.lease_id, pinnedDir, spec.gateway?.env),
+      env: opencodeWakeEnv(process.env, spec.order.lease_id, pinnedDir, gatewayEnv),
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -257,7 +286,9 @@ async function attempt(
   // ADR 546: the lease file, so `musterd <seat>` finds this wake; rewritten when the session id
   // is learned from stdout (a resumed run knows it already). ADR 613: the pid that reaches the
   // adapter is the serve daemon's — the adapter is serve's child, never the run's.
-  const servePid = child.pid !== undefined ? await opencodeServePid(deps) : undefined;
+  // A standalone run's adapter descends from the run itself, not from the background serve.
+  const servePid =
+    child.pid !== undefined && origin === undefined ? await opencodeServePid(deps) : undefined;
   const lease =
     child.pid !== undefined
       ? holdWakeLease(

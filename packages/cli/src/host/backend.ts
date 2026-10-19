@@ -37,8 +37,9 @@ export interface WakeSpec {
   bounds: WakeBounds;
   /** ADR 583: the per-wake metering gateway's base-URL variables, to be placed in the spawned
    *  harness's environment last (after the backend's own allowlist). Absent when the loop runs
-   *  without a gateway (tests, `--no-gateway`). */
-  gateway?: { env: Record<string, string> };
+   *  without a gateway (tests, `--no-gateway`). `origin` is the gateway's own address, for a
+   *  harness that takes base URLs only from a config file (OpenCode). */
+  gateway?: { env: Record<string, string>; origin?: string };
   /** ADR 588 §1: the name of the environment variable holding a resident seat's API key, from
    *  the host registry. The native backend reads the key at spawn and never logs it; absent means
    *  the engine's ambient credential resolution applies. */
