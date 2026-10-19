@@ -1,0 +1,30 @@
+{
+  "name": "@musterd/allowance",
+  "version": "0.1.0",
+  "description": "A local page of what is left on the provider accounts on this machine.",
+  "license": "MIT",
+  "homepage": "https://musterd.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/musterd-io/musterd.git",
+    "directory": "packages/allowance"
+  },
+  "bugs": "https://github.com/musterd-io/musterd/issues",
+  "keywords": ["musterd", "allowance", "usage"],
+  "type": "module",
+  "main": "./dist/bin.js",
+  "bin": {
+    "allowance": "./dist/bin.js"
+  },
+  "files": ["dist", "assets"],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ../../scripts/stamp-build.mjs",
+    "test": "vitest run"
+  }
+}
