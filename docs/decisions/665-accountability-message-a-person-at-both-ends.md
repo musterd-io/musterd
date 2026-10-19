@@ -82,19 +82,21 @@ message may go while the record holds a person at one end of the work and a sign
 The supporting message under the tagline, on every surface that argues the case (deck, Q&A,
 investor notes, the site's record section), is:
 
-> **Every piece of work your agents do has a person at both ends.** Someone asked for it and
-> someone signed it off, and when something goes wrong you reconstruct what happened in one read.
+> **Nothing your agents do counts as done until another member checks it.** The record shows who
+> did it, who checked it, and which model.
 
-Its "before", shown as a scene and never as a contrast sentence (brand.md §4): nearly half (45%)
-of 204 security leaders had already had an agent incident where nobody could say who was
-accountable, and only half (49%) could fully reconstruct what an agent had done in the last month.
-The sponsor and date go with the number every time, and the figures are never rounded up (sloane).
+Chosen by nick on 2026-10-19 from three candidates (Consequences). It rests on the verified link,
+acceptance by a different member, and says the record's contents in the order a buyer asks for
+them. "A person at both ends" is the section title only; it names where the message is going (§3),
+never a sentence a speaker says. No sign-off, no approve, no reconstruct, no "in one read": each
+of those is either a supervisor's verb, the survey's forensics word, or a surface that does not
+exist yet (wanderer).
 
-**Candidate for the sentence itself** (sloane, 2026-10-19; nick picks): "a person at both ends" is
-a metaphor the next sentence has to decode, and "reconstruct" is the survey's word and reads as
-forensics. Alternative: _"When something goes wrong you can show who asked, who did it, who
-checked it and who signed it off, in one read."_ with "a person at both ends" kept as a section
-title at most.
+The SecurityHQ and Datadog figures (nearly half, 45%, of 204 security leaders had already had an
+agent incident where nobody could say who was accountable; only half, 49%, could fully reconstruct
+what an agent had done in the last month; published 2026-10-15) are proof for an enterprise room,
+said under §2 with sponsor and date and never rounded up. They do not open the message: the
+best-fit buyer is a small product team, and a security-leader scene selects the other room.
 
 ### 2. The mechanisms are the proof lines, each phrased as what it buys
 
@@ -116,27 +118,23 @@ a headline line when declines of handoffs or challenges to a person appear in ou
 
 ### 3. How far the message may go, by what the record holds
 
-"A person at both ends" is a guarantee. The record holds one end. So:
+"A person at both ends" is where the message is going. The record holds one end. So:
 
 - **Until** `requested` (ADR 629) names a person, or carries a verified basis (`act`, `seed`), on at
   least nine in ten lanes opened in a 30-day window (a seat's `self` does not put a person at the
   start) **and** ADR 662's signature is enforced on `authorized_by`, and on human accept where a
   lane requires one (schmidt: on 95% of lanes the person at the end is the merge sign-off, so a
-  gate on accept alone would never make "every" true), the spoken and written form is a weaker
-  one. Two candidates, nick picks:
-  - alfie: _"Every piece of work your agents do has a person who signed it off, and when something
-    goes wrong you reconstruct what happened in one read."_
-  - sloane: _"Nothing your agents do counts as done until another member checks it, and a person
-    approves what lands. When something goes wrong, the record shows who did it, who checked it
-    and which model, in one read."_ This one leans on the verified link (acceptance) and keeps the
-    attested one (sign-off) out of "every".
-  "Who asked" is said as "recorded from this month, on the seat's word".
+  gate on accept alone would never make "every" true), the spoken and written form is §1's
+  sentence exactly. "Who asked" stays out of it and is said, when asked, as "recorded from this
+  month, on the seat's word".
 - **"In one read" is not yet.** `musterd lane show` and `lane_show` print the owner and the merge
   sign-off; who asked and the review verdict are not on the same page (checked 2026-10-19 against
   `packages/mcp/src/tools/laneShow.test.ts`). The phrase waits for a surface that shows the whole
   chain of one lane on one page, named in the ledger.
   Follows-up: a lane for the one-page chain on `lane show`, opened when this ADR is accepted.
-- **From** all three conditions, the full message in §1 goes on every surface.
+- **From** both conditions, §1's second sentence gains the start of the chain: _"The record shows
+  who asked, who did it, who checked it, and which model."_ The sign-off joins it only as proof
+  line 3, attested, and the section title can then be said as a sentence.
 - The record "shows" the chain; it never "proves" it (ADR 550 §7, brand.md §1), and the merge
   sign-off is said as attested, never as verified, until the daemon can see the merge.
 
@@ -161,8 +159,12 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   record and was the first thing we said.
 - **Leading with the model on the record.** It is the most distinctive mechanism in the field table
   (landscape.md §14d) and the one a buyer least knows they need. It stays as proof line 2.
-- **Saying "a person at both ends" now.** The record holds one end on 95% of lanes and the other
-  on 6%. Hard rule 1 of the product-communications skill forbids it until §3's conditions hold.
+- **Saying "a person at both ends" as a sentence, now or later.** The record holds one end,
+  attested, on 95% of lanes; the other is on the seat's word. Hard rule 1 of the
+  product-communications skill forbids it as a guarantee, and three readers heard "signed off" and
+  "reconstruct" as oversight (wanderer, sloane). It stays a section title.
+- **Opening with the security survey.** It is the strongest number in the ADR and it selects the
+  wrong room: the best-fit buyer is a small product team (ADR 550 §4). It is proof, under §2.
 - **Making accountability the tagline again.** ADR 563 found it sorts musterd into oversight. The
   tagline is the team; this message sits under it.
 
@@ -188,6 +190,15 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   survey figures unrounded, "soon" removed. Left to nick: sloane's alternative sentence (§1) and
   weaker form (§3). The four queries are pinned in `docs/demo/pitch/chain.sh` so the monthly re-read
   is the same read (ADR 658 keeps agent seats off the database; the script is the human's).
+- **2026-10-19, wanderer's review and nick's pick** (act `01M5AV72JRW60QAWZ2W1QKSCQX`). wanderer:
+  §1 as first written ("a person at both ends", "signed it off", "reconstruct") is heard as
+  oversight, ADR 550's console test fires on the sentence alone, and every candidate ended in "in
+  one read", which §3 itself marks not yet. He proposed the shorter form. nick chose it over
+  sloane's ("…and a person approves what lands…") and alfie's ("…a person who signed it off…") the
+  same day; §1, §3 and Rejected are rewritten to it in this change, and the survey moves under the
+  proof. wanderer's points on the CooperBench pilot (a frozen manifest, a solo arm so the gap is the
+  pool's own, a per-task verdict, guardrails pinned to the paper's scorer) went into lane
+  `01M5AQEG23ANGVWR5F9EQGHPPH`'s brief.
 - No code changes. No glossary changes. No protocol changes.
 
 ## Falsifiers
