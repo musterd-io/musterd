@@ -1406,6 +1406,16 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-18 — `liveCssGzipBytes` 24,500 → 24,600 B: the phone topbar wraps, the team column scrolls as one (lane `01M596F88W`)
+
+| Budget   | main `96413b91` (local) | This PR (local) | Ceiling                  |
+| -------- | ----------------------- | --------------- | ------------------------ |
+| live CSS | 24,288 B                | 24,328 B        | RAISED 24,500 → 24,600 B |
+
+CSS +40 B: the topbar's controls become one wrapping group, and under 880px the team column scrolls as one instead of squeezing its cards. Both are fixes to phone layout that ryder flagged when accepting #2875, not features. Main already sat at 24,288 + ~210 B CI gap = ~24,498 against 24,500, so any CSS at all would cross it. CSS is measured plus about 210 B.
+
+- Falsify: `pnpm perf:check` in CI on main after this lands reports live CSS at or under 24,500 B.
+
 ### 2026-10-18 — `totalJsGzipBytes` 327,000 → 328,300 B and `liveCssGzipBytes` 24,300 → 24,500 B: the log, the office key and the phone band, measured stacked (lanes `01M57WK2AR`, `01M57WK4A2`, `01M57WJMBD`)
 
 | Budget   | main `ab7a3733` (local) | The three stacked (local) | Ceiling                    |
