@@ -99,6 +99,29 @@ export const judge = (t, all) => {
 };
 
 /**
+ * Is a target out of reach — none of it can be brought on screen, or only a sliver under the size it
+ * has? Returns the reason, or null when it can be reached. `reach` is the sweep's measure: the part
+ * of the box any scroll can show (absent when not measured).
+ *
+ * Its own tier, like the house floor, and never counted as a 2.5.8 failure: 2.5.8 judges a target's
+ * size, and these pass it. They fail because no finger gets to them at all, which no size clause
+ * asks (lane 01M59782TX: five 30×30 /live topbar buttons sat past a phone's right edge and passed
+ * SIZE, #2879). A target cut to less than its own size but still ≥24 in both directions is
+ * reachable: half of a 62px pill is still a 31px target.
+ */
+export const offscreen = (t) => {
+  if (t.reach === undefined) return null;
+  if (t.reach === null) return 'no part of it can be scrolled on screen';
+  const cutW = t.reach.w < Math.min(t.w, MIN);
+  const cutH = t.reach.h < Math.min(t.h, MIN);
+  if (!cutW && !cutH) return null;
+  return (
+    `only ${Math.round(t.reach.w)}×${Math.round(t.reach.h)} of its ` +
+    `${Math.round(t.w)}×${Math.round(t.h)} can be scrolled on screen`
+  );
+};
+
+/**
  * Every PARTIALLY overlapping pair.
  *
  * Not folded into `judge` because overlap is a property of the pair, and because it applies to

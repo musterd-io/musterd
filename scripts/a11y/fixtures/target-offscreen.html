@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>target control — off-screen</title>
+<!--
+  MUST FAIL, and MUST fail OFFSCREEN rather than for size: every button here is 30x30.
+
+  The bar is /live's topbar before #2879 (lane 01M596F88W): a flex row that cannot shrink its fixed
+  buttons, so at 390px the last ones sit past the right edge of a page that cannot scroll sideways.
+  Each passed the size clause and the gate stayed green. The panel is the other way the same app
+  lost a control: a fixed-height box that clips what is below it, with no scroller to reach it.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 14px/1 system-ui, sans-serif; }
+  .bar { display: flex; gap: 8px; padding: 8px; width: 100%; box-sizing: border-box; }
+  .bar button { flex: none; width: 30px; height: 30px; }
+  .bar .wide { width: 150px; }
+  .panel { height: 120px; overflow: hidden; }
+  .panel .spacer { height: 300px; }
+  .panel button { width: 44px; height: 44px; }
+</style>
+<div class="bar">
+  <button class="wide">pause</button><button class="wide">tour</button>
+  <button>a</button><button>b</button><button class="past">c</button><button class="past">d</button>
+  <button class="past">e</button>
+</div>
+<div class="panel">
+  <div class="spacer"></div>
+  <button class="below">f</button>
+</div>

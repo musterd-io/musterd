@@ -218,9 +218,9 @@
   flex: 1;
 }
 /* The controls on the right travel as one group. A row of fixed 30px buttons cannot shrink, so on
-   a phone the bar used to run them off its right edge: at 390px the seeds, log, share and both
-   sound buttons sat at x 405–507, out of reach, and "pause…" was cut in half (ryder, accepting
-   #2875; measured 2026-10-18, lane 01M596F88W). Wrapped as a group, the bar grows a second row
+   a phone the bar used to run them off its right edge: at 390px the log button was cut to 21px
+   and share and both sound buttons sat wholly past it, out of reach (ryder, accepting #2875;
+   lane 01M596F88W; counted by the target-size gate's OFFSCREEN rule, lane 01M59782TX). Wrapped as a group, the bar grows a second row
    and the group keeps to the right of it; nothing hides and every target keeps its size. The
    group may wrap inside itself too, for the admin's open hold form. */
 .lc__tools {

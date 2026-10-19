@@ -202,9 +202,10 @@ const report = ({ code, out }, label, floor = 0) => {
     return;
   }
   failed.push(label);
+  const off = /(\d+) off-screen/.exec(out);
   console.log(
     `  ✗ ${label} — ${line?.[2] ?? '?'} below AA 2.5.8, ${line?.[3] ?? '?'} below the house floor, ` +
-      `${line?.[4] ?? '?'} overlapping pair(s)${tail}`,
+      `${line?.[4] ?? '?'} overlapping pair(s), ${off?.[1] ?? '?'} off-screen${tail}`,
   );
   for (const l of out.split('\n')) if (/^\s+✗ /.test(l)) console.log(`   ${l.trim()}`);
 };
@@ -339,6 +340,8 @@ if (failed.length) {
       ' repo as an accessibility defect — fix it because a 21px link on a phone is missed twice' +
       ' before it is hit.' +
       '\nAn OVERLAP row is not a spacing nicety: neither target can be hit reliably.' +
+      '\nAn OFFSCREEN row is NOT a 2.5.8 failure either: the target is big enough, and no scroll' +
+      ' can bring it on screen — a control pushed past the edge of a bar that cannot scroll.' +
       '\nThe rule, its exceptions and the worked examples: docs/a11y/target-size.md' +
       '\nRe-measure one page with: pnpm a11y:targets <url>' +
       '\nCheck the GATE itself rather than the page: node scripts/a11y/target-size-falsifier.mjs',
@@ -348,8 +351,8 @@ if (failed.length) {
 /* The count is of SWEEPS taken, not of routes listed — a run narrowed by a flag must not report
    the coverage of a full one. */
 console.log(
-  `\ntarget-size-gate — ${measured} sweep(s) at ${VIEWPORT}, 0 below AA 2.5.8 and 0 below the` +
-    ' house floor' +
+  `\ntarget-size-gate — ${measured} sweep(s) at ${VIEWPORT}, 0 below AA 2.5.8, 0 below the` +
+    ' house floor and 0 off-screen' +
     (STATIC_ONLY ? ' (prerendered phase only)' : CONNECTED_ONLY ? ' (connected phase only)' : '') +
     '.',
 );

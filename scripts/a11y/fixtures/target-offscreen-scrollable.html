@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>target control — reachable by scrolling</title>
+<!--
+  MUST PASS. The same buttons as target-offscreen.html, past the same edges, but each one sits in a
+  scroller a person can move: a toolbar that scrolls sideways, and a panel that scrolls down. A
+  target off screen NOW is not out of reach. A gate that reds this gets switched off.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 14px/1 system-ui, sans-serif; }
+  .bar { display: flex; gap: 8px; padding: 8px; width: 100%; box-sizing: border-box; overflow-x: auto; }
+  .bar button { flex: none; width: 30px; height: 30px; }
+  .bar .wide { width: 150px; }
+  .panel { height: 120px; overflow-y: auto; }
+  .panel .spacer { height: 300px; }
+  .panel button { width: 44px; height: 44px; }
+</style>
+<div class="bar">
+  <button class="wide">pause</button><button class="wide">tour</button>
+  <button>a</button><button>b</button><button class="past">c</button><button class="past">d</button>
+  <button class="past">e</button>
+</div>
+<div class="panel">
+  <div class="spacer"></div>
+  <button class="below">f</button>
+</div>
