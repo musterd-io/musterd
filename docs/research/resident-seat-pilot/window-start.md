@@ -276,3 +276,11 @@ finding reads that from the hub.
 **Spend at the pass**: mason $27.16 across 58 `residency.wake_cost` rows, every one priced,
 against $100; resident $0.127 across 13 against $15. Neither ceiling stops dispatch. Two days of
 the window are left (it ends 2026-10-21 17:11:37 PDT).
+
+**Arm B's key stopped auto-reloading** (added 2026-10-19, from nick). nick turned off auto-reload
+on the provider balance for mason's API key on or about 2026-10-16. He meant arm B to keep
+running. Up to this pass the rows show no credit failures. Mason's wakes on 2026-10-17 22:31 and
+2026-10-18 22:30 were gateway-priced. Each of the five failed wakes on 2026-10-16 also carries a
+`cost_usd`, so the provider served them. If the balance runs out before the window ends, B's
+wakes from that point fail at the provider. The finding reports any such failure as an operator
+funding stop and does not count it as a seat failure, as it would treat crossing the $100 ceiling.
