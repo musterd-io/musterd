@@ -2082,9 +2082,9 @@
 .lc-gl-label.is-broadcast .lc-gl-label__seg--role {
   display: none;
 }
-/* Back-compat alias — prefer .lc-gl-label__seg. The model's name wears its lab's own casing
-   (`displayModel`: "GPT 6 Luna", "Kimi K3") and its whole name: a forced lowercase plus a 5.5rem cut
-   turned big-body's GPT 6 Luna into "gpt 6…" on every plate (nick, 2026-10-19). */
+/* Back-compat alias — prefer .lc-gl-label__seg. The plate keeps the model lowercase (nick's call,
+   2026-10-19 — the team column and cards wear the lab's casing), but shows the whole name: a 5.5rem
+   cut turned big-body's GPT 6 Luna into "gpt 6…" on every plate. */
 .lc-gl-label__model {
   max-width: 8rem;
   overflow: hidden;
@@ -2092,6 +2092,7 @@
   white-space: nowrap;
   font-weight: 600;
   letter-spacing: 0.02em;
+  text-transform: lowercase;
   color: color-mix(in srgb, var(--lc-paper-ink) 78%, transparent);
 }
 /* Work cues no longer ride the nameplate — see the team column. Keep class inert if hybrid is re-enabled. */
