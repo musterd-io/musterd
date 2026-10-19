@@ -5,6 +5,7 @@ import {
   organizationNode,
   pageHead,
   softwareApplicationNode,
+  softwareSourceCodeNode,
   webSiteNode,
 } from '../brand/siteMeta';
 import { Boundary } from '../components/site/Boundary';
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/')({
       path: '/',
       // The landing page is where the product's entity is declared; every other route's graph
       // points back at these three by @id rather than restating them.
-      graph: [softwareApplicationNode(), webSiteNode(), organizationNode()],
+      graph: [softwareApplicationNode(), softwareSourceCodeNode(), webSiteNode(), organizationNode()],
       // The player iframe is injected post-paint (StreamSection); these hints are all the initial
       // load owes Twitch.
       links: [

@@ -227,10 +227,13 @@ describe('one spelling of a URL returns 200, and it is the one we publish', () =
   });
 
   it('nothing reintroduces a second 200 for the same page', () => {
-    // not_found_handling:"none" is the other half. With an SPA fallback, ANY misspelling of a path
-    // would return 200 and the shell would boot — an unbounded supply of duplicates for every page,
-    // which is the ADR 132 daemon-route leak and this canonical problem at the same time.
-    expect(wrangler).toMatch(/"not_found_handling":\s*"none"/);
+    // not_found_handling is the other half. With an SPA fallback ("single-page-application"), ANY
+    // misspelling of a path would return 200 and the shell would boot — an unbounded supply of
+    // duplicates for every page, which is the ADR 132 daemon-route leak and this canonical problem at
+    // the same time. "none" (empty 404) and "404-page" (static 404.html, still a 404 status — ADR
+    // 666) both refuse the fallback; only those two are admissible.
+    expect(wrangler).toMatch(/"not_found_handling":\s*"(none|404-page)"/);
+    expect(wrangler).not.toMatch(/single-page-application/);
   });
 });
 

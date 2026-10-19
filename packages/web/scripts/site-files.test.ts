@@ -370,6 +370,13 @@ describe('siteFiles', () => {
         'llms.txt',
         'robots.txt',
         'sitemap.xml',
+        'site.webmanifest',
+        '404.html',
+        'favicon.ico',
+        'apple-touch-icon.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/icon-maskable-512.png',
         ...mirrors,
       ].sort(),
     );

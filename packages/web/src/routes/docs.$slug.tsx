@@ -32,6 +32,9 @@ export const Route = createFileRoute('/docs/$slug')({
           description: loaderData?.excerpt ?? 'musterd documentation.',
           url: absoluteUrl(`/docs/${params.slug}`),
           inLanguage: 'en',
+          // The day the doc's source last changed in git (gen-site-content `sourceLastModified`,
+          // ADR 666) — absent on a shallow build rather than dated to it.
+          ...(loaderData?.modified ? { dateModified: loaderData.modified } : {}),
           isPartOf: { '@id': GRAPH_ID.website },
           publisher: { '@id': GRAPH_ID.organization },
           about: { '@id': GRAPH_ID.software },

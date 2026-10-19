@@ -49,6 +49,13 @@ export const PUBLIC_ALLOW = [
   // 01M2XD2RPG). Static JSON, no client — admissible for the same reason the text files above are.
   // It is copied from `dist/build.json` (the stamp lives beside `client/`, not inside it).
   'build.json',
+  // ADR 666: the icons, manifest and 404 page an origin is asked for by path. Static files with no
+  // client to boot, admissible for the same reason the text files above are.
+  'favicon.ico',
+  'apple-touch-icon.png',
+  'icons',
+  'site.webmanifest',
+  '404.html',
 ];
 
 /**

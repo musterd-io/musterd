@@ -28,6 +28,12 @@ describe('the public-origin allowlist (ADR 302)', () => {
         'sitemap.xml',
         // The ADR 135 build stamp, so the origin says which commit it serves (ADR 308, lane 01M2XD2RPG).
         'build.json',
+        // ADR 666: what an origin is asked for by path — icons, the manifest, the 404 page.
+        'favicon.ico',
+        'apple-touch-icon.png',
+        'icons',
+        'site.webmanifest',
+        '404.html',
       ].sort(),
     );
   });

@@ -6,8 +6,11 @@
   // `scripts/stage-allowlist.mjs`. The build also prerenders /live, /board, /audit and friends, and
   // those must NEVER reach this origin: they are daemon-connected surfaces that would render dead
   // UI on a public host (ADR 132 puts the live viewer on the daemon origin; ADR 156 keeps /live out
-  // of packaged installs). `not_found_handling: "none"` is the second half of that guarantee —
-  // an unknown path 404s instead of falling back to the SPA shell and booting the board client-side.
+  // of packaged installs). `not_found_handling` is the second half of that guarantee — an unknown
+  // path 404s instead of falling back to the SPA shell and booting the board client-side. It was
+  // "none" (an empty 404 body) until ADR 666; "404-page" keeps the same status and the same refusal
+  // to fall back, and serves the static `404.html` from site-files.ts instead of nothing, so a
+  // person or agent on a stale link gets a way back rather than a blank page.
   //
   // Deploy with `pnpm --filter @musterd/web deploy:site` (build → stage → deploy), never by
   // pointing wrangler at `dist/client` directly.
@@ -33,7 +36,7 @@
   // returns 200, and it is the spelling we publish.
   "assets": {
     "directory": "./dist/site",
-    "not_found_handling": "none",
+    "not_found_handling": "404-page",
     "html_handling": "drop-trailing-slash"
   },
   "routes": [{ "pattern": "musterd.io", "custom_domain": true }],
