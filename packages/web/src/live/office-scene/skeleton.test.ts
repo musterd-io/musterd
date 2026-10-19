@@ -9,11 +9,13 @@ import {
   IDLE_GESTURES,
   isIdleGesture,
   handsInLap,
+  PULSE_TYPING_PERIOD_S,
   seedOf,
   solveSkeleton,
   SPLIT_BEATS,
   STRIDE,
   typingBurst,
+  typingFromPulse,
   type SkelInput,
 } from './skeleton';
 
@@ -223,6 +225,42 @@ describe('typing', () => {
 
   it('is seeded per member, so a room does not type in unison', () => {
     expect(typingBurst(0.1, 3)).not.toBe(typingBurst(0.8, 3));
+  });
+});
+
+describe('typing from the pulse (ADR 660)', () => {
+  const duty = (intensity: number, seed = 0.3) => {
+    const n = 600; // one period at 10 ms
+    const samples = Array.from({ length: n }, (_, i) => typingFromPulse(intensity, seed, (i * PULSE_TYPING_PERIOD_S) / n));
+    return samples.filter((s) => s > 0).length / n;
+  };
+
+  it('never types with no pulse — a hookless or idle seat sits still', () => {
+    for (let i = 0; i < 100; i++) expect(typingFromPulse(0, 0.3, i * 0.37)).toBe(0);
+  });
+
+  it('types a quarter of the time at one call a minute', () => {
+    expect(duty(1)).toBeGreaterThan(0.2);
+    expect(duty(1)).toBeLessThan(0.3);
+  });
+
+  it('types most of the time at twelve or more', () => {
+    expect(duty(12)).toBeGreaterThan(0.8);
+    expect(duty(12)).toBeLessThan(0.9);
+    expect(duty(40)).toBeCloseTo(duty(12), 2); // capped, not a metronome
+  });
+
+  it('still bursts: ramps to full and really stops within a period', () => {
+    const samples = Array.from({ length: 600 }, (_, i) => typingFromPulse(6, 0.3, i * 0.01));
+    expect(Math.max(...samples)).toBeCloseTo(1, 1);
+    expect(samples.some((s) => s === 0)).toBe(true);
+  });
+
+  it('is phase-seeded per member', () => {
+    const diff = Array.from({ length: 50 }, (_, i) => i * 0.11).filter(
+      (t) => typingFromPulse(4, 0.1, t) !== typingFromPulse(4, 0.8, t),
+    );
+    expect(diff.length).toBeGreaterThan(25);
   });
 });
 
