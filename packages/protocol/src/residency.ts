@@ -754,8 +754,21 @@ export const LocalServingSchema = z.object({
   provider: z.string().min(1).max(64),
   /** The pinned model as configured (`qwen3:4b`). */
   model: z.string().min(1).max(120),
-  /** The provider's base URL — loopback by construction, or there is no snapshot. */
-  base_url: z.string().min(1).max(200),
+  /** The provider's base URL — loopback by construction, or there is no snapshot. Scheme, host and
+   *  path only: a URL carrying userinfo, a query or a fragment is refused, because this lands on an
+   *  audit row and those are where a key would ride (hard rule 5). */
+  base_url: z
+    .string()
+    .min(1)
+    .max(200)
+    .refine((v) => {
+      try {
+        const u = new URL(v);
+        return !u.username && !u.password && !u.search && !u.hash;
+      } catch {
+        return false;
+      }
+    }, 'base_url must be scheme://host/path only'),
 });
 export type LocalServing = z.infer<typeof LocalServingSchema>;
 

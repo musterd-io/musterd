@@ -40,6 +40,12 @@ export function isLoopbackUrl(raw: string): boolean {
   return LOOPBACK_HOSTS.has(host) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
 }
 
+/** `scheme://host[:port]/path` — no userinfo, query or fragment. */
+export function sanitizedBaseUrl(raw: string): string {
+  const url = new URL(raw);
+  return `${url.protocol}//${url.host}${url.pathname}`;
+}
+
 export interface LocalServingIo {
   exists: (path: string) => boolean;
   read: (path: string) => string;
@@ -94,8 +100,11 @@ export function readLocalServing(
   if (!LOCAL_SERVING_PROVIDERS.includes(provider)) return null;
   const urls = new Set(configs.flatMap((c) => providerBaseUrl(c, provider) ?? []));
   if (urls.size !== 1) return null;
-  const baseUrl = [...urls][0]!;
-  if (!isLoopbackUrl(baseUrl)) return null;
+  const configured = [...urls][0]!;
+  if (!isLoopbackUrl(configured)) return null;
+  // The snapshot lands on an audit row: keep scheme, host and path only, so a key carried in
+  // userinfo or a query string never reaches the log (hard rule 5).
+  const baseUrl = sanitizedBaseUrl(configured);
   if (provider.length > 64 || model.length > 120 || baseUrl.length > 200) return null;
   return { provider, model, base_url: baseUrl };
 }

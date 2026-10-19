@@ -91,6 +91,18 @@ describe('readLocalServing (ADR 663): three signals, all at spawn', () => {
   });
 });
 
+describe('the snapshot never carries a credential (hard rule 5)', () => {
+  it('drops userinfo, query and fragment from the base URL', () => {
+    const snap = readLocalServing(
+      WS,
+      { local: true },
+      io({ [DOT]: ollama('http://user:sk-secret@127.0.0.1:11434/v1?key=sk-secret#frag') }),
+    );
+    expect(snap?.base_url).toBe('http://127.0.0.1:11434/v1');
+    expect(JSON.stringify(snap)).not.toContain('sk-secret');
+  });
+});
+
 describe('isLoopbackUrl', () => {
   it('accepts loopback hosts over http(s) only', () => {
     for (const u of [

@@ -28,8 +28,8 @@ is a **lower bound**.
 
 The skill list was injected even though the run's config directory was isolated, so OpenCode reads
 skills from beyond `XDG_CONFIG_HOME`. Which skill folders it reads, and how to turn the list off,
-is unverified (2026-10-19; falsify: rerun the stub with `HOME` pointed at an empty folder and
-compare the `available_skills` bytes). <!-- claim: other -->
+is unverified:
+- source of the skill list unverified (2026-10-19; falsify: rerun the stub with `HOME` pointed at an empty folder and compare the `available_skills` bytes) <!-- claim: other -->
 
 **What would make this wrong:** an OpenCode upgrade, a musterd tool-list change (the budgets file
 moves with it), or a tokenizer that packs JSON better than bytes/4 would. Re-measure with the same
@@ -63,13 +63,13 @@ length before testing anything. It is amended to start at the measured floor (sp
   not the quantized file a Mac runs. Three reasons it cannot enter the gauntlet on Air 2 today,
   each with its falsifier:
   - No released runtime: Ollama has no tag, llama.cpp support is draft PR 30306, MLX has no
-    implementation; the only Mac path is a pinned fork build (falsify: `ollama.com/library/dory`
-    resolves, or llama.cpp PR 30306 merges). <!-- claim: other -->
+    implementation; the only Mac path is a pinned fork build.
+    - no released runtime (2026-10-19; falsify: `ollama.com/library/dory` resolves, or llama.cpp PR 30306 merges) <!-- claim: other -->
   - Memory: the Q5_K_M file is 3.67 GB and its f16 KV cache costs 229,376 B per token at 2 loops,
-    about 3.7 GB at 16k, so it needs about 7.4 GB before the host's seats (falsify: a q8 KV cache or
-    a 1-loop run measured under 5 GB at 16k on an 8 GB Mac). <!-- claim: other -->
-  - Tool calling is not claimed by the vendor, and every gauntlet step is a tool call (falsify: a
-    published tool-calling eval, or one gauntlet step passing on a 16 GB machine). <!-- claim: other -->
+    about 3.7 GB at 16k, so it needs about 7.4 GB before the host's seats.
+    - does not fit 8 GB at 16k (2026-10-19; falsify: a q8 KV cache or a 1-loop run measured under 5 GB at 16k on an 8 GB Mac) <!-- claim: other -->
+  - Tool calling is not claimed by the vendor, and every gauntlet step is a tool call.
+    - tool calling unclaimed (2026-10-19; falsify: a published tool-calling eval, or one gauntlet step passing on a 16 GB machine) <!-- claim: other -->
 
   Source: [ModelFit's Dory page](https://modelfit.io/blog/nvidia-nemotron-labs-dory-1-0-4b-mac-memory-requirements/),
   read 2026-10-19. ADR 663 names llama.cpp's `llama-server` as a local-serving provider, so Dory is

@@ -57,7 +57,7 @@ the ADR 436 rail and `/report` can show apart, and that never turns a spend guar
 
 The per-seat advisory acceptance scope the spec pairs with this change is a separate server
 mechanism (the picker's re-route after an advisory verdict). It gets its own ADR with its own lane.
-Follows-up: lane `01M5APAM3AMT67WF3859GT53ZE`.
+Follows-up: `01M5APAM3AMT67WF3859GT53ZE`
 
 ## Consequences
 
@@ -70,7 +70,7 @@ Follows-up: lane `01M5APAM3AMT67WF3859GT53ZE`.
   the merge guard, for the same seat only. A folder re-bound to another seat drops it.
 - The gauntlet (lane `01M55R1FN3M1BPFQ5J5RH2QGX1`) starts on this. Its first check is that a
   wake's `wake_cost` row reads `unpriced_reason: local` with the snapshot.
-  Follows-up: lane `01M55R1FN3M1BPFQ5J5RH2QGX1`.
+  Follows-up: `01M55R1FN3M1BPFQ5J5RH2QGX1`
 - Adding a provider to `LOCAL_SERVING_PROVIDERS` is a one-line change, and it needs a dated note
   here naming the server it stands for.
 - The resident engine (`pi.ts`) still has no local provider. That is the spec's second step, taken
