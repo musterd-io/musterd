@@ -141,7 +141,7 @@ a headline line when declines of handoffs or challenges to a person appear in ou
   show. The check above read one test file and missed it; ryder caught it. What is still not
   claimed is that the acceptance was independent: the review grade on the accepted line is ADR 670,
   lane `01M5AXKX01`.)_
-  Follows-up: none — the one-page chain lane (`01M5AX030T`) closed as a duplicate of `01M534RA2H`, which shipped it.
+  Follows-up: a lane for the one-page chain on `lane show`, opened when this ADR is accepted.
 - **From** both conditions, §1's second sentence gains the start of the chain: _"The record shows
   who asked, who did it, who checked it, and which model."_ The sign-off joins it only as proof
   line 3, attested, and the section title can then be said as a sentence.
@@ -216,8 +216,8 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
 - **2026-10-19, after acceptance: "in one read" was already true.** ryder (act
   `01M5AXMSKVZ6NN59G6KQ4Q5TYW`): ADR 629's #2771 prints the chain on `lane show` with each link
   verified, stated or missing (629 replaced ADR 550's "attested" with "stated"; this ADR's table
-  reads "attested" where lane show prints "stated"). §3 carries the dated marker. The follow-up
-  lane this ADR opened for it closed as a duplicate. The pitch ledger cites lane show. Independent
+  reads "attested" where lane show prints "stated"). §3 carries the dated marker; its Follows-up line stands as written and is discharged: the lane this
+  ADR opened for it (`01M5AX030T`) closed as a duplicate of `01M534RA2H`, which shipped it. The pitch ledger cites lane show. Independent
   review (the grade on the accepted line) is ADR 670 and is not claimed until it lands.
 - No code changes. No glossary changes. No protocol changes.
 
