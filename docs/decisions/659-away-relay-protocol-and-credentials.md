@@ -138,6 +138,11 @@ ADR 147/153).
   daemon out until Cloudflare reaped it; the §1 amendment's replacement rule covers the rotation
   case, and a same-credential half-open socket still waits for the platform reap — accepted, since
   the daemon's reconnect backoff retries the upgrade and reconcile makes the wait lossless.
+- 2026-10-19 — stanley's acceptance of the re-landing carried one non-blocking follow-up, fixed
+  in lane `01M5AMK4AWX632BYCM05R6N8HK`: the §4 re-check now also guards what a socket receives.
+  The callback route runs `socketCredentialLive` before forwarding and answers 503 (so the
+  provider retries against the legitimate daemon) after closing a rotated/revoked socket with
+  1008 — callback bodies carry ask tokens, so a silent revoked socket no longer receives them.
 - Pairing (`01M50XPYZ9877E494X2SV1EGTB`) and the Slack adapter
   (`01M50XQ04M8E3X5QHY173Q18X7`) build on this protocol: pairing adds the binding store redemption
   currently fails closed without; the adapter renders the `deliver` POST and parses `callback`

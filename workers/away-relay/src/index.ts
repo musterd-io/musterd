@@ -133,18 +133,31 @@ export class TeamRelay implements DurableObject {
       pair[1].serializeAttachment({ slug, credentialHash: presented } satisfies SocketAttachment);
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
-    const callback = /^\/callback\/[^/]+\/([^/]+)$/.exec(url.pathname);
+    const callback = /^\/callback\/([^/]+)\/([^/]+)$/.exec(url.pathname);
     if (request.method === 'POST' && callback) {
       const body = await request.text();
       if (new TextEncoder().encode(body).length > RELAY_MAX_FRAME_BYTES)
         return new Response('callback too large', { status: 413 });
       const socket = this.state.getWebSockets()[0];
       if (!socket) return new Response('daemon not connected', { status: 503 });
+      // The §4 re-check applies to what a socket RECEIVES, not only what it sends: a rotated or
+      // revoked socket that stays silent must not keep receiving callbacks (their bodies carry
+      // ask tokens). Refuse with 503 so the provider retries against the legitimate daemon.
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (
+        !socketCredentialLive(
+          attachment?.credentialHash ?? null,
+          credentialHashFor(this.env.TEAM_CREDENTIALS_JSON, decodeURIComponent(callback[1]!)),
+        )
+      ) {
+        socket.close(1008, 'credential rotated or revoked');
+        return new Response('daemon credential rotated or revoked', { status: 503 });
+      }
       socket.send(
         JSON.stringify({
           protocol: 1,
           type: 'callback',
-          ask_ref: decodeURIComponent(callback[1]!),
+          ask_ref: decodeURIComponent(callback[2]!),
           ...(request.headers.get('content-type')
             ? { content_type: request.headers.get('content-type') }
             : {}),
