@@ -23,6 +23,10 @@
  *                          and the 01M32GF49Z fix produced exactly it by growing padding.
  *   inline-block-cta     — an undersized CTA in a section full of prose. The FIRST cut of this
  *                          gate's inline exception exempted it. This arm is aimed at the gate.
+ *   offscreen            — 30x30 buttons past the edge of a bar that cannot scroll, and one below a
+ *                          panel that clips. Every one passes SIZE; /live shipped five of them at
+ *                          390px with the gate green (lane 01M59782TX). Its passing twin,
+ *                          offscreen-scrollable, puts the same buttons in scrollers.
  *   whitespace-is-not-prose — links whose only neighbours are newlines. A collapsed `\\s` escape
  *                          inside the in-page template literal once made the strip remove the
  *                          letter S instead of whitespace; CI's linter caught it and all five
@@ -124,6 +128,21 @@ const ARMS = [
        exemption firing on links that have nothing but newlines around them. */
     forbid: /EXEMPT — inline/,
     why: 'newlines and indentation around a link are not a sentence',
+  },
+  {
+    file: 'target-offscreen.html',
+    want: 1,
+    /* Exactly four: c, d and e past the bar's right edge and f below the panel's clipped bottom. b
+       is cut too, to 28px of its 30, and must NOT count: what is left of it is still a target. */
+    expect: /, 4 off-screen[\s\S]*OFFSCREEN [^\n]*button\.past[\s\S]*OFFSCREEN [^\n]*button\.below/,
+    forbid: /[1-9]\d* below AA 2\.5\.8/,
+    why: '30×30 buttons past the edge of a bar that cannot scroll must fail OFFSCREEN, not size',
+  },
+  {
+    file: 'target-offscreen-scrollable.html',
+    want: 0,
+    expect: /, 0 off-screen/,
+    why: 'the same buttons in scrollers a person can move are reachable and must pass',
   },
   {
     /* THE SURFACE CHECK, on a page that is otherwise perfectly healthy. `--require` exists because

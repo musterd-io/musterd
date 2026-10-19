@@ -55,7 +55,13 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { openChromePage } from './chrome.mjs';
-import { HOUSE_FLOOR_SCOPE, MIN, judge, overlappingPairs } from './target-size-rules.mjs';
+import {
+  HOUSE_FLOOR_SCOPE,
+  MIN,
+  judge,
+  offscreen,
+  overlappingPairs,
+} from './target-size-rules.mjs';
 
 const args = process.argv.slice(2);
 const url = args.find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:4849/';
@@ -280,6 +286,52 @@ const MEASURE = /* js */ `(() => {
     return false;
   };
 
+  /**
+   * The part of a target a person can ever bring on screen — by scrolling the page or any scroller
+   * around it — or null when no part of it can be. \`vis\` above is what is on screen NOW; this is
+   * what is reachable AT ALL, and the difference is the whole point.
+   *
+   * A target the size clause passes can still be out of every finger's reach. /live at 390×844 ran
+   * five 30×30 topbar buttons off the bar's right edge, x 405–507 on a page that cannot scroll
+   * sideways (fixed in #2879, lane 01M596F88W): each one passed SIZE, and the gate stayed green.
+   *
+   * Per axis, walking out from the target: a clipping ancestor (overflow hidden or clip) cuts the
+   * interval to its own box, because what it hides no scroll can show; a scroller on that axis
+   * makes all of its content reachable, so the interval becomes the scroller's own box. The page is
+   * the last scroller: an axis it scrolls on keeps what is left, an axis it cannot scroll on is cut
+   * to the viewport. An absolutely positioned target escapes the clipping of static ancestors until
+   * its containing block, and a fixed one is judged against the viewport alone.
+   */
+  const reachOf = (el, r, cs) => {
+    let x0 = r.left, x1 = r.right, y0 = r.top, y1 = r.bottom;
+    if (cs.position !== 'fixed') {
+      let escaping = cs.position === 'absolute';
+      for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        const o = getComputedStyle(p);
+        if (!escaping || o.position !== 'static') {
+          const pr = p.getBoundingClientRect();
+          if (/(auto|scroll)/.test(o.overflowX)) { if (x1 > x0) { x0 = pr.left; x1 = pr.right; } }
+          else if (/(hidden|clip)/.test(o.overflowX)) { x0 = Math.max(x0, pr.left); x1 = Math.min(x1, pr.right); }
+          if (/(auto|scroll)/.test(o.overflowY)) { if (y1 > y0) { y0 = pr.top; y1 = pr.bottom; } }
+          else if (/(hidden|clip)/.test(o.overflowY)) { y0 = Math.max(y0, pr.top); y1 = Math.min(y1, pr.bottom); }
+        }
+        if (o.position !== 'static') escaping = o.position === 'absolute';
+        if (o.position === 'fixed') break;
+      }
+    }
+    /* The page. It scrolls on an axis when its content overflows there and neither the root nor the
+       body hides that overflow; otherwise the viewport is all there is on that axis. */
+    const root = document.documentElement;
+    const ro = getComputedStyle(root), bo = getComputedStyle(document.body);
+    const pageScrolls = (axis) =>
+      cs.position !== 'fixed' &&
+      !/(hidden|clip)/.test(ro['overflow' + axis] + ' ' + bo['overflow' + axis]) &&
+      (axis === 'X' ? root.scrollWidth > innerWidth : root.scrollHeight > innerHeight);
+    if (!pageScrolls('X')) { x0 = Math.max(x0, 0); x1 = Math.min(x1, innerWidth); }
+    if (!pageScrolls('Y')) { y0 = Math.max(y0, 0); y1 = Math.min(y1, innerHeight); }
+    return x1 > x0 && y1 > y0 ? { w: x1 - x0, h: y1 - y0 } : null;
+  };
+
   const rows = [];
   for (const el of document.querySelectorAll(SEL)) {
     const r = el.getBoundingClientRect();
@@ -309,6 +361,7 @@ const MEASURE = /* js */ `(() => {
     }
     rows.push({
       ...(vis !== undefined ? { vis } : {}),
+      reach: reachOf(el, r, cs),
       sel: pathOf(el),
       name: (el.getAttribute('aria-label') || el.textContent || el.getAttribute('title') || '')
         .trim().replace(/\\s+/g, ' ').slice(0, 40),
@@ -345,6 +398,9 @@ const failures = judged.filter((j) => j.verdict === 'fail');
 const houseFailures = judged.filter((j) => j.verdict === 'house');
 
 const overlapping = overlappingPairs(targets);
+const offscreenRows = targets
+  .map((t) => ({ ...t, why: offscreen(t) }))
+  .filter((t) => t.why !== null);
 
 /**
  * A CLEAN SWEEP OF NOTHING IS NOT A PASS.
@@ -377,11 +433,13 @@ log(
 );
 log(
   `targets: ${targets.length} measured, ${failures.length} below AA 2.5.8, ` +
-    `${houseFailures.length} below the house floor, ${overlapping.length} overlapping pair(s)` +
+    `${houseFailures.length} below the house floor, ${overlapping.length} overlapping pair(s), ` +
+    `${offscreenRows.length} off-screen` +
     (settled ? '' : ', MEASURED MID-FLIGHT (geometry never settled)'),
 );
 for (const f of failures) log(`  ✗ ${f.sel} "${f.name}" — ${f.why}`);
 for (const f of houseFailures) log(`  ✗ HOUSE FLOOR ${f.sel} "${f.name}" — ${f.why}`);
+for (const f of offscreenRows) log(`  ✗ OFFSCREEN ${f.sel} "${f.name}" — ${f.why}`);
 for (const [a, b] of overlapping)
   log(
     `  ✗ OVERLAP ${a.sel} "${a.name}" and ${b.sel} "${b.name}" — ` +
@@ -429,6 +487,11 @@ log(
 );
 
 if (JSON_OUT)
-  writeFileSync(JSON_OUT, JSON.stringify({ url, viewport, judged, overlapping }, null, 2));
+  writeFileSync(
+    JSON_OUT,
+    JSON.stringify({ url, viewport, judged, overlapping, offscreen: offscreenRows }, null, 2),
+  );
 
-await exit(failures.length || houseFailures.length || overlapping.length ? 1 : 0);
+await exit(
+  failures.length || houseFailures.length || overlapping.length || offscreenRows.length ? 1 : 0,
+);

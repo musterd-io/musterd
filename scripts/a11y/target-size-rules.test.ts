@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { MIN, distToBox, judge, overlappingPairs, overlaps } from './target-size-rules.mjs';
+import {
+  MIN,
+  distToBox,
+  judge,
+  offscreen,
+  overlappingPairs,
+  overlaps,
+} from './target-size-rules.mjs';
 
 /**
  * The spacing exception is the reason this file exists.
@@ -174,5 +181,33 @@ describe('distToBox', () => {
   it('is zero inside the box and the euclidean gap outside it', () => {
     expect(distToBox({ x: 10, y: 10 }, t(0, 0, 40, 40))).toBe(0);
     expect(distToBox({ x: 0, y: 0 }, t(3, 4, 10, 10))).toBe(5);
+  });
+});
+
+describe('offscreen — big enough, out of reach (lane 01M59782TX)', () => {
+  it('passes a target the sweep did not measure for reach', () => {
+    expect(offscreen(t(0, 0, 30, 30))).toBeNull();
+  });
+  it('passes a target wholly reachable', () => {
+    expect(offscreen(t(0, 0, 30, 30, { reach: { w: 30, h: 30 } }))).toBeNull();
+  });
+  it('fails a target no scroll can bring on screen', () => {
+    expect(offscreen(t(405, 11, 30, 30, { reach: null }))).toMatch(/no part of it/);
+  });
+  it('fails a 30px button cut to 21px — the /live team-log button at 390', () => {
+    expect(offscreen(t(369, 11, 30, 30, { reach: { w: 21, h: 30 } }))).toMatch(
+      /only 21×30 of its 30×30/,
+    );
+  });
+  it('passes a wide pill cut in half when what is left is still ≥24', () => {
+    expect(offscreen(t(360, 11, 62, 24, { reach: { w: 31, h: 24 } }))).toBeNull();
+  });
+  it('leaves an undersized target to the size clause, unless the cut takes more of it', () => {
+    expect(offscreen(t(0, 0, 20, 20, { reach: { w: 20, h: 20 } }))).toBeNull();
+    expect(offscreen(t(0, 0, 20, 20, { reach: { w: 12, h: 20 } }))).toMatch(/only 12×20/);
+  });
+  it('is never a 2.5.8 verdict: judge still passes it on size', () => {
+    const b = t(405, 11, 30, 30, { reach: null });
+    expect(judge(b, [b]).verdict).toBe('size');
   });
 });

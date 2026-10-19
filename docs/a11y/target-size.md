@@ -31,6 +31,7 @@ row with which one it is:
 | `✗ … under 24×24, and …` | a genuine **WCAG 2.2 AA 2.5.8** failure                        | an accessibility defect       |
 | `✗ HOUSE FLOOR …`     | conforms to 2.5.8, under the **24px the team set** for the chrome | a house preference, not WCAG  |
 | `✗ OVERLAP …`         | two targets partially on top of each other                        | an accessibility defect       |
+| `✗ OFFSCREEN …`       | big enough, but no scroll can bring it (or more than a sliver of it) on screen | a defect, under 1.4.10 Reflow — never as 2.5.8 |
 
 **The audit that started this was wrong about the spec, and measuring is what settled it.** The
 2026-09-21 site audit called the 21–22px nav and footer links a 2.5.8 defect. They are not: nothing
@@ -48,6 +49,29 @@ site, in our own CI, and `target-house-floor-nav.html` is the control that stops
 The house floor's scope is `header, footer, nav` and nothing else, because that is exactly what was
 decided. Prose links are judged by the spec alone: `/docs`'s 22px list links are reported as
 **conforming on spacing**, not failed.
+
+## Off-screen: big enough, out of reach
+
+2.5.8 judges a target's size, and a target can pass it while no finger gets to it. `/live` at
+390×844 ran its topbar's fixed 30px buttons past the bar's right edge on a page that cannot scroll
+sideways: the team log was cut to 21px, and share and both sound toggles sat wholly past x 390.
+All four passed SIZE and the gate stayed green (fixed in #2879; the rule came after, lane
+`01M59782TX`).
+
+So the sweep also measures, for every target, the part of it any scroll can bring on screen. Walking
+out from the target, per axis: an `overflow: hidden`/`clip` ancestor cuts it to that ancestor's box;
+a scroller on that axis makes its whole content reachable; the page is the last scroller, and an
+axis it cannot scroll on is cut to the viewport. An absolutely positioned target escapes static
+ancestors until its containing block; a fixed one is judged against the viewport alone.
+
+A row fails `OFFSCREEN` when none of the target is reachable, or when what is reachable is under
+its own size **and** under 24px in that direction. Half of a 62px pill is still a 31px target and
+passes; a 30px button cut to 21px does not. It is its own tier and is never counted as
+`below AA 2.5.8`. Content lost at a 320px-or-wider viewport is the business of 1.4.10 Reflow, which
+is how to report it outside the repo.
+
+Not covered: `transform`ed and `contain: paint` ancestors (they clip without `overflow`), and a
+target under another opaque element. Those are hidden from the finger without leaving the box.
 
 ## The four 2.5.8 clauses, and which one decided each row
 
@@ -179,7 +203,7 @@ sweep defaulting to 1440 would be green by construction.
 node scripts/a11y/target-size-falsifier.mjs
 ```
 
-Seven arms over fixtures whose verdict is known in advance. `contrast.md` set the precedent and the
+Nine arms over fixtures whose verdict is known in advance. `contrast.md` set the precedent and the
 wiki's rule 3 states it: **a check that passes either way is a ritual.** The gate is green on
 `main` — that is either because the site conforms or because the gate cannot see, and only a
 control that fails tells them apart.
@@ -192,6 +216,8 @@ control that fails tells them apart.
 | `overlapping-pair`        | fail 1 | two 44×44 buttons overlapping — a size-only gate passes  |
 | `inline-block-cta`        | fail 1 | the exemption drifting back to permissive                |
 | `house-floor-nav`         | fail 1 | conforming markup must fail HOUSE, never "below AA"      |
+| `offscreen`               | fail 1 | 30×30 buttons past a bar's edge, one below a clipping panel — SIZE passes all of them |
+| `offscreen-scrollable`    | pass 0 | the same buttons in scrollers a person can move          |
 | `conforming`              | pass 0 | size, spacing and inline conformance all pass            |
 
 The passing arm is the one that keeps the gate installed. "It fails the bad ones" is half a claim.
