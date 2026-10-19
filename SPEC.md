@@ -993,3 +993,28 @@ only, so the office can show _that_ a seat is working and nothing of _what_.
   session digest, harness or agent id to it.
 - Additive to `musterd/0.3`: a client that does not recognise `seat_pulse` ignores it. `test` is in
   the enum; no server produces it until a classifier exists (ADR 660 Consequences).
+
+## A.26 Metrics and samples on dated reads (unreleased — ADR 673)
+
+A dated read may declare what it measures, collect one number per day against it, and carry the
+measured value on its verdict.
+
+- `metric` is `{name (1–80), unit (1–24), baseline: number|null, target: number, direction:
+  'up'|'down', source, by, at}`. It is accepted on open and on update (`null` on update clears it).
+  A server MUST stamp `by` and `at`, and MUST refuse, with `validation`, a metric on a Lane with no
+  `reads_on`, or an update that clears `reads_on` under a standing metric. On input `source` is one
+  of `manual` (default), `wake_latency_p50_ms` and `dispute_rate`; on read it is a plain string.
+  Changing `target` or `direction` is recorded as `lane.metric_changed` with both values.
+- `POST /teams/:slug/lanes/:id/samples` takes `{day: YYYY-MM-DD, value: number, n: int ≥ 0}` from
+  any authenticated member of the Team and answers `201 {sample, replaced}`. A server MUST refuse it
+  with `validation` when the Lane has no metric, and with `409` when the Lane is `done` or
+  `abandoned`. A Lane has one sample per day: a later write for the day replaces the earlier one,
+  and each write is one `lane.sample_recorded` audit row carrying what it replaced.
+- The Lane projection carries `samples`, the newest 60 days oldest first, only when `metric` is
+  set (including on `brief=1`).
+- `read_verdict` gains optional `measured: {value: number, n: int ≥ 0}` and `evidence` (1–200
+  characters: a URL, a repo path or an ADR ref, never followed). A server MUST refuse, with
+  `validation`, a `met` or `missed` verdict without `measured` on a Lane with a metric.
+  `inconclusive` never needs it.
+- A server derives nothing from samples: no status, and no verdict. A server behind this appendix
+  sends none of these fields, and a reader treats the Lane as measuring nothing.

@@ -63,6 +63,7 @@ import {
   SessionDigestSchema,
   TraceEventBatchSchema,
   OpenLaneSchema,
+  SampleInputSchema,
   UpdateLaneSchema,
   DeclareGoalSchema,
   PostGoalOutcomeSchema,
@@ -328,6 +329,7 @@ import {
   updateLane,
   withinHistoryWindow,
 } from '../store/lanes.js';
+import { recordSample } from '../store/laneSamples.js';
 import { SWEEP_GRACE_MS } from '../store/laneSweep.js';
 import {
   hueSharedWith,
@@ -7888,6 +7890,21 @@ export async function handleHttp(
           lane_open: { lane: lane.id, title: lane.title, project: lane.project },
         });
         return sendJson(res, 201, { lane, warnings });
+      }
+
+      // ADR 673 §2: one day's sample for a metric lane. Any authenticated member of the team may
+      // post; the store refuses a lane with no metric and a closed one, and replaces the day's row.
+      const sampleMatch = rest.match(/^\/lanes\/([^/]+)\/samples$/);
+      if (method === 'POST' && sampleMatch) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        // A disabled or banned seat records nothing; a service seat may (the daily sweep, lane 2).
+        assertSeatCanRead(member);
+        const input = parseOrBadRequest(SampleInputSchema, await readJson(req));
+        const laneId = await laneIdFromRef(ctx, team.id, decodeURIComponent(sampleMatch[1]!), slug);
+        const lane = await getLane(ctx.db, team.id, laneId, team.slug);
+        if (!lane) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
+        const result = await recordSample(ctx.db, team.id, lane, input, member.name);
+        return sendJson(res, 201, result);
       }
 
       const laneMatch = rest.match(/^\/lanes\/([^/]+)$/);

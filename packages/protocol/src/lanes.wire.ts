@@ -42,6 +42,17 @@ export type ReadStatus = (typeof READ_STATUSES)[number];
 /** ADR 644: the verdict note's bounds. */
 export const READ_NOTE_MAX_CHARS = 280;
 
+/** ADR 673: where a metric's daily samples come from. `manual` is posted by a seat; the others are
+ *  numbers the daemon computes itself (lane 01M5B1Z5RR's sweep). */
+export const METRIC_SOURCES = ['manual', 'wake_latency_p50_ms', 'dispute_rate'] as const;
+export type MetricSource = (typeof METRIC_SOURCES)[number];
+
+/** ADR 673: how many of a lane's newest daily samples ride the lane. */
+export const LANE_SAMPLES_SERVED = 60;
+
+/** ADR 673: an evidence pointer's bounds — a URL, or a repo path / ADR ref. */
+export const EVIDENCE_MAX_CHARS = 200;
+
 /** Today as `YYYY-MM-DD` in `tz` (wall-clock, like a calendar entry). */
 export function dayInZone(nowMs: number, tz: string): string {
   const p = new Intl.DateTimeFormat('en-CA', {

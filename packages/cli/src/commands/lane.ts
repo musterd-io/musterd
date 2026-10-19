@@ -1,5 +1,7 @@
 import {
   BUILD_ON_CHECK,
+  CALENDAR_DEFAULT_TZ,
+  dayInZone,
   builtOnLine,
   emptyPoolHint,
   LANE_REQUESTED_NUDGE,
@@ -13,6 +15,7 @@ import {
   type LaneStakes,
   type OpenLane,
   type LaneWarning,
+  type MetricInput,
 } from '@musterd/protocol';
 import { resolveProject } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
@@ -32,13 +35,14 @@ import { claimSeams, renderClaims } from './laneClaims.js';
 const USAGE =
   'usage:\n' +
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--reads-on <YYYY-MM-DD> [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>]]] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id> [--reason "<why>"]\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--read-verdict met|missed|inconclusive --read-note "<what was read>"] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] | --metric none] [--read-verdict met|missed|inconclusive --read-note "<what was read>" [--measured <value> --n <count>] [--evidence <url|path>]] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane sample <id> --value <v> --n <count> [--day <YYYY-MM-DD>]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
@@ -202,6 +206,26 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     return 0;
   }
 
+  // ADR 673: one day's number for a metric lane. `--day` defaults to yesterday in the team's
+  // calendar zone, because a day's number is known the morning after.
+  if (sub === 'sample') {
+    const id = parsed.positionals[1];
+    const raw = flagStr(parsed.flags, 'value');
+    if (!id || raw === undefined) throw new CliError(USAGE, 2);
+    const day =
+      flagStr(parsed.flags, 'day') ?? dayInZone(Date.now() - 86_400_000, CALENDAR_DEFAULT_TZ);
+    const res = await http.laneSample(team, id, {
+      day,
+      value: numberFlag(raw, 'value'),
+      n: countFlag(parsed.flags),
+    });
+    const was = res.replaced ? ` (replaced ${String(res.replaced.value)})` : '';
+    process.stdout.write(
+      `${theme.ok('✓')} sample ${res.sample.day} = ${String(res.sample.value)} (n ${String(res.sample.n)})${was}\n`,
+    );
+    return 0;
+  }
+
   if (sub === 'open') {
     const title = parsed.positionals[1];
     if (!title) throw new CliError(USAGE, 2);
@@ -247,6 +271,8 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(flagStr(parsed.flags, 'reads-on') !== undefined
         ? { reads_on: flagStr(parsed.flags, 'reads-on')! }
         : {}),
+      // ADR 673: what the read measures.
+      ...(metricFlags(parsed.flags, false) as { metric?: MetricWire }),
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
         : {}),
@@ -503,6 +529,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
           }
         : {}),
       ...readVerdictFlags(parsed.flags),
+      ...metricFlags(parsed.flags, true),
       // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE — a lane stamped with the
       // wrong merge had no way back. Owner or admin only; the daemon refuses a counterpart.
       ...(parsed.flags['clear-merged'] === true ? { merged: null } : {}),
@@ -665,7 +692,12 @@ export function renderSubmitReport(res: Awaited<ReturnType<HttpClient['updateLan
  * repair rather than reaching the daemon half-formed. A typo in the outcome fails too.
  */
 export function readVerdictFlags(flags: Parsed['flags']): {
-  read_verdict?: { outcome: 'met' | 'missed' | 'inconclusive'; note: string };
+  read_verdict?: {
+    outcome: 'met' | 'missed' | 'inconclusive';
+    note: string;
+    measured?: { value: number; n: number };
+    evidence?: string;
+  };
 } {
   const outcome = flagStr(flags, 'read-verdict');
   const note = flagStr(flags, 'read-note');
@@ -677,7 +709,76 @@ export function readVerdictFlags(flags: Parsed['flags']): {
     );
   if (outcome !== 'met' && outcome !== 'missed' && outcome !== 'inconclusive')
     throw new CliError(`--read-verdict is met, missed or inconclusive — got "${outcome}"`, 2);
-  return { read_verdict: { outcome, note } };
+  // ADR 673: the number the read found (`--measured <value> --n <count>`) and where it came from.
+  const measured = flagStr(flags, 'measured');
+  const evidence = flagStr(flags, 'evidence');
+  return {
+    read_verdict: {
+      outcome,
+      note,
+      ...(measured !== undefined
+        ? { measured: { value: numberFlag(measured, 'measured'), n: countFlag(flags) } }
+        : {}),
+      ...(evidence !== undefined ? { evidence } : {}),
+    },
+  };
+}
+
+function numberFlag(raw: string, name: string): number {
+  const v = Number(raw);
+  if (raw.trim() === '' || !Number.isFinite(v))
+    throw new CliError(`--${name} is a number — got "${raw}"`, 2);
+  return v;
+}
+
+/** `--n <count>`: how many observations a measured value or sample summarises. Required with one. */
+function countFlag(flags: Parsed['flags']): number {
+  const raw = flagStr(flags, 'n');
+  if (raw === undefined) throw new CliError('give --n <count> with the value it summarises', 2);
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) throw new CliError(`--n is a whole count — got "${raw}"`, 2);
+  return n;
+}
+
+/** A metric as it goes on the wire: the input with its `source` always named. */
+type MetricWire = MetricInput & { source: NonNullable<MetricInput['source']> };
+
+/**
+ * ADR 673: `--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>]
+ * [--metric-source <s>]` → the metric; `--metric none` clears it (update only).
+ */
+export function metricFlags(
+  flags: Parsed['flags'],
+  allowClear: boolean,
+): { metric?: MetricWire | null } {
+  const name = flagStr(flags, 'metric');
+  if (name === undefined) return {};
+  if (name.toLowerCase() === 'none') {
+    if (!allowClear) throw new CliError('--metric none clears a metric on update, not on open', 2);
+    return { metric: null };
+  }
+  const unit = flagStr(flags, 'unit');
+  const target = flagStr(flags, 'target');
+  const direction = flagStr(flags, 'direction');
+  if (unit === undefined || target === undefined || direction === undefined)
+    throw new CliError(
+      'a metric needs --unit <u> --target <t> --direction up|down (and optionally --baseline <b>)',
+      2,
+    );
+  if (direction !== 'up' && direction !== 'down')
+    throw new CliError(`--direction is up or down — got "${direction}"`, 2);
+  const baseline = flagStr(flags, 'baseline');
+  const source = flagStr(flags, 'metric-source');
+  return {
+    metric: {
+      name,
+      unit,
+      target: numberFlag(target, 'target'),
+      baseline: baseline === undefined ? null : numberFlag(baseline, 'baseline'),
+      direction,
+      source: (source ?? 'manual') as NonNullable<MetricInput['source']>,
+    },
+  };
 }
 
 /** `--follows-up a,b` / `--follows-up none` → the ADR 487 patch field; absent sends nothing. */

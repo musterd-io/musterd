@@ -30,6 +30,7 @@ import {
   LaneBoardSchema,
   LaneDetailSchema,
   LaneResultSchema,
+  SampleResultSchema,
   SeedListSchema,
   SeedResultSchema,
   NextBriefSchema,
@@ -116,6 +117,8 @@ import {
   type LaneBoard,
   type LaneDetail,
   type LaneResult,
+  type SampleInput,
+  type SampleResult,
   type Seed,
   type SubmitSeedBrief,
   type PromoteSeed,
@@ -1420,6 +1423,18 @@ export class HttpClient {
     );
     const parsed = LaneResultSchema.safeParse(json);
     if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+
+  /** ADR 673: one day's sample for a metric lane; the stored sample and what it replaced. */
+  async laneSample(slug: string, id: string, body: SampleInput): Promise<SampleResult> {
+    const json = await this.request(
+      'POST',
+      `/teams/${slug}/lanes/${encodeURIComponent(id)}/samples`,
+      body,
+    );
+    const parsed = SampleResultSchema.safeParse(json);
+    if (!parsed.success) throw new CliError('sample response did not match the protocol schema', 1);
     return parsed.data;
   }
 

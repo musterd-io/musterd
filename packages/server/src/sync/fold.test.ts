@@ -2,7 +2,7 @@ import { makeEnvelope, type SyncPullEvent } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { type Database } from '../db/open.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
-import { AUDITED_LANE_FIELDS } from '../store/lanes.js';
+import { AUDITED_LANE_FIELDS, getLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
@@ -290,6 +290,44 @@ withDrivers('fold', (_o, kind) => {
   }
 
   describe('foldBatch — the lane kind', async () => {
+    it('folds a metric birth and a sample from a joiner into the hub (ADR 673)', async () => {
+      const { db, team } = await seed();
+      const metric = {
+        name: 'hit rate',
+        unit: '%',
+        baseline: 40,
+        target: 60,
+        direction: 'up',
+        source: 'manual',
+        by: 'nick',
+        at: 1,
+      };
+      const res = await foldBatch(db, team.id, [
+        foreignLane('m-1', 1, 1, 'lane.opened', {
+          lane: 'LM',
+          title: 'measured',
+          project: 'musterd',
+          reads_on: '2026-10-21',
+          metric,
+          created_by: 'nick',
+          created_at: 1,
+        }),
+        foreignLane('m-2', 2, 2, 'lane.sample_recorded', {
+          lane: 'LM',
+          day: '2026-10-19',
+          value: 61,
+          n: 23,
+          by: 'nick',
+          at: 2,
+          replaced: null,
+        }),
+      ]);
+      expect(res.stop ?? null).toBeNull();
+      const lane = await getLane(db, team.id, 'LM', team.slug);
+      expect(lane?.metric).toMatchObject({ name: 'hit rate', target: 60 });
+      expect(lane?.samples).toEqual([{ day: '2026-10-19', value: 61, n: 23, by: 'nick', at: 2 }]);
+    });
+
     it('projects a birth into lanes, holds the row in audit with its stamp, and leaves the allocator alone', async () => {
       const { db, team } = await seed();
       const before = await localNextSeq(db, team.id);

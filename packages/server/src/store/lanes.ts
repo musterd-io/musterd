@@ -19,6 +19,8 @@ import {
   type BuiltOn,
   type Goal,
   type Lane,
+  type LaneMetric,
+  type MetricInput,
   type LaneState,
   type LaneWarning,
   type OpenLane,
@@ -30,6 +32,7 @@ import { MusterdError } from '../errors.js';
 import { appendLaneEventRequired, type AuditAction, type AuditRow } from './audit.js';
 import { stalledContinuationWarning } from './continuationStall.js';
 import { listGoals } from './goals.js';
+import { withSamples } from './laneSamples.js';
 import { getPolicy } from './teams.js';
 
 /**
@@ -81,6 +84,8 @@ interface LaneRow {
   read_verdict_json: string | null;
   /** ADR 645 (v106): the pre-registered declaration, JSON `{run, verdict_rule, record, expected_spend, by, at}`; null = not declared. */
   pre_registered_json: string | null;
+  /** ADR 673 (v112): what the read measures, JSON `{name, unit, baseline, target, direction, source, by, at}`; null = none. */
+  metric_json: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
@@ -177,6 +182,33 @@ async function resolveRequested(
   throw new MusterdError('bad_request', 'say who asked with basis self, stated, act, or seed');
 }
 
+/**
+ * ADR 673 §1: a metric as the store keeps it — the declaration stamped with who set it and when.
+ * Refused without a read day: a number with no verdict day is a dashboard, not an experiment.
+ */
+function metricRecord(
+  input: MetricInput,
+  readsOn: string | null | undefined,
+  by: string,
+  at: number,
+): LaneMetric {
+  if (!readsOn)
+    throw new MusterdError(
+      'bad_request',
+      'a metric belongs to a dated read: set reads_on (YYYY-MM-DD) with it (ADR 673)',
+    );
+  return {
+    name: input.name,
+    unit: input.unit,
+    baseline: input.baseline,
+    target: input.target,
+    direction: input.direction,
+    source: input.source ?? 'manual',
+    by,
+    at,
+  };
+}
+
 function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): Lane {
   const scope = JSON.parse(row.surface_globs) as string[];
   const declaredAreas = row.areas_json ? (JSON.parse(row.areas_json) as string[]) : undefined;
@@ -232,6 +264,7 @@ function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): 
     ...(row.pre_registered_json
       ? { pre_registered: JSON.parse(row.pre_registered_json) as Lane['pre_registered'] }
       : {}),
+    ...(row.metric_json ? { metric: JSON.parse(row.metric_json) as Lane['metric'] } : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
@@ -338,6 +371,23 @@ async function recordLaneEdges(
       by: after.read_verdict.by,
       at: after.read_verdict.at,
       previous_outcome: before.read_verdict?.outcome ?? null,
+      ...(after.read_verdict.measured ? { measured: after.read_verdict.measured } : {}),
+      ...(after.read_verdict.evidence ? { evidence: after.read_verdict.evidence } : {}),
+    });
+  }
+  // ADR 673 §1: a moved goalpost is on the record — target or direction changed on a lane that
+  // already had a metric.
+  if (
+    before.metric &&
+    after.metric &&
+    (before.metric.target !== after.metric.target ||
+      before.metric.direction !== after.metric.direction)
+  ) {
+    await laneAuditRow(db, teamId, audit, 'lane.metric_changed', after.id, {
+      lane: after.id,
+      name: after.metric.name,
+      from: { target: before.metric.target, direction: before.metric.direction },
+      to: { target: after.metric.target, direction: after.metric.direction },
     });
   }
   const released = before.owner_seat !== null && after.state === 'open' && before.state !== 'open';
@@ -392,6 +442,8 @@ export async function openLane(
     const refusal = preRegisteredRefusal({ risk: input.risk, stakes: input.stakes });
     if (refusal) throw new MusterdError('bad_request', `${refusal} (ADR 645)`);
   }
+  // ADR 673 §1: a metric is a dated read's — refused without `reads_on`; stamped like a verdict.
+  const metric = input.metric ? metricRecord(input.metric, input.reads_on, createdBy, now) : null;
   // ADR 244: an admin's default-stakes rule fires HERE, at open, and never again. Resolving it late
   // — at submit, or at close — would make a policy able to rewrite what a lane already was, which is
   // the exact trap ADR 234 increment 2 named for the close edge: only a RECORDED fact earns a label.
@@ -441,6 +493,7 @@ export async function openLane(
     reads_on: input.reads_on ?? null,
     read_verdict_json: null,
     pre_registered_json: preRegistered ? JSON.stringify(preRegistered) : null,
+    metric_json: metric ? JSON.stringify(metric) : null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -448,8 +501,8 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, pre_registered_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, pre_registered_json, metric_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
@@ -474,6 +527,7 @@ export async function openLane(
       row.requested_json,
       row.reads_on,
       row.pre_registered_json,
+      row.metric_json,
       row.state,
       row.created_by,
       row.created_at,
@@ -503,6 +557,7 @@ export async function openLane(
       ...(requested ? { requested } : {}),
       ...(row.reads_on !== null ? { reads_on: row.reads_on } : {}),
       ...(preRegistered ? { pre_registered: preRegistered } : {}),
+      ...(metric ? { metric } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -556,7 +611,9 @@ export async function getLane(
     teamId,
     id,
   ]);
-  return row ? rowToLane(row, teamSlug) : null;
+  if (!row) return null;
+  const lane = rowToLane(row, teamSlug);
+  return lane.metric ? (await withSamples(db, teamId, [lane]))[0]! : lane;
 }
 
 /**
@@ -815,6 +872,32 @@ async function updateLaneInTx(
       throw new MusterdError('bad_request', 'recording a read verdict needs the seat doing it');
     readVerdict = { ...patch.read_verdict, by: actor, at: now };
   }
+  // ADR 673 §1: set, replace or clear (`null`) the metric. It needs a read day, so clearing
+  // `reads_on` under a standing metric is refused unless the same patch clears the metric too.
+  let metric = existing.metric ?? null;
+  if (patch.metric !== undefined) {
+    if (patch.metric === null) metric = null;
+    else {
+      const actor = audit?.actor;
+      if (!actor) throw new MusterdError('bad_request', 'setting a metric needs the seat doing it');
+      metric = metricRecord(patch.metric, readsOn, actor, now);
+    }
+  } else if (metric !== null && readsOn === null)
+    throw new MusterdError(
+      'bad_request',
+      `lane "${id}" measures ${metric.name}: clear the metric (metric: null) before reads_on (ADR 673)`,
+    );
+  // ADR 673 §3: on a metric lane, met / missed carries the number it was decided by.
+  if (
+    patch.read_verdict !== undefined &&
+    metric !== null &&
+    patch.read_verdict.outcome !== 'inconclusive' &&
+    patch.read_verdict.measured === undefined
+  )
+    throw new MusterdError(
+      'bad_request',
+      `this lane measures ${metric.name}: give measured {value, n} with ${patch.read_verdict.outcome} (ADR 673)`,
+    );
   // ADR 645 §1–2: `null` withdraws the declaration; an object replaces it, stamped from the
   // authenticated sender. Refused on a lane that is not open (409 — a declaration is made before
   // the work) and where the anti-goal lives (400 — the resulting risk / stakes), so a patch that
@@ -880,6 +963,7 @@ async function updateLaneInTx(
     reads_on: readsOn,
     read_verdict_json: readVerdict !== null ? JSON.stringify(readVerdict) : null,
     pre_registered_json: preRegistered !== null ? JSON.stringify(preRegistered) : null,
+    metric_json: metric !== null ? JSON.stringify(metric) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -938,6 +1022,7 @@ async function updateLaneInTx(
     'reads_on',
     'read_verdict_json',
     'pre_registered_json',
+    'metric_json',
     'claims_json',
     'areas_json',
     'declined_json',
@@ -1006,6 +1091,7 @@ export const AUDITED_LANE_FIELDS = [
   'reads_on',
   'read_verdict',
   'pre_registered',
+  'metric',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */
@@ -1100,7 +1186,12 @@ export async function listLanes(
     `SELECT * FROM lanes WHERE ${where.join(' AND ')} ORDER BY created_at`,
     params,
   );
-  return rows.map((r) => rowToLane(r, teamSlug));
+  // ADR 673: a metric lane carries its newest samples — one query for the board, none without one.
+  return withSamples(
+    db,
+    teamId,
+    rows.map((r) => rowToLane(r, teamSlug)),
+  );
 }
 
 /**
