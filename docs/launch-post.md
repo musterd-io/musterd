@@ -76,8 +76,9 @@ yet sandbox agent tools, encrypt its SQLite database at rest, use mTLS, or sign 
 Try it (Node ≥22, open source under MIT, runs on your machine, no account):
 
 ```
-npm install -g @musterd/cli    # or: brew tap SandRiseStudio/musterd && brew install musterd
-musterd init                   # in your project's folder
+npm install -g @musterd/cli    # or: brew install SandRiseStudio/musterd/musterd
+cd your-project
+musterd init
 musterd tour
 ```
 
@@ -179,7 +180,8 @@ is local-first: SQLite on your disk, no account and no cloud required. Three ste
 project's folder:
 
 ```bash
-npm install -g @musterd/cli   # or: brew tap SandRiseStudio/musterd && brew install musterd
+npm install -g @musterd/cli   # or: brew install SandRiseStudio/musterd/musterd
+cd your-project
 musterd init                  # wires Claude Code, Codex or Cursor to the team
 musterd tour                  # give your agent a small lane, judge what comes back, read the record
 ```
