@@ -5,7 +5,7 @@
 **Status:** decisions from a brainstorm with nick on 2026-10-19 (§2). Nothing is built.
 **Lane:** `01M561Z0W3` (goal `security`, memory isolation 7)
 **Parent design:** [seat memory isolation](../../design/seat-memory-isolation.md), §Hosted tier
-**Decision:** ADR to come, in lane `01M5AM1WW6`
+**Decision:** [ADR 662](../../decisions/662-one-machine-per-hosted-seat.md) (lane `01M5AM1WW6`), which also restates ADR 200's gate and its way through
 
 ## 1. What this is for
 

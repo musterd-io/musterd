@@ -76,7 +76,7 @@ different product, and one nobody should adopt on the strength of these ADRs.
 ### 3. The gate
 
 **This blocks any release promoted for real use, including the npm publish and the launch tail.**
-A release may go out for others to use only when an agent seat cannot read a human credential.
+A release may go out for others to use only when an agent seat cannot read a human credential. _(Amended 2026-10-19: restated by ADR 662 as "cannot exercise human authority". See the amendment below.)_
 
 Concretely, until that holds:
 
@@ -98,7 +98,7 @@ naming precisely: it requires **a human physically at the machine**, not a file 
 
 Three barriers that do work, in rough order of how well they fit:
 
-1. **Agent seats run as a separate OS user.** The classic answer, and the only one where `0600`
+1. **Agent seats run as a separate OS user.** _(Amended 2026-10-19: withdrawn by ADR 662. See the amendment below.)_ The classic answer, and the only one where `0600`
    starts doing the work it currently appears to do. No prompts, no per-act friction, and it
    generalises to every credential rather than to a list of sensitive acts. Cost: changes how seats
    are provisioned (worktree access, daemon socket, git identity, MCP config all have to keep
@@ -134,6 +134,14 @@ Follows-up: deferred — ADR 341 defers the barrier to its separate-OS-user prot
 - The in-session acceptance work (lane `01KYX2R8Y1`) can proceed honestly: it improves ergonomics and
   metric accuracy and explicitly claims no trust boundary, which is only defensible with this ADR
   standing behind it.
+
+- **2026-10-19: the gate restated, barrier (1) withdrawn ([ADR 662](662-one-machine-per-hosted-seat.md)).**
+  nick rejected separate OS users for agents. The gate now reads: a release goes out for real users
+  only when an agent cannot exercise human authority. §2's principle (the capability must be
+  absent) is unchanged. The way through is barriers (2) and (3) joined: every high-authority act
+  needs a fresh-presence signature over a server-built descriptor, by a device key bound to that
+  human, from a laptop Secure Enclave helper, a passkey on musterd's own origin, or the paired
+  phone (ADR 662 decisions 4 to 6). §3's publish and promotion limits stand until that lands.
 
 ## Observability & Evaluation
 

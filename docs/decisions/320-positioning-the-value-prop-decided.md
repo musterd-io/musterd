@@ -178,6 +178,13 @@ substance; brand.md §1's tagline and one-liner stay canonical for their slots):
   layer" vocabulary with accountability, and reorders the moat. Decisions 2, 3 and 5 stand and are
   re-read there; the canonical statement above is replaced by ADR 550 §1's.
 
+- **2026-10-19: where musterd hosts ([ADR 662](662-one-machine-per-hosted-seat.md)).** "Rejected:
+  claiming containment" stands, and musterd builds no sandbox. On a seat musterd hosts, the public
+  surfaces may say what is true there, "each hosted agent runs on its own machine", once the
+  machine-half canary (lane `01M561ZCDS5TYWD6NTBQP63ABY`) passes. That names a rented machine
+  boundary, not a sandbox. On a person's own machine the current line is unchanged: "musterd does
+  not sandbox your agents; your own host, sandbox and provider controls still do that."
+
 ## Observability & Evaluation
 
 - **Traces:** n/a — a positioning decision emits nothing; the act log already captures the

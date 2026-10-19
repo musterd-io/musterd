@@ -33,7 +33,7 @@ storage as a substitute for credential custody.
 2. A release for real users requires each agent Member to run under a distinct
    OS user from every human credential holder. The human credential store is
    readable only by its owning OS user; a 0600 shared vault is
-   development-only and cannot satisfy this gate.
+   development-only and cannot satisfy this gate. _(Amended 2026-10-19: superseded by ADR 662. See the amendment below.)_
 3. OS secure storage protects secrets at rest but is not the custody boundary.
    Implement macOS Keychain support first, then equivalent native stores on
    supported platforms. A missing secure store fails closed for real-user
@@ -58,6 +58,12 @@ storage as a substitute for credential custody.
   agent cannot authorize as a human.
 - Multi-admin, scoped bootstrap keys, abuse controls, signed audit evidence,
   and database encryption remain separately ADR-gated work.
+
+- **2026-10-19: decision 2 superseded by [ADR 662](662-one-machine-per-hosted-seat.md).** nick
+  rejected separate OS users for agents. ADR 200's gate stands, restated as "an agent cannot
+  exercise human authority", and it closes with a device signature over a server-built
+  descriptor (ADR 662 decision 5). The prototype in this ADR's Experiment is not wanted any more.
+  Decisions 1 and 3 to 5 are untouched.
 
 ## Observability & Evaluation
 
