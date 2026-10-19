@@ -142,6 +142,27 @@ export const LeaseFrame = z.object({
 });
 export type LeaseFrame = z.infer<typeof LeaseFrame>;
 
+export const PulseKindSchema = z.enum(['read', 'edit', 'run', 'test']);
+export type PulseKind = z.infer<typeof PulseKindSchema>;
+
+/**
+ * ADR 660: a seat's harness tool-call cadence, counts and kinds only — distinct calls in the
+ * trailing 60 s and the kind of the latest. Sent to `team-all` subscribers (the firehose) at most
+ * every ~5 s per seat, and **never when the seat is idle**: no frame is the idle signal, so a viewer
+ * decides stillness from `ts`. Never carries a tool name, path, command, session digest, harness or
+ * agent id — these six fields are the whole leak surface, and `frames.test.ts` pins the key set.
+ * Not sent on the seat's own connection. Additive to `musterd/0.3` (SPEC A.25).
+ */
+export const SeatPulseFrame = z.object({
+  type: z.literal('seat_pulse'),
+  member: z.string().min(1),
+  ts: z.number().int().min(0),
+  intensity: z.number().int().min(0),
+  kind: PulseKindSchema.nullable(),
+  last_ts: z.number().int().min(0),
+});
+export type SeatPulseFrame = z.infer<typeof SeatPulseFrame>;
+
 export const WSServerFrame = z.discriminatedUnion('type', [
   WelcomeFrame,
   OccupiedFrame,
@@ -153,5 +174,6 @@ export const WSServerFrame = z.discriminatedUnion('type', [
   PresenceEvtFrame,
   ErrorFrame,
   LeaseFrame,
+  SeatPulseFrame,
 ]);
 export type WSServerFrame = z.infer<typeof WSServerFrame>;
