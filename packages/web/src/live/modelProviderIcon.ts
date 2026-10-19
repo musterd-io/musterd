@@ -1,4 +1,5 @@
 import type { ModelProvider } from './modelProvider';
+import { shortModel } from './presenceLabel';
 
 const CATJAM_SVG = "<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"1em\" height=\"1em\" viewBox=\"0 0 24 24\"><path fill=\"#7C3AED\" d=\"M4 9 L7 2 L9 8 Z M20 9 L17 2 L15 8 Z\"/><circle cx=\"12\" cy=\"13\" r=\"8.5\" fill=\"#F3E8FF\" stroke=\"#7C3AED\" stroke-width=\"1.2\"/><circle cx=\"9\" cy=\"12\" r=\"1.3\" fill=\"#7C3AED\"/><circle cx=\"15\" cy=\"12\" r=\"1.3\" fill=\"#7C3AED\"/><path fill=\"#EC4899\" d=\"M11 14.5 L13 14.5 L12 16 Z\"/><path stroke=\"#7C3AED\" stroke-width=\"0.6\" stroke-linecap=\"round\" fill=\"none\" d=\"M8 16.2 C9 15.6 10 15.6 11 16.2 M13 16.2 C14 15.6 15 15.6 16 16.2\"/></svg>";
 
@@ -24,13 +25,32 @@ const MINIMAX_SVG = "<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/sv
 
 const NOVA_SVG = "<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"1em\" height=\"1em\" viewBox=\"0 0 24 24\"><path fill=\"#FF9900\" d=\"M6.763 10.036q.002.446.088.71c.064.176.144.368.256.576c.04.063.056.127.056.183q.002.12-.152.24l-.503.335a.4.4 0 0 1-.208.072q-.12-.002-.239-.112a2.5 2.5 0 0 1-.287-.375a6 6 0 0 1-.248-.471q-.934 1.101-2.347 1.101c-.67 0-1.205-.191-1.596-.574q-.588-.575-.59-1.533c0-.678.239-1.23.726-1.644c.487-.415 1.133-.623 1.955-.623c.272 0 .551.024.846.064c.296.04.6.104.918.176v-.583q-.001-.909-.375-1.277c-.255-.248-.686-.367-1.3-.367c-.28 0-.568.031-.863.103q-.443.106-.862.272a2 2 0 0 1-.28.104a.5.5 0 0 1-.127.023q-.168.002-.168-.247v-.391c0-.128.016-.224.056-.28a.6.6 0 0 1 .224-.167a4.6 4.6 0 0 1 1.005-.36a4.8 4.8 0 0 1 1.246-.151c.95 0 1.644.216 2.091.647q.66.645.662 1.963v2.586zm-3.24 1.214c.263 0 .534-.048.822-.144a1.8 1.8 0 0 0 .758-.51a1.3 1.3 0 0 0 .272-.512c.047-.191.08-.423.08-.694v-.335a7 7 0 0 0-.735-.136a6 6 0 0 0-.75-.048c-.535 0-.926.104-1.19.32c-.263.215-.39.518-.39.917c0 .375.095.655.295.846c.191.2.47.296.838.296m6.41.862c-.144 0-.24-.024-.304-.08c-.064-.048-.12-.16-.168-.311L7.586 5.55a1.4 1.4 0 0 1-.072-.32c0-.128.064-.2.191-.2h.783q.227-.001.31.08c.065.048.113.16.16.312l1.342 5.284l1.245-5.284q.058-.24.151-.312a.55.55 0 0 1 .32-.08h.638c.152 0 .256.025.32.08c.063.048.12.16.151.312l1.261 5.348l1.381-5.348q.074-.24.16-.312a.52.52 0 0 1 .311-.08h.743c.127 0 .2.065.2.2c0 .04-.009.08-.017.128a1 1 0 0 1-.056.2l-1.923 6.17q-.072.24-.168.311a.5.5 0 0 1-.303.08h-.687c-.151 0-.255-.024-.32-.08c-.063-.056-.119-.16-.15-.32l-1.238-5.148l-1.23 5.14c-.04.16-.087.264-.15.32c-.065.056-.177.08-.32.08zm10.256.215c-.415 0-.83-.048-1.229-.143c-.399-.096-.71-.2-.918-.32c-.128-.071-.215-.151-.247-.223a.6.6 0 0 1-.048-.224v-.407c0-.167.064-.247.183-.247q.072 0 .144.024c.048.016.12.048.2.08q.408.181.878.279c.319.064.63.096.95.096c.502 0 .894-.088 1.165-.264a.86.86 0 0 0 .415-.758a.78.78 0 0 0-.215-.559c-.144-.151-.416-.287-.807-.415l-1.157-.36c-.583-.183-1.014-.454-1.277-.813a1.9 1.9 0 0 1-.4-1.158q0-.502.216-.886c.144-.255.335-.479.575-.654c.24-.184.51-.32.83-.415c.32-.096.655-.136 1.006-.136c.175 0 .359.008.535.032c.183.024.35.056.518.088q.24.058.455.127q.216.072.336.144a.7.7 0 0 1 .24.2a.43.43 0 0 1 .071.263v.375q-.002.254-.184.256a.8.8 0 0 1-.303-.096a3.65 3.65 0 0 0-1.532-.311c-.455 0-.815.071-1.062.223s-.375.383-.375.71c0 .224.08.416.24.567c.159.152.454.304.877.44l1.134.358c.574.184.99.44 1.237.767s.367.702.367 1.117c0 .343-.072.655-.207.926a2.2 2.2 0 0 1-.583.703c-.248.2-.543.343-.886.447c-.36.111-.734.167-1.142.167m1.509 3.88c-2.626 1.94-6.442 2.969-9.722 2.969c-4.598 0-8.74-1.7-11.87-4.526c-.247-.223-.024-.527.272-.351c3.384 1.963 7.559 3.153 11.877 3.153c2.914 0 6.114-.607 9.06-1.852c.439-.2.814.287.383.607m1.094-1.246c-.336-.43-2.22-.207-3.074-.103c-.255.032-.295-.192-.063-.36c1.5-1.053 3.967-.75 4.254-.399c.287.36-.08 2.826-1.485 4.007c-.215.184-.423.088-.327-.151c.32-.79 1.03-2.57.695-2.994\"/></svg>";
 
+const GLM_SVG = "<svg aria-hidden=\"true\" width=\"1em\" height=\"1em\" fill=\"#1F1F1F\" fill-rule=\"evenodd\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z\"></path></svg>";
+
+const STEPFUN_SVG = "<svg aria-hidden=\"true\" width=\"1em\" height=\"1em\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M22.012 0h1.032v.927H24v.968h-.956V3.78h-1.032V1.896h-1.878v-.97h1.878V0zM2.6 12.371V1.87h.969v10.502h-.97zm10.423.66h10.95v.918h-6.208v9.579h-4.742V13.03zM5.629 3.333v12.356H0v4.51h10.386V8L20.859 8l-.003-4.668-15.227.001z\" fill=\"#0160FF\" fill-rule=\"evenodd\"></path></svg>";
+
+const LONGCAT_SVG = "<svg aria-hidden=\"true\" width=\"1em\" height=\"1em\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path clip-rule=\"evenodd\" d=\"M.507 19.883a.507.507 0 01-.489-.642L4.29 3.745a1.013 1.013 0 011.533-.578l5.622 3.687a1.013 1.013 0 001.11 0L18.2 3.165a1.013 1.013 0 011.532.58l4.25 15.497a.506.506 0 01-.49.64H18.07a6.297 6.297 0 001.53-4.115v-.177a6.09 6.09 0 00-1.513-4.017l-.697-3.495a.438.438 0 00-.694-.266L14.07 9.781a.748.748 0 01-.654.121 5.156 5.156 0 00-2.833 0 .746.746 0 01-.653-.121L7.302 7.81a.435.435 0 00-.688.269l-.675 3.652a5.36 5.36 0 00-1.539 3.76v.333c0 1.474.527 2.9 1.488 4.02l.032.038H.507z\" fill=\"#29E154\" fill-rule=\"evenodd\"></path><path fill=\"#0B3B1A\" d=\"M9.213 16.843h1.52v-3.546h-1.29l-.23 3.546zm5.573 0h-1.52v-3.546h1.29l.23 3.546z\"></path></svg>";
+
+const ANT_SVG = "<svg aria-hidden=\"true\" width=\"1em\" height=\"1em\" fill=\"#1677FF\" fill-rule=\"evenodd\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M15.984 1.383c-.259.593-.877.914-1.334 1.348-.702.669-.998 1.726-1.218 2.682 3.37.775 5.995 3.532 6.486 7.025.566 4.016-1.85 7.859-5.744 9.134-3.894 1.276-8.153-.38-10.126-3.935A8.339 8.339 0 016.457 6.833a18.703 18.703 0 01-.376-.802l-.174-.408a8.698 8.698 0 01-.618-1.987 7.523 7.523 0 01-.051-.37 3.717 3.717 0 01-.024-.34 2.506 2.506 0 01.132-.872 1.26 1.26 0 01.384-.594.842.842 0 011.165.11c.694.82.169 2.078.142 3.02.009.575.111 1.144.301 1.684l-.103.052a8.404 8.404 0 001.318-.79c.28-.243.45-.742.781-.864.33-.121.682.146.946.297.278.145.587.219.901.214l.462.007c.076.002.152.005.226.011.212.01.422.026.63.05l.196-1.08c.04-.216.082-.43.126-.645l.141-.641c.14-.7.42-1.367.823-1.96.305-.431.75-.746 1.262-.89.877-.217 1.24.629.937 1.348zm-2.244 5.44c-2.841.002-4.898 2.532-4.628 5.64.27 3.11 2.781 5.642 5.613 5.666 2.832.024 4.932-2.512 4.658-5.644-.273-3.133-2.802-5.666-5.643-5.663zm.357.57a4.707 4.707 0 013.304 1.445 5.703 5.703 0 011.643 3.49 4.841 4.841 0 01-1.141 3.705v.015a3.923 3.923 0 01-2.808 1.303 4.664 4.664 0 01-3.367-1.387 5.678 5.678 0 01-1.71-3.518 4.832 4.832 0 011.14-3.753 3.923 3.923 0 012.813-1.3h.126z\"></path></svg>";
+
+/** No model attested at all — an empty dashed ring, "nothing to show yet", in the pin's own ink. */
+const NO_MODEL_SVG = "<svg aria-hidden=\"true\" width=\"1em\" height=\"1em\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-dasharray=\"4.2 3.2\"/></svg>";
+
 /** A person — the provider slot's mark on a human's plate, which attests no model. `currentColor`, so
  *  the chip's CSS wears it in the human's own hue. */
 export const HUMAN_GLYPH_SVG =
   '<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7.5" r="4.5"/><path d="M3 22c0-5 4-8.5 9-8.5s9 3.5 9 8.5z"/></svg>';
 
-/** Returns inner HTML for a ~12px provider mark (svg or letter). */
-export function providerIconHtml(provider: ModelProvider): string {
+/** The placeholder for a lab we have no logo for (yet): the model's own initial — "B" for beam,
+ *  "F" for fledge-alpha — so two unrecognised seats still tell apart, and nothing reads "?". */
+function monogram(model: string | null | undefined): string | null {
+  const letter = shortModel(model).match(/[a-z]/);
+  return letter ? letter[0].toUpperCase() : null;
+}
+
+/** Returns inner HTML for a ~12px provider mark: the lab's logo, else the model's initial, else (no
+ *  model at all) an empty ring. Pass the raw model id so the placeholder can wear its initial. */
+export function providerIconHtml(provider: ModelProvider, model?: string | null): string {
   switch (provider.id) {
     case 'claude':
       return CLAUDE_SVG;
@@ -57,9 +77,19 @@ export function providerIconHtml(provider: ModelProvider): string {
     case 'catjam':
       return CATJAM_SVG;
     case 'glm':
-      return `<span class="lc-gl-label__provider-letter" style="color:${provider.ink}">G</span>`;
-    case 'unknown':
-      return `<span class="lc-gl-label__provider-letter" aria-hidden="true">?</span>`;
+      return GLM_SVG;
+    case 'stepfun':
+      return STEPFUN_SVG;
+    case 'longcat':
+      return LONGCAT_SVG;
+    case 'ant':
+      return ANT_SVG;
+    case 'unknown': {
+      const letter = monogram(model);
+      return letter
+        ? `<span class="lc-gl-label__provider-letter" aria-hidden="true" style="color:${provider.ink}">${letter}</span>`
+        : `<span class="lc-gl-label__provider-none" style="color:${provider.ink}">${NO_MODEL_SVG}</span>`;
+    }
     default: {
       const _exhaustive: never = provider.id;
       return _exhaustive;

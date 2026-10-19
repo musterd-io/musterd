@@ -75,11 +75,33 @@ describe('shortSurface', () => {
 describe('shortModel', () => {
   it('shortens common model ids into glanceable labels', () => {
     expect(shortModel('claude-opus-4-5')).toBe('opus 4.5');
-    expect(shortModel('gpt-5.6-luna-medium')).toBe('gpt 5.6');
+    // The lab's variant name stays; the harness's effort suffix goes (nick, 2026-10-19: big-body's
+    // GPT 6 Luna read "gpt6").
+    expect(shortModel('gpt-5.6-luna-medium')).toBe('gpt 5.6 luna');
+    expect(shortModel('gpt-6-luna')).toBe('gpt 6 luna');
+    expect(shortModel('grok-4.7')).toBe('grok 4.7');
+    expect(shortModel('claude-opus-4-6')).toBe('opus 4.6');
     expect(shortModel('grok-4.5')).toBe('grok 4.5');
   });
   it('returns empty when unattested', () => {
     expect(shortModel(null)).toBe('');
+  });
+
+  it('drops a vendor prefix — a router id names the lab twice', () => {
+    expect(shortModel('moonshotai/kimi-k3')).toBe('kimi k3');
+    expect(shortModel('opencode/beam-free')).toBe('beam');
+  });
+
+  it('drops route words but keeps the stealth name whole', () => {
+    expect(shortModel('fledge-alpha-free')).toBe('fledge alpha');
+    expect(shortModel('longcat-2.5-preview-free')).toBe('longcat 2.5');
+    expect(shortModel('cat-jam-free')).toBe('cat jam');
+  });
+
+  it('cuts at a word, never mid-word', () => {
+    const s = shortModel('some-very-long-experimental-model-name-v9');
+    expect(s.length).toBeLessThanOrEqual(20);
+    expect('some very long model name v9'.startsWith(s)).toBe(true);
     expect(shortModel('unknown')).toBe('');
   });
 });

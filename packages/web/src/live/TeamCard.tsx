@@ -89,7 +89,7 @@ export function TeamCard({
             <span
               className="lc-team-card__logo"
               aria-hidden="true"
-              dangerouslySetInnerHTML={{ __html: providerIconHtml(badge.provider) }}
+              dangerouslySetInnerHTML={{ __html: providerIconHtml(badge.provider, badge.full) }}
             />
           )}
           {badge.label}

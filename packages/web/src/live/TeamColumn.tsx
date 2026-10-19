@@ -141,7 +141,7 @@ export function TeamColumn({
                   <span
                     className="lc-team__pip-logo"
                     aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: providerIconHtml(b.provider) }}
+                    dangerouslySetInnerHTML={{ __html: providerIconHtml(b.provider, b.full) }}
                   />
                 )}
               </li>
