@@ -130,6 +130,11 @@ away from musterd's files. Nothing claims to stop a determined process running a
 
 ### Hosted tier: hostile
 
+_(2026-10-19, nick: no per-seat OS users anywhere, and musterd builds no sandbox. Each hosted seat
+gets its own microVM, which is the boundary between seats. Item 1 below is replaced, and item 2
+waits on the resident-seat pilot. See
+[the hosted tier spec](../superpowers/specs/2026-10-19-hosted-tier-one-machine-per-seat-design.md).)_
+
 **Goal.** On a host musterd provisions, a seat cannot read another seat's note, or act as another
 seat, through musterd or through the file system.
 
