@@ -168,6 +168,69 @@ export function experimentEntries(board: LaneBoard | null, now: number): Experim
 
 const isUrgent = (e: ExperimentEntry) => e.status === 'overdue' || e.status === 'due';
 
+/**
+ * The instant a read day BEGINS in the team zone (00:00 America/Los_Angeles), in epoch ms — the
+ * moment the server's `read_status` turns a `waiting` read into `due`, and what the countdown runs
+ * toward (lane 01M5AXHFZT). Found by formatting the UTC-midnight guess back into the zone and
+ * correcting by the difference, so DST falls out of Intl rather than a table.
+ */
+export function readDayStart(ymd: string, tz: string = TEAM_TZ): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const guess = Date.UTC(y!, m! - 1, d!);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(guess);
+  const at = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? '0');
+  const localAsUtc = Date.UTC(at('year'), at('month') - 1, at('day'), at('hour'), at('minute'));
+  return guess - (localAsUtc - guess);
+}
+
+/** Whole days, hours and minutes in a span of ms (never negative; the caller keeps the sign). */
+export function splitSpan(ms: number): { days: number; hours: number; minutes: number } {
+  const total = Math.max(0, Math.floor(ms / 60_000));
+  return { days: Math.floor(total / 1440), hours: Math.floor((total % 1440) / 60), minutes: total % 60 };
+}
+
+const two = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * The row's clock, read against `now` every minute (nick, 2026-10-19: "a countdown clock to make
+ * it more exciting for the viewer"). The STATUS is still the server's — the clock only counts
+ * toward or from the read day it names — so at the midnight seam the phrase can say `due today`
+ * for a read the server still calls `waiting`, and the two agree within a tick.
+ *   waiting  → `2d 14h 05m` · `14h 05m` · `05m`
+ *   due      → `today · 9h 12m left`
+ *   overdue  → `overdue · 2d 04h` · `overdue · 4h 12m`
+ *   read     → the verdict word (unchanged)
+ */
+export function clockPhrase(e: Pick<ExperimentEntry, 'status' | 'readsOn' | 'phrase'>, now: number): string {
+  if (e.status === 'read') return e.phrase;
+  const start = readDayStart(e.readsOn);
+  if (e.status === 'waiting') {
+    const ms = start - now;
+    if (ms <= 0) return 'due today';
+    const { days, hours, minutes } = splitSpan(ms);
+    if (days >= 1) return `${days}d ${two(hours)}h ${two(minutes)}m`;
+    if (hours >= 1) return `${hours}h ${two(minutes)}m`;
+    return `${two(minutes)}m`;
+  }
+  if (e.status === 'due') {
+    const left = start + DAY_MS - now;
+    if (left <= 0) return 'due today';
+    const { hours, minutes } = splitSpan(left);
+    return `today · ${hours}h ${two(minutes)}m left`;
+  }
+  const { days, hours, minutes } = splitSpan(now - start);
+  if (days >= 1) return `overdue · ${days}d ${two(hours)}h`;
+  return `overdue · ${hours}h ${two(minutes)}m`;
+}
+
 /** The rows shown under the cap: every urgent row, then the rest up to `EXPERIMENTS_CAP`. */
 export function capEntries(entries: readonly ExperimentEntry[]): ExperimentEntry[] {
   const urgent = entries.filter(isUrgent).length;

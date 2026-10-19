@@ -139,7 +139,7 @@ and the broadcast capturer has no emoji font).
 | Count, nothing urgent | `1 read`; `{n} reads` |
 | overdue | `overdue · 1 day`; `overdue · {n} days` |
 | due | `due today` |
-| waiting | `tomorrow` when the day is next; `in {n} days` from 2 |
+| waiting | `tomorrow` when the day is next; `in {n} days` from 2 — _(amended 2026-10-19, lane `01M5AXHFZT`: the row shows a live countdown to the read day's start in the team zone instead — `2d 14h 05m` · `14h 05m` · `05m`; `due` reads `today · 9h 12m left`; `overdue` reads `overdue · 2d 04h` / `overdue · 4h 12m`; the screen-reader label keeps the day phrases; nick: "a countdown clock to make it more exciting for the viewer")_ |
 | read | `met` · `missed` · `inconclusive` |
 | Empty, `/live` only | `No dated reads. Open a lane with --reads-on to add one.` |
 | More, `/live` | `Show all {n}` / `Show fewer` |
@@ -191,7 +191,10 @@ no bake.)_
 - **Motion.** When a row changes status (a verdict lands, or midnight moves a read to `due`), its
   ground flashes once to `--lc-surface` and back over `--lc-dur-4` / `--lc-ease-out`. A new order is
   applied with no slide, because rows sliding on the stream read as noise. Under reduced motion,
-  nothing moves. Nothing loops.
+  nothing moves. Nothing loops. _(Amended 2026-10-19, lane `01M5AXHFZT`: the countdowns tick once a
+  minute, on the wall minute, on `/live` and the stream alike — one text node per row, paused while
+  the tab is hidden, and still ticking under reduced motion, because a clock is information rather
+  than motion. That is not a loop in this section's sense; nothing animates.)_
 
 ## 8. States
 
