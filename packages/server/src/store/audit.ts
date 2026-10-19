@@ -134,6 +134,11 @@ export type AuditAction =
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
   | 'channel.settings.changed'
+  // Human authority (ADR 662): a listed act presented without a valid A2 signature, and the
+  // approval that let one through. Detail carries act, target, key id and reason only — never
+  // a signature, nonce or descriptor payload (hard rule 5).
+  | 'authority.refused'
+  | 'authority.approved'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -713,6 +718,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.pair.revoked': 'actor',
   'channel.killswitch': 'actor',
   'channel.settings.changed': 'actor',
+  'authority.refused': 'actor',
+  'authority.approved': 'actor',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
   // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.

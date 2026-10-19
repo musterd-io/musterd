@@ -23,6 +23,7 @@ import {
   SetHoldBodySchema,
   TALK_ONLY_REPLY_ACTS,
   TALK_ONLY_SEND_ACTS,
+  ApprovalProofSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
@@ -31,6 +32,7 @@ import { log } from '../log.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { deliverAskToSlackChannels } from '../notify/slackAdapter.js';
 import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
+import { requireAuthority } from '../store/authority.js';
 import { boardSeat } from '../store/boardSeat.js';
 import { dreamMayWrite, isDreaming } from '../store/dream.js';
 import { holdExpiry, holdForProposal, setHold } from '../store/holds.js';
@@ -1733,6 +1735,28 @@ async function applyAcceptanceVerdict(
       decider: decider.name,
     });
     return;
+  }
+
+  // ADR 662: a human's verdict is a listed act. Once that human has an enrolled device key,
+  // the verdict binds only with an A2 signature over the server descriptor (carried on the
+  // act as meta.approval); without it the act lands as a message and moves nothing — the
+  // refusal itself is audited by the gate. Agent deciders are peer acceptance, not listed.
+  if (decider.kind === 'human') {
+    const proofParsed = ApprovalProofSchema.safeParse(meta?.['approval']);
+    const check = await requireAuthority(ctx.db, {
+      teamId: team.id,
+      audience: team.slug,
+      presenter: decider,
+      credential: 'human',
+      act: 'human_accept',
+      target: laneId,
+      payload: { lane: laneId, verdict: act },
+      proof: proofParsed.success ? proofParsed.data : undefined,
+    });
+    if (!check.ok) {
+      log.info({ msg: 'authority_verdict_refused', lane: laneId, decider: decider.name });
+      return;
+    }
   }
 
   // ADR 644 §3: an accept closes the lane `done`, so it meets the same rule as any close: a lane

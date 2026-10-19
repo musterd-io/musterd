@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApprovalProofSchema } from './authority.js';
 import { CalendarDateSchema } from './calendar.js';
 import { ClaimCheckSchema } from './claimCheck.js';
 import { LaneClaimsSchema } from './claims.js';
@@ -1111,6 +1112,13 @@ export const UpdateLaneSchema = z.object({
     .array(z.string().min(1).max(LANE_TODO_MAX_CHARS))
     .max(LANE_TODOS_MAX_ITEMS)
     .optional(),
+  /**
+   * ADR 662: an A2 approval proof for a high-authority move this patch performs (a human
+   * counterpart close, or `merged.authorized_by` naming an enrolled human). Meaningful only
+   * alongside such a move; the daemon verifies it against the server-built descriptor and
+   * refuses the patch without it once the human is enrolled.
+   */
+  approval: ApprovalProofSchema.optional(),
 });
 export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
 

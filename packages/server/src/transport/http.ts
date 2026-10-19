@@ -166,6 +166,9 @@ import {
   SyncHoldRequestSchema,
   CalendarEntryInputSchema,
   MemberCeilingSchema,
+  ApprovalProofSchema,
+  HIGH_AUTHORITY_ACTS,
+  type HighAuthorityAct,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -232,6 +235,7 @@ import {
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
+import { buildDescriptor, requireAuthority } from '../store/authority.js';
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import {
   createCalendarEntry,
@@ -1251,6 +1255,16 @@ const PairingStartBody = z.object({
 // against the adapters that exist — slack is the only one in v1 — so an arbitrary string from
 // the URL never reaches the store or the audit log as a channel.
 const ChannelSettingsChannel = z.enum(['slack']);
+
+// Human authority (ADR 662): ask the server to build an approval descriptor. The caller
+// names the act, target and payload; the server fills actor, digest, expiry and nonce, so
+// the prompt a human later approves is worded from server data, never caller arguments.
+const DescriptorRequestBody = z.object({
+  act: z.enum(HIGH_AUTHORITY_ACTS),
+  target: z.string().min(1),
+  payload: z.unknown().optional(),
+  actor: z.string().min(1).optional(),
+});
 const ChannelSettingsBody = z.object({
   deliver: z.boolean(),
   answer: z.boolean(),
@@ -1872,6 +1886,41 @@ async function authAdmin(
       'this resource requires a human admin (visibility_level: admin)',
     );
   return auth;
+}
+
+/**
+ * ADR 662 at the transport edge: a high-authority act proceeds only through
+ * {@link requireAuthority}. `presenter` is the member whose authority the act exercises —
+ * for `set_authorized_by`, the human named, not the seat relaying their proof. The proof
+ * rides the request body as `approval` and is parsed here, at the boundary.
+ */
+async function guardAuthority(
+  ctx: Ctx,
+  team: TeamRow,
+  presenter: MemberRow,
+  act: HighAuthorityAct,
+  target: string,
+  payload: unknown,
+  proofRaw: unknown,
+): Promise<void> {
+  const proof =
+    proofRaw === undefined ? undefined : parseOrBadRequest(ApprovalProofSchema, proofRaw);
+  const check = await requireAuthority(ctx.db, {
+    teamId: team.id,
+    audience: team.slug,
+    presenter,
+    credential: presenter.kind === 'human' ? 'human' : 'agent',
+    act,
+    target,
+    payload,
+    proof,
+  });
+  if (!check.ok) {
+    throw new MusterdError(
+      'forbidden',
+      `authority refused (${check.reason}): ${act} requires an A2 device signature (ADR 662)`,
+    );
+  }
 }
 
 /**
@@ -3155,7 +3204,18 @@ export async function handleHttp(
           bearer(req),
           actingSeat(req),
         );
-        const body = parseOrBadRequest(SponsoredAgentBody, await readJson(req));
+        const rawAgent = (await readJson(req)) as { approval?: unknown };
+        const body = parseOrBadRequest(SponsoredAgentBody, rawAgent);
+        // ADR 662: creating an agent is a listed act, whoever sponsors it.
+        await guardAuthority(
+          ctx,
+          team,
+          sponsor,
+          'agent_create',
+          body.name,
+          { name: body.name, role: body.role ?? null },
+          rawAgent.approval,
+        );
         const minted = await mintSponsoredAgent(ctx, team, sponsor, body, requestOrigin(req));
         return sendJson(res, 201, { ...minted, member: toMember(minted.member, team.slug) });
       }
@@ -3833,7 +3893,8 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/grants') {
-        const body = parseOrBadRequest(IssueGrantSchema, await readJson(req));
+        const rawGrant = (await readJson(req)) as { approval?: unknown };
+        const body = parseOrBadRequest(IssueGrantSchema, rawGrant);
         // ADR 463 §1: a sponsor may issue a SEAT grant for an agent they sponsor; all else is admin.
         // ADR 648: a sponsor host key may do the same for its creator's sponsored seats.
         const { team, member, sponsorScoped, viaHostKey, host } =
@@ -3845,6 +3906,19 @@ export async function handleHttp(
                 viaHostKey: false,
                 host: null,
               };
+        // ADR 662: issuing a grant is a listed act. The sponsor/host-key seat-grant path is a
+        // provisioning verb (decision 4) and stays off the list; the admin path signs.
+        if (!sponsorScoped && !viaHostKey) {
+          await guardAuthority(
+            ctx,
+            team,
+            member,
+            'grant_issue',
+            body.target,
+            { scope: body.scope, target: body.target, lifetime: body.lifetime },
+            rawGrant.approval,
+          );
+        }
         const mint = await issueGrant(ctx.db, team.id, body, member.name);
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -4179,7 +4253,18 @@ export async function handleHttp(
         // `/sync/lane` pattern, ADR 361) and learns the answer back through the fold; the hub
         // stamps the change so every machine converges. Unreachable hub REFUSES: policy is not an
         // act that may fork.
-        const stored = parseOrBadRequest(PolicyOverrideSchema, await readJson(req));
+        const rawPolicy = (await readJson(req)) as { approval?: unknown };
+        const stored = parseOrBadRequest(PolicyOverrideSchema, rawPolicy);
+        // ADR 662: team policy is a listed act — an enrolled human admin signs for it.
+        await guardAuthority(
+          ctx,
+          team,
+          member,
+          'admin.team_policy',
+          team.slug,
+          stored,
+          rawPolicy.approval,
+        );
         // ADR 443 §5: every doorbell sink URL is https to a public host — the daemon POSTs to it.
         for (const [sink, url] of [
           ['slack', stored.doorbell?.slack_url],
@@ -4454,6 +4539,31 @@ export async function handleHttp(
         }
       }
 
+      // ADR 662: build an approval descriptor. Any authenticated member may ask — fetching a
+      // descriptor grants nothing; only a device key's signature over it does, at the act.
+      if (method === 'POST' && rest === '/authority/descriptors') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(DescriptorRequestBody, await readJson(req));
+        const presenter = body.actor ? await getMemberByName(ctx.db, team.id, body.actor) : member;
+        if (!presenter || presenter.left_at !== null || presenter.kind !== 'human') {
+          throw new MusterdError(
+            'validation',
+            `no human member "${body.actor ?? member.name}" on ${slug}`,
+          );
+        }
+        const descriptor = await buildDescriptor(ctx.db, {
+          teamId: team.id,
+          audience: team.slug,
+          memberId: presenter.id,
+          actor: presenter.name,
+          act: body.act,
+          target: body.target,
+          payload: body.payload ?? null,
+        });
+        return sendJson(res, 201, { descriptor });
+      }
+
       // The read half of the policy verb (increment 5): `musterd residency policy` does
       // read → merge → POST, so admins can set one knob without re-stating the rest. It merges into
       // `stored` (ADR 185) — merging into `policy` is what re-densified the row on every write.
@@ -4470,7 +4580,18 @@ export async function handleHttp(
       // it without ever receiving a human credential. Nothing here activates required enforcement.
       if (method === 'POST' && rest === '/governed/policy') {
         const { team, member } = await authAdmin(ctx, slug, req);
-        const policy = parseOrBadRequest(GovernedPolicySchema, await readJson(req));
+        const rawGoverned = (await readJson(req)) as { approval?: unknown };
+        const policy = parseOrBadRequest(GovernedPolicySchema, rawGoverned);
+        // ADR 662: governed policy is team policy — a listed act.
+        await guardAuthority(
+          ctx,
+          team,
+          member,
+          'admin.team_policy',
+          team.slug,
+          policy,
+          rawGoverned.approval,
+        );
         const applied = await setGovernedPolicy(ctx.db, team.id, policy);
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -8074,6 +8195,46 @@ export async function handleHttp(
               body,
               ctx.config.presenceTimeoutMs,
             );
+        // ADR 662: two listed acts ride this patch. A human closing a counterpart's lane from
+        // awaiting_acceptance is a human accept/decline; `merged.authorized_by` names the
+        // human whose authority the merge attestation claims — the proof is theirs, relayed
+        // by whoever submits. Unenrolled humans proceed as before (enrollment latches it).
+        if (
+          body.state !== undefined &&
+          LANE_TERMINAL_STATES.has(body.state) &&
+          isAwaitingAcceptance(before.state) &&
+          member.kind === 'human' &&
+          member.name !== before.owner_seat
+        ) {
+          await guardAuthority(
+            ctx,
+            team,
+            member,
+            'human_accept',
+            before.id,
+            { lane: before.id, verdict: body.state },
+            body.approval,
+          );
+        }
+        if (body.merged?.authorized_by) {
+          const authorizer = await getMemberByName(ctx.db, team.id, body.merged.authorized_by);
+          if (authorizer && authorizer.kind === 'human' && authorizer.left_at === null) {
+            await guardAuthority(
+              ctx,
+              team,
+              authorizer,
+              'set_authorized_by',
+              before.id,
+              {
+                lane: before.id,
+                authorized_by: body.merged.authorized_by,
+                pr: body.merged.pr ?? null,
+                sha: body.merged.sha ?? null,
+              },
+              body.approval,
+            );
+          }
+        }
         const beforeKeys = new Set(
           (await laneWarnings(ctx.db, team.id, team.slug, before)).map(laneWarningKey),
         );
