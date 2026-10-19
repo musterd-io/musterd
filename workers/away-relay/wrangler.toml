@@ -1,0 +1,21 @@
+# The away-channels relay (ADR 659, lane 01M50XPXWE). One Durable Object per team holds that
+# team's pending-delivery metadata (never ask content); the daemon dials out to it over one
+# hibernating WebSocket. Ships UNDEPLOYED: an operator deploys it in the dedicated musterd
+# Cloudflare account and sets the secret below directly (never through an agent, ADR 659 §4).
+#
+#   cd workers/away-relay && wrangler deploy
+#   wrangler secret put TEAM_CREDENTIALS_JSON   # {"<team-slug>": "<sha256 hex of the credential>"}
+name = "musterd-away-relay"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "AWAY_RELAY"
+class_name = "TeamRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TeamRelay"]

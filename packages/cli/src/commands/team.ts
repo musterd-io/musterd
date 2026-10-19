@@ -593,6 +593,8 @@ const POLICY_FLAGS = new Set([
   'ask-slack-webhook',
   'seeds-relay',
   'seeds-token',
+  'away-relay',
+  'away-token',
   'guardian-tier',
   'stakes-default',
   'review-by',
@@ -868,6 +870,27 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     }
     changed = true;
   }
+  // ADR 659: the away relay — the daemon dials out to it for channel deliveries. Two keys set
+  // together (`--away-relay <url> --away-token <token>`), `--away-relay off` clears both. The
+  // token is a per-team credential (only its sha256 sits at the relay) and never displayed.
+  const awayRelay = flagStr(parsed.flags, 'away-relay');
+  const awayToken = flagStr(parsed.flags, 'away-token');
+  if (awayRelay !== undefined) {
+    if (awayRelay === 'off') {
+      delete merged.away_relay_url;
+      delete merged.away_relay_token;
+    } else {
+      if (!/^https:\/\/|^wss:\/\//.test(awayRelay) || awayToken === undefined) {
+        throw new CliError(
+          'usage: musterd team policy --away-relay <https url | off> --away-token <token>',
+          2,
+        );
+      }
+      merged.away_relay_url = awayRelay;
+      merged.away_relay_token = awayToken;
+    }
+    changed = true;
+  }
   // ADR 150: the enforcement class table — the opt-in PreToolUse gate declaration. `--enforce-surface`
   // (contended surfaces, Gate A) and `--enforce-action` (costly actions, Gate B) upsert classes by name
   // (re-declaring a name replaces it); `--enforce-clear` empties the table. Posture defaults to `block`
@@ -1094,6 +1117,10 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   // ADR 248: the relay URL shows its host; the token shows only that it is set.
   process.stdout.write(
     `  seeds relay: ${current.seeds_relay_url ? theme.accent(maskWebhook(current.seeds_relay_url)) : 'off'}${inherited(stored, 'seeds_relay_url')}\n`,
+  );
+  // ADR 659: the away relay URL shows its host; the credential shows only that it is set.
+  process.stdout.write(
+    `  away relay: ${current.away_relay_url ? theme.accent(maskWebhook(current.away_relay_url)) : 'off'}${inherited(stored, 'away_relay_url')}\n`,
   );
   // ADR 244: admin-set default stakes by surface. Empty is the shipped default (inert).
   const stakeRules = current.stakes_defaults;

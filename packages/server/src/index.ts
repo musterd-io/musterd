@@ -23,6 +23,7 @@ import { openTraceDriver } from './db/traceDb.js';
 import { startDigestSchedule } from './digest/schedule.js';
 import { startFootprintSampler } from './footprint/sampler.js';
 import { log, redactPath, requestFailure } from './log.js';
+import { startAwayRelay } from './notify/relay.js';
 import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
@@ -359,6 +360,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   const stopLoopWatch = watchEventLoop();
   let stopReaper: (() => void) | null = null;
   let stopSeeds: (() => void) | null = null;
+  let stopAwayRelay: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
@@ -449,6 +451,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           if (loops.has('reaper')) stopReaper = startReaper(opCtx);
           affinity?.start();
           if (loops.has('seeds_ingest')) stopSeeds = startSeedsIngest(opCtx);
+          // ADR 659: the away-relay client. Inert unless a team's policy names a relay.
+          if (loops.has('away_relay')) stopAwayRelay = startAwayRelay(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
@@ -622,6 +626,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopReaper?.();
         affinity?.stop();
         stopSeeds?.();
+        stopAwayRelay?.();
         stopDigest?.();
         stopSync?.();
         stopPull?.();
