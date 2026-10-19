@@ -54,6 +54,11 @@ one install block every surface renders from, with a test that fails when any su
   `mcpName`).
 - Until the tooling lanes land, `nextStepsAfterPublish` in `scripts/release/helpers.ts` remains the
   checklist, and it already prints the registry step.
+- 2026-10-19: `pnpm train status [--version X]` and `pnpm train notes --version X [vPREV..HEAD]`
+  landed (lanes `01M5AXB7VW`, `01M5AXBAFG`; `scripts/train/`). First reading, against 0.5.0: npm,
+  tag, Homebrew and the site ✓; **no GitHub Release ✗** (0.5.0 never had one); MCP Registry `?`
+  from a machine that could not reach it. A notes draft for v0.5.0..main took 75 s and kept 350 of
+  521 commits under 30 goals — the editing pass is where it becomes a release body.
 
 ## Observability & Evaluation
 

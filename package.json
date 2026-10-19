@@ -51,6 +51,7 @@
     "tour:check": "node --disable-warning=ExperimentalWarning scripts/gen-tour.ts --check",
     "install:gen": "node --disable-warning=ExperimentalWarning scripts/gen-install.ts",
     "install:check": "node --disable-warning=ExperimentalWarning scripts/gen-install.ts --check",
+    "train": "node --disable-warning=ExperimentalWarning scripts/train.ts",
     "roadmap-truth:check": "node --disable-warning=ExperimentalWarning scripts/check-roadmap-truth.ts",
     "steward:scan": "node --disable-warning=ExperimentalWarning scripts/steward/scan.ts",
     "steward:notify": "node --disable-warning=ExperimentalWarning scripts/steward/notify.ts",
