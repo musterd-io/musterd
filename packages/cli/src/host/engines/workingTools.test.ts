@@ -1,4 +1,5 @@
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -12,18 +13,49 @@ import { declaredScripts, preflightWorkingTool, workingTools } from './workingTo
  */
 
 let ws: string;
+let outside: string;
 let tools: Record<string, EngineTool>;
-const policy = { scripts: new Set(['hello']) };
+let gateway: Server;
+let blocked: Server;
+let gatewayEnv: Record<string, string>;
+const outsideSentinel = 'resident-sandbox-outside-read-marker';
+const policy = { scripts: new Set(['hello', 'gateway', 'off-gateway']) };
 
-beforeAll(() => {
+async function listen(server: Server): Promise<number> {
+  await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('expected a TCP address');
+  return address.port;
+}
+
+beforeAll(async () => {
   ws = realpathSync(mkdtempSync(join(tmpdir(), 'musterd-wt-')));
-  writeFileSync(join(ws, 'package.json'), JSON.stringify({ scripts: { hello: 'echo hi' } }));
+  outside = realpathSync(mkdtempSync(join(tmpdir(), 'musterd-outside-')));
+  writeFileSync(join(outside, 'host-only.txt'), outsideSentinel);
+  gateway = createServer((_req, res) => res.end('gateway-marker'));
+  blocked = createServer((_req, res) => res.end('off-gateway-marker'));
+  const gatewayPort = await listen(gateway);
+  const blockedPort = await listen(blocked);
+  gatewayEnv = { ANTHROPIC_BASE_URL: `http://127.0.0.1:${String(gatewayPort)}` };
+  writeFileSync(
+    join(ws, 'package.json'),
+    JSON.stringify({
+      packageManager: 'pnpm@10.28.2',
+      scripts: {
+        hello: `cat ${join(outside, 'host-only.txt')}`,
+        gateway:
+          'node -e "fetch(process.env.ANTHROPIC_BASE_URL).then(r=>r.text()).then(console.log)"',
+        'off-gateway': `BLOCKED_URL=http://127.0.0.1:${String(blockedPort)} node -e "fetch(process.env.BLOCKED_URL).then(r=>r.text()).then(console.log)"`,
+      },
+    }),
+  );
   writeFileSync(join(ws, 'a.txt'), 'one\ntwo\nthree\nfour\n');
   tools = Object.fromEntries(
     workingTools({
       workspace: ws,
       policy,
       env: { PATH: process.env['PATH'], HOME: process.env['HOME'], SEAT_KEY: 'sk-secret' },
+      gatewayEnv,
       secretEnvNames: ['SEAT_KEY'],
       bashTimeoutMs: 2_000,
     }).map((t) => [t.name, t]),
@@ -31,7 +63,10 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  gateway.close();
+  blocked.close();
   rmSync(ws, { recursive: true, force: true });
+  rmSync(outside, { recursive: true, force: true });
 });
 
 describe('workingTools', () => {
@@ -104,6 +139,20 @@ describe('workingTools', () => {
     expect(out).toContain('one');
   });
 
+  it('bash cannot read a host file through an allowed package script', async () => {
+    const out = await tools['bash']!.run({ command: 'pnpm hello' });
+    expect(out).not.toContain(outsideSentinel);
+  });
+
+  it('bash can reach the metering gateway and cannot reach another local port', async () => {
+    await expect(tools['bash']!.run({ command: 'pnpm gateway' })).resolves.toContain(
+      'gateway-marker',
+    );
+    await expect(tools['bash']!.run({ command: 'pnpm off-gateway' })).resolves.not.toContain(
+      'off-gateway-marker',
+    );
+  });
+
   it('bash refuses what the policy refuses, and reports a non-zero exit', async () => {
     await expect(tools['bash']!.run({ command: 'rm -rf .' })).rejects.toThrow(/denied/);
     const out = await tools['bash']!.run({ command: 'cat does-not-exist' });
@@ -133,7 +182,7 @@ describe('preflightWorkingTool', () => {
 
 describe('declaredScripts', () => {
   it('reads package.json scripts, and is empty (deny-safe) when there are none', () => {
-    expect([...declaredScripts(ws)]).toEqual(['hello']);
+    expect([...declaredScripts(ws)]).toEqual(['hello', 'gateway', 'off-gateway']);
     expect(declaredScripts('/nowhere').size).toBe(0);
     expect(declaredScripts(ws, () => '{"scripts": 3}').size).toBe(0);
   });
