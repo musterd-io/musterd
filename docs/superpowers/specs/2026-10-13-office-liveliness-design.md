@@ -157,3 +157,9 @@ ceiling, so a further beat that moves bytes needs a measured ADR 183 raise or a 
 2. ~~Should the carrier fix go all the way to an `owner` on `meta.lane_review` (an ADR)?~~ Answered
    2026-10-15 (nick): no. The board's `owner_seat` covers it without a protocol change (§5).
 3. L3 before L1, as ordered above?
+
+_(Amended 2026-10-19, miley, lane `01M5B02V4A` — nick: "animations should fully land first before the
+second and third happen." The invariant is now stated and tested: an act walk in flight is never
+replaced by a roster update (`setHomes` leaves non-ambient walks alone; a moved home is reached by
+one plain walk after the act lands, before the queue drains), and an act yields only its own
+member's ambient (`cancelAmbient(only)`), never the room's.)_

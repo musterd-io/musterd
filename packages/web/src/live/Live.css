@@ -1530,6 +1530,12 @@
     opacity var(--lc-dur-2) var(--lc-ease-out),
     translate var(--lc-dur-3) var(--lc-ease-out);
 }
+/* A walker's plate carries the act's words (`.lc-gl-label__walk`): lift it above the plates around it
+   while it does, but never above a speech bubble (z 3) — the bubble is an utterance, the tag a label
+   (lane 01M5B02V4A). */
+.lc-gl-label.is-tagged {
+  z-index: 2;
+}
 @media (prefers-reduced-motion: reduce) {
   .lc-gl-label {
     transition: opacity var(--lc-dur-2) var(--lc-ease-out);
