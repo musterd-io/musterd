@@ -122,6 +122,14 @@ export type AuditAction =
   // first class that can release work and is not written yet.
   | 'channel.answer.advisory'
   | 'channel.answer.refused'
+  // ADR 618 §8 (away channels 4 pairing, lane 01M50XPYZ9877E494X2SV1EGTB): the binding lifecycle.
+  // Detail carries the immutable provider identity and binding generation; never a raw nonce
+  // (hard rule 5). `channel.killswitch` records how many bindings and tokens it revoked.
+  | 'channel.pair.proposed'
+  | 'channel.pair.confirmed'
+  | 'channel.pair.rejected'
+  | 'channel.pair.revoked'
+  | 'channel.killswitch'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -687,6 +695,12 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   // The relay is not a seat; the human is named in detail.authorizer, the delivery path in detail.delivery_actor.
   'channel.answer.advisory': 'none',
   'channel.answer.refused': 'none',
+  // The human on the original surface is the actor for every binding-lifecycle write.
+  'channel.pair.proposed': 'actor',
+  'channel.pair.confirmed': 'actor',
+  'channel.pair.rejected': 'actor',
+  'channel.pair.revoked': 'actor',
+  'channel.killswitch': 'actor',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
   // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.

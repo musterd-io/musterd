@@ -138,6 +138,15 @@ them.
   Follows-up: lane `01M50XPXWEFMHND3GABXDSNTVW`.
 - Pairing, the Slack adapter and channel settings build on this model.
   Follows-up: lanes `01M50XPYZ9877E494X2SV1EGTB`, `01M50XQ04M8E3X5QHY173Q18X7`, `01M50XQ5YXXPJ8KVCV31KFB2N8`.
+  - 2026-10-19: the pairing lane (`01M50XPYZ9877E494X2SV1EGTB`) landed §7 as designed — the binding
+    store in the daemon (schema v110), a single-use 5-minute pairing nonce stored only as sha256,
+    the provider identity staged daemon-side by the relay path and bound only on the human's
+    confirmation (CLI `musterd channels` or the /live pairing panel, both showing the daemon-held
+    tenant and user), revoke and the kill switch consuming outstanding tokens in the same
+    transaction, audited as `channel.pair.*` / `channel.killswitch`. Redemption now rechecks
+    against this store instead of failing closed with `no_binding_store`. The daemon HTTP shapes
+    are parsed at the boundary with local schemas; no `@musterd/protocol` schema changed. The
+    three pairing falsifiers (different identity, confirmation-UI lie, kill switch) are real tests.
 - A2 and the musterd app are their own spec and ADR.
   Follows-up: lane `01M50XQ1TGXNVXRF0481TCK4AA`.
 

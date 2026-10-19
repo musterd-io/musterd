@@ -9,6 +9,8 @@ import {
   acquireWatchLinkObserver,
   broadcastSeat,
   createLane,
+  fetchChannelPairings,
+  confirmChannelPairing,
   fetchLaneBoard,
   fetchLaneChain,
   fetchLiveLaneBoard,
@@ -616,6 +618,47 @@ describe('haltSeat / resumeSeat (ADR 501)', () => {
     await expect(resumeSeat(cfg, 'Ada')).rejects.toMatchObject({
       status: 403,
       message: 'you may halt only agents you sponsor',
+    });
+  });
+});
+
+describe('channel pairings (ADR 618 §7: the /live confirmation surface)', () => {
+  const cfg = { team: 'revive', as: 'nick', token: 'mscr_human' };
+  const pairing = {
+    id: 'pair-1',
+    channel: 'slack',
+    check_code: '42',
+    state: 'awaiting_confirmation',
+    provider_tenant_id: 'T1',
+    provider_user_id: 'U1',
+    expires_at: 999,
+    created_at: 1,
+  };
+
+  it('reads staged pairings — tenant and user as the daemon holds them', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ pairings: [pairing] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchChannelPairings(cfg)).resolves.toEqual([pairing]);
+    expect(fetchMock).toHaveBeenCalledWith('/teams/revive/channels/pairings', {
+      headers: { authorization: `Bearer ${cfg.token}`, 'x-musterd-surface': 'web' },
+    });
+  });
+
+  it('confirms on the pairing route and surfaces a daemon refusal', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, binding: { id: 'b1' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await confirmChannelPairing(cfg, 'pair-1');
+    expect(fetchMock).toHaveBeenCalledWith('/teams/revive/channels/pairings/pair-1/confirm', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${cfg.token}`, 'x-musterd-surface': 'web' },
     });
   });
 });

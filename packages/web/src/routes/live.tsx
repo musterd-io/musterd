@@ -15,6 +15,7 @@ import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
 import { AsksStrip } from '../live/AsksStrip';
+import { PairingPanel } from '../live/PairingPanel';
 import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../live/MemberSignIn';
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
@@ -696,6 +697,8 @@ function LivePage() {
             </div>
           )}
           {phone && <div className="lc__phone-asks">{asksStrip}</div>}
+          {/* ADR 618 §7: a staged channel pairing waits for this human's confirmation here. */}
+          {cfg && <PairingPanel cfg={cfg} />}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +

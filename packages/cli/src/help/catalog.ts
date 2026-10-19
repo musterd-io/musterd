@@ -1183,6 +1183,19 @@ export const CATALOG: readonly CommandEntry[] = [
       'with its id as source_ref, so a second run reports every entry unchanged and writes nothing.',
   },
   {
+    name: 'channels',
+    signature:
+      'pair --channel <name> | pairings | confirm <id> | reject <id> | bindings | revoke <id> | kill-switch',
+    summary: 'pair an away channel to you — bindings, revoke, and the kill switch',
+    group: 'team',
+    detail:
+      'ADR 618 §7. Pairing binds an immutable provider identity to you in the daemon: `pair` mints ' +
+      'a single-use nonce (shown once; only its sha256 is stored) and a two-digit UX check code. ' +
+      'The provider identity is staged by the relay path, and only `confirm` on this surface — ' +
+      'showing the tenant and user exactly as the daemon holds them — creates the binding. ' +
+      '`kill-switch` revokes every binding generation and outstanding token and disconnects the relay.',
+  },
+  {
     name: 'hold',
     signature: 'set|propose <effect> --for|--until … --reason "<why>" | lift <id> | list [--all]',
     summary: 'pause something team-wide, with an author and an end — every seat sees it',

@@ -11,11 +11,11 @@ import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import {
-  NO_BINDING_STORE,
   redeemAskChannelToken,
   type AskStanding,
   type RedemptionChecks,
 } from '../store/askChannelTokens.js';
+import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
 import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
@@ -30,8 +30,10 @@ import { backoffMs } from '../sync/streamJoiner.js';
  * A team with `away_relay_url` / `away_relay_token` unset (the default) never connects: no
  * outbound call, the ADR 149 posture. Callbacks are forwarded raw by the relay; parsing a
  * provider's payload is its adapter's job (Slack: lane 01M50XQ04M8E3X5QHY173Q18X7). The generic
- * JSON shape (`{token, decision}`) is redeemed here and, until the pairing lane lands a binding
- * store, fails closed with `no_binding_store` (ADR 623 §6).
+ * JSON shape (`{token, decision}`) is redeemed here against the pairing lane's binding store
+ * (ADR 618 §7): no current binding at the token's generation, no answer (ADR 623 §6). A pairing
+ * identity (`{pairing_nonce, provider_tenant_id, provider_user_id}`) is staged, never bound —
+ * binding waits for the human's confirmation on the original surface.
  */
 
 /** How often the client looks for teams whose relay policy appeared, changed, or went away. */
@@ -123,7 +125,9 @@ async function relayAskStanding(
 
 const relayChecks: RedemptionChecks = {
   askStanding: relayAskStanding,
-  bindingStanding: NO_BINDING_STORE,
+  // The pairing lane's binding store (ADR 618 §7): a binding is current only while it is active
+  // at the generation the token names; revoked, re-paired or unknown bindings refuse the answer.
+  bindingStanding: channelBindingStanding,
 };
 
 /**
@@ -144,7 +148,31 @@ export async function handleRelayCallback(
   } catch {
     return { ok: false, reason: 'unparseable_callback' };
   }
-  const body = parsed as { token?: unknown; decision?: unknown; authorizer?: unknown } | null;
+  const body = parsed as {
+    token?: unknown;
+    decision?: unknown;
+    authorizer?: unknown;
+    pairing_nonce?: unknown;
+    provider_tenant_id?: unknown;
+    provider_user_id?: unknown;
+  } | null;
+  // A pairing identity stages against its nonce and binds nothing (spec §Pairing step 3): the
+  // binding is created only by the human's confirmation on the original surface, which shows
+  // the tenant and user exactly as recorded here.
+  if (
+    body &&
+    typeof body.pairing_nonce === 'string' &&
+    typeof body.provider_tenant_id === 'string' &&
+    typeof body.provider_user_id === 'string'
+  ) {
+    const staged = await recordPairingIdentity(ctx.db, {
+      nonce: body.pairing_nonce,
+      providerTenantId: body.provider_tenant_id,
+      providerUserId: body.provider_user_id,
+      now,
+    });
+    return staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
+  }
   if (
     !body ||
     typeof body.token !== 'string' ||
