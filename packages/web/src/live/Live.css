@@ -8832,6 +8832,11 @@ a.lc-xp__hit:focus-visible {
 }
 .lc-xp__note-toggle {
   all: unset;
+  /* A tap target in its own right (WCAG 2.2 AA 2.5.8, the connected target gate): 24px tall however
+     small its italic line is, so it never leans on spacing it does not have inside a row link. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   cursor: pointer;
   font: inherit;
   color: inherit;
