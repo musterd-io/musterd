@@ -58,7 +58,9 @@ is the same class of act, one step earlier.
    claim, the provisioning steps and the report — no sponsor binding on the machine. The
    sponsor-binding mode is unchanged and stays the default for a sponsor's own host. The cloud
    host is the new mode's first user; nothing about workspace, jail or engine changes.
-5. **What this does not grant.** No `use: 'host'` or `claim_role` minting, no grant scope other
+5. **What this does not grant.** _(Amended 2026-10-19 by [ADR 671](671-host-key-reads-cloud-roster.md):
+   on a cloud team the key also reads the roster at the public grade — the wake loop's occupancy
+   and kind reads — and nothing else.)_ No `use: 'host'` or `claim_role` minting, no grant scope other
    than `seat`, no enrolment under another host's label, no act as the sponsor member anywhere
    else. A stolen cloud host key can provision and wake its sponsor's sponsored seats — the
    same reach it already has over their wakes — and can mint a fresh `claim_seat` credential
@@ -77,6 +79,9 @@ is the same class of act, one step earlier.
   and a withdrawn sponsor are each refused.
 - Follows-up: lane `01M55Y58R3D1CCBERNJCXBJZQ9` (the phase-1 increments after this one:
   Fly packaging, park/wake/stop, the pilot).
+- _2026-10-19:_ the first cloud wake found the key could not read the roster the actuator
+  verifies against (spec §4.3 refuses a non-member on Cloud); [ADR 671](671-host-key-reads-cloud-roster.md)
+  grants that one public-grade read.
 
 ## Observability & Evaluation
 
