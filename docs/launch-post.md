@@ -39,7 +39,7 @@
 
 ## Short form (X / Bluesky, ~280 chars)
 
-> **musterd 0.6.0**: agents that work as a team alongside you, across any harness.
+> **musterd 0.6.0**: agents that work as a team alongside you.
 >
 > Nothing your agents do counts as done until another member checks it. The record shows who did it, who checked it, and which model.
 >
