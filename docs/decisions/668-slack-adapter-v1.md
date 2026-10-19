@@ -58,7 +58,10 @@ does not change.
 A forwarded payload is parsed at the boundary into `{team_id, user_id, token, decision}`. The
 daemon looks the binding up **by the provider identity in the payload**; the answer's authorizer
 is the human that binding names (read from the daemon's member table), never a name the payload
-carries. Redemption is ADR 623 §6 unchanged: the token must be unconsumed and unexpired, the ask
+carries. _(Amended 2026-10-19: `binding_id` from the token row is the source of the authorizer;
+the signed payload identity and callback route ask id must match the token binding, and unsigned
+generic JSON callbacks are refused.)_
+Redemption is ADR 623 §6 unchanged: the token must be unconsumed and unexpired, the ask
 still open with the same digest (now computed over the stored ask body and meta, at delivery and
 again at redemption) and the same recomputed class, and the binding current at the token's
 generation. A payload whose Slack user is not the bound user for that token redeems nothing. The
@@ -89,13 +92,20 @@ own change.
 
 ## Consequences
 
+- 2026-10-19 — callback ingress is Slack-only: the Worker detects the parsed `payload` field
+  independent of form order, verifies the Slack signature and install mapping, and refuses
+  unsigned JSON callbacks. Redemption resolves the authorizer through the token's binding row and
+  requires the signed provider identity and callback route's ask id to match the token binding.
+  Falsifiers cover identity mismatch, route mismatch, and forged JSON answer and pairing inputs.
+
 - 2026-10-19 — acceptance review of the first landing caught §1/§2 failing open on missing
   config: with `SLACK_SIGNING_SECRET` unset a Slack-shaped callback was forwarded unverified,
   and with `SLACK_TEAM_MAP_JSON` unset any signed callback went to whatever slug the URL named.
   The callback route now refuses a Slack-shaped body with 503 when either secret is unset
   (401 on a bad signature, 403 on an unmapped team), each case covered by a fetch-handler test
-  in `workers/away-relay/src/index.test.ts`. Generic (non-Slack) callbacks keep the plain
-  forward and carry no Slack trust claim.
+  in `workers/away-relay/src/index.test.ts`. At that first landing, generic (non-Slack) callbacks
+  kept the plain forward and carried no Slack trust claim; the 2026-10-19 validation change
+  retired that path until a separate adapter is reviewed.
 
 - Increments 1–6 are now completable on one workspace: pair (`musterd channels pair`), complete
   the Slack sign-in, confirm, and ordinary asks arrive with buttons whose answers are advisory.
@@ -120,9 +130,10 @@ outcome logged as `away_slack_delivered` / `away_slack_delivery_failed` (ask ref
 never a token, body, or credential — hard rule 5). Worker logs carry frame types and statuses
 only (ADR 659).
 
-**Eval** — the falsifier suite: the three Worker ingress tests above, plus adapter tests that a
-payload naming an unbound Slack user redeems nothing, a changed ask after delivery is refused
-`stale_revision`, and a pairing callback stages without binding. Headline check after wiring:
+**Eval** — the Worker ingress and adapter falsifier tests: unmapped or unsigned callbacks are
+refused, a payload naming an unbound Slack user or mismatching its token's ask redeems nothing,
+a changed ask after delivery is refused `stale_revision`, and a pairing callback stages without
+binding. Headline check after wiring:
 **zero** `channel.answer.*` audit rows carrying `authorized_by` for A1 answers (ADR 623's query).
 
 **Experiment** — n/a — no user-facing behavior changes until an operator wires a real workspace;

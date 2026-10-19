@@ -99,6 +99,15 @@ export interface AskStanding {
 
 export type BindingStanding = 'current' | 'stale' | 'unavailable';
 
+/** The authorizer resolved from the binding named by the redeemed token. */
+export interface BindingAuthorizer {
+  memberId: string;
+  memberName: string;
+  channel: string;
+  providerTenantId: string;
+  providerUserId: string;
+}
+
 /** What redemption must re-read at the moment of the answer, injected so it is testable. */
 export interface RedemptionChecks {
   askStanding(t: Driver, teamId: string, askId: string): Promise<AskStanding | null>;
@@ -113,6 +122,13 @@ export interface RedemptionChecks {
    * Optional: when absent, answer authority is not gated (existing callers and unit stubs).
    */
   answerEnabled?(t: Driver, teamId: string, bindingId: string, channel: string): Promise<boolean>;
+  bindingAuthorizer(
+    t: Driver,
+    teamId: string,
+    bindingId: string,
+    generation: number,
+    channel: string,
+  ): Promise<BindingAuthorizer | null>;
 }
 
 /**
@@ -124,17 +140,20 @@ export const NO_BINDING_STORE: RedemptionChecks['bindingStanding'] = async () =>
 export interface RedeemInput {
   teamId: string;
   token: string;
+  /** Callback route ask id; it must be the ask bound to the token. */
+  askId: string;
   /** The assurance the answering channel can prove. A2 is never accepted in v1 (ADR 623 §2). */
   assurance: Assurance;
   decision: Decision;
   /** The id the answer message will carry; the decision row records it. */
   answerMessageId: string;
-  /** The bound human (the authorizer) and the delivery path (the actor), kept separate (ADR 618 §1). */
-  authorizer: string;
+  /** Provider identity authenticated by ingress; it must match the token's binding. */
+  providerIdentity: { tenantId: string; userId: string };
+  /** The delivery path (the actor), kept separate from the authorizer (ADR 618 §1). */
   deliveryActor: string;
   now: number;
-  /** Writes the answer message inside the redemption transaction. A throw rolls everything back. */
-  writeAnswer(t: Driver): Promise<void>;
+  /** Writes the answer as the token-bound member inside the transaction. A throw rolls it back. */
+  writeAnswer(t: Driver, authorizer: BindingAuthorizer): Promise<void>;
 }
 
 export type RedeemResult =
@@ -164,13 +183,18 @@ class Refuse extends Error {
   }
 }
 
-function auditDetail(row: TokenRow, input: RedeemInput, extra: Record<string, unknown>) {
+function auditDetail(
+  row: TokenRow,
+  input: RedeemInput,
+  authorizer: BindingAuthorizer | null,
+  extra: Record<string, unknown>,
+) {
   return {
     ask: row.ask_id,
     ask_digest: row.ask_digest,
     channel: row.channel,
     assurance: input.assurance,
-    authorizer: input.authorizer,
+    authorizer: authorizer?.memberName ?? 'unknown',
     delivery_actor: input.deliveryActor,
     binding_id: row.binding_id,
     binding_generation: row.binding_generation,
@@ -206,6 +230,7 @@ export async function redeemAskChannelToken(
       if (input.assurance === 'A2' || row.required_assurance !== input.assurance) {
         throw new Refuse('assurance', row);
       }
+      if (row.ask_id !== input.askId) throw new Refuse('conflict', row);
       const ask = await checks.askStanding(t, input.teamId, row.ask_id);
       if (!ask || !ask.open) throw new Refuse('conflict', row);
       if (ask.digest !== row.ask_digest) throw new Refuse('stale_revision', row);
@@ -228,6 +253,21 @@ export async function redeemAskChannelToken(
       ) {
         throw new Refuse('answer_disabled', row);
       }
+      const authorizer = await checks.bindingAuthorizer(
+        t,
+        input.teamId,
+        row.binding_id,
+        row.binding_generation,
+        row.channel,
+      );
+      if (
+        !authorizer ||
+        authorizer.channel !== row.channel ||
+        authorizer.providerTenantId !== input.providerIdentity.tenantId ||
+        authorizer.providerUserId !== input.providerIdentity.userId
+      ) {
+        throw new Refuse('binding_stale', row);
+      }
 
       // The compare-and-set: one decision per ask, whichever channel gets here first.
       const claimed = await t.run(
@@ -238,7 +278,7 @@ export async function redeemAskChannelToken(
       );
       if (claimed.changes !== 1) throw new Refuse('conflict', row);
 
-      await input.writeAnswer(t);
+      await input.writeAnswer(t, authorizer);
 
       const consumed = await t.run(
         'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL',
@@ -251,7 +291,7 @@ export async function redeemAskChannelToken(
         action: 'channel.answer.advisory',
         target: row.ask_id,
         result: 'allow',
-        detail: auditDetail(row, input, { decision: input.decision }),
+        detail: auditDetail(row, input, authorizer, { decision: input.decision }),
       });
       return { ok: true, decision: input.decision, messageId: input.answerMessageId };
     });
@@ -265,7 +305,7 @@ export async function redeemAskChannelToken(
       target: err.row?.ask_id ?? null,
       result: 'deny',
       detail: err.row
-        ? auditDetail(err.row, input, { reason: err.reason })
+        ? auditDetail(err.row, input, null, { reason: err.reason })
         : { reason: err.reason, delivery_actor: input.deliveryActor },
     });
     return { ok: false, reason: err.reason };

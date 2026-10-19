@@ -231,6 +231,79 @@ withDrivers('slack adapter (ADR 668)', (o) => {
     expect(result).toEqual({ ok: false, reason: 'binding_stale' });
   });
 
+  it('refuses a callback route whose ask id differs from the token ask', async () => {
+    const { db, team, ctx, token } = await seed();
+    const result = await handleRelayCallback(
+      ctx,
+      team,
+      {
+        protocol: 1,
+        type: 'callback',
+        ask_ref: 'ask-other',
+        body: slackBody({
+          team: { id: 'T1' },
+          user: { id: 'U1' },
+          actions: [{ action_id: 'musterd_approve', value: token }],
+        }),
+      },
+      NOW + 1_000,
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'conflict' });
+    expect(await db.all('SELECT 1 FROM ask_decisions')).toHaveLength(0);
+    expect(await db.all("SELECT 1 FROM messages WHERE meta LIKE '%channel_answer%'")).toHaveLength(
+      0,
+    );
+  });
+
+  it('checks the callback identity against the issued token', async () => {
+    const { db, team, ctx, token } = await seed();
+    const bo = (await addMember(db, team, { name: 'bo', kind: 'human' })).row;
+    const { pairing, nonce } = await startPairing(db, {
+      teamId: team.id,
+      memberId: bo.id,
+      actor: 'bo',
+      channel: 'slack',
+      now: NOW,
+    });
+    await recordPairingIdentity(db, {
+      nonce,
+      providerTenantId: 'T1',
+      providerUserId: 'U2',
+      now: NOW,
+    });
+    const confirmed = await confirmPairing(db, {
+      teamId: team.id,
+      memberId: bo.id,
+      actor: 'bo',
+      pairingId: pairing.id,
+      now: NOW,
+    });
+    if (!confirmed.ok) throw new Error(confirmed.reason);
+
+    const result = await handleRelayCallback(
+      ctx,
+      team,
+      {
+        protocol: 1,
+        type: 'callback',
+        ask_ref: 'ask-1',
+        body: `extra=x&${slackBody({
+          team: { id: 'T1' },
+          user: { id: 'U2' },
+          actions: [{ action_id: 'musterd_approve', value: token }],
+        })}`,
+      },
+      NOW + 1_000,
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'binding_stale' });
+    expect(await db.all('SELECT 1 FROM ask_decisions WHERE ask_id = ?', ['ask-1'])).toHaveLength(0);
+    expect(await db.all("SELECT 1 FROM messages WHERE meta LIKE '%channel_answer%'")).toHaveLength(
+      0,
+    );
+  });
+
   it('a pairing callback stages the identity and binds nothing', async () => {
     const { db, team, ctx } = await seed();
     const nick = await db.get<{ id: string }>("SELECT id FROM members WHERE name = 'nick'");

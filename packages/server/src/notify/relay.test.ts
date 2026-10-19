@@ -76,7 +76,7 @@ withDrivers('away relay client (ADR 659)', (o) => {
     expect(await buildRelayPending(db, team.id, NOW + 61_000)).toEqual([]);
   });
 
-  it('a generic callback fails closed while no binding is current', async () => {
+  it('refuses callbacks outside the configured adapter format', async () => {
     const { team, ctx, token } = await seed();
     const result = await handleRelayCallback(
       ctx,
@@ -89,16 +89,27 @@ withDrivers('away relay client (ADR 659)', (o) => {
       },
       NOW + 1_000,
     );
-    // The token names binding bind-1, which pairing never confirmed: refused, nothing decided.
-    expect(result).toEqual({ ok: false, reason: 'binding_stale' });
+    expect(result).toEqual({ ok: false, reason: 'unparseable_callback' });
+    const pairing = await handleRelayCallback(
+      ctx,
+      team,
+      {
+        protocol: 1,
+        type: 'callback',
+        ask_ref: 'ask-1',
+        body: JSON.stringify({
+          pairing_nonce: 'nonce-1',
+          provider_tenant_id: 'T-attacker',
+          provider_user_id: 'U-attacker',
+        }),
+      },
+      NOW + 1_000,
+    );
+    expect(pairing).toEqual({ ok: false, reason: 'unparseable_callback' });
+    expect(await ctx.db.all('SELECT 1 FROM ask_decisions')).toHaveLength(0);
     expect(
-      await handleRelayCallback(
-        ctx,
-        team,
-        { protocol: 1, type: 'callback', ask_ref: 'ask-1', body: '<xml>provider</xml>' },
-        NOW + 1_000,
-      ),
-    ).toEqual({ ok: false, reason: 'unparseable_callback' });
+      await ctx.db.all("SELECT 1 FROM pairing_nonces WHERE provider_user_id = 'U-attacker'"),
+    ).toHaveLength(0);
   });
 
   it('the socket URL is the per-team connect route over wss', () => {

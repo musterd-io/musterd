@@ -5,9 +5,9 @@
  * WebSocket. The relay carries two things and stores neither's content:
  *  - `deliver` frames: the relay makes the provider POST inside the request and drops the body;
  *    storage keeps metadata only (`ask_ref`, `dedupe_id`, `expires_at`, status, provider coords).
- *  - provider callbacks (`POST /callback/<slug>/<ask_ref>`): forwarded raw to the daemon, which
- *    parses and redeems them against its own state (ADR 623 §6). The relay verifies no provider
- *    signature and grants nothing: a callback here is a transport event, never an answer.
+ *  - Slack callbacks (`POST /callback/<slug>/<ask_ref>`): signature-verified and install-mapped
+ *    before forwarding raw to the daemon, which parses and redeems against its own state (ADR 623 §6).
+ *    The relay grants nothing: a callback here is a transport event, never an answer.
  *
  * Auth: the daemon presents its per-team credential as a Bearer on the socket upgrade; the Worker
  * stores only its sha256 (`TEAM_CREDENTIALS_JSON`, set by the operator). One live socket per
@@ -89,35 +89,26 @@ export default {
     if (request.method === 'POST' && callback) {
       const slug = decodeURIComponent(callback[1]!);
       const rawBody = await request.text();
-      // Slack interactivity (ADR 668 §1/§2) fails CLOSED on missing config: a Slack-shaped
-      // body (`payload=…`) is forwarded only after its signature verifies against the Worker
-      // secret and its Slack team maps to the slug in the URL. With either secret unset the
-      // callback is refused, never forwarded unverified or unmapped — the daemon treats every
-      // forwarded callback as ingress-attested. Non-Slack (generic) callbacks keep the plain
-      // forward below; they carry no Slack trust claim.
-      if (rawBody.startsWith('payload=')) {
-        if (!env.SLACK_SIGNING_SECRET)
-          return new Response('slack signing secret not configured', { status: 503 });
-        const valid = await slackSignatureValid(
-          env.SLACK_SIGNING_SECRET,
-          request.headers.get('x-slack-request-timestamp') ?? '',
-          rawBody,
-          request.headers.get('x-slack-signature') ?? '',
-          Date.now(),
-        );
-        if (!valid) return new Response('invalid slack signature', { status: 401 });
-        if (!env.SLACK_TEAM_MAP_JSON)
-          return new Response('slack team map not configured', { status: 503 });
-        if (!slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug))
-          return new Response('slack team not mapped to this destination', { status: 403 });
-        return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
-          new Request(request.url, {
-            method: 'POST',
-            headers: request.headers,
-            body: rawBody,
-          }),
-        );
-      }
+      // This route currently serves Slack only. Detect Slack form callbacks by parsed field,
+      // independent of form field order, and treat Slack signature headers as a Slack signal too.
+      // Every accepted callback is verified and mapped before the daemon sees it.
+      const slackShaped =
+        new URLSearchParams(rawBody).has('payload') || request.headers.has('x-slack-signature');
+      if (!slackShaped) return new Response('unsupported callback', { status: 400 });
+      if (!env.SLACK_SIGNING_SECRET)
+        return new Response('slack signing secret not configured', { status: 503 });
+      const valid = await slackSignatureValid(
+        env.SLACK_SIGNING_SECRET,
+        request.headers.get('x-slack-request-timestamp') ?? '',
+        rawBody,
+        request.headers.get('x-slack-signature') ?? '',
+        Date.now(),
+      );
+      if (!valid) return new Response('invalid slack signature', { status: 401 });
+      if (!env.SLACK_TEAM_MAP_JSON)
+        return new Response('slack team map not configured', { status: 503 });
+      if (!slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug))
+        return new Response('slack team not mapped to this destination', { status: 403 });
       return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
         new Request(request.url, {
           method: 'POST',
