@@ -1,6 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneWarning } from './lanes.js';
-import { filterPicker, pickerRows } from './picker.js';
+import {
+  filterPicker,
+  PICK_ASK,
+  PICK_PHRASE,
+  pickerRows,
+  pickHandoffNote,
+  terminalPickNotice,
+} from './picker.js';
+
+describe('pick texts (spec §5.7, §10; ADR 626)', () => {
+  it('the /live handoff note names the human, says it is signed in, and asks for a plan then work', () => {
+    expect(pickHandoffNote('nick')).toBe(
+      'nick picked this lane for you in the lane picker (/live, signed in). Reply with a 3–5 line plan, then start unless redirected.',
+    );
+  });
+
+  it("the terminal notice is ADR 626's wording: unattested, with the lane title", () => {
+    expect(terminalPickNotice({ requested_by: 'nick', title: 'console /health build' })).toBe(
+      'nick picked this lane for you in the lane picker (terminal, unattested): "console /health build". Reply with a 3–5 line plan, then start unless redirected.',
+    );
+  });
+
+  it('both carry the shared phrase and ask, so the skill recognises either way in', () => {
+    const texts = [pickHandoffNote('a'), terminalPickNotice({ requested_by: 'a', title: 'x' })];
+    for (const t of texts) {
+      expect(t).toContain(PICK_PHRASE);
+      expect(t.endsWith(PICK_ASK)).toBe(true);
+    }
+  });
+});
 
 const lane = (o: Partial<Lane>): Lane =>
   ({
