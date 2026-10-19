@@ -106,6 +106,8 @@ seeing that person, and every guard downstream reads the seat as empty.
   protected absolutely, a claim presenting no lease of the seat's opens no window, and the
   displaced side rides the existing superseded/audit machinery. Read ADR 609 for the full rule.
 
+- **2026-10-19, "delivered when the seat is next idle" implemented for armed sessions ([ADR 558](558-idle-at-prompt-wake.md), lane `01M4M6QE47M3XNVFEK5H2X4705`).** The first bullet above said a deferred act "is delivered when the seat is next idle", which previously waited for the session to close or for the human's next tool boundary. Under ADR 558, an attended session whose inject adapter is armed (`hearing: 'idle'`) hears a ringable directed act (`steer`, `ask`, `request_help`, `handoff`, or `meta.urgent`) directly at its idle prompt (`GET /inbox/interrupt-check?seam=idle`, 5 s coalescing window, 30 s keyboard guard, 3/h per-sender and 6/h per-session caps) and does not drop presence at the 60-minute transcript-silence rung. A session that is deaf (switches off, no inject rail, or Cursor/Muse) still waits for a tool boundary or until the attended session closes and the wake host runs.
+
 ## Observability & Evaluation
 
 - Traces: `claim.refused` rows with `reason: 'attended_session'` count how often the rule fires:
