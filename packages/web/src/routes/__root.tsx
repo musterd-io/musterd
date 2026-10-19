@@ -43,7 +43,12 @@ export const Route = createRootRoute({
       { name: 'twitter:image:alt', content: SITE_CARD_ALT },
     ],
     links: [
+      // The SVG mark first for browsers that take it; /favicon.ico and the touch icon for the ones,
+      // and the answer engines' source lists, that ask by path (ADR 666 — both 404'd before).
       { rel: 'icon', href: chipIcon, type: 'image/svg+xml' },
+      { rel: 'icon', href: '/favicon.ico', sizes: '16x16 32x32 48x48' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      { rel: 'manifest', href: '/site.webmanifest' },
       { rel: 'stylesheet', href: globalCss },
       { rel: 'stylesheet', href: brandCss },
     ],

@@ -186,7 +186,24 @@ export const GRAPH_ID = {
   organization: `${SITE_ORIGIN}/#organization`,
   website: `${SITE_ORIGIN}/#website`,
   software: `${SITE_ORIGIN}/#software`,
+  source: `${SITE_ORIGIN}/#source`,
 } as const;
+
+/** The repository — one constant, so the graph's three mentions of it cannot drift. */
+export const REPO_URL = 'https://github.com/musterd-io/musterd';
+
+/**
+ * The places musterd is, besides this origin — `sameAs` on the Organization. This is what lets an
+ * answer engine join "musterd" on GitHub, on npm and on Twitch into ONE entity rather than three
+ * strangers that share a word (ADR 666; sandrise.io's linked graph is the model). Only accounts
+ * musterd itself controls belong here; a mention elsewhere is not a sameAs.
+ */
+export const SAME_AS = [
+  'https://github.com/musterd-io',
+  REPO_URL,
+  'https://www.npmjs.com/package/@musterd/cli',
+  'https://twitch.tv/musterd_io',
+] as const;
 
 /** musterd the publisher. SandRise Studio sits above it, and is never named as the product. */
 export function organizationNode(): JsonLdNode {
@@ -196,6 +213,8 @@ export function organizationNode(): JsonLdNode {
     name: SITE_TITLE,
     url: SITE_ORIGIN,
     description: SITE_TAGLINE,
+    logo: { '@type': 'ImageObject', url: absoluteUrl('/icons/icon-512.png'), width: 512, height: 512 },
+    sameAs: [...SAME_AS],
     parentOrganization: {
       '@type': 'Organization',
       name: 'SandRise Studio',
@@ -226,8 +245,30 @@ export function softwareApplicationNode(): JsonLdNode {
     description: SITE_ONE_LINER,
     softwareHelp: { '@type': 'WebPage', url: `${SITE_ORIGIN}/docs` },
     // The repository is public again (ADR 565). No install path or price: the preview is a
-    // separate decision (ADR 565 decision 5).
-    codeRepository: 'https://github.com/musterd-io/musterd',
+    // separate decision (ADR 565 decision 5). The repository itself is the SoftwareSourceCode node
+    // below — `codeRepository` is not a SoftwareApplication property, so it moved there (ADR 666).
+    license: 'https://opensource.org/licenses/MIT',
+    publisher: { '@id': GRAPH_ID.organization },
+  };
+}
+
+/**
+ * The code itself, as its own entity beside the application (ADR 666). `codeRepository` on a
+ * SoftwareApplication is outside schema.org's vocabulary for that type — validators drop it — so
+ * the open-source fact had nowhere machine-readable to live. This is the node that carries it, and
+ * it points back at the application it builds.
+ */
+export function softwareSourceCodeNode(): JsonLdNode {
+  return {
+    '@type': 'SoftwareSourceCode',
+    '@id': GRAPH_ID.source,
+    name: SITE_TITLE,
+    codeRepository: REPO_URL,
+    url: REPO_URL,
+    license: 'https://opensource.org/licenses/MIT',
+    programmingLanguage: 'TypeScript',
+    runtimePlatform: 'Node.js 22',
+    targetProduct: { '@id': GRAPH_ID.software },
     publisher: { '@id': GRAPH_ID.organization },
   };
 }

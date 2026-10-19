@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOCS_MANIFEST, type DocEntry } from '../content/docs.manifest';
 import { SITE_ORIGIN, SITE_TAGLINE, SITE_TITLE } from '../src/brand/siteMeta';
-import { excerpt, renderPage } from './gen-site-content';
+import { excerpt, renderPage, sourceLastModified } from './gen-site-content';
 
 const pkgRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRoot = dirname(dirname(pkgRoot));
@@ -55,8 +55,9 @@ export function blogEntries(dir = join(pkgRoot, 'content', 'blog')): { slug: str
  * sitemap advertising a path the deploy withholds is a 404 we told a crawler to go find.
  */
 export function siteUrls(
-  docs: { slug: string }[] = DOCS_MANIFEST,
+  docs: { slug: string; source?: string }[] = DOCS_MANIFEST,
   posts: { slug: string; date: string }[] = blogEntries(),
+  modifiedOf: (source: string) => string | undefined = sourceLastModified,
 ): SiteUrl[] {
   return [
     { path: '/' },
@@ -66,7 +67,13 @@ export function siteUrls(
     // 01M4GQ2NR438YWWYRH7RTTYP9X). Static preview copy with no daemon behind it, public for
     // the same reason /watch is.
     { path: '/start' },
-    ...docs.map((d) => ({ path: `/docs/${d.slug}` })),
+    // A doc's lastmod is the day its SOURCE file last changed in git — true of the page, unlike a
+    // build date (ADR 666). `sourceLastModified` returns nothing on a shallow clone rather than
+    // dating every doc to HEAD.
+    ...docs.map((d) => {
+      const lastmod = d.source ? modifiedOf(d.source) : undefined;
+      return { path: `/docs/${d.slug}`, ...(lastmod ? { lastmod } : {}) };
+    }),
     // The blog section exists only while it has something in it. An index advertising nothing is
     // worse than no index: it is a public promise of content, indexed as an empty page and unfurled
     // as one. With no posts, /blog and the feed leave the sitemap, the nav and llms.txt together —
@@ -135,12 +142,24 @@ export const AI_CRAWLERS = [
   'CCBot',
 ] as const;
 
+/**
+ * The Content Signals Policy line (contentsignals.org): what a crawler may DO with a page once
+ * robots lets it in — show it in search, feed it to an answer as input, train on it. All three are
+ * yes: the product is MIT, the site exists to be found and cited, and the named training crawlers
+ * below were already allowed one by one. Stated in OUR file, never by turning on Cloudflare's
+ * Managed robots.txt to get it: that setting replaces this file wholesale (ADR 302 2026-09-01
+ * amendment; sandrise.io hit the same trap). ADR 666.
+ */
+export const CONTENT_SIGNAL = 'search=yes, ai-input=yes, ai-train=yes';
+
 export function robotsTxt(): string {
   return `# musterd.io — everything this origin serves is public, and nothing is disallowed.
 # Agent-readable summary of the product: ${SITE_ORIGIN}/llms.txt
+# Content signals (https://contentsignals.org): search, ai-input and ai-train are all yes.
 
 User-agent: *
 Allow: /
+Content-Signal: ${CONTENT_SIGNAL}
 
 ${AI_CRAWLERS.map((ua) => `User-agent: ${ua}\nAllow: /\n`).join('\n')}
 Sitemap: ${SITE_ORIGIN}/sitemap.xml
@@ -205,8 +224,8 @@ ${[...docLines, ...(posts.length > 0 ? [`- ${SITE_ORIGIN}/blog`, ...postLines] :
 
 ## For agents
 
-Every page above is also served as markdown at the same URL with \`.md\` appended — the same source
-the HTML was rendered from, with no nav, no styling and no script. Prefer it.
+Every doc${posts.length > 0 ? ' and post' : ''} above is also served as markdown at the same URL with \`.md\` appended — the
+same source the HTML was rendered from, with no nav, no styling and no script. Prefer it.
 
 - ${SITE_ORIGIN}/docs/spec.md — one page, clean.
 - ${SITE_ORIGIN}/llms-full.txt — every document above, whole, in one fetch.${
@@ -392,6 +411,21 @@ export function headersFile(): string {
   Cache-Control: public, max-age=300
   Content-Type: application/rss+xml; charset=utf-8
 
+# Icons and the manifest live at fixed, unhashed paths (browsers and crawlers ask for
+# /favicon.ico by name), so they get a day rather than the year /assets/* gets.
+/favicon.ico
+  Cache-Control: public, max-age=86400
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400
+
+/icons/*
+  Cache-Control: public, max-age=86400
+
+/site.webmanifest
+  Cache-Control: public, max-age=86400
+  Content-Type: application/manifest+json; charset=utf-8
+
 # Wrangler types an asset from its extension at upload, and .md is already text/markdown — this
 # states the charset, and states the type where a stale mime table would guess text/plain and send
 # an agent reader a file it has to sniff.
@@ -402,6 +436,93 @@ export function headersFile(): string {
 /blog/*.md
   Cache-Control: public, max-age=300
   Content-Type: text/markdown; charset=utf-8
+`;
+}
+
+/**
+ * The icons a browser, a home screen or an answer engine's source list asks for BY PATH, without
+ * reading the page's <link rel="icon">: /favicon.ico and /apple-touch-icon.png both 404'd until
+ * 2026-10-19 (ADR 666). Rendered once and committed as files — a rasterizer in the build would be
+ * a dependency for five images that change when the mark does. brand.md's two cuts hold: the ICO's
+ * 16px frame is the small cut (`src/brand/chip-sm.svg`), everything 24px and up is the full cut
+ * (`docs/design/assets/chip.svg`). The touch and maskable icons are full-bleed, because iOS and
+ * Android round their own corners and a pre-rounded one shows black in them.
+ */
+const ICON_DIR = join(pkgRoot, 'src', 'brand', 'icons');
+export const ICON_FILES = {
+  'favicon.ico': 'favicon.ico',
+  'apple-touch-icon.png': 'apple-touch-icon.png',
+  'icons/icon-192.png': 'icon-192.png',
+  'icons/icon-512.png': 'icon-512.png',
+  'icons/icon-maskable-512.png': 'icon-maskable-512.png',
+} as const;
+
+/** The web app manifest: the name, colours and icons an install prompt or a launcher shows. */
+export function webManifest(): string {
+  return `${JSON.stringify(
+    {
+      name: SITE_TITLE,
+      short_name: SITE_TITLE,
+      description: SITE_TAGLINE,
+      start_url: '/',
+      display: 'browser',
+      background_color: '#f7efe2',
+      theme_color: '#f7efe2',
+      icons: [
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+/**
+ * The page an unknown path gets. Before ADR 666 a 404 here was an EMPTY body: right for a crawler,
+ * a dead end for a person or an agent that followed a stale link. It stays a real 404 status
+ * (`not_found_handling: "404-page"` serves this file WITH 404 — never the SPA shell, which is the
+ * guarantee wrangler.jsonc keeps), and it is static on purpose: no bundle, no font, no script, so
+ * it cannot boot anything and costs nothing when a scanner sprays paths at the origin.
+ */
+export function notFoundHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Not found — ${SITE_TITLE}</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box; padding: 24px 16px;
+    background: #f7efe2; color: #2a2118;
+    font: 17px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { width: 100%; max-width: 32rem; }
+  .mark { width: 48px; height: 48px; display: block; margin-bottom: 20px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 12px; }
+  p { margin: 0 0 16px; }
+  a { color: #7a4a00; font-weight: 600; text-underline-offset: 3px; }
+  ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  li a { display: inline-block; min-height: 24px; padding: 2px 0; }
+</style>
+</head>
+<body>
+<main>
+  <img class="mark" src="/icons/icon-192.png" alt="" width="48" height="48">
+  <h1>Nobody’s at this desk.</h1>
+  <p>There’s no page at this address. It may have moved, or the link was mistyped.</p>
+  <ul>
+    <li><a href="/">The front page</a></li>
+    <li><a href="/docs">Docs</a></li>
+    <li><a href="/llms.txt">llms.txt, for agents</a></li>
+  </ul>
+</main>
+</body>
+</html>
 `;
 }
 
@@ -416,10 +537,15 @@ export function allMirrors(): SiteMirror[] {
 }
 
 /** Everything this module contributes to the build, keyed by the filename it ships as. */
-export function siteFiles(): Record<string, string> {
+export function siteFiles(): Record<string, string | Uint8Array> {
   const mirrors = allMirrors();
   return {
     'robots.txt': robotsTxt(),
+    'site.webmanifest': webManifest(),
+    '404.html': notFoundHtml(),
+    ...Object.fromEntries(
+      Object.entries(ICON_FILES).map(([out, file]) => [out, readFileSync(join(ICON_DIR, file))]),
+    ),
     'sitemap.xml': sitemapXml(siteUrls(), mirrors),
     'llms.txt': llmsTxt(),
     'llms-full.txt': llmsFullTxt(),

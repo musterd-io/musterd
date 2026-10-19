@@ -17,6 +17,7 @@ import {
   pageMeta,
   pageTitle,
   softwareApplicationNode,
+  softwareSourceCodeNode,
   TWITCH_CHANNEL_URL,
   webSiteNode,
 } from './siteMeta';
@@ -184,8 +185,19 @@ describe('structured data nodes', () => {
     expect(app.offers).toBeUndefined();
     expect(app.installUrl).toBeUndefined();
     expect(app.disambiguatingDescription).toBeUndefined();
-    expect(app.codeRepository).toBe('https://github.com/musterd-io/musterd');
+    expect(app.license).toBe('https://opensource.org/licenses/MIT');
     expect(app.publisher).toEqual({ '@id': GRAPH_ID.organization });
+    // The repository moved to its own SoftwareSourceCode node (ADR 666): `codeRepository` is not
+    // a SoftwareApplication property, and the source node points back at the app it builds.
+    const src = softwareSourceCodeNode();
+    expect(src.codeRepository).toBe('https://github.com/musterd-io/musterd');
+    expect(src.targetProduct).toEqual({ '@id': GRAPH_ID.software });
+  });
+
+  it('the organization names its logo and the accounts it controls, so one entity joins them', () => {
+    const org = organizationNode();
+    expect(org.sameAs).toEqual(expect.arrayContaining(['https://github.com/musterd-io', 'https://twitch.tv/musterd_io']));
+    expect((org.logo as { url: string }).url).toBe('https://musterd.io/icons/icon-512.png');
   });
 
   it('the site-wide nodes are addressable, so pages reference instead of restating', () => {
