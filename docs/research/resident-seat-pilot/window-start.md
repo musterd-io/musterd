@@ -299,3 +299,9 @@ C's eight in-class lanes has a priced wake by a C seat. The others were done in 
 which lease nothing and so leave no `residency.wake_cost` row to price. Unless the hub shows
 otherwise, C's dollars per accepted lane rest on one lane. The script prints that count beside the
 kill criterion. The finding reports it as the honest-N caveat, and does not read it as a comparison.
+
+**Decision (nick, 2026-10-19):** the rule stands, and the finding reports measure 2 as
+underpowered on arm C. The manifest is not amended and the window is not extended. The worker shape
+waits either way. The finding names the defect so the next pilot fixes it: C needs an arm that
+leaves a priced record, either seats that work only through wakes, or attended sessions whose model
+calls the gateway prices.
