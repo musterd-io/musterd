@@ -30,7 +30,14 @@ async function sign(secret: string, body: string, ts: number): Promise<string> {
 }
 
 function env(partial: Partial<Env>): { env: Env; forwarded: ReturnType<typeof vi.fn> } {
-  const forwarded = vi.fn(async () => new Response('forwarded', { status: 200 }));
+  const forwarded = vi.fn(async (req: Request) => {
+    if (new URL(req.url).pathname.startsWith('/install-state/'))
+      return new Response(JSON.stringify({ registered: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    return new Response('forwarded', { status: 200 });
+  });
   const full = {
     AWAY_RELAY: {
       idFromName: (name: string) => name,
@@ -39,6 +46,30 @@ function env(partial: Partial<Env>): { env: Env; forwarded: ReturnType<typeof vi
     ...partial,
   } as unknown as Env;
   return { env: full, forwarded };
+}
+
+/** A relay-object stub that holds daemon-minted state hashes for named teams only. */
+function relayStateStub(registeredByTeam: Map<string, Set<string>>) {
+  return {
+    idFromName: (name: string) => name,
+    get: (id: string) => ({
+      fetch: async (req: Request) => {
+        const url = new URL(req.url);
+        const m = /^\/install-state\/([0-9a-f]{64})$/.exec(url.pathname);
+        if (m)
+          return new Response(
+            JSON.stringify({ registered: registeredByTeam.get(id)?.has(m[1]!) ?? false }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        return new Response('held', { status: 200 });
+      },
+    }),
+  };
+}
+
+async function sha256HexOf(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function post(body: string, headers: Record<string, string> = {}): Request {
@@ -264,6 +295,11 @@ describe('slack install routes (ADR 668 decision 2, increment 9)', () => {
         idFromName: (name: string) => name,
         get: () => ({
           fetch: async (req: Request) => {
+            if (new URL(req.url).pathname.startsWith('/install-state/'))
+              return new Response(JSON.stringify({ registered: true }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              });
             held.push(req);
             return new Response('held', { status: 200 });
           },
@@ -323,6 +359,37 @@ describe('slack install routes (ADR 668 decision 2, increment 9)', () => {
     }
   });
 
+  it('a state registered by one team cannot start an install for another (lazara falsifier)', async () => {
+    const registry = registryStub();
+    const state = 'victim-state-at-least-16';
+    const hash = await sha256HexOf(state);
+    const e = {
+      AWAY_RELAY: relayStateStub(new Map([['revive', new Set([hash])]])),
+      SLACK_INSTALLS: registry,
+      SLACK_CLIENT_ID: '123.456',
+      SLACK_CLIENT_SECRET: 'shh',
+    } as unknown as Env;
+    // The victim team's own link works.
+    const own = await worker.fetch(
+      new Request(`https://relay.example/slack/install?team=revive&state=${state}`),
+      e,
+    );
+    expect(own.status).toBe(302);
+    // Whoever holds the link cannot re-bind it to their own team: the attacker's
+    // relay object holds no such hash, so no install starts and no mapping is written.
+    const rebound = await worker.fetch(
+      new Request(`https://relay.example/slack/install?team=attacker&state=${state}`),
+      e,
+    );
+    expect(rebound.status).toBe(403);
+    // An entirely unregistered state is refused even for a well-formed slug.
+    const invented = await worker.fetch(
+      new Request('https://relay.example/slack/install?team=revive&state=invented-state-16ch'),
+      e,
+    );
+    expect(invented.status).toBe(403);
+  });
+
   it('callback dispatch follows the install record even with no operator map', async () => {
     const registry = registryStub();
     registry.installs.set('T9', 'revive');
@@ -378,7 +445,15 @@ describe('cloud-direct dispatch (spec: Slack ingress §3, away 10)', () => {
     const e = {
       AWAY_RELAY: {
         idFromName: (name: string) => name,
-        get: () => ({ fetch: async () => new Response('held', { status: 200 }) }),
+        get: () => ({
+          fetch: async (req: Request) =>
+            new URL(req.url).pathname.startsWith('/install-state/')
+              ? new Response(JSON.stringify({ registered: true }), {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                })
+              : new Response('held', { status: 200 }),
+        }),
       },
       SLACK_INSTALLS: registry,
       SLACK_CLIENT_ID: '123.456',

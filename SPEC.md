@@ -1106,7 +1106,10 @@ A team's Slack workspace is installed through Slack's OAuth flow, not an operato
 - The **install mapping** (Slack team id → musterd team → destination) MUST be written only by
   the authenticated install flow: a one-time state a daemon minted (stored there only as
   sha256), authorized by the workspace installer at Slack, exchanged by the relay with the
-  app's client secret. Nothing in an incoming callback can write or alter it.
+  app's client secret. Nothing in an incoming callback can write or alter it. The daemon
+  MUST register the state's hash with its own relay object; the ingress MUST accept a state
+  only when the named team's object holds that hash, and MUST bind a state to one team
+  insert-only — a state can never be re-bound, and its consumption never resets.
 - On connect a daemon MUST send `install_sync`; the relay answers `installs` with the records
   it holds for that team and MUST keep each record until the daemon's `install_ack`. A daemon
   MUST record an install only against a live state it minted for its own team; anything else

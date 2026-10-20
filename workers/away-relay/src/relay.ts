@@ -84,6 +84,7 @@ export interface RelaySlackInstall {
 }
 
 export type DaemonFrame =
+  | { protocol: 1; type: 'install_state'; state_hash: string }
   | { protocol: 1; type: 'install_sync' }
   | { protocol: 1; type: 'install_ack'; slack_team_ids: string[] }
   | { protocol: 1; type: 'reconcile'; pending: RelayPendingRow[] }
@@ -188,6 +189,10 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
     return null;
   }
   if (!isRecord(v) || v['protocol'] !== RELAY_PROTOCOL_VERSION) return null;
+  if (v['type'] === 'install_state') {
+    if (typeof v['state_hash'] !== 'string' || !/^[0-9a-f]{64}$/.test(v['state_hash'])) return null;
+    return { protocol: 1, type: 'install_state', state_hash: v['state_hash'] };
+  }
   if (v['type'] === 'install_sync') return { protocol: 1, type: 'install_sync' };
   if (v['type'] === 'install_ack') {
     if (

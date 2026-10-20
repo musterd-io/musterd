@@ -110,6 +110,24 @@ export async function recordSlackInstall(
   };
 }
 
+/**
+ * Hashes of this team's live install states, for registering with the relay object
+ * (ADR 668 decision 2): the relay accepts an install state only when the named team's
+ * own object holds its hash, so a state is bound to the team that minted it.
+ */
+export async function listLiveInstallStateHashes(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<string[]> {
+  const rows = await db.all<{ state_hash: string }>(
+    `SELECT state_hash FROM slack_install_requests
+      WHERE team_id = ? AND consumed_at IS NULL AND created_at > ?`,
+    [teamId, now - STATE_TTL_MS],
+  );
+  return rows.map((r) => r.state_hash);
+}
+
 /** The team's live install, token included — store-internal; listings never carry it. */
 export async function getSlackInstallBotToken(
   db: Driver,

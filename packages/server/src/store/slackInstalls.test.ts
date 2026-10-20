@@ -5,6 +5,7 @@ import { addMember } from './members.js';
 import {
   createSlackInstallRequest,
   getSlackInstallBotToken,
+  listLiveInstallStateHashes,
   listSlackInstalls,
   recordSlackInstall,
   revokeSlackInstall,
@@ -79,6 +80,23 @@ withDrivers('slack installs (ADR 668 decision 2, increment 9)', (o) => {
     const refused = await record(db, other.id, state);
     expect(refused).toEqual({ ok: false, reason: 'no_live_request' });
     expect(await getSlackInstallBotToken(db, other.id)).toBeNull();
+  });
+
+  it('lists only this team’s live state hashes for relay registration', async () => {
+    const { db, team, nick } = await teamWithHuman();
+    const other = await createTeam(db, { slug: 'other' });
+    const { createHash } = await import('node:crypto');
+    const hashOf = (s: string) => createHash('sha256').update(s).digest('hex');
+    const mine = await createSlackInstallRequest(db, { teamId: team.id, actor: nick.name });
+    await createSlackInstallRequest(db, { teamId: other.id, actor: nick.name });
+    const stale = await createSlackInstallRequest(db, {
+      teamId: team.id,
+      actor: nick.name,
+      now: Date.now() - 11 * 60_000,
+    });
+    void stale;
+    const hashes = await listLiveInstallStateHashes(db, team.id);
+    expect(hashes).toEqual([hashOf(mine.state)]);
   });
 
   it('a revoked install stops yielding a token and stays listed as revoked', async () => {
