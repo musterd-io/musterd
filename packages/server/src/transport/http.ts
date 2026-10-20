@@ -6619,6 +6619,8 @@ export async function handleHttp(
           ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
           // ADR 667: a verdict on an advisory ask — recorded, moved nothing.
           ...(result.lane_advisory ? { lane_advisory: result.lane_advisory } : {}),
+          // ADR 680: a verdict on a lane that had left the acceptance stage — bound to nothing.
+          ...(result.lane_unbound ? { lane_unbound: result.lane_unbound } : {}),
           // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason;
           // and the note an accepted handoff carried, returned where it was accepted (§6).
           ...(result.dispute ? { dispute: result.dispute } : {}),

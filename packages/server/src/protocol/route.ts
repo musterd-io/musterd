@@ -16,6 +16,7 @@ import {
   type Lane,
   type LaneAdvisoryWire,
   type LaneSupersededWire,
+  type LaneUnboundWire,
   makeEnvelope,
   modelFamily,
   confidentialAskSubject,
@@ -105,6 +106,11 @@ export interface RouteResult {
   /** ADR 667 — the reply answered an ADVISORY acceptance ask: recorded against the lane, moved
    *  nothing. Reported on the ack so the advisory seat learns its verdict did not close the lane. */
   lane_advisory?: LaneAdvisoryWire;
+  /** ADR 680 — the reply answered an acceptance ask on a lane that had LEFT the acceptance stage:
+   *  it bound to nothing (ADR 202 — one verdict closes a lane), and the ack says so and names the
+   *  lane's state. Reported for the same reason `lane_verdict` is: the sender must learn on the
+   *  spot that their verdict did not move the lane, and why. */
+  lane_unbound?: LaneUnboundWire;
   /** ADR 505 — what the daemon did with the lane owner's answer to a review dispute: a recorded
    *  concession, or a hold that re-routed the lane to a tiebreak reviewer (or could not). Absent
    *  when the act answered no dispute of the sender's. Reported on the ack as `lane_verdict` is. */
@@ -294,6 +300,7 @@ async function routeEnvelopeInner(
   let laneAck: RouteResult['lane_ack'];
   let laneSuperseded: RouteResult['lane_superseded'];
   let laneAdvisory: RouteResult['lane_advisory'];
+  let laneUnbound: RouteResult['lane_unbound'];
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
   let deafRecipient: RouteResult['deaf_recipient'];
@@ -761,6 +768,16 @@ async function routeEnvelopeInner(
         log.warn({ msg: 'superseded_check_failed', err: String(err) });
       }
     }
+    // ADR 680: the third way an ask stops binding — the lane left the acceptance stage (closed on a
+    // newer PR, sent back, parked, abandoned). The verdict moves nothing, so the daemon says so and
+    // writes the row; checked after the two above, which own their own cases.
+    if (typeof ref === 'string' && !laneAdvisory && !laneSuperseded) {
+      try {
+        laneUnbound = await unboundLaneReview(ctx, team, sender, ref, env.act, message.id);
+      } catch (err) {
+        log.warn({ msg: 'unbound_check_failed', err: String(err) });
+      }
+    }
     // Hub-only (joiner audit 2026-10-02, lane 01M3ZBTJKD): the ask is composed FROM the lane owner,
     // who may be bound to the hub, and a joiner pushing it wedges. A joiner's accept folds, and the
     // hub fires the ask then (`handleFoldedMessages`).
@@ -776,7 +793,8 @@ async function routeEnvelopeInner(
       typeof ref === 'string' &&
       sender.kind !== 'human' &&
       !laneSuperseded &&
-      !laneAdvisory
+      !laneAdvisory &&
+      !laneUnbound
     ) {
       try {
         if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
@@ -805,7 +823,7 @@ async function routeEnvelopeInner(
     // demanded, and that human's verdict is the one that closes.
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
-        if (!escalatedToHuman && !laneSuperseded && !laneAdvisory)
+        if (!escalatedToHuman && !laneSuperseded && !laneAdvisory && !laneUnbound)
           laneVerdict = await applyAcceptanceVerdict(
             ctx,
             team,
@@ -866,6 +884,9 @@ async function routeEnvelopeInner(
         if (!(await isAdvisoryAsk(ctx, team, ref))) {
           laneSuperseded = await supersededLaneReview(ctx, team, ref);
           if (!laneSuperseded) laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
+          // ADR 680: a `wait` on a lane that has left the acceptance stage takes no review — say so.
+          if (!laneSuperseded && !laneAck)
+            laneUnbound = await unboundLaneReview(ctx, team, sender, ref, 'wait', message.id);
         }
       } catch (err) {
         log.warn({ msg: 'acceptance_ack_failed', err: String(err) });
@@ -1006,6 +1027,7 @@ async function routeEnvelopeInner(
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
     ...(laneAdvisory ? { lane_advisory: laneAdvisory } : {}),
+    ...(laneUnbound ? { lane_unbound: laneUnbound } : {}),
     ...(dispute ? { dispute } : {}),
     ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
     ...(deafRecipient ? { deaf_recipient: deafRecipient } : {}),
@@ -1699,6 +1721,74 @@ async function newestLaneReviewAsk(
     [team.id, laneId],
   );
   return row?.id;
+}
+
+/**
+ * ADR 680 — the reply answered a `lane_review` ask on a lane that has LEFT the acceptance stage:
+ * the third way an ask stops being the one that binds (a re-route is ADR 545, an advisory ask is
+ * ADR 667). The lane closed on a newer PR, was sent back, was parked or was abandoned, so no
+ * verdict on it can move it — ADR 202 means one verdict closes a lane, and the second one is
+ * simply nothing.
+ *
+ * It used to be nothing *and silent*: `applyAcceptanceVerdict` returns early once the lane is no
+ * longer awaiting acceptance, and ADR 545's marker is gated on that same state, so the sender got
+ * no "moved nothing" sentence and the audit trail got no row. big-body's 16:58 decline on
+ * 2026-10-19 (lane 01M5ASVF3G, closed at 14:20 on a newer PR) bound to nothing in silence, and
+ * the correction it carried sat on `main` for 2h20m after the lane closed.
+ *
+ * So: name it. The row is targeted at the lane, so it appears in that lane's history — a reviewer
+ * who was not heard is visible there — and the ack tells the sender on the spot, which is what
+ * ADR 545 did for its own case. Nothing is woken and nothing is copied: the lane is settled, and
+ * the sender is the one who can act on what they just learned.
+ */
+async function unboundLaneReview(
+  ctx: Ctx,
+  team: TeamRow,
+  sender: MemberRow,
+  repliedToId: string,
+  act: 'accept' | 'decline' | 'wait',
+  answerId: string,
+): Promise<RouteResult['lane_unbound']> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
+  if (!replied?.meta) return;
+  let laneId: string | undefined;
+  try {
+    laneId = (JSON.parse(replied.meta) as { lane_review?: { lane?: string } }).lane_review?.lane;
+  } catch {
+    return;
+  }
+  if (!laneId) return;
+  // ADR 667: an advisory ask's reply is recorded and named by its own marker, in any lane state.
+  if (isAdvisoryReviewMeta(safeParse(replied.meta))) return;
+  const lane = await getLane(ctx.db, team.id, laneId, team.slug);
+  // A lane still awaiting acceptance is ADR 545's case (the ask was superseded) or the live ask's
+  // (the verdict binds) — both of those answer for themselves.
+  if (!lane || isAwaitingAcceptance(lane.state)) return;
+  await appendAudit(ctx.db, team.id, {
+    actor: sender.name,
+    action: 'lane.review_unbound',
+    target: lane.id,
+    result: 'allow',
+    detail: {
+      lane: lane.id,
+      ask: repliedToId,
+      reviewer: sender.name,
+      verdict: act,
+      answer: answerId,
+      state: lane.state,
+    },
+  });
+  log.info({
+    msg: 'acceptance_verdict_unbound',
+    lane: laneId,
+    ask: repliedToId,
+    verdict: act,
+    state: lane.state,
+  });
+  return { lane: lane.id, ask: repliedToId, verdict: act, state: lane.state };
 }
 
 /**

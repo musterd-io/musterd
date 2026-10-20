@@ -1080,3 +1080,20 @@ advisory for every listed act.
   human's enrolled passkeys; `POST /teams/:slug/authority/approvals` verifies and parks a
   passkey proof on the nonce for the waiting surface to collect with its own credential
   (`GET …/authority/approvals/:nonce`). The act always re-verifies at presentation.
+
+## A.28 A verdict on a lane that left the acceptance stage (unreleased — ADR 680)
+
+A `lane_review` ask stops being the one that binds in three ways: a re-route superseded it
+(A.21), the ask is advisory (ADR 667), or the Lane has left the acceptance stage — it closed on a
+newer PR, was sent back, was parked or was abandoned. A supporting server, for the third:
+
+- MUST NOT let an `accept`, `decline` or `wait` that answers such an ask move the Lane, record a
+  peer confirmation, or fire a human ask — one verdict closes a Lane (ADR 202), and that verdict
+  has already been given.
+- MUST answer that act's ack with `lane_unbound {lane, ask, verdict, state}` — `verdict` the reply
+  (`accept` | `decline` | `wait`), `state` the Lane's state at that moment — and MUST NOT answer
+  `lane_verdict`, `lane_escalation`, `lane_ack` or `lane_superseded` for it.
+- MUST record `lane.review_unbound {lane, ask, reviewer, verdict, answer, state}` against the Lane,
+  where `answer` is the id of the reply, so a readout joins the verdict to its words.
+- MUST NOT wake a Member or copy the reply for this row. The sender is told on the ack, and the
+  row is in the Lane's history.
