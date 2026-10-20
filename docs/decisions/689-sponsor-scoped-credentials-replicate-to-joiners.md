@@ -1,11 +1,11 @@
-# 688 — Sponsor-scoped credentials and host-pinned provisions replicate to joiners
+# 689 — Sponsor-scoped credentials and host-pinned provisions replicate to joiners
 
 - Status: proposed
 - Date: 2026-10-21
 - Lane: `01M55Y5E28EPF6RNTCREYKQ6CP` (goal `cloud-agents`, phase 2b)
 - Builds on: [ADR 647](647-cloud-agents-compute-home.md) §4.3 (laptop-hub joiner), [ADR 648](648-sponsor-host-key-provisions-own-seats.md) (a host key provisions its sponsor's seats), [ADR 393](393-residency-enrollment-projects.md) (ledger projector pattern), [ADR 325](325-multi-machine-federation.md) / [ADR 328](328-machine-credential.md) (joiners), [ADR 360](360-push-level-residence.md), [ADR 662](662-one-machine-per-hosted-seat.md) d4/d7
 - Design: `docs/superpowers/specs/2026-10-21-cloud-agents-2b-joiner-design.md`
-- Review gate: the security role (big-body) on the authority crossing a node boundary, at lane acceptance
+- Review gate: the security role (big-body) on the authority crossing a node boundary — design read 2026-10-21 (act `01M5DV5TR0PJD1ND4D0T93KB6G`, three issues folded into decisions 5–9), and again at lane acceptance
 
 ## Context
 
@@ -57,13 +57,47 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
    roster; the seat credential (which then replicates by (1)) and its grant are minted at the
    joiner — grants stay local, ADR 393 §2 — and the enrolment replicates to the hub by ADR 393
    §1, so the hub's roster shows the seat `wakeable` on the joiner's host.
-5. **Push residence holds without `node trust`.** Every event the joiner authors is the seat's
-   (occupancy) or carries `via: 'host_key'` (ADR 648 §3); none is a human's, so ADR 360's check
-   passes. A joiner push authored by a human stays refused `bound_elsewhere`; a test pins it.
-6. **Revocation is one sync tick.** Revoking the host key on the hub projects the delete at the
-   joiner on its next pull; leases already granted there settle on their own clock. A joiner
-   that cannot reach the hub keeps honouring what it last folded — the same staleness ADR 325
-   prices for every replicated fact, now stated for a credential.
+5. **A host-key-authored event names the host as its actor, never the sponsor.** ADR 648 §3
+   stamps the sponsor as `actor` on rows a host key writes; at a joiner that actor is a human
+   bound to the hub, and `syncEventActor` would refuse the push `bound_elsewhere`. So a row the
+   host key authors carries `actor: <host label>` with `actor_kind: 'host'` and the sponsor kept
+   separately in `detail.sponsor` (`sponsor_scoped: true`, `via: 'host_key'` unchanged). Push
+   residence (ADR 360) skips the seat check for `actor_kind: 'host'` and instead requires that
+   the pushing node is the node that host label is enrolled on (`host_liveness.node`, written at
+   the host's first poll) — the one narrowly validated exception. A joiner push authored by a
+   human stays refused `bound_elsewhere`; a push whose host actor does not match the pushing
+   node is refused too. Both are tested on a real joiner→hub push.
+6. **Provenance is bound on every credential and provision event, at both ends.** The fold does
+   not trust a ledger payload or its `via` field by verb. The hub materialises a joiner-authored
+   `credential.minted` only when, **at fold time**: the minting host key named in the event is
+   live and unrevoked on the hub, sponsor-scoped, its creator still sponsors the target with
+   standing and `can_create_agents` intact, the event's `host` equals that key's label, and the
+   event's origin node is the node that label is enrolled on. Anything else folds as
+   `credential.refused` (audited, nothing inserted) — a credential minted under authority the
+   hub has since withdrawn never materialises, whenever it arrives. A joiner accepts
+   `credential.*` and `host.provision_*` events **only from the hub's origin node**; joiners
+   never trust each other's. Tests: forged, wrong-sponsor, wrong-host and wrong-origin events
+   from a joiner are each refused.
+7. **Privileged verbs at a joiner need fresh hub authority; wakes do not.** The four ADR 648
+   verbs (mint `claim_seat`, issue grant, enrol, revoke) and a provision claim run at a joiner
+   only when its last successful pull from the hub is younger than `agent_host.freshness_ms`
+   (policy, default 15 minutes — the provision cancel window, ADR 463 §2). Older than that they
+   refuse `hub_unreachable` (ADR 355 §3's code) and the host loop keeps polling. Wake leases on
+   seats already enrolled keep deriving from folded acts regardless — that is what the joiner is
+   for, and a wake exercises no authority a revocation would withdraw beyond the seat's own
+   credential, which decision 8 ends. Test: revoke on the hub while the joiner is offline → a
+   local mint is refused once the window lapses, and the pre-lapse mint is refused at the hub
+   by decision 6 on reconnect.
+8. **Revocation is one sync tick, bounded by decision 7.** Revoking the host key or the seat
+   credential on the hub projects the delete at the joiner on its next pull; leases already
+   granted settle on their own clock. The staleness ADR 325 prices for every replicated fact is
+   now bounded for authority by the freshness window, and unbounded only for what a wake may
+   do with a credential the joiner still holds.
+9. **The hash is a verifier, and it is retained.** A `credential.minted` row leaves a permanent
+   copy of the sha256 in every joiner's append-only `sync_log`. The secret is 24 random bytes
+   (`newSecret`), so the hash is not a bearer and inversion is not practical; the retention is
+   named here so nobody mistakes the log for secret-free, and the hash never appears in a log
+   line, a trace or telemetry (hard rule 5).
 
 ## Consequences
 
@@ -74,7 +108,10 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   portable migration if a column is needed, store tests on both drivers. No new sync kind, no
   protocol schema change (the ledger envelope already carries `detail`).
 - A stolen joiner's blast radius is unchanged from phase 1's: the host key's sponsored seats.
-  The credential hashes it now also holds are of credentials it could already use.
+  The credential hashes it now also holds are of credentials it could already use, and the
+  authority to mint more lapses with the freshness window (decision 7).
+- `PolicySchema.agent_host` gains `freshness_ms` — a protocol schema addition, so this ADR is
+  its gate (hard rule 1). `host_liveness` gains a nullable `node` column (portable migration).
 - While the hub is unreachable the joiner wakes the seat on folded acts and the seat can answer
   them, but cannot claim a lane (ADR 355 §3) and its acts queue. "Always on" for a laptop hub
   means that and no more; the design §3.2 says so and the dogfood reading measures it.
@@ -89,7 +126,9 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   claim of an unpinned or foreign-pinned provision is an ordinary deny row.
 - **Eval:** the design §6 tests — cross-sponsor refusal at the joiner, team-wide key never
   replicates, revocation lands within one tick, pinned-only claims, human-authored joiner push
-  refused, spend caps unchanged — on both drivers.
+  refused, host-actor/node mismatch refused, forged and wrong-origin events refused at the fold,
+  offline revoke → local mint refused → reconnect folds `credential.refused`, spend caps
+  unchanged — on both drivers.
 - **Experiment:** the week's dogfood reading on the revive hub (`docs/perf/cloud-seat.md`):
   wake latency against the laptop baseline, behaviour across hub sleeps, human steps per boot
   (target: zero after the sponsor's one `create.sh`). Falsifier: a human step on the machine or a

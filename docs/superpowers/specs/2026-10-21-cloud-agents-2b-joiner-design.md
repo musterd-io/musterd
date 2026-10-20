@@ -5,7 +5,7 @@
 **Status:** design, from the 2026-10-17 cloud agents brainstorm (§4.3, §6 #4) and nick's call on
 2026-10-21 (joiner daemon, not a remote actuator). Nothing is built.
 **Lane:** `01M55Y5E28EPF6RNTCREYKQ6CP` (goal `cloud-agents`)
-**Decision:** [ADR 688](../../decisions/688-sponsor-scoped-credentials-replicate-to-joiners.md)
+**Decision:** [ADR 689](../../decisions/689-sponsor-scoped-credentials-replicate-to-joiners.md)
 
 ## 1. What this is for
 
@@ -60,7 +60,7 @@ Options weighed:
   needs the sponsor's signature at the joiner — the sponsor is not there. Rejected.
 - **(c) Replicate sponsor-scoped credentials and pinned provisions to joiners** — chosen.
 
-### 3.1 Decision (c), the shape of ADR 688
+### 3.1 Decision (c), the shape of ADR 689
 
 1. **Sponsor-scoped credential hashes cross the wire.** `credential.minted` and
    `credential.revoked` ledger events (kind `ledger`, the ADR 393 pattern: a tag, two verbs, a
@@ -78,16 +78,21 @@ Options weighed:
    local daemon; `hostKeyScope` resolves the sponsor from the replicated roster; the seat
    credential and grant are minted locally (ADR 393 §2: the origin mints grants); enrolment
    replicates to the hub (ADR 393 §1) so the hub roster shows the seat `wakeable` on the joiner.
-4. **Push residence holds.** Events the joiner authors are authored by the seat (occupancy) or
-   carry `via: 'host_key'` (ADR 648 §3); none is a human's, so ADR 360's check passes without
-   `node trust`. A test pins it: a joiner push with a human author is still refused.
+4. **Push residence holds without a human.** A host-key-authored row names the host as its
+   actor (`actor_kind: 'host'`), the sponsor kept in `detail`; ADR 360's check binds that actor to
+   the node the host label is enrolled on instead of to a seat. No `node trust`. A joiner push with
+   a human author is still refused — the test pins it.
+5. **Provenance and freshness** (big-body's read, 2026-10-21): the hub re-validates every
+   joiner-minted credential at fold time against current authority; a joiner trusts credential and
+   provision events only from the hub; privileged verbs at a joiner need a pull younger than
+   `agent_host.freshness_ms` (default 15 m), wakes do not. ADR 689 decisions 5–9.
 
 ### 3.2 What the hub-asleep case actually buys
 
 While the hub is unreachable the joiner can wake the seat on already-folded directed acts and
 the seat can answer them; it **cannot claim a lane** (ADR 355 §3: `hub_unreachable` refuses the
 claim) and its own acts queue until the hub returns. That is delta's measured behaviour and it
-is accepted for 2b; ADR 688 says it in Consequences so nobody reads "always on" into a laptop
+is accepted for 2b; ADR 689 says it in Consequences so nobody reads "always on" into a laptop
 hub. The floating-seat lane (`01M55PDGG8`) is where leases move to the hub.
 
 ## 4. The machine
@@ -113,7 +118,7 @@ needs no tailnet.
 
 ## 5. Increments (lanes under goal `cloud-agents`; each lands on its own)
 
-1. **ADR 688** — the decision in §3.1 (this lane, `01M55Y5E28EPF6RNTCREYKQ6CP`; draft PR #3073 first, ADR 223).
+1. **ADR 689** — the decision in §3.1 (this lane, `01M55Y5E28EPF6RNTCREYKQ6CP`; draft PR #3073 first, ADR 223).
 2. **Sync: sponsor-scoped credentials and pinned provisions replicate** (lane `01M5DTS8DC0S69GMQ3BN13FHKR`) — events, projectors,
    `withDrivers` store tests, the push-residence test of §3.1.4. Server + protocol-adjacent;
    needs the ADR before a line of it.
