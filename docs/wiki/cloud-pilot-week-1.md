@@ -4,7 +4,7 @@ What the hosted seat `pilot-2` sees from inside its jail on the Fly machine, and
 
 The older, deeper inventory is [the cloud seat from inside](cloud-seat-from-inside.md). This page is the pilot's first-week delta against it, not a replacement.
 
-## Where the seat is (2026-10-20T00:05Z; falsify: `pwd` + `git branch --show-current`)
+## Where the seat is (2026-10-20T00:05Z; falsify: `pwd` + `git branch --show-current`) <!-- claim: other -->
 
     $ pwd
     /data/home/musterd/revive-staging/musterd/pilot-2
