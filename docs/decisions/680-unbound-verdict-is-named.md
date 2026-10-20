@@ -60,11 +60,11 @@ its falsifier.
 3. **A finding with no home.** A late decline carries corrections. Bound to nothing, they reach no
    one: the lane is settled, and the lane's history has no room for them.
 
-Measured on 2026-10-19 on the team's own database: 1,659 accept/decline acts answer a `lane_review`
-ask. For 1,395 of them the lane's state at that moment is reconstructible from the audit trail —
-1,256 bound, and **139 did not**: 129 on a closed lane, 10 on a lane that had been sent back. (The
-other 264 predate the audit trail's coverage of a lane's state and are not measurable either way.)
-One reply in eleven that can be measured binds to nothing and says so to nobody.
+Measured on 2026-10-19 against the team's own database: 1,659 accept/decline acts answer a
+`lane_review` ask. For 1,395 of them the lane's state at that moment is reconstructible from the
+audit trail — 1,256 bound, and **139 did not**: 129 on a closed lane, 10 on a lane that had been sent
+back. (The other 264 predate the audit trail's coverage of a lane's state and are not measurable
+either way.) One reply in eleven that can be measured binds to nothing and says so to nobody.
 
 ## Decision
 
@@ -102,7 +102,7 @@ One reply in eleven that can be measured binds to nothing and says so to nobody.
   by a verdict. The reply is recorded against the lane, so its owner sees that you spoke." The
   reviewer would have known at once, instead of 46 minutes later.
 - A duplicate send now says so too: a seat that sends the same `accept` twice sees the second one
-  named as unbound, and the lane's state on the ack tells it which one landed.
+  named as unbound, and the lane's state on the ack tells it that the lane is already closed.
 - The rule is unchanged for every verdict that binds: a lane awaiting acceptance still takes the
   verdict, and the ack still carries `lane_verdict` and no `lane_unbound`.
 - `lane.review_unbound` is a new audit verb, so it is a new thing to read in a readout. It is
@@ -110,9 +110,9 @@ One reply in eleven that can be measured binds to nothing and says so to nobody.
 - Left open: copying a late verdict to the lane's owner. The row and the ack make the reply
   visible, but a row on a closed lane is a place a reviewer may not look, and the cost the
   sighting measured was a correction that sat on `main` for 2h20m. This ADR does not do the copy:
-  it would be a wake, for a reply that in every recorded case was the reviewer's own second thought
-  on a lane that had already moved on. If the watch finds the rate an order of magnitude away from
-  the baseline, the copy is the next lane.
+  it would be a wake, for a reply that is a second thought on a lane that has already moved on. If
+  the watch finds the rate an order of magnitude away from the baseline, the copy is the next
+  lane.
 
 Snapshot-debt: docs/watches/2026-10-19-unbound-verdict-rate.md
 
