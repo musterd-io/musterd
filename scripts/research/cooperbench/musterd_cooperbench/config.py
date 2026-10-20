@@ -29,7 +29,14 @@ INTERRUPT_HOOK = (
     "command -v musterd >/dev/null 2>&1 && musterd inbox --interrupt-check --hook claude-code 2>/dev/null || true "
     "# musterd-interrupt-hook"
 )
-GATE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit|Bash"
+# musterd's own matcher is "Edit|Write|MultiEdit|NotebookEdit|Bash". The arm leaves Bash out on purpose.
+# It gates every path with one `**` class (agents declare their own scopes), and the gate matches a
+# Bash call by its whole command string, so `**` matched every command: `git diff`, `git status` and
+# `cat` were all refused. The second e2e run (2026-10-20) showed the cost: 12 Bash denials, and the
+# agents hand-wrote patch.txt with fake blob hashes that never applied. Gating the file-editing tools
+# keeps lane ownership on every edit the agent makes through them. An edit through Bash (sed -i,
+# cat >) is ungated, and the README says so.
+GATE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 
 # musterd keeps the seat binding (and the gate's session markers) in `.musterd/` at the repo root.
 # Excluding it in .git/info/exclude keeps it out of `git diff` and `git add -A`, so it can never

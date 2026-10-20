@@ -46,3 +46,9 @@ def test_mcp_config_is_the_musterd_server_alone():
 
 def test_git_exclude_keeps_the_binding_out_of_the_patch():
     assert cfg.GIT_EXCLUDE.strip() == ".musterd/"
+
+
+def test_the_gate_leaves_bash_ungated():
+    # `**` matches a Bash call by its whole command string; gating Bash refused git diff (e2e run 2).
+    assert "Bash" not in cfg.GATE_MATCHER.split("|")
+    assert set(cfg.GATE_MATCHER.split("|")) == {"Edit", "Write", "MultiEdit", "NotebookEdit"}
