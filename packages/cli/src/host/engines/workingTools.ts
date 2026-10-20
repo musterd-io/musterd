@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { EngineTool } from '../engine.js';
 import { bashAllowed, jailPath, scrubEnv, type BashPolicy, type JailFsDeps } from './jail.js';
+import { spawnSandboxedBash } from './sandbox.js';
 
 /**
  * The resident seat's four working tools (ADR 588 §3–§4): `read`, `write`, `edit`, `bash` — our
@@ -20,6 +20,8 @@ export interface WorkingToolOptions {
   env: Record<string, string | undefined>;
   /** Variable names that must never reach a child — the ADR 588 `--key-env` name above all. */
   secretEnvNames?: readonly string[];
+  /** The resident metering gateway's loopback endpoints, the only network the bash child may use. */
+  gatewayEnv?: Record<string, string | undefined>;
   bashTimeoutMs?: number;
   fs?: JailFsDeps;
 }
@@ -191,15 +193,16 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
       const ceiling = opts.bashTimeoutMs ?? DEFAULT_BASH_TIMEOUT_MS;
       const timeoutMs = Math.min(requested ?? ceiling, ceiling);
       const env = scrubEnv(opts.env, opts.secretEnvNames ?? []);
+      const sandbox = await spawnSandboxedBash({
+        workspace: opts.workspace,
+        command,
+        env,
+        ...(opts.gatewayEnv ? { gatewayEnv: opts.gatewayEnv } : {}),
+      });
+      const child = sandbox.child;
       return await new Promise<string>((resolveRun) => {
-        // Its own process group, so the kill below reaches what the shell forked (a `tail -f`
-        // under dash keeps the pipe open after the shell dies, and `close` never fires).
-        const child = spawn('/bin/sh', ['-f', '-c', command], {
-          cwd: opts.workspace,
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: true,
-        });
+        // The OS sandbox wrapper owns a process group, so the timeout reaches its shell and all
+        // descendants (a `tail -f` under dash keeps the pipe open after the shell dies).
         let out = '';
         let err = '';
         let killed = false;
@@ -208,6 +211,7 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
+          sandbox.dispose();
           const body = [clip(out), err ? `stderr:\n${clip(err)}` : ''].filter(Boolean).join('\n');
           resolveRun(`${status}\n${body}`);
         };
@@ -220,16 +224,17 @@ export function workingTools(opts: WorkingToolOptions): EngineTool[] {
             child.kill('SIGKILL');
           }
         }, timeoutMs);
-        child.stdout.on('data', (d: Buffer) => {
+        child.stdout!.on('data', (d: Buffer) => {
           if (out.length < WORKING_TOOL_OUTPUT_MAX_BYTES) out += d.toString('utf8');
         });
-        child.stderr.on('data', (d: Buffer) => {
+        child.stderr!.on('data', (d: Buffer) => {
           if (err.length < WORKING_TOOL_OUTPUT_MAX_BYTES) err += d.toString('utf8');
         });
         child.on('error', (e) => {
           clearTimeout(timer);
           if (!settled) {
             settled = true;
+            sandbox.dispose();
             resolveRun(`spawn failed: ${e.message}`);
           }
         });

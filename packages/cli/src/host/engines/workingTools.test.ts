@@ -1,8 +1,18 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { EngineTool } from '../engine.js';
+import { macSandboxProfile } from './sandbox.macos.js';
 import { declaredScripts, preflightWorkingTool, workingTools } from './workingTools.js';
 
 /**
@@ -12,18 +22,49 @@ import { declaredScripts, preflightWorkingTool, workingTools } from './workingTo
  */
 
 let ws: string;
+let outside: string;
 let tools: Record<string, EngineTool>;
-const policy = { scripts: new Set(['hello']) };
+let gateway: Server;
+let blocked: Server;
+let gatewayEnv: Record<string, string>;
+const outsideSentinel = 'resident-sandbox-outside-read-marker';
+const policy = { scripts: new Set(['hello', 'gateway', 'off-gateway']) };
 
-beforeAll(() => {
+async function listen(server: Server): Promise<number> {
+  await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('expected a TCP address');
+  return address.port;
+}
+
+beforeAll(async () => {
   ws = realpathSync(mkdtempSync(join(tmpdir(), 'musterd-wt-')));
-  writeFileSync(join(ws, 'package.json'), JSON.stringify({ scripts: { hello: 'echo hi' } }));
+  outside = realpathSync(mkdtempSync(join(tmpdir(), 'musterd-outside-')));
+  writeFileSync(join(outside, 'host-only.txt'), outsideSentinel);
+  gateway = createServer((_req, res) => res.end('gateway-marker'));
+  blocked = createServer((_req, res) => res.end('off-gateway-marker'));
+  const gatewayPort = await listen(gateway);
+  const blockedPort = await listen(blocked);
+  gatewayEnv = { ANTHROPIC_BASE_URL: `http://127.0.0.1:${String(gatewayPort)}` };
+  writeFileSync(
+    join(ws, 'package.json'),
+    JSON.stringify({
+      packageManager: 'pnpm@10.28.2',
+      scripts: {
+        hello: `cat ${join(outside, 'host-only.txt')}; printf script-complete`,
+        gateway:
+          'node -e "fetch(process.env.ANTHROPIC_BASE_URL).then(r=>r.text()).then(console.log)"',
+        'off-gateway': `BLOCKED_URL=http://127.0.0.1:${String(blockedPort)} node -e "fetch(process.env.BLOCKED_URL).then(r=>r.text()).then(console.log)"`,
+      },
+    }),
+  );
   writeFileSync(join(ws, 'a.txt'), 'one\ntwo\nthree\nfour\n');
   tools = Object.fromEntries(
     workingTools({
       workspace: ws,
       policy,
       env: { PATH: process.env['PATH'], HOME: process.env['HOME'], SEAT_KEY: 'sk-secret' },
+      gatewayEnv,
       secretEnvNames: ['SEAT_KEY'],
       bashTimeoutMs: 2_000,
     }).map((t) => [t.name, t]),
@@ -31,7 +72,10 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  gateway.close();
+  blocked.close();
   rmSync(ws, { recursive: true, force: true });
+  rmSync(outside, { recursive: true, force: true });
 });
 
 describe('workingTools', () => {
@@ -104,6 +148,232 @@ describe('workingTools', () => {
     expect(out).toContain('one');
   });
 
+  it('bash cannot read a host file through an allowed package script', async () => {
+    const out = await tools['bash']!.run({ command: 'pnpm hello' });
+    expect(out).toMatch(/^exit 0\n/);
+    expect(out).not.toContain(outsideSentinel);
+    expect(out).toContain('script-complete');
+  });
+
+  it('bash can reach the metering gateway and cannot reach another local port', async () => {
+    const gatewayOut = await tools['bash']!.run({ command: 'pnpm gateway' });
+    expect(gatewayOut).toMatch(/^exit 0\n/);
+    expect(gatewayOut).toContain('gateway-marker');
+    await expect(tools['bash']!.run({ command: 'pnpm off-gateway' })).resolves.not.toContain(
+      'off-gateway-marker',
+    );
+  });
+
+  it('allows a standalone pnpm launcher install without exposing PNPM_HOME', () => {
+    const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm-home-'));
+    const temporary = mkdtempSync(join(tmpdir(), 'musterd-pnpm-sandbox-'));
+    const packageInstall = join(pnpmHome, '.tools', 'pnpm', '10.28.2');
+    const exeInstall = join(pnpmHome, '.tools', 'pnpm-exe', '10.28.2');
+    mkdirSync(join(pnpmHome, 'bin'), { recursive: true });
+    mkdirSync(join(packageInstall, 'bin'), { recursive: true });
+    mkdirSync(exeInstall, { recursive: true });
+    const shim = join(pnpmHome, 'bin', 'pnpm');
+    writeFileSync(shim, '#!/bin/sh\nexec "$basedir/../.tools/pnpm-exe/10.28.2/pnpm" "$@"\n');
+    writeFileSync(join(packageInstall, 'bin', 'pnpm'), '#!/bin/sh\n');
+    writeFileSync(join(exeInstall, 'pnpm'), '#!/bin/sh\n');
+
+    try {
+      const profile = macSandboxProfile(
+        {
+          workspace: ws,
+          command: 'pnpm hello',
+          env: { PATH: join(pnpmHome, 'bin') },
+        },
+        temporary,
+        join(pnpmHome, 'store'),
+      );
+      expect(profile).toContain(`(allow file-read* (subpath "${realpathSync(exeInstall)}"))`);
+      expect(profile).not.toContain(
+        `(allow file-read* (subpath "${realpathSync(packageInstall)}"))`,
+      );
+      expect(profile).not.toContain(`(allow file-read* (subpath "${pnpmHome}"))`);
+
+      writeFileSync(shim, '#!/bin/sh\nexec "$basedir/../.tools/pnpm/10.28.2/bin/pnpm" "$@"\n');
+      const packageProfile = macSandboxProfile(
+        {
+          workspace: ws,
+          command: 'pnpm hello',
+          env: { PATH: join(pnpmHome, 'bin'), PNPM_HOME: pnpmHome },
+        },
+        temporary,
+        join(pnpmHome, 'store'),
+      );
+      expect(packageProfile).toContain(
+        `(allow file-read* (subpath "${realpathSync(packageInstall)}"))`,
+      );
+    } finally {
+      rmSync(pnpmHome, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a pnpm 11 global shim target without exposing PNPM_HOME', () => {
+    const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm11-home-'));
+    const temporary = mkdtempSync(join(tmpdir(), 'musterd-pnpm-sandbox-'));
+    const install = join(pnpmHome, 'global', 'v11', 'fixture-hash', 'node_modules', 'pnpm');
+    mkdirSync(join(pnpmHome, 'bin'), { recursive: true });
+    mkdirSync(install, { recursive: true });
+    const launcher = join(install, 'pnpm');
+    writeFileSync(join(install, 'package.json'), JSON.stringify({ version: '11.0.0' }));
+    writeFileSync(launcher, '#!/bin/sh\n');
+    const shim = join(pnpmHome, 'bin', 'pnpm');
+    writeFileSync(
+      shim,
+      `#!/bin/sh\nbasedir=$(dirname "$0")\nexec "$basedir/../global/v11/fixture-hash/node_modules/pnpm/pnpm" "$@"\n# cmd-shim-target=${launcher}\n`,
+    );
+
+    try {
+      const profile = macSandboxProfile(
+        {
+          workspace: ws,
+          command: 'pnpm hello',
+          env: { PATH: join(pnpmHome, 'bin') },
+        },
+        temporary,
+        join(pnpmHome, 'store'),
+      );
+      expect(profile).toContain(`(allow file-read* (subpath "${realpathSync(install)}"))`);
+      expect(profile).not.toContain(`(allow file-read* (subpath "${pnpmHome}"))`);
+    } finally {
+      rmSync(pnpmHome, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('fails before launching a pnpm 11 global shim when its target is missing', () => {
+    const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm11-empty-'));
+    const temporary = mkdtempSync(join(tmpdir(), 'musterd-pnpm-sandbox-'));
+    mkdirSync(join(pnpmHome, 'bin'), { recursive: true });
+    const missing = join(pnpmHome, 'global', 'v11', 'missing-hash', 'node_modules', 'pnpm', 'pnpm');
+    writeFileSync(
+      join(pnpmHome, 'bin', 'pnpm'),
+      `#!/bin/sh\n# cmd-shim-target=${missing}\nexec "$basedir/../global/v11/missing-hash/node_modules/pnpm/pnpm" "$@"\n`,
+    );
+
+    try {
+      expect(() =>
+        macSandboxProfile(
+          {
+            workspace: ws,
+            command: 'pnpm hello',
+            env: { PATH: join(pnpmHome, 'bin') },
+          },
+          temporary,
+          join(pnpmHome, 'store'),
+        ),
+      ).toThrow(/could not resolve standalone pnpm install under PNPM_HOME/);
+    } finally {
+      rmSync(pnpmHome, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('fails before launching a pnpm shim when PNPM_HOME has no installed runtime', () => {
+    const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm-empty-'));
+    const temporary = mkdtempSync(join(tmpdir(), 'musterd-pnpm-sandbox-'));
+    mkdirSync(join(pnpmHome, 'bin'), { recursive: true });
+    writeFileSync(join(pnpmHome, 'bin', 'pnpm'), '#!/bin/sh\n');
+
+    try {
+      expect(() =>
+        macSandboxProfile(
+          {
+            workspace: ws,
+            command: 'pnpm hello',
+            env: { PATH: join(pnpmHome, 'bin'), PNPM_HOME: pnpmHome },
+          },
+          temporary,
+          join(pnpmHome, 'store'),
+        ),
+      ).toThrow(/could not resolve standalone pnpm install under PNPM_HOME/);
+    } finally {
+      rmSync(pnpmHome, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'darwin')(
+    'preserves the launcher directory for a standalone package manager',
+    async () => {
+      const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm-home-'));
+      const pnpmBin = join(pnpmHome, 'bin');
+      const standalone = join(pnpmHome, '.tools', 'pnpm-exe', '10.28.2');
+      mkdirSync(pnpmBin, { recursive: true });
+      mkdirSync(standalone, { recursive: true });
+      const wrapper = join(pnpmBin, 'pnpm');
+      writeFileSync(
+        wrapper,
+        '#!/bin/sh\nbasedir=$(dirname "$0")\nexec "$basedir/../.tools/pnpm-exe/10.28.2/pnpm" "$@"\n',
+      );
+      writeFileSync(
+        join(standalone, 'pnpm'),
+        `#!/bin/sh\ncat ${join(outside, 'host-only.txt')}\nprintf script-complete\n`,
+      );
+      chmodSync(wrapper, 0o755);
+      chmodSync(join(standalone, 'pnpm'), 0o755);
+      const standaloneTools = Object.fromEntries(
+        workingTools({
+          workspace: ws,
+          policy,
+          env: { PATH: pnpmBin, PNPM_HOME: pnpmHome, HOME: process.env['HOME'] },
+          bashTimeoutMs: 2_000,
+        }).map((tool) => [tool.name, tool]),
+      );
+
+      try {
+        const out = await standaloneTools['bash']!.run({ command: 'pnpm hello' });
+        expect(out).toMatch(/^exit 0\n/);
+        expect(out).not.toContain(outsideSentinel);
+        expect(out).toContain('script-complete');
+      } finally {
+        rmSync(pnpmHome, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform !== 'darwin')(
+    'launches a pnpm 11 global shim target without hanging or exposing PNPM_HOME',
+    async () => {
+      const pnpmHome = mkdtempSync(join(tmpdir(), 'musterd-pnpm11-home-'));
+      const pnpmBin = join(pnpmHome, 'bin');
+      const install = join(pnpmHome, 'global', 'v11', 'fixture-hash', 'node_modules', 'pnpm');
+      mkdirSync(pnpmBin, { recursive: true });
+      mkdirSync(install, { recursive: true });
+      const wrapper = join(pnpmBin, 'pnpm');
+      const launcher = join(install, 'pnpm');
+      writeFileSync(join(install, 'package.json'), JSON.stringify({ version: '11.0.0' }));
+      writeFileSync(
+        wrapper,
+        '#!/bin/sh\nbasedir=$(dirname "$0")\nexec "$basedir/../global/v11/fixture-hash/node_modules/pnpm/pnpm" "$@"\n',
+      );
+      writeFileSync(launcher, '#!/bin/sh\nprintf script-complete\\n\n');
+      chmodSync(wrapper, 0o755);
+      chmodSync(launcher, 0o755);
+      const standaloneTools = Object.fromEntries(
+        workingTools({
+          workspace: ws,
+          policy,
+          env: { PATH: pnpmBin, HOME: process.env['HOME'] },
+          bashTimeoutMs: 2_000,
+        }).map((tool) => [tool.name, tool]),
+      );
+
+      try {
+        const out = await standaloneTools['bash']!.run({ command: 'pnpm hello' });
+        expect(out).toMatch(/^exit 0\n/);
+        expect(out).toContain('script-complete');
+        expect(out).not.toContain('killed after');
+      } finally {
+        rmSync(pnpmHome, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('bash refuses what the policy refuses, and reports a non-zero exit', async () => {
     await expect(tools['bash']!.run({ command: 'rm -rf .' })).rejects.toThrow(/denied/);
     const out = await tools['bash']!.run({ command: 'cat does-not-exist' });
@@ -133,7 +403,7 @@ describe('preflightWorkingTool', () => {
 
 describe('declaredScripts', () => {
   it('reads package.json scripts, and is empty (deny-safe) when there are none', () => {
-    expect([...declaredScripts(ws)]).toEqual(['hello']);
+    expect([...declaredScripts(ws)]).toEqual(['hello', 'gateway', 'off-gateway']);
     expect(declaredScripts('/nowhere').size).toBe(0);
     expect(declaredScripts(ws, () => '{"scripts": 3}').size).toBe(0);
   });
