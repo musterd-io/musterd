@@ -327,6 +327,15 @@ teammate's session. Consequences worth internalising:
   step from the mustard floor; chalk lifts the plates by lightness (never darkness, nick's standing
   line). nick picked it from five stocks shown side by side — a tinted plate per member read as
   twelve colours and drowned state. The stocks tried are recorded beside the rule.
+- **/live wears a product frame** (lane 01M5BEE19C, 2026-10-19; nick: /live in a pitch read "too
+  silly/casual/game like" for something teams buy). The `.lc` palette is neutral white and cool grey
+  (it was warm cream), the uppercase mono section labels are sentence case in the linear cut (mono
+  stays for clocks and counts; no re-font, ADR 477 stands), and on `main.lc` the room and the team
+  column are two bordered panels on a grey page. On `main.lc` a speech bubble is a white card with the
+  act's tone as a 3px top edge, clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
+  specificity so the marked bubbles (`.is-mark--*`) and hover-expand still win. Every motion is
+  unchanged. /broadcast's stage is a `div.lc`, so it keeps the paper bubbles and its own frame, and
+  its team column takes the neutral palette with /live (ADR 464: they share one column).
 - **A walk lands before the next beat** (lane 01M5B02V4A, 2026-10-19). The per-member walk queue
   (`actors.ts` `pending` → `startNext` on walk end) and the per-member speech queue were already
   there; what cut walks short was `setHomes`, which runs on every envelope and presence frame and

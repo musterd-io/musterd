@@ -1,7 +1,8 @@
 /*
  * musterd — Live Comms. Split-canvas: an isometric office (left) over a daylight sky + a legible
- * stream console (right). Theme: warm **daylight office** mid-tone — soft morning cream up top
- * melting to a gold horizon, dark ink text, mustard accent. "Calm at rest, energetic in motion."
+ * stream console (right). Theme: a neutral **product frame** (white panels on cool grey, dark ink,
+ * mustard accent) around a warm daylight room — the room is the one warm thing on the page (lane
+ * 01M5BEE19C, 2026-10-19; cream before that). "Calm at rest, energetic in motion."
  *
  * PR 4 retheme: this was the dusk/dawn palette (twilight violet → amber, cream ink); the office
  * canvas's own daylight palette (PR 3b, office-scene/index.ts) is no longer pinned to dusk here
@@ -10,26 +11,31 @@
  */
 
 .lc {
-  /* — palette: daylight office mid-tone — */
-  --lc-ground: #f3e7d4; /* warm daylight base (solid areas / stream console) */
-  --lc-ground-2: #fbf3e6;
-  --lc-surface: #f7efe2; /* rows */
-  --lc-surface-2: #f0e2c8; /* raised: live row, badges, inputs */
-  --lc-surface-3: #e8d7b4;
-  --lc-text: #2a2118; /* dark ink */
-  --lc-dim: #4a3f30;
-  /* The quiet tiers are INK — 45 of muted's 52 uses and 22 of faint's 25 are `color`. They were
-     picked for feel (3.68:1 and 2.37:1) and quiet text is still text, so both were re-spaced to
-     clear 4.5. The ramp keeps four separable steps rather than collapsing the bottom two together:
-     11.1 / 7.2 / 5.7 / 4.6. */
-  --lc-muted: #5a4e3f; /* 5.71:1 on the darkest paper */
-  --lc-faint: #675c4b; /* 4.60:1 — the quietest tier that is still readable */
+  /* — palette: the product frame —
+     The chrome around the room is neutral white and cool grey (nick, 2026-10-19, lane 01M5BEE19C:
+     /live in a pitch read "too silly/casual/game like" for something teams buy). It was warm cream
+     (#f3e7d4 ground, #2a2118 ink) so the frame and the room were one daylight scene; now the frame is
+     the product and the room is the one warm thing inside it. The room's own paper (plates, bubbles'
+     tones, the floor) lives on the paper set below and the scene's palette, and is unchanged. Mocks:
+     https://claude.ai/artifact/HM4uccvBG4UJULHA2Jgedv (option C). */
+  --lc-ground: #f4f5f7; /* the page behind the panels (solid areas / stream console) */
+  --lc-ground-2: #ffffff; /* a panel */
+  --lc-surface: #f8f9fb; /* rows */
+  --lc-surface-2: #eef0f3; /* raised: live row, badges, inputs */
+  --lc-surface-3: #e4e7ec;
+  --lc-text: #15181e; /* dark ink */
+  --lc-dim: #3a404b;
+  /* The quiet tiers are INK — 45 of muted's 52 uses and 22 of faint's 25 are `color`, so both clear
+     4.5 on the darkest surface. The ramp keeps four separable steps: 14.3 / 8.4 / 6.1 / 4.9 on
+     surface-3. */
+  --lc-muted: #4d5462; /* 6.14:1 on the darkest surface */
+  --lc-faint: #5c6370; /* 4.88:1 — the quietest tier that is still readable */
   /* A cold seat's dot, which is what --lc-faint used to paint. It stays light on purpose: darkening
      it along with the ink would have made the OFFLINE dot the strongest mark on the roster, which is
      backwards. A dot is a fill; its job is to be a colour. */
-  --lc-dot-off: #9a8a72;
-  --lc-border: rgba(60, 40, 20, 0.14);
-  --lc-border-2: rgba(60, 40, 20, 0.26);
+  --lc-dot-off: #9aa1ac;
+  --lc-border: rgba(17, 24, 39, 0.09);
+  --lc-border-2: rgba(17, 24, 39, 0.18);
   --lc-accent: var(--mustard-700, #b8860b);
   --lc-accent-bright: var(--mustard-500, #e1ad01);
   --lc-success: #2f9e6a;
@@ -784,6 +790,40 @@
 .lc__canvas--companion .lc-team {
   display: none;
 }
+/* ─── the product frame: panels on a page (nick 2026-10-19, lane 01M5BEE19C) ──────────────────
+   On /live the room and the team column are two panels on a grey page, the way a chart sits in a
+   dashboard, so in a pitch the office reads as a feature of a product rather than the product being
+   a game. /broadcast's stage is a `div.lc` (its frame is the 1920×1080 capture, never a page) and
+   the single-track companion canvas keeps its full bleed, so neither picks this up. The 12px gutter
+   costs the room 24px of width; the fit is width-limited, so that is about 2% of its scale. */
+/* Wide screens only. At ≤880px the office is hidden and the team column is the page, so a gutter
+   and a border there are chrome a phone pays for in width — and clipping the column hid its cards
+   off-screen, which the target-size gate caught at 390px. The team panel never clips: its radius is
+   drawn by the border, and its list keeps scrolling the way it always has. */
+@media (min-width: 881px) {
+  main.lc .lc__canvas:not(.lc__canvas--companion) {
+    gap: var(--lc-5);
+    padding: var(--lc-5);
+    background: var(--lc-ground);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office,
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
+    border: 1px solid var(--lc-border);
+    border-radius: var(--lc-r-lg);
+    box-shadow:
+      0 1px 2px rgba(17, 24, 39, 0.05),
+      0 8px 24px -12px rgba(17, 24, 39, 0.12);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office {
+    overflow: hidden;
+    /* The amber horizon glow belonged to a cream page; on the grey one it reads as a stain. A quiet
+       daylight wash keeps the room lit without colouring the panel. */
+    background: linear-gradient(180deg, var(--lc-ground-2) 0%, var(--lc-surface-2) 100%);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
+    background: var(--lc-ground-2);
+  }
+}
 
 /* ─── collapse pill (in each panel header) ────────────────────────────── */
 .lc-collapse {
@@ -1069,11 +1109,8 @@
 }
 .lc-office__key-title {
   flex: 1;
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-office__key-close {
@@ -2947,6 +2984,36 @@
   background: color-mix(in srgb, var(--lc-speech-tone) 50%, transparent);
   border-radius: 3px;
 }
+/* ── the product bubble (/live only; nick 2026-10-19, lane 01M5BEE19C) ──────────────────────────
+   On /live a bubble is a white card in the product's type: the act's tone moves from a glowing ring
+   to a 3px top edge, and the glance clips at 4 lines instead of 5 (nick: "I kind of like the full
+   sentence message bubbles, but maybe we shorten it a tiny bit"). Everything that moves — the pop
+   in, the drift out, the hover-expand — is untouched, and so is every mark: `:where()` keeps this
+   block at the base rule's specificity, so `.is-mark--needs-human` and `.is-expanded` still win and
+   the loud asks stay loud. /broadcast keeps the paper bubble: it is a `div.lc`, not a `main.lc`. */
+:where(main.lc) .lc-speech__inner {
+  border-radius: 10px;
+  background: var(--lc-ground-2);
+  box-shadow:
+    inset 0 3px 0 0 var(--lc-speech-tone),
+    0 0 0 1px var(--lc-border-2),
+    0 1px 2px rgba(17, 24, 39, 0.08),
+    0 10px 22px -8px rgba(17, 24, 39, 0.22);
+}
+:where(main.lc) .lc-speech__inner::before {
+  border-top-color: var(--lc-border-2);
+}
+:where(main.lc) .lc-speech__inner::after {
+  border-top-color: var(--lc-ground-2);
+}
+:where(main.lc) .lc-speech__text {
+  -webkit-line-clamp: 4;
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-weight: 450;
+  letter-spacing: 0;
+  color: var(--lc-text);
+}
 @media (prefers-reduced-motion: reduce) {
   /* no spring/drift — just a soft cross-fade (opacity is safe under reduced-motion) */
   .lc-speech__inner {
@@ -3462,12 +3529,9 @@
   padding: var(--lc-5) var(--lc-6);
 }
 .lc-team__title {
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lc-muted);
+  color: var(--lc-text);
 }
 .lc-team__count {
   font-size: 12px;
@@ -3632,9 +3696,7 @@
   grid-column: 2;
 }
 .lc-team-card__state {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--lc-muted);
 }
 .lc-team-card__work {
@@ -3913,11 +3975,8 @@
   gap: var(--lc-2);
 }
 .lc-digest__title {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--lc-type-meta);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--lc-lane-ink);
 }
 .lc-digest__by {
@@ -4646,11 +4705,8 @@
   padding-top: var(--lc-2);
 }
 .lc-day__label {
-  font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-day__line {
@@ -5151,12 +5207,9 @@
   border-bottom: 1px solid var(--lc-border);
 }
 .lc-drawer__title {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--lc-muted);
+  color: var(--lc-text);
 }
 .lc-drawer__spacer {
   flex: 1;
@@ -6125,11 +6178,8 @@
 .lc-insight__title,
 .lc-insight__label {
   margin: 0;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-insight__section {
@@ -7001,11 +7051,8 @@
 }
 .lc-asks__reviews-title {
   margin: 0 0 var(--lc-2);
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-asks__review {
@@ -8094,10 +8141,8 @@
   margin: 0;
 }
 .nowc-you__k {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
   color: var(--lc-warn-ink);
 }
 .nowc-you__what {
@@ -8163,11 +8208,9 @@
 }
 .nowc-h {
   margin: var(--lc-6) 0 var(--lc-3);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--lc-muted);
+  color: var(--lc-text);
 }
 .nowc-list {
   margin: 0;
