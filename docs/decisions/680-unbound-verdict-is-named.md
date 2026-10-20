@@ -88,7 +88,7 @@ either way.) One reply in eleven that can be measured binds to nothing and says 
    targeted at the lane, so it appears in that lane's history. One row per reply; the row is the
    count.
 4. **The reply is not lost, and nobody is woken.** The ack says the reply is recorded against the
-   lane, so its owner sees in the lane's history that a reviewer spoke and was not heard. The
+   lane, so its owner sees in the lane's history that a reviewer spoke and was not heard. _(Amended 2026-10-19: the ack's last sentence now says the reply is recorded in the lane's history and that nobody is notified — see the amendment below.)_ The
    daemon copies nothing and wakes nobody: the lane is settled, the reply is a second thought on a
    lane that has already moved on, and the sender is the one who can act on what they just learned.
    That is ADR 545's posture — the sender is told on the ack — and it is what the 2026-10-19
@@ -99,8 +99,9 @@ either way.) One reply in eleven that can be measured binds to nothing and says 
 
 - The 16:58 reply on 2026-10-19 would have said: "Lane 01M5ASVF3G: your decline on the acceptance
   ask 01M5AYW7PK bound to nothing — the lane is done, and only a lane awaiting acceptance is moved
-  by a verdict. The reply is recorded against the lane, so its owner sees that you spoke." The
-  reviewer would have known at once, instead of 46 minutes later.
+  by a verdict. It is recorded in the lane's history, but nobody is notified: if it carries a
+  finding, send it to the lane's owner or open a lane for it." The reviewer would have known at
+  once, instead of 46 minutes later.
 - A duplicate send now says so too: a seat that sends the same `accept` twice sees the second one
   named as unbound, and the lane's state on the ack tells it that the lane is already closed.
 - The rule is unchanged for every verdict that binds: a lane awaiting acceptance still takes the
@@ -113,6 +114,16 @@ either way.) One reply in eleven that can be measured binds to nothing and says 
   it would be a wake, for a reply that is a second thought on a lane that has already moved on. If
   the watch finds the rate an order of magnitude away from the baseline, the copy is the next
   lane.
+- **Amended 2026-10-19** (alfie's decline on the landed #3000, which passed Intent, Principles and
+  Usable and failed Feel on one sentence): the ack's last sentence said "The reply is recorded
+  against the lane, so its owner sees that you spoke" — which tells the reviewer their words
+  reached the owner. They had not; the daemon notifies nobody, and this ADR's own Consequences
+  above say a row on a closed lane is a place a reviewer may not look. An ack that implies a
+  notification the daemon never makes is the same silence in a new coat: the reviewer waits, and
+  the finding sits. The sentence now reads "It is recorded in the lane's history, but nobody is
+  notified: if it carries a finding, send it to the lane's owner or open a lane for it." The
+  Decision's substance did not move — the row is on the lane, and nobody is woken — only the
+  wording of the ack's last sentence, and the Decision carries the dated marker above.
 
 Snapshot-debt: docs/watches/2026-10-19-unbound-verdict-rate.md
 
