@@ -12,7 +12,7 @@
 export interface RenderedAsset {
   /** Stable id the painters look up, e.g. `desk/base`, `room/floor`, `desk/lamp-on`. */
   id: string;
-  /** Basename of the PNG, e.g. `office-desk-base.png` — the `office-` prefix is what the byte budget sums. */
+  /** Basename of the PNG, e.g. `office-art-desk-base.png` — the `office-art-` prefix is what the byte budget sums. */
   file: string;
   /** Source size in px, rendered at 2× (spec §5). */
   w: number;

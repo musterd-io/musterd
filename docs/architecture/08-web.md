@@ -69,7 +69,7 @@ access; roster handles and Presence remain visible.
 
 ## The three `/live` panels
 
-- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079).
+- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079). Behind `?office=rendered` the scene loads pre-rendered PNG assets (`office-scene/rendered/`, source in `packages/web/art/office/`) and an item whose asset is present blits it where it painted vectors — the office re-make's build flag (spec `2026-10-20-office-realism-design.md`; increment 1 renders the desk bases only).
   Presence → placement, act → choreography, travel-intensity == notification tier. Members are drawn from a
   **procedural jointed skeleton** (ADR 133 — `skeleton.ts` solves the joints, `character.ts` paints them):
   a distance-driven walk cycle, a seated pose with the hands typing on the desk, and eased sit/stride
@@ -289,6 +289,10 @@ live/
     skeleton.ts                 // THE character animation: 3D joints, renderer-free (walk/sit/type) — ADR 133
     appearance.ts               // THE character identity: skin/hair/hats/clothes, name-seeded, pure — ADR 142
     character.ts                // paints a skeleton in an appearance (facing + limb self-occlusion)
+    rendered/                   // pre-rendered art behind `?office=rendered` (office realism, spec 2026-10-20; the art source is packages/web/art/office/)
+      manifest.ts               // the render's manifest contract: parseManifest / assetById (id, file, size, anchor, px per floor unit, camera KX/KY)
+      assets.ts                 // the flag (`renderedOfficeFromSearch`) and the never-rejecting loader (`loadRenderedAssets`: images by id + the files that failed)
+      blit.ts                   // blitAsset: one image at a floor point through project(), its anchor on the point, sized by fit.scale / asset.scale
     speech.ts                   // the over-head speech-bubble text model
     arrivals.ts                 // who is new: pure roster diff (created / firstOnline — never-seen-online this session, created ≤24 h). Its new-arrivals polaroid corner under the wall board was retired 2026-10-12 (nick: one kind of card on the wall)
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure

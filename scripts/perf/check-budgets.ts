@@ -49,6 +49,8 @@ interface Budgets {
   cssBundles: Record<CssGroup, string[]>;
   totalFontBytes: number;
   allowedFontFamilies: string[];
+  /** Pre-rendered office art (`office-art-*.png|webp`), raw bytes — office realism, spec 2026-10-20 §5. */
+  officeArtBytes: number;
 }
 
 type CssGroup = 'live' | 'app' | 'site' | 'shared';
@@ -211,6 +213,23 @@ for (const group of Object.keys(cssGroupBudget) as CssGroup[]) {
 
 if (totalFont > budgets.totalFontBytes) {
   failures.push(`total font bytes ${kb(totalFont)} > budget ${kb(budgets.totalFontBytes)}`);
+}
+
+// Pre-rendered office art: every `office-art-*.png|webp` the build emits (the `office-still` hero is brand, not art), raw bytes (PNG is already
+// compressed; gzip would mislead). Sprite sheets are what grow this, so the remedy names them.
+const art = files.filter((f) => /\/office-art-[^/]+\.(png|webp)$/.test(f));
+const totalArt = art.reduce((s, f) => s + statSync(f).size, 0);
+if (totalArt > budgets.officeArtBytes) {
+  const top = art
+    .map((f) => ({ f, size: statSync(f).size }))
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 8)
+    .map((a) => `    ${kb(a.size)}  ${relative(distClient, a.f)}`)
+    .join('\n');
+  failures.push(
+    `office art ${kb(totalArt)} across ${art.length} file(s) > budget ${kb(budgets.officeArtBytes)}; largest:\n${top}\n` +
+      `    → cut sprite directions/frames or identity layers, re-render at a lower --scale, or raise officeArtBytes deliberately and log it in docs/perf/web-live-baseline.md (ADR 151/183).`,
+  );
 }
 
 for (const f of fonts) {
