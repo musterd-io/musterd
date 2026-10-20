@@ -86,9 +86,9 @@ either way.) One reply in eleven that can be measured binds to nothing and says 
 3. **The record gets a row.** The daemon writes `lane.review_unbound {lane, ask, reviewer, verdict,
    answer, state}` — the reply's id, so a readout joins the verdict to its words (ADR 667's shape) —
    targeted at the lane, so it appears in that lane's history. One row per reply; the row is the
-   count.
+   count. _(Amended 2026-10-20: the row lands on the node that handled the verdict, not on every machine — see the amendment below.)_
 4. **The reply is not lost, and nobody is woken.** The ack says the reply is recorded against the
-   lane, so its owner sees in the lane's history that a reviewer spoke and was not heard. _(Amended 2026-10-19: the ack's last sentence now says the reply is recorded in the lane's history and that nobody is notified — see the amendment below.)_ The
+   lane, so its owner sees in the lane's history that a reviewer spoke and was not heard. _(Amended 2026-10-19: the ack's last sentence now says the reply is recorded in the lane's history and that nobody is notified — see the amendment below.)_ _(Amended 2026-10-20: the row lands on the node that handled the verdict, so the ack is what reaches the sender — see the amendment below.)_ The
    daemon copies nothing and wakes nobody: the lane is settled, the reply is a second thought on a
    lane that has already moved on, and the sender is the one who can act on what they just learned.
    That is ADR 545's posture — the sender is told on the ack — and it is what the 2026-10-19
@@ -124,6 +124,23 @@ either way.) One reply in eleven that can be measured binds to nothing and says 
   notified: if it carries a finding, send it to the lane's owner or open a lane for it." The
   Decision's substance did not move — the row is on the lane, and nobody is woken — only the
   wording of the ack's last sentence, and the Decision carries the dated marker above.
+- **Amended 2026-10-20** (found on 2026-10-20, while verifying the landed behaviour on the live
+  daemon after stanley accepted #3000 + #3008 on 2026-10-19): the row is written by `appendAudit`, which leaves
+  it unstamped, so it lands on the node that handled the verdict and is never pushed — it appears
+  in that lane's history on that machine and nowhere else. The `lane.review_*` family is split the
+  same way with no rule behind it: `lane.review_peer_confirmed` and `lane.review_human_asked` are
+  stamped and cross; `lane.review_sent_back` (ADR 202's rejection record),
+  `lane.review_acknowledged`, `lane.review_advisory` (ADR 667), `lane.claims_verified` (ADR 585)
+  and this lane's own `lane.review_unbound` are not — though the sync fold lists all of them as
+  projectable, so for them the fold entry is unreachable. The evidence is on revive: big-body's
+  13:51 decline on lane 01M5ASVF3G wrote `lane.state_changed` (present in the hub's database) and
+  no `lane.review_sent_back` (absent). So the row that exists to say "a reviewer was not heard" is
+  itself a row most of the team cannot see — the same shape as the defect this ADR ends. What
+  carries the finding today is the ack, which crosses, and the #3008 sentence, which tells the
+  sender to send the finding to the owner or open a lane for it; the row is a local backstop.
+  Whether the family should cross is lane `01M5D558Q4R9NNYB5TTEM2EYJJ`'s decision, and this ADR's
+  Decision 3 and 4 stand or fall with it. The count in the Problem section above is a TEAM count,
+  computed from the messages and the replicated lane state, not from these rows.
 
 Snapshot-debt: docs/watches/2026-10-19-unbound-verdict-rate.md
 
