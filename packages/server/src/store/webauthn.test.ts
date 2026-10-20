@@ -57,6 +57,7 @@ it('registration extracts the credential and assertion verifies against it', asy
     authenticatorData: extractAuthData(f.attestationObject),
     clientDataJson: clientData('webauthn.create', Buffer.from(code, 'utf8').toString('base64url')),
     expectedChallenge: Buffer.from(code, 'utf8').toString('base64url'),
+    expectedOrigins: ['https://example.com'],
   });
   expect(verified.credentialId).toBe(f.credId.toString('base64url'));
   expect(verified.publicKeySpki).toBe(
@@ -76,6 +77,7 @@ it('registration extracts the credential and assertion verifies against it', asy
       signature,
       publicKeySpki: verified.publicKeySpki,
       expectedChallenge: nonce,
+      expectedOrigins: ['https://example.com'],
     }),
   ).toBe(true);
   // A different challenge, and a tampered signature, both fail.
@@ -86,6 +88,7 @@ it('registration extracts the credential and assertion verifies against it', asy
       signature,
       publicKeySpki: verified.publicKeySpki,
       expectedChallenge: nonce,
+      expectedOrigins: ['https://example.com'],
     }),
   ).toBe(false);
   const bad = Buffer.from(signature);
@@ -97,6 +100,7 @@ it('registration extracts the credential and assertion verifies against it', asy
       signature: bad,
       publicKeySpki: verified.publicKeySpki,
       expectedChallenge: nonce,
+      expectedOrigins: ['https://example.com'],
     }),
   ).toBe(false);
 });
@@ -143,4 +147,38 @@ it('an origin the daemon is not configured for never verifies, however consisten
       expectedOrigins: ['https://relay.example.net'],
     }),
   ).toThrow(/origin/);
+});
+
+it('no configured origin list fails closed, never skips the check', async () => {
+  const { extractAuthData } = await import('./webauthn.js');
+  const f = fixture();
+  const nonce = 'nonce-at-least-16-chars';
+  const getAuthData = Buffer.concat([f.rpHash, Buffer.from([0x01]), Buffer.from([0, 0, 0, 9])]);
+  const cdj = clientData('webauthn.get', nonce);
+  const signature = cryptoSign(
+    null,
+    Buffer.concat([getAuthData, createHash('sha256').update(cdj).digest()]),
+    f.privateKey,
+  );
+  const spki = f.publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
+  for (const expectedOrigins of [undefined, []] as const) {
+    expect(
+      verifyAssertion({
+        authenticatorData: getAuthData,
+        clientDataJson: cdj,
+        signature,
+        publicKeySpki: spki,
+        expectedChallenge: nonce,
+        expectedOrigins,
+      }),
+    ).toBe(false);
+    expect(() =>
+      verifyRegistration({
+        authenticatorData: extractAuthData(f.attestationObject),
+        clientDataJson: clientData('webauthn.create', 'challenge-0123456789'),
+        expectedChallenge: 'challenge-0123456789',
+        expectedOrigins,
+      }),
+    ).toThrow(/no configured origin/);
+  }
 });
