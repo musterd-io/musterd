@@ -20,7 +20,7 @@
       "join",
       "Tour",
       "PickOverlay",
-      "PairingPanel"
+      "SettingsOverlay"
     ],
     "site": [
       "SiteNav",

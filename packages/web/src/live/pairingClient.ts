@@ -1,9 +1,9 @@
 import { apiGet, LiveFetchError, type LiveConfig } from './client';
 
 /**
- * The /live pairing client's wire half (ADR 618 §7). It lives beside the lazy PairingPanel —
- * not in `client.ts` — so the confirmation surface's bytes ride its own lazy chunk and /live's
- * eager graph pays nothing for a panel that renders only while a pairing is staged.
+ * The /live pairing client's wire half (ADR 618 §7). It lives apart from `client.ts` so its bytes
+ * ride a lazy chunk: the settings overlay imports it, and `usePendingPairings` imports it on first
+ * use, so /live's eager graph pays nothing for a confirmation only a signed-in human ever sees.
  */
 
 /** A staged channel pairing as the daemon holds it — the /live confirmation view. */

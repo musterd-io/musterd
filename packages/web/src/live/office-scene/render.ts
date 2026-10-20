@@ -1249,7 +1249,9 @@ export function drawWalls(
     if (wallIndex === 1) {
       if (!wantsFixtures) return;
       run(() => wallClock(ctx, fit, edge, 0.52, 0.62, env.hours)); // dead centre, between the windows
-      if (teamWorkingHours) run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
+      // Painted with or without a schedule: on /live it is the door to the team's settings, so a team
+      // that never set hours still needs something to reach for (nick, 2026-10-19).
+      run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
       run(() => wallLaneBoard(ctx, fit, edge, wallBoard));
@@ -1366,11 +1368,11 @@ function workingHoursSign(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
   edge: (t: number) => [number, number],
-  schedule: WorkingHours,
+  schedule: WorkingHours | null,
   t: number,
 ): void {
-  const copy = formatWorkingHours(schedule);
-  if (!copy) return;
+  // No schedule is a schedule too: the sheet says so plainly, and the week strip stays unlit.
+  const copy = formatWorkingHours(schedule) ?? { days: 'ANY DAY', hours: 'no set hours' };
   const { tc, uc, w: W, h: H } = WORKING_HOURS_CALENDAR;
   // Everything below is laid out in logical wall units off the card's centre, because that is the space
   // the copy is measured in too — mixing the two is what let the schedule line run off the paper.
@@ -1410,7 +1412,7 @@ function workingHoursSign(
   // days line says in the one language that survives being eight pixels tall, and gives the sheet a
   // foot to stand on rather than trailing off into blank paper.
   wallRect(ctx, fit, edge, T(-halfW + 13), U(-12), T(halfW - 13), U(-11.3), 'rgba(120,96,60,0.18)');
-  const on = new Set(schedule.days);
+  const on = new Set(schedule?.days ?? []);
   WEEK.forEach((day, i) => {
     const dx = (i - 3) * 11;
     const lit = on.has(day);
@@ -1466,6 +1468,27 @@ export function furnishedBox(): FitBox {
  * (the `magicAnchors` pattern: pure geometry out, index.ts places the element). The wall shears the
  * board, so the box brackets all four projected corners rather than trusting any two.
  */
+/**
+ * The working-hours calendar's screen box, for the settings hotspot laid over it on /live — the same
+ * corner projection `boardAnchor` uses, on the same wall. Axis-aligned bounds of the four corners: the
+ * wall is slanted, so the box is a little taller than the card, which only makes it easier to hit.
+ */
+export function hoursAnchor(fit: Fit): { x: number; y: number; w: number; h: number } {
+  const { tc, uc, w: W, h: H, wall } = WORKING_HOURS_CALENDAR;
+  const edge = WALL_EDGES[wall]!;
+  const corners = [
+    wallPt(edge, tc - W / 2 / FLOOR, uc - H / 2 / WALL_H, fit),
+    wallPt(edge, tc + W / 2 / FLOOR, uc - H / 2 / WALL_H, fit),
+    wallPt(edge, tc + W / 2 / FLOOR, uc + H / 2 / WALL_H, fit),
+    wallPt(edge, tc - W / 2 / FLOOR, uc + H / 2 / WALL_H, fit),
+  ];
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
 export function boardAnchor(fit: Fit): {
   x: number;
   y: number;

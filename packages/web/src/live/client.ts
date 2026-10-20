@@ -8,6 +8,7 @@
 //      then live-tails — the canonical "GET history, then subscribe, dedupe by id" pattern.
 import type {
   AuditEntry,
+  DoorbellPrefs,
   Envelope,
   Hold,
   HoldEffect,
@@ -22,7 +23,13 @@ import type {
   UpdateLane,
   WorkingHours,
 } from '@musterd/protocol';
-import type { LaneChainLink, StyleDialsWire, StyleFloorWire, StylePrefsWire } from '@musterd/protocol/wire';
+import type {
+  DoorbellSink,
+  LaneChainLink,
+  StyleDialsWire,
+  StyleFloorWire,
+  StylePrefsWire,
+} from '@musterd/protocol/wire';
 // The read path takes the validator-free door (ADR 148; `protocol/guards.ts`): the browser reads
 // this daemon over its own origin and the daemon parses everything on ingest, so re-deriving the
 // schemas here bought a strict page-level reject and ~20 KB of zod. The guards keep the one check
@@ -697,6 +704,37 @@ export function getMyStyle(cfg: LiveConfig): Promise<MyStyle> {
 /** ADR 514: replace this viewer's prefs whole — the route stores exactly what it is sent. */
 export function putMyStyle(cfg: LiveConfig, prefs: StylePrefsWire): Promise<MyStyle> {
   return sendAsWeb(cfg, 'PUT', `/teams/${encodeURIComponent(cfg.team)}/members/me/style`, prefs);
+}
+
+/** ADR 443 §4–5: a human's own doorbell — what `GET`/`PUT /members/me/doorbell` answer (self only). */
+export interface MyDoorbell {
+  member: string;
+  prefs: DoorbellPrefs;
+  /** The sinks the team allows, and the ones it rings by default. */
+  allow: DoorbellSink[];
+  defaults: DoorbellSink[];
+  /** Whether the team configured each off-machine URL — never the URL. */
+  team_urls: { slack: boolean; webhook: boolean };
+  /** Where an ask rings this human today, with these prefs. */
+  route: DoorbellSink[];
+}
+
+/** Read this viewer's own doorbell. A seat is refused (403): agents have no doorbell. */
+export function getMyDoorbell(cfg: LiveConfig): Promise<MyDoorbell> {
+  return apiGet(cfg, `/teams/${encodeURIComponent(cfg.team)}/members/me/doorbell`);
+}
+
+/** Replace this viewer's doorbell prefs whole; the daemon answers with the stored result. */
+export function putMyDoorbell(cfg: LiveConfig, prefs: DoorbellPrefs): Promise<MyDoorbell> {
+  return sendAsWeb(cfg, 'PUT', `/teams/${encodeURIComponent(cfg.team)}/members/me/doorbell`, prefs);
+}
+
+/** SPEC A.6 Axis 2: set this viewer's own availability. `until` rides only `away`. */
+export function setMyAvailability(
+  cfg: LiveConfig,
+  body: { status: 'available' | 'away' | 'dnd'; until?: number | null },
+): Promise<{ member: MemberSummary }> {
+  return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/availability`, body);
 }
 
 /** The style slice of a sparse policy override (ADR 185): only what an admin chose. */

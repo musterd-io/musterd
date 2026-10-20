@@ -69,6 +69,7 @@ import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
   boardAnchor,
+  hoursAnchor,
   furnishedBox,
   coffeeAnchor,
   DARK_PALETTE,
@@ -310,6 +311,12 @@ export interface OfficeOptions {
   /** First hover/focus on the board hotspot — the route uses it to preload the overlay's lazy chunk
    * so the click meets code that is already here. */
   onBoardHover?: () => void;
+  /** `/live` only: the working-hours calendar becomes the door to the settings overlay, handing back
+   * its viewport rect the way the board does. The hotspot starts hidden; `setSettingsSpot` shows it
+   * once the viewer is someone with settings (a signed-in human). Requires `interactiveLabels`. */
+  onSettingsClick?: (rect: DOMRect) => void;
+  /** First hover/focus on the calendar — preload the settings overlay's chunk. */
+  onSettingsHover?: () => void;
   /** Broadcast mode (ADR 157): this office is a *stream source*, not a viewer's panel. The loop keeps
    * running while the tab is hidden or headless, DPR is pinned to 1 for a deterministic capture size,
    * and suspend requests are ignored. Only `/broadcast` passes it — see ./broadcast.ts. */
@@ -432,6 +439,42 @@ export function mountOffice(
           return el;
         })()
       : null;
+
+  // The working-hours calendar's hotspot — the settings door (nick, 2026-10-19). Same build as the
+  // board's: a real button over the paint, below every nameplate and bubble in DOM order. Hidden
+  // until the route says the viewer has settings; a dot on it says a pairing waits for them.
+  const hoursSpot =
+    interactiveLabels && options.onSettingsClick
+      ? (() => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = 'lc-hoursspot';
+          el.hidden = true;
+          el.setAttribute('aria-label', 'Open settings');
+          el.title = 'Settings';
+          const dot = document.createElement('span');
+          dot.className = 'lc-hoursspot__dot';
+          dot.setAttribute('aria-hidden', 'true');
+          el.appendChild(dot);
+          el.addEventListener('click', () => options.onSettingsClick!(el.getBoundingClientRect()));
+          if (options.onSettingsHover) {
+            const warm = () => options.onSettingsHover!();
+            el.addEventListener('pointerenter', warm, { once: true });
+            el.addEventListener('focus', warm, { once: true });
+          }
+          labelHost.appendChild(el);
+          return el;
+        })()
+      : null;
+
+  function positionHoursSpot(): void {
+    if (!hoursSpot) return;
+    const a = hoursAnchor(fit);
+    hoursSpot.style.left = `${a.x}px`;
+    hoursSpot.style.top = `${a.y}px`;
+    hoursSpot.style.width = `${a.w}px`;
+    hoursSpot.style.height = `${a.h}px`;
+  }
 
   function positionBoardSpot(): void {
     if (!boardSpot) return;
@@ -841,6 +884,7 @@ export function mountOffice(
     syncLabels(anchors.heads, nodes, poses);
     repositionSpeeches(anchors.heads);
     positionBoardSpot();
+    positionHoursSpot();
     if (!reduced) {
       positionSteam();
       syncDeskProps();
@@ -3378,6 +3422,15 @@ export function mountOffice(
         hit: solidHit(p.lx, p.ly),
         sit: p.sit,
       })),
+    setSettingsSpot: ({ enabled, flagged }: { enabled: boolean; flagged: boolean }) => {
+      if (!hoursSpot) return;
+      hoursSpot.hidden = !enabled;
+      hoursSpot.classList.toggle('is-flagged', flagged);
+      hoursSpot.setAttribute(
+        'aria-label',
+        flagged ? 'Open settings — a channel pairing waits for you' : 'Open settings',
+      );
+    },
     setLinked: (names: string | readonly string[] | null) => {
       // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464). Several at once
       // when a Now goal row lights everyone on that goal.
@@ -3480,6 +3533,7 @@ export function mountOffice(
       askCards.clear();
       ambientHost.remove(); // removes the day-cycle wash, steam, and the animated desk props
       boardSpot?.remove();
+      hoursSpot?.remove();
       canvas.remove();
     },
   };

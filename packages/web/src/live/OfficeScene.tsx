@@ -195,6 +195,9 @@ export function OfficeScene({
   onLaneClick,
   onBoardOpen,
   onBoardHover,
+  onSettingsOpen,
+  onSettingsHover,
+  settingsSpot = null,
   broadcast = false,
   captureFps,
   sprites = false,
@@ -227,6 +230,14 @@ export function OfficeScene({
   onBoardOpen?: (rect: DOMRect) => void;
   /** First hover/focus on the board — preload the overlay's lazy chunk. */
   onBoardHover?: () => void;
+  /** The working-hours calendar clicked — hands back its rect, the settings overlay's zoom origin.
+   * `/live` only, like `onBoardOpen`. */
+  onSettingsOpen?: (rect: DOMRect) => void;
+  /** First hover/focus on the calendar — preload the settings overlay's chunk. */
+  onSettingsHover?: () => void;
+  /** Whether the calendar opens settings for this viewer, and whether something there waits for
+   * them. Null (the default) leaves the calendar as paint. */
+  settingsSpot?: { enabled: boolean; flagged: boolean } | null;
   /** Broadcast mode (ADR 157) — only `/broadcast` sets it: the scene is a stream source, so it keeps
    * animating unseen, pins DPR to 1, and ignores reduced-motion (the viewer of a stream is not the
    * person whose OS preference this is). */
@@ -313,6 +324,9 @@ export function OfficeScene({
   const onLaneClickRef = useRef(onLaneClick);
   const onBoardOpenRef = useRef(onBoardOpen);
   const onBoardHoverRef = useRef(onBoardHover);
+  const onSettingsOpenRef = useRef(onSettingsOpen);
+  const onSettingsHoverRef = useRef(onSettingsHover);
+  const settingsSpotRef = useRef(settingsSpot);
   const onReadyRef = useRef(onReady);
   const onCaptionRef = useRef(onCaption);
   const onPlateHoverRef = useRef(onPlateHover);
@@ -323,6 +337,9 @@ export function OfficeScene({
     onLaneClickRef.current = onLaneClick;
     onBoardOpenRef.current = onBoardOpen;
     onBoardHoverRef.current = onBoardHover;
+    onSettingsOpenRef.current = onSettingsOpen;
+    onSettingsHoverRef.current = onSettingsHover;
+    settingsSpotRef.current = settingsSpot;
     onReadyRef.current = onReady;
     onCaptionRef.current = onCaption;
     onPlateHoverRef.current = onPlateHover;
@@ -363,6 +380,12 @@ export function OfficeScene({
                 onBoardHover: () => onBoardHoverRef.current?.(),
               }
             : {}),
+          ...(onSettingsOpenRef.current
+            ? {
+                onSettingsClick: (rect: DOMRect) => onSettingsOpenRef.current?.(rect),
+                onSettingsHover: () => onSettingsHoverRef.current?.(),
+              }
+            : {}),
           broadcast,
           ...(captureFps !== undefined ? { captureFps } : {}),
           sprites,
@@ -373,6 +396,7 @@ export function OfficeScene({
         });
         handle.update(dataRef.current);
         handle.setSuspended(collapsedRef.current); // mounted while collapsed → start parked
+        if (settingsSpotRef.current) handle.setSettingsSpot(settingsSpotRef.current);
         handleRef.current = handle;
         replayOnce(handle, replayRef);
         onReadyRef.current?.(handle);
@@ -400,6 +424,14 @@ export function OfficeScene({
   useEffect(() => {
     handleRef.current?.setSuspended(collapsed);
   }, [collapsed]);
+
+  // The settings door on the calendar: shown for a viewer who has settings, flagged when a pairing
+  // waits. Two booleans, so the effect keys on them rather than on a fresh object every render.
+  const spotEnabled = settingsSpot?.enabled ?? false;
+  const spotFlagged = settingsSpot?.flagged ?? false;
+  useEffect(() => {
+    handleRef.current?.setSettingsSpot({ enabled: spotEnabled, flagged: spotFlagged });
+  }, [spotEnabled, spotFlagged]);
 
   // The card↔character link (ADR 464): a class on the plate, so it costs no frame.
   useEffect(() => {
