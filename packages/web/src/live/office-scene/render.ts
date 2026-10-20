@@ -1978,8 +1978,14 @@ function receptionItems(
   t: number,
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
   statKey = '',
+  rendered?: RenderedAssets,
 ): DepthItem[] {
   const R = RECEPTION;
+  /* Rendered (plan Task 6): the front desk's base is one asset; its screen's typing flicker is a
+     live part that Task 7 paints back on top. Until then a rendered front desk is a still one. */
+  const deskDraw = renderedOr(fit, rendered, 'reception/desk', FRONT_DESK.lx, FRONT_DESK.ly, (c) =>
+    frontDesk(c, fit, t, recep?.mode === 'typing'),
+  );
   const still = (d: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
     d,
     fn: () => draw(ctx),
@@ -1991,12 +1997,24 @@ function receptionItems(
       d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly),
       fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t),
     },
-    { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => frontDesk(ctx, fit, t, recep?.mode === 'typing') },
-    still(depth(R.endTable.lx, R.endTable.ly), 'recep·endtable', (c) => endTable(c, fit, R.endTable.lx, R.endTable.ly)),
-    still(depth(R.chair.lx, R.chair.ly), 'recep·armchair', (c) =>
-      armchair(c, fit, R.chair.lx, R.chair.ly, PAL.couch, R.chair.dir, WAIT_CHAIR),
+    { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => deskDraw(ctx) },
+    still(
+      depth(R.endTable.lx, R.endTable.ly),
+      'recep·endtable',
+      renderedOr(fit, rendered, 'reception/endtable', R.endTable.lx, R.endTable.ly, (c) => endTable(c, fit, R.endTable.lx, R.endTable.ly)),
     ),
-    still(depth(R.plant.lx, R.plant.ly), 'recep·plant', (c) => drawPlant(c, fit, R.plant.lx, R.plant.ly, 'fiddle')),
+    still(
+      depth(R.chair.lx, R.chair.ly),
+      'recep·armchair',
+      renderedOr(fit, rendered, 'reception/armchair', R.chair.lx, R.chair.ly, (c) =>
+        armchair(c, fit, R.chair.lx, R.chair.ly, PAL.couch, R.chair.dir, WAIT_CHAIR),
+      ),
+    ),
+    still(
+      depth(R.plant.lx, R.plant.ly),
+      'recep·plant',
+      renderedOr(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly, (c) => drawPlant(c, fit, R.plant.lx, R.plant.ly, 'fiddle')),
+    ),
   ];
 }
 
@@ -2150,6 +2168,25 @@ function blitIf(
   return true;
 }
 
+/**
+ * A static item's painter, rendered-aware: blits the asset `id` at `(lx, ly)` when the manifest has
+ * it, otherwise runs `paint`. Wraps the `draw` of a sprite part, so the sprite cache rasterises the
+ * blit exactly as it rasterised the painter — the depth item, its key and its order do not change.
+ */
+function renderedOr(
+  fit: Fit,
+  rendered: RenderedAssets | undefined,
+  id: string,
+  lx: number,
+  ly: number,
+  paint: (c: CanvasRenderingContext2D) => void,
+): (c: CanvasRenderingContext2D) => void {
+  if (!rendered?.images.has(id)) return paint;
+  return (c) => {
+    if (!blitIf(c, fit, rendered, id, lx, ly)) paint(c);
+  };
+}
+
 /** Convex hull (monotone chain) of a point set — the silhouette an extruded box clips to. */
 function hull(pts: Pt[]): Pt[] {
   const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
@@ -2174,9 +2211,14 @@ function nookItems(
   fridgeOpen = false,
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
   statKey = '',
+  rendered?: RenderedAssets,
 ): { rug: (c: CanvasRenderingContext2D) => void; items: DepthItem[] } {
   const { lx, ly } = NOOK;
   const L = LOUNGE;
+  /* Rendered pieces (plan Task 6): each nook item is one asset at its own floor point. The open
+     fridge is a live state and keeps its painter until Task 7 renders the door. */
+  const r = (id: string, dx: number, dy: number, paint: (c: CanvasRenderingContext2D) => void) =>
+    renderedOr(fit, rendered, id, lx + dx, ly + dy, paint);
   /* Every nook piece is still furniture, so each one is a sprite; `key` carries whatever else it
      reads (the fridge door). */
   const at = (dx: number, dy: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
@@ -2186,12 +2228,17 @@ function nookItems(
   });
   return {
     // Flat floor paint: it belongs to the background layer, so it takes the context to draw on.
-    rug: (c) => drawRug(c, fit, NOOK_RUG, lx, ly, NOOK_RUG_R * 2, NOOK_RUG_R * 2),
+    rug: renderedOr(fit, rendered, 'rug/nook', lx, ly, (c) => drawRug(c, fit, NOOK_RUG, lx, ly, NOOK_RUG_R * 2, NOOK_RUG_R * 2)),
     items: [
-      at(L.fridge.dx, L.fridge.dy, `fridge·${fridgeOpen ? 'open' : 'shut'}`, (ctx) =>
-        fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, fridgeOpen),
+      at(
+        L.fridge.dx,
+        L.fridge.dy,
+        `fridge·${fridgeOpen ? 'open' : 'shut'}`,
+        fridgeOpen
+          ? (ctx) => fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, true)
+          : r('nook/fridge', L.fridge.dx, L.fridge.dy, (ctx) => fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, false)),
       ),
-      at(L.counter.dx, L.counter.dy, 'counter', (ctx) => {
+      at(L.counter.dx, L.counter.dy, 'counter', r('nook/counter', L.counter.dx, L.counter.dy, (ctx) => {
         // Base cabinets, then a slab that overhangs them — the overhang is what separates a worktop
         // from a plain box, and it is most of why this now reads as a fitted kitchen run.
         box(ctx, fit, lx + L.counter.dx, ly + L.counter.dy, L.counter.w - 4, L.counter.d - 3, L.counter.h - 4, dim(woodTop(), 0.88));
@@ -2213,10 +2260,10 @@ function nookItems(
         for (let i = 0; i < 2; i++) {
           frustum(ctx, fit, lx + L.counter.dx + 32, ly + L.counter.dy, 6, 6, 7, 7, 5, '#f2e7d5', L.counter.h + i * 5);
         }
-      }),
-      at(L.cooler.dx, L.cooler.dy, 'cooler', (ctx) => watercooler(ctx, fit, lx + L.cooler.dx, ly + L.cooler.dy)),
-      at(L.couch.dx, L.couch.dy, 'couch', (ctx) => couch(ctx, fit, lx + L.couch.dx, ly + L.couch.dy, PAL.couch, 'S')),
-      at(L.table.dx, L.table.dy, 'table', (ctx) => ctable(ctx, fit, lx + L.table.dx, ly + L.table.dy)),
+      })),
+      at(L.cooler.dx, L.cooler.dy, 'cooler', r('nook/cooler', L.cooler.dx, L.cooler.dy, (ctx) => watercooler(ctx, fit, lx + L.cooler.dx, ly + L.cooler.dy))),
+      at(L.couch.dx, L.couch.dy, 'couch', r('nook/couch', L.couch.dx, L.couch.dy, (ctx) => couch(ctx, fit, lx + L.couch.dx, ly + L.couch.dy, PAL.couch, 'S'))),
+      at(L.table.dx, L.table.dy, 'table', r('nook/table', L.table.dx, L.table.dy, (ctx) => ctable(ctx, fit, lx + L.table.dx, ly + L.table.dy))),
     ],
   };
 }
@@ -5117,31 +5164,32 @@ export function renderScene(
   const items: DepthItem[] = [];
   /* Every static item's key ends with the same three facts: where the pixel grid is, how dense it
      is, and what the theme resolved to. A resize or a theme flip is one cold frame, then cached. */
-  const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}`;
+  const rendered = opts.rendered;
+  const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}${rendered ? '·r' : ''}`;
+  /* Pre-rendered art (plan Task 6): a static item blits its asset where its painter ran, through
+     the same depth item and sprite key, so nothing about order or caching changes. */
+  const ro = (id: string, lx: number, ly: number, paint: (c: CanvasRenderingContext2D) => void) =>
+    renderedOr(fit, rendered, id, lx, ly, paint);
 
   PLANTS.forEach((plant, pi) => {
+    const draw = ro(`plant/${plant.species}`, plant.lx, plant.ly, (c) => drawPlant(c, fit, plant.lx, plant.ly, plant.species));
     items.push({
       d: depth(plant.lx, plant.ly),
-      fn: () => drawPlant(ctx, fit, plant.lx, plant.ly, plant.species),
-      parts: [
-        {
-          kind: 'sprite',
-          key: `plant·${pi}·${plant.species}·${statKey}`,
-          draw: (c) => drawPlant(c, fit, plant.lx, plant.ly, plant.species),
-        },
-      ],
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `plant·${pi}·${plant.species}·${statKey}`, draw }],
     });
   });
   BOOKSHELVES.forEach((s, si) => {
     // The index is the book seed — it is what makes shelf 0 and shelf 2 hold different books
     // despite being the same size.
+    const draw = ro(`shelf/${si}`, s.lx, s.ly, (c) => bookshelf(c, fit, s, si));
     items.push({
       d: depth(s.lx, s.ly),
-      fn: () => bookshelf(ctx, fit, s, si),
-      parts: [{ kind: 'sprite', key: `shelf·${si}·${statKey}`, draw: (c) => bookshelf(c, fit, s, si) }],
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `shelf·${si}·${statKey}`, draw }],
     });
   });
-  const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false, statKey);
+  const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false, statKey, rendered);
   items.push(...nook.items);
 
   /* THE ROOM SHELL, painted before the depth-sorted loop: the ground shadow the diorama sits on, the
@@ -5149,10 +5197,20 @@ export function renderScene(
      item, and the flat rugs (drawn with the floor so a member standing on one is never over-painted
      by it). All of it is static per lighting step — so with a cache it is two sprites around the
      three live wall fixtures, and with none it paints exactly as it always has. */
+  /* Rendered shell (plan Task 6): the floor and the two back walls are one image each. The walls'
+     fixtures — clock, hours sign, board, calendar — are live and still paint on top (the 'live'
+     slice); the painted dressing (art, hanger, cable) is in the wall render. */
+  const wallsRendered = !!rendered?.images.has('room/wall-left') && !!rendered.images.has('room/wall-right');
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
-    drawFloor(c, fit);
-    drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, cache ? 'static' : 'all');
+    if (!blitIf(c, fit, rendered, 'room/floor', 0, 0)) drawFloor(c, fit);
+    if (wallsRendered) {
+      blitIf(c, fit, rendered, 'room/wall-left', 0, 0);
+      blitIf(c, fit, rendered, 'room/wall-right', 0, 0);
+      if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, 'live');
+    } else {
+      drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, cache ? 'static' : 'all');
+    }
     if (!cache) drawWindowBeams(c, fit, env);
     if (!cache) rugs(c);
   };
@@ -5164,10 +5222,12 @@ export function renderScene(
       const dims = pod.size === 1 ? POD_RUG_SOLO : pod.size === 2 ? POD_RUG_DUO : POD_RUG;
       const w = ns ? dims.across : dims.along;
       const d = ns ? dims.along : dims.across;
-      drawRug(c, fit, pod.rug, pod.cx, pod.cy, w, d);
+      ro(`rug/pod-${pod.id}`, pod.cx, pod.cy, (g) => drawRug(g, fit, pod.rug, pod.cx, pod.cy, w, d))(c);
     }
-    drawRug(c, fit, MEETING.rug, MEETING.lx, MEETING.ly, MEETING.rug.w, MEETING.rug.d);
-    drawRug(c, fit, RECEPTION.rug, RECEPTION.rug.lx, RECEPTION.rug.ly, RECEPTION.rug.w, RECEPTION.rug.d);
+    ro('rug/meeting', MEETING.lx, MEETING.ly, (g) => drawRug(g, fit, MEETING.rug, MEETING.lx, MEETING.ly, MEETING.rug.w, MEETING.rug.d))(c);
+    ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly, (g) =>
+      drawRug(g, fit, RECEPTION.rug, RECEPTION.rug.lx, RECEPTION.rug.ly, RECEPTION.rug.w, RECEPTION.rug.d),
+    )(c);
     nook.rug(c);
   }
   if (cache) {
@@ -5182,31 +5242,25 @@ export function renderScene(
   } else {
     run(() => shell(ctx));
   }
-  items.push({
-    d: depth(MEETING.lx, MEETING.ly),
-    fn: () => meetingTable(ctx, fit),
-    parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw: (c) => meetingTable(c, fit) }],
-  });
+  {
+    const draw = ro('meeting/table', MEETING.lx, MEETING.ly, (c) => meetingTable(c, fit));
+    items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw }] });
+  }
   MEETING.chairs.forEach((c, ci) => {
     const cx = MEETING.lx + c.dx;
     const cy = MEETING.ly + c.dy;
-    items.push({
-      d: depth(cx, cy),
-      fn: () => meetingChair(ctx, fit, cx, cy, c.dir),
-      parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw: (g) => meetingChair(g, fit, cx, cy, c.dir) }],
-    });
+    const draw = ro(`meeting/chair-${ci}`, cx, cy, (g) => meetingChair(g, fit, cx, cy, c.dir));
+    items.push({ d: depth(cx, cy), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw }] });
   });
-  items.push(...receptionItems(ctx, fit, recep, t, statKey));
-  items.push({
-    d: depth(PRINTER.lx, PRINTER.ly),
-    fn: () => printer(ctx, fit),
-    parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw: (c) => printer(c, fit) }],
-  });
-  items.push({
-    d: depth(ENTRANCE.lx, ENTRANCE.ly),
-    fn: () => drawEntrance(ctx, fit),
-    parts: [{ kind: 'sprite', key: `entrance·${statKey}`, draw: (c) => drawEntrance(c, fit) }],
-  });
+  items.push(...receptionItems(ctx, fit, recep, t, statKey, rendered));
+  {
+    const draw = ro('printer', PRINTER.lx, PRINTER.ly, (c) => printer(c, fit));
+    items.push({ d: depth(PRINTER.lx, PRINTER.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw }] });
+  }
+  {
+    const draw = ro('entrance', ENTRANCE.lx, ENTRANCE.ly, (c) => drawEntrance(c, fit));
+    items.push({ d: depth(ENTRANCE.lx, ENTRANCE.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `entrance·${statKey}`, draw }] });
+  }
 
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
   if (pet) items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t) });
@@ -5227,11 +5281,10 @@ export function renderScene(
 
   // The bench's shared counter, once — its seats' gear rides per-slot below.
   // 300 long: the widest footprint on the floor, so the centre-vs-edge error is largest here.
-  items.push({
-    d: depth(BENCH.lx, BENCH.ly),
-    fn: () => benchCounter(ctx, fit),
-    parts: [{ kind: 'sprite', key: `bench·${statKey}`, draw: (c) => benchCounter(c, fit) }],
-  });
+  {
+    const draw = ro('bench/base', BENCH.lx, BENCH.ly, (c) => benchCounter(c, fit));
+    items.push({ d: depth(BENCH.lx, BENCH.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `bench·${statKey}`, draw }] });
+  }
 
   // Desks whose lamp is switched on: a real sitter's desk, after dark. Filled from the same three facts
   // `drawWorkstation` uses to draw the lit shade (a node, not a bench seat, not an offline owner's kept
