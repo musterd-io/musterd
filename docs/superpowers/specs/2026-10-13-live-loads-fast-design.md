@@ -96,9 +96,12 @@ from a card). Five visits each, medians:
 - the daemon's answer: **144 ms** on warm visits and **130 ms** on cold (worst run 980 ms). Bar ≤ 3.0 s:
   met on this daemon.
 
-Not yet measured on the hub. A joiner answers from its own local copy, so the third line there says
-little about the hub's read path under its weekday load, which is what the bar names. The hub run is
-the same script, signed in by a human on the hub machine; the goal outcome waits for it.
+**Measured 2026-10-20 on the hub**, which is the read the bar names. nick ran `scripts/perf/live-paint-bar.sh`
+at a load average of 16.7, heavier than ordinary. Medians: warm card **119 ms**, cold skeleton
+**331 ms**, and the daemon's answer **119 ms** on warm visits and **457 ms** on cold. All three lines are
+met, and the goal ships on them. One run is an exception: the first warm visit after signing in took
+8.3 s to a card, for a reason not yet known. It is recorded in `web-live-baseline.md`, with a second
+read at ordinary load as the next check.
 
 Increment 2 is a measurement lane, not a build; it exists so the goal closes on a number rather than on
 a feeling. If increment 1 lands and the third line still fails, the next lane is on the daemon's read
