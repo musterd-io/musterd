@@ -1946,10 +1946,11 @@ async function authAdmin(
  * for `set_authorized_by`, the human named, not the seat relaying their proof. The proof
  * rides the request body as `approval` and is parsed here, at the boundary.
  */
-/** ADR 662 dec. 5: the origins a passkey ceremony may be on — the daemon's configured
- * origins plus the origin this very request arrived on (the daemon's own origin). */
-function webauthnExpectedOrigins(ctx: Ctx, req: IncomingMessage): string[] {
-  return [...new Set([...ctx.config.webauthnOrigins, requestOrigin(req)])];
+/** ADR 662 dec. 5: the origins a passkey ceremony may be on — only the daemon's
+ * configured origins. Never the request's own Host/X-Forwarded-Proto: those are
+ * caller-claimed, so unioning them made the origin check pass for any origin. */
+function webauthnExpectedOrigins(ctx: Ctx): string[] {
+  return [...new Set(ctx.config.webauthnOrigins)];
 }
 
 async function guardAuthority(
@@ -1973,7 +1974,7 @@ async function guardAuthority(
     target,
     payload,
     proof,
-    expectedOrigins: webauthnExpectedOrigins(ctx, req),
+    expectedOrigins: webauthnExpectedOrigins(ctx),
   });
   if (!check.ok) {
     throw new MusterdError(
@@ -4808,7 +4809,7 @@ export async function handleHttp(
           teamId: team.id,
           audience: team.slug,
           proof,
-          expectedOrigins: webauthnExpectedOrigins(ctx, req),
+          expectedOrigins: webauthnExpectedOrigins(ctx),
         });
         if (!parked) {
           throw new MusterdError('validation', 'that approval does not verify for its descriptor');
@@ -4848,7 +4849,7 @@ export async function handleHttp(
                   proof: body.countersign.approval,
                 }
               : undefined,
-          expectedOrigins: webauthnExpectedOrigins(ctx, req),
+          expectedOrigins: webauthnExpectedOrigins(ctx),
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
             clientDataJson: body.registration.client_data_json,

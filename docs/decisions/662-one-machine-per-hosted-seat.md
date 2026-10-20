@@ -203,6 +203,12 @@ All four converged on one shape, and nick directed it be written as this ADR.
   the human's lane-review ask answered with no human present. Falsifier committed:
   a relay-origin assertion with a valid signature refuses at `requireAuthority`,
   and an empty/omitted origin list never verifies.)_
+- _(2026-10-20: HA3 third finding (stanley): the HTTP transport still unioned the
+  request's own origin — built from caller-claimed Host/X-Forwarded-Proto headers —
+  into the expected-origin list, so the origin check passed for whatever origin a
+  ceremony claimed. `webauthnExpectedOrigins` now returns only the configured
+  `webauthnOrigins`; the falsifier is a transport test whose claimed origin matches
+  only its own headers, refused at registration as `bad_registration`.)_
 - _(2026-10-20: HA3 re-review (lazara, declined #2968) closed the two authenticator
   gaps. The CLI's file-stored software key is gone (with HA2's passkey-first CLI);
   a software key may still be recorded under the honest kind `software`, and

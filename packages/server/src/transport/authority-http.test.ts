@@ -1,9 +1,9 @@
-import { generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
-import { enrollDeviceKey } from '../store/authority.js';
+import { enrollDeviceKey, issueEnrollmentChallenge } from '../store/authority.js';
 import { getMemberByName } from '../store/members.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
@@ -154,6 +154,105 @@ withDrivers('authority-http (ADR 662)', (_o, kind) => {
     const proof = { key_id: keyId, nonce: d.nonce, signature: signWith(d) };
     const ok = await call('POST', '/teams/dawn/agent-key/rotate', nick, { approval: proof });
     expect(ok.status).toBe(200);
+  });
+
+  it('passkey enrollment refuses an origin that matches only its own spoofed Host header', async () => {
+    // Stanley's falsifier: before the fix, webauthnExpectedOrigins unioned
+    // requestOrigin(req) — Host/X-Forwarded-Proto — so a ceremony whose
+    // claimed origin matched its own headers passed its own origin check.
+    const teamRow = (await getTeamBySlug(server.store, 'dawn'))!;
+    // A fresh human with no standing key: before the fix her ceremony verified
+    // (origin allowed via headers) and only failed later at countersign; after
+    // the fix it must fail at registration with bad_registration.
+    const { addMember } = await import('../store/members.js');
+    const mallory = (await addMember(server.store, teamRow, { name: 'mallory', kind: 'human' }))
+      .row;
+    const issued = await issueEnrollmentChallenge(server.store, {
+      teamId: teamRow.id,
+      memberId: mallory.id,
+      actor: 'mallory',
+    });
+    const head = (major: number, len: number): Buffer =>
+      len < 24 ? Buffer.from([(major << 5) | len]) : Buffer.from([(major << 5) | 24, len]);
+    const encInt = (n: number) => (n >= 0 ? head(0, n) : head(1, -1 - n));
+    const encBytes = (b: Uint8Array) => Buffer.concat([head(2, b.length), Buffer.from(b)]);
+    const encText = (s: string) => {
+      const b = Buffer.from(s, 'utf8');
+      return Buffer.concat([head(3, b.length), b]);
+    };
+    const encMap = (entries: [Uint8Array, Uint8Array][]) =>
+      Buffer.concat([head(5, entries.length), ...entries.flatMap(([k, v]) => [k, v])]);
+    const { publicKey } = generateKeyPairSync('ed25519');
+    const jwk = publicKey.export({ format: 'jwk' }) as { x: string };
+    const cose = encMap([
+      [encInt(1), encInt(1)],
+      [encInt(3), encInt(-8)],
+      [encInt(-1), encInt(6)],
+      [encInt(-2), encBytes(Buffer.from(jwk.x, 'base64url'))],
+    ]);
+    const credId = Buffer.from('evil-credential');
+    // Host must pass the daemon's Host allowlist, so claim its own loopback
+    // origin on the test port — an origin config never listed (config pins
+    // the daemon's configured port, not this ephemeral one).
+    const claimedOrigin = `http://localhost:${Number(new URL(base).port)}`;
+    const rpHash = createHash('sha256').update('localhost').digest();
+    const authData = Buffer.concat([
+      rpHash,
+      Buffer.from([0x45]),
+      Buffer.from([0, 0, 0, 0]),
+      Buffer.alloc(16),
+      Buffer.from([0, credId.length]),
+      credId,
+      cose,
+    ]);
+    const attestationObject = encMap([
+      [encText('fmt'), encText('none')],
+      [encText('attStmt'), encMap([])],
+      [encText('authData'), encBytes(authData)],
+    ]);
+    // Raw http.request: fetch/undici will not send a caller-chosen Host header.
+    const { request } = await import('node:http');
+    const port = Number(new URL(base).port);
+    const bodyText = JSON.stringify({
+      actor: 'mallory',
+      challenge: issued.challenge,
+      registration: {
+        attestation_object: attestationObject.toString('base64url'),
+        client_data_json: JSON.stringify({
+          type: 'webauthn.create',
+          challenge: issued.challenge,
+          origin: claimedOrigin,
+          crossOrigin: false,
+        }),
+      },
+    });
+    const res = await new Promise<{ status: number; text: string }>((resolveReq, rejectReq) => {
+      const r = request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: '/teams/dawn/authority/passkeys',
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(bodyText),
+            host: `localhost:${port}`,
+            'x-forwarded-proto': 'http',
+          },
+        },
+        (resp) => {
+          let text = '';
+          resp.on('data', (c) => (text += c));
+          resp.on('end', () => resolveReq({ status: resp.statusCode ?? 0, text }));
+        },
+      );
+      r.on('error', rejectReq);
+      r.end(bodyText);
+    });
+    expect(res.status).toBe(422);
+    expect(res.text).toContain('bad_registration');
+    const keys = await call('GET', '/teams/dawn/authority/keys', nick);
+    expect(keys.json.keys.filter((k: { kind: string }) => k.kind === 'passkey')).toHaveLength(0);
   });
 
   it('a human counterpart close needs the signature; the signed close lands', async () => {
