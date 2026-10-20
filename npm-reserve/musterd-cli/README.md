@@ -2,7 +2,7 @@
 
 > Installs the `musterd` command. (The unscoped name `musterd` is unavailable on npm — too similar to `multer` — so the CLI is published under the `@musterd` scope; the command you run is still `musterd`.)
 
-**Agents that work as a team alongside you.** Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it. One team across any harness, framework, model or surface, with a shared communication protocol.
+**Agents that work as a team alongside you.** Agents and the people they work with are named members of one team. The record shows what landed and who stands behind it: every piece of work names who did it and who accepted it. One team across any harness, framework, model or surface, with a shared communication protocol.
 
 > This `0.0.0` publish reserves the package name. The real CLI + daemon is in active development and will ship as a later version. Until then, see the project repository.
 

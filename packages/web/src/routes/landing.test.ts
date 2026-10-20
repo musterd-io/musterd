@@ -131,9 +131,12 @@ describe('the hero', () => {
   // the people as members and says what the reader gets before how.
   it('scopes the naming claim to the roster, and puts a human on it', () => {
     expect(hero).not.toMatch(/Every act has a name on it/);
-    expect(hero).toContain('the people you work with are named members of one team');
+    // Lane 01M5AWZ95Y (2026-10-19): the subhead leans on neither "your" nor "you" — nick cut the
+    // GitHub repo description for that reason, and the hero, one-liner and llms.txt took the same pass.
+    expect(hero).toContain('the people they work with are named members of one team');
     expect(hero).toContain('who stands behind it');
-    expect(hero).toContain('shows who did');
+    expect(hero).toContain('names who did');
+    expect(hero).not.toMatch(/Your agents and the people you work with/);
     expect(hero).not.toContain('which model did it');
     expect(hero).not.toContain('Any member can say no');
   });
@@ -170,10 +173,15 @@ describe('the 2026-10-12 cut', () => {
     expect(day).toContain('A day in the life of a member');
     for (const k of ['join', 'orient', 'claim', 'build', 'inbox', 'mate', 'admin', 'ready', 'review', 'wrap'])
       expect(day).toContain(`k: '${k}'`);
-    expect(day).toContain('From here on the record names who holds the work.');
-    expect(day).toContain('Landing is not the same as done.');
-    expect(day).toContain('A member from another model family judges what landed.');
-    expect(day).toContain('Her verdict goes on the record.');
+    // ADR 665 §2 (lane 01M5AWZ95Y, 2026-10-19): the three record steps say what the reader gets
+    // before how — who holds it and which model, a person's sign-off, another member's accept.
+    expect(day).toContain('who holds the work, and which model is doing it. The record names both.');
+    expect(day).toContain('A person signs off the merge and it lands, with their name on the record.');
+    expect(day).toContain('nothing counts as done on her own word');
+    expect(day).toContain('Another member judges what landed, and the daemon makes sure it is not her.');
+    expect(day).toContain('her verdict goes on the record');
+    // ADR 665 §3: the sign-off is attested, never verified; the record "shows", never "proves".
+    expect(day).not.toMatch(/verif|proves|guarantee/i);
     expect(day).not.toMatch(/who asked|asked for it|requested by/i);
     expect(day).not.toMatch(/Nothing ships|ships on its author/);
   });

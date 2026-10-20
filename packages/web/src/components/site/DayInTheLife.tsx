@@ -24,6 +24,14 @@ import './DayInTheLife.css';
  * tool's hook fires it. The chain the old section walked (claimed, model, landed, accepted) is
  * carried by the Claim, Ready for review and Review steps, so the page still states the record
  * once (ADR 550 §2); "who asked" stays out (ADR 550 §3).
+ *
+ * Those three steps carry ADR 665 §2's proof lines (lane 01M5AWZ95YKDHBM4BJ14CDXAG2, 2026-10-19),
+ * each phrased as what the reader gets before how: who holds the work and which model (Claim); a
+ * person signs off the merge, and nothing counts as done on the author's own word (Ready for
+ * review); another member's accept, enforced to be a different member, is what makes it done
+ * (Review). The sign-off is said as the record names it, never as verified (ADR 665 §3); the
+ * numbers under those lines belong to the deck and the Q&A, not to a caption that is not re-read
+ * monthly. No new section.
  */
 
 const W = 1000;
@@ -75,7 +83,7 @@ export const DAY_STEPS: readonly Step[] = [
     points: [
       'The team’s goal is split into lanes. She claims one: redesign the asks rail.',
       'She names the files it touches, and is warned if someone else holds them.',
-      'From here on the record names who holds the work.',
+      'From here on you know who holds the work, and which model is doing it. The record names both.',
     ],
     how: ['tool call', 'before a tool call'],
   },
@@ -135,9 +143,9 @@ export const DAY_STEPS: readonly Step[] = [
     y: 205,
     title: 'Ready for review',
     points: [
-      'Opens a pull request. It lands.',
-      'Submits the lane. Landing is not the same as done.',
-      'A member from another model family judges what landed.',
+      'Opens a pull request. A person signs off the merge and it lands, with their name on the record.',
+      'Submits the lane. Landed is not done: nothing counts as done on her own word.',
+      'Another member judges what landed, and the daemon makes sure it is not her.',
     ],
     how: ['tool call'],
   },
@@ -150,7 +158,8 @@ export const DAY_STEPS: readonly Step[] = [
     points: [
       'A review request lands: izzo’s lane.',
       'She takes it without being asked twice.',
-      'She accepts, or sends it back with a note. Her verdict goes on the record.',
+      'izzo’s work is not done until she accepts it.',
+      'She accepts, or sends it back with a note, and her verdict goes on the record.',
     ],
     how: ['tool call'],
   },

@@ -8,7 +8,7 @@ export const SITE_ORIGIN = 'https://musterd.io';
 export const SITE_TITLE = 'musterd';
 export const SITE_TAGLINE = 'Agents that work as a team alongside you.';
 export const SITE_ONE_LINER =
-  "Your agents and the people you work with join one team as named members, whatever harness they run in. You see what landed and who stands behind it: the record shows who claimed the work, which model did it and who accepted it.";
+  'Agents and the people they work with join one team as named members, whatever harness they run in. The record shows what landed and who stands behind it: who claimed the work, which model did it and who accepted it.';
 
 /**
  * What a share card leads with. NOT the same job as SITE_ONE_LINER, which is brand.md §1 verbatim
@@ -24,7 +24,7 @@ export const SITE_SHARE_DESCRIPTION =
 
 /** What the social card actually renders, for readers who get the alt text instead of the image. */
 export const SITE_CARD_ALT =
-  'The musterd mark beside the word musterd. Agents that work as a team alongside you. Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.';
+  'The musterd mark beside the word musterd. Agents that work as a team alongside you. Agents and the people they work with are named members of one team. The record shows what landed and who stands behind it: every piece of work names who did it and who accepted it.';
 
 /**
  * The document title for a page: its own name, suffixed with the product — unless the name

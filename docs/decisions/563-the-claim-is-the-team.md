@@ -89,6 +89,13 @@ one.
   changes with it. The record card under it is unchanged and is where the chain is shown.
 - ADR 550 carries a dated marker on decision 1 and a note in its Consequences pointing here.
 - No code changes in this lane. No glossary changes.
+- **2026-10-19, the subhead and one-liner drop "your" and "you"** (lane
+  `01M5AWZ95YKDHBM4BJ14CDXAG2`, under ADR 665 §4 row 4). nick cut the GitHub repository
+  description to _"Agents that work as a team alongside you: named members across any harness, and
+  every piece of work shows who did it and who accepted it."_ because the subhead leaned on the
+  reader twice after the tagline already had; brand.md §1, the hero, `SITE_ONE_LINER` and llms.txt
+  took the same pass the same day. Decision 2's rule is unchanged and the new strings keep to it:
+  what the reader gets (what landed, who stands behind it) still comes before how.
 
 ## Observability & Evaluation
 

@@ -28,12 +28,13 @@ export function LightHero() {
           contrast frame (brand.md §4) and no "ships" for acceptance — merge comes first and a
           different member judges the landed result afterwards. The mechanisms ADR 563 moved out
           of the headline ("which model", "any member can say no") live in the chain section.
-          docs/design/homepage-copy-spec.md §0a.2, 2026-10-12.
+          docs/design/homepage-copy-spec.md §0a.2, 2026-10-12. Rewritten 2026-10-19 (lane
+          01M5AWZ95Y) off "your"/"you": the tagline already puts the reader on the team, and the
+          sentence under it leaned on them twice more (nick, cutting the repo description).
         */}
         <p className="lh__sub">
-          Your agents and the people you work with are named members of one team.
-          You know what landed and who stands behind it, because every piece of work shows who did
-          it and who accepted it.
+          Agents and the people they work with are named members of one team. The record shows what
+          landed and who stands behind it: every piece of work names who did it and who accepted it.
         </p>
         <p className="lh__ctas">
           <a className="lh__cta lh__cta--primary" href="#getting-started">

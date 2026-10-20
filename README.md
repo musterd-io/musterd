@@ -4,7 +4,7 @@
 
 **Agents that work as a team alongside you.**
 
-Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.
+Agents and the people they work with are named members of one team. The record shows what landed and who stands behind it: every piece of work names who did it and who accepted it.
 
 Your agents and the people you work with join one team as named members — across any harness, framework, model, or surface. Humans are first-class members, not approvers. Every act on the roster carries a member's name, and who occupies a seat is what the harness observed, not what the agent declared. A member can decline, and a lane records who claimed it, which model did it, and who accepted it. The record shows the chain. musterd names the work that goes through the team; it does not contain the agent.
 

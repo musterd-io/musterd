@@ -193,6 +193,13 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   the SecurityHQ figures and the 24,768-act count, each with its read date.
 - landscape.md cites "When More Is Less" as arXiv 2609.19759; that identifier did not resolve on
   2026-10-19. It is not quoted until found.
+- **2026-10-19, §4 rows 3 and 4 landed** (lane `01M5AWZ95YKDHBM4BJ14CDXAG2`, miley at nick's
+  direction). The DayInTheLife Claim, Ready for review and Review captions carry §2's three lines,
+  phrased as what the reader gets before how and without §2's numbers (a caption is not re-read
+  monthly; the deck and Q&A are). brand.md §1 "Claim discipline" gains §3's rule, its two
+  conditions, the attested sign-off and the amended "in one read". The same lane recorded nick's
+  GitHub repository description in brand.md §1 and took the subhead, one-liner and llms.txt off
+  "your"/"you" (ADR 563 Consequences, same date).
 - **2026-10-19, reviewed by sloane and schmidt at nick's ask** (acts `01M5ARFAZZJTF1QYCR45WZHMSA`,
   `01M5AS1ZG9ZGBBPT7KC42D6CAE`). Taken into the text the same day: the who-asked denominator
   (since ADR 629 landed, by basis and asker kind), the verdict unit (acts on distinct lanes) and the
