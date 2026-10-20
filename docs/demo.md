@@ -356,171 +356,111 @@ front of it and the receipt behind it. Nothing in it needs the second machine, t
 projector; it runs on the laptop against the live team, never a fixture, and the stream is the
 backup if the laptop dies.
 
-Startup Grind asks for problem, solution, market insight, traction, and the AI edge. The beats
-below carry each, in that order, without naming them.
+**Refreshed 2026-10-20 (sloane, for nick's recording).** The spoken lines below follow the claim
+([ADR 563](decisions/563-the-claim-is-the-team.md)), the message
+([ADR 665](decisions/665-accountability-message-a-person-at-both-ends.md) §1), the `/live` sentence
+([ADR 683](decisions/683-live-and-multiplayer-in-the-message.md) §1) and the install that
+[ADR 669](decisions/669-the-release-train.md) generates. The 2026-09-21 text said "coordination
+layer", showed `npx @musterd/cli init`, called the 37% "thrown away", and offered to show the 38×
+table. All four are out. The 38× stays out of every spoken beat until lane `01M1VDRC6BAG` lands
+(`docs/brand/leave-behinds/security-position.md` §3 item 11). That covers the multiplier, its
+components and any offer to show the table.
 
-**It has to FIT, and the way to know is to count the words.** A 2-minute slot is ~300 spoken words
-at 150 wpm, and this script's `SAY` lines are the only thing that spends the clock. Measured
-2026-09-21, counting spoken words only — bracketed notes to the speaker are not speech:
+**It has to FIT, and the way to know is to count the words.** A 2-minute slot is about 300 spoken
+words at 150 wpm, and the `SAY` lines are the only thing that spends the clock. Counted 2026-10-20,
+spoken words only; bracketed notes to the speaker are not speech:
 
-| beat | budget | spoken | ~at 150 wpm |
+| beat | budget | spoken | at 150 wpm |
 | --- | --- | --- | --- |
-| 0:00 roster | 20 s | 76 | ~30 s |
-| 0:20 second agent | 25 s | 62 | ~24 s |
-| 0:45 the ask (centerpiece) | 45 s | 98 | ~39 s |
-| 1:30 two claims | 20 s | 64 | ~25 s |
-| 1:50 the ask | 10 s | 29 | ~11 s |
-| **total** | **120 s** | **329** | **~131 s** |
+| 0:00 the roster | 20 s | 55 | ~22 s |
+| 0:20 the second agent | 25 s | 46 | ~18 s |
+| 0:45 the ask (centerpiece) | 45 s | 81 | ~32 s |
+| 1:30 two claims, and the chain | 20 s | 50 | ~20 s |
+| 1:50 the ask | 10 s | 41 | ~16 s |
+| **total** | **120 s** | **273** | **~109 s** |
 
-**0:00 is the one that overruns** — ten seconds long, and it is the beat that sets up everything
-after it, so it is the speaker's call whether to trim it or to take the ten seconds out of the
-centerpiece's slack (0:45 runs six seconds under). Before this measurement the script ran ~160 s
-and nobody had counted; two of those beats were lengthened on 2026-09-21 by a claims repair that
-added qualification to spoken copy (see the notes at 0:20 and 1:30).
-
-**Falsify it rather than trust it:** read the script aloud with a timer at a real demo pace. 150
-wpm is a presentation constant, and a demo with pauses and a laptop to look at is slower — so if
-this table says 131 s, the room is unlikely to be kinder. If a live read comes in under 120 s, the
-constant is wrong and this table should be replaced by the stopwatch.
+0:00 and 1:50 run a few seconds over their own budget and the centerpiece runs well under, so the
+total holds. A demo with pauses and a laptop to look at is slower than 150 wpm: read it aloud with a
+timer, and if the stopwatch disagrees with this table, replace the table.
 
 **The true sentence, before anything else:** musterd is the team boundary for attribution and
-human coordination. It is not a sandbox, a policy engine, or a host containment layer. Every claim
-in this script is scoped to acts the daemon accepted — the roster — and none of it promises
-anything about what an agent does outside that boundary.
+human coordination. It does not sandbox, does not enforce a policy and does not contain a host.
+Every claim in this script is scoped to acts the daemon accepted, on that roster, and none of it
+promises anything about what an agent does outside that boundary.
 
-**Standing setup, five minutes before:** `/live` open with the office lit and the roster showing
-the human present and two agents `here`; a terminal with `musterd inbox --watch`; one small real
-task ready to hand to the two agents, split by ownership; one agent primed in plain words — *"when
-I say go, raise a standard-tier ask to nick about the task"* — so the ask fires on cue rather than
-on luck. The frame rule holds (§3 "What is in frame"): the human seat is visible the whole time.
+**Standing setup, five minutes before:** `/live` open with the office lit and the roster showing the
+human present and two agents `here`; a terminal with `musterd inbox --watch`; one small real task
+ready to hand to the two agents, split by ownership; one agent primed in plain words — *"when I say
+go, raise a standard-tier ask to nick about the task"* — so the ask fires on cue. The frame rule holds (§3 "What is in frame"): the human seat is visible the whole time.
 
-### 0:00 — Their objection, and the roster (20 s)
+### 0:00 — The roster (20 s)
 
 **SEE** `/live`. A roster of names. One of them is nick.
 
-**SAY** "Everyone here has read this year's headlines — agents nobody owns, agents nobody can
-stop. This is the opposite shape. A roster of names, one of them is me, and every act on that
-roster carries a name. musterd is the coordination layer where agents and humans are peers. It
-connects the agents you already run; it does not run them, and it does not contain them — your
-sandbox and your host still do that."
+**SAY** "I'm Nick. musterd gives you agents that work as a team alongside you. This is our office on /live: agents and people, named members on one roster. One of them is me. Nothing they do counts as done until another member accepts it. The record shows who did it, who accepted it, and which model."
 
 ### 0:20 — The second agent is where it breaks (25 s)
 
 **DO** Hand the two agents the task, split by ownership. Each claims a lane.
 
-**SEE** The board: two owners, two scopes. If a scope overlaps, the warning fires — read it aloud.
+**SEE** The board: two owners, two scopes. If a scope overlaps, the warning fires; read it aloud.
 
-**SAY** "The moment you run a second agent on one repo, the waste starts. On our own team, in 2026,
-before lanes — about 37% of the code produced was thrown away. Two agents writing the same diff, or
-one undoing the other. The fix is not a smarter model. It is one owner per unit of work, declared
-before the first keystroke."
+**SAY** "The moment you run a second agent on one repo, the waste starts. On our own team, 37% of the code our agents wrote never reached main before musterd. After, 0.9%. The fix is one owner for each piece of work, declared before the first keystroke."
 
-<!-- ~53 words, ~21 s. MAST IS NOT IN THIS BEAT, and that is the decision, not an omission.
-     The bare "about 79%" was cut on 2026-09-21 to match #1577; the first repair replaced it with
-     the scoped form — "a taxonomy over other people's systems, not a measurement of us, and it
-     says nothing about safety" — which is correct, and is three qualifying clauses nobody says
-     out loud with a two-minute clock running. That repair took this beat from 55 to 107 words.
+<!-- The 37% is ours, dated, from our git history (one team, one read in July, one in September; not
+     a controlled study). The ledger row is in `docs/demo/pitch/script.md`. MAST is in no spoken beat:
+     a claim that needs three qualifying clauses is cut under a hard clock, not caveated. -->
 
-     THE RULE: in spoken copy under a hard clock, a claim that needs that much scoping gets CUT,
-     not caveated. A qualifier dropped on stage cannot be corrected afterwards, and the speaker
-     most likely to drop it is one who is running long. Same move nick ruled for the 38x
-     (`security-position.md` §6.5: drop rather than caveat) — applied to the other number that was
-     in this beat.
-
-     The 37% is ours, dated, and the stronger sentence anyway. MAST keeps its scoped form in
-     `docs/launch-post.md`, where a reader can re-read the qualifier. It is in no spoken beat of
-     this document — §5's six-minute pitch never carried it either. -->
-
-
-### 0:45 — A question reaches the human (45 s — the centerpiece)
+### 0:45 — A question reaches the human (45 s, the centerpiece)
 
 **DO** "Go." The primed agent raises its `ask`.
 
 **SEE** It lands on the rail in the agent's hue with the tier's clock drawn as an arc, and in the
-terminal inbox. Let it sit for one breath. Answer it from the terminal, as yourself — decline it if
-the question allows a no; accept it if the clock is short.
+terminal inbox. Let it sit for one breath. Answer it from `/live` as yourself. Decline it if the
+question allows a no; accept it if the clock is short. When you decline, the agent re-routes the
+work: the lane moves on the board.
 
-**SAY** "It asked me. Not the person driving its session — me, a member on the same roster, with
-a clock on the question. Above a certain stakes tier it holds until I answer; below it, it proceeds
-when the clock runs out and writes down that it went on without me. My silence becomes a fact in
-the record, not a bypass. And I can say no — so can they, to each other and to me. A teammate you
-can only assign to cannot tell you no. That is the difference between a fleet and a team."
+**SAY** "It asked me. Not the person driving its session. Me, a member on the same roster, with a clock on the question. Above a certain stakes tier it holds until I answer. Below it, it goes ahead when the clock runs out and writes down that it went on without me. From /live I see every member at work and answer what is waiting for me. So I answer here. I say no. And the work goes where I sent it."
 
-### 1:30 — Done is two claims, and the receipt (20 s)
+### 1:30 — Done is two claims, and the chain (20 s)
 
 **SEE** A lane in awaiting-acceptance, its acceptance routed to a *different* seat — a different
 model family when one is on the roster. Then, in the terminal:
 
 ```bash
-musterd report
+musterd lane show <lane id>
 ```
 
-**SAY** "The agent that built it says merged. A different model family says this is what we
-wanted. That is two claims, not one. We measured the waste both ways — those numbers are from
-July, the re-run is pending, so ask me after and I'll show you the table. One agent alone is still
-cheaper: we sell against the second agent, not the first."
+**SAY** "The agent that built it says merged. A different member accepts it, on a different model family when the roster has one. That is two claims. This one command prints the chain: who asked, who claimed, which model, who accepted. Each link says whether it is verified, stated or missing."
 
-<!-- ~58 words, ~23 s, against a 20 s budget — the closest this beat gets while keeping the cost
-     side, which is the half a hostile room tests. The 2026-09-21 repair ran it to 97 words by
-     explaining the gate out loud; a room does not need our reasoning, only the offer of the
-     table. The multiplier stays out until lane 01M1VDRC6BAG lands (`security-position.md` §3
-     item 11, ADR 437) — restoring it is an edit there, not here. -->
-
+<!-- `musterd lane show` prints the chain, each link marked verified, stated or missing (ADR 629,
+     #2771). "Verified" is said only as the page shows it. That the acceptance was independent is
+     not claimed until the review grade is on the accepted line (ADR 670). -->
 
 ### 1:50 — The ask (10 s)
 
-**SAY** "Open source. `npx @musterd/cli init`. [The honest traction line for that week, from the
-traction plan's log — installs and who is using it, or "we are installing it on laptops this
-month" if the number is still small.] If you run more than one agent, try it with your team for
-two weeks — I'll sit with you for the first hour."
+**SAY** "It is open source, and free to run yourself. I am looking for my first design partners. If you run more than one agent, try it with your team for two weeks, and I'll sit with you for the first hour."
 
 Then stop.
 
 ### What the panel asks after
 
-Answers a page can back (ADR 320 "What this is not"; the moat, ordered, in ADR 320). Refresh this
-list from the room after Sep 17 and Oct 7 — the plan's log records what was actually asked.
-
-- **"So it's an AI safety product?"** — "No, and the second half of that
-  matters: musterd does not make an agent harmless — it gives the team a named, auditable
-  coordination boundary, while your sandbox, host and provider controls do the containment."
-  **Never say the first half alone.** A bare "we do not contain them" reads to a security-minded
-  listener as *we knew it was dangerous and chose a ledger* (big-body's cross-family read, act
-  `01M2PH26PH`, 2026-09-17).
-- **"What happens when one of these agents does something bad?"** — the sentence above, then the
-  true limit: "musterd will tell you which member did what it accepted, and when a human was asked
-  and did not answer. It will not tell you what that agent did in a shell it opened on its own,
-  and it will not stop it. That is your sandbox's job."
-- **"Is the audit log tamper-proof?"** — "No. It is append-only in our code, on your machine, in
-  a SQLite file you own. It is an accountability record, not forensic evidence — no signed rows,
-  no encryption at rest — and we say so on every page that mentions it."
-- **"Why won't Anthropic or OpenAI just build this?"** — "They are building the durable agent —
-  inside their own runtime. Identity there binds to the lab; here it binds to the team, across
-  every harness, with attestation a second party can check. The primitives are reproducible in a
-  summer; the identity, the attestation, the human on the same protocol, and the measured corpus
-  are not."
-- **"Who pays, and for what?"** — "The core is open source. The thing a team cannot produce for
-  itself is the record — attested, cross-family, kept — and that is where a paid layer sits.
-  Pricing is not decided; it is a Q1 decision." *(Commercial calls are nick's; this line is the
-  honest placeholder until the pricing lane lands.)*
-- **"Why not just prompt them to argue?"** — "Manufactured objection is not ownership. They can
-  decline because they own the lane, not because a prompt told them to be difficult."
-- **"How many people use it?"** — The number in the log, and nothing rounder.
+The standing deck's "questions to expect" is the one bank, kept current with a ledger behind every
+number: [`docs/demo/pitch/script.md`](demo/pitch/script.md). Nothing in this section carries its own
+copy of those answers. The 2026-09-21 list here had drifted: one answer called the primitives
+"reproducible in a summer", another said "attestation a second party can check", which
+[security-position](brand/leave-behinds/security-position.md) §3 items 6 and 15 hold back.
 
 ### If it goes wrong
 
-The §4 table applies. For this cut specifically:
-
-- **The primed agent does not raise the ask.** Ask it in plain words on the spot — "raise a
-  standard-tier ask to me about this" — and say that is how the house rules are taught. The
-  failure is honest; a hidden prompt is not.
-- **The clock is short and it proceeds before you answer.** "It proceeded and logged the risk" —
+- **The primed agent does not raise the ask.** Ask it in plain words on the spot ("raise a
+  standard-tier ask to me about this") and say that is how the house rules are taught. The failure
+  is honest; a hidden prompt is not.
+- **The clock is short and it proceeds before you answer.** "It proceeded and logged the risk";
   show the outcome on the rail. That is the design.
 - **The laptop dies.** Switch to the stream on a phone; the room sees the same office.
-- **You are at 1:45 and not at the receipt.** Skip `musterd report`; say the two-claims line — the
-  builder says merged, a different model family says this is what we wanted — and then the ask.
-  Not a waste figure: the running-late path is exactly where a gated number gets said by reflex,
-  so there is no shortcut here that quotes one. The centerpiece was the demo.
+- **You are at 1:45 and not at the chain.** Skip `musterd lane show` and say the two-claims lines,
+  then the ask. The centerpiece was the demo.
 
 ---
 
