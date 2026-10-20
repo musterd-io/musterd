@@ -354,7 +354,7 @@ teammate's session. Consequences worth internalising:
   (it was warm cream), the uppercase mono section labels are sentence case in the linear cut (mono
   stays for clocks and counts; no re-font, ADR 477 stands), and on `main.lc` the room and the team
   column are two bordered panels on a grey page. On `main.lc` a speech bubble is a white card with the
-  act's tone as a 3px top edge, clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
+  act's tone as a subtle 1.5px border all the way round (a 3px top edge until 2026-10-20), clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
   specificity so the marked bubbles (`.is-mark--*`) and hover-expand still win. Every motion is
   unchanged. /broadcast's stage is a `div.lc` and keeps its own frame (no panels), and its team
   column takes the neutral palette with /live (ADR 464: they share one column).

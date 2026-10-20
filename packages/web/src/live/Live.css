@@ -3054,7 +3054,8 @@
 }
 /* ── the product bubble (/live only; nick 2026-10-19, lane 01M5BEE19C) ──────────────────────────
    On /live a bubble is a white card in the product's type: the act's tone moves from a glowing ring
-   to a 3px top edge, and the glance clips at 4 lines instead of 5 (nick: "I kind of like the full
+   to a quiet hairline all the way round (a 3px top edge until 2026-10-20 — nick: "I want the entire
+   bubble to have subtle border color"), and the glance clips at 4 lines instead of 5 (nick: "I kind of like the full
    sentence message bubbles, but maybe we shorten it a tiny bit"). Everything that moves — the pop
    in, the drift out, the hover-expand — is untouched, and so is every mark: `:where()` keeps this
    block at the base rule's specificity, so `.is-mark--needs-human` and `.is-expanded` still win and
@@ -3067,13 +3068,12 @@
   border-radius: 10px;
   background: var(--lc-ground-2);
   box-shadow:
-    inset 0 3px 0 0 var(--lc-speech-tone),
-    0 0 0 1px var(--lc-border-2),
+    0 0 0 1.5px color-mix(in srgb, var(--lc-speech-tone) 45%, var(--lc-border-2)),
     0 1px 2px rgba(17, 24, 39, 0.08),
     0 10px 22px -8px rgba(17, 24, 39, 0.22);
 }
 :where(main.lc, .bc__stage.lc) .lc-speech__inner::before {
-  border-top-color: var(--lc-border-2);
+  border-top-color: color-mix(in srgb, var(--lc-speech-tone) 45%, var(--lc-border-2));
 }
 :where(main.lc, .bc__stage.lc) .lc-speech__inner::after {
   border-top-color: var(--lc-ground-2);
