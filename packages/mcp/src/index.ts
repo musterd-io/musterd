@@ -21,6 +21,7 @@ import {
 import { IdleWake } from './idleWake/decider.js';
 import { injectAdapterFor } from './idleWake/inject.js';
 import { markersFor, readIdleWakeState } from './idleWake/state.js';
+import { isMainModule } from './isMain.js';
 import { clearPendingMarker, readAndConsumeResolution, writePendingMarker } from './pending.js';
 import {
   abstainChangeLabel,
@@ -624,6 +625,7 @@ export function runAdapter(): void {
   });
 }
 
+export { isMainModule } from './isMain.js';
+
 // Run when this file is invoked directly (`node dist/lib/index.js`, or from source), not imported.
-const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
-if (isMain) runAdapter();
+if (isMainModule(import.meta.url)) runAdapter();
