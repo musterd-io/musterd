@@ -19,7 +19,7 @@ import {
   type MetricInput,
 } from '@musterd/protocol';
 import { resolveProject } from '@musterd/protocol/project';
-import { flagStr, type Parsed } from '../args.js';
+import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { plainTerminalLines, plainTerminalText } from '../render/plainText.js';
@@ -181,7 +181,73 @@ function renderBranchCleanup(branch: string | null): void {
   );
 }
 
+/**
+ * The flags `musterd lane` takes (lane `01M5D907S74XVT5YECNWB5VW5A`).
+ *
+ * A flag this command does not know takes the NEXT argument as its value and drops it, so a
+ * typo silently loses an argument — the lane id, the target, the words of a message. A command
+ * knows its own flags, so it refuses the ones it does not, before anything is composed. The
+ * global flags every command inherits come from `GLOBAL_FLAGS`; this list is the command's own.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const LANE_FLAGS = [
+  'abandon-reason',
+  'act',
+  'area',
+  'authorized-by',
+  'baseline',
+  'branch',
+  'by',
+  'claim',
+  'clear-merged',
+  'day',
+  'depends',
+  'detail',
+  'direction',
+  'evidence',
+  'follows-up',
+  'goal',
+  'measured',
+  'metric',
+  'metric-source',
+  'mine',
+  'n',
+  'note',
+  'open',
+  'pr',
+  'project',
+  'read-note',
+  'read-verdict',
+  'reads-on',
+  'reason',
+  'risk',
+  'role',
+  'seed',
+  'self',
+  'sha',
+  'source-ref',
+  'stakes',
+  'state',
+  'surface',
+  'target',
+  'title',
+  'to',
+  'unit',
+  'until',
+  'value',
+] as const;
+
 export async function laneCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...LANE_FLAGS],
+    'the flags `musterd lane` takes are listed by `musterd help lane`',
+  );
   const sub = parsed.positionals[0];
   const { team, identity, http } = resolve(parsed.flags);
 
