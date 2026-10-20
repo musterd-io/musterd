@@ -182,21 +182,39 @@ describe('bashAllowed', () => {
     expect(deny('git log -c')).toMatch(/executes, reconfigures/);
     expect(deny('git fetch --upload-pack=evil origin')).toMatch(/executes/);
     expect(deny('git push --receive-pack=evil origin x')).toMatch(/executes/);
-    // ADR 675 review: only the seat's own branch, by name or as the current branch.
+    // ADR 675 review: an allowlist — abbreviated long options (`--mir`) are what a deny-list misses.
     for (const c of [
       'git push --all origin',
       'git push --mirror origin',
+      'git push --mir origin',
       'git push --tags',
+      'git push --ta',
       'git push origin --delete agent/x',
       'git push origin -d agent/x',
+      'git push -o ci.skip origin agent/x',
+      'git push --prune origin',
+    ])
+      expect(deny(c), c).toMatch(/is not allowed — only -u/);
+    for (const c of [
       'git push origin +HEAD:agent/x',
       'git push origin HEAD:refs/heads/other',
       'git push origin :agent/x',
-      'git push --prune origin',
+      'git push origin refs/heads/agent/x',
     ])
-      expect(deny(c), c).toMatch(/current branch by name only/);
+      expect(deny(c), c).toMatch(/no refspecs/);
+    expect(deny('git push upstream agent/x')).toMatch(/origin only/);
+    expect(deny('git push origin agent/x extra')).toMatch(/at most a remote/);
     expect(bashAllowed('git push -u origin agent/pilot-2', policy).ok).toBe(true);
     expect(bashAllowed('git push --force-with-lease origin agent/pilot-2', policy).ok).toBe(true);
+    expect(bashAllowed('git push --force-with-lease=agent/x:abc', policy).ok).toBe(true);
+    // Bound to the seat's branch when the policy names it.
+    const own = { ...policy, branch: 'agent/pilot-2' };
+    expect(bashAllowed('git push -u origin agent/pilot-2', own).ok).toBe(true);
+    expect(bashAllowed('git push origin HEAD', own).ok).toBe(true);
+    expect(bashAllowed('git push', own).ok).toBe(true);
+    expect((bashAllowed('git push origin agent/other', own) as { reason: string }).reason).toMatch(
+      /only this seat’s branch agent\/pilot-2/,
+    );
     expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
     expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
     expect(deny('git diff --ext-diff')).toMatch(/executes/);
