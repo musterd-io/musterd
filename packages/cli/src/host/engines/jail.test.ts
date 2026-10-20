@@ -215,6 +215,40 @@ describe('bashAllowed', () => {
     expect((bashAllowed('git push origin agent/other', own) as { reason: string }).reason).toMatch(
       /only this seat’s branch agent\/pilot-2/,
     );
+    // Round 3: the bound holds only if the seat cannot move off its branch or retarget origin.
+    const ownDeny = (cmd: string) => (bashAllowed(cmd, own) as { reason: string }).reason;
+    for (const c of [
+      'git switch other',
+      'git switch -',
+      'git checkout feat/x',
+      'git checkout -b feat/x',
+      'git checkout feat/x -- src/a.ts',
+      'git checkout --detach',
+      'git branch feat/x',
+      'git branch -m agent/renamed',
+      'git branch -D agent/pilot-2',
+      'git branch -u origin/other',
+    ])
+      expect(ownDeny(c), c).toMatch(/this seat works on agent\/pilot-2/);
+    // `-c` is already a denied git option everywhere (it reconfigures); still refused, by that rule.
+    expect(ownDeny('git switch -c feat/x')).toMatch(/executes, reconfigures/);
+    // `@{-1}` is refused one layer earlier, as a brace expansion; the branch rule would catch it too.
+    expect(ownDeny('git checkout @{-1}')).toMatch(/expansion|this seat works/);
+    expect(bashAllowed('git switch agent/pilot-2', own).ok).toBe(true);
+    expect(bashAllowed('git checkout agent/pilot-2', own).ok).toBe(true);
+    expect(bashAllowed('git checkout -- src/a.ts', own).ok).toBe(true);
+    expect(bashAllowed('git checkout agent/pilot-2 -- src/a.ts', own).ok).toBe(true);
+    expect(bashAllowed('git branch --show-current', own).ok).toBe(true);
+    expect(bashAllowed('git branch -a', own).ok).toBe(true);
+    for (const c of [
+      'git remote set-url origin https://evil.example/x.git',
+      'git remote add evil https://evil.example/x.git',
+      'git remote remove origin',
+      'git remote rename origin evil',
+    ])
+      expect(deny(c), c).toMatch(/remotes are read-only/);
+    expect(bashAllowed('git remote -v', policy).ok).toBe(true);
+    expect(bashAllowed('git remote get-url origin', policy).ok).toBe(true);
     expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
     expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
     expect(deny('git diff --ext-diff')).toMatch(/executes/);

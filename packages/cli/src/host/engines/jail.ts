@@ -312,6 +312,48 @@ function denyGit(words: string[], policy: BashPolicy): string | undefined {
   if (sub === 'checkout' || sub === 'switch' || sub === 'branch') {
     if (rest.some((w) => PROTECTED_BRANCHES.has(w)))
       return `git ${sub} ${rest.find((w) => PROTECTED_BRANCHES.has(w))!} is never allowed`;
+    // ADR 675 (review, round 3): the push bound is the checked-out branch, so the seat may not
+    // move off its own branch, rename it, or make another — `git push` (bare) and `HEAD` would
+    // otherwise push whatever it switched to. Only the words BEFORE `--` name a branch; after it
+    // they are paths. A bare `-` and `@{-N}` are "the previous branch" and are refused outright.
+    if (policy.branch !== undefined) {
+      const dd = rest.indexOf('--');
+      const head = dd === -1 ? rest : rest.slice(0, dd);
+      const off = head.find((w) => w === '-' || /^@\{-?\d+\}$/.test(w) || w.startsWith('@{'));
+      if (off) return `git ${sub} ${off} is not allowed — this seat works on ${policy.branch}`;
+      if (sub === 'branch') {
+        const mutating = head.find(
+          (w) =>
+            /^-[a-zA-Z]*[mMcCdDfu]/.test(w) ||
+            /^--(move|copy|delete|force|set-upstream-to|unset-upstream|edit-description|track|no-track)/.test(
+              w,
+            ),
+        );
+        if (mutating)
+          return `git branch ${mutating} is not allowed — this seat works on ${policy.branch}`;
+        const named = head.filter((w) => !w.startsWith('-'));
+        if (named.length > 0 && !head.some((w) => w === '--list' || w === '-l'))
+          return `git branch ${named[0]} is not allowed — this seat works on ${policy.branch}`;
+      } else {
+        const creating = head.find(
+          (w) =>
+            /^-[a-zA-Z]*[bcBC]/.test(w) || /^--(create|force-create|orphan|detach|track)/.test(w),
+        );
+        if (creating)
+          return `git ${sub} ${creating} is not allowed — this seat works on ${policy.branch}`;
+        const named = head.filter((w) => !w.startsWith('-'));
+        const other = named.find((w) => w !== policy.branch);
+        if (other !== undefined)
+          return `git ${sub} ${other} is not allowed — this seat works on ${policy.branch}`;
+      }
+    }
+  }
+  if (sub === 'remote') {
+    // ADR 675 (review, round 3): read-only. `set-url` would retarget `origin`, and the push
+    // gate's "origin only" means nothing if origin can be pointed anywhere.
+    const verb = rest.find((w) => !w.startsWith('-'));
+    if (verb !== undefined && verb !== 'get-url' && verb !== 'show')
+      return `git remote ${verb} is not allowed — remotes are read-only here`;
   }
   return undefined;
 }

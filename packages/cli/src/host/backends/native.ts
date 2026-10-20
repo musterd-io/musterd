@@ -293,11 +293,10 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         policy: {
           scripts: declaredScripts(spec.workspace),
           pathOk: bashPathOk(spec.workspace),
-          // ADR 675 (review): the jail's `git push` may name only this branch.
-          ...(() => {
-            const branch = currentBranch(spec.workspace);
-            return branch !== undefined ? { branch } : {};
-          })(),
+          // ADR 675 (review): the jail's `git push` may name only this branch — the checkout's
+          // own, or the provisioned `agent/<seat>` when the checkout is detached or unreadable
+          // (round 3: never unbound).
+          branch: currentBranch(spec.workspace) ?? `agent/${spec.order.seat}`,
         },
       };
       const runTools: EngineTool[] = working
