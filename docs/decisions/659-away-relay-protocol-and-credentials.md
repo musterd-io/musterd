@@ -156,6 +156,17 @@ ADR 147/153).
 - Multi-tenant hardening (per-team quotas, tenant-isolation falsifiers, bring-your-own-relay) is
   unchanged in scope; this ADR's credential is the per-team unit that work hardens.
   Follows-up: lane `01M50ZQCTWM5QBZ083782J9N6R`.
+- 2026-10-20, lane 01M50ZQCTW (multi-tenant hardening): each team's object now enforces a
+  per-team delivery quota (defaults 60 provider deliveries/minute and 10,000/day, counting
+  actual provider attempts; `TEAM_QUOTAS_JSON` overrides per team, clamped, a bad map falling
+  back to the defaults — never to unlimited). A refused delivery is answered
+  `delivered {ok: false, reason: rate_limited | quota_exceeded}` and stored `failed`, so the
+  daemon's re-push retries it; a duplicate answered from its stored row burns no quota.
+  Tenant-isolation falsifiers now run by name: a cross-team credential refused at the connect
+  route, quota rules that never leak across teams, and the cross-team credential / install-map
+  dispatch tests from the first landing. Bring-your-own-relay is the daemon's existing policy
+  URL (any `https:`/`wss:` host, plaintext refused) plus the operator guide
+  `docs/guides/away-relay.md`; the Worker still ships undeployed.
 - Deploying the relay (a dedicated musterd Cloudflare account, secrets set by the operator) is an
   operator act, not part of this lane's code; the Worker ships undeployed with its `wrangler.toml`
   names unset, like the staging-jwks worker.
