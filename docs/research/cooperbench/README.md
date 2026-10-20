@@ -107,8 +107,31 @@ In each container (`adapter.py`):
   $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012).
 - `tests/`: 12 tests on the hook drift, the prompt's shape, and the adapter's container flow against
   a fake container and host.
-- **Not yet verified:** the arm inside a task container on the run machine, and one task end to end
-  in both arms.
+- **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,
+  features 1 and 2, `claude-sonnet-4-5`, `--setting coop` without `--git`, on 2026-10-20:
+
+  | Arm | Patches | Coordination | Eval | Cost |
+  | --- | --- | --- | --- | --- |
+  | `claude_code` (coop) | both applied | 0 messages recorded | merge conflicts, so no tests ran | $1.14 |
+  | `claude_code_musterd` (run 3, musterd `985bb9bc`) | both applied (real `git diff`) | 2 lanes, 10 messages, 5 gated edits allowed, 0 refused | merge conflicts, so no tests ran | $1.27 |
+
+  Runs 1 and 2 of the musterd arm don't count. Their findings are above: no MCP server, and Bash
+  gated. This is a check that both arms run and score, not a result. Lane 2 makes result claims.
+
+## Notes for the pilot (lane `01M5AQEG23`)
+
+- **Lanes don't make ownership exclusive.** In run 3 both agents claimed lanes over the same two
+  files. The gate requires the editing seat to own a covering lane, not to own it alone, so
+  overlapping claims only warn. The agents saw the overlap, said so to each other, and edited anyway.
+  This is the question dogfood run 8 asks ("does one-owner-per-task stop the collision or just
+  report it?"), and here it only reported it. Decide before the pilot whether the arm keeps musterd's
+  shipped semantics or adds exclusive claims. Adding them would be its own decision, not a harness
+  setting.
+- **The agents misread the scoring.** agent1 concluded that "we're evaluated separately, so no need
+  to merge". CooperBench scores each pair on both features' tests, and without `--git` neither agent
+  can bring in the other's work. The pilot should run every arm with `--git`, as CooperBench's own
+  `team` comparisons do. Otherwise any two features that touch one file are close to a guaranteed
+  conflict, whatever the coordination layer.
 
 ## Running it
 
