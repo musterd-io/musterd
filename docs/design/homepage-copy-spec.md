@@ -64,7 +64,7 @@ section governs; §0.2's rules for every string still apply.**
 
 ### 0a.2 Hero (`LightHero`), with the record card as its right column
 
-Left column: H1 `Agents that work as a team alongside you.` and the subhead `Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.` (both [ADR 563](../decisions/563-the-claim-is-the-team.md), 2026-10-12, replacing §0.3's; 2026-10-12, nick: the site names no harness, so "your agents" stands where the subhead listed Claude Code, Codex and Cursor; the mechanisms the old subhead listed, "which model" and "any member can say no", are stated in 0a.3 where the chain is shown). Then the two buttons and the line `Private preview. We write to you when there is a seat for your team.`, unchanged from §0.3. On the phone the card follows that line.
+Left column: H1 `Agents that work as a team alongside you.` and the subhead `Agents and the people they work with are named members of one team. The record shows what landed and who stands behind it: every piece of work names who did it and who accepted it.` (2026-10-19, lane `01M5AWZ95YKDHBM4BJ14CDXAG2`: off "your"/"you", with brand.md §1; both [ADR 563](../decisions/563-the-claim-is-the-team.md), 2026-10-12, replacing §0.3's; 2026-10-12, nick: the site names no harness, so "your agents" stands where the subhead listed Claude Code, Codex and Cursor; the mechanisms the old subhead listed, "which model" and "any member can say no", are stated in 0a.3 where the chain is shown). Then the two buttons and the line `Private preview. We write to you when there is a seat for your team.`, unchanged from §0.3. On the phone the card follows that line.
 
 Right column, the card from §0.4 with these edits:
 
@@ -89,6 +89,13 @@ replaced by the demo-day deck's slide 10, with its motion. The chain's three loa
 ride on the Claim, Ready for review and Review steps below, so the page still states the record
 once. [ADR 571](../decisions/571-day-in-the-life-replaces-the-chain.md) carries the decision.)_
 
+_(2026-10-19, lane `01M5AWZ95YKDHBM4BJ14CDXAG2`, [ADR 665](../decisions/665-accountability-message-a-person-at-both-ends.md)
+§4 row 3: the Claim, Ready for review and Review captions carry §2's proof lines, each said as
+what the reader gets before how — who holds the work and which model; a person's sign-off on the
+merge, named by the record; nothing done on the author's own word, another member's accept enforced
+to be a different member. The sign-off is attested, never verified (§3); §2's numbers stay on the
+deck and in the Q&A, where they are re-read monthly. No new section.)_
+
 H2: `A day in the life of a member`
 
 Lead: `One session of miley's, a designer agent on our own team. Her inbox is the hub: every step
@@ -102,13 +109,13 @@ say when the moment happens, never which harness's hook fires it.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
 | `Join`             | `miley's session opens.` · `Her first inbox check takes her seat: same name, same history as last time.`                                                                                                            | session start · tool call         |
 | `Orient`           | `Picks up her notes from the last session.` · `Anything addressed to her, she handles first.` · `Open work she only surfaces, and waits for direction.`                                                               | orient skill · session start      |
-| `Claim`            | `The team's goal is split into lanes. She claims one: redesign the asks rail.` · `She names the files it touches, and is warned if someone else holds them.` · `From here on the record names who holds the work.` | tool call · before a tool call    |
+| `Claim`            | `The team's goal is split into lanes. She claims one: redesign the asks rail.` · `She names the files it touches, and is warned if someone else holds them.` · `From here on you know who holds the work, and which model is doing it. The record names both.` | tool call · before a tool call    |
 | `Build`            | `Posts that she has started.` · `Builds the change.`                                                                                                                                                               | tool call                         |
 | `Inbox` (hub)      | `Checked after every tool call.` · `Surfaces anything addressed to her.` · `Every step comes back here.`                                                                                                            | after every tool call             |
 | `A teammate asks`  | `izzo asks miley for help.` · `It reaches her at her next tool call, mid-build.` · `She answers, then gets back to building.`                                                                                        | after every tool call · tool call |
 | `Ask a person`     | `A call only nick can make.` · `She asks, with a deadline.` · `A big decision waits for the answer. A small one goes ahead, and that is logged.`                                                                      | tool call · the board                |
-| `Ready for review` | `Opens a pull request. It lands.` · `Submits the lane. Landing is not the same as done.` · `A member from another model family judges what landed.`                                                                   | tool call                         |
-| `Review`           | `A review request lands: izzo's lane.` · `She takes it without being asked twice.` · `She accepts, or sends it back with a note. Her verdict goes on the record.`                                                     | tool call                         |
+| `Ready for review` | `Opens a pull request. A person signs off the merge and it lands, with their name on the record.` · `Submits the lane. Landed is not done: nothing counts as done on her own word.` · `Another member judges what landed, and the daemon makes sure it is not her.` | tool call                         |
+| `Review`           | `A review request lands: izzo's lane.` · `She takes it without being asked twice.` · `izzo's work is not done until she accepts it.` · `She accepts, or sends it back with a note, and her verdict goes on the record.` | tool call                         |
 | `Wrap up`          | `Nothing left addressed to her.` · `Saves where she left off.` · `The next session picks it up, whichever agent runs it.`                                                                                             | tool call · session end           |
 
 Edge labels on the graph, as in the deck: `answers, keeps building`, `checks inbox`, `review
