@@ -124,8 +124,8 @@ it, who accepted it, and which model), the mechanisms as proof under it. "An age
 out of the headline lines until our own record shows refusals aimed at a person (ADR 665 §2). Every
 number has a row in the Q&A ledger below; re-read it before each event.
 
-- **Is anyone using it?** Only our own team so far. The first design partners start this month.
-  _(Written for 2026-10-09; re-check before every event.)_
+- **Is anyone using it?** Only our own team so far. I have not started with design partners yet; finding the first ones is
+  my next job. _(nick, 2026-10-20: no design partner conversations yet. Re-check before every event.)_
 - **Is it open source?** The packages are MIT. I decide what else to open after the first design
   partners.
 - **Does musterd run my agents?** Your agents keep running in Claude Code, Codex or whatever runs
