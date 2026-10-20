@@ -175,6 +175,14 @@ Required env for S3 SigV4 upload: `MUSTERD_DATABASE_OWNER_URL` (or `_OPERATOR_UR
 **Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `studio.sandrise.musterd-cloud-backup` LaunchAgent installed and kickstarted, recording in `~/.musterd/cloud/backup.log`:
 `{"msg":"cloud_backup_completed","date":"2026-10-20","dry_run":false,"teams":1,"uploaded":2,"total_bytes":2087,"pruned":0}` (`teams/revive/coordination/2026-10-20.json.gz.enc` and `teams/revive/trace/2026-10-20.json.gz.enc`), and round-trip `decryptDump` verified the downloaded R2 object.
 
+4. Run the restore drill (`scripts/cloud/drill.mjs`, lane `01M3Z4408C3T72EY3H92JQST01`; recorded in [`docs/perf/cloud-restore-drill.md`](../perf/cloud-restore-drill.md)):
+
+```sh
+node scripts/cloud/drill.mjs --wrangler
+```
+
+Creates two fresh temporary databases on Neon (`musterd_drill_<id>` and `musterd_drill_<id>_trace`), migrates both from scratch, downloads and decrypts the newest coordination + trace backup pair for each team from R2, restores every table via `restoreSnapshot`, verifies row counts and tenant RLS isolation under `musterd_app`, runs the Postgres tenancy/migration/backup suite, and drops the temporary databases in `finally`.
+
 ## Check it
 
 - Certificate: `fly certs check '*.musterd.dev' --app musterd-cloud`. It should say `Issued`.

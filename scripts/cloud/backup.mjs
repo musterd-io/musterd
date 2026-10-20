@@ -169,32 +169,65 @@ export async function exportConsoleSnapshot(consoleClient, now = Date.now()) {
 
 /**
  * Restore a team's coordination or trace snapshot (from {@link decryptDump}) into `client` inside a
- * single transaction. Idempotent (`ON CONFLICT DO NOTHING`) so restoring into a fresh migrated
- * database repopulates the team cleanly.
+ * single transaction. Orders `teams` and `members` before child tables and runs up to 3 topological
+ * passes with `SAVEPOINT`s so foreign-key dependencies on managed Postgres (where `neon_superuser`
+ * cannot set `session_replication_role = 'replica'`) resolve without needing superuser trigger
+ * overrides. Idempotent (`ON CONFLICT DO NOTHING`) so restoring into a fresh migrated database
+ * repopulates the team cleanly.
  */
 export async function restoreSnapshot(client, snapshot) {
   await client.query('BEGIN');
   try {
-    // Disable FK trigger checks for the bulk load inside the restore transaction (owner role),
-    // then re-enable before commit so table order inside `tables` never trips self/cross FKs.
-    await client.query("SET LOCAL session_replication_role = 'replica'");
     let inserted = 0;
-    for (const [table, rows] of Object.entries(snapshot.tables ?? {})) {
-      if (!/^[a-z_][a-z0-9_]*$/.test(table) || !Array.isArray(rows) || rows.length === 0) continue;
-      for (const row of rows) {
-        const cols = Object.keys(row).filter((c) => /^[a-z_][a-z0-9_]*$/.test(c));
-        if (cols.length === 0) continue;
-        const colList = cols.map((c) => `"${c}"`).join(', ');
-        const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
-        const values = cols.map((c) => row[c]);
-        const r = await client.query(
-          `INSERT INTO "${table}" (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
-          values,
-        );
-        inserted += r.rowCount ?? 0;
+    const { rows: genRows } = await client.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND is_generated = 'ALWAYS'`,
+    );
+    const generatedCols = new Set(genRows.map((r) => `${r.table_name}.${r.column_name}`));
+    // Also guard the two known GENERATED ALWAYS columns (`insights.tsv`, `messages.in_reply_to`)
+    // when restoring through a lightweight client adapter in unit tests.
+    generatedCols.add('insights.tsv');
+    generatedCols.add('messages.in_reply_to');
+
+    const entries = Object.entries(snapshot.tables ?? {}).filter(
+      ([table, rows]) => /^[a-z_][a-z0-9_]*$/.test(table) && Array.isArray(rows) && rows.length > 0,
+    );
+    const priority = (t) => (t === 'teams' ? 0 : t === 'members' ? 1 : t === 'goals' ? 2 : 3);
+    entries.sort((a, b) => priority(a[0]) - priority(b[0]) || a[0].localeCompare(b[0]));
+
+    let pending = entries;
+    for (let pass = 0; pass < 4 && pending.length > 0; pass++) {
+      const retryNext = [];
+      let lastErr = null;
+      for (const [table, rows] of pending) {
+        await client.query('SAVEPOINT restore_table');
+        try {
+          for (const row of rows) {
+            const cols = Object.keys(row).filter(
+              (c) => /^[a-z_][a-z0-9_]*$/.test(c) && !generatedCols.has(`${table}.${c}`),
+            );
+            if (cols.length === 0) continue;
+            const colList = cols.map((c) => `"${c}"`).join(', ');
+            const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+            const values = cols.map((c) => row[c]);
+            const r = await client.query(
+              `INSERT INTO "${table}" (${colList}) OVERRIDING SYSTEM VALUE VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+              values,
+            );
+            inserted += r.rowCount ?? 0;
+          }
+          await client.query('RELEASE SAVEPOINT restore_table');
+        } catch (err) {
+          await client.query('ROLLBACK TO SAVEPOINT restore_table');
+          lastErr = err;
+          retryNext.push([table, rows]);
+        }
       }
+      if (retryNext.length === pending.length && lastErr) {
+        throw lastErr;
+      }
+      pending = retryNext;
     }
-    await client.query("SET LOCAL session_replication_role = 'origin'");
     await client.query('COMMIT');
     return { inserted };
   } catch (err) {
