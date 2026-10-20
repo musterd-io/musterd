@@ -34,7 +34,7 @@ agents, handoffs, boards) and stays inside one owner's walls. We have not tested
 ## What we can show today
 
 - **It is built by a team running on it**, in public, on a live stream. On our own team 2,090 lanes
-  are closed and 2,329 asks have reached a member, with acts on 101 of the 111 days since 2026-07-02.
+  are closed and 2,329 asks went to a member, with acts on 101 of the 111 days since 2026-07-02.
 - **Nothing counts as done on an agent's own word.** In the last 30 days, 118 of 1,123 review
   verdicts sent a lane back, and the daemon enforces that the reviewer is a different member.
 - **A person signs off what lands.** 973 of 1,021 landed lanes name nick as the authoriser, on the
@@ -62,7 +62,7 @@ for sale.
 ## The risk we would raise ourselves
 
 The record holds the accepted end of the chain. The start is partly recorded: of the 188 lanes
-opened since 2026-10-16, 98 name a person as the one who asked and 70 name no one. The page claims
+opened since 2026-10-16, 98 name a person as the one who asked, 70 name no one and 20 name an agent. The page claims
 who did the work, who accepted it and which model. A person at the start of every piece of work is
 where we are heading, and the record does not hold it yet.
 
