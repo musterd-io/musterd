@@ -1143,6 +1143,36 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'ci.run_measured',
 ]);
 
+/**
+ * The `lane.*` verbs that must cross the wire as LANE-kind rows (ADR 682).
+ *
+ * These are the acceptance rail's records: the rejection (ADR 202), the acknowledge, the advisory
+ * verdict (ADR 667), the acceptor's claims (ADR 585) and the unbound verdict (ADR 680). They carry
+ * no state — they are evidence — but a lane's history is read on every machine, so a record that
+ * stays on the node that wrote it is a hole in the team's record of what it decided.
+ *
+ * They are deliberately NOT in {@link REPLICATED_LEDGER_VERBS}. The ledger kind is a different tag,
+ * and an older build's fold refuses a `lane.*` verb wearing it unless the verb is declared there
+ * (ADR 371 §4's guard) — a stop that is terminal and asks for an operator. As lane-kind rows they
+ * ride the tag the prefix already gives them, and an older build's fold already knows four of the
+ * five (`LANE_VERBS`), so nothing stops.
+ *
+ * Checked inside `appendAudit`, not at the push (ADR 365): the push's one rule decides the tag from
+ * the action, and the tag of these verbs is already right.
+ */
+export const REPLICATED_LANE_VERBS = new Set([
+  // ADR 202's rejection record: the counterpart returned the lane.
+  'lane.review_sent_back',
+  // ADR 202's acknowledge: the counterpart said "not yet", and the ask is still owed.
+  'lane.review_acknowledged',
+  // ADR 667's advisory verdict: a verdict recorded beside a binding on an ask.
+  'lane.review_advisory',
+  // ADR 585's acceptor's claims, verified against git and written with the verdict.
+  'lane.claims_verified',
+  // ADR 680's unbound verdict: a verdict that bound to nothing, named on the ack.
+  'lane.review_unbound',
+]);
+
 /** Insert an audit row and surface failure when the caller's transaction requires the evidence. */
 export async function appendAuditRequired(
   db: Driver,
@@ -1190,10 +1220,17 @@ export async function appendAuditRequired(
  */
 export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry): Promise<void> {
   // Before the try, deliberately: the undeclared-action refusal is a programming error, and the
-  // catch below exists to swallow STORAGE failures so observability can never break a request path.
-  // Inside it, decision 2 would be logged and walked past — which is the decay it exists to stop.
+  // catch below exists to swallow STORAGE failures so observability can never break a request path
+  // (ADR 325 §4, ADR 131 — a row cannot bear correctness). Inside it, decision 2 would be logged
+  // and walked past — which is the decay it exists to stop.
   assertAuditSubjectDeclared(entry.action);
-  if (REPLICATED_LEDGER_VERBS.has(entry.action)) {
+  const isLedgerVerb = REPLICATED_LEDGER_VERBS.has(entry.action);
+  // ADR 682: the acceptance rail's records are evidence the team reads on every machine, so they
+  // are stamped too. The two sets differ in what they mean, not in how they are written: the
+  // ledger set rides the ledger tag (ADR 365), these ride the lane tag their prefix already gives
+  // them, and neither is a decision when it lands.
+  const isCrossingLaneVerb = REPLICATED_LANE_VERBS.has(entry.action);
+  if (isLedgerVerb || isCrossingLaneVerb) {
     try {
       await appendReplicatedEvent(db, teamId, entry);
       return;
@@ -1202,7 +1239,11 @@ export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry)
       // `local_node` row for the team (never enrolled, never messaged) cannot allocate a seq, and
       // must still keep its own ledger — it falls through to the unstamped append, which reads
       // exactly as every pre-ADR-364 row does: local, and not replicated.
-      log.warn({ msg: 'ledger_stamp_failed', action: entry.action, err: String(err) });
+      log.warn({
+        msg: isLedgerVerb ? 'ledger_stamp_failed' : 'lane_stamp_failed',
+        action: entry.action,
+        err: String(err),
+      });
     }
   }
   try {

@@ -181,6 +181,9 @@ const LANE_VERBS = new Set([
   'lane.review_advisory',
   'lane.review_unbound',
   'lane.review_rerouted',
+  // ADR 682: the acceptor's claims (ADR 585) are evidence like the review verbs, and they cross
+  // with them — the fold has to be able to NAME a verb that arrives, or it stops at it.
+  'lane.claims_verified',
   // ADR 645's band-2 pull. `lane.pulled` joins a claim (which rides `lane.claimed`) to its
   // announcement and `lane.pull_declined` records a stopped window: both are held in audit.
   // `lane.pull_released` gives a dead pull's lane back, so it projects.
