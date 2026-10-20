@@ -3,12 +3,29 @@ import { SpanStatusCode, trace } from '@opentelemetry/api';
 const SCOPE = 'musterd';
 
 /**
+ * Redact member-named and seat-named URL path segments before stamping `url.path` on an OTel span
+ * (ADR 678 §4): `redactPath` in `log.ts` already strips credentials and `/mcp/*` tokens; this
+ * additionally replaces the member/seat segment under `/members/<name>` (except the literal `me`
+ * and `agents` sub-resource roots, while `/members/agents/<name>` redacts `<name>`),
+ * `/trace/seats/<seat>`, and `/nodes/bindings/<seat>` with `[seat]`, so seat/member names are
+ * never exported in HTTP span paths.
+ */
+export function redactSpanPath(path: string): string {
+  return path
+    .replace(/(\/members\/agents\/)[^/]+/g, '$1[seat]')
+    .replace(/(\/members\/)(?!(?:me|agents)(?:\/|$))[^/]+/g, '$1[seat]')
+    .replace(/(\/trace\/seats\/)[^/]+/g, '$1[seat]')
+    .replace(/(\/nodes\/bindings\/)[^/]+/g, '$1[seat]');
+}
+
+/**
  * Cloud 6 HTTP request tracing + error tracking (ADR 678; spec §7 + §10).
  *
  * Wraps an HTTP request in a `musterd.http.request` span so every Cloud request produces a trace
- * carrying structural attributes only (`http.request.method`, `url.path` redacted, `musterd.team`
- * when path-scoped, `http.response.status_code`) — never message bodies, Act text, headers, query
- * strings or credentials.
+ * carrying structural attributes only (`http.request.method`, `url.path` with credentials and
+ * seat/member segments redacted via {@link redactSpanPath}, `musterd.team` when path-scoped,
+ * `http.response.status_code`) — never message bodies, Act text, headers, query strings,
+ * credentials, or seat names.
  *
  * When a route throws or answers 5xx, {@link recordHttpException} records the exception on the
  * active span (`exception.type`, `exception.message`, `exception.stacktrace`) and sets
@@ -27,9 +44,10 @@ export async function withHttpRequestSpan<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const tracer = trace.getTracer(SCOPE);
+  const safePath = redactSpanPath(attrs.path);
   return await tracer.startActiveSpan('musterd.http.request', async (span) => {
     span.setAttribute('http.request.method', attrs.method);
-    span.setAttribute('url.path', attrs.path);
+    span.setAttribute('url.path', safePath);
     span.setAttribute('musterd.mode', attrs.mode);
     if (attrs.team) span.setAttribute('musterd.team', attrs.team);
     try {
