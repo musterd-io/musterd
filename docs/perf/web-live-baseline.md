@@ -1406,6 +1406,28 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-20 — `totalJsGzipBytes` 335,400 → 342,400 B and `appCssGzipBytes` 14,000 → 15,600 B: the `/live` settings overlay (lane `01M5BDF1A5`)
+
+| Budget     | Before (main, CI `39357513240`) | This branch, rebased on main (laptop) | Ceiling                    |
+| ---------- | ------------------------------- | ------------------------------------- | -------------------------- |
+| total JS   | 326.6 KB (~334,400 B)           | 341,583 B (+~6,900)                   | RAISED 335,400 → 342,400 B |
+| app CSS    | 13.2 KB (~13,500 B)             | 15,306 B (+~1,800)                    | RAISED 14,000 → 15,600 B   |
+| initial JS | 143.4 KB                        | 143.9 KB                              | fits — no raise            |
+| live CSS   | 24.2 KB                         | 24,893 B                              | fits — no raise            |
+
+nick, 2026-10-19: the office's working-hours calendar opens settings the way the wall board opens the
+board — a You tab (pairing, away channels, availability, your hours, style) for any signed-in human
+and a Team tab (hours, policy groups, holds, team style) for admins — and the big pairing panel goes.
+The overlay is a lazy chunk, so `/live`'s eager graph pays only the hotspot and its mount. What total
+pays is the overlay itself: two panels, the shared controls, and the policy-knob model that maps a
+group to its knobs. `SettingsOverlay.css` (2,119 B) replaces `PairingPanel.css` in the `app` group.
+Trimmed first: the hotspot's rules share the board hotspot's selectors, which holds live CSS under
+its ceiling. Nothing left to trim that is not the feature, and lazy-loading cannot move total
+(ADR 183). Ceilings are local + ~800 B JS and ~300 B CSS.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 342,400 B and app CSS at or under
+  15,600 B with this change in.
+
 ### 2026-10-19 — `liveCssGzipBytes` 25,000 → 25,300 B: /broadcast on the product palette, a bubble's "open ›", a woken plate's violet ring (lane `01M5BP0TEQ`)
 
 | Budget   | Before (main 5a8c515b, same laptop) | This branch (laptop) | Ceiling                  |
