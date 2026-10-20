@@ -235,5 +235,5 @@ ADR 679 (lane `01M5BC0CJQK8DR6J1CWM63FWXC`) closes the silence above, and closes
 - The audit carries `lane.review_unbound {lane, ask, reviewer, verdict, answer, state}` against the lane, so the lane's history shows a reviewer who was not heard — the reply's own id rides the row, so a readout joins the verdict to its words.
 - Nothing is woken and nothing is copied: the lane is settled, and the sender is the one who can act on what they just learned.
 
-The shape it replaced, measured on the team's own database (2026-10-19): of the 1,654 accept/decline acts that answer a `lane_review` ask, 1,254 bound and **136 did not** — 126 on a closed lane, 10 on a lane sent back. One reply in ten that can be measured bound to nothing, and said so to nobody.
+The shape it replaced, measured on the team's own database (2026-10-19): of the 1,659 accept/decline acts that answer a `lane_review` ask, 1,256 bound and **139 did not** — 129 on a closed lane, 10 on a lane sent back. One reply in eleven that can be measured bound to nothing, and said so to nobody.
 

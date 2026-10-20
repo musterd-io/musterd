@@ -60,11 +60,11 @@ its falsifier.
 3. **A finding with no home.** A late decline carries corrections. Bound to nothing, they reach no
    one: the lane is settled, and the lane's history has no room for them.
 
-Measured on the team's own database: 1,654 accept/decline acts answer a `lane_review` ask. For
-1,390 of them the lane's state at that moment is reconstructible from the audit trail — 1,254
-bound, and **136 did not**: 126 on a closed lane, 10 on a lane that had been sent back. (The other
-264 predate the audit trail's coverage of a lane's state and are not measurable either way.) One
-reply in ten that can be measured binds to nothing and says so to nobody.
+Measured on 2026-10-19 on the team's own database: 1,659 accept/decline acts answer a `lane_review`
+ask. For 1,395 of them the lane's state at that moment is reconstructible from the audit trail —
+1,256 bound, and **139 did not**: 129 on a closed lane, 10 on a lane that had been sent back. (The
+other 264 predate the audit trail's coverage of a lane's state and are not measurable either way.)
+One reply in eleven that can be measured binds to nothing and says so to nobody.
 
 ## Decision
 
@@ -135,9 +135,9 @@ failing before the change:
   writes no `lane.review_unbound` row.
 
 **Experiment.** For 30 days, read the `lane.review_unbound` rows: the count per day, and the split
-by `state` and by `verdict`. The baseline is the team's recorded history — 136 unbound verdicts
-over 39 days, 3.5 a day, 126 of them on a closed lane. A rate far above that means the marker is
-firing on a path this ADR did not intend (a duplicate send, a reply to an ask that was never
-binding); read the rows. A rate far below means a path is missing. Falsify: on a daemon built after
-this lands, `select count(*) from audit where action = 'lane.review_unbound'` is 0 while the
-2026-10-19 reply is replayed.
+by `state` and by `verdict`. The baseline is the team's recorded history — 139 unbound verdicts
+over the 47 days the audit trail covers (2026-09-02 to 2026-10-19), 3 a day, 129 of them on a
+closed lane. A rate far above that means the marker is firing on a path this ADR did not intend (a
+duplicate send, a reply to an ask that was never binding); read the rows. A rate far below means a
+path is missing. Falsify: on a daemon built after this lands, `select count(*) from audit where
+action = 'lane.review_unbound'` is 0 while the 2026-10-19 reply is replayed.
