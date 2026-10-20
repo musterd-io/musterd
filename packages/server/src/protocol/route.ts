@@ -106,7 +106,7 @@ export interface RouteResult {
   /** ADR 667 — the reply answered an ADVISORY acceptance ask: recorded against the lane, moved
    *  nothing. Reported on the ack so the advisory seat learns its verdict did not close the lane. */
   lane_advisory?: LaneAdvisoryWire;
-  /** ADR 679 — the reply answered an acceptance ask on a lane that had LEFT the acceptance stage:
+  /** ADR 680 — the reply answered an acceptance ask on a lane that had LEFT the acceptance stage:
    *  it bound to nothing (ADR 202 — one verdict closes a lane), and the ack says so and names the
    *  lane's state. Reported for the same reason `lane_verdict` is: the sender must learn on the
    *  spot that their verdict did not move the lane, and why. */
@@ -768,7 +768,7 @@ async function routeEnvelopeInner(
         log.warn({ msg: 'superseded_check_failed', err: String(err) });
       }
     }
-    // ADR 679: the third way an ask stops binding — the lane left the acceptance stage (closed on a
+    // ADR 680: the third way an ask stops binding — the lane left the acceptance stage (closed on a
     // newer PR, sent back, parked, abandoned). The verdict moves nothing, so the daemon says so and
     // writes the row; checked after the two above, which own their own cases.
     if (typeof ref === 'string' && !laneAdvisory && !laneSuperseded) {
@@ -884,7 +884,7 @@ async function routeEnvelopeInner(
         if (!(await isAdvisoryAsk(ctx, team, ref))) {
           laneSuperseded = await supersededLaneReview(ctx, team, ref);
           if (!laneSuperseded) laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
-          // ADR 679: a `wait` on a lane that has left the acceptance stage takes no review — say so.
+          // ADR 680: a `wait` on a lane that has left the acceptance stage takes no review — say so.
           if (!laneSuperseded && !laneAck)
             laneUnbound = await unboundLaneReview(ctx, team, sender, ref, 'wait', message.id);
         }
@@ -1724,7 +1724,7 @@ async function newestLaneReviewAsk(
 }
 
 /**
- * ADR 679 — the reply answered a `lane_review` ask on a lane that has LEFT the acceptance stage:
+ * ADR 680 — the reply answered a `lane_review` ask on a lane that has LEFT the acceptance stage:
  * the third way an ask stops being the one that binds (a re-route is ADR 545, an advisory ask is
  * ADR 667). The lane closed on a newer PR, was sent back, was parked or was abandoned, so no
  * verdict on it can move it — ADR 202 means one verdict closes a lane, and the second one is

@@ -375,7 +375,7 @@ export function registerSend(
           ? laneAdvisoryAck(ackBody.lane_advisory)
           : undefined;
         const advisoryGuidance = laneAdvisory ? ` ${laneAdvisory.guidance}` : '';
-        // ADR 679: a verdict on a lane that had left the acceptance stage — it bound to nothing, and
+        // ADR 680: a verdict on a lane that had left the acceptance stage — it bound to nothing, and
         // the lane's state is named; said on the spot for the same reason.
         const laneUnbound = ackBody?.lane_unbound
           ? laneUnboundAck(ackBody.lane_unbound)

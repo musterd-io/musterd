@@ -373,7 +373,7 @@ export function laneAdvisoryAck(a: LaneAdvisoryWire): LaneAdvisoryAck {
 }
 
 /**
- * ADR 679: a reply on a `lane_review` ask whose lane has LEFT the acceptance stage — the third way
+ * ADR 680: a reply on a `lane_review` ask whose lane has LEFT the acceptance stage — the third way
  * an ask stops being the one that binds (a re-route is ADR 545, an advisory ask is ADR 667), on
  * the wire.
  */
@@ -391,7 +391,7 @@ export interface LaneUnboundAck extends LaneUnboundWire {
 }
 
 /**
- * ADR 679: the ack for an accept / decline / wait that answered an acceptance ask on a lane that
+ * ADR 680: the ack for an accept / decline / wait that answered an acceptance ask on a lane that
  * had already left the acceptance stage. It moved nothing — ADR 202 means one verdict closes a
  * lane — but it used to say nothing either, so big-body's 16:58 decline on 2026-10-19 (lane
  * 01M5ASVF3G, closed at 14:20 on a newer PR) read exactly like a decline that had landed, and

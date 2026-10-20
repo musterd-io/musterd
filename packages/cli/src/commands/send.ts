@@ -310,7 +310,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // ask binds now.
   if (ackBody?.lane_superseded)
     process.stdout.write(theme.dim(laneSupersededAck(ackBody.lane_superseded).guidance) + '\n');
-  // ADR 679: a verdict on a lane that had left the acceptance stage, at the same parity — it bound
+  // ADR 680: a verdict on a lane that had left the acceptance stage, at the same parity — it bound
   // to nothing, and the lane's state is named.
   if (ackBody?.lane_unbound)
     process.stdout.write(theme.dim(laneUnboundAck(ackBody.lane_unbound).guidance) + '\n');

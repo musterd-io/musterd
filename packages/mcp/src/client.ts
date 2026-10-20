@@ -102,7 +102,7 @@ export type LaneSupersededWire = {
   current: { ask: string; reviewer: string } | null;
 };
 
-/** ADR 679: a verdict on a lane that had left the acceptance stage — `laneUnboundAck()` renders
+/** ADR 680: a verdict on a lane that had left the acceptance stage — `laneUnboundAck()` renders
  *  the sentence. */
 export type LaneUnboundWire = {
   lane: string;
@@ -839,7 +839,7 @@ export class MusterdClient {
     lane_superseded?: LaneSupersededWire;
     /** ADR 667: this reply answered an advisory acceptance ask — recorded, moved nothing. */
     lane_advisory?: LaneAdvisoryWire;
-    /** ADR 679: this reply answered an acceptance ask on a lane that had left the acceptance
+    /** ADR 680: this reply answered an acceptance ask on a lane that had left the acceptance
      *  stage — it bound to nothing, and the lane's state is named. */
     lane_unbound?: LaneUnboundWire;
     /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */

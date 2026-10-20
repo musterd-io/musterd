@@ -251,7 +251,7 @@ export type AuditAction =
   // ADR 667: an ADVISORY seat's verdict on its advisory acceptance ask — recorded, moves nothing.
   // detail: { lane, ask, reviewer, verdict: 'accept'|'decline', answer }.
   | 'lane.review_advisory'
-  // ADR 679: a reply on an acceptance ask whose lane had LEFT the acceptance stage (closed on a
+  // ADR 680: a reply on an acceptance ask whose lane had LEFT the acceptance stage (closed on a
   // newer PR, sent back, parked, abandoned) — it bound to nothing, and this row names it.
   // detail: { lane, ask, reviewer, verdict: 'accept'|'decline'|'wait', answer, state }.
   | 'lane.review_unbound'

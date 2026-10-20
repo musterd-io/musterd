@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { laneUnboundAck } from './lanes.js';
 
-describe('laneUnboundAck (ADR 679)', () => {
+describe('laneUnboundAck (ADR 680)', () => {
   it('says the reply bound to nothing, and names the lane’s state', () => {
     const ack = laneUnboundAck({
       lane: 'L1',

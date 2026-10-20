@@ -2148,7 +2148,7 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(late.json.lane_superseded?.current?.reviewer).toBe('hal');
       });
 
-      describe('a verdict on a lane that left the acceptance stage (ADR 679)', () => {
+      describe('a verdict on a lane that left the acceptance stage (ADR 680)', () => {
         // 2026-10-19, lane 01M5ASVF3G: big-body declined at 13:51, slippy resubmitted #2950 at
         // 14:17, big-body accepted at 14:20 (the lane closed), and at 16:58 big-body sent ANOTHER
         // decline on the original ask, with two live corrections. It bound to nothing — and said

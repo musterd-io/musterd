@@ -1076,7 +1076,7 @@ advisory for every listed act.
   passkey proof on the nonce for the waiting surface to collect with its own credential
   (`GET …/authority/approvals/:nonce`). The act always re-verifies at presentation.
 
-## A.28 A verdict on a lane that left the acceptance stage (unreleased — ADR 679)
+## A.28 A verdict on a lane that left the acceptance stage (unreleased — ADR 680)
 
 A `lane_review` ask stops being the one that binds in three ways: a re-route superseded it
 (A.21), the ask is advisory (ADR 667), or the Lane has left the acceptance stage — it closed on a

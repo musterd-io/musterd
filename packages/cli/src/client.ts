@@ -984,7 +984,7 @@ export class HttpClient {
       ask: string;
       current: { ask: string; reviewer: string } | null;
     };
-    /** ADR 679: this reply answered an acceptance ask on a lane that had left the acceptance
+    /** ADR 680: this reply answered an acceptance ask on a lane that had left the acceptance
      *  stage — it bound to nothing, and the lane's state is named. */
     lane_unbound?: {
       lane: string;
