@@ -135,6 +135,11 @@ export type AuditAction =
   // when the human's standing key approved the phone key and the binding exists (binding, device
   // key id, App Attest key id and environment). Never key material, the code, or a signature.
   | 'channel.app_paired'
+  // ADR 676 §2, §8: a sealed delivery handed to the relay (ask, binding, sealed size, inline or
+  // fetch), and a decline the human marked "I did not expect this" (ask, asking seat, binding).
+  // Never the token, the nonce, a key or the body.
+  | 'channel.sealed_delivered'
+  | 'channel.answer_reported'
   // Channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8): a human changing
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
@@ -736,6 +741,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.pair.revoked': 'actor',
   'channel.killswitch': 'actor',
   'channel.app_paired': 'none',
+  'channel.sealed_delivered': 'none',
+  'channel.answer_reported': 'none',
   'channel.settings.changed': 'actor',
   'authority.refused': 'actor',
   'authority.approved': 'actor',

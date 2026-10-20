@@ -201,6 +201,7 @@ import {
 import { reapOrphans } from '../footprint/reap.js';
 import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
+import { sendAppPaired } from '../notify/appAdapter.js';
 import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { relayLinkFor } from '../notify/relay.js';
@@ -1280,7 +1281,7 @@ const PairingStartBody = z.object({
 // default; presence gating defaults on; tier floor is optional. The channel itself is parsed
 // against the adapters that exist — slack is the only one in v1 — so an arbitrary string from
 // the URL never reaches the store or the audit log as a channel.
-const ChannelSettingsChannel = z.enum(['slack']);
+const ChannelSettingsChannel = z.enum(['slack', APP_CHANNEL]);
 
 // Human authority (ADR 662): ask the server to build an approval descriptor. The caller
 // names the act, target and payload; the server fills actor, digest, expiry and nonce, so
@@ -4679,6 +4680,13 @@ export async function handleHttp(
                 `pairing ${result.reason}`,
               );
             }
+            // ADR 676 §5 step 6: the phone shows "paired" only from a delivery the daemon signed.
+            void sendAppPaired(ctx, team, {
+              binding: result.binding,
+              member: member.name,
+              deviceKeyId: result.deviceKeyId,
+              pairingId,
+            }).catch(() => undefined);
             return sendJson(res, 200, {
               ok: true,
               binding: result.binding,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SealedBodySchema } from './appChannel.js';
 import { RELAY_MAX_FRAME_BYTES, RELAY_PROTOCOL_VERSION } from './relay.wire.js';
 
 /**
@@ -50,6 +51,22 @@ export const RelayDeliverFrameSchema = z.object({
 });
 export type RelayDeliverFrame = z.infer<typeof RelayDeliverFrameSchema>;
 
+/**
+ * Daemon → relay: one sealed delivery to the musterd app (ADR 676 §2). The relay sees the route
+ * and the ciphertext, never the content; it pushes the body inline when it fits
+ * (`APP_PUSH_INLINE_MAX_BYTES`), else the ask ref, and stores no sealed body either way.
+ */
+export const RelayAppDeliverFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('app_deliver'),
+  ask_ref: askRef,
+  dedupe_id: z.string().min(1).max(128),
+  expires_at: z.number().int().nonnegative(),
+  binding: z.string().min(1).max(64),
+  sealed: SealedBodySchema,
+});
+export type RelayAppDeliverFrame = z.infer<typeof RelayAppDeliverFrameSchema>;
+
 /** Daemon → relay: the ask resolved or expired daemon-side; drop its metadata row. */
 export const RelayResolveFrameSchema = z.object({
   protocol: version,
@@ -61,6 +78,7 @@ export type RelayResolveFrame = z.infer<typeof RelayResolveFrameSchema>;
 export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
   RelayReconcileFrameSchema,
   RelayDeliverFrameSchema,
+  RelayAppDeliverFrameSchema,
   RelayResolveFrameSchema,
 ]);
 export type RelayDaemonFrame = z.infer<typeof RelayDaemonFrameSchema>;

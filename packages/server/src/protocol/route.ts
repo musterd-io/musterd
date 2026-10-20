@@ -30,6 +30,7 @@ import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
+import { deliverAskToAppChannels } from '../notify/appAdapter.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { deliverAskToSlackChannels } from '../notify/slackAdapter.js';
 import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
@@ -981,10 +982,11 @@ async function routeEnvelopeInner(
   // and never throwing — the send has already persisted and delivered.
   await ringDoorbell(ctx, team, firehoseEnv);
 
-  // Away channels (ADR 668): an advisory ask also goes to each addressed human's Slack
-  // binding as an interactive message. Detached and never throwing — delivery is a loud
+  // Away channels (ADR 668, ADR 676): an advisory ask also goes to each addressed human's Slack
+  // binding as an interactive message, and sealed to their musterd app. Detached and never throwing — delivery is a loud
   // surface beside the durable inbox reach, never a condition of the send.
   void deliverAskToSlackChannels(ctx, team, firehoseEnv);
+  void deliverAskToAppChannels(ctx, team, firehoseEnv);
 
   log.info({
     msg: 'route',

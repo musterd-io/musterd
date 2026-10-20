@@ -1,4 +1,5 @@
 import {
+  AppCallbackSchema,
   classifyAskAction,
   makeEnvelope,
   RelayServerFrameSchema,
@@ -22,6 +23,7 @@ import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
+import { handleAppCallback } from './appAdapter.js';
 import { parseSlackCallback } from './slackAdapter.js';
 
 /**
@@ -128,7 +130,7 @@ async function relayAskStanding(
   };
 }
 
-const relayChecks: RedemptionChecks = {
+export const relayChecks: RedemptionChecks = {
   askStanding: relayAskStanding,
   // The pairing lane's binding store (ADR 618 §7): a binding is current only while it is active
   // at the generation the token names; revoked, re-paired or unknown bindings refuse the answer.
@@ -168,6 +170,10 @@ export async function handleRelayCallback(
   frame: RelayCallbackFrame,
   now: number = Date.now(),
 ): Promise<{ ok: boolean; reason?: string }> {
+  // The musterd app (ADR 676): a JSON body with `app: 1`. Its trust is the seal and the phone's
+  // signature, checked in the adapter; the relay vouches for nothing.
+  const app = parseAppCallback(frame.body);
+  if (app) return handleAppCallback(ctx, team, app, now);
   // Treat the whole form as Slack-shaped when it contains a `payload` field, regardless of
   // field order or percent-encoding. The Worker verifies its signature before forwarding.
   const slackBody = new URLSearchParams(frame.body).has('payload') ? frame.body : null;
@@ -228,6 +234,17 @@ export async function handleRelayCallback(
   return { ok: false, reason: 'unparseable_callback' };
 }
 
+/** An app callback body, parsed at the boundary (hard rule 4); null for anything else. */
+function parseAppCallback(body: string) {
+  if (!body.startsWith('{')) return null;
+  try {
+    const parsed = AppCallbackSchema.safeParse(JSON.parse(body));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface RelayLink {
   /** Queue one daemon frame; false when no socket is live (the caller keeps its own retry). */
   send(frame: RelayDaemonFrame): boolean;
@@ -236,6 +253,14 @@ export interface RelayLink {
 
 /** Live links per daemon config, so later lanes can deliver through the running client. */
 const linksByConfig = new WeakMap<Ctx['config'], Map<string, RelayLink>>();
+
+/** Tests stand in a link for a team without a socket; `null` removes it. */
+export function __setRelayLinkForTest(ctx: Ctx, teamSlug: string, link: RelayLink | null): void {
+  const map = linksByConfig.get(ctx.config) ?? new Map<string, RelayLink>();
+  if (link) map.set(teamSlug, link);
+  else map.delete(teamSlug);
+  linksByConfig.set(ctx.config, map);
+}
 
 /** The live relay link for a team, or null when unconfigured/disconnected (lane 5 delivers here). */
 export function relayLinkFor(ctx: Ctx, teamSlug: string): RelayLink | null {
