@@ -1,6 +1,6 @@
 # 683 — /live is where a person sits, and what "multiplayer AI" may mean in our message
 
-- Status: proposed (sloane's proposal for nick; nothing below is on any surface until nick accepts)
+- Status: accepted (2026-10-20, nick; drafted by sloane in session with nick)
 - Date: 2026-10-20
 - Lane: `01M5D9SSDFR2WB2G7GCWV4GKHP` (goal `accountable-agents-positioning`)
 - Amends: [ADR 578](578-the-office-and-knowledge-work.md) §1 (the office), if accepted. The claim stays
@@ -105,6 +105,8 @@ request from an accelerator and competitor blog posts. nick has had no design pa
 
 ## Consequences
 
+- 2026-10-20: accepted by nick the same day. The deck (slide 5), the script (page 5, the Q&A answer and
+  its ledger row) landed in the acceptance PR; the homepage string is §0c of the copy spec, for miley.
 - A reader of the deck learns what the UI is for, in the words of what a person does there.
 - The Q&A bank has a truthful answer to the question the market will ask us in the next quarter.
 - We give up the hero word. If YC's frame becomes the category, a team-sense claim is a smaller story

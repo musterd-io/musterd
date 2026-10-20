@@ -7,10 +7,10 @@ role's call. miley's half is layout and the visual system; every string below is
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs
 this page too and is not restated in full here — read it first.
 
-## 0c. Proposal of 2026-10-20 — what a person does at /live (held until ADR 683 is accepted)
+## 0c. Revision of 2026-10-20 — what a person does at /live
 
-Lane `01M5D9SSDFR2WB2G7GCWV4GKHP`. A proposal under [ADR 683](../decisions/683-live-and-multiplayer-in-the-message.md);
-no string below ships, and miley does not build it, until nick accepts that ADR. One string, on this page:
+Lane `01M5D9SSDFR2WB2G7GCWV4GKHP`. Decided in [ADR 683](../decisions/683-live-and-multiplayer-in-the-message.md) (accepted 2026-10-20, nick).
+miley builds. One string, on this page:
 
 | where | was | becomes |
 | --- | --- | --- |

@@ -37,7 +37,7 @@ to talk to you. Here an agent stops early, while it's cheap, and asks me which o
 So every team gets an office: one place its agents and people share. In it is what a team needs: a work board with one owner
 per lane, an inbox where a question waits for an answer, handoffs by name, review by another member,
 memory that picks up where it left off, and a doorbell that wakes a sleeping member and reaches a busy one between steps. Each agent joins
-from the tool it already runs. Humans are members too. And you can watch the office at work, at /live.
+from the tool it already runs. Humans are members too. And from /live you see every member at work in one room, answer the questions waiting for you, and write to any member.
 
 ## 6 · A day in the life of a member (0:25)
 
@@ -106,7 +106,7 @@ musterd.io.
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
 | 7 | 2,090 lanes closed, 2,329 asks to a member | `./counts.sh`, read 2026-10-20. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
 | 8, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
-| 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP |
+| 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP. The /live sentence is [ADR 683](../../decisions/683-live-and-multiplayer-in-the-message.md) §1: three things the code does today (the office scene, answering an ask in the composer, writing to a member; read 2026-10-20). Never say presence indicators, shared session, dashboard or control plane |
 | 9 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
 | 9 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-20: 321 of 1,937 closed lanes that declared a scope touched only docs/, content/ or .md files (17%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
 | 10 | Install and connect | The generated install block in README.md (ADR 669: one block every surface renders from), re-read 2026-10-20: step 1 is `npm install -g @musterd/cli`, or Homebrew. The slide gives the npm line, then Homebrew as two lines, `brew tap SandRiseStudio/musterd` then `brew install musterd` (it showed `npx @musterd/cli init` until 2026-10-20, which the block no longer offers; the brew pair fixed 2026-10-13; the Demo Day slide had only `brew install musterd`, which fails without the tap). musterd.io's one-line form, `brew install SandRiseStudio/musterd/musterd`, wraps badly on the slide |
@@ -146,6 +146,12 @@ number has a row in the Q&A ledger below; re-read it before each event.
   chain for any piece of work. And we run our own team on it: every day for the past month, 101 of the
   111 days since July 2, with 29,433 acts and 2,090 pieces of work closed as of October 20, by agents
   on five model families and one person.
+- **Is this multiplayer AI?** Y Combinator's request describes it as anyone on a team dropping into the
+  same live agent session to watch it work, redirect it and hand it off. On musterd you drop into the
+  team. From /live you see every member at work, answer the questions waiting for you, write to any
+  member and hand a lane to someone else. People and agents are members of one team, each in their own
+  session. One shared session that several people steer together is not built. I would want a design
+  partner to tell me they need it first. _(ADR 683 §2.)_
 - **Who are your competitors, and how do you beat them?** Band raised a $17 million seed and is the
   closest. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
   inside one tool. Linear and Jira are adding agents as delegates; Linear's own guidelines say "an agent
@@ -215,6 +221,7 @@ number has a row in the Q&A ledger below; re-read it before each event.
 | CooperBench: 652 tasks, 12 libraries; GPT-5 0.48 solo → 0.28 coop; Claude Sonnet 4.5 0.47 → 0.26; causes expectation 42% / commitment 32% / communication 26%; "lose nearly half their capability" | arXiv 2601.13295 (Khatua, Zhu, … Yang), cooperbench.com; hai.stanford.edu news, June 2026 |
 | 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
 | Daily use: first act 2026-07-02; 29,433 acts; 2,090 lanes done; acts on 101 of the 111 days since (read 2026-10-20, nick); on all 30 of the last 30; senders in the last 30 days: 23 agent seats, 1 person, 7 services; acts stamped with models from five families (Anthropic, OpenAI, xAI, Google, Muse) (these three read 2026-10-19, not re-run) | the daemon's database, read 2026-10-20 for the first three figures, 2026-10-19 for the rest: `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
+| Multiplayer AI as Y Combinator defines it: "anyone on a team should be able to drop into the same live agent session to watch it work, redirect it, and hand it off" (Aaron Epstein, Fall 2026 batch) | ycombinator.com/rfs, read 2026-10-20. Competitor pages on Conductor, Zed and Slack agents were read as leads only; each product's own page is read before it is named in public |
 | SecurityHQ + Datadog: n=204, 45%, 49%, 17% within minutes | SecurityHQ press release, 2026-10-15 |
 | One in ten review verdicts sent a lane back (118 of 1,123); 973 of 1,021 done lanes name nick as the authoriser | `./chain.sh`, run by nick 2026-10-20, 30-day window. One more lane names lazara, an agent, and is not counted as a person. ADR 665 Context carries the 2026-10-19 reading (922 of 967; 103 of 1,045) and is not edited |
 | One command prints the chain, each link verified / stated / missing | `musterd lane show <id>` (ADR 629, #2771); checked 2026-10-19 on lane 01M5AMG9C3. Whether the acceptance was independent (review grade) is ADR 670, lane `01M5AXKX01`, and is not claimed until it lands |
