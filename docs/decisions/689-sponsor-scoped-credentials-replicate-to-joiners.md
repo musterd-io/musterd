@@ -3,7 +3,7 @@
 - Status: proposed
 - Date: 2026-10-21
 - Lane: `01M55Y5E28EPF6RNTCREYKQ6CP` (goal `cloud-agents`, phase 2b)
-- Builds on: [ADR 647](647-cloud-agents-compute-home.md) §4.3 (laptop-hub joiner), [ADR 648](648-sponsor-host-key-provisions-own-seats.md) (a host key provisions its sponsor's seats), [ADR 393](393-residency-enrollment-projects.md) (ledger projector pattern), [ADR 325](325-multi-machine-federation.md) / [ADR 328](328-machine-credential.md) (joiners), [ADR 360](360-push-level-residence.md), [ADR 662](662-one-machine-per-hosted-seat.md) d4/d7
+- Builds on: [ADR 647](647-cloud-agents-compute-home.md) §4.3 (laptop-hub joiner), [ADR 648](648-sponsor-host-key-provisions.md) (a host key provisions its sponsor's seats), [ADR 393](393-residency-enrollment-projects.md) (ledger projector pattern), [ADR 325](325-multi-machine-federation.md) / [ADR 328](328-machine-credential.md) (joiners), [ADR 360](360-push-level-residence.md), [ADR 662](662-one-machine-per-hosted-seat.md) d4/d7
 - Design: `docs/superpowers/specs/2026-10-21-cloud-agents-2b-joiner-design.md`
 - Review gate: the security role (big-body) on the authority crossing a node boundary — design read 2026-10-21 (act `01M5DV5TR0PJD1ND4D0T93KB6G`, three issues folded into decisions 5–9), and again at lane acceptance
 
@@ -67,17 +67,24 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
    the host's first poll) — the one narrowly validated exception. A joiner push authored by a
    human stays refused `bound_elsewhere`; a push whose host actor does not match the pushing
    node is refused too. Both are tested on a real joiner→hub push.
-6. **Provenance is bound on every credential and provision event, at both ends.** The fold does
-   not trust a ledger payload or its `via` field by verb. The hub materialises a joiner-authored
-   `credential.minted` only when, **at fold time**: the minting host key named in the event is
-   live and unrevoked on the hub, sponsor-scoped, its creator still sponsors the target with
-   standing and `can_create_agents` intact, the event's `host` equals that key's label, and the
-   event's origin node is the node that label is enrolled on. Anything else folds as
+6. **Provenance is bound on every credential and provision event, and only the hub's word
+   projects.** A joiner-authored `credential.minted`, `host.provision_claimed` or
+   `host.provision_reported` is a *request* in the log, never a fact: it projects nothing at any
+   joiner, and keeps its joiner as `origin_node` (ADR 325; `sync/log.ts` stores pushed events
+   verbatim). The hub, at fold time, checks that the minting host key named in the event is live
+   and unrevoked, sponsor-scoped, that its creator still sponsors the target with standing and
+   `can_create_agents` intact, that the event's `host` equals that key's label, and that the
+   event's origin node is the node that label is enrolled on. If all hold the hub writes a
+   **hub-origin** `credential.accepted` (or `host.provision_claimed` / `_reported` as its own
+   row) carrying the request's event id, the hash and the scope; if any fails it writes
    `credential.refused` (audited, nothing inserted) — a credential minted under authority the
-   hub has since withdrawn never materialises, whenever it arrives. A joiner accepts
-   `credential.*` and `host.provision_*` events **only from the hub's origin node**; joiners
-   never trust each other's. Tests: forged, wrong-sponsor, wrong-host and wrong-origin events
-   from a joiner are each refused.
+   hub has since withdrawn never materialises, whenever it arrives. Joiners project
+   `credential.accepted`, `credential.revoked` and `host.provision_*` **only when
+   `origin_node` is the hub's**; the fold never trusts a ledger payload or its `via` field by
+   verb, and joiners never trust each other's rows. Tests: forged, wrong-sponsor, wrong-host and
+   wrong-origin requests from a joiner are each refused; a two-joiner case shows a valid mint
+   at joiner A reaches joiner B as a hub-origin `credential.accepted` while a forged one never
+   does.
 7. **Privileged verbs at a joiner need fresh hub authority; wakes do not.** The four ADR 648
    verbs (mint `claim_seat`, issue grant, enrol, revoke) and a provision claim run at a joiner
    only when its last successful pull from the hub is younger than `agent_host.freshness_ms`
@@ -104,7 +111,7 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the
   root rather than being patched; item 2 is settled by decision 2.
-- Two new ledger tags and two projectors, dual-dialect by construction (ADR 647 §4.1b): a
+- Three new ledger tags (`credential.{accepted,refused,revoked}`, `host.provision_*`) and two projectors, dual-dialect by construction (ADR 647 §4.1b): a
   portable migration if a column is needed, store tests on both drivers. No new sync kind, no
   protocol schema change (the ledger envelope already carries `detail`).
 - A stolen joiner's blast radius is unchanged from phase 1's: the host key's sponsored seats.
@@ -120,9 +127,9 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
 
 ## Observability & Evaluation
 
-- **Traces:** the ledger rows themselves (`credential.minted` / `credential.revoked`,
-  `host.provision_*`) stamped with `origin_node`, so "which node minted, which folded" is one
-  query on `sync_log`; the existing audit actions with `via: 'host_key'` at the joiner; a joiner
+- **Traces:** the ledger rows themselves (`credential.minted` request, hub-origin
+  `credential.accepted` / `refused` / `revoked`, `host.provision_*`) stamped with `origin_node`,
+  so "which node asked, what the hub decided, which folded" is one query on `sync_log`; the existing audit actions with `via: 'host_key'` at the joiner; a joiner
   claim of an unpinned or foreign-pinned provision is an ordinary deny row.
 - **Eval:** the design §6 tests — cross-sponsor refusal at the joiner, team-wide key never
   replicates, revocation lands within one tick, pinned-only claims, human-authored joiner push
