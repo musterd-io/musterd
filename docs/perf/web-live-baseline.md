@@ -1406,7 +1406,28 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
-### 2026-10-20 — `siteCssGzipBytes` 6,100 → 6,300 B: musterd.io on the product's neutral palette, and /start's step copy (lane `01M5D25W7B`, ADR 681)
+### 2026-10-20 — the live-loads-fast bar, first read: nick's laptop (lane `01M4VJS7EX`)
+
+`scripts/perf/live-paint-bar.mjs http://localhost:4849/live?team=revive --signin-url-file <f> --runs 5`.
+It times the page's own markers: the first real `.lc-team-card`, the first `.lc-skel`, and the moment
+there is a card, no skeleton, and a meter that no longer reads `refreshing…`. The sign-in is a one-shot
+`musterd live --print --no-open` link from a human's own Workspace; agents cannot sign in to /live.
+
+| Line (bar)                     | Median | Runs (ms)              |
+| ------------------------------ | ------ | ---------------------- |
+| warm: first team card (≤ 1.0 s) | 85 ms  | 144, 65, 727, 78, 85   |
+| cold: first skeleton (≤ 0.5 s)  | 51 ms  | 51, 305, 15, 51, 29    |
+| answer, warm visits (≤ 3.0 s)   | 144 ms | 144, 65, 784, 78, 164  |
+| answer, cold visits (≤ 3.0 s)   | 130 ms | 130, 980, 52, 182, 72  |
+
+This was a joiner's daemon answering from its local copy, not the hub under its weekday load, so the
+goal does not close on it. The first attempt read nothing: the sign-in link was on `localhost` and the
+run measured `127.0.0.1`, two origins with separate storage, so the script now measures on the sign-in
+link's own origin.
+
+- Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
+
+ 6,100 → 6,300 B: musterd.io on the product's neutral palette, and /start's step copy (lane `01M5D25W7B`, ADR 681)
 
 | Budget   | Before (main `03b5dc7f`, same laptop) | This branch (laptop) | Ceiling                |
 | -------- | ------------------------------------- | -------------------- | ---------------------- |
