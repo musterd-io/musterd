@@ -145,3 +145,4 @@ packages/web/src/content/generated/
 .github/styles/config/vocabularies/*
 !.github/styles/config/vocabularies/musterd/
 !.github/styles/musterd/
+__pycache__/

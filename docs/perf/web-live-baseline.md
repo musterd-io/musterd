@@ -1427,7 +1427,27 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
- 6,100 → 6,300 B: musterd.io on the product's neutral palette, and /start's step copy (lane `01M5D25W7B`, ADR 681)
+### 2026-10-20 — `officeArtBytes` added at 190,600 B; `totalJsGzipBytes` 342,900 → 344,000 B: the pre-rendered office art pipeline (lane `01M5D8F3RN`, office realism increment 1)
+
+| Budget     | Before (main `0d8bb345`, same laptop) | This branch (laptop)  | Ceiling                    |
+| ---------- | ------------------------------------- | --------------------- | -------------------------- |
+| total JS   | 342,078 B                             | 343,181 B (+1,103)    | RAISED 342,900 → 344,000 B |
+| office art | — (no budget)                         | 165,737 B (2 files)   | ADDED 190,600 B (+15%)     |
+
+The first increment of the office re-make (spec `2026-10-20-office-realism-design.md`): a Blender
+scene and render script (`packages/web/art/office/`) write PNG assets and a manifest; behind
+`?office=rendered` the scene loads them and `drawWorkstation` blits a rendered desk base where it
+painted legs and a slab. The JS is the manifest parser, the never-rejecting loader, `blitAsset` and
+the desk branch — nothing is removed yet, so this is a real +1.1 KB; the goal's constraint (spec §5)
+is net-zero JS by increment 4, when the painters are deleted, and this entry is the number that
+has to come back. The art budget counts raw bytes of `dist/client/assets/office-art-*` (PNG is
+already compressed) and is set the way the others are, measured + 15%; sprite sheets in
+increment 3 are what will move it.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 344,000 B and office art
+  at or under 190,600 B with this change in; or the goal closes with total JS above 342,078 B.
+
+### 2026-10-20 — `siteCssGzipBytes` 6,100 → 6,300 B: musterd.io on the product's neutral palette, and /start's step copy (lane `01M5D25W7B`, ADR 681)
 
 | Budget   | Before (main `03b5dc7f`, same laptop) | This branch (laptop) | Ceiling                |
 | -------- | ------------------------------------- | -------------------- | ---------------------- |

@@ -92,6 +92,8 @@ import {
   type Unit,
   type UnitHook,
 } from './damage';
+import { loadRenderedAssets, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
+import { parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
 import { createLaneOwners } from './laneOwners';
@@ -401,6 +403,36 @@ export function mountOffice(
      fit, so stale entries would only waste memory) and on dispose. */
   const sprites = options.sprites === true ? makeSpriteCache({ dpr }) : undefined;
   const dirtyRects = sprites !== undefined && options.dirtyRects === true;
+  /* Pre-rendered art behind `?office=rendered` (office realism, spec 2026-10-20 §7). Read once at
+     mount like the other flags. The painted room draws until the images have decoded; then one
+     rebake switches every item whose asset arrived, and the sprite cache starts over (its keys
+     never saw the images). A manifest that is not there — a checkout before the art landed — logs
+     once and leaves the room painted. */
+  let rendered: RenderedAssets | undefined;
+  if (typeof window !== 'undefined' && renderedOfficeFromSearch(window.location.search)) {
+    const files = import.meta.glob('./rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<
+      string,
+      string
+    >;
+    const manifestUrl = files['./rendered/assets/manifest.json'];
+    if (!manifestUrl) {
+      console.warn('office: ?office=rendered but rendered/assets/manifest.json is not in this build — painting');
+    } else {
+      void fetch(manifestUrl)
+        .then((r) => r.json())
+        .then((json: unknown) =>
+          loadRenderedAssets(parseManifest(json), (file) => files[`./rendered/assets/${file}`] ?? file),
+        )
+        .then((r) => {
+          if (disposed) return;
+          if (r.missing.length) console.warn(`office: ${r.missing.length} rendered asset(s) failed to load: ${r.missing.join(', ')}`);
+          rendered = r;
+          sprites?.clear();
+          bake();
+        })
+        .catch((e: unknown) => console.warn('office: rendered manifest unusable — painting', e));
+    }
+  }
   /* The dirty-rect state (see drawDamaged): the measure-pass recorder, sized to the canvas, and the
      last painted frame's units. Both reset on resize. */
   let recorder: Recorder | null = null;
@@ -893,7 +925,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint },
+      { welcome: welcomeRoom.paint, rendered },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -1994,7 +2026,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);

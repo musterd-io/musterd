@@ -4,3 +4,6 @@
 # file as binary and hid its diffs from review. This keeps such files reviewable regardless.)
 *.ts diff
 
+
+# Pre-rendered office art: build inputs written by packages/web/art/office/render.py (office realism, 2026-10-20).
+packages/web/src/live/office-scene/rendered/assets/*.png binary

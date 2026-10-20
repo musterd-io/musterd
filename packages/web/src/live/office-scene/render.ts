@@ -57,6 +57,8 @@ import { workingAtDesk, type Placement } from './seating';
 import { pulseIntensity, pulseLive, runGlow } from '../pulse';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
+import { blitAsset } from './rendered/blit';
+import type { RenderedAssets } from './rendered/assets';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
@@ -2117,6 +2119,49 @@ export interface RenderOpts {
    * the ones a partial frame cannot touch. Absent → every unit runs, exactly as before.
    */
   units?: UnitHook | undefined;
+  /**
+   * Pre-rendered art (office realism, spec 2026-10-20). An item whose asset id is present blits the
+   * image where it painted vectors; one that is absent paints as before, so a partial manifest and
+   * a failed load both leave a room, never a hole. Absent → the painted office, byte-identical.
+   */
+  rendered?: RenderedAssets | undefined;
+}
+
+/**
+ * Blit the rendered asset `id` at `(lx, ly)` when `rendered` carries it; answer false when it does
+ * not, so the caller falls through to its painter.
+ */
+function blitIf(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  rendered: RenderedAssets | undefined,
+  id: string,
+  lx: number,
+  ly: number,
+): boolean {
+  if (!rendered) return false;
+  const img = rendered.images.get(id);
+  const a = rendered.manifest.assets.find((x) => x.id === id);
+  if (!img || !a) return false;
+  blitAsset(ctx, fit, a, img, lx, ly);
+  return true;
+}
+
+/** Convex hull (monotone chain) of a point set — the silhouette an extruded box clips to. */
+function hull(pts: Pt[]): Pt[] {
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o: Pt, a: Pt, b: Pt): number => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: Pt[] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: Pt[] = [];
+  for (const q of p.reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
 /** The break-nook lounge, as depth items: the rug flat on the floor, every solid piece self-sorted. */
@@ -4194,11 +4239,40 @@ export function benchPropSort(
  *
  * `render.test.ts` pins the ordering at all four facings, which is the check #1394 did not have.
  */
-function deskNearHalf(ctx: CanvasRenderingContext2D, fit: Fit, slot: DeskSlot): void {
+function deskNearHalf(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  slot: DeskSlot,
+  rendered?: RenderedAssets,
+): void {
   const { lx, ly, dir } = slot;
   const sn = dir === 'S' || dir === 'N';
   const wx = sn ? DESK_W : DESK_D;
   const dy = sn ? DESK_D : DESK_W;
+  // Rendered: the same base image again, clipped to the near half's silhouette (the extruded box
+  // from the floor to the worktop) — the same pixels, so still additive by construction.
+  const id = sn ? 'desk/base' : 'desk/base-ew';
+  if (rendered?.images.has(id)) {
+    const corners: Pt[] = [];
+    for (const [cx, cy] of [
+      [lx - wx / 2, ly],
+      [lx + wx / 2, ly],
+      [lx + wx / 2, ly + dy / 2],
+      [lx - wx / 2, ly + dy / 2],
+    ] as const) {
+      const q = project(cx, cy, fit);
+      corners.push(q, { x: q.x, y: q.y - DESK_UP * fit.scale });
+    }
+    const h = hull(corners);
+    ctx.save();
+    ctx.beginPath();
+    h.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)));
+    ctx.closePath();
+    ctx.clip();
+    blitIf(ctx, fit, rendered, id, lx, ly);
+    ctx.restore();
+    return;
+  }
   // The half NEAREST THE CAMERA, which is +lx / +ly — a property of the projection, not of the facing.
   // Getting that wrong is what the tests caught on the first cut of this function: on an N or W desk
   // `FWD` points AWAY from the viewer, so "the side the desk faces" and "the side the viewer sees" are
@@ -4267,6 +4341,8 @@ export function drawWorkstation(
    */
   atWork = false,
   phase: WorkstationPhase = 'all',
+  /** Pre-rendered art; the desk base blits when its asset is present (plan Task 3). */
+  rendered?: RenderedAssets,
 ): void {
   const { lx, ly, dir, id } = slot;
   const f = FWD[dir];
@@ -4297,7 +4373,10 @@ export function drawWorkstation(
     return;
   }
 
-  if (phase !== 'post') {
+  // The base — legs, slab and its bevelled lip — is one rendered image when the manifest has it
+  // (`desk/base` for a S/N desk, `desk/base-ew` for an E/W one); otherwise the painter below.
+  const baseRendered = phase !== 'post' && blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  if (phase !== 'post' && !baseRendered) {
     for (const [sx, sy] of [
       [-1, -1],
       [1, -1],
@@ -4310,7 +4389,7 @@ export function drawWorkstation(
   }
   // Bevelled front lip (Delight D): a soft rim light along the slab's two viewer-facing top edges,
   // so the worktop reads as a finished edge rather than a raw extrusion.
-  if (phase !== 'post') {
+  if (phase !== 'post' && !baseRendered) {
     const e = project(lx - wx / 2, ly + dy / 2, fit);
     const s2 = project(lx + wx / 2, ly + dy / 2, fit);
     const e2 = project(lx + wx / 2, ly - dy / 2, fit);
@@ -4751,6 +4830,8 @@ export function deskStationItems(
     lampsOn?: boolean | undefined;
     /** Device pixel ratio, for the sprite keys. Default 1. */
     dpr?: number | undefined;
+    /** Pre-rendered art (`RenderOpts.rendered`), threaded to the desk painters. */
+    rendered?: RenderedAssets | undefined;
   },
 ): { items: DepthItem[]; lampLit: boolean } {
   const out: DepthItem[] = [];
@@ -4802,7 +4883,8 @@ export function deskStationItems(
        sitter. This desk key stays at the CENTRE and that is now the settled answer, not a pending
        revert — the paragraph above is kept because it is the reasoning, not because anything is owed. */
       d: depth(slot.lx, slot.ly),
-      fn: () => drawWorkstation(ctx, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking),
+      fn: () =>
+        drawWorkstation(ctx, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, 'all', opts.rendered),
       // Cached form: two sprites around a live screen (see `WorkstationPhase`). The sprite draws
       // take the OFFSCREEN context; the screen paints on the stage.
       parts: (() => {
@@ -4819,7 +4901,7 @@ export function deskStationItems(
           warmAlpha: ownedDeskWarmAlpha(node, deskOwned),
         });
         const ws = (c: CanvasRenderingContext2D, phase: WorkstationPhase): void =>
-          drawWorkstation(c, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, phase);
+          drawWorkstation(c, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, phase, opts.rendered);
         return [
           { kind: 'sprite', key: `${key}·pre`, draw: (c) => ws(c, 'pre') },
           { kind: 'live', draw: () => ws(ctx, 'monitor') },
@@ -4834,8 +4916,10 @@ export function deskStationItems(
     // the desk's own key cannot simply move (#1394, #1400).
     out.push({
       d: deskNearDepth(slot, seatedHere),
-      fn: () => deskNearHalf(ctx, fit, slot),
-      parts: [{ kind: 'sprite', key: `near·${slot.id}·${statKey}`, draw: (c) => deskNearHalf(c, fit, slot) }],
+      fn: () => deskNearHalf(ctx, fit, slot, opts.rendered),
+      parts: [
+        { kind: 'sprite', key: `near·${slot.id}·${statKey}`, draw: (c) => deskNearHalf(c, fit, slot, opts.rendered) },
+      ],
     });
   }
   // The task chair, in two depth items (see `chairBase`/`chairBack`): the cushion the member sits *on*
@@ -5178,6 +5262,7 @@ export function renderScene(
       hide,
       lampsOn: env.lampsOn,
       dpr: opts.dpr,
+      rendered: opts.rendered,
     });
     if (station.lampLit) litLamps.add(slot.id);
     if (station.lampLit && node?.dreaming) dreamLamps.add(slot.id);
