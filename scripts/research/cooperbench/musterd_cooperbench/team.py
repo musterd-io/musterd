@@ -165,7 +165,9 @@ def tear_down(pair: PairTeam, keep_logs_in: Path | None = None) -> None:
         keep_logs_in.mkdir(parents=True, exist_ok=True)
         # Which musterd this pair measured (the image's build arg; see deploy/cooperbench/Dockerfile).
         (keep_logs_in / "musterd-ref.txt").write_text(os.environ.get("MUSTERD_REF", "unknown") + "\n")
-        for name in ("daemon.log", "musterd.db"):
+        # The -wal and -shm files carry every write SQLite hasn't checkpointed yet; without them
+        # the copied database read as empty after the first e2e run (2026-10-20).
+        for name in ("daemon.log", "musterd.db", "musterd.db-wal", "musterd.db-shm"):
             src = pair.workdir / name
             if src.exists():
                 shutil.copy2(src, keep_logs_in / f"musterd-{name}")
