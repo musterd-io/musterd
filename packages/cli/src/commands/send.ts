@@ -3,6 +3,7 @@ import {
   type Act,
   askContract,
   askContractText,
+  askProseChoiceNotice,
   AskTierSchema,
   chooseAutoTarget,
   CLI_REPLY_TO_STYLE,
@@ -346,6 +347,10 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       theme.dim(askContractText(envelope.id, askTier, ackBody?.ask_contract?.unblocker_reachable)) +
         '\n',
     );
+  // ADR 684, at parity with the MCP reply: an ask whose options are prose reaches the human as
+  // Approve / Deny.
+  const proseChoice = act === 'ask' ? askProseChoiceNotice(envelope.body ?? '') : null;
+  if (proseChoice) process.stdout.write(theme.warn(`⚠ ${proseChoice}`) + '\n');
   // ADR 202's consequence, at parity with the MCP reply (lane 01M2GQFJXG): an accept that answered
   // a lane_review ask closed the lane — the sender is told here, not left to find it on the board.
   // Lane 01M2KYF888: the text is protocol's, not this file's. It used to be written shorter here

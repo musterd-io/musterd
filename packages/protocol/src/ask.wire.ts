@@ -221,3 +221,41 @@ export function askContractText(id: string, tier: AskTier, unblockerReachable?: 
     `meta.chosen_approach. A human may reply "deciding" (wait, meta.until) to extend your clock.`
   );
 }
+
+/**
+ * The send-time half of ADR 684. /live turns an ask into option buttons only when its options are LINES
+ * that open with a marker (`A.`, `B)`, `(c)`, `1.` … — `askChoices` in packages/web/src/live/askPhrase.ts
+ * is the reader and the authority on that grammar). An ask that offers its alternatives in a sentence —
+ * "Which account should hold the key: a new GCP project, an existing one you name, or AWS?" (nick's KMS
+ * ask, 2026-10-20) — reaches the human as Approve / Deny, which answers none of them.
+ *
+ * So the sender is told, on the spot, in the send reply. Returns that notice, or null when the body
+ * already has an option line (the reader decides from there) or does not read as a choice. Advisory and
+ * deliberately narrow: a question that offers alternatives (an interrogative and an "or" in one
+ * sentence), inline markers joined by "or" ("(a) revert, or (b) patch forward"), or an "options:"
+ * lead-in. A plain yes/no approve never
+ * trips it.
+ */
+export function askProseChoiceNotice(body: string): string | null {
+  if (/^\s*(?:[-*•]\s*)?\(?(?:[A-Za-z]|\d{1,2})[.)]\s+\S/m.test(body)) return null;
+  // Inline markers are a choice only when an "or" joins them: "(1) rotate the key; (2) confirm the
+  // rows" is a list of things to confirm, and Approve / Deny answers it (measured on 400 real asks,
+  // 2026-10-20 — counting bare markers flagged those too).
+  const inlineAlternatives =
+    /\(?\b(?:[a-e]|[1-5])\)[^()?]*\bor\b[^()?]*\(?\b(?:[a-e]|[1-5])\)/i.test(body);
+  const questionWithAlternatives = body
+    .split('?')
+    .slice(0, -1)
+    .some(
+      (s) =>
+        /\bor\b/i.test(s) &&
+        /\b(?:which|what|whether|should|shall|would you|do you want|prefer)\b/i.test(s),
+    );
+  const optionsLeadIn = /\b(?:options?|alternatives?|choices?)\s*(?::|are\b)/i.test(body);
+  if (!inlineAlternatives && !questionWithAlternatives && !optionsLeadIn) return null;
+  return (
+    'This ask reads as a choice, but its options are written as prose: /live only offers option ' +
+    'buttons for lines that start with `A.` / `1.`, so as sent the human sees Approve / Deny. Re-send ' +
+    'it with one option per line (A. … B. …) and, if you have a pick, "I recommend B".'
+  );
+}

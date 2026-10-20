@@ -8,6 +8,7 @@ import {
   AskTierSchema,
   askContract,
   askContractText,
+  askProseChoiceNotice,
   askConcernsMe,
   chooseAutoTarget,
   ELIGIBLE_ACTS,
@@ -325,6 +326,10 @@ export function registerSend(
           args.act === 'ask' && isAskTier(meta['tier'])
             ? askContractText(envelope.id, meta['tier'], serverContract?.unblocker_reachable)
             : null;
+        // ADR 684: an ask whose options are prose reaches the human as Approve / Deny — say so now,
+        // while the sender can still re-send it as option lines.
+        const proseChoiceNotice = args.act === 'ask' ? askProseChoiceNotice(args.body) : null;
+        const proseChoiceGuidance = proseChoiceNotice ? ` ⚠ ${proseChoiceNotice}` : '';
         // No `delivery_hint` is read or passed on (ADR 442 retired ADR 167 increment 2): the model is
         // never invited to reach another session, even by an older daemon that still sends one.
         // The handoff's lane (ADR 231): a `handoff` that named no lane either got one attached —
@@ -416,6 +421,7 @@ export function registerSend(
           (askGuidance
             ? `sent ask to ${toLabel} (id=${envelope.id}). ${askGuidance}`
             : `sent ${args.act} to ${toLabel} (id=${envelope.id})`) +
+          proseChoiceGuidance +
           deafGuidance +
           handoffGuidance +
           verdictGuidance +
@@ -442,6 +448,7 @@ export function registerSend(
             ...(args.act === 'ask' && isAskTier(meta['tier'])
               ? { ask_contract: serverContract ?? askContract(meta['tier']) }
               : {}),
+            ...(proseChoiceNotice ? { prose_choice_notice: proseChoiceNotice } : {}),
             ...(handoffLane ? { handoff_lane: handoffLane } : {}),
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
             ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),

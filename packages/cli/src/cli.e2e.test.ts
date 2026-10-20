@@ -347,6 +347,36 @@ describe('CLI ask contract parity (ADR 147 / finding 006 item 3)', () => {
   });
 });
 
+describe('CLI ask: a choice written as prose is named at send time (ADR 684)', () => {
+  it('warns that /live will show Approve / Deny, and stays quiet once the options are lines', async () => {
+    await run(teamCommand, ['create', 'dawn', '--member', 'nick', '--role', 'lead']);
+    const prose = await run(sendCommand, [
+      '--to',
+      '@team',
+      '--act',
+      'ask',
+      '--meta',
+      'species=consult',
+      '--meta',
+      'tier=advisory',
+      'Should I revert the PR, or patch forward?',
+    ]);
+    expect(prose.out).toContain('Approve / Deny');
+    const lines = await run(sendCommand, [
+      '--to',
+      '@team',
+      '--act',
+      'ask',
+      '--meta',
+      'species=consult',
+      '--meta',
+      'tier=advisory',
+      'Which way?\nA. revert the PR\nB. patch forward',
+    ]);
+    expect(lines.out).not.toContain('Approve / Deny');
+  });
+});
+
 describe('comeback summary on status (ADR 024)', () => {
   it('leads status with the count of unread action-needed messages, then clears once read', async () => {
     // nick creates dawn and adds bo (the away human).

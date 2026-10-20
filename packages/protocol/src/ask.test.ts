@@ -12,6 +12,7 @@ import {
   askContract,
   answerAuthority,
   askContractText,
+  askProseChoiceNotice,
   classifyAskAction,
   reviewWaitMinutes,
   askTierHolds,
@@ -202,5 +203,41 @@ describe('what an answer is worth (ADR 623 §3)', () => {
     expect(answerAuthority({}, { channel_answer: 'A2' })).toBe('advisory');
     expect(answerAuthority({}, { channel_answer: { assurance: 'A2' } })).toBe('advisory');
     expect(answerAuthority({}, { channel_answer: { assurance: 'bogus' } })).toBe('advisory');
+  });
+});
+
+describe('askProseChoiceNotice — a choice written as prose is named at send time (ADR 684)', () => {
+  it("flags nick's KMS ask: three alternatives in one question", () => {
+    const kms =
+      'Cloud 2 (lane 01M3Z43V58) needs a cloud KMS for the console signing key. The key is never exported. ' +
+      'Which account should hold the key: a new GCP project, an existing one you name, or AWS once credentials are on this machine?';
+    expect(askProseChoiceNotice(kms)).toMatch(/Approve \/ Deny/);
+  });
+  it('flags inline markers and an options lead-in', () => {
+    expect(
+      askProseChoiceNotice('Pick a path: (a) revert the PR, or (b) patch forward.'),
+    ).not.toBeNull();
+    expect(askProseChoiceNotice('The options are a new project or the old one.')).not.toBeNull();
+  });
+  it('stays quiet when the options are already lines /live can read', () => {
+    expect(askProseChoiceNotice('Which way?\nA. a new GCP project\nB. AWS')).toBeNull();
+    expect(askProseChoiceNotice('Which way?\n1) revert\n2) patch forward')).toBeNull();
+  });
+  it('stays quiet on a numbered list of things to confirm', () => {
+    expect(
+      askProseChoiceNotice(
+        'Please confirm: (1) the key was rotated; (2) the old rows are redacted.',
+      ),
+    ).toBeNull();
+    expect(
+      askProseChoiceNotice('Approve two deploys: (1) musterd-cloud, and (2) the pilot machine.'),
+    ).toBeNull();
+  });
+  it('stays quiet on a plain yes/no approve', () => {
+    expect(askProseChoiceNotice('May I merge #3051 now? CI is green.')).toBeNull();
+    expect(askProseChoiceNotice('Approve the deploy of 73c2810f to musterd.io?')).toBeNull();
+    expect(
+      askProseChoiceNotice('This is blocking; I will hold until you answer or the window ends.'),
+    ).toBeNull();
   });
 });
