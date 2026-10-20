@@ -13,6 +13,7 @@ import { CliError } from '../errors.js';
 import { canonicalServer, type HostRegistryEntry, loadHostRegistry } from '../host/registry.js';
 import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
+import { setPolicySigned } from './authority.js';
 import { resolve, resolveRead } from './helpers.js';
 
 /**
@@ -197,7 +198,7 @@ async function teamKnobs(parsed: Parsed): Promise<number> {
   const next: PolicyOverride = { ...stored };
   if (Object.keys(doorbell).length > 0) next.doorbell = doorbell;
   else delete next.doorbell;
-  const result = changed ? await http.setPolicy(team, next) : await http.getPolicy(team);
+  const result = changed ? await setPolicySigned(http, team, next) : await http.getPolicy(team);
   const effective = result.policy.doorbell;
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(effective) + '\n');

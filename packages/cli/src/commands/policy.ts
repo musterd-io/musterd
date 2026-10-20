@@ -10,6 +10,7 @@ import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
+import { setPolicySigned } from './authority.js';
 import { rejectAs, resolve } from './helpers.js';
 import { DIAL_VALUES, parseDialPairs } from './style.js';
 
@@ -79,7 +80,7 @@ export async function teamPolicyStyle(parsed: Parsed): Promise<number> {
     changed = true;
   }
 
-  const result = changed ? await http.setPolicy(team, next) : { policy: null, stored };
+  const result = changed ? await setPolicySigned(http, team, next) : { policy: null, stored };
   const current = result.policy ?? (await http.getPolicy(team)).policy;
   const now = current.style;
   const setBy = await styleSetByFromAudit(http, team, changed ? next : stored);

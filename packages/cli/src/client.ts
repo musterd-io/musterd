@@ -1,4 +1,5 @@
 import {
+  type ApprovalProof,
   type CiRunBatch,
   type HostProvision,
   type HostProvisionReportBody,
@@ -2210,8 +2211,10 @@ export class HttpClient {
   async setPolicy(
     slug: string,
     policy: PolicyOverride,
+    approval?: ApprovalProof,
   ): Promise<{ policy: Policy; stored: PolicyOverride }> {
-    return (await this.request('POST', `/teams/${slug}/policy`, policy)) as {
+    const body = approval ? { ...policy, approval } : policy;
+    return (await this.request('POST', `/teams/${slug}/policy`, body)) as {
       policy: Policy;
       stored: PolicyOverride;
     };
