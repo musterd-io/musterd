@@ -487,12 +487,18 @@ async function detachedClaim(input: {
   // split one Claude Code session into two digests at the minute of the claim (ryder
   // 27f7954d → b7bed855, 2026-09-28 20:50:54) and re-tailed its whole transcript under the new
   // one. The credential rides beside it (`saveBinding` carries the on-disk one forward).
+  // A seat's FIRST claim is the one time the server hands out its seat credential (`credential_hash`
+  // null → minted); every later claim returns none. The attached path saves it; this path dropped it
+  // and relied on `saveBinding` carrying one forward from disk — so a first claim made with
+  // `--detach` left a binding that could only ever present the bootstrap key, and every routine
+  // call after it was refused "a bootstrap key only claims a seat" (hosted canary-6, 2026-10-20).
   const binding: Binding = {
     version: 2,
     server,
     team,
     agent_key: agentKey ?? key,
     claim: { mode: 'seat', name: seat },
+    ...(outcome.seatCredential !== undefined ? { seat_credential: outcome.seatCredential } : {}),
     ...(grant !== undefined ? { grant } : {}),
   };
   saveBinding(process.cwd(), binding);
