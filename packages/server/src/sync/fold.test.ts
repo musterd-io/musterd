@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type Database } from '../db/open.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { AUDITED_LANE_FIELDS, getLane } from '../store/lanes.js';
-import { addMember } from '../store/members.js';
+import { addMember, getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
 import { foldBatch, foldNodeLiveness, LANE_UPDATE_COLUMNS, readPullCursor } from './fold.js';
@@ -64,6 +64,7 @@ withDrivers('fold', (_o, kind) => {
       to: { kind: 'member'; name: string } | { kind: 'team' };
       act: string;
       ts: number;
+      meta: Record<string, unknown>;
     }> = {},
   ): Promise<SyncPullEvent> {
     const envelope = makeEnvelope({
@@ -74,6 +75,7 @@ withDrivers('fold', (_o, kind) => {
       act: 'message',
       body: `b-${seq}`,
       ts: overrides.ts ?? 2000 + seq,
+      ...(overrides.meta ? { meta: overrides.meta } : {}),
     });
     // makeEnvelope validates the act; an origin on a NEWER build would mint one this build's enum
     // refuses, so the override goes on after the parse — that is what "the wire outran the reader"
@@ -216,6 +218,29 @@ withDrivers('fold', (_o, kind) => {
         last_hub_seq: 1,
         stop: null,
       });
+      await db.close();
+    });
+
+    it('mints a host service seat the envelope names its host for, and only that (ADR 645)', async () => {
+      const { db, team } = await seed();
+      // The hub minted `host-mac.lan` when its pull first spoke; no event carried the mint.
+      const res = await foldBatch(db, team.id, [
+        await foreign('f-1', 1, 1, {
+          from: 'host-mac.lan',
+          to: { kind: 'member', name: 'nick' },
+          meta: { species: 'consult', tier: 'advisory', pull: { host: 'mac.lan', lane: 'L1' } },
+        }),
+      ]);
+      expect(res).toMatchObject({ applied: 1, stop: null });
+      expect(await getMemberByName(db, team.id, 'host-mac.lan')).toMatchObject({
+        kind: 'service',
+      });
+      // A `host-*` sender whose envelope does not name that host is git lag like any other.
+      const lag = await foldBatch(db, team.id, [
+        await foreign('f-2', 2, 2, { from: 'host-other', meta: { pull: { host: 'mac.lan' } } }),
+      ]);
+      expect(lag.stop).toEqual({ kind: 'unresolved_seat', seat: 'host-other', hub_seq: 2 });
+      expect(await getMemberByName(db, team.id, 'host-other')).toBeFalsy();
       await db.close();
     });
 
@@ -526,6 +551,31 @@ withDrivers('fold', (_o, kind) => {
         title: 'after',
         branch: 'kept',
         detail: 'later',
+      });
+      await db.close();
+    });
+
+    it('folds the band-2 pull verbs: pulled and declined are held, a release frees only the pulled owner (ADR 645)', async () => {
+      const { db, team } = await seed();
+      const res = await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', { lane: 'L1', title: 't' }),
+        foreignLane('e-2', 2, 2, 'lane.pull_declined', { lane: 'L1', seat: 'ada', reason: 'x' }),
+        foreignLane('e-3', 3, 3, 'lane.claimed', { lane: 'L1', owner: 'ada', kind: 'claim' }),
+        foreignLane('e-4', 4, 4, 'lane.pulled', { lane: 'L1', seat: 'ada' }),
+        // A release naming a seat that no longer holds the lane takes nothing.
+        foreignLane('e-5', 5, 5, 'lane.pull_released', { lane: 'L1', owner_before: 'nick' }),
+      ]);
+      expect(res).toMatchObject({ applied: 5, stop: null });
+      expect(await db.get('SELECT state, owner_seat FROM lanes WHERE id = ?', ['L1'])).toEqual({
+        state: 'claimed',
+        owner_seat: 'ada',
+      });
+      await foldBatch(db, team.id, [
+        foreignLane('e-6', 6, 6, 'lane.pull_released', { lane: 'L1', owner_before: 'ada' }),
+      ]);
+      expect(await db.get('SELECT state, owner_seat FROM lanes WHERE id = ?', ['L1'])).toEqual({
+        state: 'open',
+        owner_seat: null,
       });
       await db.close();
     });

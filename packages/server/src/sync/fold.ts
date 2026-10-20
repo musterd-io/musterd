@@ -19,7 +19,7 @@ import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
 import { upsertSample } from '../store/laneSamples.js';
-import { getMemberByName } from '../store/members.js';
+import { getMemberByName, hostServiceSeat, hostServiceSeatName } from '../store/members.js';
 import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import { stripPolicyRedactionMarkers } from '../store/policyRedaction.js';
@@ -28,7 +28,7 @@ import {
   recordSessionAttestation,
   revokeResidency,
 } from '../store/residency.js';
-import type { MessageRow } from '../store/rows.js';
+import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { applySeedCapture } from '../store/seeds.js';
 import { setStylePrefs } from '../store/style.js';
 import { recordToolCalls } from '../store/toolCalls.js';
@@ -181,7 +181,32 @@ const LANE_VERBS = new Set([
   'lane.review_advisory',
   'lane.review_unbound',
   'lane.review_rerouted',
+  // ADR 645's band-2 pull. `lane.pulled` joins a claim (which rides `lane.claimed`) to its
+  // announcement and `lane.pull_declined` records a stopped window: both are held in audit.
+  // `lane.pull_released` gives a dead pull's lane back, so it projects.
+  'lane.pulled',
+  'lane.pull_declined',
+  'lane.pull_released',
 ]);
+
+/**
+ * A host's service seat is minted where the host first speaks (ADR 645, `hostServiceSeat`) and no
+ * event carries the mint, so a joiner meets its first act with no such seat. Mint it here, the
+ * same row the hub made — but only when the envelope itself names the host the seat folds from
+ * (`meta.pull.host`). Any other unknown sender is git lag and still stops the fold.
+ */
+async function hostSeatFromEnvelope(
+  db: Driver,
+  teamId: string,
+  env: { from: string; meta?: Record<string, unknown> | null | undefined },
+): Promise<MemberRow | null> {
+  const pull = env.meta?.['pull'];
+  const host =
+    pull && typeof pull === 'object' ? (pull as Record<string, unknown>)['host'] : undefined;
+  if (typeof host !== 'string' || hostServiceSeatName(host) !== env.from) return null;
+  const team = await db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [teamId]);
+  return team ? hostServiceSeat(db, team, host) : null;
+}
 
 /**
  * Project one replicated lane transition into this daemon's `lanes` — the materialised fold the
@@ -279,6 +304,18 @@ async function projectLaneEvent(
         [ts, teamId, laneId],
       );
       return 'applied';
+    case 'lane.pull_released': {
+      // The origin released only while the pulled seat still held the lane; mirror that guard,
+      // so a release that raced a later claim here takes nothing from the new owner.
+      if (staleAgainstClose) return 'applied';
+      const ownerBefore = typeof d['owner_before'] === 'string' ? d['owner_before'] : null;
+      await db.run(
+        `UPDATE lanes SET owner_seat = NULL, state = 'open', claimed_at = NULL, updated_at = ?
+          WHERE team_id = ? AND id = ? AND owner_seat = ?`,
+        [ts, teamId, laneId, ownerBefore],
+      );
+      return 'applied';
+    }
     case 'lane.state_changed': {
       const to = typeof d['to'] === 'string' ? d['to'] : null;
       if (to === null) return 'applied';
@@ -1456,7 +1493,9 @@ export async function foldBatch(
 
       // Rule 3 — resolve every seat the envelope names, or stop here. `to` blocks too: NULL would
       // silently turn a directed act into a broadcast.
-      const from = await getMemberByName(t, teamId, env.from);
+      const from =
+        (await getMemberByName(t, teamId, env.from)) ??
+        (await hostSeatFromEnvelope(t, teamId, env));
       if (!from) {
         stop = { kind: 'unresolved_seat', seat: env.from, hub_seq: event.hub_seq };
         return await finish();

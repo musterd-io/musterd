@@ -196,6 +196,17 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 
+- 2026-10-20, lane 01M5D62FZJ: the pull wedged every joiner's sync fold. Two gaps, both from
+  the first landing: `lane.pulled`, `lane.pull_declined` and `lane.pull_released` are written with
+  `appendLaneEventRequired`, so they replicate, but the fold's lane verbs listed none of them and
+  stopped as `unknown_lane_event` ("a peer runs a newer build", though both ran main); and the
+  host's service seat is minted on the hub by `addMember`, which no event carries, so a joiner
+  stopped `unresolved_seat` on the first pull ask. nick's second laptop sat at one hub event for
+  about ten hours, and lane and policy writes from it were refused as stale meanwhile. The fold
+  now knows the three verbs (`lane.pull_released` projects with the origin's owner guard) and
+  mints a host service seat when the envelope names the host it folds from. The stuck laptop was
+  unblocked by minting its four missing `host-*` seats by hand before the fix landed.
+
 ## Observability & Evaluation
 
 - **Traces:** `lane.pulled` / `lane.pull_declined` / `lane.pull_released` audit rows, each naming
