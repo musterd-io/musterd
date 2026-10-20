@@ -87,6 +87,19 @@ counts and the shipped list, or force a second fetch to restore them.
 | 1 | `01M4RNCZVB` | `GET /teams/:slug/lanes?brief=1` leaves every row's `detail` out (opt-in; the schema already allows null, so no protocol change); `/live` fetches brief and every state but `abandoned` through the existing repeatable `?state=`; the rows, counts, warnings and annotations are otherwise unchanged. Built 2026-10-13 instead of the row cut first written here | the /live lanes response on revive measured before and after in `web-live-baseline.md`; the Now card's "d of n done", the shipped list and the wall board's done column still agree with `/board` |
 | 2 | opened at increment 1's close | the bar above measured on the hub and recorded as a dated note in `web-live-baseline.md`; the goal outcome written from it | five-reload medians for the three lines, with the daemon's load noted; the goal ships if all three hold, or this section says which did not and why |
 
+**Measured 2026-10-20, nick's laptop (a joiner, not the hub)** with `scripts/perf/live-paint-bar.mjs`,
+which times the page's own markers (`live-baseline.mjs` reports paint events and cannot tell a skeleton
+from a card). Five visits each, medians:
+
+- warm: first team card **85 ms** (runs 144, 65, 727, 78, 85). Bar ≤ 1.0 s: met.
+- cold: first skeleton **51 ms** (runs 51, 305, 15, 51, 29). Bar ≤ 0.5 s: met.
+- the daemon's answer: **144 ms** on warm visits and **130 ms** on cold (worst run 980 ms). Bar ≤ 3.0 s:
+  met on this daemon.
+
+Not yet measured on the hub. A joiner answers from its own local copy, so the third line there says
+little about the hub's read path under its weekday load, which is what the bar names. The hub run is
+the same script, signed in by a human on the hub machine; the goal outcome waits for it.
+
 Increment 2 is a measurement lane, not a build; it exists so the goal closes on a number rather than on
 a feeling. If increment 1 lands and the third line still fails, the next lane is on the daemon's read
 path, not the page, and belongs under `live-loads-fast` with its own measurement first.
