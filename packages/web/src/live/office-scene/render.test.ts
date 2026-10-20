@@ -2128,6 +2128,18 @@ describe('background layer (sprite cache)', () => {
     expect(backgroundKey(fit, env, 2)).not.toBe(k);
   });
 
+  it('the RENDERED shell’s key follows the room state and its fade, in 32 steps (plan Task 8)', () => {
+    const k = backgroundKey(fit, env, 1, true);
+    expect(backgroundKey(fit, env, 1, true)).toBe(k);
+    expect(k).not.toBe(backgroundKey(fit, env, 1));
+    // the same day state at another hour is the same key…
+    expect(backgroundKey(fit, { ...env, hours: 10 }, 1, true)).toBe(backgroundKey(fit, { ...env, hours: 14 }, 1, true));
+    // …a fade step is not; and two instants 10 s apart inside a fade share a step
+    const a = backgroundKey(fit, { ...env, hours: 16.6 }, 1, true);
+    expect(a).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1, true));
+    expect(backgroundKey(fit, { ...env, hours: 16.6 + 10 / 3600 }, 1, true)).toBe(a);
+  });
+
   it('the shell sets every state it reads, so its sprite can start from the 2D defaults', () => {
     const r = recordingCtx();
     drawWalls(r.ctx, fit, env, schedule, board(), 3, 'static');

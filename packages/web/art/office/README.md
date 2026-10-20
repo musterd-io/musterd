@@ -36,6 +36,32 @@ Commit the outputs. `pnpm perf:check` sums `dist/client/assets/office-art-*.png`
 `officeArtBytes` in `docs/perf/budgets.json`; a raise is logged in
 `docs/perf/web-live-baseline.md` (ADR 151).
 
+Two things keep the set small (10 MB → ~1 MB, increment 2): every `room/*` layer is **box-filtered
+to half the item resolution** before it is cropped (`SHELL_DOWNSAMPLE`; the manifest's per-asset
+`scale` records it, so `blit.ts` needs no special case), and every PNG is **palette-quantized with
+pngquant** when it is on PATH (`brew install pngquant`; without it the script says so and the files
+are two to three times bigger). Both are lossy in a way nobody can see at the panel's scale, and
+both are the render script's business, not the runtime's.
+
+## What is rendered (increment 2)
+
+- **The shell**, `room/light-<day|evening|night>`: floor, both back walls, windows and skirting, all
+  together, under one light rig per day state (`LIGHT_STATES` in `scene.py`: sun, fill, world, what
+  the panes emit, the window spots that pool light on the floor). `roomState.ts` crossfades the two
+  nearest over 45 minutes at each edge (07:00, 16:30, 19:00).
+- **The ceiling bank**, `room/ceiling-<on|spill>`: the night shell rendered with the four area lights
+  on, minus the same render with them off — an **additive** layer the canvas draws with
+  `globalCompositeOperation = 'lighter'` over any day state. `spill` is the same at 42%. There is no
+  `off` image; off is nothing.
+- **Every static item** once, at the floor's centre, blitted wherever `layout.ts` puts one: desks (two
+  orientations), the bench, plants, shelves, the entrance, the nook set, reception, the meeting
+  table and chairs, the printer, the rugs. Each carries its own soft contact shadow.
+- **Per-desk overlays**: `desk/lamp-off`, `desk/lamp-on` (the lit one with its pool on the slab) and
+  `desk/fan-0..3` (the blades a quarter-turn apart); `drawWorkstation` picks by the desk's live state.
+
+Items are rendered under the day rig; at evening and night the painted veil does to them what it
+always did, and `figureTintFor` carries the same curve to the figures of increment 3.
+
 ## Projection
 
 `iso.ts` projects `x = (lx − ly)·KX`, `y = (lx + ly)·KY − lz` and lifts heights 1:1 (no

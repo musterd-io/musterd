@@ -58,6 +58,7 @@ import { pulseIntensity, pulseLive, runGlow } from '../pulse';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
 import { blitAsset } from './rendered/blit';
+import { ceilingOf, dayOf, roomMixFor } from './rendered/roomState';
 import type { RenderedAssets } from './rendered/assets';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
@@ -2159,12 +2160,13 @@ function blitIf(
   id: string,
   lx: number,
   ly: number,
+  alpha = 1,
 ): boolean {
   if (!rendered) return false;
   const img = rendered.images.get(id);
   const a = rendered.manifest.assets.find((x) => x.id === id);
   if (!img || !a) return false;
-  blitAsset(ctx, fit, a, img, lx, ly);
+  blitAsset(ctx, fit, a, img, lx, ly, alpha);
   return true;
 }
 
@@ -4512,7 +4514,14 @@ export function drawWorkstation(
   at(KEYBOARD_ALONG + 2, 27, (ix, iy) => deskMouse(ctx, fit, ix, iy, sn, up, mouseColor));
   // The desk lamp is work gear, not a hashed personality prop: every OCCUPIED desk has one (the
   // sitter brought it), no empty desk ever does — see deskLamp for the #304 story. Lit only after dark.
-  if (node) at(LAMP_ALONG, LAMP_ACROSS, (ix, iy) => deskLamp(ctx, fit, ix, iy, up, lampsLit && !ownedEmpty));
+  // Rendered (plan Task 7): the lamp is `desk/lamp-off` or `desk/lamp-on` (the lit one carries its
+  // own pool on the slab); the painter is the fallback. `lampHead`'s additive core still paints
+  // after the veil either way, so a lit lamp reads as lit at night.
+  if (node)
+    at(LAMP_ALONG, LAMP_ACROSS, (ix, iy) => {
+      const lit = lampsLit && !ownedEmpty;
+      if (!blitIf(ctx, fit, rendered, lit ? 'desk/lamp-on' : 'desk/lamp-off', ix, iy)) deskLamp(ctx, fit, ix, iy, up, lit);
+    });
 
   // optional personal props — each present-or-not per desk by a stable hash, at its own station
   for (const kind of PROP_KINDS) {
@@ -4529,8 +4538,13 @@ export function drawWorkstation(
           return deskPlant(ctx, fit, ix, iy, up);
         case 'photo':
           return deskPhoto(ctx, fit, ix, iy, sn, up, PHOTOS[Math.floor(deskRnd(id, 41) * PHOTOS.length)]!);
-        case 'fan':
+        case 'fan': {
+          // Rendered: four blade positions; the blades turn only while someone is at the desk
+          // (spec §3.1 item 5 — a prop moves only with a sitter), 8 steps a second.
+          const frame = node ? Math.floor(t * 8) % 4 : 0;
+          if (blitIf(ctx, fit, rendered, `desk/fan-${frame}`, ix, iy)) return;
           return deskFan(ctx, fit, ix, iy, up);
+        }
         case 'notebook':
           return deskNotebook(ctx, fit, ix, iy, sn, up, NOTEBOOK_COVERS[Math.floor(deskRnd(id, 43) * NOTEBOOK_COVERS.length)]!);
         case 'pens':
@@ -5105,9 +5119,14 @@ function blitSprite(
  * which only `drawInteriorLight` reads and which is never cached. `hours` is absent on purpose: the
  * clock is the live fixture that reads it.
  */
-export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
+export function backgroundKey(fit: Fit, env: LightEnv, dpr: number, renderedShell = false): string {
+  const m = roomMixFor(env);
   return [
     'bg',
+    // The rendered shell paints the room's STATE, so its key follows the clock — quantised, so a
+    // 45-minute fade re-bakes in 32 steps, not every frame. The painted shell reads only the env
+    // facts below and must not follow the hour (its test pins that).
+    renderedShell ? `${m.from}→${m.to}@${Math.round(m.mix * 32)}` : '',
     glassColor(env),
     env.skyTint,
     env.skyStrength.toFixed(3),
@@ -5197,21 +5216,34 @@ export function renderScene(
      item, and the flat rugs (drawn with the floor so a member standing on one is never over-painted
      by it). All of it is static per lighting step — so with a cache it is two sprites around the
      three live wall fixtures, and with none it paints exactly as it always has. */
-  /* Rendered shell (plan Task 6): the floor and the two back walls are one image each. The walls'
+  /* Rendered shell (plan Tasks 6 and 8): the floor and the two back walls are one image per day
+     state (`room/light-<day|evening|night>`), crossfaded by `roomMixFor` — `from` at alpha 1, `to`
+     at `mix` — and the ceiling bank is an additive overlay (`room/ceiling-<on|spill>`). The walls'
      fixtures — clock, hours sign, board, calendar — are live and still paint on top (the 'live'
-     slice); the painted dressing (art, hanger, cable) is in the wall render. */
-  const wallsRendered = !!rendered?.images.has('room/wall-left') && !!rendered.images.has('room/wall-right');
+     slice); the painted dressing (art, hanger, cable) is in the wall render, and the painted
+     window beams are in the light layers, so they are skipped. */
+  const mix = roomMixFor(env);
+  const shellRendered = !!rendered?.images.has(`room/light-${dayOf(mix.from)}`);
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
-    if (!blitIf(c, fit, rendered, 'room/floor', 0, 0)) drawFloor(c, fit);
-    if (wallsRendered) {
-      blitIf(c, fit, rendered, 'room/wall-left', 0, 0);
-      blitIf(c, fit, rendered, 'room/wall-right', 0, 0);
+    if (shellRendered) {
+      blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
+      if (mix.mix > 0) blitIf(c, fit, rendered, `room/light-${dayOf(mix.to)}`, 0, 0, mix.mix);
+      const ceiling = ceilingOf(mix.from);
+      if (ceiling !== 'off') {
+        // The overlay was measured at night (night-on minus night-off). By day the same light adds
+        // far less to an already-lit room, so it fades with the daylight — continuous, like the veil.
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
+        c.restore();
+      }
       if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, 'live');
     } else {
+      drawFloor(c, fit);
       drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, cache ? 'static' : 'all');
+      if (!cache) drawWindowBeams(c, fit, env);
     }
-    if (!cache) drawWindowBeams(c, fit, env);
     if (!cache) rugs(c);
   };
   /* Flat floor paint, drawn with the floor (before every solid and every actor) so a member standing
@@ -5231,12 +5263,12 @@ export function renderScene(
     nook.rug(c);
   }
   if (cache) {
-    const bg = backgroundKey(fit, env, dpr);
+    const bg = backgroundKey(fit, env, dpr, shellRendered);
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: three fixtures that are not static, then the right
     // wall's additive strand, then the additive daylight beams. See `WallSlice`.
     drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live', run);
-    run(() => drawWindowBeams(ctx, fit, env));
+    if (!shellRendered) run(() => drawWindowBeams(ctx, fit, env));
     // Source-over floor paint, so it caches cleanly on top of the beams it is painted over.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {

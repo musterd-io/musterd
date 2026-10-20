@@ -748,6 +748,98 @@ def printer(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, lx, ly, col)
 
 
+# ── per-desk live overlays (plan Task 7) ───────────────────────────────────────────────────
+def desk_lamp(asset_id: str, lit: bool, zs: float, col) -> bpy.types.Object:
+    """A desk lamp standing on the worktop at its floor point: base, pole, shade — and, lit, a
+    glowing shade and a warm pool on the slab. Modelled at DESK_UP so the anchor is the floor point
+    `drawWorkstation` already blits props at."""
+    C = FLOOR / 2
+    up = DESK_UP
+    dark = paint("lamp-dark", srgb("#3d4650"), 0.4)
+    pole = paint("lamp-pole", srgb("#4a545f"), 0.4)
+    shade = glow("lamp-shade-lit", srgb("#f3cf6e"), strength=2.4) if lit else paint("lamp-shade", srgb("#aab0b8"), 0.5)
+    parts = [
+        box(f"{asset_id}/base", C, C, up, 10, 10, 3, dark, zs),
+        cyl(f"{asset_id}/pole", C, C, up + 3, 1.5, 1.5, 22, pole, zs, 10),
+        cyl(f"{asset_id}/shade", C, C, up + 22, 4.5, 9, 7, shade, zs, 20),
+    ]
+    if lit:
+        pool = bpy.data.materials.get("lamp-pool") or bpy.data.materials.new("lamp-pool")
+        nt, nodes, links, bsdf = _nodes(pool)
+        bsdf.inputs["Base Color"].default_value = (1.0, 0.85, 0.5, 1)
+        bsdf.inputs["Emission Color"].default_value = (1.0, 0.85, 0.5, 1)
+        bsdf.inputs["Emission Strength"].default_value = 0.9
+        bsdf.inputs["Alpha"].default_value = 0.35
+        for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND")):
+            try:
+                setattr(pool, attr, val)
+            except Exception:
+                pass
+        bpy.ops.mesh.primitive_circle_add(vertices=32, radius=1.0, fill_type="NGON")
+        o = bpy.context.active_object
+        o.name = f"{asset_id}/pool"
+        o.scale = (22, 16, 1.0)
+        o.location = (C + 3, C + 4, (up + 0.3) * zs)
+        bpy.ops.object.transform_apply(scale=True)
+        o.data.materials.append(pool)
+        o.visible_shadow = False
+        parts.append(o)
+    return finish(asset_id, parts, C, C, col)
+
+
+def desk_fan(asset_id: str, frame: int, zs: float, col) -> bpy.types.Object:
+    """A small desk fan: base, neck, a cage ring with a hub and three blades, the head facing the
+    viewer (+x +y); `frame`/4 of a revolution turns the blades."""
+    from mathutils import Matrix
+
+    C = FLOOR / 2
+    up = DESK_UP
+    dark = paint("fan-dark", srgb("#556069"), 0.4)
+    cage = paint("fan-cage", srgb("#8794a0"), 0.4)
+    blade = paint("fan-blade", srgb("#aeb9c2"), 0.5)
+    parts = [
+        box(f"{asset_id}/base", C, C, up, 9, 9, 5, dark, zs),
+        cyl(f"{asset_id}/neck", C, C, up + 4, 1.5, 1.5, 12, dark, zs, 10),
+    ]
+    n = Vector((1, 1, 0)).normalized()          # the head's axis, toward the viewer
+    u = Vector((0, 0, 1))                       # "up" in the head's plane
+    v = n.cross(u)                              # "across" in the head's plane
+    centre = Vector((C, C, (up + 17) * zs))
+    face = n.to_track_quat("Z", "Y")           # takes a cylinder's Z axis onto n
+
+    def head(o: bpy.types.Object) -> bpy.types.Object:
+        o.rotation_euler = face.to_euler()
+        o.location = centre
+        return o
+
+    bpy.ops.mesh.primitive_torus_add(major_radius=10, minor_radius=0.7, major_segments=32, minor_segments=8)
+    ring = bpy.context.active_object
+    ring.name = f"{asset_id}/ring"
+    ring.data.materials.append(cage)
+    parts.append(head(ring))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=2.4, depth=2.0)
+    hub = bpy.context.active_object
+    hub.name = f"{asset_id}/hub"
+    hub.data.materials.append(dark)
+    parts.append(head(hub))
+    for i in range(3):
+        a = math.radians(frame * 30 + i * 120)
+        radial = (math.cos(a) * u + math.sin(a) * v).normalized()
+        tangent = n.cross(radial)
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=1.0)
+        b = bpy.context.active_object
+        b.name = f"{asset_id}/blade{i}"
+        b.scale = (4.2, 2.2, 0.5)               # long along the radial, flat along the axis (left unapplied: join bakes it)
+        b.data.materials.append(blade)
+        smooth(b)
+        # basis columns: x → radial, y → tangent, z → the head's axis
+        m = Matrix((radial, tangent, n)).transposed()
+        b.rotation_euler = m.to_euler()
+        b.location = centre + radial * 5.5
+        parts.append(b)
+    return finish(asset_id, parts, C, C, col)
+
+
 # ── the shell ──────────────────────────────────────────────────────────────────────────────
 def floor_slab(asset_id: str, zs: float, col) -> bpy.types.Object:
     """The floor: a tiled top and a darker slab edge (THICK) the diamond sits on. Origin at the back corner."""
@@ -796,28 +888,96 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, 0, 0, col)
 
 
-def lights() -> None:
-    """One warm key from the window side (upper-left in the painted room), a cool fill, soft world."""
-    bpy.ops.object.light_add(type="SUN", location=(0, 0, 400))
-    key = bpy.context.active_object
-    key.name = "key"
-    key.data.energy = 3.0
-    key.data.angle = math.radians(8)
-    key.data.color = (1.0, 0.93, 0.82)
-    key.rotation_euler = (math.radians(50), 0, math.radians(-120))
+# ── light states (spec §3.3, plan Task 8) ─────────────────────────────────────────────────
+# Each day state is a rig: the sun (energy, colour, elevation), the fill, the world, and what the
+# window panes emit. The ceiling bank is a separate set of area lights, on / off / spill.
+LIGHT_STATES = {
+    "day": dict(sun=(3.0, (1.0, 0.93, 0.82), 50), fill=(0.9, (0.82, 0.9, 1.0)), world=(0.35, (0.9, 0.86, 0.8)),
+                pane=(2.2, "#f6e7c4"), window=(900.0, (1.0, 0.93, 0.8))),
+    "evening": dict(sun=(2.2, (1.0, 0.62, 0.36), 18), fill=(0.5, (0.7, 0.62, 0.9)), world=(0.22, (0.75, 0.55, 0.6)),
+                    pane=(1.7, "#f3b57a"), window=(700.0, (1.0, 0.66, 0.4))),
+    "night": dict(sun=(0.0, (0.5, 0.6, 1.0), 30), fill=(0.32, (0.55, 0.65, 1.0)), world=(0.1, (0.35, 0.4, 0.65)),
+                  pane=(0.18, "#1b2440"), window=(0.0, (0.5, 0.6, 1.0))),
+}
+CEILING = {"on": 1.0, "spill": 0.42, "off": 0.0}
+
+
+def clear_lights() -> None:
+    for o in [o for o in bpy.data.objects if o.type == "LIGHT"]:
+        bpy.data.objects.remove(o, do_unlink=True)
+
+
+def lights(state: str = "day", ceiling: str = "off", zs: float = 1.0) -> None:
+    """The light rig for one day state and one ceiling state. Items are rendered under `day`/`off`
+    (their own shading is baked in; the room's state tints them at runtime); the shell is rendered
+    under every state. Windows are on both back walls, so each gets a spot that pools light across
+    the floor the way the painted `drawWindowBeams` does."""
+    clear_lights()
+    L = LIGHT_STATES[state]
+    energy, color, elev = L["sun"]
+    if energy > 0:
+        bpy.ops.object.light_add(type="SUN", location=(0, 0, 400))
+        key = bpy.context.active_object
+        key.name = "key"
+        key.data.energy = energy
+        key.data.angle = math.radians(8)
+        key.data.color = color
+        key.rotation_euler = (math.radians(90 - elev), 0, math.radians(-120))
+    f_energy, f_color = L["fill"]
     bpy.ops.object.light_add(type="SUN", location=(0, 0, 400))
     fill = bpy.context.active_object
     fill.name = "fill"
-    fill.data.energy = 0.9
+    fill.data.energy = f_energy
     fill.data.angle = math.radians(40)
-    fill.data.color = (0.82, 0.9, 1.0)
+    fill.data.color = f_color
     fill.rotation_euler = (math.radians(35), 0, math.radians(60))
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
     bpy.context.scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
-    bg.inputs["Color"].default_value = (0.9, 0.86, 0.8, 1.0)
-    bg.inputs["Strength"].default_value = 0.35
+    w_strength, w_color = L["world"]
+    bg.inputs["Color"].default_value = (*w_color, 1.0)
+    bg.inputs["Strength"].default_value = w_strength
+    # the panes' glow follows the state (the glow material is shared by every window)
+    pane = bpy.data.materials.get("window-pane")
+    if pane:
+        bsdf = pane.node_tree.nodes.get("Principled BSDF")
+        p_strength, p_hex = L["pane"]
+        bsdf.inputs["Emission Color"].default_value = (*srgb(p_hex), 1)
+        bsdf.inputs["Base Color"].default_value = (*srgb(p_hex), 1)
+        bsdf.inputs["Emission Strength"].default_value = p_strength
+    # window spots: one per window per wall, just outside the pane, aimed down across the floor
+    w_energy, w_color = L["window"]
+    if w_energy > 0:
+        for which in (0, 1):
+            for t0, t1, u0, u1, _ in WINDOWS:
+                c = (t0 + t1) / 2 * FLOOR
+                z = (u0 + u1) / 2 * WALL_H * zs
+                # just inside the pane (a light behind the wall block lights nothing in the room)
+                loc = (6, c, z) if which == 0 else (c, 6, z)
+                aim = Vector((c + 260, c + 120, 0)) if which == 0 else Vector((c + 120, c + 260, 0))
+                aim = Vector((260, c + 120, 0)) if which == 0 else Vector((c + 120, 260, 0))
+                bpy.ops.object.light_add(type="SPOT", location=loc)
+                sp = bpy.context.active_object
+                sp.name = f"window-{which}-{t0}"
+                sp.data.energy = w_energy * 1800
+                sp.data.color = w_color
+                sp.data.spot_size = math.radians(70)
+                sp.data.spot_blend = 0.9
+                sp.data.shadow_soft_size = 40
+                sp.rotation_euler = (aim - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+    # the ceiling bank: four warm area lights over the floor
+    c_scale = CEILING[ceiling]
+    if c_scale > 0:
+        for cx, cy in ((FLOOR * 0.3, FLOOR * 0.3), (FLOOR * 0.7, FLOOR * 0.3), (FLOOR * 0.3, FLOOR * 0.7), (FLOOR * 0.7, FLOOR * 0.7)):
+            bpy.ops.object.light_add(type="AREA", location=(cx, cy, 260 * zs))
+            a = bpy.context.active_object
+            a.name = f"ceiling-{cx}-{cy}"
+            a.data.shape = "SQUARE"
+            a.data.size = 220
+            a.data.energy = 650000 * c_scale
+            a.data.color = (1.0, 0.95, 0.86)
+            a.rotation_euler = (0, 0, 0)
 
 
 def camera(ky: float, px_per_unit: float, zs: float) -> bpy.types.Object:
@@ -861,9 +1021,13 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     export = collection("export")
     C = FLOOR / 2
     a: dict[str, bpy.types.Object] = {}
-    a["room/floor"] = floor_slab("room/floor", zs, export)
-    a["room/wall-left"] = wall("room/wall-left", 0, zs, export)
-    a["room/wall-right"] = wall("room/wall-right", 1, zs, export)
+    # The shell — floor and both walls — is one image per light state (`room/light-<state>`),
+    # rendered together under each rig; `render.py` iterates LIGHT_STATES for it. Its objects are
+    # built once and carry the `shell` tag the renderer reads.
+    shell = [floor_slab("room/floor", zs, export), wall("room/wall-left", 0, zs, export), wall("room/wall-right", 1, zs, export)]
+    for o in shell:
+        o["shell"] = True
+    a["room/shell"] = shell[0]
     for pid, cx, cy, axis, size, fill, mark, weave in PODS:
         ns = axis == "ns"
         along, across = POD_RUG_SOLO if size == 1 else POD_RUG_DUO if size == 2 else POD_RUG
@@ -897,6 +1061,10 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     for i, (dx, dy, facing) in enumerate(MEETING["chairs"]):
         a[f"meeting/chair-{i}"] = meeting_chair(f"meeting/chair-{i}", MEETING["lx"] + dx, MEETING["ly"] + dy, facing, zs, export)
     a["printer"] = printer("printer", zs, export)
-    lights()
+    a["desk/lamp-off"] = desk_lamp("desk/lamp-off", False, zs, export)
+    a["desk/lamp-on"] = desk_lamp("desk/lamp-on", True, zs, export)
+    for frame in range(4):
+        a[f"desk/fan-{frame}"] = desk_fan(f"desk/fan-{frame}", frame, zs, export)
+    lights("day", "off", zs)
     camera(ky, px_per_unit, zs)
     return a

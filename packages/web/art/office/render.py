@@ -33,7 +33,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None}
+    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -45,6 +45,8 @@ def args() -> dict:
             out["ky"] = float(argv[i + 1]); i += 2
         elif k == "--save":
             out["save"] = argv[i + 1]; i += 2
+        elif k == "--only":
+            out["only"] = set(argv[i + 1].split(",")); i += 2
         else:
             raise SystemExit(f"render.py: unknown argument {k}")
     if not out["out"]:
@@ -77,17 +79,38 @@ def project_px(point: Vector, w: int, h: int) -> tuple[float, float]:
     return (v.x * w, (1.0 - v.y) * h)
 
 
-def render_alone(obj: bpy.types.Object, path: str, export: bpy.types.Collection) -> None:
+def render_alone(objs: list[bpy.types.Object], path: str, export: bpy.types.Collection) -> None:
+    """Render only `objs` of the export collection (every other export object hidden)."""
     for o in export.objects:
-        o.hide_render = o is not obj
+        o.hide_render = o not in objs
     bpy.context.scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
+
+
+def difference(path_on: str, path_off: str, out_path: str, gain: float = 1.0) -> None:
+    """Write `out_path` = clip(on − off) · gain, alpha from `off` — the additive overlay the canvas
+    draws with `globalCompositeOperation = 'lighter'` to switch the ceiling bank on over any day
+    state. Both inputs are full-frame renders; the caller crops the result like any asset."""
+    a = bpy.data.images.load(path_on)
+    b = bpy.data.images.load(path_off)
+    w, h = a.size
+    pa = np.array(a.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    pb = np.array(b.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    diff = np.clip((pa[:, :, :3] - pb[:, :, :3]) * gain, 0, 1)
+    out = np.concatenate([diff, pb[:, :, 3:4]], axis=2)
+    img = bpy.data.images.new("diff", w, h, alpha=True, float_buffer=False)
+    img.pixels = out.astype(np.float32).ravel().tolist()
+    img.filepath_raw = out_path
+    img.file_format = "PNG"
+    img.save()
+    for i in (a, b, img):
+        bpy.data.images.remove(i)
 
 
 # The room shell — floor and walls — is big and flat, so it ships at half the item resolution:
 # 4× fewer pixels for layers nobody reads at the sprite scale. The manifest's per-asset `scale`
 # records it, so `blit.ts` sizes them right without knowing.
-SHELL_DOWNSAMPLE = {"room/floor": 2, "room/wall-left": 2, "room/wall-right": 2}
+SHELL_DOWNSAMPLE = 2  # applies to every `room/*` asset
 
 
 def crop_alpha(path: str, down: int = 1) -> tuple[int, int, int, int]:
@@ -145,17 +168,28 @@ def main() -> None:
     export = bpy.data.collections["export"]
     w, h = setup_render(a["scale"])
     manifest = {"version": 1, "camera": {"kx": scene.KX, "ky": a["ky"]}, "assets": []}
-    for asset_id, obj in assets.items():
-        v = world_to_camera_view(bpy.context.scene, bpy.context.scene.camera, obj.matrix_world.translation)
-        print(f"frame {w}x{h}; {asset_id} origin in camera view: ({v.x:.3f}, {v.y:.3f}, {v.z:.1f})")
-        file = "office-art-" + asset_id.replace("/", "-") + ".png"
-        path = os.path.join(a["out"], file)
-        render_alone(obj, path, export)
-        print(f"engine {bpy.context.scene.render.engine}; wrote {os.path.getsize(path)} bytes to {file}")
-        down = SHELL_DOWNSAMPLE.get(asset_id, 1)
+    # `--only id,id`: re-render those and keep every other entry of the manifest already on disk
+    # (same camera and scale, or the kept entries would lie) — a desk's tweak is seconds, not minutes.
+    only = a["only"]
+    manifest_path = os.path.join(a["out"], "manifest.json")
+    if only:
+        with open(manifest_path) as f:
+            prev = json.load(f)
+        if prev["camera"] != manifest["camera"]:
+            raise SystemExit("render.py: --only needs the camera the manifest was rendered at")
+        manifest["assets"] = [x for x in prev["assets"] if x["id"] not in only]
+
+    def wanted(asset_id: str) -> bool:
+        return not only or asset_id in only
+
+    zs = scene.z_scale(a["ky"])
+    shell = [o for o in export.objects if o.get("shell")]
+
+    def record(asset_id: str, path: str, origin: Vector, down: int) -> None:
+        file = os.path.basename(path)
         x0, y0, cw, ch = crop_alpha(path, down)
         quantize(path)
-        ox, oy = project_px(obj.matrix_world.translation, w, h)
+        ox, oy = project_px(origin, w, h)
         manifest["assets"].append(
             {
                 "id": asset_id,
@@ -167,7 +201,43 @@ def main() -> None:
             }
         )
         print(f"rendered {asset_id} -> {file} {cw // down}x{ch // down} anchor ({(ox - x0) / down:.1f}, {(oy - y0) / down:.1f}) {os.path.getsize(path)} B")
-    with open(os.path.join(a["out"], "manifest.json"), "w") as f:
+
+    def out_path(asset_id: str) -> str:
+        return os.path.join(a["out"], "office-art-" + asset_id.replace("/", "-") + ".png")
+
+    # the shell under each day state (ceiling off), then the ceiling overlays as night-on minus night-off
+    origin = shell[0].matrix_world.translation.copy()
+    for state in scene.LIGHT_STATES:
+        if not wanted(f"room/light-{state}"):
+            continue
+        scene.lights(state, "off", zs)
+        path = out_path(f"room/light-{state}")
+        render_alone(shell, path, export)
+        record(f"room/light-{state}", path, origin, SHELL_DOWNSAMPLE)
+    if wanted("room/ceiling-on") or wanted("room/ceiling-spill"):
+        night_off = os.path.join(a["out"], "_night-off.png")
+        night_on = os.path.join(a["out"], "_night-on.png")
+        scene.lights("night", "off", zs)
+        render_alone(shell, night_off, export)
+        scene.lights("night", "on", zs)
+        render_alone(shell, night_on, export)
+        for ceiling, gain in (("on", 1.0), ("spill", scene.CEILING["spill"])):
+            path = out_path(f"room/ceiling-{ceiling}")
+            difference(night_on, night_off, path, gain)
+            record(f"room/ceiling-{ceiling}", path, origin, SHELL_DOWNSAMPLE)
+        for p in (night_off, night_on):
+            os.remove(p)
+    scene.lights("day", "off", zs)
+
+    for asset_id, obj in assets.items():
+        if asset_id == "room/shell" or not wanted(asset_id):
+            continue
+        path = out_path(asset_id)
+        render_alone([obj], path, export)
+        print(f"engine {bpy.context.scene.render.engine}; wrote {os.path.getsize(path)} bytes to {os.path.basename(path)}")
+        record(asset_id, path, obj.matrix_world.translation, 1)
+    manifest["assets"].sort(key=lambda x: x["id"])
+    with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
     if a["save"]:

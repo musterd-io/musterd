@@ -6,112 +6,13 @@
   },
   "assets": [
     {
-      "id": "room/floor",
-      "file": "office-art-room-floor.png",
-      "w": 1909,
-      "h": 946,
+      "id": "bench/base",
+      "file": "office-art-bench-base.png",
+      "w": 712,
+      "h": 451,
       "anchor": {
-        "x": 954.5,
-        "y": 1.71
-      },
-      "scale": 1.5
-    },
-    {
-      "id": "room/wall-left",
-      "file": "office-art-room-wall-left.png",
-      "w": 958,
-      "h": 750,
-      "anchor": {
-        "x": 3.5,
-        "y": 292.21
-      },
-      "scale": 1.5
-    },
-    {
-      "id": "room/wall-right",
-      "file": "office-art-room-wall-right.png",
-      "w": 958,
-      "h": 750,
-      "anchor": {
-        "x": 954.5,
-        "y": 292.21
-      },
-      "scale": 1.5
-    },
-    {
-      "id": "rug/pod-0",
-      "file": "office-art-rug-pod-0.png",
-      "w": 1024,
-      "h": 495,
-      "anchor": {
-        "x": 512.08,
-        "y": 249.36
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/pod-1",
-      "file": "office-art-rug-pod-1.png",
-      "w": 1024,
-      "h": 495,
-      "anchor": {
-        "x": 512.18,
-        "y": 249.41
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/pod-2",
-      "file": "office-art-rug-pod-2.png",
-      "w": 664,
-      "h": 324,
-      "anchor": {
-        "x": 332.15,
-        "y": 163.88
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/pod-3",
-      "file": "office-art-rug-pod-3.png",
-      "w": 537,
-      "h": 262,
-      "anchor": {
-        "x": 268.17,
-        "y": 132.71
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/meeting",
-      "file": "office-art-rug-meeting.png",
-      "w": 908,
-      "h": 440,
-      "anchor": {
-        "x": 453.94,
-        "y": 221.77
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/reception",
-      "file": "office-art-rug-reception.png",
-      "w": 685,
-      "h": 334,
-      "anchor": {
-        "x": 342.14,
-        "y": 168.59
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "rug/nook",
-      "file": "office-art-rug-nook.png",
-      "w": 642,
-      "h": 314,
-      "anchor": {
-        "x": -1370.61,
-        "y": 32.0
+        "x": 360.75,
+        "y": 273.91
       },
       "scale": 3.0
     },
@@ -138,79 +39,68 @@
       "scale": 3.0
     },
     {
-      "id": "bench/base",
-      "file": "office-art-bench-base.png",
-      "w": 712,
-      "h": 451,
+      "id": "desk/fan-0",
+      "file": "office-art-desk-fan-0.png",
+      "w": 70,
+      "h": 94,
       "anchor": {
-        "x": 360.75,
-        "y": 273.91
+        "x": 35.0,
+        "y": 187.0
       },
       "scale": 3.0
     },
     {
-      "id": "plant/snake",
-      "file": "office-art-plant-snake.png",
-      "w": 118,
-      "h": 428,
+      "id": "desk/fan-1",
+      "file": "office-art-desk-fan-1.png",
+      "w": 70,
+      "h": 94,
       "anchor": {
-        "x": 60.0,
-        "y": 338.0
+        "x": 35.0,
+        "y": 187.0
       },
       "scale": 3.0
     },
     {
-      "id": "plant/fiddle",
-      "file": "office-art-plant-fiddle.png",
-      "w": 118,
-      "h": 277,
+      "id": "desk/fan-2",
+      "file": "office-art-desk-fan-2.png",
+      "w": 70,
+      "h": 94,
       "anchor": {
-        "x": 58.0,
-        "y": 247.0
+        "x": 35.0,
+        "y": 187.0
       },
       "scale": 3.0
     },
     {
-      "id": "shelf/0",
-      "file": "office-art-shelf-0.png",
-      "w": 143,
-      "h": 333,
+      "id": "desk/fan-3",
+      "file": "office-art-desk-fan-3.png",
+      "w": 70,
+      "h": 94,
       "anchor": {
-        "x": 71.47,
-        "y": 294.06
+        "x": 35.0,
+        "y": 187.0
       },
       "scale": 3.0
     },
     {
-      "id": "shelf/1",
-      "file": "office-art-shelf-1.png",
-      "w": 224,
-      "h": 240,
+      "id": "desk/lamp-off",
+      "file": "office-art-desk-lamp-off.png",
+      "w": 60,
+      "h": 115,
       "anchor": {
-        "x": 107.09,
-        "y": 187.64
+        "x": 30.0,
+        "y": 207.0
       },
       "scale": 3.0
     },
     {
-      "id": "shelf/2",
-      "file": "office-art-shelf-2.png",
-      "w": 172,
-      "h": 284,
+      "id": "desk/lamp-on",
+      "file": "office-art-desk-lamp-on.png",
+      "w": 122,
+      "h": 138,
       "anchor": {
-        "x": 85.86,
-        "y": 236.36
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "shelf/3",
-      "file": "office-art-shelf-3.png",
-      "w": 201,
-      "h": 245,
-      "anchor": {
-        "x": 100.49,
-        "y": 190.13
+        "x": 59.0,
+        "y": 207.0
       },
       "scale": 3.0
     },
@@ -222,105 +112,6 @@
       "anchor": {
         "x": 52.01,
         "y": 410.56
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "nook/fridge",
-      "file": "office-art-nook-fridge.png",
-      "w": 145,
-      "h": 299,
-      "anchor": {
-        "x": 72.72,
-        "y": 261.07
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "nook/counter",
-      "file": "office-art-nook-counter.png",
-      "w": 325,
-      "h": 306,
-      "anchor": {
-        "x": 162.61,
-        "y": 225.64
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "nook/cooler",
-      "file": "office-art-nook-cooler.png",
-      "w": 117,
-      "h": 260,
-      "anchor": {
-        "x": 58.16,
-        "y": 228.41
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "nook/couch",
-      "file": "office-art-nook-couch.png",
-      "w": 330,
-      "h": 259,
-      "anchor": {
-        "x": 166.18,
-        "y": 180.03
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "nook/table",
-      "file": "office-art-nook-table.png",
-      "w": 208,
-      "h": 146,
-      "anchor": {
-        "x": 104.08,
-        "y": 97.08
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "reception/desk",
-      "file": "office-art-reception-desk.png",
-      "w": 308,
-      "h": 281,
-      "anchor": {
-        "x": 153.88,
-        "y": 209.08
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "reception/endtable",
-      "file": "office-art-reception-endtable.png",
-      "w": 115,
-      "h": 105,
-      "anchor": {
-        "x": 57.75,
-        "y": 75.32
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "reception/armchair",
-      "file": "office-art-reception-armchair.png",
-      "w": 145,
-      "h": 142,
-      "anchor": {
-        "x": 72.84,
-        "y": 105.9
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "meeting/table",
-      "file": "office-art-meeting-table.png",
-      "w": 494,
-      "h": 349,
-      "anchor": {
-        "x": 246.94,
-        "y": 237.77
       },
       "scale": 3.0
     },
@@ -369,6 +160,94 @@
       "scale": 3.0
     },
     {
+      "id": "meeting/table",
+      "file": "office-art-meeting-table.png",
+      "w": 494,
+      "h": 349,
+      "anchor": {
+        "x": 246.94,
+        "y": 237.77
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/cooler",
+      "file": "office-art-nook-cooler.png",
+      "w": 117,
+      "h": 260,
+      "anchor": {
+        "x": 58.16,
+        "y": 228.41
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/couch",
+      "file": "office-art-nook-couch.png",
+      "w": 330,
+      "h": 259,
+      "anchor": {
+        "x": 166.18,
+        "y": 180.03
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/counter",
+      "file": "office-art-nook-counter.png",
+      "w": 325,
+      "h": 306,
+      "anchor": {
+        "x": 162.61,
+        "y": 225.64
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/fridge",
+      "file": "office-art-nook-fridge.png",
+      "w": 145,
+      "h": 299,
+      "anchor": {
+        "x": 72.72,
+        "y": 261.07
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/table",
+      "file": "office-art-nook-table.png",
+      "w": 208,
+      "h": 146,
+      "anchor": {
+        "x": 104.08,
+        "y": 97.08
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "plant/fiddle",
+      "file": "office-art-plant-fiddle.png",
+      "w": 118,
+      "h": 277,
+      "anchor": {
+        "x": 58.0,
+        "y": 247.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "plant/snake",
+      "file": "office-art-plant-snake.png",
+      "w": 118,
+      "h": 428,
+      "anchor": {
+        "x": 60.0,
+        "y": 338.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "printer",
       "file": "office-art-printer.png",
       "w": 172,
@@ -376,6 +255,215 @@
       "anchor": {
         "x": 86.11,
         "y": 143.06
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "reception/armchair",
+      "file": "office-art-reception-armchair.png",
+      "w": 145,
+      "h": 142,
+      "anchor": {
+        "x": 72.84,
+        "y": 105.9
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "reception/desk",
+      "file": "office-art-reception-desk.png",
+      "w": 308,
+      "h": 281,
+      "anchor": {
+        "x": 153.88,
+        "y": 209.08
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "reception/endtable",
+      "file": "office-art-reception-endtable.png",
+      "w": 115,
+      "h": 105,
+      "anchor": {
+        "x": 57.75,
+        "y": 75.32
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "room/ceiling-on",
+      "file": "office-art-room-ceiling-on.png",
+      "w": 1909,
+      "h": 1236,
+      "anchor": {
+        "x": 954.5,
+        "y": 292.21
+      },
+      "scale": 1.5
+    },
+    {
+      "id": "room/ceiling-spill",
+      "file": "office-art-room-ceiling-spill.png",
+      "w": 1909,
+      "h": 1236,
+      "anchor": {
+        "x": 954.5,
+        "y": 292.21
+      },
+      "scale": 1.5
+    },
+    {
+      "id": "room/light-day",
+      "file": "office-art-room-light-day.png",
+      "w": 1909,
+      "h": 1236,
+      "anchor": {
+        "x": 954.5,
+        "y": 292.21
+      },
+      "scale": 1.5
+    },
+    {
+      "id": "room/light-evening",
+      "file": "office-art-room-light-evening.png",
+      "w": 1909,
+      "h": 1236,
+      "anchor": {
+        "x": 954.5,
+        "y": 292.21
+      },
+      "scale": 1.5
+    },
+    {
+      "id": "room/light-night",
+      "file": "office-art-room-light-night.png",
+      "w": 1909,
+      "h": 1236,
+      "anchor": {
+        "x": 954.5,
+        "y": 292.21
+      },
+      "scale": 1.5
+    },
+    {
+      "id": "rug/meeting",
+      "file": "office-art-rug-meeting.png",
+      "w": 908,
+      "h": 440,
+      "anchor": {
+        "x": 453.94,
+        "y": 221.77
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/nook",
+      "file": "office-art-rug-nook.png",
+      "w": 642,
+      "h": 314,
+      "anchor": {
+        "x": -1370.61,
+        "y": 32.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/pod-0",
+      "file": "office-art-rug-pod-0.png",
+      "w": 1024,
+      "h": 495,
+      "anchor": {
+        "x": 512.08,
+        "y": 249.36
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/pod-1",
+      "file": "office-art-rug-pod-1.png",
+      "w": 1024,
+      "h": 495,
+      "anchor": {
+        "x": 512.18,
+        "y": 249.41
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/pod-2",
+      "file": "office-art-rug-pod-2.png",
+      "w": 664,
+      "h": 324,
+      "anchor": {
+        "x": 332.15,
+        "y": 163.88
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/pod-3",
+      "file": "office-art-rug-pod-3.png",
+      "w": 537,
+      "h": 262,
+      "anchor": {
+        "x": 268.17,
+        "y": 132.71
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "rug/reception",
+      "file": "office-art-rug-reception.png",
+      "w": 685,
+      "h": 334,
+      "anchor": {
+        "x": 342.14,
+        "y": 168.59
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "shelf/0",
+      "file": "office-art-shelf-0.png",
+      "w": 143,
+      "h": 333,
+      "anchor": {
+        "x": 71.47,
+        "y": 294.06
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "shelf/1",
+      "file": "office-art-shelf-1.png",
+      "w": 224,
+      "h": 240,
+      "anchor": {
+        "x": 107.09,
+        "y": 187.64
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "shelf/2",
+      "file": "office-art-shelf-2.png",
+      "w": 172,
+      "h": 284,
+      "anchor": {
+        "x": 85.86,
+        "y": 236.36
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "shelf/3",
+      "file": "office-art-shelf-3.png",
+      "w": 201,
+      "h": 245,
+      "anchor": {
+        "x": 100.49,
+        "y": 190.13
       },
       "scale": 3.0
     }

@@ -69,7 +69,7 @@ access; roster handles and Presence remain visible.
 
 ## The three `/live` panels
 
-- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079). Behind `?office=rendered` the scene loads pre-rendered PNG assets (`office-scene/rendered/`, source in `packages/web/art/office/`) and an item whose asset is present blits it where it painted vectors — the office re-make's build flag (spec `2026-10-20-office-realism-design.md`; increment 1 renders the desk bases only).
+- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079). Behind `?office=rendered` the scene loads pre-rendered PNG assets (`office-scene/rendered/`, source in `packages/web/art/office/`) and an item whose asset is present blits it where it painted vectors — the office re-make's build flag (spec `2026-10-20-office-realism-design.md`). Increment 2 draws the whole room from the corner camera (`CORNER_CAMERA` in `iso.ts`, carried on the `Fit`): the floor and walls as one image per day state crossfaded by `roomState.ts`, the ceiling bank as an additive overlay, every static item, and the lamp and fan per desk; people, chairs, monitors, desk props and the wall fixtures still paint on top until increments 3–4.
   Presence → placement, act → choreography, travel-intensity == notification tier. Members are drawn from a
   **procedural jointed skeleton** (ADR 133 — `skeleton.ts` solves the joints, `character.ts` paints them):
   a distance-driven walk cycle, a seated pose with the hands typing on the desk, and eased sit/stride
@@ -293,6 +293,7 @@ live/
       manifest.ts               // the render's manifest contract: parseManifest / assetById (id, file, size, anchor, px per floor unit, camera KX/KY)
       assets.ts                 // the flag (`renderedOfficeFromSearch`) and the never-rejecting loader (`loadRenderedAssets`: images by id + the files that failed)
       blit.ts                   // blitAsset: one image at a floor point through project(), its anchor on the point, sized by fit.scale / asset.scale
+      roomState.ts              // which rendered light state the room shows: roomMixFor (day/evening/night × ceiling on/off/spill, a 45-minute crossfade at each edge), figureTintFor
     speech.ts                   // the over-head speech-bubble text model
     arrivals.ts                 // who is new: pure roster diff (created / firstOnline — never-seen-online this session, created ≤24 h). Its new-arrivals polaroid corner under the wall board was retired 2026-10-12 (nick: one kind of card on the wall)
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure

@@ -80,6 +80,13 @@ export default defineConfig(({ command }) => {
   if (command === 'build') installPrerenderDiagnostics();
   return {
   ...(id ? { define: { __WEB_BUILD__: JSON.stringify(id) } } : {}),
+  build: {
+    // Vite inlines any asset under 4 KB as a base64 data URL in the importing chunk. The office's
+    // rendered art is loaded by the manifest as files, and a small sprite (a fan frame, a lamp)
+    // inlined into office-scene's chunk is counted as JS — six of them cost 22 KB of the total-JS
+    // budget on 2026-10-20. Art stays a file; everything else keeps Vite's default.
+    assetsInlineLimit: (file: string) => (file.includes('office-art-') ? false : undefined),
+  },
   // `vite dev` evaluates modules instead of bundling them, so @musterd/protocol's barrel drags
   // enforcement.ts — and its `node:crypto` import — into the browser, where Vite's externalized
   // stub throws on first access and takes /live down into its error boundary. The production build

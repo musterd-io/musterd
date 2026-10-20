@@ -1427,6 +1427,29 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
+### 2026-10-20 — `officeArtBytes` 190,600 → 2,003,000 B; `totalJsGzipBytes` 344,000 → 346,000 B: the whole rendered room (lane `01M5D8F7FT`, office realism increment 2)
+
+| Budget     | Before (main `437236bb`, same laptop) | This branch (laptop)   | Ceiling                         |
+| ---------- | ------------------------------------- | ---------------------- | ------------------------------- |
+| total JS   | 343,181 B                             | 345,395 B (+2,214)     | RAISED 344,000 → 346,000 B      |
+| office art | 165,737 B (2 files)                   | 1,742,029 B (42 files) | RAISED 190,600 → 2,003,000 B    |
+
+Increment 2 of the office re-make: behind `?office=rendered` the room is drawn from the corner
+camera and every static thing is a rendered image — the shell (floor, walls, windows) under three
+light states crossfaded over 45 minutes, two additive ceiling overlays, every item of furniture,
+the lamp and the fan per desk. The art is what it costs to carry a room as pictures: 42 PNGs at
+2× for the 1080p broadcast, the shell at half that (a box filter in `render.py`) and every file
+palette-quantized (pngquant) — the first cut was 10 MB, this is 1.7 MB, and the sprite sheets of
+increment 3 are the next thing that moves it. The JS is the camera on the `Fit`, `roomState.ts`,
+`renderedOr` and the desk overlay branches; the painters are still in, so this is a real +2.2 KB
+against the goal's constraint of net-zero by increment 4 (the entry above and this one are the
+numbers that have to come back). One trap found on the way, fixed in `vite.config.ts`: Vite
+inlines any asset under 4 KB as a data URL in the importing chunk, so six small sprites (fan
+frames, lamps) cost 22 KB of *JS* until `assetsInlineLimit` excluded `office-art-*`.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 346,000 B and office art
+  at or under 2,003,000 B with this change in; or the goal closes with total JS above 342,078 B.
+
 ### 2026-10-20 — `officeArtBytes` added at 190,600 B; `totalJsGzipBytes` 342,900 → 344,000 B: the pre-rendered office art pipeline (lane `01M5D8F3RN`, office realism increment 1)
 
 | Budget     | Before (main `0d8bb345`, same laptop) | This branch (laptop)  | Ceiling                    |
