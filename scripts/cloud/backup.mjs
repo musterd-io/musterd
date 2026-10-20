@@ -319,8 +319,28 @@ export function signR2Request({
   };
 }
 
-/** Build an R2 storage adapter (PUT, GET, LIST, DELETE) against `https://<accountId>.r2.cloudflarestorage.com/<bucket>` or via `wrangler r2 object` CLI fallback when no S3 access key is set. */
-export function createWranglerR2Store({ bucket, wranglerCmd = 'npx' }) {
+function readWranglerAuth() {
+  const candidates = [
+    join(homedir(), 'Library', 'Preferences', '.wrangler', 'config', 'default.toml'),
+    join(homedir(), '.wrangler', 'config', 'default.toml'),
+  ];
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    const text = readFileSync(p, 'utf8');
+    const token = /^oauth_token\s*=\s*"([^"]+)"/m.exec(text)?.[1];
+    if (token) return token;
+  }
+  return process.env.CLOUDFLARE_API_TOKEN?.trim() || null;
+}
+
+/** Build an R2 storage adapter (PUT, GET, LIST, DELETE) against `https://<accountId>.r2.cloudflarestorage.com/<bucket>` or via `wrangler r2 object` CLI + Cloudflare REST API fallback when no S3 access key is set. */
+export function createWranglerR2Store({
+  bucket,
+  accountId = process.env.MUSTERD_BACKUP_R2_ACCOUNT_ID?.trim() ||
+    '0f159d2f0622a4fef8e07d64d4a9bdb0',
+  wranglerCmd = 'npx',
+  fetchImpl = fetch,
+}) {
   const runWrangler = (args, input) => {
     const r = spawnSync(wranglerCmd, ['wrangler', 'r2', ...args], {
       encoding: input ? undefined : 'utf8',
@@ -361,10 +381,30 @@ export function createWranglerR2Store({ bucket, wranglerCmd = 'npx' }) {
       );
       return Buffer.isBuffer(out) ? out : Buffer.from(String(out));
     },
-    async list() {
-      // Wrangler's CLI does not have `r2 object list`, so when running in wrangler-CLI mode only
-      // put/get/delete are supported (or S3 credentials / Cloudflare API token can list).
-      return [];
+    async list(prefix = '') {
+      const token = readWranglerAuth();
+      if (!token || !accountId) return [];
+      const keys = [];
+      let cursor = undefined;
+      for (;;) {
+        const u = new URL(
+          `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects`,
+        );
+        if (prefix) u.searchParams.set('prefix', prefix);
+        if (cursor) u.searchParams.set('cursor', cursor);
+        const res = await fetchImpl(u.toString(), {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Cloudflare R2 list ${bucket} → HTTP ${res.status}`);
+        const body = await res.json();
+        for (const obj of body.result ?? []) {
+          if (typeof obj?.key === 'string') keys.push(obj.key);
+        }
+        const nextCursor = body.result_info?.cursor;
+        if (!body.result_info?.is_truncated || !nextCursor) break;
+        cursor = nextCursor;
+      }
+      return keys;
     },
     async delete(key) {
       runWrangler(['object', 'delete', `${bucket}/${key.replace(/^\/+/, '')}`, '--remote']);
@@ -509,10 +549,93 @@ function readEnvFile(path) {
   return out;
 }
 
+/** Build the macOS LaunchAgent plist for the nightly unattended R2 backup (`03:17` local). */
+export function buildBackupLaunchdPlist({
+  nodePath = process.execPath,
+  repoRoot = fileURLToPath(new URL('../..', import.meta.url)),
+  logPath = join(homedir(), '.musterd', 'cloud', 'backup.log'),
+  hour = 3,
+  minute = 17,
+} = {}) {
+  const scriptPath = join(repoRoot, 'scripts', 'cloud', 'backup.mjs');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>studio.sandrise.musterd-cloud-backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${nodePath}</string>
+    <string>${scriptPath}</string>
+    <string>--wrangler</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${repoRoot}</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>${hour}</integer>
+    <key>Minute</key>
+    <integer>${minute}</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${dirname(nodePath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${logPath}</string>
+  <key>StandardErrorPath</key>
+  <string>${logPath}</string>
+</dict>
+</plist>
+`;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const defaultKeyPath = join(homedir(), '.musterd', 'cloud', 'backup.key');
   const defaultNeonEnvPath = join(homedir(), '.musterd', 'cloud', 'neon.env');
+
+  if (args.includes('--install-launchd')) {
+    const plistDir = join(homedir(), 'Library', 'LaunchAgents');
+    const plistPath = join(plistDir, 'studio.sandrise.musterd-cloud-backup.plist');
+    const logPath = join(homedir(), '.musterd', 'cloud', 'backup.log');
+    const runtimeRoot = join(homedir(), '.musterd', 'runtime');
+    const repoRoot = existsSync(join(runtimeRoot, 'scripts', 'cloud', 'backup.mjs'))
+      ? runtimeRoot
+      : fileURLToPath(new URL('../..', import.meta.url));
+    mkdirSync(plistDir, { recursive: true });
+    mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
+    writeFileSync(plistPath, buildBackupLaunchdPlist({ repoRoot, logPath }), { mode: 0o644 });
+    spawnSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
+    const load = spawnSync('launchctl', ['load', plistPath], { encoding: 'utf8' });
+    if (load.status !== 0) {
+      throw new Error(`launchctl load failed (exit ${load.status}): ${load.stderr ?? ''}`);
+    }
+    if (args.includes('--kickstart')) {
+      const uid = process.getuid ? process.getuid() : 501;
+      const ks = spawnSync(
+        'launchctl',
+        ['kickstart', '-k', `gui/${uid}/studio.sandrise.musterd-cloud-backup`],
+        { encoding: 'utf8' },
+      );
+      if (ks.status !== 0) {
+        throw new Error(`launchctl kickstart failed (exit ${ks.status}): ${ks.stderr ?? ''}`);
+      }
+    }
+    console.log(
+      JSON.stringify({
+        msg: 'cloud_backup_schedule_installed',
+        label: 'studio.sandrise.musterd-cloud-backup',
+        plist: plistPath,
+        log: logPath,
+        schedule: '03:17 daily',
+      }),
+    );
+    return;
+  }
 
   if (args.includes('--keygen')) {
     if (existsSync(defaultKeyPath) && !args.includes('--force')) {
