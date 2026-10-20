@@ -74,7 +74,18 @@ export interface RelayPendingRow {
   expires_at: number;
 }
 
+/** One Slack install record held for a daemon (ADR 668 decision 2, increment 9). */
+export interface RelaySlackInstall {
+  slack_team_id: string;
+  bot_token: string;
+  installer_slack_id: string;
+  state: string;
+  installed_at: number;
+}
+
 export type DaemonFrame =
+  | { protocol: 1; type: 'install_sync' }
+  | { protocol: 1; type: 'install_ack'; slack_team_ids: string[] }
   | { protocol: 1; type: 'reconcile'; pending: RelayPendingRow[] }
   | {
       protocol: 1;
@@ -177,6 +188,16 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
     return null;
   }
   if (!isRecord(v) || v['protocol'] !== RELAY_PROTOCOL_VERSION) return null;
+  if (v['type'] === 'install_sync') return { protocol: 1, type: 'install_sync' };
+  if (v['type'] === 'install_ack') {
+    if (
+      !Array.isArray(v['slack_team_ids']) ||
+      v['slack_team_ids'].length > 32 ||
+      !v['slack_team_ids'].every((id) => typeof id === 'string' && id.length > 0 && id.length <= 64)
+    )
+      return null;
+    return { protocol: 1, type: 'install_ack', slack_team_ids: v['slack_team_ids'] as string[] };
+  }
   if (v['type'] === 'reconcile') {
     if (!Array.isArray(v['pending']) || !v['pending'].every(isPending)) return null;
     if (v['pending'].length > RELAY_MAX_PENDING) return null;

@@ -880,6 +880,30 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
     sqlite: scrubPolicyAuditSqlite,
     postgres: scrubPolicyAuditPostgres,
   },
+  {
+    // The distributed Slack app (ADR 668 decisions 2/5, lane 01M50ZQGWYNZKNWDNDDRP41W5B):
+    // one install record per workspace (its per-install bot token, replacing the team-policy
+    // token) and the one-time install states a human minted here, stored only as sha256.
+    // The token is a credential: it is never audited, logged, exported or shown (hard rule 5).
+    version: 119,
+    sql: `CREATE TABLE IF NOT EXISTS slack_installs (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  slack_team_id TEXT NOT NULL,
+  bot_token TEXT NOT NULL,
+  installer_slack_id TEXT NOT NULL,
+  installed_at BIGINT NOT NULL,
+  revoked_at BIGINT,
+  PRIMARY KEY (team_id, slack_team_id)
+);
+CREATE TABLE IF NOT EXISTS slack_install_requests (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  state_hash TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  consumed_at BIGINT,
+  PRIMARY KEY (team_id, state_hash)
+)`,
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

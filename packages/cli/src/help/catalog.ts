@@ -1203,8 +1203,8 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'channels',
     signature:
-      'pair --channel <name> | pairings | confirm <id> | reject <id> | bindings | revoke <id> | kill-switch',
-    summary: 'pair an away channel to you — bindings, revoke, and the kill switch',
+      'pair --channel <name> | pairings | confirm <id> | reject <id> | bindings | revoke <id> | slack-install | slack-installs | slack-revoke <id> | kill-switch',
+    summary: 'pair an away channel to you — bindings, revoke, Slack install, and the kill switch',
     group: 'team',
     detail:
       'ADR 618 §7. Pairing binds an immutable provider identity to you in the daemon: `pair` mints ' +

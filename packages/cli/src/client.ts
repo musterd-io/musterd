@@ -1321,6 +1321,41 @@ export class HttpClient {
     }) as Promise<{ pairing_id: string; nonce: string; check_code: string; expires_at: number }>;
   }
 
+  /** ADR 668 decision 2 (increment 9): mint the one-time Slack install link for this team. */
+  async startSlackInstall(slug: string): Promise<{ install_url: string; expires_at: number }> {
+    return this.request('POST', `/teams/${slug}/channels/slack/install`) as Promise<{
+      install_url: string;
+      expires_at: number;
+    }>;
+  }
+
+  /** ADR 668 decision 2: the team's Slack installs — routing facts only, never a token. */
+  async listSlackInstalls(slug: string): Promise<{
+    installs: {
+      slack_team_id: string;
+      installer_slack_id: string;
+      installed_at: number;
+      revoked_at: number | null;
+    }[];
+  }> {
+    return this.request('GET', `/teams/${slug}/channels/slack/installs`) as Promise<{
+      installs: {
+        slack_team_id: string;
+        installer_slack_id: string;
+        installed_at: number;
+        revoked_at: number | null;
+      }[];
+    }>;
+  }
+
+  /** ADR 668 decision 2: revoke one workspace's install; its token stops working here. */
+  async revokeSlackInstall(slug: string, slackTeamId: string): Promise<{ ok: true }> {
+    return this.request(
+      'POST',
+      `/teams/${slug}/channels/slack/installs/${encodeURIComponent(slackTeamId)}/revoke`,
+    ) as Promise<{ ok: true }>;
+  }
+
   /** ADR 618 §7: pairings staged for this human's confirmation — daemon-held identity only. */
   async listChannelPairings(slug: string): Promise<{ pairings: ChannelPairing[] }> {
     return this.request('GET', `/teams/${slug}/channels/pairings`) as Promise<{
