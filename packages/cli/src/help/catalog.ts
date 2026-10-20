@@ -850,15 +850,15 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'authority',
     signature:
-      'enroll [--kind platform | --passkey] | keys | revoke <key-id> | approve --act <act> --target <t> --payload <json> [--passkey]',
+      'enroll [--confirmed-by <admin>] | keys | revoke <key-id> | approve --act <act> --target <t> --payload <json>',
     summary: 'your device keys for high-authority acts (ADR 662)',
     group: 'team',
     detail:
-      'A device key binds your human authority to a key only you hold. `enroll` is the explicit ' +
-      'human path: a one-time code from your own credential enrolls a fresh keypair (private half ' +
-      'in a 0600 file beside your config, never sent anywhere). Once enrolled, high-authority acts ' +
+      'A device key binds your human authority to a passkey only you can use. `enroll` runs the ' +
+      'passkey ceremony on the daemon’s own origin; with no standing key of yours, once the team ' +
+      'has keys, a human admin countersigns (`--confirmed-by`). Once enrolled, high-authority acts ' +
       '— human accepts, policy, grants, minting — need that key’s signature. `revoke` retires a key ' +
-      'by another key’s signature, or by enrollment code when the device is lost.',
+      'by a standing key’s signature.',
     examples: ['musterd authority enroll', 'musterd authority keys'],
   },
   {

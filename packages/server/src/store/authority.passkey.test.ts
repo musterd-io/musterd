@@ -1,9 +1,11 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
+import { descriptorSigningBytes } from '@musterd/protocol';
 import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
   buildDescriptor,
+  enrollDeviceKey,
   enrollPasskeyGuarded,
   getParkedProof,
   issueEnrollmentChallenge,
@@ -147,5 +149,101 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
         proof: parked!,
       }),
     ).resolves.toEqual({ ok: true, assurance: 'A2', keyId, kind: 'passkey' });
+  });
+
+  it('past genesis, a fabricated registration enrolls nothing without an admin countersign', async () => {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const root = (await addMember(db, team, { name: 'root', kind: 'human' })).row;
+
+    // Root already has a standing key: genesis is over for this team.
+    const rootKp = generateKeyPairSync('ed25519');
+    const rootKey = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: root.id,
+      publicKey: rootKp.publicKey.export({ format: 'der', type: 'spki' }).toString('base64url'),
+      kind: 'platform',
+    });
+
+    // Lazara's fabricated registration: a self-generated Ed25519 COSE key, flags
+    // UP|UV|AT, fmt none — no authenticator anywhere. It verifies as a ceremony…
+    const { publicKey } = generateKeyPairSync('ed25519');
+    const jwk = publicKey.export({ format: 'jwk' }) as { x: string };
+    const cose = encMap([
+      [encInt(1), encInt(1)],
+      [encInt(3), encInt(-8)],
+      [encInt(-1), encInt(6)],
+      [encInt(-2), encBytes(Buffer.from(jwk.x, 'base64url'))],
+    ]);
+    const credId = Buffer.from('fabricated-credential');
+    const rpHash = createHash('sha256').update('example.com').digest();
+    const regAuthData = Buffer.concat([
+      rpHash,
+      Buffer.from([0x45]),
+      Buffer.from([0, 0, 0, 0]),
+      Buffer.alloc(16),
+      Buffer.from([0, credId.length]),
+      credId,
+      cose,
+    ]);
+    const attestationObject = encMap([
+      [encText('fmt'), encText('none')],
+      [encText('attStmt'), encMap([])],
+      [encText('authData'), encBytes(regAuthData)],
+    ]);
+    const clientData = (type: string, challenge: string) =>
+      JSON.stringify({ type, challenge, origin: 'https://example.com', crossOrigin: false });
+    const issued = await issueEnrollmentChallenge(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      actor: 'nick',
+    });
+    const attempt = (countersign?: {
+      confirmer: { id: string; name: string; kind: string };
+      isAdmin: boolean;
+      proof?: { key_id: string; nonce: string; signature: string };
+    }) =>
+      enrollPasskeyGuarded(db, {
+        teamId: team.id,
+        audience: team.slug,
+        member: nick,
+        challenge: issued.challenge,
+        expectedOrigins: ['https://example.com'],
+        countersign,
+        registration: {
+          attestationObject,
+          clientDataJson: clientData('webauthn.create', issued.challenge),
+        },
+      });
+
+    // …but enrolls nothing: no countersign, and none from a non-admin, both refuse.
+    await expect(attempt()).resolves.toEqual({ ok: false, reason: 'countersign_required' });
+    await expect(attempt({ confirmer: nick, isAdmin: false })).resolves.toEqual({
+      ok: false,
+      reason: 'countersign_required',
+    });
+
+    // Root, a human admin with a standing key, countersigns — now it enrolls.
+    const d = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: root.id,
+      actor: 'root',
+      act: 'device_key_admin',
+      target: 'nick',
+      payload: { action: 'enroll', kind: 'passkey', member: 'nick' },
+    });
+    const proof = {
+      key_id: rootKey.id,
+      nonce: d.nonce,
+      signature: cryptoSign(
+        null,
+        Buffer.from(descriptorSigningBytes(d), 'utf8'),
+        rootKp.privateKey,
+      ).toString('base64url'),
+    };
+    const enrolled = await attempt({ confirmer: root, isAdmin: true, proof });
+    expect(enrolled.ok).toBe(true);
   });
 });

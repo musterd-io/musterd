@@ -1418,6 +1418,7 @@ export class HttpClient {
       actor: string;
       challenge: string;
       approval?: AuthorityProof;
+      countersign?: { confirmer: string; approval: AuthorityProof };
       registration: { attestation_object: string; client_data_json: string };
     },
   ): Promise<{ key: { id: string; kind: string } }> {

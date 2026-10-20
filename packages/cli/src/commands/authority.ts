@@ -5,7 +5,7 @@ import { success } from '../render/ui.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd authority enroll\n' +
+  'usage: musterd authority enroll [--confirmed-by <admin>]\n' +
   '       musterd authority keys\n' +
   '       musterd authority revoke <key-id>\n' +
   '       musterd authority approve --act <act> --target <target> --payload <json>';
@@ -35,8 +35,14 @@ async function collectApproval(
   act: string,
   target: string,
   payload: unknown,
+  actor?: string,
 ): Promise<Proof> {
-  const { descriptor } = await http.createAuthorityDescriptor(team, { act, target, payload });
+  const { descriptor } = await http.createAuthorityDescriptor(team, {
+    act,
+    target,
+    payload,
+    ...(actor ? { actor } : {}),
+  });
   const d = descriptor as ApprovalDescriptor;
   process.stdout.write(
     `descriptor (built by the server):\n  actor:  ${d.actor}\n  act:    ${d.act}\n` +
@@ -69,18 +75,39 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     const beforeIds = new Set(before.keys.map((k) => k.id));
     const active = before.keys.filter((k) => k.revoked_at === null);
     let approval: Proof | undefined;
+    let countersign: { confirmer: string; approval: Proof } | undefined;
+    const confirmedBy = flagStr(parsed.flags, 'confirmed-by');
     if (active.length > 0) {
       process.stdout.write('A device key already stands — the new passkey needs its approval.\n');
       approval = await collectApproval(http, team, 'device_key_admin', member, {
         action: 'enroll',
         kind: 'passkey',
       });
+    } else if (confirmedBy) {
+      process.stdout.write(
+        `No standing key of yours — ${confirmedBy} (a human admin) must countersign.\n` +
+          `They open the approval link and approve with their passkey.\n`,
+      );
+      const proof = await collectApproval(
+        http,
+        team,
+        'device_key_admin',
+        member,
+        { action: 'enroll', kind: 'passkey', member },
+        confirmedBy,
+      );
+      countersign = { confirmer: confirmedBy, approval: proof };
     }
     const { challenge } = await http.issueEnrollmentChallenge(team);
+    const fragment = approval
+      ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}`
+      : countersign
+        ? `#countersign=${Buffer.from(JSON.stringify(countersign)).toString('base64url')}`
+        : '';
     const url =
       `${http.server}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
-      (approval ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}` : '');
+      fragment;
     process.stdout.write(`Open ${url}\nwaiting for the passkey ceremony…\n`);
     const deadline = Date.now() + 4 * 60 * 1000;
     for (;;) {
@@ -96,7 +123,13 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
         return 0;
       }
       if (Date.now() > deadline) {
-        throw new CliError('no passkey was enrolled in 4 minutes', 1);
+        throw new CliError(
+          confirmedBy || active.length > 0
+            ? 'no passkey was enrolled in 4 minutes'
+            : 'no passkey was enrolled in 4 minutes — if this team already has device keys, ' +
+                'a human admin must countersign: re-run with --confirmed-by <admin>',
+          1,
+        );
       }
       await new Promise((r) => setTimeout(r, 2000));
     }

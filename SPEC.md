@@ -1050,10 +1050,13 @@ advisory for every listed act.
   No signature, nonce or descriptor payload is ever logged.
 - Device keys (decision 6, passkey-first): `POST /teams/:slug/authority/enrollment-challenges`
   → `201 {challenge, expires_at}` — stored only as sha256, ten minutes, one use. The
-  challenge binds a ceremony and authorizes nothing by itself: the first key, and
-  recovery when every key is lost, is a user-verified WebAuthn registration over it
-  (`POST /teams/:slug/authority/passkeys`), so a Bearer [REDACTED] agent can read enrolls
-  nothing. `POST /teams/:slug/authority/keys` `{public_key, kind, approval?}` enrolls a
+  challenge binds a ceremony and authorizes nothing by itself: a user-verified WebAuthn
+  registration over it (`POST /teams/:slug/authority/passkeys`) enrolls the first key
+  while the team has no device key at all (genesis); past genesis, a member with zero
+  active keys — first enrollment or lost-everything recovery — additionally needs
+  `countersign: {confirmer, approval}`: a different human admin's standing-key A2 over
+  `device_key_admin {action:'enroll', kind:'passkey', member}`, since an unattested
+  ceremony is fabricable by a Bearer-holding agent. No countersigner, no recovery. `POST /teams/:slug/authority/keys` `{public_key, kind, approval?}` enrolls a
   raw-key device only behind a standing key's A2 approval over `device_key_admin`, and
   refuses `passkey_first` while no key stands. An agent member can never enroll. `GET
   /teams/:slug/authority/keys` lists the caller's own keys; `POST
@@ -1063,7 +1066,7 @@ advisory for every listed act.
   `device_key.enrolled|revoked|enrollment_challenge`, never a challenge or key.
 - Authenticators (decision 5): `GET /authority/passkey` and `GET /authority/approve` are
   small pages the daemon serves from its own origin — never the relay. Passkey enrollment
-  is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, registration}`: a
+  is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, countersign?, registration}`: a
   WebAuthn registration whose challenge is the enrollment challenge, verified server-side
   (challenge, user verification, origin pinned to the daemon's configured origins —
   its own origin plus `MUSTERD_WEBAUTHN_ORIGINS` — with the rpIdHash checked against
