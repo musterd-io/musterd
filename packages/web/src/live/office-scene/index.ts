@@ -2634,13 +2634,17 @@ export function mountOffice(
     // Only stir a calm, visible room; otherwise let this slot pass and wait for the next one. The
     // decision itself is pure over roster-derived inputs (stanley's E1 review item): local scene
     // state may veto PLAYING a beat, but it can never change WHICH beat every viewer chose.
-    if (!reduced && !suspended && VISIBLE() && quiet()) {
-      const slot = slotAt(Date.now());
-      const nodes = actors.nodes();
-      // The pool is pure over placements + nodes (ambientSeed.ts): desk members for gestures, the
-      // non-working ones for errands, and chat pairs with nobody working (ADR 464 §3.1).
-      const pool = ambientPool(placements, nodes);
-      const decision = decideAmbient(teamName, slot, pool);
+    const slot = slotAt(Date.now());
+    const nodes = actors.nodes();
+    // The pool is pure over placements + nodes (ambientSeed.ts): seated members for gestures, the
+    // non-working ones for errands, and chat pairs with nobody working (ADR 464 §3.1).
+    const pool = ambientPool(placements, nodes);
+    const decision = decideAmbient(teamName, slot, pool);
+    // A floor walk (ADR 686) needs only that nobody else is on their feet. A gesture or a cue's
+    // afterglow holding `quiet()` false would otherwise spend the floor's slot on a room that looked
+    // still, which is exactly the gap the floor exists to close.
+    const floorMayPlay = 'floor' in decision && decision.floor === true && !actors.walkingAny() && cues.length === 0;
+    if (!reduced && !suspended && VISIBLE() && (quiet() || floorMayPlay)) {
       let played = false;
       if (decision.kind === 'pet') {
         // The pet's beat: it wakes, stretches, pads to a fresh nap spot (a sunbeam by day, a rug by
@@ -2663,6 +2667,10 @@ export function mountOffice(
         // The aisle meet (nick, 2026-10-12): two idle members get up, meet between their desks, talk,
         // and go back — the room reading as a team rather than parallel solo workers.
         played = actors.aisleMeet(decision.a, decision.b, slotRng(teamName, slot, 'meet'));
+        // A meet that cannot happen here (the two would never reach each other) still walks: the
+        // first of them goes for coffee instead. The walk floor counts a decided meet as a walk, so a
+        // meet that played nothing would leave the room still for a floor and a half.
+        if (!played) played = coffeeStroll(decision.a, slot);
         logAmbient({ slot, kind: 'meet', pair: [decision.a, decision.b], played });
         if (played) ensureLoop();
       } else if (decision.kind === 'member') {
@@ -2670,6 +2678,8 @@ export function mountOffice(
           decision.who,
           slot,
           pool.errands?.includes(decision.who) ?? true,
+          'beat',
+          decision.walk === true,
         );
         logAmbient({ slot, kind: 'member', who: decision.who, played });
         if (played) ensureLoop();
@@ -2715,7 +2725,14 @@ export function mountOffice(
    * coffee-stroll staying in the mix at ~1 in 5. Weighted rather than uniform so the broad, always-valid
    * beats (stretch/glance/scratch/chin/lean) carry the room and the chair theatrics stay occasional.
    */
-  function playAmbientBeat(who: string, slot: number, mayErrand = true, purpose = 'beat'): boolean {
+  function playAmbientBeat(
+    who: string,
+    slot: number,
+    mayErrand = true,
+    purpose = 'beat',
+    /** The walk floor chose this beat (`WALK_FLOOR_SLOTS`): play an errand, never a seated gesture. */
+    walkOnly = false,
+  ): boolean {
     const pl = placements.get(who);
     const deskSlot = pl?.kind === 'desk' ? pl.slot : null;
     const casters = deskSlot !== null; // every desk chair rolls now (the `stool` kind is gone)
@@ -2775,6 +2792,24 @@ export function mountOffice(
         [9, () => actors.gestureBeat(who, GESTURE.swivel)],
         [5, () => actors.gestureBeat(who, GESTURE.roll)],
       );
+    if (walkOnly && mayErrand) {
+      // The floor's beat is a trip, not a fidget: the same weighted pick, over the errands only. Water
+      // needs a bottle on that desk, so a lounging member draws from the other three.
+      const errands: Array<[number, () => boolean]> = [
+        [15, () => coffeeStroll(who, slot)],
+        [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))],
+        [7, () => actors.errandFridge(who, slotRng(teamName, slot, 'fridge')) !== null],
+      ];
+      if (water) errands.push([8, () => waterStroll(who, slot)]);
+      // A floor walk must WALK. A trip this browser cannot start (the lounge full for the fridge, say)
+      // falls back to the coffee run, which needs nothing but a free path. Which errand plays can then
+      // differ between viewers for one slot; that someone walks cannot.
+      beats.splice(
+        0,
+        beats.length,
+        ...errands.map(([w, play]) => [w, () => play() || coffeeStroll(who, slot)] as [number, () => boolean]),
+      );
+    }
     let total = 0;
     for (const [w] of beats) total += w;
     // `purpose` keeps a companion's roll apart from the slot's own beat, so the two never mirror.

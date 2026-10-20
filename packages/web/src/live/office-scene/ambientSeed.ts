@@ -89,7 +89,10 @@ export interface AmbientPool {
  * The pool every viewer's shared decision draws from (E1 spec §2), as a pure function of the
  * roster-derived inputs both viewers hold — placements and nodes — so two browsers keep agreeing.
  *
- * - `members`: present desk members (the scheduler's desk test, unchanged) — the micro-gesture pool.
+ * - `members`: present members seated at a desk OR on the leisure furniture — the micro-gesture pool.
+ *   Desk-only until 2026-10-20 (the E1a "desk test, unchanged"): idle members are seated on the
+ *   leisure furniture first, so a desk-only pool left exactly the people allowed to walk without a
+ *   beat — measured on /office-preview at 14 seats with ten idle, not one walk in ten minutes.
  * - `errands`: the members above whose posture is not `working` (ADR 464 §3.1).
  * - `pairs`: desk-chat neighbours where NEITHER is working — a chat pulls two people off their
  *   screens, and a working member's screen is the point.
@@ -100,7 +103,7 @@ export function ambientPool(
 ): AmbientPool {
   const members: string[] = [];
   for (const [name, pl] of placements) {
-    if (pl.kind === 'desk' && !pl.owned && nodes.has(name)) members.push(name);
+    if (((pl.kind === 'desk' && !pl.owned) || pl.kind === 'leisure') && nodes.has(name)) members.push(name);
   }
   const working = (n: string) => nodes.get(n)?.posture === 'working';
   return {
@@ -119,8 +122,11 @@ export type AmbientDecision =
   /** Two idle members meet in the aisle for a word and go back (nick, 2026-10-12: the room should
    *  read as a team, not parallel solo workers). Both come from `errands` — a working member's
    *  screen is the point. */
-  | ({ kind: 'meet'; a: string; b: string } & Companion)
-  | ({ kind: 'member'; who: string } & Companion);
+  | ({ kind: 'meet'; a: string; b: string; floor?: true } & Companion)
+  /** `walk`: play one of `who`'s errands, never a seated gesture. `floor`: the walk floor
+   *  (`WALK_FLOOR_SLOTS`) overrode this slot's draw, so it is not part of the lattice's rates.
+   *  `offTurn`: the walker was picked outside the gesture rotation (the next turn was working). */
+  | ({ kind: 'member'; who: string; walk?: true; floor?: true; offTurn?: true } & Companion);
 
 /**
  * Occupancy → per-slot fire probability (E1b, spec §3): a populated room reads at ~2.5–3
@@ -170,15 +176,31 @@ export function ambientFireP(members: number): number {
   return AMBIENT_P_QUIET + t * (AMBIENT_P_FULL - AMBIENT_P_QUIET);
 }
 
+/**
+ * The walk floor (nick, 2026-10-20: the stream "looked frozen"). After this many slots (~50 s) with no
+ * walking beat DECIDED, the next slot is a walk: an aisle meet, or one idle member's errand. The rest of
+ * the lattice leaves walking to chance: about one fired beat in six, and none at all in a room where
+ * everyone idle sat on the couch and everyone at a desk was working. Counted over the decided
+ * sequence, which every viewer replays identically, so the floor is shared. A viewer whose room was
+ * busy and skipped the slot still had motion on screen, which is the floor's whole point.
+ */
+export const WALK_FLOOR_SLOTS = 5;
+
 /** Slots in one coverage window — ten minutes at `AMBIENT_SLOT_MS`. */
 export const COVERAGE_WINDOW_SLOTS = 60;
 
 /**
- * The per-slot roll, before the single-member beats are made fair (see `decideAmbient`). Pure over
- * (team, slot, pool); the actor of a `member` decision here is the uniform draw, which `decideAmbient`
- * replaces.
+ * The per-slot roll, before the single-member beats are made fair and before the walk floor (see
+ * `decideAmbient`). Pure over (team, slot, pool); the actor of a `member` decision here is the uniform
+ * draw, which `decideAmbient` replaces. Exported so the lattice's own rates can be tested without the
+ * floor's overrides in the way.
  */
-function rollDecision(team: string, slot: number, pool: AmbientPool, members: string[]): AmbientDecision {
+export function rollDecision(
+  team: string,
+  slot: number,
+  pool: AmbientPool,
+  members: string[],
+): AmbientDecision {
   if (members.length === 0) return { kind: 'none' };
   // Occupancy comes from the canonical pool, so the probability is as roster-derived as the pick it
   // gates: two viewers of the same team draw the same fire decision as well as the same beat.
@@ -255,30 +277,78 @@ export function decideAmbient(team: string, slot: number, pool: AmbientPool): Am
     return o;
   };
   let turn = 0;
-  let deferred: string | null = null; // a turn passed over because its member was busy — it goes next
-  const take = (): string => {
-    if (deferred !== null) {
-      const who = deferred;
-      deferred = null;
-      return who;
+  // Turns passed over because their member was busy (or had just gone): they go next, in order.
+  const deferred: string[] = [];
+  let lastTaken: string | null = null;
+  const fresh = (k: number): string => order(Math.floor(k / n))[k % n]!;
+  // Never the same member twice running, judged on who was actually TAKEN. The lap guard above only
+  // sees each lap's shuffled order, and a deferred turn can change who really went last, so a lap
+  // could still open on the member who had just gone (surfaced by the walk floor, 2026-10-20). `skip`
+  // is the slot's own busy actors: a turn landing on one of them, or on the last taken, waits.
+  const blocked = (who: string, skip: readonly string[]) =>
+    n >= 2 && (who === lastTaken || skip.includes(who));
+  const take = (skip: readonly string[] = []): string => {
+    const i = deferred.findIndex((w) => !blocked(w, skip));
+    let who: string;
+    if (i >= 0) who = deferred.splice(i, 1)[0]!;
+    else {
+      // Bounded: at most n fresh turns, and with n ≥ 2 one of them clears the guard unless every
+      // member is busy, in which case the last one drawn goes anyway.
+      who = fresh(turn++);
+      for (let k = 0; k < n && blocked(who, skip); k++) {
+        deferred.push(who);
+        who = fresh(turn++);
+      }
     }
-    const who = order(Math.floor(turn / n))[turn % n]!;
-    turn++;
+    lastTaken = who;
     return who;
   };
+  /** Who `take()` would return next, without taking it. */
+  const upcoming = (): string => {
+    const d = deferred.find((w) => !blocked(w, []));
+    if (d !== undefined) return d;
+    let k = turn;
+    let who = fresh(k);
+    while (n >= 2 && who === lastTaken) who = fresh(++k);
+    return who;
+  };
+  const walkers = [...(pool.errands ?? members)].sort();
+  // Each window opens with a walk due. The previous window already kept its own last
+  // WALK_FLOOR_SLOTS - 1 slots from all being still, so a still stretch never straddles the boundary,
+  // and every window starts the same way for every viewer.
+  let lastWalk = w0 - WALK_FLOOR_SLOTS;
   for (let t = w0; ; t++) {
     let d = rollDecision(team, t, pool, members);
-    if (d.kind === 'member' && n >= 2) d = { kind: 'member', who: take() };
+    // The floor decides BEFORE a rotation turn is taken: an overridden slot must not spend a member's
+    // gesture turn, or the rotation stops being a permutation.
+    const floorDue = d.kind !== 'meet' && walkers.length > 0 && t - lastWalk >= WALK_FLOOR_SLOTS;
+    if (!floorDue && d.kind === 'member' && n >= 2) d = { kind: 'member', who: take() };
+    if (floorDue) {
+      if (walkers.length >= 2 && roll(team, t, 'floor-meet') < 0.35) {
+        const i = Math.floor(roll(team, t, 'floor-a') * walkers.length);
+        const j = (i + 1 + Math.floor(roll(team, t, 'floor-b') * (walkers.length - 1))) % walkers.length;
+        d = { kind: 'meet', a: walkers[i]!, b: walkers[j]!, floor: true };
+      } else if (n >= 2 && walkers.includes(upcoming())) {
+        // The next turn may walk: the floor spends that turn on a trip instead of a fidget, so the
+        // rotation's coverage holds (a member out on an errand is not a still desk).
+        d = { kind: 'member', who: take(), walk: true, floor: true };
+      } else {
+        // The next turn is a working member, who keeps their desk: an idle member goes instead, off turn.
+        d = {
+          kind: 'member',
+          who: walkers[Math.floor(roll(team, t, 'floor-who') * walkers.length)]!,
+          walk: true,
+          floor: true,
+          offTurn: true,
+        };
+      }
+    }
+    if (d.kind === 'meet' || (d.kind === 'member' && d.walk)) lastWalk = t;
     const pc = d.kind === 'pet' || d.kind === 'meet' ? COMPANION_P_MOVING : COMPANION_P_STILL;
     if (d.kind !== 'none' && n >= COMPANION_MIN_ROOM && roll(team, t, 'companion') < pc) {
       const busy = d.kind === 'member' ? [d.who] : d.kind === 'pet' ? [] : [d.a, d.b];
-      let c = take();
-      if (busy.includes(c)) {
-        // The beat's own actor is busy: the next member goes now and this one keeps the next turn.
-        const next = take();
-        deferred = c;
-        c = next;
-      }
+      // The beat's own actors are busy: the next free member goes now, and a skipped one keeps the next turn.
+      const c = take(busy);
       if (!busy.includes(c)) d = { ...d, companion: c };
     }
     if (t === slot) return d;
