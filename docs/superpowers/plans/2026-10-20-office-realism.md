@@ -6,7 +6,7 @@
 
 **Architecture:** A Blender scene and a Python render script produce PNG layers (room, furniture, per-desk overlays, light states) and figure sprite sheets plus a JSON manifest; a new `office-scene/rendered/` module loads them and blits them through the existing depth sort and sprite cache, behind `?office=rendered`, while the actor state machine, layout and nav stay untouched. The camera stays orthographic with new corner constants. When the rendered path reaches parity the flag and the painters go.
 
-**Tech Stack:** TypeScript, Canvas 2D, Vite asset imports (`?url`), vitest with the recording context (`render.test.ts`), Blender 4.x + Python (art tool only, not a runtime dependency), `scripts/perf/check-budgets.ts`, `scripts/perf/scene-pixel-check.mjs`, `scripts/perf/broadcast-baseline.mjs`.
+**Tech Stack:** TypeScript, Canvas 2D, Vite asset imports (`?url`), vitest with the recording context (`render.test.ts`), Blender 4.x + Python with a free isometric-render add-on, Mixamo auto-rig + clips via the Mixamo Rig 5 add-on (art tools only, not runtime dependencies; research 2026-10-20 in the PR #3034 thread), `scripts/perf/check-budgets.ts`, `scripts/perf/scene-pixel-check.mjs`, `scripts/perf/broadcast-baseline.mjs`.
 
 **Spec:** `docs/superpowers/specs/2026-10-20-office-realism-design.md`
 
@@ -152,13 +152,14 @@
 
 - [ ] **Step 1: Install Blender** (`brew install --cask blender`); record the version in the README. This is the operator's machine, not CI; CI never renders.
 - [ ] **Step 2: Model one desk** in `scene.blend` at `DESK_W × DESK_D × DESK_UP` floor units (100 × 68 × 36), matte oak, with the camera set so that one floor unit along `lx` projects to `KX_CORNER` px and along `ly` to `KY_CORNER` px at scale 1 (values from Task 5; for this increment use today's `KX = 0.70710678`, `KY = 0.35355339` so the blit lines up with the painted room).
-- [ ] **Step 3: Write `render.py`**: iterate the `export` collection, isolate each object, render to PNG with film transparent, compute the anchor as the projected floor-point of the object's origin, write the manifest.
-- [ ] **Step 4: Render** and commit the outputs; add `packages/web/src/live/office-scene/rendered/assets/*.png binary` to `.gitattributes`.
-- [ ] **Step 5: Write the failing budget check** — a unit test is not practical for this script; instead set `officeArtBytes: 1` in `budgets.json`, run `pnpm --filter @musterd/web build && pnpm perf:check`, expect the new failure line naming the desk PNG.
-- [ ] **Step 6: Implement** the check; set `officeArtBytes` to measured + 15%; log the measurement in `web-live-baseline.md` under a dated heading with the lane id.
-- [ ] **Step 7: Verify in the browser**: `pnpm dev` → `http://localhost:5174/office-preview?office=rendered` shows the rendered desk base under every desk's painted monitor and props, aligned to the painted room; without the flag nothing changes. Capture both for the PR.
-- [ ] **Step 8: Docs**: `08-web.md`'s office-scene file tree gains the `rendered/` lines and `art/office/` is described (the arch-tree check fails otherwise).
-- [ ] **Step 9: Run the fast gates** `pnpm typecheck && pnpm lint && pnpm format:check`; commit `feat(office): Blender pipeline, first rendered desk, officeArtBytes budget (lane 01M5D8F3RN)`; open the PR; `lane_submit` after merge.
+- [ ] **Step 3: Evaluate the free omnidirectional isometric render add-on** (itch.io, April 2025; packs sheets via Pillow) and the open-source Blender-Isometric-Renderer script for the direction renders. Keep whichever renders 8 directions headlessly from `render.py`; script only what neither does (the room layers, the manifest). Record the choice and the add-on version in the README.
+- [ ] **Step 4: Write `render.py`**: iterate the `export` collection, isolate each object, render to PNG with film transparent, compute the anchor as the projected floor-point of the object's origin, write the manifest.
+- [ ] **Step 5: Render** and commit the outputs; add `packages/web/src/live/office-scene/rendered/assets/*.png binary` to `.gitattributes`.
+- [ ] **Step 6: Write the failing budget check** — a unit test is not practical for this script; instead set `officeArtBytes: 1` in `budgets.json`, run `pnpm --filter @musterd/web build && pnpm perf:check`, expect the new failure line naming the desk PNG.
+- [ ] **Step 7: Implement** the check; set `officeArtBytes` to measured + 15%; log the measurement in `web-live-baseline.md` under a dated heading with the lane id.
+- [ ] **Step 8: Verify in the browser**: `pnpm dev` → `http://localhost:5174/office-preview?office=rendered` shows the rendered desk base under every desk's painted monitor and props, aligned to the painted room; without the flag nothing changes. Capture both for the PR.
+- [ ] **Step 9: Docs**: `08-web.md`'s office-scene file tree gains the `rendered/` lines and `art/office/` is described (the arch-tree check fails otherwise).
+- [ ] **Step 10: Run the fast gates** `pnpm typecheck && pnpm lint && pnpm format:check`; commit `feat(office): Blender pipeline, first rendered desk, officeArtBytes budget (lane 01M5D8F3RN)`; open the PR; `lane_submit` after merge.
 
 ---
 
@@ -301,8 +302,8 @@
 - Create: `packages/web/art/office/figure.blend`; modify `render.py` (a `--figure` mode writing `office-fig-<layer>.png` + `figure.json` as `SheetSpec`)
 - Create: the sheets under `rendered/assets/`
 
-- [ ] **Step 1: Build the character** to spec §2.1 (5 heads, slight waist, pelvis, structured face, matte materials) with one rig; identity layers as separate meshes/collections rendered neutral grey where tinted.
-- [ ] **Step 2: Author the 8 first-cut actions** at 12 fps: idle 8f loop, walk 8f loop (stride = `STRIDE` floor units per cycle so feet don't slide), sit-type 6f loop, sit-idle 8f loop, speak 8f loop, turn 4f one-shot, sit-down / stand-up 6f one-shot.
+- [ ] **Step 1: Build the character** to spec §2.1 (5 heads, slight waist, pelvis, structured face, matte materials); identity layers as separate meshes/collections rendered neutral grey where tinted. **Rig it with Mixamo's free auto-rigger** (humanoid, FBX in T-pose) and bring the rig and its standard clips into Blender with the Mixamo Rig 5 add-on; parent hair, hat, accessory and carried-prop meshes to bones so they follow every clip.
+- [ ] **Step 2: Author the 8 first-cut actions** at 12 fps — walk, idle, sit-down/stand-up and sit-idle from Mixamo's library (deformations fixed in Blender), sit-type, speak and turn keyed by hand; every gesture that is ours (the wave, the board reach, the sip) is always hand-keyed so the figure never reads as a stock Mixamo character: idle 8f loop, walk 8f loop (stride = `STRIDE` floor units per cycle so feet don't slide), sit-type 6f loop, sit-idle 8f loop, speak 8f loop, turn 4f one-shot, sit-down / stand-up 6f one-shot.
 - [ ] **Step 3: Render** 8 directions × actions × layers at 2× with the Task 5 camera; commit; `perf:check` (expect a raise; log it).
 - [ ] **Step 4: Commit** `art(office): the member rig and first-cut sprite sheets (lane 01M5D8F93K)`.
 
