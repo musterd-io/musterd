@@ -47,7 +47,7 @@ RUN git clone https://github.com/cooperbench/CooperBench.git /opt/cooperbench \
 
 ENV PATH=/opt/cb-venv/bin:$PATH \
     PYTHONPATH=/app/scripts/research/cooperbench \
-    COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter \
+    COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter,musterd_cooperbench.openhands \
     MUSTERD_PACK_DIR=/opt/musterd-pack \
     MUSTERD_BIN=musterd
 
@@ -55,7 +55,7 @@ ENV PATH=/opt/cb-venv/bin:$PATH \
 RUN printf '%s\n' \
       'export PATH=/opt/cb-venv/bin:$PATH' \
       'export PYTHONPATH=/app/scripts/research/cooperbench' \
-      'export COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter' \
+      'export COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter,musterd_cooperbench.openhands' \
       'export MUSTERD_PACK_DIR=/opt/musterd-pack' \
       'export MUSTERD_BIN=musterd' \
       'export IS_SANDBOX=1' \
