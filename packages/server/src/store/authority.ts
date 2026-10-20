@@ -429,6 +429,8 @@ export async function requireAuthority(
     target: string;
     payload: unknown;
     proof?: ApprovalProof | undefined;
+    /** ADR 662 dec. 5: passkey ceremonies must be on one of these origins, when known. */
+    expectedOrigins?: readonly string[] | undefined;
     now?: number;
   },
 ): Promise<AuthorityCheck> {
@@ -471,6 +473,9 @@ export async function requireAuthority(
   const key = await getDeviceKey(db, input.teamId, proof.key_id);
   if (!key || key.memberId !== input.presenter.id) return refuse('descriptor_mismatch');
   if (key.revokedAt !== null) return refuse('key_revoked');
+  // Decision 5: a software key's private half is readable by any same-user process,
+  // so it never qualifies as A2 — however valid its signature is.
+  if (key.kind === 'software') return refuse('assurance_too_low');
 
   const descriptor: ApprovalDescriptor = {
     v: 1,
@@ -497,6 +502,7 @@ export async function requireAuthority(
         signature: Buffer.from(proof.signature, 'base64url'),
         publicKeySpki: key.publicKey,
         expectedChallenge: proof.nonce,
+        expectedOrigins: input.expectedOrigins,
       });
   } else {
     try {
@@ -545,6 +551,8 @@ export async function storePasskeyProof(
     teamId: string;
     audience: string;
     proof: ApprovalProof;
+    /** ADR 662 dec. 5: the ceremony must be on one of these origins (the daemon's own). */
+    expectedOrigins?: readonly string[] | undefined;
     now?: number;
   },
 ): Promise<boolean> {
@@ -566,6 +574,7 @@ export async function storePasskeyProof(
       signature: Buffer.from(input.proof.signature, 'base64url'),
       publicKeySpki: key.publicKey,
       expectedChallenge: input.proof.nonce,
+      expectedOrigins: input.expectedOrigins,
     })
   ) {
     return false;
@@ -647,6 +656,8 @@ export async function enrollPasskeyGuarded(
     challenge: string;
     registration: { attestationObject: Uint8Array; clientDataJson: string };
     proof?: ApprovalProof | undefined;
+    /** ADR 662 dec. 5: the ceremony must be on one of these origins (the daemon's own). */
+    expectedOrigins?: readonly string[] | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -659,6 +670,7 @@ export async function enrollPasskeyGuarded(
       clientDataJson: input.registration.clientDataJson,
       expectedChallenge: input.challenge,
       requireUserVerified: true,
+      expectedOrigins: input.expectedOrigins,
     });
   } catch {
     return { ok: false, reason: 'bad_registration' };
@@ -674,6 +686,7 @@ export async function enrollPasskeyGuarded(
       target: input.member.name,
       payload: { action: 'enroll', kind: 'passkey' },
       proof: input.proof,
+      expectedOrigins: input.expectedOrigins,
       now,
     });
     if (!check.ok) return { ok: false, reason: check.reason };

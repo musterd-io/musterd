@@ -53,6 +53,10 @@ export interface ResolvedConfig {
   trustProxy: boolean;
   /** The scheme this listener actually serves: `wss` only with native TLS. */
   scheme: 'ws' | 'wss';
+  /** Origins whose passkeys the daemon accepts (ADR 662 dec. 5): `MUSTERD_WEBAUTHN_ORIGINS`,
+   * plus the origin a ceremony request itself arrives on — the daemon's own origin. A
+   * relay-hosted page's origin is never in this set, so its ceremonies never verify. */
+  webauthnOrigins: string[];
   /** Extra Host header hostnames allowed on the WS upgrade (besides loopback + bound host). */
   allowedHosts: string[];
   /** Origin values allowed on the WS upgrade (CLI/MCP clients send none; browsers do). */
@@ -306,6 +310,7 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     // Cloud sits behind Cloudflare + Fly: every request arrives from the edge proxy (spec §5.1).
     trustProxy: cloud ? true : (opts?.trustProxy ?? envBool('MUSTERD_INSECURE_TRUST_PROXY')),
     scheme: tls ? 'wss' : 'ws',
+    webauthnOrigins: envList('MUSTERD_WEBAUTHN_ORIGINS'),
     allowedHosts: envList('MUSTERD_ALLOWED_HOSTS'),
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
     webRoot: webRootOf(opts?.webRoot ?? process.env['MUSTERD_WEB_ROOT']),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ApprovalDescriptorSchema,
+  AUTHENTICATOR_KINDS,
   HIGH_AUTHORITY_ACTS,
   canonicalJson,
   descriptorSigningBytes,
@@ -28,6 +29,12 @@ describe('HIGH_AUTHORITY_ACTS (ADR 662 decision 4)', () => {
     expect(isHighAuthorityAct('human_accept')).toBe(true);
     expect(isHighAuthorityAct('lane.claim')).toBe(false);
     expect(isHighAuthorityAct(undefined)).toBe(false);
+  });
+});
+
+describe('AUTHENTICATOR_KINDS (ADR 662 decision 5)', () => {
+  it('pins the kinds, with software recorded honestly and never as platform', () => {
+    expect([...AUTHENTICATOR_KINDS]).toEqual(['platform', 'passkey', 'phone', 'software']);
   });
 });
 

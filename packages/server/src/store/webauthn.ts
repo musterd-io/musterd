@@ -2,9 +2,10 @@ import { createHash, createPublicKey, verify as cryptoVerify, type KeyObject } f
 
 /**
  * The passkey half of ADR 662 decision 5, with no new dependency: just enough CBOR to read
- * a COSE public key, and the two WebAuthn checks that matter — the challenge is the one the
- * server minted, and the signature covers authenticatorData ‖ sha256(clientDataJSON) for
- * the origin the browser actually used. Supports EdDSA (-8) and ES256 (-7) credentials.
+ * a COSE public key, and the WebAuthn checks that matter — the challenge is the one the
+ * server minted, the ceremony is on an origin this daemon is configured for (its own
+ * origin or musterd.io — never a relay-hosted page, ADR 618 §2), and the signature covers
+ * authenticatorData ‖ sha256(clientDataJSON). Supports EdDSA (-8) and ES256 (-7).
  * Attestation is 'none'-grade: registration proves possession of the credential and binds
  * its public key; no attestation statement is verified (no authenticator allowlist exists).
  */
@@ -175,10 +176,21 @@ function checkRpAndChallenge(
   clientDataJson: string,
   expectedType: string,
   expectedChallenge: string,
+  expectedOrigins?: readonly string[],
 ): { auth: ParsedAuthData; clientData: ClientData } {
   const clientData = parseClientData(clientDataJson);
   if (clientData.type !== expectedType) throw new Error('webauthn: wrong ceremony type');
   if (clientData.challenge !== expectedChallenge) throw new Error('webauthn: challenge mismatch');
+  // ADR 662 dec. 5 / ADR 618 §2: the ceremony must be on an origin the daemon is
+  // configured for (its own origin, or musterd.io) — an origin the caller merely
+  // claims, e.g. a relay-hosted page, never verifies, however consistent it looks.
+  if (
+    expectedOrigins &&
+    expectedOrigins.length > 0 &&
+    !expectedOrigins.includes(clientData.origin)
+  ) {
+    throw new Error('webauthn: origin not configured for this daemon');
+  }
   const rpId = new URL(clientData.origin).hostname;
   const rpHash = createHash('sha256').update(rpId, 'utf8').digest();
   const auth = parseAuthData(authData);
@@ -205,12 +217,15 @@ export function verifyRegistration(input: {
   expectedChallenge: string;
   /** Enrollment (ADR 662 dec. 6): the ceremony must be user-verified, not merely present. */
   requireUserVerified?: boolean;
+  /** ADR 662 dec. 5: origins this daemon accepts ceremonies from (its own, musterd.io). */
+  expectedOrigins?: readonly string[] | undefined;
 }): { credentialId: string; publicKeySpki: string } {
   const { auth } = checkRpAndChallenge(
     input.authenticatorData,
     input.clientDataJson,
     'webauthn.create',
     input.expectedChallenge,
+    input.expectedOrigins,
   );
   if (input.requireUserVerified && !auth.userVerified) {
     throw new Error('webauthn: user verification not asserted');
@@ -231,6 +246,8 @@ export function verifyAssertion(input: {
   signature: Uint8Array;
   publicKeySpki: string;
   expectedChallenge: string;
+  /** ADR 662 dec. 5: origins this daemon accepts ceremonies from (its own, musterd.io). */
+  expectedOrigins?: readonly string[] | undefined;
 }): boolean {
   try {
     checkRpAndChallenge(
@@ -238,6 +255,7 @@ export function verifyAssertion(input: {
       input.clientDataJson,
       'webauthn.get',
       input.expectedChallenge,
+      input.expectedOrigins,
     );
     const clientHash = createHash('sha256').update(input.clientDataJson, 'utf8').digest();
     const signed = Buffer.concat([Buffer.from(input.authenticatorData), clientHash]);

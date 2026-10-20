@@ -53,8 +53,14 @@ export const AUTHORITY_REFUSAL_REASONS = [
 ] as const;
 export type AuthorityRefusalReason = (typeof AUTHORITY_REFUSAL_REASONS)[number];
 
-/** The authenticators of decision 5. One verifier; the kind is recorded, never trusted. */
-export const AUTHENTICATOR_KINDS = ['platform', 'passkey', 'phone'] as const;
+/**
+ * The authenticators of decision 5, plus `software` — an honestly recorded kind for a
+ * key whose private half lives in a file any same-user process can read. It may be
+ * enrolled (behind a standing key's signature) but `requireAuthority` never accepts
+ * it as A2 (decision 5: a key reachable by any node process does not qualify); it is
+ * never spelled `platform`, which is reserved for the Secure Enclave helper's key.
+ */
+export const AUTHENTICATOR_KINDS = ['platform', 'passkey', 'phone', 'software'] as const;
 export type AuthenticatorKind = (typeof AUTHENTICATOR_KINDS)[number];
 
 /** Canonical JSON: object keys sorted recursively, so a digest means the same bytes everywhere. */

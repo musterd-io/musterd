@@ -71,11 +71,25 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
       memberId: nick.id,
       actor: 'nick',
     });
+    // A ceremony on an origin this daemon is not configured for enrolls nothing.
+    const refused = await enrollPasskeyGuarded(db, {
+      teamId: team.id,
+      audience: team.slug,
+      member: nick,
+      challenge: issued.challenge,
+      expectedOrigins: ['https://relay.example.net'],
+      registration: {
+        attestationObject,
+        clientDataJson: clientData('webauthn.create', issued.challenge),
+      },
+    });
+    expect(refused).toEqual({ ok: false, reason: 'bad_registration' });
     const enrolled = await enrollPasskeyGuarded(db, {
       teamId: team.id,
       audience: team.slug,
       member: nick,
       challenge: issued.challenge,
+      expectedOrigins: ['https://example.com'],
       registration: {
         attestationObject,
         clientDataJson: clientData('webauthn.create', issued.challenge),

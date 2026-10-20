@@ -176,6 +176,15 @@ All four converged on one shape, and nick directed it be written as this ADR.
   itself; once a key stands, enrolling or revoking requires a standing key's
   `device_key_admin` signature, the challenge path being reserved for zero active keys.
   Lazara's attack is a transport falsifier (`authority-lifecycle-http.test.ts`).)_
+- _(2026-10-20: HA3 re-review (lazara, declined #2968) closed the two authenticator
+  gaps. The CLI's file-stored software key is gone (with HA2's passkey-first CLI);
+  a software key may still be recorded under the honest kind `software`, and
+  `requireAuthority` refuses it as `assurance_too_low` however valid its signature —
+  never spelled `platform`. Passkey ceremonies now pin `clientData.origin` to the
+  daemon's configured origins (its own request origin plus `MUSTERD_WEBAUTHN_ORIGINS`,
+  e.g. musterd.io) and check the rpIdHash against that origin's host, at enrollment,
+  at proof parking, and at presentation — a relay-hosted page's ceremony never
+  verifies.)_
 
 ## Observability & Evaluation
 

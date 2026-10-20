@@ -116,6 +116,35 @@ withDrivers('human authority (ADR 662)', (o) => {
     expect(JSON.stringify(rows)).not.toContain(descriptor.nonce);
   });
 
+  it('a software key never qualifies as A2, however valid its signature', async () => {
+    const db = await openStore();
+    const { team, nick } = await seed(db);
+    const kp = keypair();
+    const key = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: kp.publicKey,
+      kind: 'software',
+    });
+    const descriptor = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: nick.name,
+      ...act,
+    });
+    await expect(
+      requireAuthority(db, {
+        teamId: team.id,
+        audience: team.slug,
+        presenter: nick,
+        credential: 'human',
+        ...act,
+        proof: { key_id: key.id, nonce: descriptor.nonce, signature: kp.sign(descriptor) },
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'assurance_too_low' });
+  });
+
   it('two concurrent presentations of one proof: exactly one spends the nonce', async () => {
     const db = await openStore();
     const { team, nick } = await seed(db);
