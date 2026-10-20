@@ -300,7 +300,6 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
             ...workingTools({
               ...jail,
               env,
-              ...(spec.gateway?.env ? { gatewayEnv: spec.gateway.env } : {}),
               secretEnvNames: spec.key_env !== undefined ? [spec.key_env] : [],
             }),
           ]

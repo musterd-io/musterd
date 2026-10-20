@@ -48,6 +48,18 @@ preflight errors. No runtime dependency or protocol schema is added.
 
 ## Consequences
 
+- 2026-10-19: Reverted from `main` the same day it merged (lane 01M5B9P5TQ, nick's call). On the
+  hub Mac, pnpm is the standalone install (a shell shim under `~/Library/pnpm`) and hangs inside the
+  Seatbelt policy, so every declared script was killed at the bash ceiling and resident bash was
+  unusable during the resident-seat pilot whose read decides this ADR. CI's pnpm, installed by the
+  setup action, did not show it. #2969 (handling the `.tools` standalone layout) merged first and
+  was reverted with it: the hub's pnpm 11 install lives under `~/Library/pnpm/global/v11/<hash>/`
+  with no `.tools` directory, and still hung (2 of 19 working-tools tests killed at the ceiling).
+  The decision text stands. The implementation re-lands on lane
+  01M4VYT6JW once the shim's install root is admitted, a sandbox start failure fails fast, and the
+  script tests assert exit 0, and only if the pilot read keeps resident bash.
+  Follows-up: lane 01M4VYT6JW (big-body) re-lands the sandbox after the pilot read.
+
 - 2026-10-19: Ubuntu 24.04's AppArmor unprivileged-user-namespace restriction can prevent
   bubblewrap from setting up the network namespace. Load Ubuntu's `bwrap-userns-restrict` `profile`
   to permit bubblewrap while retaining the system-wide restriction; CI installs and loads that
