@@ -106,6 +106,12 @@ scene's logical resolution with a 2× variant for retina. Layers, back to front:
    can crossfade without re-shipping furniture.
 4. **Wall objects** (board, calendar, clock) keep their live content: the rendered layer carries the
    frame, the canvas keeps painting the numbers and the days on it as it does today.
+5. **Per-desk live state stays** (my call). A desk today is not static (`drawWorkstation`): its lamp
+   shows only when occupied and dark, its screen changes when the owner is working, its props (fan,
+   mug) move only with someone there, and the ceiling lights follow occupancy and declared working
+   hours (`overheadOn`, `afterHours`). So a desk is a base sprite plus small overlays — lamp on and
+   its pool, screen on, the animated prop — and the room's light layers include ceiling on / off /
+   after-hours spill as well as day / evening / night. Nothing the room does today goes away.
 
 Interactive things stay interactive: the board hotspot, the hours tab, nameplates, bubbles and the
 asks bar are DOM and CSS, unchanged by this document.
@@ -121,10 +127,25 @@ solving a skeleton and instead picks a frame.
 - **Animations (first cut):** idle stand, walk, sit-type, sit-idle, stand-gesture (speak), turn
   head, sit-down / stand-up. Each is a short loop or a short one-shot; frame counts are the
   builder's, with the stream's 30 fps as the clock.
-- **Identity:** a member's figure is composed from layers rendered separately from the same rig
-  — body/skin, outfit, hair — so hair style and outfit are swapped per member and the member's
-  existing hue (`appearance.ts`) tints the outfit. The face is the same across members at office
-  scale; close views (hover, roster) may add per-member faces later, out of scope here.
+- **Motion parity before the flag comes off** (my call). Today's scene has ~21 idle gestures
+  (`skeleton.ts` `GESTURE`: stretch, sip, swivel, rub eyes, phone, eat, pour, browse, wave, the
+  reach/take at the wall board, …), carried props (laptop, plate, box, card) and continuous heading
+  and chair yaw. The first cut above is what increment 3 ships behind the flag; increment 3b
+  (§9) brings the rest to parity, because a trimmed office is a regression the anti-goals forbid and
+  the Welcome Wagon wave and board reach are product behaviour, not decoration. `actors.test.ts`
+  stays green throughout: the state machine does not change, only what a state draws.
+- **Identity:** a member's figure is composed from layers rendered separately from the same rig,
+  so the builder can swap and tint per member. `appearance.ts` already derives a member's look from
+  their name — skin tone, hair shape and colour, facial hair, hat, top cut, trouser and shoe
+  colours, glasses / headphones / scarf — and that derivation **stays the source of truth**; the
+  sprite layers are its new rendering. Layers (my call): skin, hair (per shape), facial hair, top,
+  trousers, shoes, accessory, each rendered neutral and tinted at runtime from the appearance, so
+  the sheet count is shapes × directions × animations, not colours. The face is the same across
+  members at office scale; close views may add per-member faces later, out of scope here.
+- **Agents are told apart from humans by the visor**, which `appearance.ts` calls "the one tell the
+  office cannot afford to lose"; it is its own layer and always present on an agent. Whether the
+  non-human skin tints agents carry today (mint, seafoam, periwinkle) survive into the realistic
+  look is **nick's call** (open question at hand-over).
 - **Scale:** one sprite scale per depth band, so a figure at the back is smaller than one at the
   front, as in the corner mockup.
 
@@ -174,8 +195,12 @@ produce consistent sprite sheets for the figures.
 
 - **Perf contract** (`packages/web/AGENTS.md`): image bytes are not yet a budget; this work **adds
   one** (`officeArtBytes`) in its first increment and logs the measured cost in
-  `docs/perf/web-live-baseline.md` (ADR 151). JS budgets must not rise for this: sprite picking is
-  less code than skeleton solving.
+  `docs/perf/web-live-baseline.md` (ADR 151). The ceiling is set the way the others are: measured
+  after increment 2 (room) and again after 3 (figures), +15% (ADR 183), never designed to in
+  advance. Art is rendered sharp for the 1080p broadcast panel at DPR 1 and the /live panel at DPR 2
+  — one 2× source per asset, downsampled by the canvas for smaller fits, as the fonts and the
+  office still are today. JS budgets must not rise for this: sprite picking is less code than
+  skeleton solving.
 - **No `backdrop-filter`, no per-frame blur** — the office-block house rule, for the stream.
 - **Dirty-rect repaint** (ADR 625) stays; a sprite frame change marks exactly its rect.
 - **Hidden-tab pause and collapsed-panel suspend** stay.
@@ -195,6 +220,9 @@ produce consistent sprite sheets for the figures.
 6. **Whether the welcome room, pet and receptionist** (`welcomeRoom.ts`, `pet.ts`,
    `receptionist.ts`) get re-rendered in the first pass or keep their painters until a later
    increment. Mixed is acceptable only behind a flag during the build.
+7. **The hero crop.** The musterd.io hero and `/office-preview` draw this same scene through
+   `fitFloor` / `ROOM_BOX`; they switch with the flag's removal (the painters are deleted, which is
+   what keeps the JS budget flat), and the hero's framing of the full wall height is the builder's.
 
 ## 7. Rollout
 
@@ -217,8 +245,9 @@ goes. Each increment lands with a capture nick can look at, the way the brainsto
 | # | Increment | Proves | Lane |
 | --- | --- | --- | --- |
 | 1 | Pipeline: Blender scene + render script → one desk sprite drawn by the sprite cache behind the flag; `officeArtBytes` budget added | the toolchain and the byte cost | _(opened after the plan)_ |
-| 2 | The room: walls, floor, all furniture, three lighting states, crossfade | the look nick asked for, at the agreed camera | |
+| 2 | The room: walls, floor, all furniture, lighting states (day/evening/night × ceiling on/off/after-hours), per-desk overlays, crossfade | the look nick asked for, at the agreed camera | |
 | 3 | The figure: rig, sprite sheets, identity layers, `drawCharacter` picks frames | people who walk, sit and gesture | |
+| 3b | Motion parity: the remaining idle gestures, carried props, board reach, the wave; per-desk overlays | nothing the office does today is lost | |
 | 4 | Ambient life, welcome room, pet, receptionist; flag removed; /broadcast capture compared frame-for-frame against today | the whole floor, stream-safe | |
 
 A several-step plan is a Goal with every step's lane (ADR 487); the Goal is declared when the plan
