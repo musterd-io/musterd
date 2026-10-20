@@ -166,6 +166,7 @@ import {
   SyncHoldRequestSchema,
   CalendarEntryInputSchema,
   MemberCeilingSchema,
+  APP_CHANNEL,
   ApprovalProofSchema,
   AUTHENTICATOR_KINDS,
   HIGH_AUTHORITY_ACTS,
@@ -200,6 +201,7 @@ import {
 import { reapOrphans } from '../footprint/reap.js';
 import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
+import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { relayLinkFor } from '../notify/relay.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
@@ -223,6 +225,13 @@ import {
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
 import { resolveActivity } from '../store/activity.js';
+import {
+  appEnrollPayload,
+  confirmAppPairing,
+  keyFingerprint,
+  stagedAppKeys,
+  startAppPairing,
+} from '../store/appPairing.js';
 import {
   appendAudit,
   appendLaneEventRequired,
@@ -259,6 +268,7 @@ import {
 } from '../store/calendar.js';
 import {
   confirmPairing,
+  getPairing,
   killSwitchChannels,
   listBindings,
   listPendingPairings,
@@ -1260,6 +1270,8 @@ const FootprintReapBody = z.object({
 // ADR 618 §7 (away channels pairing): start names only the channel; confirm/reject/revoke name
 // only the row. The provider identity is never a request field here — it is read from the
 // daemon's own pairing row, which is what the confirmation shows.
+// ADR 676 §5: an app pairing is confirmed with a standing key's signature over the phone's key.
+const ConfirmPairingBody = z.object({ approval: ApprovalProofSchema.optional() });
 const PairingStartBody = z.object({
   channel: z.string().min(1).max(64),
 });
@@ -4573,8 +4585,41 @@ export async function handleHttp(
             `seat "${member.name}" is not a human; channel bindings name a human authorizer`,
           );
         }
+        // ADR 676 §5: pairing the musterd app. The QR payload — relay route, one-time code, both
+        // daemon public keys — is shown once, here, on the daemon's own page. The phone answers
+        // through the relay, sealed; nothing is bound until a standing key approves its key.
+        if (method === 'POST' && rest === '/channels/app/pairing') {
+          const relayUrl = (await getPolicy(ctx.db, team.id)).away_relay_url;
+          if (!relayUrl) {
+            throw new MusterdError(
+              'validation',
+              'pairing the app needs an away relay: set away_relay_url and away_relay_token in team policy',
+            );
+          }
+          const keys = await loadAppChannelKeys();
+          const { pairing, qr } = await startAppPairing(ctx.db, {
+            teamId: team.id,
+            teamSlug: team.slug,
+            memberId: member.id,
+            actor: member.name,
+            relayUrl,
+            keys,
+          });
+          return sendJson(res, 201, {
+            pairing_id: pairing.id,
+            qr,
+            daemon_fingerprint: keyFingerprint(keys.identityPublic),
+            expires_at: pairing.expires_at,
+          });
+        }
         if (method === 'POST' && rest === '/channels/pairing/start') {
           const body = parseOrBadRequest(PairingStartBody, await readJson(req));
+          if (body.channel === APP_CHANNEL) {
+            throw new MusterdError(
+              'validation',
+              'the app pairs through POST /channels/app/pairing',
+            );
+          }
           const { pairing, nonce } = await startPairing(ctx.db, {
             teamId: team.id,
             memberId: member.id,
@@ -4591,13 +4636,55 @@ export async function handleHttp(
           });
         }
         if (method === 'GET' && rest === '/channels/pairings') {
-          return sendJson(res, 200, {
-            pairings: await listPendingPairings(ctx.db, team.id, member.id),
-          });
+          const pairings = await listPendingPairings(ctx.db, team.id, member.id);
+          // An app pairing also carries what the page shows and what the standing key signs.
+          const withApp = await Promise.all(
+            pairings.map(async (p) => {
+              const app =
+                p.channel === APP_CHANNEL ? await stagedAppKeys(ctx.db, team.id, p.id) : null;
+              if (!app) return p;
+              return {
+                ...p,
+                app: {
+                  fingerprint: keyFingerprint(app.signing_public_key),
+                  environment: app.environment,
+                  device_name: app.device_name ?? null,
+                  enroll_payload: appEnrollPayload(app),
+                },
+              };
+            }),
+          );
+          return sendJson(res, 200, { pairings: withApp });
         }
         const pairingMatch = /^\/channels\/pairings\/([^/]+)\/(confirm|reject)$/.exec(rest);
         if (method === 'POST' && pairingMatch) {
           const pairingId = decodeURIComponent(pairingMatch[1]!);
+          const target = await getPairing(ctx.db, team.id, pairingId);
+          if (target?.channel === APP_CHANNEL && pairingMatch[2] === 'confirm') {
+            const body = parseOrBadRequest(ConfirmPairingBody, await readJson(req));
+            const result = await confirmAppPairing(ctx.db, {
+              teamId: team.id,
+              audience: team.slug,
+              member,
+              pairingId,
+              proof: body.approval,
+            });
+            if (!result.ok) {
+              throw new MusterdError(
+                result.reason === 'not_found'
+                  ? 'not_found'
+                  : result.reason === 'no_signature' || result.reason === 'passkey_first'
+                    ? 'forbidden'
+                    : 'validation',
+                `pairing ${result.reason}`,
+              );
+            }
+            return sendJson(res, 200, {
+              ok: true,
+              binding: result.binding,
+              device_key_id: result.deviceKeyId,
+            });
+          }
           const input = {
             teamId: team.id,
             memberId: member.id,
@@ -4812,6 +4899,13 @@ export async function handleHttp(
         }
         if (method === 'POST' && rest === '/authority/keys') {
           const body = parseOrBadRequest(EnrollKeyBody, await readJson(req));
+          // ADR 676 §5: a `phone` key is one App Attest vouched for, so it enrolls only by pairing.
+          if (body.kind === 'phone') {
+            throw new MusterdError(
+              'validation',
+              'a phone key is enrolled by pairing the musterd app',
+            );
+          }
           const result = await enrollKeyGuarded(ctx.db, {
             teamId: team.id,
             audience: team.slug,

@@ -130,6 +130,11 @@ export type AuditAction =
   | 'channel.pair.rejected'
   | 'channel.pair.revoked'
   | 'channel.killswitch'
+  // ADR 676 §5 (away channels 7a, lane 01M5BER5GX4WENE2CEST6CA8NB): an app pairing. `deny` when
+  // a sealed pairing request is refused (attestation verdict or reason, the pairing id); `allow`
+  // when the human's standing key approved the phone key and the binding exists (binding, device
+  // key id, App Attest key id and environment). Never key material, the code, or a signature.
+  | 'channel.app_paired'
   // Channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8): a human changing
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
@@ -730,6 +735,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.pair.rejected': 'actor',
   'channel.pair.revoked': 'actor',
   'channel.killswitch': 'actor',
+  'channel.app_paired': 'none',
   'channel.settings.changed': 'actor',
   'authority.refused': 'actor',
   'authority.approved': 'actor',
