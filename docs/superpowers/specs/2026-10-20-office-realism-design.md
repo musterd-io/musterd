@@ -5,8 +5,7 @@
 **Status:** design agreed with nick in the brainstorm on 2026-10-20 ("yes go with that"). Nothing is
 built.
 **Lanes:** this document is lane `01M5D79CFYX6R7J9FWD0K0J63D` (goal `live-delight`). The build
-increments are opened under a Goal once the plan is written; each row of §9 names its lane when it
-exists.
+increments are lanes under Goal `office-realism`; §9 names each.
 **Builds on:** the office scene as it stands (`packages/web/src/live/office-scene/`, read order:
 `layout.ts` → `iso.ts` → `render.ts` → `skeleton.ts` → `actors.ts` → `sprite-cache.ts`), its
 sprite-cache spec ([2026-09-17](2026-09-17-office-scene-sprite-cache-design.md)), the hosted stream
@@ -246,11 +245,10 @@ goes. Each increment lands with a capture nick can look at, the way the brainsto
 
 | # | Increment | Proves | Lane |
 | --- | --- | --- | --- |
-| 1 | Pipeline: Blender scene + render script → one desk sprite drawn by the sprite cache behind the flag; `officeArtBytes` budget added | the toolchain and the byte cost | _(opened after the plan)_ |
-| 2 | The room: walls, floor, all furniture, lighting states (day/evening/night × ceiling on/off/after-hours), per-desk overlays, crossfade | the look nick asked for, at the agreed camera | |
-| 3 | The figure: rig, sprite sheets, identity layers, `drawCharacter` picks frames | people who walk, sit and gesture | |
-| 3b | Motion parity: the remaining idle gestures, carried props, board reach, the wave; per-desk overlays | nothing the office does today is lost | |
-| 4 | Ambient life, welcome room, pet, receptionist; flag removed; /broadcast capture compared frame-for-frame against today | the whole floor, stream-safe | |
+| 1 | Pipeline: Blender scene + render script → one desk sprite drawn by the sprite cache behind the flag; `officeArtBytes` budget added | the toolchain and the byte cost | `01M5D8F3RNW6AXVXSR76FG24KK` |
+| 2 | The room: walls, floor, all furniture, lighting states (day/evening/night × ceiling on/off/after-hours), per-desk overlays, crossfade | the look nick asked for, at the agreed camera | `01M5D8F7FTXT07SSGPPYGX9JV8` |
+| 3 | The figure: rig, sprite sheets, identity layers, `drawCharacter` picks frames | people who walk, sit and gesture | `01M5D8F93KGF8A47F2Q1A6N2BV` |
+| 3b | Motion parity: the remaining idle gestures, carried props, board reach, the wave; per-desk overlays | nothing the office does today is lost | `01M5D8FCC94N90YHDSN79C9RPF` |
+| 4 | Ambient life, welcome room, pet, receptionist; flag removed; /broadcast capture compared frame-for-frame against today | the whole floor, stream-safe | `01M5D8EJ40SANYJ781005AZN06` |
 
-A several-step plan is a Goal with every step's lane (ADR 487); the Goal is declared when the plan
-is written.
+Goal `office-realism` (ADR 487). The plan: `docs/superpowers/plans/2026-10-20-office-realism.md`.
