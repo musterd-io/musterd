@@ -75,8 +75,11 @@ Until a workspace installs, the pre-install path still works: the operator-set
 `SLACK_TEAM_MAP_JSON` and the team-policy `slack_bot_token`. The install record takes
 precedence where both exist.
 
-**Hosted teams (Cloud-direct).** A hosted team's install link carries
-`&dest=<its Cloud server origin>`. The relay then sends the install record and that
+**Hosted teams (Cloud-direct).** A hosted team sets `MUSTERD_PUBLIC_ORIGIN` to its
+Cloud server's https origin; when it mints an install state, the server registers that
+origin as the destination with its relay object over its authenticated socket. The
+install link itself carries only the team and state — no destination — and the relay
+ignores any destination added to it. The relay then sends the install record and that
 workspace's callbacks straight to the Cloud server — no relay hop — each signed with the
 ingress's Ed25519 key (`INGRESS_SIGNING_KEY`, a Worker secret). The Cloud server holds only
 the public half (`MUSTERD_INGRESS_PUBLIC_KEY`, PEM or base64url DER) and refuses any

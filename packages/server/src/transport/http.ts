@@ -536,6 +536,7 @@ import {
 import { mintSessionLease, revokeMemberSessionLeases } from '../store/session-leases.js';
 import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import {
+  cloudDestinationFrom,
   createSlackInstallRequest,
   listSlackInstalls,
   recordSlackInstall,
@@ -4860,9 +4861,22 @@ export async function handleHttp(
               'installing Slack needs an away relay: set away_relay_url and away_relay_token in team policy first',
             );
           }
+          // A hosted server registers its own public origin as the Cloud-direct
+          // destination at mint (away 10 decline fix): it comes from this server's
+          // operator config, never from the install link or any request field.
+          const destination = ctx.config.publicOrigin
+            ? cloudDestinationFrom(ctx.config.publicOrigin)
+            : null;
+          if (ctx.config.publicOrigin && !destination) {
+            throw new MusterdError(
+              'validation',
+              'MUSTERD_PUBLIC_ORIGIN must be an https origin (no path, no userinfo) to use Cloud-direct Slack',
+            );
+          }
           const { state, expiresAt } = await createSlackInstallRequest(ctx.db, {
             teamId: team.id,
             actor: member.name,
+            destination,
           });
           // Register the state's hash with this team's relay object over the
           // authenticated socket (ADR 668 decision 2): the relay's install flow accepts
@@ -4874,6 +4888,7 @@ export async function handleHttp(
               protocol: 1,
               type: 'install_state',
               state_hash: createHash('sha256').update(state).digest('hex'),
+              destination,
             });
           }
           const relayOrigin = new URL(policy.away_relay_url);

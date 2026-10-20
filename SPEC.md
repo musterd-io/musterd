@@ -1125,3 +1125,8 @@ A team's Slack workspace is installed through Slack's OAuth flow, not an operato
   server MUST verify that attestation before re-parsing or redeeming anything, and MUST
   refuse when it holds no ingress public key. The same adapter interface and token model
   apply on both transports.
+- That destination MUST be registered by the hosted server at mint, over the same
+  authenticated channel that registers the state's hash (the `install_state` frame's
+  `destination`, from the server's operator-configured public origin). No request field
+  selects a destination: an install link carries only its team and state, and any
+  destination a link or callback carries MUST be ignored.

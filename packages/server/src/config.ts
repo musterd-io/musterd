@@ -60,6 +60,10 @@ export interface ResolvedConfig {
   /** The Slack ingress's Ed25519 public key (PEM or base64url DER), or null: Cloud-direct
    * Slack callbacks and install records are refused without it (spec: Slack ingress §3). */
   ingressPublicKey: string | null;
+  /** This server's public https origin when hosted (`MUSTERD_PUBLIC_ORIGIN`), or null.
+   * Registered with the relay at Slack-install mint as the Cloud-direct destination;
+   * never taken from a request (away 10 decline fix). */
+  publicOrigin: string | null;
   /** Extra Host header hostnames allowed on the WS upgrade (besides loopback + bound host). */
   allowedHosts: string[];
   /** Origin values allowed on the WS upgrade (CLI/MCP clients send none; browsers do). */
@@ -284,6 +288,8 @@ export interface ConfigOptions {
   webauthnOrigins?: string[];
   /** The Slack ingress public key (tests); env MUSTERD_INGRESS_PUBLIC_KEY otherwise. */
   ingressPublicKey?: string;
+  /** This server's public https origin when hosted (tests); env MUSTERD_PUBLIC_ORIGIN otherwise. */
+  publicOrigin?: string;
   /** Serve a built web UI from this directory, same-origin (ADR 062). */
   webRoot?: string;
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder, e.g. `musterd serve`. */
@@ -342,6 +348,7 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
         : defaultWebauthnOrigins({ scheme: tls ? 'https' : 'http', host, port })),
     ingressPublicKey:
       opts?.ingressPublicKey ?? (process.env['MUSTERD_INGRESS_PUBLIC_KEY']?.trim() || null),
+    publicOrigin: opts?.publicOrigin ?? (process.env['MUSTERD_PUBLIC_ORIGIN']?.trim() || null),
     allowedHosts: envList('MUSTERD_ALLOWED_HOSTS'),
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
     webRoot: webRootOf(opts?.webRoot ?? process.env['MUSTERD_WEB_ROOT']),

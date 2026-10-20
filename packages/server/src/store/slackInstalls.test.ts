@@ -3,9 +3,11 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { addMember } from './members.js';
 import {
+  cloudDestinationFrom,
   createSlackInstallRequest,
   getSlackInstallBotToken,
   listLiveInstallStateHashes,
+  listLiveInstallStates,
   listSlackInstalls,
   recordSlackInstall,
   revokeSlackInstall,
@@ -97,6 +99,27 @@ withDrivers('slack installs (ADR 668 decision 2, increment 9)', (o) => {
     void stale;
     const hashes = await listLiveInstallStateHashes(db, team.id);
     expect(hashes).toEqual([hashOf(mine.state)]);
+  });
+
+  it('the destination registered at mint round-trips, normalized to an https origin', async () => {
+    const { db, team, nick } = await teamWithHuman();
+    const { createHash } = await import('node:crypto');
+    const hashOf = (s: string) => createHash('sha256').update(s).digest('hex');
+    const hosted = await createSlackInstallRequest(db, {
+      teamId: team.id,
+      actor: nick.name,
+      destination: 'https://cloud.example',
+    });
+    const laptop = await createSlackInstallRequest(db, { teamId: team.id, actor: nick.name });
+    const states = await listLiveInstallStates(db, team.id);
+    expect(states).toContainEqual({
+      stateHash: hashOf(hosted.state),
+      destination: 'https://cloud.example',
+    });
+    expect(states).toContainEqual({ stateHash: hashOf(laptop.state), destination: null });
+    expect(cloudDestinationFrom('http://cloud.example')).toBeNull();
+    expect(cloudDestinationFrom('https://cloud.example/path')).toBeNull();
+    expect(cloudDestinationFrom('https://user@cloud.example')).toBeNull();
   });
 
   it('a revoked install stops yielding a token and stays listed as revoked', async () => {

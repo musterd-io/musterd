@@ -283,6 +283,7 @@ function registryStub() {
     }),
     installs,
     destinations,
+    states,
   };
 }
 
@@ -448,10 +449,13 @@ describe('cloud-direct dispatch (spec: Slack ingress §3, away 10)', () => {
         get: () => ({
           fetch: async (req: Request) =>
             new URL(req.url).pathname.startsWith('/install-state/')
-              ? new Response(JSON.stringify({ registered: true }), {
-                  status: 200,
-                  headers: { 'content-type': 'application/json' },
-                })
+              ? new Response(
+                  JSON.stringify({ registered: true, destination: 'https://cloud.example' }),
+                  {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                  },
+                )
               : new Response('held', { status: 200 }),
         }),
       },
@@ -463,9 +467,7 @@ describe('cloud-direct dispatch (spec: Slack ingress §3, away 10)', () => {
     } as unknown as Env;
 
     const install = await worker.fetch(
-      new Request(
-        'https://relay.example/slack/install?team=revive&state=cloud-state-16-chars&dest=https://cloud.example',
-      ),
+      new Request('https://relay.example/slack/install?team=revive&state=cloud-state-16-chars'),
       e,
     );
     expect(install.status).toBe(302);
@@ -536,6 +538,65 @@ describe('cloud-direct dispatch (spec: Slack ingress §3, away 10)', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('a dest on the install link selects nothing: only the mint-registered destination is recorded (ryder falsifier)', async () => {
+    const registry = registryStub();
+    const state = 'cloud-state-16-chars';
+    const e = {
+      AWAY_RELAY: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: async (req: Request) =>
+            new URL(req.url).pathname.startsWith('/install-state/')
+              ? new Response(
+                  JSON.stringify({ registered: true, destination: 'https://cloud.example' }),
+                  { status: 200, headers: { 'content-type': 'application/json' } },
+                )
+              : new Response('held', { status: 200 }),
+        }),
+      },
+      SLACK_INSTALLS: registry,
+      SLACK_CLIENT_ID: '123.456',
+      SLACK_CLIENT_SECRET: 'shh',
+    } as unknown as Env;
+    const install = await worker.fetch(
+      new Request(
+        `https://relay.example/slack/install?team=revive&state=${state}&dest=https://evil.example`,
+      ),
+      e,
+    );
+    expect(install.status).toBe(302);
+    expect(registry.states.get(state)?.destination).toBe('https://cloud.example');
+
+    // With no destination registered at mint, an attacker-supplied dest records none:
+    // the install falls back to the relay-object transport, never the attacker's origin.
+    const registry2 = registryStub();
+    const e2 = {
+      AWAY_RELAY: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: async (req: Request) =>
+            new URL(req.url).pathname.startsWith('/install-state/')
+              ? new Response(JSON.stringify({ registered: true, destination: null }), {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                })
+              : new Response('held', { status: 200 }),
+        }),
+      },
+      SLACK_INSTALLS: registry2,
+      SLACK_CLIENT_ID: '123.456',
+      SLACK_CLIENT_SECRET: 'shh',
+    } as unknown as Env;
+    const install2 = await worker.fetch(
+      new Request(
+        `https://relay.example/slack/install?team=revive&state=${state}&dest=https://evil.example`,
+      ),
+      e2,
+    );
+    expect(install2.status).toBe(302);
+    expect(registry2.states.get(state)?.destination).toBeNull();
   });
 
   it('cloudDestinationFrom accepts only https origins', async () => {
