@@ -98,6 +98,9 @@ one gets tapped through.
     daemon, rather than a general CBOR library. On the phone, CryptoKit's `HPKE` and Secure Enclave
     APIs, through one small Expo native module. ADR 520's falsifier ("a required native capability
     needs an eject") is checked by that module: a config plugin, not an eject.
+    _(Amended 2026-10-20: `@hpke/dhkem-p256` does not exist; `@hpke/core` carries DHKEM(P-256)
+    itself, so the daemon takes one direct dependency, with `@hpke/common` under it. See
+    Consequences.)_
 
 11. **TestFlight, iOS only.** The app ships to nick through TestFlight. App Store review waits until an
     outside user needs the phone authenticator, since passkeys cover them meanwhile. Android is one more
@@ -114,6 +117,11 @@ one gets tapped through.
   Follows-up: 01M5BER5GX4WENE2CEST6CA8NB
   Follows-up: 01M5BEQWY8DSJGW69EQW8SAW74
   Follows-up: 01M50XQ1TGXNVXRF0481TCK4AA
+- 2026-10-20, lane 01M5BER5GX: nick approved the two packages named in decision 10 in chat. On
+  install, `@hpke/dhkem-p256` turned out not to be a published package: `@hpke/core` 1.9.0 exports
+  `DhkemP256HkdfSha256`, `HkdfSha256` and `Aes128Gcm` directly. The daemon depends on `@hpke/core`
+  alone, which pulls in `@hpke/common` (same author, same repository). That is a smaller surface
+  than the approval covered.
 - The launch gate in ADR 662 can close for nick once the phone key is enrolled through this pairing.
 - A lost or wiped phone is ADR 662's recovery path. A Face ID change ends the signing key the
   same way and needs the same re-key.
