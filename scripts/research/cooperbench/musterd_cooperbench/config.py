@@ -47,6 +47,10 @@ def seat_env(pair: PairTeam, agent_id: str, *, home: Path | str) -> dict[str, st
         # Read by the MCP server's config resolution (mcp/src/config.ts) and by `musterd claim`.
         "MUSTERD_TEAM": pair.team,
         "MUSTERD_CLAIM": f"seat:{agent_id}",
+        # Join at launch, not on the first team_* call: until the MCP server holds a live session,
+        # the hooks carry the dead lease left by admission, and the interrupt hook tells the agent
+        # its session is dead (seen in gate_smoke.py on 2026-10-19).
+        "MUSTERD_AUTOJOIN": "1",
     }
 
 
