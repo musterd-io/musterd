@@ -287,12 +287,6 @@ jobs:
       # ADR 569's eval reads this: the runner's size, so a timing change can be put down to it.
       - name: Runner
         run: echo "cpus=$(nproc) mem_gb=$(free -g | awk '/^Mem:/{print $2}')"
-      - name: Install bubblewrap
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bubblewrap apparmor-profiles apparmor-utils
-          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
-          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
       - uses: ./.github/actions/setup
       - name: Tests + coverage (shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shard_count }})
         run: pnpm coverage --maxWorkers=4 --shard=${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }} --reporter=default --reporter=github-actions --reporter=blob --outputFile.blob=coverage-blobs/blob-${{ matrix.shard }}-${{ needs.plan.outputs.shard_count }}.json
