@@ -1,6 +1,6 @@
 import type { Envelope } from '@musterd/protocol';
 import { eligibleOf } from '@musterd/protocol/wire';
-import { actLabel, actTone, laneEvent } from '../format';
+import { actLabel, actTone, laneEvent, laneIdOf } from '../format';
 import { speechAddressee, speechMark } from './speech';
 import type { OfficeEvent } from './types';
 
@@ -145,6 +145,7 @@ export function speechEventFor(env: Envelope): Extract<OfficeEvent, { kind: 'spe
        scene it would be a projection no test holds. A lane transition arrives as a plain `message`
        + meta, so the recovered lane kind has to be passed in — the act alone cannot see it. */
     marking: speechMark(env.act, env.meta, laneEvent(env)),
+    lane: laneIdOf(env),
   };
 }
 

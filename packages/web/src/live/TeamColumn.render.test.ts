@@ -148,7 +148,7 @@ describe('TeamColumn', () => {
     });
     expect(html.match(/lc-team-card /g)).toHaveLength(1); // ryder, working
     expect(html).toContain('lc-team__idle');
-    expect(html).toMatch(/between tasks <span class="lc-team__idle-count">2<\/span>/);
+    expect(html).toMatch(/Between tasks <span class="lc-team__idle-count">2<\/span>/);
     expect(html).toContain('ghost');
     expect(html).not.toContain('dreaming about lanes');
   });

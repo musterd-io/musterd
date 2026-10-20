@@ -283,6 +283,9 @@ export type OfficeEvent =
        *  bubble's colour is the sender's identity, so this is the whole of what it says about the
        *  act. `null`/absent is the common answer: most acts are the room working. */
       marking?: SpeechMarking | null;
+      /** The lane this act is about (`laneIdOf`), so the bubble's "open ›" can take a viewer to
+       *  the lane's chain on the board rather than the act's row in the log. Absent for most acts. */
+      lane?: string | null;
     };
 
 /** The imperative handle the `OfficeScene` component drives the mounted scene through. */

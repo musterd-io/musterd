@@ -212,7 +212,7 @@ function IdleStrip({ cards }: { cards: TeamCardModel[] }) {
   return (
     <section className="lc-team__idle" aria-label="Between tasks">
       <p className="lc-team__idle-head">
-        between tasks <span className="lc-team__idle-count">{cards.length}</span>
+        Between tasks <span className="lc-team__idle-count">{cards.length}</span>
       </p>
       <ul className="lc-team__idle-list">
         {cards.map((c) => (
