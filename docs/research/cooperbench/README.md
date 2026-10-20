@@ -27,7 +27,7 @@ thing swapped: the coordination layer.
 | Task image, repo, git remote, submission (`patch.txt`), cost parsing | CooperBench's | the same code, called, not copied |
 | Messaging | `coop-send` / `coop-recv` shell commands over Redis | the musterd MCP tools (`team_send`, `team_inbox_check`), on a fresh team per pair |
 | Hearing a partner mid-run | only when the agent runs `coop-recv` | musterd's PostToolUse interrupt hook, as on any musterd seat |
-| File ownership | none | each agent opens and claims its own lane; musterd's PreToolUse gate refuses an edit outside it (ADR 150) |
+| File ownership | none | each agent opens and claims its own lane; musterd's PreToolUse gate refuses an edit through the file tools outside it (ADR 150). Bash is ungated (below). |
 | Instruction | task, submission block, coop block, optional git block | the same, with a musterd block in the coop block's place, written to the coop block's shape (`test_prompt.py`) |
 | Container network | docker bridge | `--network=host` (below) |
 
@@ -88,6 +88,15 @@ In each container (`adapter.py`):
   every edit (87 `401` responses in the daemon log). The pair still ran and scored, failing on merge
   conflicts like the coop arm. The entry is now resolved with `npm root -g`, and **a run whose
   musterd MCP server isn't `connected` at session start is an error, not a score**.
+
+- **Gating Bash with `**` refused every shell command.** The second e2e run (2026-10-20) was the
+  first with musterd working: both agents opened lanes, introduced themselves, found the conflict and
+  coordinated over about 20 acts, two of them `request_help`. But the gate matches a Bash call by its
+  whole command string, and `**` matches any string, so `git diff` and `git status` were refused 12
+  times. The agents wrote `patch.txt` by hand with fake blob hashes, and neither patch applied. The arm
+  now gates the file-editing tools (`Edit|Write|MultiEdit|NotebookEdit`) and leaves Bash ungated. An
+  edit made through Bash (`sed -i`, `cat >`) is not lane-checked, so the arm's lane ownership covers
+  edits through the file tools only.
 
 ## Verified so far
 
