@@ -105,7 +105,7 @@ In each container (`adapter.py`):
   declared contended surface you have not claimed a lane for"); the daemon audited one `lane.gate`
   deny. PASS on this Mac with no Docker (2026-10-19, $0.007), PASS on the Fly run machine (2026-10-20,
   $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012).
-- `tests/`: 34 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
+- `tests/`: 39 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,
   features 1 and 2, `claude-sonnet-4-5`, `--setting coop` without `--git`, on 2026-10-20:
@@ -158,14 +158,57 @@ re-raised each step until the agent reads its inbox.
 **What a run must show.** A musterd run with no musterd tool call is an error, not a score, as in
 the Claude Code arm. `oh_gate_smoke.py` runs the real arm on one container and passes only if the
 lane let one edit through, the gate refused one and the daemon audited it, a `⚡ musterd` line reached
-the conversation, and the agent made musterd calls. Run it before any measured pair. It has not run
-yet; this lane's PR adds it untested against a live agent-server.
+the conversation, and the agent made musterd calls. Run it before any measured pair.
 
-**Not yet verified.** The `-oh` images install `openhands-agent-server` from PyPI unpinned, so the
-version inside a given image is whatever was current when it was built. The arm needs one that loads
-plugins (`StartConversationRequest.plugins`, present in 1.10.0). `oh_gate_smoke.py` is what proves it
-for the image in use. With `--git`, the runner's docker git server is reached by its bridge IP,
-because host-network containers can't resolve its container name.
+**What the first smoke runs found (2026-10-20, on the run machine, musterd `6fee95a5`).** It took
+five runs to PASS, and each failure was a real one:
+
+- **No Claude 5.x model in the OpenHands arms.** The images' OpenHands doesn't know `claude-*-5-*`,
+  so it sends `temperature`, and the API refuses it ("`temperature` is deprecated for this model") on
+  the first call. The smoke runs `claude-haiku-4-5`, and the pair runs use `claude-sonnet-4-5`, which
+  OpenHands already handles.
+- **The interrupt slot was deaf the whole run.** The plugin's MCP server started without a cwd, so
+  it never found the seat's binding in the repo, and its live lease never reached the binding that
+  `inbox --interrupt-check` reads. It now starts from `/workspace/repo`. The check at step 0 still
+  runs before the MCP server joins. That one "deaf" line goes to the agent-server's log, not the
+  conversation, because the Claude Code arm never sees it either. Only a `⚡` line is injected.
+- **The smoke itself had three false readings.** The task text mentioned "⚡ musterd", which matched
+  as a delivered line. A bare file-name match counted edits that never happened. A steer sent before
+  the run was read by the agent's first `team_inbox_check`, leaving the interrupt slot nothing to
+  deliver. The smoke now requires the `[team]:` tag and a diff header, and it sends the steer once
+  the lane is open. It also saves `events.txt` and `patch.diff`.
+
+**The first pair (2026-10-20, `claude-sonnet-4-5`) measured nothing, and found three more.**
+`oh-coop` cost $4.69: agent1 hit the cost limit, and agent2 died on the API's "The final block in
+an assistant message cannot be `thinking`". `oh-musterd` cost $2.03, and both agents submitted.
+CooperBench's eval then failed both with "Failed to write patch1.patch". Fixed since:
+
+- **The seat died 15 s in.** In docker the agent-server was PID 1, so the MCP server it spawned had
+  ppid 1, which the adapter's session ladder (ADR 164) reads as "harness exited". It released the seat
+  at its first heartbeat, and every musterd call after the first failed with an empty error. So did
+  every gate check (fail open, unaudited) and every interrupt check. Neither agent opened a lane or
+  sent an act, and the arm's "no musterd call" check passed on the one call that landed. The smoke
+  had passed only because Haiku made all its musterd calls inside those 15 s. Containers now run
+  with `--init`, as Modal's do. The smoke now sleeps 25 s before a last musterd call, and fails on
+  any MCP error or `presence.session_ended`.
+- **The agent-server's state was in the patch.** It writes `workspace/conversations/…` and
+  `workspace/bash_events/…` under its cwd, which was the image's WORKDIR, the repo. `git add -A`
+  took them, and the patches reached 0.5 to 1.1 MB, past what the eval passes to `bash -c`. The
+  server now runs from `/`, as Modal's `workdir="/"`. The two runs were re-scored with those files
+  stripped (originals kept as `*.patch.orig`): `oh-coop` merged clean, because agent2's patch was
+  empty, with feature 1 failing and feature 2 passing; `oh-musterd` had merge conflicts.
+- **Extended thinking is off in both OpenHands arms.** OpenHands turns it on for Anthropic models by
+  default (a 200k budget), and on a long run it replays an assistant message that ends in a thinking
+  block. This departs from CooperBench's own `openhands_sdk` arm, but applies to both arms alike.
+
+PASS again after these (run 6, $0.045): the seat lived through `sleep 25`, and `team_status` after it
+answered "3 members · 2 present". PASS (run 5, `claude-haiku-4-5`, $0.02): the lane let `smoke-a.txt` through, the hook refused
+`smoke-b.txt` ("'**' is a declared contended surface you have not claimed a lane for") and the
+daemon audited the deny, and the steer arrived mid-run as `⚡ musterd [team]: steer from me …`. That
+also shows the image's agent-server loads plugins. The `-oh` images install `openhands-agent-server`
+unpinned, so a rebuilt image is checked again by the same smoke. With `--git`, the runner's docker
+git server is reached by its bridge IP, because host-network containers can't resolve its container
+name.
 
 ## Notes for the pilot (lane `01M5AQEG23`)
 
@@ -199,6 +242,7 @@ fly machine start --app musterd-cooperbench
 fly ssh console --app musterd-cooperbench
 # on the machine:
 cd /data/runs
+ln -sfn /opt/cooperbench/dataset dataset                                            # `cooperbench run` reads ./dataset
 PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/gate_smoke.py   # must print PASS first
 cooperbench run -n smoke-coop    -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code         --setting coop
 cooperbench run -n smoke-musterd -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code_musterd --setting coop

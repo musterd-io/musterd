@@ -181,8 +181,17 @@ def docker_run_args(
     The `-oh` image's ENTRYPOINT already passes `--host 0.0.0.0 --port 8000`; the trailing arguments
     override both (argparse keeps the last), so two agents on one host network don't collide and
     neither server listens beyond loopback.
+
+    `-w /` as CooperBench's Modal sandbox (`workdir="/"`): the agent-server writes its state under
+    `workspace/` in its cwd, and in the image's WORKDIR, the repo, `git add -A` put that state in the
+    patch, which grew past what the eval can pass to `bash -c` ("Failed to write patch1.patch").
+
+    `--init`, as Modal's sandbox has one: without it the agent-server is PID 1, so the musterd MCP
+    server it spawns has ppid 1, which the adapter's session ladder (ADR 164) reads as "harness
+    exited". It released the seat at its first heartbeat, 15 s in, and every musterd call, gate check
+    and interrupt check after that failed.
     """
-    args = ["run", "-d", "--rm", "--name", name, "--network=host"]
+    args = ["run", "-d", "--rm", "--init", "--name", name, "--network=host", "-w", "/"]
     for k, v in env.items():
         args += ["-e", f"{k}={v}"]
     if musterd:
@@ -240,7 +249,10 @@ def plugin_files(seat_env: dict[str, str], mcp_entry: str) -> dict[str, str]:
             ]
         }
     }
-    mcp = {"mcpServers": {"musterd": {"command": "node", "args": [mcp_entry], "env": seat_env}}}
+    # Started from the repo: the adapter finds the seat's binding from its cwd, and only a binding
+    # it found carries its live lease, which `inbox --interrupt-check` needs or reads as deaf.
+    launch = f"cd {shlex.quote(CONTAINER_REPO)} && exec node {shlex.quote(mcp_entry)}"
+    mcp = {"mcpServers": {"musterd": {"command": "sh", "args": ["-c", launch], "env": seat_env}}}
     manifest = {"name": "musterd", "version": "0.0.0", "description": "musterd seat: lane gate and team tools"}
     return {
         ".claude-plugin/plugin.json": json.dumps(manifest),
@@ -371,6 +383,11 @@ def musterd_agent(llm: Any, state: ArmState, *, cli_mode: bool = True) -> Any:
 
 def _get_default_agent(llm: Any, cli_mode: bool = False, coop_info: dict | None = None) -> Any:
     state = current_arm()
+    if state is not None:
+        # Both arms, alike: OpenHands defaults Anthropic models to extended thinking, and on a long run
+        # it replays an assistant message that ends in a thinking block, which the API refuses ("The
+        # final block in an assistant message cannot be `thinking`"). oh-coop's agent2 died on it.
+        llm = llm.model_copy(update={"extended_thinking_budget": None})
     if state is not None and state.mode == "musterd":
         return musterd_agent(llm, state, cli_mode=cli_mode)
     return _ORIGINAL_GET_DEFAULT_AGENT(llm=llm, cli_mode=cli_mode, coop_info=coop_info)

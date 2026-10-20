@@ -39,6 +39,8 @@ def llm() -> LLM:
 def test_agent_server_runs_on_loopback_on_its_own_port_with_host_networking():
     args = ohm.docker_run_args("img:task1-oh", name="c1", port=40123, env={"AGENT_ID": "agent1"}, musterd=False)
     assert "--network=host" in args and "-e" in args and "AGENT_ID=agent1" in args
+    assert args[args.index("-w") + 1] == "/"  # as Modal: the server's state stays out of the repo's patch
+    assert "--init" in args  # as Modal: the agent-server is not PID 1, so its MCP child's ppid isn't 1
     assert args[-5:] == ["img:task1-oh", "--host", "127.0.0.1", "--port", "40123"]
     assert not any(ohm.CONTAINER_PACK_DIR in a for a in args)
 
@@ -69,7 +71,8 @@ def test_the_plugin_gates_only_the_file_editor_and_carries_the_seat_env():
     assert hooks["PreToolUse"][0]["matcher"] == "file_editor"
     assert hooks["PreToolUse"][0]["hooks"][0]["command"] == f"node {ohm.GATE_SHIM}"
     mcp = json.loads(files[".mcp.json"])["mcpServers"]["musterd"]
-    assert mcp["args"] == ["/usr/lib/node_modules/@musterd/mcp/dist/index.js"] and mcp["env"] == env
+    assert mcp["command"] == "sh" and mcp["env"] == env
+    assert mcp["args"] == ["-c", "cd /workspace/repo && exec node /usr/lib/node_modules/@musterd/mcp/dist/index.js"]
     assert json.loads(files[".claude-plugin/plugin.json"])["name"] == "musterd"
 
 
@@ -126,6 +129,17 @@ def test_the_plain_docker_arm_keeps_cooperbench_agent():
             llm=llm(), cli_mode=True, coop_info={"agent_id": "agent1", "agents": ["agent1", "agent2"]}
         )
     assert "send_message" in agent.system_prompt_kwargs["collaboration"]
+
+
+@pytest.mark.parametrize("mode", ["docker", "musterd"])
+def test_both_arms_run_without_extended_thinking(mode):
+    assert llm().extended_thinking_budget  # OpenHands' default, which CooperBench's own arm keeps
+    state = ohm.ArmState(mode=mode, agent_id="agent1", agents=("agent1", "agent2"))
+    with ohm.arm(state):
+        agent = ohm.oh_preset.get_default_agent(
+            llm=llm(), cli_mode=True, coop_info={"agent_id": "agent1", "agents": ["agent1", "agent2"]}
+        )
+    assert agent.llm.extended_thinking_budget is None
 
 
 def test_musterd_calls_are_counted_from_action_events():
@@ -265,6 +279,21 @@ def test_the_interrupt_slot_injects_the_daemon_line_after_the_redis_check(monkey
     monkeypatch.setattr(inbox, "interrupt_line", lambda: None)
     LocalConversation()._check_inbox_messages()
     assert order == ["redis"]
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        ("⚡ musterd [cb-r1]: steer from me (steer) — read it\n", "⚡ musterd [cb-r1]: steer from me (steer) — read it"),
+        ("musterd: the interrupt line is deaf — this seat's session lease is dead\n", None),
+        ("", None),
+    ],
+)
+def test_only_a_raised_line_reaches_the_conversation(monkeypatch, stdout, expected):
+    from musterd_cooperbench.oh_container import musterd_oh_inbox as inbox
+
+    monkeypatch.setattr(inbox.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout=stdout))
+    assert inbox.interrupt_line() == expected
 
 
 def test_the_pth_loads_the_interrupt_module_from_its_mount():
