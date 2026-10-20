@@ -356,7 +356,9 @@ Drops Presence (`client.leave()`). The seat is held ~45s (the reclaim grace) so 
 
 Maps `to` → Recipient (`@team`/`@broadcast`/name), builds an Envelope (`from`=the claimed member), validates with `@musterd/protocol`, `POST …/messages` (or live WS). Returns the stored message id + a one-line confirmation. **Refuses until ready** — _pending_ (no seat → claim one) or _dormant_ (claimed, not joined → `team_join`), via `notReadyMessage` (ADR 032/033).
 
-**Reply size (lane 01M4S53FQT).** The confirmation plus any contract line the act carries (an ask's tier, a lane verdict, a superseded notice). Measured 2026-10-13 over 384 sends on one machine: median 84 characters, max 471. No cap is needed; a reply past 1,000 characters would be a regression.
+**A choice written as prose (ADR 684).** An `ask` whose body reads as a choice but has no option lines (`askProseChoiceNotice` in `@musterd/protocol`) gets one advisory line in the reply, and `prose_choice_notice` in `structuredContent`: /live shows option buttons only for lines that start `A.` / `1.`, so as sent the human sees Approve / Deny. `musterd send` prints the same line. It is computed by the client from the body, not returned by the daemon.
+
+**Reply size (lane 01M4S53FQT).** The confirmation plus any contract line the act carries (an ask's tier, a lane verdict, a superseded notice, a prose-choice notice). Measured 2026-10-13 over 384 sends on one machine: median 84 characters, max 471. No cap is needed; a reply past 1,000 characters would be a regression.
 
 ### `team_inbox_check`
 
