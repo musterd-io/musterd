@@ -61,6 +61,15 @@ export function parseManifest(json: unknown): RenderedManifest {
   };
 }
 
+/**
+ * Does a manifest's camera match the camera the scene will project through? A desk rendered at one
+ * elevation blitted under another lands on the wrong pixels and reads as a broken drawing, which is
+ * worse than the painted desk; so a mismatch leaves the room painted (and says so, once).
+ */
+export function cameraMatches(m: RenderedManifest, cam: { kx: number; ky: number }, tol = 1e-4): boolean {
+  return Math.abs(m.camera.kx - cam.kx) <= tol && Math.abs(m.camera.ky - cam.ky) <= tol;
+}
+
 export function assetById(m: RenderedManifest, id: string): RenderedAsset | undefined {
   return m.assets.find((a) => a.id === id);
 }

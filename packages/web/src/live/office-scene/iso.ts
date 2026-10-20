@@ -7,6 +7,26 @@
 
 export const KX = 0.70710678;
 export const KY = 0.35355339;
+
+/**
+ * An orthographic corner camera: `kx` spreads a floor unit left/right of the back corner, `ky` drops
+ * it down the panel. Azimuth is always 45° (kx = cos 45°, so Blender renders with a square pixel —
+ * `art/office/scene.py`); elevation is `asin(ky / kx)`. Heights are drawn 1:1 by both paths.
+ */
+export interface Camera {
+  kx: number;
+  ky: number;
+}
+
+/** The painted scene's camera: the 2:1 iso the Figma frames were drawn at (elevation 30°). */
+export const ISO_CAMERA: Camera = { kx: KX, ky: KY };
+/**
+ * The rendered room's camera (office realism, spec §2.2): the same corner, "a touch lower than today"
+ * so figures stand up and faces face the viewer — elevation ≈ 26°. The builder tunes `ky` against the
+ * render with nick's eye (spec §6.2); `art/office/render.py --ky` must be rendered with the same number,
+ * and `manifest.json` records what it was.
+ */
+export const CORNER_CAMERA: Camera = { kx: KX, ky: 0.31 };
 /** Logical floor extent (both axes). Desk/furniture anchors live in [0, FLOOR]. */
 export const FLOOR = 900;
 /** Floor slab thickness, in screen px at scale 1. */
@@ -32,13 +52,21 @@ export interface Fit {
   ox: number;
   oy: number;
   scale: number;
+  /** The camera this fit projects through; absent means `ISO_CAMERA`, so every painted-path caller is unchanged. */
+  cam?: Camera;
+}
+
+/** The camera a fit projects through. */
+export function cameraOf(fit: Fit): Camera {
+  return fit.cam ?? ISO_CAMERA;
 }
 
 /** Project a logical floor point (lx,ly) to screen pixels under a fit. */
 export function project(lx: number, ly: number, fit: Fit): Pt {
+  const cam = fit.cam ?? ISO_CAMERA;
   return {
-    x: fit.ox + (lx - ly) * KX * fit.scale,
-    y: fit.oy + (lx + ly) * KY * fit.scale,
+    x: fit.ox + (lx - ly) * cam.kx * fit.scale,
+    y: fit.oy + (lx + ly) * cam.ky * fit.scale,
   };
 }
 
@@ -88,30 +116,36 @@ export interface FitBox {
  * floor diamond (the old behaviour) let the wall tops clip off the top of the panel at wide/short aspect
  * ratios, which is why the back corner was getting cut off.
  */
-export const ROOM_BOX: FitBox = {
-  left: -FLOOR * KX,
-  right: FLOOR * KX,
-  top: -SCENE_RISE,
-  bottom: FLOOR * KY * 2 + SCENE_DROP,
-};
+export function roomBox(cam: Camera = ISO_CAMERA): FitBox {
+  return {
+    left: -FLOOR * cam.kx,
+    right: FLOOR * cam.kx,
+    top: -SCENE_RISE,
+    bottom: FLOOR * cam.ky * 2 + SCENE_DROP,
+  };
+}
+export const ROOM_BOX: FitBox = roomBox();
 
 /**
  * Fit a box into a panel: the largest scale that leaves `margin` of the binding axis, the box centred.
  * 0.94 → 0.96 (nick, 2026-08-03): the scene is height-bound at most aspects the product uses, so the
  * margin is the room's size on screen, and 6% of unused height on a 720p stream is 43 wasted pixels.
  */
-export function fitBox(panelW: number, panelH: number, box: FitBox, margin = 0.96): Fit {
+export function fitBox(panelW: number, panelH: number, box: FitBox, margin = 0.96, cam?: Camera): Fit {
   const bw = box.right - box.left;
   const bh = box.bottom - box.top;
   const scale = Math.max(0.05, Math.min((panelW * margin) / bw, (panelH * margin) / bh));
-  return {
+  const fit: Fit = {
     ox: panelW / 2 - ((box.left + box.right) / 2) * scale,
     oy: panelH / 2 - ((box.top + box.bottom) / 2) * scale,
     scale,
   };
+  // Only set when asked for: the painted path's fits keep their exact shape (and their snapshots).
+  if (cam) fit.cam = cam;
+  return fit;
 }
 
 /** Fit the whole scene, margin and all — the musterd.io hero and /office-preview; /live and /broadcast fit the furnished room instead (`furnishedBox` in render.ts). */
-export function fitFloor(panelW: number, panelH: number): Fit {
-  return fitBox(panelW, panelH, ROOM_BOX);
+export function fitFloor(panelW: number, panelH: number, cam?: Camera): Fit {
+  return cam ? fitBox(panelW, panelH, roomBox(cam), 0.96, cam) : fitBox(panelW, panelH, ROOM_BOX);
 }
