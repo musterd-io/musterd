@@ -52,6 +52,14 @@ of them to a lane. So a `met` says nothing about by how much, and the panel has 
   `met · 61% (target 40%, n 23)` beside the word. A lane with no metric looks exactly as it does
   today.
 - Lane `01M5B1Z5RR` adds the daemon's own daily samples for the two non-manual sources.
+  _(2026-10-19, lane `01M5B1Z5RR`: shipped as `store/sweepMetricSamples.ts` on the hub's reaper,
+  once per team per day, 5 minutes past midnight in `CALENDAR_DEFAULT_TZ`, the zone `read_status`
+  flips in, so samples and read days share one calendar. Two definitions the spec left open:
+  `wake_latency_p50_ms` takes `n` as the woken acts with a measured latency that day, not all
+  woken acts, because an unanswered wake adds nothing to the median. `dispute_rate` divides the
+  dispute readout's `total.opened` by the acceptance verdicts that day, meaning the first `accept`
+  or `decline` on each non-tiebreak `lane_review` ask. A review decline is both, so the rate reads
+  "disputes per verdict". A day with no measurement writes no sample, rather than a zero.)_
 - All the new fields are optional on the wire. A client from before this change ignores them, and
   an older daemon drops `metric` on open. No feature epoch.
 - New table `lane_samples`, in `musterd.db` beside `lanes`.

@@ -1,4 +1,5 @@
 import type { Ctx } from '../context.js';
+import { DIGEST_SEAT } from '../digest/schedule.js';
 import { log } from '../log.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
 import { sweepLapsedPulledAcceptances, sweepReapedAcceptances } from '../protocol/laneReroute.js';
@@ -23,6 +24,7 @@ import {
   listResidencyTeamIds,
   wakeExhaustionKey,
 } from '../store/residency.js';
+import { metricSampleGate, sweepMetricSamples } from '../store/sweepMetricSamples.js';
 import { getPolicy, getTeamById, getTeamBySlug, listActiveTeams } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 
@@ -65,6 +67,8 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
   // event loop with the sockets it judges, so any gap as long as the timeout itself already means
   // no row could have been heard. Both start at boot, because before that neither was running.
   let presenceWatchedSince = lastTickAt;
+  // ADR 673 lane 2: the daemon's own metric samples run once per team per day on this loop.
+  const metricSamples = metricSampleGate();
 
   const tick = async () => {
     const now = Date.now();
@@ -302,6 +306,21 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
           owner: lane.owner_seat,
           waited_hours: Math.round(lane.waited_ms / 3_600_000),
         });
+      }
+    }
+
+    // ADR 673 §2, lane 2: yesterday's sample for each metric lane whose source the daemon derives,
+    // written as the `digest` service seat. Hub only, like the backstop: a joiner's replica would
+    // measure its own sync clock, and the hub's rows reach it by the pull.
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id) || !metricSamples.due(team.id, now)) continue;
+      try {
+        const written = await sweepMetricSamples(ctx.db, team.id, team.slug, now, DIGEST_SEAT);
+        metricSamples.done(team.id, now);
+        if (written.length > 0)
+          log.info({ msg: 'metric_samples_swept', team: team.slug, count: written.length });
+      } catch (err) {
+        log.warn({ msg: 'metric_samples_sweep_failed', team: team.slug, err: String(err) });
       }
     }
 
