@@ -223,6 +223,16 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Typecheck
         run: pnpm typecheck
+      # The router's generated route tree must be committed exactly as this lockfile's generator writes it
+      # (setup's `pnpm build` just regenerated it). A seat with stale node_modules committed the other
+      # import order three times (#2738, #2922, #2972); every service checkout that then built it saw a
+      # dirty tree, which parked the daemon's auto-refresh and the /live publisher (lane 01M5BQ7WSZ).
+      - name: Generated route tree is current
+        run: |
+          git diff --exit-code -- packages/web/src/routeTree.gen.ts || {
+            echo "::error file=packages/web/src/routeTree.gen.ts::routeTree.gen.ts differs from what the build generates — run \`pnpm install && pnpm --filter @musterd/web build\` and commit the result."
+            exit 1
+          }
       # Byte budgets for the built web client (ADR 151).
       - name: Perf budgets
         run: pnpm perf:check

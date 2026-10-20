@@ -42,12 +42,18 @@ describe('buildLiveBuildScript', () => {
     gitDir: '/opt/git/bin',
   });
   it('syncs to origin/main, builds protocol then web, and does NOT run a dev server', () => {
-    expect(s).toContain('git checkout --quiet --detach origin/main');
+    expect(s).toContain('git checkout --quiet --force --detach origin/main');
     expect(s).toContain('pnpm --filter @musterd/protocol build');
     expect(s).toContain('pnpm --filter @musterd/web build');
     expect(s).not.toContain('pnpm dev'); // no dev server anymore
     expect(s).toContain('WORKTREE="/Users/x/agents-live"');
     expect(s).toContain('WEBROOT="/Users/x/.musterd/live/web"');
+  });
+  it('a checkout over a rewritten generated file is forced, and a failed one stops loudly (lane 01M5BQ7WSZ)', () => {
+    expect(s).not.toContain('checkout --quiet --detach origin/main || true'); // never builds the old HEAD
+    expect(s).toMatch(
+      /if ! git checkout --quiet --force --detach origin\/main 2>&1; then\n.*checkout FAILED — serving .*\n\s+exit 1/,
+    );
   });
   it('atomically publishes the built bundle into the web-root (stage + rename swap)', () => {
     expect(s).toContain('cp -R "$SRC" "$STAGE"'); // stage on the web-root filesystem
