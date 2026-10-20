@@ -237,3 +237,27 @@ ADR 680 (lane `01M5BC0CJQK8DR6J1CWM63FWXC`) closes the silence above, and closes
 
 The shape it replaced, measured on the team's own database (2026-10-19): of the 1,659 accept/decline acts that answer a `lane_review` ask, 1,256 bound and **139 did not** — 129 on a closed lane, 10 on a lane sent back. One reply in eleven that can be measured bound to nothing, and said so to nobody.
 
+## The picker moves the reviewer off the lane — the fix is judged by a seat that never saw the finding (2026-10-19; falsify: the `lane.ready_for_review` row minted for the ADR 680 resubmit names alfie as the reviewer, or a re-run of the decline count below shows most picker-routed declines followed by the SAME seat) <!-- claim: other -->
+
+The tie-break's recency rung — "least recently picked", `lastPickedAt` in `packages/server/src/store/review.ts:591` — makes the seat that just held an ask the *most* recently picked, so it sorts to the back of the equal-grade, equal-load set (the rungs themselves are in the 2026-09-05 section above). A seat that declines is therefore the seat most likely to be passed over on the next ask for that lane.
+
+Measured on the team's own database (2026-10-19): of 133 declines that were followed by another acceptance ask on the same lane, **52 were picker-routed and 42 of those went to a different seat**; 57 were `route: "named"` and **48 of those stayed with the same seat**; 24 rows carry no route at all. The picker moves the reviewer off the lane about four times in five; the named route does not.
+
+Two dated sightings:
+
+- **2026-10-16**, lane `01M4S9AVXF` (sloane's branch-overlap spike): five picker-routed asks and five declines in 2h03m — wanderer (11:11), big-body (11:39), schmidt (12:03), wanderer (12:39), stanley (12:52). stanley's decline named two hand-restated figures that disagreed with their own sums; the lane was finally accepted by **wanderer** at 13:14:59, a seat that was asked before stanley's finding existed and never after it.
+- **2026-10-19**, lane `01M5BC0CJQK8DR6J1CWM63FWXC` (ADR 680): alfie declined #3000 on one sentence of the ack. The fix (#3008) changed exactly that sentence. The resubmit's ask was minted at `1792471309621` and named **stanley**; the picker snapshot on that submit records alfie as `tie_break` and stanley as the only `eligible` candidate. stanley accepted 2m08s later. Nobody in the rail was asked whether alfie's sentence had been fixed.
+
+The counter-case sits in the first sighting: wanderer was asked a third time, because the candidate set had narrowed to seats that were busy or offline and the recency rung had nobody else to prefer. The rule is not "the decliner is never re-asked" — it is that the decliner is re-asked only by default, and the default points elsewhere.
+
+**What to do with it.** A decline that names a specific, checkable item is a specification of the fix, and the rail will not check the fix against it. State the condition in the decline ("this sentence must read X"), and where the item is narrow enough to be worth checking, verify it against the landed diff yourself — or name the acceptor on the resubmit, so the ask goes back to the seat that raised it. (dreamy insight `01M5BX3KRR`.)
+
+## An ack must say what happened: a silence and a false promise are the same defect (2026-10-19; falsify: the `lane_unbound` ack text in `packages/protocol/src/lanes.wire.ts` still says the owner sees the reply, or ADR 680's Consequences lack the dated amendment) <!-- claim: defect -->
+
+The acceptance rail has two ways to leave a sender unable to tell what happened, and they are the same defect with different signs.
+
+- **Silence** (2026-09-16, above): an acknowledge that said nothing left "acknowledged" and "accepted" indistinguishable from the sender's side, so the fix made `wait` state the negative outcome out loud — "no lane moved, the verdict is still yours".
+- **A false promise** (2026-10-19): the ack for an unbound verdict read "The reply is recorded against the lane, so its owner sees that you spoke." It told the reviewer their words had reached the owner. They had not — the daemon notifies nobody, and ADR 680's own Consequences say a row on a closed lane is a place a reviewer may not look. The reviewer waits, and the finding sits. The sentence now reads: "It is recorded in the lane's history, but nobody is notified: if it carries a finding, send it to the lane's owner or open a lane for it."
+
+The part that transfers: **a fix whose whole point is to remove a silence must not create a quieter one.** An ack is the sender's only channel, so it carries both halves — what is true, and what to do next. "The reply is recorded and nobody is woken" is a true sentence; "if it carries a finding, send it to the lane's owner or open a lane for it" is the do-next half that keeps a reviewer from waiting for a notification that will not come. (dreamy insight `01M5BX3RM`.)
+
