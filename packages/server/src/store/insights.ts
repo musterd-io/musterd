@@ -16,6 +16,7 @@ import {
   summariseDisputes,
   toDisputeRow,
   type DisputeReadout,
+  type DisputeRow,
   type OwnDisputeRow,
   type RawDisputeRow,
   type WaitingOnEntry,
@@ -809,6 +810,65 @@ export async function pricedWakeCostUsd(
   return costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
 }
 
+/** Wake latency for one woken act: the trigger's ts to the seat's first act strictly after it (ts,
+ *  then id — the steering tie-break). Null while the seat has not acted since. */
+async function wokenActLatency(
+  db: Driver,
+  teamId: string,
+  msg: MessageRow,
+  recipientId: string,
+): Promise<number | null> {
+  const later = await db.get<{ ts: number }>(
+    `SELECT ts FROM messages
+        WHERE team_id = ? AND from_member = ?
+          AND (ts > ? OR (ts = ? AND id > ?))
+        ORDER BY ts ASC, id ASC LIMIT 1`,
+    [teamId, recipientId, msg.ts, msg.ts, msg.id],
+  );
+  return later ? later.ts - msg.ts : null;
+}
+
+/**
+ * ADR 673 §2 (lane 2): one day's wake latency for the `wake_latency_p50_ms` metric source — the
+ * same per-act latency as {@link deriveWakeMetrics}, over the distinct acts whose `residency.woke`
+ * row falls in `[since, until)`. `n` is the latencies measured: a woken act its seat has not yet
+ * answered has no latency and adds nothing to the median, so it does not count toward `n` either.
+ */
+export async function dayWakeLatency(
+  db: Driver,
+  teamId: string,
+  since: number,
+  until: number,
+): Promise<{ p50_ms: number | null; n: number }> {
+  const rows = await db.all<{ target: string; detail: string | null }>(
+    `SELECT target, detail FROM audit
+      WHERE team_id = ? AND action = 'residency.woke' AND ts >= ? AND ts < ?`,
+    [teamId, since, until],
+  );
+  const byAct = new Map<string, string>();
+  for (const r of rows) {
+    try {
+      const act = r.detail ? (JSON.parse(r.detail) as { act?: unknown }).act : undefined;
+      if (typeof act === 'string') byAct.set(act, r.target);
+    } catch {
+      /* an unparseable row names no act */
+    }
+  }
+  const latencies: number[] = [];
+  for (const [actId, seat] of byAct) {
+    const msg = await db.get<MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?', [
+      teamId,
+      actId,
+    ]);
+    const recipient = await getMemberByName(db, teamId, seat);
+    if (!msg || !recipient) continue;
+    const latency = await wokenActLatency(db, teamId, msg, recipient.id);
+    if (latency !== null) latencies.push(latency);
+  }
+  latencies.sort((a, b) => a - b);
+  return { p50_ms: percentile(latencies, 0.5), n: latencies.length };
+}
+
 export async function deriveWakeMetrics(
   db: Driver,
   teamId: string,
@@ -844,15 +904,8 @@ export async function deriveWakeMetrics(
     ]);
     const recipient = await getMemberByName(db, teamId, woke.target);
     if (!msg || !recipient) continue;
-    // The seat's first act strictly after the trigger (ts, then id) — the steering tie-break.
-    const later = await db.get<{ ts: number }>(
-      `SELECT ts FROM messages
-          WHERE team_id = ? AND from_member = ?
-            AND (ts > ? OR (ts = ? AND id > ?))
-          ORDER BY ts ASC, id ASC LIMIT 1`,
-      [teamId, recipient.id, msg.ts, msg.ts, msg.id],
-    );
-    if (later) latencies.push(later.ts - msg.ts);
+    const latency = await wokenActLatency(db, teamId, msg, recipient.id);
+    if (latency !== null) latencies.push(latency);
     if (await actAnswered(db, msg, recipient.id)) answered += 1;
   }
   latencies.sort((a, b) => a - b);
@@ -991,6 +1044,17 @@ export async function deriveDisputes(
   windowMs: number = DISPUTES_WINDOW_MS,
 ): Promise<DisputeReadout> {
   const since = now - windowMs;
+  return summariseDisputes(await loadDisputeRows(db, teamId, since), since);
+}
+
+/** The acts a dispute is made of, from `since` (and before `until` when given), each with the act
+ *  it answers — the `sycophancy-readout.ts` cut. */
+async function loadDisputeRows(
+  db: Driver,
+  teamId: string,
+  since: number,
+  until?: number,
+): Promise<DisputeRow[]> {
   const rows = await db.all<RawDisputeRow>(
     `SELECT r.id AS id, mem.name AS seat, mem.kind AS kind, r.act AS act, r.body AS body,
             r.meta AS meta, r.in_reply_to AS "inReplyTo", r.ts AS ts,
@@ -998,13 +1062,41 @@ export async function deriveDisputes(
        FROM messages r
        JOIN members mem ON mem.id = r.from_member
        LEFT JOIN messages p ON p.id = r.in_reply_to
-      WHERE r.team_id = ? AND r.ts >= ?
+      WHERE r.team_id = ? AND r.ts >= ?${until === undefined ? '' : ' AND r.ts < ?'}
         AND (r.act IN ('challenge','decline','accept','ask')
              OR (r.act = 'message' AND r.in_reply_to IS NOT NULL))
       ORDER BY r.ts, r.id`,
-    [teamId, since],
+    until === undefined ? [teamId, since] : [teamId, since, until],
   );
-  return summariseDisputes(rows.map(toDisputeRow), since);
+  return rows.map(toDisputeRow);
+}
+
+/**
+ * ADR 673 §2 (lane 2): one day's dispute rate for the `dispute_rate` metric source. Disputes are
+ * the readout's `total.opened` over acts in `[since, until)`; acceptances are the acceptance
+ * verdicts given that day — the first `accept` or `decline` answering each `lane_review` ask
+ * (tiebreak asks excluded: they judge a dispute, not a landed lane). A review `decline` is both a
+ * verdict and a dispute, so the rate reads "disputes per verdict". Null below one verdict.
+ */
+export async function dayDisputeRate(
+  db: Driver,
+  teamId: string,
+  since: number,
+  until: number,
+): Promise<{ rate: number | null; disputes: number; n: number }> {
+  const rows = await loadDisputeRows(db, teamId, since, until);
+  const disputes = summariseDisputes(rows, since).total.opened;
+  const answered = new Set<string>();
+  for (const r of rows) {
+    if ((r.act !== 'accept' && r.act !== 'decline') || !r.inReplyTo || r.parentAct !== 'ask')
+      continue;
+    const review = (r.parentMeta as { lane_review?: { lane?: unknown; tiebreak?: unknown } } | null)
+      ?.lane_review;
+    if (!review || typeof review.lane !== 'string' || review.tiebreak) continue;
+    answered.add(r.inReplyTo);
+  }
+  const n = answered.size;
+  return { rate: n > 0 ? disputes / n : null, disputes, n };
 }
 
 /**
