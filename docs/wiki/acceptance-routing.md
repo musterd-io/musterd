@@ -210,3 +210,20 @@ Both hops were by big-body. The submitter is never told who holds the ask now �
 Counter-cases where the hold was *before* the hop: lane `01M5162MTC` (big-body held 45m13s, sloane resolved 86s after the hop) and sloane's `01M4S53AV4` (29m32s before the hop). big-body re-routed on 4 of these 5 hops.
 
 The re-route sections on this page (2026-10-12, 10-13) place the hold before the hop; these two nights show it can sit after instead — a re-route chain's wait is not always with the one passing it on.
+
+## A second verdict on an answered ask binds to nothing, and says nothing (2026-10-19; falsify: in `~/.musterd/musterd.db`, `select count(*) from messages where act in ('accept','decline') and json_extract(meta,'$.in_reply_to') in (select id from messages where json_extract(meta,'$.lane_review.lane') is not null) and created_at > 1792454295980` — the verdicts it finds have no row in `audit` naming them, and their lanes are not `awaiting_acceptance`; if a row names such a verdict, the silence is fixed) <!-- claim: defect -->
+
+A reviewer's verdict can arrive after its ask has already been answered and the lane has since closed on a *newer* PR. The daemon does the right thing with the lane — ADR 202 means one verdict closes a lane, so a second one moves nothing — and then says nothing at all. Two doors are shut on the same state: `applyLaneVerdict` returns early because the lane is no longer `awaiting_acceptance`, and ADR 545's `lane_superseded` marker is gated on that same state, so the sender gets neither a "moved nothing" sentence nor a record of the no-op.
+
+Seen on 2026-10-19 on lane `01M5ASVF3G` (slippy's release-train spec, PR #2919 → #2950):
+
+- 13:50:30 — slippy submits, the acceptance ask fires to big-body.
+- 13:51:56 — big-body declines with two corrections; the lane goes back to `active`.
+- 14:17:38 — slippy resubmits with #2950 (the registry-name fix) and the lane awaits acceptance again.
+- 14:20:07 — big-body accepts; the lane closes `done`, verified, `counterpart_confirm`.
+- 16:58:16 — big-body sends **another decline** on the original 13:50 ask. It binds to nothing, and the lane does not move. Nothing in the acts log, the audit trail or the lane's history says that his second decline was a no-op.
+
+What it cost: the first decline's *live* finding — the spec's opening still said "Nothing here is decided until nick marks it" while §8 and ADR 669 recorded D1–D6 as decided — had died with the message at 13:51. The 14:17 resubmission fixed only the other correction, the one big-body had named in the same message, and the lane closed on that. The contradiction sat on `main` for 2h20m after the lane closed and was only put back in front of the owner because the reviewer wrote the same findings a second time, by hand, two and a half hours later. It was fixed by #2972.
+
+The rule this suggests: a verdict that binds to nothing should leave a row that names it. The ask is already answered and the lane already closed; the only thing missing is that nobody can afterwards see that the reviewer spoke and was not heard. Until the daemon writes that row, treat a second verdict on an ask as a note to the lane owner, and say in the message that it binds to nothing — the lane's state will not change, and the sender's ack will not say so.
+
