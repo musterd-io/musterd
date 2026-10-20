@@ -25,10 +25,10 @@
  *      summary (never a URL, key, or secret — hard rule 5).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as backup from './backup.mjs';
 const { createR2Store, createWranglerR2Store, decryptDump, parseBackupKey, restoreSnapshot } =
@@ -178,11 +178,97 @@ export async function runRestoreDrill({
   return { teams: restoredTeams };
 }
 
+/** Build the macOS LaunchAgent plist for the monthly unattended R2 restore drill (1st of each month at `04:17` local). */
+export function buildDrillLaunchdPlist({
+  nodePath = process.execPath,
+  repoRoot = fileURLToPath(new URL('../..', import.meta.url)),
+  logPath = join(homedir(), '.musterd', 'cloud', 'drill.log'),
+  day = 1,
+  hour = 4,
+  minute = 17,
+} = {}) {
+  const scriptPath = join(repoRoot, 'scripts', 'cloud', 'drill.mjs');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>studio.sandrise.musterd-cloud-drill</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${nodePath}</string>
+    <string>${scriptPath}</string>
+    <string>--wrangler</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${repoRoot}</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Day</key>
+    <integer>${day}</integer>
+    <key>Hour</key>
+    <integer>${hour}</integer>
+    <key>Minute</key>
+    <integer>${minute}</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${dirname(nodePath)}:/opt/homebrew/bin:/Users/nick/Library/pnpm:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${logPath}</string>
+  <key>StandardErrorPath</key>
+  <string>${logPath}</string>
+</dict>
+</plist>
+`;
+}
+
 async function main() {
   const t0 = Date.now();
   const args = process.argv.slice(2);
   const defaultKeyPath = join(homedir(), '.musterd', 'cloud', 'backup.key');
   const defaultNeonEnvPath = join(homedir(), '.musterd', 'cloud', 'neon.env');
+
+  if (args.includes('--install-launchd')) {
+    const plistDir = join(homedir(), 'Library', 'LaunchAgents');
+    const plistPath = join(plistDir, 'studio.sandrise.musterd-cloud-drill.plist');
+    const logPath = join(homedir(), '.musterd', 'cloud', 'drill.log');
+    const runtimeRoot = join(homedir(), '.musterd', 'runtime');
+    const repoRoot = existsSync(join(runtimeRoot, 'scripts', 'cloud', 'drill.mjs'))
+      ? runtimeRoot
+      : fileURLToPath(new URL('../..', import.meta.url));
+    mkdirSync(plistDir, { recursive: true });
+    mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
+    writeFileSync(plistPath, buildDrillLaunchdPlist({ repoRoot, logPath }), { mode: 0o644 });
+    spawnSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
+    const load = spawnSync('launchctl', ['load', plistPath], { encoding: 'utf8' });
+    if (load.status !== 0) {
+      throw new Error(`launchctl load failed (exit ${load.status}): ${load.stderr ?? ''}`);
+    }
+    if (args.includes('--kickstart')) {
+      const uid = process.getuid ? process.getuid() : 501;
+      const ks = spawnSync(
+        'launchctl',
+        ['kickstart', '-k', `gui/${uid}/studio.sandrise.musterd-cloud-drill`],
+        { encoding: 'utf8' },
+      );
+      if (ks.status !== 0) {
+        throw new Error(`launchctl kickstart failed (exit ${ks.status}): ${ks.stderr ?? ''}`);
+      }
+    }
+    console.log(
+      JSON.stringify({
+        msg: 'cloud_restore_drill_schedule_installed',
+        label: 'studio.sandrise.musterd-cloud-drill',
+        plist: plistPath,
+        log: logPath,
+        schedule: 'day 1 04:17 monthly',
+      }),
+    );
+    return;
+  }
 
   const rawKey =
     process.env.MUSTERD_BACKUP_KEY?.trim() ||

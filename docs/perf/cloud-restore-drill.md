@@ -14,10 +14,24 @@
 5. **Run the Postgres verification suite:** Runs `src/db/pg/tenancy.test.ts`, `src/db/pg/migrate.test.ts`, `src/db/pg/drift.test.ts`, and `src/cloud/backup.test.ts`.
 6. **Teardown:** Drops `musterd_drill_<id>` and `musterd_drill_<id>_trace` with `DROP DATABASE ... WITH (FORCE)`.
 
-## Recorded Result (2026-10-20)
+## Recorded Results
+
+### 2026-10-20 — First drill (lane `01M3Z4408C3T72EY3H92JQST01`)
 
 ```json
 {"msg":"cloud_restore_drill_completed","date":"2026-10-20","drill_databases":["musterd_drill_mvh0ztnr","musterd_drill_mvh0ztnr_trace"],"schema_versions":{"main":118,"trace":4},"teams_restored":[{"slug":"revive","date":"2026-10-20","coordination_bytes":1910,"trace_bytes":177,"tables":54,"coordination_rows_inserted":11,"trace_rows_inserted":0,"members_verified":3,"rls_leak_rows":0}],"suite_passed":true,"duration_ms":51948}
+```
+
+### 2026-10-20 — Unattended monthly LaunchAgent cadence (`studio.sandrise.musterd-cloud-drill`, lane `01M3Z44YMTAH6F4Z19ZGRB72JM`)
+
+The monthly cadence is wired in two places:
+- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-drill`):** installed by `node scripts/cloud/drill.mjs --install-launchd` (`~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist`), runs `scripts/cloud/drill.mjs --wrangler` on the 1st of each month at `04:17` local time (one hour after the `03:17` nightly backup) and appends structured JSON lines to `~/.musterd/cloud/drill.log`.
+- **GitHub Actions workflow (`.github/workflows/cloud-restore-drill.yml`):** cron `17 4 1 * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/drill.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_{OWNER,APP,OPERATOR}_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured.
+
+Unattended LaunchAgent kickstart output recorded in `~/.musterd/cloud/drill.log`:
+
+```json
+{"msg":"cloud_restore_drill_completed","date":"2026-10-20","drill_databases":["musterd_drill_mvh23r55","musterd_drill_mvh23r55_trace"],"schema_versions":{"main":119,"trace":4},"teams_restored":[{"slug":"revive","date":"2026-10-20","coordination_bytes":1910,"trace_bytes":177,"tables":54,"coordination_rows_inserted":11,"trace_rows_inserted":0,"members_verified":3,"rls_leak_rows":0}],"suite_passed":true,"duration_ms":57329}
 ```
 
 ### Bugs caught and fixed by the first real-Neon drill

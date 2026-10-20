@@ -10,7 +10,11 @@ import {
   parseBackupKey,
   runBackupPass,
 } from '../../../../scripts/cloud/backup.mjs';
-import { runRestoreDrill, selectNewestTeamDumps } from '../../../../scripts/cloud/drill.mjs';
+import {
+  buildDrillLaunchdPlist,
+  runRestoreDrill,
+  selectNewestTeamDumps,
+} from '../../../../scripts/cloud/drill.mjs';
 import { openTestDriver } from '../db/testing.js';
 import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
@@ -76,6 +80,17 @@ describe('Cloud 3 encrypted R2 backups (ADR 679)', () => {
     expect(plist).toContain('<key>StartCalendarInterval</key>');
     expect(plist).toContain('<integer>3</integer>');
     expect(plist).toContain('<integer>17</integer>');
+
+    const drillPlist = buildDrillLaunchdPlist({
+      nodePath: '/opt/homebrew/bin/node',
+      repoRoot: '/Users/nick/.musterd/runtime',
+      logPath: '/Users/nick/.musterd/cloud/drill.log',
+    });
+    expect(drillPlist).toContain('<string>studio.sandrise.musterd-cloud-drill</string>');
+    expect(drillPlist).toContain('<key>Day</key>');
+    expect(drillPlist).toContain('<integer>1</integer>');
+    expect(drillPlist).toContain('<integer>4</integer>');
+    expect(drillPlist).toContain('<integer>17</integer>');
 
     expect(
       selectNewestTeamDumps([
