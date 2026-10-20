@@ -115,6 +115,50 @@ withDrivers('policy-http', (_o, kind) => {
   });
 
   describe('the policy.change audit records the request, not the parsed result', () => {
+    it('keeps policy credentials on the hub and redacts them from the audit event', async () => {
+      const secrets = {
+        ask_slack_webhook: 'https://hooks.slack.test/ASK_SENTINEL',
+        seeds_relay_url: 'https://relay.test/SEEDS_URL_SENTINEL',
+        seeds_relay_token: 'SEEDS_TOKEN_SENTINEL',
+        away_relay_url: 'wss://relay.test/AWAY_URL_SENTINEL',
+        away_relay_token: 'AWAY_TOKEN_SENTINEL',
+        slack_bot_token: 'SLACK_TOKEN_SENTINEL',
+        doorbell: {
+          slack_url: 'https://hooks.slack.test/DOORBELL_SLACK_SENTINEL',
+          webhook_url: 'https://hooks.test/DOORBELL_WEBHOOK_SENTINEL',
+        },
+      };
+      const set = await post(
+        '/teams/dawn/policy',
+        { ...secrets, ask_fallback_to_nonadmin: true },
+        bearer(nickCred),
+      );
+      expect(set.status).toBe(200);
+      expect(await storedRow()).toMatchObject({ ...secrets, ask_fallback_to_nonadmin: true });
+
+      const audit = await server.store.get<{ detail: string }>(
+        "SELECT detail FROM audit WHERE action = 'policy.change' ORDER BY ts DESC LIMIT 1",
+      );
+      expect(audit).toBeDefined();
+      const marker = { $redacted: 'policy-secret' };
+      expect(JSON.parse(audit!.detail)).toMatchObject({
+        ask_slack_webhook: marker,
+        seeds_relay_url: marker,
+        seeds_relay_token: marker,
+        away_relay_url: marker,
+        away_relay_token: marker,
+        slack_bot_token: marker,
+        doorbell: { slack_url: marker, webhook_url: marker },
+        ask_fallback_to_nonadmin: true,
+      });
+      const encoded = audit!.detail;
+      for (const value of [
+        ...Object.values(secrets).filter((value): value is string => typeof value === 'string'),
+        ...Object.values(secrets.doorbell),
+      ])
+        expect(encoded).not.toContain(value);
+    });
+
     it('ADR 533: a write stamps review_by on the stored doc; a client-supplied policy_review marker is stripped', async () => {
       const before = Date.now();
       const set = await post(

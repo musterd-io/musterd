@@ -22,6 +22,7 @@ import { upsertSample } from '../store/laneSamples.js';
 import { getMemberByName } from '../store/members.js';
 import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
+import { stripPolicyRedactionMarkers } from '../store/policyRedaction.js';
 import {
   applyFoldedEnrollment,
   recordSessionAttestation,
@@ -446,7 +447,7 @@ async function projectPolicyEvent(
     return 'applied';
   }
   if (event.action !== 'policy.change') return 'unknown';
-  const stored = event.detail ?? {};
+  const stored = stripPolicyRedactionMarkers(event.detail ?? {});
   await db.run('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?', [
     JSON.stringify(stored),
     now,

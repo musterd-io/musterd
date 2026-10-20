@@ -226,6 +226,61 @@ withDrivers('policy', (_o, kind) => {
       });
     });
 
+    it('the hub keeps credentials locally and the replica omits redacted policy fields', async () => {
+      const secrets = {
+        ask_slack_webhook: 'https://hooks.slack.test/ASK_SENTINEL',
+        seeds_relay_url: 'https://relay.test/SEEDS_URL_SENTINEL',
+        seeds_relay_token: 'SEEDS_TOKEN_SENTINEL',
+        away_relay_url: 'wss://relay.test/AWAY_URL_SENTINEL',
+        away_relay_token: 'AWAY_TOKEN_SENTINEL',
+        slack_bot_token: 'SLACK_TOKEN_SENTINEL',
+        doorbell: {
+          allow: ['slack'],
+          defaults: ['slack'],
+          slack_url: 'https://hooks.slack.test/DOORBELL_SLACK_SENTINEL',
+          webhook_url: 'https://hooks.test/DOORBELL_WEBHOOK_SENTINEL',
+        },
+      };
+      const set = await post(
+        hubBase,
+        '/teams/bravo/policy',
+        { ...secrets, ask_fallback_to_nonadmin: true },
+        nickOnHub,
+      );
+      expect(set.status).toBe(200);
+      expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toMatchObject({
+        ...secrets,
+        ask_fallback_to_nonadmin: true,
+      });
+
+      await roundTrip();
+
+      const projected = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
+      const received = await joiner.store.get<{ detail: string }>(
+        "SELECT detail FROM audit WHERE action = 'policy.change' ORDER BY ts DESC LIMIT 1",
+      );
+      expect(received).toBeDefined();
+      expect(JSON.parse(received!.detail).seeds_relay_token).toEqual({
+        $redacted: 'policy-secret',
+      });
+      expect(projected).toMatchObject({
+        ask_fallback_to_nonadmin: true,
+        doorbell: { allow: ['slack'], defaults: ['slack'] },
+      });
+      for (const field of [
+        'ask_slack_webhook',
+        'seeds_relay_url',
+        'seeds_relay_token',
+        'away_relay_url',
+        'away_relay_token',
+        'slack_bot_token',
+      ])
+        expect(projected).not.toHaveProperty(field);
+      expect(projected.doorbell).not.toHaveProperty('slack_url');
+      expect(projected.doorbell).not.toHaveProperty('webhook_url');
+      expect(JSON.stringify(projected)).not.toContain('$redacted');
+    });
+
     it('replace semantics survive the fold: a knob cleared on the hub is cleared on the joiner', async () => {
       await post(hubBase, '/teams/bravo/policy', { residency: { hourly_cap: 1 } }, nickOnHub);
       await roundTrip();

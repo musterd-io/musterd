@@ -56,7 +56,9 @@ falsifier 2 runnable — without re-opening the federation question ADR 390 §6 
 **`seed` becomes a replicated kind with a hub-exclusive origin, and the relay stays the hub's.**
 
 1. **The hub is the only node that mints `seed` events.** This copies the rule `policy` and
-   `record.incident_report` already carry (`sync/log.ts:185`, `:197`): a joiner-minted `seed` event
+   `record.incident_report` already carry (`sync/log.ts:185`, `:197`). _(Amended 2026-10-19: replicated
+   policy events redact secret-bearing values and replicas omit those fields; the complete
+   integration credentials remain hub-local, per ADR 677.)_ A joiner-minted `seed` event
    is refused at ingest. The relay is polled in exactly one place, so a seed has one birth and one
    `relay_id` per team, and two daemons cannot race the same relay cursor.
 2. **`relay_id` is the cross-machine identity, as it already is for thread entries.** The fold
@@ -115,6 +117,9 @@ read: one relay poll *or one fold* away, whichever the node can do.
   relay credentials too. It would poll the relay with its own empty cursor and stamp
   `seed.captured` events the hub refuses with a 403. `ingestTeamSeeds` now returns before any fetch
   on an enrolled joiner.
+- **2026-10-19 (ADR 677):** the policy event path no longer distributes the relay token; the
+  historical event scrub waits for confirmation that the token has been rotated on the hub and
+  replicas.
 
 ## Observability & Evaluation
 

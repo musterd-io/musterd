@@ -18,6 +18,256 @@ describe('the portable ladder (spec §12.2)', () => {
     expect(MIGRATIONS[MIGRATIONS.length - 1]!.version).toBe(LADDER[LADDER.length - 1]!.version);
   });
 
+  it('v116 scrubs historical policy copies in place on SQLite and Postgres', async () => {
+    const marker = { $redacted: 'policy-secret' };
+    const policy = {
+      ask_slack_webhook: 'https://hooks.slack.test/ASK_SENTINEL',
+      seeds_relay_url: 'https://relay.test/SEEDS_URL_SENTINEL',
+      seeds_relay_token: 'SEEDS_TOKEN_SENTINEL',
+      away_relay_url: 'wss://relay.test/AWAY_URL_SENTINEL',
+      away_relay_token: 'AWAY_TOKEN_SENTINEL',
+      slack_bot_token: 'SLACK_TOKEN_SENTINEL',
+      doorbell: {
+        slack_url: 'https://hooks.slack.test/DOORBELL_SLACK_SENTINEL',
+        webhook_url: 'https://hooks.test/DOORBELL_WEBHOOK_SENTINEL',
+      },
+      ask_fallback_to_nonadmin: true,
+    };
+    const event = {
+      kind: 'policy',
+      team: 't',
+      event: {
+        id: 'audit-policy',
+        ts: 10,
+        actor: 'nick',
+        action: 'policy.change',
+        target: null,
+        result: 'allow',
+        detail: policy,
+      },
+      origin_node: 'N',
+      origin_seq: 17,
+    };
+    const otherEvent = {
+      kind: 'policy',
+      team: 't',
+      event: {
+        id: 'audit-other',
+        ts: 12,
+        actor: 'nick',
+        action: 'member.add',
+        target: 'ada',
+        result: 'allow',
+        detail: { note: 'KEEP_SYNC_SENTINEL' },
+      },
+      origin_node: 'N',
+      origin_seq: 18,
+    };
+
+    const sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    runMigrations(
+      sqlite,
+      MIGRATIONS.filter((m) => m.version <= 115),
+    );
+    sqlite.exec("INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('T','t',1,1)");
+    sqlite.exec("INSERT INTO nodes (id, team_id, label) VALUES ('N','T','hub')");
+    const insertSqlite = sqlite.prepare(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at,
+         origin_node, origin_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insertSqlite.run(
+      'audit-policy',
+      'T',
+      10,
+      'nick',
+      'policy.change',
+      null,
+      'allow',
+      JSON.stringify(policy),
+      11,
+      'N',
+      17,
+    );
+    insertSqlite.run(
+      'audit-other',
+      'T',
+      12,
+      'nick',
+      'member.add',
+      null,
+      'allow',
+      '{"note":"KEEP_SENTINEL"}',
+      13,
+      'N',
+      18,
+    );
+    sqlite
+      .prepare(
+        `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('sync-policy', 'T', 'N', 17, 9, JSON.stringify(event), 20);
+    sqlite
+      .prepare(
+        `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('sync-other', 'T', 'N', 18, 10, JSON.stringify(otherEvent), 21);
+    const sqliteAuditBefore = sqlite
+      .prepare(
+        'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
+      )
+      .all();
+    const sqliteSyncBefore = sqlite
+      .prepare(
+        'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
+      )
+      .all();
+    expect(runMigrations(sqlite)).toBe(116);
+    expect(
+      sqlite
+        .prepare(
+          'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
+        )
+        .all(),
+    ).toEqual(sqliteAuditBefore);
+    expect(
+      sqlite
+        .prepare(
+          'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
+        )
+        .all(),
+    ).toEqual(sqliteSyncBefore);
+    const sqliteDetail = JSON.parse(
+      sqlite.prepare('SELECT detail FROM audit WHERE id = ?').get('audit-policy')!.detail as string,
+    );
+    const sqlitePayload = JSON.parse(
+      sqlite.prepare('SELECT payload FROM sync_log WHERE id = ?').get('sync-policy')!
+        .payload as string,
+    );
+    expect(sqliteDetail).toMatchObject({
+      ask_slack_webhook: marker,
+      seeds_relay_url: marker,
+      seeds_relay_token: marker,
+      away_relay_url: marker,
+      away_relay_token: marker,
+      slack_bot_token: marker,
+      doorbell: { slack_url: marker, webhook_url: marker },
+      ask_fallback_to_nonadmin: true,
+    });
+    expect(JSON.stringify(sqlitePayload)).not.toContain('SENTINEL');
+    expect(sqlite.prepare('SELECT detail FROM audit WHERE id = ?').get('audit-other')).toEqual({
+      detail: '{"note":"KEEP_SENTINEL"}',
+    });
+    expect(
+      JSON.parse(
+        sqlite.prepare('SELECT payload FROM sync_log WHERE id = ?').get('sync-other')!
+          .payload as string,
+      ),
+    ).toEqual(otherEvent);
+
+    const p = await pgliteDriver();
+    const owner = p.asOwner();
+    await migratePostgres(owner);
+    await owner.exec("UPDATE schema_meta SET value = '115' WHERE key = 'schema_version'");
+    await owner.exec("INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('T','t',1,1)");
+    await owner.exec("INSERT INTO nodes (id, team_id, label) VALUES ('N','T','hub')");
+    await owner.run(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at,
+         origin_node, origin_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'audit-policy',
+        'T',
+        10,
+        'nick',
+        'policy.change',
+        null,
+        'allow',
+        JSON.stringify(policy),
+        11,
+        'N',
+        17,
+      ],
+    );
+    await owner.run(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at,
+         origin_node, origin_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'audit-other',
+        'T',
+        12,
+        'nick',
+        'member.add',
+        null,
+        'allow',
+        '{"note":"KEEP_SENTINEL"}',
+        13,
+        'N',
+        18,
+      ],
+    );
+    await owner.run(
+      `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['sync-policy', 'T', 'N', 17, 9, JSON.stringify(event), 20],
+    );
+    await owner.run(
+      `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['sync-other', 'T', 'N', 18, 10, JSON.stringify(otherEvent), 21],
+    );
+    const pgAuditBefore = await owner.all(
+      'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
+    );
+    const pgSyncBefore = await owner.all(
+      'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
+    );
+    expect(await migratePostgres(owner)).toBe(116);
+    expect(
+      await owner.all(
+        'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
+      ),
+    ).toEqual(pgAuditBefore);
+    expect(
+      await owner.all(
+        'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
+      ),
+    ).toEqual(pgSyncBefore);
+    const pgDetail = JSON.parse(
+      (await owner.get<{ detail: string }>('SELECT detail FROM audit WHERE id = ?', [
+        'audit-policy',
+      ]))!.detail,
+    );
+    const pgPayload = JSON.parse(
+      (await owner.get<{ payload: string }>('SELECT payload FROM sync_log WHERE id = ?', [
+        'sync-policy',
+      ]))!.payload,
+    );
+    expect(pgDetail).toMatchObject({
+      ask_slack_webhook: marker,
+      seeds_relay_url: marker,
+      seeds_relay_token: marker,
+      away_relay_url: marker,
+      away_relay_token: marker,
+      slack_bot_token: marker,
+      doorbell: { slack_url: marker, webhook_url: marker },
+      ask_fallback_to_nonadmin: true,
+    });
+    expect(JSON.stringify(pgPayload)).not.toContain('SENTINEL');
+    expect(await owner.get('SELECT detail FROM audit WHERE id = ?', ['audit-other'])).toEqual({
+      detail: '{"note":"KEEP_SENTINEL"}',
+    });
+    expect(
+      JSON.parse(
+        (await owner.get<{ payload: string }>('SELECT payload FROM sync_log WHERE id = ?', [
+          'sync-other',
+        ]))!.payload,
+      ),
+    ).toEqual(otherEvent);
+    await p.close();
+  });
+
   it('v83: the four member-owned tables carry team_id on both engines', async () => {
     const s = new Database(':memory:');
     runMigrations(s);
@@ -61,7 +311,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(117);
+    expect(runMigrations(s)).toBe(118);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
@@ -92,7 +342,7 @@ describe('the portable ladder (spec §12.2)', () => {
       `INSERT INTO tool_call_stats (team_id, seat, role, tool, outcome, bucket_start, calls,
          total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','team_send','ok',3600000,4,40,20)`,
     );
-    expect(runMigrations(s)).toBe(117);
+    expect(runMigrations(s)).toBe(118);
     expect(s.prepare('SELECT rail, calls, role FROM tool_call_stats').get()).toEqual({
       rail: 'stdio',
       calls: 4,
@@ -145,7 +395,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '103') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     ).run();
 
-    expect(runMigrations(s)).toBe(117);
+    expect(runMigrations(s)).toBe(118);
 
     expect(s.prepare('SELECT * FROM presence WHERE id = ?').get('P')).toMatchObject({
       id: 'P',
@@ -201,7 +451,7 @@ describe('the portable ladder (spec §12.2)', () => {
 
     // A rewind replays the rebuild. The lease must still be there: fkOff is the whole point.
     s.prepare("UPDATE schema_meta SET value = '103' WHERE key = 'schema_version'").run();
-    expect(runMigrations(s)).toBe(117);
+    expect(runMigrations(s)).toBe(118);
     expect(s.prepare('SELECT presence_id FROM session_leases WHERE id = ?').get('L')).toEqual({
       presence_id: 'P',
     });
