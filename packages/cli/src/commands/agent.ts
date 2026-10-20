@@ -36,7 +36,7 @@ export async function agentCommand(
   const name = parsed.positionals[0];
   if (!name || /\s/.test(name)) {
     throw new CliError(
-      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <id[,id…]>] [--driver <you>] [--here | --path <dir>] | --hosted [--json]',
+      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <id[,id…]>] [--driver <you>] [--here | --path <dir>] | --hosted [--host <label>] [--json]',
       2,
     );
   }
@@ -88,7 +88,14 @@ export async function agentCommand(
   // pilot ran these the other way round on 2026-10-19 and the host polled an empty queue forever).
   // No workspace, no wiring: the host clones and wires on its own machine.
   if (parsed.flags['hosted'] === true) {
-    const minted = await http.mintSponsoredAgent(team, { name, ...(role ? { role } : {}) });
+    // `--host <label>` pins the provision to one live host of the sponsor's (lane 01M5DR34Y2);
+    // without it the newest-seen host is named and any live host of the sponsor's may claim.
+    const host = flagStr(parsed.flags, 'host');
+    const minted = await http.mintSponsoredAgent(team, {
+      name,
+      ...(role ? { role } : {}),
+      ...(host ? { host } : {}),
+    });
     if (parsed.flags['json']) {
       process.stdout.write(
         JSON.stringify({

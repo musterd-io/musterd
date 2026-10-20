@@ -55,6 +55,22 @@ withDrivers('hostProvisions', (o) => {
       expect((await getProvision(db, team.id, row.id))!.state).toBe('claimed');
     });
 
+    // Lane 01M5DR34Y2: two live hosts of one sponsor raced for every row; a row pinned at insert
+    // waits for the named host (2026-10-20: three machine stops to steer three canary provisions).
+    it('a row pinned to a host is claimed only by that host; an unpinned row by any', async () => {
+      const { db, team, dana, scopeOf } = await teamWithHumans();
+      const { member: a } = await createSponsoredAgent(db, team, dana, { name: 'pinned' });
+      const { member: b } = await createSponsoredAgent(db, team, dana, { name: 'loose' });
+      const pinned = await insertProvision(db, team.id, a.id, dana.id, Date.now(), null, 'h2');
+      const loose = await insertProvision(db, team.id, b.id, dana.id);
+      expect(pinned.host).toBe('h2');
+      const byH1 = await claimProvisions(db, team.id, 'h1', scopeOf(dana.id), 5);
+      expect(byH1.map((r) => r.id)).toEqual([loose.id]);
+      const byH2 = await claimProvisions(db, team.id, 'h2', scopeOf(dana.id), 5);
+      expect(byH2.map((r) => r.id)).toEqual([pinned.id]);
+      expect(byH2[0]!.claimed_by).toBe('h2');
+    });
+
     it('a sponsor key claims only its own rows; a team-wide key claims no sponsored row', async () => {
       const { db, team, dana, eve, scopeOf } = await teamWithHumans();
       const { member: ds } = await createSponsoredAgent(db, team, dana, { name: 'dana-scout' });

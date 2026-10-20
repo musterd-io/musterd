@@ -175,8 +175,10 @@ if [ "$SKIP_SPONSOR" = 0 ]; then
   fi
   say "-- sponsor: hosted budget \$$HOSTED_BUDGET_USD per wake (ADR 463 §2 — a claim without one fails no_budget)"
   run musterd team policy --hosted-budget "$HOSTED_BUDGET_USD"
-  say "-- sponsor: mint the agent (sponsored path — this is what queues its provision)"
-  run musterd agent "$SEAT" --hosted
+  say "-- sponsor: mint the agent (sponsored path — this is what queues its provision, pinned to this host)"
+  # --host pins the row to THIS machine's label: with another host of the sponsor's polling (the
+  # pilot, a sibling canary), whichever polled first used to claim it (2026-10-20, three times).
+  run musterd agent "$SEAT" --hosted --host "$HOST_LABEL"
 fi
 
 say ""

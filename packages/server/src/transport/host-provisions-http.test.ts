@@ -115,6 +115,32 @@ withDrivers('host-provisions-http', (_o, kind) => {
       expect(again.json.provisions).toEqual([]);
     });
 
+    // Lane 01M5DR34Y2: `--host <label>` pins the row to one live host of the sponsor's; a label
+    // that did not poll is refused with the ones that did, and nothing is minted or queued.
+    it('a mint naming a live host pins the provision to it; naming an unseen host is refused', async () => {
+      const { dana, hostKey } = await danaWithLiveHost();
+      const bad = await post(
+        '/teams/hp-t/members/agents',
+        { name: 'dana-scout', host: 'dana-air' },
+        dana,
+      );
+      expect(bad.status).toBe(409);
+      expect(bad.json.error.message).toMatch(/dana-air.*seen: dana-mbp/);
+      const r = await post(
+        '/teams/hp-t/members/agents',
+        { name: 'dana-scout', host: 'dana-mbp' },
+        dana,
+      );
+      expect(r.status).toBe(201);
+      expect(r.json).toMatchObject({ hosting: 'sponsor_host', host: 'dana-mbp' });
+      const row = (await server.store.get('SELECT host FROM host_provisions WHERE state = ?', [
+        'pending',
+      ])) as { host: string | null };
+      expect(row.host).toBe('dana-mbp');
+      const claim = await post('/teams/hp-t/host/provisions', { host: 'dana-mbp' }, hostKey);
+      expect(claim.json.provisions).toHaveLength(1);
+    });
+
     it('a mint with no live host answers hosting: connect_link and queues nothing', async () => {
       const dana = await addHuman('dana');
       const r = await post('/teams/hp-t/members/agents', { name: 'dana-scout' }, dana);

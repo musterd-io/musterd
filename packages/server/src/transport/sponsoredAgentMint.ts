@@ -29,7 +29,7 @@ export async function mintSponsoredAgent(
   ctx: Ctx,
   team: TeamRow,
   sponsor: MemberRow,
-  input: { name: string; role?: string | null | undefined },
+  input: { name: string; role?: string | null | undefined; host?: string | null | undefined },
   origin: string,
 ): Promise<{
   member: MemberRow;
@@ -47,6 +47,19 @@ export async function mintSponsoredAgent(
       `"${team.slug}" keeps its roster in seat files — add an agent there (\`musterd agent\`); ` +
         'member-created agents need a team whose roster lives in the daemon',
     );
+  // A named host (`musterd agent --hosted --host <label>`, lane 01M5DR34Y2) pins the row to that
+  // label; checked BEFORE the member exists, so a refusal leaves no seat behind; it must be one of the sponsor's hosts seen in the window, else the mint is refused with
+  // the labels that were. Unnamed keeps the original shape: the newest-seen host, any host claims.
+  const seen = await sponsorHostsSeen(ctx.db, team.id, sponsor.id);
+  const wanted = input.host ?? null;
+  if (wanted !== null && !seen.includes(wanted)) {
+    throw new MusterdError(
+      'conflict',
+      `host "${wanted}" is not a host of yours that polled in the last 10 minutes` +
+        (seen.length > 0 ? ` (seen: ${seen.join(', ')})` : ' (none seen)') +
+        ' — start it, or name one of those',
+    );
+  }
   const { member, nonce, expires_at } = await createSponsoredAgent(
     ctx.db,
     team,
@@ -69,10 +82,10 @@ export async function mintSponsoredAgent(
   // ADR 463 §2: a sponsor whose own host key polled in the last 10 minutes gets the agent stood up
   // there — one pending provision that host claims. Otherwise nothing is queued and the connect
   // link below is the way in. The link is returned either way; a caller leads with whichever applies.
-  const [host = null] = await sponsorHostsSeen(ctx.db, team.id, sponsor.id);
+  const host = wanted ?? seen[0] ?? null;
   const hosting: SponsoredAgentHosting = host !== null ? 'sponsor_host' : 'connect_link';
   if (host !== null)
-    await insertProvision(ctx.db, team.id, member.id, sponsor.id, Date.now(), origin);
+    await insertProvision(ctx.db, team.id, member.id, sponsor.id, Date.now(), origin, wanted);
   return {
     member,
     hosting,

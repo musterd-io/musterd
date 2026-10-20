@@ -196,6 +196,14 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
 - The work was planned as five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and
   host-key scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario
   E, docs. It landed as seven (the 2026-09-29 note above).
+- **2026-10-20 (lane 01M5DR34Y2): a mint may name its host.** §2's "a host of the sponsor's"
+  let any live host key of the sponsor claim any pending row, first poll wins. With two live hosts
+  (the pilot machine and a canary machine) every new provision went to whichever polled first, and
+  standing a seat up on the other machine meant stopping the first — three times in one day.
+  `POST /members/agents` now takes an optional `host`: it must be one of the sponsor's labels seen
+  in the live window (else `conflict`, naming the labels that were), the row is pinned to it, and
+  `claimProvisions` skips rows pinned to another label. An unnamed mint keeps the original shape.
+  `musterd agent --hosted --host <label>`; `create.sh` passes its own label. Decision unchanged.
 
 ## Observability & Evaluation
 
