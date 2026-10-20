@@ -1,5 +1,11 @@
 # CFP — AI Engineer Code Summit, Nov 10–12 2026
 
+> **Archived 2026-10-20: this CFP was not submitted.** It closed 2026-10-11 with nothing sent (nick,
+> 2026-10-20). Asked whether to retarget the abstract for the next conference or keep it as a record,
+> nick chose the record. The text below is the draft as written on 2026-10-02, kept as it was: it
+> predates ADRs 563 and 665, so its title and wording are not the current message, and no surface
+> should reuse it. A new abstract starts from the standing pitch (`docs/demo/pitch/`).
+
 _Submission copy for the speaker CFP (Sessionize), which closes **2026-10-11**
 ([traction-plan](../../design/traction-plan.md) §10 "Events — where to be"). The talk title is fixed by that plan; the
 rest is drafted here so it can be read by a second seat before it is pasted into a form we cannot
