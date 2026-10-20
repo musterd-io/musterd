@@ -37,8 +37,8 @@ musterd arm the answer's file list, which the coop arm never sees (nick, 2026-10
 
 **Hooks and MCP are musterd's own.** The two hook commands are copied verbatim from
 `packages/cli/src/onboard/harnesses/claudeCode.ts`, and `test_config.py` fails if they drift. The
-agent containers install this checkout's CLI and MCP server from tarballs (`pack.sh`), so a run
-measures the musterd it names in `dist/build.json`.
+agent containers install this checkout's CLI and MCP server from tarballs (`pack.sh`), and each pair's
+log records the commit they were built from (`musterd-ref.txt`, from the image's `MUSTERD_REF`).
 
 ## How a seat gets onto its team
 
@@ -69,20 +69,29 @@ In each container (`adapter.py`):
 - **`@musterd/mcp` never started through an npm bin symlink.** It exited 0 without answering, so
   Claude Code showed `CONNECTION_CLOSED`. Fixed in #2974 (lane `01M5BA7C3H`). Until that lands on the
   run machine's build, the arm launches the MCP's real file with `node`.
-- **The MCP server joins lazily.** Until its first `team_*` call, the hooks carry the dead lease left
-  over from admission, and the interrupt hook tells the agent its session is dead. The arm sets
-  `MUSTERD_AUTOJOIN=1`.
+- **The seat is deaf, and the gate open, until the agent's first musterd call.** The MCP server joins
+  on its first MCP tool call, by design, so a health probe never claims the seat. Claude Code defers
+  MCP tool schemas behind `ToolSearch`, which makes `ToolSearch` the agent's first call. Until a
+  musterd call lands, the hooks carry the dead lease admission left behind: the interrupt hook tells
+  the agent "the interrupt line is deaf" on each built-in tool call, and the gate fails open, so an
+  edit in that window would go ungated. `MUSTERD_AUTOJOIN=1` alone doesn't help, because autojoin
+  also waits for the first MCP call. The arm sets `ENABLE_TOOL_SEARCH=false`, so the musterd tools
+  are loaded upfront, and the instruction's first step is `team_inbox_check`, a real seat's first
+  move. `gate_smoke.py` now fails if the warning appears. The coop arm has no MCP tools, so turning
+  tool search off changes nothing there except that the musterd arm's context holds the musterd tool
+  schemas from the start.
 
 ## Verified so far
 
-- `gate_smoke.py`, a real headless Claude Code on the host with the arm's exact wiring and no Docker
-  (2026-10-19, `claude-haiku-5-5`, $0.007): it claimed a lane for `src/a.py` and edited it; its edit
-  to `src/b.py` was refused ("'**' is a declared contended surface you have not claimed a lane
-  for"); the daemon audited one `lane.gate` deny.
+- `gate_smoke.py`, a real headless Claude Code with the arm's exact wiring (`claude-haiku-5-5`): it
+  claimed a lane for `src/a.py` and edited it; its edit to `src/b.py` was refused ("'**' is a
+  declared contended surface you have not claimed a lane for"); the daemon audited one `lane.gate`
+  deny. PASS on this Mac with no Docker (2026-10-19, $0.007), PASS on the Fly run machine (2026-10-20,
+  $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012).
 - `tests/`: 12 tests on the hook drift, the prompt's shape, and the adapter's container flow against
   a fake container and host.
 - **Not yet verified:** the arm inside a task container on the run machine, and one task end to end
-  in both arms. Those need the machine below.
+  in both arms.
 
 ## Running it
 
@@ -101,7 +110,7 @@ fly machine start --app musterd-cooperbench
 fly ssh console --app musterd-cooperbench
 # on the machine:
 cd /data/runs
-PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/gate_smoke.py         # must print PASS first
+PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/gate_smoke.py   # must print PASS first
 cooperbench run -n smoke-coop    -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code         --setting coop
 cooperbench run -n smoke-musterd -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code_musterd --setting coop
 cooperbench eval -n smoke-coop --backend docker && cooperbench eval -n smoke-musterd --backend docker

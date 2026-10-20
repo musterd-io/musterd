@@ -8,6 +8,10 @@
 FROM node:22-bookworm
 
 ARG COOPERBENCH_COMMIT=63b9d44
+# The musterd commit this image was built from. The build context has no .git, so dist/build.json
+# cannot stamp it; create.sh passes `git rev-parse HEAD`, and every pair's log records it.
+ARG MUSTERD_REF=unknown
+ENV MUSTERD_REF=${MUSTERD_REF}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gnupg iptables jq python3 python3-venv python3-pip redis-server \
@@ -32,16 +36,29 @@ RUN corepack enable \
 RUN npm install -g --prefix /opt/musterd-seat --ignore-scripts --no-audit --no-fund /opt/musterd-pack/musterd-*.tgz \
   && npm install -g --no-audit --no-fund @anthropic-ai/claude-code
 
-# CooperBench at the commit the adapter was written and tested against.
+# CooperBench at the commit the adapter was written and tested against. Its openhands-sdk dependency
+# needs Python >= 3.12 and bookworm ships 3.11, so the venv uses a uv-managed 3.12.
+COPY --from=ghcr.io/astral-sh/uv:0.5.31 /uv /uvx /usr/local/bin/
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN git clone https://github.com/cooperbench/CooperBench.git /opt/cooperbench \
   && git -C /opt/cooperbench checkout --quiet "${COOPERBENCH_COMMIT}" \
-  && python3 -m venv /opt/cb-venv \
-  && /opt/cb-venv/bin/pip install --quiet -e /opt/cooperbench
+  && uv venv --python 3.12 /opt/cb-venv \
+  && uv pip install --quiet --python /opt/cb-venv/bin/python -e /opt/cooperbench
 
 ENV PATH=/opt/cb-venv/bin:$PATH \
     PYTHONPATH=/app/scripts/research/cooperbench \
     COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter \
     MUSTERD_PACK_DIR=/opt/musterd-pack \
     MUSTERD_BIN=musterd
+
+# `fly ssh console` starts a login shell that doesn't inherit the ENV above; give it the same.
+RUN printf '%s\n' \
+      'export PATH=/opt/cb-venv/bin:$PATH' \
+      'export PYTHONPATH=/app/scripts/research/cooperbench' \
+      'export COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter' \
+      'export MUSTERD_PACK_DIR=/opt/musterd-pack' \
+      'export MUSTERD_BIN=musterd' \
+      'export IS_SANDBOX=1' \
+    > /etc/profile.d/cooperbench.sh
 
 ENTRYPOINT ["bash", "/app/deploy/cooperbench/entrypoint.sh"]

@@ -36,9 +36,10 @@ An edit outside your lanes is refused, and the refusal says why.
 
 Recommended workflow:
 
-1. At the start, open and claim a lane whose scope names the files you
-   intend to touch, then `team_send` your partners a short summary of your
-   feature and your lane.
+1. Your first action is `team_inbox_check`, which joins you to the team.
+   Then open and claim a lane whose scope names the files you intend to
+   touch, and `team_send` your partners a short summary of your feature
+   and your lane.
 2. Check `team_inbox_check` at minimum after major edits and before
    submitting. Acts addressed to you also appear after your tool calls.
 3. If two agents need to modify the same file, coordinate explicitly

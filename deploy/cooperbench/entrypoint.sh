@@ -10,5 +10,5 @@ for _ in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
 docker info >/dev/null 2>&1 || { echo "dockerd never came up"; tail -40 /data/dockerd.log; exit 1; }
 
 redis-server --daemonize yes --bind 127.0.0.1 --port 6379 >/dev/null
-echo "cooperbench machine ready: docker $(docker version -f '{{.Server.Version}}'), musterd $(jq -r .sha /app/packages/cli/dist/build.json 2>/dev/null || echo '?')"
+echo "cooperbench machine ready: docker $(docker version -f '{{.Server.Version}}'), musterd ${MUSTERD_REF:-unknown}"
 exec sleep infinity

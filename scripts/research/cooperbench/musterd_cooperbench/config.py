@@ -59,16 +59,25 @@ def mcp_config(env: dict[str, str], *, command: str, args: list[str] | None = No
     return {"mcpServers": {"musterd": {"type": "stdio", "command": command, "args": args or [], "env": env}}}
 
 
+# Claude Code defers MCP tool schemas behind ToolSearch by default, so an agent's first tool call
+# is ToolSearch, not a musterd tool. The MCP server joins the team on its first MCP call (by design:
+# a health probe must never claim the seat), so until then the hooks carry the dead lease admission
+# left behind. The interrupt hook says "the interrupt line is deaf" on every built-in tool call, and
+# the gate fails open, so an edit made before the first musterd call would be ungated. Loading the
+# musterd tools upfront lets the instruction's first step, team_inbox_check, be the first call, which
+# is how a real seat starts. The coop arm has no MCP tools, so this changes nothing there.
+TOOL_SEARCH_OFF = {"ENABLE_TOOL_SEARCH": "false"}
+
+
 def claude_settings(extra_env: dict[str, str] | None = None) -> dict[str, Any]:
-    """`--settings` JSON: musterd's gate and interrupt hooks (plus any env CooperBench already sets)."""
+    """`--settings` JSON: musterd's gate and interrupt hooks, tool search off, CooperBench's own env."""
     settings: dict[str, Any] = {
         "hooks": {
             "PreToolUse": [{"matcher": GATE_MATCHER, "hooks": [{"type": "command", "command": GATE_HOOK}]}],
             "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": INTERRUPT_HOOK}]}],
         }
     }
-    if extra_env:
-        settings["env"] = dict(extra_env)
+    settings["env"] = {**TOOL_SEARCH_OFF, **(extra_env or {})}
     return settings
 
 
