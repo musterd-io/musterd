@@ -97,6 +97,16 @@ describe('memory command (ADR 093)', () => {
     expect(res.out).toContain('no memory saved for this seat');
   });
 
+  // Lane 01M5DNP56N: from canary-4, `memory save --seat canary-7` reported "memory saved" and wrote
+  // canary-4's own note — isolation held, but the probe read as a success and the run halted.
+  it('save refuses a flag it does not take (--seat is a cross-seat write request), and writes nothing', async () => {
+    await setupTeam();
+    await expect(
+      memoryCommand(parseArgs(['save', '--seat', 'other', '--headline', 'probe', 'body'])),
+    ).rejects.toThrow(/unknown flag --seat .*takes no target/);
+    await expect(memoryCommand(parseArgs(['show', '--json']))).resolves.toBe(0);
+  });
+
   it('save without --headline is a usage error; over-cap is rejected with the limit named', async () => {
     await setupTeam();
     await expect(memoryCommand(parseArgs(['save', 'body-only']))).rejects.toThrow(/--headline/);
