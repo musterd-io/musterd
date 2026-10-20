@@ -273,6 +273,8 @@ export interface AuthorityProof {
   key_id: string;
   nonce: string;
   signature: string;
+  authenticator_data?: string;
+  client_data_json?: string;
 }
 
 /** One of a human's device keys, public half only (ADR 662 decision 6). */
@@ -1377,12 +1379,13 @@ export class HttpClient {
     ) as Promise<{ proof: AuthorityProof }>;
   }
 
-  /** ADR 662 decision 5: enroll a passkey with an enrollment code (browser ceremony). */
+  /** ADR 662 decisions 5/6: enroll a passkey over a ceremony challenge (browser). */
   async enrollPasskey(
     slug: string,
     body: {
       actor: string;
-      enrollment_code: string;
+      challenge: string;
+      approval?: AuthorityProof;
       registration: { attestation_object: string; client_data_json: string };
     },
   ): Promise<{ key: { id: string; kind: string } }> {
@@ -1391,10 +1394,10 @@ export class HttpClient {
     }>;
   }
 
-  /** ADR 662 decision 6: mint a one-time device-key enrollment code (shown once). */
-  async issueEnrollmentCode(slug: string): Promise<{ code: string; expires_at: number }> {
-    return this.request('POST', `/teams/${slug}/authority/enrollment-codes`) as Promise<{
-      code: string;
+  /** ADR 662 decision 6: mint a passkey-ceremony challenge (binds the ceremony, grants nothing). */
+  async issueEnrollmentChallenge(slug: string): Promise<{ challenge: string; expires_at: number }> {
+    return this.request('POST', `/teams/${slug}/authority/enrollment-challenges`) as Promise<{
+      challenge: string;
       expires_at: number;
     }>;
   }
@@ -1406,13 +1409,12 @@ export class HttpClient {
     }>;
   }
 
-  /** ADR 662 decision 6: enroll a device key by code, or by a standing key's signature. */
+  /** ADR 662 decision 6: enroll a device key by a standing key's signature. */
   async enrollDeviceKey(
     slug: string,
     body: {
       public_key: string;
       kind: string;
-      enrollment_code?: string;
       approval?: AuthorityProof;
     },
   ): Promise<{ key: { id: string; kind: string } }> {
@@ -1421,11 +1423,11 @@ export class HttpClient {
     }>;
   }
 
-  /** ADR 662 decision 6: revoke one of this human's device keys. */
+  /** ADR 662 decision 6: revoke one of this human's keys, by a standing key's signature. */
   async revokeDeviceKey(
     slug: string,
     keyId: string,
-    body: { enrollment_code?: string; approval?: AuthorityProof },
+    body: { approval?: AuthorityProof },
   ): Promise<{ ok: true }> {
     return this.request(
       'POST',

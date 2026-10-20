@@ -1048,20 +1048,24 @@ advisory for every listed act.
   `descriptor_mismatch`, `expired`, `nonce_reused`, `key_revoked`, `agent_credential`); an
   approval writes `authority.approved` with the assurance, authenticator kind and key id.
   No signature, nonce or descriptor payload is ever logged.
-- Device keys (decision 6): `POST /teams/:slug/authority/enrollment-codes` → `201 {code,
-expires_at}` — the code is shown once, stored only as sha256, ten minutes, one use, and a
-  human member's alone to mint. `POST /teams/:slug/authority/keys` `{public_key, kind,
-enrollment_code? | approval?}` enrolls: the first key, and recovery when every key is
-  lost, by code; a further key may instead carry an A2 approval from a standing key over
-  `device_key_admin`. An agent member can never enroll. `GET /teams/:slug/authority/keys`
-  lists the caller's own keys; `POST /teams/:slug/authority/keys/:id/revoke` retires one by
-  enrollment code or by a different standing key's signature — a key never revokes itself.
-  Lifecycle writes audit `device_key.enrolled|revoked|enrollment_code`, never a code or key.
+- Device keys (decision 6, passkey-first): `POST /teams/:slug/authority/enrollment-challenges`
+  → `201 {challenge, expires_at}` — stored only as sha256, ten minutes, one use. The
+  challenge binds a ceremony and authorizes nothing by itself: the first key, and
+  recovery when every key is lost, is a user-verified WebAuthn registration over it
+  (`POST /teams/:slug/authority/passkeys`), so a Bearer [REDACTED] agent can read enrolls
+  nothing. `POST /teams/:slug/authority/keys` `{public_key, kind, approval?}` enrolls a
+  raw-key device only behind a standing key's A2 approval over `device_key_admin`, and
+  refuses `passkey_first` while no key stands. An agent member can never enroll. `GET
+  /teams/:slug/authority/keys` lists the caller's own keys; `POST
+  /teams/:slug/authority/keys/:id/revoke` retires one by a standing key's signature — a
+  key never revokes itself while another stands; the sole standing key may retire
+  itself (recovery is a fresh ceremony). Lifecycle writes audit
+  `device_key.enrolled|revoked|enrollment_challenge`, never a challenge or key.
 - Authenticators (decision 5): `GET /authority/passkey` and `GET /authority/approve` are
   small pages the daemon serves from its own origin — never the relay. Passkey enrollment
-  is `POST /teams/:slug/authority/passkeys` `{actor, enrollment_code, registration}`: a
-  WebAuthn registration whose challenge is the enrollment code, verified server-side
-  (challenge, rpId from the browser's actual origin, attested credential extracted from
+  is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, registration}`: a
+  WebAuthn registration whose challenge is the enrollment challenge, verified server-side
+  (challenge, user verification, rpId from the browser's actual origin, attested credential extracted from
   the attestation object; possession-grade, no attestation statement checked). A passkey
   proof carries `authenticator_data` and `client_data_json` beside the signature; the
   server checks the assertion's challenge is the descriptor nonce. `GET

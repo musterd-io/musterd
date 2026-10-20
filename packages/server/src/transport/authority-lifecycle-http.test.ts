@@ -1,13 +1,19 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
+import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
+import { enrollDeviceKey } from '../store/authority.js';
+import { getMemberByName } from '../store/members.js';
+import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
 /**
- * ADR 662 decision 6 over HTTP (lane 01M5ANFKEVTENBNVG9JQKA965N): a human enrolls their
- * first key with a one-time code from their own credential; from that moment their Bearer
- * alone no longer performs a listed act. An agent seat cannot even mint a code.
+ * ADR 662 decision 6 over HTTP (lane 01M5ANFKEVTENBNVG9JQKA965N, passkey-first):
+ * lazara's HA2 attack as a falsifier — an agent holding the human's config.json
+ * Bearer can mint a ceremony challenge, but can enroll no key with it, revoke
+ * nothing with it, and perform no listed act. Enrollment is a user-verified
+ * passkey ceremony (first key / recovery) or a standing key's signature.
  */
 withDrivers('authority-lifecycle-http (ADR 662)', (_o, kind) => {
   let server: RunningServer;
@@ -47,48 +53,65 @@ withDrivers('authority-lifecycle-http (ADR 662)', (_o, kind) => {
     await server.close();
   });
 
-  it('enroll by code latches the gate; the key lists and revokes by code', async () => {
-    // An agent seat gets no code and no keys.
-    expect((await call('POST', '/teams/dawn/authority/enrollment-codes', ada)).status).toBe(403);
+  it('the config.json attack enrolls nothing and performs no listed act', async () => {
+    // An agent seat gets no challenge and no keys.
+    expect((await call('POST', '/teams/dawn/authority/enrollment-challenges', ada)).status).toBe(
+      403,
+    );
+    // The old code endpoint is gone.
+    expect((await call('POST', '/teams/dawn/authority/enrollment-codes', nick)).status).toBe(404);
 
-    const issued = await call('POST', '/teams/dawn/authority/enrollment-codes', nick);
+    // The attacker holds nick's Bearer and mints a challenge: that alone enrolls nothing.
+    const issued = await call('POST', '/teams/dawn/authority/enrollment-challenges', nick);
     expect(issued.status).toBe(201);
-    const { publicKey } = generateKeyPairSync('ed25519');
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
     const public_key = publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
 
-    // A wrong code enrolls nothing.
-    const bad = await call('POST', '/teams/dawn/authority/keys', nick, {
+    const enroll = await call('POST', '/teams/dawn/authority/keys', nick, {
       public_key,
       kind: 'platform',
-      enrollment_code: 'wrong-code',
     });
-    expect(bad.status).toBe(422);
+    expect(enroll.status).toBe(422);
+    expect(JSON.stringify(enroll.json)).toContain('passkey_first');
+    expect((await call('GET', '/teams/dawn/authority/keys', nick)).json.keys).toEqual([]);
 
-    const enrolled = await call('POST', '/teams/dawn/authority/keys', nick, {
-      public_key,
+    // Nick enrolls a real key (the ceremony itself is covered at store level);
+    // from here the Bearer alone performs no listed act and revokes nothing.
+    const teamRow = (await getTeamBySlug(server.store, 'dawn'))!;
+    const nickRow = (await getMemberByName(server.store, teamRow.id, 'nick'))!;
+    const key = await enrollDeviceKey(server.store, {
+      teamId: teamRow.id,
+      memberId: nickRow.id,
+      publicKey: public_key,
       kind: 'platform',
-      enrollment_code: issued.json.code,
     });
-    expect(enrolled.status).toBe(201);
-    const keyId = enrolled.json.key.id as string;
 
-    const listed = await call('GET', '/teams/dawn/authority/keys', nick);
-    expect(listed.json.keys).toEqual([
-      { id: keyId, kind: 'platform', created_at: expect.any(Number), revoked_at: null },
-    ]);
-
-    // The gate is latched now: nick's Bearer alone is refused on a listed act.
     const refused = await call('POST', '/teams/dawn/policy', nick, { doorbell: { allow: [] } });
     expect(refused.status).toBe(403);
     expect(JSON.stringify(refused.json)).toContain('no_signature');
 
-    // Revoke the only key by a fresh code (the lost-device path).
-    const code2 = await call('POST', '/teams/dawn/authority/enrollment-codes', nick);
-    const revoked = await call('POST', `/teams/dawn/authority/keys/${keyId}/revoke`, nick, {
-      enrollment_code: code2.json.code,
+    const revoke = await call('POST', `/teams/dawn/authority/keys/${key.id}/revoke`, nick, {});
+    expect(revoke.status).toBe(422);
+    const listed = await call('GET', '/teams/dawn/authority/keys', nick);
+    expect(listed.json.keys[0].revoked_at).toBeNull();
+
+    // The standing key signs a descriptor and the act goes through exactly once.
+    const desc = await call('POST', '/teams/dawn/authority/descriptors', nick, {
+      act: 'admin.team_policy',
+      target: 'dawn',
+      payload: { doorbell: { allow: [] } },
     });
-    expect(revoked.status).toBe(200);
-    const after = await call('GET', '/teams/dawn/authority/keys', nick);
-    expect(after.json.keys[0].revoked_at).toEqual(expect.any(Number));
+    expect(desc.status).toBe(201);
+    const d = desc.json.descriptor as ApprovalDescriptor;
+    const signature = cryptoSign(
+      null,
+      Buffer.from(descriptorSigningBytes(d), 'utf8'),
+      privateKey,
+    ).toString('base64url');
+    const ok = await call('POST', '/teams/dawn/policy', nick, {
+      doorbell: { allow: [] },
+      approval: { key_id: key.id, nonce: d.nonce, signature },
+    });
+    expect(ok.status).toBe(200);
   });
 });

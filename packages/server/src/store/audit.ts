@@ -140,10 +140,10 @@ export type AuditAction =
   | 'authority.refused'
   | 'authority.approved'
   // Device-key lifecycle (ADR 662 decision 6): enrollment, revocation, recovery. Detail
-  // carries the key id, kind and path (code | signature) — never a code, key or signature.
+  // carries the key id, kind and path (ceremony | signature) — never a challenge, key or signature.
   | 'device_key.enrolled'
   | 'device_key.revoked'
-  | 'device_key.enrollment_code'
+  | 'device_key.enrollment_challenge'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -727,7 +727,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'authority.approved': 'actor',
   'device_key.enrolled': 'actor',
   'device_key.revoked': 'actor',
-  'device_key.enrollment_code': 'actor',
+  'device_key.enrollment_challenge': 'actor',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
   // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.

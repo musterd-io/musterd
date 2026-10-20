@@ -1,58 +1,61 @@
-import { createPrivateKey, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
+import type { ApprovalDescriptor } from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
-import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
 import { success } from '../render/ui.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd authority enroll [--kind platform | --passkey]\n' +
+  'usage: musterd authority enroll\n' +
   '       musterd authority keys\n' +
   '       musterd authority revoke <key-id>\n' +
-  '       musterd authority approve --act <act> --target <target> --payload <json> [--passkey]';
+  '       musterd authority approve --act <act> --target <target> --payload <json>';
 
 /**
- * ADR 662 decision 6 — the device-key lifecycle from the terminal. `enroll` is the explicit
- * human path: it asks the daemon for a one-time enrollment code with the human's own
- * credential, generates an Ed25519 keypair here, keeps the private half in a 0600 file
- * beside the CLI config (never beside the workspace, never on the server), and enrolls the
- * public half. Run it as the human, from the human's terminal — the daemon audits every
- * step. Lane 3 replaces this file storage with real authenticators (Secure Enclave,
- * passkey); what is enrolled here is a key whose private half a person holds, and the gate
- * (lane 1) is already live for it.
+ * ADR 662 decisions 5/6 — the device-key lifecycle from the terminal, passkey-first.
+ * The key lives in the human's authenticator, never in a file an agent process on
+ * this machine could read (HA3 re-review: the old file-stored software key was
+ * readable by every process running as the human, so it qualified as nothing).
+ * `enroll` runs the browser ceremony on the daemon's own origin; when a key already
+ * stands, a further passkey first needs that key's approval, collected the same way.
+ * `approve` fetches the descriptor from the server itself (decision 5) — the words
+ * a human approves are the server's, never the caller's.
  */
 
-interface StoredDeviceKey {
-  key_id: string;
-  kind: string;
-  public_key: string;
-  private_key: string;
-}
-
-function keyFile(team: string, member: string): string {
-  const safe = `${team}-${member}`.replace(/[^a-zA-Z0-9_.-]/g, '_');
-  return join(dirname(configPath()), 'device-keys', `${safe}.json`);
-}
-
-function readStoredKey(team: string, member: string): StoredDeviceKey | null {
-  const path = keyFile(team, member);
-  if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, 'utf8')) as StoredDeviceKey;
-}
-
-function writeStoredKey(team: string, member: string, key: StoredDeviceKey): void {
-  const path = keyFile(team, member);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(key, null, 2) + '\n', { mode: 0o600 });
-  chmodSync(path, 0o600);
-}
+type Http = ReturnType<typeof resolve>['http'];
+type Proof = Awaited<ReturnType<Http['getParkedApproval']>>['proof'];
 
 function printJson(value: unknown): number {
   process.stdout.write(JSON.stringify(value, null, 2) + '\n');
   return 0;
+}
+
+async function collectApproval(
+  http: Http,
+  team: string,
+  act: string,
+  target: string,
+  payload: unknown,
+): Promise<Proof> {
+  const { descriptor } = await http.createAuthorityDescriptor(team, { act, target, payload });
+  const d = descriptor as ApprovalDescriptor;
+  process.stdout.write(
+    `descriptor (built by the server):\n  actor:  ${d.actor}\n  act:    ${d.act}\n` +
+      `  target: ${d.target}\n  expires: ${new Date(d.expiry).toISOString()}\n`,
+  );
+  const url =
+    `${http.server}/authority/approve?team=${encodeURIComponent(team)}` +
+    `&nonce=${encodeURIComponent(d.nonce)}`;
+  process.stdout.write(`Approve at ${url}\nwaiting for the parked proof…\n`);
+  const deadline = Date.now() + 4 * 60 * 1000;
+  for (;;) {
+    try {
+      const { proof } = await http.getParkedApproval(team, d.nonce);
+      return proof;
+    } catch {
+      if (Date.now() > deadline) throw new CliError('no approval arrived in 4 minutes', 1);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 export async function authorityCommand(parsed: Parsed): Promise<number> {
@@ -61,17 +64,42 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
   const json = parsed.flags['json'] === true;
   const member = identity.name;
 
-  if (sub === 'enroll' && parsed.flags['passkey'] === true) {
-    // The browser holds the key; the daemon page (its own origin, never the relay) runs the
-    // WebAuthn ceremony. The code is the one capability: shown once, ten minutes.
-    const { code } = await http.issueEnrollmentCode(team);
+  if (sub === 'enroll') {
+    const before = await http.listDeviceKeys(team);
+    const beforeIds = new Set(before.keys.map((k) => k.id));
+    const active = before.keys.filter((k) => k.revoked_at === null);
+    let approval: Proof | undefined;
+    if (active.length > 0) {
+      process.stdout.write('A device key already stands — the new passkey needs its approval.\n');
+      approval = await collectApproval(http, team, 'device_key_admin', member, {
+        action: 'enroll',
+        kind: 'passkey',
+      });
+    }
+    const { challenge } = await http.issueEnrollmentChallenge(team);
     const url =
       `${http.server}/authority/passkey?team=${encodeURIComponent(team)}` +
-      `&member=${encodeURIComponent(member)}`;
-    process.stdout.write(
-      `Open ${url}\n  member: ${member}\n  enrollment code (shown once): ${code}\n`,
-    );
-    return 0;
+      `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
+      (approval ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}` : '');
+    process.stdout.write(`Open ${url}\nwaiting for the passkey ceremony…\n`);
+    const deadline = Date.now() + 4 * 60 * 1000;
+    for (;;) {
+      const { keys } = await http.listDeviceKeys(team);
+      const fresh = keys.find((k) => !beforeIds.has(k.id) && k.revoked_at === null);
+      if (fresh) {
+        if (json) return printJson(fresh);
+        process.stdout.write(
+          success(`passkey enrolled for ${member} (${fresh.id})`, {
+            next: 'high-authority acts now ask this passkey (ADR 662)',
+          }) + '\n',
+        );
+        return 0;
+      }
+      if (Date.now() > deadline) {
+        throw new CliError('no passkey was enrolled in 4 minutes', 1);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
 
   if (sub === 'approve') {
@@ -85,75 +113,8 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     } catch {
       throw new CliError('--payload must be JSON', 2);
     }
-    // The helper fetches the descriptor from the server itself (decision 5) — the words a
-    // human approves are the server's, never the caller's.
-    const { descriptor } = await http.createAuthorityDescriptor(team, { act, target, payload });
-    process.stdout.write(
-      `descriptor (built by the server):\n  actor:  ${descriptor.actor}\n  act:    ${descriptor.act}\n` +
-        `  target: ${descriptor.target}\n  expires: ${new Date(descriptor.expiry).toISOString()}\n`,
-    );
-    if (parsed.flags['passkey'] === true) {
-      const url =
-        `${http.server}/authority/approve?team=${encodeURIComponent(team)}` +
-        `&nonce=${encodeURIComponent(descriptor.nonce)}`;
-      process.stdout.write(`Approve at ${url}\nwaiting for the parked proof…\n`);
-      const deadline = Date.now() + 4 * 60 * 1000;
-      for (;;) {
-        try {
-          const { proof } = await http.getParkedApproval(team, descriptor.nonce);
-          process.stdout.write(JSON.stringify(proof) + '\n');
-          return 0;
-        } catch {
-          if (Date.now() > deadline) throw new CliError('no approval arrived in 4 minutes', 1);
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-      }
-    }
-    const stored = readStoredKey(team, member);
-    if (!stored) {
-      throw new CliError(
-        'no device key on this machine — enroll one (`musterd authority enroll`) or use --passkey',
-        1,
-      );
-    }
-    const signature = cryptoSign(
-      null,
-      Buffer.from(descriptorSigningBytes(descriptor as ApprovalDescriptor), 'utf8'),
-      createPrivateKey({
-        key: Buffer.from(stored.private_key, 'base64url'),
-        format: 'der',
-        type: 'pkcs8',
-      }),
-    ).toString('base64url');
-    process.stdout.write(
-      JSON.stringify({ key_id: stored.key_id, nonce: descriptor.nonce, signature }) + '\n',
-    );
-    return 0;
-  }
-
-  if (sub === 'enroll') {
-    const kind = flagStr(parsed.flags, 'kind') ?? 'platform';
-    const { code } = await http.issueEnrollmentCode(team);
-    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-    const public_key = publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
-    const { key } = await http.enrollDeviceKey(team, {
-      public_key,
-      kind,
-      enrollment_code: code,
-    });
-    writeStoredKey(team, member, {
-      key_id: key.id,
-      kind,
-      public_key,
-      private_key: privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64url'),
-    });
-    if (json) return printJson(key);
-    process.stdout.write(
-      success(`device key enrolled for ${member} (${kind}, ${key.id})`, {
-        next: 'high-authority acts now need this key’s signature (ADR 662)',
-      }) + '\n',
-    );
-    process.stdout.write(`  private key: ${keyFile(team, member)} (0600, never sent anywhere)\n`);
+    const proof = await collectApproval(http, team, act, target, payload);
+    process.stdout.write(JSON.stringify(proof) + '\n');
     return 0;
   }
 
@@ -161,11 +122,8 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     const { keys } = await http.listDeviceKeys(team);
     if (json) return printJson(keys);
     if (keys.length === 0) process.stdout.write('no device keys enrolled\n');
-    const stored = readStoredKey(team, member);
     for (const k of keys) {
-      process.stdout.write(
-        `${k.id}  ${k.kind}  ${k.revoked_at ? 'revoked' : 'active'}${stored?.key_id === k.id ? '  (private key on this machine)' : ''}\n`,
-      );
+      process.stdout.write(`${k.id}  ${k.kind}  ${k.revoked_at ? 'revoked' : 'active'}\n`);
     }
     return 0;
   }
@@ -173,31 +131,11 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
   if (sub === 'revoke') {
     const keyId = parsed.positionals[1];
     if (!keyId) throw new CliError(USAGE, 2);
-    const stored = readStoredKey(team, member);
-    if (stored && stored.key_id !== keyId) {
-      // Revoke with the standing key's signature (never the target key's own).
-      const { descriptor } = await http.createAuthorityDescriptor(team, {
-        act: 'device_key_admin',
-        target: member,
-        payload: { action: 'revoke', key_id: keyId },
-      });
-      const signature = cryptoSign(
-        null,
-        Buffer.from(descriptorSigningBytes(descriptor as ApprovalDescriptor), 'utf8'),
-        createPrivateKey({
-          key: Buffer.from(stored.private_key, 'base64url'),
-          format: 'der',
-          type: 'pkcs8',
-        }),
-      ).toString('base64url');
-      await http.revokeDeviceKey(team, keyId, {
-        approval: { key_id: stored.key_id, nonce: descriptor.nonce, signature },
-      });
-    } else {
-      // No other standing key here: the lost-device path, by enrollment code.
-      const { code } = await http.issueEnrollmentCode(team);
-      await http.revokeDeviceKey(team, keyId, { enrollment_code: code });
-    }
+    const approval = await collectApproval(http, team, 'device_key_admin', member, {
+      action: 'revoke',
+      key_id: keyId,
+    });
+    await http.revokeDeviceKey(team, keyId, { approval });
     if (json) return printJson({ ok: true, key_id: keyId });
     process.stdout.write(success(`device key ${keyId} revoked`) + '\n');
     return 0;

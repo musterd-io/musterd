@@ -168,6 +168,14 @@ All four converged on one shape, and nick directed it be written as this ADR.
   rotate, agent-key rotate) now pass `requireAuthority`, each with a transport falsifier.
   The nonce spend is one conditional `UPDATE … WHERE used_at IS NULL`, so concurrent
   presentations of one proof yield exactly one approval.)_
+- _(2026-10-20: HA2 re-review (lazara, declined #2966; nick chose passkey-first in chat)
+  removed the self-issued enrollment code: the code was minted and spent by whoever held
+  the human's Bearer, so an agent with `config.json` enrolled its own key and signed
+  (proved end to end). First enrollment and lost-everything recovery are now a
+  user-verified passkey ceremony over a server challenge that authorizes nothing by
+  itself; once a key stands, enrolling or revoking requires a standing key's
+  `device_key_admin` signature, the challenge path being reserved for zero active keys.
+  Lazara's attack is a transport falsifier (`authority-lifecycle-http.test.ts`).)_
 
 ## Observability & Evaluation
 
