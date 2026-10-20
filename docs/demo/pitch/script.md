@@ -124,8 +124,8 @@ it, who accepted it, and which model), the mechanisms as proof under it. "An age
 out of the headline lines until our own record shows refusals aimed at a person (ADR 665 §2). Every
 number has a row in the Q&A ledger below; re-read it before each event.
 
-- **Is anyone using it?** Only our own team so far. The first design partners start this month.
-  _(Written for 2026-10-09; re-check before every event.)_
+- **Is anyone using it?** Only our own team so far. I have not started with design partners yet; finding the first ones is
+  my next job. _(nick, 2026-10-20: no design partner conversations yet. Re-check before every event.)_
 - **Is it open source?** The packages are MIT. I decide what else to open after the first design
   partners.
 - **Does musterd run my agents?** Your agents keep running in Claude Code, Codex or whatever runs
@@ -143,8 +143,8 @@ number has a row in the Q&A ledger below; re-read it before each event.
   mix tools. That layer is one neither Anthropic nor OpenAI will build, because each only sees its own
   agents. On musterd nothing counts as done until another member accepts it, and the record shows who
   did it, who accepted it, and which model, across every tool the team uses. One command prints that
-  chain for any piece of work. And we run our own team on it: every day for the past month, 100 of the
-  110 days since July 2, with 29,158 acts and 2,063 pieces of work closed as of October 19, by agents
+  chain for any piece of work. And we run our own team on it: every day for the past month, 101 of the
+  111 days since July 2, with 29,433 acts and 2,090 pieces of work closed as of October 20, by agents
   on five model families and one person.
 - **Who are your competitors, and how do you beat them?** Band raised a $17 million seed and is the
   closest. Agent Relay is the closest transport. Party, Conductor and Multica run parallel agents
@@ -199,7 +199,7 @@ number has a row in the Q&A ledger below; re-read it before each event.
   had done over the previous 30 days. A vendor survey; say the sponsor and the date with it, and never
   round it up. It is proof under the message, never the opening (ADR 665 §1).
 
-### Q&A ledger (read 2026-10-19 unless stated)
+### Q&A ledger (read 2026-10-20 where a row says so, otherwise 2026-10-19)
 
 | Claim | Source |
 | --- | --- |
@@ -214,9 +214,9 @@ number has a row in the Q&A ledger below; re-read it before each event.
 | Agent Relay hosted "free to start", open-source self-host; owner and harness shown, no acceptance | agentrelay.com |
 | CooperBench: 652 tasks, 12 libraries; GPT-5 0.48 solo → 0.28 coop; Claude Sonnet 4.5 0.47 → 0.26; causes expectation 42% / commitment 32% / communication 26%; "lose nearly half their capability" | arXiv 2601.13295 (Khatua, Zhu, … Yang), cooperbench.com; hai.stanford.edu news, June 2026 |
 | 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
-| Daily use: first act 2026-07-02; 29,158 acts; 2,063 lanes done; acts on 100 of the 110 days since, and on all 30 of the last 30; senders in the last 30 days: 23 agent seats, 1 person, 7 services; acts stamped with models from five families (Anthropic, OpenAI, xAI, Google, Muse) | the daemon's database, read 2026-10-19: `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
+| Daily use: first act 2026-07-02; 29,433 acts; 2,090 lanes done; acts on 101 of the 111 days since (read 2026-10-20, nick); on all 30 of the last 30; senders in the last 30 days: 23 agent seats, 1 person, 7 services; acts stamped with models from five families (Anthropic, OpenAI, xAI, Google, Muse) (these three read 2026-10-19, not re-run) | the daemon's database, read 2026-10-20 for the first three figures, 2026-10-19 for the rest: `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
 | SecurityHQ + Datadog: n=204, 45%, 49%, 17% within minutes | SecurityHQ press release, 2026-10-15 |
-| One in ten landed lanes sent back on review; 922 of 967 name the person who authorised the merge | `./chain.sh`, read 2026-10-19; ADR 665 Context |
+| One in ten review verdicts sent a lane back (118 of 1,123); 973 of 1,021 done lanes name nick as the authoriser | `./chain.sh`, run by nick 2026-10-20, 30-day window. One more lane names lazara, an agent, and is not counted as a person. ADR 665 Context carries the 2026-10-19 reading (922 of 967; 103 of 1,045) and is not edited |
 | One command prints the chain, each link verified / stated / missing | `musterd lane show <id>` (ADR 629, #2771); checked 2026-10-19 on lane 01M5AMG9C3. Whether the acceptance was independent (review grade) is ADR 670, lane `01M5AXKX01`, and is not claimed until it lands |
 | Hosted subscription with caps and credits; org tier; no prices | `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 461 §5 for the price rule |
 | No account, no cloud, no analytics in the product; telemetry off by default; bodies never in it | `PRIVACY.md` |
