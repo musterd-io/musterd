@@ -984,11 +984,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     expect(plan).toMatch(/idx_messages_in_reply_to \(team_id=\? AND in_reply_to=\?\)/);
     // A replay must not re-add the column: table_info hides a VIRTUAL column, table_xinfo shows it.
     db.prepare("UPDATE schema_meta SET value = '70' WHERE key = 'schema_version'").run();
-<<<<<<< HEAD
-    expect(runMigrations(db)).toBe(117);
-=======
-    expect(runMigrations(db)).toBe(116);
->>>>>>> abf3c95ea (server: repair policy audit migration CI)
+    expect(runMigrations(db)).toBe(118);
     await db.close();
   });
 });

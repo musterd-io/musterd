@@ -124,7 +124,7 @@ describe('the portable ladder (spec §12.2)', () => {
         'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
       )
       .all();
-    expect(runMigrations(sqlite)).toBe(116);
+    expect(runMigrations(sqlite)).toBe(118);
     expect(
       sqlite
         .prepare(
@@ -223,7 +223,7 @@ describe('the portable ladder (spec §12.2)', () => {
     const pgSyncBefore = await owner.all(
       'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
     );
-    expect(await migratePostgres(owner)).toBe(116);
+    expect(await migratePostgres(owner)).toBe(118);
     expect(
       await owner.all(
         'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
