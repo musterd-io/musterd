@@ -175,13 +175,14 @@ Required env for S3 SigV4 upload: `MUSTERD_DATABASE_OWNER_URL` (or `_OPERATOR_UR
 **Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `studio.sandrise.musterd-cloud-backup` LaunchAgent installed and kickstarted, recording in `~/.musterd/cloud/backup.log`:
 `{"msg":"cloud_backup_completed","date":"2026-10-20","dry_run":false,"teams":1,"uploaded":2,"total_bytes":2087,"pruned":0}` (`teams/revive/coordination/2026-10-20.json.gz.enc` and `teams/revive/trace/2026-10-20.json.gz.enc`), and round-trip `decryptDump` verified the downloaded R2 object.
 
-4. Run the restore drill (`scripts/cloud/drill.mjs`, lane `01M3Z4408C3T72EY3H92JQST01`; recorded in [`docs/perf/cloud-restore-drill.md`](../perf/cloud-restore-drill.md)):
+4. Run the restore drill or install the monthly schedule (`scripts/cloud/drill.mjs`, lanes `01M3Z4408C3T72EY3H92JQST01` + `01M3Z44YMTAH6F4Z19ZGRB72JM`; recorded in [`docs/perf/cloud-restore-drill.md`](../perf/cloud-restore-drill.md)):
 
 ```sh
 node scripts/cloud/drill.mjs --wrangler
+node scripts/cloud/drill.mjs --install-launchd --kickstart   # installs ~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist (day 1 at 04:17 monthly)
 ```
 
-Creates two fresh temporary databases on Neon (`musterd_drill_<id>` and `musterd_drill_<id>_trace`), migrates both from scratch, downloads and decrypts the newest coordination + trace backup pair for each team from R2, restores every table via `restoreSnapshot`, verifies row counts and tenant RLS isolation under `musterd_app`, runs the Postgres tenancy/migration/backup suite, and drops the temporary databases in `finally`.
+Creates two fresh temporary databases on Neon (`musterd_drill_<id>` and `musterd_drill_<id>_trace`), migrates both from scratch, downloads and decrypts the newest coordination + trace backup pair for each team from R2, restores every table via `restoreSnapshot`, verifies row counts and tenant RLS isolation under `musterd_app`, runs the Postgres tenancy/migration/backup suite, and drops the temporary databases in `finally`. The monthly cadence is scheduled both on the operator machine (`studio.sandrise.musterd-cloud-drill`, 1st of each month at `04:17` local → `~/.musterd/cloud/drill.log`) and in `.github/workflows/cloud-restore-drill.yml` (`17 4 1 * *` UTC).
 
 ## Check it
 
