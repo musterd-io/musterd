@@ -271,6 +271,19 @@ export function splitWords(segment: string): string[] {
   return words;
 }
 
+/** `git push` shapes that reach past the seat's own branch (ADR 675 review). */
+const PUSH_DENIED_FLAGS = new Set([
+  '--all',
+  '--mirror',
+  '--tags',
+  '--follow-tags',
+  '--delete',
+  '--prune',
+  '--push-option',
+  '-o',
+  '--branches',
+]);
+
 function denyGit(words: string[]): string | undefined {
   const sub = words[1];
   if (sub === undefined || !GIT.has(sub)) return `git ${sub ?? ''} is not on the allowlist`.trim();
@@ -282,6 +295,18 @@ function denyGit(words: string[]): string | undefined {
       return 'git push --force is never allowed (use --force-with-lease)';
     if (rest.some((w) => /(^|[/:])(main|master)$/.test(w)))
       return 'git push to main is never allowed';
+    // ADR 675 (review): with origin on GitHub the push surface is the seat's own branch, by
+    // name or as the current branch — never every ref, tags, a deletion, a forced refspec, or
+    // a refspec that lands somewhere else.
+    const wide = rest.find(
+      (w) =>
+        PUSH_DENIED_FLAGS.has(w) ||
+        /^-[a-zA-Z]*d[a-zA-Z]*$/.test(w) ||
+        w.startsWith('+') ||
+        w.includes(':'),
+    );
+    if (wide)
+      return `git push ${wide} is not allowed — push the current branch by name only (no --all, --mirror, --tags, --delete, --prune, or src:dst refspecs)`;
   }
   if (sub === 'checkout' || sub === 'switch' || sub === 'branch') {
     if (rest.some((w) => PROTECTED_BRANCHES.has(w)))

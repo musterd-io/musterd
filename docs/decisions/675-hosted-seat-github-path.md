@@ -36,7 +36,7 @@ seat's behalf would keep the rule but needs a new verb on the wire and a second 
    source). The cloud host passes its mirror's own `origin` URL (`musterd host --cloud-provision`),
    so a cloud seat's pushes leave the machine. A sponsor's own host passes nothing: a laptop clone
    keeps git's default, as before.
-2. **gh holds the credential, outside the jail.** The entrypoint moves `GH_TOKEN` to a shell local,
+2. **gh holds the credential, outside the jail.** _(Amended 2026-10-20: "outside the jail" means out of the shell's reach, not out of the seat user's — see the note in Consequences.)_ The entrypoint moves `GH_TOKEN` to a shell local,
    unsets it, signs gh in with it (`gh auth login --with-token`, stored under `$HOME/.config/gh`,
    mode 0600, outside every workspace) and sets git's credential helper to gh (`gh auth
    setup-git`). The host loop starts with no `GH_TOKEN` in its environment. The seat's `git push`
@@ -58,6 +58,20 @@ seat's behalf would keep the rule but needs a new verb on the wire and a second 
   keeps its local-path origin until someone runs `git remote set-url origin <url>` in it once (the
   pilot's `pilot-2` was repointed by hand on 2026-10-20); the entrypoint's gh sign-in reaches
   every seat at the machine's next boot.
+- _2026-10-20, from the automated security review of #2982:_ the pilot machine runs the host
+  loop, the engine and the jail as one user (`seat`), and everything on the volume is that user's.
+  So gh's credential file is readable by any code the jail may run as that user — a pnpm script,
+  `vitest`, `eslint` — exactly as the model key in the host process's environment and the host key
+  already are. The shell cannot reach it; same-user code can. That class is not this ADR's to
+  close: it is the resident-bash OS sandbox lane (`01M4VYT6JWHYG6E8ZZ9J55AS9X`), which separates
+  the jail's user from the host's; until then a hosted seat's push token is as exposed as its
+  model key, and should be scoped and short-lived for the same reason. Two tightenings from the
+  same review landed with this note: the clone's origin is stripped of any userinfo before it is
+  written to the workspace (`publicOriginUrl`), and `git push` in the jail may push only the
+  seat's own branch by name — no `--all`, `--mirror`, `--tags`, `--delete`, `--prune`, forced or
+  `src:dst` refspecs. Branch protection on `main` must apply to the token's account too (an
+  admin's fine-grained token can bypass unprotected-for-admins rules); the pilot's token is the
+  sponsor's, so "include administrators" is the setting to keep on.
 - The host-forwarding design (the host pushes `agent/*` refs and opens PRs for the seat, the token
   never on the same machine as the model) is not taken. It stays the answer if the security track
   decides a seat's processes must not hold a push credential at all.

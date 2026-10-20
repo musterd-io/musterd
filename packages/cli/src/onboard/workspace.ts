@@ -105,6 +105,25 @@ function remoteRepoName(remote: string | null): string | null {
   return name ? name : null;
 }
 
+/**
+ * ADR 675 (review): the origin URL a seat's clone may be handed — never one carrying credentials.
+ * A `https://user:token@host/…` origin would put the token in the clone's `.git/config`, inside
+ * the workspace; userinfo is stripped and authentication is left to the credential helper. A URL
+ * that does not parse (scp-like `git@host:path`) passes through; it carries no secret.
+ */
+export function publicOriginUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (!u.username && !u.password) return url;
+    u.username = '';
+    u.password = '';
+    return u.href;
+  } catch {
+    return url;
+  }
+}
+
 /** The checkout's `origin` URL, or null when it has none (ADR 675: what a cloud clone points at). */
 export function originUrl(top: string): string | null {
   try {

@@ -3,7 +3,12 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { memberWorkspaceDir, provisionWorkspace, setSeatGitIdentity } from './workspace.js';
+import {
+  memberWorkspaceDir,
+  provisionWorkspace,
+  publicOriginUrl,
+  setSeatGitIdentity,
+} from './workspace.js';
 
 const made: string[] = [];
 function tmp(prefix: string): string {
@@ -376,5 +381,18 @@ describe('memberWorkspaceDir — ~/musterd/<team>/<repo>/<member> (ADR 447)', ()
     const ws = provisionWorkspace('June', { cwd: repo, team: 'revive', home });
     expect(realpathSync(ws.dir)).toBe(realpathSync(legacy));
     expect(ws.created).toBe(false);
+  });
+});
+
+describe('publicOriginUrl (ADR 675 review)', () => {
+  it('strips userinfo from an https origin and passes other shapes through', () => {
+    expect(publicOriginUrl('https://x-access-token:ghp_abc@github.com/acme/repo.git')).toBe(
+      'https://github.com/acme/repo.git',
+    );
+    expect(publicOriginUrl('https://github.com/acme/repo.git')).toBe(
+      'https://github.com/acme/repo.git',
+    );
+    expect(publicOriginUrl('git@github.com:acme/repo.git')).toBe('git@github.com:acme/repo.git');
+    expect(publicOriginUrl(null)).toBeNull();
   });
 });

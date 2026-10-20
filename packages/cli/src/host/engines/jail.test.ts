@@ -182,6 +182,21 @@ describe('bashAllowed', () => {
     expect(deny('git log -c')).toMatch(/executes, reconfigures/);
     expect(deny('git fetch --upload-pack=evil origin')).toMatch(/executes/);
     expect(deny('git push --receive-pack=evil origin x')).toMatch(/executes/);
+    // ADR 675 review: only the seat's own branch, by name or as the current branch.
+    for (const c of [
+      'git push --all origin',
+      'git push --mirror origin',
+      'git push --tags',
+      'git push origin --delete agent/x',
+      'git push origin -d agent/x',
+      'git push origin +HEAD:agent/x',
+      'git push origin HEAD:refs/heads/other',
+      'git push origin :agent/x',
+      'git push --prune origin',
+    ])
+      expect(deny(c), c).toMatch(/current branch by name only/);
+    expect(bashAllowed('git push -u origin agent/pilot-2', policy).ok).toBe(true);
+    expect(bashAllowed('git push --force-with-lease origin agent/pilot-2', policy).ok).toBe(true);
     expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
     expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
     expect(deny('git diff --ext-diff')).toMatch(/executes/);
