@@ -796,27 +796,33 @@
    a game. /broadcast's stage is a `div.lc` (its frame is the 1920×1080 capture, never a page) and
    the single-track companion canvas keeps its full bleed, so neither picks this up. The 12px gutter
    costs the room 24px of width; the fit is width-limited, so that is about 2% of its scale. */
-main.lc .lc__canvas:not(.lc__canvas--companion) {
-  gap: var(--lc-5);
-  padding: var(--lc-5);
-  background: var(--lc-ground);
-}
-main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office,
-main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
-  border: 1px solid var(--lc-border);
-  border-radius: var(--lc-r-lg);
-  overflow: hidden;
-  box-shadow:
-    0 1px 2px rgba(17, 24, 39, 0.05),
-    0 8px 24px -12px rgba(17, 24, 39, 0.12);
-}
-main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office {
-  /* The amber horizon glow belonged to a cream page; on the grey one it reads as a stain. A quiet
-     daylight wash keeps the room lit without colouring the panel. */
-  background: linear-gradient(180deg, var(--lc-ground-2) 0%, var(--lc-surface-2) 100%);
-}
-main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
-  background: var(--lc-ground-2);
+/* Wide screens only. At ≤880px the office is hidden and the team column is the page, so a gutter
+   and a border there are chrome a phone pays for in width — and clipping the column hid its cards
+   off-screen, which the target-size gate caught at 390px. The team panel never clips: its radius is
+   drawn by the border, and its list keeps scrolling the way it always has. */
+@media (min-width: 881px) {
+  main.lc .lc__canvas:not(.lc__canvas--companion) {
+    gap: var(--lc-5);
+    padding: var(--lc-5);
+    background: var(--lc-ground);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office,
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
+    border: 1px solid var(--lc-border);
+    border-radius: var(--lc-r-lg);
+    box-shadow:
+      0 1px 2px rgba(17, 24, 39, 0.05),
+      0 8px 24px -12px rgba(17, 24, 39, 0.12);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-office {
+    overflow: hidden;
+    /* The amber horizon glow belonged to a cream page; on the grey one it reads as a stain. A quiet
+       daylight wash keeps the room lit without colouring the panel. */
+    background: linear-gradient(180deg, var(--lc-ground-2) 0%, var(--lc-surface-2) 100%);
+  }
+  main.lc .lc__canvas:not(.lc__canvas--companion) .lc-team {
+    background: var(--lc-ground-2);
+  }
 }
 
 /* ─── collapse pill (in each panel header) ────────────────────────────── */
