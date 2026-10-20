@@ -7,6 +7,29 @@ role's call. miley's half is layout and the visual system; every string below is
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs
 this page too and is not restated in full here — read it first.
 
+## 0c. Proposal of 2026-10-20 — what a person does at /live (held until ADR 683 is accepted)
+
+Lane `01M5D9SSDFR2WB2G7GCWV4GKHP`. A proposal under [ADR 683](../decisions/683-live-and-multiplayer-in-the-message.md);
+no string below ships, and miley does not build it, until nick accepts that ADR. One string, on this page:
+
+| where | was | becomes |
+| --- | --- | --- |
+| `StreamSection`, a new line under body 1 and above the links | — | `On your team, /live shows every member at work in one room. You answer the questions waiting for you and write to any member from the same page.` |
+
+Rules for the string, on top of §0.2:
+
+- It says what a member of a team does at `/live`, and a visitor to musterd.io is not one. The words
+  "on your team" carry that. The page never implies a visitor can answer our team's asks.
+- It names three things the code does today (ADR 683, Context): the office scene, answering an ask in the
+  composer, writing to a member. It does not say "presence indicators", "shared session", "co-driving",
+  "dashboard" or "control plane".
+- "You miss nothing" and "step back to a higher level" are nick's words about nick's use and are not
+  copy until a second person says them to us, with consent (ADR 683 §1).
+- The speaker's form, for the deck and the Q&A bank, is in ADR 683 §1 and §2. This line is the page's form.
+
+For miley: one text line, about 30 words. If the JS budget cannot take it
+(`docs/perf/web-live-baseline.md`), the line is cut and nothing else on the page changes.
+
 ## 0b. Revision of 2026-10-13 — the office, and knowledge work
 
 Lane `01M4V6TP8NQYRHPVBWG48019FX`, on nick's direction of 2026-10-13, decided in
