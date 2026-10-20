@@ -649,6 +649,26 @@ describe('claim --detach (ADR 377 increment 1 — the one-shot HTTP path `join` 
     expect(after.claim).toEqual({ mode: 'seat', name: 'bo' });
   });
 
+  // A seat's first claim is the only time the server hands out its seat credential. Made with
+  // `--detach`, the credential was dropped on the floor and the binding kept only the bootstrap key —
+  // so the seat could claim but never act (hosted canary-6, 2026-10-20).
+  it('a FIRST claim made with --detach keeps the seat credential the server minted', async () => {
+    await declareSeat('bo');
+    const g = await grant('bo');
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      expect(
+        await claimCommand(parseArgs(['bo', '--team', 'dawn', '--grant', g, '--detach'])),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const binding = readBinding();
+    expect(binding.agent_key).toBe(agentKey);
+    expect(binding.seat_credential).toMatch(/^msac_/);
+    expect(binding.claim).toEqual({ mode: 'seat', name: 'bo' });
+  });
+
   // A hosted team serves no roster to an anonymous caller, so a fresh folder on <slug>.musterd.dev
   // failed before it ever claimed ("missing bearer token", cloud-agent pilot 2026-10-18).
   describe('the roster read before a claim carries the credential the claim will use', () => {
