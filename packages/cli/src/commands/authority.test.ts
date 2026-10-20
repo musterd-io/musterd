@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Parsed } from '../args.js';
-import { authorityCommand } from './authority.js';
+import { authorityCommand, browserOrigin } from './authority.js';
 
 const h = vi.hoisted(() => ({
+  server: 'http://localhost:4849',
   keys: [] as { id: string; kind: string; created_at: number; revoked_at: number | null }[],
   issueEnrollmentChallenge: vi.fn(async () => ({
     challenge: 'challenge-at-least-16-chars',
@@ -32,7 +33,7 @@ vi.mock('./helpers.js', () => ({
     team: 'revive',
     identity: { name: 'nick' },
     http: {
-      server: 'http://localhost:4849',
+      server: h.server,
       issueEnrollmentChallenge: h.issueEnrollmentChallenge,
       enrollDeviceKey: vi.fn(),
       listDeviceKeys: h.listDeviceKeys,
@@ -109,6 +110,31 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     );
     expect(out.join('')).toContain('#countersign=');
     vi.restoreAllMocks();
+  });
+
+  it('browserOrigin rewrites IP literals to localhost and leaves domains alone', () => {
+    // Falsifier for the 2026-10-19 failure: a 127.0.0.1 ceremony URL can
+    // never complete — WebAuthn rejects an IP relying-party ID.
+    expect(browserOrigin('http://127.0.0.1:4849')).toBe('http://localhost:4849');
+    expect(browserOrigin('http://[::1]:4849')).toBe('http://localhost:4849');
+    expect(browserOrigin('http://localhost:4849')).toBe('http://localhost:4849');
+    expect(browserOrigin('https://musterd.example:4849')).toBe('https://musterd.example:4849');
+  });
+
+  it('enroll prints a localhost ceremony URL when the server is 127.0.0.1', async () => {
+    h.server = 'http://127.0.0.1:4849';
+    try {
+      h.listDeviceKeys.mockResolvedValueOnce({ keys: [] }).mockResolvedValue({
+        keys: [{ id: 'key-10', kind: 'passkey', created_at: 2, revoked_at: null }],
+      });
+      const out = captureStdout();
+      expect(await authorityCommand(parsed(['enroll']))).toBe(0);
+      expect(out.join('')).toContain('Open http://localhost:4849/authority/passkey?');
+      expect(out.join('')).not.toContain('Open http://127.0.0.1:4849/authority/passkey?');
+    } finally {
+      h.server = 'http://localhost:4849';
+      vi.restoreAllMocks();
+    }
   });
 
   it('keys lists the daemon keys', async () => {

@@ -24,6 +24,25 @@ const USAGE =
 type Http = ReturnType<typeof resolve>['http'];
 type Proof = Awaited<ReturnType<Http['getParkedApproval']>>['proof'];
 
+/**
+ * WebAuthn refuses an IP-literal relying-party ID ("invalid domain"), so a
+ * ceremony URL on 127.0.0.1/::1 can never complete. `localhost` is a valid
+ * RP ID and the daemon pins it as an expected origin. Only the printed
+ * browser URL is rewritten — API calls keep the configured server URL.
+ */
+export function browserOrigin(server: string): string {
+  try {
+    const u = new URL(server);
+    if (u.hostname === '127.0.0.1' || u.hostname === '[::1]' || u.hostname === '::1') {
+      u.hostname = 'localhost';
+      return u.origin;
+    }
+    return server.replace(/\/$/, '');
+  } catch {
+    return server;
+  }
+}
+
 function printJson(value: unknown): number {
   process.stdout.write(JSON.stringify(value, null, 2) + '\n');
   return 0;
@@ -49,7 +68,7 @@ async function collectApproval(
       `  target: ${d.target}\n  expires: ${new Date(d.expiry).toISOString()}\n`,
   );
   const url =
-    `${http.server}/authority/approve?team=${encodeURIComponent(team)}` +
+    `${browserOrigin(http.server)}/authority/approve?team=${encodeURIComponent(team)}` +
     `&nonce=${encodeURIComponent(d.nonce)}`;
   process.stdout.write(`Approve at ${url}\nwaiting for the parked proof…\n`);
   const deadline = Date.now() + 4 * 60 * 1000;
@@ -105,7 +124,7 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
         ? `#countersign=${Buffer.from(JSON.stringify(countersign)).toString('base64url')}`
         : '';
     const url =
-      `${http.server}/authority/passkey?team=${encodeURIComponent(team)}` +
+      `${browserOrigin(http.server)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
       fragment;
     process.stdout.write(`Open ${url}\nwaiting for the passkey ceremony…\n`);
