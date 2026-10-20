@@ -2723,6 +2723,59 @@
 .lc-boardspot:focus-visible .lc-boardspot__tag {
   background: var(--lc-oak-lit);
 }
+/* The working-hours calendar's hotspot — the settings door. Same build and same hover promise as
+   the board's, minus the sign; at least 24px whatever the fit (the house tap floor). `[hidden]` must
+   win over `display` here, since the route reveals it only when the viewer has settings. */
+.lc-hoursspot {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 4px;
+  transition:
+    box-shadow var(--lc-dur-2) var(--lc-ease-out),
+    transform var(--lc-dur-2) var(--lc-ease-pop);
+}
+.lc-hoursspot[hidden] {
+  display: none;
+}
+.lc-hoursspot:hover,
+.lc-hoursspot:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--lc-accent) 60%, transparent),
+    0 4px 16px -4px color-mix(in srgb, var(--lc-accent) 42%, transparent),
+    0 0 14px -4px rgba(255, 190, 110, 0.85);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-hoursspot:hover,
+  .lc-hoursspot:focus-visible {
+    transform: none;
+  }
+}
+/* A pairing waits for this viewer: a red pin in the calendar's corner, like a note tacked on. */
+.lc-hoursspot__dot {
+  display: none;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lc-danger);
+  box-shadow:
+    0 0 0 2px var(--lc-surface),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.lc-hoursspot.is-flagged .lc-hoursspot__dot {
+  display: block;
+}
 
 /* the soft acknowledge pulse the moment a bubble is clicked (focus hands off to the stream flash) */
 /* The recipient chip: who a directed act is aimed at, so the body can safely say "you". The
