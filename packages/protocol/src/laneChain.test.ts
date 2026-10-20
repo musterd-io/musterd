@@ -79,6 +79,82 @@ describe('laneChain', () => {
     ).toEqual(link('model', 'grok-4', 'stated'));
   });
 
+  it("names the claimant's model, not the acceptor's, and falls back only when the claimant has none", () => {
+    // ADR 687: dreamy's counterpart close is the newest row with a model; lazara did the work.
+    const counterpartClose: LaneChainEvent[] = [
+      {
+        action: 'lane.claimed',
+        actor: 'lazara',
+        owner: 'lazara',
+        model: 'claude-opus-5-5',
+        model_source: 'observed',
+      },
+      {
+        action: 'lane.state_changed',
+        actor: 'lazara',
+        model: 'claude-opus-5-5',
+        model_source: 'observed',
+      },
+      {
+        action: 'lane.closed',
+        actor: 'dreamy',
+        verified: true,
+        model: 'minimax-m3.1-flash-free',
+        model_source: 'observed',
+      },
+    ];
+    expect(laneChain({ owner_seat: 'lazara' }, counterpartClose)[2]).toEqual(
+      link('model', 'claude-opus-5-5', 'verified'),
+    );
+    // The lane row is unowned after release: the claimant comes from the newest lane.claimed row.
+    expect(laneChain(empty, counterpartClose)[2]).toEqual(
+      link('model', 'claude-opus-5-5', 'verified'),
+    );
+    // The claimant's newest model wins over an older one of theirs, whatever its mark.
+    expect(
+      laneChain({ owner_seat: 'lazara' }, [
+        {
+          action: 'lane.claimed',
+          actor: 'lazara',
+          model: 'claude-opus-5-5',
+          model_source: 'observed',
+        },
+        {
+          action: 'lane.state_changed',
+          actor: 'lazara',
+          model: 'claude-sonnet-5-5',
+          model_source: 'binding',
+        },
+        {
+          action: 'lane.closed',
+          actor: 'dreamy',
+          verified: true,
+          model: 'grok-4',
+          model_source: 'observed',
+        },
+      ])[2],
+    ).toEqual(link('model', 'claude-sonnet-5-5', 'stated'));
+    // No row by the claimant carries a model: the newest row by anyone stands in.
+    expect(
+      laneChain({ owner_seat: 'lazara' }, [
+        { action: 'lane.claimed', actor: 'lazara', model: 'unknown', model_source: 'observed' },
+        {
+          action: 'lane.closed',
+          actor: 'dreamy',
+          verified: true,
+          model: 'grok-4',
+          model_source: 'observed',
+        },
+      ])[2],
+    ).toEqual(link('model', 'grok-4', 'verified'));
+    // No claimant at all: the newest row by anyone, as before.
+    expect(
+      laneChain(empty, [
+        { action: 'lane.opened', actor: 'stanley', model: 'grok-4', model_source: 'observed' },
+      ])[2],
+    ).toEqual(link('model', 'grok-4', 'verified'));
+  });
+
   it('accepts only a confirmed close that names the closer', () => {
     const history: LaneChainEvent[] = [
       { action: 'lane.closed', actor: 'TJ', verified: false },
