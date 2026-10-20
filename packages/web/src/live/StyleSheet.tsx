@@ -53,6 +53,40 @@ export interface StyleSheetViewProps {
 /** The sheet's body — pure, so the first frame is testable without a daemon. */
 export function StyleSheetView({ mine, team, busy, note, onDial, onProse, onTeam }: StyleSheetViewProps) {
   if (!mine) return <p className="lc-style__quiet">Reading how agents talk to you…</p>;
+  return (
+    <>
+      <MyStylePart mine={mine} busy={busy} onDial={onDial} onProse={onProse} />
+      {team && <TeamStylePart team={team} busy={busy} onTeam={onTeam} />}
+      <StyleNote note={note} />
+    </>
+  );
+}
+
+/** The live line under a write — what the daemon answered, or why it refused. */
+export function StyleNote({ note }: { note: SheetNote }) {
+  return (
+    <p
+      className={`lc-style__note${note ? ` lc-style__note--${note.tone}` : ''}`}
+      role="status"
+      aria-live="polite"
+    >
+      {note?.text ?? ''}
+    </p>
+  );
+}
+
+/** "How agents talk to me": the viewer's own dials and prose, over the team floor they sit on. */
+export function MyStylePart({
+  mine,
+  busy,
+  onDial,
+  onProse,
+}: {
+  mine: MyStyle;
+  busy: boolean;
+  onDial: (key: StyleDialKey, value: string | null) => void;
+  onProse: (text: string) => void;
+}) {
   const { prefs, resolved } = mine;
   const floorOff = STYLE_FLOOR_PHRASES.filter(([k]) => !resolved.floor[k]).length;
   return (
@@ -107,21 +141,12 @@ export function StyleSheetView({ mine, team, busy, note, onDial, onProse, onTeam
           <pre>{mine.block}</pre>
         </details>
       </section>
-
-      {team && <TeamPart team={team} busy={busy} onTeam={onTeam} />}
-
-      <p
-        className={`lc-style__note${note ? ` lc-style__note--${note.tone}` : ''}`}
-        role="status"
-        aria-live="polite"
-      >
-        {note?.text ?? ''}
-      </p>
     </>
   );
 }
 
-function TeamPart({
+/** The team's floor, default dials and prose — admin only; the daemon decides who that is. */
+export function TeamStylePart({
   team,
   busy,
   onTeam,
@@ -308,27 +333,8 @@ export function StyleSheet({
   isAdmin: boolean;
   onClose: () => void;
 }) {
-  const [mine, setMine] = useState<MyStyle | null>(null);
-  const [team, setTeam] = useState<TeamPolicyRead | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<SheetNote>(null);
+  const style = useStyleEdit(cfg, isAdmin);
   const panel = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let live = true;
-    getMyStyle(cfg).then(
-      (s) => live && setMine(s),
-      (e: unknown) => live && setNote({ tone: 'err', text: message(e) }),
-    );
-    if (isAdmin)
-      getTeamPolicy(cfg).then(
-        (p) => live && setTeam(p),
-        () => undefined, // not an admin after all — the daemon's answer wins; no team part
-      );
-    return () => {
-      live = false;
-    };
-  }, [cfg, isAdmin]);
 
   // Escape or a press outside closes; focus lands in the sheet so the keyboard can reach it.
   useEffect(() => {
@@ -346,6 +352,46 @@ export function StyleSheet({
       window.removeEventListener('pointerdown', onDown);
     };
   }, [onClose]);
+
+  return (
+    <div
+      ref={panel}
+      className="lc-style"
+      role="dialog"
+      aria-label="How agents talk to me"
+      tabIndex={-1}
+    >
+      <StyleSheetView {...style} />
+    </div>
+  );
+}
+
+/**
+ * The style sheet's state and writes, apart from where it renders: reads on mount, writes one change
+ * at a time, keeps what the daemon answered. `isAdmin` only decides whether to ASK for the team part;
+ * the daemon's `authAdmin` decides whether there is one, and a refusal just leaves `team` null.
+ */
+export function useStyleEdit(cfg: LiveConfig, isAdmin: boolean): StyleSheetViewProps {
+  const [mine, setMine] = useState<MyStyle | null>(null);
+  const [team, setTeam] = useState<TeamPolicyRead | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<SheetNote>(null);
+
+  useEffect(() => {
+    let live = true;
+    getMyStyle(cfg).then(
+      (s) => live && setMine(s),
+      (e: unknown) => live && setNote({ tone: 'err', text: message(e) }),
+    );
+    if (isAdmin)
+      getTeamPolicy(cfg).then(
+        (p) => live && setTeam(p),
+        () => undefined, // not an admin after all — the daemon's answer wins; no team part
+      );
+    return () => {
+      live = false;
+    };
+  }, [cfg, isAdmin]);
 
   const run = useCallback(async (work: () => Promise<void>, done: string) => {
     setBusy(true);
@@ -384,23 +430,5 @@ export function StyleSheet({
     }, 'team style saved');
   };
 
-  return (
-    <div
-      ref={panel}
-      className="lc-style"
-      role="dialog"
-      aria-label="How agents talk to me"
-      tabIndex={-1}
-    >
-      <StyleSheetView
-        mine={mine}
-        team={team}
-        busy={busy}
-        note={note}
-        onDial={onDial}
-        onProse={onProse}
-        onTeam={onTeam}
-      />
-    </div>
-  );
+  return { mine, team, busy, note, onDial, onProse, onTeam };
 }

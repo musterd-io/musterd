@@ -79,8 +79,11 @@ access; roster handles and Presence remain visible.
   between tasks, `ambientSeed.ts` `ambientPool`; who gets a gesture is a rotation through a seeded permutation of the desk members, advancing on each single-member decision — `decideAmbient`, a pure replay every viewer agrees on — not a uniform draw, which left a third of a twelve-person room without one in ten minutes), a purposeful walk wears its verb over the plate
   (`headline.ts` `walkTag`: "handing off → dolly"), and `live/OfficeKey.tsx` says how to read the
   room in one closable corner card; the scene idle-parks to 0 rAF/sec
-  when nobody is working. A read-only working-hours sign is painted from the Team schedule projection
-  (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206).
+  when nobody is working. A working-hours sign is painted from the Team schedule projection
+  (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206);
+  a Team with no schedule gets the same card reading `ANY DAY · no set hours`. On `/live` that card is
+  the door to **settings** (below): a hotspot button over it (`hoursAnchor`, the scene handle's
+  `setSettingsSpot`) shows for a signed-in human and wears a dot while a channel pairing waits.
 - **Log drawer** (`live/LogDrawer.tsx`, hosting `live/Stream.tsx`) — every message, one keystroke
   away (ADR 464 lane 2): the act feed, newest-last, live rows type out, threaded replies indent,
   day/now dividers, the model stamp and the click-through. A huddle is ONE card in the feed
@@ -131,7 +134,26 @@ access; roster handles and Presence remain visible.
   2026-10-12): the `pause…` form is `HoldsPause`, mounted in the topbar's right end. Both are one
   lazy chunk. Increment 4: `lift` on each hold and the `pause…` form (effect, reason, duration preset)
   render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
-  the client — and a refusal shows in place in the daemon's words.
+  the client — and a refusal shows in place in the daemon's words. Since 2026-10-19 the `pause…`
+  form lives in settings' Team sheet, not the topbar.
+- **Settings** (`live/settings/SettingsOverlay.tsx`, its own lazy chunk and `Settings.css`; nick,
+  2026-10-19, lane 01M5BDF1A5) — opened from the working-hours calendar under the wall clock, which
+  wears an oak "settings ›" tab fixed under its frame (the clock leaves no room above it, and its
+  header band keeps the days) and a red pin when a pairing waits. The board overlay's gesture again: it comes off the wall out of the card's rect and goes back on it, at
+  600px so the room stays in view, dressed in the card's oak, brass and mustard band. Two sheets.
+  **You** (`YouPanel.tsx`, any signed-in human, every route self-only): staged channel pairings as
+  one compact row each — workspace, user and check code exactly as the daemon holds them, Confirm /
+  Reject (ADR 618 §7; this replaced the full-width pairing panel above the room) — then availability
+  (`POST /availability`), the viewer's effective hours read-only, where asks ring them
+  (`GET`/`PUT /members/me/doorbell`, ADR 443; a personal URL is CLI-only, never shown here), each
+  paired away channel's switches (away channels 6), and how agents talk to them (`StyleSheet.tsx`'s
+  `MyStylePart`). **Team** (`TeamPanel.tsx`, shown when the roster says admin; the daemon still
+  decides): the Team's hours read-only (an editor is lane 01M5BDFCFE), `pause…`, the policy knobs in
+  plain groups from one table (`policyKnobs.ts`: waking agents, spend, acceptance & asks, huddles,
+  joining — no secret is in it, and a test holds that), and the team style. Every Team write goes
+  through one copy of the sparse stored doc, so a knob and a style edit cannot undo each other (ADR
+  185). Pairings are read by `live/usePendingPairings.ts` (30s poll, client loaded on first use).
+  Sound, room tone and the share link stay in the topbar (nick).
 - **How agents talk to me** (`live/StyleSheet.tsx`, merges in `live/styleEdit.ts`; ADR 514
   increment 5) — on `/board`, a signed-in human's own identity chip opens a sheet. /board has no
   per-human row, so the chip is that row (2026-10-07). It shows the viewer's four dials, each
@@ -332,7 +354,7 @@ teammate's session. Consequences worth internalising:
   (it was warm cream), the uppercase mono section labels are sentence case in the linear cut (mono
   stays for clocks and counts; no re-font, ADR 477 stands), and on `main.lc` the room and the team
   column are two bordered panels on a grey page. On `main.lc` a speech bubble is a white card with the
-  act's tone as a 3px top edge, clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
+  act's tone as a subtle 1.5px border all the way round (a 3px top edge until 2026-10-20), clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
   specificity so the marked bubbles (`.is-mark--*`) and hover-expand still win. Every motion is
   unchanged. /broadcast's stage is a `div.lc` and keeps its own frame (no panels), and its team
   column takes the neutral palette with /live (ADR 464: they share one column).

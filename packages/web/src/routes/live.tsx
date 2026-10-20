@@ -47,6 +47,7 @@ import { firehoseSound, roomTone } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
 import { useTeamHolds } from '../live/useTeamHolds';
+import { usePendingPairings } from '../live/usePendingPairings';
 import { useServerHealth } from '../live/serverHealth';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
@@ -105,10 +106,14 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
-/** The pairing confirmation panel (ADR 618 §7): lazy — it renders only while a pairing is staged. */
-const LazyPairingPanel = lazy(() =>
-  import('../live/PairingPanel').then((m) => ({ default: m.PairingPanel })),
+/** Settings (nick, 2026-10-19): opened from the working-hours calendar on the office wall, so its
+ *  chunk loads on the calendar's first hover or on the click — never with the room. */
+const LazySettingsOverlay = lazy(() =>
+  import('../live/settings/SettingsOverlay').then((m) => ({ default: m.SettingsOverlay })),
 );
+function preloadSettings(): void {
+  void import('../live/settings/SettingsOverlay');
+}
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
@@ -130,9 +135,6 @@ const TOUR_SLOT_ID = 'lc-tour-slot';
 // stays out of /live's eager graph on every ordinary day.
 const HoldsBanner = lazy(() =>
   import('../live/HoldsBanner').then((m) => ({ default: m.HoldsBanner })),
-);
-const HoldsPause = lazy(() =>
-  import('../live/HoldsBanner').then((m) => ({ default: m.HoldsPause })),
 );
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
@@ -247,6 +249,12 @@ function LivePage() {
     rosterStale,
     fresh,
   } = stream;
+  // Settings are a signed-in human's: their own sheet for anyone, the team's for an admin. The
+  // roster says which; the daemon still decides every read and write.
+  const meRow = signedIn && cfg ? (roster.find((m) => m.name === cfg.as) ?? null) : null;
+  const settingsHuman = meRow?.kind === 'human';
+  const settingsAdmin = settingsHuman && meRow?.capabilities?.is_admin === true;
+  const { pairings, refresh: refreshPairings } = usePendingPairings(cfg, settingsHuman);
   // What this browser sent through the demo prompt bar, folded in from the ack so a huddle shows on
   // the screen that opened it at once; the firehose copy that follows is deduped by id below.
   const [sent, setSent] = useState<Envelope[]>([]);
@@ -445,6 +453,19 @@ function LivePage() {
     setBoardGoal(goalId);
     roomTone.moment('boardOpen', 0);
   }, []);
+  // Settings, from the calendar under the wall clock — the board's open/close/focus pattern again.
+  const [settingsOrigin, setSettingsOrigin] = useState<DOMRect | null>(null);
+  const settingsOpener = useRef<HTMLElement | null>(null);
+  const openSettings = useCallback((rect: DOMRect) => {
+    settingsOpener.current = (document.activeElement as HTMLElement | null) ?? null;
+    setSettingsOrigin(rect);
+    roomTone.moment('boardOpen', 0);
+  }, []);
+  const closeSettings = useCallback(() => {
+    setSettingsOrigin(null);
+    roomTone.moment('boardClose', 0);
+    window.setTimeout(() => settingsOpener.current?.focus?.({ preventScroll: true }), 0);
+  }, []);
   const closeBoard = useCallback(() => {
     setBoardOrigin(null);
     setBoardLane(null);
@@ -640,12 +661,8 @@ function LivePage() {
         {/* One group, so a narrow topbar wraps the controls to a row of their own instead of
             pushing them off-screen (Live.css `.lc__tools`). */}
         <span className="lc__tools">
-          {/* ADR 516 inc 4: an admin's "pause…" lives here, not on an always-on banner. */}
-          {cfg && canSetHold && (
-            <Suspense fallback={null}>
-              <HoldsPause cfg={cfg} onChanged={refreshHolds} />
-            </Suspense>
-          )}
+          {/* An admin's "pause…" moved into settings' Team sheet (nick, 2026-10-19); the banner
+              still appears above the room while a hold is in force. */}
           {connected && (
             <button
               type="button"
@@ -700,12 +717,6 @@ function LivePage() {
             </div>
           )}
           {phone && <div className="lc__phone-asks">{asksStrip}</div>}
-          {/* ADR 618 §7: a staged channel pairing waits for this human's confirmation here. */}
-          {cfg && (
-            <Suspense fallback={null}>
-              <LazyPairingPanel cfg={cfg} />
-            </Suspense>
-          )}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +
@@ -713,7 +724,9 @@ function LivePage() {
             }
             // A modal means it: while the board overlay is up, the room behind it takes no focus and
             // no clicks (the AsksStrip inert precedent, promoted to page scope).
-            inert={boardOpen || seedsOpen || logOpen || pickSeat !== null}
+            inert={
+              boardOpen || seedsOpen || logOpen || pickSeat !== null || settingsOrigin !== null
+            }
           >
             {/* On a phone the room is a window to watch, not a panel to work (goal live-delight):
                 inert, so its plates — a few px apart at that scale — are not tap targets anyone
@@ -728,6 +741,11 @@ function LivePage() {
                 onLaneClick={setBoardLane}
                 onBoardOpen={openBoard}
                 onBoardHover={preloadBoardOverlay}
+                onSettingsOpen={openSettings}
+                onSettingsHover={preloadSettings}
+                // ADR 618 §7: a staged pairing used to be a full-width panel above the room; now it
+                // is a dot on the calendar, and the You sheet holds the confirmation.
+                settingsSpot={{ enabled: settingsHuman, flagged: pairings.length > 0 }}
                 // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
                 // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
                 topSlot={phone ? null : asksStrip}
@@ -837,6 +855,21 @@ function LivePage() {
                 focusLane={boardLane}
                 focusGoal={boardGoal}
                 onClose={closeBoard}
+              />
+            </Suspense>
+          )}
+          {settingsOrigin !== null && cfg && settingsHuman && (
+            <Suspense fallback={null}>
+              <LazySettingsOverlay
+                cfg={cfg}
+                me={meRow}
+                isAdmin={settingsAdmin}
+                teamHours={stream.teamWorkingHours}
+                pairings={pairings}
+                origin={settingsOrigin}
+                onPairingsChanged={refreshPairings}
+                onHoldsChanged={refreshHolds}
+                onClose={closeSettings}
               />
             </Suspense>
           )}

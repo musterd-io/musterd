@@ -1,0 +1,469 @@
+/* ─── settings overlay — the wall calendar, taken down ─────────────────────────────────────────────
+   Opened from the working-hours calendar under the wall clock, so it wears that card's materials:
+   the oak frame and brass trim (render.ts `workingHoursSign`), the mustard band with its two punched
+   holes, paper below. The scrim, motion and dismissal are the board overlay's (`.lc-boardoverlay`);
+   only the panel's size and dress differ. Narrower than the board — it is a list to read down, and
+   the room left showing either side is what says you never left the office. */
+.lc-settings {
+  --set-oak: #6a4a30;
+  --set-brass: #c39a41;
+  --set-band: #e1ad01;
+  --set-band-ink: #33261c; /* 8.2:1 on the band */
+  --set-band-dim: #4e331f; /* 6.3:1 on the band */
+  --set-paper: #fbf1d8;
+  --set-rule: rgba(120, 96, 60, 0.18);
+  --set-hole: #b8862a;
+}
+
+.lc-boardoverlay__panel.lc-settings__panel {
+  width: min(94vw, 600px);
+  min-width: 0;
+  height: min(86vh, 780px);
+  min-height: min(86vh, 360px);
+  background: var(--set-paper);
+  border: 3px solid var(--set-oak);
+  box-shadow:
+    inset 0 0 0 2px var(--set-brass),
+    0 8px 22px -8px color-mix(in srgb, var(--lc-ground) 70%, transparent),
+    0 32px 80px -24px color-mix(in srgb, var(--lc-ground) 85%, transparent);
+  overflow: hidden;
+}
+
+/* The band: the calendar's mustard header, holes and all. Tabs sit on it like the month's name. */
+.lc-settings__band {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  padding: var(--lc-4) var(--lc-4) var(--lc-4) var(--lc-4);
+  background: var(--set-band);
+  border-bottom: 1px solid rgba(120, 84, 20, 0.35);
+  box-shadow: 0 1.5px 0 rgba(120, 84, 20, 0.18);
+}
+.lc-settings__hole {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--set-hole);
+  box-shadow: inset 0 1px 1px rgba(60, 40, 10, 0.45);
+}
+.lc-settings__title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--set-band-ink);
+  white-space: nowrap;
+}
+.lc-settings__team {
+  font-weight: 400;
+  color: var(--set-band-dim);
+}
+.lc-settings__tabs {
+  display: inline-flex;
+  gap: var(--lc-2);
+  margin-left: auto;
+}
+.lc-settings__tab {
+  position: relative;
+  appearance: none;
+  min-width: 56px;
+  min-height: 28px;
+  padding: 0 var(--lc-5);
+  border: 1px solid rgba(78, 51, 31, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--set-band-ink);
+  font: 600 12px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background var(--lc-dur-1) var(--lc-ease-out),
+    color var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc-settings__tab:hover {
+  background: rgba(255, 248, 225, 0.35);
+}
+.lc-settings__tab.is-on {
+  background: var(--set-paper);
+  border-color: var(--set-paper);
+  color: var(--lc-text);
+}
+.lc-settings__tab:focus-visible,
+.lc-settings__close:focus-visible {
+  outline: 2px solid var(--set-band-ink);
+  outline-offset: 2px;
+}
+/* Something waits on this sheet — a pairing to confirm. */
+.lc-settings__flag {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lc-danger);
+  box-shadow: 0 0 0 2px var(--set-band);
+}
+.lc-settings__close {
+  appearance: none;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(78, 51, 31, 0.35);
+  border-radius: var(--lc-r-sm);
+  background: transparent;
+  color: var(--set-band-ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lc-settings__close:hover {
+  background: rgba(255, 248, 225, 0.35);
+}
+
+.lc-settings__sheet {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--lc-3) var(--lc-5) var(--lc-5) calc(var(--lc-5) + 4px);
+  color: var(--lc-text);
+}
+
+/* ── groups and rows ── */
+.lc-set__group {
+  padding: var(--lc-5) 0 var(--lc-3);
+  border-bottom: 1px solid var(--set-rule);
+}
+.lc-set__group:last-of-type {
+  border-bottom: 0;
+}
+/* The one group that is waiting on you: a warm edge, not a banner. */
+.lc-set__group--waiting {
+  margin: var(--lc-3) calc(-1 * var(--lc-3)) 0;
+  padding: var(--lc-4) var(--lc-3) var(--lc-3);
+  border: 1px solid color-mix(in srgb, var(--set-band) 55%, transparent);
+  border-left: 3px solid var(--set-band);
+  border-radius: var(--lc-r-sm);
+  background: color-mix(in srgb, var(--set-band) 9%, var(--set-paper));
+}
+.lc-set__h {
+  margin: 0 0 var(--lc-2);
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lc-text);
+}
+.lc-set__lede {
+  margin: 0 0 var(--lc-3);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--lc-muted);
+}
+.lc-set__quiet {
+  margin: var(--lc-5) 0;
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-set__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lc-5);
+  min-height: 40px;
+  padding: var(--lc-2) 0;
+}
+.lc-set__what {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.lc-set__label {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--lc-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.lc-set__tag {
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--lc-muted);
+}
+.lc-set__hint {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--lc-muted);
+}
+.lc-set__control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-3);
+  flex: none;
+}
+.lc-set__read {
+  font: 600 12px/1.3 var(--font-mono);
+  color: var(--lc-dim);
+  text-align: right;
+}
+
+/* ── the switch: a checkbox in a brass-and-paper dress ── */
+.lc-set__switch {
+  position: relative;
+  display: inline-flex;
+  width: 40px;
+  height: 24px;
+  cursor: pointer;
+}
+.lc-set__switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.lc-set__track {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(120, 96, 60, 0.28);
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-set__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fffaf0;
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.35);
+  transition: transform var(--lc-dur-2) var(--lc-ease-pop);
+}
+.lc-set__switch input:checked + .lc-set__track {
+  background: var(--lc-accent);
+}
+.lc-set__switch input:checked + .lc-set__track .lc-set__thumb {
+  transform: translateX(16px);
+}
+.lc-set__switch input:focus-visible + .lc-set__track {
+  outline: 2px solid var(--lc-accent-ink);
+  outline-offset: 2px;
+}
+.lc-set__switch input:disabled {
+  cursor: default;
+}
+.lc-set__switch input:disabled + .lc-set__track {
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-set__thumb,
+  .lc-set__track {
+    transition: none;
+  }
+}
+
+/* ── segmented choice ── */
+.lc-set__seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(120, 96, 60, 0.12);
+}
+.lc-set__segopt {
+  appearance: none;
+  min-height: 24px;
+  padding: 0 var(--lc-4);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lc-dim);
+  font: 500 11.5px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lc-set__segopt:hover:not(:disabled) {
+  color: var(--lc-text);
+}
+.lc-set__segopt.is-on {
+  background: #fffaf0;
+  color: var(--lc-text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.22);
+}
+.lc-set__segopt:focus-visible {
+  outline: 2px solid var(--lc-accent-ink);
+  outline-offset: 1px;
+}
+
+/* ── numbers ── */
+.lc-set__num {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-2);
+}
+.lc-set__num input {
+  width: 72px;
+  min-height: 28px;
+  padding: 0 var(--lc-3);
+  border: 1px solid rgba(120, 96, 60, 0.35);
+  border-radius: var(--lc-r-sm);
+  background: #fffaf0;
+  color: var(--lc-text);
+  font: 500 12px/1 var(--font-mono);
+  text-align: right;
+}
+.lc-set__num input:focus-visible {
+  outline: 2px solid var(--lc-accent-ink);
+  outline-offset: 1px;
+}
+.lc-set__num input[aria-invalid='true'] {
+  border-color: var(--lc-danger-ink);
+}
+.lc-set__unit {
+  min-width: 28px;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--lc-muted);
+}
+.lc-set__numerr {
+  min-width: 28px;
+  font: 500 11px/1.2 var(--font-mono);
+  color: var(--lc-danger-ink);
+}
+
+.lc-set__reset {
+  appearance: none;
+  min-height: 24px;
+  padding: 0 var(--lc-2);
+  border: 0;
+  background: transparent;
+  color: var(--lc-accent-ink);
+  font: 500 11px/1 var(--font-mono);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ── pairings ── */
+.lc-set__pairs {
+  display: grid;
+  gap: var(--lc-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lc-set__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--lc-4);
+}
+.lc-set__pairwho {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.lc-set__chan {
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-dim);
+}
+.lc-set__chan--head {
+  display: block;
+  padding-top: var(--lc-3);
+}
+.lc-set__ids {
+  overflow: hidden;
+  font: 500 12px/1.3 var(--font-mono);
+  color: var(--lc-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-set__check {
+  font: 400 11.5px/1 var(--font-mono);
+  color: var(--lc-muted);
+}
+.lc-set__check b {
+  font-weight: 700;
+  color: var(--lc-text);
+  letter-spacing: 0.06em;
+}
+.lc-set__pairact {
+  display: inline-flex;
+  gap: var(--lc-2);
+}
+.lc-set__btn {
+  appearance: none;
+  min-height: 28px;
+  padding: 0 var(--lc-4);
+  border: 1px solid rgba(120, 96, 60, 0.4);
+  border-radius: var(--lc-r-sm);
+  background: #fffaf0;
+  color: var(--lc-text);
+  font: 600 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.lc-set__btn--go {
+  background: var(--set-band);
+  border-color: color-mix(in srgb, var(--set-band) 70%, #000);
+  color: var(--set-band-ink);
+}
+.lc-set__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.lc-set__btn:focus-visible {
+  outline: 2px solid var(--lc-accent-ink);
+  outline-offset: 2px;
+}
+
+.lc-set__chanblock + .lc-set__chanblock {
+  margin-top: var(--lc-3);
+  border-top: 1px dashed var(--set-rule);
+}
+
+.lc-set__note {
+  min-height: 16px;
+  margin: var(--lc-2) 0 0;
+  font: 400 11.5px/1.35 var(--font-mono);
+  color: var(--lc-muted);
+}
+.lc-set__note--ok {
+  color: var(--lc-success-ink);
+}
+.lc-set__note--err {
+  color: var(--lc-danger-ink);
+}
+
+/* The style parts come from /board's sheet (StyleSheet.tsx) and keep its classes; here they sit
+   flush in the sheet instead of in a dropdown. */
+.lc-set__style {
+  padding-top: var(--lc-5);
+}
+
+/* Phone: the panel is most of the screen, and a row's control drops under its words. */
+@media (max-width: 520px) {
+  .lc-boardoverlay__panel.lc-settings__panel {
+    width: calc(100vw - 32px);
+    height: calc(100dvh - 48px);
+  }
+  .lc-set__row {
+    flex-wrap: wrap;
+  }
+  .lc-set__control {
+    margin-left: auto;
+  }
+  .lc-set__pair {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lc-set__pairact {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}

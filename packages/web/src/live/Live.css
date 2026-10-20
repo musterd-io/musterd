@@ -2635,7 +2635,8 @@
    A real <button> laid over the painted wall board (the canvas takes no pointer events). At rest only
    its sign shows (`__tag`, hung above it); hover/focus adds a warm ring and lifts the board. Sits in the label layer BELOW bubbles/nameplates (DOM order), and never on /broadcast
    (the scene only creates it under interactiveLabels). No backdrop-filter: office-block house rule. */
-.lc-boardspot {
+.lc-boardspot,
+.lc-hoursspot {
   position: absolute;
   pointer-events: auto;
   cursor: pointer;
@@ -2652,7 +2653,9 @@
    object comes off the wall, made before you click. Lives on the DOM hotspot, not the canvas, so
    pointing at the board never costs a scene repaint. */
 .lc-boardspot:hover,
-.lc-boardspot:focus-visible {
+.lc-boardspot:focus-visible,
+.lc-hoursspot:hover,
+.lc-hoursspot:focus-visible {
   outline: none;
   transform: translateY(-2px);
   box-shadow:
@@ -2662,7 +2665,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .lc-boardspot:hover,
-  .lc-boardspot:focus-visible {
+  .lc-boardspot:focus-visible,
+  .lc-hoursspot:hover,
+  .lc-hoursspot:focus-visible {
     transform: none;
   }
 }
@@ -2677,16 +2682,18 @@
   left: 50%;
   /* Hung from the middle of the board's top edge, not the box's top: on the slanted wall the box's
      top is the board's high corner (`--lc-sign-drop`, set by the scene from `boardAnchor`). */
-  bottom: calc(100% - var(--lc-sign-drop, 0px) + 12px);
+  bottom: calc(100% - var(--lc-sign-drop, 0px) + 0.8em);
   /* Skewed by the board's top-edge slope (`--lc-sign-tilt`, from `boardAnchor`), so it lies in the
      wall's plane like the board under it. skewY keeps the strings vertical, as a hung sign's are. */
   transform: translateX(-50%) skewY(var(--lc-sign-tilt, 0deg));
   transform-origin: 50% 100%;
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 0.4em;
   font-family: var(--font-display, var(--font-sans));
-  font-size: 12px;
+  /* Scales with the room (`--lc-sign-scale` is the scene's fit scale), so the sign stays in proportion
+     to the board it names: ~9px at a laptop-width office, never under 8px or over 12px. */
+  font-size: clamp(8px, calc(var(--lc-sign-scale, 1) * 13px), 12px);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -2695,7 +2702,7 @@
   border-top: 1px solid var(--lc-oak-lit);
   border-radius: 3px;
   box-shadow: 0 2px 0 var(--lc-oak-shade);
-  padding: 4px 9px 5px;
+  padding: 0.3em 0.7em 0.4em;
   pointer-events: auto;
   transition: background var(--lc-dur-2) var(--lc-ease-out);
 }
@@ -2706,14 +2713,14 @@
   position: absolute;
   bottom: 100%;
   width: 1px;
-  height: 10px;
+  height: 0.7em;
   background: var(--lc-oak-shade);
 }
 .lc-boardspot__tag::before {
-  left: 12px;
+  left: 1em;
 }
 .lc-boardspot__tag::after {
-  right: 12px;
+  right: 1em;
 }
 .lc-boardspot__caret {
   /* --lc-dim, not --lc-muted: on the oak under the asks sheet's dim, muted read 4.44 (CI, #2300). */
@@ -2722,6 +2729,56 @@
 .lc-boardspot:hover .lc-boardspot__tag,
 .lc-boardspot:focus-visible .lc-boardspot__tag {
   background: var(--lc-oak-lit);
+}
+/* The working-hours calendar's hotspot — the settings door. It shares the board hotspot's build
+   and hover (grouped above); its own: a settings tab under its frame (below), the house 24px tap floor whatever the fit, and a red
+   pin in the corner when a pairing waits for this viewer. */
+.lc-hoursspot {
+  min-width: 24px;
+  min-height: 24px;
+}
+.lc-hoursspot[hidden],
+.lc-hoursspot:not(.is-flagged) .lc-hoursspot__dot {
+  display: none;
+}
+/* The settings tab: oak, fixed flush under the calendar's frame across its middle, skewed into the
+   wall's plane like the board's sign. Sized in wall units (`--lc-tab-unit`) so it keeps its
+   proportion to the card at any fit, never under 8px type. */
+.lc-hoursspot__tab {
+  --lc-oak: #dcbf8e;
+  position: absolute;
+  left: var(--lc-tab-x, 0px);
+  top: var(--lc-tab-y, 0px);
+  width: var(--lc-tab-w, 0px);
+  transform: skewY(var(--lc-sign-tilt, 0deg));
+  transform-origin: 0 0;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--lc-tab-unit, 0px) * 1.5) 0 calc(var(--lc-tab-unit, 0px) * 2);
+  white-space: nowrap;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: max(8px, calc(var(--lc-tab-unit, 0px) * 10));
+  font-weight: 700;
+  line-height: 1;
+  color: var(--lc-text);
+  background: var(--lc-oak);
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 2px 0 #b9915f;
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-hoursspot:hover .lc-hoursspot__tab,
+.lc-hoursspot:focus-visible .lc-hoursspot__tab {
+  background: #f0dcb4;
+}
+.lc-hoursspot__dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lc-danger);
+  box-shadow: 0 0 0 2px var(--lc-surface);
 }
 
 /* the soft acknowledge pulse the moment a bubble is clicked (focus hands off to the stream flash) */
@@ -2997,7 +3054,8 @@
 }
 /* ── the product bubble (/live only; nick 2026-10-19, lane 01M5BEE19C) ──────────────────────────
    On /live a bubble is a white card in the product's type: the act's tone moves from a glowing ring
-   to a 3px top edge, and the glance clips at 4 lines instead of 5 (nick: "I kind of like the full
+   to a quiet hairline all the way round (a 3px top edge until 2026-10-20 — nick: "I want the entire
+   bubble to have subtle border color"), and the glance clips at 4 lines instead of 5 (nick: "I kind of like the full
    sentence message bubbles, but maybe we shorten it a tiny bit"). Everything that moves — the pop
    in, the drift out, the hover-expand — is untouched, and so is every mark: `:where()` keeps this
    block at the base rule's specificity, so `.is-mark--needs-human` and `.is-expanded` still win and
@@ -3010,13 +3068,12 @@
   border-radius: 10px;
   background: var(--lc-ground-2);
   box-shadow:
-    inset 0 3px 0 0 var(--lc-speech-tone),
-    0 0 0 1px var(--lc-border-2),
+    0 0 0 1.5px color-mix(in srgb, var(--lc-speech-tone) 45%, var(--lc-border-2)),
     0 1px 2px rgba(17, 24, 39, 0.08),
     0 10px 22px -8px rgba(17, 24, 39, 0.22);
 }
 :where(main.lc, .bc__stage.lc) .lc-speech__inner::before {
-  border-top-color: var(--lc-border-2);
+  border-top-color: color-mix(in srgb, var(--lc-speech-tone) 45%, var(--lc-border-2));
 }
 :where(main.lc, .bc__stage.lc) .lc-speech__inner::after {
   border-top-color: var(--lc-ground-2);

@@ -335,6 +335,9 @@ export interface OfficeHandle {
   /** ADR 464: ring this member's plate (null clears) — the team column's card↔character link — or
    * several members' at once (a Now goal row). A class toggle on the HTML plate, never a redraw. */
   setLinked: (names: string | readonly string[] | null) => void;
+  /** Show the working-hours calendar's settings door (`/live`, a signed-in human), and flag it when
+   *  something there waits for the viewer. A no-op where the scene made no hotspot. */
+  setSettingsSpot: (state: { enabled: boolean; flagged: boolean }) => void;
   /** Fire an in-place ambient gesture now on an idle desk member (a `GESTURE` kind), bypassing the
    * ambient scheduler. Returns the member it played on, or null if none was eligible.
    * A design-preview / verification affordance (see office-preview); the live office uses the scheduler. */
