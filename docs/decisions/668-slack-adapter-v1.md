@@ -142,6 +142,13 @@ own change.
   dispatch when it holds no key, and re-checks team, binding and token against its own
   state through the same `handleRelayCallback` path. Same adapter, same token model;
   SPEC A.29 carries the wire rule.
+- 2026-10-20 — increment 9 re-review (lazara, declined #3039): the relay accepted any
+  state string, so whoever held an install link could re-bind it to another team before
+  the daemon's check ran. Fixed the same day: the daemon registers `sha256(state)` with
+  its own relay object over its authenticated socket at mint time and on every connect
+  (`install_state` frame), the install flow accepts a state only when the named team's
+  object holds its hash, and the registry's state write is insert-only — a state bound
+  to one team can never be re-bound, and its consumption and clock never reset.
 
 ## Observability & Evaluation
 

@@ -91,6 +91,19 @@ export const RelayAppBodyFrameSchema = z.object({
 export type RelayAppBodyFrame = z.infer<typeof RelayAppBodyFrameSchema>;
 
 /**
+ * Daemon → relay: register one Slack install state this daemon minted (ADR 668 decision 2,
+ * increment 9). Only the hash crosses; the relay's install flow accepts a state only when
+ * the named team's own object holds its hash, so a state can never be re-bound to another
+ * team by whoever happens to hold the install link.
+ */
+export const RelayInstallStateFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('install_state'),
+  state_hash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type RelayInstallStateFrame = z.infer<typeof RelayInstallStateFrameSchema>;
+
+/**
  * Daemon → relay: ask for any Slack install records the relay is holding for this team
  * (ADR 668 decision 2, increment 9). Sent on every connect, after reconcile; the relay
  * answers with `installs` and keeps each record until the daemon's `install_ack`.
@@ -145,6 +158,7 @@ export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
   RelayAppDeliverFrameSchema,
   RelayAppBodyFrameSchema,
   RelayResolveFrameSchema,
+  RelayInstallStateFrameSchema,
   RelayInstallSyncFrameSchema,
   RelayInstallAckFrameSchema,
 ]);

@@ -22,7 +22,7 @@ import {
 import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
 import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { insertMessage } from '../store/messages.js';
-import { recordSlackInstall } from '../store/slackInstalls.js';
+import { listLiveInstallStateHashes, recordSlackInstall } from '../store/slackInstalls.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
 import { handleAppCallback, handleAppFetch } from './appAdapter.js';
@@ -318,6 +318,14 @@ export function startAwayRelay(ctx: Ctx): () => void {
             // Pick up any Slack install the OAuth flow completed while we were away
             // (ADR 668 decision 2): the relay holds the record until our ack.
             socket.send(JSON.stringify({ protocol: 1, type: 'install_sync' }));
+            // Register every live install state we minted (hashes only): the relay
+            // accepts a state only from the team whose object holds its hash.
+            void listLiveInstallStateHashes(ctx.db, team.id)
+              .then((hashes) => {
+                for (const state_hash of hashes)
+                  socket.send(JSON.stringify({ protocol: 1, type: 'install_state', state_hash }));
+              })
+              .catch(() => {});
           })
           .catch((err) =>
             log.warn({ msg: 'away_relay_reconcile_failed', team: team.slug, err: String(err) }),

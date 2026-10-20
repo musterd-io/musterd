@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { hostname } from 'node:os';
@@ -4863,6 +4864,18 @@ export async function handleHttp(
             teamId: team.id,
             actor: member.name,
           });
+          // Register the state's hash with this team's relay object over the
+          // authenticated socket (ADR 668 decision 2): the relay's install flow accepts
+          // the state only from the team whose object holds the hash, so a leaked link
+          // cannot be re-bound. No live socket now is fine — the daemon re-registers
+          // every live state on its next connect, before any install can complete.
+          {
+            relayLinkFor(ctx, team.slug)?.send({
+              protocol: 1,
+              type: 'install_state',
+              state_hash: createHash('sha256').update(state).digest('hex'),
+            });
+          }
           const relayOrigin = new URL(policy.away_relay_url);
           const installUrl =
             `${relayOrigin.origin}/slack/install?team=${encodeURIComponent(team.slug)}` +

@@ -209,6 +209,22 @@ export default {
         return new Response('install link is missing its team or state', { status: 400 });
       if (!env.SLACK_CLIENT_ID)
         return new Response('slack app not configured on this relay', { status: 503 });
+      // The state must be one the named team's daemon minted: its relay object holds
+      // the hash it registered over the authenticated socket. An unregistered state —
+      // however plausible — starts no install, so a leaked link cannot be re-bound.
+      const stateHash = await sha256Hex(installState);
+      let registered = false;
+      try {
+        const checkRes = await env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+          new Request(`https://relay.internal/install-state/${stateHash}`),
+        );
+        registered =
+          checkRes.ok && ((await checkRes.json()) as { registered?: boolean }).registered === true;
+      } catch {
+        registered = false;
+      }
+      if (!registered)
+        return new Response('install state not registered by that team', { status: 403 });
       const recorded = await registryJson(env, '/state', {
         method: 'PUT',
         body: {
@@ -463,14 +479,22 @@ export class SlackInstalls implements DurableObject {
         !body.slug
       )
         return json({ error: 'bad state' }, 400);
-      this.state.storage.sql.exec(
-        `INSERT INTO states (state, slug, created_at, consumed_at, destination) VALUES (?, ?, ?, NULL, ?)
-         ON CONFLICT(state) DO UPDATE SET slug = excluded.slug, created_at = excluded.created_at, consumed_at = NULL, destination = excluded.destination`,
-        body.state,
-        body.slug,
-        Date.now(),
-        cloudDestinationFrom(body.destination),
-      );
+      // Insert-only: a state is bound once, to the team that registered it. A second
+      // write naming a different team conflicts and changes nothing — in particular it
+      // never resets consumption or the clock (ADR 668 decision 2).
+      const existing = this.state.storage.sql
+        .exec<{ slug: string }>('SELECT slug FROM states WHERE state = ?', body.state)
+        .toArray()[0];
+      if (existing && existing.slug !== body.slug)
+        return json({ error: 'state bound to another team' }, 409);
+      if (!existing)
+        this.state.storage.sql.exec(
+          `INSERT INTO states (state, slug, created_at, consumed_at, destination) VALUES (?, ?, ?, NULL, ?)`,
+          body.state,
+          body.slug,
+          Date.now(),
+          cloudDestinationFrom(body.destination),
+        );
       return json({ ok: true });
     }
     const stateMatch = /^\/state\/([^/]+)$/.exec(url.pathname);
@@ -583,11 +607,32 @@ export class TeamRelay implements DurableObject {
            installer_slack_id TEXT NOT NULL, state TEXT NOT NULL, installed_at INTEGER NOT NULL
          )`,
       );
+      // Install states this team's daemon minted (hashes only, ADR 668 decision 2): the
+      // install flow accepts a state only when the named team's object holds its hash.
+      this.state.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS install_states (
+           state_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL
+         )`,
+      );
     });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    // Internal: does this object hold a daemon-minted install state's hash?
+    const stateCheck = /^\/install-state\/([0-9a-f]{64})$/.exec(url.pathname);
+    if (request.method === 'GET' && stateCheck) {
+      const row = this.state.storage.sql
+        .exec<{
+          created_at: number;
+        }>('SELECT created_at FROM install_states WHERE state_hash = ?', stateCheck[1])
+        .toArray()[0];
+      const live = row !== undefined && installStateLive(row.created_at, null, Date.now());
+      return new Response(JSON.stringify({ registered: live }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     // Internal: the Worker hands this object one install record after the OAuth exchange.
     if (request.method === 'PUT' && url.pathname === '/install-record') {
       const body = (await request.json()) as {
@@ -827,6 +872,15 @@ export class TeamRelay implements DurableObject {
       return;
     }
     const now = Date.now();
+    if (frame.type === 'install_state') {
+      this.state.storage.sql.exec(
+        `INSERT INTO install_states (state_hash, created_at) VALUES (?, ?)
+         ON CONFLICT(state_hash) DO NOTHING`,
+        frame.state_hash,
+        now,
+      );
+      return;
+    }
     if (frame.type === 'install_sync') {
       const installs = this.state.storage.sql
         .exec<{
