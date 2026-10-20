@@ -137,8 +137,9 @@ access; roster handles and Presence remain visible.
   the client — and a refusal shows in place in the daemon's words. Since 2026-10-19 the `pause…`
   form lives in settings' Team sheet, not the topbar.
 - **Settings** (`live/settings/SettingsOverlay.tsx`, its own lazy chunk and `Settings.css`; nick,
-  2026-10-19, lane 01M5BDF1A5) — opened from the working-hours calendar under the wall clock, the
-  board overlay's gesture again: it comes off the wall out of the card's rect and goes back on it, at
+  2026-10-19, lane 01M5BDF1A5) — opened from the working-hours calendar under the wall clock, which
+  wears an oak "settings ›" tab fixed under its frame (the clock leaves no room above it, and its
+  header band keeps the days) and a red pin when a pairing waits. The board overlay's gesture again: it comes off the wall out of the card's rect and goes back on it, at
   600px so the room stays in view, dressed in the card's oak, brass and mustard band. Two sheets.
   **You** (`YouPanel.tsx`, any signed-in human, every route self-only): staged channel pairings as
   one compact row each — workspace, user and check code exactly as the daemon holds them, Confirm /
