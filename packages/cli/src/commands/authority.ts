@@ -48,7 +48,7 @@ function printJson(value: unknown): number {
   return 0;
 }
 
-async function collectApproval(
+export async function collectApproval(
   http: Http,
   team: string,
   act: string,

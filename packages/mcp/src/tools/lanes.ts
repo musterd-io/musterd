@@ -6,6 +6,7 @@ import {
   type LaneClaim,
   BUILD_ON_CHECK,
   builtOnLine,
+  ApprovalProofSchema,
   CALENDAR_DEFAULT_TZ,
   claimCheckLines,
   dayInZone,
@@ -554,6 +555,7 @@ export function registerLanes(
     pr?: number | undefined;
     sha?: string | undefined;
     authorized_by?: string | undefined;
+    approval?: unknown;
     branch?: string | undefined;
     acceptor?: string | undefined;
     follows_up?: string | undefined;
@@ -606,9 +608,12 @@ export function registerLanes(
         branch: args.branch,
         verification,
       });
+      const approval =
+        args.approval === undefined ? undefined : ApprovalProofSchema.parse(args.approval);
       const { lane, warnings, review } = await client.updateLane(args.id, {
         state: 'awaiting_acceptance',
         merged,
+        ...(approval !== undefined ? { approval } : {}),
         ...(claims.length > 0 ? { claims } : {}),
         // ADR 083's argument for `branch` is that work should reach the next person as an ARTIFACT
         // rather than a description — and submit, which hands the lane to an acceptor, is the moment
@@ -710,7 +715,7 @@ export function registerLanes(
         // The unlanded-refusal behavior (ADR 300) is deliberately NOT described here: the standing
         // tools/list surface is budget-gated (context:check), and the refusal message itself
         // teaches at the only moment it matters — when an unlanded submit is attempted.
-        'After merge, move a Lane to awaiting_acceptance with PR/SHA evidence. The response names the acceptor and whether to wait or self-close.',
+        'After merge, submit PR/SHA evidence; provide A2 proof for authorized_by. Response names the acceptor and next step.',
       inputSchema: {
         id: z.string().describe('lane id'),
         pr: z.number().int().optional().describe('landed PR number; omit for a local merge'),
@@ -719,6 +724,9 @@ export function registerLanes(
           .string()
           .optional()
           .describe('the human whose authority the merge ran under'),
+        // Kept compact for the standing tools/list budget; the handler parses it through the
+        // canonical protocol schema before forwarding it.
+        approval: z.unknown().optional(),
         branch: z.string().optional().describe('branch carrying the work'),
         acceptor: z
           .string()

@@ -779,6 +779,10 @@ The host half of the `os` sink is `host/doorbell.ts`. Each `musterd host` tick c
 
 Per-folder **uninstall** (ADR 027 — the reversibility gap `reset` left open): removes _exactly_ what `musterd init` wrote into this folder's harness and restores the prior state — the role-provisioned MCP servers + permission entries (from the manifest, ADR 030), the musterd MCP server itself, the managed AGENTS.md primer block (the user's own prose is kept), and the local `.musterd/` state (binding + manifest) and registry entry. Purely local: it **never touches the server roster** — the member stays on the team (offline); removing it server-side is the v0.3 seat model. Never imports `@musterd/server`. Confirms on a TTY; `--force`/`--yes` skips the prompt.
 
+### `musterd lane submit <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>]`
+
+When `--authorized-by` is present, the CLI requires the current Workspace identity to match that human, asks the server to build the ADR 662 `set_authorized_by` descriptor for the full lane id and exact `{lane, authorized_by, pr, sha}` tuple, then waits for the human's passkey proof before submitting. The descriptor is shown and approved at the daemon's own origin. A submission without `--authorized-by` does not request this signature.
+
 ## Exit codes (must match the State frames' annotations)
 
 | exit | condition                                       | error code     |
