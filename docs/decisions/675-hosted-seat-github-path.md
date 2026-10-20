@@ -67,9 +67,11 @@ seat's behalf would keep the rule but needs a new verb on the wire and a second 
   the jail's user from the host's; until then a hosted seat's push token is as exposed as its
   model key, and should be scoped and short-lived for the same reason. Two tightenings from the
   same review landed with this note: the clone's origin is stripped of any userinfo before it is
-  written to the workspace (`publicOriginUrl`), and `git push` in the jail may push only the
-  seat's own branch by name — no `--all`, `--mirror`, `--tags`, `--delete`, `--prune`, forced or
-  `src:dst` refspecs. Branch protection on `main` must apply to the token's account too (an
+  written to the workspace (`publicOriginUrl`), and `git push` in the jail is an allowlist, not a
+  deny-list (git accepts abbreviated long options, so `--mir` is `--mirror`): only `-u`,
+  `--set-upstream`, `--force-with-lease`, `-q`, `--dry-run`, the remote `origin`, and the seat's
+  own branch by name or `HEAD` — the native backend hands the jail the workspace's checked-out
+  branch for that bound (second review round, 2026-10-20). Branch protection on `main` must apply to the token's account too (an
   admin's fine-grained token can bypass unprotected-for-admins rules); the pilot's token is the
   sponsor's, so "include administrators" is the setting to keep on.
 - The host-forwarding design (the host pushes `agent/*` refs and opens PRs for the seat, the token

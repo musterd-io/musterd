@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   resolveAttestedModel,
   WAKE_TURN_TRANSCRIPT_MAX_BYTES,
@@ -292,6 +293,11 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         policy: {
           scripts: declaredScripts(spec.workspace),
           pathOk: bashPathOk(spec.workspace),
+          // ADR 675 (review): the jail's `git push` may name only this branch.
+          ...(() => {
+            const branch = currentBranch(spec.workspace);
+            return branch !== undefined ? { branch } : {};
+          })(),
         },
       };
       const runTools: EngineTool[] = working
@@ -489,4 +495,18 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       };
     },
   };
+}
+
+/** The workspace's checked-out branch, for the jail's push bound (ADR 675 review); undefined when
+ *  detached or not a git checkout — then `git push` is bound to nothing beyond the allowlist. */
+function currentBranch(workspace: string): string | undefined {
+  try {
+    const out = execFileSync('git', ['-C', workspace, 'branch', '--show-current'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return out.length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
 }

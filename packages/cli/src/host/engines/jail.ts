@@ -95,6 +95,8 @@ export interface BashPolicy {
    *  to the workspace, whether it resolves (through symlinks) inside the workspace. `undefined`
    *  means "not a path here" and the token is judged on its text alone. Absent ⇒ text only. */
   pathOk?: (token: string) => boolean | undefined;
+  /** ADR 675 (review): the seat's own branch. When set, `git push` may name only it (or `HEAD`). */
+  branch?: string;
 }
 
 export type BashVerdict = { ok: true } | { ok: false; reason: string };
@@ -271,20 +273,10 @@ export function splitWords(segment: string): string[] {
   return words;
 }
 
-/** `git push` shapes that reach past the seat's own branch (ADR 675 review). */
-const PUSH_DENIED_FLAGS = new Set([
-  '--all',
-  '--mirror',
-  '--tags',
-  '--follow-tags',
-  '--delete',
-  '--prune',
-  '--push-option',
-  '-o',
-  '--branches',
-]);
+/** The only `git push` flags a seat needs (ADR 675 review): upstream, lease-guarded force, quiet, dry run. */
+const PUSH_FLAGS_OK = /^(-u|--set-upstream|-q|--quiet|--dry-run|--force-with-lease(=[^\s]*)?)$/;
 
-function denyGit(words: string[]): string | undefined {
+function denyGit(words: string[], policy: BashPolicy): string | undefined {
   const sub = words[1];
   if (sub === undefined || !GIT.has(sub)) return `git ${sub ?? ''} is not on the allowlist`.trim();
   const rest = words.slice(2);
@@ -295,18 +287,27 @@ function denyGit(words: string[]): string | undefined {
       return 'git push --force is never allowed (use --force-with-lease)';
     if (rest.some((w) => /(^|[/:])(main|master)$/.test(w)))
       return 'git push to main is never allowed';
-    // ADR 675 (review): with origin on GitHub the push surface is the seat's own branch, by
-    // name or as the current branch — never every ref, tags, a deletion, a forced refspec, or
-    // a refspec that lands somewhere else.
-    const wide = rest.find(
-      (w) =>
-        PUSH_DENIED_FLAGS.has(w) ||
-        /^-[a-zA-Z]*d[a-zA-Z]*$/.test(w) ||
-        w.startsWith('+') ||
-        w.includes(':'),
-    );
-    if (wide)
-      return `git push ${wide} is not allowed — push the current branch by name only (no --all, --mirror, --tags, --delete, --prune, or src:dst refspecs)`;
+    // ADR 675 (review): with origin on GitHub the push surface is the seat's own branch. git
+    // accepts abbreviated long options (`--mir` is `--mirror`), so a deny-list of spellings is no
+    // fence; this is an allowlist — the few flags a seat needs, `origin`, and its own branch.
+    const positionals: string[] = [];
+    for (const w of rest) {
+      if (w.startsWith('-')) {
+        if (!PUSH_FLAGS_OK.test(w))
+          return `git push ${w} is not allowed — only -u, --set-upstream, --force-with-lease, -q, --dry-run`;
+        continue;
+      }
+      positionals.push(w);
+    }
+    if (positionals.length > 2) return 'git push takes at most a remote and one branch';
+    const [remote, ref] = positionals;
+    if (remote !== undefined && remote !== 'origin') return 'git push may target origin only';
+    if (ref !== undefined) {
+      if (ref.startsWith('+') || ref.includes(':') || ref.startsWith('refs/'))
+        return `git push ${ref} is not allowed — name the branch, no refspecs`;
+      if (policy.branch !== undefined && ref !== policy.branch && ref !== 'HEAD')
+        return `git push may push only this seat’s branch ${policy.branch}`;
+    }
   }
   if (sub === 'checkout' || sub === 'switch' || sub === 'branch') {
     if (rest.some((w) => PROTECTED_BRANCHES.has(w)))
@@ -409,7 +410,7 @@ function denySegment(words: string[], policy: BashPolicy): string | undefined {
     return undefined;
   }
   if (head === 'pnpm') return denyPnpm(words, policy);
-  if (head === 'git') return denyGit(words);
+  if (head === 'git') return denyGit(words, policy);
   if (head === 'gh') {
     if (words[1] !== 'pr' || words[2] === undefined || !GH_PR.has(words[2]))
       return `gh ${words.slice(1, 3).join(' ')} is not on the allowlist`.trim();
