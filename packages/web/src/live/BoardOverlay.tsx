@@ -68,10 +68,13 @@ export function BoardOverlay({
     },
     [cfg],
   );
-  // Same default rule as /board (no stored preference in the overlay): grid iff goals exist.
+  // Same default rule as /board (no stored preference in the overlay): grid iff goals exist. A
+  // focused goal or LANE opens on the columns, the one view that can show and centre a lane card —
+  // opened on the grid, a lane link (a bubble's "open ›", an ask's lane, a Now row) landed on goals
+  // with the lane nowhere in sight (lane 01M5BP0TEQ).
   const unshipped = goals.filter((g) => g.status !== 'shipped').length;
   const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(
-    focusGoal === undefined ? null : 'columns',
+    focusGoal === undefined && !focusLane ? null : 'columns',
   );
   const view = chosenView ?? resolveBoardView(null, unshipped);
   // Drill-in inside the overlay: a card click filters the columns to that goal's lanes.

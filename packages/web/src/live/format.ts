@@ -122,6 +122,35 @@ export function laneEvent(env: Pick<Envelope, 'act' | 'meta'>): LaneEventKind | 
 }
 
 /**
+ * The lane an act is ABOUT, when it says so in its meta: a lane event's own bag (`lane_open` …
+ * `lane_handoff`, stamped `{ lane: id }` by the daemon), a routed acceptance ask (`lane_review`,
+ * ADR 191) or a verdict that disputes one (`dispute`). Null for everything else — a lane id merely
+ * quoted in a body is prose, not a reference, and guessing at it would send a click to the wrong
+ * place. The office bubble's "open ›" uses it to open the lane's chain on the board instead of the
+ * act's row in the log (lane 01M5BP0TEQ).
+ */
+export function laneIdOf(env: Pick<Envelope, 'meta'>): string | null {
+  const meta = env.meta;
+  if (!meta) return null;
+  for (const key of [
+    'lane_open',
+    'lane_claim',
+    'lane_state',
+    'lane_resolve',
+    'lane_handoff',
+    'lane_review',
+    'dispute',
+  ]) {
+    const bag = meta[key];
+    if (bag && typeof bag === 'object') {
+      const lane = (bag as Record<string, unknown>)['lane'];
+      if (typeof lane === 'string' && lane) return lane;
+    }
+  }
+  return null;
+}
+
+/**
  * A Goal declaration (ADR 084) also rides as a plain `message` + `meta.goal` — recover it the same way
  * a lane event is recovered, so the stream badges it `goal` (not `message`) and renders the Goal title
  * as a work item rather than dumping the composed `[goal] declared "…"` body.

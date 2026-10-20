@@ -283,6 +283,7 @@ interface Utterance {
   act?: string | undefined;
   addressee?: Addressee | null | undefined;
   marking?: SpeechMarking | null | undefined;
+  lane?: string | null | undefined;
 }
 
 /**
@@ -298,6 +299,10 @@ export interface OfficeOptions {
   /** Called with the act's envelope id when a speech bubble is clicked — the route uses it to scroll
    * to / highlight that act in the stream panel. Bubbles without an id (or no handler) aren't clickable. */
   onActClick?: (id: string) => void;
+  /** `/live` only: a bubble whose act is about a lane gets an "open ›" that hands back the lane id —
+   * the route opens that lane's chain on the board. Acts with no lane open their log row instead
+   * (`onActClick`). Broadcast passes neither, so its bubbles carry no link. */
+  onLaneClick?: (laneId: string) => void;
   /** `/live` only: the wall's agile board becomes a click target that hands back its viewport rect —
    * the route opens the work-board overlay zooming out FROM that rect. Requires `interactiveLabels`;
    * broadcast passes nothing and the wall stays paint. */
@@ -1483,6 +1488,9 @@ export function mountOffice(
     dx += inView;
     // The tail stays over the speaker for the edge slide (the board's slide moves the whole bubble aside).
     outer.style.setProperty('--lc-speech-tail', `${inView}px`);
+    // A bubble slid left off the right wall has its tail on the RIGHT, where "open ›" hangs — the
+    // link moves to the left corner rather than sitting on the tail.
+    outer.classList.toggle('is-tail-right', inView < 0);
     outer.style.transform = `translate(-50%, -100%) translate(${head.x + dx}px, ${head.y - SPEECH_LIFT}px)`;
   }
 
@@ -1526,8 +1534,9 @@ export function mountOffice(
     act?: string,
     addressee?: Addressee | null,
     marking?: SpeechMarking | null,
+    lane?: string | null,
   ) {
-    const u: Utterance = { raw, tone, id, act, addressee, marking };
+    const u: Utterance = { raw, tone, id, act, addressee, marking, lane };
     if (!speeches.has(who)) {
       playSpeech(who, u);
       return;
@@ -1551,7 +1560,7 @@ export function mountOffice(
    * typewriter. When the act's envelope `id` is known (and the host wired `onActClick`), the bubble is
    * a click-through to that act in the stream panel. */
   function playSpeech(who: string, u: Utterance) {
-    const { raw, tone, id, act, addressee, marking } = u;
+    const { raw, tone, id, act, addressee, marking, lane } = u;
     const { glance, full, clamped } = shapeSpeech(raw, act);
     const head = heads.get(who);
     // Nothing to say, or the sender left the floor while queued (offline / capped out of the render).
@@ -1711,6 +1720,29 @@ export function mountOffice(
       inner.appendChild(more);
     }
     outer.appendChild(inner);
+    /* ── "open ›": the act's record, said out loud ──────────────────────────────────────────────
+       The whole bubble was already a click-through, but nothing on it said so (the product-frame
+       mock drew the link, nick picked it, 2026-10-19). A lane act opens the lane's chain on the
+       board — who asked, who claimed, which model, who accepted — and anything else opens its row
+       in the log. A child of OUTER, not `__inner`: hovering makes the inner a scroll container that
+       clips whatever hangs outside it, and the link is what a viewer leaning in is reaching for.
+       Hung off the bottom edge, so it never takes a row from the sentence. */
+    if (id && options.onActClick && !broadcast) {
+      const toLane = lane && options.onLaneClick ? lane : null;
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'lc-speech__open';
+      open.textContent = 'open ›';
+      open.title = toLane ? 'Open this lane on the board' : 'Show this act in the log';
+      open.setAttribute('aria-label', open.title);
+      open.addEventListener('click', (e) => {
+        e.stopPropagation();
+        outer.classList.add('is-picked');
+        if (toLane) options.onLaneClick!(toLane);
+        else options.onActClick!(id);
+      });
+      outer.appendChild(open);
+    }
     labelHost.appendChild(outer);
 
     // Measured with the whole glance in it: the typewriter starts it empty, so a width read now would
@@ -2864,7 +2896,7 @@ export function mountOffice(
     }
     // Speech is legible content, not motion — it plays even under reduced-motion (typewriter off there).
     if (ev.kind === 'speech') {
-      showSpeech(ev.who, ev.text, ev.tone, ev.id, ev.act, ev.addressee, ev.marking);
+      showSpeech(ev.who, ev.text, ev.tone, ev.id, ev.act, ev.addressee, ev.marking, ev.lane);
       // An ask lands with acoustic weight in the room (E3 spec §2): one soft held tone, panned to
       // the asked member's desk when directed, soft-centre for a team ask. Stateless by design.
       if (ev.act === 'ask') {

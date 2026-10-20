@@ -2199,9 +2199,14 @@
     0 3px 8px -1px var(--lc-paper-drop),
     0 0 18px -3px color-mix(in srgb, var(--lc-accent) 40%, transparent);
 }
-/* A woken seat's plate: moonlit paper, so a wake reads across the room (nick, 2026-10-09). The rim
-   stays the member's own hue. Before the offline rule on purpose: a seat dozing after its wake is
-   offline, and the offline plate wins — it says asleep, the tag still says why it was here. */
+/* A woken seat's plate: moonlit paper, so a wake reads across the room (nick, 2026-10-09). Before
+   the offline rule on purpose: a seat dozing after its wake is offline, and the offline plate wins —
+   it says asleep, the tag still says why it was here.
+   2026-10-19 (lane 01M5BP0TEQ, nick picked option E): the RIM goes violet too. With every plate on
+   one chalk stock, #e7e5fa against #fffaf0 was a difference you had to be told about, and the rim
+   was still the member's hue, so a woken plate looked like any other plate. Colour on the floor now
+   means state: the woken tag's own violet (`--lc-woken-fill`) carries into the rim at 70% and a 1px
+   halo, the one plate on a resting floor that is ringed. The ink stays `--lc-paper-ink`. */
 .lc-gl-label.is-woken .lc-gl-label__plate {
   --lc-woken-paper: #e7e5fa;
   background:
@@ -2213,6 +2218,16 @@
     ),
     var(--lc-woken-paper);
 }
+/* Resting only: pointing at a woken plate still lights the hover ring above, like any other; and
+   never offline, where the asleep plate below must keep winning. */
+.lc-gl-label.is-woken:not(.is-offline):not(:hover):not(:focus-within) .lc-gl-label__plate {
+  --lc-woken-rim: #4b43b8;
+  border-color: color-mix(in srgb, var(--lc-woken-rim) 70%, var(--lc-paper-rim));
+  box-shadow:
+    inset 0 1px 0 var(--lc-paper-sheen),
+    0 0 0 1px color-mix(in srgb, var(--lc-woken-rim) 28%, transparent),
+    0 1px 4px -1px var(--lc-paper-drop);
+}
 .lc-gl-label.is-offline .lc-gl-label__plate {
   color: var(--lc-dim);
   background: rgba(13, 9, 6, 0.46);
@@ -2222,10 +2237,6 @@
 .lc-gl-label.is-offline .lc-gl-label__who {
   font-weight: 500;
   color: var(--lc-dim);
-}
-/* Back-compat if anything still targets the old name class */
-.lc-gl-label__name {
-  display: none;
 }
 /* The roster panel's presence dot, miniaturised, leading the floating name. It stays at the LEFT
    edge even though the provider mark moved right: status is what you scan a full room for, and the
@@ -2990,8 +3001,12 @@
    sentence message bubbles, but maybe we shorten it a tiny bit"). Everything that moves — the pop
    in, the drift out, the hover-expand — is untouched, and so is every mark: `:where()` keeps this
    block at the base rule's specificity, so `.is-mark--needs-human` and `.is-expanded` still win and
-   the loud asks stay loud. /broadcast keeps the paper bubble: it is a `div.lc`, not a `main.lc`. */
-:where(main.lc) .lc-speech__inner {
+   the loud asks stay loud.
+   2026-10-19 (lane 01M5BP0TEQ, nick: "broadcast should switch to new neutral palette"): the
+   /broadcast stage (`.bc__stage.lc`) takes the same card. It keeps its own TYPE and its 5 lines:
+   the stream arrives at 720p, so a 1920 stage cannot spend the 12.5px /live chose, and a viewer of
+   a stream cannot hover for the rest. Only the card and the ink carry over. */
+:where(main.lc, .bc__stage.lc) .lc-speech__inner {
   border-radius: 10px;
   background: var(--lc-ground-2);
   box-shadow:
@@ -3000,11 +3015,59 @@
     0 1px 2px rgba(17, 24, 39, 0.08),
     0 10px 22px -8px rgba(17, 24, 39, 0.22);
 }
-:where(main.lc) .lc-speech__inner::before {
+:where(main.lc, .bc__stage.lc) .lc-speech__inner::before {
   border-top-color: var(--lc-border-2);
 }
-:where(main.lc) .lc-speech__inner::after {
+:where(main.lc, .bc__stage.lc) .lc-speech__inner::after {
   border-top-color: var(--lc-ground-2);
+}
+:where(.bc__stage.lc) .lc-speech__text {
+  color: var(--lc-text);
+}
+/* "open ›" (lane 01M5BP0TEQ): the act's record, named on the bubble instead of hidden in a click.
+   Hung half off the bottom edge at the right, so it takes no row from the sentence; on a bubble
+   whose tail sits right (slid off the right wall) it hangs left instead. It enters and leaves with
+   the bubble, and lights to the accent ink when pointed at. /live only — broadcast renders none. */
+.lc-speech__open {
+  position: absolute;
+  right: 12px;
+  bottom: -12px;
+  z-index: 1;
+  /* 24px tall: the house target floor, and a separate target sitting on top of the bubble's own. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 999px;
+  background: var(--lc-ground-2);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.1);
+  font: 600 11px/1 var(--font-sans, sans-serif);
+  color: var(--lc-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transition: all var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-speech.is-tail-right .lc-speech__open {
+  right: auto;
+  left: 12px;
+}
+.lc-speech.is-in .lc-speech__open {
+  opacity: 1;
+}
+.lc-speech.is-out .lc-speech__open {
+  opacity: 0;
+}
+.lc-speech__open:hover,
+.lc-speech__open:focus-visible {
+  color: var(--lc-accent-ink);
+  border-color: color-mix(in srgb, var(--lc-accent) 55%, var(--lc-border-2));
+}
+.lc-speech__open:focus-visible {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: 2px;
 }
 :where(main.lc) .lc-speech__text {
   -webkit-line-clamp: 4;

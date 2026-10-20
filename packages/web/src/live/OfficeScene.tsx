@@ -192,6 +192,7 @@ export function OfficeScene({
   collapsed = false,
   onCollapse,
   onActClick,
+  onLaneClick,
   onBoardOpen,
   onBoardHover,
   broadcast = false,
@@ -218,6 +219,9 @@ export function OfficeScene({
   onCollapse?: () => void;
   /** Speech-bubble click-through: called with the act's envelope id (the route scrolls the stream). */
   onActClick?: (id: string) => void;
+  /** A lane act's bubble "open ›" clicked — hands back the lane id (the route opens its chain on the
+   * board). `/live` only; without it every bubble's link opens the log. */
+  onLaneClick?: (laneId: string) => void;
   /** The wall's agile board clicked — hands back its viewport rect (the overlay's zoom origin).
    * `/live` only; leaving it unset (as `/broadcast` does) renders the board as plain paint. */
   onBoardOpen?: (rect: DOMRect) => void;
@@ -306,6 +310,7 @@ export function OfficeScene({
   // reads them.
   const dataRef = useRef(data);
   const onActClickRef = useRef(onActClick);
+  const onLaneClickRef = useRef(onLaneClick);
   const onBoardOpenRef = useRef(onBoardOpen);
   const onBoardHoverRef = useRef(onBoardHover);
   const onReadyRef = useRef(onReady);
@@ -315,6 +320,7 @@ export function OfficeScene({
   useEffect(() => {
     dataRef.current = data;
     onActClickRef.current = onActClick;
+    onLaneClickRef.current = onLaneClick;
     onBoardOpenRef.current = onBoardOpen;
     onBoardHoverRef.current = onBoardHover;
     onReadyRef.current = onReady;
@@ -339,6 +345,10 @@ export function OfficeScene({
         if (disposed || !host || !labelHost) return;
         const handle = mountOffice(host, labelHost, reduced, {
           onActClick: (id) => onActClickRef.current?.(id),
+          // Gated on the mount-time prop like the board below: /live wires it, /broadcast never does.
+          ...(onLaneClickRef.current
+            ? { onLaneClick: (lane: string) => onLaneClickRef.current?.(lane) }
+            : {}),
           // The narration line renders in the team column's header (chrome), not as scene DOM.
           onCaption: (next) => {
             if (disposed) return;

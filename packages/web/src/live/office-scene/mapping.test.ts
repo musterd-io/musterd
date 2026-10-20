@@ -189,7 +189,18 @@ describe('speechEventFor', () => {
       // loosely — the whole point of this describe is that the CONSTRUCTION is pinned, and a field
       // that only appears when it is non-null is a field that can silently stop appearing.
       marking: null,
+      // No lane bag in the meta: the bubble's "open ›" goes to the log row.
+      lane: null,
     });
+  });
+
+  /* The "open ›" link's half (lane 01M5BP0TEQ): `laneIdOf` has its own suite, so pin the call. */
+  it('carries the lane a lane act is about onto the bubble — the wiring, not just the rule', () => {
+    const claim = env('message', {
+      body: '[lane] claimed "x"',
+      meta: { lane_claim: { lane: '01LANE', title: 'x' } },
+    });
+    expect(speechEventFor(claim).lane).toBe('01LANE');
   });
 
   /* The mark's half of the same wiring, and the same lesson ryder's 01M0GVNBHA acceptance taught:

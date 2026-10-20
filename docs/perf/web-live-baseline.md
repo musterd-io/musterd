@@ -1406,6 +1406,23 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-19 — `liveCssGzipBytes` 25,000 → 25,300 B: /broadcast on the product palette, a bubble's "open ›", a woken plate's violet ring (lane `01M5BP0TEQ`)
+
+| Budget   | Before (main 5a8c515b, same laptop) | This branch (laptop) | Ceiling                  |
+| -------- | ----------------------------------- | -------------------- | ------------------------ |
+| live CSS | 24,790 B                            | 24,996 B (+206)      | RAISED 25,000 → 25,300 B |
+
+nick, 2026-10-19, three picks in one message: /broadcast takes the neutral palette #2987 gave /live,
+bubbles say where they lead ("open ›" → the lane's chain on the board, or the act's row in the log),
+and a woken member's plate turns violet (option E). Main already sat at the ceiling once CI's ~210 B
+gzip gap is added (24,790 locally), so any rule here breaches it. Trimmed first: the woken plate's
+shadow stack lost two layers, the link's three transitions became one, and the dead
+`.lc-gl-label__name` back-compat rule went (no element renders it). What is left is the link (a
+24px target, its tail-side flip, enter/leave, hover and focus), the woken rim and halo, and the
+`.bc__stage.lc` arm of the product bubble. Broadcast's own chunk got smaller (1,490 → 1,451 B).
+
+- Falsify: `pnpm perf:check` after a build reports live CSS at or under 25,000 B with this change in.
+
 ### 2026-10-19 — `initialJsGzipBytes` 147,500 → 148,000 B and `totalJsGzipBytes` 335,000 → 335,400 B: a live deaf seat reads `live · deaf` on `/live` (lane `01M4M6QP2J`, ADR 558 §5)
 
 | Budget     | Before (main `3809094e`, same laptop) | This branch (laptop) | Ceiling                    |

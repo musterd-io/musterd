@@ -97,11 +97,10 @@
 }
 .lc-team__idle-head {
   margin: 0 0 var(--lc-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  /* Sentence case in the product type, like the column's other labels (lane 01M5BP0TEQ; #2987 moved
+     the ten on /live, and this one lives here, so it was missed). */
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-team__idle-count {
@@ -159,12 +158,15 @@
    line is bare mono ink at the watermark's size, because it is an address, not a message. Both are
    sized for the 720p encode like the reel — a line that survives capture is the whole bar. */
 .bc__notice {
-  --lc-paper: #f3e2c3;
-  --lc-paper-2: #e9d3ab;
-  --lc-paper-ink: #2b1f13;
-  --lc-paper-rim: rgba(120, 78, 42, 0.42);
-  --lc-paper-drop: rgba(58, 34, 12, 0.38);
-  --lc-paper-sheen: rgba(255, 252, 245, 0.55);
+  /* The product frame's white, not the reel's cream (lane 01M5BP0TEQ, nick 2026-10-19: "broadcast
+     should switch to new neutral palette"). Same token names, so the flare and the ship beat below
+     are untouched; only the stock and the rim moved to the `.lc` frame's white and cool grey. */
+  --lc-paper: var(--lc-ground-2);
+  --lc-paper-2: var(--lc-surface);
+  --lc-paper-ink: var(--lc-text);
+  --lc-paper-rim: var(--lc-border-2);
+  --lc-paper-drop: rgba(17, 24, 39, 0.18);
+  --lc-paper-sheen: rgba(255, 255, 255, 0.7);
   /* The warm the ship beat flares to, and the alpha of that flare. Both are custom properties so the
      state change is two token swaps on one rule — never a second `animation:` declaration, which
      restarts lc-fade underneath and lights up the a11y sweep on elements nobody touched (#1270). */
@@ -182,12 +184,10 @@
       rgba(255, 236, 190, calc(0.9 * var(--bc-flare))) 0%,
       rgba(255, 236, 190, 0) 62%
     ),
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--lc-paper) 94%, var(--lc-accent)) 0%,
-      color-mix(in srgb, var(--lc-paper-2) 92%, transparent) 100%
-    );
-  border: 1px solid color-mix(in srgb, var(--lc-accent) 30%, var(--lc-paper-rim));
+    linear-gradient(165deg, var(--lc-paper) 0%, var(--lc-paper-2) 100%);
+  /* Neutral at rest: the accent is spent only on the ship beat (`--bc-flare` above and below). */
+  border: 1px solid
+    color-mix(in srgb, var(--lc-accent) calc(45% * var(--bc-flare)), var(--lc-paper-rim));
   box-shadow:
     inset 0 1px 0 var(--lc-paper-sheen),
     0 2px 8px -2px var(--lc-paper-drop),
@@ -286,7 +286,7 @@
    corner had simply never been held to it. Hence 15px and open tracking, not a colour change. */
 .bc__contact {
   display: inline-flex;
-  color: var(--lc-paper-ink, #2b1f13);
+  color: var(--lc-text); /* the frame's ink, not the room's warm paper ink (lane 01M5BP0TEQ) */
   font-family: var(--font-mono);
   font-size: 15px;
   /* MUTED BY WEIGHT, NOT BY ALPHA (nick, 2026-09-04: "make the revive@musterd.io line more muted

@@ -18,6 +18,7 @@ import {
   memberInk,
   laneEvent,
   laneEventDetail,
+  laneIdOf,
   postureMeta,
   proseSegments,
   richLength,
@@ -69,6 +70,23 @@ describe('laneEvent — recovering the lane sub-type from meta', () => {
   it('leaves a teammate-composed handoff alone — no lane meta, no lane badge', () => {
     expect(laneEvent({ act: 'handoff', meta: null })).toBeNull();
     expect(laneEvent({ act: 'handoff', meta: { progress: 0.5 } })).toBeNull();
+  });
+});
+
+describe('laneIdOf — the lane an act is about, read only from its meta', () => {
+  it('reads the lane from every lane event bag, a routed review ask and a dispute', () => {
+    for (const key of ['lane_open', 'lane_claim', 'lane_state', 'lane_resolve', 'lane_handoff']) {
+      expect(laneIdOf({ meta: { [key]: { lane: '01LANE', title: 't' } } })).toBe('01LANE');
+    }
+    expect(laneIdOf({ meta: { lane_review: { lane: '01REVIEW', wait_ms: 1 } } })).toBe('01REVIEW');
+    expect(laneIdOf({ meta: { dispute: { via: 'review', lane: '01DISPUTE' } } })).toBe('01DISPUTE');
+  });
+
+  it('is null without a lane bag — an id quoted in prose is not a reference', () => {
+    expect(laneIdOf({ meta: null })).toBeNull();
+    expect(laneIdOf({ meta: { progress: 0.5 } })).toBeNull();
+    expect(laneIdOf({ meta: { lane_claim: { title: 'no id' } } })).toBeNull();
+    expect(laneIdOf({ meta: { lane_claim: { lane: '' } } })).toBeNull();
   });
 });
 

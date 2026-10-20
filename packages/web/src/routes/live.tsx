@@ -725,6 +725,7 @@ function LivePage() {
                 collapsed={collapsed.office}
                 onCollapse={() => toggleCollapse('office')}
                 onActClick={onActClick}
+                onLaneClick={setBoardLane}
                 onBoardOpen={openBoard}
                 onBoardHover={preloadBoardOverlay}
                 // The asks & approvals rail (ADR 149) rides the top of the room itself — the office

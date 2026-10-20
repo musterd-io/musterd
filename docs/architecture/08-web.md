@@ -334,8 +334,21 @@ teammate's session. Consequences worth internalising:
   column are two bordered panels on a grey page. On `main.lc` a speech bubble is a white card with the
   act's tone as a 3px top edge, clipped at 4 lines (was 5); `:where()` keeps it at the base rule's
   specificity so the marked bubbles (`.is-mark--*`) and hover-expand still win. Every motion is
-  unchanged. /broadcast's stage is a `div.lc`, so it keeps the paper bubbles and its own frame, and
-  its team column takes the neutral palette with /live (ADR 464: they share one column).
+  unchanged. /broadcast's stage is a `div.lc` and keeps its own frame (no panels), and its team
+  column takes the neutral palette with /live (ADR 464: they share one column).
+- **The product frame reaches /broadcast and says where a bubble leads** (lane 01M5BP0TEQ,
+  2026-10-19, nick's picks). /broadcast's bubbles take the white card (`:where(main.lc,
+  .bc__stage.lc)`) but keep their own type size and 5 lines, because the stream arrives at 720p and
+  nobody can hover it; its corner notice is white at rest and warms only on the ship beat, and the
+  stream-only "Between tasks" label is sentence case. On /live a clickable bubble carries an
+  "open ›" (`.lc-speech__open`, a child of the bubble's outer so hover-expand cannot clip it, hung off
+  the bottom edge so it takes no row, flipped left when the tail sits right): a lane act
+  (`format.ts` `laneIdOf` — the lane bag in its meta, never an id quoted in prose) opens the board
+  on that lane's card with its chain open, anything else opens its row in the log. The board overlay
+  opens on columns whenever a lane is focused, so the asks strip's and the Now panel's lane links
+  land on the card too. A woken plate rings violet (`--lc-woken-rim`, the woken tag's own colour, at
+  70% in the rim plus a 1px halo; nick picked option E) — on one chalk stock, colour on the floor
+  means state.
 - **A walk lands before the next beat** (lane 01M5B02V4A, 2026-10-19). The per-member walk queue
   (`actors.ts` `pending` → `startNext` on walk end) and the per-member speech queue were already
   there; what cut walks short was `setHomes`, which runs on every envelope and presence frame and
