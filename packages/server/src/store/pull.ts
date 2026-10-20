@@ -46,6 +46,15 @@ import { getPolicy } from './teams.js';
  *  is offered again. Long enough for a slow poll cycle plus a claim round-trip through a joiner. */
 export const PULL_GRANT_TTL_MS = 15 * 60_000;
 
+/** ADR 688: a host whose grant for a lane went unredeemed is not offered that lane again for this
+ *  long. Before it, an unredeemed grant was re-offered on the very next poll, and the opener got a
+ *  fresh announcement ask for the same lane from the same host every window (60 in one day, lane
+ *  01M49HHJQF, 2026-10-20). Six hours is one more try per working day per host, not one per poll. */
+export const PULL_REOFFER_COOLDOWN_MS = 6 * 60 * 60_000;
+
+/** The decline reason the cooldown keys on. */
+const GRANT_NOT_REDEEMED = 'grant not redeemed';
+
 /** Declared text, JSON-quoted: a quote, a newline or a delimiter inside it is escaped, so the
  *  declaration cannot pose as a line of the notice that carries it. */
 const q = (text: string): string => JSON.stringify(text);
@@ -118,20 +127,42 @@ async function inFlightForHost(
   );
 }
 
-/** Offers a seat received since the start of today (team calendar zone), for the daily cap. */
+/** Offers a seat received since the start of today (team calendar zone), for the daily cap — read
+ *  from the announcement rows themselves (ADR 688), never a pruneable audit projection of them. */
 async function offersToday(
   db: Driver,
   teamId: string,
-  seatName: string,
+  memberId: string,
   now: number,
 ): Promise<number> {
   const today = dayInZone(now, CALENDAR_DEFAULT_TZ);
-  const rows = await db.all<{ ts: number }>(
-    `SELECT ts FROM audit WHERE team_id = ? AND action = 'residency.pull_offered'
-       AND json_extract(detail, '$.seat') = ? AND ts > ?`,
-    [teamId, seatName, now - 2 * 86_400_000],
+  const rows = await db.all<{ announced_at: number }>(
+    `SELECT announced_at FROM pull_announcements WHERE team_id = ? AND member_id = ? AND announced_at > ?`,
+    [teamId, memberId, now - 2 * 86_400_000],
   );
-  return rows.filter((r) => dayInZone(r.ts, CALENDAR_DEFAULT_TZ) === today).length;
+  return rows.filter((r) => dayInZone(r.announced_at, CALENDAR_DEFAULT_TZ) === today).length;
+}
+
+/**
+ * ADR 688: the newest unredeemed grant of this lane on this host inside the cooldown, or null. The
+ * host had its window and its TTL and did not claim; offering the same pair again on the next poll
+ * only re-announces to the opener.
+ */
+async function unredeemedWithin(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  host: string,
+  now: number,
+): Promise<PullAnnouncementRow | null> {
+  return (
+    (await db.get<PullAnnouncementRow>(
+      `SELECT * FROM pull_announcements WHERE team_id = ? AND lane_id = ? AND host = ?
+         AND state = 'declined' AND reason = ? AND decided_at > ?
+       ORDER BY decided_at DESC LIMIT 1`,
+      [teamId, laneId, host, GRANT_NOT_REDEEMED, now - PULL_REOFFER_COOLDOWN_MS],
+    )) ?? null
+  );
 }
 
 /** When the seat last completed a wake, for the least-recently-woken tiebreak; 0 if never. */
@@ -225,7 +256,7 @@ export async function offerPull(
       !(await seatBindings(db, member.id)).some((b) => b.node_id === nodeId)
     )
       continue;
-    if ((await offersToday(db, team.id, member.name, now)) >= policy.daily_cap_per_seat) continue;
+    if ((await offersToday(db, team.id, member.id, now)) >= policy.daily_cap_per_seat) continue;
     seats.push({
       member,
       roles: parseRoles(member),
@@ -235,7 +266,12 @@ export async function offerPull(
   if (seats.length === 0)
     return { offer: null, idle_reason: 'no enrolled seat with room on this host' };
 
+  let cooling = 0;
   for (const lane of await eligibleLanes(db, team, now)) {
+    if (await unredeemedWithin(db, team.id, lane.id, host, now)) {
+      cooling += 1;
+      continue;
+    }
     const fit = seats
       .filter((s) => lane.role === null || s.roles.includes(lane.role))
       .sort((a, b) => a.lastWoke - b.lastWoke);
@@ -321,7 +357,10 @@ export async function offerPull(
   }
   return {
     offer: null,
-    idle_reason: 'no eligible pre-registered lane for the seats enrolled here',
+    idle_reason:
+      cooling > 0
+        ? `${cooling} eligible lane(s) this host was granted and did not claim — offered again after ${Math.round(PULL_REOFFER_COOLDOWN_MS / 3_600_000)} h (ADR 688)`
+        : 'no eligible pre-registered lane for the seats enrolled here',
   };
 }
 
@@ -372,6 +411,58 @@ async function transition(
   return res.changes === 1;
 }
 
+/**
+ * ADR 688: the window is over, so the ask that opened it is closed — a `resolve` on the ask's thread
+ * from the same service seat that raised it, to the same opener. The thread resolve is what the
+ * inbox's pinned set and the ADR 090 ledger both read as discharged; without it the announcement
+ * stayed an open directed ask in the opener's inbox for good. Best-effort: a failure here leaves
+ * the window's decision standing.
+ */
+async function closeAnnouncementAsk(
+  ctx: Ctx,
+  team: TeamRow,
+  row: PullAnnouncementRow,
+  outcome: string,
+): Promise<void> {
+  const db = ctx.db;
+  const ask = await db.get<{ to_member: string | null }>(
+    'SELECT to_member FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, row.ask_id],
+  );
+  const to = ask?.to_member ? await getMemberById(db, ask.to_member) : null;
+  const voice = await hostServiceSeat(db, team, row.host);
+  const seat = await getMemberById(db, row.member_id);
+  if (!to || !voice) return;
+  try {
+    await routeEnvelope(
+      ctx,
+      team,
+      voice,
+      makeEnvelope({
+        id: ulid(),
+        team: team.slug,
+        from: voice.name,
+        to: { kind: 'member', name: to.name },
+        act: 'resolve',
+        body: `pull window closed: ${outcome} — lane ${row.lane_id}, seat ${seat?.name ?? '?'}`,
+        thread: row.ask_id,
+        meta: {
+          pull: {
+            announcement: row.id,
+            lane: row.lane_id,
+            seat: seat?.name ?? '?',
+            host: row.host,
+          },
+        },
+      }),
+      undefined,
+      true,
+    );
+  } catch {
+    /* the decision is recorded; the open ask is the only thing left behind */
+  }
+}
+
 async function declineAudit(db: Driver, row: PullAnnouncementRow, reason: string): Promise<void> {
   const seat = await getMemberById(db, row.member_id);
   await appendLaneEventRequired(db, row.team_id, {
@@ -419,6 +510,12 @@ export async function sweepPullWindows(
     const to = reason ? 'declined' : 'granted';
     if (!(await transition(db, row, 'announced', to, now, reason))) continue;
     if (reason) await declineAudit(db, row, reason);
+    await closeAnnouncementAsk(
+      ctx,
+      team,
+      row,
+      reason ? `stopped (${reason})` : 'granted on silence',
+    );
     out.push({ announcement: row.id, lane: row.lane_id, decision: to, reason });
   }
   const stale = await db.all<PullAnnouncementRow>(
@@ -426,7 +523,7 @@ export async function sweepPullWindows(
     [team.id, now - PULL_GRANT_TTL_MS],
   );
   for (const row of stale) {
-    const reason = 'grant not redeemed';
+    const reason = GRANT_NOT_REDEEMED;
     if (!(await transition(db, row, 'granted', 'declined', now, reason))) continue;
     await declineAudit(db, row, reason);
     out.push({ announcement: row.id, lane: row.lane_id, decision: 'declined', reason });

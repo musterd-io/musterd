@@ -196,6 +196,11 @@ record as a human-started lane: who asked, who claimed, which model, who accepte
 - ADR 179 §rejected, ADR 199 §7 and the ADR 326 amendment are read with this ADR beside them: the
   autonomy line stays at unaddressed work for every lane that carries no declaration.
 
+- 2026-10-20, lane 01M5DT2PT7: a grant nobody redeemed was re-offered on the next poll to the same
+  host, and the announcement ask was never closed — 60 `grant not redeemed` declines on one lane in
+  a day, one open ask to the opener every window. [ADR 688](688-pull-window-closes-its-ask.md): a
+  decided window resolves its ask, an unredeemed (lane, host) pair cools down 6 h, and the daily cap
+  counts announcement rows.
 - 2026-10-20, lane 01M5D62FZJ: the pull wedged every joiner's sync fold. Two gaps, both from
   the first landing: `lane.pulled`, `lane.pull_declined` and `lane.pull_released` are written with
   `appendLaneEventRequired`, so they replicate, but the fold's lane verbs listed none of them and
