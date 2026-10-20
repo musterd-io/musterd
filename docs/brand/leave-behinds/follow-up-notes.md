@@ -57,7 +57,7 @@ list, that is a correction owed to the person, not a note.
 
 ## The ask, and the answer
 
-The ask is the small one: try it on a real repo, for a week, and say what broke. Not a meeting, not
+The ask is the small one: try it with your team for two weeks, and I sit with you for the first hour. Not a meeting, not
 a pilot, not an intro.
 
 | field | value |
