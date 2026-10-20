@@ -114,6 +114,42 @@ export function flagStr(flags: Record<string, string | boolean>, name: string): 
 }
 
 /**
+ * Refuse a flag this command does not know, rather than letting it eat the next argument.
+ *
+ * The parser cannot tell an unknown flag from a known one: an unrecognised `--flag` takes the NEXT
+ * argument as its value and drops it, so `musterd send --to x --act message --body "text"` sends
+ * an act with an EMPTY body and reports success (2026-10-20, lane `01M5D5J8HQG688C0QWEN0633H2`).
+ * Three messages and two status_updates left that seat empty before it read the stored body
+ * length. A command knows its own flags, so it can refuse the ones it does not — before the value
+ * is lost, and before the act is sent.
+ *
+ * The known set is the command's own value-flags plus the global ones every command inherits
+ * ({@link BOOLEAN_FLAGS}, `args`, `server`, `team`, `as`). A typo becomes a refusal that names the
+ * flag and the shape, instead of a silently truncated command.
+ */
+export function rejectUnknownFlags(
+  flags: Record<string, string | boolean>,
+  known: Iterable<string>,
+  shape: string,
+): void {
+  const allowed = new Set(known);
+  for (const name of Object.keys(flags)) {
+    if (allowed.has(name)) continue;
+    throw new CliError(`unknown flag --${name} for this command — ${shape}`, 2);
+  }
+}
+
+/** The flags every command inherits: the boolean ones, plus the value-flags the resolver reads. */
+export const GLOBAL_FLAGS: readonly string[] = [
+  ...BOOLEAN_FLAGS,
+  ...DASH_VALUED_FLAGS,
+  'server',
+  'team',
+  'as',
+  'meta',
+];
+
+/**
  * Parse a human duration flag (`45s`, `15m`, `2h`) to milliseconds. The unit suffix is REQUIRED —
  * minute-scale knobs (wake cooldowns) sit next to second-scale ones (watchdog timeouts), so a bare
  * number is ambiguous; refuse it and show the shape. (`musterd host --timeout` predates this and

@@ -23,7 +23,7 @@ import {
   type Recipient,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { flagStr, parseMeta, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, parseMeta, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HttpClient } from '../client.js';
 import { readBindingAt } from '../config.js';
 import { CliError } from '../errors.js';
@@ -31,6 +31,48 @@ import { dischargedIds, openActionNeeded, renderMessageRow } from '../render/row
 import { theme } from '../render/theme.js';
 import { bindThread } from '../session/continuity.js';
 import { findWorkspaceDir, kindLookup, resolve, sendOrEcho, viewerFlags } from './helpers.js';
+
+/**
+ * The value-flags `musterd send` reads. A flag outside this set (and the global ones) is a typo,
+ * and a typo that eats the next argument is worse than a typo: it sends the wrong thing, or
+ * nothing. Refused, with the shape (lane 01M5D5J8HQG688C0QWEN0633H2).
+ */
+const SEND_FLAGS = [
+  'to',
+  'act',
+  'thread',
+  'reply-to',
+  'urgent',
+  'urgent-reason',
+  'blocked-by',
+  'ref',
+  'sig',
+  'json',
+] as const;
+
+/**
+ * The acts whose MEANING is words. `accept`/`decline`/`wait`/`resolve` are decisions, not
+ * statements, and may carry no body; a `message` or a `status_update` with no body is a silence
+ * nobody asked for — and on every surface that renders one, it is indistinguishable from a
+ * deliberate one.
+ */
+const WORD_ACT_NAMES = new Set(['message', 'status_update', 'request_help', 'steer', 'challenge']);
+
+/**
+ * Refuse an act whose meaning is words but which carries none. A blank act lands as a blank act:
+ * it is stored, it counts in the acts log, and it renders as an empty message on every surface that
+ * shows one — indistinguishable from a deliberate silence. (Lane `01M5D5J8HQG688C0QWEN0633H2`:
+ * three messages and two status_updates reached their recipients with zero bytes, each reported as
+ * sent, because an unknown flag had eaten the body.)
+ */
+export function requireWords(act: string, body: string): void {
+  if (body.trim() !== '') return;
+  if (!WORD_ACT_NAMES.has(act)) return;
+  throw new CliError(
+    `a ${act} needs words — the body is positional: musterd send --to <name|a,b|@team> --act ${act} <body...>`,
+    2,
+  );
+}
 
 /**
  * The act `accept`/`decline` answers, when the caller didn't name one (ADR 067). Auto-targets the
@@ -141,6 +183,14 @@ export function blockedByFlags(
 }
 
 export async function sendCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it —
+  // `musterd send --to x --act message --body "text"` sends an act with an empty body and reports
+  // success. Refuse the flag instead, before anything is composed (lane 01M5D5J8HQG688C0QWEN0633H2).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...SEND_FLAGS],
+    'the body is positional: musterd send --to <name|a,b|@team> --act <act> <body...>',
+  );
   const { team, identity, http } = resolve(parsed.flags);
   const to = flagStr(parsed.flags, 'to') ?? '@team';
   // A shared-blocker report supplies its own act (status_update, spec §1), so `--blocked-by` alone is
@@ -155,6 +205,11 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   const body =
     parsed.positionals.join(' ') ||
     (blocked ? `blocked by ${blocked.report.gate} — parked, not debugging it` : '');
+  // An act whose MEANING is words, sent with no words, is never what was meant — and an empty act
+  // is indistinguishable, on every surface that renders one, from a deliberate silence. The acts
+  // that are a decision rather than a statement (accept/decline/wait/resolve) may carry no body:
+  // their meaning is the act itself. Lane 01M5D5J8HQG688C0QWEN0633H2.
+  requireWords(act, body);
   const replyTo = flagStr(parsed.flags, 'reply-to');
 
   const meta = parseMeta(parsed.metaPairs) ?? {};
