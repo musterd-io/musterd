@@ -17,6 +17,9 @@ command -v musterd >/dev/null || { echo "✗ musterd is not on PATH" >&2; exit 1
 WHO="$(musterd whoami 2>/dev/null | head -1 || true)"
 echo "▸ signing in as this folder's seat: ${WHO:-unknown}"
 
+BROWSER="$(node "$HERE/live-paint-bar.mjs" --which-browser)" || exit 1
+echo "▸ browser: $BROWSER"
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 chmod 700 "$TMP"
