@@ -30,6 +30,22 @@ export interface ResolvedEndpoint {
    */
   endpoint: string | undefined;
   source: EndpointSource;
+  /** Optional `MUSTERD_OTLP_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` key=value pairs (ADR 678). */
+  headers?: Record<string, string>;
+}
+
+/** Parse an OTLP header string (`k1=v1,k2=v2`) into a record, or undefined when empty. */
+export function parseOtlpHeaders(raw: string | undefined): Record<string, string> | undefined {
+  if (!raw?.trim()) return undefined;
+  const out: Record<string, string> = {};
+  for (const pair of raw.split(',')) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const key = pair.slice(0, eq).trim();
+    const val = pair.slice(eq + 1).trim();
+    if (key) out[key] = val;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** The machine config path, as the CLI resolves it (`MUSTERD_CONFIG` override, else `~/.musterd`). */
@@ -71,13 +87,20 @@ export function resolveOtlpEndpoint(
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedEndpoint | undefined {
   if (env['OTEL_SDK_DISABLED'] === 'true') return undefined;
+  const headers = parseOtlpHeaders(
+    env['MUSTERD_OTLP_HEADERS'] ?? env['OTEL_EXPORTER_OTLP_HEADERS'],
+  );
+  const musterd = env['MUSTERD_OTLP_ENDPOINT']?.trim();
+  if (musterd) return { endpoint: musterd, source: 'env', ...(headers ? { headers } : {}) };
   const generic = env['OTEL_EXPORTER_OTLP_ENDPOINT'];
-  if (generic) return { endpoint: generic, source: 'env' };
+  if (generic) return { endpoint: generic, source: 'env', ...(headers ? { headers } : {}) };
   if (env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] || env['OTEL_EXPORTER_OTLP_METRICS_ENDPOINT']) {
-    return { endpoint: undefined, source: 'env' };
+    return { endpoint: undefined, source: 'env', ...(headers ? { headers } : {}) };
   }
   const fromConfig = endpointFromConfig(env);
-  return fromConfig ? { endpoint: fromConfig, source: 'config' } : undefined;
+  return fromConfig
+    ? { endpoint: fromConfig, source: 'config', ...(headers ? { headers } : {}) }
+    : undefined;
 }
 
 /** Telemetry is on iff the operator pointed us at an OTLP endpoint (and hasn't disabled the SDK). */
@@ -157,21 +180,28 @@ export function startTelemetry(opts: TelemetryOptions): Promise<TelemetryHandle>
     const { resourceFromAttributes } = interop(await import('@opentelemetry/resources'));
     const { ATTR_SERVICE_NAME } = interop(await import('@opentelemetry/semantic-conventions'));
 
-    // From env, the exporters read the standard variables themselves (generic + per-signal). From
-    // the config file there is no env to read, so the per-signal URLs are passed explicitly — the
-    // same `<endpoint>/v1/<signal>` the OTel spec derives from a generic endpoint.
-    const explicit =
-      resolved.source === 'config' && resolved.endpoint
-        ? { base: resolved.endpoint.replace(/\/+$/, '') }
+    // From standard OTEL_* env, the exporters read the variables themselves. When the endpoint came
+    // from `MUSTERD_OTLP_ENDPOINT` or the config file, pass the per-signal URLs (and any headers
+    // from `MUSTERD_OTLP_HEADERS`) explicitly — the same `<endpoint>/v1/<signal>` OTel derives.
+    const explicitBase =
+      resolved.endpoint &&
+      (resolved.source === 'config' || Boolean(env['MUSTERD_OTLP_ENDPOINT']?.trim()))
+        ? resolved.endpoint.replace(/\/+$/, '')
         : undefined;
     const sdk = new NodeSDK({
       resource: resourceFromAttributes({
         [ATTR_SERVICE_NAME]: opts.serviceName,
         ...(opts.attributes ?? {}),
       }),
-      traceExporter: new OTLPTraceExporter(explicit ? { url: `${explicit.base}/v1/traces` } : {}),
+      traceExporter: new OTLPTraceExporter({
+        ...(explicitBase ? { url: `${explicitBase}/v1/traces` } : {}),
+        ...(resolved.headers ? { headers: resolved.headers } : {}),
+      }),
       metricReader: new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter(explicit ? { url: `${explicit.base}/v1/metrics` } : {}),
+        exporter: new OTLPMetricExporter({
+          ...(explicitBase ? { url: `${explicitBase}/v1/metrics` } : {}),
+          ...(resolved.headers ? { headers: resolved.headers } : {}),
+        }),
       }),
     });
     sdk.start();

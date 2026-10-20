@@ -4,6 +4,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import type { Envelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { Affinity, affinityFromEnv, type AffinityOptions } from './cloud/affinity.js';
+import { pathTeam } from './cloud/hostIsolation.js';
 import { loopsFor } from './cloud/loops.js';
 import {
   RECONCILE_DEBOUNCE_MS,
@@ -24,6 +25,7 @@ import { startDigestSchedule } from './digest/schedule.js';
 import { startFootprintSampler } from './footprint/sampler.js';
 import { log, redactPath, requestFailure } from './log.js';
 import { startAwayRelay } from './notify/relay.js';
+import { withHttpRequestSpan } from './otel/httpTrace.js';
 import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
@@ -357,7 +359,18 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       else log.info(fields);
     });
     // The store records into this request's timing (db/requestTiming.ts); read at 'finish'.
-    const run = withRequestTiming(() => handleHttp(ctx, req, res));
+    const run = withRequestTiming(() =>
+      withHttpRequestSpan(
+        {
+          method: req.method ?? 'GET',
+          path,
+          team: pathTeam(path),
+          mode: config.mode,
+        },
+        () => res.statusCode,
+        () => handleHttp(ctx, req, res),
+      ),
+    );
     // ADR 507: the request's leased store clients go back when the response is done ('close'
     // fires after 'finish' and on an aborted connection alike).
     res.once('close', () => void endRequestTiming(run.timing));
