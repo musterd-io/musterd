@@ -2,8 +2,8 @@
 
 **Status:** decided 2026-10-19 — nick took D1–D6 the same day; the decision record is
 [ADR 669](../../decisions/669-the-release-train.md). Lane `01M5ASVF3GAAE17TY3S3AX9SF0` (slippy), asked
-for by nick in-session: "we need a better overall unified publish/launch strategy". Nothing here is
-decided until nick marks it; the decisions in §8 become an ADR once he does. This page does not
+for by nick in-session: "we need a better overall unified publish/launch strategy". The decisions
+in §8 are recorded in ADR 669; where this page and the ADR differ, the ADR wins. This page does not
 re-plan the launch's *message* or *calendar* — those are
 [traction-plan.md](../../design/traction-plan.md) (§7 launch day, §13 measures) and the positioning
 ADRs (550, 563, 665). It plans the *machinery* those depend on.
