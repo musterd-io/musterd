@@ -12,6 +12,9 @@ import another musterd package. Keys are read from the environment on the server
 into the HTML or the JSON.
 
 Which accounts appear is the person's choice. The page is a form (`POST /accounts`, no script).
+Live accounts sit two across, each window on one row with its sentence and a thin bar. An account
+with no number is one line. The checkboxes wrap in a row under the accounts, so a laptop window
+holds the page without a long scroll.
 Checked ids are saved at `~/.allowance/config.json`, mode 0600, ids only. A missing or unreadable
 file means ElevenLabs and is not rewritten. Unknown ids are dropped. An empty selection is allowed.
 
@@ -47,7 +50,7 @@ A number is drawn only from a body the provider's own client reads:
   never copied out.
 
 OpenCode, Grok, Muse, Hume and Exa have no remaining-window read. When one of them is checked, the
-card is the reason and no number. A checked account with no sign-in on this machine says so, and
+line is the reason and no number. A checked account with no sign-in on this machine says so, and
 shows no number.
 
 The server listens on `127.0.0.1` only (port `4877`, or `ALLOWANCE_PORT`). The bin is `allowance`.
@@ -67,7 +70,7 @@ css.ts            // percentCss: .p0–.p100 so a bar width is a class, not an i
 cursor.ts         // Cursor's usage read: included percent and on-demand cents, message dropped
 elevenlabs.ts     // parseElevenLabs + readElevenLabs (redirect:'error', 5s budget lives with the caller)
 format.ts         // counts, "left of", a share of a named window, on-demand dollars, reset phrases
-page.ts           // renderPage: the paper page, the account form, every provider string escaped
+page.ts           // renderPage: live accounts two across, a quiet account on one line, the account form, every provider string escaped
 server.ts         // 127.0.0.1 only; /, /api/board, POST /accounts, the stylesheet, the three font files
 types.ts          // Board, windows, live / missing / error / quiet
 ```

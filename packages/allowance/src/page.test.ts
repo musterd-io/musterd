@@ -61,9 +61,17 @@ describe('renderPage', () => {
   });
 
   it('lists a quiet account with its reason and no number', () => {
+    expect(html).toContain('<ul class="quiet">');
     expect(html).toContain('OpenCode spends other providers. It has no window of its own.');
     expect(html).not.toContain('aria-valuenow="0"');
     expect(QUIET.every((provider) => provider.reason !== '')).toBe(true);
+  });
+
+  it('puts live accounts on the board and the time in the header', () => {
+    expect(html).toContain('<div class="board">');
+    expect(html).toContain('<header class="top">');
+    expect(html).toContain('class="win"');
+    expect(html).not.toContain('class="foot"');
   });
 
   it('offers every account, and checks the ones that are on', () => {
