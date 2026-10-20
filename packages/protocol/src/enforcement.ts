@@ -351,6 +351,7 @@ export const ACTOR_ATTESTATION_KINDS = [
   'subagent-spawn',
   'session-message',
   'session-denied',
+  'unenforced',
 ] as const;
 export type ActorAttestationKind = (typeof ACTOR_ATTESTATION_KINDS)[number];
 
@@ -389,6 +390,11 @@ export const ActorAttestationSchema = z.object({
   /** `session-denied`-only (ADR 442): which harness the refused call came from, so the per-harness
    *  reach table is readable from the audit. Optional — a hook that cannot tell leaves it out. */
   harness: z.enum(SURFACES).optional(),
+  /** `unenforced`-only (ADR 674): how many calls proceeded unenforced while the server was down, and
+   *  the window `[since_ts, until_ts]` they spanned, flushed as one `gate.unenforced` audit row on recovery. */
+  count: z.number().int().min(1).optional(),
+  since_ts: z.number().int().min(0).optional(),
+  until_ts: z.number().int().min(0).optional(),
 });
 export type ActorAttestation = z.infer<typeof ActorAttestationSchema>;
 

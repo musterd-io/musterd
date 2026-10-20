@@ -353,6 +353,23 @@ export async function recordActorAttestation(
     });
     return;
   }
+  // ADR 674 (Cloud 4 hooks against a remote server) — the local counter of calls that proceeded
+  // `unenforced` while the server was down, flushed as one audit row when the server returns.
+  if (att.kind === 'unenforced') {
+    await appendAudit(srv.db, team.id, {
+      actor: member.name,
+      action: 'gate.unenforced',
+      target: null,
+      result: 'allow',
+      detail: {
+        count: att.count ?? 1,
+        tool: att.tool,
+        ...(att.since_ts !== undefined ? { since_ts: att.since_ts } : {}),
+        ...(att.until_ts !== undefined ? { until_ts: att.until_ts } : {}),
+      },
+    });
+    return;
+  }
   // ADR 167 — a seat used the harness's session-to-session send. Everything sensitive was reduced to
   // sha256-16 client-side (body AND target session id — stricter than the Bash split below, because a
   // session message is another agent's incoming context and a session id is contractually

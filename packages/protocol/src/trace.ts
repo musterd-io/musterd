@@ -48,8 +48,16 @@ export const TraceEventKindSchema = z.enum(TRACE_EVENT_KINDS);
 export type TraceEventKind = z.infer<typeof TraceEventKindSchema>;
 
 /** How the observed thing ended, when the hook knows. `denied` is a gate deny; `timeout` a hook
- *  that hit its own budget; `unknown` is honest absence, never defaulted to `ok`. */
-export const TRACE_OUTCOMES = ['ok', 'error', 'denied', 'timeout', 'unknown'] as const;
+ *  that hit its own budget; `unenforced` (ADR 674) a call that proceeded while the server could
+ *  not be reached to adjudicate; `unknown` is honest absence, never defaulted to `ok`. */
+export const TRACE_OUTCOMES = [
+  'ok',
+  'error',
+  'denied',
+  'timeout',
+  'unenforced',
+  'unknown',
+] as const;
 export const TraceOutcomeSchema = z.enum(TRACE_OUTCOMES);
 export type TraceOutcome = z.infer<typeof TraceOutcomeSchema>;
 

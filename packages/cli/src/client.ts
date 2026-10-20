@@ -241,7 +241,16 @@ export interface HttpClientOpts {
   noTouch?: boolean;
   /** Test seam: inject a ClaimSocket factory for the reclaim WS (lane 01M1F7Y4N). */
   createClaimSocket?: (url: string) => ClaimSocket;
+  /**
+   * ADR 674 (Cloud 4 hooks against a remote server): hard per-request timeout in ms. When set,
+   * `fetchWithRetry` bounds each `fetch` with an AbortSignal and does not retry — a hook must
+   * never stall the tool call it rides on past its budget.
+   */
+  timeoutMs?: number;
 }
+
+/** ADR 674 (Cloud 4 §4.7): hard network timeout for harness hook HTTP calls. */
+export const HOOK_HTTP_TIMEOUT_MS = 1_500;
 
 /** ADR 450: the redacted invite projection — never a hash, never the secret. */
 /** A staged channel pairing as the daemon holds it (ADR 618 §7) — the confirmation view. */
@@ -434,22 +443,45 @@ export class HttpClient {
     return new HttpClient({ ...this.opts, noTouch: true });
   }
 
+  /** ADR 674: a clone of this client with a hard per-request timeout (`HOOK_HTTP_TIMEOUT_MS`). */
+  withTimeout(timeoutMs: number = HOOK_HTTP_TIMEOUT_MS): HttpClient {
+    return new HttpClient({ ...this.opts, timeoutMs });
+  }
+
   /**
    * `fetch` that rides out a daemon bounce (§ {@link RETRY_DELAYS_MS}) — the ~849ms window in which
    * the auto-refresher's rebuilt daemon is not yet answering. Retries a write whose connection was
    * *refused*, and nothing else: a reset mid-flight connection may already have been processed, a read
    * self-heals on the next poll, and any HTTP status is a real answer. All three go straight back to
-   * the caller.
+   * the caller. When `this.opts.timeoutMs` is set (ADR 674, harness hooks), each call is bounded by
+   * an AbortSignal and never retries.
    */
   private async fetchWithRetry(path: string, init: RequestInit): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
+      let timer: NodeJS.Timeout | undefined;
       try {
-        return await fetch(this.opts.server + path, init);
+        const controller =
+          this.opts.timeoutMs !== undefined && !init.signal ? new AbortController() : undefined;
+        if (controller && this.opts.timeoutMs !== undefined) {
+          timer = setTimeout(() => {
+            controller.abort(
+              new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+            );
+          }, this.opts.timeoutMs);
+          timer.unref?.();
+        }
+        return await fetch(
+          this.opts.server + path,
+          controller ? { ...init, signal: controller.signal } : init,
+        );
       } catch (err) {
+        if (this.opts.timeoutMs !== undefined) throw err;
         const delay = RETRY_DELAYS_MS[attempt];
         const retryable = worthRetrying(init.method ?? 'GET') && connectionNeverEstablished(err);
         if (delay === undefined || !retryable) throw err;
         await new Promise((r) => setTimeout(r, delay));
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
   }

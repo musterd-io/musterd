@@ -339,6 +339,8 @@ export interface ResolveReadOptions {
    * default for exactly that reason. Interactive is not the test; refusable is.
    */
   claimSeatPerRequest?: boolean;
+  /** ADR 674: hard per-request timeout in ms for hook-facing reads (`HOOK_HTTP_TIMEOUT_MS`). */
+  timeoutMs?: number;
 }
 
 export function resolveRead(
@@ -367,11 +369,14 @@ export function resolveRead(
     server,
     http: new HttpClient(
       identity
-        ? identityClientOpts(
-            { server, team, workspace, workspaceKey, identity, model, modelSource },
-            claimSeatPerRequest,
-          )
-        : { server },
+        ? {
+            ...identityClientOpts(
+              { server, team, workspace, workspaceKey, identity, model, modelSource },
+              claimSeatPerRequest,
+            ),
+            ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+          }
+        : { server, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) },
     ),
     explicit,
     ...(identity ? { identity } : {}),

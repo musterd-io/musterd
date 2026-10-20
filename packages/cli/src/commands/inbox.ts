@@ -8,7 +8,7 @@ import {
 import { resolveWorkspace } from '@musterd/protocol/project';
 import { ulid } from 'ulid';
 import { flagStr, type Parsed } from '../args.js';
-import { isSessionLeaseRefusal, watchClaim } from '../client.js';
+import { HOOK_HTTP_TIMEOUT_MS, isSessionLeaseRefusal, watchClaim } from '../client.js';
 import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
@@ -427,7 +427,9 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   try {
     // The interrupt probe is hook-installed and rides every tool call — it takes the default (no
     // reclaim) for the same reason `gate check` does.
-    const { http, team, identity, explicit } = resolveRead(parsed.flags);
+    const { http, team, identity, explicit } = resolveRead(parsed.flags, {
+      timeoutMs: HOOK_HTTP_TIMEOUT_MS,
+    });
     if (!explicit || !identity) {
       await tap();
       return 0;

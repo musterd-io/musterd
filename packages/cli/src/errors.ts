@@ -47,15 +47,18 @@ export function exitForCode(code: ErrorCode): number {
 }
 
 /**
- * Connection failures (daemon down) → exit 7.
+ * Connection failures (daemon down or timed out) → exit 7.
  *
  * Deliberately broad: for *reporting* "can't reach the daemon", every one of these means the same
  * thing to a human. It is therefore the WRONG predicate for deciding whether to retry — see
  * {@link connectionNeverEstablished}.
  */
 export function isConnRefused(err: unknown): boolean {
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+    return true;
+  }
   const msg = err instanceof Error ? err.message : String(err);
-  return /ECONNREFUSED|fetch failed|ENOTFOUND|ECONNRESET/i.test(msg);
+  return /ECONNREFUSED|fetch failed|ENOTFOUND|ECONNRESET|timed out|aborted/i.test(msg);
 }
 
 /**

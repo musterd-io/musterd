@@ -543,6 +543,10 @@ export type AuditAction =
   // client-side, before any round trip, and attested it after. The one actor row whose `result` is
   // `deny`. Detail `{ tool, harness? }` — never a body, a target, or a session id.
   | 'gate.session_denied'
+  // ADR 674 (Cloud 4 hooks against a remote server): while the server was unreachable, `count`
+  // warn-class or unclassified calls proceeded unenforced and were flushed on recovery as one row.
+  // Detail `{ count, since_ts?, until_ts?, tool }`.
+  | 'gate.unenforced'
   // The inverse of team create: an admin soft-archived the whole team (`POST /teams/:slug/archive`).
   // target = the slug. The row lands in the archived team's own log — readable again only at the db
   // (requireTeam refuses archived teams), but the history survives, which is the point of soft.
@@ -839,6 +843,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'actor.subagent_spawn': 'actor',
   'actor.session_message': 'actor',
   'gate.session_denied': 'actor',
+  'gate.unenforced': 'actor',
   'credential.rotate': 'actor',
   'oauth.client_registered': 'none',
   'oauth.code_issued': 'actor',
