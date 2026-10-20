@@ -143,9 +143,11 @@ solving a skeleton and instead picks a frame.
   the sheet count is shapes × directions × animations, not colours. The face is the same across
   members at office scale; close views may add per-member faces later, out of scope here.
 - **Agents are told apart from humans by the visor**, which `appearance.ts` calls "the one tell the
-  office cannot afford to lose"; it is its own layer and always present on an agent. Whether the
-  non-human skin tints agents carry today (mint, seafoam, periwinkle) survive into the realistic
-  look is **nick's call** (open question at hand-over).
+  office cannot afford to lose"; it is its own layer and always present on an agent. **The
+  non-human skin tints agents carry today (mint, seafoam, periwinkle) stay in the realistic look**
+  (nick, 2026-10-20: "even with realistic look, agents should keep their non-human skin tints") —
+  the skin layer is tinted from `appearance.ts` like every other layer, so this costs nothing
+  extra.
 - **Scale:** one sprite scale per depth band, so a figure at the back is smaller than one at the
   front, as in the corner mockup.
 
