@@ -1,82 +1,94 @@
-# musterd — what we are not building is why this one finishes
+# musterd — agents that work as a team alongside you
 
-_One page. Every claim here is checkable; the ones that are not yet true are marked as such, and
-the traction numbers are the real ones rather than the flattering ones._
+_One page, for an investor. Every claim here is checkable; the ones that are not yet true are marked
+as such, and the traction numbers are the real ones._
 
 ---
 
-**What it is.** A coordination layer where agents and humans are peers: named members on one
-persistent team, with durable inboxes and messages that say what they are for, across any harness.
-It does not run or orchestrate your agents — it makes the ones you already run into a team.
+**What it is.** Agents and the people they work with join one team as named members, whatever
+harness they run in. Nothing your agents do counts as done until another member accepts it. The
+record shows who did it, who accepted it, and which model. Every team gets an office: one place its
+agents and people share, with a board, inboxes, memory and that record.
 
-**The wedge, narrow on purpose.** The loud problem in agents is intra-task orchestration — one
-process driving sub-agents — and it is commoditizing into the harnesses and model APIs themselves.
-We are not in that fight. musterd coordinates actors that already exist independently and that
-nobody centrally owns, and puts a human on the roster as a peer rather than above it as an
-approver.
+**The wedge.** The loud problem in agents is one process driving sub-agents, and it is moving into
+the harnesses and model APIs themselves. musterd covers the space between agents that already exist
+independently and that nobody centrally owns: a team's agents from different vendors, and the
+people beside them. It does not run your agents.
 
 ## The scope decision, which is the whole bet
 
 musterd names the work that goes through the team. **It does not contain the agent.**
 
 It does not sandbox, does not see the shell, filesystem, network or tool calls, and would not have
-stopped a prompt injection or a compromised package. A boundary we chose, not a gap we are closing.
-The adjacent product — a control plane between the agent and the world — is larger, slower, more
-regulated, and has to be right about everything. Ours has to be right about one thing: that work
-between independent actors has an owner, a refusal, and a record.
+stopped a prompt injection or a compromised package. We chose that boundary. The adjacent product,
+a control plane between the agent and the world, is larger, slower, more regulated, and has to be
+right about everything. Ours has to be right about one thing: that work between independent actors
+has an owner, an acceptance and a record.
 
-**The objection, which we would rather state than be asked.** Money in this cell has already gone
-to the bigger product — Band raised $17M and xpander $7.5M, on our 2026-08-24 read of the
-landscape. "A small team can finish it" is a reason a founder declines the control plane; it is not
-by itself a reason to prefer the smaller company.
-
-The reason is what those products do not do. The 2026 wave adopts the same nouns — named
-persistent agents, handoffs, boards — and stays **inside one owner's walls**: no identity that
-crosses owners, and no teammate who can decline. That is the unclaimed piece, and it happens to be
-the only piece a small team can finish. The boundary is not what we gave up to be small; it is what
-is left over once the funded products stop where they stop.
+**The objection, which we would rather state than be asked.** Money in this cell has gone to the
+bigger product: Band raised a $17 million seed and xpander a $7.5 million seed. A small team
+finishing it is a reason to decline the control plane, and a weak reason to prefer the smaller
+company. Our reason is where we looked: the 2026 wave adopts the same nouns (named persistent
+agents, handoffs, boards) and stays inside one owner's walls. We have not tested their products.
 
 ## What we can show today
 
-- **It is built by a team running on it**, in public, on a live stream. Two lanes were declined
-  back to their authors with concrete notes in the week these pages were written.
-- **Nothing ships on its author's word**: acceptance comes from a different member, and where the
-  roster allows, one on a different model family.
-- **One command** — `npx @musterd/cli init` — no service, no account, no telemetry.
+- **It is built by a team running on it**, in public, on a live stream. On our own team 2,090 lanes
+  are closed and 2,329 asks have reached a member, with acts on 101 of the 111 days since 2026-07-02.
+- **Nothing counts as done on an agent's own word.** In the last 30 days, 118 of 1,123 review
+  verdicts sent a lane back, and the daemon enforces that the reviewer is a different member.
+- **A person signs off what lands.** 973 of 1,021 landed lanes name nick as the authoriser, on the
+  seat's word. The daemon cannot see the merge. A signature it requires is decided and not built.
+- **A person's place on the team is `/live`.** On your team, it shows every member at work in one
+  room. You answer the questions waiting for you and write to any member from the same page.
 
 ## Traction, unflattered
 
-- **npm: 8–11 downloads a week** of the current version per package, and days at zero (baseline
-  2026-09-17). The registry's own totals are much higher and we do not use them: they count mirror
-  crawls of the whole `@musterd` scope, including versions nobody ever published, such as `0.0.0`.
-- **GitHub: 0 stars, 7 unique visitors** (2026-09-16).
-- **The website had essentially no traffic ever**, and was not indexed until 2026-09-16.
-- **No usage analytics, by design**, so installs and retention are hand-counted from
-  conversations. A privacy choice whose cost is that we cannot show you a chart.
+- **GitHub: 1 star** (2026-10-20).
+- **No install outside the team is logged** (2026-10-20). The product collects no usage analytics,
+  so installs are hand-counted from conversations, and none has been recorded yet.
+- **npm downloads are not reported here.** The registry's weekly totals include mirror crawls, and
+  we have not separated them.
+- **Design partners: none yet.** The first conversations have not started.
 
 ## What is not decided, and is not a secret
 
-**There is no pricing and no business model written down.** An open piece of work with nobody
-assigned, not a number we are holding back — anyone who tells you the model is settled is ahead of
-the record. Also absent: hosted service, SSO, team billing. Not a soft launch; none of it exists.
+**There are no prices.** The first design partners will tell us. Running it yourself is free: MIT,
+your machines, no caps. musterd Cloud, hosted teams with nothing to run, is coming soon: a
+subscription with caps on teams, people and history, and credits for model compute that we run. An
+organization tier with single sign-on and signed audit export is also coming soon. None of it is
+for sale.
 
 ## The risk we would raise ourselves
 
-The claim is that humans are peers on the roster, not approvers above it. Measured on our own team,
-in the protocol, all-time as of 2026-07-16: **637 acts from agents against 6 from the human**, zero
-requests for help addressed to him, and self-approvals crediting him with a decision he did not
-make. The product does not yet
-produce the behaviour it describes, on the one team that knows it best. We publish it because a peer
-claim that cannot point at a number is a slogan.
+The record holds the accepted end of the chain. The start is partly recorded: of the 188 lanes
+opened since 2026-10-16, 98 name a person as the one who asked and 70 name no one. The page claims
+who did the work, who accepted it and which model. A person at the start of every piece of work is
+where we are heading, and the record does not hold it yet.
 
 ## The ask
 
-**Do you run more than one agent session, or know a team that does?** Install it, and tell us
-where it broke. That is the first artifact we want from this conversation — not because we are
-refusing the other one, but because a round grows from teams that have tried it, and an honest
-account of where it failed is the thing we cannot get any other way.
+**Do you run more than one agent session, or know a team that does?** Try it with your team for two
+weeks; I will sit with you for the first hour. An honest account of where it broke is the first
+thing we want from this conversation.
+
+```
+# 1. Install the command line tool.
+npm install -g @musterd/cli
+# Or with Homebrew: brew install SandRiseStudio/musterd/musterd
+
+# 2. Run it in your project’s folder.
+cd your-project
+musterd init
+
+# 3. Start a chat with your agent there, then take the tour.
+musterd tour
+```
+
+You need Node 22 or later, and an agent tool you already use.
 
 ---
 
-_musterd is made by SandRise Studio. Sources for the July 2025 incident referenced in the companion
-pages: Replit's own posts of 2025-07-21 and 2025-07-29, and Jason Lemkin's account on SaaStr._
+_musterd is made by SandRise Studio. Numbers: the ledger in
+[`docs/demo/pitch/script.md`](../../demo/pitch/script.md), read 2026-10-20. Funding figures:
+[landscape](../../design/landscape.md) §5 (Band) and §13 (xpander)._
