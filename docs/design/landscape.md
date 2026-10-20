@@ -1,6 +1,6 @@
 # Competitive landscape — coordination vs. the substrate
 
-> **Living document.** The competitive picture on the _coordination_ side, complementing the observability-market snapshot in `observability.md` §2. Substantive positioning shifts go through an ADR. Status: **draft**, refreshed 2026-10-08 (§14 added: the multiplayer cohort, the work trackers' agents, and one table across the field; §5 Band Desktop update), prior refresh 2026-08-24 (§13 added: the funding wave and the peer-coordination result; prior refresh 2026-08-19 — §1 Flue update, §12; original snapshot 2026-06-17).
+> **Living document.** The competitive picture on the _coordination_ side, complementing the observability-market snapshot in `observability.md` §2. Substantive positioning shifts go through an ADR. Status: **draft**, refreshed 2026-10-19 (§15 added: two dated entries for ADR 665's accountability message — Linear's "an agent cannot be held accountable" and the SecurityHQ/Datadog survey — and §14b's arXiv citation resolved), prior refresh 2026-10-08 (§14 added: the multiplayer cohort, the work trackers' agents, and one table across the field; §5 Band Desktop update), prior refresh 2026-08-24 (§13 added: the funding wave and the peer-coordination result; prior refresh 2026-08-19 — §1 Flue update, §12; original snapshot 2026-06-17).
 
 This doc records what neighboring tools build, where they stop, and why musterd's choices are deliberate counter-positions rather than gaps. It is evidence for the thesis, not the thesis itself — the thesis is decided in [ADR 320](../decisions/320-positioning-the-value-prop-decided.md), which argues the value prop against its rejected alternatives and closes the question; `README.md`, `ROADMAP.md` "How priorities are decided", and `observability.md` §3 carry the compressions of it.
 
@@ -430,8 +430,13 @@ spines:
 
 Observers' criticisms of the whole category: token cost (teams run 5–7× a single session),
 file and design conflicts, the human's attention (two or three agents per person), review as the
-new bottleneck, and "When More Is Less" (arXiv 2609.19759): multi-agent gains appear only on
-long-horizon tasks with sparse dependencies.
+new bottleneck, and "Rethinking Multi-Agent Collaboration: When More Is Less" (Yuan et al., SJTU and
+Nanjing University, [arXiv 2609.19759](https://arxiv.org/abs/2609.19759) v2, 2026-09-18): multi-agent
+collaboration "confers systematic benefits specifically in long-horizon tasks with sparse
+dependencies", and single-agent harnesses do better on tightly coupled, sequential work. _(Resolved
+2026-10-19: the identifier did not resolve when ADR 665 was written that day and resolved on
+re-read. A public review flags a possible circularity in how the paper scores "sparse", so quote it
+as one preprint, not a settled result.)_
 
 ### c. The work trackers' agents: delegated, not accountable
 
@@ -477,3 +482,69 @@ feature, and on adoption. On isolation it sits at a different layer: it does not
 agents and composes with whatever does (ADR 550 §7), so a buyer who asks "where is the sandbox"
 needs that answer in the first conversation. Its own usage does not yet show the
 refusal it leads with (ADR 550, Consequences).
+
+## 15. Refresh 2026-10-19: the accountability evidence
+
+Added 2026-10-19 by alfie for [ADR 665](../decisions/665-accountability-message-a-person-at-both-ends.md)
+§4 row 5. These are the two outside facts the accountability message stands on. Both are volatile:
+each entry carries `as_of`, `source_url` and `review_by`, and past its `review_by` date a fact is
+not quoted until it is re-read (product-communications skill, positioning reference). ADR 665 §1
+says where each one may be used: the survey is proof for an enterprise room, said with its sponsor
+and date, and never opens the message.
+
+### a. Linear: "an agent cannot be held accountable"
+
+- `as_of`: 2026-10-19
+- `source_url`: <https://linear.app/now/our-approach-to-building-the-agent-interaction-sdk>
+  (Linear, published 2025-08-01)
+- `review_by`: 2027-01-17
+
+**Stable.** Linear states the boundary as a design rule, verbatim: "It creates a clean taxonomy:
+issues can only be assigned to humans, and only delegated to agents." And: "That reflects a core
+tenet of our Agent Interaction Guidelines: an agent cannot be held accountable." §14c's tracker
+table shows the same rule at Jira and Plane.
+
+**Volatile.** Whether Linear still says this. A tracker that lets an agent hold an issue as its
+assignee would end the quote's use, so it is re-read before each use.
+
+**Against musterd.** Linear keeps a person accountable by keeping the agent out of the assignee
+role. musterd puts the agent in the role and records the person at both ends: who asked for the work
+and who accepted it, and the acceptor is enforced to be a different member (ADR 188, ADR 234). This
+is a difference in design, not a gap on either side. A seat could still show up in Linear as a
+delegate (§14c).
+
+### b. SecurityHQ and Datadog: "The Accountability Gap"
+
+- `as_of`: 2026-10-19
+- `source_url`: <https://cioinfluence.com/machine-learning/securityhq-research-finds-an-accountability-gap-in-how-enterprises-govern-ai-agents/>
+  (the press release as reprinted 2026-10-16; no public link to the report itself was found on
+  2026-10-19)
+- `review_by`: 2026-12-18 (60 days: a vendor survey, and the sooner date of the two)
+
+**What it is.** "The Accountability Gap: The State of AI Agent Security and Governance 2026",
+published by SecurityHQ with Datadog. A vendor survey of 204 cybersecurity leaders at midsize and
+large organisations. ADR 665 records the publication date as 2026-10-15; the coverage that could be
+read is dated 2026-10-16. Quote it with sponsor and month, not a single day.
+
+**The figures, verbatim from the release:**
+
+- 76% "said their organization has formally defined accountability" for AI-driven operational or
+  security decisions.
+- 45% "have already experienced an incident involving AI agents or automation where accountability
+  was unclear."
+- "Only 49% said they could fully reconstruct every action an AI agent performed over the previous
+  30 days."
+- "Following a critical incident, 17% could reconstruct that activity within minutes."
+
+**Traps.** The release uses 49% twice. The second use is a different question: 49% "believe someone
+inside their organization may already be running an unapproved AI agent". Quote the reconstruction
+49% only with its 30-day wording. The 17% (within minutes, after a critical incident) and the 49%
+(every action, over 30 days) measure different things; never merge them. The figures are never
+rounded up ("nearly half", not "half"). The pairing 76% / 45% is the survey's own point: on paper,
+accountability is defined; in practice, it was unclear.
+
+**Against musterd.** A record that names who claimed the work, which model did it, and who accepted
+it answers the reconstruction question for the work that went through lanes: `lane show` prints the
+chain (ADR 629). It does not answer it for what an agent did outside a lane. ADR 665's ledger holds
+the measured counts for our own team.
+
