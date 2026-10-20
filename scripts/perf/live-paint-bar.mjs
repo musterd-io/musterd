@@ -74,21 +74,31 @@ const RUNS = Number(flag('runs') ?? 5);
 const JSON_OUT = flag('json');
 const TIMEOUT_MS = 20_000;
 
-const port = 9334;
+// Port 0: Chrome picks a free port and writes it to <profile>/DevToolsActivePort, so a port another
+// process holds can never be the reason the endpoint does not answer (the hub's first run, 2026-10-20).
 const profile = mkdtempSync(join(tmpdir(), 'live-paint-bar-'));
 const chrome = spawn(
   CHROME,
   [
     '--headless=new',
-    `--remote-debugging-port=${port}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
+    '--no-default-browser-check',
     '--disable-extensions',
     '--window-size=1440,900',
     'about:blank',
   ],
-  { stdio: 'ignore' },
+  { stdio: ['ignore', 'ignore', 'pipe'] },
 );
+let chromeErr = '';
+chrome.stderr.on('data', (d) => {
+  chromeErr = (chromeErr + d.toString()).slice(-4000);
+});
+let chromeExit = null;
+chrome.on('exit', (code, signal) => {
+  chromeExit = signal ?? code;
+});
 process.on('exit', () => {
   chrome.kill();
   try {
@@ -98,11 +108,16 @@ process.on('exit', () => {
   }
 });
 
+let port = null;
 let targets;
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 150 && chromeExit === null; i++) {
   try {
-    targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    if (targets.some((t) => t.type === 'page')) break;
+    port ??=
+      Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]) || null;
+    if (port) {
+      targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      if (targets.some((t) => t.type === 'page')) break;
+    }
   } catch {
     /* not up yet */
   }
@@ -111,8 +126,19 @@ for (let i = 0; i < 100; i++) {
 const page = targets?.find((t) => t.type === 'page');
 if (!page) {
   console.error(
-    `✗ ${CHROME} started but its DevTools endpoint never answered on port ${port} within 20 s.`,
+    chromeExit !== null
+      ? `✗ ${CHROME} exited (${chromeExit}) before its DevTools endpoint came up.`
+      : `✗ ${CHROME} did not open a DevTools endpoint within 30 s${port ? ` (port ${port})` : ''}.`,
   );
+  if (chromeErr.trim())
+    console.error(
+      `  Chrome said:\n${chromeErr
+        .trim()
+        .split('\n')
+        .slice(-12)
+        .map((l) => `    ${l}`)
+        .join('\n')}`,
+    );
   process.exit(1);
 }
 const ws = new WebSocket(page.webSocketDebuggerUrl);
