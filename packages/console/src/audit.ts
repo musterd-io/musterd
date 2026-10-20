@@ -15,7 +15,8 @@ export type AuditAction =
   | 'session.revoke'
   | 'session.revoke_all'
   | 'identity.link'
-  | 'identity.unlink';
+  | 'identity.unlink'
+  | 'token.issue';
 
 export async function appendAudit(
   db: Queryable,

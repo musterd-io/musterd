@@ -25,6 +25,7 @@ const config: ConsoleConfig = {
     fromAddress: 'signin@musterd.io',
     fromName: 'musterd',
   },
+  kms: null,
 };
 const okDb: Queryable = { query: async () => ({ rows: [] }) };
 

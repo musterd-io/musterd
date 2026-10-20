@@ -24,7 +24,8 @@ Two routes, and everything else is refused:
 | Route | Answer |
 | --- | --- |
 | `GET /health` | `200 {ok: true, build}`, or `503 {ok: false, reason: "database unreachable"}` — never a URL or a driver error |
-| `GET /.well-known/jwks.json` | `200 {keys: []}`, `cache-control: public, max-age=300`. Empty until the KMS lane (`01M3Z43V58`); an empty set verifies nothing |
+| `GET /.well-known/jwks.json` | `200 {keys: […]}` when Cloud KMS is configured (ADR 685), else `{keys: []}`, `cache-control: public, max-age=300`. An empty set verifies nothing. There is no dev key |
+| `POST /tokens` | ADR 685: exact Origin, the `__Host-session` cookie, that session's CSRF field, a session fresh within 15 minutes, and an audience of 1–200 characters with no whitespace or controls. 30 a minute per account. `200 {token}`. No signer is 404. A signed-out, stale, or bad-audience request never signs |
 | `POST /auth/{github,google}/start` | ADR 620: exact Origin; 30 a minute per client (`clientip.ts`: `cf-connecting-ip` only when the hop Fly saw is in Cloudflare's published ranges, else the sender's own address — so a direct-to-origin sender can neither invent addresses nor name a victim's; there is no global sign-in bucket to exhaust); a fresh single-use transaction (state, PKCE S256, Google's nonce) keyed by a `__Host-tx` cookie, 10 minutes; `303` to the pinned provider. A provider with no client configured answers 404 |
 | `GET /auth/{github,google}/callback` | consumes the transaction atomically (cookie, provider, state, TTL), exchanges the code (Google's ID token verified: signature, issuer, audience, expiry, nonce; GitHub's numeric id from the pinned `/user`), finds or makes the account by `(provider, subject)` only, issues a session, `303` to an allowlisted return path. Any failure is a fixed error, never a redirect |
 | `POST /auth/email/start` | ADR 620: exact Origin; a valid address (domain case-folded, local part kept); limits per client, per inbox-and-client, and per inbox (20 an hour) — an inbox being the address case-folded, `+tag` dropped, Gmail dots removed — none global; a single-use magic transaction bound to this browser's `__Host-tx` cookie, 15 minutes; emails `issuer/auth/email/confirm?t=…` through Cloudflare Email Service; always answers "check your email" |
@@ -43,9 +44,9 @@ its provider, disabled, expired or too-many-attempts page — a failed sign-in n
 a caller-chosen path. The session marker on the account row this session used is
 `Signed in with this` (copy spec §6). The row has no date.
 
-No sign-in, signing, identity-binding or team-provisioning route exists until its own lane: sign-in
-`01M3Z43QYB`, KMS tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create-team `01M3Z44MTV`.
-There is no development issuer or test key to fall back to.
+Sign-in is ADR 620. Console tokens are ADR 685 (`POST /tokens` when KMS is configured). Identity
+binding (`01M3Z44K46`) and create-team (`01M3Z44MTV`) are not this token route. There is no
+development issuer.
 
 ## The HTTP boundary
 
@@ -55,8 +56,8 @@ There is no development issuer or test key to fall back to.
   origin with no path. Nothing reads a Host header, a token's `jku`/`x5u`, or a caller-supplied URL
   to decide what to trust.
 - **Forwarded headers are not read** — no route uses the client address.
-- **Methods:** GET and HEAD only; a body is never read. Header size (16 KiB) and the request (10 s) and
-  header (5 s) timeouts are bounded on the server.
+- **Methods:** GET and HEAD, plus the POST routes in the table (Origin, form, CSRF). Header size
+  (16 KiB) and the request (10 s) and header (5 s) timeouts are bounded on the server.
 - **Request id:** an inbound `x-request-id` is kept only if it is an 8–64 character safe token, else
   replaced; every response carries one.
 - **Headers on every response:** HSTS, `nosniff`, `no-referrer`, a `default-src 'none'` CSP,
@@ -134,14 +135,15 @@ full sha: a 12-character build would never match an adapter's 40-character stamp
 src/
   accounts.ts     // accountFor(db, identity, now): the account an identity (provider, subject) belongs to, or a new one — never by email; null when disabled; methodsOf(account, session identity) marks that one row current and keeps subjects off the result
   audit.ts        // appendAudit(db, {action, requestId, actorAccountId, detail}, now): one INSERT; detail goes through log.ts's redact, so no secret lands in audit
-  bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; listens) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL; the /health build is the dist stamp, else the FLY_IMAGE_REF git-<sha> label (the image has no .git)
-  config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL; refusals name the variable, never the value
+  bin.ts          // `musterd-console serve` (runtime role; refuses a foreign schema; when KMS is configured, reads the public key before listen, else exits) | `migrate` (owner URL + runtime role name, from the migrate app only); prints versions, never a URL; the /health build is the dist stamp, else the FLY_IMAGE_REF git-<sha> label (the image has no .git)
+  config.ts       // resolveConsoleConfig(env, build): the pinned issuer (https origin, no path), allowed hosts, port, runtime DB URL, the KMS key name and credential file (both or neither); refusals name the variable, never the value
   csrf.ts         // csrfTokenFor(sid) (sha256 of the session id, base64url), csrfTokenValid (constant time), originAllowed (exactly the issuer; missing or null refused)
   clientip.ts     // clientIp(req, {behindFlyProxy, trustedProxies}): the rate-limit key — cf-connecting-ip only from a Cloudflare-range peer (fly-client-ip on Fly), else the peer itself; CLOUDFLARE_RANGES pinned 2026-10-16; bucketOf keys IPv6 by its /64
   cookies.ts      // hostCookie(name, value, maxAge?): the one cookie writer — __Host-, Secure, Path=/, HttpOnly, SameSite=Lax, no Domain
   db.ts           // Queryable (pg Pool / PGlite seam), schemaVersion, assertSchema (newer|older sentences), DATABASE_UNREACHABLE_SENTENCE
   email.ts        // sendSignInEmail(cfg, {to, link, expiresMinutes}): one POST to Cloudflare Email Service's REST endpoint, no SDK, no tracking; signInMessage (copy spec §4, text only)
-  http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health and the empty JWKS, the sign-in and account pages and their assets, one error shape, one log line per request by route label
+  http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health, the JWKS (the signer's public key, or empty), POST /tokens, the sign-in and account pages and their assets, one error shape, one log line per request by route label
+  kms.ts          // Cloud KMS over REST (ADR 685): service-account JWT for a bearer, getPublicKey, asymmetricSign of a precomputed SHA-256, DER to ieee-p1363; errors name the call and the HTTP status, never the assertion or the credential file
   pages.ts        // the sign-in screens (design 2026-10-15, copy spec words): shell, signInPage, checkEmailPage, finishPage, wrongBrowserPage, errorPages, accountPage; PAGE_CSP and assetFor for assets/ — no script, nothing inline
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
   providers.ts    // PINNED GitHub/Google endpoints, startFlow (state, PKCE S256, Google nonce; pinned callback), finishFlow (openid-client code exchange; Google ID token claims; GitHub numeric id from /user); ProviderOverrides for tests only
@@ -152,5 +154,6 @@ src/
   secrets.ts      // newSecret (256-bit base64url), hashSecret (SHA-256 hex — the only form a secret is stored in), sameSecret (constant time)
   sessions.ts     // IDLE_MS / ABSOLUTE_MS / FRESH_MS; createSession (always a new id), loadSession (one query: not revoked, both expiries, account live, generation current; touches at most once a minute), isFresh, revokeSession, revokeAllSessions
   testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
+  tokens.ts       // signConsoleToken (ES256, 60 s, one audience, one jti), audienceOk, derToP1363, publicJwkFromPem, localSigner (tests and the in-process console; not a production fallback)
   transactions.ts // TX_COOKIE, TX_TTL_MS; createOAuthTx (hashed cookie id and state), consumeOAuthTx (one atomic UPDATE … WHERE consumed_at IS NULL; cookie, provider, state, TTL); createMagicTx, lookupMagic (read-only: confirm / other_browser / expired), consumeMagic (token AND browser cookie, atomic)
 ```

@@ -40,6 +40,7 @@ async function boot(opts: { email?: boolean; failSend?: boolean } = {}) {
             fromAddress: 'signin@musterd.test',
             fromName: 'musterd',
           },
+    kms: null,
   };
   const server = createConsoleServer({
     config,
