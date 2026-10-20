@@ -273,11 +273,39 @@ describe('bashAllowed', () => {
     expect(bashAllowed('git branch --contains HEAD', own).ok).toBe(true);
     // rebase's second positional checks a branch out; fetch refspecs rewrite local branches.
     expect(ownDeny('git rebase origin/main feat/x')).toMatch(/only its upstream/);
-    expect(ownDeny('git rebase --onto origin/main a b')).toMatch(/only its upstream/);
+    expect(ownDeny('git rebase --onto origin/main a b')).toMatch(/this seat works on/);
+    // Round 5: rebase and fetch flags are allowlists too; abbreviations fall out with the rest.
+    for (const c of [
+      'git rebase --root feat/x',
+      'git rebase --r feat/x',
+      'git rebase -i origin/main',
+      'git rebase --update-refs origin/main',
+    ])
+      expect(ownDeny(c), c).toMatch(/this seat works on|executes/);
+    expect(ownDeny('git rebase main')).toMatch(/never allowed/);
     expect(bashAllowed('git rebase origin/main', own).ok).toBe(true);
+    expect(bashAllowed('git rebase --continue', own).ok).toBe(true);
     expect(ownDeny('git fetch origin other:agent/pilot-2')).toMatch(/no refspecs/);
     expect(ownDeny('git fetch origin +refs/heads/x:refs/heads/x')).toMatch(/no refspecs/);
+    // the glob is refused a layer earlier as an expansion; the flag rule would catch it too
+    expect(ownDeny('git fetch --refmap=+refs/heads/*:refs/heads/* origin')).toMatch(
+      /no refspecs|expansion/,
+    );
+    expect(ownDeny('git fetch --refmap=+refs/heads/a:refs/heads/b origin')).toMatch(/no refspecs/);
+    expect(ownDeny('git fetch --ref origin')).toMatch(/no refspecs/);
     expect(bashAllowed('git fetch origin main', own).ok).toBe(true);
+    expect(bashAllowed('git fetch --prune origin', own).ok).toBe(true);
+    // Round 5: one bare/HEAD push per line, never beside another command.
+    expect(
+      (bashAllowed('git rebase origin/main && git push', onOwn) as { reason: string }).reason,
+    ).toMatch(/multi-command line/);
+    expect(
+      (bashAllowed('git fetch origin main && git push origin HEAD', onOwn) as { reason: string })
+        .reason,
+    ).toMatch(/multi-command line/);
+    expect(
+      bashAllowed('git rebase origin/main && git push -u origin agent/pilot-2', onOwn).ok,
+    ).toBe(true);
     expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
     expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
     expect(deny('git diff --ext-diff')).toMatch(/executes/);

@@ -280,6 +280,20 @@ export function splitWords(segment: string): string[] {
 const CHECKOUT_FLAGS_OK = new Set(['-q', '--quiet', '-m', '--merge', '-f', '--force']);
 /** `git branch` listings whose positional is a pattern or a commit, never a new branch name. */
 const BRANCH_LISTING_WITH_ARG = new Set(['-l', '--list', '--contains', '--merged', '--no-merged']);
+/** Under a branch bound, the only `git rebase` flags a seat needs: the ADR 106 catch-up and its
+ *  three resolutions. No `--onto`, `--root`, `-i`, `--exec`, `--update-refs`. */
+const REBASE_FLAGS_OK = new Set(['-q', '--quiet', '--continue', '--abort', '--skip']);
+/** Under a branch bound, the only `git fetch` flags a seat needs. No `--refmap`, no refspec. */
+const FETCH_FLAGS_OK = new Set([
+  '-q',
+  '--quiet',
+  '-p',
+  '--prune',
+  '--tags',
+  '--all',
+  '--dry-run',
+  '-n',
+]);
 /** Under a branch bound, the only `git branch` flags a seat needs: all read-only listings. */
 const BRANCH_FLAGS_OK = new Set([
   '--show-current',
@@ -374,19 +388,27 @@ function denyGit(words: string[], policy: BashPolicy): string | undefined {
     }
   }
   if (sub === 'rebase' && policy.branch !== undefined) {
-    // ADR 675 (review, round 4): `git rebase <upstream> <branch>` checks <branch> out first —
-    // the same move as switch. One positional (the upstream) at most; `--onto` takes a second.
+    // ADR 675 (review, rounds 4–5): `git rebase <upstream> <branch>` checks <branch> out first —
+    // the same move as switch — and `--root`/`--onto` make a positional mean something else.
+    // Flags are an allowlist; one positional, the upstream, never a protected name.
+    const flag = rest.find((w) => w.startsWith('-') && !REBASE_FLAGS_OK.has(w));
+    if (flag !== undefined)
+      return `git rebase ${flag} is not allowed — this seat works on ${policy.branch}`;
     const named = rest.filter((w) => !w.startsWith('-'));
-    const onto = rest.find((w) => w.startsWith('--onto'));
-    if (onto !== undefined || named.length > 1)
+    if (named.length > 1)
       return `git rebase may name only its upstream here — this seat works on ${policy.branch}`;
+    if (named[0] !== undefined && PROTECTED_BRANCHES.has(named[0]))
+      return `git rebase ${named[0]} is never allowed`;
   }
   if (sub === 'fetch' && policy.branch !== undefined) {
-    // ADR 675 (review, round 4): a fetch refspec can rewrite a local branch (`other:agent/x`,
-    // `+refs/heads/*:…`); fetch names a remote and, at most, a remote ref to bring down.
-    const spec = rest.find(
-      (w) => !w.startsWith('-') && (w.includes(':') || w.startsWith('+') || w.startsWith('refs/')),
-    );
+    // ADR 675 (review, rounds 4–5): a fetch refspec can rewrite a local branch (`other:agent/x`,
+    // `+refs/heads/*:…`), and `--refmap` is a refspec in a flag. Flags are an allowlist; fetch
+    // names a remote and, at most, one remote ref to bring down.
+    const flag = rest.find((w) => w.startsWith('-') && !FETCH_FLAGS_OK.has(w));
+    if (flag !== undefined) return `git fetch ${flag} is not allowed — no refspecs here`;
+    const named = rest.filter((w) => !w.startsWith('-'));
+    if (named.length > 2) return 'git fetch takes at most a remote and one ref';
+    const spec = named.find((w) => w.includes(':') || w.startsWith('+') || w.startsWith('refs/'));
     if (spec !== undefined) return `git fetch ${spec} is not allowed — no refspecs here`;
   }
   if (sub === 'remote') {
@@ -516,6 +538,24 @@ export function bashAllowed(command: string, policy: BashPolicy): BashVerdict {
   if (hasArgumentExpansion(command))
     return { ok: false, reason: 'unquoted argument expansion is not allowed in bash' };
   const segments = command.split(/\|\||&&|;|\|/);
+  // ADR 675 (review, round 5): under a branch bound a bare or `HEAD` push is judged on the live
+  // checkout, and a multi-segment line could move it between the verdict and the push. One push
+  // per line, by name, when the line does anything else.
+  if (policy.branch !== undefined && segments.length > 1) {
+    const bare = segments.find((seg) => {
+      const w = splitWords(seg.trim()).filter((t) => !t.startsWith('-'));
+      return (
+        w[0] === 'git' &&
+        w[1] === 'push' &&
+        (w[2] === undefined || w[3] === undefined || w[3] === 'HEAD')
+      );
+    });
+    if (bare)
+      return {
+        ok: false,
+        reason: `git push without the branch name is not allowed in a multi-command line — git push -u origin ${policy.branch}`,
+      };
+  }
   for (const segment of segments) {
     const words = splitWords(segment.trim());
     const reason = denySegment(words, policy);
