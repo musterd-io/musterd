@@ -121,6 +121,18 @@ own change.
 - The Worker stays undeployed (ADR 659): an operator deploys it and sets
   `SLACK_SIGNING_SECRET` + `SLACK_TEAM_MAP_JSON` directly when wiring the real workspace.
   Follows-up: deferred — operator act at first real Slack wiring, with lane `01M50ZQGWYNZKNWDNDDRP41W5B`'s app review (2026-10-19).
+- 2026-10-20 — increment 9 (lane 01M50ZQGWYNZKNWDNDDRP41W5B) replaced the operator-set map
+  with the OAuth install record, as decisions 2 and 5 named. A human admin mints a one-time
+  install state daemon-side (`musterd channels slack-install`, stored only as sha256); the
+  relay's `/slack/install` / `/slack/oauth` flow exchanges Slack's code with the client
+  secret and writes the Slack team → team mapping to an install registry — that flow is the
+  only writer, so the rule in decision 2 is unchanged. The per-install bot token is held by
+  the team's relay object until its daemon syncs it (`install_sync` / `installs` /
+  `install_ack` frames, SPEC A.29) and stores it daemon-side only against the live state it
+  minted; the team-policy `slack_bot_token` remains the pre-install fallback until its own
+  retirement change. Installing a workspace (Slack's admin act) and pairing a person (the
+  binding flow) stay separate acts. The Worker still ships undeployed; Slack's app review
+  and the client credentials are operator acts, listed in `docs/guides/away-relay.md`.
 
 ## Observability & Evaluation
 

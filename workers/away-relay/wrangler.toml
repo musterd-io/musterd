@@ -9,6 +9,8 @@
 #   wrangler secret put SLACK_TEAM_MAP_JSON     # {"<slack-team-id>": "<team-slug>"}
 #   wrangler secret put APNS_KEY_P8             # the APNs token key (.p8, PEM) — ADR 676 §9
 #   wrangler secret put TEAM_QUOTAS_JSON        # optional: {"<team-slug>": {"per_minute": 60, "per_day": 10000}}
+#   wrangler secret put SLACK_CLIENT_SECRET     # the distributed Slack app's client secret (increment 9)
+# SLACK_CLIENT_ID is a plain [vars] entry below, set by the operator with the app's client id.
 name = "musterd-away-relay"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"
@@ -29,6 +31,14 @@ enabled = true
 name = "AWAY_RELAY"
 class_name = "TeamRelay"
 
+[[durable_objects.bindings]]
+name = "SLACK_INSTALLS"
+class_name = "SlackInstalls"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TeamRelay"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SlackInstalls"]

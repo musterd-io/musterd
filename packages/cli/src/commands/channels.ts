@@ -9,6 +9,9 @@ const USAGE =
   '       musterd channels confirm <pairing-id> | reject <pairing-id>\\n' +
   '       musterd channels bindings [--json]\\n' +
   '       musterd channels revoke <binding-id>\\n' +
+  '       musterd channels slack-install\\n' +
+  '       musterd channels slack-installs [--json]\\n' +
+  '       musterd channels slack-revoke <slack-team-id>\\n' +
   '       musterd channels kill-switch';
 
 /**
@@ -93,6 +96,43 @@ export async function channelsCommand(parsed: Parsed): Promise<number> {
     const result = await http.revokeChannelBinding(team, id);
     process.stdout.write(
       success(`binding revoked — ${result.tokensRevoked} outstanding token(s) consumed`) + '\n',
+    );
+    return 0;
+  }
+
+  if (sub === 'slack-install') {
+    const started = await http.startSlackInstall(team);
+    if (json) return printJson(started);
+    process.stdout.write(
+      success('Slack install link minted — open it and authorize in your workspace', {
+        next: 'after authorizing, each person pairs: musterd channels pair --channel slack',
+      }) + '\n',
+    );
+    process.stdout.write(`  install: ${started.install_url}\n`);
+    return 0;
+  }
+
+  if (sub === 'slack-installs') {
+    const { installs } = await http.listSlackInstalls(team);
+    if (json) return printJson(installs);
+    if (installs.length === 0) {
+      process.stdout.write('no Slack installs\n');
+      return 0;
+    }
+    for (const i of installs) {
+      process.stdout.write(
+        `${i.slack_team_id}  installer ${i.installer_slack_id}  ${i.revoked_at ? 'revoked' : 'active'}\n`,
+      );
+    }
+    return 0;
+  }
+
+  if (sub === 'slack-revoke') {
+    const id = parsed.positionals[1];
+    if (!id) throw new CliError(USAGE, 2);
+    await http.revokeSlackInstall(team, id);
+    process.stdout.write(
+      success(`Slack install ${id} revoked — its token no longer works here`) + '\n',
     );
     return 0;
   }

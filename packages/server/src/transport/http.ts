@@ -532,6 +532,11 @@ import {
 } from '../store/seeds.js';
 import { mintSessionLease, revokeMemberSessionLeases } from '../store/session-leases.js';
 import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
+import {
+  createSlackInstallRequest,
+  listSlackInstalls,
+  revokeSlackInstall,
+} from '../store/slackInstalls.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
@@ -4764,6 +4769,57 @@ export async function handleHttp(
             },
           });
           return sendJson(res, 200, { settings: saved });
+        }
+        // The distributed Slack app (ADR 668 decision 2, increment 9): a human admin mints
+        // the one-time install state and opens the relay's install link; Slack's installer
+        // (a workspace admin, on Slack's side) authorizes there. Completion arrives through
+        // the relay and is recorded only against this state (store/slackInstalls.ts).
+        if (method === 'POST' && rest === '/channels/slack/install') {
+          if (!resolveCapabilities(member).is_admin) {
+            throw new MusterdError(
+              'forbidden',
+              'installing the Slack app for this team requires an admin seat',
+            );
+          }
+          const policy = await getPolicy(ctx.db, team.id);
+          if (!policy.away_relay_url || !policy.away_relay_token) {
+            throw new MusterdError(
+              'validation',
+              'installing Slack needs an away relay: set away_relay_url and away_relay_token in team policy first',
+            );
+          }
+          const { state, expiresAt } = await createSlackInstallRequest(ctx.db, {
+            teamId: team.id,
+            actor: member.name,
+          });
+          const relayOrigin = new URL(policy.away_relay_url);
+          const installUrl =
+            `${relayOrigin.origin}/slack/install?team=${encodeURIComponent(team.slug)}` +
+            `&state=${encodeURIComponent(state)}`;
+          return sendJson(res, 201, { install_url: installUrl, expires_at: expiresAt });
+        }
+        if (method === 'GET' && rest === '/channels/slack/installs') {
+          return sendJson(res, 200, {
+            installs: (await listSlackInstalls(ctx.db, team.id)).map((i) => ({
+              slack_team_id: i.slackTeamId,
+              installer_slack_id: i.installerSlackId,
+              installed_at: i.installedAt,
+              revoked_at: i.revokedAt,
+            })),
+          });
+        }
+        const slackRevoke = /^\/channels\/slack\/installs\/([^/]+)\/revoke$/.exec(rest);
+        if (method === 'POST' && slackRevoke) {
+          if (!resolveCapabilities(member).is_admin) {
+            throw new MusterdError('forbidden', 'revoking a Slack install requires an admin seat');
+          }
+          const revoked = await revokeSlackInstall(ctx.db, {
+            teamId: team.id,
+            actor: member.name,
+            slackTeamId: decodeURIComponent(slackRevoke[1]!),
+          });
+          if (!revoked) throw new MusterdError('not_found', 'no live Slack install by that id');
+          return sendJson(res, 200, { ok: true });
         }
         if (method === 'POST' && rest === '/channels/kill-switch') {
           const result = await killSwitchChannels(ctx.db, {

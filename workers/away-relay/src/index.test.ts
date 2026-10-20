@@ -189,6 +189,149 @@ describe('away-relay tenant isolation (lane 01M50ZQCTW)', () => {
   });
 });
 
+/** An in-memory stand-in for the SlackInstalls registry object. */
+function registryStub() {
+  const states = new Map<string, { slug: string; consumed: boolean }>();
+  const installs = new Map<string, string>();
+  return {
+    idFromName: (name: string) => name,
+    get: () => ({
+      fetch: async (req: Request) => {
+        const url = new URL(req.url);
+        const json = (body: unknown, status = 200) =>
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { 'content-type': 'application/json' },
+          });
+        if (req.method === 'PUT' && url.pathname === '/state') {
+          const b = (await req.json()) as { state: string; slug: string };
+          states.set(b.state, { slug: b.slug, consumed: false });
+          return json({ ok: true });
+        }
+        const sm = /^\/state\/(.+)$/.exec(url.pathname);
+        if (req.method === 'GET' && sm) {
+          const row = states.get(decodeURIComponent(sm[1]!));
+          return json({ slug: row?.slug ?? null, live: !!row && !row.consumed });
+        }
+        if (req.method === 'PUT' && url.pathname === '/install') {
+          const b = (await req.json()) as { state: string; slack_team_id: string; slug: string };
+          const row = states.get(b.state);
+          if (row) row.consumed = true;
+          installs.set(b.slack_team_id, b.slug);
+          return json({ ok: true });
+        }
+        const gm = /^\/slug-for\/(.+)$/.exec(url.pathname);
+        if (req.method === 'GET' && gm)
+          return json({ slug: installs.get(decodeURIComponent(gm[1]!)) ?? null });
+        return json({ error: 'not found' }, 404);
+      },
+    }),
+    installs,
+  };
+}
+
+describe('slack install routes (ADR 668 decision 2, increment 9)', () => {
+  it('install redirects to Slack; oauth exchanges once, records the mapping, and holds the token for the daemon', async () => {
+    const registry = registryStub();
+    const held: Request[] = [];
+    const e = {
+      AWAY_RELAY: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: async (req: Request) => {
+            held.push(req);
+            return new Response('held', { status: 200 });
+          },
+        }),
+      },
+      SLACK_INSTALLS: registry,
+      SLACK_CLIENT_ID: '123.456',
+      SLACK_CLIENT_SECRET: 'shh',
+    } as unknown as Env;
+
+    const install = await worker.fetch(
+      new Request('https://relay.example/slack/install?team=revive&state=state-at-least-16-chars'),
+      e,
+    );
+    expect(install.status).toBe(302);
+    expect(install.headers.get('location')).toContain('https://slack.com/oauth/v2/authorize');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              access_token: 'xoxb-install-token',
+              team: { id: 'T9' },
+              authed_user: { id: 'U9' },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    try {
+      const oauth = await worker.fetch(
+        new Request('https://relay.example/slack/oauth?code=abc&state=state-at-least-16-chars'),
+        e,
+      );
+      expect(oauth.status).toBe(200);
+      expect(registry.installs.get('T9')).toBe('revive');
+      expect(held).toHaveLength(1);
+      const heldBody = (await held[0]!.clone().json()) as Record<string, unknown>;
+      expect(heldBody).toMatchObject({ slack_team_id: 'T9', bot_token: 'xoxb-install-token' });
+      // The state is consumed: a replayed return with the same state is refused.
+      const replay = await worker.fetch(
+        new Request('https://relay.example/slack/oauth?code=abc&state=state-at-least-16-chars'),
+        e,
+      );
+      expect(replay.status).toBe(403);
+      // An unknown state never reaches the exchange.
+      const unknown = await worker.fetch(
+        new Request('https://relay.example/slack/oauth?code=abc&state=never-issued-state-x'),
+        e,
+      );
+      expect(unknown.status).toBe(403);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('callback dispatch follows the install record even with no operator map', async () => {
+    const registry = registryStub();
+    registry.installs.set('T9', 'revive');
+    const { env: e, forwarded } = env({ SLACK_SIGNING_SECRET: 'sekret' });
+    (e as unknown as { SLACK_INSTALLS: unknown }).SLACK_INSTALLS = registry;
+    const body = slackBody('T9');
+    const ts = Math.floor(Date.now() / 1000);
+    const res = await worker.fetch(
+      post(body, {
+        'x-slack-request-timestamp': String(ts),
+        'x-slack-signature': await sign('sekret', body, ts),
+      }),
+      e,
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded).toHaveBeenCalledTimes(1);
+    // The same payload at another team's URL is refused, never re-routed.
+    const wrong = await worker.fetch(
+      new Request('https://relay.example/callback/other/ask-1', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-slack-request-timestamp': String(ts),
+          'x-slack-signature': await sign('sekret', body, ts),
+        },
+        body,
+      }),
+      e,
+    );
+    expect(wrong.status).toBe(403);
+    expect(forwarded).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('away-relay app routes (ADR 676 §2, §9)', () => {
   it('forwards a well-shaped app callback to the team object under its ref; refuses a malformed one', async () => {
     const { env: e, forwarded } = env({});

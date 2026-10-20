@@ -23,6 +23,12 @@
 
 import { apnsConfigFrom, sendApns } from './apns.js';
 import {
+  installStateLive,
+  parseSlackOAuthResponse,
+  slackAuthorizeUrl,
+  type SlackInstallRecord,
+} from './installs.js';
+import {
   credentialHashFor,
   deliverVerdict,
   hashesEqual,
@@ -47,6 +53,8 @@ import {
 
 export interface Env {
   AWAY_RELAY: DurableObjectNamespace;
+  /** The Slack install registry (increment 9): install states and the Slack team → slug mapping. */
+  SLACK_INSTALLS: DurableObjectNamespace;
   /** Secret (wrangler secret put): JSON map of team slug → sha256 hex of that team's credential. */
   TEAM_CREDENTIALS_JSON?: string;
   /** Secret (wrangler secret put): Slack's signing secret — lives only here (ADR 668 §1). */
@@ -57,6 +65,9 @@ export interface Env {
   TEAM_QUOTAS_JSON?: string;
   /** Secret (wrangler secret put): the APNs `.p8` token key, PEM (ADR 676 §9, ADR 659 §4). */
   APNS_KEY_P8?: string;
+  /** The distributed Slack app's client id (wrangler.toml var) and client secret (secret). */
+  SLACK_CLIENT_ID?: string;
+  SLACK_CLIENT_SECRET?: string;
   /** The APNs key id, the Apple Developer team id and the app's bundle id (wrangler.toml vars). */
   APNS_KEY_ID?: string;
   APNS_TEAM_ID?: string;
@@ -91,10 +102,124 @@ interface SocketAttachment {
   credentialHash: string | null;
 }
 
+/** The install registry object: one instance holds the states and the mapping. */
+function installRegistry(env: Env): DurableObjectStub {
+  return env.SLACK_INSTALLS.get(env.SLACK_INSTALLS.idFromName('slack-installs'));
+}
+
+async function registryJson(
+  env: Env,
+  path: string,
+  init?: { method: string; body: unknown },
+): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await installRegistry(env).fetch(
+      new Request(`https://installs.internal${path}`, {
+        ...(init
+          ? {
+              method: init.method,
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(init.body),
+            }
+          : {}),
+      }),
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 // eslint-disable-next-line import/no-default-export -- the Workers runtime requires a default export
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    // The distributed Slack app's install flow (ADR 668 decision 2, increment 9). The link a
+    // daemon mints names its team and a one-time state; Slack's installer authorizes there,
+    // and Slack returns to /slack/oauth with a code this Worker exchanges. Only this flow
+    // writes the install mapping — never anything an incoming callback carries.
+    if (request.method === 'GET' && url.pathname === '/slack/install') {
+      const slug = url.searchParams.get('team') ?? '';
+      const installState = url.searchParams.get('state') ?? '';
+      if (!slug || installState.length < 16)
+        return new Response('install link is missing its team or state', { status: 400 });
+      if (!env.SLACK_CLIENT_ID)
+        return new Response('slack app not configured on this relay', { status: 503 });
+      const recorded = await registryJson(env, '/state', {
+        method: 'PUT',
+        body: { state: installState, slug },
+      });
+      if (!recorded) return new Response('install registry unavailable', { status: 503 });
+      return Response.redirect(
+        slackAuthorizeUrl({
+          clientId: env.SLACK_CLIENT_ID,
+          redirectUri: `${url.origin}/slack/oauth`,
+          state: installState,
+        }),
+        302,
+      );
+    }
+    if (request.method === 'GET' && url.pathname === '/slack/oauth') {
+      const code = url.searchParams.get('code') ?? '';
+      const installState = url.searchParams.get('state') ?? '';
+      if (!code || !installState) return new Response('missing code or state', { status: 400 });
+      if (!env.SLACK_CLIENT_ID || !env.SLACK_CLIENT_SECRET)
+        return new Response('slack app not configured on this relay', { status: 503 });
+      const looked = await registryJson(env, `/state/${encodeURIComponent(installState)}`);
+      const slug = typeof looked?.['slug'] === 'string' ? (looked['slug'] as string) : null;
+      if (!slug || looked?.['live'] !== true)
+        return new Response('install state unknown or expired', { status: 403 });
+      let record: SlackInstallRecord | null = null;
+      try {
+        const res = await fetch('https://slack.com/api/oauth.v2.access', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: env.SLACK_CLIENT_ID,
+            client_secret: env.SLACK_CLIENT_SECRET,
+            code,
+            redirect_uri: `${url.origin}/slack/oauth`,
+          }),
+          signal: AbortSignal.timeout(RELAY_PROVIDER_TIMEOUT_MS),
+        });
+        record = parseSlackOAuthResponse((await res.json()) as unknown);
+      } catch {
+        record = null;
+      }
+      if (!record) return new Response('slack install exchange failed', { status: 502 });
+      const mapped = await registryJson(env, '/install', {
+        method: 'PUT',
+        body: {
+          state: installState,
+          slack_team_id: record.slackTeamId,
+          slug,
+          installer: record.installerSlackId,
+        },
+      });
+      if (!mapped) return new Response('install registry unavailable', { status: 503 });
+      // Hold the per-install token in the team's own object until its daemon syncs it
+      // (install_sync / install_ack); the registry keeps only the routing mapping.
+      const held = await env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+        new Request('https://relay.internal/install-record', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            slack_team_id: record.slackTeamId,
+            bot_token: record.botToken,
+            installer_slack_id: record.installerSlackId,
+            state: installState,
+            installed_at: Date.now(),
+          }),
+        }),
+      );
+      if (!held.ok)
+        return new Response('could not hold the install for its daemon', { status: 503 });
+      return new Response(
+        'Slack app installed for this workspace. Return to musterd — the install completes when your daemon next connects.',
+        { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+      );
+    }
     const connect = /^\/teams\/([^/]+)\/connect$/.exec(url.pathname);
     if (request.method === 'GET' && connect) {
       const slug = decodeURIComponent(connect[1]!);
@@ -128,10 +253,22 @@ export default {
         Date.now(),
       );
       if (!valid) return new Response('invalid slack signature', { status: 401 });
-      if (!env.SLACK_TEAM_MAP_JSON)
+      // Dispatch is by the install record (increment 9): the OAuth registry first, the
+      // operator-set map as the pre-install fallback. No request field selects a destination.
+      const payloadTeam = slackTeamIdFromBody(rawBody);
+      const registered = payloadTeam
+        ? await registryJson(env, `/slug-for/${encodeURIComponent(payloadTeam)}`)
+        : null;
+      const registeredSlug =
+        typeof registered?.['slug'] === 'string' ? (registered['slug'] as string) : null;
+      if (registeredSlug !== null) {
+        if (registeredSlug !== slug)
+          return new Response('slack team not mapped to this destination', { status: 403 });
+      } else if (!env.SLACK_TEAM_MAP_JSON) {
         return new Response('slack team map not configured', { status: 503 });
-      if (!slackDispatchAllowed(slackTeamIdFromBody(rawBody), env.SLACK_TEAM_MAP_JSON, slug))
+      } else if (!slackDispatchAllowed(payloadTeam, env.SLACK_TEAM_MAP_JSON, slug)) {
         return new Response('slack team not mapped to this destination', { status: 403 });
+      }
       return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
         new Request(request.url, {
           method: 'POST',
@@ -166,6 +303,125 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+/**
+ * The Slack install registry (ADR 668 decision 2, increment 9): install states a daemon
+ * minted, and the mapping the OAuth flow wrote — Slack team id → musterd team slug +
+ * installer. Routing data only: the per-install bot token never lands here; it is held
+ * by the team's own object until its daemon syncs it. Internal routes only — the Worker
+ * calls them; nothing public reaches this object.
+ */
+export class SlackInstalls implements DurableObject {
+  constructor(
+    private readonly state: DurableObjectState,
+    private readonly env: Env,
+  ) {
+    void this.env;
+    this.state.blockConcurrencyWhile(async () => {
+      this.state.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS states (
+           state TEXT PRIMARY KEY, slug TEXT NOT NULL, created_at INTEGER NOT NULL, consumed_at INTEGER
+         )`,
+      );
+      this.state.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS installs (
+           slack_team_id TEXT PRIMARY KEY, slug TEXT NOT NULL, installer TEXT NOT NULL, installed_at INTEGER NOT NULL
+         )`,
+      );
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      });
+    if (request.method === 'PUT' && url.pathname === '/state') {
+      const body = (await request.json()) as { state?: unknown; slug?: unknown };
+      if (
+        typeof body.state !== 'string' ||
+        body.state.length < 16 ||
+        typeof body.slug !== 'string' ||
+        !body.slug
+      )
+        return json({ error: 'bad state' }, 400);
+      this.state.storage.sql.exec(
+        `INSERT INTO states (state, slug, created_at, consumed_at) VALUES (?, ?, ?, NULL)
+         ON CONFLICT(state) DO UPDATE SET slug = excluded.slug, created_at = excluded.created_at, consumed_at = NULL`,
+        body.state,
+        body.slug,
+        Date.now(),
+      );
+      return json({ ok: true });
+    }
+    const stateMatch = /^\/state\/([^/]+)$/.exec(url.pathname);
+    if (request.method === 'GET' && stateMatch) {
+      const row = this.state.storage.sql
+        .exec<{
+          slug: string;
+          created_at: number;
+          consumed_at: number | null;
+        }>(
+          'SELECT slug, created_at, consumed_at FROM states WHERE state = ?',
+          decodeURIComponent(stateMatch[1]!),
+        )
+        .toArray()[0];
+      if (!row) return json({ slug: null, live: false });
+      return json({
+        slug: row.slug,
+        live: installStateLive(row.created_at, row.consumed_at, Date.now()),
+      });
+    }
+    if (request.method === 'PUT' && url.pathname === '/install') {
+      const body = (await request.json()) as {
+        state?: unknown;
+        slack_team_id?: unknown;
+        slug?: unknown;
+        installer?: unknown;
+      };
+      if (
+        typeof body.state !== 'string' ||
+        typeof body.slack_team_id !== 'string' ||
+        !body.slack_team_id ||
+        typeof body.slug !== 'string' ||
+        !body.slug ||
+        typeof body.installer !== 'string' ||
+        !body.installer
+      )
+        return json({ error: 'bad install' }, 400);
+      // The state is consumed by the exchange that writes the mapping: one state, one install.
+      const consumed = this.state.storage.sql.exec(
+        'UPDATE states SET consumed_at = ? WHERE state = ? AND slug = ? AND consumed_at IS NULL',
+        Date.now(),
+        body.state,
+        body.slug,
+      );
+      void consumed;
+      this.state.storage.sql.exec(
+        `INSERT INTO installs (slack_team_id, slug, installer, installed_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(slack_team_id) DO UPDATE SET slug = excluded.slug,
+           installer = excluded.installer, installed_at = excluded.installed_at`,
+        body.slack_team_id,
+        body.slug,
+        body.installer,
+        Date.now(),
+      );
+      return json({ ok: true });
+    }
+    const slugMatch = /^\/slug-for\/([^/]+)$/.exec(url.pathname);
+    if (request.method === 'GET' && slugMatch) {
+      const row = this.state.storage.sql
+        .exec<{
+          slug: string;
+        }>('SELECT slug FROM installs WHERE slack_team_id = ?', decodeURIComponent(slugMatch[1]!))
+        .toArray()[0];
+      return json({ slug: row?.slug ?? null });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+}
+
 /** One team's relay object: its socket, its pending metadata, its expiry alarm. */
 export class TeamRelay implements DurableObject {
   /** Body fetches waiting on the daemon's `app_body`, by request id. In memory only: never stored. */
@@ -192,11 +448,54 @@ export class TeamRelay implements DurableObject {
       // Per-team delivery attempts for the quota windows (lane 01M50ZQCTWM5QBZ083782J9N6R):
       // timestamps only, no content, pruned past the day window on each delivery.
       this.state.storage.sql.exec(`CREATE TABLE IF NOT EXISTS deliveries (at INTEGER NOT NULL)`);
+      // Slack install records held for this team's daemon (increment 9): the per-install
+      // bot token lives here only until the daemon stores it and acks (install_ack).
+      this.state.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS slack_installs (
+           slack_team_id TEXT PRIMARY KEY, bot_token TEXT NOT NULL,
+           installer_slack_id TEXT NOT NULL, state TEXT NOT NULL, installed_at INTEGER NOT NULL
+         )`,
+      );
     });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    // Internal: the Worker hands this object one install record after the OAuth exchange.
+    if (request.method === 'PUT' && url.pathname === '/install-record') {
+      const body = (await request.json()) as {
+        slack_team_id?: unknown;
+        bot_token?: unknown;
+        installer_slack_id?: unknown;
+        state?: unknown;
+        installed_at?: unknown;
+      };
+      if (
+        typeof body.slack_team_id !== 'string' ||
+        !body.slack_team_id ||
+        typeof body.bot_token !== 'string' ||
+        !body.bot_token ||
+        typeof body.installer_slack_id !== 'string' ||
+        !body.installer_slack_id ||
+        typeof body.state !== 'string' ||
+        !body.state ||
+        typeof body.installed_at !== 'number'
+      )
+        return new Response('bad install record', { status: 400 });
+      this.state.storage.sql.exec(
+        `INSERT INTO slack_installs (slack_team_id, bot_token, installer_slack_id, state, installed_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(slack_team_id) DO UPDATE SET bot_token = excluded.bot_token,
+           installer_slack_id = excluded.installer_slack_id, state = excluded.state,
+           installed_at = excluded.installed_at`,
+        body.slack_team_id,
+        body.bot_token,
+        body.installer_slack_id,
+        body.state,
+        body.installed_at,
+      );
+      return new Response('held', { status: 200 });
+    }
     if (request.headers.get('upgrade') === 'websocket') {
       const slug = decodeURIComponent(/^\/teams\/([^/]+)\/connect$/.exec(url.pathname)?.[1] ?? '');
       const presented = request.headers.get('x-relay-credential-hash');
@@ -401,6 +700,26 @@ export class TeamRelay implements DurableObject {
       return;
     }
     const now = Date.now();
+    if (frame.type === 'install_sync') {
+      const installs = this.state.storage.sql
+        .exec<{
+          slack_team_id: string;
+          bot_token: string;
+          installer_slack_id: string;
+          state: string;
+          installed_at: number;
+        }>(
+          'SELECT slack_team_id, bot_token, installer_slack_id, state, installed_at FROM slack_installs',
+        )
+        .toArray();
+      ws.send(JSON.stringify({ protocol: 1, type: 'installs', installs }));
+      return;
+    }
+    if (frame.type === 'install_ack') {
+      for (const id of frame.slack_team_ids)
+        this.state.storage.sql.exec('DELETE FROM slack_installs WHERE slack_team_id = ?', id);
+      return;
+    }
     if (frame.type === 'app_deliver') {
       await this.appDeliver(ws, attachment?.slug ?? '', frame, now);
       return;

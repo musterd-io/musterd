@@ -54,6 +54,33 @@ daemon's re-push retries it once the window passes. Override per team with `TEAM
 (values are clamped to 600/minute and 100,000/day; a bad or partial map falls back to the
 defaults, never to unlimited).
 
+## Installing Slack into a workspace
+
+The Slack app is distributed: each workspace installs it through OAuth and gets its own bot
+token (ADR 668 decision 2). Set `SLACK_CLIENT_ID` as a plain `[vars]` entry in
+`wrangler.toml` and the client secret as a Worker secret. Then, per team:
+
+1. A human admin runs `musterd channels slack-install`. The daemon mints a one-time,
+   ten-minute install state and prints the relay's install link.
+2. The link opens Slack's authorize page. Whoever Slack permits to install apps in that
+   workspace (a workspace admin, under Slack's own rules) authorizes — that is the
+   workspace's act, separate from any person's pairing.
+3. Slack returns to the relay, which exchanges the code, records the mapping
+   (Slack team → musterd team), and holds the per-install token in the team's relay object.
+4. The daemon picks the record up on its next connect and stores it — but only against the
+   live state it minted. `musterd channels slack-installs` lists installs (never a token);
+   `slack-revoke <slack-team-id>` revokes one.
+
+Until a workspace installs, the pre-install path still works: the operator-set
+`SLACK_TEAM_MAP_JSON` and the team-policy `slack_bot_token`. The install record takes
+precedence where both exist.
+
+**App review.** Slack reviews a distributed app before public listing. What the review
+sees: the OAuth scopes `chat:write`, `im:write`, `users:read` (exactly these), the
+interactivity Request URL (this Worker's `/callback/<slug>/<ask_ref>` route), the OAuth
+redirect URL (`/slack/oauth`), and the install URL (`/slack/install`). Submitting for
+review, collecting the app's client credentials, and setting them here are operator acts.
+
 ## Bring your own relay
 
 A self-hoster may run their own relay instead of musterd's: deploy `workers/away-relay` to your
