@@ -8,9 +8,9 @@ import {
   encryptDump,
   expiredBackupKeys,
   parseBackupKey,
-  restoreSnapshot,
   runBackupPass,
 } from '../../../../scripts/cloud/backup.mjs';
+import { runRestoreDrill, selectNewestTeamDumps } from '../../../../scripts/cloud/drill.mjs';
 import { openTestDriver } from '../db/testing.js';
 import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
@@ -76,6 +76,23 @@ describe('Cloud 3 encrypted R2 backups (ADR 679)', () => {
     expect(plist).toContain('<key>StartCalendarInterval</key>');
     expect(plist).toContain('<integer>3</integer>');
     expect(plist).toContain('<integer>17</integer>');
+
+    expect(
+      selectNewestTeamDumps([
+        'teams/revive/coordination/2026-10-19.json.gz.enc',
+        'teams/revive/trace/2026-10-19.json.gz.enc',
+        'teams/revive/coordination/2026-10-20.json.gz.enc',
+        'teams/revive/trace/2026-10-20.json.gz.enc',
+        'teams/partial/coordination/2026-10-20.json.gz.enc',
+      ]),
+    ).toEqual([
+      {
+        slug: 'revive',
+        date: '2026-10-20',
+        coordinationKey: 'teams/revive/coordination/2026-10-20.json.gz.enc',
+        traceKey: 'teams/revive/trace/2026-10-20.json.gz.enc',
+      },
+    ]);
   });
 
   it('dumps per-team coordination + trace + console over SigV4 to an R2 endpoint, prunes expired keys, and restores onto a fresh Postgres database', async () => {
@@ -173,7 +190,7 @@ describe('Cloud 3 encrypted R2 backups (ADR 679)', () => {
           const rows = await d.all<Record<string, unknown>>(q, params);
           return { rows, rowCount: rows.length };
         }
-        if (/^\s*(BEGIN|COMMIT|ROLLBACK|SET\s+LOCAL)\b/i.test(q)) {
+        if (/^\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE\s+SAVEPOINT|SET\s+LOCAL)\b/i.test(q)) {
           return { rows: [], rowCount: 0 };
         }
         const res = await d.run(q, params);
@@ -216,8 +233,27 @@ describe('Cloud 3 encrypted R2 backups (ADR 679)', () => {
     expect(coordSnap.tables.members).toHaveLength(1);
 
     const freshDb = await openTestDriver('pglite', { store: 'main', instance: 2 });
-    cleanups.push(() => freshDb.close());
-    await restoreSnapshot(toClient(freshDb), coordSnap);
+    const freshTraceDb = await openTestDriver('pglite', { store: 'trace', instance: 2 });
+    cleanups.push(
+      () => freshDb.close(),
+      () => freshTraceDb.close(),
+    );
+    const drill = await runRestoreDrill({
+      store,
+      encryptionKey: backupKey,
+      mainClient: toClient(freshDb),
+      traceClient: toClient(freshTraceDb),
+      mainDriver: freshDb,
+      traceDriver: freshTraceDb,
+    });
+    expect(drill.teams).toEqual([
+      expect.objectContaining({
+        slug: 'revive',
+        date: '2026-10-20',
+        members_verified: 1,
+        rls_leak_rows: 0,
+      }),
+    ]);
     const restoredMembers = await freshDb.all<{ name: string }>(
       'SELECT name FROM members WHERE team_id = ?',
       [team.id],
