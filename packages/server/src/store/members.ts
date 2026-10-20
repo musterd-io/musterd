@@ -1121,3 +1121,31 @@ export async function markSessionEnded(db: Driver, memberId: string): Promise<vo
 }
 
 export { newToken };
+
+/** Service seats a host speaks as: `host-<label>`, label folded to the member-name alphabet. */
+export function hostServiceSeatName(host: string): string {
+  const folded = host
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `host-${folded || 'unnamed'}`;
+}
+
+/**
+ * The host's own service seat (ADR 232), minted on first use: by the hub when the host's pull
+ * first speaks (ADR 645), and by a joiner's sync fold when an event from that seat arrives — no
+ * event carries the mint, so each daemon makes the same row itself. Null when the name is already
+ * held by a seat that is not a live service seat — the host never speaks as somebody's agent or
+ * person.
+ */
+export async function hostServiceSeat(
+  db: Driver,
+  team: TeamRow,
+  host: string,
+): Promise<MemberRow | null> {
+  const name = hostServiceSeatName(host);
+  const existing = await getMemberByName(db, team.id, name);
+  if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
+  return (await addMember(db, team, { name, kind: 'service' })).row;
+}

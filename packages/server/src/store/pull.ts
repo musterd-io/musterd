@@ -16,9 +16,10 @@ import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit, appendLaneEventRequired } from './audit.js';
 import { deriveGoalStatus, getLane, lanesForGoal, listLanes } from './lanes.js';
 import {
-  addMember,
   getMemberById,
   getMemberByName,
+  hostServiceSeat,
+  hostServiceSeatName,
   listMembers,
   memberStandingRefusal,
 } from './members.js';
@@ -49,30 +50,9 @@ export const PULL_GRANT_TTL_MS = 15 * 60_000;
  *  declaration cannot pose as a line of the notice that carries it. */
 const q = (text: string): string => JSON.stringify(text);
 
-/** Service seats a host speaks as: `host-<label>`, label folded to the member-name alphabet. */
-export function hostServiceSeatName(host: string): string {
-  const folded = host
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
-  return `host-${folded || 'unnamed'}`;
-}
-
-/**
- * The host's own service seat (ADR 232), minted on first use. Null when the name is already held
- * by a seat that is not a live service seat — the host never speaks as somebody's agent or person.
- */
-export async function hostServiceSeat(
-  db: Driver,
-  team: TeamRow,
-  host: string,
-): Promise<MemberRow | null> {
-  const name = hostServiceSeatName(host);
-  const existing = await getMemberByName(db, team.id, name);
-  if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
-  return (await addMember(db, team, { name, kind: 'service' })).row;
-}
+// The host's service seat lives beside the other member writes, so the sync fold can mint it
+// on a joiner without importing the pull (and the router behind it).
+export { hostServiceSeat, hostServiceSeatName };
 
 export interface PullAnnouncementRow {
   id: string;
