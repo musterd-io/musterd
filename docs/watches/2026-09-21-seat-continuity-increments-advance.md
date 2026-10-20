@@ -11,7 +11,8 @@ cadence:    read once, at revisit_by
 opened:     2026-09-21
 opened_by:  stanley
 revisit_by: 2026-10-19
-status:     open
+status:     resolved
+resolution: "HELD, weakly. Read 2026-10-20 from the daemon's lane store: all four lanes are done and confirmed — increment 2 01M32FH5YQ (#1599, izzo), 3 01M32FHKKQ (#1601), 4 01M32FHX6J (#1610), 5 01M32FJ8T4 (#1644) — and the control, increment 1 01M32FGSXK (#1594), is done. Four of four, against a bar of three. The caveat that matters: every one closed on 2026-09-21, the day the plan was written, so the window never tested what it was opened to test. The plan was finished inside its author's attention span, not carried past it, and the board holding it was never put under load. The drop pattern is neither confirmed nor ruled out by this read; the overdue-goal signal named in the falsifier stays unbuilt and unrequired."
 ---
 
 Opened the day the plan was written, on nick's instruction that the plan be captured somewhere it
