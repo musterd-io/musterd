@@ -32,11 +32,14 @@ RUN corepack enable \
 RUN npm install -g --prefix /opt/musterd-seat --ignore-scripts --no-audit --no-fund /opt/musterd-pack/musterd-*.tgz \
   && npm install -g --no-audit --no-fund @anthropic-ai/claude-code
 
-# CooperBench at the commit the adapter was written and tested against.
+# CooperBench at the commit the adapter was written and tested against. Its openhands-sdk dependency
+# needs Python >= 3.12 and bookworm ships 3.11, so the venv uses a uv-managed 3.12.
+COPY --from=ghcr.io/astral-sh/uv:0.5.31 /uv /uvx /usr/local/bin/
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN git clone https://github.com/cooperbench/CooperBench.git /opt/cooperbench \
   && git -C /opt/cooperbench checkout --quiet "${COOPERBENCH_COMMIT}" \
-  && python3 -m venv /opt/cb-venv \
-  && /opt/cb-venv/bin/pip install --quiet -e /opt/cooperbench
+  && uv venv --python 3.12 /opt/cb-venv \
+  && uv pip install --quiet --python /opt/cb-venv/bin/python -e /opt/cooperbench
 
 ENV PATH=/opt/cb-venv/bin:$PATH \
     PYTHONPATH=/app/scripts/research/cooperbench \
