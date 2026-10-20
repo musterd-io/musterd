@@ -210,8 +210,6 @@ describe('bashAllowed', () => {
     // Bound to the seat's branch when the policy names it.
     const own = { ...policy, branch: 'agent/pilot-2' };
     expect(bashAllowed('git push -u origin agent/pilot-2', own).ok).toBe(true);
-    expect(bashAllowed('git push origin HEAD', own).ok).toBe(true);
-    expect(bashAllowed('git push', own).ok).toBe(true);
     expect((bashAllowed('git push origin agent/other', own) as { reason: string }).reason).toMatch(
       /only this seat’s branch agent\/pilot-2/,
     );
@@ -249,6 +247,37 @@ describe('bashAllowed', () => {
       expect(deny(c), c).toMatch(/remotes are read-only/);
     expect(bashAllowed('git remote -v', policy).ok).toBe(true);
     expect(bashAllowed('git remote get-url origin', policy).ok).toBe(true);
+    // Round 4: the live checkout is the fence for a bare / HEAD push.
+    const onOwn = { ...own, currentBranch: () => 'agent/pilot-2' };
+    const onOther = { ...own, currentBranch: () => 'feat/x' };
+    expect(bashAllowed('git push', onOwn).ok).toBe(true);
+    expect(bashAllowed('git push origin HEAD', onOwn).ok).toBe(true);
+    expect((bashAllowed('git push', onOther) as { reason: string }).reason).toMatch(
+      /HEAD is on feat\/x, not this seat’s branch/,
+    );
+    expect((bashAllowed('git push origin HEAD', onOther) as { reason: string }).reason).toMatch(
+      /HEAD is on feat\/x/,
+    );
+    // No way to read it: refused, with the explicit form to use instead.
+    expect(ownDeny('git push')).toMatch(/cannot confirm the checked-out branch/);
+    expect(bashAllowed('git push -u origin agent/pilot-2', onOther).ok).toBe(true);
+    // Abbreviated long options are refused by the allowlist, not by their spelling.
+    for (const c of ['git checkout --det', 'git switch --orph x', 'git checkout --tr feat/x'])
+      expect(ownDeny(c), c).toMatch(/this seat works on/);
+    for (const c of [
+      'git branch --mo x',
+      'git branch --del x',
+      'git branch --set-upstream-to=origin/x',
+    ])
+      expect(ownDeny(c), c).toMatch(/this seat works on/);
+    expect(bashAllowed('git branch --contains HEAD', own).ok).toBe(true);
+    // rebase's second positional checks a branch out; fetch refspecs rewrite local branches.
+    expect(ownDeny('git rebase origin/main feat/x')).toMatch(/only its upstream/);
+    expect(ownDeny('git rebase --onto origin/main a b')).toMatch(/only its upstream/);
+    expect(bashAllowed('git rebase origin/main', own).ok).toBe(true);
+    expect(ownDeny('git fetch origin other:agent/pilot-2')).toMatch(/no refspecs/);
+    expect(ownDeny('git fetch origin +refs/heads/x:refs/heads/x')).toMatch(/no refspecs/);
+    expect(bashAllowed('git fetch origin main', own).ok).toBe(true);
     expect(deny('git rebase -x "rm -rf ." origin/main')).toMatch(/executes/);
     expect(deny('git rebase --exec evil origin/main')).toMatch(/executes/);
     expect(deny('git diff --ext-diff')).toMatch(/executes/);

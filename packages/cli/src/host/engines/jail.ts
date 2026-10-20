@@ -97,6 +97,9 @@ export interface BashPolicy {
   pathOk?: (token: string) => boolean | undefined;
   /** ADR 675 (review): the seat's own branch. When set, `git push` may name only it (or `HEAD`). */
   branch?: string;
+  /** ADR 675 (review, round 4): the LIVE checked-out branch, read at decision time — the fence for
+   *  a bare or `HEAD` push under a bound. Absent, or returning undefined, refuses those pushes. */
+  currentBranch?: () => string | undefined;
 }
 
 export type BashVerdict = { ok: true } | { ok: false; reason: string };
@@ -273,6 +276,26 @@ export function splitWords(segment: string): string[] {
   return words;
 }
 
+/** Under a branch bound, the only checkout/switch flags a seat needs (ADR 675 review, round 4). */
+const CHECKOUT_FLAGS_OK = new Set(['-q', '--quiet', '-m', '--merge', '-f', '--force']);
+/** `git branch` listings whose positional is a pattern or a commit, never a new branch name. */
+const BRANCH_LISTING_WITH_ARG = new Set(['-l', '--list', '--contains', '--merged', '--no-merged']);
+/** Under a branch bound, the only `git branch` flags a seat needs: all read-only listings. */
+const BRANCH_FLAGS_OK = new Set([
+  '--show-current',
+  '-a',
+  '--all',
+  '-r',
+  '--remotes',
+  '-v',
+  '-vv',
+  '--verbose',
+  '-l',
+  '--list',
+  '--contains',
+  '--merged',
+  '--no-merged',
+]);
 /** The only `git push` flags a seat needs (ADR 675 review): upstream, lease-guarded force, quiet, dry run. */
 const PUSH_FLAGS_OK = /^(-u|--set-upstream|-q|--quiet|--dry-run|--force-with-lease(=[^\s]*)?)$/;
 
@@ -308,45 +331,63 @@ function denyGit(words: string[], policy: BashPolicy): string | undefined {
       if (policy.branch !== undefined && ref !== policy.branch && ref !== 'HEAD')
         return `git push may push only this seat’s branch ${policy.branch}`;
     }
+    // ADR 675 (review, round 4): a bare `git push` or `HEAD` pushes whatever is checked out, and
+    // text rules on checkout/switch/rebase can only approximate that. The fence is the live
+    // checkout, read at decision time: it must be the bound branch, or the push is refused — and
+    // with no way to read it, refused too.
+    if (policy.branch !== undefined && (ref === undefined || ref === 'HEAD')) {
+      const live = policy.currentBranch?.();
+      if (live === undefined)
+        return `git push cannot confirm the checked-out branch — name it: git push -u origin ${policy.branch}`;
+      if (live !== policy.branch)
+        return `git push refused — HEAD is on ${live}, not this seat’s branch ${policy.branch}`;
+    }
   }
   if (sub === 'checkout' || sub === 'switch' || sub === 'branch') {
     if (rest.some((w) => PROTECTED_BRANCHES.has(w)))
       return `git ${sub} ${rest.find((w) => PROTECTED_BRANCHES.has(w))!} is never allowed`;
-    // ADR 675 (review, round 3): the push bound is the checked-out branch, so the seat may not
-    // move off its own branch, rename it, or make another — `git push` (bare) and `HEAD` would
-    // otherwise push whatever it switched to. Only the words BEFORE `--` name a branch; after it
+    // ADR 675 (review, rounds 3–4): under a branch bound the seat may not move off its branch,
+    // rename it, or make another. Flags are an ALLOWLIST (git abbreviates long options, so a
+    // deny-list of spellings is no fence). Only the words BEFORE `--` name a branch; after it
     // they are paths. A bare `-` and `@{-N}` are "the previous branch" and are refused outright.
     if (policy.branch !== undefined) {
       const dd = rest.indexOf('--');
       const head = dd === -1 ? rest : rest.slice(0, dd);
-      const off = head.find((w) => w === '-' || /^@\{-?\d+\}$/.test(w) || w.startsWith('@{'));
+      const off = head.find((w) => w === '-' || w.startsWith('@{'));
       if (off) return `git ${sub} ${off} is not allowed — this seat works on ${policy.branch}`;
+      const flagsOk = sub === 'branch' ? BRANCH_FLAGS_OK : CHECKOUT_FLAGS_OK;
+      const flag = head.find((w) => w.startsWith('-') && !flagsOk.has(w));
+      if (flag !== undefined)
+        return `git ${sub} ${flag} is not allowed — this seat works on ${policy.branch}`;
+      const named = head.filter((w) => !w.startsWith('-'));
       if (sub === 'branch') {
-        const mutating = head.find(
-          (w) =>
-            /^-[a-zA-Z]*[mMcCdDfu]/.test(w) ||
-            /^--(move|copy|delete|force|set-upstream-to|unset-upstream|edit-description|track|no-track)/.test(
-              w,
-            ),
-        );
-        if (mutating)
-          return `git branch ${mutating} is not allowed — this seat works on ${policy.branch}`;
-        const named = head.filter((w) => !w.startsWith('-'));
-        if (named.length > 0 && !head.some((w) => w === '--list' || w === '-l'))
+        // A positional is a pattern for `--list`, or a commit for the `--contains` family;
+        // anywhere else it would create a branch.
+        const listing = head.some((w) => BRANCH_LISTING_WITH_ARG.has(w));
+        if (named.length > 0 && !listing)
           return `git branch ${named[0]} is not allowed — this seat works on ${policy.branch}`;
       } else {
-        const creating = head.find(
-          (w) =>
-            /^-[a-zA-Z]*[bcBC]/.test(w) || /^--(create|force-create|orphan|detach|track)/.test(w),
-        );
-        if (creating)
-          return `git ${sub} ${creating} is not allowed — this seat works on ${policy.branch}`;
-        const named = head.filter((w) => !w.startsWith('-'));
         const other = named.find((w) => w !== policy.branch);
         if (other !== undefined)
           return `git ${sub} ${other} is not allowed — this seat works on ${policy.branch}`;
       }
     }
+  }
+  if (sub === 'rebase' && policy.branch !== undefined) {
+    // ADR 675 (review, round 4): `git rebase <upstream> <branch>` checks <branch> out first —
+    // the same move as switch. One positional (the upstream) at most; `--onto` takes a second.
+    const named = rest.filter((w) => !w.startsWith('-'));
+    const onto = rest.find((w) => w.startsWith('--onto'));
+    if (onto !== undefined || named.length > 1)
+      return `git rebase may name only its upstream here — this seat works on ${policy.branch}`;
+  }
+  if (sub === 'fetch' && policy.branch !== undefined) {
+    // ADR 675 (review, round 4): a fetch refspec can rewrite a local branch (`other:agent/x`,
+    // `+refs/heads/*:…`); fetch names a remote and, at most, a remote ref to bring down.
+    const spec = rest.find(
+      (w) => !w.startsWith('-') && (w.includes(':') || w.startsWith('+') || w.startsWith('refs/')),
+    );
+    if (spec !== undefined) return `git fetch ${spec} is not allowed — no refspecs here`;
   }
   if (sub === 'remote') {
     // ADR 675 (review, round 3): read-only. `set-url` would retarget `origin`, and the push
