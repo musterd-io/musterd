@@ -542,7 +542,13 @@ export async function requireAuthority(
   }
   if (!valid) return refuse('descriptor_mismatch');
 
-  await db.run(`UPDATE approval_nonces SET used_at = ? WHERE nonce = ?`, [now, proof.nonce]);
+  // One-use, atomically: the conditional update is the consumption, so two concurrent
+  // presentations of the same proof cannot both spend the nonce (HA1 re-review).
+  const spent = await db.run(
+    `UPDATE approval_nonces SET used_at = ? WHERE team_id = ? AND nonce = ? AND used_at IS NULL`,
+    [now, input.teamId, proof.nonce],
+  );
+  if (spent.changes === 0) return refuse('nonce_reused');
   await appendAudit(db, input.teamId, {
     actor: input.presenter.name,
     action: 'authority.approved',

@@ -162,6 +162,12 @@ All four converged on one shape, and nick directed it be written as this ADR.
   signs with the local key; the code-signed Secure Enclave helper rides the same protocol
   once a signing identity exists.)_
   Follows-up: 01M5B73NG2E2A4XXBW9FG9ND8Z
+- _(2026-10-19: HA1 re-review (lazara, declined #2963) wired the three listed acts that had
+  no caller: `admin.roster` (member add, remove, ceiling), `admin.team_settings` (team
+  archive) and `credential_mint` (bootstrap mint including host keys, human credential
+  rotate, agent-key rotate) now pass `requireAuthority`, each with a transport falsifier.
+  The nonce spend is one conditional `UPDATE … WHERE used_at IS NULL`, so concurrent
+  presentations of one proof yield exactly one approval.)_
 
 ## Observability & Evaluation
 

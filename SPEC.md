@@ -1036,6 +1036,14 @@ advisory for every listed act.
 - A listed act carries its proof as `approval: {key_id, nonce, signature}` (request body, a
   lane patch's `approval` field, or an act's `meta.approval`). Signatures are Ed25519 over
   the descriptor's canonical signing bytes.
+- Every act on the closed list has a wired caller: human verdicts (act path and counterpart
+  lane closes), `merged.authorized_by`, team and governed policy, grant issue on the admin
+  path, agent create, roster add/remove/ceiling (`POST /members`, `…/remove`, `…/ceiling`),
+  team archive as `admin.team_settings`, and credential mints (`POST
+  /agent-bootstrap-credentials` including host keys, `…/credential/rotate`, `POST
+  /agent-key/rotate`). The sponsor/host-key provisioning paths of ADR 648 decision 1 are
+  agent-kind and stay off the list. The nonce is spent by one conditional update, so
+  concurrent presentations of one proof yield exactly one approval.
 - Refusals write `authority.refused` with a reason (`no_signature`, `assurance_too_low`,
   `descriptor_mismatch`, `expired`, `nonce_reused`, `key_revoked`, `agent_credential`); an
   approval writes `authority.approved` with the assurance, authenticator kind and key id.

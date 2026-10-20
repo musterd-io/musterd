@@ -104,6 +104,58 @@ withDrivers('authority-http (ADR 662)', (_o, kind) => {
     expect(JSON.stringify(refused.json)).toContain('no_signature');
   });
 
+  it('roster add: an enrolled human’s Bearer mints no new human; a signed add does', async () => {
+    const refused = await call('POST', '/teams/dawn/members', nick, {
+      name: 'mallory',
+      kind: 'human',
+    });
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(refused.json)).toContain('no_signature');
+
+    const payload = { name: 'mallory', kind: 'human', role: null, observer: false };
+    const d = await descriptor('admin.roster', 'mallory', payload);
+    const proof = { key_id: keyId, nonce: d.nonce, signature: signWith(d) };
+    const ok = await call('POST', '/teams/dawn/members', nick, {
+      name: 'mallory',
+      kind: 'human',
+      approval: proof,
+    });
+    expect(ok.status).toBe(201);
+  });
+
+  it('roster remove, credential mints and team archive all refuse an unsigned Bearer', async () => {
+    const removed = await call('POST', '/teams/dawn/members/ada/remove', nick, {});
+    expect(removed.status).toBe(403);
+    expect(JSON.stringify(removed.json)).toContain('no_signature');
+
+    const bootstrap = await call('POST', '/teams/dawn/agent-bootstrap-credentials', nick, {
+      use: 'host',
+      target: 'host-1',
+    });
+    expect(bootstrap.status).toBe(403);
+    expect(JSON.stringify(bootstrap.json)).toContain('no_signature');
+
+    const agentKey = await call('POST', '/teams/dawn/agent-key/rotate', nick, {});
+    expect(agentKey.status).toBe(403);
+    expect(JSON.stringify(agentKey.json)).toContain('no_signature');
+
+    const credRotate = await call('POST', '/teams/dawn/members/nick/credential/rotate', nick, {});
+    expect(credRotate.status).toBe(403);
+    expect(JSON.stringify(credRotate.json)).toContain('no_signature');
+
+    const archived = await call('POST', '/teams/dawn/archive', nick, {});
+    expect(archived.status).toBe(403);
+    expect(JSON.stringify(archived.json)).toContain('no_signature');
+  });
+
+  it('a signed credential mint goes through', async () => {
+    const payload = { action: 'agent_key_rotate' };
+    const d = await descriptor('credential_mint', 'dawn', payload);
+    const proof = { key_id: keyId, nonce: d.nonce, signature: signWith(d) };
+    const ok = await call('POST', '/teams/dawn/agent-key/rotate', nick, { approval: proof });
+    expect(ok.status).toBe(200);
+  });
+
   it('a human counterpart close needs the signature; the signed close lands', async () => {
     const opened = await call('POST', '/teams/dawn/lanes', ada, { title: 'verdict lane' });
     expect(opened.status).toBe(201);

@@ -116,6 +116,41 @@ withDrivers('human authority (ADR 662)', (o) => {
     expect(JSON.stringify(rows)).not.toContain(descriptor.nonce);
   });
 
+  it('two concurrent presentations of one proof: exactly one spends the nonce', async () => {
+    const db = await openStore();
+    const { team, nick } = await seed(db);
+    const kp = keypair();
+    const key = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: kp.publicKey,
+      kind: 'platform',
+    });
+    const descriptor = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: nick.name,
+      ...act,
+    });
+    const proof = { key_id: key.id, nonce: descriptor.nonce, signature: kp.sign(descriptor) };
+    const base = {
+      teamId: team.id,
+      audience: team.slug,
+      presenter: nick,
+      credential: 'human' as const,
+      ...act,
+      proof,
+    };
+    const results = await Promise.all([
+      requireAuthority(db, base),
+      requireAuthority(db, base),
+      requireAuthority(db, base),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toHaveLength(2);
+  });
+
   it('a signature over a different payload, an expired descriptor, and a revoked key all refuse', async () => {
     const db = await openStore();
     const { team, nick } = await seed(db);
