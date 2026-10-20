@@ -436,7 +436,9 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
     await tap();
     return 0;
   }
-  pickLine = takePendingPick(findWorkspaceDir() ?? process.cwd());
+  // Only a bound workspace's marker — never whatever folder the hook happened to run in.
+  const pickDir = findWorkspaceDir();
+  pickLine = pickDir ? takePendingPick(pickDir) : null;
   let seat: string | undefined;
   try {
     // The interrupt probe is hook-installed and rides every tool call — it takes the default (no
@@ -445,7 +447,8 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       timeoutMs: HOOK_HTTP_TIMEOUT_MS,
     });
     if (!explicit || !identity) {
-      flushPick();
+      // No seat resolved here, so nobody the pick could be for: drop it unshown.
+      pickLine = null;
       await tap();
       return 0;
     }

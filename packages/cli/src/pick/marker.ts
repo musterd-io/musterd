@@ -21,10 +21,22 @@ export function writePendingPick(workspaceDir: string, pick: PendingPick): void 
   writeFileSync(join(dir, FILE), JSON.stringify(pick) + '\n', { mode: 0o600 });
 }
 
-/** The line the seat is shown, once. The words are ADR 626 Decision 2's. */
-export function pendingPickLine(p: PendingPick): string {
-  // eslint-disable-next-line no-control-regex
-  const title = p.title.replace(/[\x00-\x1f\x7f]/g, ' ');
+const LANE_ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const MEMBER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const TITLE_MAX = 120;
+
+/**
+ * The line the seat is shown, once. The words are ADR 626 Decision 2's. The marker is a file any
+ * process in the workspace could write, so every field is held to its shape before it reaches the
+ * seat's context: a ULID lane, a member-shaped name, and a title with no control bytes, no quotes
+ * to break out of its quoting, and a hard length cap. Anything else is not shown.
+ */
+export function pendingPickLine(p: PendingPick): string | null {
+  if (!LANE_ID.test(p.lane) || !MEMBER_NAME.test(p.requested_by)) return null;
+  const title = p.title
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f-\x9f"“”]/g, ' ')
+    .slice(0, TITLE_MAX);
   return (
     `musterd: ${p.requested_by} picked lane ${p.lane.slice(0, 10)} for you in the lane picker ` +
     `(terminal, unattested): "${title}". Reply with a 3–5 line plan, then start unless redirected.`
