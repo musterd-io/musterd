@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { HttpClient, watchClaim } from '../client.js';
 import { saveBinding, wsBase } from '../config.js';
+import { CliError } from '../errors.js';
 import { writePending } from '../onboard/pending.js';
 import { claimCommand } from './claim.js';
 import { WAIT_TIMEOUT_EXIT } from './inbox.js';
@@ -674,6 +675,19 @@ describe('claim --detach (ADR 377 increment 1 — the one-shot HTTP path `join` 
       await declareSeat('bo');
       expect((await run(['bo', '--team', 'dawn', '--detach'])).code).toBe(0);
       expect(rosterKeys).toEqual([undefined]);
+    });
+
+    it('a hosted team refusing the anonymous read does not stop a bootstrap-key claim', async () => {
+      // A hosted team serves no roster to an anonymous caller; a provisioned seat's folder holds only
+      // its bootstrap key, so the preflight has nothing to offer and must not be the thing that fails.
+      await declareSeat('bo');
+      vi.spyOn(HttpClient.prototype, 'roster').mockRejectedValue(
+        new CliError('missing bearer token', 1, 'unauthorized'),
+      );
+      const r = await run(['bo', '--team', 'dawn', '--detach']);
+      expect(r.code).toBe(0);
+      // The claim went to the server (a request opened for admin approval), not a preflight death.
+      expect(r.out).toContain('claim request opened');
     });
   });
 });

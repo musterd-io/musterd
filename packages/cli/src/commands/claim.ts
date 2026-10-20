@@ -136,11 +136,24 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
   // with. A bootstrap key (`mskey_`) is left off: the server refuses it on routine reads ("a bootstrap
   // key only claims a seat"), and a self-hosted roster is public on loopback anyway.
   const readKey = claimKey.startsWith(TOKEN_PREFIXES.agent_key) ? undefined : claimKey;
-  const { members } = await new HttpClient({
-    server,
-    surface,
-    ...(readKey ? { key: readKey } : {}),
-  }).roster(team);
+  let members: Awaited<ReturnType<HttpClient['roster']>>['members'];
+  try {
+    ({ members } = await new HttpClient({
+      server,
+      surface,
+      ...(readKey ? { key: readKey } : {}),
+    }).roster(team));
+  } catch (err) {
+    // A folder holding only a bootstrap key on a hosted team can read nothing before it claims: the
+    // anonymous read is refused and the key itself is refused on routine calls. The read only feeds
+    // the "already live here" shortcut and the clobber guard, and the claim itself still runs the
+    // server's checks — so an unauthorized read with no credential to offer is an empty roster, not a
+    // refusal to claim (cloud-agent canary 2026-10-20: `musterd claim` from a provisioned seat's own
+    // workspace died in this preflight with "missing bearer token").
+    if (!(readKey === undefined && err instanceof CliError && err.code === 'unauthorized'))
+      throw err;
+    members = [];
+  }
   const workspace = resolveWorkspace();
 
   // Consolidated self-service (ADR 087): a bare `musterd claim` (no seat/role given) in a folder whose
