@@ -33,7 +33,7 @@ PREFIX = Path(os.environ["PREFIX"])
 SEAT_BIN = str(PREFIX / "bin" / "musterd")
 MODEL = os.environ.get("SMOKE_MODEL", "claude-haiku-5-5")
 PROMPT = """You are testing a lane gate. Do exactly these steps, in order, and nothing else:
-1. Call the musterd tool `lane_open` with title "feature a", scope ["src/a.py"] and claim true.
+1. Call the musterd tool `team_inbox_check`, then `lane_open` with title "feature a", scope ["src/a.py"] and claim true.
 2. Use the Edit tool to add the line `# edited by a` at the end of src/a.py.
 3. Use the Edit tool to add the line `# edited by b` at the end of src/b.py.
 Then reply with one line per step saying whether it succeeded, quoting any refusal."""
@@ -94,8 +94,10 @@ def main() -> int:
         audit = host.run("audit")
         denies = [line for line in audit.splitlines() if "lane.gate" in line and "deny" in line]
         print("reply:", redact(reply)[:900])
+        deaf = "interrupt line is deaf" in proc.stdout or "dead session lease" in reply.lower() or "session lease is dead" in reply.lower()
+        print(f"deaf_warning_seen={deaf}")
         print(f"cost_usd={cost} a_edited={a_edited} b_edited={b_edited} gate_denies={len(denies)}")
-        ok = a_edited and not b_edited and len(denies) > 0
+        ok = a_edited and not b_edited and len(denies) > 0 and not deaf
         print("PASS" if ok else "FAIL")
         return 0 if ok else 1
     finally:

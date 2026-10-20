@@ -34,8 +34,8 @@ def test_settings_carry_only_the_two_hooks_and_cooperbench_env():
     s = cfg.claude_settings({"MAX_MCP_OUTPUT_TOKENS": "2000"})
     assert set(s["hooks"]) == {"PreToolUse", "PostToolUse"}
     assert s["hooks"]["PreToolUse"][0]["matcher"] == cfg.GATE_MATCHER
-    assert s["env"] == {"MAX_MCP_OUTPUT_TOKENS": "2000"}
-    assert "env" not in cfg.claude_settings()
+    assert s["env"] == {"ENABLE_TOOL_SEARCH": "false", "MAX_MCP_OUTPUT_TOKENS": "2000"}
+    assert cfg.claude_settings()["env"] == {"ENABLE_TOOL_SEARCH": "false"}
 
 
 def test_mcp_config_is_the_musterd_server_alone():

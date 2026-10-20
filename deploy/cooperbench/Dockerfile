@@ -47,4 +47,14 @@ ENV PATH=/opt/cb-venv/bin:$PATH \
     MUSTERD_PACK_DIR=/opt/musterd-pack \
     MUSTERD_BIN=musterd
 
+# `fly ssh console` starts a login shell that doesn't inherit the ENV above; give it the same.
+RUN printf '%s\n' \
+      'export PATH=/opt/cb-venv/bin:$PATH' \
+      'export PYTHONPATH=/app/scripts/research/cooperbench' \
+      'export COOPERBENCH_EXTERNAL_AGENTS=musterd_cooperbench.adapter' \
+      'export MUSTERD_PACK_DIR=/opt/musterd-pack' \
+      'export MUSTERD_BIN=musterd' \
+      'export IS_SANDBOX=1' \
+    > /etc/profile.d/cooperbench.sh
+
 ENTRYPOINT ["bash", "/app/deploy/cooperbench/entrypoint.sh"]
