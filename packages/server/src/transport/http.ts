@@ -3136,7 +3136,8 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/members') {
-        const body = parseOrBadRequest(AddMemberBody, await readJson(req));
+        const rawMember = (await readJson(req)) as { approval?: unknown };
+        const body = parseOrBadRequest(AddMemberBody, rawMember);
         const provisioningTeam = await requireTeam(ctx.db, slug);
         const roots = body.observer
           ? []
@@ -3151,6 +3152,27 @@ export async function handleHttp(
           humanAdminRequired:
             body.observer === true || targetKind === 'human' || projectionRequiresHumanAdmin,
         });
+        // ADR 662: a roster change is a listed act. When the caller is an identifiable
+        // human, their enrolled key must sign for it — a Bearer an agent can read mints
+        // no new human (HA1 re-review). The local-trust provisioning shortcut carries
+        // no human presenter and stays as ADR 134/648 left it.
+        const rosterCaller = await tryAuth(ctx, slug, req);
+        if (rosterCaller && rosterCaller.kind === 'human') {
+          await guardAuthority(
+            ctx,
+            provisioningTeam,
+            rosterCaller,
+            'admin.roster',
+            body.name,
+            {
+              name: body.name,
+              kind: targetKind,
+              role: body.role ?? null,
+              observer: body.observer ?? false,
+            },
+            rawMember.approval,
+          );
+        }
         // ADR 058 project-and-return: for a *file-backed* team the file is the single writer — the CLI
         // has already written `seats/<name>.toml`; the daemon reconciles it and hands back the token,
         // never originating the seat. A *db-only* team (no roster root declares it) keeps the legacy
@@ -4004,6 +4026,17 @@ export async function handleHttp(
       // admin of a live team can always reach this; a second call 404s on auth ("team is archived").
       if (method === 'POST' && rest === '/archive') {
         const { team, member } = await authAdmin(ctx, slug, req);
+        const rawArchive = (await readJson(req)) as { approval?: unknown };
+        // ADR 662: archiving is a team-settings change — a listed act.
+        await guardAuthority(
+          ctx,
+          team,
+          member,
+          'admin.team_settings',
+          slug,
+          { action: 'archive' },
+          rawArchive.approval,
+        );
         const { archived_at } = await archiveTeam(ctx.db, slug);
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -4016,6 +4049,17 @@ export async function handleHttp(
 
       if (method === 'POST' && rest === '/agent-key/rotate') {
         const { team, member } = await authAdmin(ctx, slug, req);
+        const rawRotate = (await readJson(req)) as { approval?: unknown };
+        // ADR 662: rotating the team agent key mints a credential — a listed act.
+        await guardAuthority(
+          ctx,
+          team,
+          member,
+          'credential_mint',
+          slug,
+          { action: 'agent_key_rotate' },
+          rawRotate.approval,
+        );
         const mint = await rotateAgentKey(ctx.db, team.id);
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -4032,6 +4076,7 @@ export async function handleHttp(
           target: z.string().min(1).max(120),
           label: z.string().min(1).max(120).optional(),
           expires_at: z.number().int().positive().optional(),
+          approval: ApprovalProofSchema.optional(),
         })
         .strict()
         .refine((body) => body.expires_at === undefined || body.expires_at > Date.now(), {
@@ -4054,7 +4099,8 @@ export async function handleHttp(
       });
 
       if (method === 'POST' && rest === '/agent-bootstrap-credentials') {
-        const body = parseOrBadRequest(BootstrapCredentialBody, await readJson(req));
+        const rawBootstrap = (await readJson(req)) as { approval?: unknown };
+        const body = parseOrBadRequest(BootstrapCredentialBody, rawBootstrap);
         // ADR 463 §1: a sponsor may mint a `claim_seat` credential for an agent they sponsor.
         // …and a `host` key, which the wake/doorbell routes then scope to that sponsor's seats.
         // ADR 648: a sponsor host key may mint the `claim_seat` credential (never a host key).
@@ -4084,6 +4130,19 @@ export async function handleHttp(
           ))
         ) {
           throw new MusterdError('not_found', `no role "${body.target}" in team "${slug}"`);
+        }
+        // ADR 662: minting a bootstrap credential or a host key is a listed act. The
+        // host-key provisioning path (ADR 648 decision 1) is agent-kind and stays off it.
+        if (!viaHostKey) {
+          await guardAuthority(
+            ctx,
+            team,
+            member,
+            'credential_mint',
+            body.target,
+            { action: 'bootstrap_mint', use: body.use, target: body.target },
+            rawBootstrap.approval,
+          );
         }
         const minted = await mintBootstrapCredential(ctx.db, {
           teamId: team.id,
@@ -4206,11 +4265,27 @@ export async function handleHttp(
       const ceilingMatch = method === 'POST' ? rest.match(/^\/members\/([^/]+)\/ceiling$/) : null;
       if (ceilingMatch) {
         const { team, member: admin } = await authAdmin(ctx, slug, req);
+        const rawCeiling = (await readJson(req)) as { approval?: unknown };
         const body = parseOrBadRequest(
-          z.object({ ceiling: MemberCeilingSchema.nullable() }).strict(),
-          await readJson(req),
+          z
+            .object({
+              ceiling: MemberCeilingSchema.nullable(),
+              approval: ApprovalProofSchema.optional(),
+            })
+            .strict(),
+          rawCeiling,
         );
         const name = decodeURIComponent(ceilingMatch[1]!);
+        // ADR 662: setting a member's ceiling is a roster change — a listed act.
+        await guardAuthority(
+          ctx,
+          team,
+          admin,
+          'admin.roster',
+          name,
+          { action: 'ceiling', name, ceiling: body.ceiling },
+          rawCeiling.approval,
+        );
         const target = await getMemberByName(ctx.db, team.id, name);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${name}" on team "${slug}"`);
@@ -10385,7 +10460,18 @@ export async function handleHttp(
       if (method === 'POST' && credentialRotateMatch) {
         const team = await requireTeam(ctx.db, slug);
         const { member: actor } = await authAdmin(ctx, slug, req);
+        const rawCredRotate = (await readJson(req)) as { approval?: unknown };
         const targetName = decodeURIComponent(credentialRotateMatch[1]!);
+        // ADR 662: rotating a human credential mints a credential — a listed act.
+        await guardAuthority(
+          ctx,
+          team,
+          actor,
+          'credential_mint',
+          targetName,
+          { action: 'credential_rotate', name: targetName },
+          rawCredRotate.approval,
+        );
         const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null) {
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
@@ -10521,7 +10607,20 @@ export async function handleHttp(
       const removeMatch = rest.match(/^\/members\/([^/]+)\/remove$/);
       if (method === 'POST' && removeMatch) {
         const { team, member: caller, viaFallback } = await authGovernance(ctx, slug, req);
+        const rawRemove = (await readJson(req)) as { approval?: unknown };
         const targetName = decodeURIComponent(removeMatch[1]!);
+        // ADR 662: member removal is a roster change — a listed act.
+        if (caller.kind === 'human') {
+          await guardAuthority(
+            ctx,
+            team,
+            caller,
+            'admin.roster',
+            targetName,
+            { action: 'remove', name: targetName },
+            rawRemove.approval,
+          );
+        }
         const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
