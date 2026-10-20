@@ -2,17 +2,17 @@
   "version": 1,
   "camera": {
     "kx": 0.70710678,
-    "ky": 0.35355339
+    "ky": 0.31
   },
   "assets": [
     {
       "id": "desk/base",
       "file": "office-art-desk-base.png",
       "w": 360,
-      "h": 298,
+      "h": 274,
       "anchor": {
         "x": 180.0,
-        "y": 203.0
+        "y": 192.0
       },
       "scale": 3.0
     },
@@ -20,10 +20,10 @@
       "id": "desk/base-ew",
       "file": "office-art-desk-base-ew.png",
       "w": 360,
-      "h": 298,
+      "h": 274,
       "anchor": {
         "x": 180.0,
-        "y": 203.0
+        "y": 192.0
       },
       "scale": 3.0
     }

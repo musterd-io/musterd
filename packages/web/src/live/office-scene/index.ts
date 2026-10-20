@@ -40,7 +40,7 @@ import {
   stepPet,
 } from './pet';
 import { createReceptionist, receptionistCue, stepReceptionist } from './receptionist';
-import { fitBox, project, ROOM_BOX, type Fit, type Pt } from './iso';
+import { CORNER_CAMERA, fitBox, project, roomBox, type Camera, type Fit, type Pt } from './iso';
 import {
   CHAIR_OFF,
   COFFEE_STAND,
@@ -93,7 +93,7 @@ import {
   type UnitHook,
 } from './damage';
 import { loadRenderedAssets, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
-import { parseManifest } from './rendered/manifest';
+import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
 import { createLaneOwners } from './laneOwners';
@@ -409,7 +409,11 @@ export function mountOffice(
      never saw the images). A manifest that is not there — a checkout before the art landed — logs
      once and leaves the room painted. */
   let rendered: RenderedAssets | undefined;
-  if (typeof window !== 'undefined' && renderedOfficeFromSearch(window.location.search)) {
+  const renderedFlag = typeof window !== 'undefined' && renderedOfficeFromSearch(window.location.search);
+  /* The rendered room is drawn from the corner camera (spec §2.2, plan Task 5); the painted room
+     keeps the iso it was drawn at. The camera rides on the fit, so every `project()` follows. */
+  const cam: Camera | undefined = renderedFlag ? CORNER_CAMERA : undefined;
+  if (renderedFlag) {
     const files = import.meta.glob('./rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<
       string,
       string
@@ -420,9 +424,15 @@ export function mountOffice(
     } else {
       void fetch(manifestUrl)
         .then((r) => r.json())
-        .then((json: unknown) =>
-          loadRenderedAssets(parseManifest(json), (file) => files[`./rendered/assets/${file}`] ?? file),
-        )
+        .then((json: unknown) => {
+          const manifest = parseManifest(json);
+          if (!cameraMatches(manifest, CORNER_CAMERA)) {
+            throw new Error(
+              `rendered at camera (${manifest.camera.kx}, ${manifest.camera.ky}), scene projects through (${CORNER_CAMERA.kx}, ${CORNER_CAMERA.ky}) — re-render with --ky ${CORNER_CAMERA.ky}`,
+            );
+          }
+          return loadRenderedAssets(manifest, (file) => files[`./rendered/assets/${file}`] ?? file);
+        })
         .then((r) => {
           if (disposed) return;
           if (r.missing.length) console.warn(`office: ${r.missing.length} rendered asset(s) failed to load: ${r.missing.join(', ')}`);
@@ -550,9 +560,9 @@ export function mountOffice(
   let height = Math.max(1, host.clientHeight);
   // The furnished box carries its own breathing room (FURNISHED_PAD, TOP_TRIM), so it fits flush;
   // the whole-room box keeps the 0.96 margin it has always had.
-  const fitTo = options.fit === 'furnished' ? furnishedBox() : ROOM_BOX;
+  const fitTo = options.fit === 'furnished' ? furnishedBox(cam) : roomBox(cam);
   const fitMargin = options.fit === 'furnished' ? 1 : 0.96;
-  let fit: Fit = fitBox(width, height, fitTo, fitMargin);
+  let fit: Fit = fitBox(width, height, fitTo, fitMargin, cam);
 
   const actors: Actors = createActors();
   /** The office dog (pet.ts): asleep in the baked frame; stirred by the ambient scheduler below. */
@@ -861,7 +871,7 @@ export function mountOffice(
     // consumer's stylesheet; `/live`'s `!important` rules still win over these, so nothing moves there.
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    fit = fitBox(width, height, fitTo, fitMargin);
+    fit = fitBox(width, height, fitTo, fitMargin, cam);
     // Every sprite key carries the fit, so a resize only strands the old rasters — drop them.
     sprites?.clear();
     // A new canvas is a new pixel grid: the next frame paints whole, measured from scratch.

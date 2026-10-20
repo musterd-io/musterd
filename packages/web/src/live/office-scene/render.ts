@@ -2,7 +2,7 @@ import { canvasFont } from '../canvasFont';
 import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { drawCharacter } from './character';
-import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type FitBox, type Pt } from './iso';
+import { cameraOf, depth, FLOOR, ISO_CAMERA, project, THICK, WALL_H, type Camera, type Fit, type FitBox, type Pt } from './iso';
 import type { SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
@@ -253,8 +253,9 @@ export function contactPool(
   const cy = c.y - baseUp * fit.scale;
   // The penumbra spills a little past the footprint, and the pool is offset a touch toward the
   // viewer — the room's light comes from the windows behind, so shade falls to the front.
-  const rx = span * KX * fit.scale * 0.78;
-  const ry = span * KY * fit.scale * 0.92;
+  const cam = cameraOf(fit);
+  const rx = span * cam.kx * fit.scale * 0.78;
+  const ry = span * cam.ky * fit.scale * 0.92;
   ctx.save();
   ctx.translate(c.x, cy + ry * 0.18);
   ctx.scale(1, ry / rx);
@@ -349,8 +350,9 @@ function drawGroundShadow(ctx: CanvasRenderingContext2D, fit: Fit): void {
   const front = project(FLOOR, FLOOR, fit);
   const cx = fit.ox;
   const cy = (back.y + front.y) / 2 + THICK * fit.scale * 0.9; // pooled toward the slab's front base
-  const rx = FLOOR * KX * fit.scale * 1.08;
-  const ry = FLOOR * KY * fit.scale * 1.24;
+  const cam = cameraOf(fit);
+  const rx = FLOOR * cam.kx * fit.scale * 1.08;
+  const ry = FLOOR * cam.ky * fit.scale * 1.24;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(1, ry / rx); // draw a circle, squash it to the iso ellipse
@@ -1086,7 +1088,8 @@ function wallText(
   const o = wallPt(edge, t, u, fit);
   ctx.save();
   ctx.translate(o.x, o.y);
-  ctx.transform(KX * fit.scale, KY * fit.scale, 0, fit.scale, 0, 0);
+  const cam = cameraOf(fit);
+  ctx.transform(cam.kx * fit.scale, cam.ky * fit.scale, 0, fit.scale, 0, 0);
   ctx.font = canvasFont(size, '--font-mono', 700);
   ctx.fillStyle = fill;
   ctx.textAlign = align;
@@ -1452,8 +1455,8 @@ function magicRnd(n: number): number {
  */
 const FURNISHED_PAD = 6;
 const TOP_TRIM = 24;
-export function furnishedBox(): FitBox {
-  const unit: Fit = { ox: 0, oy: 0, scale: 1 };
+export function furnishedBox(cam: Camera = ISO_CAMERA): FitBox {
+  const unit: Fit = { ox: 0, oy: 0, scale: 1, cam };
   const doorPlane = ENTRANCE.lx - 42; // drawEntrance's `wx`
   const doorOuter = project(doorPlane, ENTRANCE.ly + 44 + 5, unit); // the outer post, half its 10 out
   const board = boardAnchor(unit);
@@ -1461,7 +1464,7 @@ export function furnishedBox(): FitBox {
     left: doorOuter.x - FURNISHED_PAD,
     right: board.x + board.w + FURNISHED_PAD,
     top: -WALL_H + TOP_TRIM,
-    bottom: FLOOR * KY * 2 + THICK,
+    bottom: FLOOR * cam.ky * 2 + THICK,
   };
 }
 

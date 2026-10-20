@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assetById, parseManifest } from './manifest';
+import { assetById, cameraMatches, parseManifest } from './manifest';
 
 const desk = {
   id: 'desk/base',
@@ -40,5 +40,18 @@ describe('assetById', () => {
     const m = parseManifest(good);
     expect(assetById(m, 'desk/base')).toEqual(desk);
     expect(assetById(m, 'desk/lamp-on')).toBeUndefined();
+  });
+});
+
+describe('cameraMatches', () => {
+  it('accepts the camera it was rendered at, within rounding', () => {
+    const m = parseManifest(good);
+    expect(cameraMatches(m, { kx: 0.70710678, ky: 0.35355339 })).toBe(true);
+    expect(cameraMatches(m, { kx: 0.7071, ky: 0.35355 })).toBe(true);
+  });
+
+  it('refuses a different elevation — the corner camera over an isometric render', () => {
+    const m = parseManifest(good);
+    expect(cameraMatches(m, { kx: 0.70710678, ky: 0.31 })).toBe(false);
   });
 });
