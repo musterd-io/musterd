@@ -52,6 +52,8 @@ function printJson(value: unknown): number {
   return 0;
 }
 
+/** Build the server's descriptor, send the human to approve it with their passkey, and wait for the
+ * parked proof (ADR 662). Exported for any command whose act the daemon refuses unsigned. */
 export async function collectApproval(
   http: Http,
   team: string,
