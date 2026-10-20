@@ -297,6 +297,8 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
           // own, or the provisioned `agent/<seat>` when the checkout is detached or unreadable
           // (round 3: never unbound).
           branch: currentBranch(spec.workspace) ?? `agent/${spec.order.seat}`,
+          // Round 4: the live checkout, read when a bare or HEAD push is judged.
+          currentBranch: () => currentBranch(spec.workspace),
         },
       };
       const runTools: EngineTool[] = working
