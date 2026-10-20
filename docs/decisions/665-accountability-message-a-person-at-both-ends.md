@@ -193,6 +193,13 @@ Follows-up: a lane per row above, opened when this ADR is accepted; the deck and
   the SecurityHQ figures and the 24,768-act count, each with its read date.
 - landscape.md cites "When More Is Less" as arXiv 2609.19759; that identifier did not resolve on
   2026-10-19. It is not quoted until found.
+  _(2026-10-19, later: found. It is "Rethinking Multi-Agent Collaboration: When More Is Less",
+  arXiv 2609.19759 v2, 2026-09-18; landscape.md §14b now cites it in full, lane
+  `01M5AWZWGPEN3TF2TQH306BF9J`.)_
+- **2026-10-19, §4 row 5 landed** (lane `01M5AWZWGPEN3TF2TQH306BF9J`, alfie at nick's direction).
+  landscape.md §15 carries the Linear quote and the SecurityHQ/Datadog figures as dated entries
+  with `as_of`, `source_url` and `review_by` (2027-01-17 and 2026-12-18). The survey coverage read
+  that day is dated 2026-10-16, a day after this ADR's 2026-10-15; §15b says to quote the month.
 - **2026-10-19, §4 rows 3 and 4 landed** (lane `01M5AWZ95YKDHBM4BJ14CDXAG2`, miley at nick's
   direction). The DayInTheLife Claim, Ready for review and Review captions carry §2's three lines,
   phrased as what the reader gets before how and without §2's numbers (a caption is not re-read
