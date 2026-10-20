@@ -121,7 +121,7 @@ OAK = srgb("#a97a46")        # the painters' PAL.wood lit; the render carries it
 OAK_DARK = srgb("#6b4826")
 FLOOR_TILE = srgb("#ebae64")  # DARK_PALETTE.floor
 FLOOR_SIDE = srgb("#c8863c")  # DARK_PALETTE.floor2
-WALL = srgb("#b8aac2")        # pale lilac-grey plaster: nick 2026-10-20, "still a tiny bit too dark" at #9a8aa6 (first cut #5a4a64)
+WALL = srgb("#d6cbbc")        # warm greige plaster: nick 2026-10-20, the lilac "looks purpleish"; a neutral that takes the warm key
 APPLIANCE = srgb("#d8d2c6")
 COUCH = srgb("#e3a72b")       # DARK_PALETTE.couch
 
