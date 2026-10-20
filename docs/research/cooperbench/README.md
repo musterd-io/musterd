@@ -89,7 +89,7 @@ In each container (`adapter.py`):
 One-time, from the repo root, by a human with flyctl logged in:
 
 ```bash
-deploy/cooperbench/create.sh --org <fly-org>   # app, 50 GB volume, key (asked for with no echo), deploy
+deploy/cooperbench/create.sh --org <fly-org>   # app, 50 GB volume, key (asked for with no echo), deploy (one machine)
 ```
 
 To rotate the key later, run `deploy/cooperbench/set-key.sh`.
