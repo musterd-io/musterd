@@ -176,6 +176,23 @@ All four converged on one shape, and nick directed it be written as this ADR.
   itself; once a key stands, enrolling or revoking requires a standing key's
   `device_key_admin` signature, the challenge path being reserved for zero active keys.
   Lazara's attack is a transport falsifier (`authority-lifecycle-http.test.ts`).)_
+- _(2026-10-20: HA2 second re-review (lazara, declined #2985) proved the zero-key
+  ceremony fabricable in plain Node — no attestation is checked, and the UV flag is a
+  byte the caller sets — so the ceremony alone is no anchor once a team has keys.
+  Observed 2026-10-20: lazara's uncommitted throwaway test enrolled a key with a
+  self-generated COSE key (UP|UV|AT, fmt `none`) and then signed `admin.team_policy`
+  to a 200; the same fabrication is now a committed falsifier
+  (`authority.passkey.test.ts`: fabricated registration, no countersign →
+  `countersign_required`; an admin's countersign → enrolled). What would overturn
+  the countersign rule: the server verifying attestation (or an equivalent
+  hardware-bound proof) such that that fabricated registration fails
+  `verifyRegistration` — then the ceremony could anchor zero-key enrollment again
+  and the countersign is ceremony, not anchor. Nick's call, same day: while the
+  team has NO device key at all, the genesis ceremony stands alone; past genesis, a
+  zero-active-key member (first enrollment or lost-everything recovery) needs a
+  countersign — a different human admin of the team with a standing key, signing
+  `device_key_admin` over the enrollment. No enrolled admin peer, no recovery:
+  fail closed, stated at enrollment time.)_
 - _(2026-10-20: HA3 re-review (lazara, declined #2968) closed the two authenticator
   gaps. The CLI's file-stored software key is gone (with HA2's passkey-first CLI);
   a software key may still be recorded under the honest kind `software`, and

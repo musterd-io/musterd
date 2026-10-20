@@ -641,11 +641,16 @@ export async function getParkedProof(
 /**
  * Enroll a passkey (decision 6, passkey-first). The registration ceremony's challenge
  * is the server-minted enrollment challenge, so the challenge's one use and the
- * credential's birth are the same event. With zero active keys this IS the explicit
- * human path — first enrollment and lost-everything recovery: the ceremony requires
- * user verification, which a Bearer-holding agent process cannot produce. Once a key
- * stands, a further passkey additionally needs a standing key's `device_key_admin`
- * signature over `{action:'enroll', kind:'passkey'}`.
+ * credential's birth are the same event.
+ *
+ * The zero-key anchor (nick, 2026-10-20): with no attestation checked, a fabricated
+ * authenticator can complete a ceremony, so the ceremony alone anchors nothing once
+ * the team has keys. While the TEAM has no device key at all, the genesis ceremony
+ * stands alone — that window exists only at team birth. After that, a member with
+ * zero active keys (first enrollment, or lost-everything recovery) needs a countersign:
+ * a DIFFERENT human admin of the team, with a standing key, signing `device_key_admin`
+ * over `{action:'enroll', kind:'passkey', member}`. No countersigner, no recovery —
+ * fail closed. Once the member has a standing key, a further passkey needs their own.
  */
 export async function enrollPasskeyGuarded(
   db: Driver,
@@ -656,6 +661,14 @@ export async function enrollPasskeyGuarded(
     challenge: string;
     registration: { attestationObject: Uint8Array; clientDataJson: string };
     proof?: ApprovalProof | undefined;
+    /** Another human admin's standing-key signature, for the zero-active-key path. */
+    countersign?:
+      | {
+          confirmer: { id: string; name: string; kind: string };
+          isAdmin: boolean;
+          proof?: ApprovalProof | undefined;
+        }
+      | undefined;
     /** ADR 662 dec. 5: the ceremony must be on one of these origins (the daemon's own). */
     expectedOrigins?: readonly string[] | undefined;
     now?: number;
@@ -690,6 +703,37 @@ export async function enrollPasskeyGuarded(
       now,
     });
     if (!check.ok) return { ok: false, reason: check.reason };
+  } else {
+    // Zero active keys for this member: genesis (team has no key at all) stands
+    // alone; otherwise another human admin's standing key must countersign.
+    const anyTeamKey = await db.get<{ id: string }>(
+      `SELECT id FROM device_keys WHERE team_id = ? LIMIT 1`,
+      [input.teamId],
+    );
+    if (anyTeamKey) {
+      const cs = input.countersign;
+      if (
+        !cs ||
+        cs.confirmer.kind !== 'human' ||
+        !cs.isAdmin ||
+        cs.confirmer.id === input.member.id
+      ) {
+        return { ok: false, reason: 'countersign_required' };
+      }
+      const check = await requireAuthority(db, {
+        teamId: input.teamId,
+        audience: input.audience,
+        presenter: cs.confirmer,
+        credential: 'human',
+        act: 'device_key_admin',
+        target: input.member.name,
+        payload: { action: 'enroll', kind: 'passkey', member: input.member.name },
+        proof: cs.proof,
+        expectedOrigins: input.expectedOrigins,
+        now,
+      });
+      if (!check.ok) return { ok: false, reason: check.reason };
+    }
   }
   const spent = await consumeEnrollmentChallenge(db, {
     teamId: input.teamId,

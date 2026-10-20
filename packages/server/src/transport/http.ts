@@ -1298,6 +1298,8 @@ const PasskeyEnrollBody = z.object({
   actor: z.string().min(1),
   challenge: z.string().min(16),
   approval: ApprovalProofSchema.optional(),
+  /** Zero-active-key path past genesis: another human admin's standing-key signature. */
+  countersign: z.object({ confirmer: z.string().min(1), approval: ApprovalProofSchema }).optional(),
   registration: z.object({
     attestation_object: z.string().min(1),
     client_data_json: z.string().min(1),
@@ -4741,12 +4743,24 @@ export async function handleHttp(
         if (!member || member.left_at !== null) {
           throw new MusterdError('validation', `no member "${body.actor}" on ${slug}`);
         }
+        const confirmerRow = body.countersign
+          ? await getMemberByName(ctx.db, team.id, body.countersign.confirmer)
+          : null;
         const result = await enrollPasskeyGuarded(ctx.db, {
           teamId: team.id,
           audience: team.slug,
           member,
           challenge: body.challenge,
           proof: body.approval,
+          countersign:
+            body.countersign && confirmerRow
+              ? {
+                  confirmer: confirmerRow,
+                  isAdmin:
+                    confirmerRow.kind === 'human' && resolveCapabilities(confirmerRow).is_admin,
+                  proof: body.countersign.approval,
+                }
+              : undefined,
           expectedOrigins: webauthnExpectedOrigins(ctx, req),
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),

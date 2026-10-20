@@ -97,6 +97,20 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     vi.restoreAllMocks();
   });
 
+  it('enroll --confirmed-by collects the admin countersign into the ceremony link', async () => {
+    h.listDeviceKeys.mockResolvedValueOnce({ keys: [] }).mockResolvedValue({
+      keys: [{ id: 'key-7', kind: 'passkey', created_at: 2, revoked_at: null }],
+    });
+    const out = captureStdout();
+    expect(await authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root' }))).toBe(0);
+    expect(h.createAuthorityDescriptor).toHaveBeenCalledWith(
+      'revive',
+      expect.objectContaining({ act: 'device_key_admin', target: 'nick', actor: 'root' }),
+    );
+    expect(out.join('')).toContain('#countersign=');
+    vi.restoreAllMocks();
+  });
+
   it('keys lists the daemon keys', async () => {
     h.keys = [{ id: 'key-1', kind: 'platform', created_at: 1, revoked_at: null }];
     h.listDeviceKeys.mockResolvedValue({ keys: h.keys });

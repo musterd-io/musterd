@@ -45,6 +45,8 @@ document.getElementById('go').addEventListener('click', async () => {
   const frag = new URLSearchParams(location.hash.slice(1));
   let approval;
   try { approval = frag.get('approval') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('approval')))) : undefined; } catch { approval = undefined; }
+  let countersign;
+  try { countersign = frag.get('countersign') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('countersign')))) : undefined; } catch { countersign = undefined; }
   try {
     out('Waiting for your passkey…');
     const cred = await navigator.credentials.create({ publicKey: {
@@ -57,7 +59,7 @@ document.getElementById('go').addEventListener('click', async () => {
     }});
     const res = await fetch('/teams/' + encodeURIComponent(team) + '/authority/passkeys', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), registration: {
+      body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), ...(countersign ? { countersign } : {}), registration: {
         attestation_object: b64u(cred.response.attestationObject),
         client_data_json: new TextDecoder().decode(cred.response.clientDataJSON),
       }}),
