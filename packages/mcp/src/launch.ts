@@ -11,8 +11,8 @@
 import nodeModule from 'node:module';
 
 nodeModule.enableCompileCache?.();
-const { runAdapter } = await import('./index.js');
+const { runAdapter, isMainModule } = await import('./index.js');
 // Run only when launched, as index.ts did before this file existed: `scripts/mcp/bench.mjs` imports
-// the bin to time module load, and an import must not start a server on the importer's stdio.
-const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
-if (isMain) runAdapter();
+// the bin to time module load, and an import must not start a server on the importer's stdio. The
+// check resolves symlinks, so a package-manager bin (npm i -g, npx) still counts as launched.
+if (isMainModule(import.meta.url)) runAdapter();
