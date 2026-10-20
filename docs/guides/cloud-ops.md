@@ -139,8 +139,35 @@ printf 'MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID=%s\nMUSTERD_CONSOLE_EMAIL_API_TOKEN=%s\
 ```
 
 Done when `curl -s https://app.musterd.io/health` answers `{"ok":true,"build":"<sha>"}` and
-`/.well-known/jwks.json` answers `{"keys":[]}`. Backups: Neon point-in-time restore until the
-increment 3 backup lane (`01M3Z42KWH`) covers this database too.
+`/.well-known/jwks.json` answers `{"keys":[]}`.
+
+## Nightly encrypted R2 backups (`scripts/cloud/backup.mjs`, ADR 679)
+
+`scripts/cloud/backup.mjs` exports each active team's coordination tables (`teams/<slug>/coordination/<YYYY-MM-DD>.json.gz.enc`, kept 30 days) and captured-content trace rows (`teams/<slug>/trace/<YYYY-MM-DD>.json.gz.enc`, kept 7 days per spec §4.8), plus the console database (`console/<YYYY-MM-DD>.json.gz.enc`, kept 30 days, omitting `sessions`, `auth_transactions`, and `rate_limits` per ADR 615 decision 9), compresses with gzip, encrypts client-side with AES-256-GCM (AAD bound to the object path), uploads to Cloudflare R2 (`musterd-cloud-backups`) over AWS SigV4, and prunes expired objects on each run.
+
+1. Generate the 32-byte encryption key once (held outside both Neon and R2, mode 600):
+
+```sh
+node scripts/cloud/backup.mjs --keygen   # writes ~/.musterd/cloud/backup.key (0600)
+```
+
+2. Create the bucket in the Cloudflare account and a bucket-scoped R2 API token (`Object Read & Write` on `musterd-cloud-backups` only):
+
+```sh
+npx wrangler r2 bucket create musterd-cloud-backups
+```
+
+3. Run a dry-run or live backup pass (reads `~/.musterd/cloud/neon.env` automatically when `MUSTERD_DATABASE_OWNER_URL` is not in the environment):
+
+```sh
+node scripts/cloud/backup.mjs --dry-run
+node scripts/cloud/backup.mjs --wrangler   # uploads via wrangler R2 auth
+node scripts/cloud/backup.mjs              # uploads via S3 SigV4 (MUSTERD_BACKUP_R2_*)
+```
+
+Required env for S3 SigV4 upload: `MUSTERD_DATABASE_OWNER_URL` (or `_OPERATOR_URL`, or `~/.musterd/cloud/neon.env`), `MUSTERD_TRACE_DATABASE_OWNER_URL` (or derived `<db>_trace`), `MUSTERD_BACKUP_R2_ACCOUNT_ID`, `MUSTERD_BACKUP_R2_ACCESS_KEY_ID`, `MUSTERD_BACKUP_R2_SECRET_ACCESS_KEY` (and optional `MUSTERD_BACKUP_R2_BUCKET`, `MUSTERD_CONSOLE_DATABASE_OWNER_URL`, `MUSTERD_BACKUP_PG_DUMP=1`).
+
+**Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `node scripts/cloud/backup.mjs --wrangler` exported, gzipped, AES-256-GCM encrypted, and uploaded `teams/revive/coordination/2026-10-20.json.gz.enc` (1,907 B, 54 team-owned tables) and `teams/revive/trace/2026-10-20.json.gz.enc` (177 B), and round-trip `decryptDump` verified the downloaded R2 object.
 
 ## Check it
 

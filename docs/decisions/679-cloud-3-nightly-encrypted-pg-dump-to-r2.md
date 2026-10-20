@@ -24,9 +24,10 @@ musterd Cloud stores team state in Neon Postgres. Losing the Neon account loses 
 - A Neon account loss no longer loses data: R2 holds 30 days of coordination dumps in a separate account.
 - The encryption key is the single point of failure for recovery; it lives outside both Neon and R2, in `~/.musterd/cloud/backup.key` (mode 600), and is backed up by the operator.
 - Retention is enforced by the script on each run; R2 lifecycle rules are a backup, not the primary mechanism.
+- _(2026-10-20, lane `01M3Z42KWHFJJPKJRBH2FX5GMD`, nick's direction: the R2 bucket `musterd-cloud-backups` lives in the existing Cloudflare account behind a bucket-scoped R2 token rather than a second Cloudflare account; every object is gzipped and AES-256-GCM encrypted client-side with AAD bound to the object path (`teams/<slug>/coordination/<date>.json.gz.enc` kept 30d, `teams/<slug>/trace/<date>.json.gz.enc` kept 7d, `console/<date>.json.gz.enc` kept 30d without sessions/auth_transactions/rate_limits), plus optional full `pg_dump` archives under `pg_dump/` when `MUSTERD_BACKUP_PG_DUMP=1`.)_
 
 ## Observability & Evaluation
 
-- **Traces:** `backup.started`, `backup.completed`, `backup.failed` audit rows per team per night, with `{ size_bytes, duration_ms, retention_pruned }`.
-- **Eval:** `scripts/cloud/backup.mjs` runs end to end against a staging Neon branch and R2 bucket; the restore drill records a dated result in `docs/perf/` (or `docs/guides/cloud-ops.md`).
-- **Experiment:** Falsify: a night's dumps for every team land in R2, encrypted, and expire on schedule; a restore onto a fresh database passes the suite.
+- **Traces:** `cloud_backup_completed` structured log line per run with `{ date, teams, uploaded, total_bytes, pruned }`.
+- **Eval:** `packages/server/src/cloud/backup.test.ts` exercises `scripts/cloud/backup.mjs` end-to-end against PGlite + a local SigV4 R2 server (AES-256-GCM + AAD encryption, 30d/7d retention pruning, and `restoreSnapshot` onto a fresh database).
+- **Experiment:** Falsify: `pnpm -C packages/server exec vitest run src/cloud/backup.test.ts` fails, or an uploaded object in R2 decodes without the key or survives past its 30d/7d retention window.

@@ -450,7 +450,10 @@ booting race) and stop-the-world (every change is downtime for every team).
 ## 7. Backups, outages, and health
 
 - **Backups outside the vendor.** Neon PITR is the first line. Independently, a nightly
-  encrypted `pg_dump` per team goes to Cloudflare R2 in a **separate account**, kept 30 days for
+  encrypted `pg_dump` per team goes to Cloudflare R2 in a **separate account** *(amended 2026-10-20,
+  nick, lane `01M3Z42KWHFJJPKJRBH2FX5GMD`: a dedicated `musterd-cloud-backups` R2 bucket in the
+  existing Cloudflare account with a bucket-scoped R2 token and client-side AES-256-GCM encryption
+  in `scripts/cloud/backup.mjs`)*, kept 30 days for
   the coordination database and **7 days for the captured-content database** (§4.8); once a
   month the newest dump is restored onto a fresh database, the suite runs against it, and the
   result is recorded. The first drill is increment 3's; the monthly cadence is increment 6's.
