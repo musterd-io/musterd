@@ -8,6 +8,10 @@
 FROM node:22-bookworm
 
 ARG COOPERBENCH_COMMIT=63b9d44
+# The musterd commit this image was built from. The build context has no .git, so dist/build.json
+# cannot stamp it; create.sh passes `git rev-parse HEAD`, and every pair's log records it.
+ARG MUSTERD_REF=unknown
+ENV MUSTERD_REF=${MUSTERD_REF}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gnupg iptables jq python3 python3-venv python3-pip redis-server \

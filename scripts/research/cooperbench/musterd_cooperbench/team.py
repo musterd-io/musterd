@@ -163,6 +163,8 @@ def tear_down(pair: PairTeam, keep_logs_in: Path | None = None) -> None:
             pair.process.kill()
     if keep_logs_in is not None:
         keep_logs_in.mkdir(parents=True, exist_ok=True)
+        # Which musterd this pair measured (the image's build arg; see deploy/cooperbench/Dockerfile).
+        (keep_logs_in / "musterd-ref.txt").write_text(os.environ.get("MUSTERD_REF", "unknown") + "\n")
         for name in ("daemon.log", "musterd.db"):
             src = pair.workdir / name
             if src.exists():

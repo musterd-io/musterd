@@ -37,8 +37,8 @@ musterd arm the answer's file list, which the coop arm never sees (nick, 2026-10
 
 **Hooks and MCP are musterd's own.** The two hook commands are copied verbatim from
 `packages/cli/src/onboard/harnesses/claudeCode.ts`, and `test_config.py` fails if they drift. The
-agent containers install this checkout's CLI and MCP server from tarballs (`pack.sh`), so a run
-measures the musterd it names in `dist/build.json`.
+agent containers install this checkout's CLI and MCP server from tarballs (`pack.sh`), and each pair's
+log records the commit they were built from (`musterd-ref.txt`, from the image's `MUSTERD_REF`).
 
 ## How a seat gets onto its team
 
