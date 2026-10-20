@@ -155,6 +155,40 @@ describe('away-relay callback route: Slack fails closed (ADR 668)', () => {
   });
 });
 
+describe('away-relay tenant isolation (lane 01M50ZQCTW)', () => {
+  it("one team's credential cannot open another team's socket", async () => {
+    const sha256Hex = async (value: string) => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+      return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    };
+    const { env: e, forwarded } = env({
+      TEAM_CREDENTIALS_JSON: JSON.stringify({
+        revive: await sha256Hex('revive-secret'),
+        other: await sha256Hex('other-secret'),
+      }),
+    });
+    // Team revive's credential presented on team other's connect route: refused at the
+    // Worker, before any Durable Object is touched.
+    const res = await worker.fetch(
+      new Request('https://relay.example/teams/other/connect', {
+        headers: { upgrade: 'websocket', authorization: 'Bearer revive-secret' },
+      }),
+      e,
+    );
+    expect(res.status).toBe(401);
+    expect(forwarded).not.toHaveBeenCalled();
+    // And the right credential for that team passes the gate (the stub answers 200).
+    const ok = await worker.fetch(
+      new Request('https://relay.example/teams/other/connect', {
+        headers: { upgrade: 'websocket', authorization: 'Bearer other-secret' },
+      }),
+      e,
+    );
+    expect(ok.status).toBe(200);
+    expect(forwarded).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('away-relay app routes (ADR 676 §2, §9)', () => {
   it('forwards a well-shaped app callback to the team object under its ref; refuses a malformed one', async () => {
     const { env: e, forwarded } = env({});
@@ -223,6 +257,110 @@ async function relayWithSocket(extraEnv: Partial<Env> = {}) {
   holder.relay = relay;
   return { relay, socket, sent };
 }
+
+/** A minimal SQL stand-in honoring the exact statements the deliver path runs. */
+class FakeSql {
+  deliveries: number[] = [];
+  pending = new Map<string, { status: string; provider_ref: string | null }>();
+  exec<T>(sql: string, ...params: unknown[]): { toArray: () => T[] } {
+    const q = sql.replace(/\s+/g, ' ');
+    let rows: unknown[] = [];
+    if (q.includes('DELETE FROM deliveries')) {
+      const cutoff = params[0] as number;
+      this.deliveries = this.deliveries.filter((at) => at > cutoff);
+    } else if (q.includes('SELECT COUNT(*) AS n FROM deliveries WHERE')) {
+      rows = [{ n: this.deliveries.filter((at) => at > (params[0] as number)).length }];
+    } else if (q.includes('SELECT COUNT(*) AS n FROM deliveries')) {
+      rows = [{ n: this.deliveries.length }];
+    } else if (q.includes('INSERT INTO deliveries')) {
+      this.deliveries.push(params[0] as number);
+    } else if (q.includes('SELECT status, provider_ref FROM pending WHERE dedupe_id')) {
+      const row = [...this.pending.entries()].find(([k]) => k.endsWith(`|${params[0]}`));
+      rows = row ? [{ status: row[1].status, provider_ref: row[1].provider_ref }] : [];
+    } else if (q.includes('SELECT COUNT(*) AS n FROM pending')) {
+      rows = [{ n: this.pending.size }];
+    } else if (q.includes('INSERT INTO pending')) {
+      const [askRef, dedupeId, , created] = params as [string, string, number, number];
+      void created;
+      const status = q.includes("'failed'") ? 'failed' : 'pending';
+      this.pending.set(`${askRef}|${dedupeId}`, { status, provider_ref: null });
+    } else if (q.includes('UPDATE pending SET status')) {
+      const [status, providerRef, askRef] = params as [string, string | null, string];
+      for (const k of this.pending.keys())
+        if (k.startsWith(`${askRef}|`)) this.pending.set(k, { status, provider_ref: providerRef });
+    } else if (q.includes('SELECT MIN(expires_at)')) {
+      rows = [{ next: null }];
+    }
+    return { toArray: () => rows as T[] };
+  }
+}
+
+describe('TeamRelay delivery quota (lane 01M50ZQCTW)', () => {
+  it('a team that spends its minute quota is refused without a provider call; the refusal is retryable', async () => {
+    const credentialHash = 'f'.repeat(64);
+    const sent: Record<string, unknown>[] = [];
+    const socket = {
+      deserializeAttachment: () => ({ slug: 'revive', credentialHash }),
+      send: (raw: string) => sent.push(JSON.parse(raw) as Record<string, unknown>),
+      close: vi.fn(),
+    };
+    const sql = new FakeSql();
+    const state = {
+      blockConcurrencyWhile: (fn: () => unknown) => fn(),
+      storage: {
+        sql,
+        setAlarm: async () => {},
+        deleteAlarm: async () => {},
+      },
+      getWebSockets: () => [socket],
+    };
+    const relay = new TeamRelay(
+      state as unknown as DurableObjectState,
+      {
+        TEAM_CREDENTIALS_JSON: JSON.stringify({ revive: credentialHash }),
+        TEAM_QUOTAS_JSON: JSON.stringify({ revive: { per_minute: 2, per_day: 100 } }),
+      } as Env,
+    );
+    let providerCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        providerCalls += 1;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }),
+    );
+    const deliver = (n: number) =>
+      relay.webSocketMessage(
+        socket as unknown as WebSocket,
+        JSON.stringify({
+          protocol: 1,
+          type: 'deliver',
+          ask_ref: `ask-${n}`,
+          dedupe_id: `ask-${n}:slack:b1`,
+          expires_at: Date.now() + 60_000,
+          post: { url: 'https://provider.example/post', body: '{}' },
+        }),
+      );
+    try {
+      await deliver(1);
+      await deliver(2);
+      await deliver(3);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(providerCalls).toBe(2);
+    expect(sent[0]).toMatchObject({ type: 'delivered', ask_ref: 'ask-1', ok: true });
+    expect(sent[1]).toMatchObject({ type: 'delivered', ask_ref: 'ask-2', ok: true });
+    expect(sent[2]).toMatchObject({
+      type: 'delivered',
+      ask_ref: 'ask-3',
+      ok: false,
+      reason: 'rate_limited',
+    });
+    // Stored failed, so the daemon's re-push takes the retry path, not a duplicate answer.
+    expect(sql.pending.get('ask-3|ask-3:slack:b1')?.status).toBe('failed');
+  });
+});
 
 describe('TeamRelay app half (ADR 676 §2, §9)', () => {
   it('a body fetch asks the daemon over the socket and hands back only what it answers', async () => {

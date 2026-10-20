@@ -11,6 +11,63 @@ export const RELAY_MAX_FRAME_BYTES = 65_536;
 export const RELAY_MAX_PENDING = 1_000;
 export const RELAY_PROVIDER_TIMEOUT_MS = 5_000;
 
+/**
+ * Per-team delivery quota (lane 01M50ZQCTWM5QBZ083782J9N6R, spec scale amendment):
+ * every team has its own rate limits, including against Slack's per-workspace send
+ * limits. One Durable Object serves one team, so the counters are per-team by
+ * construction — one team exhausting its quota cannot spend another's. Defaults sit
+ * under Slack's chat.postMessage tiers; the operator may override per team with
+ * `TEAM_QUOTAS_JSON` (slug → {per_minute, per_day}).
+ */
+export const RELAY_DELIVERIES_PER_MINUTE = 60;
+export const RELAY_DELIVERIES_PER_DAY = 10_000;
+
+export interface RelayQuota {
+  perMinute: number;
+  perDay: number;
+}
+
+const QUOTA_CEILINGS: RelayQuota = { perMinute: 600, perDay: 100_000 };
+
+function quotaValue(v: unknown, fallback: number, ceiling: number): number {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? Math.min(v, ceiling) : fallback;
+}
+
+/** The quota for one team; a bad or partial map falls back to the defaults, never to unlimited. */
+export function quotaForTeam(mapJson: string | undefined, slug: string): RelayQuota {
+  const defaults: RelayQuota = {
+    perMinute: RELAY_DELIVERIES_PER_MINUTE,
+    perDay: RELAY_DELIVERIES_PER_DAY,
+  };
+  if (!mapJson) return defaults;
+  try {
+    const v: unknown = JSON.parse(mapJson);
+    if (!isRecord(v) || !isRecord(v[slug])) return defaults;
+    const entry = v[slug];
+    return {
+      perMinute: quotaValue(entry['per_minute'], defaults.perMinute, QUOTA_CEILINGS.perMinute),
+      perDay: quotaValue(entry['per_day'], defaults.perDay, QUOTA_CEILINGS.perDay),
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+/**
+ * May this team make one more provider delivery now? Counts are of actual provider
+ * attempts in the trailing windows, taken by the team's own object — a duplicate
+ * frame is answered from its stored row and never reaches this check.
+ */
+export function quotaVerdict(
+  lastMinuteAttempts: number,
+  lastDayAttempts: number,
+  quota: RelayQuota,
+): 'ok' | 'rate_limited' | 'quota_exceeded' {
+  if (lastDayAttempts >= quota.perDay) return 'quota_exceeded';
+  if (lastMinuteAttempts >= quota.perMinute) return 'rate_limited';
+  return 'ok';
+}
+
 export interface RelayPendingRow {
   ask_ref: string;
   dedupe_id: string;

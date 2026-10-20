@@ -5,7 +5,11 @@ import {
   hashesEqual,
   parseDaemonFrame,
   providerRefFrom,
+  quotaForTeam,
+  quotaVerdict,
   reconcileRelayPending,
+  RELAY_DELIVERIES_PER_DAY,
+  RELAY_DELIVERIES_PER_MINUTE,
   secondSocketVerdict,
   slackDispatchAllowed,
   slackSignatureValid,
@@ -150,6 +154,36 @@ describe('away relay pure rules (ADR 659)', () => {
     expect(slackDispatchAllowed('T9', map, 'revive')).toBe(false);
     expect(slackDispatchAllowed(null, map, 'revive')).toBe(false);
     expect(slackTeamIdFromBody('payload=%7Bbad')).toBeNull();
+  });
+
+  it('per-team quota: window verdicts, operator overrides, and a bad map never means unlimited', () => {
+    const quota = { perMinute: 2, perDay: 5 };
+    expect(quotaVerdict(0, 0, quota)).toBe('ok');
+    expect(quotaVerdict(2, 2, quota)).toBe('rate_limited');
+    expect(quotaVerdict(0, 5, quota)).toBe('quota_exceeded');
+    // The day cap is the harder stop: it wins even inside the minute window.
+    expect(quotaVerdict(2, 5, quota)).toBe('quota_exceeded');
+
+    const map = JSON.stringify({ revive: { per_minute: 10, per_day: 100 } });
+    expect(quotaForTeam(map, 'revive')).toEqual({ perMinute: 10, perDay: 100 });
+    // Tenant isolation at the rule level: another team's entry never leaks into revive's,
+    // and an unlisted team gets the defaults, not the listed team's numbers.
+    expect(quotaForTeam(map, 'other')).toEqual({
+      perMinute: RELAY_DELIVERIES_PER_MINUTE,
+      perDay: RELAY_DELIVERIES_PER_DAY,
+    });
+    expect(quotaForTeam('not json', 'revive')).toEqual({
+      perMinute: RELAY_DELIVERIES_PER_MINUTE,
+      perDay: RELAY_DELIVERIES_PER_DAY,
+    });
+    // Partial or absurd entries fall back per-field and are ceiling-clamped.
+    expect(quotaForTeam(JSON.stringify({ revive: { per_minute: 999_999 } }), 'revive')).toEqual({
+      perMinute: 600,
+      perDay: RELAY_DELIVERIES_PER_DAY,
+    });
+    expect(
+      quotaForTeam(JSON.stringify({ revive: { per_minute: -1, per_day: 0 } }), 'revive'),
+    ).toEqual({ perMinute: RELAY_DELIVERIES_PER_MINUTE, perDay: RELAY_DELIVERIES_PER_DAY });
   });
 
   it('provider coordinates come from the provider JSON; reconcile drops what the daemon dropped', () => {

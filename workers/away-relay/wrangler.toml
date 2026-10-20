@@ -8,6 +8,7 @@
 #   wrangler secret put SLACK_SIGNING_SECRET    # Slack app signing secret (ADR 668 — lives only here)
 #   wrangler secret put SLACK_TEAM_MAP_JSON     # {"<slack-team-id>": "<team-slug>"}
 #   wrangler secret put APNS_KEY_P8             # the APNs token key (.p8, PEM) — ADR 676 §9
+#   wrangler secret put TEAM_QUOTAS_JSON        # optional: {"<team-slug>": {"per_minute": 60, "per_day": 10000}}
 name = "musterd-away-relay"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"

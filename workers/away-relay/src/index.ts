@@ -28,6 +28,8 @@ import {
   hashesEqual,
   parseDaemonFrame,
   providerRefFrom,
+  quotaForTeam,
+  quotaVerdict,
   reconcileRelayPending,
   secondSocketVerdict,
   slackDispatchAllowed,
@@ -51,6 +53,8 @@ export interface Env {
   SLACK_SIGNING_SECRET?: string;
   /** Secret (wrangler secret put): JSON map of Slack team id → musterd team slug (ADR 668 §2). */
   SLACK_TEAM_MAP_JSON?: string;
+  /** Optional (wrangler secret put): JSON map of team slug → {per_minute, per_day} delivery quota overrides. */
+  TEAM_QUOTAS_JSON?: string;
   /** Secret (wrangler secret put): the APNs `.p8` token key, PEM (ADR 676 §9, ADR 659 §4). */
   APNS_KEY_P8?: string;
   /** The APNs key id, the Apple Developer team id and the app's bundle id (wrangler.toml vars). */
@@ -185,6 +189,9 @@ export class TeamRelay implements DurableObject {
            created_at INTEGER NOT NULL
          )`,
       );
+      // Per-team delivery attempts for the quota windows (lane 01M50ZQCTWM5QBZ083782J9N6R):
+      // timestamps only, no content, pruned past the day window on each delivery.
+      this.state.storage.sql.exec(`CREATE TABLE IF NOT EXISTS deliveries (at INTEGER NOT NULL)`);
     });
   }
 
@@ -455,6 +462,45 @@ export class TeamRelay implements DurableObject {
       );
       return;
     }
+    // Per-team quota (lane 01M50ZQCTWM5QBZ083782J9N6R): this object serves one team,
+    // so its delivery counters are that team's alone. A refused delivery is stored
+    // `failed`, exactly like a failed provider POST, so the daemon's re-push retries it.
+    const quota = quotaForTeam(this.env.TEAM_QUOTAS_JSON, attachment?.slug ?? '');
+    this.state.storage.sql.exec('DELETE FROM deliveries WHERE at <= ?', now - 86_400_000);
+    const minuteAttempts =
+      this.state.storage.sql
+        .exec<{ n: number }>('SELECT COUNT(*) AS n FROM deliveries WHERE at > ?', now - 60_000)
+        .toArray()[0]?.n ?? 0;
+    const dayAttempts =
+      this.state.storage.sql
+        .exec<{ n: number }>('SELECT COUNT(*) AS n FROM deliveries')
+        .toArray()[0]?.n ?? 0;
+    const quotaResult = quotaVerdict(minuteAttempts, dayAttempts, quota);
+    if (quotaResult !== 'ok') {
+      this.state.storage.sql.exec(
+        `INSERT INTO pending (ask_ref, dedupe_id, expires_at, status, provider_ref, created_at)
+         VALUES (?, ?, ?, 'failed', NULL, ?)
+         ON CONFLICT(ask_ref) DO UPDATE SET dedupe_id = excluded.dedupe_id,
+           expires_at = excluded.expires_at, status = 'failed'`,
+        frame.ask_ref,
+        frame.dedupe_id,
+        frame.expires_at,
+        now,
+      );
+      ws.send(
+        JSON.stringify({
+          protocol: 1,
+          type: 'delivered',
+          ask_ref: frame.ask_ref,
+          dedupe_id: frame.dedupe_id,
+          ok: false,
+          reason: quotaResult,
+        }),
+      );
+      await this.scheduleAlarm();
+      return;
+    }
+    this.state.storage.sql.exec('INSERT INTO deliveries (at) VALUES (?)', now);
     this.state.storage.sql.exec(
       `INSERT INTO pending (ask_ref, dedupe_id, expires_at, status, provider_ref, created_at)
        VALUES (?, ?, ?, 'pending', NULL, ?)
