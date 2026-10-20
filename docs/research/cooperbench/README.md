@@ -210,7 +210,31 @@ unpinned, so a rebuilt image is checked again by the same smoke. With `--git`, t
 git server is reached by its bridge IP, because host-network containers can't resolve its container
 name.
 
+**One pair end to end in both arms (done-when 4b), 2026-10-20**, on the run machine with musterd
+`f4d92bc4` and `claude-sonnet-4-5`, `pallets_click` task 2068, features 1 and 2, `--setting coop`
+without `--git`:
+
+| Arm | Agents | Coordination | Eval | Cost |
+| --- | --- | --- | --- | --- |
+| `openhands_sdk_docker` (`oh-coop2`) | agent2 submitted; agent1 stuck after 59 steps, empty patch | Redis messages (not counted) | merged clean; feature 1 failed, feature 2 passed | $2.01 |
+| `openhands_sdk_musterd` (`oh-musterd2`) | agent1 submitted; agent2 stuck after 67 steps, empty patch | 2 lanes, 11 messages, 4 gated edits allowed, 1 refused | merged clean; feature 1 passed, feature 2 failed | $1.65 |
+
+The musterd pair found the overlap within a minute ("I see our changes overlap"), agreed an order
+("You go first with the renaming … I'll wait for you to finish"), and agent1 announced "Done!" two
+minutes later. By then agent2 was gone. It had polled `team_inbox_check` five times in a row with
+nothing in between, and OpenHands' stuck detector ended the conversation ("Remote conversation got
+stuck"). The plain arm lost agent1 the same way, polling `receive_message`. Both arms hit it, so the
+pair is a check that both run and score, not a result.
+
+Follows-up: lane 01M5AQEG23 decides how a waiting agent survives OpenHands' stuck detector (in both arms) before any measured pair.
+
 ## Notes for the pilot (lane `01M5AQEG23`)
+
+- **A waiting OpenHands agent is killed as stuck.** Agreeing an order is good coordination, but the
+  agent that agrees to wait has no way to wait in OpenHands. Repeating one call, or emitting empty
+  messages, trips the SDK's stuck detector, and its feature ships empty. Both OpenHands arms lost one
+  agent this way in the 2026-10-20 pair. Before measuring, either tell both arms' agents how to wait
+  (for example, `sleep` in the terminal between checks), or relax the detector in both arms alike.
 
 - **Lanes don't make ownership exclusive.** In run 3 both agents claimed lanes over the same two
   files. The gate requires the editing seat to own a covering lane, not to own it alone, so
