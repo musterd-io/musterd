@@ -91,6 +91,8 @@ export interface ServerOptions {
   tlsKey?: string;
   /** Acknowledge a TLS-terminating proxy/overlay in front, allowing a non-loopback plaintext bind. */
   trustProxy?: boolean;
+  /** ADR 662 dec. 5: WebAuthn origins override (tests, hosted origins). */
+  webauthnOrigins?: string[];
   /** Serve a built web UI from this directory, same-origin (ADR 062). Defaults to MUSTERD_WEB_ROOT. */
   webRoot?: string;
   /** Inject a database (e.g. an in-memory one) for tests; bypasses dbPath. */

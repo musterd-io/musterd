@@ -184,11 +184,12 @@ function checkRpAndChallenge(
   // ADR 662 dec. 5 / ADR 618 §2: the ceremony must be on an origin the daemon is
   // configured for (its own origin, or musterd.io) — an origin the caller merely
   // claims, e.g. a relay-hosted page, never verifies, however consistent it looks.
-  if (
-    expectedOrigins &&
-    expectedOrigins.length > 0 &&
-    !expectedOrigins.includes(clientData.origin)
-  ) {
+  // No configured list fails closed: a call site that forgets the list refuses
+  // every ceremony rather than skipping the check (HA3 re-review).
+  if (!expectedOrigins || expectedOrigins.length === 0) {
+    throw new Error('webauthn: no configured origin for this daemon');
+  }
+  if (!expectedOrigins.includes(clientData.origin)) {
     throw new Error('webauthn: origin not configured for this daemon');
   }
   const rpId = new URL(clientData.origin).hostname;

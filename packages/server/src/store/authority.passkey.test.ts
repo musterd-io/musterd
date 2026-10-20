@@ -135,7 +135,12 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     };
     // The page parks the verified proof; the waiting surface collects and presents it.
     await expect(
-      storePasskeyProof(db, { teamId: team.id, audience: team.slug, proof }),
+      storePasskeyProof(db, {
+        teamId: team.id,
+        audience: team.slug,
+        proof,
+        expectedOrigins: ['https://example.com'],
+      }),
     ).resolves.toBe(true);
     const parked = await getParkedProof(db, team.id, descriptor.nonce);
     expect(parked).toEqual(proof);
@@ -147,8 +152,48 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
         credential: 'human',
         ...act,
         proof: parked!,
+        expectedOrigins: ['https://example.com'],
       }),
     ).resolves.toEqual({ ok: true, assurance: 'A2', keyId, kind: 'passkey' });
+
+    // The act path (route.ts passes the daemon's configured origins): a
+    // relay-origin assertion refuses even with a valid signature (HA3 re-review).
+    const d2 = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: 'nick',
+      ...act,
+    });
+    const relayAuthData = Buffer.concat([rpHash, Buffer.from([0x01]), Buffer.from([0, 0, 0, 4])]);
+    const relayCdj = JSON.stringify({
+      type: 'webauthn.get',
+      challenge: d2.nonce,
+      origin: 'https://relay.example.net',
+      crossOrigin: false,
+    });
+    const relaySig = cryptoSign(
+      null,
+      Buffer.concat([relayAuthData, createHash('sha256').update(relayCdj).digest()]),
+      privateKey,
+    );
+    await expect(
+      requireAuthority(db, {
+        teamId: team.id,
+        audience: team.slug,
+        presenter: nick,
+        credential: 'human',
+        ...act,
+        proof: {
+          key_id: keyId,
+          nonce: d2.nonce,
+          signature: relaySig.toString('base64url'),
+          authenticator_data: relayAuthData.toString('base64url'),
+          client_data_json: relayCdj,
+        },
+        expectedOrigins: ['https://example.com'],
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
   });
 
   it('past genesis, a fabricated registration enrolls nothing without an admin countersign', async () => {

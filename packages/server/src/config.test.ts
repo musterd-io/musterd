@@ -27,6 +27,7 @@ const TOUCHED = [
   'MUSTERD_RECLAIM_GRACE_MS',
   'MUSTERD_ALLOWED_HOSTS',
   'MUSTERD_ALLOWED_ORIGINS',
+  'MUSTERD_WEBAUTHN_ORIGINS',
 ];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -177,6 +178,17 @@ describe('resolveConfig', () => {
     expect(c.heartbeatIntervalMs).toBe(HEARTBEAT_INTERVAL_MS);
     expect(c.presenceTimeoutMs).toBe(PRESENCE_TIMEOUT_MS);
     expect(c.reclaimGraceMs).toBe(RECLAIM_GRACE_MS);
+  });
+  it('webauthn origins default to the daemon loopback origins, never empty', () => {
+    expect(resolveConfig({ port: 4849 }).webauthnOrigins).toEqual([
+      'http://localhost:4849',
+      'http://127.0.0.1:4849',
+    ]);
+    process.env['MUSTERD_WEBAUTHN_ORIGINS'] = 'https://musterd.io';
+    expect(resolveConfig({ port: 4849 }).webauthnOrigins).toEqual(['https://musterd.io']);
+    expect(
+      resolveConfig({ port: 1, webauthnOrigins: ['https://example.com'] }).webauthnOrigins,
+    ).toEqual(['https://example.com']);
   });
   it('serves wss when both cert and key are configured', () => {
     const c = resolveConfig({ tlsCert: '/c.pem', tlsKey: '/k.pem' });

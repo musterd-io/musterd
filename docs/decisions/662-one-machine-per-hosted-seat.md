@@ -193,6 +193,16 @@ All four converged on one shape, and nick directed it be written as this ADR.
   countersign — a different human admin of the team with a standing key, signing
   `device_key_admin` over the enrollment. No enrolled admin peer, no recovery:
   fail closed, stated at enrollment time.)_
+- _(2026-10-20: HA3 second re-review (lazara, declined #2992): on the act path the
+  configured origin list was empty by default and an empty list skipped the origin
+  check entirely, so a relay-origin assertion verified there. Now the verifier fails
+  closed with no configured list, and `resolveConfig` defaults `webauthnOrigins` to
+  the daemon's own loopback origins on its bound port (`MUSTERD_WEBAUTHN_ORIGINS`
+  still overrides, e.g. musterd.io) — the act path's configured list is never empty.
+  Observed 2026-10-20: lazara's relay-origin assertion over `team_send` accept →
+  the human's lane-review ask answered with no human present. Falsifier committed:
+  a relay-origin assertion with a valid signature refuses at `requireAuthority`,
+  and an empty/omitted origin list never verifies.)_
 - _(2026-10-20: HA3 re-review (lazara, declined #2968) closed the two authenticator
   gaps. The CLI's file-stored software key is gone (with HA2's passkey-first CLI);
   a software key may still be recorded under the honest kind `software`, and

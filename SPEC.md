@@ -1069,7 +1069,9 @@ advisory for every listed act.
   is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, countersign?, registration}`: a
   WebAuthn registration whose challenge is the enrollment challenge, verified server-side
   (challenge, user verification, origin pinned to the daemon's configured origins —
-  its own origin plus `MUSTERD_WEBAUTHN_ORIGINS` — with the rpIdHash checked against
+  its own origin plus `MUSTERD_WEBAUTHN_ORIGINS` — defaulting to the daemon's loopback
+  origins on its bound port, never empty on any path (HTTP or act); a ceremony with no
+  configured list refuses — with the rpIdHash checked against
   that origin's host, attested credential extracted from
   the attestation object; possession-grade, no attestation statement checked). A passkey
   proof carries `authenticator_data` and `client_data_json` beside the signature; the

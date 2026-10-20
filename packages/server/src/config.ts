@@ -252,6 +252,22 @@ function envList(name: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/**
+ * ADR 662 dec. 5: the daemon's own WebAuthn origins when `MUSTERD_WEBAUTHN_ORIGINS`
+ * is unset — its loopback origins on its own port. Never empty: an empty origin
+ * list must fail closed in the verifier, not skip the check (HA3 re-review), so
+ * the default has to exist on every path, the act path included.
+ */
+export function defaultWebauthnOrigins(input: {
+  scheme: 'http' | 'https';
+  host: string;
+  port: number;
+}): string[] {
+  const hosts = new Set(['localhost', '127.0.0.1']);
+  if (input.host && input.host !== '0.0.0.0' && input.host !== '::') hosts.add(input.host);
+  return [...hosts].map((h) => `${input.scheme}://${h}:${input.port}`);
+}
+
 export interface ConfigOptions {
   port?: number;
   host?: string;
@@ -261,6 +277,8 @@ export interface ConfigOptions {
   tlsCert?: string;
   tlsKey?: string;
   trustProxy?: boolean;
+  /** ADR 662 dec. 5: WebAuthn origins override (tests, hosted origins). */
+  webauthnOrigins?: string[];
   /** Serve a built web UI from this directory, same-origin (ADR 062). */
   webRoot?: string;
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder, e.g. `musterd serve`. */
@@ -269,6 +287,8 @@ export interface ConfigOptions {
 
 export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
   const envPort = process.env['MUSTERD_PORT'];
+  const port = opts?.port ?? (envPort ? Number(envPort) : DEFAULT_PORT);
+  const host = opts?.host ?? process.env['MUSTERD_HOST'] ?? DEFAULT_HOST;
   const certPath = opts?.tlsCert ?? process.env['MUSTERD_TLS_CERT'];
   const keyPath = opts?.tlsKey ?? process.env['MUSTERD_TLS_KEY'];
   if (Boolean(certPath) !== Boolean(keyPath)) {
@@ -283,8 +303,8 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
   return {
     mode: cloud ? 'cloud' : 'self-hosted',
     cloud,
-    port: opts?.port ?? (envPort ? Number(envPort) : DEFAULT_PORT),
-    host: opts?.host ?? process.env['MUSTERD_HOST'] ?? DEFAULT_HOST,
+    port,
+    host,
     // A cloud store has no file (the stores are the Postgres URLs above); name it so from the start.
     dbPath: cloud ? 'postgres' : (opts?.dbPath ?? defaultDbPath()),
     traceDbPath: cloud
@@ -310,7 +330,11 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     // Cloud sits behind Cloudflare + Fly: every request arrives from the edge proxy (spec §5.1).
     trustProxy: cloud ? true : (opts?.trustProxy ?? envBool('MUSTERD_INSECURE_TRUST_PROXY')),
     scheme: tls ? 'wss' : 'ws',
-    webauthnOrigins: envList('MUSTERD_WEBAUTHN_ORIGINS'),
+    webauthnOrigins:
+      opts?.webauthnOrigins ??
+      (envList('MUSTERD_WEBAUTHN_ORIGINS').length > 0
+        ? envList('MUSTERD_WEBAUTHN_ORIGINS')
+        : defaultWebauthnOrigins({ scheme: tls ? 'https' : 'http', host, port })),
     allowedHosts: envList('MUSTERD_ALLOWED_HOSTS'),
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
     webRoot: webRootOf(opts?.webRoot ?? process.env['MUSTERD_WEB_ROOT']),
