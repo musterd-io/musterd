@@ -11,7 +11,7 @@
 .tz__card {
   display: block;
   background: var(--surface-solid);
-  border: 1px solid var(--mustard-100);
+  border: 1px solid var(--hairline);
   border-radius: 10px;
   padding: 0.9rem 1rem;
   text-decoration: none;

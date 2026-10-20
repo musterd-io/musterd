@@ -51,6 +51,8 @@ budget. Canvas painters need a real family name, because `ctx.font` cannot set v
 
 ## Consequences
 
+- 2026-10-20: [ADR 681](681-site-neutral-product-palette.md) sets the public site's and the console's
+  headings in the linear cut. The casual cut keeps the display role inside /live and the office.
 - Fonts in `dist/client` go from 554.5 KB (the 2026-07-29 baseline) to 139.1 KB in three files. The
   eager latin set a /live viewer fetches goes from 169.5 KB to 142.5 KB. Any weight from 400 to 800
   now renders from the same file, so the odd weights in the CSS (480, 550, 650, 750) are real

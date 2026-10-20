@@ -31,7 +31,7 @@
   grid-template-columns: 2rem minmax(0, 1fr);
   gap: 0.8rem;
   padding: 1rem 0;
-  border-top: 1px solid var(--mustard-100);
+  border-top: 1px solid var(--hairline);
 }
 
 .gs__num {
@@ -113,7 +113,7 @@
   gap: 0.4rem 1.6rem;
   margin: 1.1rem 0 0;
   padding-top: 1rem;
-  border-top: 1px solid var(--mustard-100);
+  border-top: 1px solid var(--hairline);
   max-width: 40rem;
 }
 

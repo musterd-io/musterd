@@ -1406,6 +1406,22 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-20 — `siteCssGzipBytes` 6,100 → 6,300 B: musterd.io on the product's neutral palette, and /start's step copy (lane `01M5D25W7B`, ADR 681)
+
+| Budget   | Before (main `03b5dc7f`, same laptop) | This branch (laptop) | Ceiling                |
+| -------- | ------------------------------------- | -------------------- | ---------------------- |
+| site CSS | 5,939 B                               | 5,995 B (+56)        | RAISED 6,100 → 6,300 B |
+
+nick, 2026-10-20, picked option B: the site takes /live's white and cool grey, and its headings use the
+linear cut. The palette is a token swap in the shared `global` bundle and costs the site nothing. The
++56 B is two things. `site.css` scopes `--font-display` to the public pages, because /live's names
+keep the casual cut, and tightens their headings. `/start`'s step grid pins its copy to column 2,
+where it had auto-placed into the 2.5rem number column and wrapped one word per line in production.
+Locally that is 105 B under the old ceiling. CI's gzip reads 50–300 B above a laptop's, so the
+ceiling is raised to cover that gap.
+
+- Falsify: `pnpm perf:check` in CI reports site CSS at or under 6,100 B with this change in.
+
 ### 2026-10-20 — `totalJsGzipBytes` 335,400 → 342,900 B, `appCssGzipBytes` 14,000 → 15,600 B and `liveCssGzipBytes` 25,300 → 25,600 B: the `/live` settings overlay (lane `01M5BDF1A5`)
 
 | Budget     | Before (main, same day)   | This branch, rebased on main (laptop) | Ceiling                    |

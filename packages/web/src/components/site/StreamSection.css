@@ -49,7 +49,7 @@
   aspect-ratio: 16 / 9;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--mustard-100);
+  border: 1px solid var(--hairline);
   /* The ground the still sits on and the player paints over. Without it, the moment between
      construction and first frame is the page's background showing through a bordered box. */
   background: var(--zinc-900);
