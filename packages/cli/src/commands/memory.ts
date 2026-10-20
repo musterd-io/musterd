@@ -12,7 +12,7 @@ import {
   openForSeat,
   sealForSeat,
 } from '@musterd/protocol/note-seal';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, type Parsed, rejectUnknownFlags } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { type Config, seatsHoldingSession } from '../config.js';
 import { CliError } from '../errors.js';
@@ -37,6 +37,16 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
   refuseSeatMismatch({ config, team, folderSeat: identity.name, identitySource });
 
   if (sub === 'save') {
+    // Save takes no target: it writes THIS seat's note, as the caller. A flag it does not know is
+    // refused rather than ignored — the memory-isolation canary (lane 01M561ZCDS, 2026-10-20) ran
+    // `memory save --seat canary-7` from canary-4, got "memory saved", and had to halt and read the
+    // audit to learn the write had stayed on canary-4. `--seat` is `show`'s flag (ADR 651); on save
+    // it is a cross-seat write request, and the answer to that is a refusal, not a silent self-write.
+    rejectUnknownFlags(
+      parsed.flags,
+      [...GLOBAL_FLAGS, 'headline'],
+      'save writes this seat\'s own note and takes no target: musterd memory save --headline "<subject>" [body...]',
+    );
     const headline = flagStr(parsed.flags, 'headline');
     if (!headline) {
       throw new CliError('usage: musterd memory save --headline "<subject>" [body...]', 2);
