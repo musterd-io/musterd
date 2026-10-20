@@ -54,9 +54,12 @@ export interface ResolvedConfig {
   /** The scheme this listener actually serves: `wss` only with native TLS. */
   scheme: 'ws' | 'wss';
   /** Origins whose passkeys the daemon accepts (ADR 662 dec. 5): `MUSTERD_WEBAUTHN_ORIGINS`,
-   * plus the origin a ceremony request itself arrives on — the daemon's own origin. A
-   * relay-hosted page's origin is never in this set, so its ceremonies never verify. */
+   * defaulting to the daemon's own loopback origins on its bound port. A relay-hosted
+   * page's origin is never in this set, so its ceremonies never verify. */
   webauthnOrigins: string[];
+  /** The Slack ingress's Ed25519 public key (PEM or base64url DER), or null: Cloud-direct
+   * Slack callbacks and install records are refused without it (spec: Slack ingress §3). */
+  ingressPublicKey: string | null;
   /** Extra Host header hostnames allowed on the WS upgrade (besides loopback + bound host). */
   allowedHosts: string[];
   /** Origin values allowed on the WS upgrade (CLI/MCP clients send none; browsers do). */
@@ -279,6 +282,8 @@ export interface ConfigOptions {
   trustProxy?: boolean;
   /** ADR 662 dec. 5: WebAuthn origins override (tests, hosted origins). */
   webauthnOrigins?: string[];
+  /** The Slack ingress public key (tests); env MUSTERD_INGRESS_PUBLIC_KEY otherwise. */
+  ingressPublicKey?: string;
   /** Serve a built web UI from this directory, same-origin (ADR 062). */
   webRoot?: string;
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder, e.g. `musterd serve`. */
@@ -335,6 +340,8 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
       (envList('MUSTERD_WEBAUTHN_ORIGINS').length > 0
         ? envList('MUSTERD_WEBAUTHN_ORIGINS')
         : defaultWebauthnOrigins({ scheme: tls ? 'https' : 'http', host, port })),
+    ingressPublicKey:
+      opts?.ingressPublicKey ?? (process.env['MUSTERD_INGRESS_PUBLIC_KEY']?.trim() || null),
     allowedHosts: envList('MUSTERD_ALLOWED_HOSTS'),
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
     webRoot: webRootOf(opts?.webRoot ?? process.env['MUSTERD_WEB_ROOT']),

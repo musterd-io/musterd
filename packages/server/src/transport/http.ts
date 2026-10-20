@@ -168,6 +168,7 @@ import {
   MemberCeilingSchema,
   APP_CHANNEL,
   ApprovalProofSchema,
+  RelaySlackInstallSchema,
   AUTHENTICATOR_KINDS,
   HIGH_AUTHORITY_ACTS,
   type HighAuthorityAct,
@@ -204,7 +205,8 @@ import { saveNodeEnrollment } from '../node/state.js';
 import { sendAppPaired } from '../notify/appAdapter.js';
 import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
-import { relayLinkFor } from '../notify/relay.js';
+import { verifyIngressAttestation } from '../notify/ingress.js';
+import { handleRelayCallback, relayLinkFor } from '../notify/relay.js';
 import { recordHttpException } from '../otel/httpTrace.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
 import {
@@ -535,6 +537,7 @@ import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import {
   createSlackInstallRequest,
   listSlackInstalls,
+  recordSlackInstall,
   revokeSlackInstall,
 } from '../store/slackInstalls.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
@@ -4588,6 +4591,74 @@ export async function handleHttp(
       // human starts a pairing, the provider identity is staged daemon-side by the relay path,
       // and only this human's confirmation — showing the tenant and user from the daemon's own
       // row — creates a binding. Agents never pair: a binding names a human authorizer.
+      // Cloud-direct Slack (spec: Slack ingress §3; away channels 10): the shared ingress
+      // forwards install records and callbacks to a hosted team's server with its Ed25519
+      // attestation. No member credential rides these routes — the attestation is the
+      // authentication, and the payload is then re-checked against this team's own state.
+      const ingressCallback = /^\/channels\/slack\/callback\/([^/]+)$/.exec(rest);
+      if (
+        method === 'POST' &&
+        (rest === '/channels/slack/install-record' || ingressCallback !== null)
+      ) {
+        const team = await requireTeam(ctx.db, slug);
+        if (!ctx.config.ingressPublicKey) {
+          throw new MusterdError(
+            'server_error',
+            'slack ingress is not configured on this server (MUSTERD_INGRESS_PUBLIC_KEY)',
+          );
+        }
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const rawBody = Buffer.concat(chunks).toString('utf8');
+        const attested = verifyIngressAttestation({
+          publicKey: ctx.config.ingressPublicKey,
+          timestamp: req.headers['x-musterd-ingress-timestamp'] as string,
+          signature: req.headers['x-musterd-ingress-signature'] as string,
+          rawBody,
+        });
+        if (!attested) {
+          throw new MusterdError('forbidden', 'ingress attestation does not verify');
+        }
+        if (ingressCallback) {
+          const result = await handleRelayCallback(ctx, team, {
+            protocol: 1,
+            type: 'callback',
+            ask_ref: decodeURIComponent(ingressCallback[1]!),
+            body: rawBody,
+          });
+          if (!result.ok) {
+            throw new MusterdError(
+              'validation',
+              `slack callback refused (${result.reason ?? 'unparseable'})`,
+            );
+          }
+          return sendJson(res, 202, { ok: true });
+        }
+        let parsedJson: unknown;
+        try {
+          parsedJson = JSON.parse(rawBody);
+        } catch {
+          throw new MusterdError('bad_request', 'invalid JSON body');
+        }
+        const record = parseOrBadRequest(RelaySlackInstallSchema, parsedJson);
+        const recorded = await recordSlackInstall(ctx.db, {
+          teamId: team.id,
+          actor: 'ingress',
+          slackTeamId: record.slack_team_id,
+          botToken: record.bot_token,
+          installerSlackId: record.installer_slack_id,
+          state: record.state,
+          installedAt: record.installed_at,
+        });
+        if (!recorded.ok) {
+          throw new MusterdError(
+            'validation',
+            `slack install refused (${recorded.reason}): no live install state for this team`,
+          );
+        }
+        return sendJson(res, 201, { ok: true });
+      }
+
       if (rest === '/channels' || rest.startsWith('/channels/')) {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);

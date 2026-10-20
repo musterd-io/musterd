@@ -23,6 +23,8 @@
 
 import { apnsConfigFrom, sendApns } from './apns.js';
 import {
+  cloudDestinationFrom,
+  ingressSignedPayload,
   installStateLive,
   parseSlackOAuthResponse,
   slackAuthorizeUrl,
@@ -68,6 +70,8 @@ export interface Env {
   /** The distributed Slack app's client id (wrangler.toml var) and client secret (secret). */
   SLACK_CLIENT_ID?: string;
   SLACK_CLIENT_SECRET?: string;
+  /** Secret: this ingress's Ed25519 signing key (PKCS8 PEM) for Cloud dispatches (spec §3). */
+  INGRESS_SIGNING_KEY?: string;
   /** The APNs key id, the Apple Developer team id and the app's bundle id (wrangler.toml vars). */
   APNS_KEY_ID?: string;
   APNS_TEAM_ID?: string;
@@ -100,6 +104,65 @@ async function presentedCredentialHash(
 interface SocketAttachment {
   slug: string;
   credentialHash: string | null;
+}
+
+/**
+ * Sign one Cloud dispatch (spec: Slack ingress §3). Returns the timestamp and the
+ * base64url signature, or null when this ingress holds no signing key — a Cloud
+ * dispatch without an attestation is never sent unsigned.
+ */
+async function ingressAttestation(
+  env: Env,
+  rawBody: string,
+): Promise<{ timestamp: string; signature: string } | null> {
+  if (!env.INGRESS_SIGNING_KEY) return null;
+  try {
+    const der = Uint8Array.from(
+      atob(env.INGRESS_SIGNING_KEY.replace(/-----(BEGIN|END) [^-]+-----/g, '').replace(/\s+/g, '')),
+      (c) => c.charCodeAt(0),
+    );
+    const key = await crypto.subtle.importKey('pkcs8', der, { name: 'Ed25519' }, false, ['sign']);
+    const timestamp = String(Date.now());
+    const signature = await crypto.subtle.sign(
+      { name: 'Ed25519' },
+      key,
+      new TextEncoder().encode(ingressSignedPayload(timestamp, rawBody)),
+    );
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replace(/=+$/, '');
+    return { timestamp, signature: b64 };
+  } catch {
+    return null;
+  }
+}
+
+/** POST one attested dispatch to a Cloud server; true only on a 2xx from that server. */
+async function postToCloud(
+  env: Env,
+  destination: string,
+  path: string,
+  rawBody: string,
+  contentType: string,
+): Promise<boolean> {
+  const attestation = await ingressAttestation(env, rawBody);
+  if (!attestation) return false;
+  try {
+    const res = await fetch(`${destination}${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': contentType,
+        'x-musterd-ingress-timestamp': attestation.timestamp,
+        'x-musterd-ingress-signature': attestation.signature,
+      },
+      body: rawBody,
+      signal: AbortSignal.timeout(RELAY_PROVIDER_TIMEOUT_MS),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** The install registry object: one instance holds the states and the mapping. */
@@ -148,7 +211,13 @@ export default {
         return new Response('slack app not configured on this relay', { status: 503 });
       const recorded = await registryJson(env, '/state', {
         method: 'PUT',
-        body: { state: installState, slug },
+        body: {
+          state: installState,
+          slug,
+          // A hosted team's link names its Cloud server (spec: Slack ingress §3); a laptop
+          // daemon's link names nothing and its record is held by its relay object.
+          destination: cloudDestinationFrom(url.searchParams.get('dest')),
+        },
       });
       if (!recorded) return new Response('install registry unavailable', { status: 503 });
       return Response.redirect(
@@ -170,6 +239,9 @@ export default {
       const slug = typeof looked?.['slug'] === 'string' ? (looked['slug'] as string) : null;
       if (!slug || looked?.['live'] !== true)
         return new Response('install state unknown or expired', { status: 403 });
+      const destination = cloudDestinationFrom(looked?.['destination']);
+      if (destination && !env.INGRESS_SIGNING_KEY)
+        return new Response('cloud dispatch is not configured on this relay', { status: 503 });
       let record: SlackInstallRecord | null = null;
       try {
         const res = await fetch('https://slack.com/api/oauth.v2.access', {
@@ -195,9 +267,33 @@ export default {
           slack_team_id: record.slackTeamId,
           slug,
           installer: record.installerSlackId,
+          destination,
         },
       });
       if (!mapped) return new Response('install registry unavailable', { status: 503 });
+      if (destination) {
+        // Cloud-direct (spec §3): the record goes straight to the hosted team's server,
+        // attested by this ingress. That server stores it against the state it minted.
+        const delivered = await postToCloud(
+          env,
+          destination,
+          `/teams/${encodeURIComponent(slug)}/channels/slack/install-record`,
+          JSON.stringify({
+            slack_team_id: record.slackTeamId,
+            bot_token: record.botToken,
+            installer_slack_id: record.installerSlackId,
+            state: installState,
+            installed_at: Date.now(),
+          }),
+          'application/json',
+        );
+        if (!delivered)
+          return new Response('could not deliver the install to its server', { status: 502 });
+        return new Response(
+          'Slack app installed for this workspace. Return to musterd — your hosted team has the install.',
+          { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+        );
+      }
       // Hold the per-install token in the team's own object until its daemon syncs it
       // (install_sync / install_ack); the registry keeps only the routing mapping.
       const held = await env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
@@ -264,6 +360,21 @@ export default {
       if (registeredSlug !== null) {
         if (registeredSlug !== slug)
           return new Response('slack team not mapped to this destination', { status: 403 });
+        // Cloud-direct (spec §3): a hosted team's callbacks go straight to its server,
+        // raw body unmodified under this ingress's attestation — no relay hop, no socket.
+        const cloudDest = cloudDestinationFrom(registered?.['destination']);
+        if (cloudDest) {
+          const delivered = await postToCloud(
+            env,
+            cloudDest,
+            `/teams/${encodeURIComponent(slug)}/channels/slack/callback/${encodeURIComponent(decodeURIComponent(callback[2]!))}`,
+            rawBody,
+            request.headers.get('content-type') ?? 'application/x-www-form-urlencoded',
+          );
+          return delivered
+            ? new Response(null, { status: 202 })
+            : new Response('cloud destination did not accept the callback', { status: 502 });
+        }
       } else if (!env.SLACK_TEAM_MAP_JSON) {
         return new Response('slack team map not configured', { status: 503 });
       } else if (!slackDispatchAllowed(payloadTeam, env.SLACK_TEAM_MAP_JSON, slug)) {
@@ -319,12 +430,14 @@ export class SlackInstalls implements DurableObject {
     this.state.blockConcurrencyWhile(async () => {
       this.state.storage.sql.exec(
         `CREATE TABLE IF NOT EXISTS states (
-           state TEXT PRIMARY KEY, slug TEXT NOT NULL, created_at INTEGER NOT NULL, consumed_at INTEGER
+           state TEXT PRIMARY KEY, slug TEXT NOT NULL, created_at INTEGER NOT NULL, consumed_at INTEGER,
+           destination TEXT
          )`,
       );
       this.state.storage.sql.exec(
         `CREATE TABLE IF NOT EXISTS installs (
-           slack_team_id TEXT PRIMARY KEY, slug TEXT NOT NULL, installer TEXT NOT NULL, installed_at INTEGER NOT NULL
+           slack_team_id TEXT PRIMARY KEY, slug TEXT NOT NULL, installer TEXT NOT NULL, installed_at INTEGER NOT NULL,
+           destination TEXT
          )`,
       );
     });
@@ -338,7 +451,11 @@ export class SlackInstalls implements DurableObject {
         headers: { 'content-type': 'application/json' },
       });
     if (request.method === 'PUT' && url.pathname === '/state') {
-      const body = (await request.json()) as { state?: unknown; slug?: unknown };
+      const body = (await request.json()) as {
+        state?: unknown;
+        slug?: unknown;
+        destination?: unknown;
+      };
       if (
         typeof body.state !== 'string' ||
         body.state.length < 16 ||
@@ -347,11 +464,12 @@ export class SlackInstalls implements DurableObject {
       )
         return json({ error: 'bad state' }, 400);
       this.state.storage.sql.exec(
-        `INSERT INTO states (state, slug, created_at, consumed_at) VALUES (?, ?, ?, NULL)
-         ON CONFLICT(state) DO UPDATE SET slug = excluded.slug, created_at = excluded.created_at, consumed_at = NULL`,
+        `INSERT INTO states (state, slug, created_at, consumed_at, destination) VALUES (?, ?, ?, NULL, ?)
+         ON CONFLICT(state) DO UPDATE SET slug = excluded.slug, created_at = excluded.created_at, consumed_at = NULL, destination = excluded.destination`,
         body.state,
         body.slug,
         Date.now(),
+        cloudDestinationFrom(body.destination),
       );
       return json({ ok: true });
     }
@@ -362,14 +480,16 @@ export class SlackInstalls implements DurableObject {
           slug: string;
           created_at: number;
           consumed_at: number | null;
+          destination: string | null;
         }>(
-          'SELECT slug, created_at, consumed_at FROM states WHERE state = ?',
+          'SELECT slug, created_at, consumed_at, destination FROM states WHERE state = ?',
           decodeURIComponent(stateMatch[1]!),
         )
         .toArray()[0];
       if (!row) return json({ slug: null, live: false });
       return json({
         slug: row.slug,
+        destination: row.destination,
         live: installStateLive(row.created_at, row.consumed_at, Date.now()),
       });
     }
@@ -379,6 +499,7 @@ export class SlackInstalls implements DurableObject {
         slack_team_id?: unknown;
         slug?: unknown;
         installer?: unknown;
+        destination?: unknown;
       };
       if (
         typeof body.state !== 'string' ||
@@ -399,13 +520,15 @@ export class SlackInstalls implements DurableObject {
       );
       void consumed;
       this.state.storage.sql.exec(
-        `INSERT INTO installs (slack_team_id, slug, installer, installed_at) VALUES (?, ?, ?, ?)
+        `INSERT INTO installs (slack_team_id, slug, installer, installed_at, destination) VALUES (?, ?, ?, ?)
          ON CONFLICT(slack_team_id) DO UPDATE SET slug = excluded.slug,
-           installer = excluded.installer, installed_at = excluded.installed_at`,
+           installer = excluded.installer, installed_at = excluded.installed_at,
+           destination = excluded.destination`,
         body.slack_team_id,
         body.slug,
         body.installer,
         Date.now(),
+        cloudDestinationFrom(body.destination),
       );
       return json({ ok: true });
     }
@@ -414,9 +537,13 @@ export class SlackInstalls implements DurableObject {
       const row = this.state.storage.sql
         .exec<{
           slug: string;
-        }>('SELECT slug FROM installs WHERE slack_team_id = ?', decodeURIComponent(slugMatch[1]!))
+          destination: string | null;
+        }>(
+          'SELECT slug, destination FROM installs WHERE slack_team_id = ?',
+          decodeURIComponent(slugMatch[1]!),
+        )
         .toArray()[0];
-      return json({ slug: row?.slug ?? null });
+      return json({ slug: row?.slug ?? null, destination: row?.destination ?? null });
     }
     return json({ error: 'not found' }, 404);
   }

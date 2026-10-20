@@ -133,6 +133,15 @@ own change.
   retirement change. Installing a workspace (Slack's admin act) and pairing a person (the
   binding flow) stay separate acts. The Worker still ships undeployed; Slack's app review
   and the client credentials are operator acts, listed in `docs/guides/away-relay.md`.
+- 2026-10-20 — increment 10 (lane 01M50ZQQW95YDYVWE2BTCMKKH7) added the Cloud-direct
+  transport the ingress section designed: an install link naming a hosted team's Cloud
+  server (`dest`) makes the ingress dispatch the install record and that workspace's
+  callbacks straight to that server — no relay hop — each signed with the ingress's
+  Ed25519 key over `<timestamp>.<raw body>`. The receiving server holds only the public
+  key (`MUSTERD_INGRESS_PUBLIC_KEY`), refuses unsigned/forged/stale dispatches and any
+  dispatch when it holds no key, and re-checks team, binding and token against its own
+  state through the same `handleRelayCallback` path. Same adapter, same token model;
+  SPEC A.29 carries the wire rule.
 
 ## Observability & Evaluation
 

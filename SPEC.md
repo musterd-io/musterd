@@ -1115,3 +1115,10 @@ A team's Slack workspace is installed through Slack's OAuth flow, not an operato
   token (which remains the pre-install fallback until its retirement), and MUST never be
   logged, audited, exported or listed. Installing a workspace is separate from pairing a
   person: the install is the workspace's act, and each person still pairs their own binding.
+- For a hosted team the install's destination MAY be its Cloud server instead of a relay
+  object. The ingress MUST then dispatch the install record and every later callback for
+  that workspace directly to that server — no relay hop — signing the raw body,
+  unmodified, with the ingress's key (`<timestamp>.<raw body>`, Ed25519). The receiving
+  server MUST verify that attestation before re-parsing or redeeming anything, and MUST
+  refuse when it holds no ingress public key. The same adapter interface and token model
+  apply on both transports.

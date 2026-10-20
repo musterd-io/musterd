@@ -191,8 +191,9 @@ describe('away-relay tenant isolation (lane 01M50ZQCTW)', () => {
 
 /** An in-memory stand-in for the SlackInstalls registry object. */
 function registryStub() {
-  const states = new Map<string, { slug: string; consumed: boolean }>();
+  const states = new Map<string, { slug: string; consumed: boolean; destination: string | null }>();
   const installs = new Map<string, string>();
+  const destinations = new Map<string, string>();
   return {
     idFromName: (name: string) => name,
     get: () => ({
@@ -204,29 +205,53 @@ function registryStub() {
             headers: { 'content-type': 'application/json' },
           });
         if (req.method === 'PUT' && url.pathname === '/state') {
-          const b = (await req.json()) as { state: string; slug: string };
-          states.set(b.state, { slug: b.slug, consumed: false });
+          const b = (await req.json()) as {
+            state: string;
+            slug: string;
+            destination?: string | null;
+          };
+          states.set(b.state, {
+            slug: b.slug,
+            consumed: false,
+            destination: b.destination ?? null,
+          });
           return json({ ok: true });
         }
         const sm = /^\/state\/(.+)$/.exec(url.pathname);
         if (req.method === 'GET' && sm) {
           const row = states.get(decodeURIComponent(sm[1]!));
-          return json({ slug: row?.slug ?? null, live: !!row && !row.consumed });
+          return json({
+            slug: row?.slug ?? null,
+            destination: row?.destination ?? null,
+            live: !!row && !row.consumed,
+          });
         }
         if (req.method === 'PUT' && url.pathname === '/install') {
-          const b = (await req.json()) as { state: string; slack_team_id: string; slug: string };
+          const b = (await req.json()) as {
+            state: string;
+            slack_team_id: string;
+            slug: string;
+            destination?: string | null;
+          };
           const row = states.get(b.state);
           if (row) row.consumed = true;
           installs.set(b.slack_team_id, b.slug);
+          if (b.destination) destinations.set(b.slack_team_id, b.destination);
           return json({ ok: true });
         }
         const gm = /^\/slug-for\/(.+)$/.exec(url.pathname);
-        if (req.method === 'GET' && gm)
-          return json({ slug: installs.get(decodeURIComponent(gm[1]!)) ?? null });
+        if (req.method === 'GET' && gm) {
+          const teamId = decodeURIComponent(gm[1]!);
+          return json({
+            slug: installs.get(teamId) ?? null,
+            destination: destinations.get(teamId) ?? null,
+          });
+        }
         return json({ error: 'not found' }, 404);
       },
     }),
     installs,
+    destinations,
   };
 }
 
@@ -329,6 +354,123 @@ describe('slack install routes (ADR 668 decision 2, increment 9)', () => {
     );
     expect(wrong.status).toBe(403);
     expect(forwarded).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cloud-direct dispatch (spec: Slack ingress §3, away 10)', () => {
+  async function ingressKeyEnv() {
+    const pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair;
+    const pkcs8 = (await crypto.subtle.exportKey('pkcs8', pair.privateKey)) as ArrayBuffer;
+    const pem =
+      '-----BEGIN PRIVATE KEY-----\n' +
+      Buffer.from(pkcs8).toString('base64') +
+      '\n-----END PRIVATE KEY-----';
+    return { pem, publicKey: pair.publicKey };
+  }
+
+  it('a cloud install is delivered attested to its server, and its callbacks follow', async () => {
+    const { pem, publicKey } = await ingressKeyEnv();
+    const registry = registryStub();
+    const cloudPosts: { url: string; headers: Headers; body: string }[] = [];
+    const e = {
+      AWAY_RELAY: {
+        idFromName: (name: string) => name,
+        get: () => ({ fetch: async () => new Response('held', { status: 200 }) }),
+      },
+      SLACK_INSTALLS: registry,
+      SLACK_CLIENT_ID: '123.456',
+      SLACK_CLIENT_SECRET: 'shh',
+      INGRESS_SIGNING_KEY: pem,
+      SLACK_SIGNING_SECRET: 'sekret',
+    } as unknown as Env;
+
+    const install = await worker.fetch(
+      new Request(
+        'https://relay.example/slack/install?team=revive&state=cloud-state-16-chars&dest=https://cloud.example',
+      ),
+      e,
+    );
+    expect(install.status).toBe(302);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith('https://slack.com/'))
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              access_token: 'xoxb-cloud-token',
+              team: { id: 'T7' },
+              authed_user: { id: 'U7' },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        cloudPosts.push({
+          url,
+          headers: new Headers(init?.headers),
+          body: String(init?.body ?? ''),
+        });
+        return new Response('ok', { status: 201 });
+      }),
+    );
+    try {
+      const oauth = await worker.fetch(
+        new Request('https://relay.example/slack/oauth?code=abc&state=cloud-state-16-chars'),
+        e,
+      );
+      expect(oauth.status).toBe(200);
+      expect(cloudPosts).toHaveLength(1);
+      expect(cloudPosts[0]!.url).toBe(
+        'https://cloud.example/teams/revive/channels/slack/install-record',
+      );
+      // The attestation verifies against the ingress public key over `<ts>.<body>`.
+      const ts = cloudPosts[0]!.headers.get('x-musterd-ingress-timestamp')!;
+      const sig = Buffer.from(
+        cloudPosts[0]!.headers.get('x-musterd-ingress-signature')!,
+        'base64url',
+      );
+      expect(
+        await crypto.subtle.verify(
+          { name: 'Ed25519' },
+          publicKey,
+          sig,
+          new TextEncoder().encode(`${ts}.${cloudPosts[0]!.body}`),
+        ),
+      ).toBe(true);
+
+      // A signed Slack callback for that workspace is dispatched to the same server.
+      const body = slackBody('T7');
+      const slackTs = Math.floor(Date.now() / 1000);
+      const cb = await worker.fetch(
+        post(body, {
+          'x-slack-request-timestamp': String(slackTs),
+          'x-slack-signature': await sign('sekret', body, slackTs),
+        }),
+        e,
+      );
+      expect(cb.status).toBe(202);
+      expect(cloudPosts).toHaveLength(2);
+      expect(cloudPosts[1]!.url).toBe(
+        'https://cloud.example/teams/revive/channels/slack/callback/ask-1',
+      );
+      expect(cloudPosts[1]!.body).toBe(body);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('cloudDestinationFrom accepts only https origins', async () => {
+    const { cloudDestinationFrom } = await import('./installs.js');
+    expect(cloudDestinationFrom('https://cloud.example')).toBe('https://cloud.example');
+    expect(cloudDestinationFrom('http://cloud.example')).toBeNull();
+    expect(cloudDestinationFrom('https://cloud.example/path')).toBeNull();
+    expect(cloudDestinationFrom('https://user@cloud.example')).toBeNull();
+    expect(cloudDestinationFrom('not a url')).toBeNull();
+    expect(cloudDestinationFrom(null)).toBeNull();
   });
 });
 
