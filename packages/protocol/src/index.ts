@@ -62,6 +62,7 @@ export * from './boardQuery.js';
 export * from './authority.js';
 export * from './seeds.js';
 export * from './relay.js';
+export * from './appChannel.js';
 export * from './autoTarget.js';
 export * from './tool-telemetry.js';
 export * from './ci-telemetry.js';

@@ -793,6 +793,23 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
       }
     },
   },
+  {
+    // The musterd app's channel (ADR 676 §5, lane 01M5BER5GX4WENE2CEST6CA8NB): an app pairing
+    // stages the phone's public keys and App Attest verdict on its nonce row, and the binding it
+    // becomes keeps them — the receive key deliveries are sealed to and the device key that signs
+    // answers. Public halves only, as JSON. v116 is taken by PR #2991.
+    version: 117,
+    sqlite: (db) => {
+      for (const table of ['pairing_nonces', 'channel_bindings']) {
+        const cols = db.prepare(`SELECT name FROM pragma_table_info('${table}')`).pluck().all();
+        if (!cols.includes('app_keys')) db.exec(`ALTER TABLE ${table} ADD COLUMN app_keys TEXT`);
+      }
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE pairing_nonces ADD COLUMN IF NOT EXISTS app_keys TEXT');
+      await d.exec('ALTER TABLE channel_bindings ADD COLUMN IF NOT EXISTS app_keys TEXT');
+    },
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

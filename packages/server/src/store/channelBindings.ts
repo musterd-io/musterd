@@ -59,7 +59,8 @@ export type PairingRefusal =
   | 'not_awaiting_identity'
   | 'not_found'
   | 'not_owner'
-  | 'not_awaiting_confirmation';
+  | 'not_awaiting_confirmation'
+  | 'app_pairing';
 
 /**
  * Start a pairing (spec §Pairing step 1): mint the nonce for an authenticated human on the
@@ -137,6 +138,8 @@ export async function recordPairingIdentity(
       [sha256(input.nonce)],
     );
     if (!row) return { ok: false as const, reason: 'unknown_nonce' as const };
+    // An app pairing stages through stageAppPairing (sealed, attested), never a provider callback.
+    if (row.channel === 'app') return { ok: false as const, reason: 'app_pairing' as const };
     if (row.consumed_at !== null) return { ok: false as const, reason: 'consumed' as const };
     if (now >= row.expires_at) {
       await t.run('UPDATE pairing_nonces SET consumed_at = ? WHERE id = ?', [now, row.id]);
@@ -221,13 +224,23 @@ async function loadOwnedPairing(
  */
 export async function confirmPairing(
   db: Driver,
-  input: { teamId: string; memberId: string; actor: string; pairingId: string; now?: number },
+  input: {
+    teamId: string;
+    memberId: string;
+    actor: string;
+    pairingId: string;
+    now?: number;
+    /** Only confirmAppPairing sets this, after the phone key is enrolled (ADR 676 §5). */
+    allowApp?: boolean;
+  },
 ): Promise<{ ok: true; binding: ChannelBinding } | { ok: false; reason: PairingRefusal }> {
   const now = input.now ?? Date.now();
   return db.tx(async (t) => {
     const loaded = await loadOwnedPairing(t, input.teamId, input.memberId, input.pairingId);
     if ('reason' in loaded) return { ok: false as const, reason: loaded.reason };
     const { pairing } = loaded;
+    if (pairing.channel === 'app' && !input.allowApp)
+      return { ok: false as const, reason: 'app_pairing' as const };
     if (now >= pairing.expires_at) {
       await t.run('UPDATE pairing_nonces SET consumed_at = ? WHERE id = ?', [now, pairing.id]);
       return { ok: false as const, reason: 'expired' as const };

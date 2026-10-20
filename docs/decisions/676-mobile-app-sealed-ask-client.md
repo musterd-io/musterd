@@ -122,6 +122,14 @@ one gets tapped through.
   `DhkemP256HkdfSha256`, `HkdfSha256` and `Aes128Gcm` directly. The daemon depends on `@hpke/core`
   alone, which pulls in `@hpke/common` (same author, same repository). That is a smaller surface
   than the approval covered.
+- 2026-10-20, lane 01M5BER5GX (increment 2, PR #3006): the pairing's wire shapes are
+  `AppPairingQrSchema` and `AppPairRequestSchema` in `packages/protocol/src/appChannel.ts`. Keys
+  travel raw (Ed25519 32 bytes, P-256 uncompressed 65), and the App Attest challenge is
+  sha256(code ‖ signing key ‖ receive key). The pairing reuses ADR 618's single-use pairing nonce as
+  decision 5's one-time code, and the phone key is enrolled through ADR 662's `enrollKeyGuarded`
+  under a standing key's `device_key_admin` signature. `POST /authority/keys` now refuses kind
+  `phone`, so that kind always means App Attest vouched for the key. Schema v117 keeps the phone's
+  public keys on the pairing and the binding.
 - The launch gate in ADR 662 can close for nick once the phone key is enrolled through this pairing.
 - A lost or wiped phone is ADR 662's recovery path. A Face ID change ends the signing key the
   same way and needs the same re-key.
