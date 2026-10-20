@@ -373,6 +373,41 @@ export function laneAdvisoryAck(a: LaneAdvisoryWire): LaneAdvisoryAck {
 }
 
 /**
+ * ADR 679: a reply on a `lane_review` ask whose lane has LEFT the acceptance stage — the third way
+ * an ask stops being the one that binds (a re-route is ADR 545, an advisory ask is ADR 667), on
+ * the wire.
+ */
+export interface LaneUnboundWire {
+  lane: string;
+  /** The acceptance ask the reply answered. */
+  ask: string;
+  /** The reply that bound to nothing. */
+  verdict: 'accept' | 'decline' | 'wait';
+  /** The lane's state at that moment — why the reply bound to nothing. */
+  state: string;
+}
+export interface LaneUnboundAck extends LaneUnboundWire {
+  guidance: string;
+}
+
+/**
+ * ADR 679: the ack for an accept / decline / wait that answered an acceptance ask on a lane that
+ * had already left the acceptance stage. It moved nothing — ADR 202 means one verdict closes a
+ * lane — but it used to say nothing either, so big-body's 16:58 decline on 2026-10-19 (lane
+ * 01M5ASVF3G, closed at 14:20 on a newer PR) read exactly like a decline that had landed, and
+ * left no row anywhere. Names the lane's state, so the sender can see why.
+ */
+export function laneUnboundAck(u: LaneUnboundWire): LaneUnboundAck {
+  return {
+    ...u,
+    guidance:
+      `Lane ${u.lane}: your ${u.verdict} on the acceptance ask ${u.ask} bound to nothing — the lane ` +
+      `is ${u.state}, and only a lane awaiting acceptance is moved by a verdict. The reply is ` +
+      `recorded against the lane, so its owner sees that you spoke.`,
+  };
+}
+
+/**
  * Why an acceptance submit asked nobody (ADR 404). The historical sentence "no eligible acceptor
  * is live" named both an empty room and a room full of busy / same-model / human-only seats.
  */

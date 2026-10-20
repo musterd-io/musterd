@@ -14,6 +14,7 @@ import {
   laneAckAck,
   laneEscalationAck,
   laneSupersededAck,
+  laneUnboundAck,
   laneVerdictAck,
   makeEnvelope,
   threadHintFor,
@@ -261,6 +262,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
       ...(ackBody?.lane_superseded ? { lane_superseded: ackBody.lane_superseded } : {}),
+      ...(ackBody?.lane_unbound ? { lane_unbound: ackBody.lane_unbound } : {}),
       ...(ackBody?.deaf_recipient ? { deaf_recipient: ackBody.deaf_recipient } : {}),
       ...(ackBody?.evidence_notice ? { evidence_notice: ackBody.evidence_notice } : {}),
       ...(threadHint ? { thread_hint: threadHint } : {}),
@@ -308,6 +310,10 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // ask binds now.
   if (ackBody?.lane_superseded)
     process.stdout.write(theme.dim(laneSupersededAck(ackBody.lane_superseded).guidance) + '\n');
+  // ADR 679: a verdict on a lane that had left the acceptance stage, at the same parity — it bound
+  // to nothing, and the lane's state is named.
+  if (ackBody?.lane_unbound)
+    process.stdout.write(theme.dim(laneUnboundAck(ackBody.lane_unbound).guidance) + '\n');
   // ADR 505: the owner's answer to a review dispute, at the same parity — the text is protocol's.
   if (ackBody?.dispute)
     process.stdout.write(theme.dim(disputeAnswerAck(ackBody.dispute).guidance) + '\n');

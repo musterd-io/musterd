@@ -2148,6 +2148,108 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(late.json.lane_superseded?.current?.reviewer).toBe('hal');
       });
 
+      describe('a verdict on a lane that left the acceptance stage (ADR 679)', () => {
+        // 2026-10-19, lane 01M5ASVF3G: big-body declined at 13:51, slippy resubmitted #2950 at
+        // 14:17, big-body accepted at 14:20 (the lane closed), and at 16:58 big-body sent ANOTHER
+        // decline on the original ask, with two live corrections. It bound to nothing — and said
+        // nothing, and left no row: the correction sat on main for 2h20m after the lane closed.
+        /** A lane with an acceptance ask on it, closed by an accept. */
+        async function closedLane() {
+          const { nickTok, ada, gee } = await setup();
+          const { laneId, reviewer, auth, askId } = await laneAwaitingAcceptance(nickTok, ada, gee);
+          const closed = await verdict(auth, reviewer, askId, 'accept');
+          expect(closed.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+          return { nickTok, laneId, reviewer, auth, askId };
+        }
+
+        it('names a late decline on a closed lane, and records the row', async () => {
+          const { nickTok, laneId, reviewer, auth, askId } = await closedLane();
+
+          const late = await verdict(auth, reviewer, askId, 'decline');
+          expect(late.status).toBe(201);
+          expect(late.json.lane_verdict).toBeUndefined();
+          expect(late.json.lane_superseded).toBeUndefined();
+          expect(late.json.lane_unbound).toEqual({
+            lane: laneId,
+            ask: askId,
+            verdict: 'decline',
+            state: 'done',
+          });
+
+          // The row names it, so the lane's history shows a reviewer who was not heard.
+          const rows = await auditRows(nickTok, 'lane.review_unbound');
+          expect(rows).toHaveLength(1);
+          expect(rows[0].detail.lane).toBe(laneId);
+          expect(rows[0].detail.ask).toBe(askId);
+          expect(rows[0].detail.reviewer).toBe(reviewer);
+          expect(rows[0].detail.verdict).toBe('decline');
+          expect(rows[0].detail.state).toBe('done');
+          // The row carries the reply's own id, so a readout joins the verdict to its words.
+          expect(rows[0].detail.answer).toBe(late.json.ack.id);
+        });
+
+        it('a second accept on a closed lane binds to nothing and closes nothing again', async () => {
+          const { nickTok, laneId, reviewer, auth, askId } = await closedLane();
+
+          const late = await verdict(auth, reviewer, askId, 'accept');
+          expect(late.status).toBe(201);
+          expect(late.json.lane_verdict).toBeUndefined();
+          expect(late.json.lane_unbound).toEqual({
+            lane: laneId,
+            ask: askId,
+            verdict: 'accept',
+            state: 'done',
+          });
+          expect(await auditRows(nickTok, 'lane.closed')).toHaveLength(1);
+          expect(await auditRows(nickTok, 'lane.review_unbound')).toHaveLength(1);
+        });
+
+        it('a `wait` on a closed lane takes no review, and says so', async () => {
+          const { laneId, reviewer, auth, askId } = await closedLane();
+
+          const late = await verdict(auth, reviewer, askId, 'wait');
+          expect(late.status).toBe(201);
+          expect(late.json.lane_ack).toBeUndefined();
+          expect(late.json.lane_unbound).toEqual({
+            lane: laneId,
+            ask: askId,
+            verdict: 'wait',
+            state: 'done',
+          });
+        });
+
+        it('a verdict that BINDS is untouched: it moves the lane and writes no unbound row', async () => {
+          const { nickTok, ada, gee } = await setup();
+          const { laneId, reviewer, auth, askId } = await laneAwaitingAcceptance(nickTok, ada, gee);
+
+          const sent = await verdict(auth, reviewer, askId, 'accept');
+          expect(sent.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+          expect(sent.json.lane_unbound).toBeUndefined();
+          expect(await auditRows(nickTok, 'lane.review_unbound')).toHaveLength(0);
+        });
+
+        it('a second decline on an ask the FIRST decline already answered is named too', async () => {
+          // The same shape as the sighting, one step earlier: the first decline sent the lane back
+          // to active, so the second decline on that ask has no lane to move.
+          const { nickTok, ada, gee } = await setup();
+          const { laneId, reviewer, auth, askId } = await laneAwaitingAcceptance(nickTok, ada, gee);
+
+          const first = await verdict(auth, reviewer, askId, 'decline');
+          expect(first.json.lane_verdict).toEqual({ lane: laneId, state: 'active' });
+          expect(first.json.lane_unbound).toBeUndefined();
+
+          const second = await verdict(auth, reviewer, askId, 'decline');
+          expect(second.json.lane_verdict).toBeUndefined();
+          expect(second.json.lane_unbound).toEqual({
+            lane: laneId,
+            ask: askId,
+            verdict: 'decline',
+            state: 'active',
+          });
+          expect(await auditRows(nickTok, 'lane.review_unbound')).toHaveLength(1);
+        });
+      });
+
       it('re-routing to the seat that already holds the ask mints nothing and reports it standing', async () => {
         const { nickTok, ada, gee } = await setup();
         const lane = await post('/teams/dawn/lanes', { title: 'same seat', claim: true }, ada);

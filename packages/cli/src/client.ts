@@ -984,6 +984,14 @@ export class HttpClient {
       ask: string;
       current: { ask: string; reviewer: string } | null;
     };
+    /** ADR 679: this reply answered an acceptance ask on a lane that had left the acceptance
+     *  stage — it bound to nothing, and the lane's state is named. */
+    lane_unbound?: {
+      lane: string;
+      ask: string;
+      verdict: 'accept' | 'decline' | 'wait';
+      state: string;
+    };
     /** ADR 505: the owner's answer to a review dispute — conceded, or held (re-routed to a
      *  tiebreak reviewer, or nobody could be picked). Absent when the act answered no dispute. */
     dispute?: {
@@ -1007,6 +1015,12 @@ export class HttpClient {
         lane: string;
         ask: string;
         current: { ask: string; reviewer: string } | null;
+      };
+      lane_unbound?: {
+        lane: string;
+        ask: string;
+        verdict: 'accept' | 'decline' | 'wait';
+        state: string;
       };
       dispute?: {
         lane: string;

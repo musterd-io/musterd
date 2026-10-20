@@ -102,6 +102,15 @@ export type LaneSupersededWire = {
   current: { ask: string; reviewer: string } | null;
 };
 
+/** ADR 679: a verdict on a lane that had left the acceptance stage — `laneUnboundAck()` renders
+ *  the sentence. */
+export type LaneUnboundWire = {
+  lane: string;
+  ask: string;
+  verdict: 'accept' | 'decline' | 'wait';
+  state: string;
+};
+
 /** A refuse whose cause is a bad *grant*, not a bad seat — drop the grant and retry bare (ADR 193). */
 function isStaleGrantRefusal(frame: { code: string; message: string }): boolean {
   if (frame.code === 'expired_grant') return true;
@@ -830,6 +839,9 @@ export class MusterdClient {
     lane_superseded?: LaneSupersededWire;
     /** ADR 667: this reply answered an advisory acceptance ask — recorded, moved nothing. */
     lane_advisory?: LaneAdvisoryWire;
+    /** ADR 679: this reply answered an acceptance ask on a lane that had left the acceptance
+     *  stage — it bound to nothing, and the lane's state is named. */
+    lane_unbound?: LaneUnboundWire;
     /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */
     dispute?: DisputeAnswerWire;
     /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
@@ -846,6 +858,7 @@ export class MusterdClient {
       lane_ack?: { lane: string };
       lane_superseded?: LaneSupersededWire;
       lane_advisory?: LaneAdvisoryWire;
+      lane_unbound?: LaneUnboundWire;
       dispute?: DisputeAnswerWire;
       accepted_handoff?: AcceptedHandoffWire;
       deaf_recipient?: { recipient: string; reason: string | null };

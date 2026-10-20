@@ -178,6 +178,7 @@ const LANE_VERBS = new Set([
   'lane.review_human_asked',
   'lane.review_acknowledged',
   'lane.review_advisory',
+  'lane.review_unbound',
   'lane.review_rerouted',
 ]);
 

@@ -251,6 +251,10 @@ export type AuditAction =
   // ADR 667: an ADVISORY seat's verdict on its advisory acceptance ask — recorded, moves nothing.
   // detail: { lane, ask, reviewer, verdict: 'accept'|'decline', answer }.
   | 'lane.review_advisory'
+  // ADR 679: a reply on an acceptance ask whose lane had LEFT the acceptance stage (closed on a
+  // newer PR, sent back, parked, abandoned) — it bound to nothing, and this row names it.
+  // detail: { lane, ask, reviewer, verdict: 'accept'|'decline'|'wait', answer, state }.
+  | 'lane.review_unbound'
   // A hand re-route of a STANDING acceptance (lane 01M1QYHJFY): the lane was already
   // awaiting_acceptance and the owner (or an admin) named a different acceptor. Its own verb, not a
   // second `lane.ready_for_review` — that row is the submit, and the review-loop breaker and the
@@ -762,6 +766,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.review_human_asked': 'none',
   'lane.review_acknowledged': 'actor',
   'lane.review_advisory': 'actor',
+  'lane.review_unbound': 'actor',
   'lane.review_rerouted': 'actor',
   'lane.dispute_answered': 'actor',
   'lane.released': 'actor',
