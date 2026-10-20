@@ -1,4 +1,4 @@
-# 675 — Cloud 6 observability: OpenTelemetry exporter + error tracking, disclosed in PRIVACY.md
+# 678 — Cloud 6 observability: OpenTelemetry exporter + error tracking, disclosed in PRIVACY.md
 
 - Status: accepted
 - Date: 2026-10-20
@@ -16,7 +16,7 @@ The server already emits OTel spans and metrics via `@opentelemetry/api` (`packa
 
 1. **New runtime dependency: `@opentelemetry/exporter-trace-otlp-http` (and the metrics exporter) via `@musterd/telemetry`.** ADR 486 already admits `pg`; this ADR adds the OTel OTLP exporter. Weighed against `@opentelemetry/sdk-node` (bundles exporters we don't need, heavier) and vendor-specific SDKs (lock-in); the OTLP/HTTP exporter keeps the app vendor-neutral.
 2. **Cloud mode reads `MUSTERD_OTLP_ENDPOINT` (and `MUSTERD_OTLP_HEADERS` for auth) from config.** When set, the server starts the SDK with that endpoint; when unset (self-hosted), the SDK stays off. `MUSTERD_MODE=cloud` does not itself enable telemetry — the operator sets the endpoint via Fly secrets.
-3. **Error tracking** uses the same OTLP trace exporter: unhandled errors and 5xxs are recorded as span events with `exception.*` attributes; a separate error-tracking vendor is deferred to a follow-up.
+3. **Error tracking** uses the same OTLP trace exporter: unhandled errors and 5xxs are recorded as span events with `exception.*` attributes; a separate error-tracking vendor is deferred to Cloud increment 6's ops lane `01M3Z44568` (no disposition needed — it is out of this lane's scope).
 4. **PRIVACY.md** gains a hosted-only section: a Cloud team server exports traces and errors to a vendor (named in the section) over OTLP; self-hosted never phones home; message bodies, Act text, secrets and seat names are never exported (ADR 015 posture).
 
 ## Consequences
