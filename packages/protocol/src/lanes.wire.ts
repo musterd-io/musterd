@@ -396,14 +396,22 @@ export interface LaneUnboundAck extends LaneUnboundWire {
  * lane — but it used to say nothing either, so big-body's 16:58 decline on 2026-10-19 (lane
  * 01M5ASVF3G, closed at 14:20 on a newer PR) read exactly like a decline that had landed, and
  * left no row anywhere. Names the lane's state, so the sender can see why.
+ *
+ * The last sentence is the one that matters (alfie's decline on the landed #3000, 2026-10-19): the
+ * row is in the lane's history, and NOBODY IS TOLD. A first draft said "so its owner sees that you
+ * spoke", which tells the reviewer their words reached the owner — they did not, and the lane's own
+ * Consequences say a row on a closed lane is a place a reviewer may not look. An ack that implies a
+ * notification the daemon never makes is the same silence in a new coat: the reviewer waits, and
+ * the finding sits. So the sentence says what is true and what to do.
  */
 export function laneUnboundAck(u: LaneUnboundWire): LaneUnboundAck {
   return {
     ...u,
     guidance:
       `Lane ${u.lane}: your ${u.verdict} on the acceptance ask ${u.ask} bound to nothing — the lane ` +
-      `is ${u.state}, and only a lane awaiting acceptance is moved by a verdict. The reply is ` +
-      `recorded against the lane, so its owner sees that you spoke.`,
+      `is ${u.state}, and only a lane awaiting acceptance is moved by a verdict. It is recorded in ` +
+      `the lane's history, but nobody is notified: if it carries a finding, send it to the lane's ` +
+      `owner or open a lane for it.`,
   };
 }
 
