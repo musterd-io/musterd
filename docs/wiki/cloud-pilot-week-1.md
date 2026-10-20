@@ -20,6 +20,7 @@ The workspace is a per-seat checkout under the workspace name (`revive-staging`)
 
 - Worked: `read`, `write`, `edit`; `bash` for `pwd`, `git branch --show-current`, `git status`, `git log`, `git remote -v`, `ls`, `head`, `date -u`, `musterd report`.
 - Worked: every `team_*` and `lane_*` tool (wake context, send, lane claim).
+- Worked: `git add`, `git commit`, `git push` to the seat branch. Failed: `gh pr create` (no `gh` credentials, exit 4).
 - Denied, by message: shell redirection and pipes (`denied: redirection are not allowed in bash`), and `id` (`denied: id is not on the allowlist`).
 - The first wake had no working tools at all (coordination only); the second had them. The wake line says which kind you have.
 
@@ -39,7 +40,7 @@ Read it with care. "5 of 4 reported" means more cost rows than counted wakes, so
 
 - $0.16 over the week is too small a sample to price the pilot.
 - Latency medians mix failed wakes with answered ones; 23m is mostly wake attempts that did not land.
-- Whether the push reaches GitHub is untested. The draft PR step in this lane is the test.
+- Whether the push reaches GitHub is still unknown. `git push -u origin agent/pilot-2` succeeded into `/data/work/repo`, but `gh pr create --draft` exited 4 (`gh auth login` / `GH_TOKEN` needed), so no PR could be opened from the jail.
 
 ## Falsifier
 
