@@ -27,7 +27,71 @@ export type DaemonFrame =
       expires_at: number;
       post: { url: string; body: string; headers?: Record<string, string> };
     }
+  | {
+      protocol: 1;
+      type: 'app_deliver';
+      ask_ref: string;
+      dedupe_id: string;
+      expires_at: number;
+      binding: string;
+      push: AppPushTarget;
+      sealed: SealedBody;
+    }
+  | {
+      protocol: 1;
+      type: 'app_body';
+      request_id: string;
+      sealed: SealedBody | null;
+      expires_at?: number;
+    }
   | { protocol: 1; type: 'resolve'; ask_ref: string };
+
+/** A sealed body as the daemon sends it (ADR 676 §2): opaque to the relay, base64url fields. */
+export interface SealedBody {
+  v: 1;
+  enc: string;
+  ct: string;
+}
+
+/** Where one app delivery is pushed: the binding's APNs device token and environment. */
+export interface AppPushTarget {
+  token: string;
+  environment: 'production' | 'development';
+}
+
+/** At or under this many bytes of sealed body the push carries it; over it, the ask ref only. */
+export const APP_PUSH_INLINE_MAX_BYTES = 3_072;
+/** APNs' payload ceiling for an alert push. */
+export const APNS_MAX_PAYLOAD_BYTES = 4_096;
+
+const B64URL = /^[A-Za-z0-9_-]+$/;
+
+function isSealed(v: unknown): v is SealedBody {
+  return (
+    isRecord(v) &&
+    v['v'] === 1 &&
+    typeof v['enc'] === 'string' &&
+    v['enc'].length <= 256 &&
+    B64URL.test(v['enc']) &&
+    typeof v['ct'] === 'string' &&
+    v['ct'].length <= 65_536 &&
+    B64URL.test(v['ct'])
+  );
+}
+
+function isPushTarget(v: unknown): v is AppPushTarget {
+  return (
+    isRecord(v) &&
+    typeof v['token'] === 'string' &&
+    /^[0-9a-f]{64,200}$/.test(v['token']) &&
+    (v['environment'] === 'production' || v['environment'] === 'development')
+  );
+}
+
+/** The bytes a sealed body takes in a push: its two encoded fields, as sent. */
+export function sealedPushBytes(sealed: SealedBody): number {
+  return sealed.enc.length + sealed.ct.length;
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -92,11 +156,103 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
       },
     };
   }
+  if (v['type'] === 'app_deliver') {
+    if (typeof v['ask_ref'] !== 'string' || v['ask_ref'].length === 0) return null;
+    if (typeof v['dedupe_id'] !== 'string' || v['dedupe_id'].length === 0) return null;
+    if (typeof v['expires_at'] !== 'number' || !Number.isInteger(v['expires_at'])) return null;
+    if (typeof v['binding'] !== 'string' || v['binding'].length === 0 || v['binding'].length > 64)
+      return null;
+    if (!isPushTarget(v['push']) || !isSealed(v['sealed'])) return null;
+    return {
+      protocol: 1,
+      type: 'app_deliver',
+      ask_ref: v['ask_ref'],
+      dedupe_id: v['dedupe_id'],
+      expires_at: v['expires_at'],
+      binding: v['binding'],
+      push: { token: v['push'].token, environment: v['push'].environment },
+      sealed: { v: 1, enc: v['sealed'].enc, ct: v['sealed'].ct },
+    };
+  }
+  if (v['type'] === 'app_body') {
+    if (typeof v['request_id'] !== 'string' || v['request_id'].length === 0) return null;
+    const sealed = v['sealed'];
+    if (sealed !== null && !isSealed(sealed)) return null;
+    const expires = v['expires_at'];
+    if (expires !== undefined && (typeof expires !== 'number' || !Number.isInteger(expires)))
+      return null;
+    return {
+      protocol: 1,
+      type: 'app_body',
+      request_id: v['request_id'],
+      sealed: sealed === null ? null : { v: 1, enc: sealed.enc, ct: sealed.ct },
+      ...(expires !== undefined ? { expires_at: expires } : {}),
+    };
+  }
   if (v['type'] === 'resolve') {
     if (typeof v['ask_ref'] !== 'string' || v['ask_ref'].length === 0) return null;
     return { protocol: 1, type: 'resolve', ask_ref: v['ask_ref'] };
   }
   return null;
+}
+
+/**
+ * The app's callback (ADR 676 §6, §8), checked for shape only: the daemon parses it in full and
+ * its trust is the seal and the phone's signature, never this relay. Returns the ref the callback
+ * frame carries — the pairing or ask it names, or the binding for a re-delivery — or null.
+ */
+export function appCallbackRef(raw: string): string | null {
+  if (new TextEncoder().encode(raw).length > RELAY_MAX_FRAME_BYTES) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(v) || v['app'] !== 1) return null;
+  const binding = v['binding'];
+  if (typeof binding !== 'string' || binding.length === 0 || binding.length > 64) return null;
+  if (v['kind'] === 'redeliver') return binding;
+  if (v['kind'] !== 'pair' && v['kind'] !== 'answer') return null;
+  const ref = v['ref'];
+  if (typeof ref !== 'string' || ref.length === 0 || ref.length > 128) return null;
+  if (!isSealed(v['sealed'])) return null;
+  return ref;
+}
+
+/**
+ * The APNs request body for one app delivery (ADR 676 §9). The alert text is the relay's own
+ * fixed placeholder; the notification service extension replaces it with the opened ask. The
+ * `musterd` block carries the route the seal was made under — what the phone opens with — and
+ * the sealed body only when it fits; otherwise the phone fetches it by ref.
+ */
+export function apnsPayload(
+  slug: string,
+  frame: Extract<DaemonFrame, { type: 'app_deliver' }>,
+): { body: string; inline: boolean } {
+  const build = (inline: boolean) =>
+    JSON.stringify({
+      aps: {
+        alert: { title: 'musterd', body: 'An ask is waiting for you.' },
+        sound: 'default',
+        'mutable-content': 1,
+        'interruption-level': 'time-sensitive',
+      },
+      musterd: {
+        v: 1,
+        team: slug,
+        binding: frame.binding,
+        ref: frame.ask_ref,
+        expires_at: frame.expires_at,
+        ...(inline ? { sealed: frame.sealed } : {}),
+      },
+    });
+  if (sealedPushBytes(frame.sealed) <= APP_PUSH_INLINE_MAX_BYTES) {
+    const body = build(true);
+    if (new TextEncoder().encode(body).length <= APNS_MAX_PAYLOAD_BYTES)
+      return { body, inline: true };
+  }
+  return { body: build(false), inline: false };
 }
 
 /** Reconcile (ADR 659 §5): the daemon's live pending set is authoritative; the rest is dropped. */

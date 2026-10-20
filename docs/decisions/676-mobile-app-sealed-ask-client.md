@@ -139,6 +139,26 @@ one gets tapped through.
   authorizes. Privileged asks, listed acts with the descriptor screen (decision 6), answers from a
   notification (decision 7) and the fatigue ceiling (decision 8) are increment 3b. 3b is where
   ADR 623's "A2 does not exist yet" ends, and that change gets its own review.
+- 2026-10-20, lane 01M5BEQWY8 (7b, the relay's push): the relay holds no device table. The phone
+  gives its APNs device token and environment inside its sealed pairing request (`push_token`,
+  `push_environment` on `AppPairRequestSchema`); the daemon keeps them on the binding and names
+  them on every `app_deliver` (`push`). A binding paired without a token is not pushed and the
+  daemon audits why. The relay signs an ES256 provider token with the operator's `.p8` key
+  (`APNS_KEY_P8` secret; key id, Apple team id and bundle id as Worker vars) and pushes
+  `mutable-content`, `time-sensitive`, the ask ref as collapse id, with a fixed placeholder alert.
+  "Up to 3 KB" is measured on the encoded sealed fields (`sealedPushBytes`), so the push stays
+  under APNs' 4 KB. A larger body is fetched by ref: the phone calls
+  `GET /app/<slug>/body/<binding>/<ref>`, the relay asks the daemon over the socket
+  (`app_fetch` → `app_body`) and returns what it answers, storing nothing; the daemon re-issues
+  that one ask under a fresh token, as a re-delivery does, since it keeps no sealed body and the
+  token exists only inside a seal. The phone's callbacks arrive at `POST /app/<slug>/callback`,
+  shape-checked by the relay and forwarded. App deliveries keep no relay pending row: each carries
+  a fresh token, so each is a new delivery. Both phone routes are unauthenticated at the relay —
+  the seal is the trust — so anyone who learns a binding id can make the daemon re-issue a token
+  for a live ask; the phone's answer to the old token then fails as consumed and it re-delivers.
+  That is the drop-or-delay class this ADR already grants a malicious relay, widened to whoever
+  holds a binding id. Rotating the push token without re-pairing is not built: the token is
+  fixed at pairing, and an APNs `Unregistered` comes back to the daemon as the delivery's reason.
 - The launch gate in ADR 662 can close for nick once the phone key is enrolled through this pairing.
 - A lost or wiped phone is ADR 662's recovery path. A Face ID change ends the signing key the
   same way and needs the same re-key.
@@ -157,6 +177,13 @@ sealed delivery past its nonce; a ciphertext swapped between two asks; an unsign
 ask injected; a stripped seal sent as plaintext; a pairing with a forged or mismatched attestation; a
 signature over a digest the phone did not render; a listed act answered from a notification action; a
 seventh listed-act ask in an hour delivered rather than held.
+
+_(2026-10-20, 7b.)_ The relay's push is checked against a fake APNs in
+`workers/away-relay/src/apns.test.ts` and `index.test.ts`; the provider token verifies under the
+key's public half. What the tests cannot show is that a Worker's `fetch` reaches APNs, which
+accepts HTTP/2 only. The first push from the deployed relay to nick's phone settles it: an
+`away_app_delivered` log line with an `apns-id` confirms it, and a protocol error from Apple
+falsifies it.
 
 **Experiment.** Pre-registered on nick's team, 30 days from the first signed answer: of the asks
 answered while nick had no live laptop presence, the share answered from the app. The design holds if

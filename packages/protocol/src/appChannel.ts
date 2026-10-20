@@ -13,6 +13,8 @@ export const APP_QR_VERSION = 1;
 const b64url = z.string().regex(/^[A-Za-z0-9_-]+$/);
 const ed25519Raw = b64url.length(43);
 const p256Raw = b64url.length(87);
+/** An APNs device token: hex, 32 bytes today, up to 100 by Apple's note that the length may grow. */
+const APNS_DEVICE_TOKEN = z.string().regex(/^[0-9a-f]{64,200}$/);
 
 /**
  * What the daemon's own page shows as a QR code (ADR 676 §5). `code` is the one-time pairing
@@ -45,6 +47,13 @@ export const AppPairRequestSchema = z.object({
   attest_key_id: b64url.length(43),
   attestation: b64url.max(16_384),
   device_name: z.string().max(64).optional(),
+  /**
+   * The phone's APNs device token (hex) and the APNs environment it was issued in. The daemon keeps
+   * them on the binding and names them on each `app_deliver`, so the relay pushes without storing
+   * a device table. Absent, the binding is paired but receives no push until it pairs again.
+   */
+  push_token: APNS_DEVICE_TOKEN.optional(),
+  push_environment: z.enum(['production', 'development']).optional(),
 });
 export type AppPairRequest = z.infer<typeof AppPairRequestSchema>;
 
@@ -61,9 +70,15 @@ export type SealedBodyWire = z.infer<typeof SealedBodySchema>;
 
 /**
  * At or under this many bytes of sealed body the relay puts it in the push; over it the push carries
- * only the ask ref and the phone fetches the body through the relay (ADR 676 §2).
+ * only the ask ref and the phone fetches the body through the relay (ADR 676 §2). Measured by
+ * {@link sealedPushBytes}, on the encoded form, so the push stays inside APNs' 4 KB payload.
  */
 export const APP_PUSH_INLINE_MAX_BYTES = 3_072;
+
+/** The bytes a sealed body takes in a push: its two base64url fields, as sent. */
+export function sealedPushBytes(sealed: { enc: string; ct: string }): number {
+  return sealed.enc.length + sealed.ct.length;
+}
 
 /**
  * What the phone sends through the relay (ADR 676 §6, §8): the relay forwards it as a callback body.

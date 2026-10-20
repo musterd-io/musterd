@@ -3,6 +3,7 @@ import {
   classifyAskAction,
   makeEnvelope,
   RelayServerFrameSchema,
+  type RelayAppBodyFrame,
   type RelayCallbackFrame,
   type RelayDaemonFrame,
   type RelayPending,
@@ -23,7 +24,7 @@ import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { insertMessage } from '../store/messages.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
-import { handleAppCallback } from './appAdapter.js';
+import { handleAppCallback, handleAppFetch } from './appAdapter.js';
 import { parseSlackCallback } from './slackAdapter.js';
 
 /**
@@ -328,17 +329,44 @@ export function startAwayRelay(ctx: Ctx): () => void {
         const frame = RelayServerFrameSchema.safeParse(parsed);
         if (!frame.success) return;
         if (frame.data.type === 'delivered') {
+          // App deliveries' dedupe ids are `<ask>:app:<binding>` and `<pairing>:paired`.
+          const app = /:app:|:paired$/.test(frame.data.dedupe_id);
           log.info({
-            msg: frame.data.ok ? 'away_slack_delivered' : 'away_slack_delivery_failed',
+            msg: app
+              ? frame.data.ok
+                ? 'away_app_delivered'
+                : 'away_app_delivery_failed'
+              : frame.data.ok
+                ? 'away_slack_delivered'
+                : 'away_slack_delivery_failed',
             team: team.slug,
             ask: frame.data.ask_ref,
             status: frame.data.status,
+            ...(frame.data.reason ? { reason: frame.data.reason } : {}),
           });
         } else if (frame.data.type === 'callback') {
           void handleRelayCallback(ctx, team, frame.data).then((r) => {
             if (!r.ok && r.reason !== 'unparseable_callback')
               log.info({ msg: 'away_relay_callback_refused', team: team.slug, reason: r.reason });
           });
+        } else if (frame.data.type === 'app_fetch') {
+          const { request_id: requestId } = frame.data;
+          void handleAppFetch(ctx, team, frame.data)
+            .catch((err) => {
+              log.warn({ msg: 'away_app_fetch_failed', team: team.slug, err: String(err) });
+              return null;
+            })
+            .then((found) => {
+              socket.send(
+                JSON.stringify({
+                  protocol: 1,
+                  type: 'app_body',
+                  request_id: requestId,
+                  sealed: found?.sealed ?? null,
+                  ...(found ? { expires_at: found.expires_at } : {}),
+                } satisfies RelayAppBodyFrame),
+              );
+            });
         } else if (frame.data.type === 'error') {
           log.warn({ msg: 'away_relay_frame_refused', team: team.slug, reason: frame.data.reason });
         }

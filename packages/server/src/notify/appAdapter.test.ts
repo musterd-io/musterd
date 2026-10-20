@@ -30,7 +30,12 @@ import { setChannelSettings } from '../store/channelSettings.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
-import { appDeliveryNonce, deliverAskToAppChannels, sendAppPaired } from './appAdapter.js';
+import {
+  appDeliveryNonce,
+  deliverAskToAppChannels,
+  handleAppFetch,
+  sendAppPaired,
+} from './appAdapter.js';
 import {
   __setAppChannelKeysForTest,
   generateAppChannelKeys,
@@ -43,6 +48,7 @@ import { __setRelayLinkForTest, handleRelayCallback } from './relay.js';
 
 const NOW = 1_800_000_000_000;
 const APP_ID = 'D27MJGWNY3.io.musterd.app';
+const PUSH_TOKEN = 'ab'.repeat(32);
 let openStore: () => Promise<Driver>;
 
 function stubCtx(db: Driver): Ctx {
@@ -60,7 +66,8 @@ interface Phone {
 }
 
 /** A team with nick paired to a phone through the real pairing path, and a captured relay link. */
-async function seed() {
+async function seed(opts: { pushToken?: string | null } = {}) {
+  const pushToken = opts.pushToken === undefined ? PUSH_TOKEN : opts.pushToken;
   const db = await openStore();
   const ctx = stubCtx(db);
   const team = await createTeam(db, { slug: 'revive' });
@@ -122,6 +129,7 @@ async function seed() {
         receive_public_key: receive.publicRaw,
         attest_key_id: f.keyId.toString('base64url'),
         attestation: f.attestation.toString('base64url'),
+        ...(pushToken ? { push_token: pushToken, push_environment: 'development' } : {}),
       }),
     ),
     purpose: 'pair',
@@ -382,6 +390,82 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       asking_seat: 'ada',
       binding_id: s.binding.id,
     });
+  });
+
+  it('each delivery names the binding’s push target; a binding paired without one is not pushed', async () => {
+    const s = await seed();
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-p'),
+    );
+    expect(lastAppFrame(s.sent).push).toEqual({ token: PUSH_TOKEN, environment: 'development' });
+
+    const bare = await seed({ pushToken: null });
+    await deliverAskToAppChannels(
+      bare.ctx,
+      bare.team,
+      await raiseAsk(bare.db, bare.team, bare.ada, bare.nick, 'ask-q'),
+    );
+    expect(bare.sent.filter((f) => f.type === 'app_deliver')).toHaveLength(0);
+    const rows = await listAuditByAction(bare.db, bare.team.id, 'channel.sealed_delivered', 100);
+    expect(rows.find((r) => r.target === 'ask-q')).toMatchObject({ result: 'deny' });
+    expect(JSON.stringify(rows.find((r) => r.target === 'ask-q'))).toContain('no_push_token');
+  });
+
+  it('a body fetch re-issues that one ask under a fresh token, and answers null for anything not live', async () => {
+    const s = await seed();
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-f'),
+    );
+    const pushed = lastAppFrame(s.sent);
+    const first = await receive(s, pushed);
+    const fetched = await handleAppFetch(
+      s.ctx,
+      s.team,
+      { ask_ref: 'ask-f', binding: s.binding.id },
+      NOW + 1_000,
+    );
+    if (!fetched) throw new Error('expected a body');
+    expect(fetched.expires_at).toBe(pushed.expires_at);
+    const second = await receive(s, { ...pushed, sealed: fetched.sealed });
+    if (first.kind !== 'ask' || second.kind !== 'ask') throw new Error('expected asks');
+    expect(second.ask.body).toBe('ship ask-f?');
+    expect(second.token).not.toBe(first.token);
+    // Nothing went to the relay for a fetch: the body travels back on the fetch alone.
+    expect(s.sent.filter((f) => f.type === 'app_deliver')).toHaveLength(1);
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('ask-f', await answerBody(s, first)),
+        NOW + 2_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('ask-f', await answerBody(s, second)),
+        NOW + 2_000,
+      ),
+    ).resolves.toEqual({ ok: true });
+    // Decided now, so nothing is live for it; nor for an unknown ask or binding.
+    await expect(
+      handleAppFetch(s.ctx, s.team, { ask_ref: 'ask-f', binding: s.binding.id }, NOW + 3_000),
+    ).resolves.toBeNull();
+    await expect(
+      handleAppFetch(s.ctx, s.team, { ask_ref: 'nope', binding: s.binding.id }, NOW + 3_000),
+    ).resolves.toBeNull();
+    await expect(
+      handleAppFetch(s.ctx, s.team, { ask_ref: 'ask-f', binding: 'nope' }, NOW + 3_000),
+    ).resolves.toBeNull();
+    const rows = await listAuditByAction(s.db, s.team.id, 'channel.sealed_delivered', 100);
+    expect(rows.some((r) => r.target === 'ask-f' && JSON.stringify(r).includes('fetched'))).toBe(
+      true,
+    );
   });
 
   it('redeliver re-sends a pending ask with a fresh token and spends the old one', async () => {

@@ -44,6 +44,9 @@ export interface AppKeys {
   device_name?: string;
   /** Set on the binding once the signing key is enrolled. */
   device_key_id?: string;
+  /** The phone's APNs device token (hex) and its environment; absent, nothing is pushed. */
+  push_token?: string;
+  push_environment?: 'production' | 'development';
 }
 
 export type AppPairingRefusal =
@@ -208,6 +211,12 @@ export async function stageAppPairing(
     attest_key_id: verdict.keyId,
     environment: verdict.environment,
     ...(request.device_name ? { device_name: request.device_name } : {}),
+    ...(request.push_token
+      ? {
+          push_token: request.push_token,
+          push_environment: request.push_environment ?? verdict.environment,
+        }
+      : {}),
   };
   // The provider identity a binding is keyed on: the App Attest key (tenant) and the phone's
   // signing key fingerprint (user). Both are fixed for the life of this install.

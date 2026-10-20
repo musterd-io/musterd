@@ -7,9 +7,17 @@
 #   wrangler secret put TEAM_CREDENTIALS_JSON   # {"<team-slug>": "<sha256 hex of the credential>"}
 #   wrangler secret put SLACK_SIGNING_SECRET    # Slack app signing secret (ADR 668 — lives only here)
 #   wrangler secret put SLACK_TEAM_MAP_JSON     # {"<slack-team-id>": "<team-slug>"}
+#   wrangler secret put APNS_KEY_P8             # the APNs token key (.p8, PEM) — ADR 676 §9
 name = "musterd-away-relay"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"
+
+# The musterd app's push (ADR 676 §9): not secrets — the key id, Apple Developer team id and
+# bundle id. APNS_KEY_ID stays unset until the operator creates the key; no push is sent until
+# all four (with APNS_KEY_P8) are present.
+[vars]
+APNS_TEAM_ID = "D27MJGWNY3"
+APNS_TOPIC = "io.musterd.app"
 
 [observability]
 enabled = true

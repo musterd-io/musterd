@@ -160,6 +160,12 @@ ADR 147/153).
   operator act, not part of this lane's code; the Worker ships undeployed with its `wrangler.toml`
   names unset, like the staging-jwks worker.
   Follows-up: deferred — an operator deploys `workers/away-relay` and sets `TEAM_CREDENTIALS_JSON` when the Slack lane is ready to wire a real provider (2026-10-19).
+- 2026-10-20, lane 01M5BEQWY8 (ADR 676 §9): the relay also carries the musterd app. Daemon
+  frames `app_deliver` and `app_body`, relay frame `app_fetch`, and `delivered.reason`, versioned
+  in `packages/protocol/src/relay.ts` and the Worker's copy under the same protocol version. Two
+  routes take no credential, `POST /app/<slug>/callback` and `GET /app/<slug>/body/<binding>/<ref>`:
+  their bodies are sealed to the daemon or the phone, and the daemon checks every one. A new
+  operator secret, `APNS_KEY_P8`, is handled as §4 handles `TEAM_CREDENTIALS_JSON`.
 - The falsifier suite's relay entry ("answers after the daemon restarted: reconciled from daemon
   state, expired buttons refused") becomes a real test with this lane; the pairing and multi-tenant
   entries stay `todo` and keep naming their lanes.

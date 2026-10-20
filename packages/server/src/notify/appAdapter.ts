@@ -8,10 +8,13 @@ import {
   AskTierSchema,
   classifyAskAction,
   makeEnvelope,
+  sealedPushBytes,
   type AppCallback,
   type AppDelivery,
   type Envelope,
   type RelayAppDeliverFrame,
+  type RelayAppFetchFrame,
+  type SealedBodyWire,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
@@ -46,6 +49,10 @@ import { relayChecks, relayLinkFor, type RelayLink } from './relay.js';
  * §6 — the same one transaction as a Slack answer, with the binding's own identity as the
  * provider identity. A re-delivery request re-sends this binding's pending asks with fresh tokens.
  *
+ * The relay pushes each delivery to the binding's APNs token (ADR 676 §9). A body too large for
+ * the push travels by ask ref, and the phone fetches it: the relay's `app_fetch` lands in
+ * {@link handleAppFetch}, which re-issues that one ask's delivery and answers with the sealed body.
+ *
  * This increment carries advisory asks only, as Slack does. Privileged asks and ADR 662 listed acts
  * (A2 answers, the descriptor screen, the fatigue ceiling) are the next increment.
  */
@@ -66,20 +73,19 @@ export function appDeliveryNonce(token: string): string {
 /** Re-sends per redeliver request — a pending set past this is older than the phone needs. */
 const REDELIVER_MAX = 20;
 
-async function sendSealed(
-  ctx: Ctx,
+interface SealInput {
+  binding: ChannelBinding;
+  keys: AppKeys;
+  ref: string;
+  expiresAt: number;
+  delivery: AppDelivery;
+}
+
+async function sealDelivery(
   team: { id: string; slug: string },
-  link: RelayLink,
-  input: {
-    binding: ChannelBinding;
-    keys: AppKeys;
-    ref: string;
-    expiresAt: number;
-    dedupeId: string;
-    delivery: AppDelivery;
-  },
-): Promise<boolean> {
-  const sealed = await sealToPhone({
+  input: SealInput,
+): Promise<SealedBodyWire> {
+  return sealToPhone({
     keys: await loadAppChannelKeys(),
     phoneReceivePublic: input.keys.receive_public_key,
     route: {
@@ -90,6 +96,44 @@ async function sendSealed(
     },
     payload: new TextEncoder().encode(JSON.stringify(input.delivery)),
   });
+}
+
+async function auditSealed(
+  ctx: Ctx,
+  team: { id: string },
+  input: SealInput,
+  sealed: SealedBodyWire | null,
+  mode: 'inline' | 'fetch' | 'fetched',
+  reason?: string,
+): Promise<void> {
+  await appendAudit(ctx.db, team.id, {
+    actor: null,
+    action: 'channel.sealed_delivered',
+    target: input.ref,
+    result: reason ? 'deny' : 'allow',
+    detail: {
+      kind: input.delivery.kind,
+      binding_id: input.binding.id,
+      ...(sealed ? { size: sealedPushBytes(sealed) } : {}),
+      mode,
+      ...(reason ? { reason } : {}),
+    },
+  });
+}
+
+async function sendSealed(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  link: RelayLink,
+  input: SealInput & { dedupeId: string },
+): Promise<boolean> {
+  // A binding paired without a push token has nowhere to be pushed; the phone still gets its
+  // pending set when it opens and asks for a re-delivery, which also lands here, so say so.
+  if (!input.keys.push_token) {
+    await auditSealed(ctx, team, input, null, 'inline', 'no_push_token');
+    return false;
+  }
+  const sealed = await sealDelivery(team, input);
   const frame: RelayAppDeliverFrame = {
     protocol: 1,
     type: 'app_deliver',
@@ -97,24 +141,21 @@ async function sendSealed(
     dedupe_id: input.dedupeId,
     expires_at: input.expiresAt,
     binding: input.binding.id,
+    push: {
+      token: input.keys.push_token,
+      environment: input.keys.push_environment ?? input.keys.environment,
+    },
     sealed,
   };
   const sent = link.send(frame);
-  const size =
-    Buffer.from(sealed.ct, 'base64url').length + Buffer.from(sealed.enc, 'base64url').length;
-  await appendAudit(ctx.db, team.id, {
-    actor: null,
-    action: 'channel.sealed_delivered',
-    target: input.ref,
-    result: sent ? 'allow' : 'deny',
-    detail: {
-      kind: input.delivery.kind,
-      binding_id: input.binding.id,
-      size,
-      mode: size <= APP_PUSH_INLINE_MAX_BYTES ? 'inline' : 'fetch',
-      ...(sent ? {} : { reason: 'relay_not_connected' }),
-    },
-  });
+  await auditSealed(
+    ctx,
+    team,
+    input,
+    sealed,
+    sealedPushBytes(sealed) <= APP_PUSH_INLINE_MAX_BYTES ? 'inline' : 'fetch',
+    sent ? undefined : 'relay_not_connected',
+  );
   return sent;
 }
 
@@ -159,15 +200,14 @@ function parseMeta(meta: string | null): Record<string, unknown> | null {
   }
 }
 
-/** Issue a token for one ask on one app binding and send the sealed delivery. */
-async function deliverOne(
+/** Issue a token for one ask on one app binding and build the delivery that carries it. */
+async function issueAskDelivery(
   ctx: Ctx,
   team: { id: string; slug: string },
-  link: RelayLink,
   ask: AskRow,
   target: { binding: ChannelBinding; keys: AppKeys },
   expiresAt: number,
-): Promise<boolean> {
+): Promise<SealInput> {
   const meta = parseMeta(ask.meta);
   const tier = AskTierSchema.safeParse(meta?.['tier']);
   const { token } = await issueAskChannelToken(ctx.db, {
@@ -182,11 +222,10 @@ async function deliverOne(
     expiresAt,
     now: Date.now(),
   });
-  return sendSealed(ctx, team, link, {
+  return {
     ...target,
     ref: ask.id,
     expiresAt,
-    dedupeId: `${ask.id}:app:${target.binding.id}`,
     delivery: {
       v: 1,
       kind: 'ask',
@@ -206,7 +245,20 @@ async function deliverOne(
       nonce: appDeliveryNonce(token),
       expires_at: expiresAt,
     },
-  });
+  };
+}
+
+/** Issue a token for one ask on one app binding and send the sealed delivery. */
+async function deliverOne(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  link: RelayLink,
+  ask: AskRow,
+  target: { binding: ChannelBinding; keys: AppKeys },
+  expiresAt: number,
+): Promise<boolean> {
+  const input = await issueAskDelivery(ctx, team, ask, target, expiresAt);
+  return sendSealed(ctx, team, link, { ...input, dedupeId: `${ask.id}:app:${target.binding.id}` });
 }
 
 /**
@@ -451,7 +503,25 @@ async function redeliver(
 ): Promise<{ ok: boolean; reason?: string }> {
   const link = relayLinkFor(ctx, team.slug);
   if (!link) return { ok: false, reason: 'relay_not_connected' };
-  const pending = await ctx.db.all<{
+  for (const live of await liveAppAsks(ctx, team, binding, now)) {
+    await spend(ctx, live.tokenHash, now);
+    await deliverOne(ctx, team, link, live.ask, { binding, keys }, live.expiresAt);
+  }
+  return { ok: true };
+}
+
+/**
+ * The asks still live on one binding: an unconsumed, unexpired token, no decision, the ask
+ * unchanged since the token was issued, and still advisory. `askId` narrows it to one ask.
+ */
+async function liveAppAsks(
+  ctx: Ctx,
+  team: { id: string },
+  binding: ChannelBinding,
+  now: number,
+  askId?: string,
+): Promise<{ tokenHash: string; ask: AskRow; expiresAt: number }[]> {
+  const rows = await ctx.db.all<{
     token_hash: string;
     ask_id: string;
     expires_at: number;
@@ -460,19 +530,60 @@ async function redeliver(
     `SELECT t.token_hash, t.ask_id, t.expires_at, t.ask_digest FROM ask_channel_tokens t
       WHERE t.team_id = ? AND t.binding_id = ? AND t.binding_generation = ?
         AND t.consumed_at IS NULL AND t.expires_at > ?
+        ${askId ? 'AND t.ask_id = ?' : ''}
         AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)
       ORDER BY t.created_at LIMIT ?`,
-    [team.id, binding.id, binding.generation, now, REDELIVER_MAX],
+    [
+      team.id,
+      binding.id,
+      binding.generation,
+      now,
+      ...(askId ? [askId] : []),
+      askId ? 1 : REDELIVER_MAX,
+    ],
   );
-  for (const row of pending) {
+  const out: { tokenHash: string; ask: AskRow; expiresAt: number }[] = [];
+  for (const row of rows) {
     const ask = await loadAsk(ctx.db, team.id, row.ask_id);
     if (!ask || askDigest(ask.body, ask.meta) !== row.ask_digest) continue;
     if (classifyAskAction(parseMeta(ask.meta)) !== 'advisory') continue;
-    await ctx.db.run(
-      'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL',
-      [now, row.token_hash],
-    );
-    await deliverOne(ctx, team, link, ask, { binding, keys }, row.expires_at);
+    out.push({ tokenHash: row.token_hash, ask, expiresAt: row.expires_at });
   }
-  return { ok: true };
+  return out;
+}
+
+/** Spend the token a re-issued delivery replaces, so one live token per ask and binding remains. */
+async function spend(ctx: Ctx, tokenHash: string, now: number): Promise<void> {
+  await ctx.db.run(
+    'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL',
+    [now, tokenHash],
+  );
+}
+
+/**
+ * The phone fetching a body its push left out (ADR 676 §2). Like a re-delivery of one ask, the
+ * delivery is re-issued with a fresh token and the old one is spent: the daemon keeps no sealed
+ * body, and the token only ever exists inside a seal. Anything not live on that binding — a
+ * stale binding, a decided or expired ask, an unknown ref — answers `null`, saying no more.
+ * Whoever asks gets ciphertext only the paired phone can open.
+ */
+export async function handleAppFetch(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  frame: Pick<RelayAppFetchFrame, 'ask_ref' | 'binding'>,
+  now: number = Date.now(),
+): Promise<{ sealed: SealedBodyWire; expires_at: number } | null> {
+  const binding = await ctx.db.get<ChannelBinding>(
+    `SELECT * FROM channel_bindings WHERE id = ? AND team_id = ? AND channel = ? AND status = 'active'`,
+    [frame.binding, team.id, APP_CHANNEL],
+  );
+  const keys = binding ? await appBindingKeys(ctx.db, team.id, binding.id) : null;
+  if (!binding || !keys) return null;
+  const [live] = await liveAppAsks(ctx, team, binding, now, frame.ask_ref);
+  if (!live) return null;
+  await spend(ctx, live.tokenHash, now);
+  const input = await issueAskDelivery(ctx, team, live.ask, { binding, keys }, live.expiresAt);
+  const sealed = await sealDelivery(team, input);
+  await auditSealed(ctx, team, input, sealed, 'fetched');
+  return { sealed, expires_at: live.expiresAt };
 }
