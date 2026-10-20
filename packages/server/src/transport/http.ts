@@ -1932,8 +1932,15 @@ async function authAdmin(
  * for `set_authorized_by`, the human named, not the seat relaying their proof. The proof
  * rides the request body as `approval` and is parsed here, at the boundary.
  */
+/** ADR 662 dec. 5: the origins a passkey ceremony may be on — the daemon's configured
+ * origins plus the origin this very request arrived on (the daemon's own origin). */
+function webauthnExpectedOrigins(ctx: Ctx, req: IncomingMessage): string[] {
+  return [...new Set([...ctx.config.webauthnOrigins, requestOrigin(req)])];
+}
+
 async function guardAuthority(
   ctx: Ctx,
+  req: IncomingMessage,
   team: TeamRow,
   presenter: MemberRow,
   act: HighAuthorityAct,
@@ -1952,6 +1959,7 @@ async function guardAuthority(
     target,
     payload,
     proof,
+    expectedOrigins: webauthnExpectedOrigins(ctx, req),
   });
   if (!check.ok) {
     throw new MusterdError(
@@ -3160,6 +3168,7 @@ export async function handleHttp(
         if (rosterCaller && rosterCaller.kind === 'human') {
           await guardAuthority(
             ctx,
+            req,
             provisioningTeam,
             rosterCaller,
             'admin.roster',
@@ -3276,6 +3285,7 @@ export async function handleHttp(
         // ADR 662: creating an agent is a listed act, whoever sponsors it.
         await guardAuthority(
           ctx,
+          req,
           team,
           sponsor,
           'agent_create',
@@ -3978,6 +3988,7 @@ export async function handleHttp(
         if (!sponsorScoped && !viaHostKey) {
           await guardAuthority(
             ctx,
+            req,
             team,
             member,
             'grant_issue',
@@ -4030,6 +4041,7 @@ export async function handleHttp(
         // ADR 662: archiving is a team-settings change — a listed act.
         await guardAuthority(
           ctx,
+          req,
           team,
           member,
           'admin.team_settings',
@@ -4053,6 +4065,7 @@ export async function handleHttp(
         // ADR 662: rotating the team agent key mints a credential — a listed act.
         await guardAuthority(
           ctx,
+          req,
           team,
           member,
           'credential_mint',
@@ -4136,6 +4149,7 @@ export async function handleHttp(
         if (!viaHostKey) {
           await guardAuthority(
             ctx,
+            req,
             team,
             member,
             'credential_mint',
@@ -4279,6 +4293,7 @@ export async function handleHttp(
         // ADR 662: setting a member's ceiling is a roster change — a listed act.
         await guardAuthority(
           ctx,
+          req,
           team,
           admin,
           'admin.roster',
@@ -4378,6 +4393,7 @@ export async function handleHttp(
         // ADR 662: team policy is a listed act — an enrolled human admin signs for it.
         await guardAuthority(
           ctx,
+          req,
           team,
           member,
           'admin.team_policy',
@@ -4703,6 +4719,7 @@ export async function handleHttp(
           teamId: team.id,
           audience: team.slug,
           proof,
+          expectedOrigins: webauthnExpectedOrigins(ctx, req),
         });
         if (!parked) {
           throw new MusterdError('validation', 'that approval does not verify for its descriptor');
@@ -4730,6 +4747,7 @@ export async function handleHttp(
           member,
           challenge: body.challenge,
           proof: body.approval,
+          expectedOrigins: webauthnExpectedOrigins(ctx, req),
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
             clientDataJson: body.registration.client_data_json,
@@ -4837,6 +4855,7 @@ export async function handleHttp(
         // ADR 662: governed policy is team policy — a listed act.
         await guardAuthority(
           ctx,
+          req,
           team,
           member,
           'admin.team_policy',
@@ -8462,6 +8481,7 @@ export async function handleHttp(
         ) {
           await guardAuthority(
             ctx,
+            req,
             team,
             member,
             'human_accept',
@@ -8475,6 +8495,7 @@ export async function handleHttp(
           if (authorizer && authorizer.kind === 'human' && authorizer.left_at === null) {
             await guardAuthority(
               ctx,
+              req,
               team,
               authorizer,
               'set_authorized_by',
@@ -10468,6 +10489,7 @@ export async function handleHttp(
         // ADR 662: rotating a human credential mints a credential — a listed act.
         await guardAuthority(
           ctx,
+          req,
           team,
           actor,
           'credential_mint',
@@ -10616,6 +10638,7 @@ export async function handleHttp(
         if (caller.kind === 'human') {
           await guardAuthority(
             ctx,
+            req,
             team,
             caller,
             'admin.roster',

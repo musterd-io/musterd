@@ -1777,6 +1777,7 @@ async function applyAcceptanceVerdict(
       target: laneId,
       payload: { lane: laneId, verdict: act },
       proof: proofParsed.success ? proofParsed.data : undefined,
+      expectedOrigins: ctx.config.webauthnOrigins,
     });
     if (!check.ok) {
       log.info({ msg: 'authority_verdict_refused', lane: laneId, decider: decider.name });

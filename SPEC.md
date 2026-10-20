@@ -1065,7 +1065,9 @@ advisory for every listed act.
   small pages the daemon serves from its own origin — never the relay. Passkey enrollment
   is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, registration}`: a
   WebAuthn registration whose challenge is the enrollment challenge, verified server-side
-  (challenge, user verification, rpId from the browser's actual origin, attested credential extracted from
+  (challenge, user verification, origin pinned to the daemon's configured origins —
+  its own origin plus `MUSTERD_WEBAUTHN_ORIGINS` — with the rpIdHash checked against
+  that origin's host, attested credential extracted from
   the attestation object; possession-grade, no attestation statement checked). A passkey
   proof carries `authenticator_data` and `client_data_json` beside the signature; the
   server checks the assertion's challenge is the descriptor nonce. `GET
