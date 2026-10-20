@@ -205,6 +205,7 @@ import { sendAppPaired } from '../notify/appAdapter.js';
 import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { relayLinkFor } from '../notify/relay.js';
+import { recordHttpException } from '../otel/httpTrace.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
 import {
   adjudicateGate,
@@ -934,8 +935,12 @@ function sendError(res: ServerResponse, err: unknown): void {
   const me = asMusterdHttpError(err);
   recordError(me.code);
   // The client gets its body; the operator gets the cause, on this request's log line (lane
-  // 01M3ZPM3FE) — before it, a load run's 500s were `status: 500` and nothing else.
-  if (me.httpStatus >= 500) noteRequestFailure(res, err);
+  // 01M3ZPM3FE) and on the active OTel span (ADR 678) — before it, a load run's 500s were
+  // `status: 500` and nothing else.
+  if (me.httpStatus >= 500) {
+    noteRequestFailure(res, err);
+    recordHttpException(err, me.httpStatus);
+  }
   sendJson(res, me.httpStatus, me.toBody());
 }
 

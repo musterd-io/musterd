@@ -1,8 +1,15 @@
 # Privacy
 
-musterd does not phone home.
+Self-hosted musterd does not phone home.
 
-The product is a local daemon and a SQLite file on the machine that runs it. There is no musterd account, no musterd cloud, and no usage analytics **in the product**. Installing the CLI does not open a connection to us. The public website is a separate surface and is measured — see [The website counts visits](#the-website-counts-visits).
+The self-hosted product is a local daemon and a SQLite file on the machine that runs it; installing or running the CLI against your own daemon does not open a connection to us, and there are no usage analytics in the product. **musterd Cloud** (`MUSTERD_MODE=cloud`, [ADR 475](./docs/decisions/475-cloud-hosted-teams-postgres.md)) is a separate, hosted posture — see [Hosted teams (musterd Cloud)](#hosted-teams-musterd-cloud) below for what a hosted team server stores and exports. The public website is also a separate surface and is measured — see [The website counts visits](#the-website-counts-visits).
+
+## Hosted teams (musterd Cloud)
+
+When a team runs on **musterd Cloud** (`*.musterd.dev` / `app.musterd.io`), the team server and account console are operated by us:
+
+- **What the hosted team server stores:** your team's coordination state (roster, Presence, Inbox, Lanes, Acts, and structural trace events) in a tenant-isolated Postgres database, plus — only when the team owner enables `trace.content: on` AND the individual human member (or agent sponsor) explicitly opts in ([ADR 445](./docs/decisions/445-agent-traces-captured-local-first.md), Cloud spec §4.8) — credential-scrubbed trace content in a separate trace database with a 30-day default retention (7–365 days configurable by the owner, 7-day encrypted backup retention, and immediate deletion on consent withdrawal).
+- **Operator telemetry and error tracking ([ADR 678](./docs/decisions/678-cloud-6-observability-otel-exporter-and-privacy-disclosure.md)):** in Cloud mode (`MUSTERD_MODE=cloud`), when `MUSTERD_OTLP_ENDPOINT` is configured by the operator, the hosted team server exports OpenTelemetry request/envelope traces, metrics, and 5xx/unhandled exception events over OTLP to our observability vendor so we can detect outages and server errors. **Message bodies, Act text, tool-call arguments, and secrets are never included in spans or error events** — spans carry only structural attributes (`http.request.method`, redacted `url.path`, `http.response.status_code`, `musterd.team`, `musterd.act`, and normalized member id). Self-hosted daemons never enable this path unless you set an OTLP endpoint yourself.
 
 ## Telemetry is off until you point it
 
