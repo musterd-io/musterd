@@ -219,6 +219,14 @@ All four converged on one shape, and nick directed it be written as this ADR.
   at proof parking, and at presentation — a relay-hosted page's ceremony never
   verifies.)_
 
+- 2026-10-20, lane 01M5DERKCP: the first real passkey approval failed. `verifyAssertion` checked
+  ES256 signatures as raw r‖s (`ieee-p1363`), but WebAuthn ES256 assertion signatures are ASN.1
+  DER, which is what every platform passkey sends and what the approve page posts. The fixtures
+  signed only with Ed25519, so the EC path never ran in a test. nick's approval of
+  `admin.team_policy` on the hub was refused with "that approval does not verify for its
+  descriptor", even though he holds one live passkey. EC assertions now verify as DER, and a test
+  registers an ES256 credential and refuses the raw r‖s form.
+
 ## Observability & Evaluation
 
 - **Traces:** every listed act's audit row records its assurance (`A2`), the authenticator kind

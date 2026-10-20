@@ -182,3 +182,62 @@ it('no configured origin list fails closed, never skips the check', async () => 
     ).toThrow(/no configured origin/);
   }
 });
+
+it('an ES256 passkey (the platform kind) verifies its DER assertion signature, and only that', async () => {
+  const { extractAuthData } = await import('./webauthn.js');
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = publicKey.export({ format: 'jwk' }) as { x: string; y: string };
+  const cose = encMap([
+    [encInt(1), encInt(2)],
+    [encInt(3), encInt(-7)],
+    [encInt(-1), encInt(1)],
+    [encInt(-2), encBytes(Buffer.from(jwk.x, 'base64url'))],
+    [encInt(-3), encBytes(Buffer.from(jwk.y, 'base64url'))],
+  ]);
+  const credId = Buffer.from('credential-es256');
+  const rpHash = createHash('sha256').update('example.com').digest();
+  const attestationObject = encMap([
+    [encText('fmt'), encText('none')],
+    [encText('attStmt'), encMap([])],
+    [
+      encText('authData'),
+      encBytes(
+        Buffer.concat([
+          rpHash,
+          Buffer.from([0x41]),
+          Buffer.from([0, 0, 0, 0]),
+          Buffer.alloc(16),
+          Buffer.from([0, credId.length]),
+          credId,
+          cose,
+        ]),
+      ),
+    ],
+  ]);
+  const code = 'code-es256';
+  const verified = verifyRegistration({
+    authenticatorData: extractAuthData(attestationObject),
+    clientDataJson: clientData('webauthn.create', Buffer.from(code, 'utf8').toString('base64url')),
+    expectedChallenge: Buffer.from(code, 'utf8').toString('base64url'),
+    expectedOrigins: ['https://example.com'],
+  });
+  const nonce = 'nonce-at-least-16-chars';
+  const getAuthData = Buffer.concat([rpHash, Buffer.from([0x05]), Buffer.from([0, 0, 0, 9])]);
+  const cdj = clientData('webauthn.get', nonce);
+  const signed = Buffer.concat([getAuthData, createHash('sha256').update(cdj).digest()]);
+  const assertion = (signature: Uint8Array) =>
+    verifyAssertion({
+      authenticatorData: getAuthData,
+      clientDataJson: cdj,
+      signature,
+      publicKeySpki: verified.publicKeySpki,
+      expectedChallenge: nonce,
+      expectedOrigins: ['https://example.com'],
+    });
+  // What an authenticator sends: DER.
+  expect(assertion(cryptoSign('sha256', signed, privateKey))).toBe(true);
+  // The same signature as raw r‖s is not the WebAuthn wire form.
+  expect(
+    assertion(cryptoSign('sha256', signed, { key: privateKey, dsaEncoding: 'ieee-p1363' })),
+  ).toBe(false);
+});

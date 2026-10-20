@@ -267,8 +267,10 @@ export function verifyAssertion(input: {
     });
     const type = (key.asymmetricKeyType ?? '') as string;
     if (type === 'ed25519') return cryptoVerify(null, signed, key, input.signature);
+    // WebAuthn ES256 (COSE alg -7) assertion signatures are ASN.1 DER, not raw r‖s — every
+    // platform passkey (Apple, Google, Windows Hello) sends DER, and the page posts it as is.
     if (type === 'ec') {
-      return cryptoVerify('sha256', signed, { key, dsaEncoding: 'ieee-p1363' }, input.signature);
+      return cryptoVerify('sha256', signed, { key, dsaEncoding: 'der' }, input.signature);
     }
     return false;
   } catch {
