@@ -198,6 +198,17 @@ describe('bashAllowed', () => {
     expect(deny('cat .git/config')).toMatch(/\.git/);
     expect(deny('ls --color=auto /tmp')).toMatch(/leaves the workspace/);
     expect(deny('gh pr create --body-file /tmp/body.md')).toMatch(/leaves the workspace/);
+  });
+
+  it('keeps the gh credential out of reach (ADR 675): no gh auth, no git credential, no HOME reads', () => {
+    // The entrypoint signs gh in under $HOME/.config/gh and sets git's credential helper; the
+    // seat's git and gh use it, the shell cannot read or print it through any allowed head.
+    expect(deny('gh auth token')).toMatch(/not on the allowlist/);
+    expect(deny('gh auth status')).toMatch(/not on the allowlist/);
+    expect(deny('git credential fill')).toMatch(/not on the allowlist/);
+    expect(deny('git config --global credential.helper')).toMatch(/not on the allowlist/);
+    expect(deny('cat ~/.config/gh/hosts.yml')).toMatch(/leaves the workspace|~/);
+    expect(deny('cat ../../../.config/gh/hosts.yml')).toMatch(/leaves the workspace/);
     expect(deny('pnpm exec vitest run --config /tmp/v.ts')).toMatch(/leaves the workspace/);
     expect(bashAllowed('cat README.md .gitignore packages/cli/src/a.ts', policy)).toEqual({
       ok: true,
