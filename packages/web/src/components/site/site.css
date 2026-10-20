@@ -9,6 +9,18 @@
   background: var(--surface-solid);
 }
 
+/* Headings on the public pages use the linear cut (ADR 681). The casual axis made them read playful
+ * next to /live's product frame. The swap is scoped here, not in tokens.css, because /live's member
+ * names and chyron labels also read --font-display and stay casual. */
+.site-page,
+.join {
+  --font-display: var(--font-sans);
+}
+.site-page :is(h1, h2, h3),
+.join :is(h1, h2, h3) {
+  letter-spacing: -0.015em;
+}
+
 /* The band: full window width, so the chrome reaches both edges on any viewport. It carries no
  * max-width of its own — that is `.sitenav__inner`'s job — and nothing but background belongs
  * here, or the rail stops being the single thing that decides the page's left edge. */

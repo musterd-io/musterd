@@ -2,8 +2,8 @@
 
 .lh {
   /* Flat (designer skill tell 1): the type carries the hero, not a wash behind it. */
-  background: var(--mustard-50);
-  border-bottom: 1px solid var(--mustard-100);
+  background: var(--hero-ground);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .lh__inner {

@@ -75,7 +75,7 @@
 
 .prose th,
 .prose td {
-  border-bottom: 1px solid var(--mustard-100);
+  border-bottom: 1px solid var(--hairline);
   padding: 0.45rem 1rem 0.45rem 0;
   text-align: left;
   vertical-align: top;

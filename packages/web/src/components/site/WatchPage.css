@@ -104,7 +104,7 @@
   aspect-ratio: 16 / 9;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--mustard-100);
+  border: 1px solid var(--hairline);
   /* The mustard bloom is the page's one piece of warmth around an otherwise black rectangle —
      without it the player reads as a hole cut in the page. */
   box-shadow: 0 0 0 1px var(--glow-mustard-soft), 0 18px 48px -24px var(--glow-mustard);

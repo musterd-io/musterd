@@ -57,3 +57,6 @@ Split the brand into two registers with one shared anchor.
   functional UI later wants spectacle, that needs its own decision — this ADR does not grant it.
 - Tooling: `packages/web` is type-checked by its own `tsc` and excluded from the Node-oriented ESLint
   config and the coverage floors (verified by build + typecheck instead).
+- 2026-10-20: [ADR 681](681-site-neutral-product-palette.md) moves the site's light ground, ink and
+  headings onto the product's neutral palette (/live's frame). The carve-out for motion, the office
+  scene and depth still stands.

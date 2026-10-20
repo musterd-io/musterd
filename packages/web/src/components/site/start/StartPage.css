@@ -54,12 +54,21 @@
   counter-increment: start-step;
   display: grid;
   grid-template-columns: 2.5rem minmax(0, 1fr);
-  gap: 0.8rem;
+  column-gap: 0.8rem;
   padding: 0.8rem 0;
-  border-top: 1px solid var(--mustard-100);
+  border-top: 1px solid var(--hairline);
+}
+
+/* The number holds column 1 for both rows; the step and its copy stack in column 2. Without this the
+ * copy auto-placed into the 2.5rem number column on row 2 and wrapped one word per line (live on
+ * musterd.io/start until ADR 681's pass). */
+.start-steps__item > * {
+  grid-column: 2;
 }
 
 .start-steps__item::before {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   content: counter(start-step);
   font-size: 0.75rem;
   color: var(--text-faint);
@@ -89,7 +98,7 @@
   display: block;
   width: 100%;
   height: auto;
-  border: 1px solid var(--mustard-100);
+  border: 1px solid var(--hairline);
 }
 
 .start-fig__cap {
@@ -102,7 +111,7 @@
 /* The board figure is an illustration of the record's shape, not a screenshot: a static
    snapshot card in the same register as the homepage's claim-to-accepted card. */
 .start-board {
-  border: 1px solid var(--mustard-100);
+  border: 1px solid var(--hairline);
   padding: 1rem 1.1rem;
   max-width: 40rem;
 }
@@ -119,7 +128,7 @@
 }
 
 .start-board__row + .start-board__row {
-  border-top: 1px solid var(--mustard-100);
+  border-top: 1px solid var(--hairline);
 }
 
 .start-board__label {

@@ -4,10 +4,10 @@
  * origin under its CSP (style-src 'self'; font-src 'self'; img-src 'self'). No inline styles anywhere:
  * every state is a class.
  *
- * Product chrome (ADR 037): minimal, warm, one accent. Tokens are the web's paper and dusk palettes
- * (packages/web/src/styles/tokens.css) and brand.md §2–3, by role. Paper only, as /live is: the
- * product chrome has no dark theme (musterd.io and /live both pin data-theme="light"), and the site's
- * dusk palette is the marketing surface's, cool where the product is warm (PRODUCT.md principle 1).
+ * Product chrome (ADR 037): minimal, one accent. Tokens are the product's neutral palette — /live's
+ * frame (Live.css `.lc`) and the site's light tokens (packages/web/src/styles/tokens.css), which
+ * ADR 681 moved off warm cream onto white and cool grey — and brand.md §2–3, by role. Light only, as
+ * /live is: musterd.io and /live both pin data-theme="light".
  */
 
 @font-face {
@@ -34,25 +34,27 @@
 :root {
   color-scheme: light;
 
-  /* Paper (light) — tokens.css :root[data-theme='light'] */
-  --c-ground: #f7efe2;
-  --c-field: #fffaf1;
-  --c-text: #2a2118;
-  --c-text-dim: #4a3f30;
-  --c-text-faint: #6b5637;
-  --c-rule: rgba(60, 40, 20, 0.14);
-  --c-edge: #8c7e6d; /* control borders, opaque: 3.46:1 on the ground, 3.8:1 on the field (WCAG 1.4.11). An
+  /* Neutral (light) — tokens.css :root[data-theme='light'], ADR 681 */
+  --c-ground: #f4f5f7;
+  --c-field: #ffffff;
+  --c-text: #15181e;
+  --c-text-dim: #3a404b;
+  --c-text-faint: #5c6370; /* 5.54:1 on the ground */
+  --c-rule: rgba(17, 24, 39, 0.09);
+  --c-edge: #7f848e; /* control borders, opaque: 3.44:1 on the ground, 3.75:1 on the field (WCAG 1.4.11). An
                          alpha edge measured 2.38 here, 2026-10-15. */
   --c-accent: #e1ad01; /* mustard-500: a FILL, behind dark text */
   --c-accent-hover: #efc94c; /* mustard-300 */
-  --c-on-accent: #2a2118;
-  --c-accent-ink: #7a5a12; /* accent as text or a mark on paper */
+  --c-on-accent: #15181e; /* 8.62:1 on mustard-500 */
+  --c-accent-ink: #7a5a06; /* mustard-900: accent as text or a mark, 5.85:1 on the ground */
   --c-danger-ink: #a3241b;
   --c-success-ink: #1f6f45; /* presence: online — brand success, deepened for paper */
-  --c-focus: #2a2118;
+  --c-focus: #15181e;
 
   --font-sans: 'Recursive', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: 'Recursive Casual', 'Recursive', ui-sans-serif, system-ui, sans-serif;
+  /* The linear cut, as the site's headings (ADR 681). The casual face stays declared above and served,
+     but no text uses it, so it never downloads. */
+  --font-display: 'Recursive', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Recursive Mono', ui-monospace, Menlo, monospace;
 
   /* Type ramp — brand.md §3 */
@@ -137,6 +139,7 @@ body {
 
 h1 {
   font: var(--t-h1);
+  letter-spacing: -0.015em;
   margin: 0 0 var(--s-2);
   text-wrap: balance;
 }
@@ -165,14 +168,14 @@ a:hover {
   text-decoration-thickness: 2px;
 }
 
-/* A notice above the heading: the one carried-over state (the session expired). A tinted strip with
+/* A notice above the heading: the one carried-over state (the session expired). A white strip with
    the accent as a mark down its edge; the words carry it, the colour repeats it. */
 .c-notice {
   margin: 0 0 var(--s-5);
   padding: var(--s-3) var(--s-4);
   border-left: 3px solid #b8860b; /* mustard-700: a mark on paper, 3.3:1 */
   border-radius: 0 var(--r-control) var(--r-control) 0;
-  background: #fbf3d5; /* mustard-50 */
+  background: var(--c-field);
   color: var(--c-text);
   font: var(--t-small);
   font-weight: 600;
