@@ -2126,6 +2126,51 @@ describe('lane_submit merge verification (merge-verified submit)', () => {
     });
   });
 
+  it('accepts a parsed A2 proof and forwards it with the exact lane submit patch', async () => {
+    const proof = { key_id: 'key-1', nonce: '1234567890123456', signature: 'signature' };
+    const updateLane = vi.fn(async () => ({ lane: submittedLane, warnings: [] }));
+    let inputSchema: Record<string, { safeParse: (value: unknown) => { success: boolean } }> = {};
+    const handlers = captureAll(
+      (s: any, c: any) =>
+        registerLanes(
+          {
+            registerTool: (name: string, schema: any, handler: Handler) => {
+              if (name === 'lane_submit') inputSchema = schema.inputSchema;
+              s.registerTool(name, schema, handler);
+            },
+          },
+          c,
+          async () => 'ancestor' as any,
+          undefined,
+          async () => ({}),
+        ),
+      { updateLane } as Partial<MusterdClient>,
+    );
+
+    expect(inputSchema['approval']!.safeParse(proof).success).toBe(true);
+    await handlers['lane_submit']!({
+      id: 'L1',
+      pr: 42,
+      sha: 'abc123f',
+      authorized_by: 'nick',
+      approval: proof,
+    });
+
+    expect(updateLane).toHaveBeenCalledWith('L1', {
+      state: 'awaiting_acceptance',
+      merged: { pr: 42, sha: 'abc123f', authorized_by: 'nick', verification: 'ancestor' },
+      claims: expect.any(Array),
+      approval: proof,
+    });
+
+    updateLane.mockClear();
+    const invalid = text(
+      await handlers['lane_submit']!({ id: 'L1', approval: { ...proof, nonce: 'short' } }),
+    );
+    expect(invalid).toMatch(/nonce/i);
+    expect(updateLane).not.toHaveBeenCalled();
+  });
+
   it('proceeds on fetch_failed (degrade, never wedge) with the tier recorded', async () => {
     const { submit, updateLane } = submitWith('fetch_failed');
     await submit({ id: 'L1', sha: 'abc123f' });

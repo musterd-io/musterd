@@ -3,6 +3,7 @@ import {
   CALENDAR_DEFAULT_TZ,
   dayInZone,
   builtOnLine,
+  type ApprovalProof,
   emptyPoolHint,
   LANE_REQUESTED_NUDGE,
   laneDetailLines,
@@ -23,6 +24,7 @@ import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { plainTerminalLines, plainTerminalText } from '../render/plainText.js';
 import { theme } from '../render/theme.js';
+import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
 import { claimSeams, renderClaims } from './laneClaims.js';
 
@@ -332,6 +334,29 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         ? await claimSeams.label(merged.sha, process.cwd())
         : null;
     if (changeLabel) Object.assign(merged, changeLabel);
+    let approval: ApprovalProof | undefined;
+    if (submit && merged.authorized_by !== undefined) {
+      if (merged.authorized_by !== identity.name) {
+        throw new CliError(
+          `A2 approval must be collected by the named human; run lane submit as ${merged.authorized_by}`,
+          1,
+        );
+      }
+      const { lane } = await http.laneShow(team, id);
+      approval = await collectApproval(
+        http,
+        team,
+        'set_authorized_by',
+        lane.id,
+        {
+          lane: lane.id,
+          authorized_by: merged.authorized_by,
+          pr: merged.pr ?? null,
+          sha: merged.sha ?? null,
+        },
+        merged.authorized_by,
+      );
+    }
     const res = await http.updateLane(
       team,
       id,
@@ -345,6 +370,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
           }
         : {
             state: submit ? 'awaiting_acceptance' : 'done',
+            ...(approval ? { approval } : {}),
             ...(Object.keys(merged).length ? { merged } : {}),
             ...(claims.length > 0 ? { claims } : {}),
             // The acceptor needs to know where the work IS (ADR 083). Submit was the one lane edge

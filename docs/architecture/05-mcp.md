@@ -500,6 +500,10 @@ and phone ([ADR 630](../decisions/630-remote-mcp-gateway.md)). `buildRemoteMcpSe
   calls. No surface attestation and no startup measure — those describe an adapter launch, not a
   request.
 
+## A2 proof on `lane_submit` (ADR 662)
+
+`lane_submit` accepts an optional `approval` object matching `ApprovalProofSchema` and forwards it on the lane patch. When `authorized_by` names a human with an enrolled device key, the proof must bind the `set_authorized_by` act to the full lane id and exact `{lane, authorized_by, pr, sha}` payload. A human can obtain the one-use proof with `musterd authority approve --act set_authorized_by --target <lane-id> --payload '<json>'`, then pass that JSON as `approval` to MCP. The CLI `musterd lane submit --authorized-by <human>` collects the same proof interactively.
+
 ## File tree `packages/mcp/src/`
 
 ```

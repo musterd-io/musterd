@@ -6,6 +6,7 @@ import { LANE_REQUESTED_NUDGE, type Lane } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
+import { HttpClient } from '../client.js';
 import { loadConfig } from '../config.js';
 import { laneCommand, lanesCommand, renderLane } from './lane.js';
 import { claimSeams } from './laneClaims.js';
@@ -280,6 +281,61 @@ describe('lane commands', () => {
     const resolved = await capture(() => laneCommand(parseArgs(['resolve', id])));
     expect(resolved.out).toContain('lane done');
     expect(resolved.out).toContain('unconfirmed close recorded');
+  });
+
+  it('collects an A2 proof over the exact merge-authority tuple and sends it with the submit', async () => {
+    const id = await openLane(['signed submit', '--claim']);
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const lane = (JSON.parse(board.out) as { lanes: Lane[] }).lanes.find((item) => item.id === id)!;
+    const descriptor = {
+      actor: 'nick',
+      act: 'set_authorized_by',
+      target: id,
+      payload_digest: 'digest',
+      audience: 'dawn',
+      expiry: Date.now() + 60_000,
+      nonce: '1234567890123456',
+    };
+    const proof = { key_id: 'key-1', nonce: descriptor.nonce, signature: 'signature' };
+    const descriptorCall = vi
+      .spyOn(HttpClient.prototype, 'createAuthorityDescriptor')
+      .mockResolvedValue({ descriptor });
+    vi.spyOn(HttpClient.prototype, 'getParkedApproval').mockResolvedValue({ proof });
+    const updateCall = vi.spyOn(HttpClient.prototype, 'updateLane').mockResolvedValue({
+      lane,
+      warnings: [],
+    } as Awaited<ReturnType<HttpClient['updateLane']>>);
+
+    const submitted = await capture(() =>
+      laneCommand(
+        parseArgs(['submit', id, '--pr', '17', '--sha', 'abcdef1', '--authorized-by', 'nick']),
+      ),
+    );
+
+    expect(submitted.code).toBe(0);
+    expect(descriptorCall).toHaveBeenCalledWith('dawn', {
+      act: 'set_authorized_by',
+      target: id,
+      actor: 'nick',
+      payload: { lane: id, authorized_by: 'nick', pr: 17, sha: 'abcdef1' },
+    });
+    expect(updateCall).toHaveBeenCalledWith(
+      'dawn',
+      id,
+      expect.objectContaining({
+        approval: proof,
+        merged: expect.objectContaining({ pr: 17, sha: 'abcdef1', authorized_by: 'nick' }),
+      }),
+    );
+  });
+
+  it('does not collect or submit authority for a different human', async () => {
+    const id = await openLane(['other authorizer']);
+    const descriptorCall = vi.spyOn(HttpClient.prototype, 'createAuthorityDescriptor');
+    await expect(
+      capture(() => laneCommand(parseArgs(['submit', id, '--authorized-by', 'someone-else']))),
+    ).rejects.toThrow(/run lane submit as someone-else/i);
+    expect(descriptorCall).not.toHaveBeenCalled();
   });
 
   // ADR 083: the acceptor should receive the work as an artifact, not a description. Submit hands
