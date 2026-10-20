@@ -126,6 +126,7 @@ export function cosePublicKey(cose: Map<number | string, CborValue>): {
 export interface ParsedAuthData {
   rpIdHash: Uint8Array;
   userPresent: boolean;
+  userVerified: boolean;
   hasAttestedCredential: boolean;
   credentialId?: Uint8Array;
   publicKeySpki?: string;
@@ -138,6 +139,7 @@ export function parseAuthData(authData: Uint8Array): ParsedAuthData {
   const parsed: ParsedAuthData = {
     rpIdHash: authData.slice(0, 32),
     userPresent: (flags & 0x01) !== 0,
+    userVerified: (flags & 0x04) !== 0,
     hasAttestedCredential: (flags & 0x40) !== 0,
   };
   if (parsed.hasAttestedCredential) {
@@ -201,6 +203,8 @@ export function verifyRegistration(input: {
   authenticatorData: Uint8Array;
   clientDataJson: string;
   expectedChallenge: string;
+  /** Enrollment (ADR 662 dec. 6): the ceremony must be user-verified, not merely present. */
+  requireUserVerified?: boolean;
 }): { credentialId: string; publicKeySpki: string } {
   const { auth } = checkRpAndChallenge(
     input.authenticatorData,
@@ -208,6 +212,9 @@ export function verifyRegistration(input: {
     'webauthn.create',
     input.expectedChallenge,
   );
+  if (input.requireUserVerified && !auth.userVerified) {
+    throw new Error('webauthn: user verification not asserted');
+  }
   if (!auth.hasAttestedCredential || !auth.credentialId || !auth.publicKeySpki) {
     throw new Error('webauthn: registration carries no attested credential');
   }

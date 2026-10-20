@@ -243,7 +243,7 @@ import {
   getDescriptorByNonce,
   getParkedProof,
   getPasskeysForDescriptor,
-  issueEnrollmentCode,
+  issueEnrollmentChallenge,
   listDeviceKeys,
   requireAuthority,
   revokeKeyGuarded,
@@ -1280,24 +1280,24 @@ const DescriptorRequestBody = z.object({
   actor: z.string().min(1).optional(),
 });
 
-// Device-key lifecycle (ADR 662 decision 6): the first key and recovery ride a one-time
-// enrollment code; further keys and revocations ride an existing key's signature.
+// Device-key lifecycle (ADR 662 decision 6, passkey-first): the first key and recovery
+// are a user-verified passkey ceremony over a server challenge; further keys and
+// revocations ride a standing key's signature. A Bearer [REDACTED] enrolls nothing.
 const EnrollKeyBody = z.object({
   public_key: z.string().min(1),
   kind: z.enum(AUTHENTICATOR_KINDS),
-  enrollment_code: z.string().min(1).optional(),
   approval: ApprovalProofSchema.optional(),
 });
 const RevokeKeyBody = z.object({
-  enrollment_code: z.string().min(1).optional(),
   approval: ApprovalProofSchema.optional(),
 });
 
-// Passkey enrollment (decision 5): the browser's registration, authorized by the enrollment
-// code alone — the code was minted by the human's credential and is spent by this one call.
+// Passkey enrollment (decision 5/6): the browser's registration over the server-minted
+// challenge — the challenge's one use and the credential's birth are the same event.
 const PasskeyEnrollBody = z.object({
   actor: z.string().min(1),
-  enrollment_code: z.string().min(1),
+  challenge: z.string().min(16),
+  approval: ApprovalProofSchema.optional(),
   registration: z.object({
     attestation_object: z.string().min(1),
     client_data_json: z.string().min(1),
@@ -4726,8 +4726,10 @@ export async function handleHttp(
         }
         const result = await enrollPasskeyGuarded(ctx.db, {
           teamId: team.id,
+          audience: team.slug,
           member,
-          code: body.enrollment_code,
+          challenge: body.challenge,
+          proof: body.approval,
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
             clientDataJson: body.registration.client_data_json,
@@ -4744,7 +4746,7 @@ export async function handleHttp(
 
       // ADR 662 decision 6 — the device-key lifecycle. Every step names the caller's own
       // keys only; a human's keys are never another seat's to list, enroll or revoke.
-      if (rest === '/authority/enrollment-codes' || rest.startsWith('/authority/keys')) {
+      if (rest === '/authority/enrollment-challenges' || rest.startsWith('/authority/keys')) {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         if (member.kind !== 'human') {
@@ -4753,14 +4755,17 @@ export async function handleHttp(
             `seat "${member.name}" is not a human; device keys bind a human's authority`,
           );
         }
-        if (method === 'POST' && rest === '/authority/enrollment-codes') {
-          const issued = await issueEnrollmentCode(ctx.db, {
+        if (method === 'POST' && rest === '/authority/enrollment-challenges') {
+          const issued = await issueEnrollmentChallenge(ctx.db, {
             teamId: team.id,
             memberId: member.id,
             actor: member.name,
           });
-          // Shown once, here, to the human who asked (hard rule 5); only its sha256 is stored.
-          return sendJson(res, 201, { code: issued.code, expires_at: issued.expiresAt });
+          // The challenge binds a browser ceremony to this human; only its sha256 is stored.
+          return sendJson(res, 201, {
+            challenge: issued.challenge,
+            expires_at: issued.expiresAt,
+          });
         }
         if (method === 'GET' && rest === '/authority/keys') {
           const keys = await listDeviceKeys(ctx.db, team.id, member.id);
@@ -4781,7 +4786,6 @@ export async function handleHttp(
             member,
             publicKey: body.public_key,
             kind: body.kind,
-            code: body.enrollment_code,
             proof: body.approval,
           });
           if (!result.ok) {
@@ -4800,7 +4804,6 @@ export async function handleHttp(
             audience: team.slug,
             member,
             keyId: decodeURIComponent(revokeMatch[1]!),
-            code: body.enrollment_code,
             proof: body.approval,
           });
           if (!result.ok) {

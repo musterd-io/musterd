@@ -141,17 +141,22 @@ export async function revokeDeviceKey(
 const ENROLLMENT_CODE_TTL_MS = 10 * 60 * 1000;
 
 /**
- * Mint a one-time enrollment code for a human (decision 6's explicit human path). Only the
- * sha256 is stored; the code is shown once, to the human who asked with their own credential,
- * and never audited. Ten minutes, one use.
+ * Mint the challenge for a passkey enrollment ceremony (decision 6, passkey-first —
+ * nick 2026-10-20). Only the sha256 is stored; ten minutes, one use, never audited.
+ * The challenge is NOT a capability: holding the human's Bearer [REDACTED] an agent can read
+ * gets an attacker this challenge but enrolls nothing — enrollment completes only
+ * with a user-verified WebAuthn registration (first key / recovery), or, once a key
+ * stands, with a standing key's `device_key_admin` signature. HA2 re-review: the old
+ * code path let whoever held the Bearer [REDACTED] a key outright, which is the exact
+ * config.json attack decision 6 forbids.
  */
-export async function issueEnrollmentCode(
+export async function issueEnrollmentChallenge(
   db: Driver,
   input: { teamId: string; memberId: string; actor: string; now?: number },
-): Promise<{ code: string; expiresAt: number }> {
+): Promise<{ challenge: string; expiresAt: number }> {
   const now = input.now ?? Date.now();
-  const code = randomBytes(9).toString('base64url');
-  const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+  const challenge = randomBytes(32).toString('base64url');
+  const codeHash = createHash('sha256').update(challenge, 'utf8').digest('hex');
   await db.run(
     `INSERT INTO enrollment_codes (code_hash, team_id, member_id, expires_at, used_at)
      VALUES (?, ?, ?, ?, NULL)`,
@@ -159,41 +164,40 @@ export async function issueEnrollmentCode(
   );
   await appendAudit(db, input.teamId, {
     actor: input.actor,
-    action: 'device_key.enrollment_code',
+    action: 'device_key.enrollment_challenge',
     target: input.actor,
     result: 'allow',
     detail: {},
   });
-  return { code, expiresAt: now + ENROLLMENT_CODE_TTL_MS };
+  return { challenge, expiresAt: now + ENROLLMENT_CODE_TTL_MS };
 }
 
-/** Spend a code: valid, unused, unexpired, and this member's. Marks it used on success. */
-export async function consumeEnrollmentCode(
+/** Spend a ceremony challenge: valid, unused, unexpired, and this member's. One use. */
+export async function consumeEnrollmentChallenge(
   db: Driver,
-  input: { teamId: string; memberId: string; code: string; now?: number },
+  input: { teamId: string; memberId: string; challenge: string; now?: number },
 ): Promise<boolean> {
   const now = input.now ?? Date.now();
-  const codeHash = createHash('sha256').update(input.code, 'utf8').digest('hex');
-  const row = await db.get<{ member_id: string; expires_at: number; used_at: number | null }>(
-    `SELECT member_id, expires_at, used_at FROM enrollment_codes WHERE team_id = ? AND code_hash = ?`,
-    [input.teamId, codeHash],
+  const codeHash = createHash('sha256').update(input.challenge, 'utf8').digest('hex');
+  const spent = await db.run(
+    `UPDATE enrollment_codes SET used_at = ?
+      WHERE team_id = ? AND code_hash = ? AND member_id = ? AND used_at IS NULL AND expires_at >= ?`,
+    [now, input.teamId, codeHash, input.memberId, now],
   );
-  if (!row || row.member_id !== input.memberId || row.used_at !== null) return false;
-  if (now > Number(row.expires_at)) return false;
-  await db.run(`UPDATE enrollment_codes SET used_at = ? WHERE code_hash = ?`, [now, codeHash]);
-  return true;
+  return spent.changes > 0;
 }
 
 export type EnrollKeyResult =
-  | { ok: true; key: DeviceKey; via: 'code' | 'approval' }
+  | { ok: true; key: DeviceKey; via: 'ceremony' | 'approval' }
   | { ok: false; reason: string };
 
 /**
- * Enroll a key for a human (decision 6: a new key never authorizes itself). The first key —
- * and recovery when every key is lost — goes through the one-time enrollment code from the
- * human's existing credential. Once any key exists, a further key may instead be authorized
- * by an A2 signature from a standing key over `device_key_admin`. An agent member can never
- * enroll: the refusal is audited like any other listed-act refusal.
+ * Enroll a raw-public-key device key for a human (decision 6: a new key never authorizes
+ * itself, and no key can be enrolled from an agent process). The FIRST key is always a
+ * passkey from the browser ceremony ({@link enrollPasskeyGuarded}) — with zero active
+ * keys this path refuses `passkey_first`, so a Bearer [REDACTED] agent can read can never
+ * enroll a key it controls. Once a key stands, a further key is authorized by an A2
+ * signature from a standing key over `device_key_admin`.
  */
 export async function enrollKeyGuarded(
   db: Driver,
@@ -203,7 +207,6 @@ export async function enrollKeyGuarded(
     member: { id: string; name: string; kind: string };
     publicKey: string;
     kind: AuthenticatorKind;
-    code?: string | undefined;
     proof?: ApprovalProof | undefined;
     now?: number;
   },
@@ -219,32 +222,8 @@ export async function enrollKeyGuarded(
     });
     return { ok: false, reason: 'agent_credential' };
   }
-  if (input.code !== undefined) {
-    const spent = await consumeEnrollmentCode(db, {
-      teamId: input.teamId,
-      memberId: input.member.id,
-      code: input.code,
-      now,
-    });
-    if (!spent) return { ok: false, reason: 'bad_code' };
-    const key = await enrollDeviceKey(db, {
-      teamId: input.teamId,
-      memberId: input.member.id,
-      publicKey: input.publicKey,
-      kind: input.kind,
-      now,
-    });
-    await appendAudit(db, input.teamId, {
-      actor: input.member.name,
-      action: 'device_key.enrolled',
-      target: input.member.name,
-      result: 'allow',
-      detail: { key_id: key.id, kind: key.kind, via: 'code' },
-    });
-    return { ok: true, key, via: 'code' };
-  }
-  const enrolled = await listDeviceKeys(db, input.teamId, input.member.id);
-  if (enrolled.length === 0) return { ok: false, reason: 'code_required' };
+  const active = await activeDeviceKeys(db, input.teamId, input.member.id);
+  if (active.length === 0) return { ok: false, reason: 'passkey_first' };
   const check = await requireAuthority(db, {
     teamId: input.teamId,
     audience: input.audience,
@@ -275,8 +254,10 @@ export async function enrollKeyGuarded(
 }
 
 /**
- * Revoke one of a human's keys: by enrollment code (the lost-device path), or by an A2
- * signature from a DIFFERENT standing key — a key never revokes itself while another stands.
+ * Revoke one of a human's keys by an A2 signature from a standing key (decision 6).
+ * A key never revokes itself while another stands; the sole standing key may retire
+ * itself, which is the lost-device path — enrollment stays latched (lane 1), and
+ * recovery is a fresh passkey ceremony, never a Bearer-only code.
  */
 export async function revokeKeyGuarded(
   db: Driver,
@@ -285,25 +266,19 @@ export async function revokeKeyGuarded(
     audience: string;
     member: { id: string; name: string; kind: string };
     keyId: string;
-    code?: string | undefined;
     proof?: ApprovalProof | undefined;
     now?: number;
   },
-): Promise<{ ok: true; via: 'code' | 'approval' } | { ok: false; reason: string }> {
+): Promise<{ ok: true; via: 'approval' } | { ok: false; reason: string }> {
   const now = input.now ?? Date.now();
   const key = await getDeviceKey(db, input.teamId, input.keyId);
   if (!key || key.memberId !== input.member.id) return { ok: false, reason: 'not_found' };
   if (key.revokedAt !== null) return { ok: false, reason: 'key_revoked' };
-  if (input.code !== undefined) {
-    const spent = await consumeEnrollmentCode(db, {
-      teamId: input.teamId,
-      memberId: input.member.id,
-      code: input.code,
-      now,
-    });
-    if (!spent) return { ok: false, reason: 'bad_code' };
-  } else {
-    if (input.proof?.key_id === input.keyId) {
+  if (input.proof?.key_id === input.keyId) {
+    const others = (await activeDeviceKeys(db, input.teamId, input.member.id)).filter(
+      (k) => k.id !== input.keyId,
+    );
+    if (others.length > 0) {
       await appendAudit(db, input.teamId, {
         actor: input.member.name,
         action: 'authority.refused',
@@ -313,28 +288,28 @@ export async function revokeKeyGuarded(
       });
       return { ok: false, reason: 'descriptor_mismatch' };
     }
-    const check = await requireAuthority(db, {
-      teamId: input.teamId,
-      audience: input.audience,
-      presenter: input.member,
-      credential: input.member.kind === 'human' ? 'human' : 'agent',
-      act: 'device_key_admin',
-      target: input.member.name,
-      payload: { action: 'revoke', key_id: input.keyId },
-      proof: input.proof,
-      now,
-    });
-    if (!check.ok) return { ok: false, reason: check.reason };
   }
+  const check = await requireAuthority(db, {
+    teamId: input.teamId,
+    audience: input.audience,
+    presenter: input.member,
+    credential: input.member.kind === 'human' ? 'human' : 'agent',
+    act: 'device_key_admin',
+    target: input.member.name,
+    payload: { action: 'revoke', key_id: input.keyId },
+    proof: input.proof,
+    now,
+  });
+  if (!check.ok) return { ok: false, reason: check.reason };
   await revokeDeviceKey(db, input.teamId, input.keyId, now);
   await appendAudit(db, input.teamId, {
     actor: input.member.name,
     action: 'device_key.revoked',
     target: input.member.name,
     result: 'allow',
-    detail: { key_id: input.keyId, via: input.code !== undefined ? 'code' : 'approval' },
+    detail: { key_id: input.keyId, via: 'approval' },
   });
-  return { ok: true, via: input.code !== undefined ? 'code' : 'approval' };
+  return { ok: true, via: 'approval' };
 }
 
 interface NonceRow {
@@ -655,17 +630,23 @@ export async function getParkedProof(
 }
 
 /**
- * Enroll a passkey by enrollment code (decision 6's human path, in the browser). The
- * registration ceremony's challenge IS the enrollment code, so the code's one use and the
- * credential's birth are the same event; the code is spent only on a verified registration.
+ * Enroll a passkey (decision 6, passkey-first). The registration ceremony's challenge
+ * is the server-minted enrollment challenge, so the challenge's one use and the
+ * credential's birth are the same event. With zero active keys this IS the explicit
+ * human path — first enrollment and lost-everything recovery: the ceremony requires
+ * user verification, which a Bearer-holding agent process cannot produce. Once a key
+ * stands, a further passkey additionally needs a standing key's `device_key_admin`
+ * signature over `{action:'enroll', kind:'passkey'}`.
  */
 export async function enrollPasskeyGuarded(
   db: Driver,
   input: {
     teamId: string;
+    audience: string;
     member: { id: string; name: string; kind: string };
-    code: string;
+    challenge: string;
     registration: { attestationObject: Uint8Array; clientDataJson: string };
+    proof?: ApprovalProof | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -676,18 +657,34 @@ export async function enrollPasskeyGuarded(
     verified = verifyRegistration({
       authenticatorData: extractAuthData(input.registration.attestationObject),
       clientDataJson: input.registration.clientDataJson,
-      expectedChallenge: Buffer.from(input.code, 'utf8').toString('base64url'),
+      expectedChallenge: input.challenge,
+      requireUserVerified: true,
     });
   } catch {
     return { ok: false, reason: 'bad_registration' };
   }
-  const spent = await consumeEnrollmentCode(db, {
+  const active = await activeDeviceKeys(db, input.teamId, input.member.id);
+  if (active.length > 0) {
+    const check = await requireAuthority(db, {
+      teamId: input.teamId,
+      audience: input.audience,
+      presenter: input.member,
+      credential: 'human',
+      act: 'device_key_admin',
+      target: input.member.name,
+      payload: { action: 'enroll', kind: 'passkey' },
+      proof: input.proof,
+      now,
+    });
+    if (!check.ok) return { ok: false, reason: check.reason };
+  }
+  const spent = await consumeEnrollmentChallenge(db, {
     teamId: input.teamId,
     memberId: input.member.id,
-    code: input.code,
+    challenge: input.challenge,
     now,
   });
-  if (!spent) return { ok: false, reason: 'bad_code' };
+  if (!spent) return { ok: false, reason: 'bad_challenge' };
   const key = await enrollDeviceKey(db, {
     teamId: input.teamId,
     memberId: input.member.id,
@@ -701,7 +698,7 @@ export async function enrollPasskeyGuarded(
     action: 'device_key.enrolled',
     target: input.member.name,
     result: 'allow',
-    detail: { key_id: key.id, kind: 'passkey', via: 'code' },
+    detail: { key_id: key.id, kind: 'passkey', via: 'ceremony' },
   });
-  return { ok: true, key, via: 'code' };
+  return { ok: true, key, via: 'ceremony' };
 }

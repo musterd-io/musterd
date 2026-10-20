@@ -29,11 +29,11 @@ ${script}
 
 export const passkeyEnrollPage = shell(
   'Enroll a passkey',
-  `<p>Bind a passkey to your human authority on this team. You need the one-time
-enrollment code from <code>musterd authority enroll --passkey</code> (shown once, ten minutes).</p>
+  `<p>Bind a passkey to your human authority on this team. Open this page from
+<code>musterd authority enroll</code> — its link carries the one-time ceremony
+challenge (ten minutes). The ceremony asks your authenticator to verify it's you.</p>
 <label for="team">Team</label><input id="team" autocomplete="off">
 <label for="member">Your member name</label><input id="member" autocomplete="off">
-<label for="code">Enrollment code</label><input id="code" autocomplete="off">
 <button id="go">Enroll this passkey</button>`,
   `
 document.getElementById('team').value = params.get('team') || '';
@@ -41,19 +41,23 @@ document.getElementById('member').value = params.get('member') || '';
 document.getElementById('go').addEventListener('click', async () => {
   const team = document.getElementById('team').value.trim();
   const member = document.getElementById('member').value.trim();
-  const code = document.getElementById('code').value.trim();
+  const challenge = params.get('challenge') || '';
+  const frag = new URLSearchParams(location.hash.slice(1));
+  let approval;
+  try { approval = frag.get('approval') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('approval')))) : undefined; } catch { approval = undefined; }
   try {
     out('Waiting for your passkey…');
     const cred = await navigator.credentials.create({ publicKey: {
-      challenge: new TextEncoder().encode(code),
+      challenge: unb64u(challenge),
       rp: { name: 'musterd' },
       user: { id: new TextEncoder().encode(member), name: member, displayName: member },
       pubKeyCredParams: [{ type: 'public-key', alg: -8 }, { type: 'public-key', alg: -7 }],
+      authenticatorSelection: { userVerification: 'required' },
       timeout: 120000,
     }});
     const res = await fetch('/teams/' + encodeURIComponent(team) + '/authority/passkeys', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ actor: member, enrollment_code: code, registration: {
+      body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), registration: {
         attestation_object: b64u(cred.response.attestationObject),
         client_data_json: new TextDecoder().decode(cred.response.clientDataJSON),
       }}),

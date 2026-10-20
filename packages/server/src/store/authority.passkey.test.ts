@@ -6,7 +6,7 @@ import {
   buildDescriptor,
   enrollPasskeyGuarded,
   getParkedProof,
-  issueEnrollmentCode,
+  issueEnrollmentChallenge,
   requireAuthority,
   storePasskeyProof,
 } from './authority.js';
@@ -34,7 +34,7 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     openStore = o;
   });
 
-  it('enroll by code, park a proof from the page, and the act verifies it', async () => {
+  it('enroll by ceremony, park a proof from the page, and the act verifies it', async () => {
     const db = await openStore();
     const team = await createTeam(db, { slug: 'revive' });
     const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
@@ -51,7 +51,7 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     const rpHash = createHash('sha256').update('example.com').digest();
     const regAuthData = Buffer.concat([
       rpHash,
-      Buffer.from([0x41]),
+      Buffer.from([0x45]),
       Buffer.from([0, 0, 0, 0]),
       Buffer.alloc(16),
       Buffer.from([0, credId.length]),
@@ -66,21 +66,19 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     const clientData = (type: string, challenge: string) =>
       JSON.stringify({ type, challenge, origin: 'https://example.com', crossOrigin: false });
 
-    const issued = await issueEnrollmentCode(db, {
+    const issued = await issueEnrollmentChallenge(db, {
       teamId: team.id,
       memberId: nick.id,
       actor: 'nick',
     });
     const enrolled = await enrollPasskeyGuarded(db, {
       teamId: team.id,
+      audience: team.slug,
       member: nick,
-      code: issued.code,
+      challenge: issued.challenge,
       registration: {
         attestationObject,
-        clientDataJson: clientData(
-          'webauthn.create',
-          Buffer.from(issued.code, 'utf8').toString('base64url'),
-        ),
+        clientDataJson: clientData('webauthn.create', issued.challenge),
       },
     });
     expect(enrolled.ok).toBe(true);

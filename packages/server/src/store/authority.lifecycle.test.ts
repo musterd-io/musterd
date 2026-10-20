@@ -6,8 +6,8 @@ import { withDrivers } from '../db/testing.js';
 import { listAudit } from './audit.js';
 import {
   buildDescriptor,
+  enrollDeviceKey,
   enrollKeyGuarded,
-  issueEnrollmentCode,
   revokeKeyGuarded,
 } from './authority.js';
 import { addMember } from './members.js';
@@ -31,19 +31,14 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
     openStore = o;
   });
 
-  it('first key by code only; further keys by code or a standing key; revoke by another key or code', async () => {
+  it('passkey-first: a Bearer alone enrolls nothing; standing keys enroll and revoke', async () => {
     const db = await openStore();
     const team = await createTeam(db, { slug: 'revive' });
     const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
     const base = { teamId: team.id, audience: team.slug, member: nick };
 
-    // An agent can never enroll a key, even with a code minted for the human.
-    const adaCode = await issueEnrollmentCode(db, {
-      teamId: team.id,
-      memberId: ada.id,
-      actor: 'ada',
-    });
+    // An agent can never enroll a key.
     await expect(
       enrollKeyGuarded(db, {
         teamId: team.id,
@@ -51,43 +46,26 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
         member: ada,
         publicKey: keypair().publicKey,
         kind: 'platform',
-        code: adaCode.code,
       }),
     ).resolves.toEqual({ ok: false, reason: 'agent_credential' });
 
-    // No code, no standing key: refused.
-    const k1 = keypair();
+    // Lazara's attack (HA2 decline of #2966): the human's Bearer, an attacker key,
+    // no standing key — refused. The first key is a passkey ceremony, never raw.
+    const attacker = keypair();
     await expect(
-      enrollKeyGuarded(db, { ...base, publicKey: k1.publicKey, kind: 'platform' }),
-    ).resolves.toEqual({ ok: false, reason: 'code_required' });
-    await expect(
-      enrollKeyGuarded(db, { ...base, publicKey: k1.publicKey, kind: 'platform', code: 'nope' }),
-    ).resolves.toEqual({ ok: false, reason: 'bad_code' });
+      enrollKeyGuarded(db, { ...base, publicKey: attacker.publicKey, kind: 'platform' }),
+    ).resolves.toEqual({ ok: false, reason: 'passkey_first' });
 
-    // The explicit human path: one code, one key, one use.
-    const issued = await issueEnrollmentCode(db, {
+    // The first key stands (enrolled by the passkey ceremony in the passkey suite).
+    const k1 = keypair();
+    const key1 = await enrollDeviceKey(db, {
       teamId: team.id,
       memberId: nick.id,
-      actor: 'nick',
-    });
-    const first = await enrollKeyGuarded(db, {
-      ...base,
       publicKey: k1.publicKey,
       kind: 'platform',
-      code: issued.code,
     });
-    expect(first.ok).toBe(true);
-    const key1 = first.ok ? first.key : null;
-    await expect(
-      enrollKeyGuarded(db, {
-        ...base,
-        publicKey: keypair().publicKey,
-        kind: 'platform',
-        code: issued.code,
-      }),
-    ).resolves.toEqual({ ok: false, reason: 'bad_code' });
 
-    // A second key by the first key's signature over device_key_admin.
+    // A second key needs the standing key's signature over device_key_admin.
     const k2 = keypair();
     await expect(
       enrollKeyGuarded(db, { ...base, publicKey: k2.publicKey, kind: 'phone' }),
@@ -105,7 +83,7 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
       ...base,
       publicKey: k2.publicKey,
       kind: 'phone',
-      proof: { key_id: key1!.id, nonce: d.nonce, signature: k1.sign(d) },
+      proof: { key_id: key1.id, nonce: d.nonce, signature: k1.sign(d) },
     });
     expect(second.ok).toBe(true);
     const key2 = second.ok ? second.key : null;
@@ -118,13 +96,13 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
       actor: 'nick',
       act: 'device_key_admin',
       target: 'nick',
-      payload: { action: 'revoke', key_id: key1!.id },
+      payload: { action: 'revoke', key_id: key1.id },
     });
     await expect(
       revokeKeyGuarded(db, {
         ...base,
-        keyId: key1!.id,
-        proof: { key_id: key1!.id, nonce: dSelf.nonce, signature: k1.sign(dSelf) },
+        keyId: key1.id,
+        proof: { key_id: key1.id, nonce: dSelf.nonce, signature: k1.sign(dSelf) },
       }),
     ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
     const dRevoke = await buildDescriptor(db, {
@@ -134,44 +112,41 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
       actor: 'nick',
       act: 'device_key_admin',
       target: 'nick',
-      payload: { action: 'revoke', key_id: key1!.id },
+      payload: { action: 'revoke', key_id: key1.id },
     });
     await expect(
       revokeKeyGuarded(db, {
         ...base,
-        keyId: key1!.id,
+        keyId: key1.id,
         proof: { key_id: key2!.id, nonce: dRevoke.nonce, signature: k2.sign(dRevoke) },
       }),
     ).resolves.toEqual({ ok: true, via: 'approval' });
 
-    // Lost-device recovery: the last key goes by code, and a fresh key enrolls by code.
-    const recovery = await issueEnrollmentCode(db, {
+    // The sole standing key may retire itself (lost-device path). Recovery after
+    // that is a fresh passkey ceremony: raw enrollment still refuses.
+    const dLast = await buildDescriptor(db, {
       teamId: team.id,
+      audience: team.slug,
       memberId: nick.id,
       actor: 'nick',
+      act: 'device_key_admin',
+      target: 'nick',
+      payload: { action: 'revoke', key_id: key2!.id },
     });
     await expect(
-      revokeKeyGuarded(db, { ...base, keyId: key2!.id, code: recovery.code }),
-    ).resolves.toEqual({ ok: true, via: 'code' });
-    const recovery2 = await issueEnrollmentCode(db, {
-      teamId: team.id,
-      memberId: nick.id,
-      actor: 'nick',
-    });
-    const recovered = await enrollKeyGuarded(db, {
-      ...base,
-      publicKey: keypair().publicKey,
-      kind: 'platform',
-      code: recovery2.code,
-    });
-    expect(recovered.ok).toBe(true);
+      revokeKeyGuarded(db, {
+        ...base,
+        keyId: key2!.id,
+        proof: { key_id: key2!.id, nonce: dLast.nonce, signature: k2.sign(dLast) },
+      }),
+    ).resolves.toEqual({ ok: true, via: 'approval' });
+    await expect(
+      enrollKeyGuarded(db, { ...base, publicKey: keypair().publicKey, kind: 'platform' }),
+    ).resolves.toEqual({ ok: false, reason: 'passkey_first' });
 
-    // The audit shows the lifecycle and never a code.
     const rows = await listAudit(db, team.id, { limit: 50 });
     const actions = rows.map((r) => r.action);
     expect(actions).toContain('device_key.enrolled');
     expect(actions).toContain('device_key.revoked');
-    expect(JSON.stringify(rows)).not.toContain(issued.code);
-    expect(JSON.stringify(rows)).not.toContain(recovery.code);
   });
 });
