@@ -116,6 +116,14 @@ building the routing ADR 272 deferred, and in a way that can be shown wrong.
   hit rate is not above the oldest-first baseline recomputed on the same rows, decision 3 is
   reverted and decisions 2 and 4 are kept — they are honesty, not relevance. The reading is
   recorded here as a dated note.
+- _Note, 2026-10-20 (lazara, the fourteen-day read)._ `pnpm next:readout --since 2026-10-06` on
+  the revive hub: **NOT-MET**. The ranking was picked up more than the baseline, so decision 3
+  stays. Ranked hit rate was 4 of 105 claims with an offer in the hour before (rank 1 / 2 / 0 / 1 / 0),
+  against 0 of 105 for the oldest-first baseline, out of 671 claims. Tier yield: role 2, goal
+  motion 2, nothing from a human pointer or scope familiarity. 197 of 197 brief reads had a pool
+  deeper than the window. The margin is four claims, and 101 of the 105 claims were for lanes in
+  neither window, so `up_next` rarely decides what a seat picks. The result table and that caveat
+  are on `docs/wiki/up-next-relevance.md`.
 
 ## Observability & Evaluation
 
