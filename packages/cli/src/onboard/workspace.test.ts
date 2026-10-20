@@ -47,6 +47,32 @@ describe('provisionWorkspace --clone (ADR 463 §3)', () => {
     expect(git('status', '--porcelain')).toBe('');
   });
 
+  it('points the clone’s origin at the given URL, not the local source (ADR 675)', () => {
+    const repo = repoWithCommit();
+    const home = tmp('mwd-clone-home-');
+    const origin = 'https://github.example/acme/repo.git';
+    const ws = provisionWorkspace('dana-scout', {
+      team: 'acme',
+      cwd: repo,
+      home,
+      clone: true,
+      origin,
+    });
+    const git = (...a: string[]) =>
+      execFileSync('git', a, { cwd: ws.dir, encoding: 'utf8' }).trim();
+    expect(git('remote', 'get-url', 'origin')).toBe(origin);
+    // the objects came from the local source all the same
+    expect(git('rev-parse', '--verify', 'HEAD')).toMatch(/^[0-9a-f]{40}$/);
+    // without the option the clone keeps git's default: the local path
+    const plain = provisionWorkspace('eve-scout', { team: 'acme', cwd: repo, home, clone: true });
+    expect(
+      execFileSync('git', ['remote', 'get-url', 'origin'], {
+        cwd: plain.dir,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe(realpathSync(repo));
+  });
+
   it('without clone it is still a linked worktree sharing the source’s object store', () => {
     const repo = repoWithCommit();
     const home = tmp('mwd-clone-home-');

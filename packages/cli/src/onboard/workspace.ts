@@ -57,6 +57,12 @@ export interface WorkspaceOpts {
    * from the launcher starts at the remote's default branch). Ignored when the branch already exists.
    */
   base?: string;
+  /**
+   * ADR 675: the URL the clone's `origin` is set to after cloning — the checkout's own remote, so a
+   * seat provisioned from a machine's local mirror pushes to GitHub, not into the mirror. Clone
+   * only (a worktree shares its checkout's remotes). Absent ⇒ git's default: the clone source.
+   */
+  origin?: string;
 }
 
 /**
@@ -99,7 +105,8 @@ function remoteRepoName(remote: string | null): string | null {
   return name ? name : null;
 }
 
-function originUrl(top: string): string | null {
+/** The checkout's `origin` URL, or null when it has none (ADR 675: what a cloud clone points at). */
+export function originUrl(top: string): string | null {
   try {
     return git(['remote', 'get-url', 'origin'], top);
   } catch {
@@ -144,9 +151,12 @@ function realpathNearest(p: string): string {
 }
 
 /** ADR 463 §3: a self-contained clone of `top` on its own `branch`, with `.musterd/` kept out of git. */
-function addClone(top: string, dir: string, branch: string, base?: string): void {
+function addClone(top: string, dir: string, branch: string, base?: string, origin?: string): void {
   mkdirSync(dirname(dir), { recursive: true });
   execFileSync('git', ['clone', '--quiet', top, dir], { encoding: 'utf8' });
+  // ADR 675: a local clone's origin is the local path it came from; the seat's pushes and PRs go
+  // to the real remote, so point origin there. The objects are already here (hard-linked).
+  if (origin) git(['remote', 'set-url', 'origin', origin], dir);
   // A local clone hard-links the whole object store, so a commit resolved in `top` exists here too.
   git(base ? ['switch', '-c', branch, base] : ['switch', '-c', branch], dir);
   // A clone has its own `.git/info/exclude`: the binding must never be committable from it.
@@ -263,7 +273,7 @@ export function provisionWorkspace(name: string, opts: WorkspaceOpts = {}): Work
       identity(dir);
       return { dir, kind: 'worktree', branch, created: false };
     }
-    if (opts.clone) addClone(top, dir, branch, opts.base);
+    if (opts.clone) addClone(top, dir, branch, opts.base, opts.origin);
     else addWorktree(top, dir, branch, opts.base);
     identity(dir);
     return { dir, kind: opts.clone ? 'folder' : 'worktree', branch, created: true };

@@ -19,6 +19,7 @@ import { pollHostOnce, type HostPollDeps } from '../host/loop.js';
 import { provisionOnce, type ProvisionDeps } from '../host/provisioner.js';
 import { hostRegistryPath, loadHostRegistry } from '../host/registry.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
+import { originUrl } from '../onboard/workspace.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
 import { ensureHostKey } from './residency.js';
@@ -120,6 +121,9 @@ export async function buildCloudProvisioner(
     harness,
     repoRoot,
     clone: parsed.flags['clone'] !== false,
+    // ADR 675: the seat's clone points at the mirror's own remote (GitHub), so its pushes and
+    // PRs leave the machine; a mirror with no remote leaves git's default (the local path).
+    ...(originUrl(repoRoot) ? { origin: originUrl(repoRoot)! } : {}),
     // The resident engine reads its key from this variable at spawn (ADR 588); the name only.
     ...(harness.id === 'musterd'
       ? { keyEnv: flagStr(parsed.flags, 'key-env') ?? 'ANTHROPIC_API_KEY' }

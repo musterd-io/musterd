@@ -22,7 +22,7 @@ Secrets arrive as Fly secrets, never in the image, `fly.toml` or the repo:
 | ------------------- | ------------------------------- | ------------------------------------- |
 | `MUSTERD_HOST_KEY`  | the host loop (ADR 648)         | the whole run; revocable server-side  |
 | model key (`ANTHROPIC_API_KEY` or the `MUSTERD_KEY_ENV` variable) | the resident engine, at spawn | the whole run — the sponsor's BYOK key |
-| `GH_TOKEN`          | clone, push, PRs from the workspace | the whole run — fine-grained, this repo only |
+| `GH_TOKEN`          | clone, push, PRs from the workspace — held by gh under `$HOME/.config/gh`, never in the jail's environment (ADR 675) | the whole run — fine-grained, this repo only, contents + pull requests |
 
 It must never hold: the team agent key (`MUSTERD_AGENT_KEY` — the entrypoint refuses to
 boot with it set) or any sponsor credential. The sponsor's binding lives on the sponsor's
@@ -110,7 +110,10 @@ enrolled under harness `musterd`), and then wake polls. On the team server, the 
    from the sponsor's host, or the audit rows carrying `via: 'host_key'`).
 2. **A cold wake.** Send the seat an act that wakes (steer/accept/a handoff). The machine's
    log shows the lease and the resident engine's turn; the roster flips the seat to `working`.
-3. **A lane end to end** from the seat's workspace: claim → work → PR → `lane_submit`.
+3. **A lane end to end** from the seat's workspace: claim → work → PR → `lane_submit`. The
+   seat's `origin` is GitHub (ADR 675; `git remote -v` from the jail shows the HTTPS URL, not
+   `/data/work/repo`) and `gh pr create` works from the jail. A workspace provisioned before ADR
+   675 needs `git remote set-url origin <url>` once.
 4. **No forbidden state.** `fly ssh console --app musterd-agent-$SEAT -C "env | grep -c
    MUSTERD_AGENT_KEY"` prints 0 (the boot would have refused it anyway), and no file on the
    volume is the sponsor's binding.

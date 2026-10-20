@@ -10,7 +10,10 @@
 #   MUSTERD_HOST_KEY    the sponsor-scoped host key (ADR 648) — the only musterd credential here
 #   ANTHROPIC_API_KEY   the sponsor's model key (BYOK, ADR 647) — the resident engine reads it
 #                       at spawn; or the variable named by MUSTERD_KEY_ENV
-#   GH_TOKEN            a fine-grained token for the workspace repo (clone, push, PRs)
+#   GH_TOKEN            a fine-grained token for the workspace repo (clone, push, PRs). ADR 675:
+#                       it never enters the jail — gh keeps it under $HOME/.config/gh (0600,
+#                       outside every workspace), git reaches it through gh's credential
+#                       helper, and the variable is dropped before the host starts.
 # Refused: MUSTERD_AGENT_KEY (a team's daemon-private key has no business on this machine) and
 # any sponsor credential — the sponsor's binding must never live here (ADR 648).
 set -euo pipefail
@@ -38,6 +41,24 @@ if [ ! -d repo/.git ]; then
   git clone --quiet "$REPO_URL" repo
 fi
 cd repo
+
+# ADR 675: sign gh in from GH_TOKEN and hand git the same credential, then drop the variable.
+# The jail's readers cannot leave the workspace and `gh auth` / `git credential` are not on its
+# allowlist, so the seat's git and gh can push and open PRs without the shell ever seeing the
+# token. gh refuses `auth login` while GH_TOKEN is exported, so it is moved to a local first.
+if [ -n "${GH_TOKEN:-}" ]; then
+  gh_token="$GH_TOKEN"
+  unset GH_TOKEN
+  if printf '%s' "$gh_token" | gh auth login --with-token --hostname github.com >>"$LOG" 2>&1 \
+    && gh auth setup-git >>"$LOG" 2>&1; then
+    log "gh: signed in from GH_TOKEN (kept under \$HOME/.config/gh); git credential helper set"
+  else
+    log "! gh: sign-in from GH_TOKEN failed — the seat can clone and commit but not push or open PRs"
+  fi
+  unset gh_token
+else
+  log "gh: no GH_TOKEN — the seat can clone and commit but not push or open PRs"
+fi
 
 # The model key's variable NAME is recorded in the registry at provisioning (ADR 588); its
 # value is this process's env, inherited by the host loop and read at spawn — never written

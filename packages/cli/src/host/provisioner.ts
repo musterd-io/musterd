@@ -44,6 +44,9 @@ export interface ProvisionDeps {
   repoRoot: string;
   /** `--clone`: a full clone instead of a `git worktree`, for isolation from the sponsor's checkout. */
   clone: boolean;
+  /** ADR 675: the clone's `origin` URL — the cloud host passes its mirror's own remote so the seat
+   *  pushes to GitHub, not into the mirror. Absent on a sponsor's own machine (git's default). */
+  origin?: string;
   log: (line: string) => void;
   /**
    * ADR 648: the environment variable holding the model key a resident (`musterd` harness)
@@ -155,6 +158,7 @@ async function standUp(deps: ProvisionDeps, row: HostProvision): Promise<void> {
               team: deps.team,
               cwd: deps.repoRoot,
               clone: deps.clone,
+              ...(deps.origin !== undefined ? { origin: deps.origin } : {}),
             });
           } catch (err) {
             throw new StepError('workspace', err);

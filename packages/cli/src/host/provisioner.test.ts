@@ -108,6 +108,16 @@ describe('provisionOnce (ADR 463 §3)', () => {
       cwd: '/repo',
       clone: false,
     });
+    // ADR 675: an `origin` dep rides to the workspace factory (the cloud host's mirror remote).
+    const cloud = deps({ origin: 'https://github.example/acme/repo.git' });
+    await provisionOnce(cloud.d);
+    cloud.provisionSeat.mock.calls[0]![0].workspace();
+    expect(cloud.provisionWorkspace).toHaveBeenCalledWith('dana-scout', {
+      team: 'acme',
+      cwd: '/repo',
+      clone: false,
+      origin: 'https://github.example/acme/repo.git',
+    });
     expect(t.sponsor.enrollResidency).toHaveBeenCalledWith('acme', {
       seat: 'dana-scout',
       harness: 'claude-code',
