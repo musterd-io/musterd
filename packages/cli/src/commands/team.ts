@@ -62,6 +62,7 @@ import {
   writeSeatFile,
 } from '../roster.js';
 import { cliBuild } from '../version.js';
+import { setPolicySigned } from './authority.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
 import { teamPolicyStyle } from './policy.js';
 
@@ -951,7 +952,7 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   }
 
   if (changed) {
-    const { policy: updated } = await http.setPolicy(team, merged);
+    const { policy: updated } = await setPolicySigned(http, team, merged);
     process.stdout.write(
       success(
         `team policy updated — ${team}: re-seat known agents ${updated.standing_reseat_known_agents ? theme.accent('on') : 'off'}, ask fallback to non-admins ${updated.ask_fallback_to_nonadmin ? theme.accent('on') : 'off'}, review loop ${updated.loops.review ? theme.accent('on') : 'off'}, dispatch loop ${updated.loops.dispatch ? theme.accent('on') : 'off'}, sweep loop ${updated.loops.sweep ? theme.accent('on') : 'off'}`,

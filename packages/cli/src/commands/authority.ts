@@ -1,4 +1,8 @@
-import type { ApprovalDescriptor } from '@musterd/protocol';
+import {
+  PolicyOverrideSchema,
+  type ApprovalDescriptor,
+  type PolicyOverride,
+} from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { success } from '../render/ui.js';
@@ -81,6 +85,34 @@ export async function collectApproval(
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
+}
+
+/**
+ * Write the team policy as a human admin (ADR 662: `admin.team_policy` is a listed act). The write
+ * goes first without a proof, which is all a human with no enrolled key needs; when the server
+ * answers `no_signature`, the server-built descriptor over the exact stored doc is approved with
+ * the passkey and the same write is sent again carrying the proof.
+ */
+export async function setPolicySigned(
+  http: Http,
+  team: string,
+  policy: PolicyOverride,
+): ReturnType<Http['setPolicy']> {
+  try {
+    return await http.setPolicy(team, policy);
+  } catch (err) {
+    if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
+      throw err;
+  }
+  process.stdout.write('Team policy is a high-authority act — approve it with your passkey.\n');
+  const approval = await collectApproval(
+    http,
+    team,
+    'admin.team_policy',
+    team,
+    PolicyOverrideSchema.parse(policy),
+  );
+  return http.setPolicy(team, policy, approval);
 }
 
 export async function authorityCommand(parsed: Parsed): Promise<number> {

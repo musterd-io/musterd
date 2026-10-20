@@ -28,6 +28,7 @@ import { opencodeCapability } from '../opencodeBin.js';
 import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
 import { seatReachLines } from '../roster.js';
+import { setPolicySigned } from './authority.js';
 import { findWorkspaceDir, resolve, resolveRead } from './helpers.js';
 import { enrollmentChecks, enrollmentRefusal } from './residencyChecks.js';
 
@@ -677,7 +678,7 @@ async function policyCommand(parsed: Parsed): Promise<number> {
   const next: PolicyOverride = { ...stored };
   if (residency === undefined) delete next.residency;
   else next.residency = residency;
-  const { policy: updated } = await http.setPolicy(team, next);
+  const { policy: updated } = await setPolicySigned(http, team, next);
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(updated.residency) + '\n');
     return 0;

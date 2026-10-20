@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Parsed } from '../args.js';
-import { authorityCommand, browserOrigin } from './authority.js';
+import { CliError } from '../errors.js';
+import { authorityCommand, browserOrigin, setPolicySigned } from './authority.js';
 
 const h = vi.hoisted(() => ({
   server: 'http://localhost:4849',
@@ -155,5 +156,67 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     });
     expect(out.join('')).toContain('device key key-1 revoked');
     vi.restoreAllMocks();
+  });
+});
+
+describe('setPolicySigned (ADR 662 admin.team_policy)', () => {
+  const policy = { loops: { review: true }, away_relay_url: 'https://relay.example' };
+  const result = { policy: {}, stored: policy };
+
+  function http(setPolicy: ReturnType<typeof vi.fn>) {
+    return {
+      server: h.server,
+      setPolicy,
+      createAuthorityDescriptor: h.createAuthorityDescriptor,
+      getParkedApproval: h.getParkedApproval,
+    } as unknown as Parameters<typeof setPolicySigned>[0];
+  }
+
+  it('writes without a ceremony when the server needs no proof', async () => {
+    h.createAuthorityDescriptor.mockClear();
+    const setPolicy = vi.fn(async () => result);
+    await expect(setPolicySigned(http(setPolicy), 'revive', policy)).resolves.toBe(result);
+    expect(setPolicy).toHaveBeenCalledTimes(1);
+    expect(h.createAuthorityDescriptor).not.toHaveBeenCalled();
+  });
+
+  it('on no_signature, approves the server-built descriptor over the exact doc and resends with the proof', async () => {
+    h.createAuthorityDescriptor.mockClear();
+    const setPolicy = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new CliError(
+          'authority refused (no_signature): admin.team_policy requires an A2 device signature (ADR 662)',
+          5,
+          'forbidden',
+        ),
+      )
+      .mockResolvedValueOnce(result);
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await expect(setPolicySigned(http(setPolicy), 'revive', policy)).resolves.toBe(result);
+    } finally {
+      out.mockRestore();
+    }
+    expect(h.createAuthorityDescriptor).toHaveBeenCalledWith('revive', {
+      act: 'admin.team_policy',
+      target: 'revive',
+      payload: policy,
+    });
+    expect(setPolicy).toHaveBeenLastCalledWith('revive', policy, {
+      key_id: 'key-1',
+      nonce: 'nonce-at-least-16-chars',
+      signature: 'sig',
+    });
+  });
+
+  it('passes any other refusal through untouched', async () => {
+    const setPolicy = vi.fn(async () => {
+      throw new CliError('the team policy changed on the hub', 9, 'conflict');
+    });
+    await expect(setPolicySigned(http(setPolicy), 'revive', policy)).rejects.toThrow(
+      /changed on the hub/,
+    );
+    expect(setPolicy).toHaveBeenCalledTimes(1);
   });
 });
