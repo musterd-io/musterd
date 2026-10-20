@@ -18,7 +18,7 @@ import {
 } from '@musterd/protocol';
 import { resolveWorkspaceKey } from '@musterd/protocol/project';
 import { fmtBytes } from '../args.js';
-import { HttpClient } from '../client.js';
+import { HOOK_HTTP_TIMEOUT_MS, HttpClient } from '../client.js';
 import { resolveClaimWorkspace } from '../commands/helpers.js';
 import { isLoopbackServer } from '../host/registry.js';
 import { sessionDigest } from '../session/digest.js';
@@ -389,6 +389,7 @@ export function traceClient(binding: Binding, dir: string): HttpClient | null {
     seat,
     surface: 'cli',
     claimSeatPerRequest: false,
+    timeoutMs: HOOK_HTTP_TIMEOUT_MS,
   }).presenceNeutral();
 }
 

@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { HttpClient } from '../client.js';
+import { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { markSessionStart, sessionStartedAt } from '../workingTree.js';
@@ -641,5 +642,28 @@ describe('spawnAttestation — the spawn row from the PostToolUse Agent payload'
       spawnAttestation(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } })),
     ).toBeNull();
     expect(spawnAttestation('not json')).toBeNull();
+  });
+});
+
+describe('HttpClient timeoutMs (ADR 674 — 1.5s hard timeout on hook HTTP calls)', () => {
+  it('aborts a hung request when timeoutMs elapses and surfaces a daemon-unreachable CliError (exit 7)', async () => {
+    const srv = createServer((_req, _res) => {
+      // deliberately hang without answering
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const client = new HttpClient({
+        server: `http://127.0.0.1:${port}`,
+        timeoutMs: 120,
+      });
+      const t0 = Date.now();
+      await expect(client.getEnforcement('dawn')).rejects.toMatchObject({
+        exitCode: 7,
+      });
+      expect(Date.now() - t0).toBeLessThan(1_000);
+    } finally {
+      srv.close();
+    }
   });
 });

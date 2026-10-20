@@ -1,6 +1,6 @@
 import type { Parsed } from '../args.js';
 import { flagStr } from '../args.js';
-import { isDaemonUnreachable } from '../client.js';
+import { HOOK_HTTP_TIMEOUT_MS, isDaemonUnreachable } from '../client.js';
 import { renderReachabilityNudge, renderWaitingActs } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { pendingActionSummary, resolveRead } from './helpers.js';
@@ -34,6 +34,7 @@ export async function nudgeCommand(parsed: Parsed): Promise<number> {
     // Hook one-shot (Notification hook): never reclaim the seat — see ResolveReadOptions.
     const { http, team, identity, explicit } = resolveRead(parsed.flags, {
       claimSeatPerRequest: false,
+      timeoutMs: HOOK_HTTP_TIMEOUT_MS,
     });
     // Only an explicit actor (a bound seat / env / `--as`) — never an ambient global-config read
     // (ADR 036) — has an inbox to surface.

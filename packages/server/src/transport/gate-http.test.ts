@@ -684,5 +684,30 @@ withDrivers('gate-http', (_o, kind) => {
       expect(detail['nudge']).toBeUndefined();
       expect(detail['verbatim']).toBeUndefined();
     });
+
+    it('records gate.unenforced when a seat flushes its local outage counter on recovery (ADR 674)', async () => {
+      const r = await post(
+        '/teams/dawn/actor',
+        {
+          kind: 'unenforced',
+          tool: 'Edit',
+          count: 4,
+          since_ts: 1_700_000_000_000,
+          until_ts: 1_700_000_030_000,
+        },
+        seatHeaders('Ada'),
+      );
+      expect(r.status).toBe(202);
+      const rows = await audits('gate.unenforced');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.actor).toBe('Ada');
+      expect(rows[0]!.result).toBe('allow');
+      expect(JSON.parse(rows[0]!.detail!)).toEqual({
+        count: 4,
+        tool: 'Edit',
+        since_ts: 1_700_000_000_000,
+        until_ts: 1_700_000_030_000,
+      });
+    });
   });
 });

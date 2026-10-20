@@ -1,7 +1,11 @@
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import {
   type ActorAttestation,
   CCD_SEND_MESSAGE_TOOL,
+  type EnforcementMatch,
+  type EnforcementPolicy,
+  EnforcementPolicySchema,
   extractUlid,
   type GateToolCall,
   isMergeShapedCommand,
@@ -13,9 +17,9 @@ import {
   textFingerprint,
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
-import type { HttpClient } from '../client.js';
+import { HOOK_HTTP_TIMEOUT_MS, type HttpClient, isDaemonUnreachable } from '../client.js';
 import { findBinding } from '../config.js';
-import { CliError } from '../errors.js';
+import { CliError, isConnRefused } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { yieldDenyReason } from '../launcher/yield.js';
 import { inferPayloadHarness, tapHook } from '../trace/hook.js';
@@ -225,6 +229,174 @@ export function haltDenyReason(err: unknown, seat: string | undefined): string |
   return `${err.message} — a human lifts it with \`musterd resume ${seat ?? '<seat>'}\``;
 }
 
+/* ───────────── ADR 674 (Cloud 4 §4.7) — 60s enforcement cache & outage posture ───────────── */
+
+/** ADR 674: how long a cached enforcement table is served before refreshing from the server. */
+export const ENFORCEMENT_CACHE_TTL_MS = 60_000;
+export const ENFORCEMENT_CACHE_FILE = 'enforcement-cache.json';
+export const UNENFORCED_COUNTER_FILE = 'gate-unenforced.json';
+
+export interface CachedEnforcement {
+  team: string;
+  server: string;
+  fetched_at: number;
+  enforcement: EnforcementPolicy;
+}
+
+export interface UnenforcedCounter {
+  count: number;
+  since_ts: number;
+  until_ts: number;
+}
+
+/** Read `.musterd/enforcement-cache.json` for `(team, server)`, or null if missing/mismatched. */
+export function readEnforcementCache(
+  dir: string,
+  team: string,
+  server?: string,
+): CachedEnforcement | null {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir, ENFORCEMENT_CACHE_FILE), 'utf8')) as {
+      team?: unknown;
+      server?: unknown;
+      fetched_at?: unknown;
+      enforcement?: unknown;
+    };
+    if (raw.team !== team) return null;
+    if (server !== undefined && typeof raw.server === 'string' && raw.server !== server) {
+      return null;
+    }
+    if (typeof raw.fetched_at !== 'number' || !Number.isFinite(raw.fetched_at)) return null;
+    const parsed = EnforcementPolicySchema.safeParse(raw.enforcement);
+    if (!parsed.success) return null;
+    return {
+      team,
+      server: typeof raw.server === 'string' ? raw.server : (server ?? ''),
+      fetched_at: raw.fetched_at,
+      enforcement: parsed.data,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeEnforcementCache(
+  dir: string,
+  team: string,
+  server: string | undefined,
+  enforcement: EnforcementPolicy,
+  now: number = Date.now(),
+): void {
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, ENFORCEMENT_CACHE_FILE),
+      JSON.stringify({ team, server: server ?? '', fetched_at: now, enforcement }) + '\n',
+    );
+  } catch {
+    /* best-effort cache */
+  }
+}
+
+/** Read `.musterd/gate-unenforced.json`, or null when empty/missing. */
+export function readUnenforcedCounter(dir: string): UnenforcedCounter | null {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir, UNENFORCED_COUNTER_FILE), 'utf8')) as {
+      count?: unknown;
+      since_ts?: unknown;
+      until_ts?: unknown;
+    };
+    if (typeof raw.count !== 'number' || raw.count < 1) return null;
+    const since = typeof raw.since_ts === 'number' ? raw.since_ts : 0;
+    const until = typeof raw.until_ts === 'number' ? raw.until_ts : since;
+    return { count: Math.floor(raw.count), since_ts: since, until_ts: until };
+  } catch {
+    return null;
+  }
+}
+
+/** Increment `.musterd/gate-unenforced.json` when a call proceeds unenforced during an outage. */
+export function recordUnenforcedCall(dir: string, now: number = Date.now()): UnenforcedCounter {
+  const prev = readUnenforcedCounter(dir);
+  const next: UnenforcedCounter = prev
+    ? { count: prev.count + 1, since_ts: prev.since_ts, until_ts: Math.max(prev.until_ts, now) }
+    : { count: 1, since_ts: now, until_ts: now };
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, UNENFORCED_COUNTER_FILE), JSON.stringify(next) + '\n');
+  } catch {
+    /* best-effort local counter */
+  }
+  return next;
+}
+
+export function clearUnenforcedCounter(dir: string): void {
+  try {
+    unlinkSync(join(dir, UNENFORCED_COUNTER_FILE));
+  } catch {
+    /* already absent */
+  }
+}
+
+/** Flush any accumulated unenforced calls to `POST /teams/:slug/actor` on recovery. */
+export function flushUnenforcedCounter(
+  http: HttpClient,
+  team: string,
+  dir: string,
+  tool: string,
+): void {
+  const pending = readUnenforcedCounter(dir);
+  if (!pending) return;
+  clearUnenforcedCounter(dir);
+  void http.recordActor(team, {
+    kind: 'unenforced',
+    tool,
+    count: pending.count,
+    since_ts: pending.since_ts,
+    until_ts: pending.until_ts,
+  });
+}
+
+/** Is this error an unreachable/unavailable team server (connection refused, timeout, or 5xx)? */
+export function isGateServerUnreachable(err: unknown): boolean {
+  if (isDaemonUnreachable(err) || isConnRefused(err)) return true;
+  if (err instanceof CliError) {
+    if (err.code === 'server_error') return true;
+    if (/^server error \(5\d\d\)$/.test(err.message)) return true;
+  }
+  return false;
+}
+
+/**
+ * ADR 674 (Cloud 4 §4.7): adjudicate a tool call when the team server cannot be reached.
+ * - `block` posture or `costly-action` kind → fail closed (`deny` with `"gate unreachable"`).
+ * - `warn` posture or unclassified → fail open and visibly (`unenforced` advisory in tool result).
+ */
+export function outageVerdictForMatch(match: EnforcementMatch | null): {
+  decision: 'deny' | 'unenforced';
+  reason: string;
+} {
+  if (match && (match.cls.posture === 'block' || match.cls.kind === 'costly-action')) {
+    return {
+      decision: 'deny',
+      reason:
+        `gate unreachable — '${match.cls.class}' requires server adjudication; ` +
+        'wait for the team server or ask a human out of band.',
+    };
+  }
+  if (match) {
+    return {
+      decision: 'unenforced',
+      reason: `unenforced (gate unreachable): '${match.cls.class}' proceeded without server adjudication.`,
+    };
+  }
+  return {
+    decision: 'unenforced',
+    reason:
+      'unenforced (gate unreachable): tool call proceeded while the team server could not be reached.',
+  };
+}
+
 /** PostToolUse `Agent` one-shot. Always exits 0 — a ledger miss must not break the spawn. */
 async function recordSubagentCommand(): Promise<number> {
   try {
@@ -236,7 +408,13 @@ async function recordSubagentCommand(): Promise<number> {
     // this is a one-shot process, and a floated request dies with it. Hook one-shot, so never reclaim.
     const att = spawnAttestation(stdin);
     if (att) {
-      const { http, team, identity, explicit } = resolveRead({}, { claimSeatPerRequest: false });
+      const { http, team, identity, explicit } = resolveRead(
+        {},
+        {
+          claimSeatPerRequest: false,
+          timeoutMs: HOOK_HTTP_TIMEOUT_MS,
+        },
+      );
       if (explicit && identity) await http.recordActor(team, att);
     }
   } catch {
@@ -384,7 +562,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
   // sizes are all the tap reads of it) and how the gate ruled.
   let tapPayload: string | undefined;
   // Widened by hand: tsc cannot see the assignments inside `decide` and would narrow to 'allow'.
-  let decision = 'allow' as 'allow' | 'deny' | 'warn';
+  let decision = 'allow' as 'allow' | 'deny' | 'warn' | 'unenforced';
   const decide = async (): Promise<void> => {
     const stdin = await readStdin();
     tapPayload = stdin;
@@ -404,13 +582,17 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     // ADR 442 — the wall is decided here, before the working-tree check and before any daemon
     // round trip. A throw below must not be what opens it.
     const sessionIdEarly = parseEnvelopeSessionId(stdin);
-    const reason = sessionReachReason(call, sessionIdEarly, findBinding() !== null, stateDir());
+    const state = stateDir();
+    const reason = sessionReachReason(call, sessionIdEarly, findBinding() !== null, state);
     if (reason) {
       emitDeny(reason);
       emitted = true;
       decision = 'deny';
       try {
-        const { http, team } = resolveRead(parsed.flags, { claimSeatPerRequest: false });
+        const { http, team } = resolveRead(parsed.flags, {
+          claimSeatPerRequest: false,
+          timeoutMs: HOOK_HTTP_TIMEOUT_MS,
+        });
         void http.recordActor(team, {
           kind: 'session-denied',
           tool: call.tool,
@@ -427,17 +609,14 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     if (sessionId) {
       // One marker per session, stamped on the first tool call the gate sees. `justMarked` is what
       // keeps a session whose very first call IS the `git add -A` from indicting the whole tree.
-      const justMarked = markSessionStart(stateDir(), sessionId);
-      wtWarn = workingTreeWarning(
-        call.command,
-        sessionStartedAt(stateDir(), sessionId),
-        justMarked,
-      );
+      const justMarked = markSessionStart(state, sessionId);
+      wtWarn = workingTreeWarning(call.command, sessionStartedAt(state, sessionId), justMarked);
     }
     // Hook one-shot: never reclaim the seat — a gate rides EVERY tool call, and a reclaim here
     // evicts the live adapter's presence and kills its lease (see ResolveReadOptions).
-    const { http, team, identity, explicit } = resolveRead(parsed.flags, {
+    const { http, team, server, identity, explicit } = resolveRead(parsed.flags, {
       claimSeatPerRequest: false,
+      timeoutMs: HOOK_HTTP_TIMEOUT_MS,
     });
     if (!explicit || !identity) return; // ambient/unbound folder — no seat to gate → allow
     seatName = identity.name;
@@ -451,33 +630,94 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     // only decides whether to ask (so ordinary calls pay no round trip); the daemon re-tests the
     // command and decides. Unreachable → the catch below fails open, the ADR 150 posture.
     if (call.command !== undefined && isMergeShapedCommand(call.command)) {
-      const held = await http.holdCheck(team, { tool: call.tool, command: call.command });
-      if (held.decision === 'deny') {
-        emitDeny(held.reason);
-        emitted = true;
-        decision = 'deny';
-        return;
+      try {
+        const held = await http.holdCheck(team, { tool: call.tool, command: call.command });
+        if (held.decision === 'deny') {
+          emitDeny(held.reason);
+          emitted = true;
+          decision = 'deny';
+          return;
+        }
+      } catch (err) {
+        const halted = haltDenyReason(err, seatName);
+        if (halted) throw err;
+        // Otherwise proceed to the enforcement table below.
       }
     }
-    const { enforcement } = await http.getEnforcement(team);
-    const match = matchEnforcement(enforcement, call);
-    if (!match) return; // undeclared call → allow, no daemon round-trip (the common case)
-    const verdict = await http.gateCheck(team, {
-      kind: match.cls.kind,
-      class: match.cls.class,
-      fingerprint: match.fingerprint,
-      posture: match.cls.posture,
-      tool: call.tool,
-      target: match.target,
-    });
-    if (verdict.decision === 'deny') {
-      emitDeny(verdict.reason);
-      emitted = true;
-      decision = 'deny';
-    } else if (verdict.outcome === 'warned' && verdict.reason) {
-      emitWarn(verdict.reason);
-      emitted = true;
-      decision = 'warn';
+    const now = Date.now();
+    const cached = readEnforcementCache(state, team, server);
+    let enforcement: EnforcementPolicy | undefined;
+    let serverReachable = false;
+    let serverOutage = false;
+    if (
+      cached &&
+      now - cached.fetched_at < ENFORCEMENT_CACHE_TTL_MS &&
+      !readUnenforcedCounter(state)
+    ) {
+      enforcement = cached.enforcement;
+    } else {
+      try {
+        const res = await http.getEnforcement(team);
+        enforcement = res.enforcement;
+        serverReachable = true;
+        writeEnforcementCache(state, team, server, enforcement, now);
+      } catch (err) {
+        if (!isGateServerUnreachable(err)) throw err;
+        serverOutage = true;
+        enforcement = cached?.enforcement;
+      }
+    }
+    const match = enforcement ? matchEnforcement(enforcement, call) : null;
+    if (serverOutage) {
+      const outage = outageVerdictForMatch(match);
+      if (outage.decision === 'deny') {
+        emitDeny(outage.reason);
+        emitted = true;
+        decision = 'deny';
+      } else {
+        recordUnenforcedCall(state, now);
+        emitWarn(outage.reason);
+        emitted = true;
+        decision = 'unenforced';
+      }
+      return;
+    }
+    if (!match) {
+      if (serverReachable) flushUnenforcedCounter(http, team, state, call.tool);
+      return; // undeclared call → allow, no daemon round-trip (the common case)
+    }
+    try {
+      const verdict = await http.gateCheck(team, {
+        kind: match.cls.kind,
+        class: match.cls.class,
+        fingerprint: match.fingerprint,
+        posture: match.cls.posture,
+        tool: call.tool,
+        target: match.target,
+      });
+      flushUnenforcedCounter(http, team, state, call.tool);
+      if (verdict.decision === 'deny') {
+        emitDeny(verdict.reason);
+        emitted = true;
+        decision = 'deny';
+      } else if (verdict.outcome === 'warned' && verdict.reason) {
+        emitWarn(verdict.reason);
+        emitted = true;
+        decision = 'warn';
+      }
+    } catch (err) {
+      if (!isGateServerUnreachable(err)) throw err;
+      const outage = outageVerdictForMatch(match);
+      if (outage.decision === 'deny') {
+        emitDeny(outage.reason);
+        emitted = true;
+        decision = 'deny';
+      } else {
+        recordUnenforcedCall(state, now);
+        emitWarn(outage.reason);
+        emitted = true;
+        decision = 'unenforced';
+      }
     }
   };
   try {
@@ -513,7 +753,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       observed: harness !== 'grok',
       outcome: {
         hook: 'gate',
-        outcome: decision === 'deny' ? 'denied' : 'ok',
+        outcome: decision === 'deny' ? 'denied' : decision === 'unenforced' ? 'unenforced' : 'ok',
         detail: { decision },
       },
     });
