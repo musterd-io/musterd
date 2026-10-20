@@ -121,7 +121,7 @@ OAK = srgb("#a97a46")        # the painters' PAL.wood lit; the render carries it
 OAK_DARK = srgb("#6b4826")
 FLOOR_TILE = srgb("#ebae64")  # DARK_PALETTE.floor
 FLOOR_SIDE = srgb("#c8863c")  # DARK_PALETTE.floor2
-WALL = srgb("#5a4a64")        # the dusk `--wall` token lifted: the render shades it down itself, and the windows light it
+WALL = srgb("#9a8aa6")        # warm lilac-grey plaster: nick 2026-10-20, "the wall color is too dark" at #5a4a64
 APPLIANCE = srgb("#d8d2c6")
 COUCH = srgb("#e3a72b")       # DARK_PALETTE.couch
 
