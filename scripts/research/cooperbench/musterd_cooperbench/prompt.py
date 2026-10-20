@@ -1,4 +1,4 @@
-"""The musterd arm's instruction: CooperBench's own sections, with its coop block swapped for ours.
+"""The musterd arms' instructions: CooperBench's own sections, with its coordination block swapped for ours.
 
 The block mirrors CooperBench's `_coop_block` (agents/_coop/prompt.py at 63b9d44) section for
 section: who you are, what each agent was given, the tools, a four-step workflow and the same
@@ -50,6 +50,54 @@ Recommended workflow:
 
 Messages are not magic — your peers only know what you tell them.
 """
+
+
+def musterd_system_section(agent_id: str, teammates: list[str], git_enabled: bool) -> str:
+    """The OpenHands arm's collaboration section, in the system prompt slot the plain arm's goes in.
+
+    Mirrors ``get_coop_system_prompt`` (openhands-tools preset/default.py at 63b9d44) section for
+    section: the opening line, a Scenario, a four-step Required workflow, the same closing warning,
+    and the same Git block. Only the coordination layer changes: `send_message` becomes `team_send`,
+    the first step also opens a lane, and the gate is described as it is — file-editor edits only.
+    """
+    all_agents = [agent_id, *teammates]
+    agents_str = ", ".join(all_agents)
+    teammate_name = teammates[0] if teammates else "teammate"
+    section = f"""You are {agent_id} working as a team with: {agents_str}.
+
+<collaboration>
+
+## Scenario
+Your teammate ({teammate_name}) is implementing the other feature in this same codebase right now. You are both editing files in parallel but you cannot see each other's changes. When you're done, your work will be merged — if any of your edits touch the same lines, both patches are thrown away.
+
+You are both seats on one musterd team. Coordinate with the musterd tools: `team_inbox_check` (read what was sent to you), `team_send` (send an act to a teammate: message, ask, request_help, handoff), `lane_open` (open a lane: a title, the file globs you will edit as its scope, claim: true) and `lane_board` (every lane, who owns it, what it covers). Edits through the file editor are gated: you can only edit files inside a lane you have claimed, and a refused edit says why.
+
+## Required workflow
+
+1. Your first action is `team_inbox_check`, which joins you to the team. Then explore the codebase to understand what files you need to change, open and claim a lane whose scope names every file you plan to modify, and tell {teammate_name}:
+   team_send(to="{teammate_name}", act="message", body="I plan to modify: <list files and functions>. My lane: <lane>")
+
+2. Wait for a reply from {teammate_name}. Acts addressed to you will appear automatically in your conversation as ⚡ musterd ... — check for overlaps and coordinate if needed.
+
+3. While you are working, if you discover you need to change files you didn't mention, message {teammate_name} and widen your lane before editing them.
+
+4. When you are done, send a final summary of every file you changed:
+   team_send(to="{teammate_name}", act="message", body="Done. I changed: <list files and changes>")
+
+Do not skip these steps. If your edits conflict with your teammate's, both of your patches will be discarded.
+"""
+    if git_enabled:
+        section += f"""
+## Git
+A shared remote called `team` is configured. Your branch is `{agent_id}`.
+Teammates' branches are at `team/<name>` (e.g., `team/{teammate_name}`).
+* Push: `git push team {agent_id}`
+* Fetch: `git fetch team`
+"""
+    section += """
+</collaboration>
+"""
+    return section
 
 
 def build_instruction(task: str, *, agents: list[str], agent_id: str, git_enabled: bool) -> str:

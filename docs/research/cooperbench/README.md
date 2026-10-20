@@ -2,7 +2,7 @@
 
 **Lane:** `01M5AQE75K` (goal `cooperbench`). **Pilot:** lane `01M5AQEG23`. **OpenHands arm:** lane `01M5B2SJG6`.
 **CooperBench:** github.com/cooperbench/CooperBench, MIT, pinned to commit `63b9d44`.
-**Code:** `scripts/research/cooperbench/` (the adapter) and `deploy/cooperbench/` (the run machine).
+**Code:** `scripts/research/cooperbench/` (the adapters) and `deploy/cooperbench/` (the run machine).
 
 This page makes no claim about results. Lane 2 does, pre-registered.
 
@@ -105,7 +105,7 @@ In each container (`adapter.py`):
   declared contended surface you have not claimed a lane for"); the daemon audited one `lane.gate`
   deny. PASS on this Mac with no Docker (2026-10-19, $0.007), PASS on the Fly run machine (2026-10-20,
   $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012).
-- `tests/`: 12 tests on the hook drift, the prompt's shape, and the adapter's container flow against
+- `tests/`: 34 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,
   features 1 and 2, `claude-sonnet-4-5`, `--setting coop` without `--git`, on 2026-10-20:
@@ -117,6 +117,55 @@ In each container (`adapter.py`):
 
   Runs 1 and 2 of the musterd arm don't count. Their findings are above: no MCP server, and Bash
   gated. This is a check that both arms run and score, not a result. Lane 2 makes result claims.
+
+## The OpenHands arms (lane `01M5B2SJG6`)
+
+The paper's own harness is OpenHands, so the comparison is also run there:
+`openhands_sdk_docker` (the plain coop arm) and `openhands_sdk_musterd`
+(`musterd_cooperbench/openhands.py`). Both call CooperBench's `OpenHandsSDKRunner.run` at `63b9d44`.
+
+| | `openhands_sdk_docker` | `openhands_sdk_musterd` |
+| --- | --- | --- |
+| Sandbox | the published `-oh` image, in docker on the run machine | the same |
+| Agent, tools, condenser, patch extraction, cost | CooperBench's (OpenHands SDK v1.10, vendored) | the same, minus the inert `send_message`/`receive_message` |
+| Messaging | `send_message` over Redis | the musterd MCP tools, on a fresh team per pair |
+| Hearing a partner mid-run | Redis inbox injected as a user message before every step | `musterd inbox --interrupt-check` injected in the same slot |
+| File ownership | none | the ADR 150 gate as an OpenHands PreToolUse hook on `file_editor` writes |
+| System prompt | CooperBench's collaboration section | the musterd section in the same slot, written to its shape (`test_openhands.py`) |
+
+**Why not Modal.** CooperBench's OpenHands adapter starts each agent in a Modal cloud sandbox. The
+daemon only listens on loopback (ADR 040), so a Modal sandbox can't reach it without a public TLS
+endpoint per pair carrying seat credentials. Both arms run the same `-oh` image in local docker
+instead, so the swap is the same for both (nick, 2026-10-20). The image's agent-server listens on
+`127.0.0.1` on its own port, on the host network.
+
+**OpenHands does have a PreToolUse hook.** The lane brief assumed it didn't. SDK v1.10 runs
+Claude-Code-style command hooks, but only inside the agent-server; the client's `RemoteConversation`
+runs session hooks alone. So the arm ships musterd to the agent-server as an OpenHands **plugin**
+(`hooks/hooks.json` and `.mcp.json`), which the server loads with the conversation. No daemon-side
+gate and no patch to OpenHands' tool layer was needed. The hook runs `oh-gate.mjs`, which only
+translates: OpenHands' event in, musterd's own `gate check` run, musterd's verdict back out as
+`{"decision": "deny"}`. A `view` is a read and isn't sent, because the gate matches on a path
+whatever the tool. Terminal calls are ungated, as in the Claude Code arm.
+
+**The interrupt slot is a patch, as the plain arm's is.** OpenHands' PostToolUse hooks can't add
+text to the conversation. The plain arm hears its partner because CooperBench's fork polls Redis
+before every step. The musterd arm adds musterd's interrupt check to that same function
+(`musterd_oh_inbox.py`, loaded by a `.pth` file only when `MUSTERD_OH_INTERRUPT=1`), so both arms
+hear their partner at the same moment (nick, 2026-10-20). Like the Claude Code hook, the line is
+re-raised each step until the agent reads its inbox.
+
+**What a run must show.** A musterd run with no musterd tool call is an error, not a score, as in
+the Claude Code arm. `oh_gate_smoke.py` runs the real arm on one container and passes only if the
+lane let one edit through, the gate refused one and the daemon audited it, a `⚡ musterd` line reached
+the conversation, and the agent made musterd calls. Run it before any measured pair. It has not run
+yet; this lane's PR adds it untested against a live agent-server.
+
+**Not yet verified.** The `-oh` images install `openhands-agent-server` from PyPI unpinned, so the
+version inside a given image is whatever was current when it was built. The arm needs one that loads
+plugins (`StartConversationRequest.plugins`, present in 1.10.0). `oh_gate_smoke.py` is what proves it
+for the image in use. With `--git`, the runner's docker git server is reached by its bridge IP,
+because host-network containers can't resolve its container name.
 
 ## Notes for the pilot (lane `01M5AQEG23`)
 
@@ -154,6 +203,10 @@ PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/gate_smoke.py
 cooperbench run -n smoke-coop    -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code         --setting coop
 cooperbench run -n smoke-musterd -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code_musterd --setting coop
 cooperbench eval -n smoke-coop --backend docker && cooperbench eval -n smoke-musterd --backend docker
+# the OpenHands arms
+python3 /app/scripts/research/cooperbench/oh_gate_smoke.py                          # must print PASS first
+cooperbench run -n oh-coop    -r pallets_click_task -t 2068 -f 1,2 -m anthropic/claude-sonnet-4-5 -a openhands_sdk_docker  --setting coop
+cooperbench run -n oh-musterd -r pallets_click_task -t 2068 -f 1,2 -m anthropic/claude-sonnet-4-5 -a openhands_sdk_musterd --setting coop
 exit
 fly machine stop --app musterd-cooperbench
 ```
