@@ -95,22 +95,33 @@ function claimed(lane: LaneChainLane, history: readonly LaneChainEvent[]): LaneC
 }
 
 /**
- * The newest `lane.*` row that carries a model (ADR 581). `observed` is a measurement.
- * `environment` and `binding` are declarations, and a model with no source is a
- * declaration too. The sentinel `unknown` is not a model.
+ * The claimant's model: the newest `lane.*` row by the `claimed` seat that carries a model
+ * (ADR 581, ADR 687). Only when the claimant never wrote a row with a model does the newest
+ * row by any actor stand in — the acceptor's close is a different seat's model and must not
+ * read as the work's. `observed` is a measurement. `environment` and `binding` are
+ * declarations, and a model with no source is a declaration too. The sentinel `unknown` is
+ * not a model.
  */
-function modelLink(history: readonly LaneChainEvent[]): LaneChainLink {
-  for (let i = history.length - 1; i >= 0; i--) {
-    const event = history[i]!;
-    const model = named(event.model);
-    if (!model || model === MODEL_UNKNOWN) continue;
-    return {
-      link: 'model',
-      value: model,
-      mark: isObservedAttestation(event.model_source) ? 'verified' : 'stated',
-    };
-  }
-  return missing('model');
+function modelLink(claimant: string | null, history: readonly LaneChainEvent[]): LaneChainLink {
+  const rowBy = (filter: (event: LaneChainEvent) => boolean): LaneChainLink | null => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const event = history[i]!;
+      if (!filter(event)) continue;
+      const model = named(event.model);
+      if (!model || model === MODEL_UNKNOWN) continue;
+      return {
+        link: 'model',
+        value: model,
+        mark: isObservedAttestation(event.model_source) ? 'verified' : 'stated',
+      };
+    }
+    return null;
+  };
+  return (
+    (claimant ? rowBy((event) => named(event.actor) === claimant) : null) ??
+    rowBy(() => true) ??
+    missing('model')
+  );
 }
 
 /**
@@ -149,10 +160,11 @@ export function laneChain(
   lane: LaneChainLane,
   history: readonly LaneChainEvent[] = [],
 ): LaneChainLink[] {
+  const holder = claimed(lane, history);
   return [
     asked(lane),
-    claimed(lane, history),
-    modelLink(history),
+    holder,
+    modelLink(holder.value, history),
     accepted(history),
     authorized(lane),
   ];

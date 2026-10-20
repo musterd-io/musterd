@@ -84,7 +84,9 @@ distinction on the lane itself, or "who asked" means two different things.
   or `missing`. `asked` is verified for `act`, `seed`, and `self`, stated for `stated` or a name
   with no basis, and missing when nobody is named. `claimed` is the current owner, or the latest
   `lane.claimed` owner when the lane is unowned, and is verified or missing. `model` is the
-  newest `lane.*` audit row that carries `actor_model` (`LaneEvent.model` /
+  newest `lane.*` audit row that carries `actor_model` _(Amended 2026-10-20: the newest such
+  row **by the `claimed` seat** — [ADR 687](687-lane-chain-model-is-claimants.md); the
+  acceptor's close was winning on every counterpart-accepted lane)_ (`LaneEvent.model` /
   `LaneEvent.model_source`, optional, older readers ignore them); `observed` is verified, a
   declaration or a model with no source is stated, and no row is missing. `accepted` is the
   newest `lane.closed` row with `verified: true` and an actor; a self-close is missing.
