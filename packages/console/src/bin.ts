@@ -4,6 +4,7 @@ import pg from 'pg';
 import { resolveConsoleConfig } from './config.js';
 import { assertSchema, type Queryable } from './db.js';
 import { createConsoleServer } from './http.js';
+import { kmsSigner, loadServiceAccount } from './kms.js';
 import { makeLog } from './log.js';
 import { migrate, SCHEMA_VERSION } from './schema.js';
 
@@ -28,7 +29,15 @@ async function serve(): Promise<void> {
   const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 5 });
   const db: Queryable = pool;
   await assertSchema(db, SCHEMA_VERSION);
-  const server = createConsoleServer({ config, db, log });
+  const signer = config.kms
+    ? kmsSigner(
+        { keyVersion: config.kms.keyVersion },
+        { credentials: await loadServiceAccount(config.kms.credentialsFile) },
+      )
+    : undefined;
+  // Fail closed: a configured key that cannot be read never starts serving an empty JWKS.
+  if (signer) await signer.publicJwk();
+  const server = createConsoleServer({ config, db, log, ...(signer ? { signer } : {}) });
   server.listen(config.port, config.host, () =>
     log.info('listening', { host: config.host, port: config.port, schema: SCHEMA_VERSION }),
   );

@@ -30,7 +30,8 @@ import { hit } from './ratelimit.js';
 import { cookie, FormError, readForm, SESSION_COOKIE } from './request.js';
 import { safeReturnPath } from './returnpath.js';
 import { hashSecret, newSecret } from './secrets.js';
-import { ABSOLUTE_MS, createSession, loadSession, revokeSession } from './sessions.js';
+import { ABSOLUTE_MS, createSession, isFresh, loadSession, revokeSession } from './sessions.js';
+import { audienceOk, signConsoleToken, type TokenSigner } from './tokens.js';
 import {
   consumeMagic,
   consumeOAuthTx,
@@ -43,11 +44,11 @@ import {
 } from './transactions.js';
 
 /**
- * The console's HTTP boundary (ADR 615). It serves `GET /health` and
- * `GET /.well-known/jwks.json` (an empty key set), the ADR 620 sign-in flows, and the sign-in
- * screens those flows render (pages.ts) — and refuses everything else. No signing, identity
- * binding or team provisioning route exists until its own lane, and there is no development
- * issuer or test key to fall back to: an empty JWKS authenticates no one.
+ * The console's HTTP boundary (ADR 615, ADR 685). It serves `GET /health`,
+ * `GET /.well-known/jwks.json`, `POST /tokens` when a signer is configured, the ADR 620 sign-in
+ * flows, and the sign-in screens those flows render (pages.ts). With no signer the JWKS is empty
+ * and `POST /tokens` is 404: there is no development issuer, and an empty set authenticates no one.
+ * Identity binding and team provisioning are separate lanes (`01M3Z44K46`, `01M3Z44MTV`).
  *
  * What the boundary holds from day one (big-body's security read, 2026-10-15):
  * - Host: answered only on the configured hosts; anything else is 404 (never a hint which exist).
@@ -87,6 +88,8 @@ export interface ConsoleDeps {
   clientIp?: ClientIpOptions;
   /** Tests only: the email transport (default: Cloudflare Email Service over fetch). */
   sendEmail?: typeof sendSignInEmail;
+  /** Cloud KMS, or a test signer. Absent: nothing signs and the JWKS is empty (ADR 685). */
+  signer?: TokenSigner;
 }
 
 /** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
@@ -96,6 +99,7 @@ const POST_ROUTES = new Set([
   '/auth/google/start',
   '/auth/email/start',
   '/auth/email/confirm',
+  '/tokens',
 ]);
 /**
  * Magic-link limits (ADR 620 decisions 6 and 9). None of them is global, because a global limit
@@ -162,6 +166,8 @@ const CALLBACK = /^\/auth\/(github|google)\/callback$/;
 const START_PER_CLIENT = 30;
 const CALLBACK_PER_CLIENT = 30;
 const WINDOW_MS = 60_000;
+/** Console tokens per account per minute (ADR 685). The bucket is the account, never global. */
+const TOKEN_PER_ACCOUNT = 30;
 
 function txCookie(value: string, maxAgeSeconds: number): string {
   return hostCookie('tx', value, maxAgeSeconds);
@@ -472,6 +478,50 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               );
               return send(res, 303, { ok: true }, clear);
             }
+            if (path === '/tokens') {
+              route = 'tokens';
+              if (!deps.signer) return send(res, 404, err('not_found', 'not found'));
+              const sid = cookie(req, SESSION_COOKIE);
+              const t = now();
+              const session = await loadSession(db, sid, t);
+              if (!session || !sid) return send(res, 401, err('signed_out', 'not signed in'));
+              if (!csrfTokenValid(sid, form.get('csrf')))
+                return send(res, 403, err('forbidden', 'forbidden'));
+              if (!isFresh(session, t)) return send(res, 403, err('stale', 'sign in again'));
+              const aud = form.get('aud') ?? '';
+              if (!audienceOk(aud)) return send(res, 400, err('bad_audience', 'bad audience'));
+              if (
+                !(await hit(
+                  db,
+                  {
+                    bucket: `token:${session.accountId}`,
+                    max: TOKEN_PER_ACCOUNT,
+                    windowMs: WINDOW_MS,
+                  },
+                  t,
+                ))
+              )
+                return send(res, 429, err('rate_limited', 'too many requests'), {
+                  'retry-after': '60',
+                });
+              const issued = await signConsoleToken(deps.signer, {
+                iss: config.issuer,
+                sub: session.accountId,
+                aud,
+                nowS: Math.floor(t / 1000),
+              });
+              await appendAudit(
+                db,
+                {
+                  action: 'token.issue',
+                  requestId: rid,
+                  actorAccountId: session.accountId,
+                  detail: { aud, jti: issued.jti },
+                },
+                t,
+              );
+              return send(res, 200, { token: issued.token });
+            }
           }
           const readOnlyGet =
             (req.method === 'GET' || req.method === 'HEAD') && path === '/auth/email/confirm';
@@ -671,9 +721,10 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
           }
           if (path === '/.well-known/jwks.json') {
             route = 'jwks';
-            // ADR 615: published from day one so team servers code against the real URL; empty
-            // until the KMS lane (01M3Z43V58) puts a key in it. An empty set verifies nothing.
-            return send(res, 200, { keys: [] }, { 'cache-control': 'public, max-age=300' });
+            // ADR 685: the signer's public key, or an empty set when nothing is configured.
+            // An empty set verifies nothing. There is no dev key.
+            const keys = deps.signer ? [await deps.signer.publicJwk()] : [];
+            return send(res, 200, { keys }, { 'cache-control': 'public, max-age=300' });
           }
           return send(res, 404, err('not_found', 'not found'));
         } catch (e) {

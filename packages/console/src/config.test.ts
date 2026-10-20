@@ -95,4 +95,36 @@ describe('resolveConsoleConfig (ADR 615)', () => {
       resolveConsoleConfig({ ...base, MUSTERD_CONSOLE_ISSUER: 'http://localhost:8787' }).issuer,
     ).toBe('http://localhost:8787');
   });
+
+  it('turns Cloud KMS on only with both variables, and refuses a bad name without echoing it', () => {
+    expect(resolveConsoleConfig(base).kms).toBeNull();
+    const key =
+      'projects/musterd-kms/locations/global/keyRings/console/cryptoKeys/console-signing/cryptoKeyVersions/1';
+    const on = resolveConsoleConfig({
+      ...base,
+      MUSTERD_CONSOLE_KMS_KEY: key,
+      MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE: '/tmp/kms.json',
+    });
+    expect(on.kms).toEqual({ keyVersion: key, credentialsFile: '/tmp/kms.json' });
+    try {
+      resolveConsoleConfig({ ...base, MUSTERD_CONSOLE_KMS_KEY: key });
+      throw new Error('should refuse');
+    } catch (e) {
+      expect(String(e)).toContain('MUSTERD_CONSOLE_KMS_KEY');
+      expect(String(e)).toContain('MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE');
+      expect(String(e)).not.toContain('musterd-kms');
+    }
+    try {
+      resolveConsoleConfig({
+        ...base,
+        MUSTERD_CONSOLE_KMS_KEY: 'https://evil.example/SECRET',
+        MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE: '/tmp/kms.json',
+      });
+      throw new Error('should refuse');
+    } catch (e) {
+      expect(String(e)).toContain('MUSTERD_CONSOLE_KMS_KEY');
+      expect(String(e)).not.toContain('SECRET');
+      expect(String(e)).not.toContain('evil.example');
+    }
+  });
 });

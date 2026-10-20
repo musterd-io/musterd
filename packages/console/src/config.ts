@@ -7,6 +7,8 @@
  * value, and nothing here logs.
  */
 
+import { KMS_KEY_VERSION } from './kms.js';
+
 export interface ConsoleConfig {
   /** The runtime login (DML on accounts/identities, INSERT-only on audit). Never the owner. */
   databaseUrl: string;
@@ -27,9 +29,28 @@ export interface ConsoleConfig {
   providers: Partial<Record<'github' | 'google', { clientId: string; clientSecret: string }>>;
   /** Magic-link email (ADR 620 decision 2): on only when the account id, token and sender are all set. */
   email: { accountId: string; apiToken: string; fromAddress: string; fromName: string } | null;
+  /**
+   * Cloud KMS signing (ADR 685). On only when the cryptoKeyVersion name and the credential file
+   * are both set. Off: the JWKS stays empty and nothing signs. There is no dev key.
+   */
+  kms: { keyVersion: string; credentialsFile: string } | null;
 }
 
 type Env = Record<string, string | undefined>;
+
+/** Both KMS variables, or neither. A bad resource name is refused without echoing it. */
+function kmsOf(env: Env): ConsoleConfig['kms'] {
+  const key = env['MUSTERD_CONSOLE_KMS_KEY']?.trim() ?? '';
+  const file = env['MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE']?.trim() ?? '';
+  if (!key && !file) return null;
+  if (!key || !file)
+    throw new Error(
+      'MUSTERD_CONSOLE_KMS_KEY and MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE must be set together',
+    );
+  if (!KMS_KEY_VERSION.test(key))
+    throw new Error('MUSTERD_CONSOLE_KMS_KEY is not a Cloud KMS cryptoKeyVersion resource name');
+  return { keyVersion: key, credentialsFile: file };
+}
 
 function required(env: Env, name: string): string {
   const v = env[name]?.trim();
@@ -109,8 +130,10 @@ export function resolveConsoleConfig(env: Env, build: string | null = null): Con
           fromName: 'musterd',
         }
       : null;
+  const kms = kmsOf(env);
   return {
     email,
+    kms,
     providers,
     databaseUrl: required(env, 'MUSTERD_CONSOLE_DATABASE_URL'),
     issuer: issuerUrl.origin,

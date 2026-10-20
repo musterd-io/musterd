@@ -485,7 +485,9 @@ Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` sets the per-team/client request al
 3. **Admin operations take a console token (§4.3/§5.2).** In increment 1 that is `POST /teams`:
    ES256, `aud` = `MUSTERD_CONSOLE_AUDIENCE`, ≤60 s, `jti` redeemed once across every server in
    `console_token_jti`. Refusals are 401 with the reason; an unreachable JWKS is 503 "console
-   unreachable". The JWKS is the test issuer until increment 2's console. Team-level `is_admin`
+   unreachable". The JWKS URL is `MUSTERD_CONSOLE_JWKS_URL`. The console publishes its Cloud KMS
+   key when configured (ADR 685). A deployment that has not switched still names the staging
+   issuer. Tests may name the test issuer. Team-level `is_admin`
    seats keep governing their own team with their own credential.
 4. **Host isolation (§5.3).** A team lives at `<slug>.<MUSTERD_CLOUD_HOST_SUFFIX>`; a request whose
    path names another team (`/teams/:slug`, `/mcp/:slug`, `/oauth/:slug`, the OAuth discovery

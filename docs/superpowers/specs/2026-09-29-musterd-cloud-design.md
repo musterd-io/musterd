@@ -562,6 +562,9 @@ the `unenforced` hook outcome (4); `role` on an invite (4); the seat-authorizati
 A Postgres driver; PGlite (if the spike passes); the KMS SDK for the console; an OpenTelemetry
 exporter. Litestream is **not** needed — the file-per-team shape that wanted it was dropped.
 
+*(2026-10-20, ADR 685: the console calls Cloud KMS over REST, the same shape as `email.ts`. No KMS
+SDK was added.)*
+
 **Docs that change in the same commit as the behaviour** (hard rule 3; *review*):
 
 - `PRIVACY.md`'s opening — "there is no musterd account, no musterd cloud … in the product" —

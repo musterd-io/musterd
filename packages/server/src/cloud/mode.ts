@@ -17,7 +17,7 @@ export interface CloudConfig {
   /** The trace store's twins (ADR 445 §3: a separate database in Cloud). */
   traceDatabaseAppUrl: string;
   traceDatabaseOperatorUrl: string;
-  /** Where the console publishes its signing keys (§4.3); the test issuer until increment 2. */
+  /** Where the console publishes its signing keys (§4.3). A deployment names that URL; tests may name the test issuer (ADR 685). */
   consoleJwksUrl: string;
   /** The `aud` a console token must carry to be accepted by this team server (§4.3). */
   consoleAudience: string;

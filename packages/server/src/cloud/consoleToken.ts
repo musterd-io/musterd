@@ -8,9 +8,9 @@ import type { Driver } from '../db/driver.js';
  * `jti` that redeems exactly once — in the database, so two servers cannot both accept it.
  * Verified with `node:crypto` against the console's JWKS (no JOSE dependency, hard rule 6).
  *
- * The token proves the console authenticated a person (`sub` = their account). It does not by
- * itself authorize anything beyond team creation; increment 3's import/export/delete also check
- * the account is bound to an owner of that team.
+ * The token proves the console authenticated a person (`sub` = their account id). It does not by
+ * itself authorize import, export, or delete. Those routes (lanes `01M3Z42W1J` and `01M3Z42YFH`)
+ * also check that this account is bound to an owner of that team.
  */
 
 export type ConsoleTokenRefusal =
