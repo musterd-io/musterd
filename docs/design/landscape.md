@@ -435,8 +435,10 @@ Nanjing University, [arXiv 2609.19759](https://arxiv.org/abs/2609.19759) v2, 202
 collaboration "confers systematic benefits specifically in long-horizon tasks with sparse
 dependencies", and single-agent harnesses do better on tightly coupled, sequential work. _(Resolved
 2026-10-19: the identifier did not resolve when ADR 665 was written that day and resolved on
-re-read. A public review flags a possible circularity in how the paper scores "sparse", so quote it
-as one preprint, not a settled result.)_
+re-read. An AI-written referee report on [Pith](https://pith.science/paper/2609.19759) says "the
+evaluation has a circularity problem": the sparse/dense labels are the tested model's own dependency
+judgments. No human review was on record on 2026-10-19, so quote it as one preprint, not a settled
+result.)_
 
 ### c. The work trackers' agents: delegated, not accountable
 
@@ -501,16 +503,18 @@ and date, and never opens the message.
 
 **Stable.** Linear states the boundary as a design rule, verbatim: "It creates a clean taxonomy:
 issues can only be assigned to humans, and only delegated to agents." And: "That reflects a core
-tenet of our Agent Interaction Guidelines: an agent cannot be held accountable." §14c's tracker
-table shows the same rule at Jira and Plane.
+tenet of our Agent Interaction Guidelines: an agent cannot be held accountable." In §14c's tracker
+table only Plane copies the rule ("Linear's model"); the other trackers let the agent hold the work
+without making it accountable.
 
 **Volatile.** Whether Linear still says this. A tracker that lets an agent hold an issue as its
 assignee would end the quote's use, so it is re-read before each use.
 
 **Against musterd.** Linear keeps a person accountable by keeping the agent out of the assignee
-role. musterd puts the agent in the role and records the person at both ends: who asked for the work
-and who accepted it, and the acceptor is enforced to be a different member (ADR 188, ADR 234). This
-is a difference in design, not a gap on either side. A seat could still show up in Linear as a
+role. musterd puts the agent in the role and records the acceptor, enforced to be a different
+member (ADR 188, ADR 234). The person at the start of the work is recorded from this month, on the
+seat's word, not yet verified (ADR 665 §3; brand.md §1 "Claim discipline"). This is a difference in
+design, not a gap on either side. A seat could still show up in Linear as a
 delegate (§14c).
 
 ### b. SecurityHQ and Datadog: "The Accountability Gap"
