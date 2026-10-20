@@ -36,5 +36,5 @@ else
   run fly volumes create cb_data --app "$APP" --region "$REGION" --size 50 --yes
 fi
 if [ "$DRY" = 1 ]; then echo "+ $here/set-key.sh --app $APP"; else "$here/set-key.sh" --app "$APP"; fi
-run fly deploy --app "$APP" --config deploy/cooperbench/fly.toml --dockerfile deploy/cooperbench/Dockerfile --region "$REGION" .
+run fly deploy --app "$APP" --config deploy/cooperbench/fly.toml --dockerfile deploy/cooperbench/Dockerfile --primary-region "$REGION" --ha=false .
 echo "✓ $APP is up. Runs: see docs/research/cooperbench/README.md. Stop it when done: fly machine stop --app $APP"
