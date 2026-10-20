@@ -51,10 +51,18 @@ export const RelayDeliverFrameSchema = z.object({
 });
 export type RelayDeliverFrame = z.infer<typeof RelayDeliverFrameSchema>;
 
+/** Where the relay pushes one app delivery: the binding's APNs device token and environment. */
+export const RelayAppPushTargetSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{64,200}$/),
+  environment: z.enum(['production', 'development']),
+});
+export type RelayAppPushTarget = z.infer<typeof RelayAppPushTargetSchema>;
+
 /**
- * Daemon → relay: one sealed delivery to the musterd app (ADR 676 §2). The relay sees the route
- * and the ciphertext, never the content; it pushes the body inline when it fits
- * (`APP_PUSH_INLINE_MAX_BYTES`), else the ask ref, and stores no sealed body either way.
+ * Daemon → relay: one sealed delivery to the musterd app (ADR 676 §2, §9). The relay sees the
+ * route, the push target and the ciphertext, never the content; it pushes the body inline when it
+ * fits (`APP_PUSH_INLINE_MAX_BYTES` by `sealedPushBytes`), else the ask ref, and stores no sealed
+ * body either way.
  */
 export const RelayAppDeliverFrameSchema = z.object({
   protocol: version,
@@ -63,9 +71,24 @@ export const RelayAppDeliverFrameSchema = z.object({
   dedupe_id: z.string().min(1).max(128),
   expires_at: z.number().int().nonnegative(),
   binding: z.string().min(1).max(64),
+  push: RelayAppPushTargetSchema,
   sealed: SealedBodySchema,
 });
 export type RelayAppDeliverFrame = z.infer<typeof RelayAppDeliverFrameSchema>;
+
+/**
+ * Daemon → relay: the answer to one `app_fetch` — the sealed body the push left out, or `null`
+ * when nothing is live for that ask on that binding. The relay hands it to the waiting phone and
+ * keeps nothing.
+ */
+export const RelayAppBodyFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('app_body'),
+  request_id: z.string().min(1).max(64),
+  sealed: SealedBodySchema.nullable(),
+  expires_at: z.number().int().nonnegative().optional(),
+});
+export type RelayAppBodyFrame = z.infer<typeof RelayAppBodyFrameSchema>;
 
 /** Daemon → relay: the ask resolved or expired daemon-side; drop its metadata row. */
 export const RelayResolveFrameSchema = z.object({
@@ -79,6 +102,7 @@ export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
   RelayReconcileFrameSchema,
   RelayDeliverFrameSchema,
   RelayAppDeliverFrameSchema,
+  RelayAppBodyFrameSchema,
   RelayResolveFrameSchema,
 ]);
 export type RelayDaemonFrame = z.infer<typeof RelayDaemonFrameSchema>;
@@ -101,6 +125,8 @@ export const RelayDeliveredFrameSchema = z.object({
   ok: z.boolean(),
   status: z.number().int().optional(),
   provider_ref: z.string().max(256).optional(),
+  /** The provider's stable failure reason when it gave one (APNs: `Unregistered`, `BadDeviceToken`). */
+  reason: z.string().max(128).optional(),
 });
 export type RelayDeliveredFrame = z.infer<typeof RelayDeliveredFrameSchema>;
 
@@ -113,6 +139,19 @@ export const RelayCallbackFrameSchema = z.object({
   body: z.string().max(RELAY_MAX_FRAME_BYTES),
 });
 export type RelayCallbackFrame = z.infer<typeof RelayCallbackFrameSchema>;
+
+/**
+ * Relay → daemon: the phone asked for the sealed body of an ask whose push carried only its ref
+ * (ADR 676 §2). The daemon answers with `app_body` under the same `request_id`.
+ */
+export const RelayAppFetchFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('app_fetch'),
+  request_id: z.string().min(1).max(64),
+  ask_ref: askRef,
+  binding: z.string().min(1).max(64),
+});
+export type RelayAppFetchFrame = z.infer<typeof RelayAppFetchFrameSchema>;
 
 /** Relay → daemon: a frame was refused; `reason` is a stable sentence, never a secret. */
 export const RelayErrorFrameSchema = z.object({
@@ -127,6 +166,7 @@ export const RelayServerFrameSchema = z.discriminatedUnion('type', [
   RelayReconciledFrameSchema,
   RelayDeliveredFrameSchema,
   RelayCallbackFrameSchema,
+  RelayAppFetchFrameSchema,
   RelayErrorFrameSchema,
 ]);
 export type RelayServerFrame = z.infer<typeof RelayServerFrameSchema>;

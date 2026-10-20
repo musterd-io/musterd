@@ -8,6 +8,11 @@
  *  - Slack callbacks (`POST /callback/<slug>/<ask_ref>`): signature-verified and install-mapped
  *    before forwarding raw to the daemon, which parses and redeems against its own state (ADR 623 §6).
  *    The relay grants nothing: a callback here is a transport event, never an answer.
+ *  - The musterd app (ADR 676 §2, §9): `app_deliver` frames are pushed through APNs with ciphertext
+ *    only, the body inline when it fits, else by ref; the phone's sealed callbacks arrive at
+ *    `POST /app/<slug>/callback` and its body fetches at `GET /app/<slug>/body/<binding>/<ref>`,
+ *    which the object answers by asking the daemon over the socket. No sealed body is stored, and
+ *    app deliveries keep no pending row: each carries a fresh token, so each is a new delivery.
  *
  * Auth: the daemon presents its per-team credential as a Bearer on the socket upgrade; the Worker
  * stores only its sha256 (`TEAM_CREDENTIALS_JSON`, set by the operator). One live socket per
@@ -16,6 +21,7 @@
  * operator map, so rotation or revocation refuses the old socket's next frame (§4).
  */
 
+import { apnsConfigFrom, sendApns } from './apns.js';
 import {
   credentialHashFor,
   deliverVerdict,
@@ -30,7 +36,11 @@ import {
   socketCredentialLive,
   RELAY_MAX_FRAME_BYTES,
   RELAY_PROVIDER_TIMEOUT_MS,
+  appCallbackRef,
+  apnsPayload,
+  type DaemonFrame,
   type RelayPendingRow,
+  type SealedBody,
 } from './relay.js';
 
 export interface Env {
@@ -41,7 +51,16 @@ export interface Env {
   SLACK_SIGNING_SECRET?: string;
   /** Secret (wrangler secret put): JSON map of Slack team id → musterd team slug (ADR 668 §2). */
   SLACK_TEAM_MAP_JSON?: string;
+  /** Secret (wrangler secret put): the APNs `.p8` token key, PEM (ADR 676 §9, ADR 659 §4). */
+  APNS_KEY_P8?: string;
+  /** The APNs key id, the Apple Developer team id and the app's bundle id (wrangler.toml vars). */
+  APNS_KEY_ID?: string;
+  APNS_TEAM_ID?: string;
+  APNS_TOPIC?: string;
 }
+
+/** How long the phone's body fetch waits for the daemon's answer over the socket. */
+const APP_FETCH_TIMEOUT_MS = 5_000;
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -117,12 +136,40 @@ export default {
         }),
       );
     }
+    // The musterd app (ADR 676). No credential: the phone's trust is its seal and signature, which
+    // only the daemon checks. The relay checks shape, forwards, and stores nothing.
+    const appCallback = /^\/app\/([^/]+)\/callback$/.exec(url.pathname);
+    if (request.method === 'POST' && appCallback) {
+      const slug = decodeURIComponent(appCallback[1]!);
+      const rawBody = await request.text();
+      const ref = appCallbackRef(rawBody);
+      if (!ref) return new Response('malformed app callback', { status: 400 });
+      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+        new Request(
+          `${url.origin}/callback/${encodeURIComponent(slug)}/${encodeURIComponent(ref)}`,
+          { method: 'POST', headers: { 'content-type': 'application/json' }, body: rawBody },
+        ),
+      );
+    }
+    const appBody = /^\/app\/([^/]+)\/body\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+    if (request.method === 'GET' && appBody) {
+      const slug = decodeURIComponent(appBody[1]!);
+      return env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
+        new Request(request.url, { method: 'GET' }),
+      );
+    }
     return new Response('not found', { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
 
 /** One team's relay object: its socket, its pending metadata, its expiry alarm. */
 export class TeamRelay implements DurableObject {
+  /** Body fetches waiting on the daemon's `app_body`, by request id. In memory only: never stored. */
+  private readonly fetches = new Map<
+    string,
+    (found: { sealed: SealedBody | null; expires_at?: number }) => void
+  >();
+
   constructor(
     private readonly state: DurableObjectState,
     private readonly env: Env,
@@ -200,7 +247,127 @@ export class TeamRelay implements DurableObject {
       );
       return new Response('accepted', { status: 202 });
     }
+    const appBody = /^\/app\/([^/]+)\/body\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+    if (request.method === 'GET' && appBody) {
+      const slug = decodeURIComponent(appBody[1]!);
+      const binding = decodeURIComponent(appBody[2]!);
+      const askRef = decodeURIComponent(appBody[3]!);
+      if (binding.length > 64 || askRef.length > 128)
+        return new Response('not found', { status: 404 });
+      const socket = this.liveSocket(slug);
+      if (!socket) return new Response('daemon not connected', { status: 503 });
+      const requestId = crypto.randomUUID();
+      const found = await new Promise<{ sealed: SealedBody | null; expires_at?: number } | null>(
+        (resolve) => {
+          const timer = setTimeout(() => {
+            this.fetches.delete(requestId);
+            resolve(null);
+          }, APP_FETCH_TIMEOUT_MS);
+          this.fetches.set(requestId, (f) => {
+            clearTimeout(timer);
+            this.fetches.delete(requestId);
+            resolve(f);
+          });
+          socket.send(
+            JSON.stringify({
+              protocol: 1,
+              type: 'app_fetch',
+              request_id: requestId,
+              ask_ref: askRef,
+              binding,
+            }),
+          );
+        },
+      );
+      if (!found) return new Response('daemon did not answer', { status: 504 });
+      if (!found.sealed) return new Response('not found', { status: 404 });
+      return Response.json(
+        {
+          team: slug,
+          binding,
+          ref: askRef,
+          expires_at: found.expires_at,
+          sealed: found.sealed,
+        },
+        { headers: { 'cache-control': 'no-store' } },
+      );
+    }
     return new Response('not found', { status: 404 });
+  }
+
+  /**
+   * The team's daemon socket, when one is live and its credential still current (§4). A socket
+   * whose credential was rotated or revoked is closed here, so it never receives a phone's request.
+   */
+  private liveSocket(slug: string): WebSocket | null {
+    const socket = this.state.getWebSockets()[0];
+    if (!socket) return null;
+    const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+    if (
+      !socketCredentialLive(
+        attachment?.credentialHash ?? null,
+        credentialHashFor(this.env.TEAM_CREDENTIALS_JSON, slug),
+      )
+    ) {
+      socket.close(1008, 'credential rotated or revoked');
+      return null;
+    }
+    return socket;
+  }
+
+  /** Push one sealed delivery to the app and tell the daemon how it went. Nothing is stored. */
+  private async appDeliver(
+    ws: WebSocket,
+    slug: string,
+    frame: Extract<DaemonFrame, { type: 'app_deliver' }>,
+    now: number,
+  ): Promise<void> {
+    const reply = (fields: Record<string, unknown>) =>
+      ws.send(
+        JSON.stringify({
+          protocol: 1,
+          type: 'delivered',
+          ask_ref: frame.ask_ref,
+          dedupe_id: frame.dedupe_id,
+          ...fields,
+        }),
+      );
+    if (frame.expires_at <= now) {
+      ws.send(
+        JSON.stringify({
+          protocol: 1,
+          type: 'error',
+          reason: 'ask already expired',
+          ask_ref: frame.ask_ref,
+        }),
+      );
+      return;
+    }
+    const config = apnsConfigFrom(this.env);
+    if (!config) {
+      ws.send(
+        JSON.stringify({
+          protocol: 1,
+          type: 'error',
+          reason: 'app push not configured on this relay',
+          ask_ref: frame.ask_ref,
+        }),
+      );
+      return;
+    }
+    const { body } = apnsPayload(slug, frame);
+    const result = await sendApns(
+      config,
+      frame.push,
+      { body, expiresAt: frame.expires_at, collapseId: frame.ask_ref },
+      now,
+    );
+    reply({
+      ok: result.ok,
+      ...(result.status !== undefined ? { status: result.status } : {}),
+      ...(result.apnsId ? { provider_ref: result.apnsId } : {}),
+      ...(result.reason ? { reason: result.reason } : {}),
+    });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -227,6 +394,17 @@ export class TeamRelay implements DurableObject {
       return;
     }
     const now = Date.now();
+    if (frame.type === 'app_deliver') {
+      await this.appDeliver(ws, attachment?.slug ?? '', frame, now);
+      return;
+    }
+    if (frame.type === 'app_body') {
+      this.fetches.get(frame.request_id)?.({
+        sealed: frame.sealed,
+        ...(frame.expires_at !== undefined ? { expires_at: frame.expires_at } : {}),
+      });
+      return;
+    }
     if (frame.type === 'reconcile') {
       const rows = this.rows();
       const { kept, dropped } = reconcileRelayPending(rows, frame.pending, now);
@@ -335,7 +513,11 @@ export class TeamRelay implements DurableObject {
 
   private rows(): RelayPendingRow[] {
     return this.state.storage.sql
-      .exec<RelayPendingRow>('SELECT ask_ref, dedupe_id, expires_at FROM pending')
+      .exec<{
+        ask_ref: string;
+        dedupe_id: string;
+        expires_at: number;
+      }>('SELECT ask_ref, dedupe_id, expires_at FROM pending')
       .toArray();
   }
 
