@@ -2682,16 +2682,18 @@
   left: 50%;
   /* Hung from the middle of the board's top edge, not the box's top: on the slanted wall the box's
      top is the board's high corner (`--lc-sign-drop`, set by the scene from `boardAnchor`). */
-  bottom: calc(100% - var(--lc-sign-drop, 0px) + 12px);
+  bottom: calc(100% - var(--lc-sign-drop, 0px) + 0.8em);
   /* Skewed by the board's top-edge slope (`--lc-sign-tilt`, from `boardAnchor`), so it lies in the
      wall's plane like the board under it. skewY keeps the strings vertical, as a hung sign's are. */
   transform: translateX(-50%) skewY(var(--lc-sign-tilt, 0deg));
   transform-origin: 50% 100%;
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 0.4em;
   font-family: var(--font-display, var(--font-sans));
-  font-size: 12px;
+  /* Scales with the room (`--lc-sign-scale` is the scene's fit scale), so the sign stays in proportion
+     to the board it names: ~9px at a laptop-width office, never under 8px or over 12px. */
+  font-size: clamp(8px, calc(var(--lc-sign-scale, 1) * 13px), 12px);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -2700,7 +2702,7 @@
   border-top: 1px solid var(--lc-oak-lit);
   border-radius: 3px;
   box-shadow: 0 2px 0 var(--lc-oak-shade);
-  padding: 4px 9px 5px;
+  padding: 0.3em 0.7em 0.4em;
   pointer-events: auto;
   transition: background var(--lc-dur-2) var(--lc-ease-out);
 }
@@ -2711,14 +2713,14 @@
   position: absolute;
   bottom: 100%;
   width: 1px;
-  height: 10px;
+  height: 0.7em;
   background: var(--lc-oak-shade);
 }
 .lc-boardspot__tag::before {
-  left: 12px;
+  left: 1em;
 }
 .lc-boardspot__tag::after {
-  right: 12px;
+  right: 1em;
 }
 .lc-boardspot__caret {
   /* --lc-dim, not --lc-muted: on the oak under the asks sheet's dim, muted read 4.44 (CI, #2300). */
@@ -2729,7 +2731,7 @@
   background: var(--lc-oak-lit);
 }
 /* The working-hours calendar's hotspot — the settings door. It shares the board hotspot's build
-   and hover (grouped above); its own: no sign, the house 24px tap floor whatever the fit, and a red
+   and hover (grouped above); its own: a settings tab under its frame (below), the house 24px tap floor whatever the fit, and a red
    pin in the corner when a pairing waits for this viewer. */
 .lc-hoursspot {
   min-width: 24px;
@@ -2738,6 +2740,35 @@
 .lc-hoursspot[hidden],
 .lc-hoursspot:not(.is-flagged) .lc-hoursspot__dot {
   display: none;
+}
+/* The settings tab: oak, fixed flush under the calendar's frame across its middle, skewed into the
+   wall's plane like the board's sign. Sized in wall units (`--lc-tab-unit`) so it keeps its
+   proportion to the card at any fit, never under 8px type. */
+.lc-hoursspot__tab {
+  --lc-oak: #dcbf8e;
+  position: absolute;
+  left: var(--lc-tab-x, 0px);
+  top: var(--lc-tab-y, 0px);
+  width: var(--lc-tab-w, 0px);
+  transform: skewY(var(--lc-sign-tilt, 0deg));
+  transform-origin: 0 0;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--lc-tab-unit, 0px) * 1.5) 0 calc(var(--lc-tab-unit, 0px) * 2);
+  white-space: nowrap;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: max(8px, calc(var(--lc-tab-unit, 0px) * 10));
+  font-weight: 700;
+  line-height: 1;
+  color: var(--lc-text);
+  background: var(--lc-oak);
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 2px 0 #b9915f;
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-hoursspot:hover .lc-hoursspot__tab,
+.lc-hoursspot:focus-visible .lc-hoursspot__tab {
+  background: #f0dcb4;
 }
 .lc-hoursspot__dot {
   position: absolute;

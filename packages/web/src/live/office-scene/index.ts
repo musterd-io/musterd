@@ -152,6 +152,11 @@ const SPEECH_OUT_MS = 560;
 
 /** How far above the head anchor the bubble sits (clears the name label). */
 const SPEECH_LIFT = 26;
+/** What an expanded bubble keeps clear of the stage's top edge: the asks bar laid over it (~36px
+ *  tall at 10px from the top) plus a breath. */
+const SPEECH_TOP_CLEAR = 52;
+/** An expanded bubble never shrinks below its glance (about three lines) to honour that clearance. */
+const SPEECH_MIN_H = 64;
 /** The bubble's widest (`.lc-speech__inner` max-width in Live.css); below it no edge check is needed. */
 const SPEECH_MAX_W = 260;
 /** After a real act, keep the loop alive this long so the Rive character settles into idle rather than
@@ -452,6 +457,14 @@ export function mountOffice(
           el.hidden = true;
           el.setAttribute('aria-label', 'Open settings');
           el.title = 'Settings';
+          // A small oak tab fixed flush under the calendar's frame: the wall clock is directly above
+          // the card and its header carries the days, and a sign hung on strings reached the desks.
+          // A child of the button, so a click on it opens settings.
+          const tab = document.createElement('span');
+          tab.className = 'lc-hoursspot__tab';
+          tab.setAttribute('aria-hidden', 'true');
+          tab.textContent = 'settings ›';
+          el.appendChild(tab);
           const dot = document.createElement('span');
           dot.className = 'lc-hoursspot__dot';
           dot.setAttribute('aria-hidden', 'true');
@@ -474,6 +487,11 @@ export function mountOffice(
     hoursSpot.style.top = `${a.y}px`;
     hoursSpot.style.width = `${a.w}px`;
     hoursSpot.style.height = `${a.h}px`;
+    hoursSpot.style.setProperty('--lc-tab-x', `${a.foot.x}px`);
+    hoursSpot.style.setProperty('--lc-tab-y', `${a.foot.y}px`);
+    hoursSpot.style.setProperty('--lc-tab-w', `${a.foot.w}px`);
+    hoursSpot.style.setProperty('--lc-tab-unit', `${a.foot.unit}px`);
+    hoursSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
   }
 
   function positionBoardSpot(): void {
@@ -486,6 +504,7 @@ export function mountOffice(
     // How far below the box's top the board's top edge is at its middle — the sign hangs from there.
     boardSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
     boardSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
+    boardSpot.style.setProperty('--lc-sign-scale', fit.scale.toFixed(3));
   }
   const ctx = canvas.getContext('2d')!;
   // Warm the izzocam chyron face the canvas labels/glyphs paint in, so they land on-brand from the
@@ -1839,8 +1858,14 @@ export function mountOffice(
         buildTokens(fullTokens, true);
         outer.classList.add('is-expanded');
         // measure on the next frame so the expanded (clamp-removed) layout has painted
+        // Capped at the room left above it: a bubble grows UP from the speaker's head, and a long
+        // act on a back-row speaker ran under the asks bar laid over the stage's top (nick,
+        // 2026-10-20). Past the cap it scrolls, as it already did past 40vh.
         requestAnimationFrame(() => {
-          inner.style.setProperty('--lc-speech-h', `${inner.scrollHeight}px`);
+          const room =
+            inner.getBoundingClientRect().bottom - labelHost.getBoundingClientRect().top - SPEECH_TOP_CLEAR;
+          const h = Math.max(SPEECH_MIN_H, Math.min(inner.scrollHeight, room));
+          inner.style.setProperty('--lc-speech-h', `${h}px`);
         });
       };
       collapse = () => {

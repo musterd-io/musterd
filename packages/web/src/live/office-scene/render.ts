@@ -1473,7 +1473,18 @@ export function furnishedBox(): FitBox {
  * corner projection `boardAnchor` uses, on the same wall. Axis-aligned bounds of the four corners: the
  * wall is slanted, so the box is a little taller than the card, which only makes it easier to hit.
  */
-export function hoursAnchor(fit: Fit): { x: number; y: number; w: number; h: number } {
+export function hoursAnchor(fit: Fit): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Where the settings tab attaches, relative to the box: the left end of the middle 60% of the
+   *  frame's bottom edge, and that span's width across the screen. /live fixes the tab flush under it — the wall clock sits directly above the
+   *  calendar, and its header band carries the days. `unit` is one wall unit in screen px. */
+  foot: { x: number; y: number; w: number; unit: number };
+  /** The slope of the calendar's edges in screen degrees, as `boardAnchor.tiltDeg`. */
+  tiltDeg: number;
+} {
   const { tc, uc, w: W, h: H, wall } = WORKING_HOURS_CALENDAR;
   const edge = WALL_EDGES[wall]!;
   const corners = [
@@ -1486,7 +1497,19 @@ export function hoursAnchor(fit: Fit): { x: number; y: number; w: number; h: num
   const ys = corners.map((c) => c.y);
   const x = Math.min(...xs);
   const y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  // The frame's bottom edge: the screen-left and screen-right of its two lower corners.
+  const [l, r] = corners[0]!.x <= corners[1]!.x ? [corners[0]!, corners[1]!] : [corners[1]!, corners[0]!];
+  const tiltDeg = (Math.atan2(r.y - l.y, r.x - l.x) * 180) / Math.PI;
+  return {
+    x,
+    y,
+    w: Math.max(...xs) - x,
+    h: Math.max(...ys) - y,
+    // The tab spans the middle 60% of the edge; its left end sits ON the slanted edge, not level
+    // with the frame's corner, or the skew leaves it hanging off (nick, 2026-10-20).
+    foot: { x: l.x + (r.x - l.x) * 0.2 - x, y: l.y + (r.y - l.y) * 0.2 - y, w: (r.x - l.x) * 0.6, unit: fit.scale },
+    tiltDeg,
+  };
 }
 
 export function boardAnchor(fit: Fit): {
