@@ -13,6 +13,7 @@ import { deliverAllowed, getChannelSettings } from '../store/channelSettings.js'
 import { listMembers } from '../store/members.js';
 import { humanPresent } from '../store/reachability.js';
 import { resolveCapabilities, type TeamRow } from '../store/rows.js';
+import { getSlackInstallBotToken } from '../store/slackInstalls.js';
 import { getPolicy } from '../store/teams.js';
 import { relayLinkFor } from './relay.js';
 
@@ -161,7 +162,10 @@ export async function deliverAskToSlackChannels(
     if (env.act !== 'ask') return;
     if (classifyAskAction(env.meta ?? null) !== 'advisory') return;
     const policy = await getPolicy(ctx.db, team.id);
-    const botToken = policy.slack_bot_token;
+    // The per-install token is the distributed app's credential (ADR 668 decision 5);
+    // the team-policy token remains the pre-install fallback until its retirement change.
+    const botToken =
+      (await getSlackInstallBotToken(ctx.db, team.id))?.botToken ?? policy.slack_bot_token;
     if (!botToken) return;
     const link = relayLinkFor(ctx, team.slug);
     if (!link) return;

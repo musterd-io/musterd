@@ -144,6 +144,11 @@ export type AuditAction =
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
   | 'channel.settings.changed'
+  // The distributed Slack app (ADR 668 decision 2, lane 01M50ZQGWYNZKNWDNDDRP41W5B): a
+  // workspace install recorded (or refused) from the OAuth flow. Detail carries the Slack
+  // team id and installer only — never the bot token or the install state (hard rule 5).
+  | 'channel.slack_installed'
+  | 'channel.slack_install_refused'
   // Human authority (ADR 662): a listed act presented without a valid A2 signature, and the
   // approval that let one through. Detail carries act, target, key id and reason only — never
   // a signature, nonce or descriptor payload (hard rule 5).
@@ -744,6 +749,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.sealed_delivered': 'none',
   'channel.answer_reported': 'none',
   'channel.settings.changed': 'actor',
+  'channel.slack_installed': 'actor',
+  'channel.slack_install_refused': 'actor',
   'authority.refused': 'actor',
   'authority.approved': 'actor',
   'device_key.enrolled': 'actor',

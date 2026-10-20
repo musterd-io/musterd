@@ -22,6 +22,7 @@ import {
 import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
 import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { insertMessage } from '../store/messages.js';
+import { recordSlackInstall } from '../store/slackInstalls.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
 import { handleAppCallback, handleAppFetch } from './appAdapter.js';
@@ -314,6 +315,9 @@ export function startAwayRelay(ctx: Ctx): () => void {
         void buildRelayPending(ctx.db, team.id)
           .then((pending) => {
             socket.send(JSON.stringify({ protocol: 1, type: 'reconcile', pending }));
+            // Pick up any Slack install the OAuth flow completed while we were away
+            // (ADR 668 decision 2): the relay holds the record until our ack.
+            socket.send(JSON.stringify({ protocol: 1, type: 'install_sync' }));
           })
           .catch((err) =>
             log.warn({ msg: 'away_relay_reconcile_failed', team: team.slug, err: String(err) }),
@@ -349,6 +353,39 @@ export function startAwayRelay(ctx: Ctx): () => void {
             if (!r.ok && r.reason !== 'unparseable_callback')
               log.info({ msg: 'away_relay_callback_refused', team: team.slug, reason: r.reason });
           });
+        } else if (frame.data.type === 'installs') {
+          // Each record must match a live install state this daemon minted; the store
+          // refuses (and audits) anything else. Ack only what we were handed, stored or
+          // refused — either way the relay's copy has served its purpose and is dropped.
+          const installs = frame.data.installs;
+          void (async () => {
+            for (const install of installs) {
+              const result = await recordSlackInstall(ctx.db, {
+                teamId: team.id,
+                actor: 'relay',
+                slackTeamId: install.slack_team_id,
+                botToken: install.bot_token,
+                installerSlackId: install.installer_slack_id,
+                state: install.state,
+                installedAt: install.installed_at,
+              });
+              log.info({
+                msg: result.ok ? 'away_slack_installed' : 'away_slack_install_refused',
+                team: team.slug,
+                slack_team: install.slack_team_id,
+                ...(result.ok ? {} : { reason: result.reason }),
+              });
+            }
+            socket.send(
+              JSON.stringify({
+                protocol: 1,
+                type: 'install_ack',
+                slack_team_ids: installs.map((i) => i.slack_team_id),
+              }),
+            );
+          })().catch((err) =>
+            log.warn({ msg: 'away_slack_install_failed', team: team.slug, err: String(err) }),
+          );
         } else if (frame.data.type === 'app_fetch') {
           const { request_id: requestId } = frame.data;
           void handleAppFetch(ctx, team, frame.data)

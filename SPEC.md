@@ -1097,3 +1097,21 @@ newer PR, was sent back, was parked or was abandoned. A supporting server, for t
   where `answer` is the id of the reply, so a readout joins the verdict to its words.
 - MUST NOT wake a Member or copy the reply for this row. The sender is told on the ack, and the
   row is in the Lane's history.
+
+## A.29 The distributed Slack app: OAuth install records (unreleased — ADR 668)
+
+A team's Slack workspace is installed through Slack's OAuth flow, not an operator-set map
+(ADR 668 decision 2, increment 9). The wire between a daemon and its relay gains three frames:
+
+- The **install mapping** (Slack team id → musterd team → destination) MUST be written only by
+  the authenticated install flow: a one-time state a daemon minted (stored there only as
+  sha256), authorized by the workspace installer at Slack, exchanged by the relay with the
+  app's client secret. Nothing in an incoming callback can write or alter it.
+- On connect a daemon MUST send `install_sync`; the relay answers `installs` with the records
+  it holds for that team and MUST keep each record until the daemon's `install_ack`. A daemon
+  MUST record an install only against a live state it minted for its own team; anything else
+  installs nothing.
+- The per-install bot token MUST be stored only daemon-side, MUST replace the team-policy
+  token (which remains the pre-install fallback until its retirement), and MUST never be
+  logged, audited, exported or listed. Installing a workspace is separate from pairing a
+  person: the install is the workspace's act, and each person still pairs their own binding.

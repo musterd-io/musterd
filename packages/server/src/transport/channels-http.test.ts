@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { recordPairingIdentity } from '../store/channelBindings.js';
+import { recordSlackInstall } from '../store/slackInstalls.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
@@ -41,6 +42,49 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
 
   afterEach(async () => {
     await server.close();
+  });
+
+  it('slack install: admin mints the link, the record lands via the store, revoke stops it', async () => {
+    // No relay in policy yet: the install link cannot be minted.
+    const noRelay = await call('POST', '/teams/dawn/channels/slack/install', nick);
+    expect(noRelay.status).toBe(422);
+    await call('POST', '/teams/dawn/policy', nick, {
+      away_relay_url: 'https://relay.example',
+      away_relay_token: 'relay-credential',
+    });
+    const started = await call('POST', '/teams/dawn/channels/slack/install', nick);
+    expect(started.status).toBe(201);
+    expect(started.json.install_url).toMatch(
+      /^https:\/\/relay\.example\/slack\/install\?team=dawn&state=/,
+    );
+    // An agent seat cannot mint or revoke installs.
+    expect((await call('POST', '/teams/dawn/channels/slack/install', ada)).status).toBe(403);
+
+    // The OAuth completion comes back through the relay: simulate its store call with
+    // the state from the minted link, then list and revoke over HTTP.
+    const state = new URL(started.json.install_url).searchParams.get('state')!;
+    const teamRow = (await getTeamBySlug(server.store, 'dawn'))!;
+    const recorded = await recordSlackInstall(server.store, {
+      teamId: teamRow.id,
+      actor: 'relay',
+      slackTeamId: 'T9',
+      botToken: 'xoxb-never-listed',
+      installerSlackId: 'U9',
+      state,
+      installedAt: Date.now(),
+    });
+    expect(recorded.ok).toBe(true);
+    const listed = await call('GET', '/teams/dawn/channels/slack/installs', nick);
+    expect(listed.status).toBe(200);
+    expect(listed.json.installs).toHaveLength(1);
+    expect(JSON.stringify(listed.json)).not.toContain('xoxb-never-listed');
+    const revoked = await call('POST', '/teams/dawn/channels/slack/installs/T9/revoke', nick);
+    expect(revoked.status).toBe(200);
+    const after = await call('GET', '/teams/dawn/channels/slack/installs', nick);
+    expect(after.json.installs[0].revoked_at).not.toBeNull();
+    expect((await call('POST', '/teams/dawn/channels/slack/installs/T9/revoke', nick)).status).toBe(
+      404,
+    );
   });
 
   it('pair → stage → confirm → revoke over HTTP, with the daemon-held identity on confirm', async () => {

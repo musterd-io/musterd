@@ -90,6 +90,47 @@ export const RelayAppBodyFrameSchema = z.object({
 });
 export type RelayAppBodyFrame = z.infer<typeof RelayAppBodyFrameSchema>;
 
+/**
+ * Daemon → relay: ask for any Slack install records the relay is holding for this team
+ * (ADR 668 decision 2, increment 9). Sent on every connect, after reconcile; the relay
+ * answers with `installs` and keeps each record until the daemon's `install_ack`.
+ */
+export const RelayInstallSyncFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('install_sync'),
+});
+export type RelayInstallSyncFrame = z.infer<typeof RelayInstallSyncFrameSchema>;
+
+/** Daemon → relay: these install records are stored daemon-side; the relay may drop them. */
+export const RelayInstallAckFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('install_ack'),
+  slack_team_ids: z.array(z.string().min(1).max(64)).max(32),
+});
+export type RelayInstallAckFrame = z.infer<typeof RelayInstallAckFrameSchema>;
+
+/**
+ * One Slack install record (ADR 668 decision 2): the OAuth install for one workspace.
+ * The bot token transits here once, daemon-bound — the relay drops its copy on the
+ * daemon's ack and stores it nowhere else; it is never logged or audited (hard rule 5).
+ */
+export const RelaySlackInstallSchema = z.object({
+  slack_team_id: z.string().min(1).max(64),
+  bot_token: z.string().min(1).max(512),
+  installer_slack_id: z.string().min(1).max(64),
+  state: z.string().min(16).max(128),
+  installed_at: z.number().int().nonnegative(),
+});
+export type RelaySlackInstall = z.infer<typeof RelaySlackInstallSchema>;
+
+/** Relay → daemon: the install records held for this team, awaiting daemon-side storage. */
+export const RelayInstallsFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('installs'),
+  installs: z.array(RelaySlackInstallSchema).max(32),
+});
+export type RelayInstallsFrame = z.infer<typeof RelayInstallsFrameSchema>;
+
 /** Daemon → relay: the ask resolved or expired daemon-side; drop its metadata row. */
 export const RelayResolveFrameSchema = z.object({
   protocol: version,
@@ -104,6 +145,8 @@ export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
   RelayAppDeliverFrameSchema,
   RelayAppBodyFrameSchema,
   RelayResolveFrameSchema,
+  RelayInstallSyncFrameSchema,
+  RelayInstallAckFrameSchema,
 ]);
 export type RelayDaemonFrame = z.infer<typeof RelayDaemonFrameSchema>;
 
@@ -167,6 +210,7 @@ export const RelayServerFrameSchema = z.discriminatedUnion('type', [
   RelayDeliveredFrameSchema,
   RelayCallbackFrameSchema,
   RelayAppFetchFrameSchema,
+  RelayInstallsFrameSchema,
   RelayErrorFrameSchema,
 ]);
 export type RelayServerFrame = z.infer<typeof RelayServerFrameSchema>;
