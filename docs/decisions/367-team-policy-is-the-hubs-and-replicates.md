@@ -35,7 +35,9 @@ straight face, and the ledger they feed reads as one team's spend.
    `appendReplicatedEvent` — the same allocator as messages, lanes and presence, so the node's
    sequence stays dense and the hub's gap check is unchanged. `applyPolicyChange` writes the row and
    the stamp in one transaction: the value this daemon holds and the fact its peers will fold are
-   the same fact, or neither happened. `setPolicy` stays as it was — the projector's own primitive,
+   the same fact, or neither happened. _(Amended 2026-10-19: the event detail redacts secret-bearing
+   policy fields; the complete values remain hub-local and replicas omit those fields, per ADR 677.)_
+   `setPolicy` stays as it was — the projector's own primitive,
    and deliberately silent.
 2. **The event carries the STORED sparse doc, never the effective policy.** ADR 185 all over again,
    this time across a machine boundary: shipping the effective policy would bake the sending build's
@@ -113,6 +115,9 @@ straight face, and the ledger they feed reads as one team's spend.
   that at ingest instead. `REPLICATED_LEDGER_VERBS` in `store/audit.ts` is where the next one lands.
 - Census gap 1 closes; gaps 2 (`seat_memory` / `inbox_cursors`, lane `01M1JNY14F`) and 3 (the
   insight substrate, lane `01M1JNY95C`) stay open.
+- _(2026-10-19, ADR 677): new `policy.change` events redact secret-bearing values, replicas omit
+  them when folding, and an in-place migration scrubs historical audit and sync copies after the
+  relay token rotation is confirmed._
 - _(2026-09-15: ADR 367 stamped **new** writes. A hub whose policy was last written unstamped —
   before the kind existed, or via silent `setPolicy` — still shipped nothing, so a live joiner's
   `loops` stayed null and every wake there was a 5-minute reply doorbell. [ADR 398](398-unstamped-team-policy-restates-once-joiners-exist.md)

@@ -18,6 +18,7 @@ import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendAuditRequired, appendReplicatedEvent } from './audit.js';
 import { hashToken, newSecret } from './members.js';
+import { redactPolicySecrets } from './policyRedaction.js';
 import { resolveAccountStatus, type MemberRow, type TeamRow } from './rows.js';
 
 const SLUG_RE = /^[a-z0-9-]{1,32}$/;
@@ -697,7 +698,7 @@ export async function applyPolicyChange(
       action: 'policy.change',
       target: null,
       result: 'allow',
-      detail: stored,
+      detail: redactPolicySecrets(stored),
     });
     return { policy: effective, stored };
   });

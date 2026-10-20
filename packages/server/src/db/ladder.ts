@@ -1,5 +1,68 @@
 import type Database from 'better-sqlite3';
+import { redactPolicySecrets } from '../store/policyRedaction.js';
 import type { Driver } from './driver.js';
+
+function redactPolicyJson(json: string): string {
+  return JSON.stringify(redactPolicySecrets(JSON.parse(json) as unknown));
+}
+
+function redactPolicyEventJson(json: string): string | null {
+  const value = JSON.parse(json) as unknown;
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new TypeError('sync_log policy event must be an object');
+  const payload = value as Record<string, unknown>;
+  const event = payload['event'];
+  if (typeof event !== 'object' || event === null || Array.isArray(event))
+    throw new TypeError('sync_log event must be an object');
+  const eventRecord = event as Record<string, unknown>;
+  if (eventRecord['action'] !== 'policy.change') return null;
+  return JSON.stringify({
+    ...payload,
+    event: { ...eventRecord, detail: redactPolicySecrets(eventRecord['detail']) },
+  });
+}
+
+function scrubPolicyAuditSqlite(db: Database.Database): void {
+  const auditRows = db
+    .prepare("SELECT id, detail FROM audit WHERE action = 'policy.change'")
+    .all() as {
+    id: string;
+    detail: string | null;
+  }[];
+  const updateAudit = db.prepare('UPDATE audit SET detail = ? WHERE id = ?');
+  for (const row of auditRows) {
+    if (row.detail === null) throw new TypeError('policy.change audit detail is null');
+    updateAudit.run(redactPolicyJson(row.detail), row.id);
+  }
+  const syncRows = db
+    .prepare(
+      "SELECT id, payload FROM sync_log WHERE json_extract(payload, '$.event.action') = 'policy.change'",
+    )
+    .all() as { id: string; payload: string }[];
+  const updateSync = db.prepare('UPDATE sync_log SET payload = ? WHERE id = ?');
+  for (const row of syncRows) {
+    const payload = redactPolicyEventJson(row.payload);
+    if (payload !== null) updateSync.run(payload, row.id);
+  }
+}
+
+async function scrubPolicyAuditPostgres(d: Driver): Promise<void> {
+  const auditRows = await d.all<{ id: string; detail: string | null }>(
+    "SELECT id, detail FROM audit WHERE action = 'policy.change'",
+  );
+  for (const row of auditRows) {
+    if (row.detail === null) throw new TypeError('policy.change audit detail is null');
+    await d.run('UPDATE audit SET detail = ? WHERE id = ?', [redactPolicyJson(row.detail), row.id]);
+  }
+  const syncRows = await d.all<{ id: string; payload: string }>(
+    "SELECT id, payload FROM sync_log WHERE payload::jsonb #>> '{event,action}' = 'policy.change'",
+  );
+  for (const row of syncRows) {
+    const payload = redactPolicyEventJson(row.payload);
+    if (payload !== null)
+      await d.run('UPDATE sync_log SET payload = ? WHERE id = ?', [payload, row.id]);
+  }
+}
 
 /**
  * Spec §12.2: from v81 on there is ONE migration ladder for both engines. An entry is portable SQL
@@ -797,7 +860,7 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
     // The musterd app's channel (ADR 676 §5, lane 01M5BER5GX4WENE2CEST6CA8NB): an app pairing
     // stages the phone's public keys and App Attest verdict on its nonce row, and the binding it
     // becomes keeps them — the receive key deliveries are sealed to and the device key that signs
-    // answers. Public halves only, as JSON. v116 is taken by PR #2991.
+    // answers. Public halves only, as JSON.
     version: 117,
     sqlite: (db) => {
       for (const table of ['pairing_nonces', 'channel_bindings']) {
@@ -809,6 +872,13 @@ CREATE TABLE IF NOT EXISTS approval_nonces (
       await d.exec('ALTER TABLE pairing_nonces ADD COLUMN IF NOT EXISTS app_keys TEXT');
       await d.exec('ALTER TABLE channel_bindings ADD COLUMN IF NOT EXISTS app_keys TEXT');
     },
+  },
+  {
+    // ADR 677: remove policy credentials from replicated audit history without changing event
+    // identity, sequence, or ordinary policy fields. Malformed matching JSON aborts the migration.
+    version: 118,
+    sqlite: scrubPolicyAuditSqlite,
+    postgres: scrubPolicyAuditPostgres,
   },
 ];
 
