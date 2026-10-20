@@ -19,6 +19,7 @@ import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
 import { keychainLookup } from '../keychain.js';
 import { theme } from '../render/theme.js';
+import { collectApproval } from './authority.js';
 import { cpuOfTree, cpuTotal, makePerfRecorder } from './broadcast-perf.js';
 import { resolve } from './helpers.js';
 
@@ -234,6 +235,18 @@ export function broadcastSeatRequest(name: string) {
   return { name, kind: 'human', observer: true, observer_scope: 'broadcast' } as const;
 }
 
+/** What the daemon digests for a roster mint's `admin.roster` descriptor (http.ts, POST /members). */
+export function rosterApprovalPayload(req: ReturnType<typeof broadcastSeatRequest>) {
+  return { name: req.name, kind: req.kind, role: null, observer: req.observer };
+}
+
+/** A human admin with an enrolled key must sign a roster change (ADR 662); an unsigned mint is refused. */
+function isUnsignedRosterRefusal(e: unknown): boolean {
+  return (
+    e instanceof CliError && /authority refused \(no_signature\): admin\.roster/.test(e.message)
+  );
+}
+
 /** Mint the run's broadcast-grade observer with this folder's identity. Refused unless that identity
  * is a human admin (ADR 580) — the message says what to do instead of echoing the daemon's. */
 export async function mintBroadcastSeat(
@@ -242,8 +255,27 @@ export async function mintBroadcastSeat(
 ): Promise<BroadcastSeat> {
   const { http } = resolve({ ...flags, team });
   const name = 'broadcast-' + Math.random().toString(36).slice(2, 8);
+  const req = broadcastSeatRequest(name);
   try {
-    const res = await http.addMember(team, broadcastSeatRequest(name));
+    let res;
+    try {
+      res = await http.addMember(team, req);
+    } catch (e) {
+      if (!isUnsignedRosterRefusal(e)) throw e;
+      // ADR 662: the observer is a roster change, so this human's passkey signs it. Same ceremony as
+      // `musterd authority approve`; the proof rides the retried mint.
+      process.stdout.write(
+        `minting the observer seat ${name} is a roster change — approve it with your passkey\n`,
+      );
+      const approval = await collectApproval(
+        http,
+        team,
+        'admin.roster',
+        name,
+        rosterApprovalPayload(req),
+      );
+      res = await http.addMember(team, { ...req, approval });
+    }
     if (!res.human_credential)
       throw new CliError(
         'the daemon minted the observer without a credential — is it older than the CLI?',
