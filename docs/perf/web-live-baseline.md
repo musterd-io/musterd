@@ -1406,7 +1406,27 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
-### 2026-10-20 — the live-loads-fast bar, first read: nick's laptop (lane `01M4VJS7EX`)
+### 2026-10-20 — the live-loads-fast bar on the hub: met (lane `01M4VJS7EX`)
+
+`bash scripts/perf/live-paint-bar.sh revive 5`, run by nick on the hub (`mac`) at 20:52Z. Load average
+16.72 / 9.84 / 9.18, so heavier than the "ordinary load" the bar names, not lighter.
+
+| Line (bar)                     | Median | Runs (ms)                  |
+| ------------------------------ | ------ | -------------------------- |
+| warm: first team card (≤ 1.0 s) | 119 ms | 8255, 85, 119, 1168, 87    |
+| cold: first skeleton (≤ 0.5 s)  | 331 ms | 55, 331, 463, 591, 24      |
+| answer, warm visits (≤ 3.0 s)   | 119 ms | 8949, 85, 119, 1168, 87    |
+| answer, cold visits (≤ 3.0 s)   | 457 ms | 145, 457, 631, 1186, 72    |
+
+All three lines hold on the median. Before #2385 the snapshot painted at ~0.6 s and the answer came at
+6.1 s. The outlier is the first warm visit after the sign-in: 8.3 s to a card and 8.9 s to the answer. Its
+cause is not known. The sign-in visit had already loaded the page in the same profile, so a cold
+cache does not explain it, and the hub was at a 16.7 load average. One run like this in five is
+worth a second read at an ordinary load before anyone builds against it.
+
+- Falsify: the same command on the hub at an ordinary load reports any median over its bar.
+
+
 
 `scripts/perf/live-paint-bar.mjs http://localhost:4849/live?team=revive --signin-url-file <f> --runs 5`.
 It times the page's own markers: the first real `.lc-team-card`, the first `.lc-skel`, and the moment
