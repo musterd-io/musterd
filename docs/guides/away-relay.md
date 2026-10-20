@@ -75,6 +75,16 @@ Until a workspace installs, the pre-install path still works: the operator-set
 `SLACK_TEAM_MAP_JSON` and the team-policy `slack_bot_token`. The install record takes
 precedence where both exist.
 
+**Hosted teams (Cloud-direct).** A hosted team's install link carries
+`&dest=<its Cloud server origin>`. The relay then sends the install record and that
+workspace's callbacks straight to the Cloud server — no relay hop — each signed with the
+ingress's Ed25519 key (`INGRESS_SIGNING_KEY`, a Worker secret). The Cloud server holds only
+the public half (`MUSTERD_INGRESS_PUBLIC_KEY`, PEM or base64url DER) and refuses any
+unsigned, forged, or stale dispatch; it then re-checks team, binding, and ask token against
+its own state exactly as it does for a relay-forwarded callback. Generate the pair with any
+Ed25519 tool (for example `openssl genpkey -algorithm Ed25519`), set the private half only
+here, and the public half only on the Cloud servers.
+
 **App review.** Slack reviews a distributed app before public listing. What the review
 sees: the OAuth scopes `chat:write`, `im:write`, `users:read` (exactly these), the
 interactivity Request URL (this Worker's `/callback/<slug>/<ask_ref>` route), the OAuth

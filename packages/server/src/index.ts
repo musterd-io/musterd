@@ -95,6 +95,8 @@ export interface ServerOptions {
   trustProxy?: boolean;
   /** ADR 662 dec. 5: WebAuthn origins override (tests, hosted origins). */
   webauthnOrigins?: string[];
+  /** The Slack ingress public key (tests); env MUSTERD_INGRESS_PUBLIC_KEY otherwise. */
+  ingressPublicKey?: string;
   /** Serve a built web UI from this directory, same-origin (ADR 062). Defaults to MUSTERD_WEB_ROOT. */
   webRoot?: string;
   /** Inject a database (e.g. an in-memory one) for tests; bypasses dbPath. */

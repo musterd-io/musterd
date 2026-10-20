@@ -57,6 +57,28 @@ export function parseSlackOAuthResponse(v: unknown): SlackInstallRecord | null {
   return { slackTeamId: teamId, botToken: token, installerSlackId: installer };
 }
 
+/**
+ * A Cloud destination for one install (spec: Slack ingress §3): the hosted team's
+ * server base, as an https origin. Anything else — http, a path, a userinfo trick —
+ * is no destination, and the install falls back to the relay-object transport.
+ */
+export function cloudDestinationFrom(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null;
+  try {
+    const url = new URL(v);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    if (url.pathname !== '/' && url.pathname !== '') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/** The ingress attestation payload (spec §3): `<timestamp>.<raw body>`, Ed25519. */
+export function ingressSignedPayload(timestamp: string, rawBody: string): string {
+  return `${timestamp}.${rawBody}`;
+}
+
 /** An install state lives ten minutes and is consumed by the first completed exchange. */
 export const INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
 
