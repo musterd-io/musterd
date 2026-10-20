@@ -527,4 +527,21 @@ withDrivers('away channels falsifiers', (o) => {
       'a flood from one team does not starve another team (multi-tenant relay lane 01M50ZQCTWM5QBZ083782J9N6R)',
     );
   });
+
+  // ADR 676 Eval — the musterd app's malicious-relay cases. Built ones are real tests beside the
+  // code they exercise: a swapped ciphertext, a stripped seal, a foreign or missing signature, a
+  // wrong nonce and a revoked phone key in notify/appAdapter.test.ts; a body sealed by anyone but
+  // the pinned daemon and a flipped byte in notify/appSeal.test.ts; a forged or mismatched
+  // attestation in store/appAttest.test.ts and store/appPairing.test.ts.
+  describe('the musterd app channel (ADR 676 Eval)', () => {
+    it.todo(
+      'a signature over a digest the phone did not render does not authorize a listed act (away channels 7a, lane 01M5BER5GX4WENE2CEST6CA8NB, increment 3b)',
+    );
+    it.todo(
+      'a listed act answered from a notification action is refused (away channels 7a, lane 01M5BER5GX4WENE2CEST6CA8NB, increment 3b)',
+    );
+    it.todo(
+      'a seventh listed-act ask from agent seats in an hour is held, not delivered (away channels 7a, lane 01M5BER5GX4WENE2CEST6CA8NB, increment 3b)',
+    );
+  });
 });

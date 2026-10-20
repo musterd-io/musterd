@@ -130,6 +130,15 @@ one gets tapped through.
   under a standing key's `device_key_admin` signature. `POST /authority/keys` now refuses kind
   `phone`, so that kind always means App Attest vouched for the key. Schema v117 keeps the phone's
   public keys on the pairing and the binding.
+- 2026-10-20, lane 01M5BER5GX (increment 3a): deliveries and answers run for **advisory** asks,
+  matching Slack. The wire adds `AppCallbackSchema` (the phone's `pair` / `answer` / `redeliver`),
+  `AppDeliverySchema`, `AppAnswerSchema` with `appAnswerSigningBytes`, and one relay daemon frame,
+  `app_deliver`. The delivery nonce is derived from the token, sha256-based, so the daemon stores
+  nothing for it. A signed app answer still redeems as A1 under ADR 623 §6: the phone signature is
+  checked before redemption and recorded as `signed_by`, but it does not yet widen what the answer
+  authorizes. Privileged asks, listed acts with the descriptor screen (decision 6), answers from a
+  notification (decision 7) and the fatigue ceiling (decision 8) are increment 3b. 3b is where
+  ADR 623's "A2 does not exist yet" ends, and that change gets its own review.
 - The launch gate in ADR 662 can close for nick once the phone key is enrolled through this pairing.
 - A lost or wiped phone is ADR 662's recovery path. A Face ID change ends the signing key the
   same way and needs the same re-key.
