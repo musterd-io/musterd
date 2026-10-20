@@ -79,6 +79,8 @@ export const KNOWN_WHOLE_CONTEXT: readonly string[] = [
   'deploy/cloud-seat/Dockerfile',
   // ADR 647 phase 1: the cloud agent, built from the repo root like deploy/cloud-seat.
   'deploy/cloud-agent/Dockerfile',
+  // Lane 01M5AQE75K: the CooperBench run machine, built from the repo root by deploy/cooperbench/create.sh.
+  'deploy/cooperbench/Dockerfile',
   'scripts/broadcast/hosted.Dockerfile',
   'scripts/perf/broadcast-bench.Dockerfile',
   'scripts/perf/loadbench.Dockerfile',
