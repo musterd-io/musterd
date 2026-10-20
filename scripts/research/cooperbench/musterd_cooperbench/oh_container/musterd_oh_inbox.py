@@ -37,7 +37,14 @@ def interrupt_line(cwd: str = REPO, timeout: float = 10.0) -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     line = (proc.stdout or "").strip()
-    return line or None
+    if not line.startswith("⚡"):
+        # e.g. the "deaf" line at step 0, before the plugin's MCP server has joined and holds the
+        # lease. The Claude Code arm's adapter joins before the first prompt and never sees it, so it
+        # stays out of the conversation and goes to the agent-server's log.
+        if line:
+            print(f"musterd interrupt check: {line}", file=sys.stderr)
+        return None
+    return line
 
 
 def patch(module) -> None:
