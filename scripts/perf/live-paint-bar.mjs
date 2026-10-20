@@ -21,13 +21,41 @@
  * origin, so the app cannot write it back between the clear and the navigation.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// Any Chromium speaks the DevTools protocol this script drives. The first run on the hub machine found
+// no Chrome at the one path the script used to try (2026-10-20), so look where browsers live instead.
+const BROWSERS = [
+  'Google Chrome.app/Contents/MacOS/Google Chrome',
+  'Chromium.app/Contents/MacOS/Chromium',
+  'Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  'Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+  'Brave Browser.app/Contents/MacOS/Brave Browser',
+  'Arc.app/Contents/MacOS/Arc',
+].flatMap((p) => [`/Applications/${p}`, `${homedir()}/Applications/${p}`]);
 const CHROME =
-  process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  process.env.CHROME_BIN ??
+  [...BROWSERS, '/usr/bin/google-chrome', '/usr/bin/chromium'].find((p) => existsSync(p));
 const args = process.argv.slice(2);
+if (process.env.CHROME_BIN && !existsSync(process.env.CHROME_BIN)) {
+  console.error(`✗ CHROME_BIN is set to ${process.env.CHROME_BIN}, and nothing is there.`);
+  process.exit(1);
+}
+if (!CHROME) {
+  console.error(
+    '✗ no Chromium browser found (Chrome, Chromium, Edge, Brave or Arc in /Applications). Install one, or set CHROME_BIN to its binary.',
+  );
+  process.exit(1);
+}
+// `--which-browser`: say which binary would run, before anything is spent (the wrapper asks this
+// BEFORE it mints the one-shot sign-in link).
+if (args.includes('--which-browser')) {
+  console.log(CHROME);
+  process.exit(0);
+}
 const flag = (name) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : undefined;
@@ -71,7 +99,7 @@ process.on('exit', () => {
 });
 
 let targets;
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < 100; i++) {
   try {
     targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     if (targets.some((t) => t.type === 'page')) break;
@@ -81,7 +109,12 @@ for (let i = 0; i < 50; i++) {
   await new Promise((r) => setTimeout(r, 200));
 }
 const page = targets?.find((t) => t.type === 'page');
-if (!page) throw new Error('Chrome DevTools endpoint never came up');
+if (!page) {
+  console.error(
+    `✗ ${CHROME} started but its DevTools endpoint never answered on port ${port} within 20 s.`,
+  );
+  process.exit(1);
+}
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((res, rej) => {
   ws.onopen = res;
