@@ -46,7 +46,7 @@ Read it with care. "5 of 4 reported" means more cost rows than counted wakes, so
 
 This note is wrong if a later `musterd report` for `revive-staging` shows the wake cost per answered wake above $0.10, or if `git remote -v` from this seat shows an `https://github.com` origin. Either would mean the numbers above were a snapshot of a transitional setup, not the pilot's steady state.
 
-## Push and PR from the jail (2026-10-20) <!-- claim: other -->
+## Push and PR from the jail (2026-10-20; falsify: `git remote -v` + `gh pr create --draft`) <!-- claim: other -->
 
 Part 1 above recorded a local-path origin and a failed `gh pr create`. The origin reading changed within a day. Measured from this seat at 2026-10-20T01:53Z:
 
@@ -57,6 +57,6 @@ Part 1 above recorded a local-path origin and a failed `gh pr create`. The origi
 - `git remote -v` now shows a GitHub HTTPS origin, not `/data/work/repo`.
 - `git push -u origin agent/pilot-2` reached GitHub: the remote printed "Create a pull request for 'agent/pilot-2' on GitHub" and `[new branch] agent/pilot-2 -> agent/pilot-2`. The branch was new because GitHub auto-deleted it when #2973 merged.
 - The three part-1 commits were already on main as a squash, so `git rebase origin/main` conflicted on this file and `git rebase --skip` dropped them ("patch contents already upstream"). `git merge` is not on the jail allowlist; `git rebase` is.
-- `gh pr create --draft`: PLACEHOLDER-GH-RESULT
+- `gh pr create --draft --head agent/pilot-2` no longer fails for lack of credentials (part 1: exit 4, no auth). It now reaches GitHub and fails on permission: `pull request create failed: GraphQL: Resource not accessible by personal access token (createPullRequest)`, exit 1. The seat has a token; the token cannot create pull requests.
 
-Falsifier: this section is wrong if `git remote -v` from this seat shows a non-GitHub origin again, or if a later `git push -u origin <seat-branch>` from the jail is refused. It also supersedes part 1's falsifier, whose "https://github.com origin" trigger has now fired.
+Falsifier: this section is wrong if `git remote -v` from this seat shows a non-GitHub origin again, or if a later `git push -u origin <seat-branch>` from the jail is refused, or if `gh pr create --draft` from the jail later succeeds without a change to the seat's token. It also supersedes part 1's falsifier, whose "https://github.com origin" trigger has now fired.
