@@ -13,9 +13,11 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 
 # The musterd app's push (ADR 676 §9): not secrets — the key id, Apple Developer team id and
-# bundle id. APNS_KEY_ID stays unset until the operator creates the key; no push is sent until
-# all four (with APNS_KEY_P8) are present.
+# bundle id. No push is sent until all four (with APNS_KEY_P8) are present. The key is
+# production-only and topic-scoped to io.musterd.app (2026-10-20): TestFlight pushes work, a dev
+# build's sandbox token is refused by Apple and the reason comes back on `delivered`.
 [vars]
+APNS_KEY_ID = "2C5VN5ZZ3J"
 APNS_TEAM_ID = "D27MJGWNY3"
 APNS_TOPIC = "io.musterd.app"
 
