@@ -8,7 +8,7 @@ import {
   TOKEN_PREFIXES,
 } from '@musterd/protocol';
 import { resolveWorkspace, resolveWorkspaceKey } from '@musterd/protocol/project';
-import { flagStr, type Parsed } from '../args.js';
+import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HttpClient, watchClaim } from '../client.js';
 import {
   findBinding,
@@ -62,7 +62,38 @@ function pendingAge(ms: number): string {
   return `${sec}s`;
 }
 
+/**
+ * The flags `musterd claim` takes (lane `01M5D907S74XVT5YECNWB5VW5A`).
+ *
+ * A flag this command does not know takes the NEXT argument as its value and drops it, so a
+ * typo silently loses an argument — the lane id, the target, the words of a message. A command
+ * knows its own flags, so it refuses the ones it does not, before anything is composed. The
+ * global flags every command inherits come from `GLOBAL_FLAGS`; this list is the command's own.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const CLAIM_FLAGS = [
+  'bootstrap',
+  'for',
+  'grant',
+  'key',
+  'role',
+  'server',
+  'surface',
+  'team',
+  'timeout',
+] as const;
+
 export async function claimCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...CLAIM_FLAGS],
+    'the flags `musterd claim` takes are listed by `musterd help claim`',
+  );
   // A FIRST binding never sits above a Workspace (reach spec §6, ADR 442). A folder already bound
   // is left to the clobber guard below — this is the layout rule, not a re-claim rule — so the
   // pre-migration `~/agents` (bound, with worktrees beneath) still re-claims until lane 3 moves it.

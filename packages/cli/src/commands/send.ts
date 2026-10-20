@@ -38,7 +38,7 @@ import { findWorkspaceDir, kindLookup, resolve, sendOrEcho, viewerFlags } from '
  * and a typo that eats the next argument is worse than a typo: it sends the wrong thing, or
  * nothing. Refused, with the shape (lane 01M5D5J8HQG688C0QWEN0633H2).
  */
-const SEND_FLAGS = [
+export const SEND_FLAGS = [
   'to',
   'act',
   'thread',
