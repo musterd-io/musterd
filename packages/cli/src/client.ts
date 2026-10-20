@@ -792,7 +792,7 @@ export class HttpClient {
    */
   mintSponsoredAgent(
     slug: string,
-    body: { name: string; role?: string | undefined },
+    body: { name: string; role?: string | undefined; host?: string | undefined },
   ): Promise<{
     member: MemberSummary;
     hosting: 'sponsor_host' | 'connect_link';

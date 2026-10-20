@@ -42,13 +42,16 @@ export async function insertProvision(
   sponsorId: string,
   now = Date.now(),
   connectOrigin: string | null = null,
+  /** Lane 01M5DR34Y2: the host label this row is pinned to — only that host claims it. `null` is
+   *  ADR 463 §2's original shape: any live host of the sponsor's claims it, first poll wins. */
+  host: string | null = null,
 ): Promise<HostProvisionRow> {
   const row: HostProvisionRow = {
     id: ulid(),
     team_id: teamId,
     member_id: memberId,
     sponsor_id: sponsorId,
-    host: null,
+    host,
     state: 'pending',
     claimed_by: null,
     claimed_at: null,
@@ -133,6 +136,9 @@ export async function liveHostedCount(db: Driver, teamId: string, host: string):
  * Atomic: the pending rows this key may serve (`hostMayServe` — a sponsored seat only from its
  * sponsor's own key) become `claimed` by `host`, oldest first, up to `maxPerHost` hosted seats on
  * the label. Rows past the cap stay pending for a later poll or another host of the sponsor's.
+ * A row pinned to another label (`host` set at insert) is left alone: with two live hosts of one
+ * sponsor, whichever polled first used to take every row, and standing a seat up on the OTHER
+ * machine meant stopping the first (three times on 2026-10-20, lane 01M5DR34Y2).
  */
 export async function claimProvisions(
   db: Driver,
@@ -151,6 +157,7 @@ export async function claimProvisions(
     const claimed: HostProvisionRow[] = [];
     for (const row of pending) {
       if (room <= 0) break;
+      if (row.host !== null && row.host !== host) continue;
       const agent = await getMemberById(t, row.member_id);
       if (!agent || agent.left_at !== null || !hostMayServe(scope, agent)) continue;
       const took = await t.run(

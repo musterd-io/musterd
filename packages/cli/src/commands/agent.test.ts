@@ -138,6 +138,15 @@ describe('musterd agent <name>', () => {
       expect(out).toContain('cloud-June');
     });
 
+    it('--host <label> rides the mint body, pinning the provision to that host (lane 01M5DR34Y2)', async () => {
+      const { code } = await capture(['June', '--hosted', '--host', 'cloud-June']);
+      expect(code).toBe(0);
+      expect(h.mintSponsoredAgent).toHaveBeenCalledWith('ritual', {
+        name: 'June',
+        host: 'cloud-June',
+      });
+    });
+
     it('no host polled: exit 1 and says what to do, --json carries hosting for a script', async () => {
       h.mintSponsoredAgent.mockResolvedValueOnce({
         member: { name: 'June' },

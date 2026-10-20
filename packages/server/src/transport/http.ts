@@ -1371,6 +1371,8 @@ const AddMemberBody = z.object({
 const SponsoredAgentBody = z.object({
   name: z.string().min(1).max(64),
   role: z.string().max(64).nullish(),
+  /** Lane 01M5DR34Y2: pin the provision to this host label of the sponsor's (must be live). */
+  host: z.string().min(1).max(64).nullish(),
 });
 
 /**
