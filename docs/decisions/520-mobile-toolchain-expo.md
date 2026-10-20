@@ -86,6 +86,7 @@ Which toolchain, and what does it cost the monorepo and its CI? Four were weighe
   the app through TestFlight from the start, built by EAS Build in the cloud and uploaded by EAS
   Submit; the development-build step above is skipped. Expo Go covers JavaScript-only iteration. The
   Expo project is `@nas4146/musterd`; `eas.json` pins Node and pnpm to the repo's.
+- _(2026-10-19, lane `01M46YWFM5`: [ADR 676](676-mobile-app-sealed-ask-client.md) keeps Expo, EAS and TestFlight, and replaces the calendar screens with the sealed ask client. Its Secure Enclave, CryptoKit HPKE and App Attest needs go through one Expo native module as a config plugin; that is this ADR's falsifier checked, not tripped.)_
 
 ## Observability & Evaluation
 

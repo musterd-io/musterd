@@ -894,13 +894,13 @@ const RAW: RawItem[] = [
     id: 'more-surfaces',
     unfrozen: 'a surface stub — Slack-first when a surface wave opens, nothing frozen',
     wave: 'later',
-    title: 'Slack surface (iOS deferred)',
+    title: 'Slack surface (general iOS app deferred)',
     plan: 'reserved',
     category: 'surfaces',
     blurb:
-      'A Slack surface, so a Member is reachable where its human already lives; a native iOS app is explicitly deferred behind it.',
+      'A Slack surface, so a Member is reachable where its human already lives; a general native iOS app is explicitly deferred behind it. One carve-out: the musterd app as a sealed ask client and the phone authenticator (ADR 676).',
     detail:
-      'Re-scoped at the 2026-07-10 reprioritization: no evidence pull for iOS anywhere in the record, while Slack is where the reachability loop (notify → availability → urgent) most plausibly meets a human day-to-day. Slack-first when a surface wave opens; iOS only on real demand.',
+      'Re-scoped at the 2026-07-10 reprioritization: no evidence pull for iOS anywhere in the record, while Slack is where the reachability loop (notify → availability → urgent) most plausibly meets a human day-to-day. Slack-first when a surface wave opens; iOS only on real demand. Carve-out 2026-10-19 (ADR 676): the calendar-only app of 2026-10-05 went unused, and the app became an ask client with device-signed answers and the ADR 662 phone authenticator, on TestFlight for nick only. A team view, /live on the phone and the calendar stay deferred.',
     dependsOn: ['web-dashboard'],
   },
   {

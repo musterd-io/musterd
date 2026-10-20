@@ -101,6 +101,7 @@ stays small.
   daemon stamps `id`, `created_by` and the times) and a refusal is `bad_request`, as on every other
   route. (d) The calendar is local to the daemon that took the write; it has no sync kind. SPEC A.16
   says all four.
+- _(2026-10-19, lane `01M46YWFM5`: nick barely used the calendar app, so [ADR 676](676-mobile-app-sealed-ask-client.md) takes the calendar out of the app and makes the app an ask client and the phone authenticator. This ADR's data model, routes and import stay on the daemon; only the app stops reading them.)_
 
 ## Observability & Evaluation
 
