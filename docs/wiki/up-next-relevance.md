@@ -25,3 +25,16 @@ ADR 536's Experiment: fourteen days after increment 1 landed on revive (#2160, 2
 - **Falsifier met** — with five or more claims that had an offer, the ranked hit rate is at or below the baseline's. Then decision 3 (the tiers) is reverted and decisions 2 and 4 (the exclusion, the counts) are kept; they are honesty, not relevance. The reading goes into ADR 536's Consequences as a dated note.
 - **Not met** — the ranked order is picked up more than the order it replaced; it stays, and the tier yield says which signals earned it.
 - **Insufficient** — fewer than five claims had an offer in the hour before; keep collecting, and say so.
+
+## The fourteen-day read (2026-10-20, `~/.musterd/musterd.db` on the revive hub; falsify: re-run `pnpm next:readout --since 2026-10-06` on the same DB and get different counts) <!-- claim: other -->
+
+Verdict **NOT-MET**: the ranked order stays. Read by lazara, lane `01M49HHJQF96W6W0QHR4KM2G7C`.
+
+| Cut | Channel and denominator | Ranked | Baseline (oldest-first) |
+| --- | --- | --- | --- |
+| Hit rate | `next.offer` × `lane.claimed` kind=claim, same actor, offer within the hour before; 671 claims, 105 with an offer | 4 of 105 (4%), by rank 1 / 2 / 0 / 1 / 0 | 0 of 105 (0%) |
+| Tier yield | of the 4 ranked hits | t1=0 · t2 (role)=2 · t3 (goal motion)=2 · t4=0 · t5=0 | — |
+| Window honesty | `next.offer.total`, brief reads | 197 of 197 (100%) had a pool deeper than the window of 5 | — |
+
+What it says, and what it doesn't (2026-10-20; falsify: a later readout where most claims with an offer are for a lane in the ranked window). The rule fired: the ranked hit rate is above the baseline with n ≥ 5, so decision 3 stays. But the margin is four claims. 101 of the 105 claims made within an hour of a brief read were for a lane outside both windows. Seats mostly choose work by some route other than `up_next`, such as a handoff, a teammate's ask, or their own lane, and the join cannot see which. The tier yield credits only roles and goal motion. Scope familiarity (t4) placed no hit, and neither did a human's pointer (t1). The spec §2 nudge for a missing `role` on `lane_open` has the only positive evidence here, and it rests on two claims. Every brief read had more claimable lanes than the window shows, so the "N of M claimable" count always applies. <!-- claim: other -->
+
