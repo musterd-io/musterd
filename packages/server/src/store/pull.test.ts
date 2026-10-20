@@ -1,4 +1,5 @@
 import { makeEnvelope, type Lane } from '@musterd/protocol';
+import { ulid } from 'ulid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
@@ -10,10 +11,11 @@ import { listAuditByAction } from './audit.js';
 import { openDirectedLedger } from './delivery.js';
 import { getLane, openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
-import { listTeamMessages, pendingInterrupts, rowToEnvelope } from './messages.js';
+import { listInbox, listTeamMessages, pendingInterrupts, rowToEnvelope } from './messages.js';
 import { bindNode, bindSeatToNode } from './nodes.js';
 import {
   PULL_GRANT_TTL_MS,
+  PULL_REOFFER_COOLDOWN_MS,
   afterPullClaim,
   assertPullGranted,
   getPullAnnouncement,
@@ -250,6 +252,14 @@ withDrivers('pull', (o) => {
       expect((await openDirectedLedger(db, team.id, T0)).map((d) => d.id)).not.toContain(
         res.offer!.ask,
       );
+      // ADR 688: nor does the resolve that closes it when the window is decided.
+      await sweepPullWindows(ctx, team, T0 + 180_000);
+      const after = (await listTeamMessages(db, team.id, { forMemberId: nick.id })).map((r) =>
+        rowToEnvelope(r, team.slug, r.from_member === nick.id ? 'nick' : voice, 'nick'),
+      );
+      expect(after.some((e) => e.act === 'resolve' && e.thread === res.offer!.ask)).toBe(true);
+      expect(pendingInterrupts(after, 'nick', { directed: true })).toEqual([]);
+      expect(pendingInterrupts(after, 'nick', {})).toEqual([]);
     });
 
     it('withholds a dated read until its day, then offers it', async () => {
@@ -430,9 +440,118 @@ withDrivers('pull', (o) => {
       const decided = await sweepPullWindows(ctx, team, T0 + 180_000 + PULL_GRANT_TTL_MS);
       expect(decided[0]?.reason).toBe('grant not redeemed');
       expect((await getPullAnnouncement(db, team.id, offer.id))!.state).toBe('declined');
-      const again = await offerPull(ctx, team, HOST, T0 + 180_000 + PULL_GRANT_TTL_MS + 1);
+      // ADR 688: not on the next poll — the host had its window and its TTL. After the cooldown.
+      const tooSoon = await offerPull(ctx, team, HOST, T0 + 180_000 + PULL_GRANT_TTL_MS + 1);
+      expect(tooSoon.offer).toBeNull();
+      expect(tooSoon.idle_reason).toMatch(/did not claim/);
+      const again = await offerPull(
+        ctx,
+        team,
+        HOST,
+        T0 + 180_000 + PULL_GRANT_TTL_MS + PULL_REOFFER_COOLDOWN_MS + 1,
+      );
       expect(again.offer?.lane).toBe(offer.lane);
       expect(again.offer?.id).not.toBe(offer.id);
+    });
+
+    it('ADR 688: the cooldown is per host — another host is offered the lane at once', async () => {
+      const { db, team, ctx, open, nick } = await fixture();
+      await open();
+      const { row: other } = await addMember(db, team, { name: 'dolly', kind: 'agent' });
+      await enrollResidency(db, team.id, {
+        member_id: other.id,
+        harness: 'claude-code',
+        host: 'pro',
+        grant_id: null,
+        authorized_by: nick.name,
+      });
+      await recordHostSeen(db, team.id, 'pro', T0);
+      await announced(ctx, team);
+      await sweepPullWindows(ctx, team, T0 + 180_000);
+      await sweepPullWindows(ctx, team, T0 + 180_000 + PULL_GRANT_TTL_MS);
+      const t = T0 + 180_000 + PULL_GRANT_TTL_MS + 1;
+      expect((await offerPull(ctx, team, HOST, t)).offer).toBeNull();
+      expect((await offerPull(ctx, team, 'pro', t)).offer?.seat).toBe('dolly');
+    });
+
+    it("ADR 688: the decided window closes its ask — a resolve on the thread, and the opener's inbox stops pinning it", async () => {
+      const { db, team, ctx, open, nick } = await fixture();
+      await open();
+      const offer = await announced(ctx, team);
+      // A newer act after the ask, so `limit: 1` shows the ask only if it is PINNED.
+      vi.setSystemTime(T0 + 1_000);
+      const voiceRow = (await getMemberByName(db, team.id, hostServiceSeatName(HOST)))!;
+      await routeEnvelope(
+        ctx,
+        team,
+        voiceRow,
+        makeEnvelope({
+          id: ulid(),
+          team: team.slug,
+          from: voiceRow.name,
+          to: { kind: 'member', name: 'nick' },
+          act: 'status_update',
+          body: 'later',
+        }),
+        undefined,
+        true,
+      );
+      const pinnedBefore = await listInbox(db, nick, { limit: 1, unreadOnly: true });
+      expect(pinnedBefore.map((m) => m.id)).toContain(offer.ask);
+      vi.setSystemTime(T0 + 180_000);
+      await sweepPullWindows(ctx, team, T0 + 180_000);
+      const closes = await db.all<{
+        act: string;
+        from_member: string;
+        to_member: string;
+        body: string;
+      }>(
+        `SELECT act, from_member, to_member, body FROM messages WHERE team_id = ? AND thread_id = ?`,
+        [team.id, offer.ask],
+      );
+      expect(closes.map((c) => c.act)).toEqual(['resolve']);
+      const voice = (await getMemberByName(db, team.id, hostServiceSeatName(HOST)))!;
+      expect(closes[0]!.from_member).toBe(voice.id);
+      expect(closes[0]!.to_member).toBe(nick.id);
+      expect(closes[0]!.body).toMatch(/granted on silence/);
+      const pinnedAfter = await listInbox(db, nick, { limit: 1, unreadOnly: true });
+      expect(pinnedAfter.map((m) => m.id)).not.toContain(offer.ask);
+      // The TTL decline that follows adds no second close.
+      await sweepPullWindows(ctx, team, T0 + 180_000 + PULL_GRANT_TTL_MS);
+      expect(
+        (
+          await db.all(`SELECT 1 FROM messages WHERE team_id = ? AND thread_id = ?`, [
+            team.id,
+            offer.ask,
+          ])
+        ).length,
+      ).toBe(1);
+    });
+
+    it('ADR 688: a stopped window closes its ask with the reason', async () => {
+      const { db, team, ctx, open, nick } = await fixture();
+      await open();
+      const offer = await announced(ctx, team);
+      await routeEnvelope(
+        ctx,
+        team,
+        nick,
+        makeEnvelope({
+          id: 'decline-1',
+          team: team.slug,
+          from: 'nick',
+          to: { kind: 'member', name: offer.announced_by },
+          act: 'decline',
+          body: 'not this one',
+          meta: { in_reply_to: offer.ask },
+        }),
+      );
+      await sweepPullWindows(ctx, team, T0 + 180_000);
+      const close = await db.get<{ body: string }>(
+        `SELECT body FROM messages WHERE team_id = ? AND thread_id = ? AND act = 'resolve'`,
+        [team.id, offer.ask],
+      );
+      expect(close?.body).toMatch(/stopped \(decline by nick\)/);
     });
   });
 
