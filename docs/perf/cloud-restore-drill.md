@@ -22,13 +22,13 @@
 {"msg":"cloud_restore_drill_completed","date":"2026-10-20","drill_databases":["musterd_drill_mvh0ztnr","musterd_drill_mvh0ztnr_trace"],"schema_versions":{"main":118,"trace":4},"teams_restored":[{"slug":"revive","date":"2026-10-20","coordination_bytes":1910,"trace_bytes":177,"tables":54,"coordination_rows_inserted":11,"trace_rows_inserted":0,"members_verified":3,"rls_leak_rows":0}],"suite_passed":true,"duration_ms":51948}
 ```
 
-### 2026-10-20 — Unattended monthly LaunchAgent cadence (`studio.sandrise.musterd-cloud-drill`, lane `01M3Z44YMTAH6F4Z19ZGRB72JM`)
+### 2026-10-20 — Install-day LaunchAgent kickstart (`studio.sandrise.musterd-cloud-drill`, lane `01M3Z44YMTAH6F4Z19ZGRB72JM`)
 
 The monthly cadence is wired in two places:
-- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-drill`):** installed by `node scripts/cloud/drill.mjs --install-launchd` (`~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist`), runs `scripts/cloud/drill.mjs --wrangler` on the 1st of each month at `04:17` local time (one hour after the `03:17` nightly backup) and appends structured JSON lines to `~/.musterd/cloud/drill.log`.
-- **GitHub Actions workflow (`.github/workflows/cloud-restore-drill.yml`):** cron `17 4 1 * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/drill.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_{OWNER,APP,OPERATOR}_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured.
+- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-drill` on `mac.lan`):** installed by `node scripts/cloud/drill.mjs --install-launchd` (`~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist` on the hub machine `mac.lan`), runs `scripts/cloud/drill.mjs --wrangler` on the 1st of each month at `04:17` local time (one hour after the `03:17` nightly backup) and appends structured JSON lines to `~/.musterd/cloud/drill.log`. The first scheduled calendar tick is **2026-11-01 at 04:17** (tracked on lane `01M3Z44YMTAH6F4Z19ZGRB72JM` with `reads_on: "2026-11-02"`).
+- **GitHub Actions workflow (`.github/workflows/cloud-restore-drill.yml`):** cron `17 4 1 * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/drill.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_{OWNER,APP,OPERATOR}_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured, and emitting an explicit `::warning::` annotation when skipped due to unset repository secrets.
 
-Unattended LaunchAgent kickstart output recorded in `~/.musterd/cloud/drill.log`:
+Install-day manual kickstart (`--install-launchd --kickstart`) output recorded in `~/.musterd/cloud/drill.log` on `mac.lan`:
 
 ```json
 {"msg":"cloud_restore_drill_completed","date":"2026-10-20","drill_databases":["musterd_drill_mvh23r55","musterd_drill_mvh23r55_trace"],"schema_versions":{"main":119,"trace":4},"teams_restored":[{"slug":"revive","date":"2026-10-20","coordination_bytes":1910,"trace_bytes":177,"tables":54,"coordination_rows_inserted":11,"trace_rows_inserted":0,"members_verified":3,"rls_leak_rows":0}],"suite_passed":true,"duration_ms":57329}

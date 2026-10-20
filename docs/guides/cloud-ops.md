@@ -167,22 +167,22 @@ node scripts/cloud/backup.mjs --install-launchd --kickstart     # installs ~/Lib
 ```
 
 Nightly scheduling is wired in two places:
-- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-backup`):** installed by `node scripts/cloud/backup.mjs --install-launchd`, runs `scripts/cloud/backup.mjs --wrangler` daily at `03:17` local time and appends structured JSON lines to `~/.musterd/cloud/backup.log`. In `--wrangler` mode, `createWranglerR2Store.list()` queries Cloudflare's R2 REST endpoint (`/client/v4/accounts/<id>/r2/buckets/musterd-cloud-backups/objects`) so expired 30d/7d dumps are pruned on every nightly run.
-- **GitHub Actions workflow (`.github/workflows/cloud-backup.yml`):** cron `17 3 * * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/backup.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_OWNER_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured.
+- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-backup` on `mac.lan`):** installed by `node scripts/cloud/backup.mjs --install-launchd` on the hub machine `mac.lan`, runs `scripts/cloud/backup.mjs --wrangler` daily at `03:17` local time and appends structured JSON lines to `~/.musterd/cloud/backup.log`. In `--wrangler` mode, `createWranglerR2Store.list()` queries Cloudflare's R2 REST endpoint (`/client/v4/accounts/<id>/r2/buckets/musterd-cloud-backups/objects`) so expired 30d/7d dumps are pruned on every nightly run.
+- **GitHub Actions workflow (`.github/workflows/cloud-backup.yml`):** cron `17 3 * * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/backup.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_OWNER_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured (and emitting a `::warning::` annotation if skipped while secrets are unset).
 
 Required env for S3 SigV4 upload: `MUSTERD_DATABASE_OWNER_URL` (or `_OPERATOR_URL`, or `~/.musterd/cloud/neon.env`), `MUSTERD_TRACE_DATABASE_OWNER_URL` (or derived `<db>_trace`), `MUSTERD_BACKUP_R2_ACCOUNT_ID`, `MUSTERD_BACKUP_R2_ACCESS_KEY_ID`, `MUSTERD_BACKUP_R2_SECRET_ACCESS_KEY` (and optional `MUSTERD_BACKUP_R2_BUCKET`, `MUSTERD_CONSOLE_DATABASE_OWNER_URL`, `MUSTERD_BACKUP_PG_DUMP=1`).
 
-**Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `studio.sandrise.musterd-cloud-backup` LaunchAgent installed and kickstarted, recording in `~/.musterd/cloud/backup.log`:
+**Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `studio.sandrise.musterd-cloud-backup` LaunchAgent installed and kickstarted on `mac.lan`, recording in `~/.musterd/cloud/backup.log`:
 `{"msg":"cloud_backup_completed","date":"2026-10-20","dry_run":false,"teams":1,"uploaded":2,"total_bytes":2087,"pruned":0}` (`teams/revive/coordination/2026-10-20.json.gz.enc` and `teams/revive/trace/2026-10-20.json.gz.enc`), and round-trip `decryptDump` verified the downloaded R2 object.
 
 4. Run the restore drill or install the monthly schedule (`scripts/cloud/drill.mjs`, lanes `01M3Z4408C3T72EY3H92JQST01` + `01M3Z44YMTAH6F4Z19ZGRB72JM`; recorded in [`docs/perf/cloud-restore-drill.md`](../perf/cloud-restore-drill.md)):
 
 ```sh
 node scripts/cloud/drill.mjs --wrangler
-node scripts/cloud/drill.mjs --install-launchd --kickstart   # installs ~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist (day 1 at 04:17 monthly)
+node scripts/cloud/drill.mjs --install-launchd --kickstart   # installs ~/Library/LaunchAgents/studio.sandrise.musterd-cloud-drill.plist on mac.lan (day 1 at 04:17 monthly)
 ```
 
-Creates two fresh temporary databases on Neon (`musterd_drill_<id>` and `musterd_drill_<id>_trace`), migrates both from scratch, downloads and decrypts the newest coordination + trace backup pair for each team from R2, restores every table via `restoreSnapshot`, verifies row counts and tenant RLS isolation under `musterd_app`, runs the Postgres tenancy/migration/backup suite, and drops the temporary databases in `finally`. The monthly cadence is scheduled both on the operator machine (`studio.sandrise.musterd-cloud-drill`, 1st of each month at `04:17` local → `~/.musterd/cloud/drill.log`) and in `.github/workflows/cloud-restore-drill.yml` (`17 4 1 * *` UTC).
+Creates two fresh temporary databases on Neon (`musterd_drill_<id>` and `musterd_drill_<id>_trace`), migrates both from scratch, downloads and decrypts the newest coordination + trace backup pair for each team from R2, restores every table via `restoreSnapshot`, verifies row counts and tenant RLS isolation under `musterd_app`, runs the Postgres tenancy/migration/backup suite, and drops the temporary databases in `finally`. The monthly cadence is scheduled on the hub operator machine `mac.lan` (`studio.sandrise.musterd-cloud-drill`, 1st of each month at `04:17` local → `~/.musterd/cloud/drill.log`; first scheduled calendar tick is `2026-11-01 04:17`, tracked with `reads_on: "2026-11-02"` on lane `01M3Z44YMTAH6F4Z19ZGRB72JM`) and in `.github/workflows/cloud-restore-drill.yml` (`17 4 1 * *` UTC, which emits a `::warning::` annotation if skipped while repository secrets are unset).
 
 ## Check it
 

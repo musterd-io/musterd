@@ -40,7 +40,8 @@ jobs:
           [ "$HAS_R2_SK" = true ] || missing+=(MUSTERD_BACKUP_R2_SECRET_ACCESS_KEY)
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Cloud restore drill skipped on GitHub Actions (operator LaunchAgent studio.sandrise.musterd-cloud-drill runs monthly until repo secrets are set: ${missing[*]})." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Cloud restore drill skipped::Missing required repository secrets (${missing[*]}). Operator LaunchAgent studio.sandrise.musterd-cloud-drill on mac.lan is the active monthly runner until repository secrets are configured."
+            echo "Cloud restore drill skipped on GitHub Actions (operator LaunchAgent studio.sandrise.musterd-cloud-drill on mac.lan runs monthly until repo secrets are set: ${missing[*]})." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi

@@ -36,7 +36,8 @@ jobs:
           [ "$HAS_R2_SK" = true ] || missing+=(MUSTERD_BACKUP_R2_SECRET_ACCESS_KEY)
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Cloud backup skipped on GitHub Actions (operator LaunchAgent studio.sandrise.musterd-cloud-backup runs nightly until repo secrets are set: ${missing[*]})." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Cloud backup skipped::Missing required repository secrets (${missing[*]}). Operator LaunchAgent studio.sandrise.musterd-cloud-backup on mac.lan is the active nightly runner until repository secrets are configured."
+            echo "Cloud backup skipped on GitHub Actions (operator LaunchAgent studio.sandrise.musterd-cloud-backup on mac.lan runs nightly until repo secrets are set: ${missing[*]})." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
