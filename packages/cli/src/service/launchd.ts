@@ -531,7 +531,15 @@ fi
 if [ "$(git rev-parse HEAD 2>/dev/null)" = "$TIP" ] && [ -n "$TIP" ] && [ "$PUBLISHED" = "$TIP" ]; then
   exit 0
 fi
-git checkout --quiet --detach origin/main || true
+# --force: this worktree is service-owned — nothing in it is anyone's work — and the build itself can
+# leave a tracked file rewritten (TanStack's routeTree.gen.ts in another import order). A plain checkout
+# refuses over that, and the old \`|| true\` then rebuilt and re-stamped the OLD HEAD every minute for
+# three hours while the log read like a healthy loop (2026-10-19, lane 01M5BQ7WSZ). A checkout that
+# still fails must say so and stop, never build the wrong commit.
+if ! git checkout --quiet --force --detach origin/main 2>&1; then
+  echo "$(date '+%F %T') checkout FAILED — serving $(git rev-parse --short HEAD 2>/dev/null) until this is fixed"
+  exit 1
+fi
 echo "$(date '+%F %T') building $(git rev-parse --short HEAD)"
 
 # Hold the build transcript aside and print it ONLY if the build fails. A successful publish is a
