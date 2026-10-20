@@ -7,39 +7,47 @@ import { parseArgs, rejectUnknownFlags } from './args.js';
  * `musterd send` now refuses a flag it does not know (lane `01M5D5J8HQG`), so THAT command no
  * longer loses an argument. Every other command still does: the parser has no vocabulary, so any
  * `--name` it has not heard of takes the NEXT token as its value and drops it. `musterd lane claim
- * --lan 01M5ABC` loses the lane id; `musterd send --body "the words"` (before the narrow fix) sent
- * an act with an empty body and reported success.
+ * --lan 01M5ABC` loses the lane id; `musterd send --body "the words"` (before the narrow fix)
+ * sent an act with an empty body and reported success.
  *
- * The invariant this file pins: **no argv token vanishes.** Every token the user typed ends up
- * used — a positional, a flag value, a meta pair — or named in the refusal, so the mistake is
- * fixable at once. A token that is silently gone is the whole defect.
+ * The invariant this file pins: **no argv token vanishes quietly.** Every token the user typed is
+ * either APPLIED by the command, or the command REFUSES and says which flag's value it did not use.
+ * A token that is silently gone is the whole defect.
  *
- * The two cases below FAIL on the current code. They are the falsifier: they say what the general
- * layer owes, and they are what the change must make true.
+ * The two shapes below FAIL on the code as it stood before this lane's change. They are the
+ * falsifier: they say what the layer owes, and they are what the change must make true.
  */
-describe('no argv token vanishes', () => {
-  it('a flag the CLI does not know is refused, and the refusal names the value it would have eaten', () => {
-    const parsed = parseArgs(['--to', 'stanley', '--act', 'message', '--body', 'the words']);
-    // The parser cannot know `--body` is not a flag, so it takes the value — the words are in the
-    // flags map under the unknown name, not gone. What must not happen is a refusal that drops the
-    // value on the floor: the user is left not knowing WHERE THE WORDS WENT.
-    expect(parsed.flags['body']).toBe('the words');
-    expect(() => rejectUnknownFlags(parsed.flags, ['to', 'act'], 'the body is positional')).toThrow(
-      /the words/,
-    );
-  });
-
+describe('no argv token vanishes quietly', () => {
   it('a value flag can be written --flag=value, so its value is never the next token', () => {
-    // Today the name becomes "to=alfie" and the flag `to` is never set: the flag is ignored and
-    // the value is lost, silently. `--to=alfie` is the form every other CLI teaches, and it is
-    // the shape in which a value can never be eaten by a neighbouring flag.
+    // Before: the name became "to=alfie" and the flag `to` was never set, so the value was
+    // silently dropped — `musterd huddle open "why" --anchor /tmp/x --to=alfie` took no recipient
+    // and opened the huddle on @team.
     const parsed = parseArgs(['--to=alfie', '--act=message']);
     expect(parsed.flags['to']).toBe('alfie');
     expect(parsed.flags['act']).toBe('message');
     expect(Object.keys(parsed.flags)).not.toContain('to=alfie');
   });
 
-  it('every token is accounted for: used, or named in the refusal', () => {
+  it('a refusal names the flag whose value it did not use', () => {
+    const parsed = parseArgs(['--to', 'stanley', '--act', 'message', '--body', 'the words']);
+    // The parser cannot know `--body` is not a flag, so it takes the value: the words sit in the
+    // flags map under the unknown name, where no command reads them. What must not happen is a
+    // refusal that leaves the user not knowing a value was there — or one that QUOTES it, since
+    // the CLI holds secret-bearing flags (away-token, seeds-token, slack-bot-token, tls-key, sig)
+    // and a mistyped one would put a credential in the terminal.
+    expect(parsed.flags['body']).toBe('the words');
+    let refusal = '';
+    try {
+      rejectUnknownFlags(parsed.flags, ['to', 'act'], 'the body is positional');
+    } catch (e) {
+      refusal = (e as Error).message;
+    }
+    expect(refusal).toMatch(/unknown flag --body/);
+    expect(refusal).toMatch(/the value after --body was not used/);
+    expect(refusal).not.toContain('the words');
+  });
+
+  it('every token is accounted for: applied, or reported as not used', () => {
     const argv = ['--to', 'stanley', '--act', 'message', '--body', 'the words'];
     const known = ['to', 'act'];
     const parsed = parseArgs(argv);
@@ -50,9 +58,9 @@ describe('no argv token vanishes', () => {
       refusal = (e as Error).message;
     }
     // A token is accounted for when the command APPLIES it — a positional, a meta pair, or the
-    // value of a flag the command knows — or when the refusal NAMES it. A value of a flag the
-    // command does not know is not applied: the command ignores it, so the only thing that keeps
-    // it from vanishing is the refusal naming it.
+    // value of a flag the command knows — or when the refusal REPORTS that the value after the
+    // named flag was not used. A value of a flag the command does not know is not applied: the
+    // command ignores it, so the refusal is the only thing that keeps it from vanishing quietly.
     const applied = new Set<string>([
       ...parsed.positionals,
       ...parsed.metaPairs,
@@ -63,10 +71,14 @@ describe('no argv token vanishes', () => {
     ]);
     for (const token of argv) {
       if (token.startsWith('--')) continue; // the flag name itself: it is either known or refused
-      const accounted = applied.has(token) || refusal.includes(token);
-      expect(accounted, `token "${token}" vanished: applied=${[...applied]} refusal="${refusal}"`).toBe(
-        true,
-      );
+      const accounted =
+        applied.has(token) ||
+        /the value after --\S+ was not used/.test(refusal) ||
+        refusal.includes(token);
+      expect(
+        accounted,
+        `token "${token}" vanished: applied=${[...applied]} refusal="${refusal}"`,
+      ).toBe(true);
     }
   });
 
@@ -75,16 +87,8 @@ describe('no argv token vanishes', () => {
     // an unknown flag, and a flag whose value looks like another flag. The shape changes where the
     // token lands; it must not change whether the token survives.
     const shapes: Array<{ name: string; argv: string[]; known: string[] }> = [
-      {
-        name: 'a known flag',
-        argv: ['--to', 'stanley', 'the words'],
-        known: ['to'],
-      },
-      {
-        name: 'an unknown flag',
-        argv: ['--to', 'stanley', '--body', 'the words'],
-        known: ['to'],
-      },
+      { name: 'a known flag', argv: ['--to', 'stanley', 'the words'], known: ['to'] },
+      { name: 'an unknown flag', argv: ['--to', 'stanley', '--body', 'the words'], known: ['to'] },
       {
         name: 'a flag whose value looks like another flag',
         argv: ['--to', '--alfie', 'the words'],
@@ -114,7 +118,10 @@ describe('no argv token vanishes', () => {
       ]);
       for (const token of shape.argv) {
         if (token.startsWith('--')) continue;
-        const accounted = applied.has(token) || refusal.includes(token);
+        const accounted =
+          applied.has(token) ||
+          /the value after --\S+ was not used/.test(refusal) ||
+          refusal.includes(token);
         expect(
           accounted,
           `[${shape.name}] token "${token}" vanished: applied=${[...applied]} refusal="${refusal}"`,

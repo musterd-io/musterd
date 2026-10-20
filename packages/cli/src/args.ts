@@ -67,7 +67,28 @@ export function parseArgs(argv: string[]): Parsed {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg.startsWith('--')) {
-      const name = arg.slice(2);
+      const body = arg.slice(2);
+      // ADR — the attached form: `--name=value` (lane `01M5D907S74XVT5YECNWB5VW5A`).
+      //
+      // Without it the whole token becomes the flag's NAME — "to=alfie" — so the flag is never
+      // set and the value is silently dropped. `musterd huddle open "why" --anchor /tmp/x
+      // --to=alfie` took no recipient and opened the huddle on @team. The attached form is the
+      // shape in which a value can never be eaten by a neighbouring flag.
+      const eq = body.indexOf('=');
+      if (eq >= 0) {
+        const name = body.slice(0, eq);
+        const raw = body.slice(eq + 1);
+        if (BOOLEAN_FLAGS.has(name)) {
+          if (raw !== 'true' && raw !== 'false')
+            throw new CliError(`--${name} takes no value — write --${name} or --${name}=false`, 2);
+          flags[name] = raw === 'true';
+          continue;
+        }
+        if (name === 'meta') metaPairs.push(raw);
+        else flags[name] = raw;
+        continue;
+      }
+      const name = body;
       if (BOOLEAN_FLAGS.has(name)) {
         flags[name] = true;
         continue;
@@ -126,6 +147,12 @@ export function flagStr(flags: Record<string, string | boolean>, name: string): 
  * The known set is the command's own value-flags plus the global ones every command inherits
  * ({@link BOOLEAN_FLAGS}, `args`, `server`, `team`, `as`). A typo becomes a refusal that names the
  * flag and the shape, instead of a silently truncated command.
+ *
+ * The refusal REPORTS that a value was dropped but does not echo it (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`): the CLI holds secret-bearing flags — `away-token`,
+ * `seeds-token`, `slack-bot-token`, `tls-key`, `sig` — so a mistyped one would put a credential in
+ * the terminal, and in whatever logs the terminal's output reaches (hard rule 5: never log
+ * secrets). The shape is what the user needs; the value is in their shell.
  */
 export function rejectUnknownFlags(
   flags: Record<string, string | boolean>,
@@ -135,7 +162,9 @@ export function rejectUnknownFlags(
   const allowed = new Set(known);
   for (const name of Object.keys(flags)) {
     if (allowed.has(name)) continue;
-    throw new CliError(`unknown flag --${name} for this command — ${shape}`, 2);
+    const dropped =
+      typeof flags[name] === 'string' ? `; the value after --${name} was not used` : '';
+    throw new CliError(`unknown flag --${name} for this command — ${shape}${dropped}`, 2);
   }
 }
 
