@@ -81,6 +81,14 @@ In each container (`adapter.py`):
   tool search off changes nothing there except that the musterd arm's context holds the musterd tool
   schemas from the start.
 
+- **The first end-to-end run (2026-10-20) scored a musterd arm that wasn't one.** The adapter
+  hard-coded the MCP entry at `/usr/local/lib/node_modules`, but the task image's Node, installed
+  from Debian packages by CooperBench's `setup.sh`, keeps global modules under `/usr/lib`. The
+  musterd MCP server failed to start, the agents had no musterd tools, and the gate failed open on
+  every edit (87 `401` responses in the daemon log). The pair still ran and scored, failing on merge
+  conflicts like the coop arm. The entry is now resolved with `npm root -g`, and **a run whose
+  musterd MCP server isn't `connected` at session start is an error, not a score**.
+
 ## Verified so far
 
 - `gate_smoke.py`, a real headless Claude Code with the arm's exact wiring (`claude-haiku-5-5`): it

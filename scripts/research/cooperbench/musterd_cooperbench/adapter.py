@@ -49,7 +49,11 @@ CONTAINER_PACK_DIR = "/opt/musterd-pack"
 CONTAINER_SEAT_HOME = "/tmp/musterd-seat"
 CONTAINER_MCP_CONFIG = "/tmp/musterd-mcp.json"
 CONTAINER_SETTINGS = f"{cc.CONTAINER_CLAUDE_CONFIG_DIR}/settings.json"
-CONTAINER_MCP_ENTRY = "/usr/local/lib/node_modules/@musterd/mcp/dist/index.js"
+# The MCP server is launched by its real file, never the npm bin symlink (#2974 fixed that, but the
+# file is the one path that cannot regress). Where npm puts global modules depends on how the task
+# image installed Node (nodesource on Debian: /usr/lib/node_modules), so it is resolved in the
+# container. The first e2e run hard-coded /usr/local/... and the MCP server failed to start.
+MCP_ENTRY_RELATIVE = "@musterd/mcp/dist/index.js"
 
 INSTALL_MUSTERD = (
     f"npm install -g --ignore-scripts --no-audit --no-fund {CONTAINER_PACK_DIR}/musterd-*.tgz "
@@ -85,6 +89,21 @@ def _admit_in_container(env: Any, pair: Any, agent_id: str, seat_exports: str, t
         time.sleep(0.5)
     log = read_file_from_container(env, "/tmp/musterd-claim.log")
     raise RuntimeError(f"{agent_id}: seat admission did not bind the repo: {log[-400:]}")
+
+
+def musterd_mcp_status(stream_text: str) -> str:
+    """The musterd MCP server's status in Claude Code's stream-json init event, or "absent"."""
+    for line in stream_text.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            for server in event.get("mcp_servers") or []:
+                if server.get("name") == "musterd":
+                    return str(server.get("status"))
+            return "absent"
+    return "absent"
 
 
 @register("claude_code_musterd")
@@ -160,10 +179,17 @@ class ClaudeCodeMusterdRunner:
                 {"command": f"printf %s {shlex.quote(cfg.GIT_EXCLUDE)} >> {CONTAINER_REPO_PATH}/.git/info/exclude"},
                 timeout=30,
             )
+            npm_root = (env.execute({"command": "npm root -g"}, timeout=60).get("output") or "").strip()
+            if not npm_root.startswith("/"):
+                raise RuntimeError(f"could not resolve npm's global root in the container: {npm_root[:200]}")
+            mcp_entry = f"{npm_root}/{MCP_ENTRY_RELATIVE}"
+            probe = env.execute({"command": f"test -f {shlex.quote(mcp_entry)}"}, timeout=30)
+            if probe.get("returncode") not in (0, None):
+                raise RuntimeError(f"musterd MCP entry missing in the container: {mcp_entry}")
             write_file_in_container(
                 env,
                 CONTAINER_MCP_CONFIG,
-                json.dumps(cfg.mcp_config(seat_env, command="node", args=[CONTAINER_MCP_ENTRY])),
+                json.dumps(cfg.mcp_config(seat_env, command="node", args=[mcp_entry])),
             )
             write_file_in_container(env, CONTAINER_SETTINGS, json.dumps(cfg.claude_settings(settings_env or None)))
 
@@ -194,6 +220,12 @@ class ClaudeCodeMusterdRunner:
 
             # 5. CooperBench's outputs.
             stream_text = read_file_from_container(env, cc.CONTAINER_STREAM_LOG)
+            # A run whose musterd MCP server never connected is not a musterd arm: the agent had no
+            # musterd tools, and the gate failed open. Fail it loudly instead of letting it score
+            # (the first e2e run, 2026-10-20, scored that way).
+            mcp_status = musterd_mcp_status(stream_text)
+            if mcp_status != "connected":
+                raise RuntimeError(f"musterd MCP server was not connected at session start (status: {mcp_status})")
             session_text = cc._find_session_jsonl(env)
             patch_text = normalize_patch(read_file_from_container(env, f"{CONTAINER_REPO_PATH}/patch.txt"))
         except Exception as e:  # noqa: BLE001 — recorded on the result, as the base adapter does

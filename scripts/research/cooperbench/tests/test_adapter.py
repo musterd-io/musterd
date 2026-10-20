@@ -19,6 +19,7 @@ class FakeEnv:
         self.commands: list[str] = []
         self.files: dict[str, str] = {}
         self.cleaned = False
+        self.stream = INIT_CONNECTED
 
     def execute(self, action, cwd="", *, timeout=None):
         cmd = action["command"]
@@ -31,11 +32,23 @@ class FakeEnv:
             path = cmd.split()[1].strip("'")
             if path.endswith("patch.txt"):
                 return {"returncode": 0, "output": "diff --git a/x b/x\n"}
+            if path.endswith("claude-stream.jsonl"):
+                return {"returncode": 0, "output": self.stream}
             return {"returncode": 0, "output": ""}
+        if cmd == "npm root -g":
+            return {"returncode": 0, "output": "/usr/lib/node_modules\n"}
         return {"returncode": 0, "output": "/usr/local/bin/musterd"}
 
     def cleanup(self):
         self.cleaned = True
+
+
+INIT_CONNECTED = json.dumps(
+    {"type": "system", "subtype": "init", "mcp_servers": [{"name": "musterd", "status": "connected"}]}
+)
+INIT_FAILED = json.dumps(
+    {"type": "system", "subtype": "init", "mcp_servers": [{"name": "musterd", "status": "failed"}]}
+)
 
 
 class FakeHost:
@@ -125,3 +138,29 @@ def test_the_pair_is_released_and_the_container_cleaned_even_on_failure(wired, m
     result = run()
     assert result.error == "no bind"
     assert envs[0].cleaned and released == ["r1"]
+
+
+def test_the_mcp_entry_is_resolved_from_npms_global_root(wired):
+    envs, _ = wired
+    run()
+    mcp = json.loads(envs[0].files[ad.CONTAINER_MCP_CONFIG])
+    assert mcp["mcpServers"]["musterd"]["args"] == ["/usr/lib/node_modules/@musterd/mcp/dist/index.js"]
+
+
+def test_a_run_whose_musterd_mcp_never_connected_is_an_error_not_a_score(wired, monkeypatch):
+    envs, _ = wired
+    original = FakeEnv.__init__
+
+    def failed_init(self, *a, **k):
+        original(self, *a, **k)
+        self.stream = INIT_FAILED
+
+    monkeypatch.setattr(FakeEnv, "__init__", failed_init)
+    result = run()
+    assert result.error is not None and "status: failed" in result.error
+
+
+def test_mcp_status_reads_the_init_event():
+    assert ad.musterd_mcp_status(INIT_CONNECTED) == "connected"
+    assert ad.musterd_mcp_status(INIT_FAILED) == "failed"
+    assert ad.musterd_mcp_status("") == "absent"
