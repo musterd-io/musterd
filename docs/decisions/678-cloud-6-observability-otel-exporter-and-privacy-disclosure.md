@@ -24,6 +24,7 @@ The server already emits OTel spans and metrics via `@opentelemetry/api` (`packa
 - Self-hosted daemons are unaffected: no endpoint, no telemetry, no new dependency loaded (the exporter is only imported when the endpoint is configured).
 - Cloud deploys set `MUSTERD_OTLP_ENDPOINT` (and headers) as Fly secrets; rotating the vendor endpoint requires a redeploy.
 - PRIVACY.md's top line ("musterd does not phone home") is qualified by the hosted section, per spec §10.
+- _(2026-10-20, lane `01M3Z436EAAVEM19MS7V95ZQSX`: `redactSpanPath` in `packages/server/src/otel/httpTrace.ts` strips seat/member path segments (`/trace/seats/<seat>`, `/members/<name>`, `/members/agents/<name>`, `/nodes/bindings/<seat>`) to `[seat]` before stamping `url.path`, and `PRIVACY.md` states that seat names are never exported in HTTP request spans and names the vendor-neutral OTLP/HTTP export posture — Grafana Cloud / Honeycomb — rather than locking in a single vendor SDK, per Decision 1.)_
 
 ## Observability & Evaluation
 
