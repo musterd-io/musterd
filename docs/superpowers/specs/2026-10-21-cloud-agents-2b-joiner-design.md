@@ -5,7 +5,7 @@
 **Status:** design, from the 2026-10-17 cloud agents brainstorm (§4.3, §6 #4) and nick's call on
 2026-10-21 (joiner daemon, not a remote actuator). Nothing is built.
 **Lane:** `01M55Y5E28EPF6RNTCREYKQ6CP` (goal `cloud-agents`)
-**Decision:** ADR 688 (to write; `pnpm adr:next` on 2026-10-21)
+**Decision:** [ADR 688](../../decisions/688-sponsor-scoped-credentials-replicate-to-joiners.md)
 
 ## 1. What this is for
 
@@ -113,17 +113,17 @@ needs no tailnet.
 
 ## 5. Increments (lanes under goal `cloud-agents`; each lands on its own)
 
-1. **ADR 688** — the decision in §3.1 (this lane's first PR; draft PR first, ADR 223).
-2. **Sync: sponsor-scoped credentials and pinned provisions replicate** — events, projectors,
+1. **ADR 688** — the decision in §3.1 (this lane, `01M55Y5E28EPF6RNTCREYKQ6CP`; draft PR #3073 first, ADR 223).
+2. **Sync: sponsor-scoped credentials and pinned provisions replicate** (lane `01M5DTS8DC0S69GMQ3BN13FHKR`) — events, projectors,
    `withDrivers` store tests, the push-residence test of §3.1.4. Server + protocol-adjacent;
    needs the ADR before a line of it.
-3. **Host loop: `--cloud-provision` against a joiner** — a joiner may claim only its pinned
+3. **Host loop: `--cloud-provision` against a joiner** (lane `01M5DTSFB6MN2T3BPRBFRFX4A3`) — a joiner may claim only its pinned
    provisions; `hostKeyScope` from the replicated roster; the hub-asleep path logs `hub_unreachable`
    and keeps polling. Scope `packages/cli/src/host/**`.
-4. **The machine: hub mode in `deploy/cloud-agent`** — entrypoint (tailnet, join, serve),
+4. **The machine: hub mode in `deploy/cloud-agent`** (lane `01M5DTSKABX7QM3V851Y193B1M`) — entrypoint (tailnet, join, serve),
    `create.sh --hub <name>` (mints the invite and the host key on the hub, pins the provision),
    README. Delta's folder is deleted in this increment; its log stays.
-5. **Dogfood reading** — one seat on the revive hub for a week, appended to
+5. **Dogfood reading** (lane `01M5DTSQ7BKX54NG9V3PHVK4A5`) — one seat on the revive hub for a week, appended to
    `docs/perf/cloud-seat.md`: wake latency against the laptop baseline, what happened across
    hub sleeps, every human step. Closes the lane.
 
