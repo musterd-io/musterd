@@ -609,6 +609,8 @@ export interface Actors {
    *  lanyard toss waits for this rather than being thrown at the door. */
   reachedMark(name: string): boolean;
   active(): boolean;
+  /** Someone is on their feet (a walk in flight). Narrower than `active`, which also counts gestures. */
+  walkingAny(): boolean;
 }
 
 export function createActors(): Actors {
@@ -1797,6 +1799,9 @@ export function createActors(): Actors {
     },
     active() {
       return walks.size > 0 || gestures.size > 0;
+    },
+    walkingAny() {
+      return walks.size > 0;
     },
   };
 }

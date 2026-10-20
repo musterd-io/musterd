@@ -1406,7 +1406,20 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
-### 2026-10-20 — the live-loads-fast bar on the hub: met (lane `01M4VJS7EX`)
+### 2026-10-20 — `totalJsGzipBytes` 346,000 → 346,500 B: the office walks again (lane `01M5DMJ7XA`, ADR 686)
+
+| Budget   | Before (main `8d31fb3e`, same laptop) | This branch (laptop) | Ceiling                    |
+| -------- | ------------------------------------- | -------------------- | -------------------------- |
+| total JS | 345,583 B                             | 346,009 B (+426)     | RAISED 346,000 → 346,500 B |
+
+The walk floor in `decideAmbient`: the lounge members in the pool, the rotation's taken-last guard,
+the errand-only beat pick, and the coffee fallbacks. It lands in the office-scene chunk, which is lazy,
+so initial JS does not move (144.1 KB). That leaves 9 B over the old ceiling locally, with CI's ~450 B
+gzip gap still to come, so the raise is local + that gap.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 346,000 B with this change in.
+
+
 
 `bash scripts/perf/live-paint-bar.sh revive 5`, run by nick on the hub (`mac`) at 20:52Z. Load average
 16.72 / 9.84 / 9.18, so heavier than the "ordinary load" the bar names, not lighter.

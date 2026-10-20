@@ -12,6 +12,8 @@ import {
   COVERAGE_WINDOW_SLOTS,
   decideAmbient,
   roll,
+  rollDecision,
+  WALK_FLOOR_SLOTS,
   slotAt,
   slotRng,
 } from './ambientSeed';
@@ -167,20 +169,32 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
   });
 
   it("fires at the occupancy curve's rate — the six-member pool sits mid-ramp", () => {
-    let fired = 0;
-    for (let s = 0; s < 5000; s++) if (decideAmbient('revive', s, pool).kind !== 'none') fired++;
+    // The walk floor overrides some slots outright; the curve is the lattice's draw on the others.
+    let fired = 0,
+      drawn = 0;
+    for (let s = 0; s < 5000; s++) {
+      const d = decideAmbient('revive', s, pool);
+      if ('floor' in d && d.floor) continue;
+      drawn++;
+      if (d.kind !== 'none') fired++;
+    }
     const want = ambientFireP(pool.members.length);
-    expect(fired / 5000).toBeGreaterThan(want - 0.03);
-    expect(fired / 5000).toBeLessThan(want + 0.03);
+    expect(fired / drawn).toBeGreaterThan(want - 0.03);
+    expect(fired / drawn).toBeLessThan(want + 0.03);
   });
 
   it('a fuller room fires more often than a room of two — the whole point of E1b', () => {
     const rate = (n: number) => {
       const members = Array.from({ length: n }, (_, i) => `m${i}`);
       let fired = 0;
-      for (let s = 0; s < 5000; s++)
-        if (decideAmbient('revive', s, { members, pairs: [] }).kind !== 'none') fired++;
-      return fired / 5000;
+      let drawn = 0;
+      for (let s = 0; s < 5000; s++) {
+        const d = decideAmbient('revive', s, { members, pairs: [] });
+        if ('floor' in d && d.floor) continue;
+        drawn++;
+        if (d.kind !== 'none') fired++;
+      }
+      return fired / drawn;
     };
     const two = rate(2);
     const full = rate(AMBIENT_FULL_ROOM);
@@ -194,6 +208,7 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
       member = 0;
     for (let s = 0; s < 10_000; s++) {
       const d = decideAmbient('revive', s, pool);
+      if ('floor' in d && d.floor) continue;
       if (d.kind === 'pet') pet++;
       else if (d.kind === 'pair') pair++;
       else if (d.kind === 'member' || d.kind === 'meet') member++;
@@ -247,14 +262,16 @@ describe('ambientPool — a working member keeps their desk (ADR 464 §3.1, fals
     ['ev', node('ev', 'active')],
   ]);
 
-  it('lists every present desk member for micro-gestures, working or not', () => {
-    expect(ambientPool(placements, nodes).members.sort()).toEqual(['ada', 'bo', 'cy', 'di']);
+  it('lists every present member at a desk or on the leisure furniture, working or not', () => {
+    // ev is idle on the lounge: until 2026-10-20 the pool was desk-only, which left the idle members
+    // (seated on the leisure furniture first) without a single beat.
+    expect(ambientPool(placements, nodes).members.sort()).toEqual(['ada', 'bo', 'cy', 'di', 'ev']);
   });
 
-  it('never sends a working member on an errand', () => {
+  it('never sends a working member on an errand, and lets an idle one on the lounge go', () => {
     const pool = ambientPool(placements, nodes);
     expect(pool.errands).not.toContain('ada');
-    expect(pool.errands?.sort()).toEqual(['bo', 'cy', 'di']);
+    expect(pool.errands?.sort()).toEqual(['bo', 'cy', 'di', 'ev']);
   });
 
   it('never pairs a working member for a desk chat', () => {
@@ -274,10 +291,11 @@ describe('ambientPool — a working member keeps their desk (ADR 464 §3.1, fals
 describe('decideAmbient — the aisle meet (nick, 2026-10-12)', () => {
   const pool = { members: ['ada', 'bo', 'cy', 'dev'], pairs: [] as Array<[string, string]>, errands: ['ada', 'bo', 'cy'] };
   it('picks two different errand-free members, ~18% of what is left after pet and pair', () => {
+    // The lattice's own draw (`rollDecision`), so the walk floor's overrides are not in the sample.
     let meet = 0,
       rest = 0;
     for (let s = 0; s < 10_000; s++) {
-      const d = decideAmbient('revive', s, pool);
+      const d = rollDecision('revive', s, pool, [...pool.members].sort());
       if (d.kind === 'meet') {
         meet++;
         expect(d.a).not.toBe(d.b);
@@ -303,7 +321,8 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
     const out: string[] = [];
     for (let s = w * COVERAGE_WINDOW_SLOTS; s < (w + 1) * COVERAGE_WINDOW_SLOTS; s++) {
       const d = decideAmbient(team, s, poolOf(n));
-      if (d.kind === 'member') out.push(d.who);
+      // A floor walk spends the next turn when that member may walk; one picked off turn is not a turn.
+      if (d.kind === 'member' && !d.offTurn) out.push(d.who);
       // A companion takes the next turn of the same rotation (ADR 617), right after the slot's own.
       if (d.kind !== 'none' && d.companion) out.push(d.companion);
     }
@@ -344,6 +363,8 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
       if (d.kind === 'none') continue;
       busyUntil = s + 1 + Math.floor(roll(team, s, 'len') * 2);
       if (d.kind === 'member') gestured.add(d.who);
+      // Two members meeting in the aisle walked across the room: neither was still.
+      if (d.kind === 'meet') gestured.add(d.a).add(d.b);
       if (d.companion) gestured.add(d.companion);
     }
     return 1 - gestured.size / n;
@@ -399,5 +420,50 @@ describe('decideAmbient — who fidgets is a rotation (lane 01M4V9VNMY, spec L1)
       expect(withCompanion / fired).toBeGreaterThan(0.55);
       expect(withCompanion / fired).toBeLessThan(0.9);
     });
+  });
+});
+
+describe('decideAmbient — the walk floor (nick, 2026-10-20: the stream looked frozen)', () => {
+  const walking = (d: ReturnType<typeof decideAmbient>) =>
+    d.kind === 'meet' || (d.kind === 'member' && d.walk === true);
+  const room = (n: number, idle: number): AmbientPool => {
+    const members = Array.from({ length: n }, (_, i) => `m${String(i).padStart(2, '0')}`);
+    return { members, errands: members.slice(0, idle), pairs: [] };
+  };
+
+  it('never lets more than WALK_FLOOR_SLOTS slots pass without a walk while anyone may walk', () => {
+    for (const team of ['revive', 'a', 'b', 'c']) {
+      for (const [n, idle] of [[14, 10], [8, 1], [3, 3]] as const) {
+        let gap = 0;
+        for (let s = 0; s < 3_000; s++) {
+          gap = walking(decideAmbient(team, s, room(n, idle))) ? 0 : gap + 1;
+          expect(gap).toBeLessThan(WALK_FLOOR_SLOTS);
+        }
+      }
+    }
+  });
+
+  it('only ever sends a member who may walk — a working member keeps their desk (ADR 464 §3.1)', () => {
+    const pool = room(10, 3);
+    for (let s = 0; s < 3_000; s++) {
+      const d = decideAmbient('revive', s, pool);
+      if (d.kind === 'member' && d.walk) expect(pool.errands).toContain(d.who);
+      if (d.kind === 'meet') {
+        expect(pool.errands).toContain(d.a);
+        expect(pool.errands).toContain(d.b);
+      }
+    }
+  });
+
+  it('stays quiet when everyone is working: nobody to send, so no forced walk', () => {
+    for (let s = 0; s < 1_000; s++) {
+      const d = decideAmbient('revive', s, room(6, 0));
+      expect('floor' in d && d.floor).toBeFalsy();
+    }
+  });
+
+  it('is a pure replay: two viewers agree on every floor walk', () => {
+    const log = () => Array.from({ length: 400 }, (_, s) => JSON.stringify(decideAmbient('revive', s, room(14, 10))));
+    expect(log()).toEqual(log());
   });
 });
