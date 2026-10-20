@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  buildBackupLaunchdPlist,
   createR2Store,
   decryptDump,
   encryptDump,
@@ -65,6 +66,16 @@ describe('Cloud 3 encrypted R2 backups (ADR 679)', () => {
       'console/2026-09-19.json.gz.enc',
       'pg_dump/trace/2026-10-10.dump.enc',
     ]);
+
+    const plist = buildBackupLaunchdPlist({
+      nodePath: '/opt/homebrew/bin/node',
+      repoRoot: '/Users/nick/.musterd/runtime',
+      logPath: '/Users/nick/.musterd/cloud/backup.log',
+    });
+    expect(plist).toContain('<string>studio.sandrise.musterd-cloud-backup</string>');
+    expect(plist).toContain('<key>StartCalendarInterval</key>');
+    expect(plist).toContain('<integer>3</integer>');
+    expect(plist).toContain('<integer>17</integer>');
   });
 
   it('dumps per-team coordination + trace + console over SigV4 to an R2 endpoint, prunes expired keys, and restores onto a fresh Postgres database', async () => {

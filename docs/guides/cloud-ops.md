@@ -157,17 +157,23 @@ node scripts/cloud/backup.mjs --keygen   # writes ~/.musterd/cloud/backup.key (0
 npx wrangler r2 bucket create musterd-cloud-backups
 ```
 
-3. Run a dry-run or live backup pass (reads `~/.musterd/cloud/neon.env` automatically when `MUSTERD_DATABASE_OWNER_URL` is not in the environment):
+3. Run a dry-run or live backup pass, or install the nightly schedule (reads `~/.musterd/cloud/neon.env` and `~/.musterd/cloud/backup.key` automatically when env vars are not set):
 
 ```sh
 node scripts/cloud/backup.mjs --dry-run
-node scripts/cloud/backup.mjs --wrangler   # uploads via wrangler R2 auth
-node scripts/cloud/backup.mjs              # uploads via S3 SigV4 (MUSTERD_BACKUP_R2_*)
+node scripts/cloud/backup.mjs --wrangler                        # uploads + lists/prunes via wrangler R2 auth
+node scripts/cloud/backup.mjs                                   # uploads + lists/prunes via S3 SigV4 (MUSTERD_BACKUP_R2_*)
+node scripts/cloud/backup.mjs --install-launchd --kickstart     # installs ~/Library/LaunchAgents/studio.sandrise.musterd-cloud-backup.plist (03:17 daily)
 ```
+
+Nightly scheduling is wired in two places:
+- **Operator LaunchAgent (`studio.sandrise.musterd-cloud-backup`):** installed by `node scripts/cloud/backup.mjs --install-launchd`, runs `scripts/cloud/backup.mjs --wrangler` daily at `03:17` local time and appends structured JSON lines to `~/.musterd/cloud/backup.log`. In `--wrangler` mode, `createWranglerR2Store.list()` queries Cloudflare's R2 REST endpoint (`/client/v4/accounts/<id>/r2/buckets/musterd-cloud-backups/objects`) so expired 30d/7d dumps are pruned on every nightly run.
+- **GitHub Actions workflow (`.github/workflows/cloud-backup.yml`):** cron `17 3 * * *` UTC (`workflow_dispatch` also enabled), running `node scripts/cloud/backup.mjs` when `MUSTERD_BACKUP_KEY`, `MUSTERD_DATABASE_OWNER_URL`, and `MUSTERD_BACKUP_R2_*` repository secrets are configured.
 
 Required env for S3 SigV4 upload: `MUSTERD_DATABASE_OWNER_URL` (or `_OPERATOR_URL`, or `~/.musterd/cloud/neon.env`), `MUSTERD_TRACE_DATABASE_OWNER_URL` (or derived `<db>_trace`), `MUSTERD_BACKUP_R2_ACCOUNT_ID`, `MUSTERD_BACKUP_R2_ACCESS_KEY_ID`, `MUSTERD_BACKUP_R2_SECRET_ACCESS_KEY` (and optional `MUSTERD_BACKUP_R2_BUCKET`, `MUSTERD_CONSOLE_DATABASE_OWNER_URL`, `MUSTERD_BACKUP_PG_DUMP=1`).
 
-**Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `node scripts/cloud/backup.mjs --wrangler` exported, gzipped, AES-256-GCM encrypted, and uploaded `teams/revive/coordination/2026-10-20.json.gz.enc` (1,907 B, 54 team-owned tables) and `teams/revive/trace/2026-10-20.json.gz.enc` (177 B), and round-trip `decryptDump` verified the downloaded R2 object.
+**Verified 2026-10-20 (lane `01M3Z42KWHFJJPKJRBH2FX5GMD`):** `musterd-cloud-backups` R2 bucket created in the Cloudflare account; `~/.musterd/cloud/backup.key` generated (mode 600); `studio.sandrise.musterd-cloud-backup` LaunchAgent installed and kickstarted, recording in `~/.musterd/cloud/backup.log`:
+`{"msg":"cloud_backup_completed","date":"2026-10-20","dry_run":false,"teams":1,"uploaded":2,"total_bytes":2087,"pruned":0}` (`teams/revive/coordination/2026-10-20.json.gz.enc` and `teams/revive/trace/2026-10-20.json.gz.enc`), and round-trip `decryptDump` verified the downloaded R2 object.
 
 ## Check it
 
