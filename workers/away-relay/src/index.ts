@@ -214,12 +214,16 @@ export default {
       // however plausible — starts no install, so a leaked link cannot be re-bound.
       const stateHash = await sha256Hex(installState);
       let registered = false;
+      let registeredDestination: unknown = null;
       try {
         const checkRes = await env.AWAY_RELAY.get(env.AWAY_RELAY.idFromName(slug)).fetch(
           new Request(`https://relay.internal/install-state/${stateHash}`),
         );
-        registered =
-          checkRes.ok && ((await checkRes.json()) as { registered?: boolean }).registered === true;
+        const check = checkRes.ok
+          ? ((await checkRes.json()) as { registered?: boolean; destination?: unknown })
+          : null;
+        registered = check?.registered === true;
+        registeredDestination = check?.destination ?? null;
       } catch {
         registered = false;
       }
@@ -230,9 +234,11 @@ export default {
         body: {
           state: installState,
           slug,
-          // A hosted team's link names its Cloud server (spec: Slack ingress §3); a laptop
-          // daemon's link names nothing and its record is held by its relay object.
-          destination: cloudDestinationFrom(url.searchParams.get('dest')),
+          // The destination comes only from what the team's daemon registered at mint
+          // over its authenticated socket (spec: Slack ingress §3) — never from this
+          // link. A `dest` query parameter selects nothing; a laptop daemon registers
+          // none and its record is held by its relay object.
+          destination: cloudDestinationFrom(registeredDestination),
         },
       });
       if (!recorded) return new Response('install registry unavailable', { status: 503 });
@@ -611,9 +617,16 @@ export class TeamRelay implements DurableObject {
       // install flow accepts a state only when the named team's object holds its hash.
       this.state.storage.sql.exec(
         `CREATE TABLE IF NOT EXISTS install_states (
-           state_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL
+           state_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, destination TEXT
          )`,
       );
+      // Objects created before the destination column: add it; a duplicate-column
+      // error just means it is already there.
+      try {
+        this.state.storage.sql.exec('ALTER TABLE install_states ADD COLUMN destination TEXT');
+      } catch {
+        // already migrated
+      }
     });
   }
 
@@ -625,13 +638,17 @@ export class TeamRelay implements DurableObject {
       const row = this.state.storage.sql
         .exec<{
           created_at: number;
-        }>('SELECT created_at FROM install_states WHERE state_hash = ?', stateCheck[1])
+          destination: string | null;
+        }>('SELECT created_at, destination FROM install_states WHERE state_hash = ?', stateCheck[1])
         .toArray()[0];
       const live = row !== undefined && installStateLive(row.created_at, null, Date.now());
-      return new Response(JSON.stringify({ registered: live }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ registered: live, destination: live ? (row?.destination ?? null) : null }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
     }
     // Internal: the Worker hands this object one install record after the OAuth exchange.
     if (request.method === 'PUT' && url.pathname === '/install-record') {
@@ -874,10 +891,11 @@ export class TeamRelay implements DurableObject {
     const now = Date.now();
     if (frame.type === 'install_state') {
       this.state.storage.sql.exec(
-        `INSERT INTO install_states (state_hash, created_at) VALUES (?, ?)
+        `INSERT INTO install_states (state_hash, created_at, destination) VALUES (?, ?, ?)
          ON CONFLICT(state_hash) DO NOTHING`,
         frame.state_hash,
         now,
+        cloudDestinationFrom(frame.destination),
       );
       return;
     }

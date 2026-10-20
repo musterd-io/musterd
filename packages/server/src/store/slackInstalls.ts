@@ -27,17 +27,34 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+/**
+ * A Cloud destination for one install (spec: Slack ingress §3): the hosted team's
+ * server base, as an https origin. Anything else — http, a path, a userinfo trick —
+ * is no destination, and the install falls back to the relay-object transport.
+ */
+export function cloudDestinationFrom(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null;
+  try {
+    const url = new URL(v);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    if (url.pathname !== '/' && url.pathname !== '') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 /** Mint a one-time install state for this team; the caller shows it once, in the link. */
 export async function createSlackInstallRequest(
   db: Driver,
-  input: { teamId: string; actor: string; now?: number },
+  input: { teamId: string; actor: string; destination?: string | null; now?: number },
 ): Promise<{ state: string; expiresAt: number }> {
   const now = input.now ?? Date.now();
   const state = randomBytes(32).toString('base64url');
   await db.run(
-    `INSERT INTO slack_install_requests (team_id, state_hash, created_by, created_at, consumed_at)
-     VALUES (?, ?, ?, ?, NULL)`,
-    [input.teamId, sha256(state), input.actor, now],
+    `INSERT INTO slack_install_requests (team_id, state_hash, created_by, created_at, consumed_at, destination)
+     VALUES (?, ?, ?, ?, NULL, ?)`,
+    [input.teamId, sha256(state), input.actor, now, cloudDestinationFrom(input.destination)],
   );
   return { state, expiresAt: now + STATE_TTL_MS };
 }
@@ -120,12 +137,24 @@ export async function listLiveInstallStateHashes(
   teamId: string,
   now: number = Date.now(),
 ): Promise<string[]> {
-  const rows = await db.all<{ state_hash: string }>(
-    `SELECT state_hash FROM slack_install_requests
+  return (await listLiveInstallStates(db, teamId, now)).map((r) => r.stateHash);
+}
+
+/** Live install states with the Cloud destination registered at mint, if any. */
+export async function listLiveInstallStates(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<{ stateHash: string; destination: string | null }[]> {
+  const rows = await db.all<{ state_hash: string; destination: string | null }>(
+    `SELECT state_hash, destination FROM slack_install_requests
       WHERE team_id = ? AND consumed_at IS NULL AND created_at > ?`,
     [teamId, now - STATE_TTL_MS],
   );
-  return rows.map((r) => r.state_hash);
+  return rows.map((r) => ({
+    stateHash: r.state_hash,
+    destination: cloudDestinationFrom(r.destination),
+  }));
 }
 
 /** The team's live install, token included — store-internal; listings never carry it. */

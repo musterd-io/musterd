@@ -149,6 +149,17 @@ own change.
   (`install_state` frame), the install flow accepts a state only when the named team's
   object holds its hash, and the registry's state write is insert-only — a state bound
   to one team can never be re-bound, and its consumption and clock never reset.
+- 2026-10-20 — increment 10 re-review (ryder, declined #3044): the Cloud destination was
+  taken from the install link's unauthenticated `dest` parameter, so whoever crafted the
+  link chose where the bot token was dispatched — decision 2's "no request field selects
+  a destination" applied to the link too, and it did not hold. Fixed: the hosted server
+  registers its operator-configured public origin (`MUSTERD_PUBLIC_ORIGIN`, an https
+  origin) as the `install_state` frame's `destination` at mint and on every connect; the
+  relay records only that registered destination and ignores any `dest` on the link.
+  SPEC A.29 carries the wire rule. Two non-blocking notes were left: the attestation
+  still signs `<timestamp>.<raw body>` without the path (each route re-checks team and
+  token, so a replay lands nowhere), and a server with no ingress key still answers
+  `server_error` — the protocol has no unavailable code, and adding one stays ADR-gated.
 
 ## Observability & Evaluation
 

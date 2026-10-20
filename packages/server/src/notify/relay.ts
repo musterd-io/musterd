@@ -22,7 +22,7 @@ import {
 import { channelBindingStanding, recordPairingIdentity } from '../store/channelBindings.js';
 import { answerAllowed, getChannelSettings } from '../store/channelSettings.js';
 import { insertMessage } from '../store/messages.js';
-import { listLiveInstallStateHashes, recordSlackInstall } from '../store/slackInstalls.js';
+import { listLiveInstallStates, recordSlackInstall } from '../store/slackInstalls.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
 import { backoffMs } from '../sync/streamJoiner.js';
 import { handleAppCallback, handleAppFetch } from './appAdapter.js';
@@ -320,10 +320,17 @@ export function startAwayRelay(ctx: Ctx): () => void {
             socket.send(JSON.stringify({ protocol: 1, type: 'install_sync' }));
             // Register every live install state we minted (hashes only): the relay
             // accepts a state only from the team whose object holds its hash.
-            void listLiveInstallStateHashes(ctx.db, team.id)
-              .then((hashes) => {
-                for (const state_hash of hashes)
-                  socket.send(JSON.stringify({ protocol: 1, type: 'install_state', state_hash }));
+            void listLiveInstallStates(ctx.db, team.id)
+              .then((states) => {
+                for (const s of states)
+                  socket.send(
+                    JSON.stringify({
+                      protocol: 1,
+                      type: 'install_state',
+                      state_hash: s.stateHash,
+                      destination: s.destination,
+                    }),
+                  );
               })
               .catch(() => {});
           })

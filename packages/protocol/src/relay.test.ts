@@ -28,6 +28,24 @@ describe('away relay frames (ADR 659)', () => {
         post: { url: 'not a url', body: 'x' },
       }).success,
     ).toBe(false);
+    // An install_state frame may carry the mint-registered Cloud destination.
+    const hash = 'a'.repeat(64);
+    expect(
+      RelayDaemonFrameSchema.parse({
+        protocol: RELAY_PROTOCOL_VERSION,
+        type: 'install_state',
+        state_hash: hash,
+        destination: 'https://cloud.example',
+      }),
+    ).toMatchObject({ type: 'install_state', destination: 'https://cloud.example' });
+    expect(
+      RelayDaemonFrameSchema.safeParse({
+        protocol: RELAY_PROTOCOL_VERSION,
+        type: 'install_state',
+        state_hash: hash,
+        destination: 'x'.repeat(257),
+      }).success,
+    ).toBe(false);
     // No frame may carry a credential-shaped field past the boundary.
     expect(
       RelayServerFrameSchema.safeParse({

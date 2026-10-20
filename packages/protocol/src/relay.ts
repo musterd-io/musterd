@@ -94,12 +94,15 @@ export type RelayAppBodyFrame = z.infer<typeof RelayAppBodyFrameSchema>;
  * Daemon → relay: register one Slack install state this daemon minted (ADR 668 decision 2,
  * increment 9). Only the hash crosses; the relay's install flow accepts a state only when
  * the named team's own object holds its hash, so a state can never be re-bound to another
- * team by whoever happens to hold the install link.
+ * team by whoever happens to hold the install link. A hosted daemon also registers its
+ * Cloud destination here, at mint, over this authenticated socket (away 10 decline fix):
+ * the install link carries no destination, and no request field selects one.
  */
 export const RelayInstallStateFrameSchema = z.object({
   protocol: version,
   type: z.literal('install_state'),
   state_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  destination: z.string().max(256).nullable().optional(),
 });
 export type RelayInstallStateFrame = z.infer<typeof RelayInstallStateFrameSchema>;
 

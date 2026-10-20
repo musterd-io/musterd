@@ -904,6 +904,23 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
   PRIMARY KEY (team_id, state_hash)
 )`,
   },
+  {
+    // Away 10 decline fix: an install request may carry the Cloud destination its
+    // hosted server registered at mint (`MUSTERD_PUBLIC_ORIGIN`, validated as an
+    // https origin), so the relay never takes a destination from the install link.
+    version: 120,
+    sqlite: (db) => {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('slack_install_requests')")
+        .pluck()
+        .all();
+      if (!cols.includes('destination'))
+        db.exec('ALTER TABLE slack_install_requests ADD COLUMN destination TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE slack_install_requests ADD COLUMN IF NOT EXISTS destination TEXT');
+    },
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (
