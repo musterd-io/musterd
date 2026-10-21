@@ -387,6 +387,18 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
   const reclaimable = optionalBool(row['reclaimable']);
   const wakeable = optionalBool(row['wakeable']);
   if (failed(reclaimable) || failed(wakeable)) return null;
+  // ADR 676 §8: `{count > 0, last_at}`, null (none in the window) or absent (older daemon).
+  const reportedRaw = row['reported_asks'];
+  const reported_asks =
+    reportedRaw === undefined || reportedRaw === null
+      ? (reportedRaw as null | undefined)
+      : isRecord(reportedRaw) &&
+          Number.isInteger(reportedRaw['count']) &&
+          (reportedRaw['count'] as number) > 0 &&
+          Number.isInteger(reportedRaw['last_at'])
+        ? { count: reportedRaw['count'] as number, last_at: reportedRaw['last_at'] as number }
+        : FAIL;
+  if (failed(reported_asks)) return null;
 
   return compact({
     id: row['id'],
@@ -421,6 +433,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
     wakeability: wakeability as Wakeability | undefined,
     resumable_at,
     quiescence,
+    reported_asks,
   }) as MemberSummary;
 }
 

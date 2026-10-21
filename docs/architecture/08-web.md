@@ -124,7 +124,7 @@ access; roster handles and Presence remain visible.
   plate carries a person glyph in their own hue in the provider slot, where it used to show the
   unknown "?" (`modelProviderIcon.ts` `HUMAN_GLYPH_SVG`). Click expands to the operator detail the roster rail used to carry
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
-  (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
+  (ADR 138/141), a `reported` chip when a human declined the seat's ask as "I did not expect this" (ADR 676 §8, also marked on the card itself), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
   At its foot, the Experiments section (`live/Experiments.tsx` + `experimentReads.ts`, ADR 644): every
   lane carrying `reads_on`, grouped by the server's `read_status` (overdue, due, waiting, read for 7

@@ -297,5 +297,17 @@ export const MemberSummarySchema = MemberSchema.extend({
    * bound" is a real state the server reports as null, distinct from an older daemon's absence.
    */
   residence: ResidenceSchema.nullish(),
+  /**
+   * ADR 676 §8: how many of this seat's asks a human declined as "I did not expect this" on the
+   * musterd app in the last {@link REPORTED_ASKS_WINDOW_MS}, and when the latest was. /live flags the
+   * seat with it; nothing is locked or blocked. Null: none in the window. Absent: an older daemon,
+   * or a reader outside the team.
+   */
+  reported_asks: z
+    .object({ count: z.number().int().positive(), last_at: z.number().int() })
+    .nullish(),
 });
+
+/** The window `reported_asks` counts over: a week, so a flag fades unless it recurs. */
+export const REPORTED_ASKS_WINDOW_MS = 7 * 24 * 60 * 60_000;
 export type MemberSummary = z.infer<typeof MemberSummarySchema>;

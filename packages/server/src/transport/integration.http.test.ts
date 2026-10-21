@@ -7,6 +7,7 @@ import { type Envelope, FEATURE_EPOCH, PROTOCOL_VERSION } from '@musterd/protoco
 import { describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer } from '../index.js';
+import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import { DUPLICATE_ENVELOPE_ID, insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -734,6 +735,33 @@ withDrivers('integration · http', (_o, kind) => {
       expect(rowFor('Ada')?.quiescence?.state).toBe('busy');
       expect(rowFor('Ada')?.quiescence?.source).toBe('audit');
       expect(rowFor('Ada')?.quiescence?.quiet_for_ms).toBeLessThan(120_000);
+    });
+
+    it('the roster flags a seat a human reported, to a team reader only (ADR 676 §8)', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+      await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickTok);
+      const teamRow = (await getTeamBySlug(h.server.store, 'dawn'))!;
+      const report = (seat: string) =>
+        appendAudit(h.server.store, teamRow.id, {
+          actor: null,
+          action: 'channel.answer_reported',
+          target: 'ask-1',
+          result: 'allow',
+          detail: { asking_seat: seat, binding_id: 'b1' },
+        });
+      await report('Ada');
+      await report('Ada');
+
+      const roster = await get('/teams/dawn/members', nickTok);
+      const rowFor = (n: string) => roster.json.members.find((m: any) => m.name === n);
+      expect(rowFor('Ada')?.reported_asks).toMatchObject({ count: 2 });
+      expect(rowFor('Lin')?.reported_asks).toBeNull();
+      // An unauthenticated read is public: it never names a seat a human reported.
+      const open = await get('/teams/dawn/members');
+      expect(open.status).toBe(200);
+      expect(open.json.members.find((m: any) => m.name === 'Ada')?.reported_asks).toBeUndefined();
     });
 
     it('ambient presence: a live watcher sees the offline→online transition event (ADR 057)', async () => {

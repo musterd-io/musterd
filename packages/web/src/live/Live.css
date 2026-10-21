@@ -3566,6 +3566,20 @@
   border: 1px solid color-mix(in srgb, var(--lc-muted) 28%, transparent);
   background: color-mix(in srgb, var(--lc-muted) 8%, transparent);
 }
+/* ADR 676 §8: the card's "reported" mark — the `behind` pill's shape in the danger ink, no fill
+   (ink on the card's own paper is the halted chip's measured ink without the tint that costs it). */
+.lc-seat__reported {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  letter-spacing: -0.01em;
+  color: var(--lc-danger-ink);
+  padding: 0 6px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lc-danger-ink) 40%, transparent);
+}
 /* The seat's monogram — white on `memberAvatar`, which targets a constant LUMINANCE (0.165) rather
    than a constant lightness, so the ink clears AA across the whole identity hue band. See
    `.lc-card__avatar` for the measurement that briefly took this letter away. */
@@ -4010,6 +4024,13 @@
 /* ADR 501: a human's hold on the seat — the one chip that says WHO to talk to. Same ink and fill
    recipe as `danger` (4.61:1 measured), under its own name so the gate and the tests can find it. */
 .lc-stat--halted {
+  color: var(--lc-danger-ink);
+  background: color-mix(in srgb, var(--lc-danger) 16%, transparent);
+}
+/* ADR 676 §8: a human declined this seat's ask as "I did not expect this" on the musterd app.
+   A trust signal, not a hold — it blocks nothing — so it borrows `halted`'s measured ink and fill
+   (4.61:1) under its own name, for the gate and the tests to find. */
+.lc-stat--reported {
   color: var(--lc-danger-ink);
   background: color-mix(in srgb, var(--lc-danger) 16%, transparent);
 }

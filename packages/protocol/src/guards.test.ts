@@ -43,6 +43,8 @@ const corpus: unknown[] = [
   { ...row, reclaimable: true, wakeable: false, wakeability: 'enrolled_host_stale' },
   { ...row, resumable_at: 12, quiescence: { state: 'quiet', quiet_for_ms: 10, source: 'audit' } },
   { ...row, quiescence: { state: 'unknown', quiet_for_ms: null, source: 'harness' } },
+  { ...row, reported_asks: { count: 2, last_at: 9 } },
+  { ...row, reported_asks: null },
   {
     ...row,
     presences: [
@@ -112,6 +114,8 @@ const corpus: unknown[] = [
     presences: [{ surface: 'cli', status: 'online', last_seen_at: 1, hearing_reason: '' }],
   },
   { ...row, quiescence: { state: 'busy', quiet_for_ms: 'a while', source: 'audit' } },
+  { ...row, reported_asks: { count: 0, last_at: 9 } },
+  { ...row, reported_asks: { count: 1 } },
   {
     ...row,
     working_hours: { timezone: 'Mars/Olympus', days: ['mon'], start: '09:00', end: '17:00' },
