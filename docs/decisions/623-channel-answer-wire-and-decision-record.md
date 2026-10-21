@@ -58,6 +58,8 @@ and so no consumer of "a human answered" can be handed a weaker proof than it as
 - The message's `from` is the bound human, so the reply reads in their thread. That is a presentation
   choice, not authority: the stamp and the audit row say it came through a channel, and no consumer treats
   a `message` as authorization. The daemon never stamps `A2` until A2 exists; a request for it is refused.
+  _(Amended 2026-10-21: A2 now exists for the musterd app, and it is not stamped here. See ADR 694 and
+  Consequences.)_
 
 ### 3. One helper decides what an answer is worth
 
@@ -153,6 +155,14 @@ rows are added to the audit action map.
   gives them the contract they plug into.
   Follows-up: lanes `01M515KT27S91S4547H24YXDTS` (2b), `01M515KYT64Z2FR1T15FT1CSAP` (2c),
   `01M515M0VMZR6AW0EDKS3WGJBY` (2d), `01M50XPYZ9877E494X2SV1EGTB` (pairing and binding store).
+- 2026-10-21, ADR 694 (lane 01M5BER5GX, 7a step 3b): A2 exists, for one ask kind on one channel. The
+  musterd app's answer to a human's verdict on a lane review redeems an A2 token, issued only for a
+  privileged ask; an advisory ask's token stays A1. That A2 does not travel as
+  `channel_answer.assurance`. The phone's answer is performed as the human's own `accept`/`decline`,
+  carrying the device signature as `meta.approval`, and ADR 662's gate verifies it on the act path the
+  same way it verifies a passkey verdict. `answerAuthority` is unchanged: a `channel_answer` is still
+  advisory whatever its assurance, and no channel stamps `A2`. Redemption is checked before the act
+  (a `preflight` that writes nothing) and settled after it.
 
 ## Observability & Evaluation
 

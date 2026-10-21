@@ -238,6 +238,15 @@ All four converged on one shape, and nick directed it be written as this ADR.
   signature, proof attached — sending nothing when the ceremony is cancelled, and
   showing the refusal instead of answering the ask away when one still comes back.
 
+- 2026-10-21, lane 01M5BER5GX ([ADR 694](694-phone-a2-lane-verdicts.md)): the phone authenticator
+  is wired for `human_accept` on the daemon. A paired phone's key (kind `phone`, P-256) signs the
+  descriptor's signing bytes as ECDSA SHA-256 DER, which is what the Secure Enclave emits;
+  `requireAuthority` already verified that form, and now a test pins it. The gate gains `checkOnly`:
+  every check, no spend, no approval row. The app channel uses it to refuse a bad verdict before
+  writing the act, then presents the same proof on the act path for real. Decision 5's "renders the
+  descriptor from server data" holds for the phone through `approvalWording` in protocol's node-free
+  `approval.ts`.
+
 ## Observability & Evaluation
 
 - **Traces:** every listed act's audit row records its assurance (`A2`), the authenticator kind

@@ -55,14 +55,18 @@ export function askDigest(body: string, metaJson: string | null): string {
 
 /**
  * Mint a token for one ask on one channel. The plaintext is returned once, to the caller that hands it
- * to the relay; it is never stored. A privileged ask gets no token: it gets no buttons (ADR 618 §4).
+ * to the relay; it is never stored. A privileged ask gets no token on an A1 channel: it gets no buttons
+ * (ADR 618 §4). It gets one only as an A2 token (ADR 694), which the musterd app redeems with a device
+ * signature that ADR 662's gate verifies; an advisory ask's token is always A1.
  */
 export async function issueAskChannelToken(
   db: Driver,
   input: IssueInput,
 ): Promise<{ token: string; expiresAt: number }> {
-  if (input.actionClass === 'privileged') {
-    throw new Error('a privileged ask gets no channel token (ADR 618 §4)');
+  if ((input.actionClass === 'privileged') !== (input.requiredAssurance === 'A2')) {
+    throw new Error(
+      'a privileged ask gets only an A2 channel token, an advisory ask only A1 (ADR 694)',
+    );
   }
   const token = randomBytes(32).toString('base64url');
   await db.run(
@@ -142,7 +146,10 @@ export interface RedeemInput {
   token: string;
   /** Callback route ask id; it must be the ask bound to the token. */
   askId: string;
-  /** The assurance the answering channel can prove. A2 is never accepted in v1 (ADR 623 §2). */
+  /**
+   * The assurance the answering channel can prove; it must be the one the token requires. A2 is
+   * presented only by the app adapter (ADR 694), after ADR 662's gate verified the device signature.
+   */
   assurance: Assurance;
   decision: Decision;
   /** The id the answer message will carry; the decision row records it. */
@@ -154,6 +161,13 @@ export interface RedeemInput {
   now: number;
   /** Writes the answer as the token-bound member inside the transaction. A throw rolls it back. */
   writeAnswer(t: Driver, authorizer: BindingAuthorizer): Promise<void>;
+  /**
+   * Run every check and stop before the claim: nothing is written, not even a refusal's audit row
+   * when it passes. An A2 answer (ADR 694) is checked this way first, because the act it performs
+   * goes through the act path — outside this transaction — and must not run on a token that
+   * redemption would then refuse.
+   */
+  preflight?: boolean;
 }
 
 export type RedeemResult =
@@ -226,17 +240,19 @@ export async function redeemAskChannelToken(
       if (!row) throw new Refuse('unknown_token');
       if (row.consumed_at !== null) throw new Refuse('consumed', row);
       if (input.now >= row.expires_at) throw new Refuse('expired', row);
-      // A2 is never accepted until it exists; and a token that requires more than was presented fails.
-      if (input.assurance === 'A2' || row.required_assurance !== input.assurance) {
+      // The presented assurance must be the token's own: A1 never redeems an A2 token, and an A2
+      // answer never redeems an advisory one (ADR 694). Issue pins A2 ⇔ privileged; re-checked here.
+      if (
+        row.required_assurance !== input.assurance ||
+        (row.action_class === 'privileged') !== (row.required_assurance === 'A2')
+      ) {
         throw new Refuse('assurance', row);
       }
       if (row.ask_id !== input.askId) throw new Refuse('conflict', row);
       const ask = await checks.askStanding(t, input.teamId, row.ask_id);
       if (!ask || !ask.open) throw new Refuse('conflict', row);
       if (ask.digest !== row.ask_digest) throw new Refuse('stale_revision', row);
-      if (ask.actionClass !== 'advisory' || ask.actionClass !== row.action_class) {
-        throw new Refuse('class_changed', row);
-      }
+      if (ask.actionClass !== row.action_class) throw new Refuse('class_changed', row);
       const standing = await checks.bindingStanding(
         t,
         input.teamId,
@@ -268,6 +284,8 @@ export async function redeemAskChannelToken(
       ) {
         throw new Refuse('binding_stale', row);
       }
+      if (input.preflight)
+        return { ok: true, decision: input.decision, messageId: input.answerMessageId };
 
       // The compare-and-set: one decision per ask, whichever channel gets here first.
       const claimed = await t.run(
@@ -288,7 +306,7 @@ export async function redeemAskChannelToken(
 
       await appendAudit(t, input.teamId, {
         actor: null,
-        action: 'channel.answer.advisory',
+        action: input.assurance === 'A2' ? 'channel.answer.a2' : 'channel.answer.advisory',
         target: row.ask_id,
         result: 'allow',
         detail: auditDetail(row, input, authorizer, { decision: input.decision }),

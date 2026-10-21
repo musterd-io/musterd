@@ -164,6 +164,16 @@ one gets tapped through.
   same way and needs the same re-key.
 - What a malicious relay can still do: drop or delay. It cannot read an ask, forge one, change one,
   replay one past its nonce, or turn an advisory answer into a listed-act answer.
+- 2026-10-21, lane 01M5BER5GX (increment 3b, [ADR 694](694-phone-a2-lane-verdicts.md)): listed-act
+  asks reach the phone for one kind, a human's verdict on a lane review (`human_accept`), built
+  against ADR 662 as it stood that day. The delivery carries an A2 token and one server-built
+  descriptor per decision, plus the payload each digest commits to. The app recomputes the digest and
+  renders the header with `approvalWording`, imported through the node-free
+  `@musterd/protocol/approval` subpath, so decision 6's "own fixed wording" is protocol's code, not a
+  copy. The answer's device signature is checked before anything is written, then the verdict is
+  performed as the human's own act through the route's gate. A refusal leaves the ask open. Other
+  privileged asks stay off the phone until their acts are gated (lane 01M5FZ5R2V). The fatigue
+  ceiling (decision 8) is the lane's next increment.
 
 ## Observability & Evaluation
 

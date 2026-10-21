@@ -119,8 +119,11 @@ export type AuditAction =
   // recorded (it authorizes nothing, ADR 618 §4); `refused` = a redemption was turned away, with a
   // closed `detail.reason`. Detail carries the human authorizer and the delivery actor separately; never
   // the token, its hash, a nonce, a signature or the body. `channel.answer.accepted` is reserved for the
-  // first class that can release work and is not written yet.
+  // first class that can release work and is not written yet. `a2` (ADR 694) = the musterd app's
+  // answer to a privileged ask was redeemed after ADR 662's gate verified its device signature on the
+  // act it performed; that act's own `authority.approved` row carries the key and kind.
   | 'channel.answer.advisory'
+  | 'channel.answer.a2'
   | 'channel.answer.refused'
   // ADR 618 §8 (away channels 4 pairing, lane 01M50XPYZ9877E494X2SV1EGTB): the binding lifecycle.
   // Detail carries the immutable provider identity and binding generation; never a raw nonce
@@ -759,6 +762,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'request.expired': 'none',
   // The relay is not a seat; the human is named in detail.authorizer, the delivery path in detail.delivery_actor.
   'channel.answer.advisory': 'none',
+  'channel.answer.a2': 'none',
   'channel.answer.refused': 'none',
   // The human on the original surface is the actor for every binding-lifecycle write.
   'channel.pair.proposed': 'actor',

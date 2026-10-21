@@ -116,6 +116,61 @@ withDrivers('human authority (ADR 662)', (o) => {
     expect(JSON.stringify(rows)).not.toContain(descriptor.nonce);
   });
 
+  it('a phone key signs as ECDSA P-256, DER; checkOnly verifies without spending (ADR 694)', async () => {
+    const db = await openStore();
+    const { team, nick } = await seed(db);
+    const phone = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const key = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: phone.publicKey.export({ format: 'der', type: 'spki' }).toString('base64url'),
+      kind: 'phone',
+    });
+    const base = {
+      teamId: team.id,
+      audience: team.slug,
+      presenter: nick,
+      credential: 'human' as const,
+      ...act,
+    };
+    const descriptor = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: nick.name,
+      ...act,
+    });
+    // What the Secure Enclave emits for ecdsaSignatureMessageX962SHA256: SHA-256, DER.
+    const proof = {
+      key_id: key.id,
+      nonce: descriptor.nonce,
+      signature: cryptoSign(
+        'sha256',
+        Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
+        phone.privateKey,
+      ).toString('base64url'),
+    };
+    const expected = { ok: true, assurance: 'A2', keyId: key.id, kind: 'phone' };
+    await expect(requireAuthority(db, { ...base, proof, checkOnly: true })).resolves.toEqual(
+      expected,
+    );
+    await expect(requireAuthority(db, { ...base, proof, checkOnly: true })).resolves.toEqual(
+      expected,
+    );
+    const rows = await listAudit(db, team.id, { limit: 20 });
+    expect(rows.filter((r) => r.action === 'authority.approved')).toHaveLength(0);
+    // The real presentation spends it, once.
+    await expect(requireAuthority(db, { ...base, proof })).resolves.toEqual(expected);
+    await expect(requireAuthority(db, { ...base, proof })).resolves.toEqual({
+      ok: false,
+      reason: 'nonce_reused',
+    });
+    // checkOnly still refuses what the gate refuses, and audits it.
+    await expect(
+      requireAuthority(db, { ...base, payload: { state: 'other' }, proof, checkOnly: true }),
+    ).resolves.toEqual({ ok: false, reason: 'nonce_reused' });
+  });
+
   it('a software key never qualifies as A2, however valid its signature', async () => {
     const db = await openStore();
     const { team, nick } = await seed(db);
