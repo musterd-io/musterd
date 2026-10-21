@@ -95,6 +95,38 @@ describe('start', () => {
       body: 'account=exa',
     });
     expect(blocked.status).toBe(403);
+    expect(await blocked.text()).toBe('That save did not come from this page.');
+
+    const opaque = await fetch(`${base}/accounts`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        origin: 'null',
+        'sec-fetch-site': 'same-origin',
+      },
+      body: 'account=grok',
+      redirect: 'manual',
+    });
+    expect(opaque.status).toBe(303);
+    expect(opaque.headers.get('location')).toBe('/');
+    expect(await readFile(join(dir, 'config.json'), 'utf8')).toContain('"grok"');
+
+    const crossed = await fetch(`${base}/accounts`, {
+      method: 'POST',
+      headers: { origin: 'null', 'sec-fetch-site': 'cross-site' },
+      body: 'account=exa',
+    });
+    expect(crossed.status).toBe(403);
+    expect(await crossed.text()).toBe('That save did not come from this page.');
+    expect(await readFile(join(dir, 'config.json'), 'utf8')).not.toContain('exa');
+
+    const bareNull = await fetch(`${base}/accounts`, {
+      method: 'POST',
+      headers: { origin: 'null' },
+      body: 'account=hume',
+    });
+    expect(bareNull.status).toBe(403);
+    expect(await readFile(join(dir, 'config.json'), 'utf8')).not.toContain('hume');
 
     const huge = await fetch(`${base}/accounts`, {
       method: 'POST',

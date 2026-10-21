@@ -45,10 +45,46 @@ export interface StartOpts {
   cursorToken?: string | null;
 }
 
+const SAVE_REFUSED = 'That save did not come from this page.';
+
 function localHost(host: string | undefined): boolean {
   if (host === undefined) return false;
   const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
   return name === '127.0.0.1' || name === 'localhost' || name === '::1';
+}
+
+function oneHeader(value: string | string[] | undefined): string | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.length === 1) return value[0];
+  if (value === undefined) return undefined;
+  return '';
+}
+
+function loopbackOrigin(origin: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const host = url.hostname;
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+/**
+ * The page sets Referrer-Policy: no-referrer, so a browser's own form sends
+ * Origin: null and Sec-Fetch-Site: same-origin. A foreign origin, or a
+ * cross-site fetch, is refused.
+ */
+function saveFromThisPage(req: IncomingMessage): boolean {
+  const origin = oneHeader(req.headers.origin);
+  const site = oneHeader(req.headers['sec-fetch-site']);
+  if (origin === '' || site === '') return false;
+  if (site === 'cross-site') return false;
+  if (origin === 'null') return site === 'same-origin' || site === 'none';
+  if (origin !== undefined && !loopbackOrigin(origin)) return false;
+  return site === undefined || site === 'same-origin' || site === 'none' || site === 'same-site';
 }
 
 const SECURITY = {
@@ -219,9 +255,8 @@ export function start(opts: StartOpts): Promise<Server> {
   }
 
   async function saveAccounts(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const origin = req.headers.origin;
-    if (origin !== undefined && !localHost(origin.replace(/^https?:\/\//, ''))) {
-      send(res, 403, 'text/plain; charset=utf-8', 'forbidden');
+    if (!saveFromThisPage(req)) {
+      send(res, 403, 'text/plain; charset=utf-8', SAVE_REFUSED);
       return;
     }
     const body = await readBody(req);

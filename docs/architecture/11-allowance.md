@@ -54,13 +54,17 @@ line is the reason and no number. A checked account with no sign-in on this mach
 shows no number.
 
 The server listens on `127.0.0.1` only (port `4877`, or `ALLOWANCE_PORT`). The bin is `allowance`.
+On a terminal it opens the page in the browser and says to leave that window open. Ctrl-C stops it.
 A sign-in is read in the server and never written into the HTML, the JSON, or the config file.
-`POST /accounts` refuses a body over 4096 bytes and an `Origin` that is not loopback.
+`POST /accounts` refuses a body over 4096 bytes. It refuses a save whose `Origin` is another site,
+or whose `Sec-Fetch-Site` is `cross-site`. The page sets `Referrer-Policy: no-referrer`, so the
+browser's own form sends `Origin: null`; that save is accepted when `Sec-Fetch-Site` is
+`same-origin`.
 
 ## File tree `packages/allowance/src/`
 
 ```
-bin.ts            // shebang: Node 22 gate, ALLOWANCE_PORT, start on loopback, print the url
+bin.ts            // shebang: Node 22 gate, ALLOWANCE_PORT, open the page, say the window stays open
 board.ts          // readBoard: the accounts the user turned on; a token stays inside its fetch
 catalog.ts        // every account the page can offer, and the reason when it has no read
 claude.ts         // Claude Code's usage read: plan from the sign-in, model windows from limits, token from env, file, or keychain
@@ -70,6 +74,7 @@ css.ts            // percentCss: .p0–.p100 so a bar width is a class, not an i
 cursor.ts         // Cursor's usage read: included percent and on-demand cents, message dropped
 elevenlabs.ts     // parseElevenLabs + readElevenLabs (redirect:'error', 5s budget lives with the caller)
 format.ts         // counts, "left of", a share of a named window, on-demand dollars, reset phrases
+launch.ts         // startup lines, and opening the browser when stdout is a terminal
 page.ts           // renderPage: live accounts two across, a quiet account on one line, the account form, every provider string escaped
 server.ts         // 127.0.0.1 only; /, /api/board, POST /accounts, the stylesheet, the three font files
 types.ts          // Board, windows, live / missing / error / quiet
