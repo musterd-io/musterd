@@ -1406,25 +1406,25 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
-### 2026-10-21 — `initialJsGzipBytes` 148,000 → 148,600 B, `totalJsGzipBytes` 347,300 → 349,900 B and `liveCssGzipBytes` 25,600 → 26,300 B: who is here on /live (lane `01M5DAJ0Z7`, ADR 692)
+### 2026-10-21 — `initialJsGzipBytes` 148,600 → 148,750 B, `totalJsGzipBytes` 347,900 → 350,200 B and `liveCssGzipBytes` 25,600 → 26,300 B: who is here on /live (lane `01M5DAJ0Z7`, ADR 692)
 
 | Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
 | ---------- | ----------------------------- | ------------------- | -------------------------- |
-| initial JS | 147,905 B                     | 148,091 B (+186)    | RAISED 148,000 → 148,600 B |
-| total JS   | 347,235 B                     | 349,380 B (+2,145)  | RAISED 347,300 → 349,900 B |
-| live CSS   | 25,230 B                      | 26,076 B (+846)     | RAISED 25,600 → 26,300 B   |
+| initial JS | 148,080 B                     | 148,265 B (+185)    | RAISED 148,600 → 148,750 B |
+| total JS   | 347,457 B                     | 349,703 B (+2,246)  | RAISED 347,900 → 350,200 B |
+| live CSS   | 25,230 B                      | 26,081 B (+851)     | RAISED 25,600 → 26,300 B   |
 
 The faces of the members with /live open, at the head of the topbar's tools, with a card per face and
 one arrival moment. The row is `lazy()` behind the first roster read, so its component and `hereRow.ts`
-(+2,145 B) stay off the eager graph; lazy-loading was applied first and cannot move total (ADR 183).
-What does reach the eager graph (+186 B) is what must run with the socket: the `/live` label on the
+(+2,246 B) stay off the eager graph; lazy-loading was applied first and cannot move total (ADR 183).
+What does reach the eager graph (+185 B) is what must run with the socket: the `/live` label on the
 claim, the 60 s roster poll that takes a closed tab out of the row, and `readPresence` keeping
-`attached_at`. Live CSS +846 B is the row's rules: stack, fan, card, arrival, leave, the phone anchor and
-reduced motion. Every ceiling had under 0.4 KB of headroom on main, so no trim of this size was
-available that is not the feature; a re-baseline would loosen. Ceilings are local + the ~450 B CI gap.
+`attached_at`. Live CSS +851 B is the row's rules: stack, fan, card, arrival, leave, the phone anchor and
+reduced motion. Main had under 0.5 KB of headroom on each, so no trim of this size was available that
+is not the feature; a re-baseline would loosen. Ceilings are local + the ~450 B CI gap.
 
-- Falsify: `pnpm perf:check` in CI reports initial JS at or under 148,000 B, total JS at or under
-  347,300 B, or live CSS at or under 25,600 B with this change in.
+- Falsify: `pnpm perf:check` in CI reports initial JS at or under 148,600 B, total JS at or under
+  347,900 B, or live CSS at or under 25,600 B with this change in.
 
 ### 2026-10-20 — `totalJsGzipBytes` 346,000 → 346,500 B: the office walks again (lane `01M5DMJ7XA`, ADR 686)
 
