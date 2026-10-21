@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { animFor } from './character';
-import type { AnimSpec, Anim } from './rendered/figureSheet';
+import { animFor, gestureFrame } from './character';
+import { GESTURE_ANIMS, type SheetSpec } from './rendered/figureSheet';
+import { GESTURE, IDLE_GESTURES } from './skeleton';
 import type { Pose } from './types';
 
-const anims: Record<Anim, AnimSpec> = {
+const anims: SheetSpec['anims'] = {
   idle: { row: 0, frames: 6, fps: 12, loop: true },
   walk: { row: 8, frames: 6, fps: 12, loop: true },
   'sit-type': { row: 16, frames: 4, fps: 12, loop: true },
@@ -44,5 +45,48 @@ describe('animFor (office realism Task 13: the pose picks the clip)', () => {
     const b = animFor(pose({}), 0, 5, 0.7, anims);
     expect(a.anim).toBe('idle');
     expect(a.startT).not.toBe(b.startT);
+  });
+});
+
+describe('gesture clips (increment 3b: every beat the painter plays has a sprite)', () => {
+  // A sheet with every gesture clip, six frames each, at rows past the base clips.
+  const withGestures: SheetSpec['anims'] = {
+    ...anims,
+    ...Object.fromEntries(GESTURE_ANIMS.map((a, i) => [a, { row: 64 + i * 8, frames: 6, fps: 12, loop: false, dirs: ['E', 'S', 'W', 'N'] }])),
+  };
+
+  it('every idle gesture maps to a clip the sheet has, in the posture it is played in', () => {
+    for (const g of IDLE_GESTURES) {
+      const r = animFor(pose({ sit: 1, gesture: g, gestureT: 0.5 }), 0, 5, 0.3, withGestures);
+      expect(r.anim.startsWith('g-'), `beat ${g}`).toBe(true);
+      expect(withGestures[r.anim], `beat ${g}`).toBeDefined();
+      expect(r.frame).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('the errand beats map too, standing; take is reach played back down', () => {
+    for (const g of [GESTURE.browse, GESTURE.fill, GESTURE.pour, GESTURE.call, GESTURE.wave, GESTURE.reach, GESTURE.take]) {
+      expect(animFor(pose({ gesture: g, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim.startsWith('g-')).toBe(true);
+    }
+    const up = animFor(pose({ gesture: GESTURE.reach, gestureT: 0.9 }), 0, 5, 0.3, withGestures);
+    const down = animFor(pose({ gesture: GESTURE.take, gestureT: 0.1 }), 0, 5, 0.3, withGestures);
+    expect(down.anim).toBe('g-reach');
+    expect(down.frame).toBe(up.frame);
+  });
+
+  it('a seated beat on a standing member, a walker, or a sheet without the clip falls back to the base clip', () => {
+    expect(animFor(pose({ sit: 0, gesture: GESTURE.lean, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim).toBe('idle');
+    expect(animFor(pose({ moving: true, gesture: GESTURE.call, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim).toBe('walk');
+    expect(animFor(pose({ sit: 1, gesture: GESTURE.sip, gestureT: 0.5 }), 0, 5, 0.3, anims).anim).toBe('sit-idle');
+  });
+
+  it('an envelope clip goes rest → peak → rest with the beat; a seq clip walks its window', () => {
+    expect(gestureFrame('arc', 0, 6)).toBe(0);
+    expect(gestureFrame('arc', 0.5, 6)).toBe(5);
+    expect(gestureFrame('arc', 1, 6)).toBe(0);
+    expect(gestureFrame('hold', 0.5, 6)).toBe(5);
+    expect(gestureFrame('rise', 1, 6)).toBe(5);
+    expect(gestureFrame('fall', 1, 6)).toBe(0);
+    expect([0, 0.3, 0.6, 0.99].map((g) => gestureFrame('seq', g, 10))).toEqual([0, 3, 6, 9]);
   });
 });

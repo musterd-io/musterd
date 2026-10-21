@@ -35,7 +35,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False}
+    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "clips": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -51,6 +51,8 @@ def args() -> dict:
             out["only"] = set(argv[i + 1].split(",")); i += 2
         elif k == "--figure":
             out["figure"] = True; i += 1
+        elif k == "--clips":
+            out["clips"] = set(argv[i + 1].split(",")); i += 2
         else:
             raise SystemExit(f"render.py: unknown argument {k}")
     if not out["out"]:
@@ -170,11 +172,14 @@ def quantize(path: str) -> None:
     subprocess.run([exe, "--force", "--ext", ".png", "--speed", "1", "--quality", "70-95", "256", path], check=False)
 
 
-def read_pixels(path: str) -> np.ndarray:
-    """A PNG as float32 (h, w, 4), y down, mirrored left-to-right (see project_px)."""
+def read_pixels(path: str, mirror: bool = True) -> np.ndarray:
+    """A PNG as float32 (h, w, 4), y down — mirrored left-to-right for a render (see project_px); an
+    atlas this script wrote reads back with `mirror=False`, since `write_pixels` does not flip."""
     img = bpy.data.images.load(path)
     w, h = img.size
-    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[::-1, ::-1]
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[::-1]
+    if mirror:
+        px = px[:, ::-1]
     bpy.data.images.remove(img)
     return px
 
@@ -248,10 +253,15 @@ def render_figure(a: dict) -> None:
 
     rows = 0
     anims = {}
-    for name, frames, loop in figure.CLIPS:
+    MIRRORED = {"S": "E", "W": "N", "SW": "NE"}
+    for name, frames, loop, dirs in figure.CLIPS:
         anims[name] = {"row": rows, "frames": frames, "fps": figure.FPS, "loop": loop}
+        if dirs is not None:
+            # the directions this clip has: the rendered ones and their mirrors (the runtime falls back
+            # to the base clip anywhere else)
+            anims[name]["dirs"] = [d for d in figure.DIRS if d in dirs or MIRRORED.get(d) in dirs]
         rows += len(figure.DIRS)
-    cols = max(f for _, f, _ in figure.CLIPS)
+    cols = max(c[1] for c in figure.CLIPS)
     sheets = {layer: np.zeros((rows * fh, cols * fw, 4), dtype=np.float32) for layer in figure.LAYERS}
     tmp_lit = os.path.join(a["out"], "_fig-lit.png")
     tmp_id = os.path.join(a["out"], "_fig-id.png")
@@ -273,15 +283,42 @@ def render_figure(a: dict) -> None:
     # Five directions are rendered and three are mirrored. A horizontal flip in the canvas's frame
     # swaps lx and ly (screen-right is +lx −ly), so the mirror of E (+lx) is S (+ly), of N is W,
     # of NE is SW; SE and NW face straight down and up the screen and mirror onto themselves.
-    MIRRORED = {"S": "E", "W": "N", "SW": "NE"}
+    fig_json = os.path.join(a["out"], "figure.json")
+    clips = a["clips"]
+    if clips:
+        # `--clips a,b`: render only those; every other clip's frames come back from the atlases on
+        # disk, so a change to one beat is a short render, not the whole figure.
+        with open(fig_json) as f:
+            prev = json.load(f)
+        prev_order = sorted(prev["anims"].items(), key=lambda kv: kv[1]["row"])
+        for layer in figure.LAYERS:
+            ent = next((l for l in prev["layers"] if l["id"] == layer), None)
+            if ent is None:
+                continue
+            atlas_px = read_pixels(os.path.join(a["out"], ent["file"]), mirror=False)
+            pc = prev["cells"].get(layer, [])
+            k = 0
+            for pname, pa in prev_order:
+                for di in range(len(figure.DIRS)):
+                    for f in range(pa["frames"]):
+                        x, y, w, h, ox, oy = pc[k * 6 : k * 6 + 6] if k * 6 + 6 <= len(pc) else (0, 0, 0, 0, 0, 0)
+                        k += 1
+                        if w == 0 or pname in clips or pname not in anims or f >= anims[pname]["frames"]:
+                            continue
+                        r0 = (anims[pname]["row"] + di) * fh + oy
+                        c0 = f * fw + ox
+                        sheets[layer][r0 : r0 + h, c0 : c0 + w] = atlas_px[y : y + h, x : x + w]
+        print(f"figure: kept every clip but {sorted(clips)} from the atlases on disk")
     done = 0
-    for name, frames, _ in figure.CLIPS:
+    for name, frames, _, dirs in figure.CLIPS:
+        if clips and name not in clips:
+            continue
         for di, d in enumerate(figure.DIRS):
             row = anims[name]["row"] + di
-            if d in MIRRORED:
+            if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # filled from its source direction after the clip, cell by cell
             for f in range(frames):
-                pose, lift = figure.action(name, f / frames)
+                pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
                 cell = (slice(row * fh, (row + 1) * fh), slice(f * fw, (f + 1) * fw))
                 # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
@@ -331,10 +368,12 @@ def render_figure(a: dict) -> None:
         "anchor": {"x": fw / 2, "y": fh - figure.ANCHOR_UP * px},
         "height": round(figure.CROWN, 2),
         "anims": anims,
+        # S, W and SW are not stored: the runtime draws E, N and NE flipped (`frameCell`). Storing
+        # the flipped copies doubled the sheets for nothing (2026-10-21, increment 3b).
+        "mirror": MIRRORED,
         "layers": [],
         "cells": {},
     }
-    fig_json = os.path.join(a["out"], "figure.json")
     kept = {}
     kept_cells = {}
     if only and os.path.exists(fig_json):
@@ -356,10 +395,13 @@ def render_figure(a: dict) -> None:
         # crop every cell; shelf-pack them left to right, top to bottom
         cells = []  # flat, six per (anim, dir, frame): x, y, w, h, ox, oy — all zero when empty
         crops = []
-        for name, frames, _ in figure.CLIPS:
+        for name, frames, _, _ in figure.CLIPS:
             for di in range(len(figure.DIRS)):
                 row = anims[name]["row"] + di
                 for f in range(frames):
+                    if figure.DIRS[di] in MIRRORED:
+                        crops.append(None)
+                        continue
                     cell = sheet[row * fh : (row + 1) * fh, f * fw : (f + 1) * fw]
                     ys, xs = np.nonzero(cell[:, :, 3] > 0.002)
                     if len(xs) == 0:

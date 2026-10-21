@@ -1,10 +1,10 @@
 import { appearanceOf, type Appearance } from './appearance';
 import type { FigureAssets } from './rendered/assets';
 import { drawFigureFrame } from './rendered/figure';
-import { type Anim, type AnimSpec, dir8FromDir, dir8FromHeading } from './rendered/figureSheet';
+import { type Anim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
 import { FWD } from './layout';
-import { GESTURE, type Skel, type V3 } from './skeleton';
+import { arcEnv, GESTURE, holdEnv, type Skel, smooth, type V3 } from './skeleton';
 import type { CarryKind, Dir, OfficeNode, Pose } from './types';
 
 /**
@@ -117,6 +117,8 @@ export interface CharacterOpts {
   rendered?: FigureAssets | undefined;
   anim?: Anim;
   animStart?: number;
+  /** A gesture clip's frame (`animFor`), when the beat rather than the clock picks it. */
+  animFrame?: number;
   tint?: string;
   topColor?: string;
   node: OfficeNode;
@@ -172,7 +174,60 @@ function blink(t: number, seed: number): number {
  * standing member with a bubble speaks; everyone else idles. `startT` for the loops is the
  * member's seed, so nineteen idlers are never in phase.
  */
-export function animFor(pose: Pose, typing: number, t: number, seed: number, anims: Record<Anim, AnimSpec>): { anim: Anim; startT: number } {
+/**
+ * Each painter beat's sprite clip (increment 3b): the clip, the posture it was posed in, and how the
+ * beat's window picks a frame — `arc`/`hold`/`rise`/`fall` map the beat's own envelope onto an
+ * envelope clip (rest → peak), `seq` samples a clip that carries its own motion. `take` is `reach`
+ * played back down, so the card's two legs are one clip.
+ */
+const GESTURE_CLIP: Record<number, { anim: GestureAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }> = {
+  [GESTURE.stretch]: { anim: 'g-stretch', seated: true, map: 'arc' },
+  [GESTURE.glance]: { anim: 'g-glance', seated: true, map: 'arc' },
+  [GESTURE.scratch]: { anim: 'g-scratch', seated: true, map: 'seq' },
+  [GESTURE.chin]: { anim: 'g-chin', seated: true, map: 'hold' },
+  [GESTURE.lean]: { anim: 'g-lean', seated: true, map: 'hold' },
+  [GESTURE.sip]: { anim: 'g-sip', seated: true, map: 'seq' },
+  [GESTURE.swivel]: { anim: 'g-swivel', seated: true, map: 'seq' },
+  [GESTURE.roll]: { anim: 'g-roll', seated: true, map: 'arc' },
+  [GESTURE.settle]: { anim: 'g-settle', seated: true, map: 'hold' },
+  [GESTURE.shoulders]: { anim: 'g-shoulders', seated: true, map: 'seq' },
+  [GESTURE.behindHead]: { anim: 'g-behindHead', seated: true, map: 'hold' },
+  [GESTURE.rubEyes]: { anim: 'g-rubEyes', seated: true, map: 'hold' },
+  [GESTURE.pocketPhone]: { anim: 'g-pocketPhone', seated: true, map: 'hold' },
+  [GESTURE.eat]: { anim: 'g-eat', seated: true, map: 'seq' },
+  [GESTURE.browse]: { anim: 'g-browse', seated: false, map: 'hold' },
+  [GESTURE.fill]: { anim: 'g-fill', seated: false, map: 'hold' },
+  [GESTURE.pour]: { anim: 'g-pour', seated: false, map: 'hold' },
+  [GESTURE.call]: { anim: 'g-call', seated: false, map: 'hold' },
+  [GESTURE.wave]: { anim: 'g-wave', seated: false, map: 'seq' },
+  [GESTURE.reach]: { anim: 'g-reach', seated: false, map: 'rise' },
+  [GESTURE.take]: { anim: 'g-reach', seated: false, map: 'fall' },
+};
+
+const GESTURE_SEATED: ReadonlySet<Anim> = new Set(Object.values(GESTURE_CLIP).filter((c) => c.seated).map((c) => c.anim));
+
+/** The frame of a gesture clip at `gestureT`, for a clip of `frames` frames. */
+export function gestureFrame(map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq', gestureT: number, frames: number): number {
+  const g = Math.max(0, Math.min(1, gestureT));
+  if (map === 'seq') return Math.min(frames - 1, Math.floor(g * frames));
+  const e = map === 'arc' ? arcEnv(g) : map === 'hold' ? holdEnv(g) : map === 'rise' ? smooth(g) : 1 - smooth(g);
+  return Math.round(Math.max(0, Math.min(1, e)) * (frames - 1));
+}
+
+export function animFor(
+  pose: Pose,
+  typing: number,
+  t: number,
+  seed: number,
+  anims: SheetSpec['anims'],
+): { anim: Anim; startT: number; frame?: number } {
+  // A beat with a clip of its own plays it — in the posture the clip was posed in. A seated beat on a
+  // standing member (or the reverse), or a sheet from before the clip, falls through to the base clip.
+  const g = pose.gesture ? GESTURE_CLIP[pose.gesture] : undefined;
+  const ga = g ? anims[g.anim] : undefined;
+  if (g && ga && !pose.moving && (g.seated ? pose.sit > 0.9 : pose.sit === 0)) {
+    return { anim: g.anim, startT: 0, frame: gestureFrame(g.map, pose.gestureT, ga.frames) };
+  }
   if (pose.moving) {
     // The walk is scrubbed by the gait PHASE, which the actor system advances by distance (STRIDE
     // floor units per cycle), never by the clock — a clock-driven loop is the skating nick saw.
@@ -201,6 +256,15 @@ export function drawCharacter(
     // separate pass until Task 16 — the frame already has the arms where the pose put them.
     if (armsOnly) return;
     const look = o.look ?? appearanceOf(node);
+    const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
+    // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
+    let anim = o.anim ?? 'idle';
+    let frame = o.animFrame;
+    const spec = o.rendered.spec.anims[anim];
+    if (!spec || (spec.dirs && !spec.dirs.includes(dir8))) {
+      anim = anim.startsWith('g-') ? (o.anim && GESTURE_SEATED.has(o.anim) ? 'sit-idle' : 'idle') : 'idle';
+      frame = undefined;
+    }
     drawFigureFrame({
       ctx,
       fit,
@@ -210,10 +274,11 @@ export function drawCharacter(
       look,
       kind: node.kind,
       topColor: o.topColor ?? node.color,
-      anim: o.anim ?? 'idle',
-      dir: o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir),
+      anim,
+      dir: dir8,
       t: o.t,
       startT: o.animStart ?? 0,
+      ...(frame !== undefined ? { frame } : {}),
       alpha: o.alpha,
       tint: o.tint ?? '#ffffff',
       size,

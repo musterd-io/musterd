@@ -61,6 +61,8 @@ export interface FigureDraw {
   dir: Dir8;
   t: number;
   startT: number;
+  /** A gesture's frame, chosen by the beat rather than the clock (`animFor`). */
+  frame?: number;
   alpha?: number;
   /** The room's light tint for figures (`figureTintFor`), multiplied into every layer. */
   tint?: string;
@@ -85,18 +87,31 @@ export function drawFigureFrame(d: FigureDraw): void {
   for (const layer of layersFor(d.look, d.kind, d.topColor ?? null)) {
     const sheet = d.sheets.get(layer.id);
     if (!sheet) continue;
-    const c = frameCell(spec, layer.id, d.anim, d.dir, d.t, d.startT);
+    const c = frameCell(spec, layer.id, d.anim, d.dir, d.t, d.startT, d.frame);
     if (c.sw <= 0 || c.sh <= 0) continue;
     const dx = p.x - (spec.anchor.x - c.ox) * k;
     const dy = p.y - (spec.anchor.y - c.oy) * k;
     const color = layer.color ? mulHex(layer.color, tint) : tint === '#ffffff' ? null : tint;
+    let src: CanvasImageSource = sheet;
+    let sx = c.sx;
+    let sy = c.sy;
     if (color) {
       d.scratch.canvas ??= (d.create ?? defaultCreate)(c.sw, c.sh);
       const tinted = tintFrame(d.scratch.canvas, sheet, c.sx, c.sy, c.sw, c.sh, color);
       if (!tinted) continue;
-      ctx.drawImage(tinted, 0, 0, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
+      src = tinted;
+      sx = 0;
+      sy = 0;
+    }
+    if (c.flip) {
+      // A mirrored direction: the stored one, flipped about the cell's own right edge.
+      ctx.save();
+      ctx.translate(dx + c.sw * k, dy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(src, sx, sy, c.sw, c.sh, 0, 0, c.sw * k, c.sh * k);
+      ctx.restore();
     } else {
-      ctx.drawImage(sheet, c.sx, c.sy, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
+      ctx.drawImage(src, sx, sy, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
     }
   }
   if (alpha < 1) ctx.restore();

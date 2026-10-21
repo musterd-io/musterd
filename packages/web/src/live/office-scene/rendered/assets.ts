@@ -7,7 +7,7 @@
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
 import type { LayerId } from './figure';
-import { ANIMS, type Anim, type AnimSpec, type SheetSpec } from './figureSheet';
+import { ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
 
 export function renderedOfficeFromSearch(search: string): boolean {
@@ -52,12 +52,17 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
   if (!isRecord(frame) || !isNum(frame['w']) || !isNum(frame['h'])) throw new Error('figure.json needs frame {w, h}');
   if (!isRecord(anchor) || !isNum(anchor['x']) || !isNum(anchor['y'])) throw new Error('figure.json needs anchor {x, y}');
   if (!isRecord(anims)) throw new Error('figure.json needs anims');
-  const out = {} as Record<Anim, AnimSpec>;
+  const out = {} as SheetSpec['anims'];
   for (const a of ANIMS) {
     const v = anims[a];
+    // A gesture clip is optional (a sheet from before increment 3b has none; the base clip plays).
+    if (v === undefined && a.startsWith('g-')) continue;
     if (!isRecord(v) || !isNum(v['row']) || !isNum(v['frames']) || !isNum(v['fps']) || typeof v['loop'] !== 'boolean')
       throw new Error(`figure.json anim ${a} needs {row, frames, fps, loop}`);
-    out[a] = { row: v['row'], frames: v['frames'], fps: v['fps'], loop: v['loop'] };
+    const dirs = v['dirs'];
+    if (dirs !== undefined && (!Array.isArray(dirs) || dirs.some((d) => !(DIR8 as readonly unknown[]).includes(d))))
+      throw new Error(`figure.json anim ${a} dirs is not a list of directions`);
+    out[a] = { row: v['row'], frames: v['frames'], fps: v['fps'], loop: v['loop'], ...(dirs ? { dirs: dirs as Dir8[] } : {}) };
   }
   if (!Array.isArray(layers)) throw new Error('figure.json needs a layers array');
   const cellsIn = json['cells'];
@@ -74,6 +79,13 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
     if (!isRecord(l) || typeof l['id'] !== 'string' || typeof l['file'] !== 'string') throw new Error(`figure.json layer ${i} needs {id, file}`);
     return { id: l['id'] as LayerId, file: l['file'] };
   });
+  const mirrorIn = json['mirror'];
+  let mirror: SheetSpec['mirror'];
+  if (mirrorIn !== undefined) {
+    const ok = isRecord(mirrorIn) && Object.entries(mirrorIn).every(([k, v]) => (DIR8 as readonly unknown[]).includes(k) && (DIR8 as readonly unknown[]).includes(v));
+    if (!ok) throw new Error('figure.json mirror is not a direction map');
+    mirror = mirrorIn as SheetSpec['mirror'];
+  }
   const height = json['height'];
   if (height !== undefined && !isNum(height)) throw new Error('figure.json height is not a number');
   return {
@@ -83,6 +95,7 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
     anims: out,
     layers: ls,
     ...(cells ? { cells } : {}),
+    ...(mirror ? { mirror } : {}),
     ...(isNum(height) ? { height } : {}),
   };
 }
