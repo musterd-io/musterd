@@ -1,0 +1,1557 @@
+[
+ {
+  "pair": "logs/p2-team/team/dottxt_ai_outlines_task/1655/f1_f3",
+  "task": "dottxt_ai_outlines_task/1655",
+  "features": [
+   1,
+   3
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": true,
+  "merge": "clean",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 95,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 87,
+   "tests_failed": 0
+  },
+  "cost": 0.524787,
+  "steps": 37,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "outlines/types/__init__.py"
+   ],
+   "agent2": [
+    "outlines/types/__init__.py"
+   ]
+  },
+  "common_files": [
+   "outlines/types/__init__.py"
+  ],
+  "eval_error": null,
+  "cause": null
+ },
+ {
+  "pair": "logs/p2-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+  "task": "dottxt_ai_outlines_task/1655",
+  "features": [
+   1,
+   3
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": true,
+  "merge": "conflicts",
+  "strategy": "solo-agent1",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 95,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 87,
+   "tests_failed": 0
+  },
+  "cost": 1.5749349000000001,
+  "steps": 118,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "outlines/types/__init__.py"
+   ],
+   "agent2": [
+    "outlines/types/__init__.py"
+   ]
+  },
+  "common_files": [
+   "outlines/types/__init__.py"
+  ],
+  "eval_error": null,
+  "cause": null,
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5FZXJGKAJFGMAJYWQXJJVXK",
+     "title": "Add IPv4, UUID4, and Hex String types to regex DSL",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "outlines/types/__init__.py"
+     ],
+     "named": [
+      "outlines/types/__init__.py"
+     ],
+     "claimed_at": 1792611895826
+    },
+    {
+     "id": "01M5FZXPR6SC8MPNZNNQ7FY6CJ",
+     "title": "Add octal_str type for octal number validation",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "outlines/types/__init__.py"
+     ],
+     "named": [
+      "outlines/types/__init__.py"
+     ],
+     "claimed_at": 1792611900166
+    },
+    {
+     "id": "01M5G02EK5MHWPP70SHR1R5KC2",
+     "title": "Integrate agent2's octal_str type",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "outlines/types/__init__.py"
+     ],
+     "named": [
+      "outlines/types/__init__.py"
+     ],
+     "claimed_at": 1792612055652
+    }
+   ],
+   "named_common_files": [
+    "outlines/types/__init__.py"
+   ],
+   "acts": {
+    "message": 17,
+    "status_update": 5,
+    "request_help": 4
+   },
+   "acts_directed": 15,
+   "gate": {
+    "allow:allowed": 4,
+    "deny:denied": 4
+   },
+   "holds": {
+    "held": 3
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    },
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent a message to agent2"
+    },
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2-team/team/dspy_task/8563/f1_f4",
+  "task": "dspy_task/8563",
+  "features": [
+   1,
+   4
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "identical",
+  "strategy": "skip-merge-identical",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 43,
+   "tests_failed": 7
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 59,
+   "tests_failed": 0
+  },
+  "cost": 1.0767597,
+  "steps": 57,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "dspy/adapters/types/tool.py"
+   ],
+   "agent2": [
+    "dspy/adapters/types/tool.py"
+   ]
+  },
+  "common_files": [
+   "dspy/adapters/types/tool.py"
+  ],
+  "eval_error": null,
+  "cause": "task"
+ },
+ {
+  "pair": "logs/p2-musterd/coop/dspy_task/8563/f1_f4",
+  "task": "dspy_task/8563",
+  "features": [
+   1,
+   4
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 4.5366813,
+  "steps": 178,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "dspy/adapters/types/tool.py",
+    "test_validate_input.py"
+   ],
+   "agent2": [
+    "dspy/adapters/types/tool.py"
+   ]
+  },
+  "common_files": [
+   "dspy/adapters/types/tool.py"
+  ],
+  "eval_error": null,
+  "cause": "coordination",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5FZXG4QGQ408R6H20MWWPVY",
+     "title": "Add deterministic fingerprinting to ToolCall",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "dspy/adapters/types/tool.py"
+     ],
+     "named": [
+      "dspy/adapters/types/tool.py"
+     ],
+     "claimed_at": 1792612049333
+    },
+    {
+     "id": "01M5FZXS0V54HQT1ABDG26Y7KY",
+     "title": "Add flexible parsing for dspy.ToolCalls LM output formats",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "dspy/adapters/types/tool.py",
+      "test_validate_input.py"
+     ],
+     "named": [
+      "dspy/adapters/types/tool.py",
+      "test_validate_input.py"
+     ],
+     "claimed_at": 1792611902490
+    }
+   ],
+   "named_common_files": [],
+   "acts": {
+    "message": 20,
+    "status_update": 9,
+    "request_help": 4,
+    "handoff": 1,
+    "accept": 1
+   },
+   "acts_directed": 21,
+   "gate": {
+    "deny:denied": 3,
+    "allow:allowed": 8
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2-team/team/go_chi_task/27/f3_f4",
+  "task": "go_chi_task/27",
+  "features": [
+   3,
+   4
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 1.4470047,
+  "steps": 75,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "logging.go",
+    "mux.go",
+    "mux_test.go"
+   ],
+   "agent2": [
+    "logging.go",
+    "mux.go",
+    "mux_test.go"
+   ]
+  },
+  "common_files": [
+   "logging.go",
+   "mux.go",
+   "mux_test.go"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2-musterd/coop/go_chi_task/27/f3_f4",
+  "task": "go_chi_task/27",
+  "features": [
+   3,
+   4
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 3.5657078999999996,
+  "steps": 233,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "mux.go"
+   ],
+   "agent2": [
+    "mux.go"
+   ]
+  },
+  "common_files": [
+   "mux.go"
+  ],
+  "eval_error": null,
+  "cause": "coordination",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5FZX5ZPQNXC2ZMQPSCW307M",
+     "title": "Add debug logging for route pattern handling",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "mux.go"
+     ],
+     "named": [
+      "mux.go"
+     ],
+     "claimed_at": 1792611882997
+    },
+    {
+     "id": "01M5FZXSPKSDPHHQECCHVFTW5F",
+     "title": "Add path prefix support in HandleFunc method",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "mux.go"
+     ],
+     "named": [
+      "mux.go"
+     ],
+     "claimed_at": 1792611903187
+    }
+   ],
+   "named_common_files": [
+    "mux.go"
+   ],
+   "acts": {
+    "message": 30,
+    "status_update": 6,
+    "request_help": 1,
+    "accept": 1
+   },
+   "acts_directed": 28,
+   "gate": {
+    "allow:allowed": 4,
+    "deny:denied": 1
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2-team/team/llama_index_task/17244/f5_f6",
+  "task": "llama_index_task/17244",
+  "features": [
+   5,
+   6
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "clean",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 13,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 13,
+   "tests_failed": 1
+  },
+  "cost": 0.7550814,
+  "steps": 50,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "agent2": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ]
+  },
+  "common_files": [
+   "llama-index-core/llama_index/core/base/llms/types.py"
+  ],
+  "eval_error": null,
+  "cause": "task"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/llama_index_task/17244/f5_f6",
+  "task": "llama_index_task/17244",
+  "features": [
+   5,
+   6
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "missing_input",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "failed"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 2.5346991,
+  "steps": 151,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "agent2": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ]
+  },
+  "common_files": [
+   "llama-index-core/llama_index/core/base/llms/types.py"
+  ],
+  "eval_error": null,
+  "cause": "setup",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1JFEBJ3CVNXME77G8YM7C",
+     "title": "Add encoding field to ImageBlock",
+     "owner": "agent1",
+     "state": "claimed",
+     "scope": [
+      "llama-index-core/llama_index/core/base/llms/types.py"
+     ],
+     "named": [
+      "llama-index-core/llama_index/core/base/llms/types.py"
+     ],
+     "claimed_at": 1792613691115
+    },
+    {
+     "id": "01M5G1JPE849RF2Z0V8VWRXDTH",
+     "title": "Add lazy MIME type accessor to ImageBlock",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "llama-index-core/llama_index/core/base/llms/types.py"
+     ],
+     "named": [
+      "llama-index-core/llama_index/core/base/llms/types.py"
+     ],
+     "claimed_at": 1792613636552
+    }
+   ],
+   "named_common_files": [],
+   "acts": {
+    "message": 20,
+    "status_update": 7,
+    "request_help": 2,
+    "handoff": 1,
+    "accept": 2
+   },
+   "acts_directed": 22,
+   "gate": {
+    "allow:allowed": 5,
+    "deny:denied": 2
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2-team/team/openai_tiktoken_task/0/f4_f8",
+  "task": "openai_tiktoken_task/0",
+  "features": [
+   4,
+   8
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 1.2331024499999999,
+  "steps": 79,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "tiktoken/core.py"
+   ],
+   "agent2": [
+    "tiktoken/core.py"
+   ]
+  },
+  "common_files": [
+   "tiktoken/core.py"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/openai_tiktoken_task/0/f4_f8",
+  "task": "openai_tiktoken_task/0",
+  "features": [
+   4,
+   8
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "missing_input",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "failed",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 3.62670285,
+  "steps": 208,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    ".github/workflows/build_wheels.yml",
+    "CHANGELOG.md",
+    "Cargo.toml",
+    "pyproject.toml",
+    "scripts/wheel_download.py",
+    "src/lib.rs",
+    "src/py.rs",
+    "tests/test_encoding.py",
+    "tests/test_misc.py",
+    "tiktoken/__init__.py",
+    "tiktoken/core.py",
+    "tiktoken/load.py",
+    "tiktoken/model.py",
+    "tiktoken_ext/openai_public.py"
+   ],
+   "agent2": [
+    "tiktoken/core.py"
+   ]
+  },
+  "common_files": [
+   "tiktoken/core.py"
+  ],
+  "eval_error": null,
+  "cause": "setup",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1JE54BD60MR2KE1BYQ8TH",
+     "title": "Add token chunking support with chunk_size parameter",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "tiktoken/core.py"
+     ],
+     "named": [
+      "tiktoken/core.py"
+     ],
+     "claimed_at": 1792614254452
+    },
+    {
+     "id": "01M5G1JHWGWRBPEPN1C9YSCGHE",
+     "title": "Add token pattern tracking to encode function",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "tiktoken/core.py"
+     ],
+     "named": [
+      "tiktoken/core.py"
+     ],
+     "claimed_at": 1792613631888
+    }
+   ],
+   "named_common_files": [
+    "tiktoken/core.py"
+   ],
+   "acts": {
+    "message": 34,
+    "status_update": 7,
+    "request_help": 5,
+    "accept": 2
+   },
+   "acts_directed": 30,
+   "gate": {
+    "deny:denied": 5,
+    "allow:allowed": 7
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2-team/team/pallets_click_task/2800/f1_f4",
+  "task": "pallets_click_task/2800",
+  "features": [
+   1,
+   4
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 2.19255825,
+  "steps": 96,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/click/shell_completion.py"
+   ],
+   "agent2": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ]
+  },
+  "common_files": [
+   "src/click/shell_completion.py"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/pallets_click_task/2800/f1_f4",
+  "task": "pallets_click_task/2800",
+  "features": [
+   1,
+   4
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 3.8314586999999993,
+  "steps": 214,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/click/shell_completion.py"
+   ],
+   "agent2": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ]
+  },
+  "common_files": [
+   "src/click/shell_completion.py"
+  ],
+  "eval_error": null,
+  "cause": "coordination",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1J7JGTV8ANHWS2S144Q2T",
+     "title": "Fix resource leak in shell completion file contexts",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "src/click/shell_completion.py"
+     ],
+     "named": [
+      "src/click/shell_completion.py"
+     ],
+     "claimed_at": 1792613621328
+    },
+    {
+     "id": "01M5G1KB82V6CETNN8G1A15KXR",
+     "title": "Add cleanup_timeout parameter to Context",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "src/click/core.py",
+      "src/click/shell_completion.py"
+     ],
+     "named": [
+      "src/click/core.py",
+      "src/click/shell_completion.py"
+     ],
+     "claimed_at": 1792613657858
+    }
+   ],
+   "named_common_files": [
+    "src/click/shell_completion.py"
+   ],
+   "acts": {
+    "message": 31,
+    "status_update": 5,
+    "request_help": 4,
+    "ask": 1
+   },
+   "acts_directed": 30,
+   "gate": {
+    "deny:denied": 4,
+    "allow:allowed": 7
+   },
+   "holds": {
+    "held": 3
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    },
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    },
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent a message to agent1"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2r-team/team/pallets_jinja_task/1559/f5_f8",
+  "task": "pallets_jinja_task/1559",
+  "features": [
+   5,
+   8
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": true,
+  "merge": "clean",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 57,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 55,
+   "tests_failed": 0
+  },
+  "cost": 1.767255,
+  "steps": 99,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/jinja2/ext.py"
+   ],
+   "agent2": [
+    "src/jinja2/ext.py"
+   ]
+  },
+  "common_files": [
+   "src/jinja2/ext.py"
+  ],
+  "eval_error": null,
+  "cause": null
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/pallets_jinja_task/1559/f5_f8",
+  "task": "pallets_jinja_task/1559",
+  "features": [
+   5,
+   8
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": true,
+  "merge": "clean",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 57,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 55,
+   "tests_failed": 0
+  },
+  "cost": 3.8923345499999993,
+  "steps": 183,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/jinja2/ext.py"
+   ],
+   "agent2": [
+    "src/jinja2/ext.py"
+   ]
+  },
+  "common_files": [
+   "src/jinja2/ext.py"
+  ],
+  "eval_error": null,
+  "cause": null,
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1JD7PG38QDK3JBQVB8JBH",
+     "title": "Add translation variable validation",
+     "owner": null,
+     "state": "open",
+     "scope": [
+      "src/jinja2/ext.py"
+     ],
+     "named": [
+      "src/jinja2/ext.py"
+     ],
+     "claimed_at": null
+    },
+    {
+     "id": "01M5G1JN1RBQHJKMQ2DP63MGKC",
+     "title": "Add conditional translation rendering (ctrans tag)",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "src/jinja2/ext.py"
+     ],
+     "named": [
+      "src/jinja2/ext.py"
+     ],
+     "claimed_at": 1792613635128
+    }
+   ],
+   "named_common_files": [],
+   "acts": {
+    "message": 19,
+    "status_update": 5,
+    "request_help": 3
+   },
+   "acts_directed": 16,
+   "gate": {
+    "allow:allowed": 5,
+    "deny:denied": 3
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent2",
+     "holder": "agent1",
+     "next": "sent request_help to agent1"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2r-team/team/pallets_jinja_task/1621/f6_f10",
+  "task": "pallets_jinja_task/1621",
+  "features": [
+   6,
+   10
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 2.305569,
+  "steps": 115,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/jinja2/loaders.py"
+   ],
+   "agent2": [
+    "src/jinja2/loaders.py"
+   ]
+  },
+  "common_files": [
+   "src/jinja2/loaders.py"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/pallets_jinja_task/1621/f6_f10",
+  "task": "pallets_jinja_task/1621",
+  "features": [
+   6,
+   10
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": true,
+  "merge": "clean",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": true,
+   "tests_passed": 49,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": true,
+   "tests_passed": 55,
+   "tests_failed": 0
+  },
+  "cost": 2.8471613999999996,
+  "steps": 195,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/jinja2/loaders.py"
+   ],
+   "agent2": [
+    "src/jinja2/loaders.py"
+   ]
+  },
+  "common_files": [
+   "src/jinja2/loaders.py"
+  ],
+  "eval_error": null,
+  "cause": null,
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1J3XV39F0B2DW767P4EK7",
+     "title": "Add template path aliasing to BaseLoader",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "src/jinja2/loaders.py"
+     ],
+     "named": [
+      "src/jinja2/loaders.py"
+     ],
+     "claimed_at": 1792613617591
+    },
+    {
+     "id": "01M5G1JC3FK5ZV330GYVQWJTZ8",
+     "title": "Add template path transformation support",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "src/jinja2/loaders.py"
+     ],
+     "named": [
+      "src/jinja2/loaders.py"
+     ],
+     "claimed_at": 1792613625966
+    }
+   ],
+   "named_common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "acts": {
+    "message": 17,
+    "status_update": 8,
+    "request_help": 3,
+    "challenge": 1,
+    "accept": 1,
+    "handoff": 1
+   },
+   "acts_directed": 18,
+   "gate": {
+    "allow:allowed": 18,
+    "deny:denied": 3
+   },
+   "holds": {
+    "held": 2
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    },
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2r-team/team/react_hook_form_task/153/f2_f6",
+  "task": "react_hook_form_task/153",
+  "features": [
+   2,
+   6
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 1.5252976500000002,
+  "steps": 94,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "agent2": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ]
+  },
+  "common_files": [
+   "src/logic/createFormControl.ts",
+   "src/types/form.ts"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/react_hook_form_task/153/f2_f6",
+  "task": "react_hook_form_task/153",
+  "features": [
+   2,
+   6
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 3.98049945,
+  "steps": 210,
+  "agent_status": {
+   "agent1": "Submitted",
+   "agent2": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "agent2": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ]
+  },
+  "common_files": [
+   "src/logic/createFormControl.ts",
+   "src/types/form.ts"
+  ],
+  "eval_error": null,
+  "cause": "coordination",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G1FZ2WBNMAB2YQ0XKBS541",
+     "title": "feat(handleSubmit): Pass submission context to handlers",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "src/types/form.ts",
+      "src/logic/createFormControl.ts"
+     ],
+     "named": [
+      "src/types/form.ts",
+      "src/logic/createFormControl.ts"
+     ],
+     "claimed_at": 1792613708404
+    },
+    {
+     "id": "01M5G1HBNCSZT6XMXKX2JHBJXF",
+     "title": "Add onFinally callback to handleSubmit",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "src/logic/createFormControl.ts",
+      "src/types/form.ts"
+     ],
+     "named": [
+      "src/logic/createFormControl.ts",
+      "src/types/form.ts"
+     ],
+     "claimed_at": 1792613592748
+    },
+    {
+     "id": "01M5G2143JBYK82ABEWZZTGZVB",
+     "title": "Apply agent1's onFinally changes for submission",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "src/types/form.ts",
+      "src/logic/createFormControl.ts"
+     ],
+     "named": [
+      "src/types/form.ts",
+      "src/logic/createFormControl.ts"
+     ],
+     "claimed_at": 1792614109298
+    }
+   ],
+   "named_common_files": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "acts": {
+    "message": 31,
+    "status_update": 6,
+    "request_help": 2,
+    "handoff": 1
+   },
+   "acts_directed": 27,
+   "gate": {
+    "deny:denied": 3,
+    "allow:allowed": 12
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent request_help to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ },
+ {
+  "pair": "logs/p2r-team/team/typst_task/6554/f2_f6",
+  "task": "typst_task/6554",
+  "features": [
+   2,
+   6
+  ],
+  "arm": "claude_code",
+  "setting": "team",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 0.756024,
+  "steps": 48,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "agent2": [
+    "crates/typst/src/foundations/str.rs"
+   ]
+  },
+  "common_files": [
+   "crates/typst/src/foundations/str.rs"
+  ],
+  "eval_error": null,
+  "cause": "coordination"
+ },
+ {
+  "pair": "logs/p2r-musterd/coop/typst_task/6554/f2_f6",
+  "task": "typst_task/6554",
+  "features": [
+   2,
+   6
+  ],
+  "arm": "claude_code_musterd",
+  "setting": "coop",
+  "passed": false,
+  "merge": "conflicts",
+  "strategy": "naive",
+  "apply": {
+   "agent1": "applied",
+   "agent2": "applied"
+  },
+  "f1": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "f2": {
+   "passed": false,
+   "tests_passed": 0,
+   "tests_failed": 0
+  },
+  "cost": 2.2922218500000002,
+  "steps": 141,
+  "agent_status": {
+   "agent2": "Submitted",
+   "agent1": "Submitted"
+  },
+  "patch_files": {
+   "agent1": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "agent2": [
+    "crates/typst/src/foundations/str.rs"
+   ]
+  },
+  "common_files": [
+   "crates/typst/src/foundations/str.rs"
+  ],
+  "eval_error": null,
+  "cause": "coordination",
+  "musterd": {
+   "lanes": [
+    {
+     "id": "01M5G22WEQ1E6QHGW9H7C2PPY4",
+     "title": "Add skip_whitespace parameter to str.first and str.last",
+     "owner": "agent2",
+     "state": "done",
+     "scope": [
+      "crates/typst/src/foundations/str.rs"
+     ],
+     "named": [
+      "crates/typst/src/foundations/str.rs"
+     ],
+     "claimed_at": 1792614166998
+    },
+    {
+     "id": "01M5G236336BGZ4Y19D3DE4WHC",
+     "title": "Add indexed access to str.first and str.last",
+     "owner": "agent1",
+     "state": "done",
+     "scope": [
+      "crates/typst/src/foundations/str.rs"
+     ],
+     "named": [
+      "crates/typst/src/foundations/str.rs"
+     ],
+     "claimed_at": 1792614176867
+    }
+   ],
+   "named_common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "acts": {
+    "message": 21,
+    "status_update": 6,
+    "request_help": 1
+   },
+   "acts_directed": 15,
+   "gate": {
+    "allow:allowed": 5,
+    "deny:denied": 2
+   },
+   "holds": {
+    "held": 1
+   },
+   "after_held_refusal": [
+    {
+     "seat": "agent1",
+     "holder": "agent2",
+     "next": "sent a message to agent2"
+    }
+   ],
+   "shell_writes_to_named_files_heuristic": []
+  }
+ }
+]
