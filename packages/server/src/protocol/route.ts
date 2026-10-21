@@ -252,6 +252,27 @@ async function refuseVoiceBoundElsewhere(
   );
 }
 
+/**
+ * True when `meta.in_reply_to` names a pull announcement ask that `memberId` sent. The only
+ * reason a departed host seat is still a legal addressee (lane 01M5G34H).
+ */
+async function replyNamesPullAskFrom(
+  db: Ctx['db'],
+  teamId: string,
+  meta: Record<string, unknown> | null | undefined,
+  memberId: string,
+): Promise<boolean> {
+  const id = typeof meta?.['in_reply_to'] === 'string' ? meta['in_reply_to'] : null;
+  if (!id) return false;
+  const row = await db.get<{ n: number }>(
+    `SELECT 1 AS n FROM messages
+       WHERE team_id = ? AND id = ? AND from_member = ? AND act = 'ask'
+         AND json_extract(meta, '$.pull.lane') IS NOT NULL`,
+    [teamId, id, memberId],
+  );
+  return row != null;
+}
+
 export async function routeEnvelope(
   ctx: Ctx,
   team: TeamRow,
@@ -709,7 +730,15 @@ async function routeEnvelopeInner(
   const recipientNames = new Map<string, string>();
   if (env.to.kind === 'member') {
     const target = await getMemberByName(ctx.db, team.id, env.to.name);
-    if (!target || target.left_at !== null) {
+    // A pull ask's sender is a host service seat, and that seat can leave while the ask is still
+    // owed. The opener's accept/decline names the ask; it does not need the host to still be a
+    // member (lane 01M5G34H). Any other act to a departed seat is still `no member`.
+    const replyToDepartedPull =
+      target != null &&
+      target.left_at !== null &&
+      (env.act === 'accept' || env.act === 'decline') &&
+      (await replyNamesPullAskFrom(ctx.db, team.id, env.meta, target.id));
+    if (!target || (target.left_at !== null && !replyToDepartedPull)) {
       throw new MusterdError('not_found', `no member "${env.to.name}" in ${team.slug}`);
     }
     toMemberId = target.id;

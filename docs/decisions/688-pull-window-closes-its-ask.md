@@ -60,9 +60,13 @@ not answered here; whatever the reason, re-asking the opener every window is not
 - A host that cannot redeem grants now announces at most four times a day per lane (6 h cooldown)
   instead of once per window, and each announcement is closed when its window is. The opener's
   inbox carries one open ask per live window, never a backlog.
-- The asks already open on the board from before this landed are not closed retroactively; they
-  age out of the pinned set as their openers read past them. Opener's `decline` with
-  `in_reply_to` still discharges one, as before.
+- The asks already open on the board from before this landed are not closed by a backfill
+  resolve. _(Amended 2026-10-21, lane 01M5G34H: they did not age out on read. A pull ask is
+  obligation-class, so reading it leaves it pinned, and a decline addressed to a host seat that
+  has left was refused `no member`. The pinned set now drops a pull ask whose lane is claimed or
+  no longer open, and an accept or decline naming that ask may be addressed to the host seat
+  after it has left. `closeAnnouncementAsk` sends its resolve from that seat even when `left_at`
+  is set.)_
 - Follows-up: why the four hosts never redeemed a grant is its own read — the host logs
   (`! pull claim refused …` / `no seat credential …`) say which. Lane to be opened by whoever
   owns the hosts.
