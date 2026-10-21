@@ -46,7 +46,8 @@ look the same at claim time.
    project whose scope names a path, the one with the earliest `claimed_at` (lane id as the
    tie-break) holds it (`laneHoldingFile`). A hold ends when that lane leaves the contending
    states (done, abandoned, released, handed off — a handoff moves the hold with the lane) or when
-   the entry is removed from its scope. Naming beats covering: a lane that names the file holds it
+   the entry is removed from its scope. _(Amended 2026-10-21: an agent holder that has left also stops holding the file —
+   [ADR 693](693-a-hold-lapses-when-its-holder-has-left.md).)_ Naming beats covering: a lane that names the file holds it
    against a lane that only covers it through an area glob, whichever was claimed first.
 3. **Gate A refuses another seat's edit of a held file.** After the ADR 150 covering check passes,
    the gate asks who holds the path. If another seat does, `block` posture denies and `warn`

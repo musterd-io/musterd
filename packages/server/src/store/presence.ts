@@ -454,6 +454,24 @@ export async function hasLiveWakePresence(
   return row !== undefined;
 }
 
+/**
+ * ADR 693: is this member still here — a live presence, or a released one still inside its reclaim
+ * grace (a reload or a daemon bounce, not a departure)? False once the reaper would free the seat.
+ */
+export async function isPresentOrReclaimable(
+  db: Driver,
+  memberId: string,
+  timeoutMs: number,
+  now = Date.now(),
+): Promise<boolean> {
+  if (await hasLivePresence(db, memberId, timeoutMs)) return true;
+  const held = await db.get<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND held_until IS NOT NULL AND held_until > ?',
+    [memberId, now],
+  );
+  return (held?.n ?? 0) > 0;
+}
+
 export async function hasActivePresence(db: Driver, memberId: string): Promise<boolean> {
   const row = await db.get<{ n: number }>(
     'SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND held_until IS NULL AND conn_id IS NOT NULL',

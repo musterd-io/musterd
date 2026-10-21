@@ -334,6 +334,80 @@ withDrivers('gate-http', (_o, kind) => {
       expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('allowed');
     });
 
+    describe('a hold lapses when its agent holder has left (ADR 693)', () => {
+      const holdByBo = async () => {
+        await bo();
+        await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+          title: 'bo first',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        await new Promise((r) => setTimeout(r, 5));
+        await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+          title: 'ada second',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        const row = await server.store.get<{ id: string }>(
+          'SELECT id FROM members WHERE name = ?',
+          ['Bo'],
+        );
+        return row!.id;
+      };
+
+      it('a holder with no session left: the edit proceeds with the advisory, under block', async () => {
+        const boId = await holdByBo();
+        await server.store.run('DELETE FROM presence WHERE member_id = ?', [boId]);
+        const r = await gateA('block', 'src/tariff.ts');
+        expect(r.json.decision).toBe('allow');
+        expect(r.json.outcome).toBe('warned');
+        expect(r.json.reason).toContain('was held by Bo');
+        expect(r.json.reason).toContain('has lapsed (ADR 693)');
+      });
+
+      it('a holder inside its reclaim grace still holds the file', async () => {
+        const boId = await holdByBo();
+        await server.store.run('DELETE FROM presence WHERE member_id = ?', [boId]);
+        await server.store.run(
+          `INSERT INTO presence (id, member_id, surface, last_seen_at, created_at, held_until) VALUES (?, ?, 'claude-code', ?, ?, ?)`,
+          ['p-bo-held', boId, Date.now(), Date.now(), Date.now() + 60_000],
+        );
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+      });
+
+      it('the holder coming back resumes the hold', async () => {
+        const boId = await holdByBo();
+        await server.store.run('DELETE FROM presence WHERE member_id = ?', [boId]);
+        expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('warned');
+        await server.store.run(
+          `INSERT INTO presence (id, member_id, surface, last_seen_at, created_at) VALUES (?, ?, 'claude-code', ?, ?)`,
+          ['p-bo-back', boId, Date.now(), Date.now()],
+        );
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+      });
+
+      it("a human's hold stands with no session", async () => {
+        await openLane(server.store, (await team()).id, 'dawn', 'nick', {
+          title: 'nick first',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        await new Promise((r) => setTimeout(r, 5));
+        await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+          title: 'ada second',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        await server.store.run(
+          'DELETE FROM presence WHERE member_id = (SELECT id FROM members WHERE name = ?)',
+          ['nick'],
+        );
+        const r = await gateA('block', 'src/tariff.ts');
+        expect(r.json.decision).toBe('deny');
+        expect(r.json.reason).toContain('held by nick');
+      });
+    });
+
     it('two area globs over one file hold nothing — ADR 150 covering ownership, unchanged', async () => {
       await bo();
       await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
