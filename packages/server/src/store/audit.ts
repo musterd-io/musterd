@@ -383,6 +383,12 @@ export type AuditAction =
   | 'host.provision_ready'
   | 'host.provision_failed'
   | 'host.provision_cancelled'
+  // ADR 689 — a sponsor-scoped credential (a sponsor's host key, a sponsored seat's `claim_seat`)
+  // crosses to joiners as the HUB's fact: `accepted` carries the hash and scope, `revoked` ends it.
+  // Actor null (a machine fact; `detail.sponsor` names the sponsor); projected into
+  // `agent_bootstrap_credentials` only from the hub's origin.
+  | 'credential.accepted'
+  | 'credential.revoked'
   // ADR 131 increment 4: `wake_deferred` — the host skipped an actuation because a live local
   // session already held the workspace (the local-session guard; roster-offline ≠ workspace-idle).
   // Deliberately OUTSIDE the rate/attempt derivations (those count woke+wake_failed only): a
@@ -828,6 +834,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'host.provision_ready': 'none',
   'host.provision_failed': 'none',
   'host.provision_cancelled': 'none',
+  'credential.accepted': 'none',
+  'credential.revoked': 'none',
   'residency.session_captured': 'none',
   'residency.session_ended': 'none',
   'presence.session_ended': 'none',
@@ -1141,6 +1149,9 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'mcp.startup_measured',
   // ADR 610 — a CI run's shape, read only by the report's ci block.
   'ci.run_measured',
+  // ADR 689 — sponsor-scoped credentials cross as the hub's facts (projected at joiners).
+  'credential.accepted',
+  'credential.revoked',
 ]);
 
 /**

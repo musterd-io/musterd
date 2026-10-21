@@ -4211,6 +4211,26 @@ export async function handleHttp(
             ...(viaHostKey ? { via: 'host_key', host } : {}),
           },
         });
+        // ADR 689 decision 1: a sponsor's host key, or a sponsored seat's `claim_seat`, crosses to
+        // the team's joiners as the hub's own fact, so the sponsor-scoped host key is honoured at
+        // a joiner's daemon. A team-wide `claim_role` and an unsponsored `claim_seat` never cross.
+        if (body.use === 'host' || (body.use === 'claim_seat' && sponsorScoped)) {
+          await appendAudit(ctx.db, team.id, {
+            actor: null,
+            action: 'credential.accepted',
+            target: minted.credential.id,
+            result: 'allow',
+            detail: {
+              use: body.use,
+              target: body.target,
+              sponsor: member.name,
+              key_hash: minted.credential.key_hash,
+              expires_at: minted.credential.expires_at,
+              created_at: minted.credential.created_at,
+              ...(body.label !== undefined ? { label: body.label } : {}),
+            },
+          });
+        }
         for (const predecessorId of minted.rotated) {
           await appendAudit(ctx.db, team.id, {
             actor: member.name,
