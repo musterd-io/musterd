@@ -71,6 +71,11 @@ Follows-up: 01M4S9AVXF6FMDXTMMKHS1WCM9
 - not-a-falsification: ADR 083 called glob false positives cheap because nothing blocks on them. That
   stands for the board. What it underpriced was the directed message, which was not free.
 
+- _2026-10-21, lane 01M5E8CD9C:_ one overlap is now precise by construction: a file both lanes
+  name outright. [ADR 691](691-named-file-is-held-first-claim-wins.md) makes the first claim a
+  hold, the gate refuses the other seat's edit under block, and the inline warning says so. The
+  area-glob overlaps this ADR measured stay advisory and inline.
+
 ## Observability & Evaluation
 
 **Traces** — n/a: no new span. The `[lane]` messages that stop are ordinary envelopes, so the drop

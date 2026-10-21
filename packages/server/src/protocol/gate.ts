@@ -15,7 +15,7 @@ import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
-import { laneCoveringPath } from '../store/lanes.js';
+import { laneCoveringPath, laneHoldingFile } from '../store/lanes.js';
 import { listMembers } from '../store/members.js';
 import { unblockerReachable } from '../store/reachability.js';
 import { getRoleSkill } from '../store/roles.js';
@@ -71,6 +71,21 @@ export async function gateA(ctx: GateContext): Promise<GateDecision> {
 
   const owned = await laneCoveringPath(db, teamId, slug, path, { owner: ctx.member.name });
   if (owned) {
+    // ADR 691: a lane that NAMES this file holds it for its tenure, first claim first. Covering it
+    // through an area glob, or naming it later, is not enough while another seat's named claim is
+    // in flight — that is the collision the overlap warning only ever reported (finding 015).
+    const holder = await laneHoldingFile(db, teamId, slug, path, owned.project);
+    if (holder && holder.owner_seat !== ctx.member.name) {
+      const since = holder.claimed_at ? new Date(holder.claimed_at).toISOString() : 'its claim';
+      const detail =
+        `'${path}' is held by ${holder.owner_seat} (lane "${holder.title}", named it first, since ${since}) — ` +
+        `ask them to hand it off or narrow their lane, wait for that lane to finish, or split the ` +
+        `work by handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
+      if (ctx.req.posture === 'warn') {
+        return { decision: 'allow', outcome: 'warned', reason: `heads-up: ${detail}` };
+      }
+      return { decision: 'deny', outcome: 'denied', reason: `blocked: ${detail}` };
+    }
     return {
       decision: 'allow',
       outcome: 'allowed',

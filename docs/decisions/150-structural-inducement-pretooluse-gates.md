@@ -243,6 +243,11 @@ count**, never a headline rate alone.
 - _2026-10-05, lane 01M44T6343:_ a third class kind, `role-route`, gates a command to the holders of a
   roster role. Unlike the two kinds here, its role and posture are read from the stored policy, not
   from the gate request. See [ADR 513](513-role-gated-routes.md).
+- _2026-10-21, lane 01M5E8CD9C:_ [ADR 691](691-named-file-is-held-first-claim-wins.md) added a
+  second Gate A rule: a scope entry that names a file outright is a hold, first claim first, and
+  another seat's edit of a held file is denied under `block` and warned under `warn` even when its
+  own lane covers the path. Area globs kept the covering rule above. The datum was finding 015,
+  where every CooperBench pair named the same file and both agents edited it.
 
 ## Related
 
