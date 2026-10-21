@@ -61,10 +61,14 @@ same guarantees a daemon-roster team gives.
    as a hub fact, as `credential.accepted` does (ADR 689 d2), and the hub's ingest refuses a
    pushed copy. Reconcile projects `sponsored_by` only where file and fact agree. A file naming
    a sponsor with no matching fact projects the agent **unsponsored** and warns. That agent can
-   do nothing a sponsor's host key would grant, so a forged line costs nobody anything. A file
-   that drops the line un-sponsors the agent, making it a plain team agent; that is the
-   narrowing direction, and pushing to the team home already carries that authority. Like
-   capabilities (ADR 070), the file can only narrow what the authenticated act granted.
+   do nothing a sponsor's host key would grant, so a forged line costs nobody anything. **A file
+   that drops the line changes nothing.** Un-sponsoring is not a narrowing: `hostMayServe` serves
+   a sponsored seat only from its sponsor's own key, and an unsponsored seat from any team-wide
+   key (an admin's or the legacy one), so clearing the sponsor would widen which machines may run
+   the agent. Once vouched, the sponsorship stands until a hub-authorized act ends it: removing
+   the agent, or the sponsor losing standing (decision 4). Reconcile keeps it and warns that the
+   file omits it. A file can add no authority the hub did not record, and a file edit alone can
+   remove none the hub did.
 
 3. **A descendant's standing is derived, never written over.** Reconcile first resolves every
    sponsor's standing: present, not disabled or banned, not expired. It then projects any agent
@@ -109,7 +113,7 @@ same guarantees a daemon-roster team gives.
 ## Observability & Evaluation
 
 - **Traces:** reconcile's warning for an uncorroborated `sponsored_by`, naming the file and the
-  sponsor it claims. `member.revoked_cascade` rows with trigger `reconcile`. The replicated
+  sponsor it claims, and for a vouched sponsorship the file omits. `member.revoked_cascade` rows with trigger `reconcile`. The replicated
   `member.sponsored_agent_created` fact in `sync_log` with its `origin_node`.
 - **Eval:** reconcile tests on both drivers. (a) A forged `sponsored_by` with no fact projects
   the agent unsponsored and a sponsor's host key cannot serve it. (b) A sponsor disabled in its
@@ -117,6 +121,8 @@ same guarantees a daemon-roster team gives.
   (c) A removed sponsor file cascades with one row per descendant. (d) An agent's `until` later
   than its sponsor's is clamped. (e) Export then reconcile is a fixed point for a team holding
   a sponsored agent. (f) A joiner-pushed `member.sponsored_agent_created` is refused at ingest.
+  (i) A vouched agent whose file drops `sponsored_by` keeps its sponsor, and a team-wide host key
+  still cannot lease its wakes or claim its provision (big-body's review, 2026-10-21).
   Mint tests: (g) a file-backed mint without the file, or with another sponsor named, is refused
   and leaves no member; (h) a refused mint leaves no seat file behind.
 - **Experiment:** lane 2b-5's week on revive is the reading. Falsifier: any step of `create.sh`
