@@ -7,6 +7,12 @@ describe('occupation', () => {
     expect(occupation('designer')).toBe('designer');
     expect(occupation('product-communications')).toBe('writer');
     expect(occupation('platform')).toBe('ops');
+    expect(occupation('steward')).toBe('auditor');
+    expect(occupation('founder')).toBe('founder');
+  });
+
+  it('gives admin no word: a permission, and "founder" would be false on most teams', () => {
+    expect(occupation('admin')).toBeNull();
   });
 
   it('never shows a raw role id it has no word for', () => {

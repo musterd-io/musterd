@@ -11,16 +11,19 @@
  * eight plates saying "backend". A member with no role shows no job until one is assigned
  * (lane 01M5FY2XFX).
  *
- * The words are copy, so product-communications owns them (designer charter; asked 2026-10-21).
+ * The words are copy: sloane and alfie (product-communications) set them on 2026-10-21. `admin` has
+ * none on purpose. It is a permission, and this map ships to every team, so "founder" would be false on
+ * any admin who is not one; the `founder` role carries that word instead, true wherever it is held.
  */
 const JOB_WORDS: Readonly<Record<string, string>> = {
-  admin: 'lead',
   courier: 'courier',
   designer: 'designer',
+  founder: 'founder',
+  planner: 'planner',
   platform: 'ops',
   'product-communications': 'writer',
   security: 'security',
-  steward: 'editor',
+  steward: 'auditor',
 };
 
 export function occupation(role: string | null | undefined): string | null {

@@ -165,7 +165,7 @@ const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; 
   Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium', role: 'product-communications' },
   Dev: { surface: 'cli', model: null },
   Eli: { surface: 'claude-code', model: 'gemini-3.2-pro' },
-  Fen: { surface: 'web', model: 'grok-4.5', role: 'admin' },
+  Fen: { surface: 'web', model: 'grok-4.5', role: 'founder' },
   Gus: { surface: 'opencode', model: 'beam-free' },
   Hana: { surface: 'opencode', model: 'moonshotai/kimi-k3' },
   Ivy: { surface: 'opencode', model: 'longcat-2.5-preview-free', role: 'designer' },
