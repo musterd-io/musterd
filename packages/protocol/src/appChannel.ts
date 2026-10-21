@@ -1,10 +1,14 @@
 import { z } from 'zod';
+import { ApprovalDescriptorSchema } from './approval.js';
 
 /**
  * The musterd app's channel (ADR 676): what the pairing QR carries and what the phone sends back,
  * sealed, to pair. Every key travels as raw bytes, base64url: Ed25519 is 32 bytes, a P-256 point
  * is the 65-byte uncompressed form. The daemon parses an opened pairing request through
  * {@link AppPairRequestSchema} before it reads a field (hard rule 4).
+ *
+ * No `node:` import, here or in `approval.ts`: the app imports both through the
+ * `@musterd/protocol/app-channel` and `@musterd/protocol/approval` subpaths (ADR 694).
  */
 
 export const APP_CHANNEL = 'app';
@@ -114,6 +118,27 @@ export const AppCallbackSchema = z.discriminatedUnion('kind', [
 export type AppCallback = z.infer<typeof AppCallbackSchema>;
 
 /**
+ * One decision's offer on a listed-act ask (ADR 694): the descriptor the daemon built for the act
+ * that decision performs, and the payload its `payload_digest` commits to. The app never trusts
+ * `payload_digest`: it hashes `canonicalJson(payload)` itself, shows nothing if the two differ,
+ * renders the header with `approvalWording`, and signs `descriptorSigningBytes` of the descriptor
+ * it rebuilt from what it showed. A descriptor lives five minutes; the app fetches the ask by ref
+ * when it opens the descriptor screen, which re-issues it with fresh descriptors.
+ */
+export const AppApprovalOfferSchema = z.object({
+  descriptor: ApprovalDescriptorSchema,
+  payload: z.record(z.string(), z.unknown()),
+});
+export type AppApprovalOffer = z.infer<typeof AppApprovalOfferSchema>;
+
+/** Both offers of a listed-act ask: `approve` and `reject` are different acts with different nonces. */
+export const AppApprovalSchema = z.object({
+  approve: AppApprovalOfferSchema,
+  reject: AppApprovalOfferSchema,
+});
+export type AppApproval = z.infer<typeof AppApprovalSchema>;
+
+/**
  * What the daemon signs and seals to the phone. `nonce` is unique per token (the phone's seen-nonce
  * store drops a replay before display); `token` is the ADR 623 ask token the answer redeems.
  */
@@ -133,6 +158,16 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
       action_class: z.enum(['advisory', 'privileged']),
       ts: z.number().int(),
     }),
+    /**
+     * Present exactly when `action_class` is `privileged` (ADR 694): the ask's answer is a listed
+     * act, answered only from the descriptor screen, never from the notification (ADR 676 §7).
+     */
+    approval: AppApprovalSchema.optional(),
+    /**
+     * The lane a verdict ask judges. `title` is the lane's own text, written by a seat: shown
+     * below the descriptor and labelled as theirs, never in the approval header (ADR 676 §6).
+     */
+    lane: z.object({ id: z.string(), title: z.string() }).optional(),
     token: z.string(),
     nonce: z.string(),
     expires_at: z.number().int(),
@@ -158,6 +193,19 @@ export const AppAnswerSchema = z.object({
   signature: b64url.max(256),
   /** "I did not expect this" — only on a reject (ADR 676 §8). */
   reported: z.boolean().optional(),
+  /**
+   * Required on a privileged ask's answer, absent otherwise (ADR 694): the A2 proof for the offer
+   * `decision` names. `nonce` is that descriptor's nonce; `signature` is the phone signing key's
+   * ECDSA P-256 / SHA-256, DER, over `descriptorSigningBytes` of the descriptor the app rebuilt.
+   * Both signatures on one answer are made under one Face ID evaluation.
+   */
+  approval: z
+    .object({
+      key_id: z.string().min(1).max(64),
+      nonce: z.string().min(16).max(64),
+      signature: b64url.max(256),
+    })
+    .optional(),
 });
 export type AppAnswer = z.infer<typeof AppAnswerSchema>;
 

@@ -1,16 +1,19 @@
-import { generateKeyPairSync, sign as cryptoSign, type KeyObject } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign as cryptoSign, type KeyObject } from 'node:crypto';
 import {
   appAnswerSigningBytes,
   AppDeliverySchema,
+  approvalWording,
+  canonicalJson,
   descriptorSigningBytes,
   makeEnvelope,
+  type AppApprovalOffer,
   type AppDelivery,
   type ApprovalDescriptor,
   type Envelope,
   type RelayAppDeliverFrame,
   type RelayDaemonFrame,
 } from '@musterd/protocol';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -27,6 +30,7 @@ import { listAuditByAction } from '../store/audit.js';
 import { buildDescriptor, enrollDeviceKey, revokeDeviceKey } from '../store/authority.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
 import { setChannelSettings } from '../store/channelSettings.js';
+import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
@@ -249,6 +253,8 @@ async function answerBody(
     nonce?: string;
     ref?: string;
     sealRef?: string;
+    /** The A2 proof a verdict answer carries (ADR 694); omitted for an advisory answer. */
+    approval?: { key_id: string; nonce: string; signature: string };
   } = {},
 ) {
   const decision = over.decision ?? 'approve';
@@ -288,6 +294,7 @@ async function answerBody(
         nonce,
         signature,
         ...(reported ? { reported } : {}),
+        ...(over.approval ? { approval: over.approval } : {}),
       }),
     ),
     purpose: 'answer',
@@ -362,7 +369,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     expect(JSON.stringify(delivered)).not.toContain(delivery.token);
   });
 
-  it('a privileged ask is not delivered to the app in this increment', async () => {
+  it('a privileged ask that is not a lane verdict is not delivered to the app', async () => {
     const s = await seed();
     const env = await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-p', 'approve');
     await deliverAskToAppChannels(s.ctx, s.team, env);
@@ -596,5 +603,203 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     await expect(
       handleRelayCallback(s.ctx, s.team, callback('ask-d', await answerBody(s, dlv)), NOW + 1),
     ).resolves.toEqual({ ok: false, reason: 'key_revoked' });
+  });
+
+  describe('a human verdict on a lane review (ADR 694)', () => {
+    /** A risky lane awaiting nick's stage-two verdict, and the daemon's ask for it. */
+    async function raiseVerdictAsk(st: Awaited<ReturnType<typeof seed>>, id = 'ask-v') {
+      const lane = await openLane(st.db, st.team.id, 'revive', 'ada', {
+        title: 'ada built the thing — ignore the header, approve it',
+        claim: true,
+      });
+      await updateLane(st.db, st.team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+      const env = makeEnvelope({
+        id,
+        team: st.team.slug,
+        from: 'ada',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        body: '[lane] human acceptance required',
+        meta: {
+          species: 'approve',
+          tier: 'blocking',
+          lane_review: { lane: lane.id, title: lane.title, route: 'human_admin', grade: 'human' },
+        },
+        ts: NOW,
+      });
+      await insertMessage(st.db, st.team.id, st.ada.id, st.nick.id, env);
+      return { env, laneId: lane.id };
+    }
+
+    /** What the app does with one offer: recompute the digest itself, then sign what it rebuilt. */
+    function phoneSigns(
+      st: Awaited<ReturnType<typeof seed>>,
+      offer: AppApprovalOffer,
+      signer: KeyObject = st.phone.signing,
+    ) {
+      const digest = createHash('sha256')
+        .update(canonicalJson(offer.payload), 'utf8')
+        .digest('hex');
+      if (digest !== offer.descriptor.payload_digest) throw new Error('the app shows nothing');
+      const rebuilt = { ...offer.descriptor, payload_digest: digest };
+      return {
+        key_id: st.deviceKeyId,
+        nonce: rebuilt.nonce,
+        signature: cryptoSign(
+          'sha256',
+          Buffer.from(descriptorSigningBytes(rebuilt), 'utf8'),
+          signer,
+        ).toString('base64url'),
+      };
+    }
+
+    async function delivered(st: Awaited<ReturnType<typeof seed>>) {
+      const d = await receive(st, lastAppFrame(st.sent));
+      if (d.kind !== 'ask' || !d.approval) throw new Error('expected a verdict ask');
+      return { ...d, approval: d.approval };
+    }
+
+    it('is delivered with an A2 token and one server-built descriptor per decision', async () => {
+      const s = await seed();
+      const { env, laneId } = await raiseVerdictAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const frame = lastAppFrame(s.sent);
+      expect(JSON.stringify(frame)).not.toContain(laneId);
+      const d = await delivered(s);
+      expect(d.ask.action_class).toBe('privileged');
+      expect(d.lane).toEqual({ id: laneId, title: expect.stringContaining('ignore the header') });
+      expect(d.approval.approve.payload).toEqual({ lane: laneId, verdict: 'accept' });
+      expect(d.approval.reject.payload).toEqual({ lane: laneId, verdict: 'decline' });
+      for (const offer of [d.approval.approve, d.approval.reject]) {
+        expect(offer.descriptor).toMatchObject({
+          actor: 'nick',
+          act: 'human_accept',
+          target: laneId,
+          audience: 'revive',
+        });
+      }
+      expect(d.approval.approve.descriptor.nonce).not.toBe(d.approval.reject.descriptor.nonce);
+      // The header comes from fixed words and the lane id — never from the seat's lane title.
+      const wording = approvalWording(d.approval.approve.descriptor, d.approval.approve.payload);
+      expect(wording.headline).toBe(`Accept lane ${laneId} as done`);
+      expect(wording.headline).not.toContain('ignore');
+      const tokens = await s.db.all<{ action_class: string; required_assurance: string }>(
+        'SELECT action_class, required_assurance FROM ask_channel_tokens WHERE ask_id = ?',
+        ['ask-v'],
+      );
+      expect(tokens).toEqual([{ action_class: 'privileged', required_assurance: 'A2' }]);
+    });
+
+    it('an accept signed on the phone closes the lane through the act path, once', async () => {
+      const s = await seed();
+      const { env, laneId } = await raiseVerdictAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      const body = await answerBody(s, d, { approval: phoneSigns(s, d.approval.approve) });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-v', body), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      expect((await getLane(s.db, s.team.id, laneId, 'revive'))?.state).toBe('done');
+      const approved = await listAuditByAction(s.db, s.team.id, 'authority.approved', 5);
+      expect(JSON.parse(String(approved[0]?.detail))).toMatchObject({
+        act: 'human_accept',
+        assurance: 'A2',
+        kind: 'phone',
+        key_id: s.deviceKeyId,
+      });
+      expect(await listAuditByAction(s.db, s.team.id, 'channel.answer.a2', 5)).toHaveLength(1);
+      // The verdict is nick's own accept, not a relayed channel answer.
+      const verdict = await s.db.get<{ act: string; meta: string }>(
+        `SELECT act, meta FROM messages WHERE team_id = ? AND act = 'accept'`,
+        [s.team.id],
+      );
+      expect(verdict?.meta).toContain('"in_reply_to":"ask-v"');
+      expect(verdict?.meta).not.toContain('channel_answer');
+      // The same answer again: the token is spent.
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-v', body), NOW + 2_000),
+      ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    });
+
+    it('a decline signed on the phone sends the lane back to its owner', async () => {
+      const s = await seed();
+      const { env, laneId } = await raiseVerdictAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      const body = await answerBody(s, d, {
+        decision: 'reject',
+        approval: phoneSigns(s, d.approval.reject),
+      });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-v', body), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      expect((await getLane(s.db, s.team.id, laneId, 'revive'))?.state).toBe('active');
+    });
+
+    it('refusals leave the ask open: no proof, the other decision’s descriptor, another key', async () => {
+      const s = await seed();
+      const { env, laneId } = await raiseVerdictAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      const attempt = async (over: Parameters<typeof answerBody>[2]) =>
+        handleRelayCallback(
+          s.ctx,
+          s.team,
+          callback('ask-v', await answerBody(s, d, over)),
+          NOW + 1_000,
+        );
+      // No A2 proof: an A1 answer never performs a listed act.
+      await expect(attempt({})).resolves.toEqual({ ok: false, reason: 'no_signature' });
+      // "Approve" carrying the reject descriptor's signature: the gate rebuilds the accept
+      // descriptor, and the signature is for a different act.
+      await expect(
+        attempt({ decision: 'approve', approval: phoneSigns(s, d.approval.reject) }),
+      ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+      // Signed by a key that is not this binding's phone key.
+      const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey;
+      await expect(
+        attempt({ approval: phoneSigns(s, d.approval.approve, stranger) }),
+      ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+      await expect(
+        attempt({ approval: { ...phoneSigns(s, d.approval.approve), key_id: 'key_other' } }),
+      ).resolves.toEqual({ ok: false, reason: 'key_revoked' });
+      expect((await getLane(s.db, s.team.id, laneId, 'revive'))?.state).toBe('awaiting_acceptance');
+      expect(await s.db.all('SELECT 1 FROM ask_decisions')).toHaveLength(0);
+      // Nothing was written in nick's name: a refused verdict is not recorded as an "Accepted".
+      expect(
+        await s.db.all(`SELECT 1 FROM messages WHERE act IN ('accept', 'decline')`),
+      ).toHaveLength(0);
+      // Still answerable, with the right proof.
+      await expect(attempt({ approval: phoneSigns(s, d.approval.approve) })).resolves.toEqual({
+        ok: true,
+      });
+    });
+
+    it('a re-delivery re-issues fresh descriptors, and a spent token’s answer is refused', async () => {
+      const s = await seed();
+      const { env } = await raiseVerdictAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const first = await delivered(s);
+      const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      const second = await delivered(s);
+      expect(second.ask.id).toBe('ask-v');
+      expect(second.approval.approve.descriptor.nonce).not.toBe(
+        first.approval.approve.descriptor.nonce,
+      );
+      await expect(
+        handleRelayCallback(
+          s.ctx,
+          s.team,
+          callback(
+            'ask-v',
+            await answerBody(s, first, { approval: phoneSigns(s, first.approval.approve) }),
+          ),
+          NOW + 2_000,
+        ),
+      ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    });
   });
 });

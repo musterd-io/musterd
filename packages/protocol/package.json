@@ -63,6 +63,14 @@
     "./errors": {
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"
+    },
+    "./approval": {
+      "types": "./dist/approval.d.ts",
+      "default": "./dist/approval.js"
+    },
+    "./app-channel": {
+      "types": "./dist/appChannel.d.ts",
+      "default": "./dist/appChannel.js"
     }
   },
   "files": [

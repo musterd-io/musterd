@@ -1,0 +1,75 @@
+{
+  "_note": "ADR 694 test vectors for the musterd app. Generated once; approval.test.ts recomputes every derived field and verifies each signature. ECDSA is randomized, so a fresh signature differs but must verify the same way.",
+  "phone_signing_key": {
+    "spki_der_b64url": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE7AGCZvKRrrXEvf_3YZM3fyQOwDrMTpfiui4htXttuMEJSgOCV8DYtJNdmEIySqVVzjSTC6wfWI-4xlO4MsGCqw",
+    "jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "7AGCZvKRrrXEvf_3YZM3fyQOwDrMTpfiui4htXttuME",
+      "y": "CUoDglfA2LSTXZhCMkqlVc40kwusH1iPuMZTuDLBgqs"
+    }
+  },
+  "offers": [
+    {
+      "decision": "approve",
+      "payload": {
+        "lane": "01M5BER5GX4WENE2CEST6CA8NB",
+        "verdict": "accept"
+      },
+      "canonical_json": "{\"lane\":\"01M5BER5GX4WENE2CEST6CA8NB\",\"verdict\":\"accept\"}",
+      "descriptor": {
+        "v": 1,
+        "actor": "nick",
+        "act": "human_accept",
+        "target": "01M5BER5GX4WENE2CEST6CA8NB",
+        "payload_digest": "973989db1c10d67f21ed13bfc364f070da72212b04dcff29c0b414e59d8139e5",
+        "audience": "revive",
+        "expiry": 1792650000000,
+        "nonce": "Zk9uY2VfYWNjZXB0X3Rlc3RfdmVjdG9yXzAwMDAwMDA"
+      },
+      "signing_bytes": "musterd-approval/v1\nnick\nhuman_accept\n01M5BER5GX4WENE2CEST6CA8NB\n973989db1c10d67f21ed13bfc364f070da72212b04dcff29c0b414e59d8139e5\nrevive\n1792650000000\nZk9uY2VfYWNjZXB0X3Rlc3RfdmVjdG9yXzAwMDAwMDA",
+      "wording": {
+        "headline": "Accept lane 01M5BER5GX4WENE2CEST6CA8NB as done",
+        "scope": "As nick on revive"
+      },
+      "signature_der": "MEUCIQDgc3pYYHLFdnemRb4ycHfvaH5_0o_vbnXTL8Dby_pLMwIgWKdCUrdDOWffrDM_F254ipV1QVA5NeH-VPob_zpppYQ"
+    },
+    {
+      "decision": "reject",
+      "payload": {
+        "lane": "01M5BER5GX4WENE2CEST6CA8NB",
+        "verdict": "decline"
+      },
+      "canonical_json": "{\"lane\":\"01M5BER5GX4WENE2CEST6CA8NB\",\"verdict\":\"decline\"}",
+      "descriptor": {
+        "v": 1,
+        "actor": "nick",
+        "act": "human_accept",
+        "target": "01M5BER5GX4WENE2CEST6CA8NB",
+        "payload_digest": "bc640bb594e8760ae59567fbeb380cf84150a33e1643f833840c38db743108ec",
+        "audience": "revive",
+        "expiry": 1792650000000,
+        "nonce": "Zk9uY2VfZGVjbGluZV90ZXN0X3ZlY3Rvcl8wMDAwMDA"
+      },
+      "signing_bytes": "musterd-approval/v1\nnick\nhuman_accept\n01M5BER5GX4WENE2CEST6CA8NB\nbc640bb594e8760ae59567fbeb380cf84150a33e1643f833840c38db743108ec\nrevive\n1792650000000\nZk9uY2VfZGVjbGluZV90ZXN0X3ZlY3Rvcl8wMDAwMDA",
+      "wording": {
+        "headline": "Send lane 01M5BER5GX4WENE2CEST6CA8NB back to its owner",
+        "scope": "As nick on revive"
+      },
+      "signature_der": "MEYCIQCc1IMkVtDSjGivsGYTuTU2cjOR4I-WqxNX99zg8xmEgwIhAOYZxqR4e_NDZPOkCf-6oM38ufSuOnGR8BVcrOmpE4mw"
+    }
+  ],
+  "answer": {
+    "input": {
+      "team": "revive",
+      "binding": "bnd_01",
+      "ask": "ask_01",
+      "token": "tok_01",
+      "decision": "approve",
+      "nonce": "nonce_01",
+      "reported": false
+    },
+    "signing_bytes": "musterd-app-answer/v1\nrevive\nbnd_01\nask_01\ntok_01\napprove\nnonce_01\n-",
+    "signature_der": "MEUCIQCr1QOMTee6GmwDSQz1Xa_QYjegovm7_iO_mttmTiOPhAIgHpsFqfCsKCWthpTEoH8tCID8QH-uMGBSs9atpJu4mzo"
+  }
+}

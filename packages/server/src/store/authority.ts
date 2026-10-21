@@ -431,6 +431,13 @@ export async function requireAuthority(
     proof?: ApprovalProof | undefined;
     /** ADR 662 dec. 5: passkey ceremonies must be on one of these origins, when known. */
     expectedOrigins?: readonly string[] | undefined;
+    /**
+     * Run every check and stop before the spend (ADR 694): the nonce stays live and no approval
+     * is audited; a refusal is audited as usual. For a caller that must not write the act it
+     * carries until it knows the gate will take it — the app channel's verdict, which the act
+     * path then presents for real.
+     */
+    checkOnly?: boolean;
     now?: number;
   },
 ): Promise<AuthorityCheck> {
@@ -522,6 +529,7 @@ export async function requireAuthority(
     }
   }
   if (!valid) return refuse('descriptor_mismatch');
+  if (input.checkOnly) return { ok: true, assurance: 'A2', keyId: key.id, kind: key.kind };
 
   // One-use, atomically: the conditional update is the consumption, so two concurrent
   // presentations of the same proof cannot both spend the nonce (HA1 re-review).

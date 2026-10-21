@@ -112,12 +112,26 @@ withDrivers('ask channel tokens and the decision record (ADR 623 §5-§7)', (ope
       expect(a.token).not.toEqual(b.token);
     });
 
-    it('refuses to issue a token for a privileged ask: it gets no buttons', async () => {
+    it('refuses an A1 token for a privileged ask (no buttons) and an A2 token for an advisory one', async () => {
       const { db, team } = await seed();
       await expect(
         issueAskChannelToken(db, issueInput(team.id, { actionClass: 'privileged' })),
       ).rejects.toThrow(/privileged/);
+      await expect(
+        issueAskChannelToken(db, issueInput(team.id, { requiredAssurance: 'A2' })),
+      ).rejects.toThrow(/A2/);
       expect(await db.all('SELECT 1 FROM ask_channel_tokens')).toHaveLength(0);
+    });
+
+    it('issues an A2 token for a privileged ask (ADR 694)', async () => {
+      const { db, team } = await seed();
+      await issueAskChannelToken(
+        db,
+        issueInput(team.id, { actionClass: 'privileged', requiredAssurance: 'A2' }),
+      );
+      expect(
+        await db.all('SELECT action_class, required_assurance FROM ask_channel_tokens'),
+      ).toEqual([{ action_class: 'privileged', required_assurance: 'A2' }]);
     });
   });
 
@@ -299,15 +313,23 @@ withDrivers('ask channel tokens and the decision record (ADR 623 §5-§7)', (ope
       );
     });
 
-    it('refuses an assurance the token does not allow, and never accepts A2 in v1', async () => {
+    it('refuses an assurance the token does not allow: A1 never redeems A2, nor A2 an A1 token', async () => {
       const { db, team } = await seed();
-      const { c } = checks();
+      const { c } = checks({ ask: { ...GOOD_ASK, actionClass: 'privileged' } });
       const a2Required = await issueAskChannelToken(
         db,
-        issueInput(team.id, { askId: 'ask-2', requiredAssurance: 'A2' }),
+        issueInput(team.id, {
+          askId: 'ask-2',
+          actionClass: 'privileged',
+          requiredAssurance: 'A2',
+        }),
       );
       expect(
-        await redeemAskChannelToken(db, redeemInput(team.id, a2Required.token).input, c),
+        await redeemAskChannelToken(
+          db,
+          redeemInput(team.id, a2Required.token, { askId: 'ask-2' }).input,
+          c,
+        ),
       ).toEqual({ ok: false, reason: 'assurance' });
       const a1 = await issueAskChannelToken(db, issueInput(team.id, { askId: 'ask-3' }));
       expect(
@@ -317,6 +339,44 @@ withDrivers('ask channel tokens and the decision record (ADR 623 §5-§7)', (ope
           c,
         ),
       ).toEqual({ ok: false, reason: 'assurance' });
+    });
+
+    it('redeems a privileged ask only at A2, and audits it as channel.answer.a2 (ADR 694)', async () => {
+      const { db, team } = await seed();
+      const { c } = checks({ ask: { ...GOOD_ASK, actionClass: 'privileged' } });
+      const { token } = await issueAskChannelToken(
+        db,
+        issueInput(team.id, { actionClass: 'privileged', requiredAssurance: 'A2' }),
+      );
+      const ok = await redeemAskChannelToken(
+        db,
+        redeemInput(team.id, token, { assurance: 'A2' }).input,
+        c,
+      );
+      expect(ok).toEqual({ ok: true, decision: 'approve', messageId: 'msg-1' });
+      const audit = await listAudit(db, team.id, { limit: 10 });
+      expect(audit.map((r) => r.action)).toContain('channel.answer.a2');
+    });
+
+    it('preflight runs every check and writes nothing: no decision, no answer, token still live', async () => {
+      const { db, team } = await seed();
+      const { c } = checks();
+      const { token } = await issueAskChannelToken(db, issueInput(team.id));
+      const pre = redeemInput(team.id, token, { preflight: true });
+      expect((await redeemAskChannelToken(db, pre.input, c)).ok).toBe(true);
+      expect(pre.wrote()).toBe(0);
+      expect(await decisionRows(db, team.id)).toHaveLength(0);
+      expect((await redeemAskChannelToken(db, redeemInput(team.id, token).input, c)).ok).toBe(true);
+      // A preflight that fails refuses with the same reason redemption would.
+      const stale = checks({ binding: 'stale' });
+      const { token: t2 } = await issueAskChannelToken(db, issueInput(team.id, { askId: 'ask-9' }));
+      expect(
+        await redeemAskChannelToken(
+          db,
+          redeemInput(team.id, t2, { askId: 'ask-9', preflight: true }).input,
+          stale.c,
+        ),
+      ).toEqual({ ok: false, reason: 'binding_stale' });
     });
 
     it('rolls everything back when writing the answer fails: no decision, token still usable', async () => {
