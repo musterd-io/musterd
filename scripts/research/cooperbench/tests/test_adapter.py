@@ -144,7 +144,8 @@ def test_the_pair_is_released_and_the_container_cleaned_even_on_failure(wired, m
 
 def test_node_22_is_ensured_after_setup_and_before_musterd_installs(wired):
     """An Alpine image's apk Node is too old for musterd's CLI (go_chi/27, pilot 2026-10-21)."""
-    envs, *_ = wired
+    envs, _ = wired
+    run()
     cmds = envs[0].commands
     setup = next(i for i, c in enumerate(cmds) if c.startswith("bash ") and "setup" in c)
     node = cmds.index(ad.ENSURE_NODE22)
