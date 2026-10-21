@@ -1,7 +1,7 @@
 # CooperBench pilot 3: pre-registration
 
-**Lane:** `01M5G70VZS` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-21,
-not yet run. Nothing below changes once a measured pair has run; what the run teaches goes in the
+**Lane:** `01M5G70VZS` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-21; run 2026-10-21 → [finding 017](../017-cooperbench-pilot-3.md).
+Nothing below changes once a measured pair has run; what the run teaches goes in the
 finding, not here. **CooperBench:** `63b9d44`. **Before this:** [pilot 1](./pilot-manifest.md) →
 [finding 015](../015-cooperbench-pilot.md), [pilot 2](./pilot2-manifest.md) →
 [finding 016](../016-cooperbench-pilot-2.md), both with dated corrections.
