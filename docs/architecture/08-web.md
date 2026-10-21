@@ -262,7 +262,7 @@ live/
   client.ts                     // observer claim + backfill + WS subscribe (browser port of the CLI watch)
   authorityProof.ts             // the ADR 662 passkey ceremony for a human's lane verdict on the asks rail; dynamically imported so it stays out of the eager bundle
   seedClient.ts                 // lazy Seed HTTP projection; keeps Seed schemas out of eager `/live`
-  recoverAsks.ts                // review asks older than the backfill window, fetched by date: an awaiting lane with no named reviewer and no held ask → its history dates the ask → one forward page (lane 01M5G10DB2); lazy
+  recoverAsks.ts                // review asks older than the backfill window, fetched by date: an awaiting lane waiting on a human (or no named reviewer) with no held ask → its history dates the ask → one forward page (lane 01M5G10DB2); lazy
   useRecoveredAsks.ts           // the asks rail's hook over recoverAsks: once per lane per connection, held apart from the 1,000-envelope cap
   useLiveStream.ts              // the React hook: envelopes, roster, liveIds, conn status, `fresh`; seeds from liveCache, drives the chime; roster refetch on presence is coalesced
   liveCache.ts                  // this browser's last /live snapshot per team + seat (roster, newest 120 envelopes, open lanes) in localStorage: painted at once on the next visit, cleared on sign-out

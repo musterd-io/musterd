@@ -8,6 +8,7 @@ import {
   reviewAsksIn,
 } from './recoverAsks';
 
+const humans = new Set(['nick']);
 const cfg = { team: 'revive', as: 'nick', token: 'mscr_watch' } as never;
 
 function env(id: string, act: Envelope['act'], ts: number, meta: Record<string, unknown> | null = null, from = 'ada'): Envelope {
@@ -36,12 +37,16 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('lanesMissingReviewAsk (lane 01M5G10DB2)', () => {
   it('names an awaiting lane with no reviewer whose review ask the window does not hold', () => {
-    expect(lanesMissingReviewAsk([lane('L1')], windowOf(9000))).toEqual(['L1']);
+    expect(lanesMissingReviewAsk([lane('L1')], windowOf(9000), humans)).toEqual(['L1']);
   });
 
-  it('skips a lane whose ask is held, one the board names a reviewer for, and one not in acceptance', () => {
-    const lanes = [lane('HELD'), lane('ROUTED', { acceptance_reviewer: 'nick' }), lane('DONE', { state: 'done' })];
-    expect(lanesMissingReviewAsk(lanes, [reviewAsk('a1', 'HELD', 5)])).toEqual([]);
+  it('names a lane waiting on a human reviewer too, so naming one on the daemon (lane 01M5G1W126) keeps it', () => {
+    expect(lanesMissingReviewAsk([lane('L1', { acceptance_reviewer: 'nick' })], windowOf(9000), humans)).toEqual(['L1']);
+  });
+
+  it("skips a lane whose ask is held, one waiting on an agent, and one not in acceptance", () => {
+    const lanes = [lane('HELD'), lane('PEER', { acceptance_reviewer: 'big-body' }), lane('DONE', { state: 'done' })];
+    expect(lanesMissingReviewAsk(lanes, [reviewAsk('a1', 'HELD', 5)], humans)).toEqual([]);
   });
 });
 

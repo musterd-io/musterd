@@ -108,13 +108,6 @@ export function AsksStrip({
   // which side of the tier contract an unanswered ask fell on (`applyTierClock`). Those must be the
   // same instant or a card can say "0:00 left" while still offering Approve.
   const [now, setNow] = useState(() => Date.now());
-  // Review asks older than the backfill window, fetched by date (lane 01M5G10DB2): without them a
-  // fresh load cannot re-offer a lane's ask that scrolled out before its refused verdict did.
-  const recovered = useRecoveredAsks(cfg, board, envelopes, !loading);
-  const derived = useMemo(
-    () => deriveAsks([...recovered, ...envelopes, ...localAnswers]),
-    [recovered, envelopes, localAnswers],
-  );
   // Answerable iff the connected seat is a real member (observers are hidden from the roster).
   const canAnswer = roster.some((m) => m.name === cfg.as);
   /**
@@ -129,6 +122,13 @@ export function AsksStrip({
       humans: new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name)),
     }),
     [canAnswer, cfg.as, localIdentity, roster],
+  );
+  // Review asks older than the backfill window, fetched by date (lane 01M5G10DB2): without them a
+  // fresh load cannot re-offer a lane's ask that scrolled out before its refused verdict did.
+  const recovered = useRecoveredAsks(cfg, board, envelopes, ctx.humans, !loading);
+  const derived = useMemo(
+    () => deriveAsks([...recovered, ...envelopes, ...localAnswers]),
+    [recovered, envelopes, localAnswers],
   );
   // A refused human verdict must not settle its ask (lane 01M5EA60RD): the board's still-awaiting
   // lanes re-offer review asks the timeline settled with an unsigned human verdict alone. Applied

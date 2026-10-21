@@ -13,6 +13,7 @@ export function useRecoveredAsks(
   cfg: LiveConfig | null,
   board: LaneBoard | null,
   envelopes: Envelope[],
+  humans: Set<string>,
   ready: boolean,
 ): Envelope[] {
   const [recovered, setRecovered] = useState<Envelope[]>([]);
@@ -35,13 +36,16 @@ export function useRecoveredAsks(
   useEffect(() => {
     if (!cfg || !board || !ready) return;
     const maybe = board.lanes.some(
-      (l) => isAwaitingAcceptance(l.state) && l.acceptance_reviewer === undefined && !tried.current.has(l.id),
+      (l) =>
+        isAwaitingAcceptance(l.state) &&
+        (l.acceptance_reviewer === undefined || humans.has(l.acceptance_reviewer)) &&
+        !tried.current.has(l.id),
     );
     if (!maybe) return;
     const at = gen.current;
     import('./recoverAsks')
       .then(async (m) => {
-        const ids = m.lanesMissingReviewAsk(board.lanes, held.current).filter((id) => !tried.current.has(id));
+        const ids = m.lanesMissingReviewAsk(board.lanes, held.current, humans).filter((id) => !tried.current.has(id));
         for (const id of ids) tried.current.add(id);
         const found = (await Promise.all(ids.map((id) => m.recoverReviewAsks(cfg, id).catch(() => [])))).flat();
         if (gen.current === at && found.length > 0) setRecovered((prev) => [...prev, ...found]);
@@ -49,7 +53,7 @@ export function useRecoveredAsks(
       .catch(() => {
         /* ambient: a failed recovery leaves the rail as the window drew it */
       });
-  }, [cfg, board, ready]);
+  }, [cfg, board, humans, ready]);
 
   return recovered;
 }

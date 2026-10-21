@@ -11,9 +11,9 @@ import { apiGet, fetchHistory, type LiveConfig } from './client';
  * envelopes back — exactly the asks `resurrectRefusedVerdicts` exists to re-offer, and it can only
  * re-offer one that is in the timeline. Raising the limit only moves the edge.
  *
- * **The rule.** The board already says which lanes are awaiting acceptance. One the board names no
- * reviewer for (the daemon counts a refused verdict as an answer, ADR 518's `acceptanceWaits`) and
- * whose review ask the timeline does not hold is fetched by its own clock: the lane's history dates
+ * **The rule.** The board already says which lanes are awaiting acceptance. One waiting on a human,
+ * or on nobody the board can name (today the daemon counts a refused verdict as an answer, lane
+ * 01M5G1W126), whose review ask the timeline does not hold is fetched by its own clock: the lane's history dates
  * the ask (`lane.review_human_asked`, or `lane.ready_for_review` for a single-stage review — each
  * written beside the ask it records), and one forward page from just before that instant holds it.
  * Two small reads per such lane, once per lane id per page load; the derivation stays envelope-pure.
@@ -34,16 +34,22 @@ function reviewLaneOf(env: Envelope): string | null {
   return typeof lane === 'string' ? lane : null;
 }
 
-/** Awaiting lanes with no named reviewer whose review ask the held timeline does not carry. */
-export function lanesMissingReviewAsk(lanes: Lane[], envelopes: Envelope[]): string[] {
+/** Awaiting lanes waiting on a human or on no named reviewer whose review ask the timeline lacks. An
+ * agent's review is watchable but never answerable here, so it is not worth the two reads. */
+export function lanesMissingReviewAsk(lanes: Lane[], envelopes: Envelope[], humans: Set<string>): string[] {
   const held = new Set<string>();
   for (const e of envelopes) {
     const lane = reviewLaneOf(e);
     if (lane) held.add(lane);
   }
   return lanes
-    .filter((l) => isAwaitingAcceptance(l.state) && l.acceptance_reviewer === undefined && !held.has(l.id))
+    .filter((l) => isAwaitingAcceptance(l.state) && waitsOnHuman(l, humans) && !held.has(l.id))
     .map((l) => l.id);
+}
+
+/** Waiting on a human, or on a reviewer the board cannot name. */
+export function waitsOnHuman(lane: Lane, humans: Set<string>): boolean {
+  return lane.acceptance_reviewer === undefined || humans.has(lane.acceptance_reviewer);
 }
 
 /** When the lane's newest review ask went out, from its history; null when it records none. */
