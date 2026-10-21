@@ -393,8 +393,11 @@ teammate's session. Consequences worth internalising:
   `plateLayout.ts` to settle. It is worn as a tag with the role's glyph (lane 01M5G33VH8; nick picked
   it from four treatments side by side, after plain words read as stray text): a borderless neutral
   fill in sentence case, so it is never mistaken for an outlined state tag, with a small drawing per
-  library role from `live/roleGlyph.ts` tinted in the member's hue. A role with no drawing keeps the
-  plain tag.
+  library role from `live/roleGlyph.ts`. The drawings were redrawn as one two-tone family on a 16-unit
+  grid (lane 01M5GCMN2S; nick, after the comms speaker read as "audio on"): each is a picture of the
+  job that cannot be read as a state, for example a paper plane for comms, a palette for designer and a
+  sprout for founder, filled with the member's hue under a dark outline (colour and stroke in Live.css,
+  shapes in roleGlyph.ts). A role with no drawing keeps the plain tag.
 - **Idle plates fold** (lane 01M5G7A9H1, 2026-10-21; nick: the office "is now becoming crowded with
   the nameplates"). An idle or away member's plate (`is-compact`) keeps its pictures and drops its
   words: dot, name, the role's glyph, the model's logo and any state tag. A working member, or one

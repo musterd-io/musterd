@@ -1448,6 +1448,22 @@ to trim that is not the feature. A re-baseline would loosen.
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B with this change in.
 
+### 2026-10-21 — `totalJsGzipBytes` 357,000 → 357,500 B: the role icons, redrawn two-tone (lane `01M5GCMN2S`)
+
+| Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
+| ---------- | ----------------------------- | ------------------- | -------------------------- |
+| initial JS | 149,120 B                     | 149,104 B (−16)     | unchanged, 149,250 B       |
+| total JS   | 356,693 B                     | 356,980 B (+287)    | RAISED 357,000 → 357,500 B |
+| live CSS   | 26,479 B                      | 26,509 B (+30)      | unchanged, 26,700 B        |
+
+nick, on the first set of role icons: the comms speaker read as "that member's audio is on". All twelve
+were redrawn as one family on a 16-unit grid, and nick picked the two-tone style from a side-by-side
+sheet. The +287 B is the extra detail per drawing. The colour and stroke attributes moved out of every
+string into one CSS rule, which is why initial JS drops a little. Main sat 307 B under its total-JS
+ceiling before this change, inside CI's ~450 B gap, so no trim this size makes the change land.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 357,000 B with this change in.
+
 ### 2026-10-21 — `totalJsGzipBytes` 356,600 → 357,000 B and `liveCssGzipBytes` 26,550 → 26,700 B: idle plates fold, the stream holds a roll call (lane `01M5G7A9H1`)
 
 | Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |

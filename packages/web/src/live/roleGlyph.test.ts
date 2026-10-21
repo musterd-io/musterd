@@ -19,7 +19,7 @@ describe('roleGlyph', () => {
       'security',
       'steward',
     ]) {
-      expect(roleGlyph(role), role).toMatch(/^<svg viewBox="0 0 11 11" aria-hidden="true">.+<\/svg>$/);
+      expect(roleGlyph(role), role).toMatch(/^<svg viewBox="0 0 16 16" aria-hidden="true">.*class="b".*<\/svg>$/);
     }
   });
 
