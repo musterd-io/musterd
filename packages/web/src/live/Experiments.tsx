@@ -218,8 +218,20 @@ function Sparkline({
         )}
         <line className="lc-xp__spark-target" x1="0" x2={SPARK_W} y1={spark.targetY} y2={spark.targetY} />
         <path className="lc-xp__spark-line" d={spark.path} />
+        {/* ADR 701: today's point, live — it moves as the day's acts land. */}
+        {spark.now && <circle className="lc-xp__spark-now" cx={spark.now.x} cy={spark.now.y} r="2.5" />}
       </svg>
-      <span className="lc-xp__spark-latest">{spark.latest}</span>
+      <span
+        className={`lc-xp__spark-latest${spark.now ? ' is-live' : ''}`}
+        title={
+          spark.now
+            ? `today so far${spark.now.asOf ? `, as of ${new Date(spark.now.asOf).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`
+            : undefined
+        }
+      >
+        {spark.latest}
+        {spark.now && <span className="lc-xp__spark-live"> now</span>}
+      </span>
     </span>
   );
 }

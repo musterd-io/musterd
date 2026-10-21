@@ -65,6 +65,7 @@ import {
   TraceEventBatchSchema,
   OpenLaneSchema,
   SampleInputSchema,
+  type LiveSamples,
   UpdateLaneSchema,
   DeclareGoalSchema,
   PostGoalOutcomeSchema,
@@ -558,6 +559,7 @@ import {
   styleResolver,
   teamStyle,
 } from '../store/style.js';
+import { liveMetricSamples } from '../store/sweepMetricSamples.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
@@ -8810,6 +8812,15 @@ export async function handleHttp(
           lane_open: { lane: lane.id, title: lane.title, project: lane.project },
         });
         return sendJson(res, 201, { lane, warnings });
+      }
+
+      // ADR 701: today's point for every open metric lane, as it stands now — what the Experiments
+      // panel polls (at most every LIVE_SAMPLES_POLL_MS) so a chart moves without a lane changing.
+      // Numbers only, no lane text, so every reader of the board may read it.
+      if (method === 'GET' && rest === '/experiments/live') {
+        const { team } = await authTouch(ctx, slug, req);
+        const samples = await liveMetricSamples(ctx.db, team.id, team.slug);
+        return sendJson(res, 200, { samples } satisfies LiveSamples);
       }
 
       // ADR 673 §2: one day's sample for a metric lane. Any authenticated member of the team may

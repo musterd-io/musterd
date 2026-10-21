@@ -839,6 +839,8 @@ export async function dayWakeLatency(
   teamId: string,
   since: number,
   until: number,
+  /** ADR 701: only seats enrolled on this harness (`residency.harness`); absent is every seat. */
+  harness?: string,
 ): Promise<{ p50_ms: number | null; n: number }> {
   const rows = await db.all<{ target: string; detail: string | null }>(
     `SELECT target, detail FROM audit
@@ -862,6 +864,13 @@ export async function dayWakeLatency(
     ]);
     const recipient = await getMemberByName(db, teamId, seat);
     if (!msg || !recipient) continue;
+    if (harness !== undefined) {
+      const enrolled = await db.get<{ harness: string }>(
+        'SELECT harness FROM residency WHERE team_id = ? AND member_id = ? LIMIT 1',
+        [teamId, recipient.id],
+      );
+      if (enrolled?.harness !== harness) continue;
+    }
     const latency = await wokenActLatency(db, teamId, msg, recipient.id);
     if (latency !== null) latencies.push(latency);
   }

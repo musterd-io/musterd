@@ -57,6 +57,57 @@ export interface ExperimentSample {
   day: string;
   value: number;
   n: number;
+  /** ADR 701: today's point as it stands now, from `GET …/experiments/live` — not yet a day's row. */
+  live?: boolean;
+  /** When a live point was computed (ms). */
+  asOf?: number;
+}
+
+/** ADR 701: one live point from `GET /teams/:slug/experiments/live`. */
+export interface LiveSampleWire {
+  lane: string;
+  day: string;
+  value: number;
+  n: number;
+  as_of: number;
+}
+
+/** `LIVE_SAMPLES_POLL_MS` from @musterd/protocol, restated for the same reason as the zone below. */
+export const LIVE_POLL_MS = 30_000;
+
+/** The live endpoint's body, read defensively (hard rule 4): a malformed row is dropped, not shown. */
+export function readLiveSamples(json: unknown): LiveSampleWire[] {
+  const rows = (json as { samples?: unknown } | null)?.samples;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(
+    (r): r is LiveSampleWire =>
+      typeof r === 'object' &&
+      r !== null &&
+      typeof (r as LiveSampleWire).lane === 'string' &&
+      typeof (r as LiveSampleWire).day === 'string' &&
+      isNum((r as LiveSampleWire).value) &&
+      isNum((r as LiveSampleWire).n) &&
+      isNum((r as LiveSampleWire).as_of),
+  );
+}
+
+/**
+ * ADR 701: put each metric entry's live point on its series — replacing today's stored sample when
+ * there is one, appended after the history otherwise. Entries without a live point are unchanged.
+ */
+export function withLivePoints(
+  entries: readonly ExperimentEntry[],
+  live: readonly LiveSampleWire[],
+): ExperimentEntry[] {
+  if (live.length === 0) return [...entries];
+  const byLane = new Map(live.map((l) => [l.lane, l]));
+  return entries.map((e) => {
+    const l = byLane.get(e.id);
+    if (!l || !e.metric || e.status === 'read') return e;
+    const point: ExperimentSample = { day: l.day, value: l.value, n: l.n, live: true, asOf: l.as_of };
+    const history = e.samples.filter((s) => s.day !== l.day);
+    return { ...e, samples: [...history, point] };
+  });
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -151,7 +202,14 @@ export function sparkline(
   samples: readonly ExperimentSample[],
   w = SPARK_W,
   h = SPARK_H,
-): { path: string; targetY: number; baselineY: number | null; latest: string } | null {
+): {
+  path: string;
+  targetY: number;
+  baselineY: number | null;
+  latest: string;
+  /** ADR 701: where today's live point sits, when the series ends on one. */
+  now: { x: number; y: number; asOf: number | null } | null;
+} | null {
   if (!metric || samples.length < 2) return null;
   const values = samples.map((s) => s.value);
   const all = [...values, metric.target, ...(metric.baseline === null ? [] : [metric.baseline])];
@@ -168,6 +226,9 @@ export function sparkline(
     targetY: y(metric.target),
     baselineY: metric.baseline === null ? null : y(metric.baseline),
     latest: formatValue(values[values.length - 1]!, metric.unit),
+    now: samples[samples.length - 1]!.live
+      ? { x: x(samples.length - 1), y: y(values[values.length - 1]!), asOf: samples[samples.length - 1]!.asOf ?? null }
+      : null,
   };
 }
 

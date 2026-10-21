@@ -139,7 +139,10 @@ function fmtResult(prefix: string, lane: Lane, warnings: LaneWarning[]): string 
  * what every follow-up call — update, handoff, resolve — needs), with any next-action `hint` as a
  * field rather than only buried in the text.
  */
-function laneResult(prefix: string, lane: Lane, warnings: LaneWarning[], hint?: string) {
+function laneResult(prefix: string, lane: Lane, warnings: LaneWarning[], given?: string) {
+  // ADR 701: a dated read with no metric says, once, that its chart is one field away.
+  const nudge = metricNudge(lane);
+  const hint = nudge ? `${given ?? ''}\n${nudge}` : given;
   return {
     content: [{ type: 'text' as const, text: fmtResult(prefix, lane, warnings) + (hint ?? '') }],
     structuredContent: {

@@ -555,6 +555,12 @@ export const MetricInputSchema = z.object({
   target: z.number(),
   direction: z.enum(['up', 'down']),
   source: z.enum(METRIC_SOURCES).default('manual'),
+  /**
+   * ADR 701: scope a derived source to the seats enrolled on one harness (`claude-code`, `codex`,
+   * …), so "does tool X wake as cheaply as tool Y" is one metric lane per tool. Only
+   * `wake_latency_p50_ms` reads it; absent means every seat.
+   */
+  harness: z.string().min(1).max(40).optional(),
 });
 export type MetricInput = z.input<typeof MetricInputSchema>;
 export const LaneMetricSchema = MetricInputSchema.extend({
@@ -579,6 +585,50 @@ export const LaneSampleSchema = SampleInputSchema.extend({
   at: z.number().int(),
 });
 export type LaneSample = z.infer<typeof LaneSampleSchema>;
+
+/**
+ * ADR 701: today's point for a metric lane, as it stands now — computed on read for a derived
+ * source, the stored sample for a manual one. Never stored: at the day's end the daemon's sweep
+ * (or the last post) is what remains. `as_of` is when it was computed.
+ */
+export const LiveSampleSchema = SampleInputSchema.extend({
+  lane: z.string().min(1),
+  as_of: z.number().int(),
+});
+export type LiveSample = z.infer<typeof LiveSampleSchema>;
+
+/** `GET /teams/:slug/experiments/live`: one live point per open metric lane that has one today. */
+export const LiveSamplesSchema = z.object({ samples: z.array(LiveSampleSchema) });
+export type LiveSamples = z.infer<typeof LiveSamplesSchema>;
+
+/**
+ * ADR 701: the one line a lane result adds when a read has no metric — so an experiment is not
+ * left chartless because nobody knew a chart was one field away. Null when it has one, or no read
+ * day, or the read is in. Same words on every surface (MCP, CLI).
+ */
+export function metricNudge(
+  lane: {
+    reads_on?: string | null | undefined;
+    metric?: unknown;
+    state: string;
+    read_verdict?: unknown;
+  },
+  form: 'tool' | 'cli' = 'tool',
+): string | null {
+  if (!lane.reads_on || lane.metric || lane.read_verdict) return null;
+  if (lane.state === 'done' || lane.state === 'abandoned') return null;
+  const how =
+    form === 'cli'
+      ? `--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] ` +
+        `[--metric-source ${METRIC_SOURCES.join('|')}] [--metric-harness <harness>]; ` +
+        `a manual metric takes a day's number with \`musterd lane sample <id> --value <v> --n <count>\``
+      : `metric {name, unit, baseline, target, direction: up|down, source?: ${METRIC_SOURCES.join('|')}, harness?}; ` +
+        `a manual metric takes a day's number with a sample {value, n}`;
+  return `this read has no metric, so /live draws no chart for it — declare one: ${how}`;
+}
+
+/** ADR 701: how often a viewer may ask for live points, and how long the daemon reuses them. */
+export const LIVE_SAMPLES_POLL_MS = 30_000;
 
 /** `POST /teams/:slug/lanes/:id/samples`: the stored sample, and the value it replaced if any. */
 export const SampleResultSchema = z.object({
