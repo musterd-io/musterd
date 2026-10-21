@@ -4423,6 +4423,15 @@ export async function handleHttp(
           result: 'allow',
           detail: viaHostKey ? { via: 'host_key', host } : {},
         });
+        // ADR 689 decision 8: the revocation crosses to every joiner that projected the mint. The
+        // row is written for every scoped revoke — a joiner holding no such row ignores it.
+        await appendAudit(ctx.db, delTeam.id, {
+          actor: null,
+          action: 'credential.revoked',
+          target: credentialId,
+          result: 'allow',
+          detail: {},
+        });
         return sendJson(res, 200, { ok: true });
       }
 

@@ -213,6 +213,19 @@ export async function ingestBatch(
             'capture reaches every node by fold',
         );
       }
+      // ADR 689 decision 6: a credential fact is the hub's to write. A joiner's mint is a request
+      // the hub validates and re-emits under its own origin; a `credential.*` row pushed from
+      // anywhere else would be a forged verifier, so it is refused before it can be stored.
+      if (
+        event.kind === 'ledger' &&
+        !loopback &&
+        (event.event.action === 'credential.accepted' || event.event.action === 'credential.revoked')
+      ) {
+        throw new SyncOriginError(
+          "a credential fact is the hub's to write (ADR 689): a joiner's mint is a request, and " +
+            'only the hub accepts or revokes',
+        );
+      }
       const actor =
         event.kind === 'policy' || event.kind === 'seed' || hubRecord
           ? null

@@ -7,7 +7,8 @@ import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
-import { addMember, getMemberByName } from '../store/members.js';
+import { appendAudit } from '../store/audit.js';
+import { addMember, getMemberByName, hashToken } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
@@ -148,6 +149,74 @@ withDrivers('credentials', (_o, kind) => {
         hostKey,
       );
       expect(after.status).toBe(200);
+    });
+
+    it('2. revoking the host key on the hub ends it at the joiner on the next round trip', async () => {
+      const hk = await post(
+        hubBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'cloud-ada' },
+        nickOnHub,
+      );
+      const hostKey = hk.json.agent_key as string;
+      const credentialId = hk.json.credential.id as string;
+      await roundTrip();
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-ada' },
+            hostKey,
+          )
+        ).status,
+      ).toBe(200);
+
+      const revoked = await fetch(
+        `${hubBase}/teams/bravo/agent-bootstrap-credentials/${credentialId}`,
+        { method: 'DELETE', headers: { authorization: `Bearer ${nickOnHub}` } },
+      );
+      expect(revoked.status).toBe(200);
+      await roundTrip();
+
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-ada' },
+            hostKey,
+          )
+        ).status,
+      ).toBe(401);
+    });
+
+    it('3. a joiner cannot author a credential fact: a forged credential.accepted is refused at the hub`s ingest', async () => {
+      const forgedKey = 'msak_forged_by_the_joiner';
+      await appendAudit(joiner.store, (await joinerTeam()).id, {
+        actor: null,
+        action: 'credential.accepted',
+        target: 'forged-credential-id',
+        result: 'allow',
+        detail: {
+          use: 'host',
+          target: 'cloud-ada',
+          sponsor: 'nick',
+          key_hash: hashToken(forgedKey),
+          created_at: Date.now(),
+        },
+      });
+      await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/403/);
+      expect(
+        (
+          await post(
+            hubBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-ada' },
+            forgedKey,
+          )
+        ).status,
+      ).toBe(401);
     });
   });
 });
