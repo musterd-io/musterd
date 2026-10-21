@@ -204,6 +204,6 @@ describe('musterd host — unknown positional', () => {
   it('names what it does accept', async () => {
     await expect(
       hostCommand(parseArgs(['statsu']), { provisioner: null, doorbell: false } as never),
-    ).rejects.toThrow(/musterd host \[provisions\]/);
+    ).rejects.toThrow(/musterd host \[provisions \| unbind <label>\]/);
   });
 });

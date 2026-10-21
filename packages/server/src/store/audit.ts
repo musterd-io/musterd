@@ -669,6 +669,10 @@ export type AuditAction =
   | 'seat.bound'
   | 'seat.bound_elsewhere'
   | 'seat.unbound'
+  // ADR 689 d5 follow-up (lane 01M5E1Z7JE): an admin cleared a host label's node binding on the hub
+  // (detail: { node }), or was refused because the label is in use (result `deny`,
+  // detail: { node, reason: 'in_use', seats }). Hub-local: it never replicates.
+  | 'host.unbound'
   // ADR 358: a human seat's set of nodes widened by the explicit trust act from a node already in
   // it (detail: { node, by_node, by_label }). A refused trust is `seat.bound_elsewhere` with
   // detail.act = 'trust' — one row shape for every probe from a machine outside the set.
@@ -930,6 +934,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.bound': 'actor',
   'seat.bound_elsewhere': 'actor',
   'seat.unbound': 'actor',
+  'host.unbound': 'actor',
   'seat.node_trusted': 'actor',
   'node.note_key_set': 'actor',
   'workspace.repaired': 'actor',

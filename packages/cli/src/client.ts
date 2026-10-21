@@ -1900,6 +1900,17 @@ export class HttpClient {
     )) as { revoked: boolean };
   }
 
+  /** Lane 01M5E1Z7JE (ADR 689 d5): an admin clears a host label's node binding, on the hub. */
+  async hostUnbind(
+    slug: string,
+    label: string,
+  ): Promise<{ host: string; unbound: boolean; node_id?: string }> {
+    return (await this.request(
+      'POST',
+      `/teams/${slug}/hosts/${encodeURIComponent(label)}/unbind`,
+    )) as { host: string; unbound: boolean; node_id?: string };
+  }
+
   /**
    * ADR 358: trust `nodeId` for the caller's own seat. Decided by the daemon this CLI talks to
    * (or forwarded to its hub) — the machine running the command is the one vouching.

@@ -2,7 +2,9 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
+import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { applyFoldedEnrollment, bindHostToNode } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
@@ -385,6 +387,121 @@ withDrivers('nodes-http', (_o, kind) => {
       const remote = listed.json.nodes.find((n: any) => n.id === 'node-remote');
       expect(remote.credential_prefix).toBe('msnode_');
       expect(remote.label).toBe('laptop');
+    });
+  });
+
+  describe('host unbind (lane 01M5E1Z7JE, ADR 689 d5 follow-up)', () => {
+    /** A host label bound to `node-remote`, the way a joiner's first host-actor push binds it. */
+    async function boundLabel(label = 'cloud-ada'): Promise<string> {
+      const code = await invite();
+      await request('POST', '/teams/bravo/nodes/join', {
+        code,
+        node_id: 'node-remote',
+        label: 'laptop',
+      });
+      const team = (await getTeamBySlug(server.store, 'bravo'))!;
+      expect(await bindHostToNode(server.store, team.id, label, 'node-remote')).toEqual({
+        bound: true,
+      });
+      return team.id;
+    }
+
+    async function bindingOf(teamId: string, label: string): Promise<string | null> {
+      const row = await server.store.get<{ node: string | null }>(
+        'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+        [teamId, label],
+      );
+      return row?.node ?? null;
+    }
+
+    async function unbindAudit(teamId: string) {
+      return await server.store.all<{ result: string; target: string; detail: string }>(
+        `SELECT result, target, detail FROM audit WHERE team_id = ? AND action = 'host.unbound'
+          ORDER BY ts, id`,
+        [teamId],
+      );
+    }
+
+    it('is admin-only', async () => {
+      await boundLabel();
+      const res = await request('POST', '/teams/bravo/hosts/cloud-ada/unbind', undefined, adaAuth);
+      expect(res.status).toBe(403);
+    });
+
+    it('clears the binding so another node takes the label on its next push, and is audited', async () => {
+      const teamId = await boundLabel();
+      const res = await request(
+        'POST',
+        '/teams/bravo/hosts/cloud-ada/unbind',
+        undefined,
+        nickCredential,
+      );
+      expect(res.status).toBe(200);
+      expect(res.json).toEqual({ host: 'cloud-ada', unbound: true, node_id: 'node-remote' });
+      expect(await bindingOf(teamId, 'cloud-ada')).toBeNull();
+      expect(await bindHostToNode(server.store, teamId, 'cloud-ada', 'node-real')).toEqual({
+        bound: true,
+      });
+
+      const rows = await unbindAudit(teamId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.result).toBe('allow');
+      expect(JSON.parse(rows[0]!.detail)).toEqual({ node: 'node-remote' });
+    });
+
+    it('reports that an unbound or unknown label changed nothing', async () => {
+      const teamId = await boundLabel();
+      const res = await request(
+        'POST',
+        '/teams/bravo/hosts/nowhere/unbind',
+        undefined,
+        nickCredential,
+      );
+      expect(res.status).toBe(200);
+      expect(res.json).toEqual({ host: 'nowhere', unbound: false });
+      expect(await unbindAudit(teamId)).toHaveLength(0);
+    });
+
+    it('refuses while the bound node is live and seats are enrolled on the label, until the node is revoked', async () => {
+      const teamId = await boundLabel();
+      const ada = (await getMemberByName(server.store, teamId, 'ada'))!;
+      await applyFoldedEnrollment(server.store, teamId, {
+        member_id: ada.id,
+        harness: 'claude-code',
+        host: 'cloud-ada',
+        authorized_by: 'nick',
+      });
+
+      const refused = await request(
+        'POST',
+        '/teams/bravo/hosts/cloud-ada/unbind',
+        undefined,
+        nickCredential,
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.message).toMatch(
+        /node-remote.*ada.*musterd node revoke node-remote/,
+      );
+      expect(await bindingOf(teamId, 'cloud-ada')).toBe('node-remote');
+      const denied = await unbindAudit(teamId);
+      expect(denied).toHaveLength(1);
+      expect(denied[0]!.result).toBe('deny');
+      expect(JSON.parse(denied[0]!.detail)).toEqual({
+        node: 'node-remote',
+        reason: 'in_use',
+        seats: ['ada'],
+      });
+
+      await request('POST', '/teams/bravo/nodes/node-remote/revoke', undefined, nickCredential);
+      const after = await request(
+        'POST',
+        '/teams/bravo/hosts/cloud-ada/unbind',
+        undefined,
+        nickCredential,
+      );
+      expect(after.status).toBe(200);
+      expect(after.json.unbound).toBe(true);
+      expect(await bindingOf(teamId, 'cloud-ada')).toBeNull();
     });
   });
 });

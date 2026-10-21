@@ -652,6 +652,57 @@ export async function bindHostToNode(
 }
 
 /**
+ * Lane 01M5E1Z7JE (ADR 689 d5 follow-up): an admin clears a label's node binding, so the next
+ * enrolled node to push a row in its name takes it. A wrong first writer only denies the label,
+ * and a node lost with its machine holds it forever; before this only a DB edit cleared either.
+ * Refused while the bound node is unrevoked and seats are still enrolled on the label — that is
+ * a label in use, and clearing it would hand it to whichever node pushes next. Revoking the node
+ * (or the seats' residency) first is the admin's statement that it is not.
+ */
+export async function unbindHostFromNode(
+  db: Driver,
+  teamId: string,
+  host: string,
+): Promise<
+  | { unbound: true; node_id: string }
+  | { unbound: false; reason: 'not_bound' }
+  | { unbound: false; reason: 'in_use'; node_id: string; seats: string[] }
+> {
+  return await db.tx(async (t) => {
+    const row = await t.get<{ node: string | null }>(
+      'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+      [teamId, host],
+    );
+    const nodeId = row?.node ?? null;
+    if (nodeId === null) return { unbound: false as const, reason: 'not_bound' as const };
+    const live = await t.get<{ id: string }>(
+      'SELECT id FROM nodes WHERE id = ? AND team_id = ? AND revoked_at IS NULL',
+      [nodeId, teamId],
+    );
+    if (live) {
+      const seats = await t.all<{ name: string }>(
+        `SELECT m.name FROM residency r JOIN members m ON m.id = r.member_id
+          WHERE r.team_id = ? AND r.host = ? ORDER BY m.name`,
+        [teamId, host],
+      );
+      if (seats.length > 0) {
+        return {
+          unbound: false as const,
+          reason: 'in_use' as const,
+          node_id: nodeId,
+          seats: seats.map((s) => s.name),
+        };
+      }
+    }
+    await t.run(
+      'UPDATE host_liveness SET node = NULL WHERE team_id = ? AND host = ? AND node = ?',
+      [teamId, host, nodeId],
+    );
+    return { unbound: true as const, node_id: nodeId };
+  });
+}
+
+/**
  * ADR 689 decision 5: is `label` a host this daemon minted a live, unexpired host key for? The
  * one way a pushed row's `actor_kind: 'host'` is honoured — a replicated key does not count (the
  * hub minted it, the hub answers for it), nor does a label with no key.

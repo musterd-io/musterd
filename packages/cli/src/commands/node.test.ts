@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createServer, openDb, readNodeState, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
+import { hostCommand } from './host.js';
 import { nodeCommand } from './node.js';
 import { sendCommand } from './send.js';
 import { teamCommand } from './team.js';
@@ -175,6 +176,30 @@ describe('node command', () => {
     // enrolling, not rotating. The operator has to actually see it: a refusal rendered as
     // "server error (409)" is the daemon's explanation thrown away at the last step.
     await expect(nodeCommand(parseArgs(['rotate', 'node-remote']))).rejects.toThrow(/revoked/);
+  });
+
+  it('host unbind clears a label bound to a node, and says when there was nothing to clear', async () => {
+    // Lane 01M5E1Z7JE: the binding a joiner's first host-actor push writes (ADR 689 d5).
+    const team = await hub.store.get<{ id: string }>('SELECT id FROM teams WHERE slug = ?', [
+      'dawn',
+    ]);
+    await hub.store.run(
+      'INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, 0, ?)',
+      [team!.id, 'cloud-ada', 'node-gone'],
+    );
+
+    const unbound = await capture(() => hostCommand(parseArgs(['unbind', 'cloud-ada'])));
+    expect(unbound.code).toBe(0);
+    expect(unbound.out).toMatch(/cloud-ada unbound from node node-gone/);
+    const row = await hub.store.get<{ node: string | null }>(
+      'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+      [team!.id, 'cloud-ada'],
+    );
+    expect(row?.node).toBeNull();
+
+    const again = await capture(() => hostCommand(parseArgs(['unbind', 'cloud-ada'])));
+    expect(again.out).toMatch(/nothing to do/);
+    await expect(hostCommand(parseArgs(['unbind']))).rejects.toThrow(/usage/);
   });
 
   it('refuses an unknown subcommand and a join missing its arguments', async () => {
