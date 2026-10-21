@@ -50,6 +50,8 @@ export interface MemberRow {
   hue: number | null;
   /** ADR 449: the member who minted this one (event sponsorship). NULL ⇒ admin/local-peer mint. */
   sponsored_by: string | null;
+  /** ADR 698: the console account bound at first hosted sign-in, write-once. NULL ⇒ unbound. */
+  account_id: string | null;
   token_hash: string | null;
   /** Held-since (ADR 058): set on first authenticated touch, cleared on rotation/reclaim. Null ⇒
    * declared-but-unheld (a stray `claim` may rotate it); non-null ⇒ held, only adoptable. */
@@ -289,6 +291,7 @@ export function toMember(row: MemberRow, teamSlug: string): Member {
     slack_user_id: row.slack_user_id ?? null,
     hue: row.hue ?? null,
     sponsored_by: row.sponsored_by ?? null,
+    account_id: row.account_id ?? null,
     account_status: resolveAccountStatus(row),
     capabilities: resolveCapabilities(row),
     // ADR 501: `by` is resolved to a NAME by the roster read (`withHaltedBy`); here it is the id.

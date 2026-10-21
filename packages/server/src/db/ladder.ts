@@ -988,6 +988,19 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     version: 125,
     sql: 'CREATE INDEX IF NOT EXISTS idx_messages_inbox_cover ON messages(team_id, created_at, id, to_kind, to_member, from_member)',
   },
+  {
+    // ADR 698 (spec §4.2): the console account a member is bound to, set write-once at the first
+    // hosted sign-in by bindMemberAccount. Nullable, no backfill: unbound is the honest state for
+    // every existing member, and the binding is written, never derived.
+    version: 126,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+      if (!cols.includes('account_id')) db.exec('ALTER TABLE members ADD COLUMN account_id TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS account_id TEXT');
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

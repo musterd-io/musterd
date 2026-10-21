@@ -650,7 +650,8 @@ const LEGACY: Migration[] = [
           halted_by TEXT,
           halted_reason TEXT,
           style_prefs TEXT,
-          ceiling TEXT
+          ceiling TEXT,
+          account_id TEXT
         );
         INSERT INTO members_new (${colList}) SELECT ${colList} FROM members;
         DROP TABLE members;

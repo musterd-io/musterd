@@ -78,6 +78,9 @@ export const MemberSchema = z.object({
   hue: z.number().int().min(0).max(359).nullish(),
   /** ADR 449: the member id that minted this one through the event door; null/absent otherwise. */
   sponsored_by: z.string().nullish(),
+  /** ADR 698 (spec §4.2): the console account this member is bound to, set write-once at the
+   *  first hosted sign-in. Null/absent ⇒ never bound (every self-hosted member). */
+  account_id: z.string().min(1).nullish(),
   /** Account status — Axis 1 (ADR 070). Optional for back-compat; the server always resolves it. */
   account_status: AccountStatusSchema.optional(),
   /** Effective capabilities (ADR 070). Optional for back-compat; the server always resolves it. */

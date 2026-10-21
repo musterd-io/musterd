@@ -27,6 +27,15 @@ describe('Member.hue (ADR 374)', () => {
   });
 });
 
+describe('Member.account_id (ADR 698)', () => {
+  it('carries the console account binding, nullish for back-compat', () => {
+    expect(MemberSchema.parse({ ...base, account_id: 'acct_1' }).account_id).toBe('acct_1');
+    expect(MemberSchema.parse(base).account_id).toBeUndefined();
+    expect(MemberSchema.parse({ ...base, account_id: null }).account_id).toBeNull();
+    expect(() => MemberSchema.parse({ ...base, account_id: '' })).toThrow();
+  });
+});
+
 describe('Presence.guidance_epoch (ADR 417)', () => {
   const base = { id: 'p1', surface: 'claude-code', status: 'online', last_seen_at: 1 };
 

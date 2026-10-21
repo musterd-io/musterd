@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
-import { addMember, getMemberByName, leaveMember, sweepExpiredMembers } from './members.js';
+import {
+  addMember,
+  bindMemberAccount,
+  getMemberByName,
+  leaveMember,
+  memberByAccount,
+  sweepExpiredMembers,
+} from './members.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -60,6 +67,31 @@ withDrivers('members', (o) => {
       expect(await sweepExpiredMembers(db)).toEqual([]);
       // An empty sweep is a no-op, not an error.
       expect(await sweepExpiredMembers(db)).toEqual([]);
+    });
+  });
+
+  describe('account binding (ADR 698, spec §4.2)', () => {
+    async function freshTeam() {
+      const db = await openStore();
+      return { db, team: await createTeam(db, { slug: 'acct-t' }) };
+    }
+
+    it('binds once: first bind sets it, same-account rebind is a no-op, lookup finds the member', async () => {
+      const { db, team } = await freshTeam();
+      const { row } = await addMember(db, team, { name: 'nick', kind: 'human' });
+      await bindMemberAccount(db, row.id, 'acct_1');
+      await bindMemberAccount(db, row.id, 'acct_1');
+      expect((await getMemberByName(db, team.id, 'nick'))!.account_id).toBe('acct_1');
+      expect((await memberByAccount(db, team.id, 'acct_1'))!.id).toBe(row.id);
+      expect(await memberByAccount(db, team.id, 'acct_other')).toBeUndefined();
+    });
+
+    it('refuses to rebind a bound member to a different account', async () => {
+      const { db, team } = await freshTeam();
+      const { row } = await addMember(db, team, { name: 'nick', kind: 'human' });
+      await bindMemberAccount(db, row.id, 'acct_1');
+      await expect(bindMemberAccount(db, row.id, 'acct_2')).rejects.toThrow();
+      expect((await getMemberByName(db, team.id, 'nick'))!.account_id).toBe('acct_1');
     });
   });
 });
