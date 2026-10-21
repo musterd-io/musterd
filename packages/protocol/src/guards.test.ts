@@ -58,6 +58,7 @@ const corpus: unknown[] = [
         build: 'abc',
         epoch: 7,
         wake_lease: 'lease',
+        attached_at: 2,
         node: 'n1',
         node_label: 'laptop',
         hearing: 'deaf',

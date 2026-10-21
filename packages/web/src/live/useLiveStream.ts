@@ -26,6 +26,12 @@ export interface LiveStreamHooks {
   onCredentialInvalid?: () => void;
   /** Fired once the backfill succeeds — lets the route re-arm its one-shot recovery guard. */
   onConnected?: () => void;
+  /**
+   * Re-read the roster this often while the tab is visible (ADR 691). A presence frame only fires
+   * when a member's LAST row goes, so a /live tab closed beside a still-open CLI session sends
+   * nothing; the poll is what takes them out of the "who is here" row. Unset: no poll.
+   */
+  rosterPollMs?: number;
 }
 
 export interface LiveState {
@@ -97,6 +103,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
   const team = cfg?.team;
   const as = cfg?.as;
   const token = cfg?.token;
+  const page = cfg?.page;
 
   // Stale-page convergence (buildSync.ts): every live surface — /live and /broadcast alike — keeps
   // itself on the build the daemon serves. Idempotent and inert in dev; independent of credentials,
@@ -110,7 +117,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
       setStatus('idle');
       return;
     }
-    const cfg: LiveConfig = { team, as, token };
+    const cfg: LiveConfig = { team, as, token, ...(page ? { page } : {}) };
     let alive = true;
     // Paint the last snapshot at once; the backfill below replaces it (lane 01M4RNBNFM).
     resumeSnapshot(team, as);
@@ -227,13 +234,20 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
       onCredentialInvalid: () => alive && hooksRef.current.onCredentialInvalid?.(),
     });
     client.connect();
+    const pollMs = hooksRef.current.rosterPollMs;
+    const poll = pollMs
+      ? setInterval(() => {
+          if (alive && document.visibilityState === 'visible') rosterRefetch.trigger();
+        }, pollMs)
+      : null;
 
     return () => {
       alive = false;
+      if (poll) clearInterval(poll);
       rosterRefetch.cancel();
       client.close();
     };
-  }, [team, as, token]);
+  }, [team, as, token, page]);
 
   return {
     envelopes,
