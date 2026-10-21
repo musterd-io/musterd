@@ -152,6 +152,8 @@ import {
   type CalendarWriteResponse,
   CalendarWriteResponseSchema,
   type InsightStatus,
+  type AppPairingQr,
+  AppPairingQrSchema,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -264,6 +266,13 @@ export interface ChannelPairing {
   provider_user_id: string | null;
   expires_at: number;
   created_at: number;
+  /** ADR 676 §5: an app pairing the phone has staged — its key, and what approving enrolls. */
+  app?: {
+    fingerprint: string;
+    environment: string;
+    device_name: string | null;
+    enroll_payload: { action: 'enroll'; public_key: string; kind: 'phone' };
+  } | null;
 }
 
 /** A server-built approval descriptor (ADR 662), as the wire carries it. */
@@ -1322,6 +1331,26 @@ export class HttpClient {
     }) as Promise<{ pairing_id: string; nonce: string; check_code: string; expires_at: number }>;
   }
 
+  /**
+   * ADR 676 §5: start pairing the musterd app. The QR payload carries a one-time code, so it comes
+   * back once, for the human who asked, and is parsed before anything renders it.
+   */
+  async startAppPairing(slug: string): Promise<{
+    pairing_id: string;
+    qr: AppPairingQr;
+    daemon_fingerprint: string;
+    expires_at: number;
+  }> {
+    return z
+      .object({
+        pairing_id: z.string(),
+        qr: AppPairingQrSchema,
+        daemon_fingerprint: z.string(),
+        expires_at: z.number(),
+      })
+      .parse(await this.request('POST', `/teams/${slug}/channels/app/pairing`));
+  }
+
   /** ADR 668 decision 2 (increment 9): mint the one-time Slack install link for this team. */
   async startSlackInstall(slug: string): Promise<{ install_url: string; expires_at: number }> {
     return this.request('POST', `/teams/${slug}/channels/slack/install`) as Promise<{
@@ -1368,10 +1397,12 @@ export class HttpClient {
   async confirmChannelPairing(
     slug: string,
     pairingId: string,
+    approval?: ApprovalProof,
   ): Promise<{ ok: true; binding: ChannelBinding }> {
     return this.request(
       'POST',
       `/teams/${slug}/channels/pairings/${encodeURIComponent(pairingId)}/confirm`,
+      approval ? { approval } : undefined,
     ) as Promise<{ ok: true; binding: ChannelBinding }>;
   }
 

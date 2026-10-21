@@ -1,10 +1,12 @@
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
+import { renderTerminalQr } from '../render/qr.js';
 import { success } from '../render/ui.js';
+import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd channels pair --channel <name>\\n' +
+  'usage: musterd channels pair --channel <name>   (--channel app prints the app pairing QR)\\n' +
   '       musterd channels pairings [--json]\\n' +
   '       musterd channels confirm <pairing-id> | reject <pairing-id>\\n' +
   '       musterd channels bindings [--json]\\n' +
@@ -58,12 +60,27 @@ export async function channelsCommand(parsed: Parsed): Promise<number> {
     'the flags `musterd channels` takes are listed by `musterd help channels`',
   );
   const sub = parsed.positionals[0] ?? 'bindings';
-  const { team, http } = resolve(parsed.flags);
+  const { team, identity, http } = resolve(parsed.flags);
   const json = parsed.flags['json'] === true;
 
   if (sub === 'pair') {
     const channel = flagStr(parsed.flags, 'channel');
     if (!channel) throw new CliError(USAGE, 2);
+    if (channel === 'app') {
+      // ADR 676 §5 / ADR 690: the QR holds a one-time code, shown once here and never logged.
+      const started = await http.startAppPairing(team);
+      if (json) return printJson(started);
+      process.stdout.write(renderTerminalQr(JSON.stringify(started.qr)) + '\n');
+      process.stdout.write(
+        success('scan this with the musterd app — it is single-use', {
+          next: 'once the phone has sent its request: musterd channels pairings, then confirm <id> with your passkey',
+        }) + '\n',
+      );
+      process.stdout.write(`  daemon fingerprint: ${started.daemon_fingerprint}\n`);
+      process.stdout.write(`  pairing: ${started.pairing_id}\n`);
+      process.stdout.write(`  expires: ${new Date(started.expires_at).toISOString()}\n`);
+      return 0;
+    }
     const started = await http.startChannelPairing(team, channel);
     if (json) return printJson(started);
     process.stdout.write(
@@ -85,7 +102,9 @@ export async function channelsCommand(parsed: Parsed): Promise<number> {
     }
     for (const p of pairings) {
       process.stdout.write(
-        `${p.id}  ${p.channel}  tenant ${p.provider_tenant_id}  user ${p.provider_user_id}  check ${p.check_code}\n`,
+        p.app
+          ? `${p.id}  app  phone key ${p.app.fingerprint}  ${p.app.device_name ?? 'unnamed device'}  ${p.app.environment}\n`
+          : `${p.id}  ${p.channel}  tenant ${p.provider_tenant_id}  user ${p.provider_user_id}  check ${p.check_code}\n`,
       );
     }
     process.stdout.write('confirm with: musterd channels confirm <pairing-id>\n');
@@ -96,7 +115,19 @@ export async function channelsCommand(parsed: Parsed): Promise<number> {
     const id = parsed.positionals[1];
     if (!id) throw new CliError(USAGE, 2);
     if (sub === 'confirm') {
-      const { binding } = await http.confirmChannelPairing(team, id);
+      // ADR 676 §5: an app pairing enrolls the phone's key, so it carries a standing key's
+      // device_key_admin approval over exactly what the daemon will enroll.
+      const staged = (await http.listChannelPairings(team)).pairings.find((p) => p.id === id);
+      const approval = staged?.app
+        ? await collectApproval(
+            http,
+            team,
+            'device_key_admin',
+            identity.name,
+            staged.app.enroll_payload,
+          )
+        : undefined;
+      const { binding } = await http.confirmChannelPairing(team, id, approval);
       process.stdout.write(
         success(
           `bound ${binding.channel} tenant ${binding.provider_tenant_id} user ${binding.provider_user_id} (generation ${binding.generation})`,
