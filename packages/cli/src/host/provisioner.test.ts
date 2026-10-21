@@ -1,5 +1,6 @@
 import type { Binding, HostProvision } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
+import { CliError } from '../errors.js';
 import type { Harness } from '../onboard/harness.js';
 import { provisionOnce, type ProvisionDeps } from './provisioner.js';
 
@@ -91,7 +92,7 @@ describe('provisionOnce (ADR 463 §3)', () => {
   it('stands a claimed agent up, enrolls it, registers it for the wake loop, and reports ready', async () => {
     const t = deps();
     const r = await provisionOnce(t.d);
-    expect(r).toEqual({ claimed: 1, ready: 1, failed: 0 });
+    expect(r).toEqual({ claimed: 1, ready: 1, failed: 0, deferred: 0 });
     expect(t.client.claimProvisions).toHaveBeenCalledWith('acme', 'dana-mbp');
     expect(t.provisionSeat).toHaveBeenCalledTimes(1);
     expect(t.provisionSeat.mock.calls[0]![0]).toMatchObject({
@@ -162,7 +163,7 @@ describe('provisionOnce (ADR 463 §3)', () => {
     const t = deps();
     t.provisionSeat.mockRejectedValueOnce(new Error('forbidden'));
     const r = await provisionOnce(t.d);
-    expect(r).toEqual({ claimed: 1, ready: 0, failed: 1 });
+    expect(r).toEqual({ claimed: 1, ready: 0, failed: 1, deferred: 0 });
     expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', {
       state: 'failed',
       reason: 'credential',
@@ -255,7 +256,12 @@ describe('provisionOnce (ADR 463 §3)', () => {
   it('a failing claim is logged and never throws; nothing is reported', async () => {
     const t = deps();
     t.client.claimProvisions.mockRejectedValueOnce(new Error('daemon down'));
-    await expect(provisionOnce(t.d)).resolves.toEqual({ claimed: 0, ready: 0, failed: 0 });
+    await expect(provisionOnce(t.d)).resolves.toEqual({
+      claimed: 0,
+      ready: 0,
+      failed: 0,
+      deferred: 0,
+    });
     expect(t.log).toHaveBeenCalledWith(expect.stringContaining('provision claim failed'));
     expect(t.client.reportProvision).not.toHaveBeenCalled();
   });
@@ -266,7 +272,7 @@ describe('provisionOnce (ADR 463 §3)', () => {
     t.provisionSeat.mockRejectedValueOnce(new Error('boom'));
     t.client.reportProvision.mockRejectedValueOnce(new Error('report lost'));
     const r = await provisionOnce(t.d);
-    expect(r).toEqual({ claimed: 2, ready: 1, failed: 1 });
+    expect(r).toEqual({ claimed: 2, ready: 1, failed: 1, deferred: 0 });
     expect(t.log).toHaveBeenCalledWith(expect.stringContaining('provision report failed'));
     expect(t.client.reportProvision).toHaveBeenLastCalledWith('acme', 'B', { state: 'ready' });
   });
@@ -275,5 +281,28 @@ describe('provisionOnce (ADR 463 §3)', () => {
     const t = deps({}, []);
     await provisionOnce(t.d);
     expect(t.log).not.toHaveBeenCalled();
+  });
+
+  // ADR 689 d7: on a joiner, a host key's mint/grant/enrol is refused `hub_unreachable` once the
+  // last pull is older than the freshness window. That is "wait", not "failed": the row stays
+  // claimed here, nothing is reported, and the next tick retries it before claiming anything new.
+  it('a hub_unreachable at a provisioning step defers the row — no failed report — and the next tick retries it', async () => {
+    const deferred: HostProvision[] = [];
+    const t = deps({ deferred });
+    t.provisionSeat.mockRejectedValueOnce(
+      new CliError('this joiner last pulled 1000 s ago', 12, 'hub_unreachable'),
+    );
+    const first = await provisionOnce(t.d);
+    expect(first).toMatchObject({ claimed: 1, ready: 0, failed: 0, deferred: 1 });
+    expect(t.client.reportProvision).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(1);
+    expect(t.log.mock.calls.map((c) => c[0]).join('\n')).toMatch(/deferred.*hub/i);
+
+    t.client.claimProvisions.mockResolvedValueOnce({ provisions: [] });
+    const second = await provisionOnce(t.d);
+    expect(second).toMatchObject({ claimed: 0, ready: 1, failed: 0, deferred: 0 });
+    expect(t.provisionSeat).toHaveBeenCalledTimes(2);
+    expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', { state: 'ready' });
+    expect(deferred).toHaveLength(0);
   });
 });
