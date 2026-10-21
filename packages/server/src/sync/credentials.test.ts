@@ -341,4 +341,56 @@ withDrivers('credentials', (_o, kind) => {
       ).toBe(200);
     });
   });
+
+  describe('ADR 689 decision 7 — privileged verbs at a joiner need fresh hub authority; wakes do not', () => {
+    it('7. a replicated host key mints a sponsored seat`s credential while the pull is fresh, is refused past the window, and still polls', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      const nickJoiner = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      await addMember(hub.store, ht, { name: 'bea', kind: 'agent', sponsoredBy: nickHub.id });
+      await addMember(joiner.store, jt, { name: 'bea', kind: 'agent', sponsoredBy: nickJoiner.id });
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+
+      const fresh = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'bea' },
+        hostKey,
+      );
+      expect(fresh.status).toBe(201);
+
+      await joiner.store.run('UPDATE sync_pull_cursor SET updated_at = ? WHERE team_id = ?', [
+        Date.now() - 16 * 60_000,
+        jt.id,
+      ]);
+      const stale = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'bea' },
+        hostKey,
+      );
+      expect(stale.status).toBe(503);
+      expect(stale.json.error.code).toBe('hub_unreachable');
+
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-bea' },
+            hostKey,
+          )
+        ).status,
+      ).toBe(200);
+    });
+  });
 });

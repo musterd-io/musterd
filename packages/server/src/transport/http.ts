@@ -2108,6 +2108,7 @@ async function authProvisionCaller(
     const creator = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
     if (!creator) throw new MusterdError('unauthorized', 'this host credential’s creator is gone');
     await assertSponsorOf(ctx.db, team, creator, agentName);
+    await assertHubFresh(ctx, team);
     await recordBootstrapCredentialUse(ctx.db, credential.id);
     return {
       team,
@@ -2119,6 +2120,28 @@ async function authProvisionCaller(
   }
   const r = await authAdminOrSponsorOf(ctx, slug, req, agentName);
   return { ...r, viaHostKey: false, host: null };
+}
+
+/**
+ * ADR 689 decision 7: on an enrolled joiner, a host key's privileged verbs need fresh hub
+ * authority — a revocation or a withdrawn sponsor reaches this daemon only by pull, so a pull older
+ * than `agent_host.freshness_ms` means this daemon cannot vouch for the key. Refuses with the
+ * unreachable-hub code (ADR 355 §3) so the host loop retries rather than treating it as a "no".
+ * A hub, or a never-synced single machine, is always fresh.
+ */
+async function assertHubFresh(ctx: Ctx, team: TeamRow): Promise<void> {
+  if ((await joinerEnrollment(ctx.db, team.id, team.slug)) === null) return;
+  const cursor = await ctx.db.get<{ updated_at: number }>(
+    'SELECT updated_at FROM sync_pull_cursor WHERE team_id = ?',
+    [team.id],
+  );
+  const window = (await getPolicy(ctx.db, team.id)).agent_host.freshness_ms;
+  const age = cursor ? Date.now() - cursor.updated_at : Number.POSITIVE_INFINITY;
+  if (age > window)
+    throw new MusterdError(
+      'hub_unreachable',
+      `this joiner last pulled from the hub ${cursor ? Math.round(age / 1000) + ' s' : 'never'} ago, past the ${Math.round(window / 1000)} s freshness window (ADR 689): minting, granting and enrolling wait for the hub`,
+    );
 }
 
 /** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
