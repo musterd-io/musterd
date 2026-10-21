@@ -451,6 +451,33 @@ describe('runInit — team selection', () => {
     expect(h.http.createTeam).not.toHaveBeenCalled();
   });
 
+  it('a new team acts with the human credential, not the vestigial seat token (lane 01M5DZXCN6)', async () => {
+    const { HttpClient } = await import('../client.js');
+    h.textQueue.push('dawn', 'nick', ''); // createTeam
+    h.selectQueue.push('watch'); // intent
+    expect(await runInit()).toBe(0);
+    const keys = vi.mocked(HttpClient).mock.calls.map((c) => (c[0] as { key?: string }).key);
+    expect(keys).toContain('mscr_creator');
+    expect(keys).not.toContain('tok-creator');
+  });
+
+  it('Enter on the team name takes the default, and the name placeholder is the login (lane 01M5DZXCN6)', async () => {
+    const clack = await import('@clack/prompts');
+    h.textQueue.push('dawn', 'nick', ''); // createTeam
+    h.selectQueue.push('watch'); // intent
+    expect(await runInit()).toBe(0);
+    const opts = vi
+      .mocked(clack.text)
+      .mock.calls.map(
+        (c) => c[0] as { message: string; placeholder?: string; validate?: (v: string) => unknown },
+      );
+    const teamPrompt = opts.find((o) => o.message === 'Name your team')!;
+    expect(teamPrompt.validate!('')).toBeUndefined();
+    expect(teamPrompt.validate!('Bad Name')).toBeDefined();
+    const namePrompt = opts.find((o) => o.message === 'Your name on the team')!;
+    expect(namePrompt.placeholder).toBe(process.env['USER'] ?? 'me');
+  });
+
   it('falls back to create when the cached team is gone (stale token)', async () => {
     h.config.current = 'gone';
     h.config.identities['gone'] = { name: 'nick', key: 'mscr_stale', surface: 'cli' };
