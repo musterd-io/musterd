@@ -15,6 +15,7 @@ import {
   SUBAGENT_CHANNEL_TOOLS,
   textFingerprint,
 } from '@musterd/protocol';
+import { gitOutput } from '@musterd/protocol/project';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { HOOK_HTTP_TIMEOUT_MS, type HttpClient, isDaemonUnreachable } from '../client.js';
@@ -614,6 +615,22 @@ export function attest(http: HttpClient, team: string, call: GateToolCall): void
   );
 }
 
+/**
+ * ADR 697 §1 — the branch and HEAD this edit is made on, so a lane learns its branch from its edits
+ * and a hold's hand-over can say where the holder's work is. One `git rev-parse`; a detached HEAD
+ * sends no branch, and anything that fails sends neither (never a reason to fail the edit).
+ */
+export function gitHere(cwd: string): { git_branch?: string; git_head?: string } {
+  // `--abbrev-ref` applies to every rev after it, so the full HEAD goes first.
+  const out = gitOutput(['rev-parse', 'HEAD', '--abbrev-ref', 'HEAD'], cwd);
+  if (!out) return {};
+  const [head, branch] = out.split('\n').map((l) => l.trim());
+  return {
+    ...(branch && branch !== 'HEAD' && branch.length <= 255 ? { git_branch: branch } : {}),
+    ...(head && /^[0-9a-f]{7,64}$/.test(head) ? { git_head: head } : {}),
+  };
+}
+
 async function gateCheck(parsed: Parsed): Promise<number> {
   if (parsed.flags['stdin'] !== true) {
     throw new CliError(
@@ -766,6 +783,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
         posture: match.cls.posture,
         tool: call.tool,
         target: match.target,
+        ...(match.cls.kind === 'contended-surface' ? gitHere(process.cwd()) : {}),
       });
       flushUnenforcedCounter(http, team, state, call.tool);
       if (verdict.decision === 'deny') {

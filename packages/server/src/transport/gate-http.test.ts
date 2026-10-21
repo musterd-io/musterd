@@ -252,7 +252,12 @@ withDrivers('gate-http', (_o, kind) => {
 
   describe('Gate A — a lane that names a file holds it, first claim first (ADR 691)', async () => {
     const team = async () => (await getTeamBySlug(server.store, 'dawn'))!;
-    const gateA = async (posture: 'warn' | 'block', target: string, seat = 'Ada') =>
+    const gateA = async (
+      posture: 'warn' | 'block',
+      target: string,
+      seat = 'Ada',
+      git: { git_branch?: string; git_head?: string } = {},
+    ) =>
       await post(
         '/teams/dawn/gate',
         {
@@ -262,6 +267,7 @@ withDrivers('gate-http', (_o, kind) => {
           posture,
           tool: 'Edit',
           target,
+          ...git,
         },
         seatHeaders(seat),
       );
@@ -339,6 +345,8 @@ withDrivers('gate-http', (_o, kind) => {
       });
       expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
       await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', first.id]);
+      // The first edit after the hold is the ADR 697 hand-over; the hold itself is over.
+      expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('denied_handover');
       expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('allowed');
     });
 
@@ -417,6 +425,89 @@ withDrivers('gate-http', (_o, kind) => {
         const r = await gateA('block', 'src/tariff.ts');
         expect(r.json.decision).toBe('deny');
         expect(r.json.reason).toContain('held by nick');
+      });
+    });
+
+    describe('a hold hands over the work, not only the turn (ADR 697)', () => {
+      const queue = async () => {
+        await bo();
+        const first = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+          title: 'bo first',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        await new Promise((r) => setTimeout(r, 5));
+        await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+          title: 'ada second',
+          scope: ['src/tariff.ts'],
+          claim: true,
+        });
+        return first;
+      };
+      const finish = async (id: string) =>
+        await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', id]);
+
+      it("the holder's edit teaches its lane the branch; the waiting seat is refused once, told where the work is", async () => {
+        const first = await queue();
+        const head = 'abc1234def567890';
+        expect(
+          (await gateA('block', 'src/tariff.ts', 'Bo', { git_branch: 'bo-work', git_head: head }))
+            .json.outcome,
+        ).toBe('allowed');
+        const learned = await server.store.get<{ branch: string }>(
+          'SELECT branch FROM lanes WHERE id = ?',
+          [first.id],
+        );
+        expect(learned?.branch).toBe('bo-work');
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+        await finish(first.id);
+        const handed = await gateA('block', 'src/tariff.ts');
+        expect(handed.json).toMatchObject({ decision: 'deny', outcome: 'denied_handover' });
+        expect(handed.json.reason).toContain('was held by Bo');
+        expect(handed.json.reason).toContain('`bo-work` at abc1234def56');
+        expect(handed.json.hold).toBeUndefined();
+        // Once per hold: the next edit is decided by ADR 691 alone.
+        expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('allowed');
+        const rows = (await audits('lane.gate')).map(
+          (r) => JSON.parse(r.detail as string) as Record<string, unknown>,
+        );
+        expect(rows.filter((d) => d.hold === 'handover' && d.holder === 'Bo')).toHaveLength(1);
+      });
+
+      it('no branch seen: the hand-over says to ask the holder, and never guesses one', async () => {
+        const first = await queue();
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+        await finish(first.id);
+        const handed = await gateA('block', 'src/tariff.ts');
+        expect(handed.json.outcome).toBe('denied_handover');
+        expect(handed.json.reason).toContain('ask Bo where their change');
+        expect(handed.json.reason).not.toContain('branch `');
+      });
+
+      it('under warn the hand-over is the advisory, and the edit goes through', async () => {
+        const first = await queue();
+        expect((await gateA('warn', 'src/tariff.ts')).json.outcome).toBe('warned');
+        await finish(first.id);
+        const handed = await gateA('warn', 'src/tariff.ts');
+        expect(handed.json).toMatchObject({ decision: 'allow', outcome: 'warned' });
+        expect(handed.json.reason).toContain('ADR 697');
+      });
+
+      it('a hold that lapsed (ADR 693) hands over too, instead of the lapse advisory', async () => {
+        await queue();
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+        await server.store.run(
+          'DELETE FROM presence WHERE member_id = (SELECT id FROM members WHERE name = ?)',
+          ['Bo'],
+        );
+        expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('denied_handover');
+        expect((await gateA('block', 'src/tariff.ts')).json.reason).toContain('has lapsed');
+      });
+
+      it('a seat never refused gets no hand-over', async () => {
+        const first = await queue();
+        await finish(first.id);
+        expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('allowed');
       });
     });
 

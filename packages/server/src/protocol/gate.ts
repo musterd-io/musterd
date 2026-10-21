@@ -14,8 +14,9 @@ import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
+import { laneHead, recordHoldRefusal, recordLaneHead, takeHandover } from '../store/handover.js';
 import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
-import { laneCoveringPath, laneHoldingFile } from '../store/lanes.js';
+import { getLane, laneCoveringPath, laneHoldingFile, updateLane } from '../store/lanes.js';
 import { getMemberByName, listMembers } from '../store/members.js';
 import { isPresentOrReclaimable } from '../store/presence.js';
 import { unblockerReachable } from '../store/reachability.js';
@@ -66,7 +67,47 @@ export interface GateContext {
  */
 /** What decided an edit of a held file (ADR 691/693), for the audit row only — never sent back. */
 interface HoldTag {
-  hold?: { state: 'held' | 'lapsed'; holder: string };
+  hold?: { state: 'held' | 'lapsed' | 'handover'; holder: string };
+}
+
+/**
+ * ADR 697 — the first edit of a file after another seat's hold on it ended. Refused once under
+ * `block` (warned under `warn`), naming where the holder's work is, so the next edit starts from it.
+ * Null when this seat has no pending hand-over for the path.
+ */
+async function handover(ctx: GateContext, path: string): Promise<(GateDecision & HoldTag) | null> {
+  const { db } = ctx.srv;
+  const teamId = ctx.team.id;
+  const pending = await takeHandover(db, teamId, ctx.member.name, path);
+  if (!pending) return null;
+  const lane = await getLane(db, teamId, pending.holder_lane_id, ctx.team.slug);
+  const head = await laneHead(db, teamId, pending.holder_lane_id);
+  const what = lane ? `lane "${lane.title}", now ${lane.state}` : 'their lane';
+  const where = lane?.branch
+    ? `Their work on it is on branch \`${lane.branch}\`${head ? ` at ${head.slice(0, 12)}` : ''}: ` +
+      `bring it in first (fetch, then merge or rebase onto it), then edit again.`
+    : `musterd has not seen which branch their work is on: ask ${pending.holder} where their change ` +
+      `to it is, bring it in, then edit again.`;
+  const detail =
+    `'${path}' was held by ${pending.holder} (${what}) while you waited, so it has probably changed. ` +
+    `${where} This is the one hand-over for that hold (ADR 697).`;
+  const hold = { state: 'handover' as const, holder: pending.holder };
+  if (ctx.req.posture === 'warn') {
+    return { hold, decision: 'allow', outcome: 'warned', reason: `heads-up: ${detail}` };
+  }
+  return { hold, decision: 'deny', outcome: 'denied_handover', reason: `blocked once: ${detail}` };
+}
+
+/** ADR 697 §1 — an allowed edit inside a lane teaches it its branch (when it has none) and HEAD. */
+async function learnFromEdit(ctx: GateContext, laneId: string, laneBranch: string | null) {
+  const { db } = ctx.srv;
+  const { git_branch: branch, git_head: head } = ctx.req;
+  if (head) await recordLaneHead(db, ctx.team.id, laneId, head);
+  if (branch && !laneBranch) {
+    await updateLane(db, ctx.team.id, laneId, ctx.team.slug, { branch }, Date.now(), undefined, {
+      actor: ctx.member.name,
+    });
+  }
 }
 
 export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
@@ -92,6 +133,9 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
         holderSeat?.kind === 'agent' &&
         !(await isPresentOrReclaimable(db, holderSeat.id, ctx.srv.config.presenceTimeoutMs))
       ) {
+        // A seat refused while that hold stood gets the hand-over now, not the lapse advisory.
+        const handed = await handover(ctx, path);
+        if (handed) return handed;
         return {
           hold: { state: 'lapsed', holder: holder.owner_seat! },
           decision: 'allow',
@@ -107,11 +151,23 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
         `ask them to hand it off or narrow their lane, wait for that lane to finish, or split the ` +
         `work by handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
       const hold = { state: 'held' as const, holder: holder.owner_seat! };
+      await recordHoldRefusal(db, teamId, ctx.member.name, path, holder.owner_seat!, holder.id);
       if (ctx.req.posture === 'warn') {
         return { hold, decision: 'allow', outcome: 'warned', reason: `heads-up: ${detail}` };
       }
       return { hold, decision: 'deny', outcome: 'denied', reason: `blocked: ${detail}` };
     }
+    // ADR 697: the hold this seat waited on is over — its first edit of the file is the hand-over.
+    const handed = await handover(ctx, path);
+    if (handed) return handed;
+    // Learning is a side effect of an allowed edit; it must never turn that edit into an error.
+    await learnFromEdit(ctx, owned.id, owned.branch).catch((err: unknown) =>
+      log.warn({
+        msg: 'gate: could not record the edit’s branch/head (ADR 697)',
+        lane: owned.id,
+        err: err instanceof Error ? err.message : String(err),
+      }),
+    );
     return {
       decision: 'allow',
       outcome: 'allowed',

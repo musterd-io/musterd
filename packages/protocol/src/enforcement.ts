@@ -91,6 +91,14 @@ export const GateCheckRequestSchema = z.object({
   /** For Gate B release re-checks: the ask this fingerprint already raised (the agent re-attempts
    *  after a denial; the daemon re-checks that thread for a human accept). Absent on first attempt. */
   ask_ref: z.string().optional(),
+  /** ADR 697: the editing seat's git branch and HEAD, on a contended-surface check. A lane learns its
+   *  branch from the edits made in it, and a hold's hand-over names where the holder's work is. Both
+   *  optional: an older hook sends neither, and a detached HEAD sends no branch. Never audited. */
+  git_branch: z.string().min(1).max(255).optional(),
+  git_head: z
+    .string()
+    .regex(/^[0-9a-f]{7,64}$/)
+    .optional(),
 });
 export type GateCheckRequest = z.infer<typeof GateCheckRequestSchema>;
 
@@ -107,6 +115,9 @@ export const GATE_OUTCOMES = [
   'released',
   // ADR 516 increment 2: an active `merges_paused` hold stopped a merge-shaped command.
   'denied_held',
+  // ADR 697: the first edit of a file after another seat's hold on it ended — refused once, naming
+  // where the holder's work is, so the next edit starts from it.
+  'denied_handover',
 ] as const;
 export type GateOutcome = (typeof GATE_OUTCOMES)[number];
 

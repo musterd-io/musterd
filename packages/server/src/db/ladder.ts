@@ -952,7 +952,41 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE host_liveness ADD COLUMN IF NOT EXISTS node TEXT');
     },
   },
+  {
+    // ADR 697: what a hold's hand-over needs. `gate_hold_refusals` remembers that a seat was refused
+    // a file another lane held, until its first edit after the hold ends; `lane_heads` keeps the last
+    // HEAD an edit inside a lane reported. Daemon-local and not replicated: the gate that refused is
+    // the gate that hands over. The path is kept here, never in the shapes-only audit row (ADR 150).
+    version: 123,
+    sqlite: (db) => {
+      db.exec(GATE_HOLD_REFUSALS_TABLE_SQL);
+      db.exec(LANE_HEADS_TABLE_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec(GATE_HOLD_REFUSALS_TABLE_SQL);
+      await d.exec(LANE_HEADS_TABLE_SQL);
+    },
+  },
 ];
+
+const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  seat TEXT NOT NULL,
+  path TEXT NOT NULL,
+  holder TEXT NOT NULL,
+  holder_lane_id TEXT NOT NULL,
+  refused_at BIGINT NOT NULL,
+  handed_over_at BIGINT,
+  PRIMARY KEY (team_id, seat, path)
+)`;
+
+const LANE_HEADS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_heads (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  lane_id TEXT NOT NULL,
+  head TEXT NOT NULL,
+  at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, lane_id)
+)`;
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (
   team_id TEXT NOT NULL REFERENCES teams(id),
