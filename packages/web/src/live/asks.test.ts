@@ -487,7 +487,8 @@ describe('deriveReviewQueue — lanes in acceptance and who they wait on', () =>
  * Lane 01M5EA60RD: a human verdict the daemon refused for lack of a valid passkey signature
  * (ADR 662) is still an envelope in the timeline, so the pure derivation settled its ask and the
  * card vanished — while the lane stayed in acceptance with no /live path back to it. The board's
- * lane state is the second fact: still awaiting + only unsigned human verdicts = still offered.
+ * lane state is the second fact: still awaiting + only human verdicts (unsigned, or signed but
+ * refused — lane 01M5EBKZQY) = still offered.
  */
 describe('resurrectRefusedVerdicts — a refused human verdict does not settle its ask', () => {
   const lane = (id: string, state = 'awaiting_acceptance') =>
@@ -526,10 +527,35 @@ describe('resurrectRefusedVerdicts — a refused human verdict does not settle i
     expect(askIsLoud(back!.state)).toBe(true);
   });
 
-  it('stays settled when the human verdict carried a passkey approval', () => {
+  it('re-offers a lane_review ask settled by a signed-but-refused human verdict while its lane still awaits (lane 01M5EBKZQY)', () => {
+    // The descriptor_mismatch era: the verdict carried a proof, the daemon refused it, the lane
+    // never moved. A binding signed verdict would have moved the lane — still-awaiting is the tell.
     const asks = deriveAsks([
       reviewAsk('r1', 'L1'),
       env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1', approval: { kind: 'webauthn' } } }),
+    ]);
+    const [back] = resurrectRefusedVerdicts(asks, [lane('L1')], humans);
+    expect(back!.state).toBe('open');
+    expect(askIsLoud(back!.state)).toBe(true);
+  });
+
+  it('stays settled for a signed human verdict once the lane has moved on — that one bound', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1', approval: { kind: 'webauthn' } } }),
+    ]);
+    expect(resurrectRefusedVerdicts(asks, [lane('L1', 'done')], humans)[0]!.state).toBe('accepted');
+  });
+
+  it('stays settled for an advisory human verdict while the lane awaits — advisory verdicts record without moving it (ADR 667)', () => {
+    const advisoryAsk = env('r1', 'ask', {
+      ts: 2000,
+      meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L1', advisory: true } },
+      to: { kind: 'member', name: 'nick' } as Envelope['to'],
+    });
+    const asks = deriveAsks([
+      advisoryAsk,
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1' } }),
     ]);
     expect(resurrectRefusedVerdicts(asks, [lane('L1')], humans)[0]!.state).toBe('accepted');
   });

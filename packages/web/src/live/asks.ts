@@ -61,10 +61,10 @@ export interface AskView {
   state: AskState;
   /** Who closed/deferred it (accept/decline/wait sender), when someone did. */
   answeredBy?: string;
-  /** Whether the settling accept/decline carried a passkey approval (`meta.approval`). A human
-   *  lane verdict without one is refused by the ADR 662 gate when that human has a key enrolled —
-   *  `resurrectRefusedVerdicts` reads this beside the lane's state to tell a refused verdict from
-   *  a binding one. Absent until an accept/decline settles the ask. */
+  /** Whether the settling accept/decline carried a passkey approval (`meta.approval`). Recorded
+   *  for the surfaces that report how a verdict arrived; the refused-verdict rule itself reads
+   *  only the lane's state (a binding verdict, signed or not, moves it). Absent until an
+   *  accept/decline settles the ask. */
   answerSigned?: boolean;
   /** The option an accept picked, when the ask was a choice and the accept names one (`C — …`,
    *  `choiceReply`, lane 01M511XNQC). Absent on a bare accept: the surface never guesses. */
@@ -229,19 +229,24 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
  * human-stage lanes were left in acceptance with no /live path back to their asks.
  *
  * **The rule.** The board's lane state is the second fact the timeline cannot see. When the lane a
- * review ask belongs to is STILL in acceptance, and the ask was settled only by an unsigned
- * verdict from a human sender, that verdict cannot have bound: a signed one would have moved the
- * lane, and an unenrolled human's unsigned one binds and moves it too. So the ask is offered
- * again. Every other settle stands — agent verdicts bind unsigned (peer stage), ordinary asks
- * carry no authority gate, and a lane that already moved on was answered for real.
+ * review ask belongs to is STILL in acceptance, and the ask was settled only by a verdict from a
+ * human sender, that verdict cannot have bound — signed or not: a binding one, signed with a
+ * valid proof or unsigned from an unenrolled human, moves the lane out of acceptance. Still
+ * awaiting is the tell, for the unsigned attempts and the signed-but-refused ones alike
+ * (descriptor_mismatch, lane 01M5EBKZQY). So the ask is offered again. Every other settle stands —
+ * agent verdicts bind unsigned (peer stage), ordinary asks carry no authority gate, a lane that
+ * already moved on was answered for real, and an ADVISORY ask (ADR 667) stays settled: its
+ * verdict records without ever moving the lane, so still-awaiting proves nothing there.
  */
 export function resurrectRefusedVerdicts(asks: AskView[], lanes: Lane[], humans: Set<string>): AskView[] {
   const awaiting = new Set(lanes.filter((l) => isAwaitingAcceptance(l.state)).map((l) => l.id));
   if (awaiting.size === 0) return asks;
   return asks.map((ask) => {
     if (ask.state !== 'accepted' && ask.state !== 'declined') return ask;
-    if (ask.answerSigned || !ask.answeredBy || !humans.has(ask.answeredBy)) return ask;
-    const ref = (ask.env.meta?.['lane_review'] as { lane?: unknown } | undefined)?.lane;
+    if (!ask.answeredBy || !humans.has(ask.answeredBy)) return ask;
+    const review = ask.env.meta?.['lane_review'] as { lane?: unknown; advisory?: unknown } | undefined;
+    if (review?.advisory === true) return ask;
+    const ref = review?.lane;
     if (typeof ref !== 'string' || !awaiting.has(ref)) return ask;
     const back: AskView = { ...ask, state: 'open' };
     delete back.answeredBy;
