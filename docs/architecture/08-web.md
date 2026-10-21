@@ -376,7 +376,8 @@ teammate's session. Consequences worth internalising:
   twelve colours and drowned state. The stocks tried are recorded beside the rule.
 - **A nameplate says the member's job** (lane 01M5FXZF49, 2026-10-21; a Twitch viewer asked "can you
   show their occupations"): one plain word beside the name on /live and /broadcast
-  (`.lc-gl-label__job`), from the seat's declared role through `live/occupation.ts` — `designer`,
+  (`.lc-gl-label__job`), from the first of the seat's declared roles that has a word in `live/occupation.ts`
+  (so `admin` + `founder` reads founder; lane 01M5FY2XFX) — `designer`,
   `writer` for product-communications, `ops` for platform, `auditor` for steward (words set by
   product-communications). `admin` shows none: it is a permission, and "founder" belongs to the `founder`
   role, so it is true wherever it shows. A role with no word there, a member with no role, and a service
