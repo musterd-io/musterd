@@ -1757,11 +1757,26 @@
 .lc-gl-label__job > span::first-letter {
   text-transform: uppercase;
 }
+/* The role's glyph, two-tone (lane 01M5GCMN2S, nick's pick): the silhouette (`.b`) is a soft fill of the
+   member's hue under a dark outline in the same hue, and detail lines and dots wear the outline. The
+   shapes live in roleGlyph.ts; the colour and stroke live here so every glyph is drawn the same way. */
 .lc-gl-label__job svg {
   flex: none;
-  width: 10px;
-  height: 10px;
-  color: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 60%, var(--lc-paper-ink));
+  width: 11px;
+  height: 11px;
+  color: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 50%, var(--lc-paper-ink));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lc-gl-label__job svg .b {
+  fill: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 45%, #fff);
+}
+.lc-gl-label__job svg .d {
+  fill: currentColor;
+  stroke: none;
 }
 /* A role assigned while the room is open is news, so its tag arrives once: it pops up into place lit
    mustard, and the light drains back to the neutral fill. Only on a real change (index.ts
