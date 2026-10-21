@@ -996,8 +996,8 @@ async function projectCredentialLedger(
   if (typeof keyHash !== 'string' || !keyHash) return;
   await db.run(
     `INSERT INTO agent_bootstrap_credentials
-      (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by, created_at, rotated_at, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL, NULL)
+      (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by, created_at, rotated_at, revoked_at, replicated_from)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL, NULL, ?)
      ON CONFLICT(id) DO NOTHING`,
     [
       id,
@@ -1009,6 +1009,7 @@ async function projectCredentialLedger(
       typeof d['expires_at'] === 'number' ? d['expires_at'] : null,
       typeof d['sponsor'] === 'string' ? d['sponsor'] : null,
       typeof d['created_at'] === 'number' ? d['created_at'] : Date.now(),
+      originNode,
     ],
   );
 }

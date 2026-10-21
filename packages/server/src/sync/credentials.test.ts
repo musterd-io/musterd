@@ -28,6 +28,7 @@ withDrivers('credentials', (_o, kind) => {
   let hubBase: string;
   let joinerBase: string;
   let nickOnHub: string;
+  let nickOnJoiner: string;
   let dir: string;
   let joinerCtx: Ctx;
 
@@ -77,7 +78,9 @@ withDrivers('credentials', (_o, kind) => {
     nickOnHub = (
       await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
     ).json.human_credential;
-    await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } });
+    nickOnJoiner = (
+      await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
+    ).json.human_credential;
     await addMember(hub.store, await hubTeam(), { name: 'ada', kind: 'agent' });
     await addMember(joiner.store, await joinerTeam(), { name: 'ada', kind: 'agent' });
 
@@ -217,6 +220,96 @@ withDrivers('credentials', (_o, kind) => {
           )
         ).status,
       ).toBe(401);
+    });
+
+    it('4. a replicated key is sponsor-only at the joiner: an admin`s hub-minted key gets no order for an unsponsored seat there', async () => {
+      // ada is unsponsored on both rosters. On the hub an admin's host key is team-wide and would
+      // serve her; the replicated copy at the joiner must not (ADR 689 decision 2).
+      const hubKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-ada' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+
+      const jt = await joinerTeam();
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/enroll',
+            { seat: 'ada', harness: 'claude-code', host: 'cloud-ada' },
+            nickOnJoiner,
+          )
+        ).status,
+      ).toBe(201);
+      const nick = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      const ada = (await getMemberByName(joiner.store, jt.id, 'ada'))!;
+      await insertMessage(
+        joiner.store,
+        jt.id,
+        nick.id,
+        ada.id,
+        makeEnvelope({
+          id: 'j-ask-ada',
+          team: 'bravo',
+          from: 'nick',
+          to: { kind: 'member', name: 'ada' },
+          act: 'request_help',
+          body: 'ada, a hand?',
+          ts: Date.now(),
+        }),
+      );
+
+      const replicated = await post(
+        joinerBase,
+        '/teams/bravo/residency/wake-leases',
+        { host: 'cloud-ada' },
+        hubKey,
+      );
+      expect(replicated.status).toBe(200);
+      expect(replicated.json.orders).toEqual([]);
+
+      // Control: the same admin's key minted AT the joiner is team-wide there and takes the order.
+      const localKey = (
+        await post(
+          joinerBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-ada' },
+          nickOnJoiner,
+        )
+      ).json.agent_key as string;
+      const local = await post(
+        joinerBase,
+        '/teams/bravo/residency/wake-leases',
+        { host: 'cloud-ada' },
+        localKey,
+      );
+      expect(local.status).toBe(200);
+      expect(local.json.orders.map((o: any) => o.seat)).toEqual(['ada']);
+    });
+
+    it('5. a joiner-side mint never poisons the joiner`s push: it stages no credential fact of its own', async () => {
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/agent-bootstrap-credentials',
+            { use: 'host', target: 'joiner-only' },
+            nickOnJoiner,
+          )
+        ).status,
+      ).toBe(201);
+      await expect(roundTrip()).resolves.toBeUndefined();
+      expect(
+        await hub.store.get(
+          "SELECT id FROM agent_bootstrap_credentials WHERE team_id = ? AND target = 'joiner-only'",
+          [(await hubTeam()).id],
+        ),
+      ).toBeUndefined();
     });
   });
 });
