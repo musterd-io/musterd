@@ -1,5 +1,5 @@
 import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { listAuditByAction } from '../store/audit.js';
