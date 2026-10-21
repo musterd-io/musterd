@@ -1927,33 +1927,50 @@ async function provisionServiceSeat(
   try {
     const http = new HttpClient({ server, key: identity.key, surface: 'cli' });
     const req = { name: svc.name, kind: 'service', role: 'platform' } as const;
+    const p = join(dirname(configPath()), svc.home, 'seat-token');
+    // ADR 662: minting a seat is a roster change, so a human admin's passkey signs it — the same
+    // ceremony `musterd broadcast` runs for its observer. Only on a terminal: an unattended install
+    // cannot wait on a person, and keeps the one-line refusal below.
+    const mint = async (): Promise<{ token?: string }> => {
+      try {
+        return (await http.addMember(team, req)) as { token?: string };
+      } catch (e) {
+        if (!UNSIGNED_ROSTER.test(String((e as Error)?.message)) || !process.stdout.isTTY) throw e;
+        ok(
+          `minting the ${svc.name} service seat is a roster change — approve it with your passkey`,
+        );
+        const approval = await authority.collectApproval(http, team, 'admin.roster', svc.name, {
+          ...req,
+          observer: false,
+        });
+        return (await http.addMember(team, { ...req, approval })) as { token?: string };
+      }
+    };
+    // A token on disk that this daemon already accepts means the install is done: no mint, and no
+    // passkey prompt for a roster change that would be refused as "already held" anyway.
+    const onDisk = await tokenOnDisk(p, server, team);
+    if (onDisk === 'works') {
+      writeServiceSeat(dirname(p), team, server);
+      ok(`the ${svc.name} service seat token at ${theme.accent(p)} already works here`);
+      return;
+    }
     let res: { token?: string };
     try {
-      res = (await http.addMember(team, req)) as { token?: string };
+      res = await mint();
     } catch (e) {
-      // ADR 662: minting a seat is a roster change, so a human admin's passkey signs it — the same
-      // ceremony `musterd broadcast` runs for its observer. Only on a terminal: an unattended
-      // install cannot wait on a person, and keeps the one-line refusal below.
-      if (!UNSIGNED_ROSTER.test(String((e as Error)?.message)) || !process.stdout.isTTY) throw e;
-      ok(`minting the ${svc.name} service seat is a roster change — approve it with your passkey`);
-      const approval = await authority.collectApproval(http, team, 'admin.roster', svc.name, {
-        ...req,
-        observer: false,
-      });
-      res = (await http.addMember(team, { ...req, approval })) as { token?: string };
+      // Held, but its token is missing or this daemon rejects it (2026-10-20: the /live token had
+      // been overwritten by one minted on staging) — nothing can ever use the seat. Free it and mint
+      // again, which the operator would otherwise do by hand with `musterd reclaim`.
+      if (!HELD_SEAT.test(String((e as Error)?.message))) throw e;
+      if (heldSeatAction(onDisk, process.stdout.isTTY === true) !== 'reissue') throw e;
+      ok(`the ${svc.name} seat is held but its token is ${onDisk} here — re-issuing it`);
+      await http.reclaim(team, svc.name);
+      res = await mint();
     }
     if (!res.token) throw new Error('daemon returned no token');
-    const p = join(dirname(configPath()), svc.home, 'seat-token');
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, res.token + '\n', { encoding: 'utf8', mode: 0o600 });
-    // The token is valid on ONE daemon for ONE team. Record which beside it, so a tick never
-    // re-derives them from `config.current` / `config.server` — the operator's machine default,
-    // which moves whenever they join another team (2026-10-19: a join to revive-staging sent every
-    // service touch to the staging cloud as an "invalid service token").
-    writeFileSync(join(dirname(p), SERVICE_SEAT_FILE), JSON.stringify({ team, server }) + '\n', {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
+    writeServiceSeat(dirname(p), team, server);
     ok(`minted the ${svc.name} service seat token → ${theme.accent(p)} (0600)`);
   } catch (err) {
     meta(
@@ -1992,6 +2009,55 @@ async function daemonServesTeam(server: string, team: string): Promise<boolean> 
   } catch {
     return false;
   }
+}
+
+/** The daemon's refusal to mint a seat somebody already holds. */
+const HELD_SEAT = /is already held/;
+
+/**
+ * What `service install` does when the seat it would mint is already held, given the token on
+ * disk: `keep` a token that works, re-issue (`reissue`) one that is missing or rejected — on a
+ * terminal only, since the reclaim and the re-mint want the operator — else `refuse`.
+ */
+export function heldSeatAction(
+  onDisk: 'works' | 'missing' | 'rejected',
+  tty: boolean,
+): 'keep' | 'reissue' | 'refuse' {
+  if (onDisk === 'works') return 'keep';
+  return tty ? 'reissue' : 'refuse';
+}
+
+async function tokenOnDisk(
+  path: string,
+  server: string,
+  team: string,
+): Promise<'works' | 'missing' | 'rejected'> {
+  let token: string;
+  try {
+    token = readFileSync(path, 'utf8').trim();
+  } catch {
+    return 'missing';
+  }
+  if (!token) return 'missing';
+  try {
+    await new HttpClient({ server, key: token, surface: 'cli' }).listHolds(team);
+    return 'works';
+  } catch {
+    return 'rejected';
+  }
+}
+
+/**
+ * The token is valid on ONE daemon for ONE team. Record which beside it, so a tick never
+ * re-derives them from `config.current` / `config.server` — the operator's machine default, which
+ * moves whenever they join another team (2026-10-19: a join to revive-staging sent every service
+ * touch to the staging cloud as an "invalid service token").
+ */
+function writeServiceSeat(dir: string, team: string, server: string): void {
+  writeFileSync(join(dir, SERVICE_SEAT_FILE), JSON.stringify({ team, server }) + '\n', {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
 }
 
 /** The auto-refresher's seat (ADR 232 increment 1) — the first attributed unattended actor. */
