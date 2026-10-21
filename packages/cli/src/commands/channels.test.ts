@@ -37,12 +37,32 @@ const h = vi.hoisted(() => ({
     },
   })),
   killChannelSwitch: vi.fn(async () => ({ bindingsRevoked: 2, tokensRevoked: 3 })),
+  startAppPairing: vi.fn(async () => ({
+    pairing_id: 'pair-app',
+    qr: {
+      v: 1,
+      relay: 'https://relay.example',
+      team: 'revive',
+      pairing: 'pair-app',
+      code: 'c'.repeat(43),
+      expires_at: 999,
+      daemon_identity_public_key: 'i'.repeat(43),
+      daemon_receive_public_key: 'r'.repeat(87),
+    },
+    daemon_fingerprint: 'ab:cd',
+    expires_at: 999,
+  })),
+  collectApproval: vi.fn(async () => ({ proof: 'signed' })),
 }));
+
+vi.mock('./authority.js', () => ({ collectApproval: h.collectApproval }));
 
 vi.mock('./helpers.js', () => ({
   resolve: () => ({
     team: 'revive',
+    identity: { name: 'nick' },
     http: {
+      startAppPairing: h.startAppPairing,
       startChannelPairing: h.startChannelPairing,
       listChannelPairings: h.listChannelPairings,
       confirmChannelPairing: h.confirmChannelPairing,
@@ -90,6 +110,68 @@ describe('musterd channels (ADR 618 §7)', () => {
     expect(await channelsCommand(parsed(['kill-switch']))).toBe(0);
     expect(out.join('')).toContain('2 binding(s) revoked');
     expect(out.join('')).toContain('3 token(s) consumed');
+    vi.restoreAllMocks();
+  });
+
+  it('pair --channel app prints the QR once with the daemon fingerprint (ADR 690)', async () => {
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => {
+      out.push(String(s));
+      return true;
+    });
+    expect(await channelsCommand(parsed(['pair'], { channel: 'app' }))).toBe(0);
+    expect(h.startAppPairing).toHaveBeenCalledWith('revive');
+    expect(h.startChannelPairing).not.toHaveBeenCalledWith('revive', 'app');
+    const text = out.join('');
+    expect(text).toContain('\u2580');
+    expect(text).toContain('ab:cd');
+    expect(text).toContain('pair-app');
+    // The one-time code rides only inside the QR, never as text.
+    expect(text).not.toContain('c'.repeat(43));
+    vi.restoreAllMocks();
+  });
+
+  it('confirm on an app pairing carries a device_key_admin approval over the enroll payload', async () => {
+    const enroll = { action: 'enroll' as const, public_key: 'spki', kind: 'phone' as const };
+    h.listChannelPairings.mockResolvedValueOnce({
+      pairings: [
+        {
+          id: 'pair-app',
+          channel: 'app',
+          check_code: '00',
+          state: 'awaiting_confirmation',
+          provider_tenant_id: null as unknown as string,
+          provider_user_id: null as unknown as string,
+          expires_at: 999,
+          created_at: 1,
+          app: {
+            fingerprint: 'ff',
+            environment: 'production',
+            device_name: null,
+            enroll_payload: enroll,
+          },
+        } as never,
+      ],
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    expect(await channelsCommand(parsed(['confirm', 'pair-app']))).toBe(0);
+    expect(h.collectApproval).toHaveBeenCalledWith(
+      expect.anything(),
+      'revive',
+      'device_key_admin',
+      'nick',
+      enroll,
+    );
+    expect(h.confirmChannelPairing).toHaveBeenCalledWith('revive', 'pair-app', { proof: 'signed' });
+    vi.restoreAllMocks();
+  });
+
+  it('confirm on a Slack pairing sends no approval', async () => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    h.collectApproval.mockClear();
+    expect(await channelsCommand(parsed(['confirm', 'pair-1']))).toBe(0);
+    expect(h.collectApproval).not.toHaveBeenCalled();
+    expect(h.confirmChannelPairing).toHaveBeenLastCalledWith('revive', 'pair-1', undefined);
     vi.restoreAllMocks();
   });
 
