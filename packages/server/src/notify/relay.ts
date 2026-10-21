@@ -149,9 +149,11 @@ export const relayChecks: RedemptionChecks = {
   },
   bindingAuthorizer: async (t, teamId, bindingId, generation, channel) =>
     (await t.get<BindingAuthorizer>(
-      `SELECT m.id AS memberId, m.name AS memberName, b.channel,
-              b.provider_tenant_id AS providerTenantId,
-              b.provider_user_id AS providerUserId
+      // Quoted: Postgres folds an unquoted alias to lower case, and this row is read by its
+      // camelCase keys (a PGlite-only binding_stale on every answer, found 2026-10-21).
+      `SELECT m.id AS "memberId", m.name AS "memberName", b.channel,
+              b.provider_tenant_id AS "providerTenantId",
+              b.provider_user_id AS "providerUserId"
          FROM channel_bindings b
          JOIN members m ON m.id = b.member_id AND m.team_id = b.team_id
         WHERE b.id = ? AND b.team_id = ? AND b.generation = ?
