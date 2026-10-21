@@ -4327,6 +4327,42 @@ export function benchPropSort(
  *
  * `render.test.ts` pins the ordering at all four facings, which is the check #1394 did not have.
  */
+/** Clip `ctx` to the near half's silhouette — the extruded box from the floor to the worktop over the
+ * +ly half of the desk. The caller saves and restores. */
+function clipToNearHalf(ctx: CanvasRenderingContext2D, fit: Fit, slot: { lx: number; ly: number; dir: Dir }): void {
+  const { lx, ly, dir } = slot;
+  const sn = dir === 'S' || dir === 'N';
+  const wx = sn ? DESK_W : DESK_D;
+  const dy = sn ? DESK_D : DESK_W;
+  const corners: Pt[] = [];
+  for (const [cx, cy] of [
+    [lx - wx / 2, ly],
+    [lx + wx / 2, ly],
+    [lx + wx / 2, ly + dy / 2],
+    [lx - wx / 2, ly + dy / 2],
+  ] as const) {
+    const q = project(cx, cy, fit);
+    corners.push(q, { x: q.x, y: q.y - DESK_UP * fit.scale });
+  }
+  const h = hull(corners);
+  ctx.beginPath();
+  h.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)));
+  ctx.closePath();
+  ctx.clip();
+}
+
+/** The props standing on the near half, painted again over `deskNearHalf` and inside the same clip.
+ * The second pass repaints the worktop, so without this every prop on the room-side half lost its
+ * foot to its own desk — a fan sunk into the slab, a monitor's stand gone (nick, 2026-10-21). The
+ * clip keeps it additive: inside it the worktop was just repainted opaque, so the props land on the
+ * same pixels as the first pass; outside it nothing is touched, so a soft shadow is not doubled. */
+function nearHalfProps(ctx: CanvasRenderingContext2D, fit: Fit, slot: { lx: number; ly: number; dir: Dir }, draw: () => void): void {
+  ctx.save();
+  clipToNearHalf(ctx, fit, slot);
+  draw();
+  ctx.restore();
+}
+
 function deskNearHalf(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -4341,22 +4377,8 @@ function deskNearHalf(
   // from the floor to the worktop) — the same pixels, so still additive by construction.
   const id = sn ? 'desk/base' : 'desk/base-ew';
   if (rendered?.images.has(id)) {
-    const corners: Pt[] = [];
-    for (const [cx, cy] of [
-      [lx - wx / 2, ly],
-      [lx + wx / 2, ly],
-      [lx + wx / 2, ly + dy / 2],
-      [lx - wx / 2, ly + dy / 2],
-    ] as const) {
-      const q = project(cx, cy, fit);
-      corners.push(q, { x: q.x, y: q.y - DESK_UP * fit.scale });
-    }
-    const h = hull(corners);
     ctx.save();
-    ctx.beginPath();
-    h.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)));
-    ctx.closePath();
-    ctx.clip();
+    clipToNearHalf(ctx, fit, slot);
     blitIf(ctx, fit, rendered, id, lx, ly);
     ctx.restore();
     return;
@@ -4431,6 +4453,8 @@ export function drawWorkstation(
   phase: WorkstationPhase = 'all',
   /** Pre-rendered art; the desk base blits when its asset is present (plan Task 3). */
   rendered?: RenderedAssets,
+  /** Only the props on the near (+ly) half, and no base — the `nearHalfProps` pass. */
+  nearOnly = false,
 ): void {
   const { lx, ly, dir, id } = slot;
   const f = FWD[dir];
@@ -4457,14 +4481,15 @@ export function drawWorkstation(
   const ownedEmpty = node != null && owned;
 
   if (phase === 'monitor') {
+    if (nearOnly && f[1] * MONITOR_ALONG < 0) return;
     monitor(ctx, fit, lx + f[0] * MONITOR_ALONG, ly + f[1] * MONITOR_ALONG, dir, working, up, id, t, screenLifeFor(node));
     return;
   }
 
   // The base — legs, slab and its bevelled lip — is one rendered image when the manifest has it
   // (`desk/base` for a S/N desk, `desk/base-ew` for an E/W one); otherwise the painter below.
-  const baseRendered = phase !== 'post' && blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
-  if (phase !== 'post' && !baseRendered) {
+  const baseRendered = phase !== 'post' && !nearOnly && blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  if (phase !== 'post' && !nearOnly && !baseRendered) {
     for (const [sx, sy] of [
       [-1, -1],
       [1, -1],
@@ -4477,7 +4502,7 @@ export function drawWorkstation(
   }
   // Bevelled front lip (Delight D): a soft rim light along the slab's two viewer-facing top edges,
   // so the worktop reads as a finished edge rather than a raw extrusion.
-  if (phase !== 'post' && !baseRendered) {
+  if (phase !== 'post' && !nearOnly && !baseRendered) {
     const e = project(lx - wx / 2, ly + dy / 2, fit);
     const s2 = project(lx + wx / 2, ly + dy / 2, fit);
     const e2 = project(lx + wx / 2, ly - dy / 2, fit);
@@ -4503,6 +4528,7 @@ export function drawWorkstation(
   const at = (along: number, across: number, fn: (ix: number, iy: number) => void, monitor?: true): void => {
     const ix = lx + f[0] * along + p[0] * across;
     const iy = ly + f[1] * along + p[1] * across;
+    if (nearOnly && iy < ly) return;
     props.push({ sum: deskPropSort(dir, along, across), fn: () => fn(ix, iy), ...(monitor ? { monitor } : {}) });
   };
 
@@ -4964,6 +4990,24 @@ export function deskStationItems(
     out.push({ d: depth(BENCH.lx, BENCH.ly) + 0.1, fn: () => benchStation(ctx, fit, slot, node, t, seatedWorking) });
   } else {
     if (node && !deskOwned && env.lampsOn) litLamps.add(slot.id);
+    const wsKey = workstationKey({
+      slot,
+      node,
+      teamName,
+      owned: deskOwned,
+      working: seatedWorking,
+      lampLit: !!node && !deskOwned && env.lampsOn,
+      hidden: hide,
+      fit,
+      dpr: opts.dpr ?? 1,
+      warmAlpha: ownedDeskWarmAlpha(node, deskOwned),
+    });
+    const ws = (c: CanvasRenderingContext2D, phase: WorkstationPhase, nearOnly = false): void =>
+      drawWorkstation(c, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, phase, opts.rendered, nearOnly);
+    // The near half's own props, again over its repaint (`nearHalfProps`) — the same pre / live
+    // monitor / post split as the desk, since an S desk's monitor stands on this half.
+    const nearProps = (c: CanvasRenderingContext2D, phase: WorkstationPhase): void =>
+      nearHalfProps(c, fit, slot, () => ws(c, phase, true));
     out.push({
       /* CENTRE, not the near corner. #1394 moved this to `nearDepth` to stop a member standing in
          front of a desk painting behind it. That reasoning was incomplete: a desk facing N or W puts
@@ -4988,24 +5032,10 @@ export function deskStationItems(
       // Cached form: two sprites around a live screen (see `WorkstationPhase`). The sprite draws
       // take the OFFSCREEN context; the screen paints on the stage.
       parts: (() => {
-        const key = workstationKey({
-          slot,
-          node,
-          teamName,
-          owned: deskOwned,
-          working: seatedWorking,
-          lampLit: !!node && !deskOwned && env.lampsOn,
-          hidden: hide,
-          fit,
-          dpr: opts.dpr ?? 1,
-          warmAlpha: ownedDeskWarmAlpha(node, deskOwned),
-        });
-        const ws = (c: CanvasRenderingContext2D, phase: WorkstationPhase): void =>
-          drawWorkstation(c, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, phase, opts.rendered);
         return [
-          { kind: 'sprite', key: `${key}·pre`, draw: (c) => ws(c, 'pre') },
+          { kind: 'sprite', key: `${wsKey}·pre`, draw: (c) => ws(c, 'pre') },
           { kind: 'live', draw: () => ws(ctx, 'monitor') },
-          { kind: 'sprite', key: `${key}·post`, draw: (c) => ws(c, 'post') },
+          { kind: 'sprite', key: `${wsKey}·post`, draw: (c) => ws(c, 'post') },
         ] satisfies SpritePart[];
       })(),
     });
@@ -5016,9 +5046,21 @@ export function deskStationItems(
     // the desk's own key cannot simply move (#1394, #1400).
     out.push({
       d: deskNearDepth(slot, seatedHere),
-      fn: () => deskNearHalf(ctx, fit, slot, opts.rendered),
+      fn: () => {
+        deskNearHalf(ctx, fit, slot, opts.rendered);
+        for (const phase of ['pre', 'monitor', 'post'] as const) nearProps(ctx, phase);
+      },
       parts: [
-        { kind: 'sprite', key: `near·${slot.id}·${statKey}`, draw: (c) => deskNearHalf(c, fit, slot, opts.rendered) },
+        {
+          kind: 'sprite',
+          key: `near·${wsKey}`,
+          draw: (c) => {
+            deskNearHalf(c, fit, slot, opts.rendered);
+            nearProps(c, 'pre');
+          },
+        },
+        { kind: 'live', draw: () => nearProps(ctx, 'monitor') },
+        { kind: 'sprite', key: `near·${wsKey}·post`, draw: (c) => nearProps(c, 'post') },
       ],
     });
   }

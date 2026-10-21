@@ -198,13 +198,36 @@ describe('rendered per-desk overlays (plan Task 7)', () => {
   };
   void blitsOf;
 
+  // Slot 0 faces S, so its lamp (along +8) stands on the near half and is blitted twice: once with
+  // the desk, once more over the near half's repaint (`nearHalfProps`).
   it('an occupied desk at night blits the lit lamp; by day the unlit one; an empty desk none', () => {
-    expect(run(22, true).by('desk/lamp-on')).toBe(1);
+    expect(run(22, true).by('desk/lamp-on')).toBe(2);
     expect(run(22, true).by('desk/lamp-off')).toBe(0);
-    expect(run(12, true).by('desk/lamp-off')).toBe(1);
+    expect(run(12, true).by('desk/lamp-off')).toBe(2);
     expect(run(12, true).by('desk/lamp-on')).toBe(0);
     const empty = run(22, false);
     expect(empty.by('desk/lamp-on') + empty.by('desk/lamp-off')).toBe(0);
+  });
+
+  it('a prop on the near half is painted again after the near half repaints the worktop', () => {
+    // The near half re-blits the desk base at the front edge's depth; a prop standing on that half
+    // used to lose its foot to it — a fan sunk into the slab (nick, 2026-10-21).
+    const { ctx, ops } = recordingCtx();
+    const r = rendered([...ids, 'desk/base']);
+    for (const id of [...ids, 'desk/base']) r.images.set(id, { fake: true, id } as unknown as CanvasImageSource);
+    const placements = new Map([['ada', { kind: 'desk' as const, slot: 0 }]]);
+    const byName = new Map([['ada', officeNode('ada')]]);
+    renderScene(ctx, fit, placements, byName, new Map(), 0, 'revive', computeLightEnv(12, true), null, undefined, null, undefined, undefined, {
+      rendered: r,
+    });
+    const idOf = (o: (typeof ops)[number]) => (o.name === 'drawImage' ? (o.args[0] as { id?: string }).id : undefined);
+    const bases = ops.flatMap((o, i) => (idOf(o) === 'desk/base' ? [i] : []));
+    const lamps = ops.flatMap((o, i) => (idOf(o) === 'desk/lamp-off' ? [i] : []));
+    expect(lamps.length).toBe(2);
+    // the second lamp lands after the near half's base, which comes after the first lamp
+    const nearBase = bases.find((i) => i > lamps[0]!);
+    expect(nearBase).toBeDefined();
+    expect(lamps[1]!).toBeGreaterThan(nearBase!);
   });
 
   it('the fan frame advances with t only while someone is at the desk', () => {

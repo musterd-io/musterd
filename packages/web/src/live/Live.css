@@ -2757,7 +2757,10 @@
   padding: calc(var(--lc-tab-unit, 0px) * 1.5) 0 calc(var(--lc-tab-unit, 0px) * 2);
   white-space: nowrap;
   font-family: var(--font-display, var(--font-sans));
-  font-size: max(8px, calc(var(--lc-tab-unit, 0px) * 10));
+  /* Fit "settings ›" (~6 em of bold) inside the tab: the wall unit alone overran the tab at the
+     rendered office's smaller calendar (nick, 2026-10-21). */
+  font-size: max(7px, min(calc(var(--lc-tab-unit, 0px) * 10), calc(var(--lc-tab-w, 0px) / 6.6)));
+  overflow: hidden;
   font-weight: 700;
   line-height: 1;
   color: var(--lc-text);
