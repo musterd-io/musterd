@@ -112,7 +112,8 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
    unexchanged codes, and its presence. Removal and expiry are the triggers today. Disable and ban
    have no writer on the teams where sponsored agents exist — seat-file reconcile is the only
    account-status writer, and a seat-file team refuses sponsored mints (ADR 449) — so the first
-   such writer must call the same cascade.
+   such writer must call the same cascade. _(Amended 2026-10-21: [ADR 700](700-sponsored-agents-on-seat-file-teams.md) lets a seat-file
+   team hold sponsored agents; seat-file reconcile is that first writer and calls this cascade.)_
 3. `PolicySchema.invite_requires_expiry` (default `false`): when true, `POST /invites` without
    `member_until` is refused. The policy setter refuses `agent_connect: 'any_member'` unless
    `invite_requires_expiry` is also true.
@@ -159,6 +160,11 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   `reconcileTeam` fails closed with `conflict` while any live member has `sponsored_by`, and
   `rosterToFiles` refuses the export first and names the way out: remove the agents, then export.
   Falsifier: a file-backed team with a live `sponsored_by` row.
+- 2026-10-21: superseded in part by [ADR 700](700-sponsored-agents-on-seat-file-teams.md). A
+  seat file now carries `sponsored_by`, which takes effect only where the hub's
+  `member.sponsored_agent_created` fact vouches for it. Reconcile derives a descendant's standing
+  and runs the cascade, so the two refusals above (reconcile and export) are removed. The
+  falsifier for this rule now lives in ADR 700.
 - 2026-09-28 (big-body, REQUIRED on #1779): as first written, §1 left admin host keys
   team-wide over sponsored seats, so a sponsor enrolling on a label an admin host already used
   would be woken on the admin's machine. §1 now binds a sponsored seat to its sponsor's own key
