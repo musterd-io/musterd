@@ -1,9 +1,8 @@
 """Smoke test for ADR 691's file hold and ADR 693's lapse, with two real headless Claude Code seats.
 
-One scratch team (team.py), two seats, each in its own clone of one scratch repo (a seat's binding
-is per folder, as each CooperBench agent has its own container). Lane paths are repo-relative, so
-both seats name the same file. Each step is its own headless session
-in the arm's exact wiring (gate_smoke.py's), so a session ending is a real departure:
+One scratch team (team.py), two seats, each in its own clone of one scratch repo. Lane paths are
+repo-relative, so both seats name the same file. Each step is its own headless session in the arm's
+exact wiring (gate_smoke.py's), so a session ending is a real departure:
 
 1. agent1 claims a lane naming src/a.py, edits it, and exits.
 2. agent2, at once (agent1 is still inside its reclaim grace), claims a lane naming the same file
@@ -11,10 +10,13 @@ in the arm's exact wiring (gate_smoke.py's), so a session ending is a real depar
 3. After LAPSE_WAIT_S, agent2 tries the same edit again. agent1 has left, so the hold has lapsed
    and the gate must let the edit through with the advisory.
 
-Pass: agent1's clone carries its line, agent2's carries its second line but not its first, the daemon audited a
-`held by` deny and a `has lapsed` warn, and no session saw the deaf warning. This is the check that
-the run image carries both ADRs before any measured pair: without 691 step 2 is allowed, without
+Pass: agent1's clone carries its line, agent2's carries its second line but not its first, the daemon
+audited a `held by` deny and a `has lapsed` warn, and no session saw the deaf warning. This checks
+that the run image carries both ADRs before any measured pair: without 691 step 2 is allowed, without
 693 step 3 is refused.
+
+The host-side Claude processes use default permissions, only the smoke's file and musterd tools,
+and a filtered per-seat environment. They do not inherit the CooperBench VM's other credentials.
 
 Usage: as gate_smoke.py, PREFIX=<prefix> python3 scripts/research/cooperbench/hold_smoke.py
 """
@@ -62,14 +64,19 @@ def redact(s: str) -> str:
 
 def session(repo: Path, wiring: dict, prompt: str) -> tuple[str, float | None, bool]:
     proc = subprocess.run(
-        [
-            "claude", "-p", prompt, "--model", MODEL, "--output-format", "json",
-            "--permission-mode", "bypassPermissions",
-            "--setting-sources", "local", "--settings", str(wiring["settings"]),
-            "--strict-mcp-config", "--mcp-config", str(wiring["mcp"]),
-        ],
+        cfg.claude_smoke_argv(
+            prompt,
+            model=MODEL,
+            settings=wiring["settings"],
+            mcp_config=wiring["mcp"],
+        ),
         cwd=repo,
-        env={**os.environ, **wiring["env"]},
+        env=cfg.claude_smoke_env(
+            os.environ,
+            wiring["env"],
+            home=Path(wiring["env"]["MUSTERD_CONFIG"]).parent,
+            prefix=PREFIX,
+        ),
         capture_output=True,
         text=True,
         timeout=600,
@@ -112,7 +119,15 @@ def main() -> int:
             cfg.admit_seat(host, pair, seat, cwd=repos[seat], env={**os.environ, **env}, musterd=SEAT_BIN)
             mcp = base / f"{seat}-mcp.json"
             settings = base / f"{seat}-settings.json"
-            mcp.write_text(json.dumps(cfg.mcp_config(env, command="node", args=[str(mcp_entry)])))
+            mcp.write_text(
+                json.dumps(
+                    cfg.mcp_config(
+                        cfg.claude_smoke_mcp_env(env),
+                        command="node",
+                        args=[str(mcp_entry)],
+                    )
+                )
+            )
             settings.write_text(json.dumps(cfg.claude_settings()))
             wiring[seat] = {"env": env, "mcp": mcp, "settings": settings, "repo": repos[seat]}
 
