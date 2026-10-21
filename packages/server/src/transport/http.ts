@@ -126,6 +126,8 @@ import {
   SyncPolicyRequestSchema,
   SyncStyleRequestSchema,
   SyncTrustRequestSchema,
+  SeatMoveRequestSchema,
+  SyncMoveRequestSchema,
   NoteRecipientsRequestSchema,
   parseSealedNote,
   SyncNoteRecipientsRequestSchema,
@@ -626,6 +628,7 @@ import {
   SyncOriginError,
   SyncResidenceError,
 } from '../sync/log.js';
+import { applyMove, moveAtHub } from '../sync/move.js';
 import { kickSyncPull, peekPullStop, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
 import { describeSeatFileReach, seatFileReach } from '../sync/rosterRefresh.js';
@@ -7616,6 +7619,41 @@ export async function handleHttp(
         }
       }
 
+      // ADR 696, hub side: a joiner forwards a move. Machine first, then the MOVER's residence on
+      // that machine (the strict form, as `/sync/policy`: a node credential says which machine
+      // speaks, never for whom), then `applyMove` re-authorizes the mover against the hub's roster.
+      if (method === 'POST' && rest === '/sync/move') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncMoveRequestSchema, await readJson(req));
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
+        const seat = await getMemberByName(ctx.db, team.id, body.seat);
+        if (!seat) throw new MusterdError('not_found', `no seat "${body.seat}" on this roster`);
+        try {
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'move');
+          const moved = await applyMove(ctx.db, team.id, {
+            seat,
+            actor,
+            speaker: node,
+            to: body.to,
+            ...(body.only ? { only: true } : {}),
+          });
+          await pushTeam(ctx, team).catch(() => undefined);
+          return sendJson(res, 200, moved);
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          throw err;
+        }
+      }
+
       // ADR 657, hub side: a joiner's note-recipients call. The authenticated node is the machine
       // whose key is recorded — a node can set only its own — and the answer is the hub's set.
       if (method === 'POST' && rest === '/sync/note-recipients') {
@@ -7634,6 +7672,49 @@ export async function handleHttp(
         if (seat.kind === 'human' && body.public_key)
           await setNodeNoteKey(ctx.db, team.id, node.id, body.public_key, seat.name);
         return sendJson(res, 200, await noteRecipients(ctx.db, seat, node.id));
+      }
+
+      // ADR 696, the seat-facing move (`musterd move`): authenticated as the mover; `to` omitted is
+      // the machine whose daemon took the request. On an enrolled joiner it is forwarded to the hub
+      // (the binding lives there); otherwise it is decided here with the local row as speaker.
+      const seatMoveMatch = rest.match(/^\/seats\/([^/]+)\/move$/);
+      if (method === 'POST' && seatMoveMatch) {
+        const body = parseOrBadRequest(SeatMoveRequestSchema, await readJson(req));
+        const { team, member } = await authTouch(ctx, slug, req);
+        const seatName = decodeURIComponent(seatMoveMatch[1]!);
+        const here = await localNodeWithLabel(ctx.db, team.id);
+        const to = body.to ?? here.id;
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        try {
+          if (enrollment) {
+            return sendJson(
+              res,
+              200,
+              await moveAtHub(enrollment, team.slug, {
+                seat: seatName,
+                actor: member.name,
+                to,
+                ...(body.only ? { only: true } : {}),
+              }),
+            );
+          }
+          const seat = await getMemberByName(ctx.db, team.id, seatName);
+          if (!seat) throw new MusterdError('not_found', `no seat "${seatName}" on this roster`);
+          const moved = await applyMove(ctx.db, team.id, {
+            seat,
+            actor: member,
+            speaker: here,
+            to,
+            ...(body.only ? { only: true } : {}),
+          });
+          await pushTeam(ctx, team).catch(() => undefined);
+          return sendJson(res, 200, moved);
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          if (err instanceof HubUnreachableError)
+            throw new MusterdError('hub_unreachable', err.message);
+          throw err;
+        }
       }
 
       // ADR 358, the seat-facing act: "trust this node for my seat". Authenticated as the seat, for
