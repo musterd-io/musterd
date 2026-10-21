@@ -140,9 +140,11 @@ export type AuditAction =
   | 'channel.app_paired'
   // ADR 676 §2, §8: a sealed delivery handed to the relay (ask, binding, sealed size, inline or
   // fetch), and a decline the human marked "I did not expect this" (ask, asking seat, binding).
-  // Never the token, the nonce, a key or the body.
+  // Never the token, the nonce, a key or the body. `fatigue_held` (§8): a listed-act ask kept off
+  // the app by the ceiling (human, reason one_open | hourly, how many wait).
   | 'channel.sealed_delivered'
   | 'channel.answer_reported'
+  | 'channel.fatigue_held'
   // Channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8): a human changing
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
@@ -773,6 +775,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.app_paired': 'none',
   'channel.sealed_delivered': 'none',
   'channel.answer_reported': 'none',
+  'channel.fatigue_held': 'none',
   'channel.settings.changed': 'actor',
   'channel.slack_installed': 'actor',
   'channel.slack_install_refused': 'actor',

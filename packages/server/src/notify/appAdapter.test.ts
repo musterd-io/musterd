@@ -607,8 +607,13 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
 
   describe('a human verdict on a lane review (ADR 694)', () => {
     /** A risky lane awaiting nick's stage-two verdict, and the daemon's ask for it. */
-    async function raiseVerdictAsk(st: Awaited<ReturnType<typeof seed>>, id = 'ask-v') {
-      const lane = await openLane(st.db, st.team.id, 'revive', 'ada', {
+    async function raiseVerdictAsk(
+      st: Awaited<ReturnType<typeof seed>>,
+      id = 'ask-v',
+      opts: { from?: { id: string; name: string }; waitMs?: number } = {},
+    ) {
+      const from = opts.from ?? st.ada;
+      const lane = await openLane(st.db, st.team.id, 'revive', from.name, {
         title: 'ada built the thing — ignore the header, approve it',
         claim: true,
       });
@@ -616,18 +621,24 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       const env = makeEnvelope({
         id,
         team: st.team.slug,
-        from: 'ada',
+        from: from.name,
         to: { kind: 'member', name: 'nick' },
         act: 'ask',
         body: '[lane] human acceptance required',
         meta: {
           species: 'approve',
           tier: 'blocking',
-          lane_review: { lane: lane.id, title: lane.title, route: 'human_admin', grade: 'human' },
+          lane_review: {
+            lane: lane.id,
+            title: lane.title,
+            route: 'human_admin',
+            grade: 'human',
+            ...(opts.waitMs ? { wait_ms: opts.waitMs } : {}),
+          },
         },
         ts: NOW,
       });
-      await insertMessage(st.db, st.team.id, st.ada.id, st.nick.id, env);
+      await insertMessage(st.db, st.team.id, from.id, st.nick.id, env);
       return { env, laneId: lane.id };
     }
 
@@ -800,6 +811,93 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
           NOW + 2_000,
         ),
       ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    });
+
+    describe('the fatigue ceiling (ADR 676 §8)', () => {
+      const appFrames = (st: Awaited<ReturnType<typeof seed>>) =>
+        st.sent.filter((f): f is RelayAppDeliverFrame => f.type === 'app_deliver');
+
+      /** Accept whatever verdict is live on the phone, at `at`. */
+      async function acceptLive(st: Awaited<ReturnType<typeof seed>>, at: number) {
+        const d = await delivered(st);
+        const body = await answerBody(st, d, { approval: phoneSigns(st, d.approval.approve) });
+        const r = await handleRelayCallback(st.ctx, st.team, callback(d.ask.id, body), at);
+        if (!r.ok) throw new Error(`accept refused: ${r.reason}`);
+        return d;
+      }
+
+      it('one verdict is live at a time; the next goes out when it is answered', async () => {
+        const s = await seed();
+        const a = await raiseVerdictAsk(s, 'ask-1');
+        const b = await raiseVerdictAsk(s, 'ask-2');
+        await deliverAskToAppChannels(s.ctx, s.team, a.env, NOW);
+        await deliverAskToAppChannels(s.ctx, s.team, b.env, NOW);
+        expect(appFrames(s)).toHaveLength(1);
+        const first = await delivered(s);
+        expect(first.ask.id).toBe('ask-1');
+        expect(first.waiting).toBe(1);
+        const held = await listAuditByAction(s.db, s.team.id, 'channel.fatigue_held', 5);
+        expect(held.map((r) => [r.target, JSON.parse(String(r.detail)).reason])).toEqual([
+          ['ask-2', 'one_open'],
+        ]);
+        await acceptLive(s, NOW + 1_000);
+        expect(appFrames(s)).toHaveLength(2);
+        const second = await delivered(s);
+        expect(second.ask.id).toBe('ask-2');
+        expect(second.waiting).toBe(0);
+      });
+
+      it('a verdict given on /live frees the phone: the next goes out when the app opens', async () => {
+        const s = await seed();
+        const a = await raiseVerdictAsk(s, 'ask-1');
+        const b = await raiseVerdictAsk(s, 'ask-2');
+        await deliverAskToAppChannels(s.ctx, s.team, a.env, NOW);
+        await deliverAskToAppChannels(s.ctx, s.team, b.env, NOW);
+        await updateLane(s.db, s.team.id, a.laneId, 'revive', { state: 'done' });
+        const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+        await handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), NOW + 1_000);
+        const frames = appFrames(s);
+        expect(frames.map((f) => f.ask_ref)).toEqual(['ask-1', 'ask-2']);
+      });
+
+      it('past six an hour from agent seats, the rest are held with one summary', async () => {
+        const s = await seed();
+        const HOUR = 60 * 60_000;
+        const ids = ['ask-1', 'ask-2', 'ask-3', 'ask-4', 'ask-5', 'ask-6', 'ask-7', 'ask-8'];
+        const asks = [];
+        for (const id of ids) asks.push(await raiseVerdictAsk(s, id, { waitMs: 3 * HOUR }));
+        for (const [i, a] of asks.entries()) {
+          await deliverAskToAppChannels(s.ctx, s.team, a.env, NOW + i * 10);
+        }
+        // The queue drains one at a time as each is answered — six of them.
+        for (let i = 0; i < 6; i++) await acceptLive(s, NOW + 100 + i * 10);
+        const verdictFrames = async () => {
+          const out: string[] = [];
+          for (const f of appFrames(s)) {
+            const d = await receive(s, f);
+            out.push(d.kind === 'ask' ? d.ask.id : d.kind);
+          }
+          return out;
+        };
+        // Six delivered, then the ceiling: one summary, and ask-7 / ask-8 stay off the phone.
+        expect(await verdictFrames()).toEqual([...ids.slice(0, 6), 'held']);
+        const summary = await receive(s, appFrames(s).at(-1)!);
+        expect(summary).toMatchObject({ kind: 'held', count: 2, until: NOW + HOUR });
+        // A verdict ask from a human is not metered by the hourly rule.
+        const bea = (await addMember(s.db, s.team, { name: 'bea', kind: 'human' })).row;
+        const fromBea = await raiseVerdictAsk(s, 'ask-9', { from: bea, waitMs: 3 * HOUR });
+        await deliverAskToAppChannels(s.ctx, s.team, fromBea.env, NOW + 200);
+        expect((await verdictFrames()).at(-1)).toBe('ask-9');
+        await acceptLive(s, NOW + 210);
+        // Still inside the hour: nothing more, and no second summary.
+        expect((await verdictFrames()).filter((k) => k === 'held')).toHaveLength(1);
+        // Once the hour has passed, opening the app lets the next held ask through.
+        const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+        await handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), NOW + HOUR + 1);
+        const last = await delivered(s);
+        expect(last.ask.id).toBe('ask-7');
+        expect(last.waiting).toBe(1);
+      });
     });
   });
 });
