@@ -151,7 +151,8 @@ export async function signinCommand(parsed: Parsed, surface: SigninSurface): Pro
   if (!identity.key.startsWith(TOKEN_PREFIXES.credential)) {
     throw new CliError(
       `${identity.name} authenticates as an agent — ${place} signs in humans. Run this where your ` +
-        `own seat is bound, or name it: musterd ${surface} --as <your seat>`,
+        `own seat is bound (musterd whoami says who this folder is) — there is no --as to name ` +
+        `another seat from here.`,
       2,
     );
   }
