@@ -635,12 +635,13 @@ export async function bindHostToNode(
   teamId: string,
   host: string,
   nodeId: string,
-  now: number = Date.now(),
 ): Promise<{ bound: true } | { bound: false; node_id: string }> {
+  // A binding is not a poll: a row this creates says `seen_at` 0 — never polled here — so the
+  // liveness readers (`listHostSeen`, the sponsor's mint) do not take a pushed row for a heartbeat.
   await db.run(
-    `INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)
+    `INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, 0, ?)
      ON CONFLICT(team_id, host) DO UPDATE SET node = COALESCE(host_liveness.node, excluded.node)`,
-    [teamId, host, now, nodeId],
+    [teamId, host, nodeId],
   );
   const row = await db.get<{ node: string | null }>(
     'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
@@ -648,6 +649,22 @@ export async function bindHostToNode(
   );
   if (row?.node === nodeId) return { bound: true };
   return { bound: false, node_id: row?.node ?? '?' };
+}
+
+/**
+ * ADR 689 decision 5: is `label` a host this daemon minted a live, unexpired host key for? The
+ * one way a pushed row's `actor_kind: 'host'` is honoured — a replicated key does not count (the
+ * hub minted it, the hub answers for it), nor does a label with no key.
+ */
+export async function isLiveHostLabel(db: Driver, teamId: string, label: string): Promise<boolean> {
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM agent_bootstrap_credentials
+      WHERE team_id = ? AND use_kind = 'host' AND target = ? AND state = 'active'
+        AND replicated_from IS NULL AND (expires_at IS NULL OR expires_at > ?)
+      LIMIT 1`,
+    [teamId, label, Date.now()],
+  );
+  return row !== undefined;
 }
 
 /** Every host this team has ever heard from, and when — nearest reading of "is the actuator up". */

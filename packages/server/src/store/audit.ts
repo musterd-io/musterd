@@ -389,6 +389,12 @@ export type AuditAction =
   // `agent_bootstrap_credentials` only from the hub's origin.
   | 'credential.accepted'
   | 'credential.revoked'
+  // ADR 689 decision 6 — a joiner's own mint is a REQUEST (`minted`, actor = the host label,
+  // `detail.actor_kind: 'host'`); the hub validates it at fold and answers with its own
+  // `accepted` or `refused` (`detail.reason`). Neither the request nor the refusal projects
+  // anything anywhere.
+  | 'credential.minted'
+  | 'credential.refused'
   // ADR 131 increment 4: `wake_deferred` — the host skipped an actuation because a live local
   // session already held the workspace (the local-session guard; roster-offline ≠ workspace-idle).
   // Deliberately OUTSIDE the rate/attempt derivations (those count woke+wake_failed only): a
@@ -836,6 +842,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'host.provision_cancelled': 'none',
   'credential.accepted': 'none',
   'credential.revoked': 'none',
+  'credential.minted': 'none',
+  'credential.refused': 'none',
   'residency.session_captured': 'none',
   'residency.session_ended': 'none',
   'presence.session_ended': 'none',
@@ -1152,6 +1160,8 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   // ADR 689 — sponsor-scoped credentials cross as the hub's facts (projected at joiners).
   'credential.accepted',
   'credential.revoked',
+  'credential.minted',
+  'credential.refused',
 ]);
 
 /**

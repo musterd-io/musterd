@@ -8,7 +8,7 @@ import {
 import type { Driver } from '../db/driver.js';
 import { getMemberByName } from '../store/members.js';
 import { bindSeatToNode } from '../store/nodes.js';
-import { bindHostToNode } from '../store/residency.js';
+import { bindHostToNode, isLiveHostLabel } from '../store/residency.js';
 import { ringStreams } from './streamHub.js';
 
 /**
@@ -237,10 +237,19 @@ export async function ingestBatch(
       // instead the label binds first-writer-wins to the node that pushes it, and a push of that
       // label from any other node is refused. A label that collides with a member name is still
       // treated as the host's row, never the member's.
+      // The tag is the pusher's claim, so it is honoured only for a label this hub minted a live
+      // host key for and that is no member's name — otherwise the row is the named seat's and
+      // takes the seat check (a row in a human's name wearing the tag is refused as theirs).
       const hostActor =
-        event.kind === 'ledger' && event.event.detail?.['actor_kind'] === 'host' ? actor : null;
+        event.kind === 'ledger' &&
+        event.event.detail?.['actor_kind'] === 'host' &&
+        actor &&
+        !(await getMemberByName(t, teamId, actor)) &&
+        (await isLiveHostLabel(t, teamId, actor))
+          ? actor
+          : null;
       if (hostActor && !loopback) {
-        const bound = await bindHostToNode(t, teamId, hostActor, nodeId, now);
+        const bound = await bindHostToNode(t, teamId, hostActor, nodeId);
         if (!bound.bound) {
           throw new SyncOriginError(
             `host "${hostActor}" is bound to node ${bound.node_id} (ADR 689): a row in its name may be pushed only from there`,

@@ -4270,6 +4270,33 @@ export async function handleHttp(
             },
           });
         }
+        // ADR 689 decision 6: at a joiner, the host key's `claim_seat` mint is a REQUEST to the
+        // hub — the row is live here at once (the seat claims against this daemon), and the hub
+        // decides whether its record holds it, re-emitting `accepted` under its own origin.
+        if (
+          body.use === 'claim_seat' &&
+          viaHostKey &&
+          host &&
+          (await joinerEnrollment(ctx.db, team.id, slug)) !== null
+        ) {
+          await appendAudit(ctx.db, team.id, {
+            actor: host,
+            action: 'credential.minted',
+            target: minted.credential.id,
+            result: 'allow',
+            detail: {
+              actor_kind: 'host',
+              use: body.use,
+              target: body.target,
+              host,
+              sponsor: member.name,
+              key_hash: minted.credential.key_hash,
+              expires_at: minted.credential.expires_at,
+              created_at: minted.credential.created_at,
+              ...(body.label !== undefined ? { label: body.label } : {}),
+            },
+          });
+        }
         for (const predecessorId of minted.rotated) {
           await appendAudit(ctx.db, team.id, {
             actor: member.name,

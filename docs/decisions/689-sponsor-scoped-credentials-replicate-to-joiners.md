@@ -115,6 +115,11 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   team-wide half never crosses; what never crosses at all is the team agent key, `claim_role`,
   an unsponsored `claim_seat`, and any human credential. The joiner request path, provisions,
   the host actor and the freshness window land in the lane's second PR.
+- _(2026-10-21, second landing.)_ Decision 5's binding is first-writer-wins at the hub's ingest,
+  and only an enrolled node can write it, for a label this hub minted a live host key for. A wrong
+  first writer therefore denies the label to the real joiner but impersonates nothing; clearing it
+  is an admin act. Follows-up: lane `01M5E1Z7JE108EFS0F253FHARQ` (`musterd host unbind <label>`).
+  Decision 7's "last successful pull" is `sync_pull_cursor.updated_at`, which every fold writes.
 
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the
