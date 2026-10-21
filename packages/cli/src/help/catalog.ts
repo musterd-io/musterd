@@ -1150,7 +1150,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'host',
     signature:
-      '[provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--clone]',
+      '[provisions | unbind <label>] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--clone]',
     summary:
       'the wake actuator — resurrect enrolled offline seats on this machine; provisions the agents you create (ADR 131, 463)',
     group: 'ops',
@@ -1166,13 +1166,16 @@ export const CATALOG: readonly CommandEntry[] = [
       '(ADR 463 §3): each tick it claims them, stands each up here — a linked checkout by default, or ' +
       'a full clone with `--clone` for isolation from your checkout — enrolls it, and reports ' +
       'ready; the new agent then greets you. `--no-provision` opts out. `musterd host provisions` ' +
-      'lists what this host may see and claims nothing.',
+      'lists what this host may see and claims nothing. `musterd host unbind <label>` (an admin, ' +
+      'against the hub) clears the node a host label is bound to (ADR 689 d5), so the real joiner ' +
+      'takes it on its next push; refused while that node is live and seats are enrolled on the label.',
     examples: [
       'musterd host',
       'musterd host --once',
       'musterd host --interval 5 --timeout 120',
       'musterd host --clone',
       'musterd host provisions',
+      'musterd host unbind cloud-ada',
     ],
   },
   {

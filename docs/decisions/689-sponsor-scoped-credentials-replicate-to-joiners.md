@@ -140,6 +140,11 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   no member — the roster arrives by git, ADR 058), where it used to refuse until a human had
   created the team and logged an act there. The hub is still the machine the team was created on
   (ADR 376): a row born by enrolment is a joiner's by construction.
+- _(2026-10-21, fifth landing, lane `01M5E1Z7JE108EFS0F253FHARQ`.)_ The admin act that clears
+  decision 5's binding is `musterd host unbind <label>` (`POST /teams/:slug/hosts/:label/unbind`,
+  hub only). It is refused while the bound node is unrevoked and seats are enrolled on the label:
+  that is a label in use, and clearing it would hand it to whichever node pushes next. A label lost
+  with its machine is cleared by revoking that node first. Each call is audited `host.unbound`.
 
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the

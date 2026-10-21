@@ -485,6 +485,7 @@ import {
   revokeResidency,
   settleWakeLease,
   toResidency,
+  unbindHostFromNode,
   wakeExhaustionKey,
 } from '../store/residency.js';
 import {
@@ -7225,6 +7226,54 @@ export async function handleHttp(
         // `revoked: false` for an already-revoked or unknown node — idempotent, without claiming to
         // have acted. Events already ingested stay either way (§5).
         return sendJson(res, 200, { node_id: nodeId, revoked });
+      }
+
+      // Lane 01M5E1Z7JE (ADR 689 d5 follow-up): `musterd host unbind <label>` — an admin clears the
+      // label's node binding so the real joiner takes it on its next push. Hub only: the binding is
+      // the hub's ingest check, and a joiner holds none worth clearing. Refused (409) while the
+      // bound node is unrevoked and seats are enrolled on the label. Idempotent like revoke.
+      const hostUnbind = rest.match(/^\/hosts\/([^/]+)\/unbind$/);
+      if (method === 'POST' && hostUnbind) {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const label = decodeURIComponent(hostUnbind[1]!);
+        const enrolledAt = await joinerEnrollment(ctx.db, team.id, team.slug);
+        if (enrolledAt) {
+          throw new MusterdError(
+            'conflict',
+            `this machine is enrolled as a joiner of "${team.slug}" — a host label is bound on the ` +
+              `hub (ADR 689): run \`musterd host unbind\` against ${enrolledAt.hub_url}`,
+          );
+        }
+        const result = await unbindHostFromNode(ctx.db, team.id, label);
+        if (!result.unbound && result.reason === 'in_use') {
+          await appendAudit(ctx.db, team.id, {
+            actor: member.name,
+            action: 'host.unbound',
+            target: label,
+            result: 'deny',
+            detail: { node: result.node_id, reason: 'in_use', seats: result.seats },
+          });
+          throw new MusterdError(
+            'conflict',
+            `host "${label}" is bound to live node ${result.node_id} and ${result.seats.join(', ')} ` +
+              `${result.seats.length === 1 ? 'is' : 'are'} enrolled on it — revoke the node ` +
+              `(\`musterd node revoke ${result.node_id}\`) or those seats' residency first`,
+          );
+        }
+        if (result.unbound) {
+          await appendAudit(ctx.db, team.id, {
+            actor: member.name,
+            action: 'host.unbound',
+            target: label,
+            result: 'allow',
+            detail: { node: result.node_id },
+          });
+        }
+        return sendJson(res, 200, {
+          host: label,
+          unbound: result.unbound,
+          ...(result.unbound ? { node_id: result.node_id } : {}),
+        });
       }
 
       if (method === 'GET' && rest === '/nodes') {

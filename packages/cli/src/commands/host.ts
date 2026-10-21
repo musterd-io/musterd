@@ -22,6 +22,7 @@ import { hostRegistryPath, loadHostRegistry } from '../host/registry.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
 import { originUrl, publicOriginUrl } from '../onboard/workspace.js';
 import { theme } from '../render/theme.js';
+import { success } from '../render/ui.js';
 import { resolve } from './helpers.js';
 import { ensureHostKey } from './residency.js';
 
@@ -228,9 +229,35 @@ async function provisionsCommand(parsed: Parsed): Promise<number> {
   return 0;
 }
 
+/**
+ * `musterd host unbind <label>` (lane 01M5E1Z7JE, ADR 689 d5 follow-up): an admin, against the
+ * hub, clears the node a host label is bound to — so a label a wrong node pushed first, or one lost
+ * with its machine, goes to the real joiner on its next push. The hub refuses while the bound node
+ * is live and seats are enrolled on the label, and says which to revoke first.
+ */
+async function unbindCommand(parsed: Parsed): Promise<number> {
+  const label = parsed.positionals[1];
+  if (!label || parsed.positionals.length > 2) throw new CliError(HOST_USAGE, 2);
+  const { team, http } = resolve(parsed.flags);
+  const result = await http.hostUnbind(team, label);
+  if (parsed.flags['json']) {
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return 0;
+  }
+  process.stdout.write(
+    result.unbound
+      ? success(`host ${label} unbound from node ${result.node_id}`, {
+          next: 'the next enrolled node to push a row in its name takes the label',
+        }) + '\n'
+      : theme.meta(`nothing to do — host ${label} is not bound to a node\n`),
+  );
+  return 0;
+}
+
 const HOST_USAGE =
-  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--cloud-provision --server <url> --team <slug>] [--no-gateway] [--clone] — ' +
-  '`musterd host` runs the wake actuator; `musterd host provisions` lists claimable provisions. ' +
+  'usage: musterd host [provisions | unbind <label>] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--cloud-provision --server <url> --team <slug>] [--no-gateway] [--clone] — ' +
+  '`musterd host` runs the wake actuator; `musterd host provisions` lists claimable provisions; ' +
+  '`musterd host unbind <label>` (admin, on the hub) clears the node a host label is bound to. ' +
   'There is no `host status`: read ~/.musterd/host.log, or `musterd service status --wake`.';
 
 /**
@@ -304,6 +331,7 @@ export async function hostCommand(
     'the flags `musterd host` takes are listed by `musterd help host`',
   );
   if (parsed.positionals[0] === 'provisions') return provisionsCommand(parsed);
+  if (parsed.positionals[0] === 'unbind') return unbindCommand(parsed);
   // Lane 01M3QTE5235VK1NNQBSSZ28ZZ1: `host` runs the actuator when it has no positional, so a
   // mistyped or imagined subcommand (`host status`) used to start a SECOND actuator in this
   // workspace, silently, forever — polling leases and provisioning under this seat's key. An
