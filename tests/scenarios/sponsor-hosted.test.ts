@@ -147,7 +147,7 @@ describe('Scenario E — a sponsor’s host runs the agent they created', () => 
       provisionSeat: (input) =>
         provisionSeat({ ...input, wiring: { ...input.wiring, reconcile: reconcile as never } }),
     });
-    expect(tick).toEqual({ claimed: 1, ready: 1, failed: 0 });
+    expect(tick).toEqual({ claimed: 1, ready: 1, failed: 0, deferred: 0 });
 
     const entry = loadHostRegistry().entries.find((e) => e.seat === 'dana-scout')!;
     expect(entry).toMatchObject({ team: TEAM, host: 'dana-mbp', harness: 'claude-code' });

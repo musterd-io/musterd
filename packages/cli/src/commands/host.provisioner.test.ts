@@ -152,14 +152,14 @@ describe('musterd host runs the provisioner each tick', () => {
   };
 
   it('--once runs the provisioner alongside the wake poll, and does not exit on an empty registry', async () => {
-    const provisioner = vi.fn(async () => ({ claimed: 0, ready: 0, failed: 0 }));
+    const provisioner = vi.fn(async () => ({ claimed: 0, ready: 0, failed: 0, deferred: 0 }));
     const code = await hostCommand(parseArgs(['--once']), { ...quiet, provisioner } as never);
     expect(code).toBe(0);
     expect(provisioner).toHaveBeenCalledTimes(1);
   });
 
   it('--no-provision never builds or runs it', async () => {
-    const provisioner = vi.fn(async () => ({ claimed: 0, ready: 0, failed: 0 }));
+    const provisioner = vi.fn(async () => ({ claimed: 0, ready: 0, failed: 0, deferred: 0 }));
     const code = await hostCommand(parseArgs(['--once', '--no-provision']), {
       ...quiet,
       provisioner,
