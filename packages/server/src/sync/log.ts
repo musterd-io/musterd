@@ -8,6 +8,7 @@ import {
 import type { Driver } from '../db/driver.js';
 import { getMemberByName } from '../store/members.js';
 import { bindSeatToNode } from '../store/nodes.js';
+import { bindHostToNode } from '../store/residency.js';
 import { ringStreams } from './streamHub.js';
 
 /**
@@ -231,7 +232,22 @@ export async function ingestBatch(
         event.kind === 'policy' || event.kind === 'seed' || hubRecord
           ? null
           : syncEventActor(event);
-      const seat = actor ? await getMemberByName(t, teamId, actor) : undefined;
+      // ADR 689 decision 5: a host-key-authored ledger row names its host label as actor
+      // (`detail.actor_kind: 'host'`). It is no seat's row, so the seat binding does not apply;
+      // instead the label binds first-writer-wins to the node that pushes it, and a push of that
+      // label from any other node is refused. A label that collides with a member name is still
+      // treated as the host's row, never the member's.
+      const hostActor =
+        event.kind === 'ledger' && event.event.detail?.['actor_kind'] === 'host' ? actor : null;
+      if (hostActor && !loopback) {
+        const bound = await bindHostToNode(t, teamId, hostActor, nodeId, now);
+        if (!bound.bound) {
+          throw new SyncOriginError(
+            `host "${hostActor}" is bound to node ${bound.node_id} (ADR 689): a row in its name may be pushed only from there`,
+          );
+        }
+      }
+      const seat = actor && !hostActor ? await getMemberByName(t, teamId, actor) : undefined;
       if (seat && seat.kind !== 'service') {
         const bound = await bindSeatToNode(t, teamId, seat.id, nodeId, now);
         if (!bound.bound && !loopback) {

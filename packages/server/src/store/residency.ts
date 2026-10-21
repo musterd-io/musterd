@@ -624,6 +624,32 @@ export async function recordHostSeen(
   );
 }
 
+/**
+ * ADR 689 decision 5: bind a host label to the node that first pushes a row in its name, and say
+ * no to every other node after that. `host_liveness.node` is the binding (v122); a row that only
+ * ever polled locally has none and takes the first pusher. The hub consults this at ingest for
+ * every `actor_kind: 'host'` ledger row.
+ */
+export async function bindHostToNode(
+  db: Driver,
+  teamId: string,
+  host: string,
+  nodeId: string,
+  now: number = Date.now(),
+): Promise<{ bound: true } | { bound: false; node_id: string }> {
+  await db.run(
+    `INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)
+     ON CONFLICT(team_id, host) DO UPDATE SET node = COALESCE(host_liveness.node, excluded.node)`,
+    [teamId, host, now, nodeId],
+  );
+  const row = await db.get<{ node: string | null }>(
+    'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+    [teamId, host],
+  );
+  if (row?.node === nodeId) return { bound: true };
+  return { bound: false, node_id: row?.node ?? '?' };
+}
+
 /** Every host this team has ever heard from, and when — nearest reading of "is the actuator up". */
 export async function listHostSeen(db: Driver, teamId: string): Promise<Map<string, number>> {
   const rows = await db.all<{ host: string; seen_at: number }>(

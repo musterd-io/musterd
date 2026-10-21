@@ -5516,8 +5516,12 @@ export async function handleHttp(
         // Last-enrolled-wins: the superseded enrollment's grant dies with it (no orphan standing
         // grants), and the host swap is named in the audit detail.
         if (previous?.grant_id) await revokeGrant(ctx.db, team.id, previous.grant_id);
+        // ADR 689 decision 5: a row the host key authors names the HOST as its actor, the sponsor
+        // kept in detail — at a joiner the sponsor is a human bound to the hub, and a row in
+        // their name would be refused `bound_elsewhere` at push. Ingest binds a host actor to
+        // the node that pushes it instead (`bindHostToNode`).
         await appendAudit(ctx.db, team.id, {
-          actor: authorizer.name,
+          actor: viaHostKey && enrollHost ? enrollHost : authorizer.name,
           action: 'residency.enrolled',
           target: target.name,
           result: 'allow',
@@ -5530,7 +5534,9 @@ export async function handleHttp(
             ...(previous ? { previous_host: previous.host } : {}),
             ...(viaFallback ? { fallback: 'no-admin' } : {}),
             sponsor_scoped: sponsorScoped,
-            ...(viaHostKey ? { via: 'host_key', host: enrollHost } : {}),
+            ...(viaHostKey
+              ? { via: 'host_key', host: enrollHost, actor_kind: 'host', sponsor: authorizer.name }
+              : {}),
           },
         });
         await appendAudit(ctx.db, team.id, {

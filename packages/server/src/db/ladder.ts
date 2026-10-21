@@ -940,6 +940,18 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       );
     },
   },
+  {
+    // ADR 689 decision 5: the node a host label is bound to — first-writer-wins at the hub's
+    // ingest of a host-authored row (`bindHostToNode`); null until a row in its name is pushed.
+    version: 122,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('host_liveness')").pluck().all();
+      if (!cols.includes('node')) db.exec('ALTER TABLE host_liveness ADD COLUMN node TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE host_liveness ADD COLUMN IF NOT EXISTS node TEXT');
+    },
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (
