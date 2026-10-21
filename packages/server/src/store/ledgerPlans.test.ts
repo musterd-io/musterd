@@ -31,3 +31,16 @@ withDrivers('report wake-metrics plan', (open, kind) => {
     expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_action_ts');
   });
 });
+
+withDrivers('lane history plan', (open, kind) => {
+  // Lane 01M5G7KWJP: `action LIKE 'lane.%'` stops the action indexes at the team, so with no index on
+  // `target` the read walked every audit row of the team — 306,790 on the revive hub, 3.9 s cold — on
+  // every `GET /lanes/:id`, each a synchronous stall of the daemon's event loop.
+  it.skipIf(kind !== 'sqlite')('one lane’s history seeks (team, target, ts)', async () => {
+    const db = await open();
+    const plan = await db.all<{ detail: string }>(
+      "EXPLAIN QUERY PLAN SELECT ts, action FROM audit WHERE team_id = 't' AND action LIKE 'lane.%' AND target = 'L' ORDER BY ts DESC, id DESC LIMIT 200",
+    );
+    expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_target_ts');
+  });
+});
