@@ -1,0 +1,45 @@
+{
+ "repo": "pallets_jinja_task",
+ "task_id": 1559,
+ "features": [
+  5,
+  8
+ ],
+ "setting": "coop",
+ "run_id": "99e96b79",
+ "run_name": "pilot-musterd",
+ "agent_framework": "claude_code_musterd",
+ "model": "claude-sonnet-4-5",
+ "started_at": "2026-10-21T01:04:56.128305",
+ "ended_at": "2026-10-21T01:16:20.335551",
+ "duration_seconds": 684.207246,
+ "agents": {
+  "agent1": {
+   "feature_id": 5,
+   "status": "Submitted",
+   "cost": 1.5689348999999997,
+   "steps": 94,
+   "input_tokens": 434,
+   "output_tokens": 17451,
+   "cache_read_tokens": 3700168,
+   "cache_write_tokens": 52218,
+   "patch_lines": 99,
+   "error": null
+  },
+  "agent2": {
+   "feature_id": 8,
+   "status": "Submitted",
+   "cost": 2.2540349999999996,
+   "steps": 108,
+   "input_tokens": 586,
+   "output_tokens": 23887,
+   "cache_read_tokens": 5516815,
+   "cache_write_tokens": 63714,
+   "patch_lines": 505,
+   "error": null
+  }
+ },
+ "total_cost": 3.8229698999999995,
+ "total_steps": 202,
+ "messages_sent": 0
+}

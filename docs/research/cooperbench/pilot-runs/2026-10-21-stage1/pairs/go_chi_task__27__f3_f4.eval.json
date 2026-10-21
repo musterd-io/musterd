@@ -1,0 +1,37 @@
+{
+  "repo": "go_chi_task",
+  "task_id": 27,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "applied",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "conflicts",
+    "strategy": "naive",
+    "diff": ""
+  },
+  "feature1": {
+    "feature_id": 3,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "feature2": {
+    "feature_id": 4,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "both_passed": false,
+  "error": null,
+  "evaluated_at": "2026-10-21T02:00:10.596994"
+}

@@ -4,7 +4,8 @@
 **CooperBench:** github.com/cooperbench/CooperBench, MIT, pinned to commit `63b9d44`.
 **Code:** `scripts/research/cooperbench/` (the adapters) and `deploy/cooperbench/` (the run machine).
 
-This page makes no claim about results. Lane 2 does, pre-registered.
+This page makes no claim about results. Lane 2 does, pre-registered: [pilot manifest](./pilot-manifest.md),
+scored as [finding 015](../015-cooperbench-pilot.md) (2026-10-21: 2/10, no claim).
 
 ## What CooperBench measures
 

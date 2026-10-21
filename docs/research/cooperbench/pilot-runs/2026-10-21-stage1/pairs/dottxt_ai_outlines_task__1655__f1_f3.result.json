@@ -1,0 +1,45 @@
+{
+ "repo": "dottxt_ai_outlines_task",
+ "task_id": 1655,
+ "features": [
+  1,
+  3
+ ],
+ "setting": "coop",
+ "run_id": "9bed0074",
+ "run_name": "pilot-musterd",
+ "agent_framework": "claude_code_musterd",
+ "model": "claude-sonnet-4-5",
+ "started_at": "2026-10-21T00:49:32.872815",
+ "ended_at": "2026-10-21T01:02:48.971338",
+ "duration_seconds": 796.098523,
+ "agents": {
+  "agent1": {
+   "feature_id": 1,
+   "status": "Submitted",
+   "cost": 1.17750195,
+   "steps": 84,
+   "input_tokens": 346,
+   "output_tokens": 15261,
+   "cache_read_tokens": 2569934,
+   "cache_write_tokens": 47085,
+   "patch_lines": 34,
+   "error": null
+  },
+  "agent2": {
+   "feature_id": 3,
+   "status": "Submitted",
+   "cost": 0.9388988999999998,
+   "steps": 78,
+   "input_tokens": 274,
+   "output_tokens": 14921,
+   "cache_read_tokens": 1873448,
+   "cache_write_tokens": 40594,
+   "patch_lines": 34,
+   "error": null
+  }
+ },
+ "total_cost": 2.11640085,
+ "total_steps": 162,
+ "messages_sent": 0
+}
