@@ -297,7 +297,7 @@ export const CONTROLS: Control[] = [
       'Six false `daemon_down` alarms on 2026-08-21, the sixth arriving AFTER the #987 repeat damper shipped — which is what proved the two are different defects. ADR 274 confirms an unreachable /health with two further probes, but all three share one 2 s bound (`rawHealth`, service.ts), so inside a stall longer than that ~8 s window they are one observation repeated. Measured the same day on the live daemon: 25 samples under load gave p50 2.8 ms, p90 16 ms, max 3.22 s, while 90 samples taken quiet gave max 0.02 s — exceeding 2000 ms is normal operation, not pathology.',
     counterfactual:
       'Yes for the motivating incident, with a caveat I cannot close retroactively. All six raises were the clean-exit + timeout shape against a daemon whose booted_at never moved, and observed worst-case latency was 3.22 s against this probe\'s 10 s bound — so the confirm would almost certainly have answered and produced no incident at all. "Almost certainly" is the honest word: those moments cannot be re-run, and a stall longer than 10 s would still have raised. That residual is deliberate rather than a gap — a confirmation that cannot come out "down" would be a blindfold, and the wedged-daemon fixture exists to prove this one can.',
-    lastExercised: '2026-08-21',
+    lastExercised: '2026-10-20',
     everTripped: false,
     staleAfterDays: 60,
     refs: [
@@ -322,7 +322,7 @@ export const CONTROLS: Control[] = [
       'The alert tier had no damper at all: `shouldAttempt` was consulted only inside the `tier === \'auto\' && remedy !== null` branch, so a class shipping as `alert` — which `daemon_down` does — raised on every tick that classified it. 30 guardian asks all-time carrying 4 distinct bodies; five byte-identical inside 33 minutes on 2026-08-21, all cleared as a false alarm. Nothing counted them as a series, which is ADR 250\'s "repeat wakes with an unchanged failure reason" instrument observed live on the ask path.',
     counterfactual:
       'Partly, and the boundary is the point. It would have collapsed the 2026-08-21 five into one and made the series countable — that is what it claims. It would NOT have stopped the first raise of each reason, so of the 30 raises it removes the repeats and not the false positives: the raises were true-positive-shaped and wrong because the daemon was slow inside a restart window, not down. That discrimination is a different control, still absent, and this entry must not be read as covering it — the same boundary its sibling `daemon-down-raise-carries-evidence` draws, one step further along. Read the two together: #923 made a raise diagnosable, this makes it non-repeating, and neither makes it true.',
-    lastExercised: '2026-08-21',
+    lastExercised: '2026-10-20',
     everTripped: false,
     staleAfterDays: 60,
     refs: [
@@ -348,7 +348,7 @@ export const CONTROLS: Control[] = [
       'ADR 227 increment 2 (2026-08-04): any agent could restart or rebuild shared infrastructure while teammates depended on it, with no signal to anyone.',
     counterfactual:
       'The gate does what it claims — it warns, and the row lands. What it CANNOT support is the decision resting on it. ADR 227’s hardening ramp (warn → --force → refuse) is gated on a measured warn→redirect rate, and no redirect signal exists: `result` is always `allow`, the touch always proceeds, and a COMPLETED infra touch writes no row at all, so there is neither a numerator (did this seat back off?) nor a denominator of total touches — only of warned ones. The obvious proxy is worse than absent: "warned, then raised an ask within 30 minutes" scores ryder’s 2026-08-05 touch as a redirect, when their ask in that window was an unrelated lane acceptance and they proceeded with the bounce under nick’s explicit instruction. Of the three rows to date, two are real warned touches and both were correctly proceeded with, so redirects = 0 of 2 — a rate no hardening could honestly rest on. Measured 2026-08-21, lane 01M0GX9VD7.',
-    lastExercised: '2026-08-21',
+    lastExercised: '2026-10-20',
     everTripped: true,
     /**
      * ryder, 2026-08-05 22:48:31 and 22:49:00 (`verb=refresh`), warned and proceeded — twenty-five
@@ -449,7 +449,7 @@ export const CONTROLS: Control[] = [
       '2026-08-21 design conversation: the team admin asked "aren\'t those profiles just roles?" — ADR 272 had already drawn the line, but the glossary was still prose, so the question was unanswerable from brand.md §5.',
     counterfactual:
       'Yes for new introductions of the lintable synonyms (profile/kit/template/worktree) — the fixture fails on the exact word. No for the semantic half of the Not column (agent-as-generic-noun, surface-as-lane-paths): a regex cannot catch those, and claiming it would is the decoration this registry exists to refuse. Those stay a review job against the regenerated glossary. 2026-09-05: brand.md §5 and the ADR 296 Decision had both claimed the whole Not column was enforced; this field was right and they were wrong, and they now say what this one says.',
-    lastExercised: '2026-09-05',
+    lastExercised: '2026-10-20',
     // ADR 299 (#972) landed minutes before the gate (#973) with an unquoted "worktree" in its
     // frozen Decision — the gate turned main red on its first day; #978 moved the boundary to 300
     // rather than editing a frozen ADR. A real catch, in anger. Full eval record:
