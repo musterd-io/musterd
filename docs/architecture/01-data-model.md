@@ -37,6 +37,7 @@ CREATE TABLE members (
   lifecycle   TEXT NOT NULL DEFAULT 'forever' CHECK (lifecycle IN ('forever','session','until')),
   lifecycle_until INTEGER,                   -- epoch ms; required iff lifecycle='until'; ENFORCED at auth since v73 (ADR 449)
   sponsored_by TEXT REFERENCES members(id),  -- v73 (ADR 449): the member who minted this one; null = admin/local-peer mint
+  account_id  TEXT,                          -- v126 (ADR 698): the console account bound at first hosted sign-in, write-once; null = unbound
   halted_at   INTEGER,                       -- v85 (ADR 501): set = a human's hold on this agent seat; null = not halted
   halted_by   TEXT,                          -- v85: the halter's NAME (the refusal sentence is built from the row alone)
   halted_reason TEXT,                        -- v85: required on halt, ≤280 chars; resume clears all three

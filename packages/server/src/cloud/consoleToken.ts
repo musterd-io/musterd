@@ -162,6 +162,8 @@ const Claims = z.object({
   aud: z.union([z.string(), z.array(z.string())]),
   jti: z.string().min(1),
   exp: z.number().int(),
+  /** The verified email — present on an identity statement (ADR 698), absent on an admin token. */
+  email: z.string().min(1).optional(),
 });
 
 function segment(s: string): unknown {
@@ -179,10 +181,10 @@ function segment(s: string): unknown {
  * then the claims, so nothing unsigned is ever believed. Does NOT redeem the `jti`; the caller does
  * that with {@link redeemJti} once it is about to act.
  */
-export async function verifyConsoleToken(
+async function verifyJws(
   token: string,
   opts: { jwks: JwksCache; audience: string; nowMs?: number },
-): Promise<ConsoleClaims> {
+): Promise<z.infer<typeof Claims>> {
   const parts = token.split('.');
   if (parts.length !== 3) throw refuse('malformed', 'not a compact JWS');
   const [h, p, s] = parts as [string, string, string];
@@ -207,7 +209,38 @@ export async function verifyConsoleToken(
   if (c.exp < nowS - SKEW_S) throw refuse('expired', 'past its exp');
   if (c.exp > nowS + MAX_LIFETIME_S + SKEW_S)
     throw refuse('lifetime', `lives longer than ${MAX_LIFETIME_S} s`);
+  return c;
+}
+
+export async function verifyConsoleToken(
+  token: string,
+  opts: { jwks: JwksCache; audience: string; nowMs?: number },
+): Promise<ConsoleClaims> {
+  const c = await verifyJws(token, opts);
   return { sub: c.sub, aud: opts.audience, jti: c.jti, exp: c.exp };
+}
+
+/** A verified identity statement (ADR 698, spec §4.4): who the console authenticated. */
+export interface IdentityClaims {
+  accountId: string;
+  email: string;
+  jti: string;
+  exp: number;
+}
+
+/**
+ * Verify an identity statement for this team server — the same JWS path, refusal order, and
+ * single-use redemption ({@link redeemJti}) as the admin token, plus the one claim that makes
+ * it a statement: a verified `email`, absent ⇒ `malformed`. Asserts identity only; which member
+ * the account binds to is the team server's own lookup (§4.2), never the statement's claim.
+ */
+export async function verifyIdentityStatement(
+  token: string,
+  opts: { jwks: JwksCache; audience: string; nowMs?: number },
+): Promise<IdentityClaims> {
+  const c = await verifyJws(token, opts);
+  if (!c.email) throw refuse('malformed', 'identity statement lacks a verified email');
+  return { accountId: c.sub, email: c.email, jti: c.jti, exp: c.exp };
 }
 
 /** Rows stay this long past their token's `exp` — far beyond any clock skew between servers. */

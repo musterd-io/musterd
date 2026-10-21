@@ -256,6 +256,8 @@ export async function addMember(
     slack_user_id: input.slackUserId ?? null,
     hue,
     sponsored_by: input.sponsoredBy ?? null,
+    // ADR 698: bound only by a hosted sign-in (bindMemberAccount), never at mint.
+    account_id: null,
     token_hash: hashToken(token),
     // A freshly minted seat is *declared*, not yet *held* — bound_at is stamped on first auth touch
     // (ADR 058). The INSERT omits the column, so it defaults to NULL; kept here for the typed row.
@@ -457,6 +459,44 @@ export async function getMemberByRole(
 
 export async function getMemberById(db: Driver, id: string): Promise<MemberRow | undefined> {
   return await db.get<MemberRow>('SELECT * FROM members WHERE id = ?', [id]);
+}
+
+/**
+ * Bind a member to a console account (ADR 698, spec §4.2) — write-once. The first hosted
+ * sign-in sets `account_id`; re-binding the SAME account is a no-op (every later sign-in);
+ * binding a DIFFERENT account is refused, so an account change can never silently re-point a
+ * member. An admin-mediated rebind is deliberately not this function.
+ */
+export async function bindMemberAccount(
+  db: Driver,
+  memberId: string,
+  accountId: string,
+): Promise<void> {
+  const member = await getMemberById(db, memberId);
+  if (!member) throw new MusterdError('not_found', `no member ${memberId}`);
+  if (member.account_id === accountId) return;
+  if (member.account_id !== null)
+    throw new MusterdError(
+      'conflict',
+      `member "${member.name}" is already bound to a different console account`,
+    );
+  await db.run('UPDATE members SET account_id = ?, updated_at = ? WHERE id = ?', [
+    accountId,
+    Date.now(),
+    memberId,
+  ]);
+}
+
+/** The member of a team bound to a console account (ADR 698), if one has signed in yet. */
+export async function memberByAccount(
+  db: Driver,
+  teamId: string,
+  accountId: string,
+): Promise<MemberRow | undefined> {
+  return await db.get<MemberRow>(
+    'SELECT * FROM members WHERE team_id = ? AND account_id = ? AND left_at IS NULL',
+    [teamId, accountId],
+  );
 }
 
 export async function listMembers(db: Driver, teamId: string): Promise<MemberRow[]> {

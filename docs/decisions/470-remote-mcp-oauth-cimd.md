@@ -1,6 +1,6 @@
 # 470 — Remote MCP OAuth with generic CIMD and retained DCR
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-09-28
 - Lane: `01M3AM3GJ2WCMW685AC9NYBZPT`
 - Relates to: [ADR 446](446-remote-mcp-https-oauth.md), [ADR 457](457-oauth-resource-indicator.md), [ADR 458](458-dcr-tolerates-rfc7591-bodies.md)
@@ -87,6 +87,11 @@ shared contracts and require a numbered ADR before they change.
   bound independently by more than one Team.
 - The consent hostname gives the person a stable origin clue; it is not proof that the client name
   is trustworthy. Remote logos and `private_key_jwt` remain out of scope.
+- _(Settled 2026-10-21, lane `01M3Z44K46C3RBHJT3D2SS7EWY` / ADR 698: this record read `proposed`
+  while its Decision was already shipped — `OAuthClientMetadataSchema` in `@musterd/protocol`,
+  the resolver in `packages/server/src/transport/cimd.ts` wired into `transport/oauth.ts`, the
+  `oauth_client_bindings` table (migration v80), with protocol, resolver, store, and HTTP tests.
+  Status now records that fact; the Decision above is unchanged.)_
 
 ## Observability & Evaluation
 

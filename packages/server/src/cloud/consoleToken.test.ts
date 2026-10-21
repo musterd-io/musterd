@@ -9,6 +9,7 @@ import {
   JwksCache,
   redeemJti,
   verifyConsoleToken,
+  verifyIdentityStatement,
 } from './consoleToken.js';
 import { testIssuer, type TestIssuer } from './testIssuer.js';
 
@@ -180,6 +181,44 @@ withDrivers('redeemJti — single use is enforced in the database (spec §4.3)',
     await redeemJti(db, 'fresh', nowS + 60);
     const rows = await db.all<{ jti: string }>('SELECT jti FROM console_token_jti ORDER BY jti');
     expect(rows.map((r) => r.jti)).toEqual(['fresh', 'recent']);
+  });
+});
+
+describe('verifyIdentityStatement (ADR 698, spec §4.4)', () => {
+  let issuer: TestIssuer;
+  let jwks: JwksCache;
+  let now: number;
+  beforeEach(async () => {
+    issuer = testIssuer();
+    await issuer.serve();
+    now = Date.now();
+    jwks = new JwksCache(issuer.url, { now: () => now });
+  });
+  afterEach(async () => issuer.close());
+  const verifyId = (t: string) => verifyIdentityStatement(t, { jwks, audience: AUD, nowMs: now });
+
+  it('accepts a statement and returns account + verified email', async () => {
+    const claims = await verifyId(issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com' }));
+    expect(claims.accountId).toBe('acct_1');
+    expect(claims.email).toBe('nick@example.com');
+  });
+
+  it('refuses a statement with no email as malformed', async () => {
+    expect(await refusal(verifyId(issuer.token(AUD, { sub: 'acct_1' })))).toBe('malformed');
+  });
+
+  it('refuses another audience, an expired statement, and a tampered payload', async () => {
+    const good = issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com' });
+    expect(
+      await refusal(
+        verifyId(issuer.token('https://other.test', { sub: 'acct_1', email: 'nick@example.com' })),
+      ),
+    ).toBe('wrong_audience');
+    const [h, , sig] = good.split('.');
+    const forged = `${h}.${b64({ sub: 'acct_2', email: 'eve@example.com', aud: AUD, jti: 'x', exp: Math.floor(now / 1000) + 60 })}.${sig}`;
+    expect(await refusal(verifyId(forged))).toBe('bad_signature');
+    now += 120_000;
+    expect(await refusal(verifyId(good))).toBe('expired');
   });
 });
 
