@@ -733,7 +733,7 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
           response: {
             signature: new Uint8Array([9, 9]).buffer,
             authenticatorData: new Uint8Array([7]).buffer,
-            clientDataJSON: new Uint8Array([8]).buffer,
+            clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer as ArrayBuffer,
           },
         })),
       },
@@ -742,6 +742,8 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
     expect(proof?.key_id).toBe('k1');
     expect(proof?.nonce).toBe(nonce);
     expect(proof?.signature).toBe('CQk');
+    // The verifier parses client_data_json as JSON text (utf8), never base64url.
+    expect(proof?.client_data_json).toBe('{"type":"webauthn.get"}');
     // The descriptor is built for exactly the act the daemon checks the proof against.
     const firstCall = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     expect(firstCall[0]).toBe('/teams/revive/authority/descriptors');
