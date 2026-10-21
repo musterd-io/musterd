@@ -1727,9 +1727,9 @@
   font-weight: 700;
   color: var(--lc-paper-ink);
 }
-/* The member's job, one word beside the name (lane 01M5FXZF49 — a stream viewer asked "can you show
-   their occupations"). The name stays the identity: mono, 700, full ink. The job is a description of
-   it, so it drops to the linear cut (already on the page for /live's labels, so no new font fetch)
+/* The member's first role beside the name, by its roster name (lanes 01M5FXZF49, 01M5FY2XFX — a stream
+   viewer asked "can you show their occupations"). The name stays the identity: mono, 700, full ink. The
+   role is a description of it, so it drops to the linear cut (already on the page for /live's labels, so no new font fetch)
    at 500 in the muted ink — read as an ordinary word, not one more identifier. The model past the
    rule stays mono. `--lc-paper-muted` on the chalk stock clears AA. */
 .lc-gl-label__job {

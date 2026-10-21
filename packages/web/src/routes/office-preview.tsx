@@ -156,8 +156,8 @@ const WOKEN: ReadonlySet<string> = new Set(['Dev']);
 /**
  * Harness + model per fixture member. Deliberately varied, including a long id and a `null` model:
  * the nameplate's provider icon + expand detail have to survive both the widest label it will ever
- * see and the seat that has nothing to report. Roles are real role-library ids, so the plate's job
- * word (`occupation.ts`) shows on some plates and not on others, as it does on the real floor.
+ * see and the seat that has nothing to report. Roles are real role-library ids, so the plate's role
+ * (`occupation.ts`) shows on some plates and not on others, as it does on the real floor.
  */
 const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; role?: string }> = {
   Ada: { surface: 'claude-code', model: 'claude-opus-5', role: 'security' },

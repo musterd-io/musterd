@@ -5,7 +5,7 @@ import { roomTone, screenPan, type LifeContext } from '../sound';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
-import { occupation } from '../occupation';
+import { seatRoles } from '../occupation';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
@@ -1143,11 +1143,13 @@ export function mountOffice(
       who.className = 'lc-gl-label__who';
       who.textContent = name;
       plate.appendChild(who);
-      // What they do here, in a word a stream viewer already knows (lane 01M5FXZF49; a viewer asked
-      // "can you show their occupations"). On the face, beside the name, so it is read with it — never
-      // on a second line, which would make every plate taller and give plateLayout.ts more collisions
-      // to settle by moving plates. A service already says what it is with its tag.
-      const job = node.service ? null : occupation(node.roles?.length ? node.roles : [node.role]);
+      // What they do here: the seat's first role, by its roster name (lanes 01M5FXZF49, 01M5FY2XFX; a
+      // stream viewer asked "can you show their occupations"). On the face, beside the name, so it is
+      // read with it — never on a second line, which would make every plate taller and give
+      // plateLayout.ts more collisions to settle by moving plates. A service already says what it is
+      // with its tag. The expanded /live plate lists every role when there is more than one.
+      const held = node.service ? [] : seatRoles(node.roles, node.role);
+      const job = held[0] ?? null;
       const jobNow = performance.now();
       const lastJob = plateJobs.get(name);
       if (!lastJob || lastJob.job !== job) {
@@ -1263,7 +1265,7 @@ export function mountOffice(
         // detail carries harness · role only — before this it said the model a second time. Broadcast
         // used to show the model crumb here as its only detail; with the name on the face it has none.
         const detailParts = interactiveLabels
-          ? plateDetailParts({ surface: node.surface, role: job ? null : node.role })
+          ? plateDetailParts({ surface: node.surface, role: held.length > 1 ? held.join(' · ') : null })
           : [];
         for (const [i, part] of detailParts.entries()) {
           if (i > 0) {
