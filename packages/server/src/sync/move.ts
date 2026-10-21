@@ -4,6 +4,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { revokeGrant } from '../store/grants.js';
+import { memberStandingRefusal } from '../store/members.js';
 import { moveSeatBinding, resolveNodeRef, seatBindings } from '../store/nodes.js';
 import { parsePolicyOverride, revokeResidency } from '../store/residency.js';
 import { type MemberRow, resolveCapabilities } from '../store/rows.js';
@@ -43,6 +44,15 @@ export async function applyMove(
   const { seat, actor, speaker } = input;
   const now = input.now ?? Date.now();
   if (seat.left_at !== null) throw new MusterdError('not_found', `no seat "${seat.name}"`);
+  // The mover's standing, on every branch: a forwarded move names its actor by string, and a seat
+  // that has left, is halted or banned, or only observes moves nothing — admin or not.
+  const standing = memberStandingRefusal(actor, now);
+  if (standing) throw standing;
+  if (actor.observer === 1)
+    throw new MusterdError(
+      'forbidden',
+      `"${actor.name}" is an observer — an observer moves no seat`,
+    );
   if (seat.kind !== 'agent' && seat.kind !== 'human')
     throw new MusterdError(
       'forbidden',

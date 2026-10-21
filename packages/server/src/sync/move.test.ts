@@ -135,6 +135,28 @@ withDrivers('sync.move', (o) => {
     expect((await seatBindings(db, tj.id)).map((b) => b.node_id)).toEqual(['nA', 'nB']);
   });
 
+  it('a mover who has left or only observes is refused, admin or not, and nothing moves', async () => {
+    const { db, team, nick, wallow } = await seed();
+    await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
+    await expect(
+      applyMove(db, team.id, {
+        seat: wallow,
+        actor: { ...nick, left_at: 5 },
+        speaker: air,
+        to: 'nB',
+      }),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+    await expect(
+      applyMove(db, team.id, {
+        seat: wallow,
+        actor: { ...nick, observer: 1 },
+        speaker: air,
+        to: 'nB',
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    expect((await seatBindings(db, wallow.id)).map((b) => b.node_id)).toEqual(['nA']);
+  });
+
   it('an unknown machine is refused with the ones that exist, and nothing changes', async () => {
     const { db, team, nick, wallow } = await seed();
     await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
