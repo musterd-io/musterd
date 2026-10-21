@@ -1833,6 +1833,15 @@ async function provisionServiceSeat(
     const p = join(dirname(configPath()), svc.home, 'seat-token');
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, res.token + '\n', { encoding: 'utf8', mode: 0o600 });
+    // The token is valid on ONE daemon for ONE team. Record which beside it, so a tick never
+    // re-derives them from `config.current` / `config.server` — the operator's machine default,
+    // which moves whenever they join another team (2026-10-19: a join to revive-staging sent every
+    // service touch to the staging cloud as an "invalid service token").
+    writeFileSync(
+      join(dirname(p), SERVICE_SEAT_FILE),
+      JSON.stringify({ team, server: config.server }) + '\n',
+      { encoding: 'utf8', mode: 0o600 },
+    );
     ok(`minted the ${svc.name} service seat token → ${theme.accent(p)} (0600)`);
   } catch (err) {
     meta(
@@ -1906,6 +1915,23 @@ function defaultTeamHolds(parsed: Parsed): TeamHoldsApi {
   };
 }
 
+/** Beside a service's `seat-token`: the team and daemon the token was minted on. */
+export const SERVICE_SEAT_FILE = 'seat.json';
+
+function readServiceSeat(dir: string): { team?: string; server?: string } | null {
+  try {
+    const v = JSON.parse(readFileSync(join(dir, SERVICE_SEAT_FILE), 'utf8')) as unknown;
+    if (!v || typeof v !== 'object') return null;
+    const { team, server } = v as Record<string, unknown>;
+    return {
+      ...(typeof team === 'string' && team ? { team } : {}),
+      ...(typeof server === 'string' && server ? { server } : {}),
+    };
+  } catch {
+    return null; // a pre-2026-10-21 install has none — config.current / config.server stand
+  }
+}
+
 export function serviceSeatAuth(
   /** The daemon this service tends and the folder it runs in — `daemonServer(ctx)` and
    *  `ctx.workingDir`. Absent (a bare call), the machine default and `config.current` stand, which
@@ -1920,12 +1946,14 @@ export function serviceSeatAuth(
     return null; // unprovisioned — pre-232 behaviour, silently
   }
   const config = loadConfig();
+  const seat = readServiceSeat(dirname(tokenFile));
   const team =
     process.env['MUSTERD_SERVICE_TEAM'] ??
     (at?.dir ? findBinding(at.dir)?.team : undefined) ??
+    seat?.team ??
     config.current;
   if (!token || !team) return null;
-  const server = at?.server ?? config.server;
+  const server = at?.server ?? seat?.server ?? config.server;
   return { http: new HttpClient({ server, key: token, surface: 'cli' }), team };
 }
 
