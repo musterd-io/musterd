@@ -65,8 +65,9 @@ could finish the work.
 
 - `packages/server/src/store/presence.ts`: `isPresentOrReclaimable`.
   `packages/server/src/protocol/gate.ts`: the lapse check in Gate A, after the holder is found and
-  before the refusal. The `lane.gate` audit row is unchanged in shape; a lapsed hold is a `warned`
-  row whose reason carries `has lapsed (ADR 693)`.
+  before the refusal. A lapsed hold is a `warned` `lane.gate` row with `detail.hold = 'lapsed'`
+  and `detail.holder` _(corrected 2026-10-21, lane 01M5FR8Y26: the row carried no reason, so the
+  fields were added)_.
 - The claim-time `surface_overlap` note still says the other lane holds the file; that is true at
   claim time, and the gate decides at the edit.
 - CooperBench's musterd arm: the second agent to name the shared file is refused while the first is
@@ -77,8 +78,8 @@ could finish the work.
 
 ## Observability & Evaluation
 
-- **Traces:** `lane.gate` rows with `has lapsed (ADR 693)` in the reason, by team and week, beside
-  ADR 691's `held by` denials.
+- **Traces:** `lane.gate` rows with `detail.hold = 'lapsed'`, by team and week, beside ADR 691's
+  `detail.hold = 'held'` rows.
 - **Eval:** on this team, 30 days after landing: for each lapsed-hold edit, whether the holder came
   back and its own branch then conflicted with the edit on that file. The rule holds if fewer than
   one in five lapsed-hold edits ends in such a conflict. Above that, a holder's absence is shorter
