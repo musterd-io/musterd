@@ -49,7 +49,26 @@ export function repoProject(cwd: string = process.cwd()): string | null {
   const abs = resolvePath(cwd, common);
   // `…/<repo>/.git` → `<repo>`; a bare repo's common dir is `…/<repo>.git` itself.
   const dir = basename(abs) === '.git' ? dirname(abs) : abs.replace(/\.git$/, '');
-  return sanitizeProject(basename(dir));
+  const folderName = sanitizeProject(basename(dir));
+  // ADR 695: prefer the origin remote's repo name when there is one, so two clones of the same
+  // repo under different folder names derive the same project (and their lanes contend). Fall back
+  // to the folder name when there is no origin (fresh `git init`, no remote, or git failure).
+  const remote = git(['remote', 'get-url', 'origin'], cwd);
+  if (remote) {
+    const remoteName = remoteRepoName(remote);
+    if (remoteName) {
+      const sanitized = sanitizeProject(remoteName);
+      if (sanitized) return sanitized;
+    }
+  }
+  return folderName;
+}
+
+/** `git@github.com:Org/musterd.git` / `https://…/Org/musterd` → `musterd`; null when unparseable. */
+function remoteRepoName(remote: string): string | null {
+  const tail = remote.trim().replace(/\/+$/, '').split(/[/:]/).pop();
+  const name = tail?.replace(/\.git$/, '');
+  return name ? name : null;
 }
 
 /**

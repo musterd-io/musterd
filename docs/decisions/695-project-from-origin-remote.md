@@ -2,13 +2,13 @@
 
 - Status: accepted
 - Date: 2026-10-21
-- Builds on: [ADR 083](083-surface-overlap-within-project.md) (contention is checked within a project, never across), [ADR 165](165-worktree-invariant-project.md) (worktree-invariant project via `--git-common-dir`)
+- Builds on: [ADR 083](083-surface-overlap-within-project.md) (contention is checked within a project, never across), [ADR 165](165-worktree-invariant-project.md) (`worktree`-invariant project via `--git-common-dir`) <!-- vocab:ok -->
 - Lane: 01M5FSHZBK6SYMJADTA00D1WRG
 
 ## Context
 
 `resolveProject` (packages/protocol/src/project.ts) derives a lane's `project` from the basename of
-the git common dir's folder. That is worktree-invariant (ADR 165), so N seats on one repo share a
+the git common dir's folder. That is `worktree`-invariant (ADR 165), so N seats on one repo share a
 project — good. But it is folder-name-dependent: two clones of the same repo named `musterd` and
 `musterd-fork` (or `agent1/` and `agent2/`) derive two different projects, and contention is checked
 within a project only. Their lanes never overlap-warn and never take an ADR 691 hold, even when they
@@ -52,8 +52,8 @@ Traces: none new. The `project` field on a lane is already recorded (`lane.opene
 compare `project` values across lanes of the same origin to confirm convergence.
 
 Eval: n/a — this is a derivation correctness fix, not a measurement. The falsifier is the existing
-`project.test.ts` suite plus a new case: two worktrees of a repo that has an `origin` remote derive
-the same project even when the worktree folders differ, and a repo with no origin falls back to the
+`project.test.ts` suite plus a new case: two `worktree`s of a repo that has an `origin` remote derive
+the same project even when the `worktree` folders differ, and a repo with no origin falls back to the
 folder name.
 
 Experiment: n/a — no agent-facing behavior change beyond project derivation.

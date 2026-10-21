@@ -75,6 +75,31 @@ describe('resolveProject', () => {
     expect(resolveProject({ cwd: plain, env: {} })).toBe(DEFAULT_PROJECT);
   });
 
+  it('derives the same project from an origin remote even when folder names differ (ADR 695)', () => {
+    // A second clone of `acme` under a different folder name, sharing the same origin.
+    const clone = join(root, 'acme-fork');
+    mkdirSync(clone);
+    git(['init', '-q', '-b', 'main'], clone);
+    git(['config', 'user.email', 'test@musterd.test'], clone);
+    git(['config', 'user.name', 'test'], clone);
+    // Point both at the same origin URL (no network needed — remote is just config).
+    git(['remote', 'add', 'origin', 'https://example.com/acme-org/acme.git'], repo);
+    git(['remote', 'add', 'origin', 'https://example.com/acme-org/acme.git'], clone);
+    // Worktrees of the origin-less repo still fall back to folder name; here origin wins.
+    expect(repoProject(repo)).toBe('acme');
+    expect(repoProject(clone)).toBe('acme');
+    expect(repoProject(repo)).toBe(repoProject(clone));
+  });
+
+  it('falls back to the folder name when there is no origin remote', () => {
+    // `repo` had an origin added above; remove it to restore the no-origin case.
+    // (Use a fresh repo to be independent.)
+    const noOrigin = join(root, 'no-origin-repo');
+    mkdirSync(noOrigin);
+    git(['init', '-q', '-b', 'main'], noOrigin);
+    expect(repoProject(noOrigin)).toBe('no-origin-repo');
+  });
+
   it('prefers an explicit project over everything', () => {
     expect(resolveProject({ explicit: 'chosen', env: { MUSTERD_PROJECT: 'env' }, cwd: repo })).toBe(
       'chosen',
