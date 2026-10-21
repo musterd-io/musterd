@@ -17,6 +17,7 @@ from openhands.sdk import LLM
 from openhands.tools.preset.default import get_coop_system_prompt
 
 from musterd_cooperbench import openhands as ohm
+from musterd_cooperbench import team as team_mod
 from musterd_cooperbench.prompt import musterd_system_section
 from musterd_cooperbench.team import PairTeam, Seat
 
@@ -56,7 +57,7 @@ def test_the_musterd_container_mounts_the_pack_the_shims_and_the_interrupt_pth()
 def test_git_url_keeps_an_ip_and_resolves_a_container_name(monkeypatch):
     assert ohm.host_reachable_git_url(None) is None
     assert ohm.host_reachable_git_url("git://10.0.0.5:9418/r.git") == "git://10.0.0.5:9418/r.git"
-    monkeypatch.setattr(ohm, "docker", lambda *a, **k: "172.18.0.2 \n")
+    monkeypatch.setattr(team_mod, "container_ip", lambda name: "172.18.0.2")
     assert ohm.host_reachable_git_url("git://cooperbench-git:9418/r1.git") == "git://172.18.0.2:9418/r1.git"
 
 

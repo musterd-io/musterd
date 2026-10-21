@@ -6,6 +6,21 @@
 > `team` harness **2/10** on the same machine and day. The first rule needs musterd ≥ team **and**
 > ≥ 6/10; the second half fails.
 
+> **Correction (2026-10-21, lane 01M5G6AGDY).** The musterd arm in this pilot **never had the shared
+> git remote either.** Every musterd agent that reached a `git fetch` or `git push` to `team` (all 14 in
+> the re-run, and 10 of 20 in the first run, whose other pairs died on the API limit first) failed with
+> `unable to look up cooperbench-git`. Its containers use the host's network, where the git server's
+> container name does not resolve; the OpenHands arms already used its bridge IP, and this arm did not.
+> No team-arm agent saw the failure (0 of 28). So the comparison below is musterd **without** a shared
+> remote against `team` **with** one, and the mechanism this finding first gave (the waiting agent
+> "edited from the base without pulling the holder's work") is wrong: the agents tried to pull and
+> could not. The streams show them pasting diffs to each other in messages instead. The two bad-base
+> patches have the same cause (the `main` pin is in the failed setup chain). The scores stand as
+> measured. The verdict (no claim) stands. The read of *why* does not, and pilot 3 must run with the
+> remote reachable, which the adapter now checks and refuses to score without. ADR 697 is still a
+> real product gap (a seat that waits for a file should start from the holder's result) but this
+> pilot is not evidence for how much it matters.
+
 ## Question
 
 The same question as [finding 015](./015-cooperbench-pilot.md), asked again after the product changes

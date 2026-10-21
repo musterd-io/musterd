@@ -6,6 +6,17 @@
 > 6/10, so the pilot stopped after its first stage, as the manifest said it would. The team and coop
 > arms did not run.
 
+> **Correction (2026-10-21, lane 01M5G6AGDY).** The musterd arm in this pilot **never had the shared
+> git remote**. Its containers run on the host's network, where the git server's container name
+> (`cooperbench-git`) does not resolve, and every one of the 20 agents' `git fetch` / `git push` to
+> `team` failed with `unable to look up cooperbench-git`. The adapter logged the failed setup as a
+> warning and the pairs were scored. The OpenHands arms already used the server's bridge IP; the
+> Claude Code musterd arm did not. So this arm ran as if `--git` were off, against a published `team`
+> figure that had a working remote. The local `main` pin of lane 01M5E8CHBT sat in the same failed
+> setup chain and never ran in this arm either. Read the per-pair analysis below with that in mind:
+> "merged the partner's branch" in the musterd column could only use work passed through messages.
+> The score, 2/10, stands as measured; what it measured was musterd without the shared remote.
+
 ## Question
 
 On CooperBench's 10-pair `core` subset ([arXiv 2601.13295](https://arxiv.org/abs/2601.13295),

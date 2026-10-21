@@ -99,6 +99,15 @@ In each container (`adapter.py`):
   edit made through Bash (`sed -i`, `cat >`) is not lane-checked, so the arm's lane ownership covers
   edits through the file tools only.
 
+- **The Claude Code musterd arm never reached the shared git remote (found 2026-10-21, lane
+  `01M5G6AGDY`).** Its containers use `--network=host`, where the git server's container name
+  `cooperbench-git` does not resolve. The OpenHands arms rewrote the URL to the server's bridge IP;
+  this arm did not, so every musterd agent's `git fetch` / `git push` to `team` failed in pilot 1 and
+  pilot 2, and a failed setup was only logged as a warning. Both arms now take the URL from
+  `team.host_reachable_git_url`, and the adapter runs `git ls-remote --heads team` after setup: a
+  remote the agent cannot reach is an **error**, re-run once, never a score. Findings 015 and 016
+  carry dated corrections.
+
 ## Verified so far
 
 - `gate_smoke.py`, a real headless Claude Code with the arm's exact wiring (`claude-haiku-5-5`): it
