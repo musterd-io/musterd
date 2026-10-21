@@ -5,7 +5,7 @@ Open for step 2 of the method.
 ## Split the craft
 
 Name the parts of the job the role does, three to seven of them, each one a craft with its own
-practice and literature. For a product-communications role that was technical writing, PR and
+practice and literature. For a comms role that was technical writing, PR and
 launch, positioning and go-to-market, research and product-market fit, accessibility, prose quality,
 data visualization and fundraising. Parts should not overlap, and together they should cover the
 charter. Add a part for "existing agent skills and tools for this role"; step 3 builds on it.

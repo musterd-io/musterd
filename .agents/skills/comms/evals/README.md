@@ -1,4 +1,4 @@
-# Evals for product-communications
+# Evals for comms
 
 Sixteen cases, two per craft, in `evals.json` (the skill-creator format, with one
 extra key, `checks`, for the deterministic checks). Inputs live in `files/`. Some
@@ -15,7 +15,7 @@ A run compares the skill with a baseline that has no skill.
 2. Run the checks:
 
    ```
-   node --disable-warning=ExperimentalWarning .agents/skills/product-communications/evals/check.mjs <workspace>
+   node --disable-warning=ExperimentalWarning .agents/skills/comms/evals/check.mjs <workspace>
    ```
 
    It writes `checks.json` beside each output and `checks-summary.json` at the

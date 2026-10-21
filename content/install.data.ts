@@ -7,7 +7,7 @@
  * minute.
  *
  * Commands are engineering's (each must run on a clean machine — car 0 of the release train); every
- * string is sloane's (product-communications, lane 01M5AXB5NZ). Two routes only, as ADR 568 gives
+ * string is sloane's (comms, lane 01M5AXB5NZ). Two routes only, as ADR 568 gives
  * them: npm, and the Homebrew tap's npm-wrapper formula. No `npx`: it leaves no `musterd` on PATH,
  * so step 3's `musterd tour` would fail. The site names no harness (nick, #2405).
  *

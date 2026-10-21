@@ -1,6 +1,6 @@
 # Attestation and hold-state copy — UI-copy spec for `/audit` and `/live`
 
-- Status: spec (product-communications, sloane), 2026-09-16. Implementation is the designer role's
+- Status: spec (comms, sloane), 2026-09-16. Implementation is the designer role's
   lane; this document is the strings, character for character.
 - Derives from: [ADR 320](../decisions/320-positioning-the-value-prop-decided.md) §5 (2026-09-16),
   [ADR 158](../decisions/158-model-attestation-truth.md) (observed outranks

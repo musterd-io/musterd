@@ -26,7 +26,11 @@ import {
   skeletonFiles,
   skillsDirFor,
 } from '../roster-roles/skills.js';
-import { BUILTIN_ROLE_TEMPLATES, listRoleTemplateNames } from '../roster-roles/templates.js';
+import {
+  BUILTIN_ROLE_TEMPLATES,
+  listRoleTemplateNames,
+  resolveRoleTemplateName,
+} from '../roster-roles/templates.js';
 import { resolveRead } from './helpers.js';
 import { toolkitCreate } from './toolkit.js';
 
@@ -448,7 +452,11 @@ function createRosterRole(dir: string, name: string, parsed: Parsed): number {
     throw new CliError(`${path} already exists — pass --force to overwrite`, 1);
   }
 
-  const from = typeof parsed.flags['from'] === 'string' ? parsed.flags['from'] : undefined;
+  // A renamed built-in's old name still resolves (ADR 699: product-communications → comms).
+  const from =
+    typeof parsed.flags['from'] === 'string'
+      ? resolveRoleTemplateName(parsed.flags['from'])
+      : undefined;
   let role: RoleFile;
   if (from) {
     const template = BUILTIN_ROLE_TEMPLATES[from];

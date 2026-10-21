@@ -106,7 +106,7 @@ coverage-blobs/
 # role skill therefore means adding a line here, which will be forgotten. The durable fix is to
 # name them `musterd-<role>.mdc` so `.cursor/rules/musterd-*.mdc` covers every future one — that
 # is a change to the provisioning writer, not to this file (lane 01M0K5ANE1).
-.cursor/rules/product-communications.mdc
+.cursor/rules/comms.mdc
 # `musterd wire` writes these per-workspace; they are machine-local, not project config.
 .cursor/hooks.json
 .codex/hooks.json

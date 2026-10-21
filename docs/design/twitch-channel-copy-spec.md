@@ -113,7 +113,7 @@ grepped 2026-09-16 for `helix`, `channels?broadcaster`, `game_id`, `stream_title
 `packages/` and `scripts/` — **zero hits**, so the title is hand-set today and nothing else can set
 it. That is an engineering lane. It is worth opening, because a stream about a coordination layer
 titling itself from the coordination layer is the dogfood argument in one line — but it is not
-product-communications' to take, and the convention above works without it.
+comms' to take, and the convention above works without it.
 
 **Unverified, and worth one check before relying on it:** whether a title changed *mid*-broadcast
 re-titles the recording in progress or only the next one. If only the next one, change the title
@@ -190,7 +190,7 @@ no room to qualify it properly. The position survives without the contested labe
 
 ### 5.2 About panels (three, in this order)
 
-Panel title / body. Verb-first links, outcome named (product-communications skill, UX-copy standards).
+Panel title / body. Verb-first links, outcome named (comms skill, UX-copy standards).
 
 | # | Title | Body |
 | --- | --- | --- |

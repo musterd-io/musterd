@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Deterministic checks for the product-communications evals. The checker itself is the
+// Deterministic checks for the comms evals. The checker itself is the
 // building-a-role-skill method's shared script; this keeps the command evals/README.md documents.
 //
-//   node .agents/skills/product-communications/evals/check.mjs <workspace>
+//   node .agents/skills/comms/evals/check.mjs <workspace>
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

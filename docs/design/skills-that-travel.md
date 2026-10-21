@@ -110,7 +110,7 @@ These are the product, and every skill's doorway line names one of them:
 - The e2e walk that produced this list is the rendered guidance's section list, the
   practice-deciding ADRs, and `docs/wiki/`. Anything found later that qualifies is appended here
   with a date, not slotted silently.
-- Every README is reviewed by product-communications before publish (one story on every surface);
+- Every README is reviewed by comms before publish (one story on every surface);
   every skill's SKILL.md is reviewed by a seat of a different model family than its author, which
   is skill 2 applied to itself.
 
@@ -121,7 +121,7 @@ code, scripts, harness integration, research, and concepts adopted while buildin
 harnesses and models — not only the three sources §5 names. Three read-only sweeps ran in parallel
 (code + scripts + hooks · design docs + ADRs + wiki · research + harness lore); ~60 raw candidates
 were curated into what follows. Two decisions from nick, 2026-09-19, shape it: **catalogue only, no
-ranking** — the order is his and product-communications' to set; and **scope is coordination +
+ranking** — the order is his and comms' to set; and **scope is coordination +
 epistemics** — general-engineering practice adopted along the way is recorded under §6.4 so the
 coverage is visible, not proposed.
 
@@ -134,7 +134,7 @@ most transferable material in the repo.
 Qualification is §1's, unchanged. Cost is at the 3–4-day cadence. ★ marks a candidate that the
 relevant sweeps converged on independently.
 
-*Names reviewed 2026-09-19 (sloane, lane `01M2XERV15`), per §5's product-communications read.*
+*Names reviewed 2026-09-19 (sloane, lane `01M2XERV15`), per §5's comms read.*
 Three changed, each for a reason rather than taste. **B1 `believe-it-or-not` → `dated-and-falsifiable`:**
 a borrowed phrase reads as a joke, brand.md §7 spends the personality budget elsewhere, and it was
 the one name that did not say what you do. **B4 `docs-that-cannot-drift` → `docs-that-catch-drift`:**
@@ -160,7 +160,7 @@ fixed in the same commit.
 
 | # | Skill | The practice, in one line | Source | Cannot do without the daemon | Cost |
 |---|---|---|---|---|---|
-| S1 ★ | **skill-home-and-provenance** | One canonical harness-neutral `.agents/skills/<name>/SKILL.md`; thin bridges in `.claude/`, `.cursor/rules/*.mdc`, and an AGENTS.md pointer for Codex — never a copy; adapted material carries `PROVENANCE.md` (URL, reviewed SHA, license, what was taken) + `LICENSES/`. The substrate the `musterd-skills` repo needs anyway, and it closes §2's open item | ADR 299; `.agents/skills/product-communications/{SKILL.md,PROVENANCE.md,LICENSES/}`; ADR 085 | Nothing | 2–3d |
+| S1 ★ | **skill-home-and-provenance** | One canonical harness-neutral `.agents/skills/<name>/SKILL.md`; thin bridges in `.claude/`, `.cursor/rules/*.mdc`, and an AGENTS.md pointer for Codex — never a copy; adapted material carries `PROVENANCE.md` (URL, reviewed SHA, license, what was taken) + `LICENSES/`. The substrate the `musterd-skills` repo needs anyway, and it closes §2's open item | ADR 299; `.agents/skills/comms/{SKILL.md,PROVENANCE.md,LICENSES/}`; ADR 085 | Nothing | 2–3d |
 | S2 | **extraction-guarantee** | If you claim a package is liftable into its own repo, make it a test: no source file imports `@yourscope/*`, `package.json` declares no internal dependency. Forty lines of vitest. Ships **with skill 1** as the proof it travels | `packages/whiteboard/src/extraction.test.ts`; ADR 330 decision 1 | Nothing | 1h |
 | S3 | **a-finding-is-not-a-fix-request** | A review finding is REQUIRED only if the spec would have demanded it before the diff was opened — honesty, a leaked secret, a probe-measured regression, a named pin; everything else is a note, and a decline names the category the finding failed. "Complying is the failure mode." Pairs with **skill 2** | ADR 338; `.github/REVIEW-RULES.md`; wiki `adr-338-drift-rerun` | A noted finding has no board to land on under the finder's name | 2–3d |
 | S4 | **seat-workspace-identity** | One Workspace per agent, each with its own git identity: `git config extensions.worktreeConfig true`, then `--worktree user.name` / `user.email` — without the extension, repo-local config is shared and the last-provisioned seat silently renames every other seat's commits; the `Co-authored-by` trailer is what survives the squash | ADRs 109, 368; wiki `which-seat-the-cli-acts-as`; `cookoff-cell-runbook.md` traps | The identity is a label, not an attested member; nothing stops two sessions in one Workspace | 2–3d |
@@ -484,13 +484,13 @@ root README, MIT LICENSE, and every script executable. Verified from a *clean cl
 the directory it was built in: `controls.py`, `claims.py`, `watches.py` and `landed.sh` all run
 from a fresh checkout.
 
-**It is PRIVATE, and that is a decision, not an oversight.** §5 requires product-communications to
+**It is PRIVATE, and that is a decision, not an oversight.** §5 requires comms to
 review every README *before* publish, and that has not happened. Creating it private lets the work
 land and the review happen against real files; flipping to public is one command and is nick's
 call. Private→public is easy, public→indexed→private is not.
 
 **What ships:** the seventeen authored 2026-09-21 (B1–B6, S1, S3–S9). **What does not:**
-`product-communications` and `security`, which are pre-existing internal ROLE CHARTERS rather than
+`comms` and `security`, which are pre-existing internal ROLE CHARTERS rather than
 skills-that-travel — and the former carries `PROVENANCE.md` + `LICENSES/` for adapted third-party
 material. Both stay here.
 
@@ -554,7 +554,7 @@ a PreToolUse deny with a repair string; Gate A needs a board, Gate B can block b
 split); *snapshot-before-you-build-on-it* (ADR 280 — `VACUUM INTO`, a drilled restore, uploads
 nothing); *honest-numbers-readout* (`scripts/traction.ts` — "not measured" never prints as zero);
 *label-your-windows* (ADRs 160, 418 — the OSC-0 grammar); *prove-it-or-cut-it*
-(`.agents/skills/product-communications/SKILL.md` de-musterd'd — "a bar that bends to an argument is
+(`.agents/skills/comms/SKILL.md` de-musterd'd — "a bar that bends to an argument is
 not a bar"); *orphan-sidecar-probe* (`scripts/perf/seat-footprint.mjs`); the *guidance-epoch* stamp
 (ADRs 417, 148 — the portable sub-rules are in S5; the fleet census is product).
 
@@ -582,7 +582,7 @@ provider-agnostic port, which would be its own lane.
 **The first three to travel are now skills 2–4**, `cross-family-review`, `board-loop` and
 `harness-inbox`, built on `musterd-skills` PR #1 (lanes `01M2PAMQX5`, `01M2PAN1F0`, `01M2PANKGP`).
 They still need the §5 reviews (a different model family for each `SKILL.md`, and
-product-communications for the copy) before nick flips the repo public. §3's "Ships" dates for the
+comms for the copy) before nick flips the repo public. §3's "Ships" dates for the
 whiteboard no longer hold; skills 5–13 keep their order.
 
 ## 9. The whiteboard is back, and the public repos moved (2026-10-06, stanley, lane `01M2PAMFW1`)

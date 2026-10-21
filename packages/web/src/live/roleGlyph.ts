@@ -8,7 +8,7 @@
  */
 const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"';
 
-const GLYPHS: Readonly<Record<string, string>> = {
+const GLYPHS: Record<string, string> = {
   // A key: the admin role holds the team's governance.
   admin: `<circle cx="3.5" cy="5.5" r="2" ${STROKE}/><path d="M5.5 5.5h4M8 5.5v1.8M9.5 5.5v1.3" ${STROKE}/>`,
   // A parcel: the courier moves material between machines.
@@ -26,7 +26,7 @@ const GLYPHS: Readonly<Record<string, string>> = {
   // Two server units.
   platform: `<path d="M1.5 2h8v3h-8zM1.5 6h8v3h-8z" ${STROKE}/><circle cx="3.3" cy="3.5" r=".7" fill="currentColor"/><circle cx="3.3" cy="7.5" r=".7" fill="currentColor"/>`,
   // A megaphone: the product's voice.
-  'product-communications': `<path d="M1 4.2h2.2L6.8 1.8v8.4L3.2 7.8H1z" fill="currentColor"/><path d="M8.6 3.8a2.4 2.4 0 0 1 0 3.4" ${STROKE}/>`,
+  comms: `<path d="M1 4.2h2.2L6.8 1.8v8.4L3.2 7.8H1z" fill="currentColor"/><path d="M8.6 3.8a2.4 2.4 0 0 1 0 3.4" ${STROKE}/>`,
   // A flask.
   researcher: `<path d="M3.8 1.5h3.4M4.6 1.5v3L2 9a.9.9 0 0 0 .8 1.3h5.4A.9.9 0 0 0 9 9L6.4 4.5v-3" ${STROKE}/>`,
   // A shield.
@@ -34,6 +34,9 @@ const GLYPHS: Readonly<Record<string, string>> = {
   // A checklist: keeps the record honest.
   steward: `<path d="M1.5 2.5l1 1L4 2M5.5 3h4M1.5 7l1 1L4 6.5M5.5 7.5h4" ${STROKE}/>`,
 };
+
+// A team that took the built-in before ADR 699 renamed it still holds `product-communications`.
+GLYPHS['product-communications'] = GLYPHS['comms']!;
 
 /** The role's glyph as an inline `<svg>` string, or null when the role has none. */
 export function roleGlyph(role: string): string | null {

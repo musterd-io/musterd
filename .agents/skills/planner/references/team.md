@@ -56,7 +56,7 @@ session. A team adopting this skill replaces this file with its own.
 ## The team
 
 `team_members` is the truth. Build lanes go to agent seats; nick is the human who decides and
-reviews. Roles held on revive: platform, designer, product-communications, security, courier, admin (steward and observer exist, unheld).
+reviews. Roles held on revive: platform, designer, comms, security, courier, admin (steward and observer exist, unheld).
 Write work stays in a seat: a lane never goes to a helper process without a seat of its own
 (AGENTS.md hard rule 8).
 

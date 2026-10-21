@@ -17,7 +17,7 @@ import './PromptBar.css';
  *
  * "@team" (nobody picked) convenes the four-seat set the first bar used; picking narrows it
  * (`audienceFor`). Either way it sends ONE envelope through `sendAct`, the shape `musterd huddle open`
- * sends (`promptAct.ts`). Copy is product-communications' (alfie), verbatim.
+ * sends (`promptAct.ts`). Copy is comms' (alfie), verbatim.
  *
  * Once sent, the replies come back above it (`ComposerReplies.tsx`, lane 01M4KY55N1): the thread is the
  * viewer's newest huddle in the timeline, so one opened from the CLI shows here too: since lane

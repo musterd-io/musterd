@@ -65,7 +65,7 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
       'know, a seat that can message is the one to raise it.',
     capabilities: { can_flag_urgent: false, can_message: 'none' },
   },
-  'product-communications': {
+  comms: {
     summary:
       "Owns the product's voice — messaging, launch narrative, public docs, release notes, marketing assets",
     charter:
@@ -103,6 +103,17 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
     capabilities: {},
   },
 };
+
+/** Old built-in names that still resolve (ADR 699): `product-communications` was renamed `comms`, so
+ *  instructions and muscle memory that name the old template keep working. */
+export const ROLE_TEMPLATE_ALIASES: Readonly<Record<string, string>> = {
+  'product-communications': 'comms',
+};
+
+/** A `--from` name as given, or the built-in it was renamed to. */
+export function resolveRoleTemplateName(name: string): string {
+  return Object.hasOwn(ROLE_TEMPLATE_ALIASES, name) ? ROLE_TEMPLATE_ALIASES[name]! : name;
+}
 
 export function listRoleTemplateNames(): string[] {
   return Object.keys(BUILTIN_ROLE_TEMPLATES).sort();
