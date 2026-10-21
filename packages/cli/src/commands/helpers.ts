@@ -509,6 +509,10 @@ export async function reachabilityNudge(
 ): Promise<string> {
   if (NUDGE_SKIP_COMMANDS.has(command)) return '';
   if (parsed.flags['json'] === true || parsed.flags['quiet'] === true) return '';
+  // A hook fires it (`gate check`, `trace hook`, `session start` — every one reads `--stdin`), and
+  // every hook line ends `2>/dev/null`: the banner is never seen, but its inbox read was paid on every
+  // tool call in every seat — ~3/s on revive, the daemon's top event-loop stall (lane 01M5G3J54H).
+  if (parsed.flags['stdin'] === true) return '';
   if (process.env['MUSTERD_NO_NUDGE'] === '1') return '';
   try {
     // Rides EVERY dispatched command (bin.ts), hook-fired ones included — `gate` and `session`

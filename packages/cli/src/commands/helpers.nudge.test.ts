@@ -31,10 +31,21 @@ describe('reachabilityNudge against a daemon that never answers', () => {
 
   it('gives up silently inside its budget', async () => {
     const started = Date.now();
-    const out = await reachabilityNudge('session', parseArgs(['start', '--stdin']), 200);
+    const out = await reachabilityNudge('lanes', parseArgs([]), 200);
     expect(out).toBe('');
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(sockets.length).toBeGreaterThan(0); // it really did reach the stalled daemon
+  });
+
+  it('a hook-fired command (--stdin) never reads the inbox: its stderr goes to /dev/null (lane 01M5G3J54H)', async () => {
+    for (const [cmd, argv] of [
+      ['gate', ['check', '--stdin']],
+      ['trace', ['hook', '--stdin']],
+      ['session', ['start', '--stdin']],
+    ] as const) {
+      expect(await reachabilityNudge(cmd, parseArgs([...argv]), 200)).toBe('');
+    }
+    expect(sockets.length).toBe(0);
   });
 
   it('the production budget is a statusline-sized pause, not a hook-sized one', () => {
