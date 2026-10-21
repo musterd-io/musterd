@@ -222,3 +222,76 @@ describe('rendered per-desk overlays (plan Task 7)', () => {
     expect(a.reduce((x, y) => x + y, 0)).toBe(b.reduce((x, y) => x + y, 0));
   });
 });
+
+describe('the rendered figure (plan Task 13)', () => {
+  const fit = fitFloor(1200, 900);
+  const ids = ['desk/base', 'desk/base-ew'];
+  const spec = {
+    scale: 2,
+    frame: { w: 128, h: 232 },
+    anchor: { x: 64, y: 220 },
+    anims: {
+      idle: { row: 0, frames: 6, fps: 12, loop: true },
+      walk: { row: 8, frames: 6, fps: 12, loop: true },
+      'sit-type': { row: 16, frames: 4, fps: 12, loop: true },
+      'sit-idle': { row: 24, frames: 6, fps: 12, loop: true },
+      speak: { row: 32, frames: 6, fps: 12, loop: true },
+      turn: { row: 40, frames: 3, fps: 12, loop: false },
+      'sit-down': { row: 48, frames: 4, fps: 12, loop: false },
+      'stand-up': { row: 56, frames: 4, fps: 12, loop: false },
+    },
+  } as const;
+  const sheetImg = (id: string) => ({ width: 1024, height: 14848, id }) as unknown as CanvasImageSource;
+  const withFigure = (): RenderedAssets => {
+    const r = rendered(ids);
+    const layers = ['skin', 'hair/short', 'top/tee', 'bottom', 'shoes', 'visor'] as const;
+    r.figure = {
+      spec: { ...spec, anims: { ...spec.anims } },
+      sheets: new Map(layers.map((l) => [l, sheetImg(l)])),
+      scratch: {},
+    };
+    return r;
+  };
+  const standing = (name: string) => {
+    const poses = new Map([[name, { lx: 300, ly: 400, dir: 'S', small: false, carry: null, bubble: null, alpha: 1, moving: true, run: false, gesture: 0, gestureT: 0, sit: 0, heading: Math.PI / 4 } as never]]);
+    const byName = new Map([[name, officeNode(name)]]);
+    return { poses, byName };
+  };
+
+  it('a walking member is sprite layers (one blit per loaded layer) at the SE row, not a skeleton', () => {
+    const { ctx, ops } = recordingCtx();
+    const { poses, byName } = standing('ada');
+    const r = withFigure();
+    // the tint pass needs a canvas; under node, give it a recording one
+    const origCreate = globalThis.document;
+    const scratch = recordingCtx(); // the one scratch canvas the tint pass draws every frame through
+    (globalThis as { document?: unknown }).document = { createElement: () => ({ width: 0, height: 0, getContext: () => scratch.ctx }) };
+    try {
+      renderScene(ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
+    } finally {
+      (globalThis as { document?: unknown }).document = origCreate;
+    }
+    const sheetBlits = ops.filter((o) => o.name === 'drawImage' && o.args.length === 9);
+    // five layers for ada (no visor) plus the receptionist's, each tinted on the scratch and blitted from it
+    expect(sheetBlits.length).toBeGreaterThanOrEqual(5);
+    // …and the scratch read ada's five from the walk row for SE (row 8 + 1) of their sheets; the
+    // receptionist (seated, facing S) reads from a sit row
+    const reads = scratch.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9 && (o.args[0] as { id?: string }).id !== undefined);
+    expect(reads.filter((b) => b.args[2] === 9 * 232).length).toBe(10); // two reads per tint pass (draw, then destination-in)
+    expect(reads.filter((b) => b.args[2] === (24 + 2) * 232).length).toBeGreaterThanOrEqual(6); // sit-idle row for S
+    // and no skeleton painting beside them: the painted character is dozens of fills more
+    const painted = recordingCtx();
+    renderScene(painted.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+    expect(ops.length).toBeLessThan(painted.ops.length - 40);
+  });
+
+  it('without figure sheets the member paints exactly as before', () => {
+    const { poses, byName } = standing('ada');
+    const a = recordingCtx();
+    renderScene(a.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, {});
+    const b = recordingCtx();
+    renderScene(b.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered([]) });
+    expect(JSON.stringify(b.ops)).toBe(JSON.stringify(a.ops));
+    expect(a.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9)).toHaveLength(0);
+  });
+});
