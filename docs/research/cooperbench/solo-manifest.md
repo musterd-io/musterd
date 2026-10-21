@@ -82,5 +82,5 @@ recorded; a failed score is never re-run.
 | Decision | Answer |
 | --- | --- |
 | Run a solo reference before any feature-correctness ADR | **yes**: nick, 2026-10-21 |
-| Compare with pilot 3's arms rather than re-running them the same day | **proposed by lazara** (saves ~$38; the different day is reported), to be confirmed by nick |
-| Spend | **$9–16, hard stop $25**: proposed by lazara, to be confirmed by nick before step 1 |
+| Compare with pilot 3's arms rather than re-running them the same day | **compare with pilot 3**: nick, 2026-10-21 (saves ~$38; the different day is reported) |
+| Spend | **$9–16, hard stop $25**: nick, 2026-10-21 |
