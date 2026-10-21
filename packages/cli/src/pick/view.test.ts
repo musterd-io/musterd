@@ -1,7 +1,7 @@
 import type { PickerRow, PickerView } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { initialPick, reducePick } from './state.js';
-import { renderPickTable } from './table.js';
+import { pickTableLines, renderPickTable } from './table.js';
 import { renderLanePicker } from './view.js';
 
 // The exact no-color text of the `cmd/pick-*` frames in figma-brief-terminal.md.
@@ -70,8 +70,8 @@ const key = (name: string) => ({ type: 'key' as const, key: { name } });
 describe('renderLanePicker (no color)', () => {
   const s0 = initialPick('revive', 'stanley', VIEW, NOW);
 
-  it('cmd/pick-stacked — 80 columns, the brief under the list', () => {
-    expect(renderLanePicker(s0, { cols: 80, rows: 16 })).toEqual([
+  it('cmd/pick-stacked — 90 columns, the brief under the list', () => {
+    expect(renderLanePicker(s0, { cols: 90, rows: 16 })).toEqual([
       HEAD,
       'filter › ▏',
       'find-work',
@@ -80,7 +80,7 @@ describe('renderLanePicker (no color)', () => {
       'no goal',
       '  01M2H2N0Y6 Decline a handoff and re-route it',
       '',
-      '─'.repeat(80),
+      '─'.repeat(90),
       '01M5162QS1',
       'musterd pick 3: CLI two-pane lane picker',
       '',
@@ -111,13 +111,13 @@ describe('renderLanePicker (no color)', () => {
 
   it('cmd/pick-blocked — tab, then ⏎ on a blocked lane: viewed, not picked', () => {
     const s = reducePick(reducePick(s0, key('tab')).state, key('return')).state;
-    const out = renderLanePicker(s, { cols: 80, rows: 16 });
+    const out = renderLanePicker(s, { cols: 90, rows: 16 });
     expect(out[1]).toBe('blocked on 01M1T6DJ7J (owner miley) — it can be viewed, not picked');
     expect(out).toContain('▸ 01M2H2MP1F Two humans, two machines, one team');
     expect(out).toContain('blocked: policy replication');
   });
 
-  it('under 60 columns it asks to be widened', () => {
+  it('shrunk under 60 columns mid-session, it asks to be widened', () => {
     expect(renderLanePicker(s0, { cols: 59, rows: 16 })).toEqual([
       'widen the terminal to 60 columns · esc quits',
     ]);
@@ -142,5 +142,13 @@ describe('cmd/pick-table — no TTY', () => {
       '  01M2H2MP1FW1AA9VJHM9SHG356    2d  Two humans, two machines, one team',
       '      blocked on 01M1T6DJ7J (owner miley)',
     ]);
+  });
+});
+
+describe('cmd/pick-narrow — a 50-column terminal', () => {
+  it('prints the plain table, then the hint', () => {
+    const out = pickTableLines(VIEW, 'revive', true);
+    expect(out.slice(0, -2)).toEqual(renderPickTable(VIEW, 'revive'));
+    expect(out.slice(-2)).toEqual(['', 'widen the terminal to 60 columns for the picker']);
   });
 });

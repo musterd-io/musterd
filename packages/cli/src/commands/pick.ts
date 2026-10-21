@@ -12,7 +12,7 @@ import {
   type PickOutcome,
   type PickState,
 } from '../pick/state.js';
-import { renderPickTable } from '../pick/table.js';
+import { NARROW_HINT, pickTableLines } from '../pick/table.js';
 import { clean } from '../pick/text.js';
 import { MIN_COLS, renderLanePicker } from '../pick/view.js';
 import { theme } from '../render/theme.js';
@@ -80,7 +80,7 @@ export async function pickCommand(parsed: Parsed): Promise<number> {
   const view = await read();
 
   if (parsed.flags['open'] === true || !pickSeams.isTTY() || pickSeams.cols() < MIN_COLS) {
-    process.stdout.write(renderPickTable(view, team).join('\n') + '\n');
+    process.stdout.write(pickTableLines(view, team, false).join('\n') + '\n');
     if (parsed.flags['open'] === true) {
       const { server } = resolveRead(parsed.flags);
       const url = `${surfaceUrl(server, team, 'live')}&pick=${encodeURIComponent(seat)}`;
@@ -89,9 +89,7 @@ export async function pickCommand(parsed: Parsed): Promise<number> {
         `\n${opened ? theme.accent('opening the lane picker') : 'the lane picker is at'} ${url}\n`,
       );
     } else if (pickSeams.isTTY()) {
-      process.stdout.write(
-        theme.meta(`\nwiden the terminal to ${MIN_COLS} columns for the picker\n`),
-      );
+      process.stdout.write(theme.meta(`\n${NARROW_HINT}\n`));
     }
     return 0;
   }

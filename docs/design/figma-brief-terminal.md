@@ -483,7 +483,7 @@ so a box is never wider than the screen.
 
 ### Lane picker frames (ADR 624/626, lane 01M5162QS1)
 
-38. `cmd/pick-stacked` — `$ musterd pick` in an 80-column terminal: header (`musterd pick` bold;
+38. `cmd/pick-stacked` — `$ musterd pick` in a 90-column terminal: header (`musterd pick` bold;
     the active tab's count accent, the other dim), the filter line, the list grouped by goal (goal
     names dim, the cursor row accent with `▸`), a dim rule, then the highlighted lane's brief (id and
     title bold, the meta line dim), and the dim key footer. The exact no-color text is
@@ -497,7 +497,7 @@ so a box is never wider than the screen.
     no goal
       01M2H2N0Y6 Decline a handoff and re-route it
 
-    ────────────────────────────────────────────────────────────────────────────────
+    ──────────────────────────────────────────────────────────────────────────────────────────
     01M5162QS1
     musterd pick 3: CLI two-pane lane picker
 
@@ -508,7 +508,10 @@ so a box is never wider than the screen.
     ```
 39. `cmd/pick-wide` — at 100 columns or more the brief sits beside the list behind a dim `│`
     (the list takes 45% of the width, at least 36 columns); the `cmd/pick-wide` case is 120 columns.
-    Under 60 columns the screen is one dim line, `widen the terminal to 60 columns · esc quits`.
+    A terminal under 60 columns at launch (the `cmd/pick-narrow` case is 50) gets the plain
+    `cmd/pick-table` board, a blank line, and the dim hint `widen the terminal to 60 columns for the
+    picker`. A terminal shrunk under 60 mid-session shows one dim line, `widen the terminal to 60
+    columns · esc quits`.
 40. `cmd/pick-blocked` — `tab` shows the blocked lanes; `⏎` on one replaces the filter line with a
     yellow notice, `blocked on 01M1T6DJ7J (owner miley) — it can be viewed, not picked`, and the brief
     adds a yellow `blocked: <detail>` line. A lane taken while the screen was open gets the same yellow
