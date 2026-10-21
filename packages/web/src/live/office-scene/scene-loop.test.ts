@@ -159,11 +159,12 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
     expect(index).toMatch(/displayModel\(node\.model\)/);
   });
 
-  it('the plate says the member’s job beside the name, and the expanded detail does not repeat it (lane 01M5FXZF49)', () => {
-    expect(index).toContain('const job = node.service ? null : occupation(node.roles?.length ? node.roles : [node.role]);');
+  it('the plate shows the first role beside the name, and the expanded detail lists them all when there are several (lanes 01M5FXZF49, 01M5FY2XFX)', () => {
+    expect(index).toContain('const held = node.service ? [] : seatRoles(node.roles, node.role);');
+    expect(index).toContain('const job = held[0] ?? null;');
     const face = index.slice(index.indexOf('plate.appendChild(who);'), index.indexOf('if (name === you)'));
     expect(face).toContain("jobEl.className = 'lc-gl-label__job'");
-    expect(index).toContain('plateDetailParts({ surface: node.surface, role: job ? null : node.role })');
+    expect(index).toContain("plateDetailParts({ surface: node.surface, role: held.length > 1 ? held.join(' · ') : null })");
   });
 
   it('a job swipes in only when it changes while the room is open, never on first build or under reduced motion', () => {
