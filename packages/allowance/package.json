@@ -1,6 +1,6 @@
 {
   "name": "@musterd/allowance",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local page of what is left on the provider accounts on this machine.",
   "license": "MIT",
   "homepage": "https://musterd.io",

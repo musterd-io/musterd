@@ -6,7 +6,7 @@ A local page of what is left on the provider accounts on this machine.
 ELEVENLABS_API_KEY=… npx @musterd/allowance
 ```
 
-Then open `http://127.0.0.1:4877`. The process binds to loopback. A sign-in stays on this machine: it is sent only to that provider, and it is never written into the page or the config file.
+On a terminal it opens `http://127.0.0.1:4877` and stays running. Leave that window open. Ctrl-C stops the page. The process binds to loopback. A sign-in stays on this machine: it is sent only to that provider, and it is never written into the page or the config file.
 
 The page shows the accounts you check, two live accounts across and one line for an account with no number. A fresh machine starts with ElevenLabs. The choice is saved at `~/.allowance/config.json` (account ids only, mode 0600).
 
