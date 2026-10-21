@@ -1,0 +1,45 @@
+{
+ "repo": "react_hook_form_task",
+ "task_id": 153,
+ "features": [
+  2,
+  6
+ ],
+ "setting": "coop",
+ "run_id": "534b34d2",
+ "run_name": "pilot-musterd",
+ "agent_framework": "claude_code_musterd",
+ "model": "claude-sonnet-4-5",
+ "started_at": "2026-10-21T01:12:36.927345",
+ "ended_at": "2026-10-21T01:26:04.185732",
+ "duration_seconds": 807.258387,
+ "agents": {
+  "agent2": {
+   "feature_id": 6,
+   "status": "Submitted",
+   "cost": 2.6416897500000003,
+   "steps": 94,
+   "input_tokens": 754,
+   "output_tokens": 19860,
+   "cache_read_tokens": 7010080,
+   "cache_write_tokens": 63601,
+   "patch_lines": 147,
+   "error": null
+  },
+  "agent1": {
+   "feature_id": 2,
+   "status": "Submitted",
+   "cost": 2.4224187000000006,
+   "steps": 86,
+   "input_tokens": 690,
+   "output_tokens": 22844,
+   "cache_read_tokens": 6157654,
+   "cache_write_tokens": 61438,
+   "patch_lines": 145,
+   "error": null
+  }
+ },
+ "total_cost": 5.064108450000001,
+ "total_steps": 180,
+ "messages_sent": 0
+}

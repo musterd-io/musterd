@@ -1,0 +1,443 @@
+{
+ "total_cost": 2.76235845,
+ "duration": null,
+ "pairs": [
+  {
+   "dir": "dottxt_ai_outlines_task/1655/f1_f3/",
+   "cost": 2.11640085,
+   "steps": 162,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "identical",
+     "strategy": "skip-merge-identical"
+    },
+    "f1": {
+     "passed": true,
+     "tests_passed": 95,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": true,
+     "tests_passed": 87,
+     "tests_failed": 0
+    },
+    "both_passed": true,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 27,
+    "request_help": 2,
+    "status_update": 7
+   },
+   "gate": {
+    "allow": 4
+   },
+   "acts_directed": 25
+  },
+  {
+   "dir": "dspy_task/8563/f1_f4/",
+   "cost": 2.669362799999999,
+   "steps": 155,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "clean",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 43,
+     "tests_failed": 7
+    },
+    "f2": {
+     "passed": true,
+     "tests_passed": 59,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 25,
+    "request_help": 2,
+    "status_update": 5
+   },
+   "gate": {
+    "allow": 4,
+    "deny": 1
+   },
+   "acts_directed": 20
+  },
+  {
+   "dir": "go_chi_task/27/f3_f4/",
+   "cost": 2.76235845,
+   "steps": 144,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "conflicts",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 19,
+    "request_help": 2,
+    "status_update": 5
+   },
+   "gate": {
+    "allow": 7,
+    "deny": 1
+   },
+   "acts_directed": 13
+  },
+  {
+   "dir": "llama_index_task/17244/f5_f6/",
+   "cost": 1.35969075,
+   "steps": 95,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "conflicts",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 13,
+    "request_help": 1,
+    "status_update": 5
+   },
+   "gate": {
+    "allow": 6,
+    "deny": 1
+   },
+   "acts_directed": 11
+  },
+  {
+   "dir": "openai_tiktoken_task/0/f4_f8/",
+   "cost": 1.9337284499999998,
+   "steps": 112,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "failed",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "missing_input",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 15,
+    "request_help": 2,
+    "status_update": 6
+   },
+   "gate": {
+    "allow": 8,
+    "deny": 1
+   },
+   "acts_directed": 12
+  },
+  {
+   "dir": "pallets_click_task/2800/f1_f4/",
+   "cost": 2.9650585499999993,
+   "steps": 134,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "clean",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": true,
+     "tests_passed": 68,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 76,
+     "tests_failed": 1
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 17,
+    "request_help": 1,
+    "status_update": 7
+   },
+   "gate": {
+    "allow": 6,
+    "deny": 2
+   },
+   "acts_directed": 11
+  },
+  {
+   "dir": "pallets_jinja_task/1559/f5_f8/",
+   "cost": 3.8229698999999995,
+   "steps": 202,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "conflicts",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 34,
+    "request_help": 1,
+    "status_update": 7
+   },
+   "gate": {
+    "allow": 7,
+    "deny": 1
+   },
+   "acts_directed": 28
+  },
+  {
+   "dir": "pallets_jinja_task/1621/f6_f10/",
+   "cost": 4.0544616000000016,
+   "steps": 211,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "failed",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "missing_input",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 30,
+    "status_update": 8
+   },
+   "gate": {
+    "allow": 35,
+    "deny": 2
+   },
+   "acts_directed": 23
+  },
+  {
+   "dir": "react_hook_form_task/153/f2_f6/",
+   "cost": 5.064108450000001,
+   "steps": 180,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "conflicts",
+     "strategy": "naive"
+    },
+    "f1": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": false,
+     "tests_passed": 0,
+     "tests_failed": 0
+    },
+    "both_passed": false,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "message": 22,
+    "request_help": 2,
+    "status_update": 6
+   },
+   "gate": {
+    "allow": 14
+   },
+   "acts_directed": 17
+  },
+  {
+   "dir": "typst_task/6554/f2_f6/",
+   "cost": 2.3306022,
+   "steps": 135,
+   "messages_sent": 0,
+   "agents": {},
+   "eval": {
+    "apply": {
+     "agent1": "applied",
+     "agent2": "applied"
+    },
+    "merge": {
+     "status": "conflicts",
+     "strategy": "solo-agent1"
+    },
+    "f1": {
+     "passed": true,
+     "tests_passed": 1,
+     "tests_failed": 0
+    },
+    "f2": {
+     "passed": true,
+     "tests_passed": 1,
+     "tests_failed": 0
+    },
+    "both_passed": true,
+    "error": null
+   },
+   "mcp": {
+    "agent1": "connected",
+    "agent2": "connected"
+   },
+   "lanes": [],
+   "acts": {
+    "accept": 1,
+    "message": 17,
+    "request_help": 2,
+    "status_update": 7
+   },
+   "gate": {
+    "allow": 10
+   },
+   "acts_directed": 13
+  }
+ ]
+}

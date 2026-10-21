@@ -1,0 +1,45 @@
+{
+ "repo": "pallets_click_task",
+ "task_id": 2800,
+ "features": [
+  1,
+  4
+ ],
+ "setting": "coop",
+ "run_id": "91e8e140",
+ "run_name": "pilot-musterd",
+ "agent_framework": "claude_code_musterd",
+ "model": "claude-sonnet-4-5",
+ "started_at": "2026-10-21T01:02:48.981386",
+ "ended_at": "2026-10-21T01:12:36.911030",
+ "duration_seconds": 587.929644,
+ "agents": {
+  "agent1": {
+   "feature_id": 1,
+   "status": "Submitted",
+   "cost": 1.0870334999999998,
+   "steps": 53,
+   "input_tokens": 298,
+   "output_tokens": 16455,
+   "cache_read_tokens": 2259815,
+   "cache_write_tokens": 43032,
+   "patch_lines": 85,
+   "error": null
+  },
+  "agent2": {
+   "feature_id": 4,
+   "status": "Submitted",
+   "cost": 1.8780250499999998,
+   "steps": 81,
+   "input_tokens": 618,
+   "output_tokens": 18447,
+   "cache_read_tokens": 4749166,
+   "cache_write_tokens": 46591,
+   "patch_lines": 82,
+   "error": null
+  }
+ },
+ "total_cost": 2.9650585499999993,
+ "total_steps": 134,
+ "messages_sent": 0
+}

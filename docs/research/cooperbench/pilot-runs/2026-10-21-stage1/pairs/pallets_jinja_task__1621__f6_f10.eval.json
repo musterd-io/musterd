@@ -1,0 +1,37 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1621,
+  "features": [
+    6,
+    10
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "failed",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "missing_input",
+    "strategy": "naive",
+    "diff": "diff --git a/src/jinja2/loaders.py b/src/jinja2/loaders.py\nindex d7d9bd04..5efc56fb 100644\n--- a/src/jinja2/loaders.py\n+++ b/src/jinja2/loaders.py\n@@ -71,6 +71,32 @@ class BaseLoader:\n     #: .. versionadded:: 2.4\n     has_source_access = True\n \n+    def __init__(self) -> None:\n+        self._aliases: t.Dict[str, str] = {}\n+\n+    def add_alias(self, alias: str, target: str) -> None:\n+        \"\"\"Add an alias that maps a template name to another template name.\n+\n+        :param alias: The alias name to create\n+        :param target: The actual template name to load\n+        \"\"\"\n+        self._aliases[alias] = target\n+\n+    def remove_alias(self, alias: str) -> None:\n+        \"\"\"Remove an alias. Safe to call with nonexistent aliases.\n+\n+        :param alias: The alias name to remove\n+        \"\"\"\n+        self._aliases.pop(alias, None)\n+\n+    def _resolve_alias(self, template: str) -> str:\n+        \"\"\"Resolve a template name through aliases. Does not chain.\n+\n+        :param template: The template name (possibly an alias)\n+        :return: The resolved template name\n+        \"\"\"\n+        return self._aliases.get(template, template)\n+\n     def get_source(\n         self, environment: \"Environment\", template: str\n     ) -> t.Tuple[str, t.Optional[str], t.Optional[t.Callable[[], bool]]]:\n@@ -120,6 +146,9 @@ class BaseLoader:\n         if globals is None:\n             globals = {}\n \n+        # Resolve any alias before loading\n+        name = self._resolve_alias(name)\n+\n         # first we try to get the source for this template together\n         # with the filename and the uptodate function.\n         source, filename, uptodate = self.get_source(environment, name)\n@@ -181,6 +210,7 @@ class FileSystemLoader(BaseLoader):\n         encoding: str = \"utf-8\",\n         followlinks: bool = False,\n     ) -> None:\n+        super().__init__()\n         if not isinstance(searchpath, abc.Iterable) or isinstance(searchpath, str):\n             searchpath = [searchpath]\n \n@@ -270,6 +300,7 @@ class PackageLoader(BaseLoader):\n         package_path: \"str\" = \"templates\",\n         encoding: str = \"utf-8\",\n     ) -> None:\n+        super().__init__()\n         package_path = os.path.normpath(package_path).rstrip(os.path.sep)\n \n         # normpath preserves \".\", which isn't valid in zip paths.\n@@ -402,6 +433,7 @@ class DictLoader(BaseLoader):\n     \"\"\"\n \n     def __init__(self, mapping: t.Mapping[str, str]) -> None:\n+        super().__init__()\n         self.mapping = mapping\n \n     def get_source(\n@@ -445,6 +477,7 @@ class FunctionLoader(BaseLoader):\n             ],\n         ],\n     ) -> None:\n+        super().__init__()\n         self.load_func = load_func\n \n     def get_source(\n@@ -479,6 +512,7 @@ class PrefixLoader(BaseLoader):\n     def __init__(\n         self, mapping: t.Mapping[str, BaseLoader], delimiter: str = \"/\"\n     ) -> None:\n+        super().__init__()\n         self.mapping = mapping\n         self.delimiter = delimiter\n \n@@ -508,6 +542,8 @@ class PrefixLoader(BaseLoader):\n         name: str,\n         globals: t.Optional[t.MutableMapping[str, t.Any]] = None,\n     ) -> \"Template\":\n+        # Resolve any alias before loading\n+        name = self._resolve_alias(name)\n         loader, local_name = self.get_loader(name)\n         try:\n             return loader.load(environment, local_name, globals)\n@@ -539,6 +575,7 @@ class ChoiceLoader(BaseLoader):\n     \"\"\"\n \n     def __init__(self, loaders: t.Sequence[BaseLoader]) -> None:\n+        super().__init__()\n         self.loaders = loaders\n \n     def get_source(\n@@ -558,6 +595,8 @@ class ChoiceLoader(BaseLoader):\n         name: str,\n         globals: t.Optional[t.MutableMapping[str, t.Any]] = None,\n     ) -> \"Template\":\n+        # Resolve any alias before loading\n+        name = self._resolve_alias(name)\n         for loader in self.loaders:\n             try:\n                 return loader.load(environment, name, globals)\n@@ -594,6 +633,7 @@ class ModuleLoader(BaseLoader):\n     def __init__(\n         self, path: t.Union[str, os.PathLike, t.Sequence[t.Union[str, os.PathLike]]]\n     ) -> None:\n+        super().__init__()\n         package_name = f\"_jinja2_module_templates_{id(self):x}\"\n \n         # create a fake module that looks for the templates in the\n"
+  },
+  "feature1": {
+    "feature_id": 6,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "feature2": {
+    "feature_id": 10,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "both_passed": false,
+  "error": null,
+  "evaluated_at": "2026-10-21T01:58:17.407748"
+}

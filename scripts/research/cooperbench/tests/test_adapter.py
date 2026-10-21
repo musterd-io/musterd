@@ -37,6 +37,8 @@ class FakeEnv:
             return {"returncode": 0, "output": ""}
         if cmd == "npm root -g":
             return {"returncode": 0, "output": "/usr/lib/node_modules\n"}
+        if cmd == ad.ENSURE_NODE22:
+            return {"returncode": 0, "output": "v22.23.3\n"}
         return {"returncode": 0, "output": "/usr/local/bin/musterd"}
 
     def cleanup(self):
@@ -138,6 +140,19 @@ def test_the_pair_is_released_and_the_container_cleaned_even_on_failure(wired, m
     result = run()
     assert result.error == "no bind"
     assert envs[0].cleaned and released == ["r1"]
+
+
+def test_node_22_is_ensured_after_setup_and_before_musterd_installs(wired):
+    """An Alpine image's apk Node is too old for musterd's CLI (go_chi/27, pilot 2026-10-21)."""
+    envs, _ = wired
+    run()
+    cmds = envs[0].commands
+    setup = next(i for i, c in enumerate(cmds) if c.startswith("bash ") and "setup" in c)
+    node = cmds.index(ad.ENSURE_NODE22)
+    install = next(i for i, c in enumerate(cmds) if c.startswith("npm install -g"))
+    assert setup < node < install
+    assert "unofficial-builds.nodejs.org" in ad.ENSURE_NODE22 and "x86_64" in ad.ENSURE_NODE22
+    assert ad.ENSURE_NODE22.endswith("node -v")
 
 
 def test_the_mcp_entry_is_resolved_from_npms_global_root(wired):
