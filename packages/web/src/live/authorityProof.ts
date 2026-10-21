@@ -73,6 +73,9 @@ export async function authorityProofForVerdict(
     nonce,
     signature: bytesToB64url(resp.signature),
     authenticator_data: bytesToB64url(resp.authenticatorData),
-    client_data_json: bytesToB64url(resp.clientDataJSON),
+    // The verifier parses this as JSON text and hashes it as utf8 — the approve page
+    // posts it decoded, and so do we. Base64url-encoding it here (the first cut did)
+    // made every passkey verdict fail verification as descriptor_mismatch.
+    client_data_json: new TextDecoder().decode(resp.clientDataJSON),
   };
 }
