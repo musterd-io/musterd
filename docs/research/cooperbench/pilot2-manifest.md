@@ -22,7 +22,7 @@ a setup change reaches every arm alike, or it would be a thumb on the scale.
 | [ADR 691](../../decisions/691-named-file-is-held-first-claim-wins.md): a lane that names a file holds it, first claim first; under `block` the gate refuses another seat's edit of it | product | every team, under the posture it chose |
 | [ADR 693](../../decisions/693-a-hold-lapses-when-its-holder-has-left.md): an agent holder that has left stops holding the file, about 90 s after its session ends | product | every team |
 | The `lane.gate` audit row records `hold` and `holder` (lane 01M5FR8Y26) | product (record only) | every team |
-| Local `main` pinned to the task base (`pin_main.py`, #3111) | setup | all three arms |
+| Local `main` pinned to the task base (`pin_main.py`, #3111) | setup | every arm |
 | A pinned Node 22 ahead of an Alpine image's Node 20 | setup | the musterd arm (the other arms run no Node) |
 
 Nothing else changed. In particular, the agents' instructions (`prompt.py`) are **byte-identical to
@@ -32,14 +32,16 @@ reaching a real team is what nick ruled out (2026-10-21).
 
 ## Arms
 
-Three, on one harness and one model, exactly as in [pilot 1](./pilot-manifest.md#arms): **coop**,
-**team** (`--setting team`) and **musterd** (`claude_code_musterd`), all with `--git`.
+Two, on one harness and one model, as in [pilot 1](./pilot-manifest.md#arms): **team**
+(`--setting team`) and **musterd** (`claude_code_musterd`), both with `--git`. **The coop arm does
+not run:** it answers only "does musterd beat plain coop", which is not this pilot's verdict, and
+it is run later if the musterd arm ties or beats team. _Decision: nick, 2026-10-21, to cut cost._
 
 **The musterd arm runs the gate in `block` posture over `**`**, as it did in pilot 1 (`team.py`).
 `block` is a team setting (`musterd team policy --enforce-posture block`), not the default; the
 default `warn` turns ADR 691's refusal into an advisory, which pilot 1 showed agents read past. Any
-result from this pilot is stated with that setting. _Decision: block — nick asked for a
-recommendation, lazara recommended block, 2026-10-21 (see "Decisions")._
+result from this pilot is stated with that setting. _Decision: block — nick, 2026-10-21, on
+lazara's recommendation (see "Decisions")._
 
 ## Tasks and scoring
 
@@ -85,8 +87,8 @@ Carried over from pilot 1 unchanged, read once from the first complete run of ea
 
 - **"musterd closes the gap at least as well as CooperBench's team harness"** only if musterd ≥ the
   same-day team arm **and** ≥ 6/10.
-- **"musterd beats plain coop"** only if musterd ≥ coop + 2.
-- Otherwise the finding reports the three numbers and makes no such claim.
+- **"musterd beats plain coop"** is **not read**: the coop arm does not run.
+- Otherwise the finding reports the two numbers and makes no such claim.
 - Any claim names the setting: "with the gate in `block` posture".
 
 And one rule for what the run is for, whatever the score: the finding names **the next product
@@ -99,7 +101,7 @@ Ten pairs, one run per arm. A one-pair difference is noise. No per-task conclusi
 
 ## Procedure
 
-On the run machine (`musterd-cooperbench`, now `performance-16x`, 32 GB), in this order, in one
+On the run machine (`musterd-cooperbench`, now `performance-8x`, 16 GB), in this order, in one
 session. A check that fails stops the procedure before any measured spend.
 
 1. **Deploy** from `main` at or after the audit-row fix, with `MUSTERD_REF` = that commit (`fly
@@ -108,12 +110,12 @@ session. A check that fails stops the procedure before any measured spend.
    - `gate_smoke.py` prints PASS (the gate is live in the arm's wiring);
    - `hold_smoke.py` prints PASS (a named file is held, the second seat is refused while the holder
      is in grace, and the hold lapses after it leaves; both audited with `hold`).
-3. **One small pair in each of the coop and team arms**, `pallets_click` task 2068, features 1 and 2,
-   `--git`, scored with the evaluator (about $1 each). Pass: both agents submit and the pair scores
-   (pass or fail, never an error). The team arm has never run on this machine, and the coop arm has
-   not run here with `--git`; a setup error found here costs $1, not an arm.
+3. **One small pair in the team arm**, `pallets_click` task 2068, features 1 and 2, `--git`,
+   scored with the evaluator (about $1). Pass: both agents submit and the pair scores (pass or
+   fail, never an error). The team arm has never run on this machine; a setup error found here
+   costs $1, not an arm.
 4. **Pull the ten task images** (`cooperbench prepare -s core`).
-5. **Run the three arms side by side**, `--concurrency 3` each, `--no-auto-eval`, then
+5. **Run the two arms side by side**, `--concurrency 3` each, `--no-auto-eval`, then
    `cooperbench eval --backend docker` for each. No arm is stopped for its score.
    **Stop an arm only for errors:** if three of its first three pairs end in an error, stop it, fix
    the cause, and re-run it whole; that restart is recorded with its reason.
@@ -128,15 +130,14 @@ session. A check that fails stops the procedure before any measured spend.
 
 | Item | Estimate |
 | --- | --- |
-| Smoke and the two small pairs | $3 |
+| Smoke and the team arm's small pair | $2 |
 | musterd arm (pilot 1: $29.08 for ten pairs with `--git`) | $25–35 |
-| coop arm (no musterd tools; the one `pallets_click` pair cost $1.14 without `--git`) | $15–25 |
-| team arm (CooperBench published ~$8.5 for ten; `--git` and two re-reads of the task add some) | $10–20 |
-| Fly `performance-16x` for about 2 h | under $5 |
-| **Total** | **about $55–85** |
+| team arm (CooperBench published ~$8.5 for ten; `--git` adds some) | $10–20 |
+| Fly `performance-8x` for about 2 h | under $3 |
+| **Total** | **about $40–60** |
 
-Approved by nick as "all three arms" on 2026-10-21; this table is the number that approval covers.
-A run that passes $90 in model spend is stopped and reported, not finished.
+Approved by nick on 2026-10-21: about $40–60, **hard stop at $65** in model spend, counted from
+the first smoke. A run that reaches $65 is stopped and reported, not finished.
 
 ## What it changes
 
@@ -150,6 +151,6 @@ A run that passes $90 in model spend is stopped and reported, not finished.
 | Decision | Options | Answer |
 | --- | --- | --- |
 | The holder-leaves deadlock | fix in the product first · run as is · tell agents to close their lanes | **product first** (ADR 693) — nick, 2026-10-21 |
-| Arms | musterd + team · all three | **all three** — nick, 2026-10-21 |
-| Posture in the musterd arm | `block` (the setting ADR 691 needs) · `warn` (the default) | **block**, stated with every result — recommended by lazara on nick's ask, 2026-10-21 |
+| Arms | musterd + team · all three | **musterd + team**, $40–60, hard stop $65 — nick, 2026-10-21 (first said all three, then asked to cut cost) |
+| Posture in the musterd arm | `block` (the setting ADR 691 needs) · `warn` (the default) | **block**, stated with every result — nick, 2026-10-21, on lazara's recommendation |
 | Staging | staged with a score stop (pilot 1) · all arms, stop for errors only | **all arms, errors only** — follows from nick's "take full advantage of each run", 2026-10-21 |

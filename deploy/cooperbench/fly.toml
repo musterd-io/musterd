@@ -15,9 +15,8 @@ primary_region = "sjc"
   initial_size = "50gb"
 
 [[vm]]
-  # Pilot 2 (lane 01M5FQBPHB) runs its three arms side by side, three pairs each: nine pairs, eighteen
-  # agent containers, dockerd, Redis and the musterd arm's daemons. CooperBench's own core runs used
-  # concurrency 3 per run. One pair at a time is comfortable on performance-2x with 8 GB; this is
-  # that, scaled for nine. Stopped between runs, it costs the volume only.
-  size = "performance-16x"
-  memory = "32gb"
+  # Pilot 2 (lane 01M5FQBPHB) runs its two arms side by side, three pairs each: six pairs, twelve
+  # agent containers, dockerd and the musterd arm's daemons. Pilot 1 ran three pairs at a time on
+  # performance-2x with 8 GB; this is that, doubled. Stopped between runs, it costs the volume only.
+  size = "performance-8x"
+  memory = "16gb"
