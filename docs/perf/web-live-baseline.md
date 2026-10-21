@@ -1422,6 +1422,23 @@ to trim that is not the feature. A re-baseline would loosen.
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B with this change in.
 
+### 2026-10-21 — `totalJsGzipBytes` 355,000 → 355,700 B and `liveCssGzipBytes` 26,450 → 26,550 B: the role tag wears a glyph (lane `01M5G33VH8`)
+
+| Budget   | Before (local, glyph table emptied) | This branch (local) | Ceiling                    |
+| -------- | ----------------------------------- | ------------------- | -------------------------- |
+| total JS | 353,586 B                           | 354,212 B (+626)    | RAISED 355,000 → 355,700 B |
+| live CSS | 26,200 B (#3120)                    | 26,291 B (+91)      | RAISED 26,450 → 26,550 B   |
+
+As plain words, the role read as stray text beside the plate's pin and tags. nick picked a tag with a
+glyph from four treatments shown side by side. The +626 B is twelve small SVG drawings, one per role in
+the library (`roleGlyph.ts`). They are needed on the plate's first paint, and lazy-loading cannot move
+total (ADR 183). The paths are already short, and the shared stroke attributes are one constant. The
++91 B is the tag and its arrival pop. The local numbers predate #3127, which raised total JS to 355,000
+on its own measured CI 346.1 KB; this raise stacks the +626 B on that.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B, or live CSS at or under
+  26,450 B, with this change in.
+
 ### 2026-10-21 — `liveCssGzipBytes` 26,300 → 26,450 B: a nameplate says the member's job (lane `01M5FXZF49`)
 
 | Budget   | main (local, #3108)  | This branch (local) | Ceiling                  |

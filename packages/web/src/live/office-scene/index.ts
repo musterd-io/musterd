@@ -6,6 +6,7 @@ import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
 import { seatRoles } from '../occupation';
+import { roleGlyph } from '../roleGlyph';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
@@ -1158,7 +1159,12 @@ export function mountOffice(
       if (job) {
         const jobEl = document.createElement('span');
         jobEl.className = 'lc-gl-label__job';
-        jobEl.textContent = job;
+        // The role's glyph, then its name in a span of its own: the tag is a flex box, and
+        // `::first-letter` (the sentence-case capital) only reaches a block-level child.
+        jobEl.innerHTML = roleGlyph(job) ?? '';
+        const jobName = document.createElement('span');
+        jobName.textContent = job;
+        jobEl.appendChild(jobName);
         const since = jobNow - plateJobs.get(name)!.at;
         if (!reduced && !STILL && since < JOB_SWIPE_MS) {
           jobEl.classList.add('is-new');

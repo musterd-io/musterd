@@ -1728,41 +1728,55 @@
   color: var(--lc-paper-ink);
 }
 /* The member's first role beside the name, by its roster name (lanes 01M5FXZF49, 01M5FY2XFX — a stream
-   viewer asked "can you show their occupations"). The name stays the identity: mono, 700, full ink. The
-   role is a description of it, so it drops to the linear cut (already on the page for /live's labels, so no new font fetch)
-   at 500 in the muted ink — read as an ordinary word, not one more identifier. The model past the
-   rule stays mono. `--lc-paper-muted` on the chalk stock clears AA. */
+   viewer asked "can you show their occupations"), worn as a tag with the role's glyph (lane 01M5G33VH8:
+   nick picked it from four treatments side by side; as plain words it read as stray text beside the
+   enamel pin and the tags). A borderless neutral fill in sentence case, so it never reads as one of
+   the outlined state tags (dnd, service): a role is who you are, not what is happening to you. The
+   glyph wears the member's hue, the one place on the face it shows beside the rim. Ink at 80% on the
+   fill measures 7.4:1. */
 .lc-gl-label__job {
-  margin-left: 4px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 5px;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--lc-paper-ink) 8%, transparent);
   font-family: var(--font-sans);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--lc-paper-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
+  color: color-mix(in srgb, var(--lc-paper-ink) 80%, transparent);
 }
-/* A job that arrives while the room is open (a role assigned mid-stream) is news, so it swipes in
-   once: the word rises into place and a mustard highlighter runs under it, then sinks away and leaves
-   the quiet word behind. Only on a real change (index.ts `plateJobs`); never on page open, never
-   under reduced motion or a still capture. */
+.lc-gl-label__job:has(svg) {
+  padding-left: 3px;
+}
+.lc-gl-label__job > span::first-letter {
+  text-transform: uppercase;
+}
+.lc-gl-label__job svg {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  color: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 60%, var(--lc-paper-ink));
+}
+/* A role assigned while the room is open is news, so its tag arrives once: it pops up into place lit
+   mustard, and the light drains back to the neutral fill. Only on a real change (index.ts
+   `plateJobs`); never on page open, never under reduced motion or a still capture. */
 .lc-gl-label__job.is-new {
   animation: lc-job-in calc(2 * var(--lc-dur-5)) var(--lc-ease-out) both;
-  background: linear-gradient(color-mix(in srgb, var(--lc-accent-bright) 45%, transparent) 0 0)
-    0 92% / 100% 40% no-repeat;
 }
 @keyframes lc-job-in {
   0% {
     opacity: 0;
-    transform: translateY(3px);
-    background-size: 0 40%;
+    transform: translateY(3px) scale(0.85);
   }
-  35% {
+  25% {
     opacity: 1;
     transform: none;
-    background-size: 100% 40%;
-  }
-  100% {
-    background-size: 100% 0;
+    background-color: color-mix(in srgb, var(--lc-accent-bright) 55%, transparent);
   }
 }
 .lc-gl-label__flag {

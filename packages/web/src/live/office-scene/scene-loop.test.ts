@@ -162,6 +162,8 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
   it('the plate shows the first role beside the name, and the expanded detail lists them all when there are several (lanes 01M5FXZF49, 01M5FY2XFX)', () => {
     expect(index).toContain('const held = node.service ? [] : seatRoles(node.roles, node.role);');
     expect(index).toContain('const job = held[0] ?? null;');
+    // The tag: the role's glyph (lane 01M5G33VH8), then the name in its own span for the capital.
+    expect(index).toContain("jobEl.innerHTML = roleGlyph(job) ?? '';");
     const face = index.slice(index.indexOf('plate.appendChild(who);'), index.indexOf('if (name === you)'));
     expect(face).toContain("jobEl.className = 'lc-gl-label__job'");
     expect(index).toContain("plateDetailParts({ surface: node.surface, role: held.length > 1 ? held.join(' · ') : null })");
