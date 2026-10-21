@@ -9,7 +9,7 @@
  * objection. So the geometry is a plain module both sides import, and `MusterdWord.tsx` renders it
  * as JSX while `musterdChipSvg` renders it as markup.
  *
- * Only the **small cut** lives in code. At 13–18px the 72-unit strokes and 66-unit seats would fill
+ * Only the **small cut** lives in code. At 13–18px the 80-unit strokes and 50-unit seats would fill
  * in the cuts between the stems, so the small cut thickens neither by much: `CHIP_SMALL_EXTRA` is
  * added to the stroke and `CHIP_SMALL_DOT_EXTRA` to the seat radius, which is what holds the cuts
  * open. The full-size cuts are files in `docs/design/assets/` (`chip.svg` solid, `chip-glass.svg`
@@ -31,19 +31,19 @@ export const CHIP_GLASS_TO = { color: '#FFEBA0', opacity: 0.22 };
 /** Corner radius on the 1024 viewBox (30%). */
 export const CHIP_RADIUS = 307;
 export const CHIP_VIEWBOX = 1024;
-/** The white ring: a rounded square stroke, centred on the tile. */
-export const CHIP_RING = { x: 95, size: 834, radius: 230, stroke: 72 };
+/** The white ring: a rounded square stroke, centred on the tile. 48 wide, so the m can fill the tile. */
+export const CHIP_RING = { x: 83, size: 858, radius: 218, stroke: 48 };
 /** Stroke of the `m`, and the seat radius, in viewBox units. */
-export const CHIP_STROKE = 72;
-export const CHIP_DOT_RADIUS = 66;
+export const CHIP_STROKE = 80;
+export const CHIP_DOT_RADIUS = 50;
 /** What the small cut adds to each so the cuts between the stems stay open. */
 export const CHIP_SMALL_EXTRA = 26;
 export const CHIP_SMALL_DOT_EXTRA = 13;
 /** Where the seats sit: the foot of each stem. */
 export const CHIP_DOTS = [
-  [345, 621],
-  [512, 621],
-  [679, 621],
+  [295, 660],
+  [512, 660],
+  [729, 660],
 ] as const;
 /**
  * The `m`: the left stem runs into the first shoulder, the second shoulder starts where the first
@@ -51,7 +51,7 @@ export const CHIP_DOTS = [
  * on the shoulders; round caps and joins come from the stroke, not the path.
  */
 export const CHIP_GLYPH_PATH =
-  'M345 621V433M345 433L385 393Q395 385 411 385H446Q462 385 472 393L512 433M512 433L552 393Q562 385 578 385H613Q629 385 639 393L679 433M512 621V521M679 621V521';
+  'M295 660V416M295 416L347 364Q360 354 381 354H426Q447 354 460 364L512 416M512 416L564 364Q577 354 598 354H643Q664 354 677 364L729 416M512 660V530M729 660V530';
 
 /**
  * The mark as an SVG string, for renderers that build markup rather than elements — the small

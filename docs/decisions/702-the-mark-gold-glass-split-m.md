@@ -39,13 +39,16 @@ brand accent used by buttons, links and the rest of the UI.
    bottom-right, with a white hairline edge. Where the platform gives a flat ground and cannot
    blur (favicon, npm/GitHub avatar, README, MCP icon, social card), the tile is **solid pastel
    apricot, `#F9DDA0`**, with a faint tonal rim so it holds an edge on white.
-2. **Ring.** A clean rounded-square stroke, 72 units wide, centred on the tile. The ink outline of
+2. **Ring.** A clean rounded-square stroke, 48 units wide, centred on the tile. The ink outline of
    ADR 497 is dropped; nothing is traced.
 3. **Ink.** Cool slate `#2E3647`, for the `m` and the seats. It replaces zinc-900.
 4. **The `m`.** Straight stems and flat-topped shoulders with soft corners. The left stem runs into
    the first shoulder; the second and third stems stop a thin cut short of their shoulders; each
    stem ends in a round **seat**, one per member. It is one geometry, in
-   `packages/web/src/brand/chipMark.ts`, and is centred in the ring.
+   `packages/web/src/brand/chipMark.ts`, centred in the ring and filling about half the tile
+   width. Stems are an 80-unit stroke and seats a 50-unit radius, so the letter leads and the
+   seats read as feet; at 66 against a 72 stroke the seats were as heavy as the stems and the
+   mark read as keyholes at 32–64px (slippy's review of #3152).
 5. **Weights and files.** Full weight (≥24px) is a file; the small weight (stroke +26, seats +13, so
    the cuts stay open) is for <24px, and the small **glass** weight is the only one in code. Files in
    `docs/design/assets/`: `chip.svg` and `chip-sm.svg` (solid), `chip-glass.svg` and
