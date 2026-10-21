@@ -1080,15 +1080,21 @@ async function createTeam(
       message: 'Name your team',
       placeholder: 'dawn',
       defaultValue: 'dawn',
+      // clack validates the raw input before it applies `defaultValue`, so an empty answer is the
+      // default being accepted, not a bad name (dogfood run 4: Enter on `dawn` was refused).
       validate: (v) =>
-        /^[a-z0-9-]{1,32}$/.test(v) ? undefined : 'use lowercase letters, numbers, hyphens (1–32)',
+        !v || /^[a-z0-9-]{1,32}$/.test(v)
+          ? undefined
+          : 'use lowercase letters, numbers, hyphens (1–32)',
     }),
   );
+  // The placeholder is the default Enter takes: this person's login, never a maintainer's name.
+  const defaultName = process.env['USER'] ?? 'me';
   const you = guard(
     await p.text({
       message: 'Your name on the team',
-      placeholder: 'nick',
-      defaultValue: process.env['USER'] ?? 'me',
+      placeholder: defaultName,
+      defaultValue: defaultName,
     }),
   ).trim();
   const role = guard(
@@ -1110,7 +1116,10 @@ async function createTeam(
     rememberIdentity(config, { team: slug, name: you, key: credential, surface: 'cli' }); // ADR 059 vault
     saveConfig(config);
     sp.stop(`Team ${pc.bold(slug)} created — you joined as ${pc.magenta(you)}`);
-    return { team: slug, creatorToken: res.token as string };
+    // The creator acts with the human credential just saved. `res.token` is the v0.2 per-seat
+    // token (`mskd_`), which the daemon accepts only from service seats (ADR 232); handing it on
+    // refused every call after team create (dogfood run 4, lane 01M5DZXCN6).
+    return { team: slug, creatorToken: credential };
   } catch (err) {
     sp.stop(pc.red(`Could not create team: ${(err as Error).message}`));
     bail();
