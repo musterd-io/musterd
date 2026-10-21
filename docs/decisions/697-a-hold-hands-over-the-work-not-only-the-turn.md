@@ -1,6 +1,6 @@
 # 697 — A hold hands over the work, not only the turn
 
-- Status: proposed
+- Status: accepted (nick, 2026-10-21)
 - Date: 2026-10-21
 - Lane: 01M5G53AD62NHAPGVXZ5270Q5S (goal `cooperbench`)
 - Amends: [ADR 691](691-named-file-is-held-first-claim-wins.md) (what the gate says when a hold
