@@ -35,8 +35,7 @@ one reason the team arm is re-run rather than quoted.
 covering lane", not "owns it alone": two agents can claim overlapping lanes, the board warns, and
 both edit. Run 3 of lane 1 showed agents doing exactly that. Making claims exclusive is a product
 change (its own ADR), not a harness setting, so the pilot measures the product as it is and counts
-overlapping claims as a secondary measure (below). _Decision recorded: nick, 2026-10-20 — see
-"Decisions" at the end; the manifest is not final until each is filled in._
+overlapping claims as a secondary measure (below). _Decision: shipped semantics, nick, 2026-10-20 (see "Decisions" at the end)._
 
 **The OpenHands arms are not in this pilot.** The brief names Claude Code. The open question from
 lane 1b (a waiting OpenHands agent is killed by the SDK's stuck detector, in both arms alike) is not
@@ -126,17 +125,31 @@ session:
 2. `gate_smoke.py` must print **PASS** (brief item 9). A FAIL stops the pilot.
 3. Pull the ten task images (`cooperbench prepare -s core`) so no arm pays for image pulls in its
    wall time.
-4. Run the three arms, `--concurrency 3` (CooperBench's own `core` runs used 3; 10 broke
-   container startup), in the order **coop, team, musterd**, each with `--no-auto-eval`.
-5. `cooperbench eval` each run, `--backend docker`.
-6. Copy each run's `logs/<run>/` (including every musterd pair's daemon database and log) to
+4. Run the arms **staged**, `--concurrency 3` (CooperBench's own `core` runs used 3; 10 broke
+   container startup), each with `--no-auto-eval`, and `cooperbench eval --backend docker` after
+   each before the next starts:
+   1. **musterd** first. If it scores **below 6/10**, the first verdict rule is already failed
+      against the published team figure, and the pilot **stops here**: the other two arms would
+      only measure by how much, which the secondary measures already say. The finding reports
+      the musterd number beside CooperBench's published `coop` and `team` figures and makes no
+      claim.
+   2. **team**, only if musterd reached 6/10 or more: the same-day re-run the first rule
+      compares against.
+   3. **coop**, only if the "beats coop" claim is wanted after the first two numbers are in,
+      and nick approves that last spend.
+   The staging changes what is spent, not what is compared: a verdict rule is read only
+   between arms that ran on the same day, and a rule whose comparison arm did not run is
+   reported as not read, never as passed.
+5. Copy each run's `logs/<run>/` (including every musterd pair's daemon database and log) to
    `/data/runs/pilot-2026-10-<dd>/`, and bring `summary.json`, `result.json` and the per-pair
    eval results back to the repo under `docs/research/cooperbench/pilot-runs/`.
-7. `fly machine stop`.
+6. `fly machine stop`.
 
 Expected spend: from lane 1's one-pair runs, about **$1.1–1.3 per pair** in the coop and musterd
-arms and CooperBench's **~$8.5 per 10 pairs** for team, so roughly **$30–40 in model calls** for
-the three arms, plus under $5 of Fly time. Spend is approved by nick before step 1 (brief item 6).
+arms and CooperBench's **~$8.5 per 10 pairs** for team. Staged, that is about **$12–15** if the
+musterd arm stops the pilot, **$22–28** with the team arm, and **$33–40** only if all three run,
+plus under $5 of Fly time. The musterd arm's spend is approved by nick before step 1 (brief
+item 6); each later stage is a separate yes.
 
 ## What it changes
 
@@ -157,7 +170,7 @@ Filled in before step 1; the manifest is not final until each has an answer and 
 
 | Decision | Options | Answer |
 | --- | --- | --- |
-| Lane semantics in the musterd arm | shipped (overlap warns) · exclusive claims (needs an ADR first) | _pending_ |
-| Spend | approve ~$30–40 + Fly · hold | _pending_ |
-| OpenHands arms | out of this pilot (as above) · in, after the wait fix | _pending_ |
-| Finding number | next free at scoring time · 015 regardless | _pending_ |
+| Lane semantics in the musterd arm | shipped (overlap warns) · exclusive claims (needs an ADR first) | **shipped** — nick, 2026-10-20 |
+| Spend | staged (musterd first, stop below 6/10) · all three at once | **staged** — nick asked for less than $30–40, 2026-10-20; the musterd arm's ~$12–15 is the first yes |
+| OpenHands arms | out of this pilot (as above) · in, after the wait fix | **out** — nick, 2026-10-20 |
+| Finding number | next free at scoring time · 015 regardless | **next free** — nick, 2026-10-20 |
