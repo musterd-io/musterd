@@ -84,8 +84,31 @@ export async function mintSponsoredAgent(
   // link below is the way in. The link is returned either way; a caller leads with whichever applies.
   const host = wanted ?? seen[0] ?? null;
   const hosting: SponsoredAgentHosting = host !== null ? 'sponsor_host' : 'connect_link';
-  if (host !== null)
-    await insertProvision(ctx.db, team.id, member.id, sponsor.id, Date.now(), origin, wanted);
+  if (host !== null) {
+    const row = await insertProvision(
+      ctx.db,
+      team.id,
+      member.id,
+      sponsor.id,
+      Date.now(),
+      origin,
+      wanted,
+    );
+    // ADR 689 decision 3: the hub's fact; a joiner pinned by `host` projects it and claims it.
+    await appendAudit(ctx.db, team.id, {
+      actor: null,
+      action: 'host.provision_pending',
+      target: row.id,
+      result: 'allow',
+      detail: {
+        agent: member.name,
+        sponsor: sponsor.name,
+        host: row.host,
+        connect_origin: row.connect_origin,
+        created_at: row.created_at,
+      },
+    });
+  }
   return {
     member,
     hosting,
