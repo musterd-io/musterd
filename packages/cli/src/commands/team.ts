@@ -33,7 +33,15 @@ import {
   nearestClearHue,
   type HueKind,
 } from '@musterd/protocol/hue';
-import { flagHue, flagStr, fmtDurationMs, parseDurationMs, type Parsed } from '../args.js';
+import {
+  flagHue,
+  flagStr,
+  fmtDurationMs,
+  GLOBAL_FLAGS,
+  parseDurationMs,
+  rejectUnknownFlags,
+  type Parsed,
+} from '../args.js';
 import { HttpClient } from '../client.js';
 import {
   excludeCredentialFromGit,
@@ -66,7 +74,164 @@ import { setPolicySigned } from './authority.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
 import { teamPolicyStyle } from './policy.js';
 
+/**
+ * The flags `musterd team` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const TEAM_FLAGS = [
+  '--git-dir',
+  '--porcelain',
+  '--show-toplevel',
+  '--switch',
+  '-c',
+  'abort',
+  'aborted',
+  'acceptance-review-window',
+  'add',
+  'agent-connect',
+  'ask-fallback-to-nonadmin',
+  'ask-slack-webhook',
+  'assign-missing',
+  'away-relay',
+  'away-token',
+  'block',
+  'blocking',
+  'branch',
+  'check',
+  'check-build',
+  'client',
+  'close',
+  'cloud-provision',
+  'commit',
+  'connect',
+  'connection',
+  'content-type',
+  'credential',
+  'data',
+  'dispatch-loop',
+  'display',
+  'end',
+  'enforce-action',
+  'enforce-posture',
+  'enforce-route',
+  'enforce-surface',
+  'enroll',
+  'error',
+  'exec',
+  'exit',
+  'expires',
+  'expires-in',
+  'fail-budget',
+  'fetch',
+  'fix',
+  'git',
+  'grant',
+  'guardian-tier',
+  'harness',
+  'hex',
+  'host',
+  'hosted-budget',
+  'hue',
+  'ignore',
+  'incident',
+  'incident-claim-window',
+  'incident-fallback-role',
+  'incident-threshold',
+  'incident-wake-on-resolve',
+  'incident-wake-on-route',
+  'install',
+  'installed',
+  'interval',
+  'into',
+  'invite-requires-expiry',
+  'key',
+  'key-env',
+  'kind',
+  'label',
+  'leases',
+  'lifecycle',
+  'local-session-live',
+  'log',
+  'ls-files',
+  'main',
+  'malformed',
+  'member',
+  'member-until',
+  'migrate-bootstrap',
+  'musterd',
+  'musterd-cli',
+  'musterd-host',
+  'new',
+  'no-gateway',
+  'none',
+  'on',
+  'origin',
+  'pipe',
+  'prose',
+  'pull',
+  'push',
+  'refresh-permissions',
+  'remote',
+  'repair',
+  'reseat-known-agents',
+  'rev-list',
+  'rev-parse',
+  'review',
+  'review-by',
+  'review-loop',
+  'role',
+  'rotate',
+  'seat',
+  'seeds-relay',
+  'seeds-token',
+  'session',
+  'set',
+  'sha256',
+  'show',
+  'slack-bot-token',
+  'spend-approval',
+  'spend-cap',
+  'sponsor',
+  'sponsored-agent-cap',
+  'spread',
+  'sqlite3',
+  'stakes-default',
+  'status',
+  'sweep-loop',
+  'switch',
+  'timeout',
+  'to',
+  'trace-content',
+  'unpriced-wake-cap',
+  'unset',
+  'until',
+  'uses',
+  'utf8',
+  'workspace',
+  'yes',
+] as const;
+
 export async function teamCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`). `team policy` is carved out: it has its own refusal
+  // (lane `01M46ZG8NY`) that names the likelier cause — a flag newer than this build — and
+  // this generic one must not preempt that wording.
+  if (parsed.positionals[0] !== 'policy') {
+    rejectUnknownFlags(
+      parsed.flags,
+      [...GLOBAL_FLAGS, ...TEAM_FLAGS],
+      'the flags `musterd team` takes are listed by `musterd help team`',
+    );
+  }
   const sub = parsed.positionals[0];
   if (sub === 'create') return teamCreate(parsed);
   if (sub === 'add') return teamAdd(parsed);

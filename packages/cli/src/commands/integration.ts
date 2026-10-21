@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { IntegrationCheck } from '@musterd/protocol';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { inspectApertureConfig, parseApertureResponse } from '../integrations/aperture.js';
@@ -229,10 +229,65 @@ async function inspectAperture(
   }
 }
 
+/**
+ * The flags `musterd integration` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const INTEGRATION_FLAGS = [
+  '--json',
+  'allowed',
+  'aperture',
+  'aperture-config-api',
+  'aperture-grants',
+  'aperture-identities',
+  'aperture-managed-policy',
+  'aperture-providers',
+  'aperture-quotas',
+  'aperture-retention',
+  'captures',
+  'check',
+  'daemon-host-gate',
+  'daemon-http',
+  'daemon-secured-bind',
+  'daemon-websocket',
+  'error',
+  'musterd-team',
+  'providers',
+  'quotas',
+  'response',
+  'serve',
+  'status',
+  'tailnet-up',
+  'tailscale-installed',
+  'tailscale-serve',
+  'timeout',
+  'tools',
+  'unreachable',
+  'upgrade',
+  'version',
+  'write',
+] as const;
+
 export async function integrationCommand(
   parsed: Parsed,
   deps: IntegrationCommandDeps = {},
 ): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...INTEGRATION_FLAGS],
+    'the flags `musterd integration` takes are listed by `musterd help integration`',
+  );
   if (parsed.positionals[0] === 'generate') {
     return parsed.positionals[1] === 'tailscale'
       ? generateTailscale(parsed, deps)

@@ -3,7 +3,7 @@ import { resolve as resolvePath } from 'node:path';
 import { buildRemoteMcpServer } from '@musterd/mcp';
 import { readBuildStamp } from '@musterd/protocol/build-stamp';
 import { createServer, type RemoteMcpFactory } from '@musterd/server';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { renderBanner } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 
@@ -51,7 +51,40 @@ export const remoteMcp: RemoteMcpFactory = (seat) => buildRemoteMcpServer(seat);
  * MCP is composed in (ADR 630 §2): the daemon serves `/mcp/:team` with the adapter's own tools,
  * built per request by `@musterd/mcp`, which the server package never imports.
  */
+/**
+ * The flags `musterd serve` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const SERVE_FLAGS = [
+  'away',
+  'git',
+  'host',
+  'musterd',
+  'offline',
+  'online',
+  'port',
+  'tls-cert',
+  'tls-key',
+  'web-root',
+] as const;
+
 export async function serveCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...SERVE_FLAGS],
+    'the flags `musterd serve` takes are listed by `musterd help serve`',
+  );
   const portFlag = flagStr(parsed.flags, 'port');
   const host = flagStr(parsed.flags, 'host');
   const tlsCert = flagStr(parsed.flags, 'tls-cert');

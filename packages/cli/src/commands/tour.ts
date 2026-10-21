@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { makeEnvelope } from '@musterd/protocol';
 import { decodeTime, ulid } from 'ulid';
 import type { Parsed } from '../args.js';
+import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { paint as pc } from '../render/theme.js';
 import { termWidth } from '../render/ui.js';
 import { runTour, type TourPort, type TourUi } from '../tour/run.js';
@@ -17,7 +18,39 @@ const POLL_MS = 2_000;
  * `musterd tour` — the hands-on first-run tour (spec 2026-10-10-first-run-tour-design). The loop
  * lives in `tour/run.ts`; this file only binds it to the daemon and to @clack/prompts.
  */
+/**
+ * The flags `musterd tour` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const TOUR_FLAGS = [
+  'home',
+  'next',
+  'online',
+  'record',
+  'reset',
+  'role',
+  'rotate',
+  'step',
+  'what',
+] as const;
+
 export async function tourCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...TOUR_FLAGS],
+    'the flags `musterd tour` takes are listed by `musterd help tour`',
+  );
   const { team, identity, http } = resolve(parsed.flags);
   const me = identity.name;
 

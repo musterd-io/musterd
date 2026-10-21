@@ -8,7 +8,7 @@ import {
   TOKEN_PREFIXES,
 } from '@musterd/protocol';
 import { resolveWorkspace, resolveWorkspaceKey } from '@musterd/protocol/project';
-import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HttpClient, watchClaim } from '../client.js';
 import {
   findBinding,
@@ -73,16 +73,113 @@ function pendingAge(ms: number): string {
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
+/**
+ * The flags `musterd claim` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
 export const CLAIM_FLAGS = [
+  '--',
+  '--git-dir',
+  '--porcelain',
+  '--show-toplevel',
+  '-c',
+  'abort',
+  'aborted',
+  'act',
+  'add',
+  'all',
+  'away',
+  'blocking',
   'bootstrap',
+  'branch',
+  'canonical',
+  'check',
+  'check-build',
+  'client',
+  'close',
+  'cloud-provision',
+  'commit',
+  'connect',
+  'connection',
+  'content-type',
+  'credential',
+  'data',
+  'deferred',
+  'end',
+  'enroll',
+  'error',
+  'exec',
+  'exit',
+  'fetch',
+  'firehose',
+  'fix',
   'for',
+  'from',
+  'git',
   'grant',
+  'harness',
+  'hex',
+  'hook',
+  'host',
+  'id',
+  'ignore',
+  'inbox',
+  'installed',
+  'interval',
   'key',
+  'key-env',
+  'leases',
+  'limit',
+  'local-session-live',
+  'log',
+  'ls-files',
+  'main',
+  'malformed',
+  'members',
+  'message',
+  'migrate-bootstrap',
+  'musterd',
+  'musterd-cli',
+  'musterd-host',
+  'new',
+  'no-gateway',
+  'offline',
+  'online',
+  'open',
+  'origin',
+  'pipe',
+  'pull',
+  'push',
+  'refresh-permissions',
+  'remote',
+  'repair',
+  'rev-list',
+  'rev-parse',
+  'review',
   'role',
-  'server',
+  'roster',
+  'session',
+  'sha256',
+  'skipped',
+  'sponsor',
+  'sqlite3',
+  'status',
   'surface',
-  'team',
   'timeout',
+  'until',
+  'until-lane',
+  'until-reply',
+  'utf8',
+  'waiting',
+  'workspace',
 ] as const;
 
 export async function claimCommand(parsed: Parsed): Promise<number> {

@@ -7,7 +7,7 @@ import {
 } from '@musterd/protocol';
 import { resolveWorkspace } from '@musterd/protocol/project';
 import { ulid } from 'ulid';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HOOK_HTTP_TIMEOUT_MS, isSessionLeaseRefusal, watchClaim } from '../client.js';
 import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
@@ -31,7 +31,53 @@ const DEFAULT_WAIT_TIMEOUT_S = 300;
  *  unread the view didn't render. */
 const DEFAULT_INBOX_WINDOW = 15;
 
+/**
+ * The flags `musterd inbox` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const INBOX_FLAGS = [
+  'act',
+  'all',
+  'claude-code',
+  'close',
+  'data',
+  'deferred',
+  'end',
+  'error',
+  'firehose',
+  'from',
+  'hook',
+  'http',
+  'id',
+  'inbox',
+  'limit',
+  'message',
+  'open',
+  'opencode',
+  'timeout',
+  'until-lane',
+  'until-reply',
+  'utf8',
+  'waiting',
+] as const;
+
 export async function inboxCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...INBOX_FLAGS],
+    'the flags `musterd inbox` takes are listed by `musterd help inbox`',
+  );
   // --interrupt-check (ADR 088): the mid-loop interrupt line. A PostToolUse hook runs this at every
   // tool boundary, so it must be resolved *before* the acting `resolve()` below (which throws on an
   // ambient/unbound folder) and must be silent-or-one-line, best-effort, and never fail a tool call.

@@ -19,7 +19,7 @@ import {
   type MetricInput,
 } from '@musterd/protocol';
 import { resolveProject } from '@musterd/protocol/project';
-import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { plainTerminalLines, plainTerminalText } from '../render/plainText.js';
@@ -192,28 +192,46 @@ function renderBranchCleanup(branch: string | null): void {
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
+/**
+ * The flags `musterd lane`/`lanes` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
 export const LANE_FLAGS = [
   'abandon-reason',
   'act',
   'area',
   'authorized-by',
   'baseline',
+  'blocked',
   'branch',
   'by',
   'claim',
+  'claimed',
+  'claims',
   'clear-merged',
   'day',
   'depends',
   'detail',
   'direction',
   'evidence',
+  'flags',
   'follows-up',
   'goal',
+  'lanes',
   'measured',
   'metric',
   'metric-source',
   'mine',
   'n',
+  'none',
   'note',
   'open',
   'pr',
@@ -222,11 +240,13 @@ export const LANE_FLAGS = [
   'read-verdict',
   'reads-on',
   'reason',
+  'requested',
   'risk',
   'role',
   'seed',
   'self',
   'sha',
+  'source',
   'source-ref',
   'stakes',
   'state',
@@ -235,6 +255,7 @@ export const LANE_FLAGS = [
   'title',
   'to',
   'unit',
+  'unowned',
   'until',
   'value',
 ] as const;

@@ -11,7 +11,15 @@ import {
   type ResidencyPolicy,
   type ResidencyPolicyOverride,
 } from '@musterd/protocol';
-import { flagStr, fmtBytes, fmtDurationMs, parseDurationMs, type Parsed } from '../args.js';
+import {
+  flagStr,
+  fmtBytes,
+  fmtDurationMs,
+  GLOBAL_FLAGS,
+  parseDurationMs,
+  rejectUnknownFlags,
+  type Parsed,
+} from '../args.js';
 import { resolveClaudeBin } from '../claudeBin.js';
 import { codexCapability, resolveCodexBin } from '../codexBin.js';
 import { findBinding, loadConfig, saveBinding } from '../config.js';
@@ -179,7 +187,86 @@ export async function ensureHostKey(
   return mint(host);
 }
 
+/**
+ * The flags `musterd residency` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const RESIDENCY_FLAGS = [
+  '--help',
+  '--version',
+  '-c',
+  'abort',
+  'attempt-cap',
+  'branch',
+  'budget',
+  'claude',
+  'client',
+  'cloud-provision',
+  'codex',
+  'convene-huddles',
+  'cooldown',
+  'credential',
+  'data',
+  'dream',
+  'dream-budget',
+  'dream-nightly',
+  'enroll',
+  'error',
+  'exec',
+  'exit',
+  'flow',
+  'git',
+  'harness',
+  'host',
+  'hourly-cap',
+  'idle-wake',
+  'ignore',
+  'interval',
+  'key-env',
+  'lane',
+  'leases',
+  'local-session-live',
+  'log',
+  'ls-files',
+  'max-turns',
+  'musterd-host',
+  'no-gateway',
+  'opencode',
+  'origin',
+  'pipe',
+  'remote',
+  'residency',
+  'rev-parse',
+  'run',
+  'seat',
+  'security',
+  'session',
+  'sponsor',
+  'timeout',
+  'tool-policy',
+  'transcript-max',
+  'utf8',
+  'work-timeout',
+  'workspace',
+] as const;
+
 export async function residencyCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...RESIDENCY_FLAGS],
+    'the flags `musterd residency` takes are listed by `musterd help residency`',
+  );
   const sub = parsed.positionals[0];
   if (sub === 'on') return onCommand(parsed);
   if (sub === 'off') return offCommand(parsed);

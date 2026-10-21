@@ -1,5 +1,5 @@
 import { resolveAttestedModel } from '@musterd/protocol';
-import { flagStr, type Parsed, flagHue } from '../args.js';
+import { flagHue, flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { infraTouchWarning } from '../infra-gate.js';
@@ -26,6 +26,41 @@ import { resolve, resolveRead } from './helpers.js';
  * `--harness <id[,id…]>` names the set to wire (default claude-code). `--here` keeps the legacy
  * single-folder behavior; `--path <dir>` targets an explicit folder.
  */
+/**
+ * The flags `musterd agent` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const AGENT_FLAGS = [
+  'add',
+  'branch',
+  'commit',
+  'driver',
+  'git',
+  'harness',
+  'host',
+  'hosted',
+  'hue',
+  'ignore',
+  'log',
+  'ls-files',
+  'model',
+  'path',
+  'pipe',
+  'profile',
+  'pull',
+  'push',
+  'rev-parse',
+  'role',
+] as const;
+
 export async function agentCommand(
   parsed: Parsed,
   deps: {
@@ -33,6 +68,14 @@ export async function agentCommand(
     infraGate?: (verb: string) => Promise<string | null>;
   } = {},
 ): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...AGENT_FLAGS],
+    'the flags `musterd agent` takes are listed by `musterd help agent`',
+  );
   const name = parsed.positionals[0];
   if (!name || /\s/.test(name)) {
     throw new CliError(

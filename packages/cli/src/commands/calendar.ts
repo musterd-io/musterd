@@ -8,7 +8,7 @@ import {
   type CalendarEntryInput,
   type CalendarWriteOutcome,
 } from '@musterd/protocol';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
@@ -30,7 +30,48 @@ const USAGE =
  * artifact: every document goes up with its document id as `source_ref`, so running it twice reports
  * every entry `unchanged` and writes nothing.
  */
+/**
+ * The flags `musterd calendar` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const CALENDAR_FLAGS = [
+  '-',
+  'all',
+  'date',
+  'end',
+  'flags',
+  'id',
+  'kind',
+  'note',
+  'past',
+  'pick',
+  'picks',
+  'place',
+  'source',
+  'start',
+  'status',
+  'title',
+  'unpick',
+  'url',
+] as const;
+
 export async function calendarCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...CALENDAR_FLAGS],
+    'the flags `musterd calendar` takes are listed by `musterd help calendar`',
+  );
   const sub = parsed.positionals[0] ?? 'list';
   const { team, http } = resolve(parsed.flags);
   const json = parsed.flags['json'] === true;

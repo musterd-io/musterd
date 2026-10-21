@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
+import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { osNotify, type NotifyItem } from '../notify/os.js';
 import { pollOnce, type NotifyDeps } from '../notify/select.js';
 import { theme } from '../render/theme.js';
@@ -115,10 +116,40 @@ async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
   throw new Error(CHANNELS_USAGE);
 }
 
+/**
+ * The flags `musterd notify` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const NOTIFY_FLAGS = [
+  'answer',
+  'deliver',
+  'interval',
+  'notify',
+  'presence-gating',
+  'slack',
+  'tier-floor',
+] as const;
+
 export async function notifyCommand(
   parsed: Parsed,
   deps: { notify?: (n: NotifyItem) => void } = {},
 ): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...NOTIFY_FLAGS],
+    'the flags `musterd notify` takes are listed by `musterd help notify`',
+  );
   if (parsed.positionals[0] === 'channels') return notifyChannelsCommand(parsed);
   const { team, identity, http } = resolve(parsed.flags);
   // The notifier polls on the away human's behalf — its reads must NOT mark them present (ADR 057),

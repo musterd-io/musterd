@@ -1,5 +1,5 @@
 import { type Binding, bindingSeat, type ClaimPolicy } from '@musterd/protocol';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HttpClient, type BootstrapCredentialSummary } from '../client.js';
 import { findBinding, loadConfig, loadWorkspace, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
@@ -45,7 +45,93 @@ export interface WireDeps {
 const CONFIGURE_REPAIR =
   'no harness selection here — run musterd harness configure (or musterd init for a fresh folder)';
 
+/**
+ * The flags `musterd wire` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const WIRE_FLAGS = [
+  '--git-dir',
+  '--porcelain',
+  '--show-toplevel',
+  '-c',
+  'abort',
+  'aborted',
+  'blocking',
+  'busy',
+  'check',
+  'check-build',
+  'client',
+  'close',
+  'cloud-provision',
+  'conflict',
+  'connect',
+  'connection',
+  'content-type',
+  'credential',
+  'data',
+  'end',
+  'enroll',
+  'error',
+  'exec',
+  'exit',
+  'fetch',
+  'fix',
+  'git',
+  'grant',
+  'harness',
+  'hex',
+  'host',
+  'ignore',
+  'installed',
+  'interval',
+  'key',
+  'key-env',
+  'leases',
+  'local-session-live',
+  'main',
+  'malformed',
+  'migrate-bootstrap',
+  'musterd',
+  'musterd-cli',
+  'musterd-host',
+  'new',
+  'no-gateway',
+  'origin',
+  'pipe',
+  'refresh-permissions',
+  'remote',
+  'repair',
+  'rev-list',
+  'rev-parse',
+  'review',
+  'session',
+  'sha256',
+  'sponsor',
+  'sqlite3',
+  'status',
+  'timeout',
+  'until',
+  'utf8',
+  'workspace',
+] as const;
+
 export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...WIRE_FLAGS],
+    'the flags `musterd wire` takes are listed by `musterd help wire`',
+  );
   const flags = parsed.flags;
   const cwd = process.cwd();
 
