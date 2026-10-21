@@ -293,6 +293,13 @@ withDrivers('gate-http', (_o, kind) => {
       // The holder is allowed, quietly.
       const holder = await gateA('block', 'src/tariff.ts', 'Bo');
       expect(holder.json.outcome).toBe('allowed');
+      // The record says a hold decided both edits, and whose; the response never carries it.
+      const rows = (await audits('lane.gate')).map(
+        (r) => JSON.parse(r.detail as string) as Record<string, unknown>,
+      );
+      expect(rows.filter((d) => d.hold === 'held' && d.holder === 'Bo')).toHaveLength(2);
+      expect(rows.filter((d) => d.hold === undefined)).toHaveLength(1);
+      expect(blocked.json.hold).toBeUndefined();
     });
 
     it('naming the file beats covering it through an area glob, whatever the claim order', async () => {
@@ -363,6 +370,11 @@ withDrivers('gate-http', (_o, kind) => {
         expect(r.json.outcome).toBe('warned');
         expect(r.json.reason).toContain('was held by Bo');
         expect(r.json.reason).toContain('has lapsed (ADR 693)');
+        const rows = (await audits('lane.gate')).map(
+          (a) => JSON.parse(a.detail as string) as Record<string, unknown>,
+        );
+        expect(rows.at(-1)).toMatchObject({ hold: 'lapsed', holder: 'Bo', outcome: 'warned' });
+        expect(r.json.hold).toBeUndefined();
       });
 
       it('a holder inside its reclaim grace still holds the file', async () => {

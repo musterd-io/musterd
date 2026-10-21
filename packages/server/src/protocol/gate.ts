@@ -64,7 +64,12 @@ export interface GateContext {
  * `req.target` arrives repo-relative (the hook normalizes it) so it compares against lane globs, which
  * are repo-relative by convention.
  */
-export async function gateA(ctx: GateContext): Promise<GateDecision> {
+/** What decided an edit of a held file (ADR 691/693), for the audit row only — never sent back. */
+interface HoldTag {
+  hold?: { state: 'held' | 'lapsed'; holder: string };
+}
+
+export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
   const { db } = ctx.srv;
   const { id: teamId, slug } = ctx.team;
   const path = ctx.req.target;
@@ -88,6 +93,7 @@ export async function gateA(ctx: GateContext): Promise<GateDecision> {
         !(await isPresentOrReclaimable(db, holderSeat.id, ctx.srv.config.presenceTimeoutMs))
       ) {
         return {
+          hold: { state: 'lapsed', holder: holder.owner_seat! },
           decision: 'allow',
           outcome: 'warned',
           reason:
@@ -100,10 +106,11 @@ export async function gateA(ctx: GateContext): Promise<GateDecision> {
         `'${path}' is held by ${holder.owner_seat} (lane "${holder.title}", named it first, since ${since}) — ` +
         `ask them to hand it off or narrow their lane, wait for that lane to finish, or split the ` +
         `work by handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
+      const hold = { state: 'held' as const, holder: holder.owner_seat! };
       if (ctx.req.posture === 'warn') {
-        return { decision: 'allow', outcome: 'warned', reason: `heads-up: ${detail}` };
+        return { hold, decision: 'allow', outcome: 'warned', reason: `heads-up: ${detail}` };
       }
-      return { decision: 'deny', outcome: 'denied', reason: `blocked: ${detail}` };
+      return { hold, decision: 'deny', outcome: 'denied', reason: `blocked: ${detail}` };
     }
     return {
       decision: 'allow',
@@ -264,7 +271,7 @@ export async function adjudicateGate(
 ): Promise<GateDecision> {
   const ctx: GateContext = { srv, team, member, req };
   const route = req.kind === 'role-route' ? await gateRoute(ctx) : undefined;
-  const decision = route
+  const { hold, ...decision }: GateDecision & HoldTag = route
     ? route.decision
     : req.kind === 'contended-surface'
       ? await gateA(ctx)
@@ -284,6 +291,8 @@ export async function adjudicateGate(
       ...(decision.ask_ref ? { ask_ref: decision.ask_ref } : {}),
       // ADR 513: which role the route needed, so the warn→redirect join can read it per role.
       ...(route ? { kind: 'role-route', role: route.role } : {}),
+      // ADR 691/693: a hold decided this edit — held (refused or warned) or lapsed, and whose.
+      ...(hold ? { hold: hold.state, holder: hold.holder } : {}),
     },
   });
   return decision;

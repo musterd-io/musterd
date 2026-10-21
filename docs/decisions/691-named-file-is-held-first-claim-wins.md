@@ -94,13 +94,17 @@ look the same at claim time.
   the one product change since finding 015, with the patch-recipe fix (lane 01M5E8CHBT) applied to
   every arm first.
   Follows-up: 01M5E8CHBT4SBSBEXM2CY7EMPX
+- 2026-10-21 (lane 01M5FR8Y26): the `lane.gate` audit row records `hold` (`held` / `lapsed`) and
+  `holder` when a hold decides the edit. The response is unchanged; the row gains two fields.
 - Dogfood run 8's question ("does one-owner-per-task stop the collision or just report it?") now
   has a product answer to test against: for named files, it stops it.
 
 ## Observability & Evaluation
 
-- **Traces:** `lane.gate` rows whose reason carries `held by` (denied under block, warned under
-  warn), by team and week; `surface_overlap` warnings whose detail carries `holds it`.
+- **Traces:** `lane.gate` rows with `detail.hold = 'held'` and `detail.holder` (denied under block,
+  warned under warn), by team and week; `surface_overlap` warnings whose detail carries `holds it`.
+  _(Corrected 2026-10-21, lane 01M5FR8Y26: the row is shapes-only and never carried the reason, so
+  this trace was not in the record until the hold fields were added.)_
 - **Eval:** on this team, 30 days after landing: the number of `held by` denials and warnings, and
   for each whether the two lanes' branches later changed a common file (ADR 575's precision
   script, restricted to named-file overlaps). The rule holds if named-file overlaps have precision
