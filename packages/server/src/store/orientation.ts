@@ -30,6 +30,7 @@ import {
 } from './lanes.js';
 import { getMemberByName, getMemberByRole } from './members.js';
 import {
+  acceptanceAskUnanswered,
   annotateClose,
   closeVerdicts,
   peerConfirmedPending,
@@ -373,10 +374,15 @@ export async function deriveNext(
   // 18-hour window and still never answering — more awake time than the reviewers who did answer.
   // The ask arrives once, while the seat is mid-lane, and nothing ever re-surfaces it.
   //
-  // "Still in the acceptance stage" IS the unanswered test (ADR 192 as repaired: an accept closes
-  // the lane it accepts). So there is no accept-message bookkeeping to drift out of sync with the
-  // lane — the lane state is the single source, and a review answered any way at all disappears
-  // from here for free.
+  // "Still in the acceptance stage" was the unanswered test (ADR 192 as repaired: an accept closes
+  // the lane it accepts). ADR 188's two-stage close broke that for RISKY lanes: there a peer's
+  // accept does not close the lane — it escalates to a human, and the lane stays in
+  // `awaiting_acceptance` until that human answers. So the lane state alone can no longer say the
+  // ask is unanswered, and the brief said "verdict owed" to a seat that had already judged
+  // (observed 2026-10-21, lane 01M5D8F7FTXT07SSGPPYGX9JV8, four hours after the accept). The ask's
+  // own ledger is the answer: an ask with an accept/decline in reply to it, or a resolve that closed
+  // its thread, is not owed by anyone. The predicate is the verdict edge's own
+  // (`acceptanceAskUnanswered`), so the brief and the edge cannot disagree.
   const owed_reviews = (
     await Promise.all(
       (
@@ -404,6 +410,9 @@ export async function deriveNext(
         // superseded one; the brief must too, or the relieved seat's `next` keeps saying "verdict
         // owed" — which is how wanderer and ryder both judged #1541, nine minutes apart.
         if ((await supersededAcceptanceAsks(db, teamId, lane.id)).has(r.ask_id)) return [];
+        // ADR 188: on a risky lane my accept did not close it — it moved the wait to a human. An ask
+        // I have already answered is not owed by me, whatever the lane's state says.
+        if (!(await acceptanceAskUnanswered(db, teamId, r.ask_id))) return [];
         return [{ lane, from: r.from_name, ask_id: r.ask_id, ts: r.ts }];
       }),
     )

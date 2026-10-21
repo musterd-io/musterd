@@ -688,6 +688,43 @@ withDrivers('orientation', (o) => {
       expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
     });
 
+    // ADR 188's two-stage close: on a RISKY lane a peer's accept does NOT close the lane — it moves
+    // the wait to a human, and the lane stays in `awaiting_acceptance` until that human answers. So
+    // the lane state alone can no longer say the ask is unanswered, and the brief said "verdict owed"
+    // to a seat that had already judged (2026-10-21, lane 01M5D8F7FTXT07SSGPPYGX9JV8, four hours
+    // after the accept).
+    it('drops the review once my accept answered it — the lane waits for the human, the ask is not mine', async () => {
+      const { db, team, nick, stanley } = await seed();
+      const lane = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'risky, peer-confirmed',
+        claim: true,
+      });
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+      await askReview(db, team.id, nick, stanley.id, lane.id, 'ask-4');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toHaveLength(1);
+
+      // The peer's accept. The lane deliberately stays in awaiting_acceptance — the risky lane's
+      // wait moved to a human — so only the ask's own ledger can say the verdict is not owed by me.
+      await insertMessage(
+        db,
+        team.id,
+        stanley.id,
+        nick.id,
+        makeEnvelope({
+          id: 'accept-1',
+          team: 'revive',
+          from: 'stanley',
+          to: { kind: 'member', name: 'nick' },
+          act: 'accept',
+          body: 'accepted',
+          ts: 2_000,
+          meta: { in_reply_to: 'ask-4' },
+        }),
+      );
+
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
+    });
+
     // Lane 01M2TNWK0K: after a re-route the relieved seat's brief still named the lane as owed.
     // The verdict edge and `openAcceptanceAsk` already exclude superseded asks; the brief did not,
     // so wanderer's `next` said "verdict owed" on #1541 and both wanderer and ryder judged it.

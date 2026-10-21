@@ -1063,6 +1063,43 @@ export async function openAcceptanceAsk(
   return superseded.has(row.id) ? null : { id: row.id, to: row.to };
 }
 
+/**
+ * Is this acceptance ask still UNANSWERED — the rule {@link openAcceptanceAsk} uses to decide which
+ * ask is standing, read for one ask id.
+ *
+ * It exists because "the lane is still in the acceptance stage" stopped being the same question as
+ * "a verdict is still owed" (ADR 188's two-stage close): on a RISKY lane a peer's accept does not
+ * close the lane, it escalates to a human, and the lane stays in `awaiting_acceptance` until that
+ * human answers. A seat that already accepted would keep being told a verdict is owed it, for as
+ * long as the human takes (observed 2026-10-21 on lane 01M5D8F7FTXT07SSGPPYGX9JV8: four hours
+ * after the accept, the brief still named it as owed).
+ *
+ * The predicate is deliberately the SAME one the verdict edge uses — an accept/decline in reply to
+ * the ask, or a resolve that closed its thread — so the brief and the edge cannot disagree about
+ * which ask is live. A `wait` is not an answer: it records that the seat is taking the ask, and the
+ * verdict is still owed.
+ */
+export async function acceptanceAskUnanswered(
+  db: Driver,
+  teamId: string,
+  askId: string,
+): Promise<boolean> {
+  const answered = await db.get<{ id: string }>(
+    `SELECT id FROM messages
+        WHERE team_id = ? AND act IN ('accept','decline') AND in_reply_to = ?
+      LIMIT 1`,
+    [teamId, askId],
+  );
+  if (answered) return false;
+  const closed = await db.get<{ id: string }>(
+    `SELECT id FROM messages
+        WHERE team_id = ? AND act = 'resolve' AND thread_id = ?
+      LIMIT 1`,
+    [teamId, askId],
+  );
+  return !closed;
+}
+
 /** ADR 518: who an awaiting lane waits on — the board's two projection fields, either may be absent. */
 export interface AcceptanceWait {
   reviewer?: string;
