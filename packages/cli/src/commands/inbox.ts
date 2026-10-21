@@ -12,10 +12,11 @@ import { HOOK_HTTP_TIMEOUT_MS, isSessionLeaseRefusal, watchClaim } from '../clie
 import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { takePendingPick } from '../pick/marker.js';
 import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
-import { kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
+import { findWorkspaceDir, kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
 import { waitingCommand } from './nudge.js';
 import { attestSlotIfUnattested, refreshModelObservation } from './session.js';
 
