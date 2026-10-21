@@ -386,9 +386,13 @@ teammate's session. Consequences worth internalising:
   so the stream shows the first. A member with no role and a service show none. nick dropped the
   viewer-word map #3120 shipped: one vocabulary, and a role whose name reads badly on a plate is
   renamed in the roster. It sits on the face, not on a second line, so plates grow no taller for
-  `plateLayout.ts` to settle. Deriving a job from a member's
+  `plateLayout.ts` to settle. It is worn as a tag with the role's glyph (lane 01M5G33VH8; nick picked
+  it from four treatments side by side, after plain words read as stray text): a borderless neutral
+  fill in sentence case, so it is never mistaken for an outlined state tag, with a small drawing per
+  library role from `live/roleGlyph.ts` tinted in the member's hue. A role with no drawing keeps the
+  plain tag. Deriving a job from a member's
   lane areas was rejected: "docs" led for nearly everyone. A job assigned while the room is open
-  swipes in once under a mustard highlighter (`.is-new`, index.ts `plateJobs`): never on page open,
+  pops in once, lit mustard, and settles to the neutral fill (`.is-new`, index.ts `plateJobs`): never on page open,
   never under reduced motion. `/office-preview`'s 🪪 gives Dev a job to judge it, and
   `?plates=broadcast` shows the stream's plates.
 - **/live wears a product frame** (lane 01M5BEE19C, 2026-10-19; nick: /live in a pitch read "too
