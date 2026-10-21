@@ -179,3 +179,25 @@ def test_mcp_status_reads_the_init_event():
     assert ad.musterd_mcp_status(INIT_CONNECTED) == "connected"
     assert ad.musterd_mcp_status(INIT_FAILED) == "failed"
     assert ad.musterd_mcp_status("") == "absent"
+
+
+def test_git_remote_is_the_bridge_ip_and_an_unreachable_one_is_an_error(wired, monkeypatch):
+    """Finding 016 correction: host-network containers can't resolve `cooperbench-git`."""
+    envs, released = wired
+    monkeypatch.setattr(ad, "host_reachable_git_url", lambda url: "git://172.18.0.2:9418/r1.git")
+    run(git_enabled=True, git_server_url="git://cooperbench-git:9418/r1.git")
+    cmds = "\n".join(envs[0].commands)
+    assert "git://172.18.0.2:9418/r1.git" in cmds and "cooperbench-git" not in cmds
+    assert ad.GIT_REMOTE_PROBE in envs[0].commands
+
+    class Unreachable(FakeEnv):
+        def execute(self, action, cwd="", *, timeout=None):
+            if action["command"] == ad.GIT_REMOTE_PROBE:
+                self.commands.append(action["command"])
+                return {"returncode": 128, "output": "fatal: unable to look up cooperbench-git"}
+            return super().execute(action, cwd, timeout=timeout)
+
+    monkeypatch.setattr(ad.cc, "_build_environment", lambda image, network=None, extra_run_args=None, backend="docker": Unreachable(image))
+    result = run(git_enabled=True, git_server_url="git://cooperbench-git:9418/r1.git")
+    assert result.status == "Error"
+    assert "shared git remote unreachable" in (result.error or "")

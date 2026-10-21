@@ -38,14 +38,12 @@ import json
 import logging
 import os
 import shlex
-import socket
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import urlsplit, urlunsplit
 
 import openhands.sdk.conversation as oh_conversation
 import openhands.tools.preset.default as oh_preset
@@ -54,6 +52,7 @@ from cooperbench.agents.registry import register
 from openhands.sdk.plugin import PluginSource
 
 from . import config as cfg
+from .team import host_reachable_git_url
 from .prompt import musterd_system_section
 from .team import REGISTRY, PairTeam, free_port
 
@@ -149,28 +148,6 @@ def docker_exec(container: str, command: str, *, timeout: int = 600, env: dict[s
     )
     return proc.returncode, proc.stdout + proc.stderr
 
-
-def host_reachable_git_url(url: str | None) -> str | None:
-    """CooperBench's docker git server URL, rewritten to its bridge IP.
-
-    The git server is a container on the `cooperbench` bridge network, addressed by its container
-    name (``git://cooperbench-git:9418/<run>.git``). These arms' containers use the host's network,
-    where that name doesn't resolve but the bridge IP routes.
-    """
-    if not url:
-        return url
-    parts = urlsplit(url)
-    host = parts.hostname or ""
-    try:
-        socket.inet_aton(host)
-        return url
-    except OSError:
-        pass
-    ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", host).split()
-    if not ip:
-        raise RuntimeError(f"git server container {host!r} has no IP address")
-    netloc = ip[0] + (f":{parts.port}" if parts.port else "")
-    return urlunsplit(parts._replace(netloc=netloc))
 
 
 def docker_run_args(

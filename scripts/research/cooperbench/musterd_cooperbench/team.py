@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +35,41 @@ ENFORCE_SURFACE_GLOB = "**"
 # agent can do in the repo, and the plain coop arm's containers are left as CooperBench builds them.
 CONTAINER_NETWORK_ARGS = ["--network=host"]
 
+
+
+def container_ip(name: str) -> str | None:
+    """The first IP docker reports for a container, or None."""
+    proc = subprocess.run(
+        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", name],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    ips = proc.stdout.split() if proc.returncode == 0 else []
+    return ips[0] if ips else None
+
+
+def host_reachable_git_url(url: str | None) -> str | None:
+    """CooperBench's docker git server URL, rewritten to its bridge IP.
+
+    The git server is a container on the `cooperbench` bridge network, addressed by its container
+    name (``git://cooperbench-git:9418/<run>.git``). Every musterd arm's containers use the host's
+    network (CONTAINER_NETWORK_ARGS), where that name doesn't resolve but the bridge IP routes.
+    """
+    if not url:
+        return url
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    try:
+        socket.inet_aton(host)
+        return url
+    except OSError:
+        pass
+    ip = container_ip(host)
+    if not ip:
+        raise RuntimeError(f"git server container {host!r} has no IP address")
+    netloc = ip + (f":{parts.port}" if parts.port else "")
+    return urlunsplit(parts._replace(netloc=netloc))
 
 @dataclass
 class Seat:

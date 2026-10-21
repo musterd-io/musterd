@@ -39,9 +39,12 @@ from cooperbench.agents.registry import register
 
 from . import config as cfg
 from .prompt import build_instruction
-from .team import CONTAINER_NETWORK_ARGS, REGISTRY
+from .team import CONTAINER_NETWORK_ARGS, REGISTRY, host_reachable_git_url
 
 logger = logging.getLogger(__name__)
+
+# The agent must be able to reach the shared remote it is told about: `team` lists its refs.
+GIT_REMOTE_PROBE = "git -C /workspace/repo ls-remote --heads team >/dev/null"
 
 # Where the packed tarballs live on the host, and where the container sees them.
 HOST_PACK_DIR = os.environ.get("MUSTERD_PACK_DIR", "/opt/musterd-pack")
@@ -213,14 +216,27 @@ class ClaudeCodeMusterdRunner:
             )
             write_file_in_container(env, CONTAINER_SETTINGS, json.dumps(cfg.claude_settings(settings_env or None)))
 
-            # 3. The shared git remote, when the run uses one (CooperBench's own setup).
+            # 3. The shared git remote, when the run uses one (CooperBench's own setup). This
+            # container is on the host's network, where the git server's container name does not
+            # resolve, so the URL is its bridge IP, as in the OpenHands arms. Until 2026-10-21 it was
+            # the name, every musterd agent's fetch and push failed, and a failed setup was only a
+            # warning (finding 016 correction). A remote the agent cannot reach is now an error,
+            # re-run once, never a score — the same rule as an unconnected MCP server.
             if use_git:
                 git_setup = env.execute(
-                    {"command": build_git_setup_command(agent_id=agent_id, server_url=git_server_url or "")},
+                    {
+                        "command": build_git_setup_command(
+                            agent_id=agent_id, server_url=host_reachable_git_url(git_server_url) or ""
+                        )
+                    },
                     timeout=120,
                 )
-                if git_setup.get("returncode") not in (0, None):
-                    logger.warning("git setup returned non-zero: %s", (git_setup.get("output") or "")[:500])
+                reach = env.execute({"command": GIT_REMOTE_PROBE}, timeout=60)
+                if git_setup.get("returncode") not in (0, None) or reach.get("returncode") not in (0, None):
+                    raise RuntimeError(
+                        "shared git remote unreachable from the agent container: "
+                        + ((reach.get("output") or git_setup.get("output") or "")[:300])
+                    )
 
             # 4. The instruction and the run.
             instruction = build_instruction(task, agents=agents, agent_id=agent_id, git_enabled=use_git)
