@@ -13,6 +13,7 @@ import {
   globsOverlap,
   LaneConflictError,
   laneCoveringPath,
+  laneHoldingFile,
   laneFieldDiff,
   laneWarnings,
   lanesForGoal,
@@ -230,6 +231,32 @@ withDrivers('lanes', (o) => {
       'packages/server/src/store/lanes.ts',
     );
     expect(covered?.id).toBe(real.id);
+  });
+
+  it('ADR 691: the lane that names a file first holds it, and the claim warning says so', async () => {
+    const { db, team } = await seed();
+    const first = await openLane(db, team.id, 'bravo', 'June', {
+      title: 'first to name',
+      scope: ['src/core.py'],
+      claim: true,
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await openLane(db, team.id, 'bravo', 'June', {
+      title: 'second to name',
+      scope: ['src/core.py', 'src/**'],
+      claim: true,
+    });
+    expect((await laneHoldingFile(db, team.id, 'bravo', 'src/core.py'))?.id).toBe(first.id);
+    // An area glob never holds; only a named entry does.
+    expect(await laneHoldingFile(db, team.id, 'bravo', 'src/util.py')).toBeNull();
+    const warn = (await laneWarnings(db, team.id, 'bravo', second)).find(
+      (w) => w.kind === 'surface_overlap' && w.with === first.id,
+    );
+    expect(warn?.detail).toContain('named src/core.py first and holds it');
+    const firstWarn = (await laneWarnings(db, team.id, 'bravo', first)).find(
+      (w) => w.kind === 'surface_overlap' && w.with === second.id,
+    );
+    expect(firstWarn?.detail).not.toContain('holds it');
   });
 
   /**

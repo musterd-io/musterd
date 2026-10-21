@@ -1679,6 +1679,40 @@ export async function laneCoveringPath(
   return null;
 }
 
+/** A scope entry that names one path outright — no `*`, `?` or `[` — rather than an area (ADR 691). */
+export function isNamedFile(glob: string): boolean {
+  return glob.length > 0 && !/[*?[]/.test(glob);
+}
+
+/** Tenure order for the hold: earlier claim first, lane id (creation order) as the tie-break. */
+function claimOrder(a: Lane, b: Lane): number {
+  const ta = a.claimed_at ?? Number.MAX_SAFE_INTEGER;
+  const tb = b.claimed_at ?? Number.MAX_SAFE_INTEGER;
+  return ta - tb || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/**
+ * The lane that HOLDS a file (ADR 691): among contending, owned lanes whose scope names `path`
+ * outright (not through a glob), the one claimed first. Naming a file is a claim of exclusive use
+ * for the lane's tenure; an area glob is not. Null when no contending lane names the path, which
+ * leaves the edit to ADR 150's covering-lane rule alone. The same project rule as the overlap
+ * warning applies: a lane in another project never holds a file here.
+ */
+export async function laneHoldingFile(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  path: string,
+  project?: string,
+): Promise<Lane | null> {
+  const lanes = (await listLanes(db, teamId, teamSlug))
+    .filter((l) => CONTENDING.has(l.state) && l.owner_seat !== null)
+    .filter((l) => project === undefined || projectsContend(l.project, project))
+    .filter((l) => l.scope.some((g) => isNamedFile(g) && g === path))
+    .sort(claimOrder);
+  return lanes[0] ?? null;
+}
+
 /**
  * Do two lanes share a surface-space? Same project, or either side unscoped — `'default'` is a
  * wildcard, not a peer project (see `DEFAULT_PROJECT`). Until derivation landed every lane was
@@ -1964,12 +1998,22 @@ export async function laneWarnings(
         other.scope.filter((og) => globsOverlap(g, og)).map((og) => `${g} ∩ ${og}`),
       );
       if (shared.length > 0) {
+        // ADR 691: a file both lanes NAME is held by whichever claimed first. Say so at the claim,
+        // precisely — this is the one overlap that will refuse an edit under block posture.
+        const held =
+          other.owner_seat !== null && claimOrder(other, lane) < 0
+            ? lane.scope.filter((g) => isNamedFile(g) && other.scope.includes(g))
+            : [];
+        const holdNote =
+          held.length > 0
+            ? `; ${other.owner_seat} named ${held.join(', ')} first and holds it while that lane is in flight — under block posture your edits there are refused until it finishes, narrows, or is handed off (ADR 691)`
+            : '';
         warnings.push({
           kind: 'surface_overlap',
           subject: lane.id,
           with: other.id,
           owner: other.owner_seat,
-          detail: `surface overlaps "${other.title}" (owner ${other.owner_seat ?? 'unowned'}): ${shared.join(', ')}`,
+          detail: `surface overlaps "${other.title}" (owner ${other.owner_seat ?? 'unowned'}): ${shared.join(', ')}${holdNote}`,
         });
       }
     }

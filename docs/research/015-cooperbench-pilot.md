@@ -122,7 +122,9 @@ Stages 2 and 3 were not spent.
 
 1. **No "closes the gap" claim for this configuration**, and `cooperbench`'s goal outcome stays
    unstated.
-2. **The next question is exclusive claims.** Every pair's loss that was coordination at all was
+2. **The next question is exclusive claims** — answered 2026-10-21 by
+   [ADR 691](../decisions/691-named-file-is-held-first-claim-wins.md): a lane that names a file
+   holds it, first claim first, and the gate refuses the other seat's edit. Every pair's loss that was coordination at all was
    two lanes over one file. Whether a second claim on a covered surface should be refused
    (ADR 150's gate decides ownership; the board only warns on overlap) is a product decision the
    manifest deferred; this is the data for it. It is also dogfood run 8's question. A second pilot

@@ -249,6 +249,108 @@ withDrivers('gate-http', (_o, kind) => {
     });
   });
 
+  describe('Gate A — a lane that names a file holds it, first claim first (ADR 691)', async () => {
+    const team = async () => (await getTeamBySlug(server.store, 'dawn'))!;
+    const gateA = async (posture: 'warn' | 'block', target: string, seat = 'Ada') =>
+      await post(
+        '/teams/dawn/gate',
+        {
+          kind: 'contended-surface',
+          class: 'src/tariff.ts',
+          fingerprint: 'fp',
+          posture,
+          tool: 'Edit',
+          target,
+        },
+        seatHeaders(seat),
+      );
+    const bo = async () => {
+      await post('/teams/dawn/members', { name: 'Bo', kind: 'agent' }, bearer(nickCred));
+      agentAuthorities['Bo'] = await claimAgentHttp(base, 'dawn', agentKey, nickCred, 'Bo');
+    };
+
+    it('both lanes name the file; the later claim is refused under block and warned under warn', async () => {
+      await bo();
+      await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+        title: 'bo first',
+        scope: ['src/tariff.ts'],
+        claim: true,
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+        title: 'ada second',
+        scope: ['src/tariff.ts'],
+        claim: true,
+      });
+      const blocked = await gateA('block', 'src/tariff.ts');
+      expect(blocked.json.decision).toBe('deny');
+      expect(blocked.json.reason).toContain('held by Bo');
+      expect(blocked.json.reason).toContain('hand it off');
+      const warned = await gateA('warn', 'src/tariff.ts');
+      expect(warned.json.decision).toBe('allow');
+      expect(warned.json.outcome).toBe('warned');
+      expect(warned.json.reason).toContain('held by Bo');
+      // The holder is allowed, quietly.
+      const holder = await gateA('block', 'src/tariff.ts', 'Bo');
+      expect(holder.json.outcome).toBe('allowed');
+    });
+
+    it('naming the file beats covering it through an area glob, whatever the claim order', async () => {
+      await bo();
+      await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+        title: 'bo area',
+        scope: ['src/**'],
+        claim: true,
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+        title: 'ada names it',
+        scope: ['src/tariff.ts'],
+        claim: true,
+      });
+      expect((await gateA('block', 'src/tariff.ts', 'Ada')).json.outcome).toBe('allowed');
+      const r = await gateA('block', 'src/tariff.ts', 'Bo');
+      expect(r.json.decision).toBe('deny');
+      expect(r.json.reason).toContain('held by Ada');
+      // A file the named lane does not name is still Bo's by the covering rule.
+      expect((await gateA('block', 'src/other.ts', 'Bo')).json.outcome).toBe('allowed');
+    });
+
+    it('the hold ends with the lane: a finished or released holder frees the file', async () => {
+      await bo();
+      const first = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+        title: 'bo first',
+        scope: ['src/tariff.ts'],
+        claim: true,
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+        title: 'ada second',
+        scope: ['src/tariff.ts'],
+        claim: true,
+      });
+      expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+      await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', first.id]);
+      expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('allowed');
+    });
+
+    it('two area globs over one file hold nothing — ADR 150 covering ownership, unchanged', async () => {
+      await bo();
+      await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+        title: 'bo area',
+        scope: ['src/**'],
+        claim: true,
+      });
+      await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+        title: 'ada area',
+        scope: ['src/*.ts'],
+        claim: true,
+      });
+      expect((await gateA('block', 'src/tariff.ts', 'Ada')).json.outcome).toBe('allowed');
+      expect((await gateA('block', 'src/tariff.ts', 'Bo')).json.outcome).toBe('allowed');
+    });
+  });
+
   describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', async () => {
     // `force-push` is the block-posture costly-action class in CLASSES.
     const forcePush = async (target = 'git push --force origin feat/x') =>
