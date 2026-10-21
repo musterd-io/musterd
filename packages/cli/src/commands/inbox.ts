@@ -12,7 +12,7 @@ import { HOOK_HTTP_TIMEOUT_MS, isSessionLeaseRefusal, watchClaim } from '../clie
 import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
-import { takePendingPick } from '../pick/marker.js';
+import { pendingPickLine, takePendingPick } from '../pick/marker.js';
 import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
@@ -439,7 +439,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   }
   // Only a bound workspace's marker — never whatever folder the hook happened to run in.
   const pickDir = findWorkspaceDir();
-  pickLine = pickDir ? takePendingPick(pickDir) : null;
+  const pending = pickDir ? takePendingPick(pickDir) : null;
   let seat: string | undefined;
   try {
     // The interrupt probe is hook-installed and rides every tool call — it takes the default (no
@@ -448,12 +448,21 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       timeoutMs: HOOK_HTTP_TIMEOUT_MS,
     });
     if (!explicit || !identity) {
-      // No seat resolved here, so nobody the pick could be for: drop it unshown.
-      pickLine = null;
       await tap();
       return 0;
     }
     seat = identity.name;
+    // The marker is a file, and a file can be forged or committed. Shown only when the daemon says
+    // the lane is this seat's, with the daemon's title — a forged marker can at most name a lane
+    // the seat already holds.
+    if (pending) {
+      try {
+        const lane = (await http.laneShow(team, pending.lane)).lane;
+        if (lane.owner_seat === seat) pickLine = pendingPickLine({ ...pending, title: lane.title });
+      } catch {
+        /* unconfirmable — dropped unshown; the probe's own check below must still run */
+      }
+    }
     // Explicit ternary, not a conditional spread: a spread here would let a mistyped key vanish
     // from typecheck, which is the exact blind spot docs/wiki/conditional-spread-blind-spot.md was
     // written about — and the field it would silently drop is the one this lane exists to record.

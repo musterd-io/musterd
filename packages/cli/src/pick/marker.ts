@@ -43,8 +43,12 @@ export function pendingPickLine(p: PendingPick): string | null {
   );
 }
 
-/** Read the marker and delete it; null when there is none or it does not parse (deleted too). */
-export function takePendingPick(workspaceDir: string): string | null {
+/**
+ * Read the marker and delete it; null when there is none or it does not parse (deleted too). A
+ * marker is only a claim that a pick happened: the caller confirms it with the daemon (the lane is
+ * this seat's) and shows the daemon's title, never the file's.
+ */
+export function takePendingPick(workspaceDir: string): PendingPick | null {
   const path = join(workspaceDir, '.musterd', FILE);
   if (!existsSync(path)) return null;
   try {
@@ -55,7 +59,8 @@ export function takePendingPick(workspaceDir: string): string | null {
       typeof p.requested_by !== 'string'
     )
       return null;
-    return pendingPickLine(p as PendingPick);
+    if (!LANE_ID.test(p.lane) || !MEMBER_NAME.test(p.requested_by)) return null;
+    return p as PendingPick;
   } catch {
     return null;
   } finally {
