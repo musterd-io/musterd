@@ -1,4 +1,4 @@
-# 702 — The mark: a split `m` with seats, on a gold glass tile
+# 702 — The mark: a split `m` with seats on a flat sand tile
 
 - Status: accepted
 - Date: 2026-10-21
@@ -11,8 +11,8 @@
 neutral palette because nick read the product in a pitch as too silly, casual and game like. The
 mark was left on a flat mustard tile, so the one remaining loud, warm object on a cool page was the
 logo. On 2026-10-21 nick asked whether the logo should follow. The work was done as a sequence of
-mocks (private artifact, eighteen rounds); each round nick picked or rejected, and this ADR records
-where it landed.
+mocks (a private artifact, twenty-one rounds); each round nick picked or rejected, and this ADR
+records where it landed.
 
 Findings that shaped it, in order:
 
@@ -25,6 +25,11 @@ Findings that shaped it, in order:
   rule is applied to every stroke, so the final shoulder uses one consistent soft corner.
 - The traced art sat roughly 40px right and 50px below the tile centre; nick said it need not be
   offset.
+- A glass tile (translucent gold gradient) was built and reviewed by slippy on #3152: on a dark
+  ground it goes muddy olive-brown, and on white at 16px it washes out. nick also did not like the
+  gradient look. Glass was dropped; the tile is flat.
+- Seats as heavy as the stems (66 against a 72 stroke) made the mark read as keyholes at 32–64px,
+  and the `m` filled only a third of the tile. Slippy's fix is adopted below.
 
 ## Problem
 
@@ -34,35 +39,29 @@ brand accent used by buttons, links and the rest of the UI.
 
 ## Decision
 
-1. **Tile.** A 30% corner radius (307 on the 1024 viewBox). The product renders it as **gold
-   glass**: a translucent gradient, `#EBAF14` at 70% to `#FFEBA0` at 22% from top-left to
-   bottom-right, with a white hairline edge. Where the platform gives a flat ground and cannot
-   blur (favicon, npm/GitHub avatar, README, MCP icon, social card), the tile is **solid pastel
-   apricot, `#F9DDA0`**, with a faint tonal rim so it holds an edge on white.
+1. **Tile.** One flat colour, **sand `#EBD9A0`**, on every surface, with a 30% corner radius (307
+   on the 1024 viewBox) and a faint brown rim (`#785A0A` at 40%, 20 units) so it holds an edge on
+   light greys. No gradient, no transparency, no blur.
 2. **Ring.** A clean rounded-square stroke, 48 units wide, centred on the tile. The ink outline of
    ADR 497 is dropped; nothing is traced.
 3. **Ink.** Cool slate `#2E3647`, for the `m` and the seats. It replaces zinc-900.
 4. **The `m`.** Straight stems and flat-topped shoulders with soft corners. The left stem runs into
    the first shoulder; the second and third stems stop a thin cut short of their shoulders; each
-   stem ends in a round **seat**, one per member. It is one geometry, in
-   `packages/web/src/brand/chipMark.ts`, centred in the ring and filling about half the tile
-   width. Stems are an 80-unit stroke and seats a 50-unit radius, so the letter leads and the
-   seats read as feet; at 66 against a 72 stroke the seats were as heavy as the stems and the
-   mark read as keyholes at 32–64px (slippy's review of #3152).
+   stem ends in a round **seat**, one per member. The stroke is 80 units and the seat radius 50, so
+   the letter leads and the seats read as feet. It is one geometry, in
+   `packages/web/src/brand/chipMark.ts`, centred in the ring and filling about half the tile width.
 5. **Weights and files.** Full weight (≥24px) is a file; the small weight (stroke +26, seats +13, so
-   the cuts stay open) is for <24px, and the small **glass** weight is the only one in code. Files in
-   `docs/design/assets/`: `chip.svg` and `chip-sm.svg` (solid), `chip-glass.svg` and
-   `chip-glass-sm.svg`; the web copies are byte-identical (`chipMark.test.ts`).
+   the cuts stay open) is for <24px and is the only one in code. Files in `docs/design/assets/`:
+   `chip.svg` and `chip-sm.svg`; the web copies are byte-identical (`chipMark.test.ts`).
 6. **The accent does not move.** The mark's tile colour is the mark's own. Mustard (`--mustard-500`)
    stays the one accent for buttons, links and rules; ADR 681's palette tokens are untouched.
-7. **Guards.** The mark never becomes a double semicircular arch, never takes pointed peaks, and
-   never sits beside red. These go in `brand.md` §1 "Never".
-8. **Code renders the glass tile as a gradient only.** The backdrop blur is a CSS property and
-   belongs to the surface that wraps the mark; the topbar adds it, the mark does not.
+7. **Guards.** The mark never becomes a double semicircular arch, never takes pointed peaks, never
+   sits beside red, and never gets a gradient or transparency on the tile. These go in `brand.md`
+   §1 "Never".
 
 ## Consequences
 
-- Changed here: the four SVG assets and their web copies, `chipMark.ts`, `MusterdChip` in
+- Changed here: the two SVG assets and their web copies, `chipMark.ts`, `MusterdChip` in
   `MusterdWord.tsx`, the MCP icon (`brand.ts`, from `chip.svg`), `brand.md` §1, and the two tests
   that pin them.
 - **Not changed here, and still on the ADR 497 mark:** `tile.svg` (the isometric tile), `avatar.svg`,
@@ -74,11 +73,12 @@ brand accent used by buttons, links and the rest of the UI.
   Follows-up: deferred — one lane redraws the derived art and re-renders the raster icons from the new files (2026-10-21)
 - The wordmark next to the mark was not reviewed in this work and is unchanged.
   Follows-up: deferred — a review of the wordmark and its lockup beside the new mark (2026-10-21)
-- The topbar needs the CSS backdrop blur to finish the glass; without it the tile reads as a pale
-  gold tint. That wiring is `packages/web`, so it goes to the designer role.
-  Follows-up: deferred — designer wires `backdrop-filter` on the /live topbar and site header (2026-10-21)
-- The 16px cut was judged only in a code mock, not in a real favicon render. If the cuts close up
-  in the ICO, the small weight is retuned in a follow-up, not here.
+- The 16px cut was judged in a code mock and in slippy's renders, not in a real favicon. If the
+  cuts close up in the ICO, or the rim is too faint on a light tab bar at 16px, the small weight is
+  retuned (a 16px-specific raster with a firmer rim is the likely fix).
+  Follows-up: deferred — a 16px-specific favicon raster, once the ICO is re-rendered (2026-10-21)
+- Slippy could not run a trademark search. Clearance belongs to the attorney-clearance lane, not to
+  this ADR.
 - The mark's glyph is geometric strokes rather than traced outlines, so it is edited as numbers;
   there is no longer a design source other than the SVG.
 

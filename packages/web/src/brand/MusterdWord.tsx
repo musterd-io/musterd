@@ -1,9 +1,8 @@
 import {
+  CHIP_BG,
   CHIP_DOTS,
   CHIP_DOT_RADIUS,
   CHIP_FG,
-  CHIP_GLASS_FROM,
-  CHIP_GLASS_TO,
   CHIP_GLYPH_PATH,
   CHIP_RADIUS,
   CHIP_RING,
@@ -18,7 +17,7 @@ type MusterdChipProps = {
   className?: string;
 };
 
-/** Brand mark — a split m with a seat at each stem foot, in a white ring on a gold glass tile (ADR 702). Always the small cut: in-product renders are 13–18px, where the cuts between the stems would fill in, so the stroke and seats are thickened by a fixed amount. */
+/** Brand mark — a split m with a seat at each stem foot, in a white ring on a flat sand tile (ADR 702). Always the small cut: in-product renders are 13–18px, where the cuts between the stems would fill in, so the stroke and seats are thickened by a fixed amount. */
 export function MusterdChip({ size = 16, className }: MusterdChipProps) {
   return (
     <svg
@@ -30,14 +29,8 @@ export function MusterdChip({ size = 16, className }: MusterdChipProps) {
       aria-hidden
       role="img"
     >
-      <defs>
-        <linearGradient id="musterd-chip-g" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="720" y2={CHIP_VIEWBOX}>
-          <stop offset="0" stopColor={CHIP_GLASS_FROM.color} stopOpacity={CHIP_GLASS_FROM.opacity} />
-          <stop offset="1" stopColor={CHIP_GLASS_TO.color} stopOpacity={CHIP_GLASS_TO.opacity} />
-        </linearGradient>
-      </defs>
-      <rect width={CHIP_VIEWBOX} height={CHIP_VIEWBOX} rx={CHIP_RADIUS} fill="url(#musterd-chip-g)" />
-      <rect x="4" y="4" width="1016" height="1016" rx="303" fill="none" stroke="#fff" strokeOpacity=".65" strokeWidth="8" />
+      <rect width={CHIP_VIEWBOX} height={CHIP_VIEWBOX} rx={CHIP_RADIUS} fill={CHIP_BG} />
+      <rect x="10" y="10" width="1004" height="1004" rx="302" fill="none" stroke="#785A0A" strokeOpacity=".4" strokeWidth="20" />
       <rect
         x={CHIP_RING.x}
         y={CHIP_RING.x}

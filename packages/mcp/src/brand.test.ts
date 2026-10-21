@@ -11,8 +11,8 @@ describe('brand (ADR 702)', () => {
     expect(CHIP_SVG).toBe(asset.trimEnd());
   });
 
-  it('chip SVG is the mark on the solid apricot tile', () => {
-    expect(CHIP_SVG).toContain('#F9DDA0');
+  it('chip SVG is the mark on the flat sand tile', () => {
+    expect(CHIP_SVG).toContain('#EBD9A0');
     expect(CHIP_SVG).toContain('#2E3647');
     expect(CHIP_SVG).toContain('aria-label="musterd"');
   });
