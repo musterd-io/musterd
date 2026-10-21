@@ -1436,6 +1436,25 @@ to trim that is not the feature. A re-baseline would loosen.
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B with this change in.
 
+### 2026-10-21 — `totalJsGzipBytes` 356,600 → 357,000 B and `liveCssGzipBytes` 26,550 → 26,700 B: idle plates fold, the stream holds a roll call (lane `01M5G7A9H1`)
+
+| Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
+| ---------- | ----------------------------- | ------------------- | -------------------------- |
+| initial JS | 148,654 B                     | 148,656 B (+2)      | unchanged, 148,750 B       |
+| total JS   | 354,962 B                     | 355,289 B (+327)    | RAISED 356,600 → 357,000 B |
+| live CSS   | 26,291 B                      | 26,413 B (+122)     | RAISED 26,550 → 26,700 B   |
+
+nick: the office "is now becoming crowded with the nameplates." An idle or away member's plate folds
+to its pictures (dot, name, role glyph, model logo). /broadcast opens the folded plates in a wave every
+five minutes so a viewer who just arrived sees every role. The +327 B is the fold toggle, the roll call
+and the layout hold that keeps a plate at its folded size while it is open. Lazy-loading cannot move
+total (ADR 183), and the scene is eager. The +122 B is the fold, the spot and its entrance. Main had
+137 B of local CSS headroom after this change, inside CI's gap. The JS raise stacks the +327 B on
+01M5D8FCC9's raise to 356,600, which landed while this was open.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 356,600 B, or live CSS at or under
+  26,550 B, with this change in.
+
 ### 2026-10-21 — `totalJsGzipBytes` 355,000 → 355,700 B and `liveCssGzipBytes` 26,450 → 26,550 B: the role tag wears a glyph (lane `01M5G33VH8`)
 
 | Budget   | Before (local, glyph table emptied) | This branch (local) | Ceiling                    |

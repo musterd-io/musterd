@@ -390,7 +390,15 @@ teammate's session. Consequences worth internalising:
   it from four treatments side by side, after plain words read as stray text): a borderless neutral
   fill in sentence case, so it is never mistaken for an outlined state tag, with a small drawing per
   library role from `live/roleGlyph.ts` tinted in the member's hue. A role with no drawing keeps the
-  plain tag. Deriving a job from a member's
+  plain tag.
+- **Idle plates fold** (lane 01M5G7A9H1, 2026-10-21; nick: the office "is now becoming crowded with
+  the nameplates"). An idle or away member's plate (`is-compact`) keeps its pictures and drops its
+  words: dot, name, the role's glyph, the model's logo and any state tag. A working member, or one
+  who owns a blocked lane, keeps the full plate. Nobody is hidden and no word dims. /live opens a
+  folded plate on hover. /broadcast runs a **roll call** every five minutes (`rollCall`): the folded
+  plates open in a wave left to right, ~1.6 s each and 200 ms apart, then fold again. While a plate is
+  open in the wave, layout keeps its folded size, so it overlays its neighbours for a moment rather
+  than moving them. `/office-preview`'s 👋 runs it. Deriving a job from a member's
   lane areas was rejected: "docs" led for nearly everyone. A job assigned while the room is open
   pops in once, lit mustard, and settles to the neutral fill (`.is-new`, index.ts `plateJobs`): never on page open,
   never under reduced motion. `/office-preview`'s 🪪 gives Dev a job to judge it, and

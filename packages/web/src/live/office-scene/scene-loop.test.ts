@@ -176,6 +176,24 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
   });
 });
 
+describe('folded plates and the roll call (lane 01M5G7A9H1)', () => {
+  it('an idle or away member folds, unless they own a blocked lane', () => {
+    expect(index).toMatch(
+      /'is-compact',\s*\(node\.posture === 'active' \|\| node\.posture === 'away'\) && node\.blocked !== true/,
+    );
+  });
+
+  it('the roll call runs on the stream only, skips a hidden tab, and stops on dispose', () => {
+    expect(index).toContain('interactiveLabels || STILL ? null : setInterval(rollCall, ROLLCALL_EVERY_MS)');
+    expect(index).toMatch(/const rollCall = \(\): void => \{\s*if \(document\.hidden\) return;/);
+    expect(index).toContain('if (rollTimer) clearInterval(rollTimer);');
+  });
+
+  it('an open plate in the wave is laid out at its folded size, so no neighbour moves', () => {
+    expect(index).toContain('const size = rollSize.get(name) ?? plateSize.get(name);');
+  });
+});
+
 describe('the in-room ask moment (ADR 464, lane 3)', () => {
   it('a new open ask raises the hand and rests a card; backfill and reduced motion get the card only', () => {
     const fn = index.slice(
