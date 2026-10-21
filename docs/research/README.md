@@ -28,6 +28,7 @@ do not cite superseded ADR 051 for the dataset gate.
 ## Standing manifests
 
 - [Resident seat pilot manifest](./resident-seat-pilot-manifest.md) (2026-10-14, pre-registered, not yet run) — ADR 588 Decision 7: one Haiku 5.5 coordination seat and one Opus 5.5 worker seat on `musterd` for a week against the Claude Code wake backend on the same lane class; six measures from rows, a kill criterion on dollars per accepted lane with a readability floor (≥8 in-class lanes handed to the worker, ≥4 verdicts). Produces finding 015.
+- [CooperBench pilot manifest](./cooperbench/pilot-manifest.md) (2026-10-20, pre-registered, not yet run) — lane `01M5AQEG23`: CooperBench's 10-pair `core` subset, Claude Code on `claude-sonnet-4-5`, three arms (`coop`, their `team` harness, `coop` + musterd), one unchanged eval policy, verdict rules fixed before the run; the team arm is the bar to beat (published 5/10).
 - [Frontier cadence manifest](./frontier-cadence-manifest.md) — Track A, deferred 2026-09-05 (finding 011).
 
 ## How to add a finding
