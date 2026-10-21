@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { HostProvision } from '@musterd/protocol';
 import type { HttpClient } from '../client.js';
 import { findBinding, saveBinding } from '../config.js';
+import { CliError } from '../errors.js';
 import type { Harness } from '../onboard/harness.js';
 import { provisionSeat } from '../onboard/provisionSeat.js';
 import { provisionWorkspace } from '../onboard/workspace.js';
@@ -54,6 +55,13 @@ export interface ProvisionDeps {
    * ADR 588). Without it a provisioned resident seat enrols but cannot run.
    */
   keyEnv?: string;
+  /**
+   * ADR 689 d7: rows claimed here whose provisioning the daemon refused `hub_unreachable` — on a
+   * joiner, the freshness window lapsed between claim and mint. Held by the caller across ticks
+   * (the loop is one process) and retried first on every tick; the daemon's sweep fails a row
+   * nobody ever reports on, so a joiner cut off for good still settles.
+   */
+  deferred?: HostProvision[];
   // ── injectables (tests) ──
   provisionWorkspace?: typeof provisionWorkspace;
   provisionSeat?: typeof provisionSeat;
@@ -68,13 +76,20 @@ export interface ProvisionTick {
   claimed: number;
   ready: number;
   failed: number;
+  /** Rows held back this tick on `hub_unreachable` (ADR 689 d7); retried next tick. */
+  deferred: number;
+}
+
+/** The daemon said "not now, the hub is out of reach" — a wait, never a failed provision. */
+function isHubUnreachable(err: unknown): boolean {
+  return err instanceof CliError && err.code === 'hub_unreachable';
 }
 
 /** A step's failure, tagged with the step so the report names it. */
 class StepError extends Error {
   constructor(
     readonly step: ProvisionStep,
-    cause: unknown,
+    override readonly cause: unknown,
   ) {
     super(cause instanceof Error ? cause.message : String(cause));
   }
@@ -85,23 +100,38 @@ class StepError extends Error {
  * is reported `failed` and the next one proceeds; a failing claim is logged and retried next tick.
  */
 export async function provisionOnce(deps: ProvisionDeps): Promise<ProvisionTick> {
-  const tick: ProvisionTick = { claimed: 0, ready: 0, failed: 0 };
+  const tick: ProvisionTick = { claimed: 0, ready: 0, failed: 0, deferred: 0 };
+  // Deferred rows first: they are already ours, and a hub that came back should not wait
+  // behind a new claim.
+  const retry = deps.deferred ? deps.deferred.splice(0) : [];
   let rows: HostProvision[];
   try {
     rows = (await deps.client.claimProvisions(deps.team, deps.host)).provisions;
   } catch (err) {
     deps.log(`! provision claim failed for ${deps.team}: ${(err as Error).message}`);
-    return tick;
+    rows = [];
+    if (retry.length === 0) return tick;
   }
   for (const row of rows) {
     tick.claimed += 1;
     deps.log(`provision claimed: ${row.agent} (sponsor ${row.sponsor}, ${row.id})`);
+  }
+  for (const row of [...retry, ...rows]) {
     try {
       await standUp(deps, row);
       await report(deps, row, { state: 'ready' });
       tick.ready += 1;
       deps.log(`provision ready: ${row.agent}`);
     } catch (err) {
+      const cause = err instanceof StepError ? err.cause : err;
+      if (isHubUnreachable(cause)) {
+        tick.deferred += 1;
+        deps.deferred?.push(row);
+        deps.log(
+          `provision deferred for ${row.agent}: the hub is out of reach (${(cause as Error).message}) — retrying next tick`,
+        );
+        continue;
+      }
       const step: ProvisionStep = err instanceof StepError ? err.step : 'unexpected';
       tick.failed += 1;
       deps.log(`! provision FAILED for ${row.agent} at ${step}: ${(err as Error).message}`);

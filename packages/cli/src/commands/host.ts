@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import type { HostProvision } from '@musterd/protocol';
 import { gitToplevel } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
@@ -132,7 +133,10 @@ export async function buildCloudProvisioner(
       ? { keyEnv: flagStr(parsed.flags, 'key-env') ?? 'ANTHROPIC_API_KEY' }
       : {}),
   };
-  return () => provisionOnce({ ...base, log });
+  // ADR 689 d7: rows a joiner's daemon told us to wait on (`hub_unreachable` past the freshness
+  // window), kept for the life of the loop and retried first on every tick.
+  const deferred: HostProvision[] = [];
+  return () => provisionOnce({ ...base, log, deferred });
 }
 
 export async function buildProvisioner(
