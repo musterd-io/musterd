@@ -119,7 +119,7 @@ machine either way:
 
 `arriveSeat` does what `bootstrap.sh seat` does today, in this order:
 
-1. Provision the Workspace at `~/musterd/<team>/<repo>/<seat>`: a worktree by default, a full
+1. Provision the Workspace at `~/musterd/<team>/<repo>/<seat>`: a git `worktree` by default, a full
    clone with `--clone` (ADR 463 §3). An existing Workspace for the seat is reused.
 2. Write the seat's binding through the existing `musterd agent` reconcile, which mints a
    `claim_seat` bootstrap credential.
