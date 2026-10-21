@@ -396,3 +396,41 @@ describe('publicOriginUrl (ADR 675 review)', () => {
     expect(publicOriginUrl(null)).toBeNull();
   });
 });
+
+/**
+ * Lane 01M5E08TQ7, dogfood run 4: `git init && musterd init` then the tour died making the person's
+ * workspace — "fatal: not a valid object name: 'HEAD'" — because a repo with no commits has no HEAD
+ * to branch from. A brand-new project is the folder a first-time user is most likely in.
+ */
+describe('provisionWorkspace in a repo with no commits', () => {
+  function emptyRepo(): string {
+    const repo = realpathSync(tmp('mwd-empty-'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo });
+    return repo;
+  }
+
+  it('makes an orphan worktree on the requested branch instead of failing on HEAD', () => {
+    const repo = emptyRepo();
+    const home = tmp('mwd-empty-home-');
+    const ws = provisionWorkspace('dev', {
+      team: 'dawn',
+      cwd: repo,
+      home,
+      branch: 'human/dev',
+      gitIdentity: false,
+    });
+    expect(ws).toMatchObject({ kind: 'worktree', branch: 'human/dev', created: true });
+    const git = (...a: string[]) =>
+      execFileSync('git', a, { cwd: ws.dir, encoding: 'utf8' }).trim();
+    expect(git('branch', '--show-current')).toBe('human/dev');
+    expect(realpathSync(git('rev-parse', '--show-toplevel'))).toBe(realpathSync(ws.dir));
+  });
+
+  it('reuses that workspace on a second run', () => {
+    const repo = emptyRepo();
+    const home = tmp('mwd-empty-home-');
+    const opts = { team: 'dawn', cwd: repo, home, branch: 'human/dev', gitIdentity: false };
+    const first = provisionWorkspace('dev', opts);
+    expect(provisionWorkspace('dev', opts)).toMatchObject({ dir: first.dir, created: false });
+  });
+});

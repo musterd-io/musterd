@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { gitToplevel } from '@musterd/protocol/project';
+import { CliError } from '../errors.js';
 
 /**
  * Provision an *isolated workspace* for a new agent (ADR 065). The thrash this avoids: in Claude Code
@@ -24,7 +25,14 @@ export interface Workspace {
 }
 
 function git(args: string[], cwd: string): string {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  // stderr is piped, not inherited: a probe that is expected to fail (no `origin` yet) must not print
+  // git's own "error: No such remote" over the onboarding screen. A real failure still carries it,
+  // in the thrown error's message.
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 }
 
 export interface WorkspaceOpts {
@@ -184,8 +192,34 @@ function addClone(top: string, dir: string, branch: string, base?: string, origi
   appendFileSync(exclude, '\n.musterd/\n');
 }
 
+/** True once `top`'s HEAD names a commit — false in a repo that was `git init`-ed and never committed. */
+function hasCommit(top: string): boolean {
+  try {
+    git(['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], top);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function addWorktree(top: string, dir: string, branch: string, base?: string): void {
   mkdirSync(dirname(dir), { recursive: true });
+  if (!base && !hasCommit(top)) {
+    // A brand-new repo has no HEAD commit to branch from, and it is the folder a first-time user is
+    // most likely in (`git init && musterd init`). An orphan worktree is the same thing one step
+    // earlier: its own unborn branch, nothing checked out, committable as soon as there is work.
+    try {
+      git(['worktree', 'add', '--orphan', '-b', branch, dir], top);
+    } catch (err) {
+      throw new CliError(
+        `this repo has no commits yet, and this git cannot make a workspace from an empty repo ` +
+          `(needs git 2.42 or newer). Make a first commit and run it again: ` +
+          `git commit --allow-empty -m "first commit"\n${(err as Error).message}`,
+        1,
+      );
+    }
+    return;
+  }
   try {
     // New branch so the member has its own line to commit on: off `base` when given (no upstream —
     // the seat's branch is its own), else off HEAD as before.
@@ -195,8 +229,14 @@ function addWorktree(top: string, dir: string, branch: string, base?: string): v
         : ['worktree', 'add', '-b', branch, dir, 'HEAD'],
       top,
     );
-  } catch {
-    // Branch already exists (e.g. a prior run): attach a worktree to it.
+  } catch (err) {
+    // Branch already exists (e.g. a prior run): attach a worktree to it. Any other failure is
+    // reported as itself, not as the attach that could never have worked.
+    try {
+      git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], top);
+    } catch {
+      throw err;
+    }
     git(['worktree', 'add', dir, branch], top);
   }
 }
