@@ -77,14 +77,16 @@ on the one file both lanes named (`llama_index`, `jinja/1559`, `react_hook_form`
 features. `outlines` passed the way CooperBench's `team` harness passes: both agents merged each
 other's work over the shared remote and submitted byte-identical patches.
 
-**Two pairs lost a patch to the git flow, not to coordination.** In `tiktoken` and `jinja/1621`
-agent1 merged the partner's branch, then wrote `patch.txt` with `git diff`, which is a diff
-against the merged HEAD. Its hunks assume the partner's lines are present, so the patch fails to
-apply on the task base (`apply_status: failed`), the merge is `missing_input`, and the agent1-alone
-fallback has nothing to test. This is CooperBench's own `_git_block` recipe (`git fetch team &&
-git merge … ` then `git diff > patch.txt`), identical in every arm; `cc_team_core_v4` passed both
-of those pairs lead-alone, so their lead's patch was whole. It is a harness hazard to name for
-the next run, not a musterd effect.
+**Two pairs lost a patch to a branch name, not to coordination.** In `tiktoken` and `jinja/1621`
+agent1 wrote `patch.txt` as `git diff main -- <file>`. The task images keep the upstream
+repository's `main` beside the detached task base, at a later commit, so that is a diff against
+the wrong commit: it fails to apply on the base (`apply_status: failed`), the merge is
+`missing_input`, and the agent1-alone fallback has nothing to test. The other eighteen agents
+diffed against a sha or `team/main`. _(Corrected 2026-10-21, lane 01M5E8CHBT: the first draft of
+this paragraph blamed a diff against the merged HEAD; the streams show `main`, and the images show
+why. The fix pins local `main` to the base in every arm's git setup — see the CooperBench
+README.)_ `cc_team_core_v4` passed both of those pairs lead-alone. A harness hazard, not a
+musterd effect.
 
 **Two pairs merged clean and still failed a suite.** `dspy/8563` (f1: 43 pass, 7 fail) is the
 pair CooperBench's changelog flags as hard for every framework; `pallets_click` failed feature 2
@@ -129,9 +131,8 @@ Stages 2 and 3 were not spent.
    (ADR 150's gate decides ownership; the board only warns on overlap) is a product decision the
    manifest deferred; this is the data for it. It is also dogfood run 8's question. A second pilot
    should not run until that ADR exists, or the second pilot is the same experiment.
-3. **The patch recipe needs a line in the arm's instruction** — "diff against the task base, not
-   your merged HEAD" — in *every* arm alike, before any arm is scored again, or two pairs per ten
-   are decided by `git diff`'s base.
+3. **The images' stale local `main` is pinned to the task base** in every arm's git setup
+   (lane 01M5E8CHBT, 2026-10-21), so no pair is decided by which branch name an agent typed.
 4. The Alpine Node fix stays in the adapter; `go_chi` is the only Alpine image in `core`.
 
 Runs: `docs/research/cooperbench/pilot-runs/2026-10-21-stage1/` (run and eval summaries, the
