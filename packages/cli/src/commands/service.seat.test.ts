@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pickServiceTeam, SERVICE_SEAT_FILE, serviceSeatAuth } from './service.js';
+import { heldSeatAction, pickServiceTeam, SERVICE_SEAT_FILE, serviceSeatAuth } from './service.js';
 
 // 2026-10-19: the operator joined revive-staging, `config.current` / `config.server` moved with
 // them, and every service tick sent its revive token to the staging cloud ("invalid service token
@@ -92,5 +92,23 @@ describe('pickServiceTeam — the installed daemon decides the team, not the mac
     process.env['MUSTERD_SERVICE_TEAM'] = 'revive';
     expect(await pickServiceTeam(config, 'x', async () => true)).toBe('revive');
     expect(await pickServiceTeam(config, 'x', async () => false)).toBeNull();
+  });
+});
+
+// 2026-10-20: the /live seat was held on revive, but its token on disk had been minted on staging.
+// Install refused "already held" and the operator had to run `musterd reclaim live` by hand.
+describe('heldSeatAction — a held seat with a dead token is re-issued, a working one is kept', () => {
+  it('keeps a token this daemon accepts', () => {
+    expect(heldSeatAction('works', true)).toBe('keep');
+    expect(heldSeatAction('works', false)).toBe('keep');
+  });
+
+  it('re-issues a missing or rejected token on a terminal', () => {
+    expect(heldSeatAction('missing', true)).toBe('reissue');
+    expect(heldSeatAction('rejected', true)).toBe('reissue');
+  });
+
+  it('an unattended install refuses rather than reclaim a seat', () => {
+    expect(heldSeatAction('rejected', false)).toBe('refuse');
   });
 });
