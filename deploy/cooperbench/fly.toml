@@ -15,7 +15,8 @@ primary_region = "sjc"
   initial_size = "50gb"
 
 [[vm]]
-  # Two agent containers plus dockerd and two short-lived musterd daemons. CooperBench's own runs
-  # used concurrency 3 on a laptop; 4 CPUs and 8 GB is the comfortable floor for one pair at a time.
-  size = "performance-2x"
-  memory = "8gb"
+  # Pilot 2 (lane 01M5FQBPHB) runs its two arms side by side, three pairs each: six pairs, twelve
+  # agent containers, dockerd and the musterd arm's daemons. Pilot 1 ran three pairs at a time on
+  # performance-2x with 8 GB; this is that, doubled. Stopped between runs, it costs the volume only.
+  size = "performance-8x"
+  memory = "16gb"
