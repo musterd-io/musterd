@@ -689,7 +689,7 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
   });
 
   it('authorityProofForVerdict: no enrolled passkey means send plain (null proof)', async () => {
-    const { authorityProofForVerdict } = await import('./client');
+    const { authorityProofForVerdict } = await import('./authorityProof');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -707,7 +707,7 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
   });
 
   it('authorityProofForVerdict signs the descriptor nonce with the enrolled passkey', async () => {
-    const { authorityProofForVerdict } = await import('./client');
+    const { authorityProofForVerdict } = await import('./authorityProof');
     const nonce = Buffer.from('1234567890abcdef1234567890abcdef').toString('base64url');
     const fetchMock = vi
       .fn()

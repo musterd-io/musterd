@@ -17,12 +17,7 @@ import {
   type AskView,
   type AudienceContext,
 } from './asks';
-import {
-  authorityProofForVerdict,
-  sendAct,
-  sendActWithVerdict,
-  type LiveConfig,
-} from './client';
+import { sendAct, sendActWithVerdict, type LiveConfig } from './client';
 import { asksOpenMode, stillMode } from './stillMode';
 import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
@@ -276,6 +271,9 @@ export function AsksStrip({
         )?.lane;
         const humanSeat = roster.find((m) => m.name === cfg.as)?.kind === 'human';
         if (typeof laneId === 'string' && humanSeat) {
+          // Lazily loaded: a verdict is rare, and the ceremony code should not ride
+          // in every /live load (perf budget).
+          const { authorityProofForVerdict } = await import('./authorityProof');
           const proof = await authorityProofForVerdict(cfg, laneId, kind);
           const sent = await sendActWithVerdict(cfg, {
             act: kind,

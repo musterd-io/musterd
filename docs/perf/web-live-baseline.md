@@ -1419,6 +1419,19 @@ gzip gap still to come, so the raise is local + that gap.
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 346,000 B with this change in.
 
+### 2026-10-20 — `totalJsGzipBytes` 346,500 → 347,300 B: the verdict passkey ceremony (lane `01M5DTPMXN`)
+
+| Budget   | Before (ceiling) | This branch (laptop) | Ceiling                    |
+| -------- | ---------------- | -------------------- | -------------------------- |
+| total JS | 346,500 B        | 346,803 B            | RAISED 346,500 → 347,300 B |
+
+The ADR 662 ceremony a human's lane verdict on the asks rail runs: `authorityProof.ts`, dynamically
+imported, plus the verdict report on the send ack. Initial JS does not move — the ceremony chunk loads
+only when a human answers a `lane_review` ask, which is why lazy-loading was applied first; it cannot
+move total (ADR 183), so the raise is the measured local cost + the ~450 B CI gap.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 346,500 B with this change in.
+
 
 
 `bash scripts/perf/live-paint-bar.sh revive 5`, run by nick on the hub (`mac`) at 20:52Z. Load average
