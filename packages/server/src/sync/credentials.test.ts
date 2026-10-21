@@ -560,7 +560,7 @@ withDrivers('credentials', (_o, kind) => {
   });
 
   describe('ADR 689 decision 6 — a joiner`s mint is a request; the hub validates and writes the fact', () => {
-    it('11. a claim_seat minted at the joiner under the replicated host key reaches the hub as a hub-origin credential.accepted and is held there', async () => {
+    it('11. a claim_seat minted at the joiner under the replicated host key reaches the hub as a hub-origin credential.accepted, recorded there and never a bearer there', async () => {
       const ht = await hubTeam();
       const jt = await joinerTeam();
       const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
@@ -588,21 +588,39 @@ withDrivers('credentials', (_o, kind) => {
       const keyHash = hashToken(minted.json.agent_key as string);
 
       await roundTrip();
-      const held = await hub.store.get<{ key_hash: string; replicated_from: string | null }>(
-        'SELECT key_hash, replicated_from FROM agent_bootstrap_credentials WHERE id = ? AND team_id = ?',
-        [credentialId, ht.id],
-      );
-      expect(held?.key_hash).toBe(keyHash);
-      expect(held?.replicated_from).not.toBeNull();
+      // The hub RECORDS the acceptance under its own origin; it never inserts a bearer from a
+      // pushed row — a seat credential authenticates only where it was minted.
+      expect(
+        await hub.store.get(
+          'SELECT id FROM agent_bootstrap_credentials WHERE id = ? AND team_id = ?',
+          [credentialId, ht.id],
+        ),
+      ).toBeUndefined();
       const hubNode = (await hub.store.get<{ node_id: string }>(
         'SELECT node_id FROM local_node WHERE team_id = ?',
         [ht.id],
       ))!.node_id;
-      const accepted = await hub.store.get<{ origin_node: string }>(
-        "SELECT origin_node FROM audit WHERE team_id = ? AND action = 'credential.accepted' AND target = ?",
+      const joinerNode = (await joiner.store.get<{ node_id: string }>(
+        'SELECT node_id FROM local_node WHERE team_id = ?',
+        [jt.id],
+      ))!.node_id;
+      const accepted = await hub.store.get<{ origin_node: string; detail: string }>(
+        "SELECT origin_node, detail FROM audit WHERE team_id = ? AND action = 'credential.accepted' AND target = ?",
         [ht.id, credentialId],
       );
       expect(accepted?.origin_node).toBe(hubNode);
+      expect(JSON.parse(accepted!.detail)).toMatchObject({
+        requested_from: joinerNode,
+        key_hash: keyHash,
+        target: 'bea',
+      });
+      // …and the minting joiner still holds its own live row, untouched by the round trip.
+      expect(
+        await joiner.store.get<{ state: string; replicated_from: string | null }>(
+          'SELECT state, replicated_from FROM agent_bootstrap_credentials WHERE id = ?',
+          [credentialId],
+        ),
+      ).toEqual({ state: 'active', replicated_from: null });
     });
   });
 });

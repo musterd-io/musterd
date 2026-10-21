@@ -991,6 +991,9 @@ async function projectCredentialLedger(
     return;
   }
   const d = e.detail ?? {};
+  // A request's acceptance (`requested_from` set) is a record: the credential lives only where it
+  // was minted, and no other node — the hub included — holds it as a bearer.
+  if (typeof d['requested_from'] === 'string') return;
   const use = d['use'];
   const target = d['target'];
   const keyHash = d['key_hash'];
@@ -1021,9 +1024,9 @@ async function projectCredentialLedger(
  * at fold time and against its own current rows, that the minting host key is live and minted
  * here, sponsor-scoped to the named sponsor who still stands and may still sponsor, that the
  * target is that sponsor's live agent, and that the request came from the node the label is
- * bound to. It then holds the row (`replicated_from` = the requesting node) and writes its own
- * `credential.accepted`, which every joiner projects; anything else is `credential.refused` with
- * the reason, and nothing is inserted. A joiner folding a relayed request does nothing — only
+ * bound to. It then RECORDS its own `credential.accepted` (`requested_from` = the requesting
+ * node) — never inserting a bearer from a pushed row; the credential authenticates only where it
+ * was minted — or `credential.refused` with the reason. A joiner folding a relayed request does nothing — only
  * the hub answers.
  */
 async function answerCredentialRequest(
@@ -1112,23 +1115,19 @@ async function answerCredentialRequest(
     await refuse('target_not_sponsored');
     return;
   }
-  await db.run(
-    `INSERT INTO agent_bootstrap_credentials
-      (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by, created_at, rotated_at, revoked_at, replicated_from)
-     VALUES (?, ?, ?, 'claim_seat', ?, ?, 'active', ?, ?, ?, NULL, NULL, ?)
-     ON CONFLICT(id) DO NOTHING`,
-    [
+  // The hub RECORDS the acceptance; it never inserts a bearer from a pushed row. A seat
+  // credential authenticates only at the node that minted it — a row here would let an enrolled
+  // machine that squatted the label mint a credential usable AT THE HUB. An id this hub already
+  // holds is a collision, not a request.
+  if (
+    await db.get('SELECT id FROM agent_bootstrap_credentials WHERE id = ? AND team_id = ?', [
       id,
       teamId,
-      keyHash,
-      target,
-      typeof d['label'] === 'string' ? d['label'] : null,
-      typeof d['expires_at'] === 'number' ? d['expires_at'] : null,
-      sponsorName,
-      typeof d['created_at'] === 'number' ? d['created_at'] : Date.now(),
-      originNode,
-    ],
-  );
+    ])
+  ) {
+    await refuse('id_collision');
+    return;
+  }
   await appendAudit(db, teamId, {
     actor: null,
     action: 'credential.accepted',
