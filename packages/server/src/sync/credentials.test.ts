@@ -311,5 +311,34 @@ withDrivers('credentials', (_o, kind) => {
         ),
       ).toBeUndefined();
     });
+
+    it('6. a joiner refuses to revoke a replicated credential — the revoke is the hub`s — and the key keeps working there', async () => {
+      const hk = await post(
+        hubBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'cloud-ada' },
+        nickOnHub,
+      );
+      const hostKey = hk.json.agent_key as string;
+      const credentialId = hk.json.credential.id as string;
+      await roundTrip();
+
+      const revoked = await fetch(
+        `${joinerBase}/teams/bravo/agent-bootstrap-credentials/${credentialId}`,
+        { method: 'DELETE', headers: { authorization: `Bearer ${nickOnJoiner}` } },
+      );
+      expect(revoked.status).toBe(403);
+      expect(((await revoked.json()) as any).error.message).toMatch(/hub/);
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-ada' },
+            hostKey,
+          )
+        ).status,
+      ).toBe(200);
+    });
   });
 });

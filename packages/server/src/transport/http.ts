@@ -2216,7 +2216,10 @@ async function authAgentKeyOnly(
 async function hostKeyScope(
   ctx: Ctx,
   team: TeamRow,
-  credential: Pick<BootstrapCredential, 'created_by' | 'replicated_from'>,
+  credential: Pick<
+    import('../store/teams.js').BootstrapCredential,
+    'created_by' | 'replicated_from'
+  >,
 ): Promise<HostScope> {
   const createdBy = credential.created_by;
   if (createdBy === null) return TEAM_WIDE_HOST;
@@ -4422,6 +4425,19 @@ export async function handleHttp(
           host = prov.host;
         } else {
           member = (await authAdmin(ctx, slug, req)).member;
+        }
+        // ADR 689 decision 8: a replicated row is revoked at the hub, whose `credential.revoked`
+        // reaches every joiner; a local revoke here would leave the key live everywhere else and
+        // report success for it.
+        if ((await joinerEnrollment(ctx.db, delTeam.id, slug)) !== null) {
+          const replicated = (await listBootstrapCredentials(ctx.db, delTeam.id)).find(
+            (c) => c.id === credentialId && c.replicated_from !== null,
+          );
+          if (replicated)
+            throw new MusterdError(
+              'forbidden',
+              `credential "${credentialId}" was minted at the hub — revoke it there (ADR 689); this joiner only folds the revocation`,
+            );
         }
         if (!(await revokeBootstrapCredential(ctx.db, delTeam.id, credentialId))) {
           throw new MusterdError(

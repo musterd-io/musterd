@@ -219,7 +219,8 @@ export async function ingestBatch(
       if (
         event.kind === 'ledger' &&
         !loopback &&
-        (event.event.action === 'credential.accepted' || event.event.action === 'credential.revoked')
+        (event.event.action === 'credential.accepted' ||
+          event.event.action === 'credential.revoked')
       ) {
         throw new SyncOriginError(
           "a credential fact is the hub's to write (ADR 689): a joiner's mint is a request, and " +

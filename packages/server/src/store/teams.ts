@@ -480,6 +480,7 @@ export async function migrateLegacyBootstrapCredential(
       revoked_at: null,
       migration_target_member_id: member.id,
       first_used_at: null,
+      replicated_from: null,
     };
     await t.run(
       `INSERT INTO agent_bootstrap_credentials
