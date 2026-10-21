@@ -1,5 +1,6 @@
 import type { PickerGroup, PickerView } from '@musterd/protocol';
 import { age, clean } from './text.js';
+import { MIN_COLS } from './view.js';
 
 /**
  * The lane picker without a terminal (spec §5.3): what an agent's shell tool gets when it runs
@@ -32,4 +33,15 @@ export function renderPickTable(view: PickerView, team: string): string[] {
     section(view.blocked, true);
   }
   return out;
+}
+
+export const NARROW_HINT = `widen the terminal to ${MIN_COLS} columns for the picker`;
+
+/**
+ * What a terminal too narrow for the picker prints (design §6: below about 60 columns, the plain
+ * table with a hint). `narrow` adds the hint, as `musterd pick` does on a TTY under `MIN_COLS`.
+ */
+export function pickTableLines(view: PickerView, team: string, narrow: boolean): string[] {
+  const table = renderPickTable(view, team);
+  return narrow ? [...table, '', NARROW_HINT] : table;
 }
