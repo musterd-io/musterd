@@ -292,6 +292,18 @@ export function SeatDetail({
             {m.presences[0].hearing_reason ? ` (${m.presences[0].hearing_reason})` : ''}
           </span>
         )}
+        {m.reported_asks && (
+          <span
+            className="lc-stat lc-stat--reported"
+            title={
+              `A human declined ${m.reported_asks.count === 1 ? 'an ask' : `${m.reported_asks.count} asks`} ` +
+              `from this seat as "I did not expect this" in the last 7 days — latest ` +
+              `${new Date(m.reported_asks.last_at).toLocaleString()}. Nothing is blocked (ADR 676 §8).`
+            }
+          >
+            reported{m.reported_asks.count > 1 ? ` ×${m.reported_asks.count}` : ''}
+          </span>
+        )}
         {accountEx && (
           <span
             className={`lc-stat lc-stat--${accountEx.tone}`}

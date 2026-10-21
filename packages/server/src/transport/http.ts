@@ -247,6 +247,7 @@ import {
   laneOwnerHistory,
   listAudit,
   listAuditByAction,
+  reportedAsksBySeat,
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
@@ -2593,7 +2594,10 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
   // The humans come from the presence read's own member list (non-left, non-observer — a superset
   // of what the only-human rule counts), not a second `SELECT * FROM members` (lane 01M477S003).
   const presenceRows = await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs);
+  // ADR 676 §8: the seats a human declined as "I did not expect this", over the window.
+  const reportedAsks = await reportedAsksBySeat(ctx.db, teamId, Date.now());
   return {
+    reportedAsks,
     teamWorkingHours,
     reclaimable,
     residency,
@@ -2625,6 +2629,7 @@ async function summarize(
   // them all for 1 s (ADR 541, widened to the whole set by ADR 573); a route that has just written
   // passes `fresh` to read its own write back.
   const {
+    reportedAsks,
     teamWorkingHours,
     reclaimable,
     residency,
@@ -2732,6 +2737,8 @@ async function summarize(
           quiescenceNow,
           QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
         ),
+        // A team reader only: a broadcast or public roster does not name a seat a human reported.
+        ...(openStatus ? {} : { reported_asks: reportedAsks.get(s.member.name) ?? null }),
       };
     }),
   );

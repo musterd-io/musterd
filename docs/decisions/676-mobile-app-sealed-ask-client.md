@@ -184,6 +184,12 @@ one gets tapped through.
   506), not the bare tier's 15 minutes, or a queued verdict would die before its turn. The /live flag
   for "I did not expect this" follows as its own change.
   Follows-up: 01M5BER5GX4WENE2CEST6CA8NB
+- 2026-10-21, lane 01M5BER5GX (the /live flag, decision 8's last bullet): the roster's
+  `MemberSummary` gains `reported_asks {count, last_at}`, read from `channel.answer_reported`
+  over seven days, so the audit row is the only record. /live shows `reported` (`×N` when it
+  recurs) on the asking seat, with the count and latest time in its tooltip. Only a team reader
+  gets it: a broadcast or public roster never names a seat a human reported. It blocks and
+  reroutes nothing.
 
 ## Observability & Evaluation
 

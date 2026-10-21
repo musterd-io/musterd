@@ -102,6 +102,16 @@ export function TeamCard({
             behind
           </span>
         )}
+        {card.member.reported_asks && (
+          // ADR 676 §8: a human declined this seat's ask as "I did not expect this". On the card,
+          // not only in the expanded detail, because a flag nobody sees until they click is none.
+          <span
+            className="lc-seat__reported"
+            title={`A human declined ${card.member.reported_asks.count === 1 ? 'an ask' : `${card.member.reported_asks.count} asks`} from this seat as "I did not expect this" in the last 7 days. Nothing is blocked.`}
+          >
+            reported
+          </span>
+        )}
       </span>
       <span className="lc-team-card__state">{card.stateLabel}</span>
       {card.title && (

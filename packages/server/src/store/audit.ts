@@ -1,4 +1,9 @@
-import { isLaneReviewGrade, isWireAttestationSource, type LaneEvent } from '@musterd/protocol';
+import {
+  isLaneReviewGrade,
+  isWireAttestationSource,
+  REPORTED_ASKS_WINDOW_MS,
+  type LaneEvent,
+} from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
@@ -1391,6 +1396,36 @@ export async function listAuditByAction(
     'SELECT * FROM audit WHERE team_id = ? AND action = ? ORDER BY ts DESC, id DESC LIMIT ?',
     [teamId, action, cap],
   );
+}
+
+/**
+ * ADR 676 §8: per asking seat, how many of its asks a human declined as "I did not expect this" in
+ * the window, and the latest — read from `channel.answer_reported`, so the flag is the record and
+ * nothing else stores it.
+ */
+export async function reportedAsksBySeat(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<Map<string, { count: number; last_at: number }>> {
+  const rows = await db.all<{ ts: number; detail: string | null }>(
+    `SELECT ts, detail FROM audit WHERE team_id = ? AND action = 'channel.answer_reported' AND ts > ?`,
+    [teamId, now - REPORTED_ASKS_WINDOW_MS],
+  );
+  const out = new Map<string, { count: number; last_at: number }>();
+  for (const row of rows) {
+    let seat: unknown;
+    try {
+      seat = (JSON.parse(row.detail ?? '{}') as { asking_seat?: unknown }).asking_seat;
+    } catch {
+      continue;
+    }
+    if (typeof seat !== 'string' || seat === 'unknown') continue;
+    const prev = out.get(seat);
+    const ts = Number(row.ts);
+    out.set(seat, { count: (prev?.count ?? 0) + 1, last_at: Math.max(prev?.last_at ?? 0, ts) });
+  }
+  return out;
 }
 
 /** Read the audit log for a team, newest-first, capped. `before` pages older than a given ts.

@@ -184,6 +184,32 @@ describe('RosterPanel — a live deaf seat says so (ADR 558 §5)', () => {
   });
 });
 
+describe('RosterPanel — a seat a human reported says so (ADR 676 §8)', () => {
+  it('flags the seat, with the count once it recurs', () => {
+    const one = render([seat({ reported_asks: { count: 1, last_at: 1_792_600_000_000 } })]);
+    expect(one).toContain('lc-stat--reported');
+    expect(one).toContain('>reported<');
+    expect(one).toContain('Nothing is blocked');
+    const three = render([seat({ reported_asks: { count: 3, last_at: 1_792_600_000_000 } })]);
+    expect(three).toContain('reported ×3');
+    expect(three).toContain('3 asks');
+  });
+
+  it('stays quiet when nobody reported it, or the daemon did not say', () => {
+    expect(render([seat({ reported_asks: null })])).not.toContain('lc-stat--reported');
+    expect(render([seat()])).not.toContain('lc-stat--reported');
+  });
+
+  // The contrast gate's fixture never reports an ask, so it cannot paint this chip. It borrows the
+  // `halted` recipe, which the gate does measure; keeping the two identical keeps that evidence.
+  it('paints exactly the measured `halted` ink and fill', () => {
+    const body = (sel: string) =>
+      new RegExp(`\\${sel}\\s*\\{([^}]*)\\}`).exec(css)?.[1]?.trim();
+    expect(body('.lc-stat--reported')).toBeDefined();
+    expect(body('.lc-stat--reported')).toBe(body('.lc-stat--halted'));
+  });
+});
+
 /**
  * Both `woken` marks stay fill-free, for a margin that is measured even though the chip is not.
  *
