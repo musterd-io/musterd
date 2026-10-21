@@ -57,7 +57,7 @@ jobs:
           week=$(date -u +%G-W%V)
           branch="automation/research-radar-$week"
           digest="docs/research/radar/$week.md"
-          existing=$(gh pr list --head "$branch" --state all --json number --jq '.[0].number // empty')
+          existing=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             details=$(gh pr view "$existing" --json state,isDraft,reviews)
             state=$(jq -r '.state' <<< "$details")
