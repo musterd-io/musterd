@@ -298,6 +298,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   if (opts.syncLoops === false)
     for (const name of ['sync_push', 'sync_pull', 'trace_push'] as const) loops.delete(name);
 
+  /** A short, printable header value as a log field, or nothing. */
+  const headerTag = (key: string, v: string | string[] | undefined): Record<string, string> =>
+    typeof v === 'string' && v.length > 0 && v.length <= 64 && /^[\w.@:-]+$/.test(v)
+      ? { [key]: v }
+      : {};
   // Lane 01M4S0ZAG8: per keep-alive socket, how many requests it has carried and when the last one
   // finished. A slow line reads them to say whether the time was the connection's (an idle socket
   // the server was about to drop, a body that came late) rather than the handler's.
@@ -332,6 +337,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         path,
         status,
         ms,
+        // Who asked, as the client named itself (lane 01M5G9FKCG): the seat and surface headers,
+        // unverified — enough to attribute load ("which seat polls /inbox 20×/min"), never an identity
+        // claim. Never a credential: the token rides `authorization`, which is not read here.
+        ...headerTag('seat', req.headers['x-musterd-seat']),
+        ...headerTag('surface', req.headers['x-musterd-surface']),
         // Only on a slow line, where the question is whether the connection held it.
         ...(ms >= SLOW_REQUEST_MS
           ? {
