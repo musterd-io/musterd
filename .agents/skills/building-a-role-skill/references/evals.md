@@ -32,7 +32,7 @@ Two per craft. Each case in `evals/evals.json`:
   with no source. Test each check on a bad answer and a good one before you trust it. A model's
   note to the requester under a `---` line starting "Note" is not part of the answer.
 
-musterd's `product-communications/evals/check.mjs` is a working example of a check script.
+musterd's `comms/evals/check.mjs` is a working example of a check script.
 
 ## Run them
 

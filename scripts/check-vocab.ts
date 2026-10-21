@@ -43,7 +43,7 @@ export const DESIGN_BASELINE = new Set([]);
  *
  * Until 2026-09-19 `docs/design/*.md` was gated on the work-item table ALONE, so the four words
  * ADR 296 lints outright were never checked in the directory holding brand.md, the copy specs and
- * the positioning material — the documents product-communications writes FROM. `pnpm vocab:check`
+ * the positioning material — the documents comms writes FROM. `pnpm vocab:check`
  * reported green over all of it. Found while reading an off-glossary skill NAME
  * (`seat-worktree-identity`) in a file the gate called clean (lane 01M2XERV15, ryder's #1588).
  *

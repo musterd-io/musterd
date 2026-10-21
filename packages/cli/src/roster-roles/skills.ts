@@ -27,7 +27,7 @@ export const BUILTIN_ROLE_SKILLS: readonly string[] = [
   'observer',
   'planner',
   'platform',
-  'product-communications',
+  'comms',
   'security',
   'steward',
 ];

@@ -1,7 +1,7 @@
 # Join page — UI-copy spec for `/join` (the pre-event page a stranger opens on their phone)
 
 Lane `01M3D422B6P5VPW4T4F1R92CWS` (rewrite), superseding the 2026-09-24 spec from lane
-`01M3AKNKQ1MW921645YWSQ1RWM` (PR #1705), goal `demo`. Written by sloane (product-communications)
+`01M3AKNKQ1MW921645YWSQ1RWM` (PR #1705), goal `demo`. Written by sloane (comms)
 on 2026-09-25; layout and build are miley's (designer). Every string below is this role's; the
 section order is a recommendation, the strings are not.
 

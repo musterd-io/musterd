@@ -1,7 +1,7 @@
 # /watch — UI-copy spec for the stream's front door
 
 **Status:** spec, 2026-09-16. Copy is final; implementation is the designer role's (charter: product
-UI stays with the designer, product-communications supplies the exact strings). Lane
+UI stays with the designer, comms supplies the exact strings). Lane
 `01M2M707M3`. Every string below traces to brand.md §1/§4, ADR 320's canonical statement, or the
 ADR 296 glossary; anything not on this page is not in the spec.
 

@@ -18,7 +18,7 @@ holds your team's roster, the folder with `.musterd/team.toml`.
 | `observer` | Reads team state for dashboards and digests; holds no lanes, sends no acts | Yes |
 | `security` | Owns the team's security evidence: threat models, scans, findings, disclosure | Yes |
 | `courier` | Moves team material between the team's machines | Role file only |
-| `product-communications` | Owns the product's voice: messaging, public docs, release notes | Yes |
+| `comms` | Owns the product's voice: messaging, public docs, release notes | Yes |
 | `admin` | The team's governance authority, held by a person | Role file only |
 
 A role ships with its skill only when the skill has evals and a recorded run in which answers with

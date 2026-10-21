@@ -162,7 +162,7 @@ const WOKEN: ReadonlySet<string> = new Set(['Dev']);
 const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; role?: string }> = {
   Ada: { surface: 'claude-code', model: 'claude-opus-5', role: 'security' },
   Bo: { surface: 'codex', model: 'gpt-6-luna', role: 'engineer' },
-  Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium', role: 'product-communications' },
+  Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium', role: 'comms' },
   Dev: { surface: 'cli', model: null },
   Eli: { surface: 'claude-code', model: 'gemini-3.2-pro', role: 'researcher' },
   Fen: { surface: 'web', model: 'grok-4.5', role: 'founder' },

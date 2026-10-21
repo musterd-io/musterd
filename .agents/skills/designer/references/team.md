@@ -14,7 +14,7 @@ ADRs are in `docs/decisions/`. miley and slippy hold the designer role; only mil
    SaaS-dashboard cliché, chat-app skins, over-animated dashboards, glass and neon, "AI made this").
 3. ADR 037: the marketing site may go maximal; product chrome stays minimal. Know which you are on.
 4. `docs/design/figma-brief-*.md`: the frames the CLI output and dashboard views must match.
-5. Copy specs, owned by product-communications: `homepage-copy-spec.md`, `watch-page-copy-spec.md`,
+5. Copy specs, owned by comms: `homepage-copy-spec.md`, `watch-page-copy-spec.md`,
    `join-page-copy.md`, `tour-web-copy.md`.
 
 ## The surfaces
@@ -33,7 +33,7 @@ ADRs are in `docs/decisions/`. miley and slippy hold the designer role; only mil
 Mustard `#E1AD01` is 2.06:1 on white. On light surfaces, accent marks use `mustard-700` `#B8860B`
 (3.25:1) and accent text uses `mustard-900` `#7A5A06` (6.38:1); mustard itself is a fill behind dark
 text or the accent on dark surfaces (brand.md §2; the table in
-`.agents/skills/product-communications/references/charts.md`).
+`.agents/skills/comms/references/charts.md`).
 
 `packages/web/src/styles/tokens.css`, `src/brand/brand.css`, the `.lc` block in `src/live/Live.css`,
 `src/live/canvasFont.ts` for canvas text, and `src/live/office-scene/motion.ts`, the source of truth
@@ -93,7 +93,7 @@ the broadcast capturer. Traps: `docs/wiki/browser-verification.md`,
 
 | When | Skill |
 | --- | --- |
-| Any copy question | `product-communications` |
+| Any copy question | `comms` |
 | A wireframe | `squig` |
 | A review finding | `a-finding-is-not-a-fix-request` |
 | Calling a change done | `definition-of-done` |

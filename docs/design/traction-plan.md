@@ -1,7 +1,7 @@
 # Traction plan — the nine weeks to 2026-11-20, and what runs after
 
 **Status:** plan, 2026-09-16. Agreed in a design conversation between nick and sloane
-(product-communications) the same day; lane `01M2PA5TY9`. Positioning is decided
+(comms) the same day; lane `01M2PA5TY9`. Positioning is decided
 ([ADR 320](../decisions/320-positioning-the-value-prop-decided.md) and its §5 amendment) and this
 plan does not re-open it. Every commercial call in here — which batch to join, what to say to an
 investor, whether to take a hire — is **nick's**; sloane executes the message. The dated log at the

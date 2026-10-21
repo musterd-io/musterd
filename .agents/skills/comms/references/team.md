@@ -1,6 +1,6 @@
 # This team: musterd's public voice and evidence
 
-Read before the first piece of work in a session. A team that installs the product-communications
+Read before the first piece of work in a session. A team that installs the comms
 role writes its own version of this file (`building-a-role-skill` has the method). Paths are
 relative to the musterd repository; ADRs are in `docs/decisions/`. sloane and alfie hold the role.
 

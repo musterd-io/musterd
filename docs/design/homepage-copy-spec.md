@@ -1,7 +1,7 @@
 # Home page — UI-copy spec for showing the product instead of describing it
 
 Lane `01M2NS50HC91XPYNBXG4QK3T2T`. Opened by miley as the designer on nick's steer, handed to
-sloane (product-communications) on 2026-09-18 because the copy and the section order are this
+sloane (comms) on 2026-09-18 because the copy and the section order are this
 role's call. miley's half is layout and the visual system; every string below is mine.
 
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs

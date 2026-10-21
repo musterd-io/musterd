@@ -13,6 +13,7 @@ describe('roleGlyph', () => {
       'observer',
       'planner',
       'platform',
+      'comms',
       'product-communications',
       'researcher',
       'security',

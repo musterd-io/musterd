@@ -1,16 +1,16 @@
 ---
-name: product-communications
+name: comms
 description: How a team speaks in public, and the evidence every public word rests on — messaging, launch narrative, release notes, press, public docs and READMEs, UI-copy specs, positioning and GTM proposals, user research synthesis, charts, pitch decks, investor and accelerator writing. Use for any writing that leaves the repo, any figure that carries a number, any claim about users or the market, and any UI-copy spec handed to the designer. Enforces the brand voice, the canonical glossary and one evidence gate; per-craft procedures live in references/.
 ---
 
-# product-communications
+# comms
 
 This skill teaches craft and evidence. The message lives in the
 authoritative sources below; if anything here disagrees with them, they win and
 this file has a bug. Fix it with a PR; do not follow it.
 
 This file is the core and is always read. Each craft has a reference file under
-`.agents/skills/product-communications/references/`; the routing table says which
+`.agents/skills/comms/references/`; the routing table says which
 to open. Read the reference before doing that craft's work, every time.
 
 ## Sources (read before writing anything public, never restated here)

@@ -292,6 +292,20 @@ describe('role create in a roster home (registry thin slice)', () => {
     expect(() => readFileSync(join(cwd, '.musterd', 'roles', 'qa.toml'), 'utf8')).toThrow();
   });
 
+  it('--from the pre-ADR 699 name product-communications still builds the comms role', async () => {
+    const m = writeRosterHome();
+    expect(await roleCommand(parsed(['create', 'comms'], { from: 'product-communications' }))).toBe(
+      0,
+    );
+    const role = parseRoleFile(readFileSync(join(m, 'roles', 'comms.toml'), 'utf8'));
+    expect(role.summary).toMatch(/product's voice/);
+    // Same name as the built-in it resolved to, so no renamed-copy `skill` pointer.
+    expect(role.skill).toBeUndefined();
+    expect(readFileSync(join(cwd, '.agents', 'skills', 'comms', 'SKILL.md'), 'utf8')).toMatch(
+      /^---\nname: comms/,
+    );
+  });
+
   it('--from a built-in copies its skill, with the team file blank (ADR 586 §4)', async () => {
     const m = writeRosterHome();
     expect(await roleCommand(parsed(['create', 'watcher'], { from: 'observer' }))).toBe(0);

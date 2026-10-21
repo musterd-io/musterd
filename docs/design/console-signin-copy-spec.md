@@ -1,6 +1,6 @@
 # Console sign-in — UI-copy spec for app.musterd.io
 
-- Status: spec (product-communications, alfie), 2026-10-15. Slippy owns the layout.
+- Status: spec (comms, alfie), 2026-10-15. Slippy owns the layout.
   Fifty builds it on lane `01M3Z43QYB`. These strings are the copy, character for character.
   Confirmed 2026-10-17: the session marker in §6, and the heading and body in §7
   (lane `01M55YZ4VF1SK65P240SKRFT5X`).

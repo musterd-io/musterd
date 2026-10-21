@@ -24,7 +24,7 @@ const SKILLS = join(root, '.agents', 'skills');
 
 /** Role skills: the built-in roles (packages/cli/src/roster-roles) and this team's custom roles. */
 const ROLE_SKILLS = [
-  'product-communications',
+  'comms',
   'platform',
   'designer',
   'security',

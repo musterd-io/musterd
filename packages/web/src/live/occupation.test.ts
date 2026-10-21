@@ -5,8 +5,8 @@ import { seatRoles } from './occupation';
 describe('seatRoles', () => {
   it('shows the roster’s own role names, in the seat’s order', () => {
     expect(seatRoles(['admin', 'founder'], 'admin')).toEqual(['admin', 'founder']);
-    expect(seatRoles(['product-communications'], 'product-communications')).toEqual([
-      'product-communications',
+    expect(seatRoles(['comms'], 'comms')).toEqual([
+      'comms',
     ]);
   });
 

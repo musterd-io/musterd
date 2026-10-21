@@ -490,7 +490,7 @@ refusal it leads with (ADR 550, Consequences).
 Added 2026-10-19 by alfie for [ADR 665](../decisions/665-accountability-message-a-person-at-both-ends.md)
 §4 row 5. These are the two outside facts the accountability message stands on. Both are volatile:
 each entry carries `as_of`, `source_url` and `review_by`, and past its `review_by` date a fact is
-not quoted until it is re-read (product-communications skill, positioning reference). ADR 665 §1
+not quoted until it is re-read (comms skill, positioning reference). ADR 665 §1
 says where each one may be used: the survey is proof for an enterprise room, said with its sponsor
 and date, and never opens the message.
 
