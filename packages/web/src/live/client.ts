@@ -59,7 +59,17 @@ export interface LiveConfig {
    * token is no longer accepted by the daemon.
    */
   token: string;
+  /**
+   * Which page holds this socket (ADR 692). Only /live sets it: its claim then carries
+   * `workspace: LIVE_PAGE_WORKSPACE`, the label the "who is here" row reads off the roster. /board
+   * and /broadcast leave it unset, so neither puts anyone in that row.
+   */
+  page?: 'live';
 }
+
+/** The presence `workspace` label a /live tab claims with (ADR 692). Humans fan out (ADR 042), so for
+ *  them the label is display only — it displaces nothing. */
+export const LIVE_PAGE_WORKSPACE = '/live';
 
 export type ConnStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'error' | 'closed';
 
@@ -956,6 +966,7 @@ export class LiveClient {
           target: { seat: this.cfg.as },
           surface: 'web',
           provenance: 'session',
+          ...(this.cfg.page === 'live' ? { workspace: LIVE_PAGE_WORKSPACE } : {}),
         }),
       );
     };

@@ -100,6 +100,16 @@ access; roster handles and Presence remain visible.
   a heartbeat that pulses on every act (the last act's age on hover), and acts over the loaded span
   (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
   (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
+- **Who is here** (`live/WhoIsHere.tsx`, from `live/hereRow.ts`; [ADR 692](../decisions/692-live-who-is-here.md))
+  — at the head of the topbar's tools: the faces of the members with /live open, others by arrival
+  and the viewer last. A /live tab claims with `workspace: '/live'` (`LiveConfig.page`), and a member
+  is here when one of their `web` rows carries that label; observer seats (the anonymous watcher, a
+  watch link, the /broadcast capture seat) never reach the roster. One face per member, however many
+  tabs. The stack fans open on hover or focus, each face has a card (kind, here since, tabs), and an
+  arrival slides in with one ring of the member's colour; "<name> opened /live" shows for a few
+  seconds only when they were already online elsewhere (the team column announces a fresh arrival).
+  /live re-reads the roster every 60 s so a tab closed beside another live session leaves the row.
+  Lazy: its chunk loads after the first roster read.
 - **Headline ticker** — retired 2026-10-12 (nick: never looked at it, on `/live` or `/broadcast`;
   the team column beside the room carries each member's latest moment). `live/headline.ts` stays:
   the office scene reads `walkTag` from it.
@@ -260,6 +270,8 @@ live/
   LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns; lazy, mounted only while open
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
   TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline
+  WhoIsHere.tsx                 // the topbar's "who is here" row (ADR 692): faces that fan open, a card per face, the arrival ring and note, the fold-out on leave; a lazy chunk
+  hereRow.ts                    // roster → the members with a /live-labelled web row: one per member, kind, tabs, here-since, idle; others by arrival, the viewer last (pure, node-tested)
   headline.ts                   // walkTag — the verb a walker wears (handing off → dolly / claiming … / finished …); the ticker's headline builders left with the ticker (2026-10-12)
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline

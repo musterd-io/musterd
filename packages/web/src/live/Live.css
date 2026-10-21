@@ -9101,3 +9101,291 @@ a.lc-xp__hit:focus-visible {
   font-weight: 600;
   color: var(--lc-accent-ink);
 }
+
+/* ─── who is here (ADR 692) ───────────────────────────────────────────────────────────────────────
+   The members with /live open, as the faces they wear on the floor, at the head of the topbar's
+   tools. A stack that fans open on hover or focus; a card per face; one authored moment, an arrival
+   (a ring in the member's own colour, once). No pulse: being here is a steady state. */
+.lc-here {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-4);
+  flex: none;
+  padding-right: var(--lc-5);
+  margin-right: var(--lc-1);
+  border-right: 1px solid var(--lc-border);
+}
+.lc-here__pile {
+  display: inline-flex;
+  align-items: center;
+  /* The stack's overlap lives on the gap, so fanning open is one transition on one property. */
+  --here-overlap: -8px;
+}
+.lc-here:hover .lc-here__pile,
+.lc-here:focus-within .lc-here__pile {
+  --here-overlap: 3px;
+}
+.lc-here__slot {
+  position: relative;
+  display: inline-flex;
+  margin-left: var(--here-overlap);
+  transition:
+    margin-left var(--lc-dur-2) var(--lc-ease-out),
+    opacity var(--lc-dur-3) var(--lc-ease-out),
+    transform var(--lc-dur-3) var(--lc-ease-out);
+}
+.lc-here__slot:first-child {
+  margin-left: 0;
+}
+/* You sit last, a breath apart from the others. */
+.lc-here__slot.is-you:not(:first-child) {
+  margin-left: calc(var(--here-overlap) + 5px);
+}
+.lc-here__face,
+.lc-here__more {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(250, 251, 252);
+  /* The ring is the topbar's own colour, so overlapping faces read as separate people. */
+  box-shadow: 0 0 0 2px rgb(250, 251, 252);
+  cursor: pointer;
+  transition: transform var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc-here__face .mface {
+  display: block;
+  border-radius: 50%;
+}
+.lc-here__face:hover,
+.lc-here__face[aria-expanded='true'] {
+  transform: translateY(-1px);
+  z-index: 1;
+}
+.lc-here__more {
+  background: var(--lc-surface-2);
+  box-shadow:
+    0 0 0 2px rgb(250, 251, 252),
+    inset 0 0 0 1px var(--lc-border);
+  color: var(--lc-dim);
+  font: 600 11px/1 var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.lc-here .lc-here__face:focus-visible,
+.lc-here .lc-here__more:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+/* Quiet tabs: the face dims, never the words (2026-08-13). */
+.lc-here__slot.is-idle .lc-here__face .mface {
+  opacity: 0.5;
+  filter: saturate(0.4);
+}
+
+/* Arrival: slide in from the right, wearing one ring of the member's own colour that settles. */
+.lc-here__slot.is-arriving {
+  animation: lc-here-in var(--lc-dur-4) var(--lc-ease-out) both;
+}
+.lc-here__slot.is-arriving .lc-here__face {
+  animation: lc-here-ring var(--lc-dur-5) var(--lc-ease-out) both;
+}
+@keyframes lc-here-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px) scale(0.7);
+  }
+}
+@keyframes lc-here-ring {
+  0% {
+    box-shadow:
+      0 0 0 2px rgb(250, 251, 252),
+      0 0 0 4px var(--here-ring);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px rgb(250, 251, 252),
+      0 0 0 10px color-mix(in srgb, var(--here-ring) 0%, transparent);
+  }
+}
+/* Leaving: fold down and close the gap. */
+.lc-here__slot.is-leaving {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+/* The card: a small raised sheet under the face, on hover, on focus, or pinned by a tap. */
+.lc-here__card {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: calc(var(--lc-z-overlay) + 1);
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  min-width: 180px;
+  max-width: 260px;
+  padding: var(--lc-4) var(--lc-5) var(--lc-4) var(--lc-4);
+  border: 1px solid var(--lc-border);
+  border-radius: var(--lc-r-md);
+  background: var(--lc-ground-2);
+  box-shadow:
+    0 1px 2px rgba(17, 24, 39, 0.06),
+    0 10px 28px -10px rgba(17, 24, 39, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity var(--lc-dur-2) var(--lc-ease-out),
+    transform var(--lc-dur-2) var(--lc-ease-out),
+    visibility 0s linear var(--lc-dur-2);
+  pointer-events: none;
+}
+.lc-here__slot:hover > .lc-here__card,
+.lc-here__face:focus-visible + .lc-here__card,
+.lc-here__more:focus-visible + .lc-here__card,
+.lc-here__card.is-pinned {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+/* The card's little caret, pointing up at its face. */
+.lc-here__card::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 5px);
+  width: 9px;
+  height: 9px;
+  border-left: 1px solid var(--lc-border);
+  border-top: 1px solid var(--lc-border);
+  background: var(--lc-ground-2);
+  transform: rotate(45deg);
+}
+.lc-here__card--list {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lc-3);
+}
+.lc-here__li {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-3);
+}
+.lc-here__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lc-here__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-3);
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lc-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-here__you {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  color: var(--lc-dim);
+  font: 600 10px/1.4 var(--font-mono, monospace);
+}
+.lc-here__meta {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+}
+.lc-here__alone {
+  font-size: 12px;
+  color: var(--lc-faint);
+  white-space: nowrap;
+}
+/* "nick opened /live": a few seconds beside the row, then gone. */
+.lc-here__whisper:empty {
+  display: none;
+}
+.lc-here__whisper-text {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+  animation: lc-here-whisper var(--lc-dur-3) var(--lc-ease-out) backwards;
+  transition: opacity var(--lc-dur-4) var(--lc-ease-in-out);
+}
+.lc-here__whisper-text.is-going {
+  opacity: 0;
+}
+.lc-here__whisper-text b {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--lc-text);
+}
+@keyframes lc-here-whisper {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+/* The topbar is its own stacking context below the asks rail (overlay + 1), so while a card is
+   showing the bar steps up over it. Only then: at rest the rail keeps its place. */
+.lc__topbar:has(.lc-here__slot:hover),
+.lc__topbar:has(.lc-here__card.is-pinned),
+.lc__topbar:has(.lc-here :focus-visible) {
+  z-index: calc(var(--lc-z-overlay) + 2);
+}
+@media (max-width: 640px) {
+  .lc-here__whisper,
+  .lc-here__alone {
+    display: none;
+  }
+  /* A phone's row sits near the left edge, where a card centred on its face runs off-screen: the
+     card hangs from the row's left instead, and loses the caret that would point at nothing. */
+  .lc-here {
+    position: relative;
+  }
+  .lc-here__slot {
+    position: static;
+  }
+  .lc-here__card {
+    left: 0;
+    transform: translateY(-4px);
+  }
+  .lc-here__slot:hover > .lc-here__card,
+  .lc-here__face:focus-visible + .lc-here__card,
+  .lc-here__more:focus-visible + .lc-here__card,
+  .lc-here__card.is-pinned {
+    transform: none;
+  }
+  .lc-here__card::before {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-here__slot,
+  .lc-here__face,
+  .lc-here__card,
+  .lc-here__whisper-text {
+    transition: none;
+  }
+  .lc-here__slot.is-arriving,
+  .lc-here__slot.is-arriving .lc-here__face,
+  .lc-here__whisper-text {
+    animation: none;
+  }
+}

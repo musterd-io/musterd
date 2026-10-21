@@ -16,6 +16,8 @@ import {
   fetchRoster,
   haltSeat,
   isStaleCredential,
+  LIVE_PAGE_WORKSPACE,
+  LiveClient,
   resumeSeat,
   updateLane,
 } from './client';
@@ -752,5 +754,52 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
       target: 'L1',
       payload: { lane: 'L1', verdict: 'accept' },
     });
+  });
+});
+
+/**
+ * ADR 692: the "who is here" row reads the `/live` label off the roster, so only the /live page may
+ * send it. /broadcast and /board build their LiveConfig without `page` and must claim without it.
+ */
+describe('LiveClient claim label (ADR 692)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function claimFrom(
+    cfg: ConstructorParameters<typeof LiveClient>[0],
+  ): Promise<Record<string, unknown>> {
+    const sent: string[] = [];
+    class FakeWs {
+      static OPEN = 1;
+      readyState = 1;
+      onopen: (() => void) | null = null;
+      onmessage: unknown = null;
+      onclose: unknown = null;
+      onerror: unknown = null;
+      constructor() {
+        queueMicrotask(() => this.onopen?.());
+      }
+      send(d: string) {
+        sent.push(d);
+      }
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', FakeWs);
+    vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:4849' } });
+    const c = new LiveClient(cfg, { onEnvelope() {}, onPresence() {}, onStatus() {}, onError() {} });
+    c.connect();
+    await new Promise<void>((r) => queueMicrotask(r));
+    c.close();
+    return JSON.parse(sent[0]!) as Record<string, unknown>;
+  }
+
+  it('a /live tab claims with the /live label', async () => {
+    const frame = await claimFrom({ team: 'dawn', as: 'nick', token: 'mscr_x', page: 'live' });
+    expect(frame).toMatchObject({ type: 'claim', surface: 'web', workspace: LIVE_PAGE_WORKSPACE });
+  });
+
+  it('a page that is not /live (the broadcast, the board) claims without it', async () => {
+    const frame = await claimFrom({ team: 'dawn', as: 'broadcast-1', token: 'mscr_x' });
+    expect(frame.type).toBe('claim');
+    expect(frame).not.toHaveProperty('workspace');
   });
 });
