@@ -76,7 +76,9 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
    `can_create_agents` intact, that the event's `host` equals that key's label, and that the
    event's origin node is the node that label is enrolled on. If all hold the hub writes a
    **hub-origin** `credential.accepted` (or `host.provision_claimed` / `_reported` as its own
-   row) carrying the request's event id, the hash and the scope; if any fails it writes
+   row) carrying the request's event id, the hash and the scope _(Amended 2026-10-21: the hub
+   records the acceptance and inserts no row — a requested credential authenticates only at the
+   node that minted it, and no node projects it; see Consequences)_; if any fails it writes
    `credential.refused` (audited, nothing inserted) — a credential minted under authority the
    hub has since withdrawn never materialises, whenever it arrives. Joiners project
    `credential.accepted`, `credential.revoked` and `host.provision_*` **only when
@@ -115,6 +117,17 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   team-wide half never crosses; what never crosses at all is the team agent key, `claim_role`,
   an unsponsored `claim_seat`, and any human credential. The joiner request path, provisions,
   the host actor and the freshness window land in the lane's second PR.
+- _(2026-10-21, second landing.)_ Decision 5's binding is first-writer-wins at the hub's ingest,
+  and only an enrolled node can write it, for a label this hub minted a live host key for. A wrong
+  first writer therefore denies the label to the real joiner but impersonates nothing; clearing it
+  is an admin act. Follows-up: lane `01M5E1Z7JE108EFS0F253FHARQ` (`musterd host unbind <label>`).
+  Decision 7's "last successful pull" is `sync_pull_cursor.updated_at`, which every fold writes.
+- _(2026-10-21, second landing.)_ Decision 6 as first worded had the hub "hold" a requested
+  credential. Held as a row, that credential would authenticate AT THE HUB — and an enrolled
+  machine that squatted a label could then mint a seat credential usable there. So the hub records
+  `credential.accepted` with `requested_from` and inserts nothing, and the projector skips any
+  acceptance carrying `requested_from`: a joiner-minted seat credential is a bearer only where it
+  was minted, and a record everywhere else. Replicated host keys (decision 1) are unchanged.
 
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the

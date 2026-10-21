@@ -115,6 +115,13 @@ export type CredentialMint = z.infer<typeof CredentialMintSchema>;
 export const AgentHostPolicySchema = z.object({
   max_per_host: z.number().int().min(1).max(100).default(5),
   policy: ResidencyPolicyOverrideSchema.default({}),
+  /**
+   * ADR 689 decision 7: on a joiner, the privileged host-key verbs (mint `claim_seat`, issue a
+   * grant, enrol, revoke, claim a provision) run only while the joiner's last successful pull from
+   * the hub is younger than this; older refuses `hub_unreachable`. Wakes are unaffected. The
+   * default is the provision cancel window (ADR 463 §2); one minute to one day.
+   */
+  freshness_ms: z.number().int().min(60_000).max(86_400_000).default(900_000),
 });
 export type AgentHostPolicy = z.infer<typeof AgentHostPolicySchema>;
 

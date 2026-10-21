@@ -15,7 +15,7 @@ import {
 } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
-import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
+import { appendAudit, REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
 import { upsertSample } from '../store/laneSamples.js';
@@ -32,6 +32,8 @@ import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { applySeedCapture } from '../store/seeds.js';
 import { setStylePrefs } from '../store/style.js';
 import { recordToolCalls } from '../store/toolCalls.js';
+import { assertSponsorCaller } from '../transport/authSponsor.js';
+import { joinerEnrollment } from './claim.js';
 
 /**
  * The fold (ADR 325 increment 3b-ii): apply the team's canonical order to THIS daemon's `messages`.
@@ -989,6 +991,9 @@ async function projectCredentialLedger(
     return;
   }
   const d = e.detail ?? {};
+  // A request's acceptance (`requested_from` set) is a record: the credential lives only where it
+  // was minted, and no other node — the hub included — holds it as a bearer.
+  if (typeof d['requested_from'] === 'string') return;
   const use = d['use'];
   const target = d['target'];
   const keyHash = d['key_hash'];
@@ -1012,6 +1017,134 @@ async function projectCredentialLedger(
       originNode,
     ],
   );
+}
+
+/**
+ * ADR 689 decision 6, the hub's half: a joiner's `credential.minted` is a request. The hub checks,
+ * at fold time and against its own current rows, that the minting host key is live and minted
+ * here, sponsor-scoped to the named sponsor who still stands and may still sponsor, that the
+ * target is that sponsor's live agent, and that the request came from the node the label is
+ * bound to. It then RECORDS its own `credential.accepted` (`requested_from` = the requesting
+ * node) — never inserting a bearer from a pushed row; the credential authenticates only where it
+ * was minted — or `credential.refused` with the reason. A joiner folding a relayed request does nothing — only
+ * the hub answers.
+ */
+async function answerCredentialRequest(
+  db: Driver,
+  teamId: string,
+  e: {
+    action: string;
+    target: string | null;
+    actor: string | null;
+    detail: Record<string, unknown> | null;
+  },
+  originNode: string,
+  localNode: string | null,
+): Promise<void> {
+  if (e.action !== 'credential.minted') return;
+  if (localNode !== null && originNode === localNode) return;
+  const team = await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]);
+  if (!team || (await joinerEnrollment(db, teamId, team.slug)) !== null) return;
+  const id = e.target ?? '';
+  const d = e.detail ?? {};
+  const host = typeof d['host'] === 'string' ? d['host'] : '';
+  const sponsorName = typeof d['sponsor'] === 'string' ? d['sponsor'] : '';
+  const target = typeof d['target'] === 'string' ? d['target'] : '';
+  const keyHash = typeof d['key_hash'] === 'string' ? d['key_hash'] : '';
+  const refuse = async (reason: string) => {
+    await appendAudit(db, teamId, {
+      actor: null,
+      action: 'credential.refused',
+      target: id,
+      result: 'deny',
+      detail: { reason, host, sponsor: sponsorName, target, origin_node: originNode },
+    });
+  };
+  if (!id || !host || !sponsorName || !target || !keyHash || d['use'] !== 'claim_seat') {
+    await refuse('malformed');
+    return;
+  }
+  if (e.actor !== host || d['actor_kind'] !== 'host') {
+    await refuse('actor_not_host');
+    return;
+  }
+  const bound = await db.get<{ node: string | null }>(
+    'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+    [teamId, host],
+  );
+  if (bound?.node !== originNode) {
+    await refuse('host_not_bound_to_origin');
+    return;
+  }
+  const hostKey = await db.get<{
+    id: string;
+    created_by: string | null;
+    replicated_from: string | null;
+    expires_at: number | null;
+  }>(
+    `SELECT id, created_by, replicated_from, expires_at FROM agent_bootstrap_credentials
+      WHERE team_id = ? AND use_kind = 'host' AND target = ? AND state = 'active'
+      ORDER BY created_at DESC LIMIT 1`,
+    [teamId, host],
+  );
+  if (!hostKey || hostKey.replicated_from !== null) {
+    await refuse('no_live_host_key');
+    return;
+  }
+  if (hostKey.expires_at !== null && hostKey.expires_at <= Date.now()) {
+    await refuse('host_key_expired');
+    return;
+  }
+  if (hostKey.created_by !== sponsorName) {
+    await refuse('host_key_not_sponsors');
+    return;
+  }
+  const sponsor = await getMemberByName(db, teamId, sponsorName);
+  if (!sponsor || sponsor.left_at !== null) {
+    await refuse('sponsor_gone');
+    return;
+  }
+  try {
+    assertSponsorCaller(sponsor);
+  } catch {
+    await refuse('sponsor_standing');
+    return;
+  }
+  const agent = await getMemberByName(db, teamId, target);
+  if (!agent || agent.left_at !== null || agent.sponsored_by !== sponsor.id) {
+    await refuse('target_not_sponsored');
+    return;
+  }
+  // The hub RECORDS the acceptance; it never inserts a bearer from a pushed row. A seat
+  // credential authenticates only at the node that minted it — a row here would let an enrolled
+  // machine that squatted the label mint a credential usable AT THE HUB. An id this hub already
+  // holds is a collision, not a request.
+  if (
+    await db.get('SELECT id FROM agent_bootstrap_credentials WHERE id = ? AND team_id = ?', [
+      id,
+      teamId,
+    ])
+  ) {
+    await refuse('id_collision');
+    return;
+  }
+  await appendAudit(db, teamId, {
+    actor: null,
+    action: 'credential.accepted',
+    target: id,
+    result: 'allow',
+    detail: {
+      use: 'claim_seat',
+      target,
+      sponsor: sponsorName,
+      host,
+      key_hash: keyHash,
+      expires_at: typeof d['expires_at'] === 'number' ? d['expires_at'] : null,
+      created_at: typeof d['created_at'] === 'number' ? d['created_at'] : Date.now(),
+      ...(typeof d['label'] === 'string' ? { label: d['label'] } : {}),
+      requested_from: originNode,
+    },
+  });
 }
 
 async function writePullCursor(
@@ -1171,6 +1304,7 @@ export async function foldBatch(
           return await finish();
         }
         await projectCredentialLedger(t, teamId, e, event.origin_node, local);
+        await answerCredentialRequest(t, teamId, e, event.origin_node, local);
         await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -113,9 +113,9 @@ describe('PolicySchema.agent_connect (ADR 456 §2)', () => {
 });
 
 describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
-  it('defaults: max_per_host 5, empty policy, invites need no expiry', () => {
+  it('defaults: max_per_host 5, empty policy, freshness 15 m (ADR 689), invites need no expiry', () => {
     const p = PolicySchema.parse({});
-    expect(p.agent_host).toEqual({ max_per_host: 5, policy: {} });
+    expect(p.agent_host).toEqual({ max_per_host: 5, policy: {}, freshness_ms: 900_000 });
     expect(p.invite_requires_expiry).toBe(false);
   });
   it('bounds max_per_host to 1..100 and keeps budget_usd optional at the schema (required at claim, not here)', () => {

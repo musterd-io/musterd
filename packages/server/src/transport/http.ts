@@ -2108,6 +2108,7 @@ async function authProvisionCaller(
     const creator = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
     if (!creator) throw new MusterdError('unauthorized', 'this host credential’s creator is gone');
     await assertSponsorOf(ctx.db, team, creator, agentName);
+    await assertHubFresh(ctx, team);
     await recordBootstrapCredentialUse(ctx.db, credential.id);
     return {
       team,
@@ -2119,6 +2120,28 @@ async function authProvisionCaller(
   }
   const r = await authAdminOrSponsorOf(ctx, slug, req, agentName);
   return { ...r, viaHostKey: false, host: null };
+}
+
+/**
+ * ADR 689 decision 7: on an enrolled joiner, a host key's privileged verbs need fresh hub
+ * authority — a revocation or a withdrawn sponsor reaches this daemon only by pull, so a pull older
+ * than `agent_host.freshness_ms` means this daemon cannot vouch for the key. Refuses with the
+ * unreachable-hub code (ADR 355 §3) so the host loop retries rather than treating it as a "no".
+ * A hub, or a never-synced single machine, is always fresh.
+ */
+async function assertHubFresh(ctx: Ctx, team: TeamRow): Promise<void> {
+  if ((await joinerEnrollment(ctx.db, team.id, team.slug)) === null) return;
+  const cursor = await ctx.db.get<{ updated_at: number }>(
+    'SELECT updated_at FROM sync_pull_cursor WHERE team_id = ?',
+    [team.id],
+  );
+  const window = (await getPolicy(ctx.db, team.id)).agent_host.freshness_ms;
+  const age = cursor ? Date.now() - cursor.updated_at : Number.POSITIVE_INFINITY;
+  if (age > window)
+    throw new MusterdError(
+      'hub_unreachable',
+      `this joiner last pulled from the hub ${cursor ? Math.round(age / 1000) + ' s' : 'never'} ago, past the ${Math.round(window / 1000)} s freshness window (ADR 689): minting, granting and enrolling wait for the hub`,
+    );
 }
 
 /** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
@@ -4247,6 +4270,33 @@ export async function handleHttp(
             },
           });
         }
+        // ADR 689 decision 6: at a joiner, the host key's `claim_seat` mint is a REQUEST to the
+        // hub — the row is live here at once (the seat claims against this daemon), and the hub
+        // decides whether its record holds it, re-emitting `accepted` under its own origin.
+        if (
+          body.use === 'claim_seat' &&
+          viaHostKey &&
+          host &&
+          (await joinerEnrollment(ctx.db, team.id, slug)) !== null
+        ) {
+          await appendAudit(ctx.db, team.id, {
+            actor: host,
+            action: 'credential.minted',
+            target: minted.credential.id,
+            result: 'allow',
+            detail: {
+              actor_kind: 'host',
+              use: body.use,
+              target: body.target,
+              host,
+              sponsor: member.name,
+              key_hash: minted.credential.key_hash,
+              expires_at: minted.credential.expires_at,
+              created_at: minted.credential.created_at,
+              ...(body.label !== undefined ? { label: body.label } : {}),
+            },
+          });
+        }
         for (const predecessorId of minted.rotated) {
           await appendAudit(ctx.db, team.id, {
             actor: member.name,
@@ -5493,8 +5543,12 @@ export async function handleHttp(
         // Last-enrolled-wins: the superseded enrollment's grant dies with it (no orphan standing
         // grants), and the host swap is named in the audit detail.
         if (previous?.grant_id) await revokeGrant(ctx.db, team.id, previous.grant_id);
+        // ADR 689 decision 5: a row the host key authors names the HOST as its actor, the sponsor
+        // kept in detail — at a joiner the sponsor is a human bound to the hub, and a row in
+        // their name would be refused `bound_elsewhere` at push. Ingest binds a host actor to
+        // the node that pushes it instead (`bindHostToNode`).
         await appendAudit(ctx.db, team.id, {
-          actor: authorizer.name,
+          actor: viaHostKey && enrollHost ? enrollHost : authorizer.name,
           action: 'residency.enrolled',
           target: target.name,
           result: 'allow',
@@ -5507,7 +5561,9 @@ export async function handleHttp(
             ...(previous ? { previous_host: previous.host } : {}),
             ...(viaFallback ? { fallback: 'no-admin' } : {}),
             sponsor_scoped: sponsorScoped,
-            ...(viaHostKey ? { via: 'host_key', host: enrollHost } : {}),
+            ...(viaHostKey
+              ? { via: 'host_key', host: enrollHost, actor_kind: 'host', sponsor: authorizer.name }
+              : {}),
           },
         });
         await appendAudit(ctx.db, team.id, {

@@ -10,6 +10,7 @@ import { createServer, type RunningServer } from '../index.js';
 import { appendAudit } from '../store/audit.js';
 import { addMember, getMemberByName, hashToken } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { bindHostToNode, getResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { pullTeam } from './pull.js';
@@ -84,16 +85,19 @@ withDrivers('credentials', (_o, kind) => {
     await addMember(hub.store, await hubTeam(), { name: 'ada', kind: 'agent' });
     await addMember(joiner.store, await joinerTeam(), { name: 'ada', kind: 'agent' });
 
+    // The joiner's node row is minted on its first logged act. It is ada's, not nick's: a human's
+    // first replicated act binds them to that node (ADR 360), and these cases need nick bound to
+    // the HUB — the laptop — so a human-authored joiner row is refused the way it is in life.
     const jt = await joinerTeam();
     await insertMessage(
       joiner.store,
       jt.id,
-      (await getMemberByName(joiner.store, jt.id, 'nick'))!.id,
+      (await getMemberByName(joiner.store, jt.id, 'ada'))!.id,
       null,
       makeEnvelope({
         id: 'j-0',
         team: 'bravo',
-        from: 'nick',
+        from: 'ada',
         to: { kind: 'team' },
         act: 'message',
         body: 'hi',
@@ -339,6 +343,284 @@ withDrivers('credentials', (_o, kind) => {
           )
         ).status,
       ).toBe(200);
+    });
+  });
+
+  describe('ADR 689 decision 7 — privileged verbs at a joiner need fresh hub authority; wakes do not', () => {
+    it('7. a replicated host key mints a sponsored seat`s credential while the pull is fresh, is refused past the window, and still polls', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      const nickJoiner = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      await addMember(hub.store, ht, { name: 'bea', kind: 'agent', sponsoredBy: nickHub.id });
+      await addMember(joiner.store, jt, { name: 'bea', kind: 'agent', sponsoredBy: nickJoiner.id });
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+
+      const fresh = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'bea' },
+        hostKey,
+      );
+      expect(fresh.status).toBe(201);
+
+      await joiner.store.run('UPDATE sync_pull_cursor SET updated_at = ? WHERE team_id = ?', [
+        Date.now() - 16 * 60_000,
+        jt.id,
+      ]);
+      const stale = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'bea' },
+        hostKey,
+      );
+      expect(stale.status).toBe(503);
+      expect(stale.json.error.code).toBe('hub_unreachable');
+
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'cloud-bea' },
+            hostKey,
+          )
+        ).status,
+      ).toBe(200);
+    });
+  });
+
+  describe('ADR 689 decision 5 — a host-key-authored row names the host as actor and pushes without a human', () => {
+    it('8. a replicated host key enrols its sponsored seat at the joiner, and the enrolment reaches the hub roster without node trust', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      const nickJoiner = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      await addMember(hub.store, ht, { name: 'bea', kind: 'agent', sponsoredBy: nickHub.id });
+      await addMember(joiner.store, jt, { name: 'bea', kind: 'agent', sponsoredBy: nickJoiner.id });
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      // nick's first replicated act is on the hub: that is where nick is bound (ADR 360).
+      await insertMessage(
+        hub.store,
+        ht.id,
+        nickHub.id,
+        null,
+        makeEnvelope({
+          id: 'h-0',
+          team: 'bravo',
+          from: 'nick',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hub first',
+          ts: Date.now(),
+        }),
+      );
+      await pushTeam(hubCtx(), ht);
+      await roundTrip();
+
+      const enrol = await post(
+        joinerBase,
+        '/teams/bravo/residency/enroll',
+        { seat: 'bea', harness: 'musterd', host: 'cloud-bea' },
+        hostKey,
+      );
+      expect(enrol.status).toBe(201);
+
+      await expect(roundTrip()).resolves.toBeUndefined();
+      const beaHub = (await getMemberByName(hub.store, ht.id, 'bea'))!;
+      const folded = await getResidency(hub.store, ht.id, beaHub.id);
+      expect(folded?.host).toBe('cloud-bea');
+      const row = await hub.store.get<{ actor: string | null; detail: string }>(
+        "SELECT actor, detail FROM audit WHERE team_id = ? AND action = 'residency.enrolled' AND target = 'bea'",
+        [ht.id],
+      );
+      expect(row?.actor).toBe('cloud-bea');
+      expect(JSON.parse(row!.detail)).toMatchObject({ actor_kind: 'host', sponsor: 'nick' });
+    });
+
+    it('9. a human-authored joiner row is still refused bound_elsewhere — the host actor is the only way through', async () => {
+      const ht = await hubTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      await insertMessage(
+        hub.store,
+        ht.id,
+        nickHub.id,
+        null,
+        makeEnvelope({
+          id: 'h-0',
+          team: 'bravo',
+          from: 'nick',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hub first',
+          ts: Date.now(),
+        }),
+      );
+      await pushTeam(hubCtx(), ht);
+      await roundTrip();
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/enroll',
+            { seat: 'ada', harness: 'claude-code', host: 'laptop-two' },
+            nickOnJoiner,
+          )
+        ).status,
+      ).toBe(201);
+      await expect(roundTrip()).rejects.toThrow(/403/);
+    });
+
+    it('10. a host row pushed from a node the label is not bound to is refused', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      expect(
+        (
+          await post(
+            hubBase,
+            '/teams/bravo/agent-bootstrap-credentials',
+            { use: 'host', target: 'cloud-elsewhere' },
+            nickOnHub,
+          )
+        ).status,
+      ).toBe(201);
+      await bindHostToNode(hub.store, ht.id, 'cloud-elsewhere', 'some-other-node');
+      await appendAudit(joiner.store, jt.id, {
+        actor: 'cloud-elsewhere',
+        action: 'residency.enrolled',
+        target: 'ada',
+        result: 'allow',
+        detail: {
+          harness: 'musterd',
+          host: 'cloud-elsewhere',
+          authorized_by: 'nick',
+          via: 'host_key',
+          actor_kind: 'host',
+          sponsor: 'nick',
+        },
+      });
+      await expect(roundTrip()).rejects.toThrow(/403/);
+      expect(
+        await getResidency(hub.store, ht.id, (await getMemberByName(hub.store, ht.id, 'ada'))!.id),
+      ).toBeNull();
+    });
+
+    it('12. a self-declared host actor that is a member`s name, or no live host key`s label, does not skip the seat check', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      await insertMessage(
+        hub.store,
+        ht.id,
+        nickHub.id,
+        null,
+        makeEnvelope({
+          id: 'h-0',
+          team: 'bravo',
+          from: 'nick',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hub first',
+          ts: Date.now(),
+        }),
+      );
+      await pushTeam(hubCtx(), ht);
+      await roundTrip();
+      // nick is bound to the hub; a joiner row in nick's name wearing actor_kind 'host' is still nick's row.
+      await appendAudit(joiner.store, jt.id, {
+        actor: 'nick',
+        action: 'residency.enrolled',
+        target: 'ada',
+        result: 'allow',
+        detail: { harness: 'musterd', host: 'nick', authorized_by: 'nick', actor_kind: 'host' },
+      });
+      await expect(roundTrip()).rejects.toThrow(/403/);
+      expect(
+        await hub.store.get('SELECT node FROM host_liveness WHERE team_id = ? AND host = ?', [
+          ht.id,
+          'nick',
+        ]),
+      ).toBeUndefined();
+    });
+  });
+
+  describe('ADR 689 decision 6 — a joiner`s mint is a request; the hub validates and writes the fact', () => {
+    it('11. a claim_seat minted at the joiner under the replicated host key reaches the hub as a hub-origin credential.accepted, recorded there and never a bearer there', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      const nickJoiner = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      await addMember(hub.store, ht, { name: 'bea', kind: 'agent', sponsoredBy: nickHub.id });
+      await addMember(joiner.store, jt, { name: 'bea', kind: 'agent', sponsoredBy: nickJoiner.id });
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+
+      const minted = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'bea' },
+        hostKey,
+      );
+      expect(minted.status).toBe(201);
+      const credentialId = minted.json.credential.id as string;
+      const keyHash = hashToken(minted.json.agent_key as string);
+
+      await roundTrip();
+      // The hub RECORDS the acceptance under its own origin; it never inserts a bearer from a
+      // pushed row — a seat credential authenticates only where it was minted.
+      expect(
+        await hub.store.get(
+          'SELECT id FROM agent_bootstrap_credentials WHERE id = ? AND team_id = ?',
+          [credentialId, ht.id],
+        ),
+      ).toBeUndefined();
+      const hubNode = (await hub.store.get<{ node_id: string }>(
+        'SELECT node_id FROM local_node WHERE team_id = ?',
+        [ht.id],
+      ))!.node_id;
+      const joinerNode = (await joiner.store.get<{ node_id: string }>(
+        'SELECT node_id FROM local_node WHERE team_id = ?',
+        [jt.id],
+      ))!.node_id;
+      const accepted = await hub.store.get<{ origin_node: string; detail: string }>(
+        "SELECT origin_node, detail FROM audit WHERE team_id = ? AND action = 'credential.accepted' AND target = ?",
+        [ht.id, credentialId],
+      );
+      expect(accepted?.origin_node).toBe(hubNode);
+      expect(JSON.parse(accepted!.detail)).toMatchObject({
+        requested_from: joinerNode,
+        key_hash: keyHash,
+        target: 'bea',
+      });
+      // …and the minting joiner still holds its own live row, untouched by the round trip.
+      expect(
+        await joiner.store.get<{ state: string; replicated_from: string | null }>(
+          'SELECT state, replicated_from FROM agent_bootstrap_credentials WHERE id = ?',
+          [credentialId],
+        ),
+      ).toEqual({ state: 'active', replicated_from: null });
     });
   });
 });
