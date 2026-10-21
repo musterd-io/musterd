@@ -187,7 +187,10 @@ access; roster handles and Presence remain visible.
   choice (lane 01M5AVXZ9B): a lane review (`meta.lane_review` — an acceptance ask, whose answers are
   accept / decline; `askChoicesOf` is what every surface calls), and numbered lines inside a quoted
   passage, which are someone else's words — the ADR 603 human-acceptance ask quotes the peer's
-  findings verbatim, and on 2026-10-19 the rail offered them to nick as "pick one". The strip's machinery is unchanged
+  findings verbatim, and on 2026-10-19 the rail offered them to nick as "pick one". A human lane
+  verdict the daemon refused for lack of a passkey signature (ADR 662) does not settle its ask:
+  `resurrectRefusedVerdicts` re-offers a `lane_review` ask while its lane is still in acceptance
+  and the only settling verdict was an unsigned human one (lane 01M5EA60RD). The strip's machinery is unchanged
   underneath — derivation and tier clock (`asks.ts`), answers, the sheet with the operator terms,
   the review queue, browser notifications (ADR 443), sign-in offers (ADR 222). The room plays the
   same ask (ADR 464 §3.3): `OfficeData.asks` raises the asker's hand with a `?` cue and rests an
