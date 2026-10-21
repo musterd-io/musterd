@@ -374,6 +374,18 @@ teammate's session. Consequences worth internalising:
   step from the mustard floor; chalk lifts the plates by lightness (never darkness, nick's standing
   line). nick picked it from five stocks shown side by side — a tinted plate per member read as
   twelve colours and drowned state. The stocks tried are recorded beside the rule.
+- **A nameplate says the member's job** (lane 01M5FXZF49, 2026-10-21; a Twitch viewer asked "can you
+  show their occupations"): one plain word beside the name on /live and /broadcast
+  (`.lc-gl-label__job`), from the seat's declared role through `live/occupation.ts` — `designer`,
+  `writer` for product-communications, `ops` for platform, `auditor` for steward (words set by
+  product-communications). `admin` shows none: it is a permission, and "founder" belongs to the `founder`
+  role, so it is true wherever it shows. A role with no word there, a member with no role, and a service
+  show none; a raw role id never reaches the plate. It sits on the face, not on a
+  second line, so plates grow no taller for `plateLayout.ts` to settle. Deriving a job from a member's
+  lane areas was rejected: "docs" led for nearly everyone. A job assigned while the room is open
+  swipes in once under a mustard highlighter (`.is-new`, index.ts `plateJobs`): never on page open,
+  never under reduced motion. `/office-preview`'s 🪪 gives Dev a job to judge it, and
+  `?plates=broadcast` shows the stream's plates. Roles for the roleless seats: lane 01M5FY2XFX.
 - **/live wears a product frame** (lane 01M5BEE19C, 2026-10-19; nick: /live in a pitch read "too
   silly/casual/game like" for something teams buy). The `.lc` palette is neutral white and cool grey
   (it was warm cream), the uppercase mono section labels are sentence case in the linear cut (mono

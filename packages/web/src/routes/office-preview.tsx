@@ -156,18 +156,19 @@ const WOKEN: ReadonlySet<string> = new Set(['Dev']);
 /**
  * Harness + model per fixture member. Deliberately varied, including a long id and a `null` model:
  * the nameplate's provider icon + expand detail have to survive both the widest label it will ever
- * see and the seat that has nothing to report.
+ * see and the seat that has nothing to report. Roles are real role-library ids, so the plate's job
+ * word (`occupation.ts`) shows on some plates and not on others, as it does on the real floor.
  */
 const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; role?: string }> = {
-  Ada: { surface: 'claude-code', model: 'claude-opus-5', role: 'lead' },
+  Ada: { surface: 'claude-code', model: 'claude-opus-5', role: 'security' },
   Bo: { surface: 'codex', model: 'gpt-6-luna' },
-  Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium' },
+  Cy: { surface: 'codex', model: 'gpt-5.6-terra-medium', role: 'product-communications' },
   Dev: { surface: 'cli', model: null },
   Eli: { surface: 'claude-code', model: 'gemini-3.2-pro' },
-  Fen: { surface: 'web', model: 'grok-4.5' },
+  Fen: { surface: 'web', model: 'grok-4.5', role: 'founder' },
   Gus: { surface: 'opencode', model: 'beam-free' },
   Hana: { surface: 'opencode', model: 'moonshotai/kimi-k3' },
-  Ivy: { surface: 'opencode', model: 'longcat-2.5-preview-free', role: 'design' },
+  Ivy: { surface: 'opencode', model: 'longcat-2.5-preview-free', role: 'designer' },
   // The service seat: no model BY KIND (pure code, nothing to attest) — distinct from Dev's
   // null-model agent, which is a seat that merely has nothing to report.
   Jib: { surface: 'cli', model: null, role: 'platform' },
@@ -424,6 +425,9 @@ function OfficePreviewPage() {
      offline and never-connected (`offline_reason: 'unknown'`) — then connected, so the real path runs:
      roster diff → sequencer → the room's residents. Nothing here shortcuts the scene. */
   const [newcomers, setNewcomers] = useState<OfficeNode[]>([]);
+  /* A role assigned while the room is open (lane 01M5FXZF49): the toolbar's 🪪 gives Dev a job and
+     takes it away again, so the plate's job swipe can be judged without a daemon. */
+  const [devRole, setDevRole] = useState('');
 
   const buildData = useCallback(
     (): OfficeData => ({
@@ -467,7 +471,7 @@ function OfficePreviewPage() {
             posture,
             state: m.state,
             color: memberColor(m.name, m.kind),
-            role: FIXTURE_IDENTITY[m.name]?.role ?? '',
+            role: m.name === 'Dev' && devRole ? devRole : (FIXTURE_IDENTITY[m.name]?.role ?? ''),
             // Varied identity, so the preview actually exercises the nameplate's provider icon and its
             // expand detail. These were `null` while the plate carried harness · model, which meant the
             // one surface for eyeballing a nameplate could never render one.
@@ -498,7 +502,7 @@ function OfficePreviewPage() {
         ...newcomers,
       ],
     }),
-    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers],
+    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers, devRole],
   );
   const dataRef = useRef(buildData);
   // Synced in an effect, not during render — see OfficeScene: the mount effect subscribes once and
@@ -540,7 +544,9 @@ function OfficePreviewPage() {
          */
         const reduced = search.has('reduced');
         const handle = mountOffice(host, labelHost, reduced, {
-          interactiveLabels: true,
+          /* `?plates=broadcast` — the stream's plates (no expand, model on the face), so a plate
+             change can be judged as /broadcast shows it without the stream's seat. */
+          interactiveLabels: search.get('plates') !== 'broadcast',
           /* `?sprites=1` — paint the static furniture from the sprite cache (spec 2026-09-17). This
              route is where the pixel gate runs, and `__office.spriteParity()` compares the two
              paths on demand whatever this flag says; the flag is for looking at the cached room.
@@ -746,6 +752,13 @@ function OfficePreviewPage() {
           onClick={() => fire({ kind: 'walk-claim', who: 'Dev', lane: 'preview-lane', title: 'Rotate the leaked keys' })}
         >
           ⇡
+        </button>
+        <button
+          className="lc__pbtn"
+          title="give Dev a job (a role assigned mid-stream), or take it away"
+          onClick={() => setDevRole((r) => (r ? '' : 'designer'))}
+        >
+          🪪
         </button>
         <button
           className="lc__pbtn"

@@ -1406,6 +1406,20 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-21 — `liveCssGzipBytes` 26,300 → 26,450 B: a nameplate says the member's job (lane `01M5FXZF49`)
+
+| Budget   | main (local, #3108)  | This branch (local) | Ceiling                  |
+| -------- | -------------------- | ------------------- | ------------------------ |
+| live CSS | 26,081 B             | 26,200 B (+119)     | RAISED 26,300 → 26,450 B |
+
+The first real question from the stream's audience was "can you show their occupations". Each plate now
+carries the member's job in one word (`.lc-gl-label__job`), and a job assigned while the room is open
+swipes in once under a mustard highlighter (`.is-new`, `@keyframes lc-job-in`). The +119 B is those two
+rules and the keyframes; there is nothing to trim that is not the feature, and main had 219 B of local
+headroom, inside CI's ~250 B CSS gap. A re-baseline would loosen. JS stays inside its ceilings.
+
+- Falsify: `pnpm perf:check` in CI reports live CSS at or under 26,300 B with this change in.
+
 ### 2026-10-21 — `initialJsGzipBytes` 148,600 → 148,750 B, `totalJsGzipBytes` 347,900 → 350,200 B and `liveCssGzipBytes` 25,600 → 26,300 B: who is here on /live (lane `01M5DAJ0Z7`, ADR 692)
 
 | Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |

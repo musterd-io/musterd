@@ -5,6 +5,7 @@ import { roomTone, screenPan, type LifeContext } from '../sound';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
+import { occupation } from '../occupation';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
@@ -164,6 +165,9 @@ const SPEECH_MAX_W = 260;
 /** After a real act, keep the loop alive this long so the Rive character settles into idle rather than
  * freezing mid-gesture (ADR 086 #5 afterglow) — a brief, bounded post-act tail, not a continuous loop. */
 const AFTERGLOW_MS = 2600;
+/** A newly assigned job's swipe on its plate — two of motion.ts's 600 ms steps; Live.css runs the
+ *  same `calc(2 * var(--lc-dur-5))`. */
+const JOB_SWIPE_MS = 1200;
 /** Ambient micro-choreography (ADR 086 Phase 2, seeded by E1): when the room is quiet, inject one idle
  * beat (a seated micro-gesture — scratch, sip, swivel… — or a stroll), drawn per 10s wall-clock slot so
  * every viewer of the same team sees the same beats. How OFTEN is `ambientSeed.ambientFireP`, which
@@ -755,6 +759,11 @@ export function mountOffice(
   let lightEnv: LightEnv = computeLightEnv(pstNowHours(), occupied); // office lighting from the PST clock
 
   const labels = new Map<string, HTMLDivElement>();
+  /** Each plate's job word and when it last changed (lane 01M5FXZF49). A job that arrives while the
+   *  room is open — a role assigned mid-stream — swipes in once, so a viewer sees someone get their
+   *  job. A plate's first build never plays it (the page opening is not news), and neither does a
+   *  rebuild of an unchanged plate: a rebuild mid-swipe resumes it via a negative delay. */
+  const plateJobs = new Map<string, { job: string | null; at: number }>();
   /** The ask cards (ADR 464 §3.3): one per ask to a human, resting at the human's plate while open. */
   const askCards = new Map<string, { el: HTMLDivElement; ask: OfficeAsk }>();
   const askSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1134,6 +1143,27 @@ export function mountOffice(
       who.className = 'lc-gl-label__who';
       who.textContent = name;
       plate.appendChild(who);
+      // What they do here, in a word a stream viewer already knows (lane 01M5FXZF49; a viewer asked
+      // "can you show their occupations"). On the face, beside the name, so it is read with it — never
+      // on a second line, which would make every plate taller and give plateLayout.ts more collisions
+      // to settle by moving plates. A service already says what it is with its tag.
+      const job = node.service ? null : occupation(node.role);
+      const jobNow = performance.now();
+      const lastJob = plateJobs.get(name);
+      if (!lastJob || lastJob.job !== job) {
+        plateJobs.set(name, { job, at: lastJob ? jobNow : -Infinity });
+      }
+      if (job) {
+        const jobEl = document.createElement('span');
+        jobEl.className = 'lc-gl-label__job';
+        jobEl.textContent = job;
+        const since = jobNow - plateJobs.get(name)!.at;
+        if (!reduced && !STILL && since < JOB_SWIPE_MS) {
+          jobEl.classList.add('is-new');
+          jobEl.style.animationDelay = `${-Math.round(since)}ms`;
+        }
+        plate.appendChild(jobEl);
+      }
       if (name === you) {
         // The viewer finding themselves in a room of twenty: a mono "you" right after the name, rimmed
         // in their own hue. Signed-in /live only (`you` is null wherever the labels are not interactive).
@@ -1233,7 +1263,7 @@ export function mountOffice(
         // detail carries harness · role only — before this it said the model a second time. Broadcast
         // used to show the model crumb here as its only detail; with the name on the face it has none.
         const detailParts = interactiveLabels
-          ? plateDetailParts({ surface: node.surface, role: node.role })
+          ? plateDetailParts({ surface: node.surface, role: job ? null : node.role })
           : [];
         for (const [i, part] of detailParts.entries()) {
           if (i > 0) {
@@ -1348,6 +1378,7 @@ export function mountOffice(
         plateFullW.delete(name);
         el.remove();
         labels.delete(name);
+        plateJobs.delete(name);
       }
     }
     positionLabels(headMap);
