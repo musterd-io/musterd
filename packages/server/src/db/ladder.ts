@@ -967,6 +967,15 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec(LANE_HEADS_TABLE_SQL);
     },
   },
+  {
+    // v124 — lane 01M5G7KWJP: one lane's history (`laneHistory`: team_id, `action LIKE 'lane.%'`,
+    // target, ORDER BY ts) had no index it could seek. The LIKE stops `idx_audit_team_action_*` at
+    // the team, so every `GET /lanes/:id`, `lane show` and /live's ask recovery walked all of the
+    // team's audit rows — 306,790 on the revive hub, 3.9 s cold, each one a synchronous stall of the
+    // daemon's event loop. A lane id is a ULID, so `(team_id, target)` leaves a handful of rows.
+    version: 124,
+    sql: 'CREATE INDEX IF NOT EXISTS idx_audit_team_target_ts ON audit(team_id, target, ts)',
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (
