@@ -75,13 +75,28 @@ export function buildOpenCommand(
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
+/**
+ * The flags `musterd board` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
 export const BOARD_FLAGS = [
   'act',
   'all',
   'anchor',
   'anchor-ref',
+  'blocked',
   'board',
+  'claimable',
   'closed',
+  'for-human',
   'harness',
   'http',
   'huddle-',
