@@ -47,7 +47,7 @@ target is a VM or cloud machine that nobody is sitting at.
 ```
 musterd move <seat>                 # bring <seat> to THIS machine
 musterd move <seat> --to <machine>  # send <seat> to an enrolled machine (its label, as `musterd node list` / residency show it)
-            [--now] [--wait <dur>] [--clone] [--harness <id>] [--dry-run]
+            [--now] [--wait <dur>] [--only] [--harness <id>] [--dry-run] [--json]
 ```
 
 `move` with no `--to` is run at the destination. `--to` can be run from anywhere, including from the
@@ -119,8 +119,9 @@ machine either way:
 
 `arriveSeat` does what `bootstrap.sh seat` does today, in this order:
 
-1. Provision the Workspace at `~/musterd/<team>/<repo>/<seat>`: a git `worktree` by default, a full
-   clone with `--clone` (ADR 463 §3). An existing Workspace for the seat is reused.
+1. Provision the Workspace at `~/musterd/<team>/<repo>/<seat>` the way `musterd agent` does: a git
+   `worktree` of the checkout `move` runs from. The host path (`--to`) takes the host's own
+   `--clone` (ADR 463 §3). An existing Workspace for the seat is reused.
 2. Write the seat's binding through the existing `musterd agent` reconcile, which mints a
    `claim_seat` bootstrap credential.
 3. For Claude Code, pre-accept the folder trust (cloud-seat finding 8).

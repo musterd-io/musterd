@@ -697,6 +697,29 @@ export const CATALOG: readonly CommandEntry[] = [
       'immediately and leaves its history alone.',
   },
   {
+    name: 'move',
+    signature:
+      '<seat> [--to <machine>] [--now | --wait <dur>] [--only] [--harness <id>] [--dry-run] [--json]',
+    summary: 'move a seat to another machine — a laptop, a VM, a cloud box — in one command',
+    group: 'team',
+    detail:
+      'ADR 696. Run at the destination, `musterd move <seat>` brings the seat to THIS machine: the hub ' +
+      're-binds it here in one act (no unbound window the old machine could reclaim), then this command ' +
+      'stands its Workspace up, wires its harness, pre-accepts Claude Code folder trust and re-enrolls its ' +
+      'wake with the same knobs. `--to <machine>` (a label from `musterd node list`, or a node id) sends ' +
+      'it from anywhere — the seat itself may run it — and you finish with `musterd move <seat>` there. ' +
+      'A live seat is first sent a steer to push and save, and the move waits `--wait` (default 5m) for ' +
+      'its accept; `--now` skips. Branches of its open lanes that are not on origin are named. Who may: ' +
+      'an admin, the agent’s sponsor, or the agent itself; a person adds a machine only to their own ' +
+      'seat, from a machine they already use (ADR 358) — `--only` drops their other machines. The ' +
+      'harness session does not move; musterd seat memory does.',
+    examples: [
+      'musterd move wallow',
+      'musterd move wallow --to macbook-air-2.lan',
+      'musterd move wallow --dry-run',
+    ],
+  },
+  {
     name: 'store',
     signature: '<prune [--dry-run]|compact|archive ls>',
     summary: 'the local store’s retention pass and one-time compaction (ADR 478)',
@@ -1035,13 +1058,13 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'claim',
     signature:
-      '[<name>] [--team <slug>] [--key <mskey_|mscr_>] [--grant <msgr_>] [--token <code>] | --role <role> [--for <code>] [--surface <s>] [--bootstrap] [--detach] [--force]',
+      '[<name>] [--team <slug>] [--key <mskey_|mscr_>] [--grant <msgr_>] | --role <role> [--for <code>] [--surface <s>] [--bootstrap] [--detach] [--force]',
     summary: 'get onto the team from this folder — occupy or adopt a seat (MCP: team_join)',
     group: 'team',
     primary: true,
     detail:
       'Get onto the team from this folder: bare `claim` occupies your bound seat (or confirms it if ' +
-      'already live here); a name/role claims that seat; `--token` adopts a teammate’s seat; `--force` ' +
+      'already live here); a name/role claims that seat (to move a seat between machines, `musterd move`); `--force` ' +
       'repoints a folder bound to a live member. A held seat opens a request and blocks until an admin ' +
       'approves, then occupies (ADR 087). In a fresh folder name the team and present the key: ' +
       '`claim <name> --team <slug> --key <mskey_|mscr_>` (a key this machine has held before is found in ' +

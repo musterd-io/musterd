@@ -43,6 +43,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   lanes: async () => (await import('./commands/lane.js')).lanesCommand,
   live: async () => (await import('./commands/live.js')).liveCommand,
   memory: async () => (await import('./commands/memory.js')).memoryCommand,
+  move: async () => (await import('./commands/move.js')).moveCommand,
   next: async () => (await import('./commands/next.js')).nextCommand,
   pick: async () => (await import('./commands/pick.js')).pickCommand,
   node: async () => (await import('./commands/node.js')).nodeCommand,

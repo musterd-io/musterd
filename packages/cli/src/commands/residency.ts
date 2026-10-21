@@ -463,7 +463,21 @@ function resolveSeat(parsed: Parsed): string {
   );
 }
 
-async function onCommand(parsed: Parsed): Promise<number> {
+/**
+ * `residency on`, callable with the knobs already in hand: ADR 696's `musterd move` re-enrolls a
+ * moved seat with the override the hub returned, not with flags a person retyped.
+ */
+export async function residencyOn(
+  parsed: Parsed,
+  opts: { policy?: ResidencyPolicyOverride } = {},
+): Promise<number> {
+  return onCommand(parsed, opts);
+}
+
+async function onCommand(
+  parsed: Parsed,
+  opts: { policy?: ResidencyPolicyOverride } = {},
+): Promise<number> {
   const { team, http } = resolve(parsed.flags);
   const seat = resolveSeat(parsed);
   const target = seatWorkspace(parsed);
@@ -514,7 +528,7 @@ async function onCommand(parsed: Parsed): Promise<number> {
     throw new CliError('--key-env applies only to --harness musterd (ADR 588)', 2);
   }
   const host = flagStr(parsed.flags, 'host') ?? hostname();
-  const policy = collectPolicyFlags(parsed);
+  const policy = opts.policy ?? collectPolicyFlags(parsed);
 
   // ADR 645 §4.2: verify the four things this host must hold BEFORE the row is written, so an
   // enrollment never promises a wake the machine cannot serve. Only when the host being enrolled is

@@ -254,6 +254,7 @@ describe('version-bump discipline (ADR 085)', () => {
     51: '8cf18ca06cb4ea13', // musterd-import points Linear and Jira at `musterd import linear` / `musterd import jira` when the credentials are already set (spec 2026-10-11, lane 01M4Q7PQGX)
     52: 'f823abce918f6db5', // + disputes: a `message` is not an answer, and a chat concession before the check is the reflex to stop (ADR 614, lane 01M4VEC15F)
     53: '3fa0baf5ac7f5854', // + "When a human picks a lane for you": behavior B — status, a 3–5 line plan, start unless redirected; decline = release with a reason (musterd pick spec §5.7, lane 01M5162W38)
+    54: '236797f6d10c2c4f', // claim --token (dead since ADR 075) → `musterd move` for moving a seat between machines (ADR 696, lane 01M5G22C7N)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

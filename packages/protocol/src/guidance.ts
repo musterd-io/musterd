@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 53;
+export const GUIDANCE_CONTENT_VERSION = 54;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -65,6 +65,8 @@ export const SKILL_CLI_COMMANDS = [
   'human',
   'board',
   'claim',
+  // ADR 696: the skill teaches moving a seat between machines.
+  'move',
   'whoami',
   'status',
   'inbox',
@@ -138,8 +140,9 @@ export function renderSkillBody(opts: { team: string }): string {
     '- **Claim with the team agent key** (local seats). Set `MUSTERD_AGENT_KEY` or pass `--key mskey_…`. This binds the',
     '  folder with no global-identity clobber. If no grant was pre-issued the claim opens a request and',
     '  **waits for an admin to approve** — that is expected, not a failure.',
-    "- **Adopt an existing seat** (take over a teammate's named seat) with `musterd claim <name> --token",
-    "  <code>` — it adopts the seat into this folder's binding without clobbering your global identity.",
+    '- **Move a seat to another machine** with `musterd move <name>` — run at the destination it brings',
+    '  the seat here (hub re-bind, Workspace, wake enrollment); `--to <machine>` sends it from anywhere,',
+    '  including from the seat itself. A live seat is asked to push and wrap up first (ADR 696).',
     '- **Recover from `conflict`.** A `conflict` means the seat/folder is already held. Do **not** hand-edit',
     "  state. Options: `musterd unbind` to release this folder's seat, `musterd reclaim <member>` to drop a",
     '  stuck/stale live session so it can rejoin, or claim a *different* open seat. Never run `musterd agent',
