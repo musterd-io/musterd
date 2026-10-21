@@ -1570,7 +1570,8 @@
 /* A walker's plate carries the act's words (`.lc-gl-label__walk`): lift it above the plates around it
    while it does, but never above a speech bubble (z 3) — the bubble is an utterance, the tag a label
    (lane 01M5B02V4A). */
-.lc-gl-label.is-tagged {
+.lc-gl-label.is-tagged,
+.lc-gl-label.is-spot {
   z-index: 2;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1777,6 +1778,34 @@
     opacity: 1;
     transform: none;
     background-color: color-mix(in srgb, var(--lc-accent-bright) 55%, transparent);
+  }
+}
+/* A folded plate (lane 01M5G7A9H1): an idle or away member's plate keeps its pictures and drops its
+   words — dot, name, the role's glyph, the model's logo, and any state tag (dnd, woken, service) — so a
+   crowded room keeps every face and still says roughly who does what (nick: "the role icon (not the
+   role title) … same thing with the model icon"). It opens on hover or focus on /live, and on
+   /broadcast when the spotlight reaches it (index.ts `spotTimer`). A role with no glyph folds away. */
+.lc-gl-label.is-compact:not(.is-spot):not(:hover):not(:focus-within):not(.is-expanded) .lc-gl-label__plate {
+  > :is(.lc-gl-label__rule, .lc-gl-label__model, .lc-gl-label__job:not(:has(svg))),
+  > .lc-gl-label__job > span {
+    display: none;
+  }
+  > .lc-gl-label__job {
+    padding: 1.5px 3px;
+  }
+}
+.lc-gl-label.is-spot .lc-gl-label__plate > :is(.lc-gl-label__job, .lc-gl-label__provider, .lc-gl-label__model) {
+  animation: lc-spot-in var(--lc-dur-4) var(--lc-ease-out) both;
+}
+@keyframes lc-spot-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-gl-label.is-spot .lc-gl-label__plate > * {
+    animation: none;
   }
 }
 .lc-gl-label__flag {

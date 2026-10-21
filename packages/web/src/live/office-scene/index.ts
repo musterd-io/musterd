@@ -169,6 +169,11 @@ const AFTERGLOW_MS = 2600;
 /** A newly assigned job's swipe on its plate — two of motion.ts's 600 ms steps; Live.css runs the
  *  same `calc(2 * var(--lc-dur-5))`. */
 const JOB_SWIPE_MS = 1200;
+/** The stream's roll call (lane 01M5G7A9H1): how often, the stagger between plates as the wave
+ *  crosses the room, and how long each plate stays open. ~3 s for a full room. */
+const ROLLCALL_EVERY_MS = 5 * 60_000;
+const ROLLCALL_STEP_MS = 200; // one motion.ts step (dur-2)
+const ROLLCALL_HOLD_MS = 1600;
 /** Ambient micro-choreography (ADR 086 Phase 2, seeded by E1): when the room is quiet, inject one idle
  * beat (a seated micro-gesture — scratch, sip, swivel… — or a stroll), drawn per 10s wall-clock slot so
  * every viewer of the same team sees the same beats. How OFTEN is `ambientSeed.ambientFireP`, which
@@ -1376,6 +1381,14 @@ export function mountOffice(
       // Woken seats wear a moonlit plate (nick, 2026-10-09): you can tell a wake from a person at a
       // keyboard across the room, not only by reading the tag.
       el.classList.toggle('is-woken', node.woken === true);
+      // Plates scale with what the member is doing (lane 01M5G7A9H1; nick: "the office space is now
+      // becoming crowded with the nameplates"). Idle or away, the plate folds to dot + name and drops
+      // its role tag and model; a working member, or one who owns a blocked lane, keeps the full plate.
+      // Nobody leaves the room and no word dims (the room stays alive, ADR 686; text keeps its ink).
+      el.classList.toggle(
+        'is-compact',
+        (node.posture === 'active' || node.posture === 'away') && node.blocked !== true,
+      );
     }
     for (const [name, el] of labels) {
       if (!seen.has(name)) {
@@ -1533,7 +1546,7 @@ export function mountOffice(
     for (const name of labels.keys()) {
       const head = headMap.get(name);
       if (!head) continue;
-      const size = plateSize.get(name);
+      const size = rollSize.get(name) ?? plateSize.get(name);
       boxes.push({
         name,
         anchor: head,
@@ -3294,6 +3307,42 @@ export function mountOffice(
   scheduleAmbient(); // start the idle coffee-stroll timer (no-op under reduced-motion)
   ensureDrift(); // and the slow breath, for the stretches where the loop is parked
 
+  // The stream's roll call (lane 01M5G7A9H1; nick picked it over a round-robin spotlight). Every five
+  // minutes the folded plates open in a wave across the room, left to right, and fold again — a full
+  // readout of who is on the floor for a viewer who just arrived, and a beat the stream can feel.
+  // /live does not need it (hover opens a plate), nor does a still capture; a hidden tab skips it.
+  // While a plate is open in the wave, layout keeps its folded size (`rollSize`): the open plate
+  // overlays its neighbours for a moment instead of shoving them — plates moving was the thing nick
+  // found "very distracting" (plateLayout.ts).
+  const rollSize = new Map<string, { w: number; h: number }>();
+  let rollTimers: ReturnType<typeof setTimeout>[] = [];
+  const rollCall = (): void => {
+    if (document.hidden) return;
+    for (const t of rollTimers) clearTimeout(t);
+    rollTimers = [];
+    const folded = [...labels]
+      .filter(([, el]) => el.classList.contains('is-compact'))
+      .map(([n, el]) => ({ n, el, x: el.getBoundingClientRect().left }))
+      .sort((a, b) => a.x - b.x);
+    folded.forEach(({ n, el }, i) => {
+      rollTimers.push(
+        setTimeout(() => {
+          const size = plateSize.get(n);
+          if (size) rollSize.set(n, size);
+          el.classList.add('is-spot');
+        }, i * ROLLCALL_STEP_MS),
+        setTimeout(
+          () => {
+            el.classList.remove('is-spot');
+            rollSize.delete(n);
+          },
+          i * ROLLCALL_STEP_MS + ROLLCALL_HOLD_MS,
+        ),
+      );
+    });
+  };
+  const rollTimer = interactiveLabels || STILL ? null : setInterval(rollCall, ROLLCALL_EVERY_MS);
+
   // Track the real PST sun: re-read the clock every minute and rebake only when the veil/lamp state moves.
   const lightTimer = setInterval(() => {
     if (refreshLightEnv()) {
@@ -3590,6 +3639,7 @@ export function mountOffice(
         flagged ? 'Open settings — a channel pairing waits for you' : 'Open settings',
       );
     },
+    rollCall,
     setLinked: (names: string | readonly string[] | null) => {
       // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464). Several at once
       // when a Now goal row lights everyone on that goal.
@@ -3669,6 +3719,8 @@ export function mountOffice(
       cancelAnimationFrame(raf);
       stopDrift(); // the heartbeat outlives nothing
       clearInterval(lightTimer); // stop the PST lighting clock
+      if (rollTimer) clearInterval(rollTimer); // stop the stream's roll call
+      for (const t of rollTimers) clearTimeout(t);
       if (railTimer) clearInterval(railTimer); // stop the caption rail
       options.onCaption?.(null);
       clearInterval(welcomeTimer); // stop the receptionist welcome

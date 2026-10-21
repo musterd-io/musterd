@@ -338,6 +338,9 @@ export interface OfficeHandle {
   /** ADR 464: ring this member's plate (null clears) — the team column's card↔character link — or
    * several members' at once (a Now goal row). A class toggle on the HTML plate, never a redraw. */
   setLinked: (names: string | readonly string[] | null) => void;
+  /** Run the stream's roll call now (lane 01M5G7A9H1): the folded plates open in a wave and fold
+   *  again. /broadcast runs it on its own clock; this is for /office-preview and captures. */
+  rollCall: () => void;
   /** Show the working-hours calendar's settings door (`/live`, a signed-in human), and flag it when
    *  something there waits for the viewer. A no-op where the scene made no hotspot. */
   setSettingsSpot: (state: { enabled: boolean; flagged: boolean }) => void;

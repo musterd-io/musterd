@@ -172,6 +172,15 @@ const FIXTURE_IDENTITY: Record<string, { surface: string; model: string | null; 
   // The service seat: no model BY KIND (pure code, nothing to attest) — distinct from Dev's
   // null-model agent, which is a seat that merely has nothing to report.
   Jib: { surface: 'cli', model: null, role: 'platform' },
+  // The `?n` extras, with roles, so a crowded room (lane 01M5G7A9H1) wears the plates a real one does.
+  Kai: { surface: 'claude-code', model: 'claude-opus-5-5', role: 'engineer' },
+  Lux: { surface: 'codex', model: 'gpt-6-luna', role: 'engineer' },
+  Mo: { surface: 'claude-code', model: 'claude-opus-5-5', role: 'researcher' },
+  Nia: { surface: 'cli', model: 'claude-sonnet-5-5', role: 'platform' },
+  Oz: { surface: 'opencode', model: 'beam-free', role: 'engineer' },
+  Pip: { surface: 'claude-code', model: 'claude-opus-5-5', role: 'comms' },
+  Quin: { surface: 'grok', model: 'grok-4.7', role: 'engineer' },
+  Rue: { surface: 'claude-code', model: 'claude-opus-5-5', role: 'security' },
 };
 
 // A looping choreography script (ms offset → event), so the room is always alive on the preview.
@@ -752,6 +761,13 @@ function OfficePreviewPage() {
           onClick={() => fire({ kind: 'walk-claim', who: 'Dev', lane: 'preview-lane', title: 'Rotate the leaked keys' })}
         >
           ⇡
+        </button>
+        <button
+          className="lc__pbtn"
+          title="roll call (the stream's wave across the folded plates)"
+          onClick={() => handleRef.current?.rollCall()}
+        >
+          👋
         </button>
         <button
           className="lc__pbtn"
