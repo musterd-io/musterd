@@ -14,7 +14,6 @@ import { ulid } from 'ulid';
 import {
   flagStr,
   GLOBAL_FLAGS,
-  parseArgs,
   parseDurationMs,
   rejectUnknownFlags,
   type Parsed,
@@ -22,6 +21,7 @@ import {
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { provisionAgentSeat } from '../onboard/agentSeat.js';
+import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
 import { resolve } from './helpers.js';
@@ -60,6 +60,7 @@ const USAGE =
 export const DEFAULT_WRAP_UP_MS = 5 * 60_000;
 const POLL_MS = 3_000;
 const GIT = 'git';
+const RESIDENCY_ON = 'on';
 
 export type WrapUp = 'accepted' | 'timeout' | 'skipped' | 'not_live' | 'self';
 
@@ -160,6 +161,12 @@ export async function runMove(input: MoveInput, deps: MoveDeps): Promise<MoveOut
     ...(input.to ? { to: input.to } : {}),
     ...(input.only ? { only: true } : {}),
   });
+  // The answer must be about the seat we asked to move — everything below acts on `moved.seat`.
+  if (moved.seat !== seat.name)
+    throw new CliError(
+      `the hub answered for "${moved.seat}", not "${seat.name}" — nothing was set up here`,
+      1,
+    );
   const from = moved.from.map((f) => f.label || f.node_id).join(', ') || 'no machine';
   deps.out(
     `${theme.ok(sym.ok)} ${seat.name} moved: ${from} → ${theme.accent(moved.to.label || moved.to.node_id)}\n`,
@@ -360,21 +367,25 @@ export async function moveCommand(parsed: Parsed): Promise<number> {
             ),
           );
         } else {
-          const argv = [
-            'on',
-            '--seat',
-            moved.seat,
-            '--workspace',
-            dir,
-            '--harness',
-            moved.residency.harness,
-          ];
+          // The hub's answer is data, never argv: the Parsed is built field by field (a harness of
+          // `--key-env` must not become a flag), and the harness must be one this CLI knows.
+          const known = harnessAdapters().map((a) => a.id);
+          if (!known.includes(moved.residency.harness))
+            throw new CliError(
+              `the hub returned an unknown harness "${moved.residency.harness}" for ${moved.seat} — ` +
+                `nothing was enrolled; run musterd residency on there with one of: ${known.join(', ')}`,
+              1,
+            );
           // `residency on` gets a Parsed built here — never `move`'s own flags — so it is loaded
           // lazily, the way commandTable loads every command: a static import would read, to
           // cli-flags:check, as `move` handing its flags to residency and on to authority.
           const { residencyOn } = await import('./residency.js');
           await residencyOn(
-            parseArgs(argv),
+            {
+              positionals: [RESIDENCY_ON],
+              flags: { seat: moved.seat, workspace: dir, harness: moved.residency.harness },
+              metaPairs: [],
+            },
             moved.residency.policy ? { policy: moved.residency.policy } : {},
           );
         }

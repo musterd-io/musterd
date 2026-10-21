@@ -165,6 +165,13 @@ describe('musterd move (ADR 696)', () => {
     expect(h.text()).toContain('would move wallow (agent) from mac.lan to macbook-air-2.lan');
   });
 
+  it('an answer about a different seat is refused before anything is set up here', async () => {
+    const h = harness({});
+    h.deps.move = async () => moved('ryder');
+    await expect(runMove(base, h.deps)).rejects.toThrow(/answered for "ryder", not "wallow"/);
+    expect(h.arrivals).toEqual([]);
+  });
+
   it('a service seat is refused: it belongs to its machine', async () => {
     const h = harness({ members: [member('nick', 'human'), member('guardian', 'service')] });
     await expect(runMove({ ...base, seat: 'guardian' }, h.deps)).rejects.toThrow(/service install/);
