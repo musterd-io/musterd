@@ -16,7 +16,8 @@ import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
 import { laneCoveringPath, laneHoldingFile } from '../store/lanes.js';
-import { listMembers } from '../store/members.js';
+import { getMemberByName, listMembers } from '../store/members.js';
+import { isPresentOrReclaimable } from '../store/presence.js';
 import { unblockerReachable } from '../store/reachability.js';
 import { getRoleSkill } from '../store/roles.js';
 import { type MemberRow, type TeamRow, toMember } from '../store/rows.js';
@@ -77,6 +78,24 @@ export async function gateA(ctx: GateContext): Promise<GateDecision> {
     const holder = await laneHoldingFile(db, teamId, slug, path, owned.project);
     if (holder && holder.owner_seat !== ctx.member.name) {
       const since = holder.claimed_at ? new Date(holder.claimed_at).toISOString() : 'its claim';
+      // ADR 693: an agent holder that has left — no live session, past its reclaim grace — no
+      // longer holds the file against a seat that is here. The lane stays theirs on the board; the
+      // edit proceeds with the advisory naming them, under either posture. A human's hold stands:
+      // a person's presence is not a reliable sign they are still working.
+      const holderSeat = await getMemberByName(db, teamId, holder.owner_seat!);
+      if (
+        holderSeat?.kind === 'agent' &&
+        !(await isPresentOrReclaimable(db, holderSeat.id, ctx.srv.config.presenceTimeoutMs))
+      ) {
+        return {
+          decision: 'allow',
+          outcome: 'warned',
+          reason:
+            `heads-up: '${path}' was held by ${holder.owner_seat} (lane "${holder.title}", since ${since}), ` +
+            `who has left — the hold has lapsed (ADR 693). Their lane is still on the board: tell them ` +
+            `what you changed in it.`,
+        };
+      }
       const detail =
         `'${path}' is held by ${holder.owner_seat} (lane "${holder.title}", named it first, since ${since}) — ` +
         `ask them to hand it off or narrow their lane, wait for that lane to finish, or split the ` +
