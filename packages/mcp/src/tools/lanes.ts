@@ -19,6 +19,7 @@ import {
   incidentBannerLines,
   laneDetailLines,
   laneIdQuery,
+  METRIC_SOURCES,
   BoardQuerySchema,
   LaneQuerySchema,
   LaneStateSchema,
@@ -73,6 +74,10 @@ const METRIC_INPUT = z.object({
   baseline: z.number().nullable(),
   target: z.number(),
   direction: z.enum(['up', 'down']),
+  // ADR 673 §2: a number the daemon derives daily fills the chart itself; `manual` (the default)
+  // takes posted samples. Without this a seat could only ever declare a manual metric. A plain
+  // string for the tools-list budget; the handler parses it against METRIC_SOURCES (hard rule 4).
+  source: z.string().optional(),
 });
 
 const PRE_REGISTERED_INPUT = z.object({
@@ -507,6 +512,9 @@ export function registerLanes(
     async (args) => {
       try {
         const { id, park_until, read_verdict, measured, evidence, sample, ...rest } = args;
+        const source = rest.metric?.source;
+        if (source !== undefined && !(METRIC_SOURCES as readonly string[]).includes(source))
+          throw new Error(`metric.source "${source}" is not one of ${METRIC_SOURCES.join(', ')}`);
         // ADR 673: a day's sample has its own endpoint; it rides this tool to save a tools-list
         // entry. Alone, it is the whole call; beside a patch, the patch goes first.
         const recordSample = async (): Promise<string> => {
