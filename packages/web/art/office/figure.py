@@ -187,13 +187,24 @@ def build_figure(zs: float, origin: Vector) -> Rig:
 
     # ── skin: head with a face, neck, hands, forearms (a short sleeve leaves them bare)
     r.ball("head", "head", "skin", skin, HEAD_X, 0, HEAD_C + HEAD_R * 1.04, HEAD_R * 0.92, HEAD_R * 0.96, HEAD_R * 1.04)
-    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.6, 0, NECK - 2 * FIG, 2.8 * FIG, 3.0 * FIG, 6.5 * FIG)
+    # tapered: a broader base where it meets the shoulders, so the head does not sit on a post
+    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.6, 0, NECK - 2.5 * FIG, 3.6 * FIG, 2.7 * FIG, 7 * FIG)
     r.ball("nose", "head", "skin", skin, HEAD_X + HEAD_R * 0.86, 0, HEAD_C - 0.8 + 1.8, 1.9, 1.5, 1.8)
     for sy in (1, -1):
-        r.ball("eye", "head", "skin", eye, HEAD_X + HEAD_R * 0.78, sy * 3.3, HEAD_C + 2.0 + 1.2, 1.1, 1.3, 1.2)
+        # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): at 2 px a unit a
+        # 2.4-unit eye was a pixel or two and vanished. Taller ovals, set a touch wider, still under
+        # the visor (its band runs HEAD_C + 0.4 … + 4.8).
+        r.ball("eye", "head", "skin", eye, HEAD_X + HEAD_R * 0.8, sy * 3.4, HEAD_C + 4.1, 1.2, 1.45, 1.75)
         r.ball("ear", "head", "skin", skin, HEAD_X, sy * HEAD_R * 0.95, HEAD_C + 1.0 + 2.1, 1.3, 1.0, 2.1)
     r.box("mouth", "head", "skin", mouth, HEAD_X + HEAD_R * 0.84, 0, HEAD_C - 4.3, 0.9, 3.4, 1.0)
     for side, sy in (("L", 1), ("R", -1)):
+        # The whole arm is skin under the sleeves: a sleeveless top (the vest) left the forearms
+        # hanging in the air, and a swung sleeve opened a gap at the shoulder and the elbow (nick,
+        # 2026-10-21: "the arms look very detached"). Balls at both joints keep the limb whole at any
+        # angle; a sleeve, a size larger, covers them.
+        r.ball("shoulder", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER + 2.3 * FIG, 3.2 * FIG, 3.2 * FIG, 3.2 * FIG)
+        r.cyl("upperarm", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM, 2.7 * FIG, 3.1 * FIG, UPPER_ARM)
+        r.ball("elbow", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 2.7 * FIG, 2.7 * FIG, 2.7 * FIG, 2.7 * FIG)
         r.cyl("forearm", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM, 2.4 * FIG, 2.9 * FIG, FORE_ARM)
         r.ball("hand", f"wrist{side}", "skin", skin, 0.6, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM - 1.5 * FIG + 3.2 * FIG, 3.0 * FIG, 2.4 * FIG, 3.2 * FIG)
 
@@ -228,13 +239,20 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         # "a little bit too block-ish" (nick): one smooth tapered volume from the waist to the
         # shoulders, oval in section — a slight waist, wider chest, rounded edges, no seams.
         z0 = HIP - 1 * FIG
-        h = SHOULDER + 2.5 * FIG - z0
+        h = SHOULDER - z0
         r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, 5.0 * FIG, 6.4 * FIG, h, sy=1.75)
+        # The shoulders: a flattened ellipsoid over the top of the torso, so the line from the neck
+        # falls away to each arm instead of meeting it at a flat lid ("the shoulders/neck are too
+        # block-y", nick, 2026-10-21).
+        r.ball("yoke", "spine", layer, mat, 0.3, 0, SHOULDER + 3.6 * FIG, 6.7 * FIG, 13.6 * FIG, 3.6 * FIG)
 
     def sleeves(layer, long: bool, mat=cloth):
         for side, sy in (("L", 1), ("R", -1)):
-            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 1 * FIG, 3.6 * FIG, 4.2 * FIG, UPPER_ARM + 1 * FIG)
+            # a rounded cap where the sleeve meets the yoke, turning with the arm
+            r.ball("cap", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER + 2.9 * FIG, 3.9 * FIG, 3.9 * FIG, 3.9 * FIG)
+            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 1 * FIG, 3.6 * FIG, 4.2 * FIG, UPPER_ARM - 1 * FIG)
             if long:
+                r.ball("elbow", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 3.5 * FIG, 3.5 * FIG, 3.5 * FIG, 3.5 * FIG)
                 r.cyl("cuff", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM + 1 * FIG, 3.0 * FIG, 3.4 * FIG, FORE_ARM - 1 * FIG)
 
     torso("top/tee"); sleeves("top/tee", False)
@@ -253,6 +271,7 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     r.ball("pelvis", "hips", "bottom", cloth, 0, 0, HIP + 2.5 * FIG, 6.0 * FIG, 8.6 * FIG, 5.0 * FIG)
     for side, sy in (("L", 1), ("R", -1)):
         r.cyl("thigh", f"hip{side}", "bottom", cloth, 0, sy * HIP_W, KNEE - 1 * FIG, 3.6 * FIG, 4.4 * FIG, THIGH + 1 * FIG)
+        r.ball("knee", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, KNEE + 3.7 * FIG, 3.7 * FIG, 3.7 * FIG, 3.7 * FIG)
         r.cyl("shin", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, ANKLE + 1 * FIG, 3.0 * FIG, 3.6 * FIG, SHIN - 1 * FIG)
         r.box("shoe", f"ankle{side}", "shoes", shoe, 2.5 * FIG, sy * HIP_W, 0, 10 * FIG, 5.5 * FIG, 4 * FIG, 1.2)
 
@@ -289,8 +308,10 @@ STAND = {}
 SEATED = {
     "hipL": (0, swing(88), 0), "hipR": (0, swing(88), 0),
     "kneeL": (0, swing(-86), 0), "kneeR": (0, swing(-86), 0),
-    "shoulderL": (0, swing(58), 0), "shoulderR": (0, swing(58), 0),
-    "elbowL": (0, swing(10), 0), "elbowR": (0, swing(10), 0),
+    # Elbows bent, forearms level over the keyboard — the old near-straight arm (58°, 10°) read as
+    # reaching, not typing. The hands land within a unit or two of where they did.
+    "shoulderL": (0, swing(45), 0), "shoulderR": (0, swing(45), 0),
+    "elbowL": (0, swing(45), 0), "elbowR": (0, swing(45), 0),
     "spine": (0, swing(-4), 0),
 }
 SEATED_LIFT = SEAT_TOP - HIP
@@ -324,10 +345,10 @@ def action(name: str, t: float) -> tuple[dict, float]:
     if name in ("sit-type", "sit-idle"):
         pose = dict(SEATED)
         if name == "sit-type":
-            pose["elbowL"] = (0, swing(10 + 6 * math.sin(ph)), 0)
-            pose["elbowR"] = (0, swing(10 - 6 * math.sin(ph)), 0)
-            pose["shoulderL"] = (0, swing(62), 0)
-            pose["shoulderR"] = (0, swing(62), 0)
+            pose["elbowL"] = (0, swing(45 + 6 * math.sin(ph)), 0)
+            pose["elbowR"] = (0, swing(45 - 6 * math.sin(ph)), 0)
+            pose["shoulderL"] = (0, swing(48), 0)
+            pose["shoulderR"] = (0, swing(48), 0)
             pose["head"] = (0, swing(6), 0)
         else:
             pose["spine"] = (0, swing(-4 + 1.5 * math.sin(ph)), 0)
