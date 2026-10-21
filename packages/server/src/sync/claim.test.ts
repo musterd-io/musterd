@@ -13,7 +13,7 @@ import { readNodeState } from '../node/state.js';
 import { getLane, updateLane } from '../store/lanes.js';
 import { addMember, getMemberByName, mintCredential } from '../store/members.js';
 import { insertMessage, localNodeForTeam } from '../store/messages.js';
-import { unbindSeat } from '../store/nodes.js';
+import { bindSeatToNode, unbindSeat } from '../store/nodes.js';
 import { touchAmbientPresence } from '../store/presence.js';
 import { claimWakeLeases, enrollResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -629,6 +629,106 @@ withDrivers('claim', (_o, kind) => {
       );
       expect(unbound.status).toBe(200);
       expect(await bindingsOf('nick')).toEqual([]);
+    });
+  });
+
+  describe('ADR 696 — `musterd move`: one act re-binds a seat, decided on the hub', async () => {
+    const bindingsOf = async (name: string) =>
+      (
+        await hub.store.all(
+          `SELECT s.node_id FROM seat_nodes s JOIN members m ON m.id = s.member_id
+          WHERE m.team_id = ? AND m.name = ? ORDER BY s.bound_at, s.node_id`,
+          [(await hubTeam()).id, name],
+        )
+      ).map((r) => r.node_id);
+    const seatId = async (name: string) =>
+      (await getMemberByName(hub.store, (await hubTeam()).id, name))!.id;
+    const nodes = async () => ({
+      hubNode: (await localNodeForTeam(hub.store, (await hubTeam()).id)).id,
+      joinerNode: readNodeState().nodes['bravo']!.node_id,
+    });
+
+    it('run on the joiner with no --to, an admin brings an agent there: forwarded, re-bound, the old node refused', async () => {
+      const { hubNode, joinerNode } = await nodes();
+      const team = await hubTeam();
+      await bindSeatToNode(hub.store, team.id, await seatId('ada'), hubNode);
+      await bindSeatToNode(hub.store, team.id, await seatId('nick'), joinerNode);
+
+      const res = await post(joinerBase, '/teams/bravo/seats/ada/move', {}, nickOnJoiner);
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(res.json).toMatchObject({
+        seat: 'ada',
+        kind: 'agent',
+        from: [{ node_id: hubNode }],
+        to: { node_id: joinerNode },
+        residency: null,
+      });
+      expect(await bindingsOf('ada')).toEqual([joinerNode]);
+      // No unbound window: the hub's own node cannot take ada back by speaking for it.
+      expect(await bindSeatToNode(hub.store, team.id, await seatId('ada'), hubNode)).toMatchObject({
+        bound: false,
+        node_id: joinerNode,
+      });
+      const moved = await hub.store.get(
+        "SELECT actor, detail FROM audit WHERE action = 'seat.moved' ORDER BY id DESC LIMIT 1",
+      )!;
+      expect(moved.actor).toBe('nick');
+      expect(JSON.parse(moved.detail)).toMatchObject({
+        from: [hubNode],
+        to: joinerNode,
+        by: 'nick',
+      });
+    });
+
+    it('a mover who does not live on the forwarding machine is refused there, and nothing moves', async () => {
+      const { hubNode } = await nodes();
+      const team = await hubTeam();
+      await bindSeatToNode(hub.store, team.id, await seatId('ada'), hubNode);
+      await bindSeatToNode(hub.store, team.id, await seatId('nick'), hubNode);
+
+      const res = await post(joinerBase, '/teams/bravo/seats/ada/move', {}, nickOnJoiner);
+      expect(res.status).toBe(403);
+      expect(res.json.error.code).toBe('bound_elsewhere');
+      expect(await bindingsOf('ada')).toEqual([hubNode]);
+    });
+
+    it('on the hub, --to names the machine; a member who is neither admin nor sponsor is refused', async () => {
+      const { hubNode, joinerNode } = await nodes();
+      const team = await hubTeam();
+      await bindSeatToNode(hub.store, team.id, await seatId('ada'), hubNode);
+      const enrolled = await enrollResidency(hub.store, team.id, {
+        member_id: await seatId('ada'),
+        harness: 'claude-code',
+        host: hostname(),
+        grant_id: null,
+        authorized_by: 'nick',
+        policy: { cooldown_ms: 900_000 },
+      });
+      expect(enrolled.row.host).toBe(hostname());
+
+      const refused = await post(
+        hubBase,
+        '/teams/bravo/seats/ada/move',
+        { to: joinerNode },
+        hanaOnHub,
+      );
+      expect(refused.status).toBe(403);
+      expect(refused.json.error.code).toBe('forbidden');
+      expect(await bindingsOf('ada')).toEqual([hubNode]);
+
+      const res = await post(hubBase, '/teams/bravo/seats/ada/move', { to: joinerNode }, nickOnHub);
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(res.json.residency).toEqual({
+        harness: 'claude-code',
+        host: hostname(),
+        policy: { cooldown_ms: 900_000 },
+      });
+      expect(await bindingsOf('ada')).toEqual([joinerNode]);
+      expect(
+        await hub.store.get('SELECT COUNT(*) AS n FROM residency WHERE member_id = ?', [
+          await seatId('ada'),
+        ]),
+      ).toEqual({ n: 0 });
     });
   });
 

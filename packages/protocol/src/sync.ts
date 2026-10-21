@@ -4,6 +4,7 @@ import { PolicyOverrideSchema } from './credentials.js';
 import { EnvelopeSchema } from './envelope.js';
 import { LaneSchema, UpdateLaneSchema } from './lanes.js';
 import { SyncPullStopSchema } from './nodes.js';
+import { ResidencyPolicyOverrideSchema } from './residency.js';
 import { StylePrefsSchema } from './style.js';
 
 /**
@@ -403,6 +404,52 @@ export const SeatNodeTrustedSchema = z.object({
   already: z.boolean(),
 });
 export type SeatNodeTrusted = z.infer<typeof SeatNodeTrustedSchema>;
+
+/**
+ * ADR 696, the seat-facing move: `POST /teams/:slug/seats/:name/move`. `to` names the destination
+ * machine by label or node id, resolved against the team's unrevoked nodes; omitted, it is the
+ * machine whose daemon took the request — `musterd move <seat>` run at the destination, the way
+ * `/nodes/trust` makes the landing daemon the voucher. `only` replaces a human's set instead of
+ * adding to it (an agent's set is always replaced).
+ */
+export const SeatMoveRequestSchema = z.object({
+  to: z.string().min(1).optional(),
+  only: z.boolean().optional(),
+});
+export type SeatMoveRequest = z.infer<typeof SeatMoveRequestSchema>;
+
+/**
+ * ADR 696, the joiner→hub forward of a move, the trust act's shape plus the mover: the node
+ * credential proves the machine, and `actor` is re-authorized against the hub's own roster after
+ * its residence on that machine is checked (the `/sync/policy` order).
+ */
+export const SyncMoveRequestSchema = SeatMoveRequestSchema.extend({
+  /** Always named on the forward: a joiner fills in its own node id for "this machine". */
+  to: z.string().min(1),
+  seat: z.string().min(1),
+  actor: z.string().min(1),
+});
+export type SyncMoveRequest = z.infer<typeof SyncMoveRequestSchema>;
+
+/**
+ * What a move did. `from` is every node the seat was bound to before (empty for a seat no machine
+ * had spoken for). `residency` is the wake enrollment the move revoked, so the destination can
+ * re-enroll with the same harness and overrides; null when the seat was not enrolled.
+ */
+export const SeatMovedSchema = z.object({
+  seat: z.string().min(1),
+  kind: z.enum(['agent', 'human']),
+  from: z.array(z.object({ node_id: z.string().min(1), label: z.string() })),
+  to: z.object({ node_id: z.string().min(1), label: z.string() }),
+  residency: z
+    .object({
+      harness: z.string().min(1),
+      host: z.string(),
+      policy: ResidencyPolicyOverrideSchema.nullable(),
+    })
+    .nullable(),
+});
+export type SeatMoved = z.infer<typeof SeatMovedSchema>;
 
 /**
  * The joiner→hub policy forward (residence-2 census gap 1): the sparse override an admin chose on

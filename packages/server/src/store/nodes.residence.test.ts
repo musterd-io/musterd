@@ -5,6 +5,8 @@ import { addMember } from './members.js';
 import {
   bindSeatToNode,
   listNodeLiveness,
+  moveSeatBinding,
+  resolveNodeRef,
   seatBinding,
   seatBindings,
   touchNode,
@@ -139,6 +141,85 @@ withDrivers('nodes.residence', (o) => {
       await trustNodeForSeat(db, team.id, nick, 'nA', 'nB', 11);
       expect(await unbindSeat(db, nick.id)).toEqual({ node_id: 'nA' });
       expect(await seatBindings(db, nick.id)).toEqual([]);
+    });
+  });
+
+  describe('a seat is MOVED by one act, never left unbound (ADR 696)', async () => {
+    it('an agent seat is re-bound to the target alone, and the old node is refused in the same instant', async () => {
+      const { db, team, ada } = await seed();
+      await bindSeatToNode(db, team.id, ada.id, 'nA', 10);
+      expect(await moveSeatBinding(db, team.id, ada, 'nB', { now: 20 })).toEqual({
+        from: ['nA'],
+        to: 'nB',
+      });
+      expect(await seatBindings(db, ada.id)).toEqual([
+        { node_id: 'nB', label: 'laptop-b', bound_at: 20 },
+      ]);
+      // The unbind race (joiner-wedges.md): with no unbound window, the old node's next push
+      // cannot take the seat back.
+      expect(await bindSeatToNode(db, team.id, ada.id, 'nA', 21)).toEqual({
+        bound: false,
+        node_id: 'nB',
+        label: 'laptop-b',
+      });
+    });
+
+    it('an unbound agent seat binds to the target; moving to where it already lives is a no-op', async () => {
+      const { db, team, ada } = await seed();
+      expect(await moveSeatBinding(db, team.id, ada, 'nB', { now: 20 })).toEqual({
+        from: [],
+        to: 'nB',
+      });
+      expect(await moveSeatBinding(db, team.id, ada, 'nB', { now: 30 })).toEqual({
+        from: ['nB'],
+        to: 'nB',
+      });
+      expect((await seatBinding(db, ada.id))?.bound_at).toBe(20);
+    });
+
+    it('a human seat GAINS the target (ADR 358: a person lives on several machines); `only` replaces', async () => {
+      const { db, team, nick } = await seed();
+      await bindSeatToNode(db, team.id, nick.id, 'nA', 10);
+      await moveSeatBinding(db, team.id, nick, 'nB', { now: 20 });
+      expect((await seatBindings(db, nick.id)).map((b) => b.node_id)).toEqual(['nA', 'nB']);
+      await moveSeatBinding(db, team.id, nick, 'nB', { now: 30, only: true });
+      expect((await seatBindings(db, nick.id)).map((b) => b.node_id)).toEqual(['nB']);
+    });
+  });
+
+  describe('a machine is named by label or id (ADR 696)', async () => {
+    it('resolves a label, then an id; a revoked node is not a target', async () => {
+      const { db, team } = await seed();
+      expect(await resolveNodeRef(db, team.id, 'laptop-b')).toEqual({
+        ok: true,
+        node: { id: 'nB', label: 'laptop-b' },
+      });
+      expect(await resolveNodeRef(db, team.id, 'nA')).toEqual({
+        ok: true,
+        node: { id: 'nA', label: 'laptop-a' },
+      });
+      expect(await resolveNodeRef(db, team.id, 'retired')).toEqual({
+        ok: false,
+        reason: 'unknown',
+        candidates: ['laptop-a', 'laptop-b'],
+      });
+    });
+
+    it('a label two machines share is ambiguous, and the ids are named so the caller can pick', async () => {
+      const { db, team } = await seed();
+      await db.run(
+        "INSERT INTO nodes (id, team_id, label, next_seq) VALUES ('nC', ?, 'laptop-b', 1)",
+        [team.id],
+      );
+      expect(await resolveNodeRef(db, team.id, 'laptop-b')).toEqual({
+        ok: false,
+        reason: 'ambiguous',
+        candidates: ['nB', 'nC'],
+      });
+      expect(await resolveNodeRef(db, team.id, 'nC')).toEqual({
+        ok: true,
+        node: { id: 'nC', label: 'laptop-b' },
+      });
     });
   });
 

@@ -15,6 +15,9 @@ import {
   GoalListSchema,
   NodeInviteMintSchema,
   NodeListSchema,
+  type SeatMoved,
+  type SeatMoveRequest,
+  SeatMovedSchema,
   type SeatNodeTrusted,
   SeatNodeTrustedSchema,
   type RosterSyncState,
@@ -1919,6 +1922,21 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/nodes/trust`, { node_id: nodeId });
     const parsed = SeatNodeTrustedSchema.safeParse(json);
     if (!parsed.success) throw new CliError('trust response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+
+  /**
+   * ADR 696: move `seat` to `to` (a machine's label or node id), or — `to` omitted — to the machine
+   * whose daemon this CLI talks to. Decided on the hub; a joiner forwards it.
+   */
+  async moveSeat(slug: string, seat: string, body: SeatMoveRequest): Promise<SeatMoved> {
+    const json = await this.request(
+      'POST',
+      `/teams/${slug}/seats/${encodeURIComponent(seat)}/move`,
+      body,
+    );
+    const parsed = SeatMovedSchema.safeParse(json);
+    if (!parsed.success) throw new CliError('move response did not match the protocol schema', 1);
     return parsed.data;
   }
 

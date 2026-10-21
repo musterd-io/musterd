@@ -127,32 +127,43 @@ musterd status                                                          # the ro
 A `sync_fold_*` line that repeats every tick is a blocker, not slowness — read
 `docs/perf/cloud-seat.md` ("the drain — three permanent wedges") before assuming it will clear.
 
-## Moving a seat — `bootstrap.sh seat <name> <harness>`
+## Moving a seat — `musterd move <name>`
 
-Per seat, in this order (the order is the whole point: the seat's first act from the joiner is
-what binds it there, and a seat still bound to the hub is refused):
+One command (ADR 696). At the destination, from your own Workspace:
 
 ```sh
-# hub, as nick — stop waking it here, then release its residence
-musterd residency off --seat ryder
-musterd node unbind ryder
-
-# joiner
-bash ~/bootstrap.sh seat ryder claude-code
-musterd ryder                                   # open it once through the front door (ADR 491)
+musterd move ryder                 # bring ryder to THIS machine
+musterd move ryder --dry-run       # say what would happen, change nothing
 ```
 
-The seat step provisions the worktree and wires the harness through the reconcile engine
-(`musterd agent`, ADR 491), pre-accepts Claude Code's folder trust so a **cold** wake does not die
-on a prompt a headless session cannot answer (cloud-seat finding 8), re-lands the doorbell hook,
-`wire`s the actuator's credential, and enrols the seat for wake with `--flow auto`. A Codex seat
-needs none of the trust step since ADR 495. The seat's `pnpm install` runs in the background;
-its first gates wait on it.
+Or from anywhere — including from the seat's own session — send it, then finish at the target:
 
-What does **not** move: the seat's resumable Claude Code / Codex session (ADR 210's registry is
-per machine) — the seat starts a fresh session on the joiner, with its musterd seat memory intact.
-The hub's worktree for the seat goes stale; leave it or `git worktree remove` it from
-`~/.musterd/runtime`.
+```sh
+musterd move ryder --to macbook-air-2.lan   # a label from `musterd node list`, or a node id
+# then, on macbook-air-2.lan:
+musterd move ryder
+```
+
+The hub re-binds the seat in one act, so there is no unbound window for the old machine's next push
+to take it back (the race `docs/wiki/joiner-wedges.md` records for the old `node unbind` path). It
+revokes the seat's wake enrollment on the old host and hands the harness and knobs to the
+destination, which re-enrolls it. A live seat is first sent a steer to push and save, and the move
+waits up to `--wait` (default 5m) for its `accept`; `--now` skips. Branches of its open lanes that
+are not on origin are named — that work is still on the old machine.
+
+At the destination the command provisions the Workspace through the reconcile engine (`musterd
+agent`, ADR 491), wires the harness, pre-accepts Claude Code's folder trust so a **cold** wake does
+not die on a prompt a headless session cannot answer (cloud-seat finding 8), and enrolls the wake.
+A seat that ran on its own key (`--harness musterd`, ADR 588) prints the `residency on … --key-env`
+line to run instead: the key's variable name is machine-local. The seat's `pnpm install` is yours to
+start (`pnpm install` in its Workspace) before its first gates.
+
+What does **not** move: the seat's resumable Claude Code / Codex session (ADR 210's registry is per
+machine) — the seat starts a fresh session on the destination, with its musterd seat memory intact.
+The old Workspace stays; leave it or `git worktree remove` it there.
+
+`musterd node unbind <seat>` remains the admin's escape valve — for a seat whose machine is gone and
+which nobody will bring back — and still has the race above, so prefer `move`.
 
 ## A seat born on the joiner — the same step; the roster commit is now part of it
 
