@@ -1,0 +1,45 @@
+{
+ "repo": "typst_task",
+ "task_id": 6554,
+ "features": [
+  2,
+  6
+ ],
+ "setting": "coop",
+ "run_id": "bea3b414",
+ "run_name": "pilot-musterd",
+ "agent_framework": "claude_code_musterd",
+ "model": "claude-sonnet-4-5",
+ "started_at": "2026-10-21T01:16:20.345194",
+ "ended_at": "2026-10-21T01:24:12.479228",
+ "duration_seconds": 472.134034,
+ "agents": {
+  "agent1": {
+   "feature_id": 2,
+   "status": "Submitted",
+   "cost": 1.1810493,
+   "steps": 73,
+   "input_tokens": 354,
+   "output_tokens": 16428,
+   "cache_read_tokens": 2571366,
+   "cache_write_tokens": 43242,
+   "patch_lines": 122,
+   "error": null
+  },
+  "agent2": {
+   "feature_id": 6,
+   "status": "Submitted",
+   "cost": 1.1495529,
+   "steps": 62,
+   "input_tokens": 298,
+   "output_tokens": 14194,
+   "cache_read_tokens": 2465188,
+   "cache_write_tokens": 52318,
+   "patch_lines": 130,
+   "error": null
+  }
+ },
+ "total_cost": 2.3306022,
+ "total_steps": 135,
+ "messages_sent": 0
+}

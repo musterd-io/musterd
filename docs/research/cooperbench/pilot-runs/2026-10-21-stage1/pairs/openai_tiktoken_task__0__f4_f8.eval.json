@@ -1,0 +1,37 @@
+{
+  "repo": "openai_tiktoken_task",
+  "task_id": 0,
+  "features": [
+    4,
+    8
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "failed",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "missing_input",
+    "strategy": "naive",
+    "diff": "diff --git a/tiktoken/core.py b/tiktoken/core.py\nindex 6bc9736..5ff991a 100644\n--- a/tiktoken/core.py\n+++ b/tiktoken/core.py\n@@ -82,7 +82,9 @@ class Encoding:\n         *,\n         allowed_special: Literal[\"all\"] | AbstractSet[str] = set(),  # noqa: B006\n         disallowed_special: Literal[\"all\"] | Collection[str] = \"all\",\n-    ) -> list[int]:\n+        chunk_size: int | None = None,\n+        return_repeated_pattern: bool = False,\n+    ) -> list[int] | list[list[int]] | tuple[list[int], dict[tuple[int, int], int]] | tuple[list[list[int]], dict[tuple[int, int], int]]:\n         \"\"\"Encodes a string into tokens.\n \n         Special tokens are artificial tokens used to unlock capabilities from a model,\n@@ -97,6 +99,12 @@ class Encoding:\n         - Setting `allowed_special` to \"all\" will cause this function to treat all text\n           corresponding to special tokens to be encoded as special tokens.\n \n+        If `chunk_size` is provided, splits the text into chunks of the specified character size\n+        and returns a list of token lists, one for each chunk.\n+\n+        If `return_repeated_pattern` is True, returns a tuple of (tokens, patterns) where patterns\n+        is a dictionary mapping token pairs to their frequency counts (top 3 most frequent pairs).\n+\n         ```\n         >>> enc.encode(\"hello world\")\n         [31373, 995]\n@@ -108,8 +116,35 @@ class Encoding:\n         # Raises ValueError\n         >>> enc.encode(\"<|endoftext|>\", disallowed_special=())\n         [27, 91, 437, 1659, 5239, 91, 29]\n+        >>> tokens, patterns = enc.encode(\"hello world\", return_repeated_pattern=True)\n+        >>> # patterns will be {(token1, token2): count, ...}\n         ```\n         \"\"\"\n+        # Handle chunking if chunk_size is specified\n+        if chunk_size is not None:\n+            chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]\n+            chunk_tokens = []\n+            for chunk in chunks:\n+                chunk_result = self.encode(\n+                    chunk,\n+                    allowed_special=allowed_special,\n+                    disallowed_special=disallowed_special,\n+                    return_repeated_pattern=False\n+                )\n+                chunk_tokens.append(chunk_result)\n+\n+            if return_repeated_pattern:\n+                # Combine all chunks to analyze patterns\n+                all_tokens = [token for chunk in chunk_tokens for token in chunk]\n+                pair_counts: dict[tuple[int, int], int] = {}\n+                for i in range(len(all_tokens) - 1):\n+                    pair = (all_tokens[i], all_tokens[i + 1])\n+                    pair_counts[pair] = pair_counts.get(pair, 0) + 1\n+                top_pairs = dict(sorted(pair_counts.items(), key=lambda x: x[1], reverse=True)[:3])\n+                return chunk_tokens, top_pairs\n+\n+            return chunk_tokens\n+\n         if allowed_special == \"all\":\n             allowed_special = self.special_tokens_set\n         if disallowed_special == \"all\":\n@@ -121,7 +156,7 @@ class Encoding:\n                 raise_disallowed_special_token(match.group())\n \n         try:\n-            return self._core_bpe.encode(text, allowed_special)\n+            tokens = self._core_bpe.encode(text, allowed_special)\n         except UnicodeEncodeError:\n             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is\n             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty\n@@ -130,7 +165,20 @@ class Encoding:\n             # string, but given that this is input we want to support, maybe that's okay.\n             # Also we use errors=\"replace\" to handle weird things like lone surrogates.\n             text = text.encode(\"utf-16\", \"surrogatepass\").decode(\"utf-16\", \"replace\")\n-            return self._core_bpe.encode(text, allowed_special)\n+            tokens = self._core_bpe.encode(text, allowed_special)\n+\n+        if return_repeated_pattern:\n+            # Track adjacent token pairs\n+            pair_counts: dict[tuple[int, int], int] = {}\n+            for i in range(len(tokens) - 1):\n+                pair = (tokens[i], tokens[i + 1])\n+                pair_counts[pair] = pair_counts.get(pair, 0) + 1\n+\n+            # Get top 3 most frequent pairs\n+            top_pairs = dict(sorted(pair_counts.items(), key=lambda x: x[1], reverse=True)[:3])\n+            return tokens, top_pairs\n+\n+        return tokens\n \n     def encode_to_numpy(\n         self,\n"
+  },
+  "feature1": {
+    "feature_id": 4,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "feature2": {
+    "feature_id": 8,
+    "passed": false,
+    "exit_code": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": ""
+  },
+  "both_passed": false,
+  "error": null,
+  "evaluated_at": "2026-10-21T01:58:17.421769"
+}
