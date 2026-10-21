@@ -55,6 +55,22 @@ CONTAINER_SETTINGS = f"{cc.CONTAINER_CLAUDE_CONFIG_DIR}/settings.json"
 # container. The first e2e run hard-coded /usr/local/... and the MCP server failed to start.
 MCP_ENTRY_RELATIVE = "@musterd/mcp/dist/index.js"
 
+# musterd's CLI refuses Node under 22. CooperBench's setup.sh installs Node from apk on an Alpine
+# image, and Alpine 3.20's newest package is Node 21 (`go_chi` task 27: v20.15.1, pilot 2026-10-21,
+# both agents refused at seat admission). So on an Alpine image an official musl build of Node 22
+# goes in front of it. Claude Code, installed by setup.sh a moment earlier, runs on it too. Debian
+# images get Node 22 from nodesource in setup.sh and skip this. One pinned build, x86_64 only: the
+# run machine's architecture, and the only one the pilot measures.
+NODE22_MUSL_VERSION = "v22.23.3"
+ENSURE_NODE22 = (
+    'major=$(node -p "process.versions.node.split(\\".\\")[0]" 2>/dev/null || echo 0); '
+    'if [ "$major" -lt 22 ] && command -v apk >/dev/null 2>&1 && [ "$(uname -m)" = x86_64 ]; then '
+    "apk add --no-cache curl xz >/dev/null 2>&1 && "
+    f"curl -fsSL https://unofficial-builds.nodejs.org/download/release/{NODE22_MUSL_VERSION}/"
+    f"node-{NODE22_MUSL_VERSION}-linux-x64-musl.tar.xz | tar -xJ -C /usr/local --strip-components=1; "
+    "fi; node -v"
+)
+
 INSTALL_MUSTERD = (
     f"npm install -g --ignore-scripts --no-audit --no-fund {CONTAINER_PACK_DIR}/musterd-*.tgz "
     "> /tmp/musterd-install.log 2>&1 && command -v musterd"
@@ -167,6 +183,10 @@ class ClaudeCodeMusterdRunner:
             install = env.execute({"command": f"bash {shlex.quote(CONTAINER_SETUP_PATH)}"}, timeout=600)
             if install.get("returncode") not in (0, None):
                 raise RuntimeError("claude-code install failed: " + (install.get("output") or "")[:2000])
+            node = env.execute({"command": ENSURE_NODE22}, timeout=600)
+            node_line = (node.get("output") or "").strip().splitlines()[-1:] or [""]
+            if node.get("returncode") not in (0, None) or not node_line[0].startswith("v"):
+                raise RuntimeError("node check failed: " + (node.get("output") or "")[-500:])
             installed = env.execute({"command": INSTALL_MUSTERD}, timeout=600)
             if installed.get("returncode") not in (0, None):
                 log = read_file_from_container(env, "/tmp/musterd-install.log")
