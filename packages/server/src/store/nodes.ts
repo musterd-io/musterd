@@ -294,6 +294,65 @@ export async function trustNodeForSeat(
   return { trusted: true, already: false };
 }
 
+/**
+ * ADR 696: move a seat to `toNodeId` in one transaction — the replace is never an unbind followed by
+ * a bind, so there is no window in which the old node's next push could take the seat back
+ * (`docs/wiki/joiner-wedges.md`'s unbind race). An agent's set becomes `{toNodeId}`; a human's set
+ * GAINS it (ADR 358), or becomes `{toNodeId}` with `only`. Moving to where a seat already lives
+ * changes nothing. Authority and the target's validity are the caller's (`sync/move.ts`).
+ */
+export async function moveSeatBinding(
+  db: Driver,
+  teamId: string,
+  seat: { id: string; kind: string },
+  toNodeId: string,
+  opts: { now?: number; only?: boolean } = {},
+): Promise<{ from: string[]; to: string }> {
+  const now = opts.now ?? Date.now();
+  return await db.tx(async (t) => {
+    const from = (await seatBindings(t, seat.id)).map((b) => b.node_id);
+    const replace = seat.kind !== 'human' || opts.only === true;
+    if (replace && !(from.length === 1 && from[0] === toNodeId)) {
+      await t.run('DELETE FROM seat_nodes WHERE member_id = ? AND node_id != ?', [
+        seat.id,
+        toNodeId,
+      ]);
+    }
+    await t.run(
+      `INSERT INTO seat_nodes (member_id, team_id, node_id, bound_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(member_id, node_id) DO NOTHING`,
+      [seat.id, teamId, toNodeId, now],
+    );
+    return { from, to: toNodeId };
+  });
+}
+
+/**
+ * ADR 696: a machine as a person names it — its label (what `node list` and residency show), else
+ * its node id. Only unrevoked nodes of the team are targets. A label two machines share is
+ * `ambiguous` with their ids, so the caller can name one exactly.
+ */
+export async function resolveNodeRef(
+  db: Driver,
+  teamId: string,
+  ref: string,
+): Promise<
+  | { ok: true; node: { id: string; label: string } }
+  | { ok: false; reason: 'unknown' | 'ambiguous'; candidates: string[] }
+> {
+  const live = await db.all<{ id: string; label: string }>(
+    'SELECT id, label FROM nodes WHERE team_id = ? AND revoked_at IS NULL ORDER BY label, id',
+    [teamId],
+  );
+  const byLabel = live.filter((n) => n.label === ref);
+  if (byLabel.length === 1) return { ok: true, node: byLabel[0]! };
+  if (byLabel.length > 1)
+    return { ok: false, reason: 'ambiguous', candidates: byLabel.map((n) => n.id) };
+  const byId = live.find((n) => n.id === ref);
+  if (byId) return { ok: true, node: byId };
+  return { ok: false, reason: 'unknown', candidates: [...new Set(live.map((n) => n.label))] };
+}
+
 /** Every binding of the team by member NAME, for the pull page (ADR 509). Earliest first. */
 export async function listSeatBindings(
   db: Driver,

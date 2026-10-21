@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   SYNC_PUSH_MAX_BATCH,
+  SeatMoveRequestSchema,
+  SeatMovedSchema,
+  SyncMoveRequestSchema,
   SyncEventSchema,
   SyncPullResponseSchema,
   SyncPushRequestSchema,
@@ -135,5 +138,34 @@ describe('SyncStreamFrameSchema (ADR 552)', () => {
     expect(SyncStreamFrameSchema.safeParse({ type: 'head', seq: -1 }).success).toBe(false);
     expect(SyncStreamFrameSchema.safeParse({ type: 'head', seq: 1.5 }).success).toBe(false);
     expect(SyncStreamFrameSchema.safeParse({ type: 'push' }).success).toBe(false);
+  });
+});
+
+describe('the seat move (ADR 696)', () => {
+  it('a move names its machine; the forward adds the seat and the mover', () => {
+    expect(SeatMoveRequestSchema.parse({ to: 'macbook-air-2.lan' })).toEqual({
+      to: 'macbook-air-2.lan',
+    });
+    expect(SeatMoveRequestSchema.safeParse({ to: '' }).success).toBe(false);
+    // Omitted: the destination is the machine whose daemon took the request.
+    expect(SeatMoveRequestSchema.parse({})).toEqual({});
+    expect(SyncMoveRequestSchema.safeParse({ to: 'nB', seat: 'wallow' }).success).toBe(false);
+    expect(SyncMoveRequestSchema.safeParse({ seat: 'wallow', actor: 'nick' }).success).toBe(false);
+    expect(
+      SyncMoveRequestSchema.parse({ to: 'nB', seat: 'wallow', actor: 'nick', only: true }),
+    ).toEqual({ to: 'nB', seat: 'wallow', actor: 'nick', only: true });
+  });
+
+  it('a result carries the revoked enrollment so the destination can re-enroll it', () => {
+    const moved = {
+      seat: 'wallow',
+      kind: 'agent',
+      from: [{ node_id: 'nA', label: 'mac.lan' }],
+      to: { node_id: 'nB', label: 'macbook-air-2.lan' },
+      residency: { harness: 'claude-code', host: 'mac.lan', policy: { cooldown_ms: 900000 } },
+    };
+    expect(SeatMovedSchema.parse(moved)).toEqual(moved);
+    expect(SeatMovedSchema.parse({ ...moved, residency: null }).residency).toBeNull();
+    expect(SeatMovedSchema.safeParse({ ...moved, kind: 'service' }).success).toBe(false);
   });
 });

@@ -669,6 +669,9 @@ export type AuditAction =
   | 'seat.bound'
   | 'seat.bound_elsewhere'
   | 'seat.unbound'
+  // ADR 696: a seat moved to another machine in one act (detail: { from: [node…], to, to_label, by,
+  // by_node, residency }). An agent's binding is replaced, a person's set gains the machine.
+  | 'seat.moved'
   // ADR 689 d5 follow-up (lane 01M5E1Z7JE): an admin cleared a host label's node binding on the hub
   // (detail: { node }), or was refused because the label is in use (result `deny`,
   // detail: { node, reason: 'in_use', seats }). Hub-local: it never replicates.
@@ -934,6 +937,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.bound': 'actor',
   'seat.bound_elsewhere': 'actor',
   'seat.unbound': 'actor',
+  'seat.moved': 'actor',
   'host.unbound': 'actor',
   'seat.node_trusted': 'actor',
   'node.note_key_set': 'actor',
