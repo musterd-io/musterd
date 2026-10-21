@@ -1432,6 +1432,21 @@ move total (ADR 183), so the raise is the measured local cost + the ~450 B CI ga
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 346,500 B with this change in.
 
+### 2026-10-21 — `initialJsGzipBytes` 148,000 → 148,600 B and `totalJsGzipBytes` 347,300 → 347,900 B: refused verdicts re-offered (lane `01M5EA60RD`)
+
+| Budget   | Before (ceiling) | This branch (laptop) | Ceiling                    |
+| -------- | ---------------- | -------------------- | -------------------------- |
+| initial JS | 148,000 B      | 144.6 KB (over)      | RAISED 148,000 → 148,600 B |
+| total JS | 347,300 B        | 339.0 KB             | RAISED 347,300 → 347,900 B |
+
+`resurrectRefusedVerdicts` in `asks.ts` plus its wiring in the asks rail: a `lane_review` ask whose
+only settling verdict was an unsigned human one is offered again while its lane is still in
+acceptance. The rail is /live's eager graph, so lazy-loading cannot move initial and cannot move
+total (ADR 183); the code is the fix and there is nothing to delete. CI's first run read initial
+144.6 KB and total 339.3 KB. Ceilings are measured + the ~450 B CI gap.
+
+- Falsify: `pnpm perf:check` in CI reports initial JS at or under 148,000 B with this change in.
+
 
 
 `bash scripts/perf/live-paint-bar.sh revive 5`, run by nick on the hub (`mac`) at 20:52Z. Load average
