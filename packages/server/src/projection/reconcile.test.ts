@@ -7,17 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { saveNodeEnrollment } from '../node/state.js';
+import { appendAudit } from '../store/audit.js';
 import { getLane, openLane } from '../store/lanes.js';
 import {
   addMember,
   getMemberByName,
   isHeld,
-  leaveMember,
   listMembers,
   markBound,
   setMemberGovernance,
 } from '../store/members.js';
 import { localNodeForTeam } from '../store/messages.js';
+import { hostMayServe, TEAM_WIDE_HOST } from '../store/residency.js';
 import { getRoleSkill, listRoleNames, roleSummariesMap } from '../store/roles.js';
 import { toMember } from '../store/rows.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -792,33 +793,145 @@ end = "12:00"
     });
   });
 
-  describe('reconcile refuses a cutover over sponsored agents (ADR 463 §4.2, big-body REQUIRED on #1789)', async () => {
-    it('fails closed while a live sponsored agent exists, and projects once it is removed', async () => {
+  describe('sponsored agents on a seat-file team (ADR 700)', () => {
+    /** The hub's own record that `sponsor` minted `agent` — what the mint route writes. */
+    async function mintFact(teamId: string, sponsor: string, agent: string): Promise<void> {
+      await appendAudit(db, teamId, {
+        actor: sponsor,
+        action: 'member.sponsored_agent_created',
+        target: agent,
+        result: 'allow',
+      });
+    }
+
+    async function cascadeRows(teamId: string): Promise<Array<{ target: string; detail: string }>> {
+      return await db.all<{ target: string; detail: string }>(
+        "SELECT target, detail FROM audit WHERE team_id = ? AND action = 'member.revoked_cascade'",
+        [teamId],
+      );
+    }
+
+    it('a file sponsor the hub vouched for projects; a forged one projects unsponsored and warns', async () => {
       await writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
       await reconcile();
       const team = (await getTeamBySlug(db, 'alpha'))!;
       const dana = (await getMemberByName(db, team.id, 'dana'))!;
-      const { row: scout } = await addMember(db, team, {
-        name: 'dana-scout',
-        kind: 'agent',
-        sponsoredBy: dana.id,
-      });
-      // The cutover a `team export` (or a hand-written team.toml) would make: files that disable the
-      // sponsor and restate the agent with no sponsorship.
+      await mintFact(team.id, 'dana', 'scout');
       await writeRoster('slug = "alpha"\n', {
-        dana: 'kind = "human"\nrole = ""\naccount_status = "disabled"\n',
-        'dana-scout': 'kind = "agent"\nrole = ""\n',
+        dana: 'kind = "human"\nrole = ""\n',
+        scout: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
+        forged: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
       });
-      await expect(reconcile()).rejects.toThrow(/still holds sponsored agents \(dana-scout\)/);
-      // Nothing projected: the sponsor was not disabled without its cascade.
-      expect((await getMemberByName(db, team.id, 'dana'))!.account_status).toBeNull();
-      // reconcileAll keeps the prior projection and goes on (fail closed, logged).
-      expect(await reconcileAll(db, [dir])).toEqual([]);
-
-      await leaveMember(db, scout.id);
       const r = await reconcile();
-      expect(r.errors).toEqual([]);
+      expect((await getMemberByName(db, team.id, 'scout'))!.sponsored_by).toBe(dana.id);
+      expect((await getMemberByName(db, team.id, 'forged'))!.sponsored_by).toBeNull();
+      expect(r.warnings.join('\n')).toMatch(/"forged" names sponsor "dana" with no mint/);
+    });
+
+    it('a file that drops the line keeps the vouched sponsor (big-body, ADR 700 d2)', async () => {
+      await writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const dana = (await getMemberByName(db, team.id, 'dana'))!;
+      await addMember(db, team, { name: 'scout', kind: 'agent', sponsoredBy: dana.id });
+      await writeRoster('slug = "alpha"\n', {
+        dana: 'kind = "human"\nrole = ""\n',
+        scout: 'kind = "agent"\nrole = ""\n',
+      });
+      const r = await reconcile();
+      expect((await getMemberByName(db, team.id, 'scout'))!.sponsored_by).toBe(dana.id);
+      expect(r.warnings.join('\n')).toMatch(
+        /"scout" omits sponsored_by — its vouched sponsor dana stands/,
+      );
+      // The reason it stands: unsponsored, any team-wide host key could run it (big-body, eval i).
+      expect(hostMayServe(TEAM_WIDE_HOST, (await getMemberByName(db, team.id, 'scout'))!)).toBe(
+        false,
+      );
+    });
+
+    it('a sponsor disabled in its file disables the agent on the same pass and cascades', async () => {
+      await writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const dana = (await getMemberByName(db, team.id, 'dana'))!;
+      await addMember(db, team, { name: 'scout', kind: 'agent', sponsoredBy: dana.id });
+      const files = {
+        dana: 'kind = "human"\nrole = ""\naccount_status = "disabled"\n',
+        scout: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
+      };
+      await writeRoster('slug = "alpha"\n', files);
+      await reconcile();
       expect((await getMemberByName(db, team.id, 'dana'))!.account_status).toBe('disabled');
+      expect((await getMemberByName(db, team.id, 'scout'))!.account_status).toBe('disabled');
+      const rows = await cascadeRows(team.id);
+      expect(rows.map((r) => r.target)).toEqual(['scout']);
+      expect(JSON.parse(rows[0]!.detail)).toMatchObject({ root: 'dana', trigger: 'reconcile' });
+      // A second pass neither re-enables the agent from its own file nor cascades again.
+      await reconcile();
+      expect((await getMemberByName(db, team.id, 'scout'))!.account_status).toBe('disabled');
+      expect(await cascadeRows(team.id)).toHaveLength(1);
+    });
+
+    it('a sponsor whose file is removed cascades to its agent', async () => {
+      await writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const dana = (await getMemberByName(db, team.id, 'dana'))!;
+      await addMember(db, team, { name: 'scout', kind: 'agent', sponsoredBy: dana.id });
+      await writeRoster('slug = "alpha"\n', {
+        dana: 'kind = "human"\nrole = ""\n',
+        scout: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
+      });
+      await reconcile();
+      rmSync(join(dir, '.musterd', 'seats', 'dana.toml'));
+      await reconcile();
+      expect((await getMemberByName(db, team.id, 'dana'))!.left_at).not.toBeNull();
+      expect((await getMemberByName(db, team.id, 'scout'))!.account_status).toBe('disabled');
+      expect((await cascadeRows(team.id)).map((r) => r.target)).toEqual(['scout']);
+    });
+
+    it("an agent's until is clamped to its sponsor's", async () => {
+      await writeRoster('slug = "alpha"\n', {
+        dana: 'kind = "human"\nrole = ""\nlifecycle = "until"\nuntil = "2030-01-01T00:00:00.000Z"\n',
+      });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const dana = (await getMemberByName(db, team.id, 'dana'))!;
+      await addMember(db, team, { name: 'scout', kind: 'agent', sponsoredBy: dana.id });
+      await writeRoster('slug = "alpha"\n', {
+        dana: 'kind = "human"\nrole = ""\nlifecycle = "until"\nuntil = "2030-01-01T00:00:00.000Z"\n',
+        scout: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
+      });
+      await reconcile();
+      const scout = (await getMemberByName(db, team.id, 'scout'))!;
+      expect(scout.lifecycle).toBe('until');
+      expect(scout.lifecycle_until).toBe(Date.parse('2030-01-01T00:00:00.000Z'));
+    });
+
+    it('export then reconcile is a fixed point for a team holding a sponsored agent', async () => {
+      await writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const dana = (await getMemberByName(db, team.id, 'dana'))!;
+      await mintFact(team.id, 'dana', 'scout');
+      await writeRoster('slug = "alpha"\n', {
+        dana: 'kind = "human"\nrole = ""\n',
+        scout: 'kind = "agent"\nrole = ""\nsponsored_by = "dana"\n',
+      });
+      await reconcile();
+      const projected = (await projectTeamToFiles(db, 'alpha'))!;
+      const { teamToml, seatFiles } = serializeProjectedTeam(projected);
+      expect(seatFiles['scout.toml']).toMatch(/sponsored_by = "dana"/);
+      await writeRoster(
+        teamToml,
+        Object.fromEntries(
+          Object.entries(seatFiles).map(([f, body]) => [f.replace(/\.toml$/, ''), body]),
+        ),
+      );
+      const r = await reconcile();
+      expect(r.updated).toEqual([]);
+      expect(r.warnings).toEqual([]);
+      expect((await getMemberByName(db, team.id, 'scout'))!.sponsored_by).toBe(dana.id);
     });
   });
 });

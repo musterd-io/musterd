@@ -223,7 +223,10 @@ export async function ingestBatch(
         (event.event.action === 'credential.accepted' ||
           event.event.action === 'credential.revoked' ||
           event.event.action === 'host.provision_pending' ||
-          event.event.action === 'host.provision_cancelled')
+          event.event.action === 'host.provision_cancelled' ||
+          // ADR 700 decision 2: the mint fact is what vouches for a seat file's `sponsored_by`, so
+          // a copy pushed from a joiner would be a forged sponsorship.
+          event.event.action === 'member.sponsored_agent_created')
       ) {
         throw new SyncOriginError(
           "a credential fact is the hub's to write (ADR 689): a joiner's mint is a request, and " +

@@ -104,19 +104,13 @@ describe('rosterToFiles — db→file projection for `team export`', () => {
     });
   });
 
-  it('REFUSES a roster that still holds sponsored agents — a seat file cannot carry sponsorship (ADR 463 §4.2)', () => {
-    expect(() =>
-      rosterToFiles('alpha', [
-        { name: 'dana', kind: 'human', role: '', lifecycle: 'forever', sponsored_by: null },
-        {
-          name: 'dana-scout',
-          kind: 'agent',
-          role: '',
-          lifecycle: 'forever',
-          sponsored_by: '01DANA',
-        },
-      ]),
-    ).toThrow(/still holds sponsored agents \(dana-scout\).*musterd team remove/);
+  it('writes a sponsored agent with its sponsor by name (ADR 700)', () => {
+    const { seatFiles } = rosterToFiles('alpha', [
+      { name: 'dana', kind: 'human', role: '', lifecycle: 'forever', sponsored_by: null },
+      { name: 'dana-scout', kind: 'agent', role: '', lifecycle: 'forever', sponsored_by: 'dana' },
+    ]);
+    expect(parseSeatFile(seatFiles['dana-scout.toml']!, 'dana-scout').sponsored_by).toBe('dana');
+    expect(seatFiles['dana.toml']).not.toMatch(/sponsored_by/);
   });
 
   it('handles an empty roster (team.toml, no seats)', () => {

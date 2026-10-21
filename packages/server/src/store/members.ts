@@ -986,6 +986,18 @@ export async function setMemberGovernance(
 }
 
 /**
+ * ADR 700 decision 2: record a sponsorship reconcile found vouched for — a seat file's
+ * `sponsored_by` the hub's own mint fact corroborates. Set only, never cleared: an omitted line
+ * keeps a vouched sponsor, because clearing it would widen `hostMayServe` to team-wide keys.
+ */
+export async function setMemberSponsor(db: Driver, id: string, sponsorId: string): Promise<void> {
+  await db.run(
+    'UPDATE members SET sponsored_by = ?, updated_at = ? WHERE id = ? AND sponsored_by IS NULL',
+    [sponsorId, Date.now(), id],
+  );
+}
+
+/**
  * ADR 449 §3: revoking a member takes every live member whose `sponsored_by` chain reaches them.
  * Sets `account_status = 'disabled'` (the existing refusal the auth paths already honour) without
  * touching capabilities — governance stays reconcile's word elsewhere. Returns the affected rows
