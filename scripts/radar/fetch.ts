@@ -67,10 +67,17 @@ async function fetchWithRetry(
         },
       });
       clearTimeout(timer);
-      // Retry rate-limits / transient 5xx with simple backoff
+      // Retry rate-limits / transient 5xx with backoff. arXiv's export API is
+      // aggressive with non-browser clients and needs longer waits than a plain
+      // 5xx (Exploring Next's ingest uses ~8s timeout + 2 retries with a
+      // browser UA; mirror that patience here).
       if ((res.status === 429 || res.status >= 500) && attempt < FETCH_RETRIES) {
         lastRes = res;
-        await new Promise((r) => setTimeout(r, 1_000 * (attempt + 1)));
+        const backoff =
+          res.status === 429
+            ? 5_000 * (attempt + 1) // 5s, 10s — arXiv asks for patience
+            : 1_000 * (attempt + 1);
+        await new Promise((r) => setTimeout(r, backoff));
         continue;
       }
       return res;
@@ -154,7 +161,19 @@ export async function sweepArxiv(opts: {
   });
   const url = `https://export.arxiv.org/api/query?${params.toString()}`;
   try {
-    const res = await fetchWithRetry(url, { headers: { Accept: 'application/atom+xml' } }, fetchFn);
+    const res = await fetchWithRetry(
+      url,
+      {
+        headers: {
+          Accept: 'application/atom+xml',
+          // arXiv is less aggressive with browser-like UAs (Exploring Next's ingest
+          // uses a browser UA; mirror that to avoid 429s on the export API).
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      },
+      fetchFn,
+    );
     if (!res.ok) {
       return { candidates: [], warning: `arXiv API returned ${res.status}` };
     }
@@ -184,7 +203,16 @@ export async function fetchArxivPaper(
   const id = normalizeArxivId(paperId);
   const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
   try {
-    const res = await fetchWithRetry(url, {}, fetchFn);
+    const res = await fetchWithRetry(
+      url,
+      {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      },
+      fetchFn,
+    );
     if (!res.ok) return null;
     const xml = await res.text();
     return parseArxivAtom(xml)[0] ?? null;
