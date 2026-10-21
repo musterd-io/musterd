@@ -101,3 +101,32 @@ describe('packed atlas cells (frameCell)', () => {
     expect(frameCell(packed, 'skin', 'walk', 'S', 10 + 5 / 12, 10)).toEqual({ ...frameRect(spec, 'walk', 'S', 10 + 5 / 12, 10), ox: 0, oy: 0 });
   });
 });
+
+describe('mirrored directions (increment 3b: S, W and SW are drawn, not stored)', () => {
+  it('a mirrored direction reads its source cell, flipped about the frame centre', () => {
+    const anims = {
+      idle: { row: 0, frames: 1, fps: 12, loop: true },
+      walk: { row: 8, frames: 1, fps: 12, loop: true },
+      'sit-type': { row: 16, frames: 1, fps: 12, loop: true },
+      'sit-idle': { row: 24, frames: 1, fps: 12, loop: true },
+      speak: { row: 32, frames: 1, fps: 12, loop: true },
+      turn: { row: 40, frames: 1, fps: 12, loop: false },
+      'sit-down': { row: 48, frames: 1, fps: 12, loop: false },
+      'stand-up': { row: 56, frames: 1, fps: 12, loop: false },
+    };
+    // idle × DIR8 (E, SE, S, SW, W, NW, N, NE): E at atlas (10, 20), 30 wide, 5 in from the frame's left
+    const idle = [10, 20, 30, 40, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const spec: SheetSpec = {
+      scale: 2,
+      frame: { w: 100, h: 200 },
+      anchor: { x: 50, y: 190 },
+      anims,
+      cells: { skin: idle },
+      mirror: { S: 'E', W: 'N', SW: 'NE' },
+    };
+    const e = frameCell(spec, 'skin', 'idle', 'E', 0, 0);
+    const s = frameCell(spec, 'skin', 'idle', 'S', 0, 0);
+    expect(e.flip).toBeUndefined();
+    expect(s).toMatchObject({ sx: 10, sy: 20, sw: 30, sh: 40, ox: 100 - 5 - 30, oy: 6, flip: true });
+  });
+});

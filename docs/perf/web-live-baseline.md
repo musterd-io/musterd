@@ -1406,6 +1406,20 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-21 — `totalJsGzipBytes` 355,700 → 356,600 B: every gesture as a sprite clip (lane `01M5D8FCC9`)
+
+| Budget       | This branch (CI, #3134)  | Ceiling                    |
+| ------------ | ------------------------ | -------------------------- |
+| total JS     | 346.9 KB (≈355,200 B)    | RAISED 355,700 → 356,600 B |
+| initial JS   | 145.2 KB of 145.3 KB     | unchanged                  |
+| office art   | 9,896,246 B              | unchanged (9,935,000 B)    |
+
+Office realism 3b (nick chose "all 21 gestures"): the beat → clip table in `character.ts`, `figure.json`'s
+`mirror` and per-clip `dirs` in `parseFigureSpec`, and the flipped draw in `figure.ts` — about 0.8 KB, all in
+the office's lazy chunks, so initial JS does not move. The art did not need a raise: mirrored directions are
+drawn flipped at runtime instead of stored, which took 21 gesture clips from 18.6 MB to 9.90 MB. Nothing to
+trim that is not the feature; a re-baseline would loosen.
+
 ### 2026-10-21 — `totalJsGzipBytes` 354,000 → 355,000 B: the asks rail recovers review asks older than the backfill (lane `01M5G10DB2`)
 
 | Budget     | This branch (CI, #3127) | Ceiling                    |

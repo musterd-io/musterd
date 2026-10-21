@@ -1940,8 +1940,8 @@ function drawReceptionist(
   const seed = RECEPTIONIST_SEED / 0xffffffff;
   const rendered = figure
     ? (() => {
-        const { anim, startT } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
-        return { rendered: figure.assets, anim, animStart: startT, tint: figure.tint };
+        const { anim, startT, frame } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
+        return { rendered: figure.assets, anim, animStart: startT, ...(frame !== undefined ? { animFrame: frame } : {}), tint: figure.tint };
       })()
     : {};
   drawCharacter(ctx, fit, {
@@ -3413,8 +3413,8 @@ export function drawActor(
     ? (() => {
         const typing =
           pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
-        const { anim, startT } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
-        return { rendered: figure.assets, anim, animStart: startT, tint: figure.tint };
+        const { anim, startT, frame } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
+        return { rendered: figure.assets, anim, animStart: startT, ...(frame !== undefined ? { animFrame: frame } : {}), tint: figure.tint };
       })()
     : {};
   drawCharacter(

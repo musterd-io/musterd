@@ -178,9 +178,9 @@ export function isIdleGesture(kind: number): kind is IdleGesture {
 }
 
 /** An arc-shaped envelope over the gesture window: 0 → 1 → 0, zero-velocity at both ends (no pop). */
-const arcEnv = (gT: number): number => Math.sin(smooth(gT) * Math.PI);
+export const arcEnv = (gT: number): number => Math.sin(smooth(gT) * Math.PI);
 /** A plateau envelope: ramp in over the first ~18% of the window, hold, ramp out over the last ~18%. */
-const holdEnv = (gT: number): number => Math.min(smooth(gT / 0.18), 1, smooth((1 - gT) / 0.18));
+export const holdEnv = (gT: number): number => Math.min(smooth(gT / 0.18), 1, smooth((1 - gT) / 0.18));
 
 /**
  * How far a rolling chair (and its sitter) shifts straight back from the desk through the `roll` beat —

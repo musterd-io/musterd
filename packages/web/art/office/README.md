@@ -30,7 +30,8 @@ Install Blender (the art machine, never CI): `brew install --cask blender`. Rend
 at DPR 2; the canvas downsamples smaller fits). `--ky` sets the camera's vertical ratio (today's
 isometric `0.35355339`; increment 2's corner camera passes its own, and `iso.ts` must carry the
 same number — the manifest records it so the two cannot drift silently). `--save <file.blend>`
-also writes the scene for the UI.
+also writes the scene for the UI. `--only desk/fan-0,desk/fan-1` re-renders just those assets and
+keeps every other manifest entry on disk — minutes, not the ~10 the whole room takes.
 
 Commit the outputs. `pnpm perf:check` sums `dist/client/assets/office-art-*.png` against
 `officeArtBytes` in `docs/perf/budgets.json`; a raise is logged in
@@ -105,7 +106,31 @@ can therefore draw the layers in any order and occlusion is already right. The s
 `office-art-fig-<layer>.png`: one row per (clip, direction) — directions clockwise from E, as
 `figureSheet.ts`'s `DIR8` — one column per frame; `figure.json` is the `SheetSpec` plus the file
 per layer. Sheets are neutral grey; `appearance.ts` tints them at draw time (`tint.ts`), and the
-visor keeps its own colour. 312 frames × (2 + 23) renders at 2 px/unit takes about 40 minutes.
+visor keeps its own colour. The base clips — 265 frames × (2 + 23) renders at 2 px/unit — took 77
+minutes on the shared laptop (2026-10-21).
+
+### Gestures (increment 3b)
+
+Every beat the painter plays (`skeleton.ts` `applyOverlays`) has a clip, `g-<beat>`, hand-keyed in
+`figure.py` `GESTURES` (and `_seq` for the beats with motion of their own). Two kinds keep the
+frames down:
+
+- **env** — the clip is the beat's envelope from rest to peak, six frames. `character.ts`
+  `gestureFrame` maps the beat's own envelope (arc, hold, rise, fall) onto it, so a beat that goes
+  out and comes back costs half the frames and plays at any length. `take` is `reach` played back.
+- **seq** — scratch, sip, swivel, shoulder roll, eat and wave carry their own motion inside the
+  window, so their eight or ten frames sample the window itself.
+
+A gesture is only ever seen facing a desk or a fixture, so it is rendered E and N and mirrored to S
+and W (`dirs` in `figure.json`); in any other direction, or in the wrong posture, the base clip
+plays. The carried prop (mug, plate, bottle, card) is not on these frames yet.
+
+### Re-rendering part of the figure
+
+`--clips g-sip,g-wave` renders only the named clips and takes every other clip's frames back out of
+the atlases on disk — a change to one beat is minutes, not the whole figure. `--only <layer>,…`
+does the same along the other axis (a hair style, a top). Change the body itself (`skin`) and
+every layer's holdout changes, so that one is the full render.
 
 ## Original art
 

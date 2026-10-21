@@ -326,8 +326,119 @@ def smoothstep(t: float) -> float:
     return t * t * (3 - 2 * t)
 
 
+# ── gestures (increment 3b) ────────────────────────────────────────────────────────────────
+# The painter's beats (skeleton.ts `applyOverlays`), hand-keyed as joint rotations. Two kinds:
+#   env — the clip IS the envelope: frame k is the pose at envelope k/(n−1), from the base pose to the
+#         peak. The runtime maps the beat's own envelope (arc, hold, or a rise) onto it, so a beat that
+#         goes out and comes back costs half the frames and plays at any length.
+#   seq — the beat has its own motion inside the window (a rub, a rock, a bite), so frames sample the
+#         window itself: frame k is gestureT = (k + ½)/n.
+# A raise of the arm to the side is a rotation about x: + for the left (+y) arm, − for the right.
+def _abduct(side: str, deg: float) -> float:
+    return deg if side == "L" else -deg
+
+
+SEATED_REST = dict(SEATED)
+LAP = {"shoulderL": (0, swing(18), 0), "shoulderR": (0, swing(18), 0),
+       "elbowL": (0, swing(55), 0), "elbowR": (0, swing(55), 0)}
+
+
+def _merge(*poses: dict) -> dict:
+    out: dict = {}
+    for p in poses:
+        out.update(p)
+    return out
+
+
+GESTURES: dict = {
+    # ── seated, at the desk ──
+    "stretch": ("seated", "env", {"shoulderL": (_abduct("L", 18), swing(165), 0), "shoulderR": (_abduct("R", 18), swing(165), 0),
+                                  "elbowL": (0, swing(12), 0), "elbowR": (0, swing(12), 0),
+                                  "spine": (0, swing(12), 0), "head": (0, swing(16), 0)}),
+    "glance": ("seated", "env", {"head": (0, 0, 38), "neck": (0, 0, 10)}),
+    "chin": ("seated", "env", {"shoulderR": (_abduct("R", 6), swing(72), 0), "elbowR": (0, swing(142), 0), "head": (0, swing(-8), 0)}),
+    "lean": ("seated", "env", _merge(LAP, {"spine": (0, swing(24), 0), "head": (0, swing(-6), 0)})),
+    "roll": ("seated", "env", _merge(LAP, {"spine": (0, swing(9), 0)})),
+    "settle": ("seated", "env", {"shoulderR": (_abduct("R", 45), swing(-35), 0), "elbowR": (0, swing(55), 0),
+                                 "spine": (_abduct("L", 7), swing(8), 0), "head": (_abduct("L", 5), 0, 0)}),
+    "behindHead": ("seated", "env", {"shoulderL": (_abduct("L", 70), swing(140), 0), "shoulderR": (_abduct("R", 70), swing(140), 0),
+                                     "elbowL": (0, swing(150), 0), "elbowR": (0, swing(150), 0),
+                                     "spine": (0, swing(18), 0), "head": (0, swing(4), 0)}),
+    "rubEyes": ("seated", "env", {"shoulderR": (_abduct("R", 4), swing(80), 0), "elbowR": (0, swing(145), 0),
+                                  "head": (0, swing(-20), 0), "neck": (0, swing(-7), 0)}),
+    "pocketPhone": ("seated", "env", {"shoulderR": (0, swing(22), 0), "elbowR": (0, swing(85), 0),
+                                      "head": (0, swing(-26), 8), "neck": (0, swing(-8), 0)}),
+    # ── standing, at a fixture or on the floor ──
+    "browse": ("standing", "env", {"shoulderR": (_abduct("R", 14), swing(95), 0), "elbowR": (0, swing(22), 0),
+                                   "spine": (0, swing(-8), 0), "head": (0, swing(-12), 0)}),
+    "fill": ("standing", "env", {"shoulderR": (0, swing(40), 0), "elbowR": (0, swing(62), 0),
+                                 "spine": (0, swing(-12), 0), "head": (0, swing(-12), 0)}),
+    "pour": ("standing", "env", {"shoulderR": (0, swing(68), 0), "elbowR": (0, swing(52), 0), "spine": (0, swing(-5), 0)}),
+    "call": ("standing", "env", {"shoulderR": (_abduct("R", 32), swing(22), 0), "elbowR": (_abduct("R", 150), 0, 0),
+                                 "head": (_abduct("R", -6), 0, 0)}),
+    # one clip for both legs of the card: `reach` plays it forward, `take` backward
+    "reach": ("standing", "env", {"shoulderR": (_abduct("R", 6), swing(150), 0), "elbowR": (0, swing(12), 0), "head": (0, swing(12), 0)}),
+}
+
+
+def _seq(name: str, t: float) -> dict:
+    """The seq beats' own motion over the window `t` (0 → 1); the envelope rides inside."""
+    arc = math.sin(smoothstep(t) * math.pi)
+    hold = min(smoothstep(min(1.0, t / 0.18)), 1.0, smoothstep(min(1.0, (1 - t) / 0.18)))
+    if name == "scratch":
+        rub = math.sin(t * 2 * math.pi * 4) * 6 * arc
+        return {"shoulderR": (_abduct("R", 38 * arc), swing(118 * arc), 0), "elbowR": (0, swing(10 + 125 * arc + rub), 0),
+                "head": (_abduct("L", 9 * arc), 0, 0)}
+    if name == "sip":
+        up = smoothstep(min(1.0, t / 0.28)) if t < 0.72 else 1 - smoothstep((t - 0.72) / 0.28)
+        tip = math.sin(((t - 0.28) / 0.44) * math.pi) if 0.28 <= t <= 0.72 else 0.0
+        return {"shoulderR": (0, swing(45 + 20 * up), 0), "elbowR": (0, swing(45 + 98 * up), 0), "head": (0, swing(11 * tip), 0)}
+    if name == "swivel":
+        yaw = math.sin(smoothstep(t) * 3 * math.pi) * 9.2  # chairYaw's 0.16 rad
+        return {"hips": (0, 0, yaw)}
+    if name == "shoulders":
+        back = math.sin(smoothstep(t) * math.pi * 2) * arc
+        return {"shoulderL": (_abduct("L", 6 * arc), swing(45 - 14 * back), 0), "shoulderR": (_abduct("R", 6 * arc), swing(45 - 14 * back), 0),
+                "shoulderL.loc": (-1.6 * back, 0, 2.4 * arc), "shoulderR.loc": (-1.6 * back, 0, 2.4 * arc),
+                "head": (0, swing(-5 * arc), 0)}
+    if name == "eat":
+        bite = (math.sin(t * 2 * math.pi * 3) + 1) / 2 * hold
+        return {"shoulderL": (0, swing(35), 0), "elbowL": (0, swing(80), 0),
+                "shoulderR": (0, swing(35 + 25 * bite), 0), "elbowR": (0, swing(80 + 62 * bite), 0)}
+    if name == "wave":
+        rock = math.sin(t * math.pi * 5) * 22 * arc
+        # upper arm out to the side, forearm up, rocking about the elbow
+        return {"shoulderR": (_abduct("R", 82 * arc), swing(14 * arc), 0), "elbowR": (_abduct("R", 78 * arc) + rock, 0, 0),
+                "head": (0, 0, -6 * arc)}
+    raise KeyError(name)
+
+
+SEQ_BASE = {"scratch": "seated", "sip": "seated", "swivel": "seated", "shoulders": "seated", "eat": "seated", "wave": "standing"}
+
+
+def gesture_pose(name: str, x: float) -> tuple[dict, float]:
+    """Gesture `name` at `x` — the envelope for an env clip, gestureT for a seq clip."""
+    if name in GESTURES:
+        base_name, _, peak = GESTURES[name]
+        base = SEATED_REST if base_name == "seated" else STAND
+        return lerp_pose(base, _merge(base, peak), x), (SEATED_LIFT if base_name == "seated" else 0.0)
+    base = SEATED_REST if SEQ_BASE[name] == "seated" else STAND
+    return _merge(base, _seq(name, x)), (SEATED_LIFT if SEQ_BASE[name] == "seated" else 0.0)
+
+
+def sample(name: str, f: int, frames: int) -> float:
+    """The clip parameter of frame `f`: the envelope k/(n−1) for an env gesture, (k + ½)/n for a seq
+    gesture, and the loop phase f/n for the base clips."""
+    if name.startswith("g-"):
+        g = name[2:]
+        return f / (frames - 1) if g in GESTURES else (f + 0.5) / frames
+    return f / frames
+
+
 def action(name: str, t: float) -> tuple[dict, float]:
     """The pose and root lift of action `name` at phase `t` (0 → 1 over the clip)."""
+    if name.startswith("g-"):
+        return gesture_pose(name[2:], t)
     ph = 2 * math.pi * t
     if name == "idle":
         breath = math.sin(ph)
@@ -368,6 +479,9 @@ def action(name: str, t: float) -> tuple[dict, float]:
 
 
 def apply_pose(rig: Rig, pose: dict, lift: float, heading_rad: float) -> None:
+    rest = getattr(rig, "rest_loc", None)
+    if rest is None:
+        rest = rig.rest_loc = {n: j.location.copy() for n, j in rig.joints.items()}
     for name, j in rig.joints.items():
         if name == "root":
             j.rotation_euler = (0, 0, heading_rad)
@@ -375,19 +489,28 @@ def apply_pose(rig: Rig, pose: dict, lift: float, heading_rad: float) -> None:
             continue
         rx, ry, rz = pose.get(name, (0, 0, 0))
         j.rotation_euler = (math.radians(rx), math.radians(ry), math.radians(rz))
+        # `<joint>.loc`: a small translation in the parent's frame (the shoulder roll lifts the joint)
+        dx, dy, dz = pose.get(f"{name}.loc", (0, 0, 0))
+        j.location = rest[name] + Vector((dx, dy, dz * rig.zs))
     bpy.context.view_layer.update()
 
 
 # ── the clips (frames at 12 fps) and the sheet layout ──────────────────────────────────────
-CLIPS = [  # name, frames, loop — "not smooth enough" (nick, 2026-10-20): the loops doubled
-    ("idle", 8, True),
-    ("walk", 12, True),
-    ("sit-type", 6, True),
-    ("sit-idle", 8, True),
-    ("speak", 8, True),
-    ("turn", 3, False),
-    ("sit-down", 4, False),
-    ("stand-up", 4, False),
+# The directions a gesture is seen in: a desk beat only ever faces a desk (E/N rendered, S/W their
+# mirrors), and so do the errands at a fixture. `None` is every rendered direction.
+CARDINAL = ["E", "N"]
+CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20): the loops doubled
+    ("idle", 8, True, None),
+    ("walk", 12, True, None),
+    ("sit-type", 6, True, None),
+    ("sit-idle", 8, True, None),
+    ("speak", 8, True, None),
+    ("turn", 3, False, None),
+    ("sit-down", 4, False, None),
+    ("stand-up", 4, False, None),
+    # increment 3b — every beat the painter plays (figureSheet.ts ANIMS lists them in this order)
+    *[(f"g-{g}", 6, False, CARDINAL) for g in GESTURES],
+    *[(f"g-{g}", n, False, CARDINAL) for g, n in (("scratch", 8), ("sip", 8), ("swivel", 8), ("shoulders", 8), ("eat", 10), ("wave", 10))],
 ]
 FPS = 12
 DIRS = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]  # figureSheet.ts DIR8, heading 0 = E, +45° clockwise

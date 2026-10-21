@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadRenderedAssets, renderedOfficeFromSearch } from './assets';
+import { loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch } from './assets';
 import { parseManifest } from './manifest';
 
 const manifest = parseManifest({
@@ -39,5 +39,31 @@ describe('loadRenderedAssets', () => {
     expect(r.images.has('desk/lamp-on')).toBe(false);
     expect(r.missing).toEqual(['office-desk-lamp.png']);
     expect(r.manifest).toBe(manifest);
+  });
+});
+
+describe('parseFigureSpec (increment 3b)', () => {
+  const base = {
+    scale: 2,
+    frame: { w: 112, h: 208 },
+    anchor: { x: 56, y: 196 },
+    layers: [{ id: 'skin', file: 'office-art-fig-skin.png' }],
+    anims: Object.fromEntries(
+      ['idle', 'walk', 'sit-type', 'sit-idle', 'speak', 'turn', 'sit-down', 'stand-up'].map((a, i) => [a, { row: i * 8, frames: 4, fps: 12, loop: true }]),
+    ),
+  };
+
+  it('keeps the mirror map and a clip’s directions — dropping them drew every S/W figure as nothing', () => {
+    const spec = parseFigureSpec({
+      ...base,
+      mirror: { S: 'E', W: 'N', SW: 'NE' },
+      anims: { ...base.anims, 'g-sip': { row: 64, frames: 8, fps: 12, loop: false, dirs: ['E', 'S', 'W', 'N'] } },
+    });
+    expect(spec.mirror).toEqual({ S: 'E', W: 'N', SW: 'NE' });
+    expect(spec.anims['g-sip']?.dirs).toEqual(['E', 'S', 'W', 'N']);
+  });
+
+  it('a sheet from before the gesture clips still parses', () => {
+    expect(parseFigureSpec(base).anims['g-sip']).toBeUndefined();
   });
 });
