@@ -185,6 +185,59 @@ def shell_writes(pair: Path, held: list[str]) -> list[dict]:
     return found
 
 
+def stream_events(path: Path):
+    """(kind, payload) in stream order: ("bash", command) for each Bash call, ("result", text) for each tool result."""
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        for block in (ev.get("message") or {}).get("content") or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") == "Bash":
+                yield "bash", (block.get("input") or {}).get("command", "")
+            elif block.get("type") == "tool_result":
+                out = block.get("content")
+                if isinstance(out, list):
+                    out = " ".join(x.get("text", "") for x in out if isinstance(x, dict))
+                yield "result", str(out or "")
+
+
+PARTNER_MERGE = re.compile(r"git (merge|pull|rebase|cherry-pick)[^\n]*team/")
+
+
+def git_remote(pair: Path) -> dict:
+    """Per agent: did the shared remote work? Lookup failures (the 015/016 bug) vs fetches that ran."""
+    out = {}
+    for stream in sorted(pair.glob("agent*_stream.jsonl")):
+        text = stream.read_text(errors="replace")
+        out[stream.name.split("_")[0]] = {
+            "lookup_failures": text.count("unable to look up"),
+            "partner_merges": len(PARTNER_MERGE.findall(text)),
+        }
+    return out
+
+
+def handover_follow(pair: Path) -> list[dict]:
+    """ADR 697: after each hand-over refusal an agent saw, did it merge a partner branch before its next edit?"""
+    found = []
+    for stream in sorted(pair.glob("agent*_stream.jsonl")):
+        agent = stream.name.split("_")[0]
+        armed = False
+        merged = False
+        for kind, payload in stream_events(stream):
+            if kind == "result" and "blocked once:" in payload and "ADR 697" in payload:
+                if armed:
+                    found.append({"agent": agent, "merged_first": merged})
+                armed, merged = True, False
+            elif armed and kind == "bash" and PARTNER_MERGE.search(payload):
+                merged = True
+        if armed:
+            found.append({"agent": agent, "merged_first": merged})
+    return found
+
+
 def pair_record(pair: Path) -> dict:
     result = load_json(find_one(pair, "result.json", "*.result.json"))
     ev = load_json(find_one(pair, "eval.json", "*.eval.json", "eval_result.json"))
@@ -210,11 +263,17 @@ def pair_record(pair: Path) -> dict:
         "eval_error": ev.get("error"),
     }
     rec["cause"] = cause(result, ev, files)
+    rec["git_remote"] = git_remote(pair)
+    # Manifest (pilot 3): an agent that could not reach the shared remote makes the pair an error.
+    if any(a["lookup_failures"] for a in rec["git_remote"].values()):
+        rec["cause"] = "setup" if not rec["passed"] else rec["cause"]
+        rec["git_remote_error"] = True
     db = find_one(pair, "musterd-musterd.db")
     if db is not None:
         rec["musterd"] = db_readout(db)
         held = sorted({f for lane in rec["musterd"]["lanes"] for f in lane["named"]})
         rec["musterd"]["shell_writes_to_named_files_heuristic"] = shell_writes(pair, held)
+        rec["musterd"]["handover_follow"] = handover_follow(pair)
     return rec
 
 
