@@ -764,6 +764,32 @@ withDrivers('integration · http', (_o, kind) => {
       expect(open.json.members.find((m: any) => m.name === 'Ada')?.reported_asks).toBeUndefined();
     });
 
+    it("experiments/live serves today's point for an open metric lane (ADR 701)", async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      const empty = await get('/teams/dawn/experiments/live', nickTok);
+      expect(empty.status).toBe(200);
+      expect(empty.json).toEqual({ samples: [] });
+      const opened = await post(
+        '/teams/dawn/lanes',
+        {
+          title: 'does it move',
+          reads_on: '2099-01-01',
+          metric: { name: 'm', unit: 'x', baseline: null, target: 1, direction: 'down' },
+        },
+        nickTok,
+      );
+      const id = opened.json.lane.id;
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(
+        new Date(),
+      );
+      await post(`/teams/dawn/lanes/${id}/samples`, { day, value: 1.4, n: 3 }, nickTok);
+      const live = await get('/teams/dawn/experiments/live', nickTok);
+      expect(live.json.samples).toEqual([
+        expect.objectContaining({ lane: id, day, value: 1.4, n: 3 }),
+      ]);
+    });
+
     it('ambient presence: a live watcher sees the offline→online transition event (ADR 057)', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const nickTok = team.json.human_credential;

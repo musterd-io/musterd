@@ -91,6 +91,7 @@ export function readLiveSamples(json: unknown): LiveSampleWire[] {
   );
 }
 
+
 /**
  * ADR 701: put each metric entry's live point on its series — replacing today's stored sample when
  * there is one, appended after the history otherwise. Entries without a live point are unchanged.

@@ -296,6 +296,7 @@ export const AUTHORITY_FLAGS = [
   'member-until',
   'metric',
   'metric-source',
+  'metric-harness',
   'migrate-bootstrap',
   'mine',
   'mint-seat',

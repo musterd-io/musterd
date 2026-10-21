@@ -20,6 +20,7 @@ import {
   laneDetailLines,
   laneIdQuery,
   METRIC_SOURCES,
+  metricNudge,
   BoardQuerySchema,
   LaneQuerySchema,
   LaneStateSchema,
@@ -78,6 +79,8 @@ const METRIC_INPUT = z.object({
   // takes posted samples. Without this a seat could only ever declare a manual metric. A plain
   // string for the tools-list budget; the handler parses it against METRIC_SOURCES (hard rule 4).
   source: z.string().optional(),
+  // ADR 701: one harness's seats only (wake latency per tool); the daemon bounds it.
+  harness: z.string().optional(),
 });
 
 const PRE_REGISTERED_INPUT = z.object({

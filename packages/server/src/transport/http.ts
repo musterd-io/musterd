@@ -559,7 +559,7 @@ import {
   styleResolver,
   teamStyle,
 } from '../store/style.js';
-import { liveMetricSamples } from '../store/sweepMetricSamples.js';
+import { invalidateLiveSamples, liveMetricSamples } from '../store/sweepMetricSamples.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
@@ -8835,6 +8835,7 @@ export async function handleHttp(
         const lane = await getLane(ctx.db, team.id, laneId, team.slug);
         if (!lane) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
         const result = await recordSample(ctx.db, team.id, lane, input, member.name);
+        invalidateLiveSamples(team.id);
         return sendJson(res, 201, result);
       }
 

@@ -220,10 +220,21 @@ export async function liveMetricSamples(
     [teamId, today],
   );
   for (const m of manual) {
-    samples.push({ lane: m.lane_id, day: today, value: Number(m.value), n: Number(m.n), as_of: Number(m.at) });
+    samples.push({
+      lane: m.lane_id,
+      day: today,
+      value: Number(m.value),
+      n: Number(m.n),
+      as_of: Number(m.at),
+    });
   }
   liveCache.set(teamId, { at: now, samples });
   return samples;
+}
+
+/** A posted sample shows at once: the next live read recomputes this team's points. */
+export function invalidateLiveSamples(teamId: string): void {
+  liveCache.delete(teamId);
 }
 
 /** Tests only: forget cached live points. */

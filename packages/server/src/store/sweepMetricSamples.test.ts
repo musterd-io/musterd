@@ -4,9 +4,9 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAudit } from './audit.js';
 import { getLane, openLane, updateLane } from './lanes.js';
+import { recordSample } from './laneSamples.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
-import { recordSample } from './laneSamples.js';
 import {
   __clearLiveSamplesCache,
   liveMetricSamples,
@@ -263,7 +263,7 @@ withDrivers('sweepMetricSamples', (o) => {
       // The sweep honours the same scope.
       const written = await sweepMetricSamples(db, team.id, team.slug, NOW, 'digest');
       expect(written).toEqual([
-        { lane: codexLane.id, source: "wake_latency_p50_ms", day: DAY, value: 10 * MIN, n: 1 },
+        { lane: codexLane.id, source: 'wake_latency_p50_ms', day: DAY, value: 10 * MIN, n: 1 },
       ]);
     });
 
