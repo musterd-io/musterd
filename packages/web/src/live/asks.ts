@@ -61,6 +61,11 @@ export interface AskView {
   state: AskState;
   /** Who closed/deferred it (accept/decline/wait sender), when someone did. */
   answeredBy?: string;
+  /** Whether the settling accept/decline carried a passkey approval (`meta.approval`). A human
+   *  lane verdict without one is refused by the ADR 662 gate when that human has a key enrolled —
+   *  `resurrectRefusedVerdicts` reads this beside the lane's state to tell a refused verdict from
+   *  a binding one. Absent until an accept/decline settles the ask. */
+  answerSigned?: boolean;
   /** The option an accept picked, when the ask was a choice and the accept names one (`C — …`,
    *  `choiceReply`, lane 01M511XNQC). Absent on a bare accept: the surface never guesses. */
   chose?: string;
@@ -185,11 +190,13 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
       if (env.act === 'accept') {
         ask.state = 'accepted';
         ask.answeredBy = env.from;
+        ask.answerSigned = env.meta?.['approval'] != null;
         const picked = /^([A-Z]|\d{1,2}) — /.exec(env.body ?? '');
         if (picked?.[1]) ask.chose = picked[1];
       } else if (env.act === 'decline') {
         ask.state = 'declined';
         ask.answeredBy = env.from;
+        ask.answerSigned = env.meta?.['approval'] != null;
       } else if (env.act === 'wait' && typeof env.meta?.['ask_ref'] === 'string') {
         ask.state = 'deferred';
         ask.answeredBy = env.from;
@@ -209,6 +216,40 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
     }
   }
   return [...asks.values()].reverse();
+}
+
+/**
+ * Re-offer a `lane_review` ask whose only settling verdict the daemon must have refused
+ * (lane 01M5EA60RD).
+ *
+ * **The defect.** A human lane verdict for a passkey-enrolled human binds only with a signed
+ * `meta.approval` (ADR 662); refused, it records an audit row and moves nothing. But the refused
+ * accept/decline is still an envelope, so `deriveAsks` — pure over the timeline — settled its ask
+ * and the rail card vanished, even at send time's correction (#3078) on the next load. Seven
+ * human-stage lanes were left in acceptance with no /live path back to their asks.
+ *
+ * **The rule.** The board's lane state is the second fact the timeline cannot see. When the lane a
+ * review ask belongs to is STILL in acceptance, and the ask was settled only by an unsigned
+ * verdict from a human sender, that verdict cannot have bound: a signed one would have moved the
+ * lane, and an unenrolled human's unsigned one binds and moves it too. So the ask is offered
+ * again. Every other settle stands — agent verdicts bind unsigned (peer stage), ordinary asks
+ * carry no authority gate, and a lane that already moved on was answered for real.
+ */
+export function resurrectRefusedVerdicts(asks: AskView[], lanes: Lane[], humans: Set<string>): AskView[] {
+  const awaiting = new Set(lanes.filter((l) => isAwaitingAcceptance(l.state)).map((l) => l.id));
+  if (awaiting.size === 0) return asks;
+  return asks.map((ask) => {
+    if (ask.state !== 'accepted' && ask.state !== 'declined') return ask;
+    if (ask.answerSigned || !ask.answeredBy || !humans.has(ask.answeredBy)) return ask;
+    const ref = (ask.env.meta?.['lane_review'] as { lane?: unknown } | undefined)?.lane;
+    if (typeof ref !== 'string' || !awaiting.has(ref)) return ask;
+    const back: AskView = { ...ask, state: 'open' };
+    delete back.answeredBy;
+    delete back.answerSigned;
+    delete back.chose;
+    delete back.settledAt;
+    return back;
+  });
 }
 
 /**

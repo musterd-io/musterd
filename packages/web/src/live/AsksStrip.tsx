@@ -12,6 +12,7 @@ import {
   clockFraction,
   deriveAsks,
   deriveReviewQueue,
+  resurrectRefusedVerdicts,
   SPECIES_VERB,
   SPECIES_VERB_YOU,
   type AskView,
@@ -110,7 +111,6 @@ export function AsksStrip({
     () => deriveAsks([...envelopes, ...localAnswers]),
     [envelopes, localAnswers],
   );
-  const asks = useMemo(() => applyTierClock(derived, now), [derived, now]);
   // Answerable iff the connected seat is a real member (observers are hidden from the roster).
   const canAnswer = roster.some((m) => m.name === cfg.as);
   /**
@@ -125,6 +125,13 @@ export function AsksStrip({
       humans: new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name)),
     }),
     [canAnswer, cfg.as, localIdentity, roster],
+  );
+  // A refused human verdict must not settle its ask (lane 01M5EA60RD): the board's still-awaiting
+  // lanes re-offer review asks the timeline settled with an unsigned human verdict alone. Applied
+  // after the tier clock so a long-refused ask is not instantly lapsed back out of the rail.
+  const asks = useMemo(
+    () => resurrectRefusedVerdicts(applyTierClock(derived, now), board?.lanes ?? [], ctx.humans),
+    [derived, board, ctx.humans, now],
   );
   const loud = asks.filter((a) => askIsLoud(a.state)).sort(byAudienceThenUrgency(ctx, now));
   const deferred = asks.filter((a) => a.state === 'deferred');

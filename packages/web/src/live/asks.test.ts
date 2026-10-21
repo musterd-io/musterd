@@ -10,6 +10,7 @@ import {
   byUrgency,
   deriveAsks,
   deriveReviewQueue,
+  resurrectRefusedVerdicts,
 } from './asks';
 
 /** A minimal timeline envelope — the derivation reads act/meta/thread/ts/id/from only. */
@@ -479,6 +480,82 @@ describe('deriveReviewQueue — lanes in acceptance and who they wait on', () =>
     ]);
     const queue = deriveReviewQueue([lane('L1')] as never[], asks);
     expect(queue[0]!.waitingOn).toBeNull();
+  });
+});
+
+/**
+ * Lane 01M5EA60RD: a human verdict the daemon refused for lack of a valid passkey signature
+ * (ADR 662) is still an envelope in the timeline, so the pure derivation settled its ask and the
+ * card vanished — while the lane stayed in acceptance with no /live path back to it. The board's
+ * lane state is the second fact: still awaiting + only unsigned human verdicts = still offered.
+ */
+describe('resurrectRefusedVerdicts — a refused human verdict does not settle its ask', () => {
+  const lane = (id: string, state = 'awaiting_acceptance') =>
+    ({ id, state, title: `lane ${id}`, owner_seat: 'miley', updated_at: 1000 }) as never;
+  const reviewAsk = (id: string, laneId: string) =>
+    env(id, 'ask', {
+      ts: 2000,
+      meta: { species: 'approve', tier: 'standard', lane_review: { lane: laneId } },
+      to: { kind: 'member', name: 'nick' } as Envelope['to'],
+    });
+  const humans = new Set(['nick']);
+
+  it('re-offers a lane_review ask settled only by an unsigned human verdict while its lane still awaits', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1' } }),
+    ]);
+    expect(asks[0]!.state).toBe('accepted');
+    const [back] = resurrectRefusedVerdicts(asks, [lane('L1')], humans);
+    expect(back).toMatchObject({ state: 'open' });
+    expect(back!.answeredBy).toBeUndefined();
+    expect(back!.settledAt).toBeUndefined();
+    expect(askIsLoud(back!.state)).toBe(true);
+    // …and the review queue names the routed human again instead of "unrouted".
+    expect(deriveReviewQueue([lane('L1')], [back!])[0]!.waitingOn).toBe('nick');
+  });
+
+  it('survives the tier clock in the strip order — a long-refused ask is not lapsed back out of the rail', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1' } }),
+    ]);
+    const farFuture = 3000 + 10 * 365 * 24 * 3600_000;
+    const [back] = resurrectRefusedVerdicts(applyTierClock(asks, farFuture), [lane('L1')], humans);
+    expect(back!.state).toBe('open');
+    expect(askIsLoud(back!.state)).toBe(true);
+  });
+
+  it('stays settled when the human verdict carried a passkey approval', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1', approval: { kind: 'webauthn' } } }),
+    ]);
+    expect(resurrectRefusedVerdicts(asks, [lane('L1')], humans)[0]!.state).toBe('accepted');
+  });
+
+  it('stays settled when the lane already moved on — an unenrolled human binds unsigned', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'r1' } }),
+    ]);
+    expect(resurrectRefusedVerdicts(asks, [lane('L1', 'done')], humans)[0]!.state).toBe('accepted');
+  });
+
+  it('stays settled for an agent verdict — peer review binds unsigned and routes a fresh human ask', () => {
+    const asks = deriveAsks([
+      reviewAsk('r1', 'L1'),
+      env('v1', 'accept', { from: 'gptbot', ts: 3000, meta: { in_reply_to: 'r1' } }),
+    ]);
+    expect(resurrectRefusedVerdicts(asks, [lane('L1')], humans)[0]!.state).toBe('accepted');
+  });
+
+  it('stays settled for an unsigned human answer to an ordinary ask — no authority gate applies', () => {
+    const asks = deriveAsks([
+      env('a1', 'ask', { ts: 2000, meta: { species: 'approve', tier: 'standard' } }),
+      env('v1', 'accept', { from: 'nick', ts: 3000, meta: { in_reply_to: 'a1' } }),
+    ]);
+    expect(resurrectRefusedVerdicts(asks, [lane('L1')], humans)[0]!.state).toBe('accepted');
   });
 });
 

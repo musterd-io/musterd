@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type Envelope, type MemberSummary } from '@musterd/protocol';
+import { PROTOCOL_VERSION, type Envelope, type LaneBoard, type MemberSummary } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -63,8 +63,8 @@ const deferredAsk = (id: string, agoMs: number): Envelope[] => [
   } as Envelope,
 ];
 
-const render = (envelopes: Envelope[]) =>
-  renderToStaticMarkup(createElement(AsksStrip, { envelopes, roster, cfg }));
+const render = (envelopes: Envelope[], board?: LaneBoard) =>
+  renderToStaticMarkup(createElement(AsksStrip, { envelopes, roster, cfg, ...(board ? { board } : {}) }));
 
 const DAYS_3 = 3 * 24 * 60 * 60 * 1000;
 
@@ -114,6 +114,32 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
     expect(html).toContain('to accept');
     expect(html).toContain('Roster fix');
     expect(html.slice(0, html.indexOf('lc-asks__sheet'))).not.toContain('[lane]');
+  });
+
+  it('re-offers a lane-review ask whose human verdict was unsigned while its lane still awaits (lane 01M5EA60RD)', () => {
+    const review = {
+      ...ask('r9', 'blocking', 1000),
+      meta: { species: 'approve', tier: 'blocking', lane_review: { lane: 'L9', title: 'Away lane' } },
+    } as Envelope;
+    const refused = {
+      id: 'v9',
+      v: PROTOCOL_VERSION,
+      team: 'revive',
+      from: 'nick',
+      to: { kind: 'member', name: 'izzo' },
+      act: 'accept',
+      body: '',
+      thread: null,
+      meta: { in_reply_to: 'r9' },
+      ts: Date.now() - 500,
+    } as Envelope;
+    const board = {
+      lanes: [{ id: 'L9', state: 'awaiting_acceptance', title: 'Away lane', owner_seat: 'izzo', updated_at: 1 }],
+    } as unknown as LaneBoard;
+    const html = render([review, refused], board);
+    expect(html).toContain('Approve');
+    // Without the board's still-awaiting lane, the same timeline reads as settled.
+    expect(render([review, refused])).not.toContain('Approve');
   });
 
   it('with nothing open, the banner is a quiet pill — not nothing', () => {
