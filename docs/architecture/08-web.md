@@ -66,6 +66,9 @@ access; roster handles and Presence remain visible.
 > **Known limitation (2026-07-07):** the HTTP backfill is capped (200) and returns the oldest of an
 > over-cap history, so on a busy team the newest acts arrive only via the live socket, not the backfill.
 > Deep-history scroll needs a paging fix; tracked separately from ADR 107.
+> The asks rail does not wait for it: a lane still in acceptance whose review ask is older than the
+> window has that ask fetched by date (`live/recoverAsks.ts`, lane 01M5G10DB2), so an open review ask
+> of any age survives a fresh load.
 
 ## The three `/live` panels
 
@@ -259,6 +262,8 @@ live/
   client.ts                     // observer claim + backfill + WS subscribe (browser port of the CLI watch)
   authorityProof.ts             // the ADR 662 passkey ceremony for a human's lane verdict on the asks rail; dynamically imported so it stays out of the eager bundle
   seedClient.ts                 // lazy Seed HTTP projection; keeps Seed schemas out of eager `/live`
+  recoverAsks.ts                // review asks older than the backfill window, fetched by date: an awaiting lane with no named reviewer and no held ask → its history dates the ask → one forward page (lane 01M5G10DB2); lazy
+  useRecoveredAsks.ts           // the asks rail's hook over recoverAsks: once per lane per connection, held apart from the 1,000-envelope cap
   useLiveStream.ts              // the React hook: envelopes, roster, liveIds, conn status, `fresh`; seeds from liveCache, drives the chime; roster refetch on presence is coalesced
   liveCache.ts                  // this browser's last /live snapshot per team + seat (roster, newest 120 envelopes, open lanes) in localStorage: painted at once on the next visit, cleared on sign-out
   coalesce.ts                   // at most one run in flight + one trailing run per gap — the roster refetch's burst guard (viewers × presence frames)

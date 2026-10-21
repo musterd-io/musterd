@@ -24,6 +24,7 @@ import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
 import { AskChoices } from './AskChoices';
+import { useRecoveredAsks } from './useRecoveredAsks';
 import { MemberFace } from './MemberFace';
 
 /**
@@ -107,9 +108,12 @@ export function AsksStrip({
   // which side of the tier contract an unanswered ask fell on (`applyTierClock`). Those must be the
   // same instant or a card can say "0:00 left" while still offering Approve.
   const [now, setNow] = useState(() => Date.now());
+  // Review asks older than the backfill window, fetched by date (lane 01M5G10DB2): without them a
+  // fresh load cannot re-offer a lane's ask that scrolled out before its refused verdict did.
+  const recovered = useRecoveredAsks(cfg, board, envelopes, !loading);
   const derived = useMemo(
-    () => deriveAsks([...envelopes, ...localAnswers]),
-    [envelopes, localAnswers],
+    () => deriveAsks([...recovered, ...envelopes, ...localAnswers]),
+    [recovered, envelopes, localAnswers],
   );
   // Answerable iff the connected seat is a real member (observers are hidden from the roster).
   const canAnswer = roster.some((m) => m.name === cfg.as);
