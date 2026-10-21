@@ -1741,6 +1741,30 @@
   color: var(--lc-paper-muted);
   white-space: nowrap;
 }
+/* A job that arrives while the room is open (a role assigned mid-stream) is news, so it swipes in
+   once: the word rises into place and a mustard highlighter runs under it, then sinks away and leaves
+   the quiet word behind. Only on a real change (index.ts `plateJobs`); never on page open, never
+   under reduced motion or a still capture. */
+.lc-gl-label__job.is-new {
+  animation: lc-job-in calc(2 * var(--lc-dur-5)) var(--lc-ease-out) both;
+  background: linear-gradient(color-mix(in srgb, var(--lc-accent-bright) 45%, transparent) 0 0)
+    0 92% / 100% 40% no-repeat;
+}
+@keyframes lc-job-in {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+    background-size: 0 40%;
+  }
+  35% {
+    opacity: 1;
+    transform: none;
+    background-size: 100% 40%;
+  }
+  100% {
+    background-size: 100% 0;
+  }
+}
 .lc-gl-label__flag {
   /* Briefing inc 2b: owns a blocked lane. A fill in danger red, not text, so the fill token is right. */
   display: inline-flex;

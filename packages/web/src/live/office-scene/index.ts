@@ -165,6 +165,9 @@ const SPEECH_MAX_W = 260;
 /** After a real act, keep the loop alive this long so the Rive character settles into idle rather than
  * freezing mid-gesture (ADR 086 #5 afterglow) — a brief, bounded post-act tail, not a continuous loop. */
 const AFTERGLOW_MS = 2600;
+/** A newly assigned job's swipe on its plate — two of motion.ts's 600 ms steps; Live.css runs the
+ *  same `calc(2 * var(--lc-dur-5))`. */
+const JOB_SWIPE_MS = 1200;
 /** Ambient micro-choreography (ADR 086 Phase 2, seeded by E1): when the room is quiet, inject one idle
  * beat (a seated micro-gesture — scratch, sip, swivel… — or a stroll), drawn per 10s wall-clock slot so
  * every viewer of the same team sees the same beats. How OFTEN is `ambientSeed.ambientFireP`, which
@@ -756,6 +759,11 @@ export function mountOffice(
   let lightEnv: LightEnv = computeLightEnv(pstNowHours(), occupied); // office lighting from the PST clock
 
   const labels = new Map<string, HTMLDivElement>();
+  /** Each plate's job word and when it last changed (lane 01M5FXZF49). A job that arrives while the
+   *  room is open — a role assigned mid-stream — swipes in once, so a viewer sees someone get their
+   *  job. A plate's first build never plays it (the page opening is not news), and neither does a
+   *  rebuild of an unchanged plate: a rebuild mid-swipe resumes it via a negative delay. */
+  const plateJobs = new Map<string, { job: string | null; at: number }>();
   /** The ask cards (ADR 464 §3.3): one per ask to a human, resting at the human's plate while open. */
   const askCards = new Map<string, { el: HTMLDivElement; ask: OfficeAsk }>();
   const askSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1140,10 +1148,20 @@ export function mountOffice(
       // on a second line, which would make every plate taller and give plateLayout.ts more collisions
       // to settle by moving plates. A service already says what it is with its tag.
       const job = node.service ? null : occupation(node.role);
+      const jobNow = performance.now();
+      const lastJob = plateJobs.get(name);
+      if (!lastJob || lastJob.job !== job) {
+        plateJobs.set(name, { job, at: lastJob ? jobNow : -Infinity });
+      }
       if (job) {
         const jobEl = document.createElement('span');
         jobEl.className = 'lc-gl-label__job';
         jobEl.textContent = job;
+        const since = jobNow - plateJobs.get(name)!.at;
+        if (!reduced && !STILL && since < JOB_SWIPE_MS) {
+          jobEl.classList.add('is-new');
+          jobEl.style.animationDelay = `${-Math.round(since)}ms`;
+        }
         plate.appendChild(jobEl);
       }
       if (name === you) {
@@ -1360,6 +1378,7 @@ export function mountOffice(
         plateFullW.delete(name);
         el.remove();
         labels.delete(name);
+        plateJobs.delete(name);
       }
     }
     positionLabels(headMap);
