@@ -1727,6 +1727,20 @@
   font-weight: 700;
   color: var(--lc-paper-ink);
 }
+/* The member's job, one word beside the name (lane 01M5FXZF49 — a stream viewer asked "can you show
+   their occupations"). The name stays the identity: mono, 700, full ink. The job is a description of
+   it, so it drops to the linear cut (already on the page for /live's labels, so no new font fetch)
+   at 500 in the muted ink — read as an ordinary word, not one more identifier. The model past the
+   rule stays mono. `--lc-paper-muted` on the chalk stock clears AA. */
+.lc-gl-label__job {
+  margin-left: 4px;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--lc-paper-muted);
+  white-space: nowrap;
+}
 .lc-gl-label__flag {
   /* Briefing inc 2b: owns a blocked lane. A fill in danger red, not text, so the fill token is right. */
   display: inline-flex;
@@ -2878,7 +2892,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5; /* the glance shows ~5 lines; the rest lives one hover away */
   overflow: hidden;
-  font-family: var(--font-sans, sans-serif);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-body);
   line-height: 1.36;
   font-weight: 500;
@@ -4936,7 +4950,7 @@
   border-radius: var(--lc-r-sm);
   padding: 10px 12px;
   color: var(--lc-text);
-  font-family: var(--font-sans, sans-serif);
+  font-family: var(--font-sans);
   font-size: 14px;
   letter-spacing: normal;
   text-transform: none;

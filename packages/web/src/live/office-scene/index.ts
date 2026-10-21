@@ -5,6 +5,7 @@ import { roomTone, screenPan, type LifeContext } from '../sound';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
+import { occupation } from '../occupation';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
@@ -1134,6 +1135,17 @@ export function mountOffice(
       who.className = 'lc-gl-label__who';
       who.textContent = name;
       plate.appendChild(who);
+      // What they do here, in a word a stream viewer already knows (lane 01M5FXZF49; a viewer asked
+      // "can you show their occupations"). On the face, beside the name, so it is read with it — never
+      // on a second line, which would make every plate taller and give plateLayout.ts more collisions
+      // to settle by moving plates. A service already says what it is with its tag.
+      const job = node.service ? null : occupation(node.role);
+      if (job) {
+        const jobEl = document.createElement('span');
+        jobEl.className = 'lc-gl-label__job';
+        jobEl.textContent = job;
+        plate.appendChild(jobEl);
+      }
       if (name === you) {
         // The viewer finding themselves in a room of twenty: a mono "you" right after the name, rimmed
         // in their own hue. Signed-in /live only (`you` is null wherever the labels are not interactive).
@@ -1233,7 +1245,7 @@ export function mountOffice(
         // detail carries harness · role only — before this it said the model a second time. Broadcast
         // used to show the model crumb here as its only detail; with the name on the face it has none.
         const detailParts = interactiveLabels
-          ? plateDetailParts({ surface: node.surface, role: node.role })
+          ? plateDetailParts({ surface: node.surface, role: job ? null : node.role })
           : [];
         for (const [i, part] of detailParts.entries()) {
           if (i > 0) {
