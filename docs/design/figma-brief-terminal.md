@@ -481,6 +481,42 @@ so a box is never wider than the screen.
     (it makes you a workspace of your own first)`. Yes ends with `Starting the tour.` instead of the
     seat count.
 
+### Lane picker frames (ADR 624/626, lane 01M5162QS1)
+
+38. `cmd/pick-stacked` — `$ musterd pick` in an 80-column terminal: header (`musterd pick` bold;
+    the active tab's count accent, the other dim), the filter line, the list grouped by goal (goal
+    names dim, the cursor row accent with `▸`), a dim rule, then the highlighted lane's brief (id and
+    title bold, the meta line dim), and the dim key footer. The exact no-color text is
+    `pick/view.test.ts`'s `cmd/pick-stacked` case:
+    ```
+    musterd pick — revive · for stanley   3 claimable · 1 blocked
+    filter › ▏
+    find-work
+    ▸ 01M5162QS1 musterd pick 3: CLI two-pane lane picker
+      01M5DT2PVN Board search: short ids that resolve
+    no goal
+      01M2H2N0Y6 Decline a handoff and re-route it
+
+    ────────────────────────────────────────────────────────────────────────────────
+    01M5162QS1
+    musterd pick 3: CLI two-pane lane picker
+
+    goal find-work · areas cli · opened 2026-10-18 (2d ago)
+    scope packages/cli/src/pick/**
+
+    type to filter · ↑↓ move · tab claimable/blocked · ⏎ pick · esc quit
+    ```
+39. `cmd/pick-wide` — at 100 columns or more the brief sits beside the list behind a dim `│`
+    (the list takes 45% of the width, at least 36 columns); the `cmd/pick-wide` case is 120 columns.
+    Under 60 columns the screen is one dim line, `widen the terminal to 60 columns · esc quits`.
+40. `cmd/pick-blocked` — `tab` shows the blocked lanes; `⏎` on one replaces the filter line with a
+    yellow notice, `blocked on 01M1T6DJ7J (owner miley) — it can be viewed, not picked`, and the brief
+    adds a yellow `blocked: <detail>` line. A lane taken while the screen was open gets the same yellow
+    line: `<id> was taken by <seat> 12s ago — pick another`.
+41. `cmd/pick-table` — no TTY (an agent's shell tool) or `--open`: the same board as plain text with
+    full ids, no color. `--open` adds `opening the lane picker <url>` (accent). Exact text:
+    `pick/view.test.ts`'s `cmd/pick-table` case.
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

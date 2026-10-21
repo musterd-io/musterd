@@ -44,6 +44,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   live: async () => (await import('./commands/live.js')).liveCommand,
   memory: async () => (await import('./commands/memory.js')).memoryCommand,
   next: async () => (await import('./commands/next.js')).nextCommand,
+  pick: async () => (await import('./commands/pick.js')).pickCommand,
   node: async () => (await import('./commands/node.js')).nodeCommand,
   notify: async () => (await import('./commands/notify.js')).notifyCommand,
   nudge: async () => (await import('./commands/nudge.js')).nudgeCommand,

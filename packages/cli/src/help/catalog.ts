@@ -670,6 +670,20 @@ export const CATALOG: readonly CommandEntry[] = [
     examples: ['musterd lanes', 'musterd lanes --mine --open'],
   },
   {
+    name: 'pick',
+    signature: '[--open] [--for-human <name>]',
+    summary: 'the lane picker — pick an open lane from the board for the seat bound here',
+    group: 'work',
+    detail:
+      'The board’s open lanes, rendered by musterd, grouped by goal, with the highlighted lane’s brief\n' +
+      'beside them (ADR 624). Type to filter, tab for blocked lanes, ⏎ picks: the seat bound in this\n' +
+      'folder claims the lane, recorded as requested by you and unattested, and hears it at its next\n' +
+      'interrupt check (ADR 626). Without a terminal it prints the same rows as a table; --open sends\n' +
+      'you to the /live lane picker for this seat instead, where a pick is signed by you.\n' +
+      'A team with more than one human needs --for-human <name>: a pick records who asked.',
+    examples: ['! musterd pick', 'musterd pick --open'],
+  },
+  {
     name: 'node',
     signature: '<invite|join|rotate|revoke|list>',
     summary: 'machine credentials — admit a second machine to this team',

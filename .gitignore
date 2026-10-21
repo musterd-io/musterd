@@ -22,6 +22,7 @@ coverage-blobs/
 **/.musterd/continuity.json
 # ADR 033: client-side pending-presence markers are transient local state, never committed.
 **/.musterd/pending/
+**/.musterd/pending-pick.json
 # ADR 239: the per-session edit index — one file per harness session, the evidence the working-tree
 # gate uses to tell THIS session's edits from a foreign session's. Local and disposable by design.
 # Three of these reached main via `git add -A` in three different seats before this line existed,

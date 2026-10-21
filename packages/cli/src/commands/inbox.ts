@@ -12,10 +12,11 @@ import { HOOK_HTTP_TIMEOUT_MS, isSessionLeaseRefusal, watchClaim } from '../clie
 import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { pendingPickLine, takePendingPick } from '../pick/marker.js';
 import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
-import { kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
+import { findWorkspaceDir, kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
 import { waitingCommand } from './nudge.js';
 import { attestSlotIfUnattested, refreshModelObservation } from './session.js';
 
@@ -362,9 +363,22 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   const hookSeam = HOOK_SEAMS[hookFlag];
   // The discovery verb this harness makes the model call before a named tool is callable, if any.
   const discoveryVerb = DEFERRED_TOOL_HARNESSES[hookFlag];
+  // ADR 626: a lane picked for this seat in its own terminal waits as a workspace marker. It rides
+  // the first line this probe emits — one hook run, one injection, so it is folded in, never a
+  // second JSON object — or goes out on its own at the end.
+  let pickLine: string | null = null;
   const emit = (line: string): void => {
-    const out = hookSeam ? hookSeam(line) : line;
+    const text = pickLine ? `${pickLine}\n${line}` : line;
+    pickLine = null;
+    const out = hookSeam ? hookSeam(text) : text;
     if (out !== null) process.stdout.write(out + '\n');
+  };
+  const flushPick = (): void => {
+    if (pickLine === null) return;
+    const line = pickLine;
+    pickLine = null;
+    emit(line);
+    raised = true;
   };
   // The tool boundary is also the first moment the running model is *knowable* — the transcript now
   // carries an assistant turn, which it did not when SessionStart observed (ADR 158 follow-up). Runs
@@ -423,6 +437,9 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
     await tap();
     return 0;
   }
+  // Only a bound workspace's marker — never whatever folder the hook happened to run in.
+  const pickDir = findWorkspaceDir();
+  const pending = pickDir ? takePendingPick(pickDir) : null;
   let seat: string | undefined;
   try {
     // The interrupt probe is hook-installed and rides every tool call — it takes the default (no
@@ -435,6 +452,17 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       return 0;
     }
     seat = identity.name;
+    // The marker is a file, and a file can be forged or committed. Shown only when the daemon says
+    // the lane is this seat's, with the daemon's title — a forged marker can at most name a lane
+    // the seat already holds.
+    if (pending) {
+      try {
+        const lane = (await http.laneShow(team, pending.lane)).lane;
+        if (lane.owner_seat === seat) pickLine = pendingPickLine({ ...pending, title: lane.title });
+      } catch {
+        /* unconfirmable — dropped unshown; the probe's own check below must still run */
+      }
+    }
     // Explicit ternary, not a conditional spread: a spread here would let a mistyped key vanish
     // from typecheck, which is the exact blind spot docs/wiki/conditional-spread-blind-spot.md was
     // written about — and the field it would silently drop is the one this lane exists to record.
@@ -495,6 +523,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       deaf = true;
     }
   }
+  flushPick();
   await tap();
   return 0;
 }
