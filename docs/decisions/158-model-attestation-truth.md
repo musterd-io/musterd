@@ -183,6 +183,11 @@ The never-erase, never-clobber, and never-fail contracts carry over unchanged, p
   whose `harness` differs is skipped, so the declared tiers answer, or `unknown`. A CLI one-shot
   cannot yet say which harness launched it, so its readers still take the observation as before.
   Follows-up: 01M5E10TQG
+- 2026-10-20, lane 01M5E10TQG: the CLI readers (`attestedAttestation` in commands/helpers.ts, and
+  `musterd claim`) now pass the launching harness too, read from the env marker each harness exports
+  into the shell commands its agent runs: `CLAUDECODE`, `CURSOR_AGENT`, `CODEX_THREAD_ID`. A `musterd
+  send` from a Codex shell in a folder holding Claude Code's observation no longer attests Claude's
+  model. With no marker (a plain terminal, OpenCode, Grok) the observation is read as before.
 
 ## Observability & Evaluation
 

@@ -11,6 +11,7 @@ import {
   type Envelope,
   type MemberKind,
   type MemberSummary,
+  type Surface,
   type WireAttestationSource,
 } from '@musterd/protocol';
 import { gitOutput, gitToplevel, resolveWorkspaceKey } from '@musterd/protocol/project';
@@ -215,6 +216,20 @@ function gather(flags: Record<string, string | boolean>) {
 }
 
 /**
+ * Which harness launched this process, from env vars each harness exports into its hooks and the
+ * shell commands its agent runs: `CLAUDECODE` (Claude Code), `CURSOR_AGENT` (Cursor) and
+ * `CODEX_THREAD_ID` (Codex, seen 2026-10-20 on codex 0.162.1 in a `codex exec` shell). Undefined
+ * for a plain terminal, and for a harness that sets none (OpenCode, Grok). A harness nested in
+ * another's shell inherits the outer marker; the order below then answers with the first match.
+ */
+export function harnessFromEnv(env: NodeJS.ProcessEnv = process.env): Surface | undefined {
+  if (env['CLAUDECODE']) return 'claude-code';
+  if (env['CURSOR_AGENT']) return 'cursor';
+  if (env['CODEX_THREAD_ID']) return 'codex';
+  return undefined;
+}
+
+/**
  * What a CLI one-shot should attest as its model (ADR 246) — the SAME ADR 158 ladder the MCP
  * adapter uses (`observed > env > binding`), resolved here because this is where the binding is
  * already in hand.
@@ -225,8 +240,13 @@ function gather(flags: Record<string, string | boolean>) {
  * `binding.model_observed`, seconds old. An unattested ambient row is the newest non-held presence,
  * so `latestAttestedModel` reads its null and the seat silently leaves the ADR 188 pool.
  *
+ * The observation counts only when it came from the harness that launched this process
+ * ({@link harnessFromEnv}): `binding.json` is per folder, so a `musterd send` that Codex's agent runs
+ * where Claude Code's hook wrote the observation must not attest Claude's model (lane 01M5E10TQG,
+ * the CLI half of 01M5E085SA). With no launcher marker it is read as before.
+ *
  * No freshness bound on the observation, deliberately and consistently with the adapter, which
- * reads `model_observed` unconditionally: ADR 158's never-erase rule already governs how an
+ * reads `model_observed` without one: ADR 158's never-erase rule already governs how an
  * observation ages, and inventing a second, CLI-only staleness rule here would let the two surfaces
  * disagree about the same seat — which is the whole thing the shared resolver exists to prevent.
  */
@@ -261,8 +281,10 @@ export function attestedAttestation(
   binding: ReturnType<typeof findBinding>,
   env: NodeJS.ProcessEnv,
 ): { model: string | undefined; source: WireAttestationSource | undefined } {
+  const harness = harnessFromEnv(env);
   const resolved = resolveAttestation({
     observed: binding?.model_observed,
+    ...(harness !== undefined ? { harness } : {}),
     env: resolveAttestedModel(env),
     binding: binding?.model,
   });

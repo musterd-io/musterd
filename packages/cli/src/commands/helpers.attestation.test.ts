@@ -107,3 +107,41 @@ describe('attestedAttestation — the tier survives the ladder (ADR 301, lane 01
     expect(attestedAttestation(binding, env).model).toBe(attestedModel(binding, env));
   });
 });
+
+/**
+ * Lane 01M5E10TQG — the CLI half of 01M5E085SA. `binding.json` is per folder, so in a seat Connect
+ * wired for both Claude Code and Codex, the observation Claude's hook wrote sat beside a `musterd
+ * send` that Codex's agent ran from its shell, and that act was stamped claude-*. The launcher's env
+ * marker now says which harness is asking, and an observation another harness wrote is skipped.
+ */
+describe('attestedAttestation — an observation counts only for the harness that launched the CLI', () => {
+  const claudeObserved = {
+    server: 'http://x',
+    team: 'dawn',
+    model_observed: { model: 'claude-opus-5-5', harness: 'claude-code', observed_at: 1 },
+  } as unknown as Binding;
+
+  it('skips Claude Code’s observation under a Codex shell and attests nothing observed', () => {
+    expect(attestedAttestation(claudeObserved, { CODEX_THREAD_ID: '019a' })).toEqual({
+      model: undefined,
+      source: undefined,
+    });
+  });
+
+  it('falls to the env declaration under a Codex shell', () => {
+    expect(
+      attestedAttestation(claudeObserved, { CODEX_THREAD_ID: '019a', MUSTERD_MODEL: 'gpt-5.5' }),
+    ).toEqual({ model: 'gpt-5.5', source: 'environment' });
+  });
+
+  it('keeps the observation under the harness that wrote it', () => {
+    expect(attestedAttestation(claudeObserved, { CLAUDECODE: '1' })).toEqual({
+      model: 'claude-opus-5-5',
+      source: 'observed',
+    });
+  });
+
+  it('reads the observation as before from a plain terminal, where no launcher is known', () => {
+    expect(attestedAttestation(claudeObserved, {}).model).toBe('claude-opus-5-5');
+  });
+});

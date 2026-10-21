@@ -30,6 +30,7 @@ import {
 import { setSeatGitIdentity } from '../onboard/workspace.js';
 import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
+import { harnessFromEnv } from './helpers.js';
 import { WAIT_TIMEOUT_EXIT } from './inbox.js';
 import { renderMemoryLine } from './memory.js';
 
@@ -428,8 +429,10 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
     };
     process.on('SIGINT', onSigint);
 
+    const launcher = harnessFromEnv(process.env);
     const model = resolveAttestation({
       observed: binding?.model_observed,
+      ...(launcher !== undefined ? { harness: launcher } : {}),
       env: resolveAttestedModel(process.env),
       binding: binding?.model,
     }).model;
