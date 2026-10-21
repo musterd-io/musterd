@@ -114,4 +114,4 @@ merge; that is measured, not avoided.
 | Run a third pilot, after the git remote fix | **yes**: nick, 2026-10-21 ("write it" after the correction) |
 | Arms | **team + musterd**, as in pilot 2 (nick, 2026-10-21) |
 | Posture | **block**, stated with every result (nick, 2026-10-21) |
-| Spend | **$40–60, hard stop $65**: proposed by lazara, to be confirmed by nick before step 1 |
+| Spend | **$40–60, hard stop $65**: nick, 2026-10-21 ("yes") |
