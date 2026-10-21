@@ -87,6 +87,10 @@ know where that version lives: a lane's `branch` is set only when someone types 
   `gate_hold_refusals` (seat, path, holder lane; the path is never in the audit row) and `lane_heads`
   (the last `git_head` per lane). A hand-over is a `lane.gate` row with `detail.hold = 'handover'`.
   The lane's branch is written through `updateLane`, so it is audited and replicated like any edit.
+- 2026-10-21, measured ([finding 017](../research/017-cooperbench-pilot-3.md)): 7 hand-overs in
+  CooperBench pilot 3, 1 followed by a merge of the holder's branch before the next edit. The Eval
+  rule below (at least half) fails. No pair in that arm was lost to coordination, so the stricter
+  ancestry check is not taken up yet; it is re-read if coordination losses return.
 
 ## Observability & Evaluation
 
