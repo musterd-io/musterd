@@ -314,6 +314,23 @@ describe('model attestation ladder (ADR 101 — attest by default)', () => {
     expect(config.modelDrift).toEqual({ declared: 'grok-4.5', observed: 'claude-opus-4-8' });
   });
 
+  it("a Codex adapter does not attest Claude Code's observation from the shared binding (lane 01M5E085SA)", () => {
+    const config = loadMcpConfig({
+      MUSTERD_TEST_SURFACE: 'codex',
+      MUSTERD_BINDING: bindingWithTiers(undefined, 'claude-opus-5-5'),
+    });
+    expect(config.model).toBeUndefined();
+    expect(config.modelSource).toBe('unknown');
+    // …and the heartbeat's re-read keeps it that way.
+    expect(
+      refreshAttestation(config, {
+        MUSTERD_TEST_SURFACE: 'codex',
+        MUSTERD_BINDING: bindingWithTiers(undefined, 'claude-opus-5-5'),
+      }),
+    ).toBe(false);
+    expect(config.model).toBeUndefined();
+  });
+
   it('attests the observation over a stale binding declaration too', () => {
     const config = loadMcpConfig({
       MUSTERD_TEST_SURFACE: 'claude-code',

@@ -61,6 +61,23 @@ describe('resolveAttestation — observation beats declaration', () => {
     });
   });
 
+  it("skips another harness's observation and lets the declared tiers answer (lane 01M5E085SA)", () => {
+    // One folder, two harnesses: Claude Code's hook observed its model; Codex reads the same file.
+    expect(resolveAttestation({ observed: obs('claude-opus-5-5'), harness: 'codex' })).toEqual({
+      model: undefined,
+      source: 'unknown',
+      drift: false,
+      declared: undefined,
+    });
+    expect(
+      resolveAttestation({ observed: obs('claude-opus-5-5'), harness: 'codex', env: 'gpt-6' }),
+    ).toMatchObject({ model: 'gpt-6', source: 'environment' });
+    // Its own harness's observation still wins.
+    expect(
+      resolveAttestation({ observed: obs('claude-opus-5-5'), harness: 'claude-code' }),
+    ).toMatchObject({ model: 'claude-opus-5-5', source: 'observed' });
+  });
+
   it('reports no drift when the observation agrees with the declaration', () => {
     expect(
       resolveAttestation({ observed: obs('claude-opus-4-8'), env: 'claude-opus-4-8' }).drift,

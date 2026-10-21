@@ -294,7 +294,7 @@ export function loadMcpConfig(
   // Boot-time value only — at adapter boot the session's transcript has no assistant turn yet, so
   // this usually resolves to a declaration or a previous session's observation. `refreshAttestation`
   // is what makes it true; see there.
-  const attestation = attestationFor(binding, env);
+  const attestation = attestationFor(binding, env, surface);
   warnUnattestedSeat(claim, attestation.model, binding !== null);
   // A seat-mode session gets a stable disambiguation code (ADR 087) keyed by what makes it the same
   // seat across relaunches: team + workspace + seat name + surface. Role/chat sessions keep a fresh
@@ -364,11 +364,15 @@ export function loadMcpConfig(
 function attestationFor(
   binding: ReturnType<typeof findBinding>,
   env: NodeJS.ProcessEnv,
+  surface: string,
 ): ReturnType<typeof resolveAttestation> {
   return resolveAttestation({
     observed: binding?.model_observed,
     env: resolveModel(env),
     binding: binding?.model,
+    // Only this harness's own observation (lane 01M5E085SA): the folder's binding is shared by
+    // every harness connected to the seat.
+    harness: surface,
   });
 }
 
@@ -402,7 +406,7 @@ export function refreshAttestation(
     const binding = findBinding(config.bindingDir ?? process.cwd(), env);
     // ADR 286: a binding refresh may update model/capture/capability fields but NEVER
     // `config.surface` — runtime Surface was resolved once, from the launcher, at startup.
-    const next = attestationFor(binding, env);
+    const next = attestationFor(binding, env, config.surface);
     // Never trade a real attestation for `unknown`: a binding that momentarily fails to read must
     // not blank the roster. Same never-erase rule the observation itself follows.
     if (next.model === undefined) return false;

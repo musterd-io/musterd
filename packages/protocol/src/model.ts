@@ -146,6 +146,15 @@ export interface AttestationInput {
   env?: string | undefined;
   /** The persisted declaration (`binding.model`). */
   binding?: string | undefined;
+  /**
+   * The harness this session runs under (its launch Surface, e.g. `codex`). An observation another
+   * harness wrote is not this session's: `binding.json` is per folder, and init's Connect wires every
+   * agent on the machine into one folder's seat, so Claude Code's observation sat in the file Codex's
+   * adapter read, and Codex's acts were stamped `claude-opus-5-5`, observed (dogfood run 4, lane
+   * 01M5E085SA). Given, an observation from a different harness is skipped and the declared tiers
+   * answer. Omitted where the reader cannot say which harness it runs under (a CLI one-shot).
+   */
+  harness?: string | undefined;
 }
 
 export interface AttestationResult {
@@ -175,11 +184,15 @@ export interface AttestationResult {
  */
 export function resolveAttestation(input: AttestationInput): AttestationResult {
   const declared = input.env ?? input.binding;
-  if (input.observed) {
+  const observed =
+    input.observed && (input.harness === undefined || input.observed.harness === input.harness)
+      ? input.observed
+      : undefined;
+  if (observed) {
     return {
-      model: input.observed.model,
+      model: observed.model,
       source: 'observed',
-      drift: declared !== undefined && declared !== input.observed.model,
+      drift: declared !== undefined && declared !== observed.model,
       declared,
     };
   }
