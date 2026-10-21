@@ -137,11 +137,13 @@ describe('binding refresh never updates Surface (ADR 286)', () => {
         agent_key: 'mskey_test',
         claim: { mode: 'seat', name: 'miley' },
         session: { harness: 'cursor', id: 's2', started_at: 2 },
-        model_observed: { model: 'grok-4.6', harness: 'cursor', observed_at: 2 },
+        // The session slot names cursor, but the observation is this adapter's own harness's:
+        // another harness's observation is never taken (lane 01M5E085SA).
+        model_observed: { model: 'claude-opus-5-5', harness: 'claude-code', observed_at: 2 },
       }),
     );
     expect(refreshAttestation(cfg, { MUSTERD_LAUNCH_SURFACE: 'claude-code' })).toBe(true);
-    expect(cfg.model).toBe('grok-4.6'); // model refresh still works…
+    expect(cfg.model).toBe('claude-opus-5-5'); // model refresh still works…
     expect(cfg.surface).toBe('claude-code'); // …and Surface stays what the launcher declared
   });
 });

@@ -175,6 +175,14 @@ The never-erase, never-clobber, and never-fail contracts carry over unchanged, p
   fallback.
 - The observed tier requires the SessionStart capture hooks (ADR 131 §5) to be wired. A workspace
   missing them falls back to the declared tier — `musterd init --check` already reports their absence.
+- 2026-10-20, lane 01M5E085SA: an observation belongs to the harness that made it.
+  `binding.json` is per folder, and since `musterd init`'s Connect wires every agent on the machine
+  into one folder's seat, Claude Code's `model_observed` sat in the file Codex's adapter read. Codex
+  then attested `claude-opus-5-5`, observed, and its acts carried that stamp (dogfood run 4). The
+  adapter now passes its launch Surface to `resolveAttestation` as `harness`, and an observation
+  whose `harness` differs is skipped, so the declared tiers answer, or `unknown`. A CLI one-shot
+  cannot yet say which harness launched it, so its readers still take the observation as before.
+  Follows-up: 01M5E10TQG
 
 ## Observability & Evaluation
 
