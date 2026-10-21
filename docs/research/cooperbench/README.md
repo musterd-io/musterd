@@ -288,6 +288,7 @@ fly ssh console --app musterd-cooperbench
 cd /data/runs
 ln -sfn /opt/cooperbench/dataset dataset                                            # `cooperbench run` reads ./dataset
 PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/gate_smoke.py   # must print PASS first
+PREFIX=/opt/musterd-seat python3 /app/scripts/research/cooperbench/hold_smoke.py   # ADR 691/693: held, then lapsed (~2 min)
 cooperbench run -n smoke-coop    -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code         --setting coop
 cooperbench run -n smoke-musterd -r pallets_click_task -t 2068 -f 1,2 -m claude-sonnet-4-5 -a claude_code_musterd --setting coop
 cooperbench eval -n smoke-coop --backend docker && cooperbench eval -n smoke-musterd --backend docker
