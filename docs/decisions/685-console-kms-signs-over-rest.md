@@ -60,7 +60,8 @@ is `token.issue` with `{aud, jti}` only.
 The token does not authorize import, export, or delete. Those routes (lanes `01M3Z42W1J` and
 `01M3Z42YFH`) read this token's `sub` as the account id and also check that the account is bound
 to an owner. Team servers keep the JWKS URL they already have. The staging issuer stays until an
-operator points them at a console that publishes this key. Rotation is a new key version and a
+operator points them at a console that publishes this key. _(Amended 2026-10-20: lane
+`01M5E0543HNPG3EKFXZ287Y80N`. See the amendment below.)_ Rotation is a new key version and a
 process restart. In-flight 60-second tokens can fail across that restart. A team server refetches
 an unknown `kid` at most every 30 seconds and trusts a JWKS set for at most 10 minutes. An offline
 root that certifies the KMS key is spec §11. This record does not add one.
@@ -71,6 +72,8 @@ root that certifies the KMS key is spec §11. This record does not add one.
 - A credential file other users can read is refused at boot. The error names
   `MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE` and not the path.
 - Cutover is an ops change recorded in `docs/guides/cloud-ops.md`, not a code default.
+  _(2026-10-20.)_ That ops change is lane `01M5E0543HNPG3EKFXZ287Y80N`: set the KMS env on Fly,
+  point team servers at the console JWKS, and retire `workers/staging-jwks` and the staging key.
   `app.musterd.io` still serves an empty JWKS. Staging team servers still name the staging issuer.
 - _(2026-10-20.)_ A live `asymmetricSign` on version 1 of `console-signing` produced a signature
   that `node:crypto` verifies with the JWK `getPublicKey` returned (`kms.test.ts`, "signs with the
