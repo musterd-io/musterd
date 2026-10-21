@@ -229,6 +229,25 @@ pair is a check that both run and score, not a result.
 
 Follows-up: lane 01M5AQEG23 decides how a waiting agent survives OpenHands' stuck detector (in both arms) before any measured pair.
 
+## The task images' local `main` is not the task base (lane `01M5E8CHBT`, 2026-10-21)
+
+Every CooperBench task image checks the repository out at the task base as a detached HEAD and
+keeps the upstream repository's `main` branch beside it, at a later commit (`openai_tiktoken:task0`:
+HEAD `4560a88`, `main` `08a5f3b`; the same shape in `pallets_jinja:task1621` and `typst:task6554`).
+CooperBench's `build_git_setup_command` pushes the base to the shared remote as `team/main` and the
+git block tells the agent "Base reference: `team/main`", but the stale local `main` stays. In the
+first pilot two of twenty agents wrote `git diff main -- <file> > patch.txt`: a diff against the
+wrong commit, which failed to apply on the base (`apply_status: failed`), so those two pairs were
+decided by a branch name. The other eighteen used a commit sha or `team/main` and were fine.
+
+`musterd_cooperbench/pin_main.py` adds one step to that same setup command, `git branch -f main
+HEAD`, so `main` and `team/main` both name the base. It replaces the symbol CooperBench's own
+adapters import, and the package is imported for every run on the machine
+(`COOPERBENCH_EXTERNAL_AGENTS`), so the plain coop arm, the team arm and the musterd arm run the
+identical setup. A harness fix that reached one arm only would be a thumb on the scale; this one
+reaches all three or none. `tests/test_pin_main.py` pins that. It belongs upstream as an image or
+harness fix and is kept here until a pinned CooperBench carries it.
+
 ## Notes for the pilot (lane `01M5AQEG23`)
 
 - **A waiting OpenHands agent is killed as stuck.** Agreeing an order is good coordination, but the
