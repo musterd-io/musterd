@@ -1406,6 +1406,22 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
+### 2026-10-21 — `totalJsGzipBytes` 354,000 → 355,000 B: the asks rail recovers review asks older than the backfill (lane `01M5G10DB2`)
+
+| Budget     | This branch (CI, #3127) | Ceiling                    |
+| ---------- | ----------------------- | -------------------------- |
+| total JS   | 346.1 KB (≈354,400 B)   | RAISED 354,000 → 355,000 B |
+| initial JS | 145.2 KB of 145.3 KB    | unchanged                  |
+
+A fresh /live load holds only the newest 200 envelopes, so a lane's review ask that scrolled further back
+never reached the rail (three of nick's refused-verdict asks sat 350–711 envelopes back). The fix is a
+small hook in `AsksStrip` (eager) plus `recoverAsks.ts` (a lazy chunk, loaded only when the board shows an
+awaiting lane whose ask the window lacks). The fetch logic is lazy so the initial budget, with ~100 B of
+headroom, stays where it was; the lazy chunk's wrapper is why the total moves more than the code. Nothing
+to trim that is not the feature. A re-baseline would loosen.
+
+- Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B with this change in.
+
 ### 2026-10-21 — `liveCssGzipBytes` 26,300 → 26,450 B: a nameplate says the member's job (lane `01M5FXZF49`)
 
 | Budget   | main (local, #3108)  | This branch (local) | Ceiling                  |
