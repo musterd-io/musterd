@@ -108,6 +108,14 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
 
 ## Consequences
 
+- _(2026-10-21, first landing, lane `01M5DTS8DC0S69GMQ3BN13FHKR`.)_ Decision 2 is precise about
+  what crosses, not about who minted it: an admin's host key is both team-wide and the admin's own
+  sponsor key (ADR 463 §1), so the row crosses and is honoured **sponsor-only** at the joiner
+  (`replicated_from` set; `hostKeyScope` never grants a replicated row team-wide reach). The
+  team-wide half never crosses; what never crosses at all is the team agent key, `claim_role`,
+  an unsponsored `claim_seat`, and any human credential. The joiner request path, provisions,
+  the host actor and the freshness window land in the lane's second PR.
+
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the
   root rather than being patched; item 2 is settled by decision 2.

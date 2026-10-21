@@ -921,6 +921,25 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE slack_install_requests ADD COLUMN IF NOT EXISTS destination TEXT');
     },
   },
+  {
+    // ADR 689: a sponsor-scoped credential projected from another node carries that node's id in
+    // `replicated_from` (null = minted here). A replicated row is honoured sponsor-only — never
+    // team-wide, whatever its creator is on the hub (decision 2). Nullable, no backfill.
+    version: 121,
+    sqlite: (db) => {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('agent_bootstrap_credentials')")
+        .pluck()
+        .all();
+      if (!cols.includes('replicated_from'))
+        db.exec('ALTER TABLE agent_bootstrap_credentials ADD COLUMN replicated_from TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec(
+        'ALTER TABLE agent_bootstrap_credentials ADD COLUMN IF NOT EXISTS replicated_from TEXT',
+      );
+    },
+  },
 ];
 
 const LANE_SAMPLES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS lane_samples (

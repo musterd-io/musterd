@@ -963,6 +963,57 @@ async function projectResidencyLedger(
   return {};
 }
 
+/**
+ * ADR 689: a sponsor-scoped credential the hub accepted projects into this daemon's
+ * `agent_bootstrap_credentials`, so a hub-minted sponsor host key authenticates here. Only a
+ * row from another node projects (this daemon's own mint already inserted it); the hash is a
+ * verifier of a 192-bit secret, never a bearer (ADR 689 decision 9). `revoked` ends it.
+ */
+async function projectCredentialLedger(
+  db: Driver,
+  teamId: string,
+  e: { action: string; target: string | null; detail: Record<string, unknown> | null },
+  originNode: string,
+  localNode: string | null,
+): Promise<void> {
+  if (e.action !== 'credential.accepted' && e.action !== 'credential.revoked') return;
+  if (localNode !== null && originNode === localNode) return;
+  const id = e.target ?? '';
+  if (!id) return;
+  if (e.action === 'credential.revoked') {
+    await db.run(
+      `UPDATE agent_bootstrap_credentials SET state = 'revoked', revoked_at = ?
+       WHERE id = ? AND team_id = ? AND state IN ('active', 'rotated')`,
+      [Date.now(), id, teamId],
+    );
+    return;
+  }
+  const d = e.detail ?? {};
+  const use = d['use'];
+  const target = d['target'];
+  const keyHash = d['key_hash'];
+  if ((use !== 'host' && use !== 'claim_seat') || typeof target !== 'string') return;
+  if (typeof keyHash !== 'string' || !keyHash) return;
+  await db.run(
+    `INSERT INTO agent_bootstrap_credentials
+      (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by, created_at, rotated_at, revoked_at, replicated_from)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL, NULL, ?)
+     ON CONFLICT(id) DO NOTHING`,
+    [
+      id,
+      teamId,
+      keyHash,
+      use,
+      target,
+      typeof d['label'] === 'string' ? d['label'] : null,
+      typeof d['expires_at'] === 'number' ? d['expires_at'] : null,
+      typeof d['sponsor'] === 'string' ? d['sponsor'] : null,
+      typeof d['created_at'] === 'number' ? d['created_at'] : Date.now(),
+      originNode,
+    ],
+  );
+}
+
 async function writePullCursor(
   db: Driver,
   teamId: string,
@@ -1119,6 +1170,7 @@ export async function foldBatch(
           stop = projected.stop;
           return await finish();
         }
+        await projectCredentialLedger(t, teamId, e, event.origin_node, local);
         await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

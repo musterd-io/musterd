@@ -2104,7 +2104,7 @@ async function authProvisionCaller(
         'forbidden',
         `this host key serves host "${credential.target}", not "${hostLabel}" (ADR 648)`,
       );
-    const scope = await hostKeyScope(ctx, team, credential.created_by);
+    const scope = await hostKeyScope(ctx, team, credential);
     const creator = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
     if (!creator) throw new MusterdError('unauthorized', 'this host credential’s creator is gone');
     await assertSponsorOf(ctx.db, team, creator, agentName);
@@ -2177,7 +2177,7 @@ async function authAgentKeyOnly(
       result: 'allow',
       detail: { use: 'host', target: credential.target },
     });
-    return { team, scope: await hostKeyScope(ctx, team, credential.created_by) };
+    return { team, scope: await hostKeyScope(ctx, team, credential) };
   }
   if (credential && credential.use_kind !== 'legacy') {
     await appendAudit(ctx.db, team.id, {
@@ -2213,12 +2213,22 @@ async function authAgentKeyOnly(
  * creator has left is refused; a non-admin sponsor's key is also refused once its creator loses
  * standing or has can_create_agents withdrawn. An admin-minted key keeps its team-wide reach.
  */
-async function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): Promise<HostScope> {
+async function hostKeyScope(
+  ctx: Ctx,
+  team: TeamRow,
+  credential: Pick<
+    import('../store/teams.js').BootstrapCredential,
+    'created_by' | 'replicated_from'
+  >,
+): Promise<HostScope> {
+  const createdBy = credential.created_by;
   if (createdBy === null) return TEAM_WIDE_HOST;
   const creator = await getMemberByName(ctx.db, team.id, createdBy);
   if (!creator || creator.left_at !== null)
     throw new MusterdError('unauthorized', 'this host credential’s creator has left the team');
-  const teamWide = resolveCapabilities(creator).is_admin;
+  // ADR 689 decision 2: a row projected from another node is sponsor-only here, whatever its
+  // creator is on the hub — the team-wide half of an admin's key never crosses.
+  const teamWide = resolveCapabilities(creator).is_admin && credential.replicated_from === null;
   // A sponsor's key is re-checked on every use, not only at mint: withdrawing can_create_agents, or
   // the sponsor's standing, stops hosting at once (ADR 463 §1). Fail closed.
   if (!teamWide) assertSponsorCaller(creator);
@@ -2459,7 +2469,7 @@ async function rosterViewer(
     const team = await requireTeam(ctx.db, slug);
     const credential = await findBootstrapCredential(ctx.db, team.id, token);
     if (credential?.use_kind === 'host') {
-      await hostKeyScope(ctx, team, credential.created_by);
+      await hostKeyScope(ctx, team, credential);
       await recordBootstrapCredentialUse(ctx.db, credential.id);
       return null;
     }
@@ -4211,6 +4221,32 @@ export async function handleHttp(
             ...(viaHostKey ? { via: 'host_key', host } : {}),
           },
         });
+        // ADR 689 decision 1: a sponsor's host key, or a sponsored seat's `claim_seat`, crosses to
+        // the team's joiners as the hub's own fact, so the sponsor-scoped host key is honoured at
+        // a joiner's daemon. A team-wide `claim_role` and an unsponsored `claim_seat` never cross.
+        // Only the hub writes the fact (decision 6): a joiner that staged one would have its whole
+        // push refused at the hub's ingest. A joiner's mint stays local until the request path
+        // (`credential.minted`) carries it up for validation.
+        if (
+          (body.use === 'host' || (body.use === 'claim_seat' && sponsorScoped)) &&
+          (await joinerEnrollment(ctx.db, team.id, slug)) === null
+        ) {
+          await appendAudit(ctx.db, team.id, {
+            actor: null,
+            action: 'credential.accepted',
+            target: minted.credential.id,
+            result: 'allow',
+            detail: {
+              use: body.use,
+              target: body.target,
+              sponsor: member.name,
+              key_hash: minted.credential.key_hash,
+              expires_at: minted.credential.expires_at,
+              created_at: minted.credential.created_at,
+              ...(body.label !== undefined ? { label: body.label } : {}),
+            },
+          });
+        }
         for (const predecessorId of minted.rotated) {
           await appendAudit(ctx.db, team.id, {
             actor: member.name,
@@ -4390,6 +4426,19 @@ export async function handleHttp(
         } else {
           member = (await authAdmin(ctx, slug, req)).member;
         }
+        // ADR 689 decision 8: a replicated row is revoked at the hub, whose `credential.revoked`
+        // reaches every joiner; a local revoke here would leave the key live everywhere else and
+        // report success for it.
+        if ((await joinerEnrollment(ctx.db, delTeam.id, slug)) !== null) {
+          const replicated = (await listBootstrapCredentials(ctx.db, delTeam.id)).find(
+            (c) => c.id === credentialId && c.replicated_from !== null,
+          );
+          if (replicated)
+            throw new MusterdError(
+              'forbidden',
+              `credential "${credentialId}" was minted at the hub — revoke it there (ADR 689); this joiner only folds the revocation`,
+            );
+        }
         if (!(await revokeBootstrapCredential(ctx.db, delTeam.id, credentialId))) {
           throw new MusterdError(
             'not_found',
@@ -4403,6 +4452,18 @@ export async function handleHttp(
           result: 'allow',
           detail: viaHostKey ? { via: 'host_key', host } : {},
         });
+        // ADR 689 decision 8: the revocation crosses to every joiner that projected the mint. The
+        // row is written for every scoped revoke on the hub — a joiner holding no such row ignores
+        // it — and never on a joiner, whose push the hub would refuse (decision 6).
+        if ((await joinerEnrollment(ctx.db, delTeam.id, slug)) === null) {
+          await appendAudit(ctx.db, delTeam.id, {
+            actor: null,
+            action: 'credential.revoked',
+            target: credentialId,
+            result: 'allow',
+            detail: {},
+          });
+        }
         return sendJson(res, 200, { ok: true });
       }
 

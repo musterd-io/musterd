@@ -43,6 +43,9 @@ export interface BootstrapCredential {
   migration_target_member_id: string | null;
   /** ADR 350: first successful scoped claim/host authentication; minting alone is not readiness. */
   first_used_at: number | null;
+  /** ADR 689: the node this row was projected from (null = minted here). Replicated rows are
+   *  honoured sponsor-only, never team-wide. */
+  replicated_from: string | null;
 }
 
 export type BootstrapMigrationResult = {
@@ -229,6 +232,7 @@ export async function mintBootstrapCredential(
     revoked_at: null,
     migration_target_member_id: null,
     first_used_at: null,
+    replicated_from: null,
   };
   const rotated = await db.tx(async (t) => {
     const predecessors = (
@@ -476,6 +480,7 @@ export async function migrateLegacyBootstrapCredential(
       revoked_at: null,
       migration_target_member_id: member.id,
       first_used_at: null,
+      replicated_from: null,
     };
     await t.run(
       `INSERT INTO agent_bootstrap_credentials
