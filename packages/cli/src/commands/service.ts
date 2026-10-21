@@ -130,6 +130,9 @@ import {
   uninstallSweep,
   type SweepCtx,
 } from '../service/sweep.js';
+// A namespace import: `collectApproval` takes no CLI flags, and cli-flags:check would otherwise
+// read a named call as `service` handing its flags to `authority`.
+import * as authority from './authority.js';
 import { resolve } from './helpers.js';
 
 /** Shell out to `launchctl` synchronously, capturing output and never throwing on a non-zero exit. */
@@ -1919,11 +1922,22 @@ async function provisionServiceSeat(
   }
   try {
     const http = new HttpClient({ server: config.server, key: identity.key, surface: 'cli' });
-    const res = (await http.addMember(team, {
-      name: svc.name,
-      kind: 'service',
-      role: 'platform',
-    })) as { token?: string };
+    const req = { name: svc.name, kind: 'service', role: 'platform' } as const;
+    let res: { token?: string };
+    try {
+      res = (await http.addMember(team, req)) as { token?: string };
+    } catch (e) {
+      // ADR 662: minting a seat is a roster change, so a human admin's passkey signs it — the same
+      // ceremony `musterd broadcast` runs for its observer. Only on a terminal: an unattended
+      // install cannot wait on a person, and keeps the one-line refusal below.
+      if (!UNSIGNED_ROSTER.test(String((e as Error)?.message)) || !process.stdout.isTTY) throw e;
+      ok(`minting the ${svc.name} service seat is a roster change — approve it with your passkey`);
+      const approval = await authority.collectApproval(http, team, 'admin.roster', svc.name, {
+        ...req,
+        observer: false,
+      });
+      res = (await http.addMember(team, { ...req, approval })) as { token?: string };
+    }
     if (!res.token) throw new Error('daemon returned no token');
     const p = join(dirname(configPath()), svc.home, 'seat-token');
     mkdirSync(dirname(p), { recursive: true });
@@ -2009,6 +2023,9 @@ function defaultTeamHolds(parsed: Parsed): TeamHoldsApi {
     },
   };
 }
+
+/** The daemon's refusal of an unsigned roster mint (ADR 662) — the same test broadcast.ts makes. */
+const UNSIGNED_ROSTER = /authority refused \(no_signature\): admin\.roster/;
 
 /** Beside a service's `seat-token`: the team and daemon the token was minted on. */
 export const SERVICE_SEAT_FILE = 'seat.json';
