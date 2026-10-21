@@ -3,11 +3,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resolveConfig } from '../config.js';
+import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
+import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { pullTeam } from '../sync/pull.js';
+import { Hub } from './hub.js';
 
 withDrivers('node-enroll-http', (_o, kind) => {
   /**
@@ -163,8 +168,10 @@ withDrivers('node-enroll-http', (_o, kind) => {
       expect(readNodeState().nodes['bravo']).toBeUndefined();
     });
 
-    it('refuses when this daemon has no node row for the team yet', async () => {
-      // No mintLocalRow: the joiner has the team but has never written to its own log.
+    // ADR 689 (cloud agents 2b-4): a joiner that has never written to its own log — a cloud agent
+    // machine on first boot — mints its node row at enrolment instead of being told to "send
+    // something first", which on a machine with no human on it meant creating one.
+    it('a daemon with the team but no node row mints one at enrolment and enrols', async () => {
       const { json: minted } = await post(
         hubBase,
         '/teams/bravo/nodes/invite',
@@ -178,7 +185,56 @@ withDrivers('node-enroll-http', (_o, kind) => {
         team: 'bravo',
       });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(200);
+      const team = (await getTeamBySlug(joiner.store, 'bravo'))!;
+      const local = await joiner.store.get<{ node_id: string }>(
+        'SELECT node_id FROM local_node WHERE team_id = ?',
+        [team.id],
+      );
+      expect(local?.node_id).toBe(res.json.node_id);
+    });
+
+    it('a fresh daemon with no team row at all enrols: node join creates the bare team row, and the hub`s roster arrives by fold', async () => {
+      const fresh = createServer({ db: await openTestDriver(kind, { instance: 'c' }), port: 0 });
+      const freshBase = `http://127.0.0.1:${(await fresh.listen()).port}`;
+      const freshState = join(dir, 'node-fresh.json');
+      const previous = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = freshState;
+      try {
+        expect(await getTeamBySlug(fresh.store, 'bravo')).toBeUndefined();
+        const { json: minted } = await post(
+          hubBase,
+          '/teams/bravo/nodes/invite',
+          { label: 'cloud agent machine' },
+          nickCredential,
+        );
+        const res = await post(freshBase, '/node/enroll', {
+          hub_url: hubBase,
+          code: minted.invite,
+          team: 'bravo',
+        });
+        expect(res.status).toBe(200);
+        const team = (await getTeamBySlug(fresh.store, 'bravo'))!;
+        expect(team).toBeDefined();
+        // No human was minted here: the bare row holds no member. The roster travels by git
+        // (ADR 058) — addMember stands in for the roster root here — and events by sync: a
+        // first pull against the hub completes with the team row the enrolment created.
+        expect(
+          await fresh.store.get('SELECT id FROM members WHERE team_id = ? LIMIT 1', [team.id]),
+        ).toBeUndefined();
+        await addMember(fresh.store, team, { name: 'nick', kind: 'human' });
+        const ctx: Ctx = {
+          db: fresh.store,
+          hub: new Hub(),
+          config: resolveConfig(),
+          rosterRoots: [],
+        };
+        await expect(pullTeam(ctx, team)).resolves.toBeDefined();
+        expect(readNodeState().nodes['bravo']?.node_id).toBe(res.json.node_id);
+      } finally {
+        process.env['MUSTERD_NODE_STATE'] = previous;
+        await fresh.close();
+      }
     });
 
     it('refuses an off-machine caller — enrolling this machine is not remotely initiable', async () => {

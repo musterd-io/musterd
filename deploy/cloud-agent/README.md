@@ -1,9 +1,21 @@
 # Cloud agent — one hosted seat on musterd compute, as a Fly machine
 
-The runbook for ADR 647 phase 1: a Fly machine that hosts one sponsored seat against a
-**hosted (Cloud) team**. It runs no daemon and holds no team store (design §4.1b): the host
-loop polls the hosted server over HTTPS, provisions the seat under the sponsor-scoped host
-key (ADR 648), and runs the resident engine in the seat's workspace.
+The runbook for ADR 647 phase 1 and phase 2b: a Fly machine that hosts one sponsored seat.
+Two modes, one image and one script:
+
+- **Hosted mode** (phase 1, the default) — against a **hosted (Cloud) team**. The machine runs
+  no daemon and holds no team store (design §4.1b): the host loop polls the hosted server over
+  HTTPS, provisions the seat under the sponsor-scoped host key (ADR 648), and runs the resident
+  engine in the seat's workspace.
+- **Hub mode** (phase 2b, ADR 689; `create.sh --hub <tailnet-name>`) — against a **laptop-hub
+  team**. The machine joins the tailnet, runs its **own daemon as a joiner** (loopback-bound,
+  enrolled at the hub with a one-shot invite), and the same host loop polls that daemon. The
+  hub-minted host key works there because sponsor-scoped credentials replicate (ADR 689 d1); the
+  seat's enrolment and provision reach the hub as host-authored rows (d3, d5); provisioning is
+  refused past the freshness window and retried (d7). **No human identity is on the machine** —
+  no `team create`, no `--as`: `node join` on a fresh daemon creates the bare team row itself.
+  While the laptop sleeps the seat wakes on already-folded acts but cannot claim a lane (ADR 355);
+  that is what "always on" means for a laptop hub.
 
 Everything marked **$** creates a cloud resource or spends money — a human at the wheel.
 The sponsor steps (minting the agent and the host key) run wherever the sponsor is bound.
@@ -23,6 +35,8 @@ Secrets arrive as Fly secrets, never in the image, `fly.toml` or the repo:
 | `MUSTERD_HOST_KEY`  | the host loop (ADR 648)         | the whole run; revocable server-side  |
 | model key (`ANTHROPIC_API_KEY` or the `MUSTERD_KEY_ENV` variable) | the resident engine, at spawn | the whole run — the sponsor's BYOK key |
 | `GH_TOKEN`          | clone, push, PRs from the workspace — held by gh under `$HOME/.config/gh`, never in the jail's environment (ADR 675) | the whole run — fine-grained, this repo only, contents + pull requests |
+| `MUSTERD_INVITE`    | hub mode, first boot: `musterd node invite` minted on the hub | single use, 15 m; scrubbed by agent.sh after enrolment |
+| `TAILSCALE_AUTHKEY` | hub mode, first boot: the tailnet auth key | single use; scrubbed by entrypoint.sh before the root drop; the node identity lives on the volume |
 
 It must never hold: the team agent key (`MUSTERD_AGENT_KEY` — the entrypoint refuses to
 boot with it set) or any sponsor credential. The sponsor's binding lives on the sponsor's
@@ -37,6 +51,13 @@ deploy/cloud-agent/create.sh <seat> --repo <workspace-git-url>
 # options: --org --region --team --server --host-label --key-env --skip-sponsor --dry-run
 # --server defaults to https://<team>.musterd.dev, where a hosted team lives (cloud-ops.md);
 # --team defaults to revive-staging, the staging team the pilot runs against.
+
+# Hub mode — run it ON THE HUB, from a folder bound to the team as an admin sponsor:
+deploy/cloud-agent/create.sh <seat> --repo <workspace-git-url> \
+  --hub <laptop-tailnet-name> --roster-repo <team-home-git-url>   # [--hub-port 4849]
+# It mints the invite and the host key on the hub, reads TAILSCALE_AUTHKEY without echo, sets
+# MUSTERD_HUB / ROSTER_REPO on the machine, and mints the agent once the machine's heartbeat
+# has reached the hub (one sync tick). The team is the one this folder is bound to.
 ```
 
 It creates the agent and queues its provision, mints the host key (captured into a shell
@@ -103,6 +124,15 @@ fly logs --app musterd-agent-$SEAT
 The log shows the provision claim, the seat standing up (workspace, credential, residency
 enrolled under harness `musterd`), and then wake polls. On the team server, the seat reads
 `offline · wakeable` until its first wake.
+
+In hub mode the log first shows `tailnet up · hub <name> → <ip>`, `dropping root → seat`, the
+joiner daemon coming up, `enrolled at http://<ip>:4849`, and `host key honoured by this daemon`
+once the hub's first sync tick has carried the key over; the hub's roster then shows the seat
+`wakeable` on this machine's host label. Nothing on the hub needs running by hand — no
+`node trust`: the machine's rows are the host's, not a human's (ADR 689 d5). The one piece of
+delta's friction that stays (docs/perf/cloud-seat.md finding 4): the cloned team home is
+declared as the daemon's roster root by writing `config.rosterHome`, because `team export`
+refuses a clone; the product fix (`musterd team adopt`) is still open.
 
 ## Verify
 

@@ -106,12 +106,17 @@ hub. The floating-seat lane (`01M55PDGG8`) is where leases move to the hub.
 | `TAILSCALE_AUTHKEY`   | —                       | first boot, scrubbed (delta's entrypoint §1)    |
 | `MUSTERD_INVITE`      | —                       | `musterd node invite` on the hub; first boot    |
 | `MUSTERD_HOST_KEY`    | sponsor host key        | same — minted on the hub, honoured by (3.1.1)   |
+| `ROSTER_REPO`         | —                       | the team home's git URL — seat files travel by git (ADR 058) |
 | `MUSTERD_AGENT_KEY`   | refused                 | refused                                         |
 
-Boot order in hub mode: tailnet (root) → drop root → `musterd serve` loopback → `node join`
-(first boot) → wait for the first fold → `musterd host --cloud-provision --server
-http://127.0.0.1:4849`. No `team create`, no `--as`, no roster-root dance: the roster comes from
-the fold (ADR 058's file root is for file-authoritative teams, and a joiner is not one).
+Boot order in hub mode: tailnet (root) → drop root → `musterd serve` loopback → clone the team
+home and declare it the roster root → `node join` (first boot) → wait for the first fold →
+`musterd host --cloud-provision --server http://127.0.0.1:4849`. No `team create`, no `--as`:
+`node join` on a fresh daemon creates the bare team row itself (lane `01M5DTSKAB`).
+_(Corrected 2026-10-21 at build time: the roster does NOT come from the fold — seat files
+travel by git, ADR 058, so the machine clones the team home like delta did, and friction item 4
+(a clone cannot be declared a roster root by `team export`) stays as a `config.rosterHome`
+write in `agent.sh`; the product fix, `musterd team adopt`, is a candidate lane.)_
 
 Delta's root/`setpriv` drop (ADR 390) is kept; phase 1's entrypoint has no root phase because it
 needs no tailnet.
