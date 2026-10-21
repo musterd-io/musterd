@@ -160,7 +160,7 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
   });
 
   it('the plate says the member’s job beside the name, and the expanded detail does not repeat it (lane 01M5FXZF49)', () => {
-    expect(index).toContain('const job = node.service ? null : occupation(node.role);');
+    expect(index).toContain('const job = node.service ? null : occupation(node.roles?.length ? node.roles : [node.role]);');
     const face = index.slice(index.indexOf('plate.appendChild(who);'), index.indexOf('if (name === you)'));
     expect(face).toContain("jobEl.className = 'lc-gl-label__job'");
     expect(index).toContain('plateDetailParts({ surface: node.surface, role: job ? null : node.role })');

@@ -120,6 +120,7 @@ function computeData(
         color: memberColor(m.name, kind, m.hue),
         hue: m.hue ?? null,
         role: m.role,
+        roles: m.roles,
         surface: live?.surface ?? null,
         model: live?.model ?? null,
         workTitle: entry?.title ?? null,

@@ -1147,7 +1147,7 @@ export function mountOffice(
       // "can you show their occupations"). On the face, beside the name, so it is read with it — never
       // on a second line, which would make every plate taller and give plateLayout.ts more collisions
       // to settle by moving plates. A service already says what it is with its tag.
-      const job = node.service ? null : occupation(node.role);
+      const job = node.service ? null : occupation(node.roles?.length ? node.roles : [node.role]);
       const jobNow = performance.now();
       const lastJob = plateJobs.get(name);
       if (!lastJob || lastJob.job !== job) {

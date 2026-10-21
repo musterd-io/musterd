@@ -37,6 +37,9 @@ export interface OfficeNode {
    *  speech ink (`memberInk`) can be derived from the same number the fill was. */
   hue?: number | null;
   role: string;
+  /** Every role the seat holds (ADR 227); the plate's job word is the first with one (`occupation.ts`).
+   *  Absent or empty where a fixture or an older daemon sends only `role`, which is then read. */
+  roles?: readonly string[];
   /** Live presence surface (harness) — for the floating nameplate identity line. */
   surface: string | null;
   /** Harness-attested model id (ADR 101) — for the floating nameplate identity line. */
