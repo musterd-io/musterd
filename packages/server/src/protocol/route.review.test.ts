@@ -1,5 +1,6 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PRESENCE_TIMEOUT_MS } from '../config.js';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -14,7 +15,7 @@ function stubCtx(db: Driver): Ctx {
   return {
     db,
     rosterRoots: [],
-    config: {} as Ctx['config'],
+    config: { presenceTimeoutMs: PRESENCE_TIMEOUT_MS } as Ctx['config'],
     hub: { deliver: () => false, broadcastFirehose: () => 0 } as unknown as Ctx['hub'],
   };
 }

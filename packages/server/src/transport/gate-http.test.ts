@@ -4,6 +4,7 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { openLane } from '../store/lanes.js';
+import { attach, release } from '../store/presence.js';
 import { upsertRole } from '../store/roles.js';
 import { getTeamBySlug, setPolicy } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
@@ -380,9 +381,11 @@ withDrivers('gate-http', (_o, kind) => {
       it('a holder inside its reclaim grace still holds the file', async () => {
         const boId = await holdByBo();
         await server.store.run('DELETE FROM presence WHERE member_id = ?', [boId]);
-        await server.store.run(
-          `INSERT INTO presence (id, member_id, surface, last_seen_at, created_at, held_until) VALUES (?, ?, 'claude-code', ?, ?, ?)`,
-          ['p-bo-held', boId, Date.now(), Date.now(), Date.now() + 60_000],
+        // A released session, still inside its reclaim grace (the store's own path, both drivers).
+        await release(
+          server.store,
+          (await attach(server.store, boId, 'claude-code', null)).id,
+          60_000,
         );
         expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
       });
@@ -391,10 +394,7 @@ withDrivers('gate-http', (_o, kind) => {
         const boId = await holdByBo();
         await server.store.run('DELETE FROM presence WHERE member_id = ?', [boId]);
         expect((await gateA('block', 'src/tariff.ts')).json.outcome).toBe('warned');
-        await server.store.run(
-          `INSERT INTO presence (id, member_id, surface, last_seen_at, created_at) VALUES (?, ?, 'claude-code', ?, ?)`,
-          ['p-bo-back', boId, Date.now(), Date.now()],
-        );
+        await attach(server.store, boId, 'claude-code', null);
         expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
       });
 
