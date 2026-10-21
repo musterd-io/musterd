@@ -19,7 +19,8 @@
 #                        its own daemon and enrols at the hub with an invite minted here; the
 #                        sponsor steps run from THIS folder, which must be bound to the team on
 #                        the hub. --roster-repo is required (the team home's git URL, ADR 058).
-#   --roster-repo <url>  hub mode: the team home repo the machine clones as its roster root
+#   --roster-repo <url>  hub mode: the team home repo the machine clones as its roster root; a
+#                        private one also takes ROSTER_TOKEN (read without echo, or from the env)
 #   --hub-port <n>       hub mode: the hub daemon's port on the tailnet (default 4849)
 #   --skip-sponsor       skip the sponsor steps (host key in MUSTERD_HOST_KEY; no agent is minted)
 #   --skip-fly           the app, volume, secrets and machine already exist — only mint the agent
@@ -164,6 +165,11 @@ fi
 if [ -z "${GH_TOKEN:-}" ] && [ "$DRY_RUN" = 0 ]; then
   read -rsp "  GH_TOKEN (fine-grained, workspace repo only, not echoed): " GH_TOKEN; echo
 fi
+# A private team home needs its own read-only token: a fine-grained token covers one owner, and
+# the workspace's owner usually differs. Empty for a public team home.
+if [ -n "$HUB" ] && [ -z "${ROSTER_TOKEN+set}" ] && [ "$DRY_RUN" = 0 ]; then
+  read -rsp "  ROSTER_TOKEN (fine-grained, $ROSTER_REPO only, contents read; empty if public, not echoed): " ROSTER_TOKEN; echo
+fi
 if [ -n "$HUB" ] && [ -z "${TAILSCALE_AUTHKEY:-}" ] && [ "$DRY_RUN" = 0 ]; then
   read -rsp "  TAILSCALE_AUTHKEY (single use, tagged if your tailnet policy wants it, not echoed): " TAILSCALE_AUTHKEY; echo
 fi
@@ -177,8 +183,9 @@ run fly volumes create agent_data --app "$APP" --region "$REGION" --size 3 --yes
 say "-- fly: stage secrets (values never printed)"
 HUB_SECRETS=()
 [ -z "$HUB" ] || HUB_SECRETS=("MUSTERD_INVITE=${INVITE:-}" "TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}")
+[ -z "$HUB" ] || [ -z "${ROSTER_TOKEN:-}" ] || HUB_SECRETS+=("ROSTER_TOKEN=$ROSTER_TOKEN")
 if [ "$DRY_RUN" = 1 ]; then
-  printf '  $ fly secrets set --app %s MUSTERD_HOST_KEY=… %s=… GH_TOKEN=…%s\n' "$APP" "$KEY_ENV" "${HUB:+ MUSTERD_INVITE=… TAILSCALE_AUTHKEY=…}"
+  printf '  $ fly secrets set --app %s MUSTERD_HOST_KEY=… %s=… GH_TOKEN=…%s\n' "$APP" "$KEY_ENV" "${HUB:+ MUSTERD_INVITE=… TAILSCALE_AUTHKEY=… [ROSTER_TOKEN=…]}"
 else
   fly secrets set --app "$APP" \
     "MUSTERD_HOST_KEY=$HOST_KEY" \
@@ -186,7 +193,7 @@ else
     "GH_TOKEN=${GH_TOKEN:-}" \
     "${HUB_SECRETS[@]}"
 fi
-unset HOST_KEY MODEL_KEY GH_TOKEN INVITE TAILSCALE_AUTHKEY HUB_SECRETS
+unset HOST_KEY MODEL_KEY GH_TOKEN INVITE TAILSCALE_AUTHKEY ROSTER_TOKEN HUB_SECRETS
 
 say "-- fly: deploy (first boot provisions the seat)"
 # The checkout is the build context (the Dockerfile's `COPY . .`), named explicitly: by default fly

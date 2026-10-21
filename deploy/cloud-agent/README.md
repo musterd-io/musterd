@@ -36,6 +36,7 @@ Secrets arrive as Fly secrets, never in the image, `fly.toml` or the repo:
 | model key (`ANTHROPIC_API_KEY` or the `MUSTERD_KEY_ENV` variable) | the resident engine, at spawn | the whole run — the sponsor's BYOK key |
 | `GH_TOKEN`          | clone, push, PRs from the workspace — held by gh under `$HOME/.config/gh`, never in the jail's environment (ADR 675) | the whole run — fine-grained, this repo only, contents + pull requests |
 | `MUSTERD_INVITE`    | hub mode, first boot: `musterd node invite` minted on the hub | single use, 15 m; scrubbed by agent.sh after enrolment |
+| `ROSTER_TOKEN`      | hub mode, a private team home: the roster clone and its pulls | the whole run — fine-grained, the team home repo only, contents read. A fine-grained token covers one owner, and the workspace's usually differs. Kept in a 0600 file under `$HOME/.config/musterd` for the clone's repo-local credential helper, which resets the helper list, so gh's workspace token never reaches the team home. Unset before the jail |
 | `TAILSCALE_AUTHKEY` | hub mode, first boot: the tailnet auth key | single use; scrubbed by entrypoint.sh before the root drop; the node identity lives on the volume |
 
 It must never hold: the team agent key (`MUSTERD_AGENT_KEY` — the entrypoint refuses to

@@ -22,6 +22,8 @@
 #   MUSTERD_INVITE      hub mode, first boot only: `musterd node invite` on the hub; scrubbed
 #   ANTHROPIC_API_KEY   the sponsor's model key (BYOK) — read at spawn; or the MUSTERD_KEY_ENV var
 #   GH_TOKEN            a fine-grained token for the workspace repo (ADR 675: never in the jail)
+#   ROSTER_TOKEN        hub mode, a private team home: fine-grained, that repo only, contents read;
+#                       kept in a 0600 file for the roster clone's own helper, then unset
 set -euo pipefail
 
 : "${MUSTERD_SERVER:?}" "${MUSTERD_TEAM:?}" "${MUSTERD_HOST:?}" "${HOME:?}" "${LOG_DIR:?}"
@@ -50,9 +52,28 @@ if [ -n "${MUSTERD_HUB:-}" ]; then
   # clone), so the root is written into config directly and the daemon reloaded — the one remaining
   # delta friction (docs/perf/cloud-seat.md finding 4); the product fix (`team adopt`) is open.
   TEAM_HOME="$HOME/musterd/$MUSTERD_TEAM"
+  # A private team home reads with its own token (ROSTER_TOKEN: fine-grained, that repo only,
+  # contents read). A fine-grained token covers one owner, and the workspace's owner usually
+  # differs. It lives in a 0600 file beside gh's config (ADR 675: never in the jail's
+  # environment), and the clone's repo-local helper list is reset to read only that file, so
+  # gh's workspace token never reaches the team home and this one never reaches the workspace.
+  ROSTER_CRED="$HOME/.config/musterd/roster-token"
+  if [ -n "${ROSTER_TOKEN:-}" ]; then
+    mkdir -p "$(dirname "$ROSTER_CRED")"
+    (umask 077 && printf '%s' "$ROSTER_TOKEN" >"$ROSTER_CRED")
+  fi
+  unset ROSTER_TOKEN
+  ROSTER_AUTH=()
+  if [ -s "$ROSTER_CRED" ]; then
+    ROSTER_AUTH=(-c credential.helper=
+      -c "credential.helper=!f() { test \"\$1\" = get || exit 0; echo username=x-access-token; echo \"password=\$(cat \"$ROSTER_CRED\")\"; }; f")
+  fi
   if [ ! -d "$TEAM_HOME/.git" ]; then
     mkdir -p "$(dirname "$TEAM_HOME")"
-    git clone --quiet "$ROSTER_REPO" "$TEAM_HOME"
+    # `clone -c` also writes the helper into the clone's own config, so later pulls (here and the
+    # daemon's roster refresh, ADR 592) read with the same token.
+    git clone --quiet "${ROSTER_AUTH[@]}" "$ROSTER_REPO" "$TEAM_HOME" \
+      || { log "roster clone failed — a private team home needs ROSTER_TOKEN (contents: read on $ROSTER_REPO)"; exit 1; }
   else
     git -C "$TEAM_HOME" pull --ff-only --quiet || log "roster pull did not fast-forward — the daemon's own refresh retries (ADR 592)"
   fi
@@ -99,6 +120,7 @@ fi
 cd repo
 
 # ADR 675: sign gh in from GH_TOKEN and hand git the same credential, then drop the variable.
+unset ROSTER_TOKEN   # hosted mode never reads it; it never reaches the jail either way
 if [ -n "${GH_TOKEN:-}" ]; then
   gh_token="$GH_TOKEN"
   unset GH_TOKEN
