@@ -1,4 +1,10 @@
-import { CALENDAR_DEFAULT_TZ, dayInZone, type MetricSource } from '@musterd/protocol';
+import {
+  CALENDAR_DEFAULT_TZ,
+  dayInZone,
+  LIVE_SAMPLES_POLL_MS,
+  type LiveSample,
+  type MetricSource,
+} from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { dayDisputeRate, dayWakeLatency } from './insights.js';
@@ -57,6 +63,61 @@ function shiftDate(date: string, days: number): string {
   return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
 }
 
+/** An open metric lane with a derived source: what the sweep and the live read both measure. */
+interface DerivedLane {
+  id: string;
+  source: DerivedSource;
+  harness: string | undefined;
+}
+
+async function derivedMetricLanes(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+): Promise<DerivedLane[]> {
+  const rows = await db.all<{ id: string; metric_json: string }>(
+    `SELECT id, metric_json FROM lanes
+      WHERE team_id = ? AND metric_json IS NOT NULL AND state NOT IN ('done','abandoned')`,
+    [teamId],
+  );
+  const out: DerivedLane[] = [];
+  for (const r of rows) {
+    let metric: { source?: unknown; harness?: unknown };
+    try {
+      metric = JSON.parse(r.metric_json) as { source?: unknown; harness?: unknown };
+    } catch {
+      continue;
+    }
+    const source = metric.source;
+    if (typeof source !== 'string' || source === 'manual') continue;
+    const harness = typeof metric.harness === 'string' ? metric.harness : undefined;
+    if (isDerived(source)) out.push({ id: r.id, source, harness });
+    else if (!loggedUnknown.has(r.id)) {
+      loggedUnknown.add(r.id);
+      log.warn({ msg: 'metric_source_unknown', team: teamSlug, lane: r.id, source });
+    }
+  }
+  return out;
+}
+
+/** Each source (and harness scope) is computed once per window, however many lanes name it. */
+function derivedMeasurer(db: Driver, teamId: string, since: number, until: number) {
+  const values = new Map<string, { value: number; n: number } | null>();
+  return async (source: DerivedSource, harness: string | undefined) => {
+    const key = `${source}|${harness ?? ''}`;
+    if (!values.has(key)) {
+      if (source === 'wake_latency_p50_ms') {
+        const w = await dayWakeLatency(db, teamId, since, until, harness);
+        values.set(key, w.p50_ms === null ? null : { value: w.p50_ms, n: w.n });
+      } else {
+        const d = await dayDisputeRate(db, teamId, since, until);
+        values.set(key, d.rate === null ? null : { value: d.rate, n: d.n });
+      }
+    }
+    return values.get(key) ?? null;
+  };
+}
+
 /** What one sweep wrote, for the caller's log. */
 export interface SweptSample {
   lane: string;
@@ -88,46 +149,13 @@ export async function sweepMetricSamples(
   const since = zoneMidnight(tz, day);
   const until = zoneMidnight(tz, shiftDate(day, 1));
 
-  const rows = await db.all<{ id: string; metric_json: string }>(
-    `SELECT id, metric_json FROM lanes
-      WHERE team_id = ? AND metric_json IS NOT NULL AND state NOT IN ('done','abandoned')`,
-    [teamId],
-  );
-  const wanted: { id: string; source: DerivedSource }[] = [];
-  for (const r of rows) {
-    let source: unknown;
-    try {
-      source = (JSON.parse(r.metric_json) as { source?: unknown }).source;
-    } catch {
-      continue;
-    }
-    if (typeof source !== 'string' || source === 'manual') continue;
-    if (isDerived(source)) wanted.push({ id: r.id, source });
-    else if (!loggedUnknown.has(r.id)) {
-      loggedUnknown.add(r.id);
-      log.warn({ msg: 'metric_source_unknown', team: teamSlug, lane: r.id, source });
-    }
-  }
+  const wanted = await derivedMetricLanes(db, teamId, teamSlug);
   if (wanted.length === 0) return [];
-
-  // Each source is computed once per day, however many lanes name it.
-  const values = new Map<DerivedSource, { value: number; n: number } | null>();
-  const measure = async (source: DerivedSource) => {
-    if (!values.has(source)) {
-      if (source === 'wake_latency_p50_ms') {
-        const w = await dayWakeLatency(db, teamId, since, until);
-        values.set(source, w.p50_ms === null ? null : { value: w.p50_ms, n: w.n });
-      } else {
-        const d = await dayDisputeRate(db, teamId, since, until);
-        values.set(source, d.rate === null ? null : { value: d.rate, n: d.n });
-      }
-    }
-    return values.get(source) ?? null;
-  };
+  const measure = derivedMeasurer(db, teamId, since, until);
 
   const out: SweptSample[] = [];
-  for (const { id, source } of wanted) {
-    const v = await measure(source);
+  for (const { id, source, harness } of wanted) {
+    const v = await measure(source, harness);
     if (!v) continue;
     const lane = await getLane(db, teamId, id, teamSlug);
     if (!lane?.metric) continue;
@@ -158,4 +186,58 @@ export function metricSampleGate(): {
       swept.set(teamId, dayInZone(now, tz));
     },
   };
+}
+
+/** ADR 701: the daemon reuses a team's live points for this long, however many viewers ask. */
+const liveCache = new Map<string, { at: number; samples: LiveSample[] }>();
+
+/**
+ * ADR 701: today's point for every open metric lane, as it stands now. A derived source is
+ * measured over today so far (the zone's midnight to `now`), the same derivation the sweep writes
+ * tomorrow for the whole day; a manual metric reads today's stored sample. Nothing is stored here.
+ * A lane with nothing to measure yet today has no point: absence is not a zero (ADR 236).
+ */
+export async function liveMetricSamples(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  now: number = Date.now(),
+): Promise<LiveSample[]> {
+  const cached = liveCache.get(teamId);
+  if (cached && now - cached.at < LIVE_SAMPLES_POLL_MS) return cached.samples;
+  const today = dayInZone(now, CALENDAR_DEFAULT_TZ);
+  const measure = derivedMeasurer(db, teamId, zoneMidnight(CALENDAR_DEFAULT_TZ, today), now);
+  const samples: LiveSample[] = [];
+  for (const { id, source, harness } of await derivedMetricLanes(db, teamId, teamSlug)) {
+    const v = await measure(source, harness);
+    if (v) samples.push({ lane: id, day: today, value: v.value, n: v.n, as_of: now });
+  }
+  const manual = await db.all<{ lane_id: string; value: number; n: number; at: number }>(
+    `SELECT s.lane_id, s.value, s.n, s.at FROM lane_samples s
+       JOIN lanes l ON l.id = s.lane_id AND l.team_id = s.team_id
+      WHERE s.team_id = ? AND s.day = ? AND l.state NOT IN ('done','abandoned')
+        AND json_extract(l.metric_json, '$.source') = 'manual'`,
+    [teamId, today],
+  );
+  for (const m of manual) {
+    samples.push({
+      lane: m.lane_id,
+      day: today,
+      value: Number(m.value),
+      n: Number(m.n),
+      as_of: Number(m.at),
+    });
+  }
+  liveCache.set(teamId, { at: now, samples });
+  return samples;
+}
+
+/** A posted sample shows at once: the next live read recomputes this team's points. */
+export function invalidateLiveSamples(teamId: string): void {
+  liveCache.delete(teamId);
+}
+
+/** Tests only: forget cached live points. */
+export function __clearLiveSamplesCache(): void {
+  liveCache.clear();
 }

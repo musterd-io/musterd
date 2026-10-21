@@ -9162,6 +9162,33 @@ a.lc-xp__hit:focus-visible {
 .lc-xp__spark.is-read {
   color: var(--lc-accent-ink);
 }
+/* ADR 701: today's live point — the line's own ink, a dot where it ends, and a soft ring that
+   breathes so "this one is moving" reads without a word. The ring is decoration: reduced motion
+   keeps the dot and drops the breath. `now` beside the number says the same thing in text. */
+.lc-xp__spark-now {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-opacity: 0.35;
+  stroke-width: 0;
+  animation: lc-xp-breathe 2.4s ease-in-out infinite;
+}
+@keyframes lc-xp-breathe {
+  0%,
+  100% {
+    stroke-width: 0;
+  }
+  50% {
+    stroke-width: 4;
+  }
+}
+.lc-xp__spark-live {
+  color: var(--lc-text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-xp__spark-now {
+    animation: none;
+  }
+}
 /* Stale: the marks dim, never the words (local rule 2026-08-13). */
 .lc-xp.is-stale :is(.lc-xp__pin, .lc-xp__tack) {
   opacity: 0.45;

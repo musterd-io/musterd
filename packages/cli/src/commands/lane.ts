@@ -6,6 +6,7 @@ import {
   type ApprovalProof,
   emptyPoolHint,
   LANE_REQUESTED_NUDGE,
+  metricNudge,
   laneDetailLines,
   laneIdQuery,
   LaneStakesSchema,
@@ -37,13 +38,13 @@ import { claimSeams, renderClaims } from './laneClaims.js';
 const USAGE =
   'usage:\n' +
   '  musterd lane show <id> [--json]                                    (one lane in full, ADR 582)\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--reads-on <YYYY-MM-DD> [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>]]] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--area <area>[,<area>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--reads-on <YYYY-MM-DD> [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] [--metric-source <s>] [--metric-harness <h>]]] [--self | --by <name> | --act <id> | --seed <id>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id> [--reason "<why>"]\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] | --metric none] [--read-verdict met|missed|inconclusive --read-note "<what was read>" [--measured <value> --n <count>] [--evidence <url|path>]] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] [--metric-source <s>] [--metric-harness <h>] | --metric none] [--read-verdict met|missed|inconclusive --read-note "<what was read>" [--measured <value> --n <count>] [--evidence <url|path>]] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
   '  musterd lane sample <id> --value <v> --n <count> [--day <YYYY-MM-DD>]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '                          [--branch b]\n' +
@@ -241,6 +242,7 @@ export const LANE_FLAGS = [
   'measured',
   'metric',
   'metric-source',
+  'metric-harness',
   'mine',
   'n',
   'none',
@@ -389,6 +391,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     });
     process.stdout.write(`${theme.ok('✓')} lane opened\n${renderLane(res.lane)}\n`);
     if (!res.lane.requested) process.stdout.write(theme.meta(LANE_REQUESTED_NUDGE) + '\n');
+    printMetricNudge(res.lane);
     renderWarnings(res.warnings);
     return 0;
   }
@@ -664,6 +667,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
     });
     process.stdout.write(`${theme.ok('✓')} lane updated\n${renderLane(res.lane)}\n`);
+    printMetricNudge(res.lane);
     renderWarnings(res.warnings);
     return 0;
   }
@@ -870,7 +874,7 @@ type MetricWire = MetricInput & { source: NonNullable<MetricInput['source']> };
 
 /**
  * ADR 673: `--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>]
- * [--metric-source <s>]` → the metric; `--metric none` clears it (update only).
+ * [--metric-source <s>] [--metric-harness <h>]` → the metric; `--metric none` clears it (update only).
  */
 export function metricFlags(
   flags: Parsed['flags'],
@@ -894,6 +898,8 @@ export function metricFlags(
     throw new CliError(`--direction is up or down — got "${direction}"`, 2);
   const baseline = flagStr(flags, 'baseline');
   const source = flagStr(flags, 'metric-source');
+  // ADR 701: scope a derived source to one harness's seats (wake latency per tool).
+  const harness = flagStr(flags, 'metric-harness');
   return {
     metric: {
       name,
@@ -902,8 +908,15 @@ export function metricFlags(
       baseline: baseline === undefined ? null : numberFlag(baseline, 'baseline'),
       direction,
       source: (source ?? 'manual') as NonNullable<MetricInput['source']>,
+      ...(harness !== undefined ? { harness } : {}),
     },
   };
+}
+
+/** ADR 701: a dated read with no metric says, once, that its chart is one flag away. */
+function printMetricNudge(lane: Lane): void {
+  const nudge = metricNudge(lane, 'cli');
+  if (nudge) process.stdout.write(theme.meta(nudge) + '\n');
 }
 
 /** `--follows-up a,b` / `--follows-up none` → the ADR 487 patch field; absent sends nothing. */

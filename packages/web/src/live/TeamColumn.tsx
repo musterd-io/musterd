@@ -7,7 +7,8 @@ import { acceptanceCapacity, initial, memberAvatar, memberColor } from './format
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
 import { Experiments, ReadMark } from './Experiments';
-import { experimentEntries } from './experimentReads';
+import { useLiveSamples } from './useLiveSamples';
+import { experimentEntries, withLivePoints } from './experimentReads';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { TeamCard } from './TeamCard';
 import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
@@ -91,7 +92,10 @@ export function TeamColumn({
 }) {
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
-  const reads = loading ? [] : experimentEntries(board, now);
+  const dated = loading ? [] : experimentEntries(board, now);
+  // ADR 701: the charts' live points — polled only while some read has a chart to move.
+  const live = useLiveSamples(cfg, dated.some((e) => e.metric !== null && e.status !== 'read'));
+  const reads = withLivePoints(dated, live);
   // A read's owner wears the same avatar their card does, offline seats included.
   const avatarOf = (seat: string) => {
     const m = roster.find((r) => r.name === seat);

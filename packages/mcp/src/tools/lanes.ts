@@ -20,6 +20,7 @@ import {
   laneDetailLines,
   laneIdQuery,
   METRIC_SOURCES,
+  metricNudge,
   BoardQuerySchema,
   LaneQuerySchema,
   LaneStateSchema,
@@ -78,6 +79,8 @@ const METRIC_INPUT = z.object({
   // takes posted samples. Without this a seat could only ever declare a manual metric. A plain
   // string for the tools-list budget; the handler parses it against METRIC_SOURCES (hard rule 4).
   source: z.string().optional(),
+  // ADR 701: one harness's seats only (wake latency per tool); the daemon bounds it.
+  harness: z.string().optional(),
 });
 
 const PRE_REGISTERED_INPUT = z.object({
@@ -139,7 +142,10 @@ function fmtResult(prefix: string, lane: Lane, warnings: LaneWarning[]): string 
  * what every follow-up call — update, handoff, resolve — needs), with any next-action `hint` as a
  * field rather than only buried in the text.
  */
-function laneResult(prefix: string, lane: Lane, warnings: LaneWarning[], hint?: string) {
+function laneResult(prefix: string, lane: Lane, warnings: LaneWarning[], given?: string) {
+  // ADR 701: a dated read with no metric says, once, that its chart is one field away.
+  const nudge = metricNudge(lane);
+  const hint = nudge ? `${given ?? ''}\n${nudge}` : given;
   return {
     content: [{ type: 'text' as const, text: fmtResult(prefix, lane, warnings) + (hint ?? '') }],
     structuredContent: {

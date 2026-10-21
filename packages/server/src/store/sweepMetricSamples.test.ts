@@ -1,12 +1,15 @@
 import { makeEnvelope, type Act, type MetricInput } from '@musterd/protocol';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAudit } from './audit.js';
 import { getLane, openLane, updateLane } from './lanes.js';
+import { recordSample } from './laneSamples.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import {
+  __clearLiveSamplesCache,
+  liveMetricSamples,
   SAMPLE_SWEEP_DELAY_MS,
   metricSampleGate,
   sweepMetricSamples,
@@ -37,6 +40,7 @@ const metric = (source: MetricInput['source']): MetricInput => ({
 withDrivers('sweepMetricSamples', (o) => {
   beforeEach(() => {
     openStore = o;
+    __clearLiveSamplesCache();
   });
 
   async function seed() {
@@ -198,5 +202,81 @@ withDrivers('sweepMetricSamples', (o) => {
     expect(gate.due('t1', NOW + MIN)).toBe(false);
     expect(gate.due('t2', NOW + MIN)).toBe(true);
     expect(gate.due('t1', NOW + 24 * 60 * MIN)).toBe(true);
+  });
+
+  describe('live points (ADR 701)', () => {
+    /** Mid-morning on DAY: the live window is DAY's midnight to now. */
+    const MID = START + 4 * 60 * MIN;
+
+    async function enroll(db: Driver, teamId: string, memberId: string, harness: string) {
+      await db.run(
+        `INSERT INTO residency (id, team_id, member_id, harness, host, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'h', 0, 0)`,
+        [`r-${memberId}`, teamId, memberId, harness],
+      );
+    }
+
+    it("measures today so far for a derived source, and reads today's stored sample for a manual one", async () => {
+      const { db, team, nick, ada, lane } = await seed();
+      const wakeLane = await lane('wake_latency_p50_ms');
+      const manual = await lane('manual');
+      await put(db, team.id, nick, 'h1', 'handoff', START + 60 * MIN);
+      await woke(db, team.id, 'ada', 'h1', START + 61 * MIN);
+      await put(db, team.id, ada, 'r1', 'status_update', START + 64 * MIN);
+      // Not yet: an act woken after `now` is not in today-so-far.
+      await put(db, team.id, nick, 'h2', 'handoff', MID + 10 * MIN);
+      await woke(db, team.id, 'ada', 'h2', MID + 11 * MIN);
+      await put(db, team.id, ada, 'r2', 'status_update', MID + 30 * MIN);
+      const m = (await getLane(db, team.id, manual.id, team.slug))!;
+      await recordSample(db, team.id, m, { day: DAY, value: 1.4, n: 5 }, 'ryder', MID - MIN);
+
+      const live = await liveMetricSamples(db, team.id, team.slug, MID);
+      expect(live).toEqual(
+        expect.arrayContaining([
+          { lane: wakeLane.id, day: DAY, value: 4 * MIN, n: 1, as_of: MID },
+          { lane: manual.id, day: DAY, value: 1.4, n: 5, as_of: MID - MIN },
+        ]),
+      );
+      expect(live).toHaveLength(2);
+      // Nothing was stored: the sweep writes the whole day tomorrow.
+      expect((await getLane(db, team.id, wakeLane.id, team.slug))?.samples).toEqual([]);
+    });
+
+    it('a harness-scoped wake metric counts only seats enrolled on that harness', async () => {
+      const { db, team, nick, ada, bo } = await seed();
+      await enroll(db, team.id, ada.id, 'claude-code');
+      await enroll(db, team.id, bo.id, 'codex');
+      const codexLane = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'codex wakes',
+        reads_on: '2026-10-30',
+        metric: { ...metric('wake_latency_p50_ms'), harness: 'codex' },
+      });
+      await put(db, team.id, nick, 'h1', 'handoff', START + 60 * MIN);
+      await woke(db, team.id, 'ada', 'h1', START + 61 * MIN);
+      await put(db, team.id, ada, 'r1', 'status_update', START + 62 * MIN);
+      await put(db, team.id, nick, 'h2', 'handoff', START + 70 * MIN);
+      await woke(db, team.id, 'bo', 'h2', START + 71 * MIN);
+      await put(db, team.id, bo, 'r2', 'status_update', START + 80 * MIN);
+
+      const live = await liveMetricSamples(db, team.id, team.slug, MID);
+      expect(live).toEqual([{ lane: codexLane.id, day: DAY, value: 10 * MIN, n: 1, as_of: MID }]);
+      // The sweep honours the same scope.
+      const written = await sweepMetricSamples(db, team.id, team.slug, NOW, 'digest');
+      expect(written).toEqual([
+        { lane: codexLane.id, source: 'wake_latency_p50_ms', day: DAY, value: 10 * MIN, n: 1 },
+      ]);
+    });
+
+    it('reuses a team’s points within the poll interval, and has no point for a quiet day', async () => {
+      const { db, team, lane } = await seed();
+      await lane('dispute_rate');
+      expect(await liveMetricSamples(db, team.id, team.slug, MID)).toEqual([]);
+      const manual = await lane('manual');
+      const m = (await getLane(db, team.id, manual.id, team.slug))!;
+      await recordSample(db, team.id, m, { day: DAY, value: 2, n: 1 }, 'ryder', MID + 1);
+      // Still cached: the new sample shows on the next window.
+      expect(await liveMetricSamples(db, team.id, team.slug, MID + 1_000)).toEqual([]);
+      expect(await liveMetricSamples(db, team.id, team.slug, MID + 31_000)).toHaveLength(1);
+    });
   });
 });

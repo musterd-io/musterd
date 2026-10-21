@@ -15,6 +15,8 @@ import {
   shortTitle,
   stripDays,
   teamToday,
+  readLiveSamples,
+  withLivePoints,
 } from './experimentReads';
 
 // Sat 2026-10-17, 15:00 in Los Angeles (22:00 UTC).
@@ -303,5 +305,67 @@ describe('the result beside the word (experiment-results design §5–6, lane 01
     expect(b!.metric).toBeNull();
     expect(b!.samples).toEqual([]);
     expect(b!.measured).toBeNull();
+  });
+});
+
+describe('live points (ADR 701)', () => {
+  const metric = { name: 'disputes per verdict', unit: 'per verdict', baseline: null, target: 0.15, direction: 'up' as const };
+  const metricLane = (id: string, samples: object[], over: Record<string, unknown> = {}) =>
+    lane(id, { reads_on: '2026-10-28', read_status: 'waiting', metric, samples, ...over });
+
+  it('reads the endpoint defensively: a malformed row is dropped, a missing body is no points', () => {
+    expect(readLiveSamples(null)).toEqual([]);
+    expect(readLiveSamples({ samples: 'x' })).toEqual([]);
+    expect(
+      readLiveSamples({
+        samples: [
+          { lane: 'L1', day: '2026-10-17', value: 0.2, n: 5, as_of: NOW },
+          { lane: 'L2', day: '2026-10-17', value: 'lots', n: 5, as_of: NOW },
+        ],
+      }),
+    ).toEqual([{ lane: 'L1', day: '2026-10-17', value: 0.2, n: 5, as_of: NOW }]);
+  });
+
+  it("puts today's live point on the series: replacing today's stored row, or after the history", () => {
+    const entries = experimentEntries(
+      board(
+        metricLane('L1', [{ day: '2026-10-16', value: 0.1, n: 4 }, { day: '2026-10-17', value: 0.12, n: 2 }]),
+        metricLane('L2', [{ day: '2026-10-16', value: 0.3, n: 3 }]),
+        metricLane('L3', [{ day: '2026-10-16', value: 0.3, n: 3 }]),
+      ),
+      NOW,
+    );
+    const live = [
+      { lane: 'L1', day: '2026-10-17', value: 0.2, n: 5, as_of: NOW },
+      { lane: 'L2', day: '2026-10-17', value: 0.25, n: 4, as_of: NOW },
+    ];
+    const merged = withLivePoints(entries, live);
+    const byId = (id: string) => merged.find((e) => e.id === id)!;
+    expect(byId('L1').samples).toEqual([
+      { day: '2026-10-16', value: 0.1, n: 4 },
+      { day: '2026-10-17', value: 0.2, n: 5, live: true, asOf: NOW },
+    ]);
+    expect(byId('L2').samples.map((s) => s.value)).toEqual([0.3, 0.25]);
+    // No live point: unchanged.
+    expect(byId('L3').samples).toEqual([{ day: '2026-10-16', value: 0.3, n: 3 }]);
+    // One day of history plus today's live point is a line, ending on a dot.
+    const spark = sparkline(byId('L2').metric, byId('L2').samples)!;
+    expect(spark.now).toMatchObject({ x: expect.any(Number), y: expect.any(Number), asOf: NOW });
+    expect(sparkline(byId('L3').metric, byId('L3').samples)).toBeNull();
+  });
+
+  it('a read that is in takes no live point: its chart is the record', () => {
+    const entries = experimentEntries(
+      board(
+        metricLane('L1', [{ day: '2026-10-16', value: 0.1, n: 4 }], {
+          state: 'done',
+          read_status: 'read',
+          read_verdict: { outcome: 'met', note: 'n', by: 'ryder', at: NOW - 1000 },
+        }),
+      ),
+      NOW,
+    );
+    const merged = withLivePoints(entries, [{ lane: 'L1', day: '2026-10-17', value: 0.9, n: 9, as_of: NOW }]);
+    expect(merged[0]!.samples).toEqual([{ day: '2026-10-16', value: 0.1, n: 4 }]);
   });
 });

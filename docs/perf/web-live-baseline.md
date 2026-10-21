@@ -942,6 +942,18 @@ after lane 5 (main) → this branch: total JS 257.1 → 255.7 KiB (44 → 42 chu
 134.9 → 130.7 KiB (13 → 11 eager chunks, a re-chunking side effect of the smaller graph), app CSS
 7.0 → 6.0 KiB.
 
+## 2026-10-21 — `initialJsGzipBytes` 148,750 → 149,250: live experiment charts (ADR 701, lane 01M5G8NKG4)
+
+nick asked for the Experiments panel's charts to be live, not daily. Today's point is computed on read
+(`GET /experiments/live`), polled every 30 s by `useLiveSamples` while a read has a metric and the tab
+is visible, merged by `withLivePoints`, and drawn as the sparkline's last point with a dot that
+breathes. All of it rides the eager TeamColumn chunk: 18,605 → 19,047 B gzip (+442), /live initial
+145.2 → 145.6 KiB against main @6e6ac010 on this laptop. Moving the fetch and parser into a lazy
+chunk saved no eager bytes and cost total, so it was reverted.
+
+- Falsify: build main with this PR and `pnpm perf:check` — /live initial must read under 145.75 KiB
+  (149,250 B). If the live point leaves the panel, this raise goes with it.
+
 ## 2026-10-08 — `totalJsGzipBytes` 275,200 → 278,600: un-red main after ADR 550's site copy (lane 01M4EKYAWS1SRE63RVGXGCX900)
 
 Main @ `8060e004` went red on `perf:check` for every PR with a web build — CLI-only ones included:

@@ -204,6 +204,7 @@ function metricRecord(
     target: input.target,
     direction: input.direction,
     source: input.source ?? 'manual',
+    ...(input.harness !== undefined ? { harness: input.harness } : {}),
     by,
     at,
   };

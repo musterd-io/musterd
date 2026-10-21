@@ -131,7 +131,11 @@ access; roster handles and Presence remain visible.
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
   At its foot, the Experiments section (`live/Experiments.tsx` + `experimentReads.ts`, ADR 644): every
   lane carrying `reads_on`, grouped by the server's `read_status` (overdue, due, waiting, read for 7
-  days), so an overdue read is seen by the room; the folded rail carries the overdue count.
+  days), so an overdue read is seen by the room; the folded rail carries the overdue count. A read
+  with a metric draws its daily series as a sparkline, and its last point is live (ADR 701):
+  `useLiveSamples` polls `GET /experiments/live` every 30 s while some open read has a metric and the
+  tab is visible (no poll while hidden), and `withLivePoints` puts today's point on the series as a
+  dot that breathes (still under reduced motion), with `now` beside the number.
   `/broadcast` mounts the same column `still` beside the room (ADR 464 lane 5): no hover, no
   expanding, no operator notes, sized off the 16:9 stage rather than the window.
 - **Room framing** (2026-10-01): `/live` and `/broadcast` fit the *furnished* room (`furnishedBox` in

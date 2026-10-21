@@ -507,6 +507,47 @@ describe('lane commands', () => {
     expect(res.out).toContain('src/c.ts');
   });
 
+  // ADR 701: a dated read with no metric says its chart is one flag away; declaring one quiets it,
+  // and --metric-harness scopes a derived source to one harness's seats.
+  it('a read with no metric is nudged toward a chart; --metric-harness rides the metric', async () => {
+    const id = await openLane(['xp']);
+    const dated = await capture(() =>
+      laneCommand(parseArgs(['update', id, '--reads-on', '2026-12-01'])),
+    );
+    expect(dated.out).toContain('this read has no metric, so /live draws no chart');
+    expect(dated.out).toContain('--metric-harness');
+    const charted = await capture(() =>
+      laneCommand(
+        parseArgs([
+          'update',
+          id,
+          '--metric',
+          'codex wake p50',
+          '--unit',
+          'ms',
+          '--target',
+          '5000',
+          '--direction',
+          'down',
+          '--metric-source',
+          'wake_latency_p50_ms',
+          '--metric-harness',
+          'codex',
+        ]),
+      ),
+    );
+    expect(charted.code).toBe(0);
+    expect(charted.out).not.toContain('this read has no metric');
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as {
+      lanes: { id: string; metric?: { source: string; harness?: string } }[];
+    };
+    expect(lanes.find((l) => l.id === id)?.metric).toMatchObject({
+      source: 'wake_latency_p50_ms',
+      harness: 'codex',
+    });
+  });
+
   // ADR 256's no_goal warning names `lane_update {goal_id}` / `musterd lane update --goal`.
   // Open already takes --goal; update did not, so a goal-less lane had no CLI repair.
   it('update --goal links a goal-less lane', async () => {
