@@ -14,8 +14,8 @@
 | Serving app | Fly `musterd-cloud`, org `personal` | **Two machines** since 2026-10-15 (nick ran `fly scale count 2`; ADR 608 team affinity makes N ≥ 2 safe), rolling deploys; before that one machine (nick, 2026-10-02), blue-green. `performance-1x` with 2 GB: a dedicated core for the load-test week (nick, 2026-10-02; revisit by 2026-10-09). Before that it was `shared-cpu-1x` with 512 MB. Holds the **app** and **operator** database URLs only. It can never change the schema. A second machine waits on cross-server fan-out (lane `01M3Z4EMH3`). Under sustained load a shared CPU is throttled to its baseline share once its burst balance runs out: the 2026-10-02 load test hit that after seven minutes (`docs/perf/daemon-load-baseline.md`). |
 | Migrate app | Fly `musterd-cloud-migrate` | No machines between deploys. Holds the **owner** URLs; the deploy runs the migrate step there before the rollout (spec §6). |
 | Database | Neon project `musterd-cloud` (`long-thunder-03987236`), aws-us-east-1, Postgres 17, **Launch plan** (nick, 2026-10-02), 7 days of point-in-time restore | Databases `musterd` and `musterd_trace`. Login users `musterd_app_login` / `musterd_operator_login`, made in SQL so they are not in `neon_superuser`. URLs use `sslmode=verify-full`. Fly's 15-second `/health` check keeps the compute awake. |
-| Staging console issuer | Key: `~/.musterd/cloud/staging-issuer.jwk` (mode 600, nick's laptop). JWKS: `https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks` (worker `workers/staging-jwks`) | Signs the tokens that create teams on staging. It stays until the console that publishes the Cloud KMS key is deployed and team servers' `MUSTERD_CONSOLE_JWKS_URL` points at that console (ADR 685). |
-| Console signing key | GCP project `musterd-kms` (332443408096), no organization. Key ring `console`, location `global`, key `console-signing`, version 1, purpose `ASYMMETRIC_SIGN`, algorithm `EC_SIGN_P256_SHA256`, software protection. Signer `console-signer@musterd-kms.iam.gserviceaccount.com` has `roles/cloudkms.signerVerifier` on that key. | Provisioned 2026-10-20 (lane `01M3Z43V58`). Not deployed. `app.musterd.io` still serves `{"keys":[]}`. Team servers still use the staging issuer. |
+| Staging console issuer | Key: `~/.musterd/cloud/staging-issuer.jwk` (mode 600, nick's laptop). JWKS: `https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks` (worker `workers/staging-jwks`) | Signs the tokens that create teams on staging. Lane `01M5E0543HNPG3EKFXZ287Y80N` sets the KMS env on Fly, points team servers' `MUSTERD_CONSOLE_JWKS_URL` at the console JWKS, and retires this issuer and `workers/staging-jwks` (ADR 685). |
+| Console signing key | GCP project `musterd-kms` (332443408096), no organization. Key ring `console`, location `global`, key `console-signing`, version 1, purpose `ASYMMETRIC_SIGN`, algorithm `EC_SIGN_P256_SHA256`, software protection. Signer `console-signer@musterd-kms.iam.gserviceaccount.com` has `roles/cloudkms.signerVerifier` on that key. | Provisioned 2026-10-20 (lane `01M3Z43V58`). Not deployed. `app.musterd.io` still serves `{"keys":[]}`. Team servers still use the staging issuer. The cutover is lane `01M5E0543HNPG3EKFXZ287Y80N`. |
 
 `musterd.io`, `musterd.ai` and `musterd.build` are on the same Cloudflare account and are not used
 by Cloud yet.
@@ -145,7 +145,8 @@ printf 'MUSTERD_CONSOLE_EMAIL_ACCOUNT_ID=%s\nMUSTERD_CONSOLE_EMAIL_API_TOKEN=%s\
 Done when `curl -s https://app.musterd.io/health` answers `{"ok":true,"build":"<sha>"}`. Until the
 KMS variables are set on the app, `/.well-known/jwks.json` answers `{"keys":[]}`. Signing is ADR 685;
 the key and the credential file are in the table and the credentials list above. They are not Fly
-secrets.
+secrets. Lane `01M5E0543HNPG3EKFXZ287Y80N` sets them, points team servers at the console JWKS, and
+retires the staging issuer.
 
 ## Nightly encrypted R2 backups (`scripts/cloud/backup.mjs`, ADR 679)
 
