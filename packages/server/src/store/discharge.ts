@@ -94,6 +94,13 @@ export function repliedByRecipientWhere(alias: string, recipient: string): strin
  * it. Measured 2026-10-14 (alfie): one seat's inbox showed the same eight months-old asks at the
  * top of every read, 15.5k unread behind them.
  *
+ * Shape 5c (lane 01M5G34H, ADR 688): a pull announcement (`meta.pull.lane`) whose lane is claimed
+ * or no longer `open`. The window's resolve is what discharges it when the host seat can still
+ * speak; the asks that outlived a lane done on 2026-10-20 had no resolve (the host seats had
+ * left, and a read does not discharge an obligation), so they re-entered every bounded inbox.
+ * An unknown lane keeps the ask owed, same as 5a — a replica that has not seen the lane yet must
+ * not drop it.
+ *
  * Same narrowness as the app-level twins: an UNKNOWN lane keeps the act owed (no row, no match),
  * and a lane that returns to play makes it owed again on the next read — derived, never stored.
  * Only the structured spelling is read here; a handoff naming its lane in prose stays with the
@@ -111,5 +118,8 @@ export function laneSettledSql(alias: string): string {
           OR (${alias}.act = 'handoff'
              AND ln.id = json_extract(${alias}.meta, '$.lane_handoff.lane')
              AND ln.state IN ('awaiting_acceptance','ready_for_review','done','abandoned'))
+          OR (${alias}.act = 'ask'
+             AND ln.id = json_extract(${alias}.meta, '$.pull.lane')
+             AND (ln.owner_seat IS NOT NULL OR ln.state <> 'open'))
         ))`;
 }

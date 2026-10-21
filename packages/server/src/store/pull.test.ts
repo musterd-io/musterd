@@ -528,6 +528,119 @@ withDrivers('pull', (o) => {
       ).toBe(1);
     });
 
+    it('lane 01M5G34H: a decided window still resolves after the host seat has left', async () => {
+      const { db, team, ctx, open, nick } = await fixture();
+      await open();
+      const offer = await announced(ctx, team);
+      const voice = (await getMemberByName(db, team.id, hostServiceSeatName(HOST)))!;
+      await db.run('UPDATE members SET left_at = ? WHERE id = ?', [T0 + 1, voice.id]);
+      vi.setSystemTime(T0 + 180_000);
+      await sweepPullWindows(ctx, team, T0 + 180_000);
+      const close = await db.get<{ from_member: string; act: string }>(
+        `SELECT from_member, act FROM messages WHERE team_id = ? AND thread_id = ?`,
+        [team.id, offer.ask],
+      );
+      expect(close).toMatchObject({ act: 'resolve', from_member: voice.id });
+      const pinned = await listInbox(db, nick, { limit: 1, unreadOnly: true });
+      expect(pinned.map((m) => m.id)).not.toContain(offer.ask);
+    });
+
+    it('lane 01M5G34H: a pull ask stops pinning once its lane is claimed, with no resolve', async () => {
+      const { db, team, ctx, open, nick, seat } = await fixture();
+      const lane = await open();
+      const offer = await announced(ctx, team);
+      vi.setSystemTime(T0 + 1_000);
+      const voiceRow = (await getMemberByName(db, team.id, hostServiceSeatName(HOST)))!;
+      await routeEnvelope(
+        ctx,
+        team,
+        voiceRow,
+        makeEnvelope({
+          id: ulid(),
+          team: team.slug,
+          from: voiceRow.name,
+          to: { kind: 'member', name: 'nick' },
+          act: 'status_update',
+          body: 'later',
+        }),
+        undefined,
+        true,
+      );
+      expect(
+        (await listInbox(db, nick, { limit: 1, unreadOnly: true })).map((m) => m.id),
+      ).toContain(offer.ask);
+      await updateLane(
+        db,
+        team.id,
+        lane.id,
+        team.slug,
+        { owner_seat: seat.name },
+        T0 + 2_000,
+        undefined,
+        { actor: seat.name },
+      );
+      expect(
+        (await listInbox(db, nick, { limit: 1, unreadOnly: true })).map((m) => m.id),
+      ).not.toContain(offer.ask);
+    });
+
+    it('lane 01M5G34H: the opener can decline a pull ask after the host seat has left', async () => {
+      const { db, team, ctx, open, nick, seat } = await fixture();
+      await open();
+      const offer = await announced(ctx, team);
+      const voice = (await getMemberByName(db, team.id, offer.announced_by))!;
+      await db.run('UPDATE members SET left_at = ? WHERE id = ?', [T0 + 1, voice.id]);
+      await expect(
+        routeEnvelope(
+          ctx,
+          team,
+          nick,
+          makeEnvelope({
+            id: 'not-a-discharge',
+            team: team.slug,
+            from: 'nick',
+            to: { kind: 'member', name: voice.name },
+            act: 'message',
+            body: 'hello',
+          }),
+        ),
+      ).rejects.toThrow(/no member/);
+      await routeEnvelope(
+        ctx,
+        team,
+        nick,
+        makeEnvelope({
+          id: 'decline-left',
+          team: team.slug,
+          from: 'nick',
+          to: { kind: 'member', name: voice.name },
+          act: 'decline',
+          body: 'lane already landed',
+          meta: { in_reply_to: offer.ask },
+        }),
+      );
+      // The decline is addressed to the host, so it is not in the opener's inbox. A later act
+      // makes the ask show up here only if it is still pinned.
+      vi.setSystemTime(T0 + 1_000);
+      await routeEnvelope(
+        ctx,
+        team,
+        seat,
+        makeEnvelope({
+          id: ulid(),
+          team: team.slug,
+          from: seat.name,
+          to: { kind: 'member', name: 'nick' },
+          act: 'status_update',
+          body: 'later',
+        }),
+        undefined,
+        true,
+      );
+      const pinned = await listInbox(db, nick, { limit: 1, unreadOnly: true });
+      expect(pinned.map((m) => m.id)).not.toContain(offer.ask);
+    });
+
     it('ADR 688: a stopped window closes its ask with the reason', async () => {
       const { db, team, ctx, open, nick } = await fixture();
       await open();

@@ -430,7 +430,10 @@ async function closeAnnouncementAsk(
     [team.id, row.ask_id],
   );
   const to = ask?.to_member ? await getMemberById(db, ask.to_member) : null;
-  const voice = await hostServiceSeat(db, team, row.host);
+  // A departed host seat still speaks this one resolve. `hostServiceSeat` returns null once
+  // `left_at` is set, and that silent return is what left the ask pinned after the window
+  // (lane 01M5G34H).
+  const voice = await announcementVoice(db, team, row.host);
   const seat = await getMemberById(db, row.member_id);
   if (!to || !voice) return;
   try {
@@ -461,6 +464,21 @@ async function closeAnnouncementAsk(
   } catch {
     /* the decision is recorded; the open ask is the only thing left behind */
   }
+}
+
+/**
+ * Who sends the window's resolve. The live service seat while the host is enrolled; the same
+ * row after it has left. Null only when the name was never a service seat.
+ */
+async function announcementVoice(
+  db: Driver,
+  team: TeamRow,
+  host: string,
+): Promise<MemberRow | null> {
+  const live = await hostServiceSeat(db, team, host);
+  if (live) return live;
+  const existing = await getMemberByName(db, team.id, hostServiceSeatName(host));
+  return existing?.kind === 'service' ? existing : null;
 }
 
 async function declineAudit(db: Driver, row: PullAnnouncementRow, reason: string): Promise<void> {
