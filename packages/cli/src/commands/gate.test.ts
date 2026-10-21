@@ -10,6 +10,7 @@ import { CliError } from '../errors.js';
 import { markSessionStart, sessionStartedAt } from '../workingTree.js';
 import {
   attest,
+  gitHere,
   haltDenyReason,
   parseEnvelopeSessionId,
   parseToolCall,
@@ -669,5 +670,33 @@ describe('HttpClient timeoutMs (ADR 674 — 1.5s hard timeout on hook HTTP calls
     } finally {
       srv.close();
     }
+  });
+});
+
+describe('gitHere (ADR 697 §1)', () => {
+  const repo = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-git-'));
+    const git = (...a: string[]) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' });
+    git('init', '-q', '-b', 'feature-x');
+    writeFileSync(join(dir, 'a.txt'), 'a\n');
+    git('add', '-A');
+    git('-c', 'user.email=t@x', '-c', 'user.name=t', 'commit', '-qm', 'base');
+    return { dir, git };
+  };
+
+  it('names the branch and the HEAD commit an edit is made on', () => {
+    const { dir } = repo();
+    const got = gitHere(dir);
+    expect(got.git_branch).toBe('feature-x');
+    expect(got.git_head).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it('sends no branch on a detached HEAD, and nothing outside a repository', () => {
+    const { dir, git } = repo();
+    git('checkout', '-q', '--detach');
+    const got = gitHere(dir);
+    expect(got.git_branch).toBeUndefined();
+    expect(got.git_head).toMatch(/^[0-9a-f]{40}$/);
+    expect(gitHere(mkdtempSync(join(tmpdir(), 'gate-nogit-')))).toEqual({});
   });
 });
