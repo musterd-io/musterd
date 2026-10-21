@@ -1508,6 +1508,28 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
+### 2026-10-20 — `officeArtBytes` 2,003,000 → 9,935,000 B; `totalJsGzipBytes` 347,900 → 352,000 B: the rendered figure (lane `01M5D8F93K`, office realism increment 3)
+
+| Budget     | Before (main `cd85cb50`, same laptop) | This branch (laptop)    | Ceiling                          |
+| ---------- | ------------------------------------- | ----------------------- | -------------------------------- |
+| total JS   | 347,900 B ceiling (main `6d22a40e`)   | 350,208 B (+3,789 from this lane) | RAISED 347,900 → 352,000 B |
+| office art | 1,742,029 B (42 files)                | 8,639,126 B (69 files)  | RAISED 2,003,000 → 9,935,000 B   |
+
+Increment 3 of the office re-make: every member is a sprite frame composed from tinted identity
+layers (spec §3.2). The art is the sheets — 27 layers (one per hair style, facial hair, hat, top
+cut, accessory, plus skin, bottom, shoes, visor) × 8 directions × 8 clips, 265 frames rendered
+at 2 px per floor unit with S, W and SW mirrored from E, N and NE, each layer packed into an atlas
+of frames cropped to their own pixels (which is also what keeps the decoded set near 100 MB
+instead of the ~1.9 GB a 27-sheet grid implied), ~6.3 MB after pngquant at figure scale 0.92 —
+three times the room, and the honest number. One lever is known and not yet pulled, for
+increment 3b: 1.5 px/unit (the broadcast draws at ~1.4, −44%); WebP was measured at −40% and
+rejected for now because the tint multiplies over the pixels and lossy edges show. The JS is
+`figureSheet`, `tint`, `figure`, `animFor` and the loader; the painters are still in, so this is
+a real +3.8 KB against the goal's net-zero by increment 4.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 352,000 B and office art
+  at or under 9,935,000 B with this change in; or the goal closes with total JS above 342,078 B.
+
 ### 2026-10-20 — `officeArtBytes` 190,600 → 2,003,000 B; `totalJsGzipBytes` 344,000 → 346,000 B: the whole rendered room (lane `01M5D8F7FT`, office realism increment 2)
 
 | Budget     | Before (main `437236bb`, same laptop) | This branch (laptop)   | Ceiling                         |

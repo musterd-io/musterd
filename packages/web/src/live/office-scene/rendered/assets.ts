@@ -6,6 +6,8 @@
  * painted scene draws, and an asset that fails to load is listed in `missing` rather than failing
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
+import type { LayerId } from './figure';
+import { ANIMS, type Anim, type AnimSpec, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
 
 export function renderedOfficeFromSearch(search: string): boolean {
@@ -22,6 +24,89 @@ export interface RenderedAssets {
   images: Map<string, CanvasImageSource>;
   /** The files that failed, by basename, for the one `console.warn` the scene prints. */
   missing: string[];
+  /** The member figure's sprite sheets (increment 3), when `figure.json` is in the build and loaded. */
+  figure?: FigureAssets | undefined;
+}
+
+export interface FigureAssets {
+  spec: SheetSpec;
+  /** Neutral sheets by layer id; a layer absent here failed to load and is skipped by `drawFigureFrame`. */
+  sheets: Map<LayerId, CanvasImageSource>;
+  /** The tint pass's one scratch canvas (`tintFrame`), shared by every member and frame. */
+  scratch: { canvas?: HTMLCanvasElement };
+}
+
+/** What `render.py --figure` writes: a SheetSpec plus the sheet file per layer. */
+export interface FigureSpecJson extends SheetSpec {
+  layers: Array<{ id: LayerId; file: string }>;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Parse `figure.json`; throws with the offending field named. */
+export function parseFigureSpec(json: unknown): FigureSpecJson {
+  if (!isRecord(json)) throw new Error('figure.json is not an object');
+  const { scale, frame, anchor, anims, layers } = json;
+  if (!isNum(scale) || scale <= 0) throw new Error('figure.json needs a positive scale');
+  if (!isRecord(frame) || !isNum(frame['w']) || !isNum(frame['h'])) throw new Error('figure.json needs frame {w, h}');
+  if (!isRecord(anchor) || !isNum(anchor['x']) || !isNum(anchor['y'])) throw new Error('figure.json needs anchor {x, y}');
+  if (!isRecord(anims)) throw new Error('figure.json needs anims');
+  const out = {} as Record<Anim, AnimSpec>;
+  for (const a of ANIMS) {
+    const v = anims[a];
+    if (!isRecord(v) || !isNum(v['row']) || !isNum(v['frames']) || !isNum(v['fps']) || typeof v['loop'] !== 'boolean')
+      throw new Error(`figure.json anim ${a} needs {row, frames, fps, loop}`);
+    out[a] = { row: v['row'], frames: v['frames'], fps: v['fps'], loop: v['loop'] };
+  }
+  if (!Array.isArray(layers)) throw new Error('figure.json needs a layers array');
+  const cellsIn = json['cells'];
+  let cells: Record<string, number[]> | undefined;
+  if (cellsIn !== undefined) {
+    if (!isRecord(cellsIn)) throw new Error('figure.json cells is not an object');
+    cells = {};
+    for (const [k, v] of Object.entries(cellsIn)) {
+      if (!Array.isArray(v) || v.some((n) => !isNum(n))) throw new Error(`figure.json cells ${k} is not a number list`);
+      cells[k] = v as number[];
+    }
+  }
+  const ls = layers.map((l, i) => {
+    if (!isRecord(l) || typeof l['id'] !== 'string' || typeof l['file'] !== 'string') throw new Error(`figure.json layer ${i} needs {id, file}`);
+    return { id: l['id'] as LayerId, file: l['file'] };
+  });
+  const height = json['height'];
+  if (height !== undefined && !isNum(height)) throw new Error('figure.json height is not a number');
+  return {
+    scale,
+    frame: { w: frame['w'], h: frame['h'] },
+    anchor: { x: anchor['x'], y: anchor['y'] },
+    anims: out,
+    layers: ls,
+    ...(cells ? { cells } : {}),
+    ...(isNum(height) ? { height } : {}),
+  };
+}
+
+/** Load every layer sheet of `spec`; a sheet that fails is left out (its layer is skipped). Never rejects. */
+export async function loadFigureAssets(
+  spec: FigureSpecJson,
+  urlFor: (file: string) => string,
+  loadImage: (url: string) => Promise<CanvasImageSource> = domImage,
+): Promise<FigureAssets & { missing: string[] }> {
+  const sheets = new Map<LayerId, CanvasImageSource>();
+  const missing: string[] = [];
+  await Promise.all(
+    spec.layers.map(async (l) => {
+      try {
+        sheets.set(l.id, await loadImage(urlFor(l.file)));
+      } catch {
+        missing.push(l.file);
+      }
+    }),
+  );
+  const { layers: _layers, ...sheet } = spec;
+  void _layers;
+  return { spec: sheet, sheets, scratch: {}, missing };
 }
 
 function domImage(url: string): Promise<CanvasImageSource> {

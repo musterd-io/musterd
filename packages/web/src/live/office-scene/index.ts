@@ -92,7 +92,7 @@ import {
   type Unit,
   type UnitHook,
 } from './damage';
-import { loadRenderedAssets, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
+import { loadFigureAssets, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
@@ -432,6 +432,24 @@ export function mountOffice(
             );
           }
           return loadRenderedAssets(manifest, (file) => files[`./rendered/assets/${file}`] ?? file);
+        })
+        .then(async (r) => {
+          /* The figure sheets (increment 3) ride in beside the room: no figure.json, or one that
+             will not parse, leaves the members painted and says so once. */
+          const figureUrl = files['./rendered/assets/figure.json'];
+          if (figureUrl) {
+            try {
+              const spec = parseFigureSpec(await (await fetch(figureUrl)).json());
+              const fig = await loadFigureAssets(spec, (file) => files[`./rendered/assets/${file}`] ?? file);
+              if (fig.missing.length) console.warn(`office: ${fig.missing.length} figure sheet(s) failed to load: ${fig.missing.join(', ')}`);
+              // No skin sheet means no figure at all: keep the painted members rather than draw nobody.
+              if (fig.sheets.has('skin')) r.figure = { spec: fig.spec, sheets: fig.sheets, scratch: fig.scratch };
+              else console.warn('office: the figure skin sheet did not load — members stay painted');
+            } catch (e: unknown) {
+              console.warn('office: figure.json unusable — members stay painted', e);
+            }
+          }
+          return r;
         })
         .then((r) => {
           if (disposed) return;

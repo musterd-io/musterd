@@ -1,8 +1,11 @@
 import { appearanceOf, type Appearance } from './appearance';
+import type { FigureAssets } from './rendered/assets';
+import { drawFigureFrame } from './rendered/figure';
+import { type Anim, type AnimSpec, dir8FromDir, dir8FromHeading } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
 import { FWD } from './layout';
 import { GESTURE, type Skel, type V3 } from './skeleton';
-import type { CarryKind, Dir, OfficeNode } from './types';
+import type { CarryKind, Dir, OfficeNode, Pose } from './types';
 
 /**
  * The character painter: flattens a `Skel` (3D joints, see `skeleton.ts`) onto the 2:1 iso canvas and
@@ -106,6 +109,16 @@ export interface CharacterOpts {
   lx: number;
   ly: number;
   dir: Dir;
+  /**
+   * Pre-rendered figure sheets (office realism, plan Task 13). When present the character is a
+   * sprite frame — `anim`/`animStart` pick it — and the skeleton is not solved; the caller passes
+   * an empty one. `tint` is the room's light tint (`figureTintFor`); `topColor` the identity hue.
+   */
+  rendered?: FigureAssets | undefined;
+  anim?: Anim;
+  animStart?: number;
+  tint?: string;
+  topColor?: string;
   node: OfficeNode;
   skel: Skel;
   /** Continuous facing (radians, logical floor space) — overrides `dir`'s cardinal basis mid-turn. */
@@ -151,6 +164,31 @@ function blink(t: number, seed: number): number {
  * *over* the desk they are resting on (a seated member's whole arm is above the desk surface, so once the
  * desk slab has been painted the arms belong on top of it). See `renderScene`.
  */
+/**
+ * Which sprite clip a pose is in, and when it started, so `frameRect` can count frames from the
+ * scene clock (plan Task 13). The actor state machine is untouched: this reads what it already
+ * decided. Walking wins; seated with a typing pulse types, seated otherwise idles; a half-sat pose
+ * is the sit-down clip scrubbed by `sit` (rising plays it backwards, which is a stand-up); a
+ * standing member with a bubble speaks; everyone else idles. `startT` for the loops is the
+ * member's seed, so nineteen idlers are never in phase.
+ */
+export function animFor(pose: Pose, typing: number, t: number, seed: number, anims: Record<Anim, AnimSpec>): { anim: Anim; startT: number } {
+  if (pose.moving) {
+    // The walk is scrubbed by the gait PHASE, which the actor system advances by distance (STRIDE
+    // floor units per cycle), never by the clock — a clock-driven loop is the skating nick saw.
+    const a = anims.walk;
+    return { anim: 'walk', startT: t - pose.phase * (a.frames / a.fps) };
+  }
+  if (pose.sit > 0.9) return { anim: typing > 0 ? 'sit-type' : 'sit-idle', startT: seed * 10 };
+  if (pose.sit > 0) {
+    const a = anims['sit-down'];
+    const duration = a.frames / a.fps;
+    return { anim: 'sit-down', startT: t - pose.sit * duration };
+  }
+  if (pose.bubble) return { anim: 'speak', startT: seed * 10 };
+  return { anim: 'idle', startT: seed * 10 };
+}
+
 export function drawCharacter(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -158,6 +196,31 @@ export function drawCharacter(
   armsOnly = false,
 ): void {
   const { skel: k, node, dir, size } = o;
+  if (o.rendered) {
+    // The rendered path: one composed sprite frame. The seated arms overlay (armsOnly) has no
+    // separate pass until Task 16 — the frame already has the arms where the pose put them.
+    if (armsOnly) return;
+    const look = o.look ?? appearanceOf(node);
+    drawFigureFrame({
+      ctx,
+      fit,
+      at: { lx: o.lx, ly: o.ly },
+      sheets: o.rendered.sheets,
+      spec: o.rendered.spec,
+      look,
+      kind: node.kind,
+      topColor: o.topColor ?? node.color,
+      anim: o.anim ?? 'idle',
+      dir: o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir),
+      t: o.t,
+      startT: o.animStart ?? 0,
+      alpha: o.alpha,
+      tint: o.tint ?? '#ffffff',
+      size,
+      scratch: o.rendered.scratch,
+    });
+    return;
+  }
   /*
    * IDLE SWAY — the weight-shift a person makes when they are not doing anything (nick, 2026-09-14).
    *

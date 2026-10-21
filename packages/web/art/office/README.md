@@ -70,12 +70,42 @@ foreshortening). The camera sits at azimuth 45° (viewer at +x +y) and elevation
 desk lands on the painted desk's pixels. A rendered asset's `anchor` is where its floor origin
 projects inside the crop; `blit.ts` puts that point on `project(lx, ly, fit)`.
 
-## Direction renders (increment 3)
+## The figure (increment 3)
 
-Figures are rendered as sprite sheets, 8 directions × actions. The plan evaluates the free
-omnidirectional isometric render add-on (itch.io, 2025) and the open-source
-Blender-Isometric-Renderer before scripting that part; the rig comes from Mixamo's auto-rigger with
-our own gestures hand-keyed. Record the choice here when it is made.
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --python packages/web/art/office/render.py -- \
+  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 2 --ky 0.31
+```
+
+`figure.py` builds the member from `skeleton.ts`'s proportions (96 tall, five heads): rigid parts
+parented to an Empty at each joint — no armature, no weights — and an **action** is a function of
+the clip's phase that sets joint rotations (`action(name, t)`). The eight first-cut clips (`CLIPS`:
+idle, walk, sit-type, sit-idle, speak, turn, sit-down, stand-up) are hand-keyed there at 12 fps.
+The plan named Mixamo's auto-rigger; it is a browser service behind an Adobe login — a human step
+the pipeline cannot run — and a stock Mixamo walk is the "some game's character" the spec rules
+out, so the rig is text that diffs instead. (Decision recorded 2026-10-20, lane 01M5D8F93K.)
+
+Five directions are rendered — E, SE, N, NE, NW — and three are mirrored from them: S from E,
+W from N, SW from NE. A horizontal flip in the canvas's frame swaps `lx` and `ly` (screen-right is
++lx −ly), which is why the mirror of east is south, not west; SE and NW face straight down and
+up the screen and are their own mirrors.
+
+Each layer's frames are **packed into an atlas, cropped to their own pixels** (`cells` in
+`figure.json`: atlas rect plus the cell's offset inside the nominal frame), not laid out as a
+grid: a glasses frame is a few hundred pixels, not a whole 112×208 cell, and 27 grid sheets would
+decode to about 2 GB in the browser. Tinting happens per frame on one scratch canvas at draw
+time; a tinted copy of a whole sheet per member colour is never made.
+
+Every mesh carries the **layer** its pixels belong to (`LAYERS`: skin, one per hair style, facial
+hair, hat, top cut, accessory, bottom, shoes, visor). Per frame the renderer draws the base body
+(skin, bottom, shoes, visor) twice — lit, neutral grey, and as flat ID colours, no anti-aliasing —
+and splits the lit pixels by ID; then each variant alone, with the body as a **holdout**, so a
+hand in front of a hoodie keeps its pixels and the hoodie has a hand-shaped hole. `figure.ts`
+can therefore draw the layers in any order and occlusion is already right. The sheets are
+`office-art-fig-<layer>.png`: one row per (clip, direction) — directions clockwise from E, as
+`figureSheet.ts`'s `DIR8` — one column per frame; `figure.json` is the `SheetSpec` plus the file
+per layer. Sheets are neutral grey; `appearance.ts` tints them at draw time (`tint.ts`), and the
+visor keeps its own colour. 312 frames × (2 + 23) renders at 2 px/unit takes about 40 minutes.
 
 ## Original art
 

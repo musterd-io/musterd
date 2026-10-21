@@ -197,8 +197,8 @@ def fabric(name: str, rgb: tuple[float, float, float], weave: float = 0.9) -> bp
     return m
 
 
-def tiles(name: str, rgb: tuple[float, float, float], cell: float = 90.0) -> bpy.types.Material:
-    """The floor: long ceramic tiles in a brick bond with a dark grout, a little colour wander per tile."""
+def tiles(name: str, rgb: tuple[float, float, float], cell: float = 60.0) -> bpy.types.Material:
+    """The floor: long ceramic tiles (1.2 × 0.6 m against an 88-unit person) in a brick bond with a dark grout."""
     m = bpy.data.materials.get(name)
     if m:
         return m

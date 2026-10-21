@@ -1,7 +1,7 @@
 import { canvasFont } from '../canvasFont';
 import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
-import { drawCharacter } from './character';
+import { animFor, drawCharacter } from './character';
 import { cameraOf, depth, FLOOR, ISO_CAMERA, project, THICK, WALL_H, type Camera, type Fit, type FitBox, type Pt } from './iso';
 import type { SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
@@ -58,8 +58,8 @@ import { pulseIntensity, pulseLive, runGlow } from '../pulse';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
 import { blitAsset } from './rendered/blit';
-import { ceilingOf, dayOf, roomMixFor } from './rendered/roomState';
-import type { RenderedAssets } from './rendered/assets';
+import { ceilingOf, dayOf, figureTintFor, roomMixFor } from './rendered/roomState';
+import type { FigureAssets, RenderedAssets } from './rendered/assets';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
@@ -1902,7 +1902,14 @@ export function receptionistPose(r: ReceptionistState): {
   return { gesture: 0, gestureT: null, carry: null, typing: r.mode === 'typing' || r.mode === 'label' };
 }
 
-function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: ReceptionistState, t: number): void {
+function drawReceptionist(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  r: ReceptionistState,
+  t: number,
+  /** The rendered figure (plan Task 13): she is a sprite like everyone else when the sheets are in. */
+  figure?: { assets: FigureAssets; tint: string },
+): void {
   const asleep = r.mode === 'asleep';
   const wake =
     asleep ? 0
@@ -1930,32 +1937,42 @@ function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: Receptioni
     gestureT,
     moving: false,
   };
+  const seed = RECEPTIONIST_SEED / 0xffffffff;
+  const rendered = figure
+    ? (() => {
+        const { anim, startT } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
+        return { rendered: figure.assets, anim, animStart: startT, tint: figure.tint };
+      })()
+    : {};
   drawCharacter(ctx, fit, {
     lx: pose.lx,
     ly: pose.ly,
     dir: pose.dir,
     node: RECEPTIONIST_NODE,
-    skel: solveSkeleton({
-      phase: 0,
-      sit: 1,
-      stride: 0,
-      run: false,
-      t,
-      // Her typing is the members' typing burst, on her own seed so she is not in lockstep with a desk.
-      typing: typing ? typingBurst(RECEPTIONIST_SEED, t) : 0,
-      carry: pose.carry,
-      help: false,
-      gesture,
-      gestureT,
-      seed: RECEPTIONIST_SEED,
-    }),
+    skel: figure
+      ? EMPTY_SKEL
+      : solveSkeleton({
+          phase: 0,
+          sit: 1,
+          stride: 0,
+          run: false,
+          t,
+          // Her typing is the members' typing burst, on her own seed so she is not in lockstep with a desk.
+          typing: typing ? typingBurst(RECEPTIONIST_SEED, t) : 0,
+          carry: pose.carry,
+          help: false,
+          gesture,
+          gestureT,
+          seed: RECEPTIONIST_SEED,
+        }),
+    ...rendered,
     size: 1,
     alpha: 1,
     carry: pose.carry,
     gesture,
     gestureT,
     t,
-    seed: RECEPTIONIST_SEED / 0xffffffff,
+    seed,
     look: RECEPTIONIST_LOOK,
   });
 }
@@ -1980,6 +1997,7 @@ function receptionItems(
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
   statKey = '',
   rendered?: RenderedAssets,
+  figure?: { assets: FigureAssets; tint: string },
 ): DepthItem[] {
   const R = RECEPTION;
   /* Rendered (plan Task 6): the front desk's base is one asset; its screen's typing flicker is a
@@ -1996,7 +2014,7 @@ function receptionItems(
     // She sorts at her own feet, north of the counter, so the counter paints over her lower body.
     {
       d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly),
-      fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t),
+      fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t, figure),
     },
     { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => deskDraw(ctx) },
     still(
@@ -3316,6 +3334,9 @@ const CURL_VIS_S = 1.1;
  * Solve a member's skeleton for this frame from their pose (see `skeleton.ts` — all the animation lives
  * there; this only decides *which* animation state the pose implies).
  */
+/** The rendered path never solves a skeleton; `drawCharacter` ignores this when `rendered` is set. */
+const EMPTY_SKEL = {} as ReturnType<typeof skelFor>;
+
 function skelFor(pose: Pose, node: OfficeNode, t: number) {
   const seed = seedOf(node.name);
   // Typing is gated on `posture`, **not `activity`** — the same source of truth the seating uses. A stale
@@ -3383,7 +3404,19 @@ export function drawActor(
   mug?: string,
   /** A first arrival's lanyard colour (lane 01M3F81DD9). */
   lanyard?: string,
+  /** The rendered figure (plan Task 13): sprite frames instead of a solved skeleton, under the room's tint. */
+  figure?: { assets: FigureAssets; tint: string },
 ): void {
+  // Rendered: pick the clip from the pose and skip the solver — the frame is the whole figure.
+  const seed = seedOf(node.name);
+  const rendered = figure
+    ? (() => {
+        const typing =
+          pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
+        const { anim, startT } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
+        return { rendered: figure.assets, anim, animStart: startT, tint: figure.tint };
+      })()
+    : {};
   drawCharacter(
     ctx,
     fit,
@@ -3393,7 +3426,8 @@ export function drawActor(
       dir: pose.dir,
       ...(pose.heading !== undefined ? { heading: pose.heading } : {}),
       node,
-      skel: skelFor(pose, node, t),
+      skel: figure ? EMPTY_SKEL : skelFor(pose, node, t),
+      ...rendered,
       size: pose.small ? 0.72 : 1,
       alpha: pose.alpha,
       carry: pose.carry,
@@ -3402,13 +3436,15 @@ export function drawActor(
       ...(mug !== undefined ? { mug } : {}),
       ...(lanyard !== undefined ? { lanyard } : {}),
       t,
-      seed: seedOf(node.name),
+      seed,
     },
     armsOnly,
   );
   if (!armsOnly && pose.bubble) {
     const p = project(pose.lx, pose.ly, fit);
-    bubble(ctx, p.x, p.y - (pose.small ? 74 : 98) * fit.scale, pose.bubble, fit.scale);
+    // Over the crown: the painted member's is 96 up; a rendered one's is in its spec.
+    const crown = figure?.assets.spec.height ?? 96;
+    bubble(ctx, p.x, p.y - (pose.small ? (crown + 2) * 0.76 : crown + 2) * fit.scale, pose.bubble, fit.scale);
   }
 }
 
@@ -5224,6 +5260,9 @@ export function renderScene(
      window beams are in the light layers, so they are skipped. */
   const mix = roomMixFor(env);
   const shellRendered = !!rendered?.images.has(`room/light-${dayOf(mix.from)}`);
+  /* The rendered figure (plan Task 13): when the sheets are loaded every member is a sprite frame
+     under the room's light tint; the painted skeleton otherwise. */
+  const figure = rendered?.figure ? { assets: rendered.figure, tint: figureTintFor(env) } : undefined;
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
     if (shellRendered) {
@@ -5284,7 +5323,7 @@ export function renderScene(
     const draw = ro(`meeting/chair-${ci}`, cx, cy, (g) => meetingChair(g, fit, cx, cy, c.dir));
     items.push({ d: depth(cx, cy), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw }] });
   });
-  items.push(...receptionItems(ctx, fit, recep, t, statKey, rendered));
+  items.push(...receptionItems(ctx, fit, recep, t, statKey, rendered, figure));
   {
     const draw = ro('printer', PRINTER.lx, PRINTER.ly, (c) => printer(c, fit));
     items.push({ d: depth(PRINTER.lx, PRINTER.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw }] });
@@ -5381,14 +5420,14 @@ export function renderScene(
     // A lanyard still in the air is not on them yet — it lands at the end of its flight.
     const inFlight = opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
     const lanyard = inFlight ? undefined : opts.welcome?.lanyards.get(name);
-    items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard) });
+    items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
 
     // Seated overlay: the desk paints over a member sitting behind it (correct — that is what a desk does
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
     // slab. One character, two depth slots: the body at the chair, the arms on the desk. Without this the
     // hands disappear into the desk and the typing is invisible. Skipped while a beat has dropped the
     // hands into the lap — lap arms painted over the slab would float on the desk.
-    if (seated && !handsInLap(pose.gesture, pose.gestureT)) {
+    if (seated && !figure && !handsInLap(pose.gesture, pose.gestureT)) {
       items.push({
         d: seatedArmsDepth(slot),
         fn: () => drawActor(ctx, fit, pose, node, t, true, mug),
@@ -5399,7 +5438,10 @@ export function renderScene(
     // The label rides above the crown — higher for a standing member than a seated one, so it tracks the
     // head through a sit rather than floating where the head used to be. Lifted clear of the firefly wisp
     // that now hovers over the head (see `drawHead`), so the name reads as a plate floating above the mote.
-    heads.set(name, { x: b.x, y: b.y - (pose.small ? 90 : 116 - pose.sit * 22) * fit.scale });
+    // The label rides 20 above the crown: 116 for the painted 96-unit member, the spec's crown for a
+    // rendered one — otherwise a smaller figure's name floats in the air above it.
+    const crown = figure?.assets.spec.height ?? 96;
+    heads.set(name, { x: b.x, y: b.y - (pose.small ? (crown + 20) * 0.78 : crown + 20 - pose.sit * 22 * (crown / 96)) * fit.scale });
   }
 
   items.sort((a, b) => a.d - b.d);
