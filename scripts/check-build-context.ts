@@ -61,7 +61,7 @@ export const REQUIRED_PATHS = [
   'pnpm-lock.yaml',
   'packages/cli/src/bin.ts',
   'packages/mcp/src/tools/inboxCheck.ts',
-  'deploy/cloud-seat/entrypoint.sh',
+  'deploy/cloud-agent/entrypoint.sh',
 ] as const;
 
 /** Directories whose entire contents are seat-local. Rule C walks these in the working tree. */
@@ -76,8 +76,8 @@ export const KNOWN_WHOLE_CONTEXT: readonly string[] = [
   'deploy/cloud/Dockerfile',
   // ADR 615: the console, built by scripts/cloud/deploy.mjs from the repo root like deploy/cloud.
   'deploy/console/Dockerfile',
-  'deploy/cloud-seat/Dockerfile',
-  // ADR 647 phase 1: the cloud agent, built from the repo root like deploy/cloud-seat.
+  // ADR 647 phase 1 + ADR 689 phase 2b: the cloud agent (hosted and hub modes), built from the
+  // repo root; it replaced deploy/cloud-seat (delta, retired 2026-10-15) on 2026-10-21.
   'deploy/cloud-agent/Dockerfile',
   // Lane 01M5AQE75K: the CooperBench run machine, built from the repo root by deploy/cooperbench/create.sh.
   'deploy/cooperbench/Dockerfile',

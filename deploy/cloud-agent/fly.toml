@@ -11,8 +11,9 @@ primary_region = "sjc"
   dockerfile = "Dockerfile"
   # Build context is the repo root; pass --dockerfile and run from the repo root (README line).
 
-# No [[services]] / [http_service]: nothing listens. The host loop dials OUT to the hosted
-# team's server over HTTPS. Fly auto-stop keys on inbound traffic, so parking is explicit
+# No [[services]] / [http_service]: nothing listens. The host loop dials OUT — to the hosted
+# team's server over HTTPS, or in hub mode (ADR 689; `MUSTERD_HUB` set by create.sh --hub) to
+# the laptop hub over the tailnet, with its own loopback-bound daemon in between. Fly auto-stop keys on inbound traffic, so parking is explicit
 # (`fly machine stop`); a parked seat costs the volume only (ADR 647 §4.4).
 
 [[mounts]]
@@ -31,5 +32,7 @@ primary_region = "sjc"
   MUSTERD_SERVER = "https://revive-staging.musterd.dev"
   MUSTERD_TEAM = "revive-staging"
   MUSTERD_HOST = "cloud-1"
+  # Hub mode only (create.sh --hub sets these): MUSTERD_HUB = the hub's tailnet name,
+  # MUSTERD_HUB_PORT, ROSTER_REPO = the team home's git URL; MUSTERD_SERVER becomes 127.0.0.1.
   # ADR 101: the resident engine never guesses a model; unset, every wake defers (quietly).
   MUSTERD_MODEL = "claude-sonnet-5-5"

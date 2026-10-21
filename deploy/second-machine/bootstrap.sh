@@ -1,6 +1,7 @@
 #!/bin/bash
 # Second machine — a macOS laptop joins a musterd team as a federated machine (ADR 325 / 328 / 376)
-# and hosts agent seats. The Mac twin of deploy/cloud-seat/{entrypoint,seat}.sh: the same steps
+# and hosts agent seats. The Mac twin of delta's cloud-seat scripts (retired 2026-10-21; the record is
+# docs/perf/cloud-seat.md, the successor deploy/cloud-agent in hub mode): the same steps
 # in the same order, with no root, no container, and launchd services where the VM has a
 # foreground supervisor. Every step is a no-op once done, so re-running after a failure resumes.
 #

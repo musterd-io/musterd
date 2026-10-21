@@ -70,7 +70,7 @@ From the role's first skill (2026-09), kept:
 
 - **The local daemon**: loopback by default (ADR 040); the shared one is `localhost:4849`.
 - **musterd Cloud**: `deploy/cloud/` (Fly app `musterd-cloud`, `MUSTERD_HOST=0.0.0.0` behind
-  public HTTPS) and the cloud seat image in `deploy/cloud-seat/`. A weakness here is reachable from
+  public HTTPS) and the cloud agent image in `deploy/cloud-agent/` (hosted and hub modes; delta's `deploy/cloud-seat/` was retired 2026-10-21). A weakness here is reachable from
   the internet; check it first when sizing a report.
 - **Published packages**: `@musterd/cli` and its siblings on npm. Compare the published version
   with `main` (`npm view @musterd/cli version`) to know which users a fix must reach.

@@ -134,6 +134,12 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   row, one per five-minute window — and the hub projects it into its `host_liveness`. The sweep's
   `cancelled` crosses to the pinned joiner, and a joiner's `claimed` / `ready` / `failed` move the
   hub's row only where its state and claimant agree.
+- _(2026-10-21, fourth landing, lane `01M5DTSKAB`.)_ Standing the joiner up with no human on
+  the machine needed one thing outside this ADR's four decisions: `POST /node/enroll` on a daemon
+  that has never seen the team now creates the bare team row and its node row itself (no creator,
+  no member — the roster arrives by git, ADR 058), where it used to refuse until a human had
+  created the team and logged an act there. The hub is still the machine the team was created on
+  (ADR 376): a row born by enrolment is a joiner's by construction.
 
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the

@@ -4,7 +4,7 @@
 > machine on the same tailnet. **Effort:** ~20 minutes at the second machine, two commands on the
 > first, then a wait while the new machine replays the team's history. **Code:** none — the
 > federation this uses shipped in ADRs 325 → 376, and `deploy/second-machine/bootstrap.sh` is the
-> cloud-seat runbook (`deploy/cloud-seat/`) rewritten for a Mac you can sit at.
+> cloud-seat runbook (delta's `deploy/cloud-seat/`, retired 2026-10-21 — the record is `docs/perf/cloud-seat.md`; its successor is `deploy/cloud-agent` in hub mode, ADR 689) rewritten for a Mac you can sit at.
 >
 > This is lane `01M3YZ0AY0`'s guide. It is written **before the run** from the cloud-seat record;
 > the **Findings** section at the end is what the run itself taught, dated, and wins over the

@@ -3054,22 +3054,19 @@ export async function handleHttp(
     if (method === 'POST' && path === '/node/enroll') {
       requireLocalPeer(ctx, req, 'enrolling this machine with a hub');
       const body = parseOrBadRequest(NodeEnrollRequestSchema, await readJson(req));
-      const team = await requireTeam(ctx.db, body.team);
-      const local = await ctx.db.get<{ node_id: string }>(
-        'SELECT node_id FROM local_node WHERE team_id = ?',
-        [team.id],
-      );
-      if (!local) {
-        throw new MusterdError(
-          'conflict',
-          `this daemon has no node row for "${body.team}" yet — it is minted on the team's first ` +
-            'logged act, so send something on this machine before enrolling it',
-        );
-      }
+      // ADR 689 (cloud agents 2b): a machine with no human on it enrols from nothing. A daemon
+      // that has never seen the team gets a bare team row — no creator, no member, the roster
+      // arrives by fold — and its node row is minted here rather than by a first logged act,
+      // which on delta's machine meant `team create --as nick`, the very identity ADR 648 forbids
+      // there. A daemon that already holds the team is unchanged.
+      const team =
+        (await getTeamBySlug(ctx.db, body.team)) ??
+        (await createTeam(ctx.db, { slug: body.team, display: null }));
+      const local = await localNodeForTeam(ctx.db, team.id);
       // A hub cannot enroll (ADR 376 §3): a machine with joiners attached is the team's authority,
       // and flipping its loops to the joiner branch would strand every event they push. Refused
       // here, before any secret leaves the machine — the target hub is never contacted.
-      if (await hasEnrolledJoiners(ctx.db, team.id, local.node_id)) {
+      if (await hasEnrolledJoiners(ctx.db, team.id, local.id)) {
         throw new MusterdError(
           'conflict',
           `this machine is the hub of "${body.team}" — it has enrolled joiners, and a hub does not ` +
@@ -3082,7 +3079,7 @@ export async function handleHttp(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           code: body.code,
-          node_id: local.node_id,
+          node_id: local.id,
           label: hostname(),
         }),
         signal: AbortSignal.timeout(10_000),
