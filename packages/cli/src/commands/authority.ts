@@ -192,6 +192,7 @@ export const AUTHORITY_FLAGS = [
   'by',
   'capture',
   'capture-nodes',
+  'channel',
   'check',
   'check-build',
   'claim',
