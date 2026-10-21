@@ -976,6 +976,18 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     version: 124,
     sql: 'CREATE INDEX IF NOT EXISTS idx_audit_team_target_ts ON audit(team_id, target, ts)',
   },
+  {
+    // v125 — lane 01M5G9FKCG: every `GET /inbox` counts the reader's whole inbox (`countInbox`) and
+    // its unread remainder (`countUnread`), and the interrupt check walks the same rows. Each filters
+    // on to_kind / to_member / from_member, none of which `(team_id, created_at)` carries, so every
+    // count fetched every message row since the floor — all 30k for a seat with no cursor. On the
+    // revive hub's 491 MB file those rows do not stay cached: 93 ms idle, ~670 ms under load, a
+    // synchronous event-loop stall each (183 s in 30 min). With the filter columns and `id` (the
+    // cursor tiebreak) in the key the counts never touch the table: 3.4 MB of index for 28 MB of
+    // rows, measured on a copy of the hub's messages.
+    version: 125,
+    sql: 'CREATE INDEX IF NOT EXISTS idx_messages_inbox_cover ON messages(team_id, created_at, id, to_kind, to_member, from_member)',
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

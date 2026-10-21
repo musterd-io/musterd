@@ -44,3 +44,27 @@ withDrivers('lane history plan', (open, kind) => {
     expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_target_ts');
   });
 });
+
+withDrivers('inbox count plans', (open, kind) => {
+  // Lane 01M5G9FKCG: the inbox counts filter on columns `(team_id, created_at)` does not carry, so each
+  // count fetched every message row since its floor — on the hub, rows that do not stay cached. The
+  // covering index answers all three shapes without touching the table.
+  it.skipIf(kind !== 'sqlite')(
+    'countInbox and both countUnread shapes read only the covering index',
+    async () => {
+      const db = await open();
+      const base =
+        "SELECT COUNT(*) AS n FROM messages WHERE team_id = 't' AND (to_member = 'm' OR to_kind IN ('team','broadcast')) AND from_member != 'm'";
+      for (const sql of [
+        base,
+        `${base} AND created_at > 1`,
+        `${base} AND (created_at > 1 OR (created_at = 1 AND id > 'x'))`,
+      ]) {
+        const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`);
+        expect(plan.map((r) => r.detail).join(' | ')).toContain(
+          'COVERING INDEX idx_messages_inbox_cover',
+        );
+      }
+    },
+  );
+});
