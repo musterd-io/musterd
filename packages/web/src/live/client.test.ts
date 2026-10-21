@@ -661,3 +661,94 @@ describe('channel pairings (ADR 618 §7: the /live confirmation surface)', () =>
     });
   });
 });
+
+describe('lane verdict authority (01M5DTPMXN)', () => {
+  const cfg = { team: 'revive', as: 'nick', token: 'mscr_nick' };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sendActWithVerdict surfaces lane_verdict and lane_authority_refused from the ack', async () => {
+    const { sendActWithVerdict } = await import('./client');
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      text: async () =>
+        JSON.stringify({
+          ack: { id: 'a1' },
+          lane_authority_refused: { lane: 'L1', reason: 'no_signature' },
+        }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const sent = await sendActWithVerdict(cfg, {
+      act: 'accept',
+      to: { kind: 'member', name: 'ada' },
+      meta: { in_reply_to: 'ask1' },
+    } as never);
+    expect(sent.lane_authority_refused).toEqual({ lane: 'L1', reason: 'no_signature' });
+    expect(sent.lane_verdict).toBeUndefined();
+    expect(sent.ack).toEqual({ id: 'a1' });
+  });
+
+  it('authorityProofForVerdict: no enrolled passkey means send plain (null proof)', async () => {
+    const { authorityProofForVerdict } = await import('./client');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ descriptor: { nonce: 'n'.repeat(32) } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ descriptor: {}, passkeys: [] }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(authorityProofForVerdict(cfg, 'L1', 'accept')).resolves.toBeNull();
+  });
+
+  it('authorityProofForVerdict signs the descriptor nonce with the enrolled passkey', async () => {
+    const { authorityProofForVerdict } = await import('./client');
+    const nonce = Buffer.from('1234567890abcdef1234567890abcdef').toString('base64url');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ descriptor: { nonce } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            descriptor: {},
+            passkeys: [{ key_id: 'k1', credential_id: 'AQID' }],
+          }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('navigator', {
+      credentials: {
+        get: vi.fn(async () => ({
+          rawId: new Uint8Array([1, 2, 3]).buffer,
+          response: {
+            signature: new Uint8Array([9, 9]).buffer,
+            authenticatorData: new Uint8Array([7]).buffer,
+            clientDataJSON: new Uint8Array([8]).buffer,
+          },
+        })),
+      },
+    });
+    const proof = await authorityProofForVerdict(cfg, 'L1', 'accept');
+    expect(proof?.key_id).toBe('k1');
+    expect(proof?.nonce).toBe(nonce);
+    expect(proof?.signature).toBe('CQk');
+    // The descriptor is built for exactly the act the daemon checks the proof against.
+    const firstCall = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(firstCall[0]).toBe('/teams/revive/authority/descriptors');
+    expect(JSON.parse(firstCall[1].body)).toEqual({
+      act: 'human_accept',
+      target: 'L1',
+      payload: { lane: 'L1', verdict: 'accept' },
+    });
+  });
+});

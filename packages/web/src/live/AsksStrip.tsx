@@ -17,7 +17,12 @@ import {
   type AskView,
   type AudienceContext,
 } from './asks';
-import { sendAct, type LiveConfig } from './client';
+import {
+  authorityProofForVerdict,
+  sendAct,
+  sendActWithVerdict,
+  type LiveConfig,
+} from './client';
 import { asksOpenMode, stillMode } from './stillMode';
 import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
@@ -252,23 +257,54 @@ export function AsksStrip({
       try {
         const to = { kind: 'member', name: ask.env.from } as const;
         const thread = ask.env.thread ?? ask.env.id;
-        const ack =
-          kind === 'deciding'
-            ? await sendAct(cfg, {
-                act: 'wait',
-                to,
-                thread,
-                body: 'deciding — check back in 1h',
-                meta: { ask_ref: ask.env.id, until: '1h' },
-              })
-            : await sendAct(cfg, {
-                act: kind,
-                to,
-                thread,
-                // A picked option rides as the body (lane 01M511XNQC), so the record says which one.
-                ...(body ? { body } : {}),
-                meta: { in_reply_to: ask.env.id },
-              });
+        if (kind === 'deciding') {
+          const ack = await sendAct(cfg, {
+            act: 'wait',
+            to,
+            thread,
+            body: 'deciding — check back in 1h',
+            meta: { ask_ref: ask.env.id, until: '1h' },
+          });
+          setLocalAnswers((prev) => [...prev, ack]);
+          return;
+        }
+        // Lane 01M5DTPMXN: a verdict on a lane_review ask from a human seat is a
+        // high-authority act (ADR 662) — it needs the passkey proof attached, or the
+        // daemon refuses it. The ceremony runs first; a cancelled one sends nothing.
+        const laneId = (
+          ask.env.meta?.['lane_review'] as { lane?: unknown } | undefined
+        )?.lane;
+        const humanSeat = roster.find((m) => m.name === cfg.as)?.kind === 'human';
+        if (typeof laneId === 'string' && humanSeat) {
+          const proof = await authorityProofForVerdict(cfg, laneId, kind);
+          const sent = await sendActWithVerdict(cfg, {
+            act: kind,
+            to,
+            thread,
+            ...(body ? { body } : {}),
+            meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
+          });
+          if (sent.lane_authority_refused) {
+            setError(
+              `that verdict did not move the lane — the daemon refused it (${sent.lane_authority_refused.reason}). It needs your enrolled key's signature; the ask is still open.`,
+            );
+            return;
+          }
+          if (!sent.lane_verdict && !sent.lane_escalation) {
+            setError('that verdict did not move the lane — the ask is still open.');
+            return;
+          }
+          setLocalAnswers((prev) => [...prev, sent.ack]);
+          return;
+        }
+        const ack = await sendAct(cfg, {
+          act: kind,
+          to,
+          thread,
+          // A picked option rides as the body (lane 01M511XNQC), so the record says which one.
+          ...(body ? { body } : {}),
+          meta: { in_reply_to: ask.env.id },
+        });
         setLocalAnswers((prev) => [...prev, ack]);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -276,7 +312,7 @@ export function AsksStrip({
         setBusy(null);
       }
     },
-    [cfg],
+    [cfg, roster],
   );
 
   const idx = new Map(roster.map((m) => [m.name, m]));

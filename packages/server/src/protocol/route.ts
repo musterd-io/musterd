@@ -90,6 +90,12 @@ export interface RouteResult {
    *  they gave a verdict at the moment they gave it (lane 01M2GQFJXG, 2026-09-14: a reviewer sent
    *  `accept` as "taking this review" and found out afterwards that the lane was already closed). */
   lane_verdict?: { lane: string; state: 'done' | 'active' };
+  /** Lane 01M5DTPMXN — a human's verdict on a `lane_review` ask was refused by the ADR 662
+   * authority gate (no A2 signature, or a bad one): the act landed as a message and moved
+   * nothing. Absent for every other act. Reported on the ack for the same reason
+   * `lane_verdict` is — before this, the refusal existed only in the audit and a log line,
+   * and the sender's surface marked the ask answered. */
+  lane_authority_refused?: { lane: string; reason: string };
   /** ADR 539 — this accept was the PEER confirmation on a risky lane (ADR 188 §4) and moved nothing:
    *  `human` is who was asked for the human verdict, null when nobody live could be (the reaper
    *  retries when a human comes live) or when this daemon is a joiner and the hub decides on fold.
@@ -297,6 +303,7 @@ async function routeEnvelopeInner(
   // HTTP and every client above them get it from one implementation. Explicit meta always wins.
   let handoffLane: RouteResult['handoff_lane'];
   let laneVerdict: RouteResult['lane_verdict'];
+  let laneAuthorityRefused: RouteResult['lane_authority_refused'];
   let laneEscalation: RouteResult['lane_escalation'];
   let laneAck: RouteResult['lane_ack'];
   let laneSuperseded: RouteResult['lane_superseded'];
@@ -824,8 +831,8 @@ async function routeEnvelopeInner(
     // demanded, and that human's verdict is the one that closes.
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
-        if (!escalatedToHuman && !laneSuperseded && !laneAdvisory && !laneUnbound)
-          laneVerdict = await applyAcceptanceVerdict(
+        if (!escalatedToHuman && !laneSuperseded && !laneAdvisory && !laneUnbound) {
+          const applied = await applyAcceptanceVerdict(
             ctx,
             team,
             sender,
@@ -834,6 +841,9 @@ async function routeEnvelopeInner(
             env.body,
             env.meta,
           );
+          laneVerdict = applied.verdict;
+          laneAuthorityRefused = applied.authorityRefused;
+        }
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
       }
@@ -1025,6 +1035,7 @@ async function routeEnvelopeInner(
     delivered,
     ...(handoffLane ? { handoff_lane: handoffLane } : {}),
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
+    ...(laneAuthorityRefused ? { lane_authority_refused: laneAuthorityRefused } : {}),
     ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
@@ -1822,24 +1833,27 @@ async function applyAcceptanceVerdict(
   act: 'accept' | 'decline',
   body: string,
   meta?: Record<string, unknown> | null,
-): Promise<RouteResult['lane_verdict']> {
+): Promise<{
+  verdict?: RouteResult['lane_verdict'];
+  authorityRefused?: RouteResult['lane_authority_refused'];
+}> {
   const replied = await ctx.db.get<{ meta: string | null }>(
     'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
     [team.id, repliedToId],
   );
-  if (!replied?.meta) return;
+  if (!replied?.meta) return {};
   let laneId: string | undefined;
   try {
     laneId = (JSON.parse(replied.meta) as { lane_review?: { lane?: string } }).lane_review?.lane;
   } catch {
-    return;
+    return {};
   }
-  if (!laneId) return;
+  if (!laneId) return {};
   // ADR 667: belt and braces — the caller already routed an advisory answer elsewhere, and an
   // advisory ask must never close or reopen a lane by any path.
-  if (isAdvisoryReviewMeta(safeParse(replied.meta))) return;
+  if (isAdvisoryReviewMeta(safeParse(replied.meta))) return {};
   const before = await getLane(ctx.db, team.id, laneId, team.slug);
-  if (!before || !isAwaitingAcceptance(before.state)) return;
+  if (!before || !isAwaitingAcceptance(before.state)) return {};
   // A re-route (lane 01M1QYHJFY) told this seat the acceptance moved to someone else and closed
   // its ask. Its verdict still lands as a message — it is not refused as an act — but it binds to
   // nothing: the lane's acceptance is the NEW seat's to give, and honouring both would let two
@@ -1851,7 +1865,7 @@ async function applyAcceptanceVerdict(
       ask: repliedToId,
       decider: decider.name,
     });
-    return;
+    return {};
   }
 
   // ADR 662: a human's verdict is a listed act. Once that human has an enrolled device key,
@@ -1873,7 +1887,10 @@ async function applyAcceptanceVerdict(
     });
     if (!check.ok) {
       log.info({ msg: 'authority_verdict_refused', lane: laneId, decider: decider.name });
-      return;
+      // Lane 01M5DTPMXN: the refusal goes back on the ack, not only into the audit — the
+      // sender's surface must be able to say "that did not count" instead of answering
+      // the ask away. `check.reason` is one of AUTHORITY_REFUSAL_REASONS.
+      return { authorityRefused: { lane: laneId, reason: check.reason ?? 'no_signature' } };
     }
   }
 
@@ -1911,11 +1928,11 @@ async function applyAcceptanceVerdict(
   } catch (err) {
     if (err instanceof LaneConflictError) {
       log.info({ msg: 'acceptance_verdict_already_decided', lane: laneId, decider: decider.name });
-      return;
+      return {};
     }
     throw err;
   }
-  if (!lane) return;
+  if (!lane) return {};
   if (acceptorClaims && acceptorClaims.length > 0)
     await appendAudit(ctx.db, team.id, {
       actor: decider.name,
@@ -1984,7 +2001,7 @@ async function applyAcceptanceVerdict(
       meta: note.meta,
     }),
   );
-  return { lane: lane.id, state: act === 'accept' ? 'done' : 'active' };
+  return { verdict: { lane: lane.id, state: act === 'accept' ? 'done' : 'active' } };
 }
 
 /**

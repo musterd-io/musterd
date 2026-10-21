@@ -1,10 +1,16 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
-import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
+import {
+  descriptorSigningBytes,
+  PROTOCOL_VERSION,
+  type ApprovalDescriptor,
+} from '@musterd/protocol';
+import { ulid } from 'ulid';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { enrollDeviceKey, issueEnrollmentChallenge } from '../store/authority.js';
 import { getMemberByName } from '../store/members.js';
+import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
@@ -279,5 +285,64 @@ withDrivers('authority-http (ADR 662)', (_o, kind) => {
     });
     expect(closed.status).toBe(200);
     expect(closed.json.lane.state).toBe('done');
+  });
+
+  it('a human verdict on a review ask: refused unsigned — and the ack says so (lane 01M5DTPMXN)', async () => {
+    const opened = await call('POST', '/teams/dawn/lanes', ada, { title: 'ask verdict lane' });
+    const laneId = opened.json.lane.id as string;
+    await call('PATCH', `/teams/dawn/lanes/${laneId}`, ada, { state: 'awaiting_acceptance' });
+    const teamRow = (await getTeamBySlug(server.store, 'dawn'))!;
+    const nickRow = (await getMemberByName(server.store, teamRow.id, 'nick'))!;
+    const adaRow = (await getMemberByName(server.store, teamRow.id, 'ada'))!;
+    const askId = ulid();
+    await insertMessage(server.store, teamRow.id, adaRow.id, nickRow.id, {
+      id: askId,
+      v: PROTOCOL_VERSION,
+      team: 'dawn',
+      from: 'ada',
+      to: { kind: 'member', name: 'nick' },
+      act: 'ask',
+      body: '[lane] human acceptance required',
+      thread: null,
+      meta: {
+        species: 'approve',
+        tier: 'blocking',
+        lane_review: { lane: laneId, route: 'human_admin', grade: 'human' },
+      },
+      ts: Date.now(),
+    } as never);
+    const send = (meta: Record<string, unknown>) =>
+      call('POST', '/teams/dawn/messages', nick, {
+        envelope: {
+          id: ulid(),
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          from: 'nick',
+          to: { kind: 'member', name: 'ada' },
+          act: 'accept',
+          body: '',
+          meta,
+          ts: Date.now(),
+        },
+      });
+    // Unsigned: the act lands, the lane does not move, and the ack names the refusal —
+    // before lane 01M5DTPMXN this existed only in the audit and the lane sat.
+    const refused = await send({ in_reply_to: askId });
+    expect(refused.status).toBe(201);
+    expect(refused.json.lane_authority_refused).toEqual({
+      lane: laneId,
+      reason: 'no_signature',
+    });
+    expect(refused.json.lane_verdict).toBeUndefined();
+    const still = await call('GET', `/teams/dawn/lanes/${laneId}`, ada);
+    expect(still.json.lane.state).toBe('awaiting_acceptance');
+    // Signed over the server descriptor for {lane, verdict: 'accept'}: the verdict binds.
+    const d = await descriptor('human_accept', laneId, { lane: laneId, verdict: 'accept' });
+    const proof = { key_id: keyId, nonce: d.nonce, signature: signWith(d) };
+    const signed = await send({ in_reply_to: askId, approval: proof });
+    expect(signed.json.lane_authority_refused).toBeUndefined();
+    expect(signed.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+    const done = await call('GET', `/teams/dawn/lanes/${laneId}`, ada);
+    expect(done.json.lane.state).toBe('done');
   });
 });

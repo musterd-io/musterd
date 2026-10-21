@@ -306,16 +306,25 @@ export async function fetchLiveLaneBoard(cfg: LiveConfig): Promise<LaneBoard> {
  * daemon's ack envelope so the view can fold the answer into its local timeline immediately; the
  * firehose copy of this HTTP send arrives a moment later and is deduped by id.
  */
-export async function sendAct(
+/** What the daemon reports back about an acceptance verdict (ADR 202 + lane 01M5DTPMXN). */
+export interface VerdictReport {
+  lane_verdict?: { lane: string; state: 'done' | 'active' };
+  lane_escalation?: { lane: string };
+  lane_authority_refused?: { lane: string; reason: string };
+}
+
+type SendActInput = {
+  act: Envelope['act'];
+  to: Envelope['to'];
+  body?: string;
+  thread?: string | null;
+  meta?: Record<string, unknown> | null;
+};
+
+async function postAct(
   cfg: LiveConfig,
-  input: {
-    act: Envelope['act'];
-    to: Envelope['to'];
-    body?: string;
-    thread?: string | null;
-    meta?: Record<string, unknown> | null;
-  },
-): Promise<Envelope> {
+  input: SendActInput,
+): Promise<{ ack: Envelope } & VerdictReport> {
   const envelope = buildEnvelope({
     id: crypto.randomUUID(),
     team: cfg.team,
@@ -345,7 +354,112 @@ export async function sendAct(
       res.status,
     );
   }
-  return (json as { ack: Envelope }).ack;
+  const { ack, lane_verdict, lane_escalation, lane_authority_refused } = json as {
+    ack: Envelope;
+  } & VerdictReport;
+  return {
+    ack,
+    ...(lane_verdict ? { lane_verdict } : {}),
+    ...(lane_escalation ? { lane_escalation } : {}),
+    ...(lane_authority_refused ? { lane_authority_refused } : {}),
+  };
+}
+
+export async function sendAct(cfg: LiveConfig, input: SendActInput): Promise<Envelope> {
+  return (await postAct(cfg, input)).ack;
+}
+
+/** Like {@link sendAct}, but also returns the daemon's verdict report beside the ack. */
+export async function sendActWithVerdict(
+  cfg: LiveConfig,
+  input: SendActInput,
+): Promise<{ ack: Envelope } & VerdictReport> {
+  return postAct(cfg, input);
+}
+
+const b64urlToBytes = (s: string): Uint8Array =>
+  Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+const bytesToB64url = (b: ArrayBuffer): string =>
+  btoa(String.fromCharCode(...new Uint8Array(b)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+async function apiPost<T>(cfg: LiveConfig, path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${cfg.token}`,
+      'x-musterd-surface': 'web',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    const err = (json as { error?: { code?: string; message?: string } })?.error;
+    throw new LiveFetchError(
+      err?.message ?? `HTTP ${res.status}`,
+      err?.code ?? `http_${res.status}`,
+      res.status,
+    );
+  }
+  return json as T;
+}
+
+/**
+ * The A2 proof a human's verdict on a lane needs (ADR 662, lane 01M5DTPMXN): the server
+ * builds the descriptor, this browser signs it with the human's passkey, and the proof
+ * rides back as `meta.approval`. Returns null when this human has no passkey enrolled —
+ * the gate passes unenrolled humans unsigned, so the caller sends plain. Throws when the
+ * ceremony is cancelled or fails: the caller must send nothing, because an unsigned
+ * verdict from an enrolled human is refused — and used to vanish silently. A human
+ * whose only enrolled key is not a passkey gets that refusal surfaced on the ack
+ * instead; the CLI helper can sign with such a key.
+ */
+export async function authorityProofForVerdict(
+  cfg: LiveConfig,
+  lane: string,
+  verdict: 'accept' | 'decline',
+): Promise<Record<string, string> | null> {
+  const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
+  const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
+    act: 'human_accept',
+    target: lane,
+    payload: { lane, verdict },
+  });
+  const nonce = created.descriptor.nonce;
+  const view = await apiGet<{ passkeys?: { key_id: string; credential_id: string }[] }>(
+    cfg,
+    `${teamPath}/descriptors/${encodeURIComponent(nonce)}`,
+  );
+  if (!view.passkeys || view.passkeys.length === 0) return null;
+  if (!navigator.credentials?.get) throw new Error('this browser cannot use a passkey');
+  const assertion = (await navigator.credentials.get({
+    publicKey: {
+      challenge: b64urlToBytes(nonce) as BufferSource,
+      allowCredentials: view.passkeys.map((p) => ({
+        type: 'public-key' as const,
+        id: b64urlToBytes(p.credential_id) as BufferSource,
+      })),
+      userVerification: 'preferred',
+      timeout: 60_000,
+    },
+  })) as PublicKeyCredential | null;
+  if (!assertion) throw new Error('passkey cancelled — the verdict was not sent');
+  const resp = assertion.response as AuthenticatorAssertionResponse;
+  const key = view.passkeys.find(
+    (p) => bytesToB64url(assertion.rawId) === p.credential_id.replace(/=+$/, ''),
+  );
+  if (!key) throw new Error('that passkey is not the enrolled one — the verdict was not sent');
+  return {
+    key_id: key.key_id,
+    nonce,
+    signature: bytesToB64url(resp.signature),
+    authenticator_data: bytesToB64url(resp.authenticatorData),
+    client_data_json: bytesToB64url(resp.clientDataJSON),
+  };
 }
 
 /**

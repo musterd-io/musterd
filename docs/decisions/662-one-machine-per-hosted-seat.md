@@ -227,6 +227,17 @@ All four converged on one shape, and nick directed it be written as this ADR.
   descriptor", even though he holds one live passkey. EC assertions now verify as DER, and a test
   registers an ES256 credential and refuses the raw r‖s form.
 
+- 2026-10-20, lane 01M5DTPMXN: the gate held and the surface lied about it. /live's asks
+  rail sent a human's lane verdict as a plain act — no web code attached `meta.approval` —
+  so every verdict from a key-enrolled human was refused here, landed as a message, and
+  the rail then marked the ask answered. nick lost three stage-two verdicts this way in
+  one day (audit: `authority.refused {act: "human_accept", reason: "no_signature"}`); the
+  lanes sat. The gate is unchanged. What changed: the refusal is returned on the verdict
+  ack (`lane_authority_refused`, as `lane_verdict` already was), and the rail runs the
+  ceremony itself for a human's verdict — server-built descriptor, in-browser passkey
+  signature, proof attached — sending nothing when the ceremony is cancelled, and
+  showing the refusal instead of answering the ask away when one still comes back.
+
 ## Observability & Evaluation
 
 - **Traces:** every listed act's audit row records its assurance (`A2`), the authenticator kind

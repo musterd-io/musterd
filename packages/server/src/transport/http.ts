@@ -6876,6 +6876,11 @@ export async function handleHttp(
           ack,
           ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
           ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
+          // Lane 01M5DTPMXN: a human verdict refused by the ADR 662 gate — told on the spot,
+          // so the sender's surface can fail visibly instead of marking the ask answered.
+          ...(result.lane_authority_refused
+            ? { lane_authority_refused: result.lane_authority_refused }
+            : {}),
           // ADR 539: an accept taken as the PEER confirmation on a risky lane — told on the spot
           // that it closed nothing and who now holds the verdict.
           ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
