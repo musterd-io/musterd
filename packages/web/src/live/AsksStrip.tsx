@@ -283,8 +283,12 @@ export function AsksStrip({
             meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
           });
           if (sent.lane_authority_refused) {
+            // The reason is a code for the audit, not a sentence for the card
+            // (slippy, review of #3078).
             setError(
-              `that verdict did not move the lane — the daemon refused it (${sent.lane_authority_refused.reason}). It needs your enrolled key's signature; the ask is still open.`,
+              sent.lane_authority_refused.reason === 'no_signature'
+                ? "Your verdict wasn't recorded: this needs your passkey, and none was used. The ask is still open; try again."
+                : "Your verdict wasn't recorded: the daemon refused it. The ask is still open; try again.",
             );
             return;
           }

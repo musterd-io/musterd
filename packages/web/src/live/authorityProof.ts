@@ -39,17 +39,29 @@ export async function authorityProofForVerdict(
   );
   if (!view.passkeys || view.passkeys.length === 0) return null;
   if (!navigator.credentials?.get) throw new Error('this browser cannot use a passkey');
-  const assertion = (await navigator.credentials.get({
-    publicKey: {
-      challenge: b64urlToBytes(nonce) as BufferSource,
-      allowCredentials: view.passkeys.map((p) => ({
-        type: 'public-key' as const,
-        id: b64urlToBytes(p.credential_id) as BufferSource,
-      })),
-      userVerification: 'preferred',
-      timeout: 60_000,
-    },
-  })) as PublicKeyCredential | null;
+  // A cancel or timeout rejects with NotAllowedError (or AbortError) rather than
+  // returning null — translate it, or the person reads the browser's raw error and
+  // never learns the verdict went nowhere (slippy, review of #3078).
+  let assertion: PublicKeyCredential | null;
+  try {
+    assertion = (await navigator.credentials.get({
+      publicKey: {
+        challenge: b64urlToBytes(nonce) as BufferSource,
+        allowCredentials: view.passkeys.map((p) => ({
+          type: 'public-key' as const,
+          id: b64urlToBytes(p.credential_id) as BufferSource,
+        })),
+        // A high-authority act: the authenticator must verify the person, not
+        // merely be present (slippy, review of #3078).
+        userVerification: 'required',
+        timeout: 60_000,
+      },
+    })) as PublicKeyCredential | null;
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError'))
+      throw new Error('passkey cancelled — the verdict was not sent');
+    throw e;
+  }
   if (!assertion) throw new Error('passkey cancelled — the verdict was not sent');
   const resp = assertion.response as AuthenticatorAssertionResponse;
   const key = view.passkeys.find(
