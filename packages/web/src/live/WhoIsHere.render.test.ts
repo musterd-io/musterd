@@ -14,7 +14,7 @@ const onLive = (name: string, kind: 'human' | 'agent') =>
 const render = (roster: MemberSummary[], you: string | null) =>
   renderToStaticMarkup(createElement(WhoIsHere, { roster, you }));
 
-describe('WhoIsHere (ADR 691)', () => {
+describe('WhoIsHere (ADR 692)', () => {
   it('renders nothing when nobody has /live open', () => {
     expect(render([], null)).toBe('');
   });

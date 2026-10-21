@@ -20,7 +20,7 @@ const REJOIN_MS = 60_000;
 type Shown = HereEntry & { leaving?: boolean; arrived?: boolean };
 
 /**
- * The "who is here" row (ADR 691): the members with /live open, as the faces they wear on the floor.
+ * The "who is here" row (ADR 692): the members with /live open, as the faces they wear on the floor.
  * It sits at the head of the topbar's tools. Hovering or focusing the stack fans it open, and each
  * face carries a small card. The one authored moment is an arrival: when someone opens /live while
  * you watch, their face slides in with a single ring of their own colour. If they were already

@@ -228,7 +228,7 @@ function readPresence(v: unknown): Presence | typeof FAIL {
   const epoch = nullishInt(v['epoch'], { min: 0 });
   const wake_lease = nullishString(v['wake_lease']);
   // When the row attached (ADR 379). /live's "who is here" row orders by it and says "here since"
-  // (ADR 691); this reader used to drop it, so the web never saw a field the daemon always sent.
+  // (ADR 692); this reader used to drop it, so the web never saw a field the daemon always sent.
   const attached_at = nullishInt(v['attached_at'], { min: 0 });
   const node = nullishString(v['node']);
   const node_label = nullishString(v['node_label']);

@@ -106,7 +106,7 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
-/** "Who is here" (ADR 691) is chrome the room does not need to paint: it follows the first roster
+/** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
 const LazyWhoIsHere = lazy(() => import('../live/WhoIsHere').then((m) => ({ default: m.WhoIsHere })));
 /** Settings (nick, 2026-10-19): opened from the working-hours calendar on the office wall, so its
@@ -134,7 +134,7 @@ const NOW_SLOT_ID = 'lc-now-slot';
 // its entry button portalled into the topbar slot below.
 const LazyTour = lazy(() => import('../components/tour/Tour').then((m) => ({ default: m.Tour })));
 const TOUR_SLOT_ID = 'lc-tour-slot';
-/** How often /live re-reads the roster on its own (ADR 691: a closed tab leaves "who is here"). */
+/** How often /live re-reads the roster on its own (ADR 692: a closed tab leaves "who is here"). */
 const HERE_POLL_MS = 60_000;
 // ADR 516: rendered only while a hold is in force, so its formatter (in `@musterd/protocol/wire`)
 // stays out of /live's eager graph on every ordinary day.
@@ -242,7 +242,7 @@ function LivePage() {
   const outage = useServerHealth();
   // ADR 516: the Team's active holds, read from the same route every surface reads.
   const { holds, canSet: canSetHold, refresh: refreshHolds } = useTeamHolds(cfg);
-  // ADR 691: this page's socket says it is /live, which is what the "who is here" row reads; the
+  // ADR 692: this page's socket says it is /live, which is what the "who is here" row reads; the
   // poll takes a closed tab out of that row when its member is still online elsewhere.
   const liveCfg = useMemo(() => (cfg ? { ...cfg, page: 'live' as const } : null), [cfg]);
   const stream = useLiveStream(liveCfg, {

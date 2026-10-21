@@ -4,12 +4,12 @@ import { withDrivers } from '../db/testing.js';
 import { integrationHarness } from './integration.helpers.js';
 
 /**
- * ADR 691 — /live's "who is here" row reads the roster for `web` rows a /live tab labelled
+ * ADR 692 — /live's "who is here" row reads the roster for `web` rows a /live tab labelled
  * `workspace: '/live'`. The row is only honest if the roster never carries such a row for the
  * /broadcast capture seat, an anonymous watcher or a watch link, even when one of them sends the
  * label, and does carry it for a signed-in member until their tab closes.
  */
-withDrivers('who is here (ADR 691)', (_o, kind) => {
+withDrivers('who is here (ADR 692)', (_o, kind) => {
   const h = integrationHarness(kind);
   const { TestWs, get, post, standingGrant, pollUntil } = h;
   const LIVE = '/live';

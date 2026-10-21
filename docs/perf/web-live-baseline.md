@@ -1406,7 +1406,7 @@ saturated by the pin-holes raise above, and a trim this size is under gzip noise
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,200 B with this change in.
 
 
-### 2026-10-21 — `initialJsGzipBytes` 148,000 → 148,600 B, `totalJsGzipBytes` 347,300 → 349,900 B and `liveCssGzipBytes` 25,600 → 26,300 B: who is here on /live (lane `01M5DAJ0Z7`, ADR 691)
+### 2026-10-21 — `initialJsGzipBytes` 148,000 → 148,600 B, `totalJsGzipBytes` 347,300 → 349,900 B and `liveCssGzipBytes` 25,600 → 26,300 B: who is here on /live (lane `01M5DAJ0Z7`, ADR 692)
 
 | Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
 | ---------- | ----------------------------- | ------------------- | -------------------------- |

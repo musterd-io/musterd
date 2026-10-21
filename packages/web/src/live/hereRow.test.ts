@@ -17,7 +17,7 @@ const live = (attached_at?: number, status = 'online'): P => ({
   ...(attached_at !== undefined ? { attached_at } : {}),
 });
 
-describe('whoIsHere (ADR 691)', () => {
+describe('whoIsHere (ADR 692)', () => {
   it('is empty when nobody has /live open: the board page and a CLI session do not count', () => {
     const roster = [
       member('nick', 'human', [{ surface: 'web', workspace: null }]),

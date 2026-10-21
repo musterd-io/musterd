@@ -1,7 +1,7 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { LIVE_PAGE_WORKSPACE } from './client';
 
-/** One member who has /live open, as the "who is here" row draws them (ADR 691). */
+/** One member who has /live open, as the "who is here" row draws them (ADR 692). */
 export interface HereEntry {
   name: string;
   kind: 'human' | 'agent';

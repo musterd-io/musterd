@@ -27,7 +27,7 @@ export interface LiveStreamHooks {
   /** Fired once the backfill succeeds — lets the route re-arm its one-shot recovery guard. */
   onConnected?: () => void;
   /**
-   * Re-read the roster this often while the tab is visible (ADR 691). A presence frame only fires
+   * Re-read the roster this often while the tab is visible (ADR 692). A presence frame only fires
    * when a member's LAST row goes, so a /live tab closed beside a still-open CLI session sends
    * nothing; the poll is what takes them out of the "who is here" row. Unset: no poll.
    */

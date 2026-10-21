@@ -758,10 +758,10 @@ describe('lane verdict authority (01M5DTPMXN)', () => {
 });
 
 /**
- * ADR 691: the "who is here" row reads the `/live` label off the roster, so only the /live page may
+ * ADR 692: the "who is here" row reads the `/live` label off the roster, so only the /live page may
  * send it. /broadcast and /board build their LiveConfig without `page` and must claim without it.
  */
-describe('LiveClient claim label (ADR 691)', () => {
+describe('LiveClient claim label (ADR 692)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   async function claimFrom(

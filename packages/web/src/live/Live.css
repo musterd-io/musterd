@@ -9102,7 +9102,7 @@ a.lc-xp__hit:focus-visible {
   color: var(--lc-accent-ink);
 }
 
-/* ─── who is here (ADR 691) ───────────────────────────────────────────────────────────────────────
+/* ─── who is here (ADR 692) ───────────────────────────────────────────────────────────────────────
    The members with /live open, as the faces they wear on the floor, at the head of the topbar's
    tools. A stack that fans open on hover or focus; a card per face; one authored moment, an arrival
    (a ring in the member's own colour, once). No pulse: being here is a steady state. */
