@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SERVICE_SEAT_FILE, serviceSeatAuth } from './service.js';
+import { pickServiceTeam, SERVICE_SEAT_FILE, serviceSeatAuth } from './service.js';
 
 // 2026-10-19: the operator joined revive-staging, `config.current` / `config.server` moved with
 // them, and every service tick sent its revive token to the staging cloud ("invalid service token
@@ -63,5 +63,34 @@ describe('serviceSeatAuth — the token’s own team and daemon win over the mac
   it('a malformed seat.json is ignored, never a throw', () => {
     writeFileSync(join(dir, 'autorefresh', SERVICE_SEAT_FILE), '{nope');
     expect(serviceSeatAuth()!.team).toBe('revive-staging');
+  });
+});
+
+// 2026-10-20: `service install --live` minted on config.current (revive-staging) at config.server,
+// so the local daemon refused the token. The mint now goes to a team the installed daemon serves.
+describe('pickServiceTeam — the installed daemon decides the team, not the machine default', () => {
+  const key = { name: 'nick', key: 'k', surface: 'cli' };
+  const config = { current: 'revive-staging', identities: { 'revive-staging': key, revive: key } };
+  const saved = process.env['MUSTERD_SERVICE_TEAM'];
+  afterEach(() => {
+    if (saved === undefined) delete process.env['MUSTERD_SERVICE_TEAM'];
+    else process.env['MUSTERD_SERVICE_TEAM'] = saved;
+  });
+
+  it('skips a current team the daemon does not serve', async () => {
+    delete process.env['MUSTERD_SERVICE_TEAM'];
+    const serves = async (_s: string, t: string) => t === 'revive';
+    expect(await pickServiceTeam(config, 'http://localhost:4849', serves)).toBe('revive');
+  });
+
+  it('keeps the current team when the daemon serves it', async () => {
+    delete process.env['MUSTERD_SERVICE_TEAM'];
+    expect(await pickServiceTeam(config, 'x', async () => true)).toBe('revive-staging');
+  });
+
+  it('an explicit env team wins; none served is null', async () => {
+    process.env['MUSTERD_SERVICE_TEAM'] = 'revive';
+    expect(await pickServiceTeam(config, 'x', async () => true)).toBe('revive');
+    expect(await pickServiceTeam(config, 'x', async () => false)).toBeNull();
   });
 });

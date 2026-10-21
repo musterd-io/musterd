@@ -1911,17 +1911,21 @@ async function provisionServiceSeat(
   meta: (s: string) => void,
 ): Promise<void> {
   const config = loadConfig();
-  const team = config.current;
+  // The token is for the INSTALLED daemon, not the operator's machine default: `config.current` /
+  // `config.server` follow whichever team they joined last (2026-10-20: a join to revive-staging
+  // minted the /live token on the staging cloud, and the local daemon refused it).
+  const server = daemonServer(resolveCtx([]));
+  const team = await pickServiceTeam(config, server);
   const identity = team ? config.identities[team] : undefined;
   if (!team || !identity) {
     meta(
-      `  seat:    no current team identity — skipped the ${svc.name} service seat token (ADR 232); ` +
-        `join your team, then rerun \`${svc.rerun}\``,
+      `  seat:    no identity on a team the daemon at ${server} serves — skipped the ${svc.name} ` +
+        `service seat token (ADR 232); join your team, then rerun \`${svc.rerun}\``,
     );
     return;
   }
   try {
-    const http = new HttpClient({ server: config.server, key: identity.key, surface: 'cli' });
+    const http = new HttpClient({ server, key: identity.key, surface: 'cli' });
     const req = { name: svc.name, kind: 'service', role: 'platform' } as const;
     let res: { token?: string };
     try {
@@ -1946,11 +1950,10 @@ async function provisionServiceSeat(
     // re-derives them from `config.current` / `config.server` — the operator's machine default,
     // which moves whenever they join another team (2026-10-19: a join to revive-staging sent every
     // service touch to the staging cloud as an "invalid service token").
-    writeFileSync(
-      join(dirname(p), SERVICE_SEAT_FILE),
-      JSON.stringify({ team, server: config.server }) + '\n',
-      { encoding: 'utf8', mode: 0o600 },
-    );
+    writeFileSync(join(dirname(p), SERVICE_SEAT_FILE), JSON.stringify({ team, server }) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     ok(`minted the ${svc.name} service seat token → ${theme.accent(p)} (0600)`);
   } catch (err) {
     meta(
@@ -1958,6 +1961,36 @@ async function provisionServiceSeat(
         `${svc.consequence}. For a file-backed roster, write seats/${svc.name}.toml ` +
         `(kind = "service", roles = ["platform"]) and rerun install.`,
     );
+  }
+}
+
+/**
+ * The team a service seat is minted on: the first of `MUSTERD_SERVICE_TEAM`, `config.current`, then
+ * every other team this machine holds an identity for, that the daemon at `server` actually serves.
+ * Null when it serves none of them. `serves` is injectable for tests.
+ */
+export async function pickServiceTeam(
+  config: Pick<ReturnType<typeof loadConfig>, 'current' | 'identities'>,
+  server: string,
+  serves: (server: string, team: string) => Promise<boolean> = daemonServesTeam,
+): Promise<string | null> {
+  const order = [
+    process.env['MUSTERD_SERVICE_TEAM'],
+    config.current,
+    ...Object.keys(config.identities),
+  ].filter((t, i, a): t is string => !!t && a.indexOf(t) === i && !!config.identities[t]);
+  for (const t of order) if (await serves(server, t)) return t;
+  return null;
+}
+
+async function daemonServesTeam(server: string, team: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${server}/teams/${encodeURIComponent(team)}/members`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
