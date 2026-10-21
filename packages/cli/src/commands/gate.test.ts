@@ -11,7 +11,6 @@ import { markSessionStart, sessionStartedAt } from '../workingTree.js';
 import {
   attest,
   haltDenyReason,
-  harnessFromEnv,
   parseEnvelopeSessionId,
   parseToolCall,
   repoRelativePath,
@@ -19,6 +18,7 @@ import {
   spawnAttestation,
   workingTreeWarning,
 } from './gate.js';
+import { harnessFromEnv } from './helpers.js';
 import { recordSubagent } from './subagentLedger.js';
 
 /**
@@ -565,6 +565,10 @@ describe('harnessFromEnv (ADR 442)', () => {
 
   it('returns cursor when CURSOR_AGENT is set', () => {
     expect(harnessFromEnv({ CURSOR_AGENT: '1' })).toBe('cursor');
+  });
+
+  it('returns codex when CODEX_THREAD_ID is set — what codex exports into its shell commands', () => {
+    expect(harnessFromEnv({ CODEX_THREAD_ID: '019a' })).toBe('codex');
   });
 
   it('returns undefined when neither is set', () => {

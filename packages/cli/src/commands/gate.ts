@@ -13,7 +13,6 @@ import {
   isWriteShaped,
   matchEnforcement,
   SUBAGENT_CHANNEL_TOOLS,
-  type Surface,
   textFingerprint,
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
@@ -31,7 +30,7 @@ import {
   sessionStartedAt,
   stalePathWarning,
 } from '../workingTree.js';
-import { resolveRead } from './helpers.js';
+import { harnessFromEnv, resolveRead } from './helpers.js';
 import { isOwnSubagent, recordSubagent, spawnedAgentId } from './subagentLedger.js';
 
 /**
@@ -247,13 +246,6 @@ function stateDir(): string {
 const SESSION_REACH_DENY =
   'musterd seats may not reach other sessions (ADR 442). Directed acts reach teammates through ' +
   'team_send; a human is reached through their musterd surfaces, never a harness session.';
-
-/** Which harness this hook process is, from env vars the harness evals have actually observed. */
-export function harnessFromEnv(env: NodeJS.ProcessEnv = process.env): Surface | undefined {
-  if (env['CLAUDECODE']) return 'claude-code';
-  if (env['CURSOR_AGENT']) return 'cursor';
-  return undefined;
-}
 
 /**
  * The wall (ADR 442). Returns the deny reason, or null to allow. A seat Workspace refuses every
