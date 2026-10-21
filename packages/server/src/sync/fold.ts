@@ -933,10 +933,7 @@ async function projectResidencyLedger(
   ) {
     return {};
   }
-  if (e.action === 'residency.host_seen') {
-    await projectHostHeartbeat(db, teamId, e);
-    return {};
-  }
+  if (e.action === 'residency.host_seen') return {};
   if (e.action === 'residency.session_captured') {
     const seat = await getMemberByName(db, teamId, e.target ?? '');
     const harness = typeof e.detail?.['harness'] === 'string' ? e.detail['harness'] : '';
@@ -1044,6 +1041,7 @@ async function projectProvisionLedger(
     detail: Record<string, unknown> | null;
   },
   hubSeq: number,
+  originNode: string,
 ): Promise<{ stop?: FoldStop }> {
   if (!e.action.startsWith('host.provision_')) return {};
   const id = e.target ?? '';
@@ -1086,6 +1084,7 @@ async function projectProvisionLedger(
   }
   if (d['actor_kind'] !== 'host' || !e.actor) return {};
   const label = e.actor;
+  if (!(await hostBoundTo(db, teamId, label, originNode))) return {};
   if (e.action === 'host.provision_claimed') {
     await db.run(
       `UPDATE host_provisions SET state = 'claimed', claimed_by = ?, claimed_at = ?
@@ -1117,16 +1116,49 @@ async function projectProvisionLedger(
 async function projectHostHeartbeat(
   db: Driver,
   teamId: string,
-  e: { target: string | null; ts: number; detail: Record<string, unknown> | null },
+  e: {
+    target: string | null;
+    actor: string | null;
+    ts: number;
+    detail: Record<string, unknown> | null;
+  },
+  originNode: string,
+  now: number,
 ): Promise<void> {
   const host = e.target ?? '';
-  if (!host) return;
+  if (!host || e.actor !== host || e.detail?.['actor_kind'] !== 'host') return;
   const team = await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]);
   if (!team || (await joinerEnrollment(db, teamId, team.slug)) !== null) return;
-  if (!(await isLiveHostLabel(db, teamId, host))) return;
-  const sponsorName = typeof e.detail?.['sponsor'] === 'string' ? e.detail['sponsor'] : '';
-  const sponsor = sponsorName ? await getMemberByName(db, teamId, sponsorName) : undefined;
-  await recordHostSeen(db, teamId, host, e.ts, sponsor?.id ?? null);
+  if (!(await hostBoundTo(db, teamId, host, originNode))) return;
+  // The sponsor is the live host key's creator on THIS daemon's rows, never the row's say-so.
+  const key = await db.get<{ created_by: string | null }>(
+    `SELECT created_by FROM agent_bootstrap_credentials
+      WHERE team_id = ? AND use_kind = 'host' AND target = ? AND state = 'active'
+        AND replicated_from IS NULL ORDER BY created_at DESC LIMIT 1`,
+    [teamId, host],
+  );
+  const sponsor = key?.created_by ? await getMemberByName(db, teamId, key.created_by) : undefined;
+  // A heartbeat is "seen now", never a time the pusher chose.
+  await recordHostSeen(db, teamId, host, Math.min(e.ts, now), sponsor?.id ?? null);
+}
+
+/**
+ * ADR 689 decision 5 at fold time: is `host` a label this hub minted a live key for, bound to
+ * `originNode`? Ingest bound it; the fold re-checks rather than trusting the row's tag, so a row
+ * that reached the log some other way moves nothing.
+ */
+async function hostBoundTo(
+  db: Driver,
+  teamId: string,
+  host: string,
+  originNode: string,
+): Promise<boolean> {
+  if (!(await isLiveHostLabel(db, teamId, host))) return false;
+  const bound = await db.get<{ node: string | null }>(
+    'SELECT node FROM host_liveness WHERE team_id = ? AND host = ?',
+    [teamId, host],
+  );
+  return bound?.node === originNode;
 }
 
 /**
@@ -1415,7 +1447,15 @@ export async function foldBatch(
         }
         await projectCredentialLedger(t, teamId, e, event.origin_node, local);
         await answerCredentialRequest(t, teamId, e, event.origin_node, local);
-        const provisioned = await projectProvisionLedger(t, teamId, e, event.hub_seq);
+        if (e.action === 'residency.host_seen' && !(local !== null && event.origin_node === local))
+          await projectHostHeartbeat(t, teamId, e, event.origin_node, now);
+        const provisioned = await projectProvisionLedger(
+          t,
+          teamId,
+          e,
+          event.hub_seq,
+          event.origin_node,
+        );
         if (provisioned.stop) {
           stop = provisioned.stop;
           return await finish();

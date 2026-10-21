@@ -30,6 +30,7 @@ withDrivers('credentials', (_o, kind) => {
   let joinerBase: string;
   let nickOnHub: string;
   let nickOnJoiner: string;
+  let joinerAgentKey: string;
   let dir: string;
   let joinerCtx: Ctx;
 
@@ -79,9 +80,11 @@ withDrivers('credentials', (_o, kind) => {
     nickOnHub = (
       await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
     ).json.human_credential;
-    nickOnJoiner = (
+    const joinerCreated = (
       await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
-    ).json.human_credential;
+    ).json;
+    nickOnJoiner = joinerCreated.human_credential;
+    joinerAgentKey = joinerCreated.agent_key;
     await addMember(hub.store, await hubTeam(), { name: 'ada', kind: 'agent' });
     await addMember(joiner.store, await joinerTeam(), { name: 'ada', kind: 'agent' });
 
@@ -751,6 +754,33 @@ withDrivers('credentials', (_o, kind) => {
         [provisionId, ht.id],
       );
       expect(hubRow).toEqual({ state: 'ready', claimed_by: 'cloud-bea' });
+    });
+
+    it('16. a legacy team key polling at the joiner stages no heartbeat — only a scoped host credential speaks for a label', async () => {
+      const ht = await hubTeam();
+      expect(
+        (
+          await post(
+            joinerBase,
+            '/teams/bravo/residency/wake-leases',
+            { host: 'legacy-host' },
+            joinerAgentKey,
+          )
+        ).status,
+      ).toBe(200);
+      await roundTrip();
+      expect(
+        await hub.store.get(
+          "SELECT id FROM audit WHERE team_id = ? AND action = 'residency.host_seen' AND target = 'legacy-host'",
+          [ht.id],
+        ),
+      ).toBeUndefined();
+      expect(
+        await hub.store.get('SELECT host FROM host_liveness WHERE team_id = ? AND host = ?', [
+          ht.id,
+          'legacy-host',
+        ]),
+      ).toBeUndefined();
     });
   });
 

@@ -2160,6 +2160,9 @@ async function stageHostHeartbeat(
   scope: HostScope,
   now: number,
 ): Promise<void> {
+  // Only a scoped host credential speaks for a label: the legacy team key resolves to the
+  // team-wide scope (no creator) and may poll any label, so it stages nothing.
+  if (scope.creatorId === null) return;
   if ((await joinerEnrollment(ctx.db, team.id, team.slug)) === null) return;
   const last = await ctx.db.get<{ ts: number }>(
     `SELECT ts FROM audit WHERE team_id = ? AND action = 'residency.host_seen' AND target = ?
@@ -5784,7 +5787,8 @@ export async function handleHttp(
         await stageHostHeartbeat(ctx, team, body.host, scope, now);
         // ADR 689 d7: a claim is a privileged verb at a joiner. d3/d5: its rows name the host.
         await assertHubFresh(ctx, team);
-        const asHost = (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
+        const asHost =
+          scope.creatorId !== null && (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
         const agentHost = (await getPolicy(ctx.db, team.id)).agent_host;
         const claimed = await claimProvisions(
           ctx.db,
@@ -5877,7 +5881,8 @@ export async function handleHttp(
           throw new MusterdError('not_found', `no provision "${id}" for this host`);
         const { row, refused } = await reportProvision(ctx.db, team.id, id, claimant, body);
         const sponsor = await getMemberById(ctx.db, row.sponsor_id);
-        const reportAsHost = (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
+        const reportAsHost =
+          scope.creatorId !== null && (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
         await appendAudit(ctx.db, team.id, {
           actor: reportAsHost ? claimant : null,
           action: row.state === 'ready' ? 'host.provision_ready' : 'host.provision_failed',
