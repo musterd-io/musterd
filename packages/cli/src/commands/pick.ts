@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { platform as osPlatform } from 'node:os';
 import { pickerRows, type Pick, type PickerView } from '@musterd/protocol';
-import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { runScreen, type PickerIO } from '../launcher/picker/tty.js';
 import { writePendingPick } from '../pick/marker.js';
@@ -48,7 +48,19 @@ export const pickSeams: {
  * rows as a table, and `--open` sends the human to the /live lane picker for this seat instead.
  */
 /** The flags `musterd pick` takes; `pnpm cli-flags:check` proves the list covers every read. */
-export const PICK_FLAGS = ['for-human', 'open'] as const;
+/**
+ * The flags `musterd pick` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const PICK_FLAGS = ['blocked', 'claimable', 'for-human', 'http', 'open'] as const;
 
 export async function pickCommand(parsed: Parsed): Promise<number> {
   rejectUnknownFlags(

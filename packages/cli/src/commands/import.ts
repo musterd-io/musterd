@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, relative, resolve as resolvePath } from 'node:path';
 import { resolveProject } from '@musterd/protocol/project';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { checkAgainstBoard } from '../import/check.js';
@@ -40,7 +40,59 @@ const USAGE =
   '                                         anonymous on a public site); run it again to re-sync';
 
 /** `musterd import` (spec 2026-10-10 "bring work in"): two steps — preview+stage, then save. */
+/**
+ * The flags `musterd import` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd import` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const IMPORT_FLAGS = [
+  'abandon',
+  'adopt',
+  'auth',
+  'authorization',
+  'base64',
+  'gh',
+  'git',
+  'hex',
+  'kind',
+  'limit',
+  'link',
+  'origin',
+  'project',
+  'remote',
+  'rename',
+  'sha256',
+  'token',
+] as const;
+
 export async function importCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...IMPORT_FLAGS],
+    'the flags `musterd import` takes are listed by `musterd help import`',
+  );
   const [first, second] = parsed.positionals;
   if (!first) throw new CliError(USAGE, 2);
   const ws = findWorkspaceDir();

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Parsed } from '../args.js';
+import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { CliError } from '../errors.js';
 import {
   BUILTIN_TOOLKITS,
@@ -26,7 +27,57 @@ import { success, sym } from '../render/ui.js';
  * assert a role. That is why nothing here reads the roster, and why being inside a roster home
  * changes nothing about what `create` writes.
  */
+/**
+ * The flags `musterd toolkit` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd toolkit` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const TOOLKIT_FLAGS = [
+  '--show-toplevel',
+  'allow',
+  'ask',
+  'built-in',
+  'evals',
+  'flags',
+  'from',
+  'git',
+  'ignore',
+  'none',
+  'profile',
+  'remove',
+  'rev-parse',
+  'user',
+  'utf8',
+] as const;
+
 export function toolkitCommand(parsed: Parsed): number {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...TOOLKIT_FLAGS],
+    'the flags `musterd toolkit` takes are listed by `musterd help toolkit`',
+  );
   const sub = parsed.positionals[0];
   if (sub === 'list') return toolkitList(parsed);
   if (sub === 'show') return toolkitShow(parsed);

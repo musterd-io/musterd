@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import { createInterface } from 'node:readline';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { configPath, loadConfig, saveConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { infraTouchWarning } from '../infra-gate.js';
@@ -15,6 +15,32 @@ import { hint, success, sym } from '../render/ui.js';
  * starts empty. Pure filesystem + config — it never imports the server (ADR 002) or opens the db;
  * it talks to a running daemon only through the read-only `/health` probe to refuse while live.
  */
+/**
+ * The flags `musterd reset` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd reset` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const RESET_FLAGS = ['no-backup', 'yes'] as const;
+
 export async function resetCommand(
   parsed: Parsed,
   deps: {
@@ -22,6 +48,14 @@ export async function resetCommand(
     infraGate?: (verb: string) => Promise<string | null>;
   } = {},
 ): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...RESET_FLAGS],
+    'the flags `musterd reset` takes are listed by `musterd help reset`',
+  );
   // The warn-only infra-touch gate (ADR 227 inc 2): wiping the shared db is the most infra a verb
   // gets. One added line for a non-`platform` agent seat, then proceed — the confirm prompt below
   // remains the actual brake.

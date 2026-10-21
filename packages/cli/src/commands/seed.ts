@@ -6,7 +6,7 @@ import {
   type CaptureRepoSeed,
   type Seed,
 } from '@musterd/protocol';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
@@ -24,7 +24,41 @@ const USAGE =
   '  musterd seed capture --ref <path#anchor> [--lane <lane-id>] "<text>"\n' +
   '  musterd seed capture --batch <file|->      (JSON lines of {ref, body, lane_id?})';
 
+/**
+ * The flags `musterd seed` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd seed` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const SEED_FLAGS = ['batch', 'detail', 'file', 'lane', 'ref', 'title'] as const;
+
 export async function seedCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...SEED_FLAGS],
+    'the flags `musterd seed` takes are listed by `musterd help seed`',
+  );
   const sub = parsed.positionals[0];
   const id = parsed.positionals[1];
   const { team, http } = resolve(parsed.flags);

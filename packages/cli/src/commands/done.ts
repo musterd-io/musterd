@@ -1,5 +1,5 @@
 import type { Lane } from '@musterd/protocol';
-import { GLOBAL_FLAGS, flagStr, rejectUnknownFlags, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
@@ -38,7 +38,61 @@ function laneLine(l: Lane): string {
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
-export const DONE_FLAGS = ['authorized-by', 'follows-up', 'pr', 'sha'] as const;
+/**
+ * The flags `musterd done` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd done` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const DONE_FLAGS = [
+  'abandon-reason',
+  'area',
+  'authorized-by',
+  'blocked',
+  'branch',
+  'claimed',
+  'clear-merged',
+  'depends',
+  'detail',
+  'evidence',
+  'follows-up',
+  'goal',
+  'measured',
+  'n',
+  'note',
+  'pr',
+  'project',
+  'read-note',
+  'read-verdict',
+  'reads-on',
+  'reason',
+  'sha',
+  'source-ref',
+  'stakes',
+  'state',
+  'surface',
+  'title',
+  'to',
+  'until',
+] as const;
 
 export async function doneCommand(parsed: Parsed): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it

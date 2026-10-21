@@ -13,7 +13,7 @@ import {
   makeEnvelope,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { flagStr, type Parsed } from '../args.js';
+import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { readBindingAt } from '../config.js';
 import { CliError } from '../errors.js';
 import { TIMELINE_WINDOW } from '../render/huddles.js';
@@ -330,7 +330,61 @@ function wrapTurn(body: string): string[] {
     .map((line) => `    ${line.trimEnd()}`);
 }
 
+/**
+ * The flags `musterd huddle` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd huddle` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const HUDDLE_FLAGS = [
+  'act',
+  'all',
+  'anchor',
+  'anchor-ref',
+  'closed',
+  'harness',
+  'http',
+  'huddle-',
+  'huddles',
+  'kind',
+  'message',
+  'open',
+  'print',
+  'room',
+  'seat',
+  'to',
+  'topic',
+  'turns',
+  'until',
+] as const;
+
 export async function huddleCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...HUDDLE_FLAGS],
+    'the flags `musterd huddle` takes are listed by `musterd help huddle`',
+  );
   const sub = parsed.positionals[0];
   if (
     sub !== 'open' &&

@@ -5,6 +5,7 @@ import {
   type Hold,
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
+import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { findBinding } from '../config.js';
 import { huddleMarks, TIMELINE_WINDOW } from '../render/huddles.js';
 import {
@@ -20,7 +21,41 @@ import { findWorkspaceDir, pendingActionSummary, resolveRead } from './helpers.j
 import { renderHolds } from './hold.js';
 import { renderMemoryLine } from './memory.js';
 
+/**
+ * The flags `musterd status` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+/**
+ * The flags `musterd status` takes (lane
+ * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
+ * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
+ * message. A command knows its own flags, so it refuses the ones it does not, before anything
+ * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
+ * the command's own — and the flags the helpers it calls read, because a helper's read is this
+ * command's vocabulary too.
+ *
+ * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
+ * without being declared fails the build instead of working in the field.
+ */
+export const STATUS_FLAGS = ['resumable', 'session', 'wakeable'] as const;
+
 export async function statusCommand(parsed: Parsed): Promise<number> {
+  // A flag this command does not know would take the NEXT argument as its value and drop it
+  // — a lost lane id, a lost target, a lost body. Refuse it before anything is composed
+  // (lane `01M5D907S74XVT5YECNWB5VW5A`).
+  rejectUnknownFlags(
+    parsed.flags,
+    [...GLOBAL_FLAGS, ...STATUS_FLAGS],
+    'the flags `musterd status` takes are listed by `musterd help status`',
+  );
   // `status` is a read: it shows the (auth-free) roster anywhere, even from an unbound folder with
   // no active identity (ADR 036). The per-member comeback summary needs a genuine actor, so it only
   // runs when someone is explicitly active here.
