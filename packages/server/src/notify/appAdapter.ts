@@ -1,12 +1,16 @@
 import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto';
 import {
+  acceptanceAskContract,
   APP_CHANNEL,
+  APP_LISTED_ACT_HOURLY_MAX,
+  APP_LISTED_ACT_OPEN_MAX,
   APP_PUSH_INLINE_MAX_BYTES,
   appAnswerSigningBytes,
   AppAnswerSchema,
   askContract,
   AskTierSchema,
   classifyAskAction,
+  isAwaitingAcceptance,
   makeEnvelope,
   sealedPushBytes,
   type AppApproval,
@@ -27,15 +31,16 @@ import {
   issueAskChannelToken,
   redeemAskChannelToken,
 } from '../store/askChannelTokens.js';
-import { appendAudit } from '../store/audit.js';
+import { appendAudit, listAuditByAction } from '../store/audit.js';
 import { buildDescriptor, getDeviceKey, requireAuthority } from '../store/authority.js';
 import { listBindings, type ChannelBinding } from '../store/channelBindings.js';
 import { deliverAllowed, getChannelSettings } from '../store/channelSettings.js';
+import { getLane } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { humanPresent } from '../store/reachability.js';
 import { isAdvisoryReviewMeta } from '../store/review.js';
-import { resolveCapabilities, type TeamRow } from '../store/rows.js';
+import { resolveCapabilities, type MemberRow, type TeamRow } from '../store/rows.js';
 import { loadAppChannelKeys, openFromPhone, sealToPhone } from './appSeal.js';
 import { relayChecks, relayLinkFor, type RelayLink } from './relay.js';
 
@@ -62,7 +67,10 @@ import { relayChecks, relayLinkFor, type RelayLink } from './relay.js';
  * signature over the one it chose, and is performed as that human's own `accept`/`decline` through
  * `routeEnvelope`, where `requireAuthority` verifies it like any passkey verdict. One verifier, one
  * door. Other privileged asks stay off the phone until the act they answer has a gate of its own.
- * The fatigue ceiling (ADR 676 §8) is the next increment.
+ * The fatigue ceiling (ADR 676 §8) meters verdict asks per human: one live on the phone at a time,
+ * at most six first-delivered from agent seats in a rolling hour (one `held` summary past that).
+ * Both are read from the token table, so nothing new is stored; the queue moves on a new ask, an
+ * answer, and the phone's re-delivery on open.
  */
 
 /** `<Apple team id>.<bundle id>` — what App Attest's RP id hash must be. */
@@ -269,7 +277,9 @@ async function issueAskDelivery(
   ask: AskRow,
   target: { binding: ChannelBinding; keys: AppKeys },
   expiresAt: number,
+  opts: { now?: number; waiting?: number } = {},
 ): Promise<SealInput> {
+  const now = opts.now ?? Date.now();
   const meta = parseMeta(ask.meta);
   const tier = AskTierSchema.safeParse(meta?.['tier']);
   const kind = appAskKind(meta);
@@ -287,7 +297,7 @@ async function issueAskDelivery(
     bindingGeneration: target.binding.generation,
     requiredAssurance: privileged ? 'A2' : 'A1',
     expiresAt,
-    now: Date.now(),
+    now,
   });
   const approval =
     kind.class === 'privileged' && human
@@ -313,7 +323,7 @@ async function issueAskDelivery(
         ts: ask.ts,
       },
       ...(approval ? { approval } : {}),
-      ...(kind.class === 'privileged' ? { lane: kind.lane } : {}),
+      ...(kind.class === 'privileged' ? { lane: kind.lane, waiting: opts.waiting ?? 0 } : {}),
       token,
       nonce: appDeliveryNonce(token),
       expires_at: expiresAt,
@@ -329,30 +339,31 @@ async function deliverOne(
   ask: AskRow,
   target: { binding: ChannelBinding; keys: AppKeys },
   expiresAt: number,
+  opts: { now?: number; waiting?: number } = {},
 ): Promise<boolean> {
-  const input = await issueAskDelivery(ctx, team, ask, target, expiresAt);
+  const input = await issueAskDelivery(ctx, team, ask, target, expiresAt, opts);
   return sendSealed(ctx, team, link, { ...input, dedupeId: `${ask.id}:app:${target.binding.id}` });
 }
 
 /**
  * Deliver one routed ask to each addressed human's app binding. Detached by the caller, like the
- * Slack adapter: a missing relay or a failed hand-off is logged and the ask is untouched.
+ * Slack adapter: a missing relay or a failed hand-off is logged and the ask is untouched. An
+ * advisory ask goes out at once; a verdict ask joins that human's queue (ADR 676 §8).
  */
 export async function deliverAskToAppChannels(
   ctx: Ctx,
   team: TeamRow,
   env: Envelope,
+  now: number = Date.now(),
 ): Promise<void> {
   try {
     if (env.act !== 'ask') return;
-    if (!appAskKind((env.meta as Record<string, unknown> | undefined) ?? null)) return;
+    const kind = appAskKind((env.meta as Record<string, unknown> | undefined) ?? null);
+    if (!kind) return;
     const link = relayLinkFor(ctx, team.slug);
     if (!link) return;
     const ask = await loadAsk(ctx.db, team.id, env.id);
     if (!ask) return;
-    const tierParsed = AskTierSchema.safeParse((env.meta as { tier?: unknown } | undefined)?.tier);
-    const askTier = tierParsed.success ? tierParsed.data : 'standard';
-    const expiresAt = env.ts + askContract(askTier).timeout_ms;
     const members = await listMembers(ctx.db, team.id);
     const humans = members.filter((m) => m.kind === 'human');
     const addressed =
@@ -360,17 +371,13 @@ export async function deliverAskToAppChannels(
         ? humans.filter((m) => m.name === (env.to as { name: string }).name)
         : humans.filter((m) => resolveCapabilities(m).is_admin);
     for (const human of addressed) {
-      const settings = await getChannelSettings(ctx.db, team.id, human.id, APP_CHANNEL);
-      if (!deliverAllowed(settings, askTier)) continue;
-      if (
-        settings.presenceGating &&
-        (await humanPresent(ctx.db, team.id, human, ctx.config.presenceTimeoutMs))
-      ) {
+      if (kind.class === 'privileged') {
+        await tickVerdictQueue(ctx, team, human, now, ask.id);
         continue;
       }
-      const target = await activeAppBinding(ctx.db, team.id, human.id);
+      const target = await appTargetFor(ctx, team, human, askTierOf(ask));
       if (!target) continue;
-      const sent = await deliverOne(ctx, team, link, ask, target, expiresAt);
+      const sent = await deliverOne(ctx, team, link, ask, target, askExpiry(ask), { now });
       log.info({
         msg: sent ? 'away_app_deliver_queued' : 'away_app_delivery_failed',
         team: team.slug,
@@ -381,6 +388,253 @@ export async function deliverAskToAppChannels(
   } catch (err) {
     log.warn({ msg: 'away_app_delivery_failed', team: team.slug, ask: env.id, err: String(err) });
   }
+}
+
+function askTierOf(ask: AskRow) {
+  const tier = AskTierSchema.safeParse(parseMeta(ask.meta)?.['tier']);
+  return tier.success ? tier.data : 'standard';
+}
+
+/**
+ * When an ask's token dies: its tier's contract from when it was raised — and for a verdict ask the
+ * review window the daemon promised (ADR 506), not the bare tier, or a queued verdict would expire
+ * before its turn came.
+ */
+function askExpiry(ask: AskRow): number {
+  const meta = parseMeta(ask.meta);
+  if (!laneVerdictOf(meta)) return ask.ts + askContract(askTierOf(ask)).timeout_ms;
+  const wait = (meta?.['lane_review'] as { wait_ms?: unknown } | undefined)?.wait_ms;
+  return (
+    ask.ts +
+    acceptanceAskContract(askTierOf(ask), typeof wait === 'number' ? wait : undefined).timeout_ms
+  );
+}
+
+/** The human's app binding, if the channel's settings and presence gate let this tier through. */
+async function appTargetFor(
+  ctx: Ctx,
+  team: { id: string },
+  human: MemberRow,
+  tier: ReturnType<typeof askTierOf>,
+): Promise<{ binding: ChannelBinding; keys: AppKeys } | null> {
+  const settings = await getChannelSettings(ctx.db, team.id, human.id, APP_CHANNEL);
+  if (!deliverAllowed(settings, tier)) return null;
+  if (
+    settings.presenceGating &&
+    (await humanPresent(ctx.db, team.id, human, ctx.config.presenceTimeoutMs))
+  ) {
+    return null;
+  }
+  return activeAppBinding(ctx.db, team.id, human.id);
+}
+
+const HOUR_MS = 60 * 60_000;
+/** How far back a pending verdict ask is looked for: past any review window a team sets. */
+const PENDING_LOOKBACK_MS = 7 * 24 * HOUR_MS;
+
+/**
+ * The verdict asks this human still owes, oldest first, one per lane (a retried stage-two ask
+ * supersedes the first): addressed to them (or to the admins, when they are one), undecided,
+ * unexpired, and their lane still awaiting acceptance — so a verdict given on /live drops it.
+ */
+async function pendingVerdicts(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: MemberRow,
+  now: number,
+): Promise<AskRow[]> {
+  const rows = await ctx.db.all<AskRow & { to_kind: string; to_member: string | null }>(
+    `SELECT msg.id, msg.body, msg.meta, msg.ts, msg.thread_id, msg.to_kind, msg.to_member,
+            m.name AS from_name, m.kind AS from_kind
+       FROM messages msg JOIN members m ON m.id = msg.from_member AND m.team_id = msg.team_id
+      WHERE msg.team_id = ? AND msg.act = 'ask' AND msg.ts > ?
+        AND json_extract(msg.meta, '$.lane_review.lane') IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = msg.team_id AND d.ask_id = msg.id)
+      ORDER BY msg.ts, msg.id`,
+    [team.id, now - PENDING_LOOKBACK_MS],
+  );
+  const isAdmin = resolveCapabilities(human).is_admin;
+  const byLane = new Map<string, AskRow>();
+  for (const row of rows) {
+    if (row.to_member !== human.id && !(row.to_kind === 'team' && isAdmin)) continue;
+    const lane = laneVerdictOf(parseMeta(row.meta));
+    if (!lane || askExpiry(row) <= now) continue;
+    const state = (await getLane(ctx.db, team.id, lane.id, team.slug))?.state;
+    if (!state || !isAwaitingAcceptance(state)) continue;
+    byLane.delete(lane.id); // the newer ask for a lane takes the older one's place
+    byLane.set(lane.id, row);
+  }
+  return [...byLane.values()].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
+}
+
+async function hourlyHoldRecorded(
+  ctx: Ctx,
+  team: { id: string },
+  bindingId: string,
+  until: number,
+): Promise<boolean> {
+  const rows = await listAuditByAction(ctx.db, team.id, 'channel.fatigue_held', 50);
+  return rows.some((r) => {
+    try {
+      const d = JSON.parse(String(r.detail)) as {
+        reason?: string;
+        until?: number;
+        binding_id?: string;
+      };
+      return d.reason === 'hourly' && d.until === until && d.binding_id === bindingId;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** How many verdict asks wait behind `askId` for this human — what a re-issued delivery says. */
+async function waitingBehind(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: MemberRow | undefined,
+  askId: string,
+  now: number,
+): Promise<number> {
+  if (human?.kind !== 'human') return 0;
+  return (await pendingVerdicts(ctx, team, human, now)).filter((a) => a.id !== askId).length;
+}
+
+/**
+ * The verdict asks live on this binding now. A live token whose lane was decided elsewhere (a
+ * verdict on /live) is spent here, so it stops counting as the one open ask.
+ */
+async function openVerdicts(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  binding: ChannelBinding,
+  now: number,
+): Promise<string[]> {
+  const rows = await ctx.db.all<{ token_hash: string; ask_id: string }>(
+    `SELECT t.token_hash, t.ask_id FROM ask_channel_tokens t
+      WHERE t.team_id = ? AND t.binding_id = ? AND t.binding_generation = ?
+        AND t.action_class = 'privileged' AND t.consumed_at IS NULL AND t.expires_at > ?
+        AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)`,
+    [team.id, binding.id, binding.generation, now],
+  );
+  const open = new Set<string>();
+  for (const row of rows) {
+    const ask = await loadAsk(ctx.db, team.id, row.ask_id);
+    const lane = ask ? laneVerdictOf(parseMeta(ask.meta)) : null;
+    const state = lane ? (await getLane(ctx.db, team.id, lane.id, team.slug))?.state : undefined;
+    if (state && isAwaitingAcceptance(state)) open.add(row.ask_id);
+    else await spend(ctx, row.token_hash, now);
+  }
+  return [...open];
+}
+
+/**
+ * Verdict asks from agent seats first delivered to this binding in the rolling hour, and when the
+ * oldest of them leaves it. A re-issue (re-delivery, fetch) is the same ask, so it is counted once,
+ * at its first token.
+ */
+async function agentDeliveriesThisHour(
+  ctx: Ctx,
+  team: { id: string },
+  binding: ChannelBinding,
+  now: number,
+): Promise<{ count: number; until: number }> {
+  const rows = await ctx.db.all<{ first: number }>(
+    `SELECT MIN(t.created_at) AS first FROM ask_channel_tokens t
+       JOIN messages msg ON msg.id = t.ask_id AND msg.team_id = t.team_id
+       JOIN members m ON m.id = msg.from_member AND m.team_id = msg.team_id
+      WHERE t.team_id = ? AND t.binding_id = ? AND t.action_class = 'privileged' AND m.kind <> 'human'
+      GROUP BY t.ask_id`,
+    [team.id, binding.id],
+  );
+  const inHour = rows.map((r) => Number(r.first)).filter((t) => t > now - HOUR_MS);
+  return { count: inHour.length, until: inHour.length ? Math.min(...inHour) + HOUR_MS : now };
+}
+
+/**
+ * Move one human's verdict queue (ADR 676 §8). With no verdict live on their phone, the oldest
+ * pending one goes out, saying how many wait behind it — unless it is from an agent seat and the
+ * hour's six are spent, when it is held (an ask from a human is not metered by the hourly rule and
+ * may go ahead of held ones). The first hold of a burst sends one `held` summary and audits it.
+ * `arrived` names the ask whose arrival called this; a `one_open` hold is audited only for it, so a
+ * re-tick writes nothing.
+ */
+export async function tickVerdictQueue(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: MemberRow,
+  now: number = Date.now(),
+  arrived?: string,
+): Promise<void> {
+  const link = relayLinkFor(ctx, team.slug);
+  if (!link) return;
+  const pending = await pendingVerdicts(ctx, team, human, now);
+  const target = pending.length
+    ? await appTargetFor(ctx, team, human, askTierOf(pending[0]!))
+    : null;
+  if (!target) return;
+  const open = await openVerdicts(ctx, team, target.binding, now);
+  const waiting = pending.filter((a) => !open.includes(a.id));
+  const auditOneOpen = async (count: number) => {
+    if (!arrived || !waiting.some((a) => a.id === arrived)) return;
+    await appendAudit(ctx.db, team.id, {
+      actor: null,
+      action: 'channel.fatigue_held',
+      target: arrived,
+      result: 'deny',
+      detail: { human: human.name, reason: 'one_open', count, binding_id: target.binding.id },
+    });
+  };
+  if (open.length >= APP_LISTED_ACT_OPEN_MAX) {
+    await auditOneOpen(waiting.length);
+    return;
+  }
+  const hour = await agentDeliveriesThisHour(ctx, team, target.binding, now);
+  const capped = hour.count >= APP_LISTED_ACT_HOURLY_MAX;
+  const next = waiting.find((a) => !capped || a.from_kind === 'human');
+  const held = capped ? waiting.filter((a) => a.from_kind !== 'human') : [];
+  // One summary per burst. A burst is named by when its oldest delivery leaves the hour: the hold
+  // lasts exactly until then, so a recorded hold for this `until` means the summary went out.
+  if (held.length > 0 && !(await hourlyHoldRecorded(ctx, team, target.binding.id, hour.until))) {
+    await appendAudit(ctx.db, team.id, {
+      actor: null,
+      action: 'channel.fatigue_held',
+      target: held[0]!.id,
+      result: 'deny',
+      detail: {
+        human: human.name,
+        reason: 'hourly',
+        count: held.length,
+        until: hour.until,
+        binding_id: target.binding.id,
+      },
+    });
+    await sendSealed(ctx, team, link, {
+      ...target,
+      ref: `held-${target.binding.id}-${now}`,
+      expiresAt: hour.until,
+      dedupeId: `held-${target.binding.id}-${hour.until}`,
+      delivery: {
+        v: 1,
+        kind: 'held',
+        team: team.slug,
+        binding: target.binding.id,
+        count: held.length,
+        until: hour.until,
+      },
+    });
+  }
+  if (!next) return;
+  const sent = await deliverOne(ctx, team, link, next, target, askExpiry(next), {
+    now,
+    waiting: waiting.length - 1,
+  });
+  log.info({
+    msg: sent ? 'away_app_deliver_queued' : 'away_app_delivery_failed',
+    team: team.slug,
+    ask: next.id,
+    reason: sent ? undefined : 'relay_not_connected',
+  });
 }
 
 /** The signed "paired" delivery the phone shows after the human approved its key (ADR 676 §5 step 6). */
@@ -704,6 +958,8 @@ async function answerVerdict(
     });
   }
   if (input.reported) await auditReported(ctx, team, ask.id, ask.from_name, binding.id);
+  // The one open verdict is settled: the next in this human's queue may go out (ADR 676 §8).
+  await tickVerdictQueue(ctx, team, human, now);
   return { ok: true };
 }
 
@@ -721,10 +977,18 @@ async function redeliver(
 ): Promise<{ ok: boolean; reason?: string }> {
   const link = relayLinkFor(ctx, team.slug);
   if (!link) return { ok: false, reason: 'relay_not_connected' };
+  const human = await getMemberById(ctx.db, binding.member_id);
+  // Spends the token of a verdict decided elsewhere, so it is not re-sent as if still owed.
+  await openVerdicts(ctx, team, binding, now);
   for (const live of await liveAppAsks(ctx, team, binding, now)) {
     await spend(ctx, live.tokenHash, now);
-    await deliverOne(ctx, team, link, live.ask, { binding, keys }, live.expiresAt);
+    await deliverOne(ctx, team, link, live.ask, { binding, keys }, live.expiresAt, {
+      now,
+      waiting: await waitingBehind(ctx, team, human, live.ask.id, now),
+    });
   }
+  // The phone opened: if no verdict is live on it (expired, or decided elsewhere), the queue moves.
+  if (human?.kind === 'human') await tickVerdictQueue(ctx, team, human, now);
   return { ok: true };
 }
 
@@ -800,7 +1064,11 @@ export async function handleAppFetch(
   const [live] = await liveAppAsks(ctx, team, binding, now, frame.ask_ref);
   if (!live) return null;
   await spend(ctx, live.tokenHash, now);
-  const input = await issueAskDelivery(ctx, team, live.ask, { binding, keys }, live.expiresAt);
+  const human = await getMemberById(ctx.db, binding.member_id);
+  const input = await issueAskDelivery(ctx, team, live.ask, { binding, keys }, live.expiresAt, {
+    now,
+    waiting: await waitingBehind(ctx, team, human, live.ask.id, now),
+  });
   const sealed = await sealDelivery(team, input);
   await auditSealed(ctx, team, input, sealed, 'fetched');
   return { sealed, expires_at: live.expiresAt };

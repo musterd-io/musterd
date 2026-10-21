@@ -174,6 +174,16 @@ one gets tapped through.
   performed as the human's own act through the route's gate. A refusal leaves the ask open. Other
   privileged asks stay off the phone until their acts are gated (lane 01M5FZ5R2V). The fatigue
   ceiling (decision 8) is the lane's next increment.
+- 2026-10-21, lane 01M5BER5GX (the fatigue ceiling, decision 8): built from the token table, with no
+  new store. "Open" means a live A2 token on the human's binding whose lane still awaits acceptance;
+  a token whose lane was decided on /live is spent when the queue next moves. "First delivered" is
+  an ask's earliest token, so a re-delivery is not counted twice. The queue moves on a new verdict
+  ask, after a verdict answer, and when the app opens. With nothing else happening, a held ask waits
+  for the app to open after the hour; the summary says when (`until`). A verdict ask from a human
+  seat is not metered by the hourly rule. A verdict ask's token now lives for its review window (ADR
+  506), not the bare tier's 15 minutes, or a queued verdict would die before its turn. The /live flag
+  for "I did not expect this" follows as its own change.
+  Follows-up: 01M5BER5GX4WENE2CEST6CA8NB
 
 ## Observability & Evaluation
 

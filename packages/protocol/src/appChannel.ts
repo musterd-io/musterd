@@ -139,6 +139,16 @@ export const AppApprovalSchema = z.object({
 export type AppApproval = z.infer<typeof AppApprovalSchema>;
 
 /**
+ * The fatigue ceiling (ADR 676 §8), per human. At most {@link APP_LISTED_ACT_OPEN_MAX} listed-act
+ * ask is live on the app at a time — the rest wait, and the live one says how many (`waiting`). At
+ * most {@link APP_LISTED_ACT_HOURLY_MAX} listed-act asks from agent seats are first delivered in any
+ * rolling hour; past that they are held and one `held` summary is sent. Nothing locks the human
+ * out: a held ask is still answerable on /live, and the phone gets it once the hour allows.
+ */
+export const APP_LISTED_ACT_OPEN_MAX = 1;
+export const APP_LISTED_ACT_HOURLY_MAX = 6;
+
+/**
  * What the daemon signs and seals to the phone. `nonce` is unique per token (the phone's seen-nonce
  * store drops a replay before display); `token` is the ADR 623 ask token the answer redeems.
  */
@@ -168,9 +178,23 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
      * below the descriptor and labelled as theirs, never in the approval header (ADR 676 §6).
      */
     lane: z.object({ id: z.string(), title: z.string() }).optional(),
+    /** On a listed-act ask: how many more wait behind it for this human (ADR 676 §8). */
+    waiting: z.number().int().nonnegative().optional(),
     token: z.string(),
     nonce: z.string(),
     expires_at: z.number().int(),
+  }),
+  z.object({
+    v: z.literal(1),
+    /**
+     * The hourly ceiling held listed-act asks from agent seats (ADR 676 §8): sent once, when the
+     * first is held. `count` held now; `until` is when the oldest delivery leaves the hour.
+     */
+    kind: z.literal('held'),
+    team: z.string(),
+    binding: z.string(),
+    count: z.number().int().positive(),
+    until: z.number().int(),
   }),
   z.object({
     v: z.literal(1),
