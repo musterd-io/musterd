@@ -83,6 +83,10 @@ know where that version lives: a lane's `branch` is set only when someone types 
 - CooperBench: the second agent in the queue is told at its first post-hold edit that agent1's work is
   on `team/agent1` at a commit, and to merge it first. Whether it does, and whether that wins pairs, is
   the third pilot's question.
+- 2026-10-21 (lane 01M5G5G1CP): implemented. The hand-over's state is daemon-local, in ladder v123's
+  `gate_hold_refusals` (seat, path, holder lane; the path is never in the audit row) and `lane_heads`
+  (the last `git_head` per lane). A hand-over is a `lane.gate` row with `detail.hold = 'handover'`.
+  The lane's branch is written through `updateLane`, so it is audited and replicated like any edit.
 
 ## Observability & Evaluation
 
