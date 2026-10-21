@@ -25,6 +25,8 @@ import { upsertForeignNode } from '../store/nodes.js';
 import { stripPolicyRedactionMarkers } from '../store/policyRedaction.js';
 import {
   applyFoldedEnrollment,
+  isLiveHostLabel,
+  recordHostSeen,
   recordSessionAttestation,
   revokeResidency,
 } from '../store/residency.js';
@@ -926,8 +928,13 @@ async function projectResidencyLedger(
   if (
     e.action !== 'residency.enrolled' &&
     e.action !== 'residency.revoked' &&
-    e.action !== 'residency.session_captured'
+    e.action !== 'residency.session_captured' &&
+    e.action !== 'residency.host_seen'
   ) {
+    return {};
+  }
+  if (e.action === 'residency.host_seen') {
+    await projectHostHeartbeat(db, teamId, e);
     return {};
   }
   if (e.action === 'residency.session_captured') {
@@ -1017,6 +1024,109 @@ async function projectCredentialLedger(
       originNode,
     ],
   );
+}
+
+/**
+ * ADR 689 decision 3: provisions cross. At a joiner, the hub's `pending` (pinned to a label) and
+ * `cancelled` project into `host_provisions`; at the hub, a joiner's `claimed` / `ready` /
+ * `failed` — host-actor rows ingest has already bound to the pushing node — move the hub's own row,
+ * and only where its state and claimant agree. A pending row naming a seat or sponsor this roster
+ * lacks is git lag: stop, don't skip.
+ */
+async function projectProvisionLedger(
+  db: Driver,
+  teamId: string,
+  e: {
+    action: string;
+    target: string | null;
+    actor: string | null;
+    ts: number;
+    detail: Record<string, unknown> | null;
+  },
+  hubSeq: number,
+): Promise<{ stop?: FoldStop }> {
+  if (!e.action.startsWith('host.provision_')) return {};
+  const id = e.target ?? '';
+  if (!id) return {};
+  const d = e.detail ?? {};
+  const team = await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]);
+  if (!team) return {};
+  const joiner = (await joinerEnrollment(db, teamId, team.slug)) !== null;
+  if (joiner) {
+    if (e.action === 'host.provision_pending') {
+      const host = typeof d['host'] === 'string' ? d['host'] : null;
+      if (!host) return {};
+      const agentName = typeof d['agent'] === 'string' ? d['agent'] : '';
+      const sponsorName = typeof d['sponsor'] === 'string' ? d['sponsor'] : '';
+      const agent = await getMemberByName(db, teamId, agentName);
+      if (!agent) return { stop: { kind: 'unresolved_seat', seat: agentName, hub_seq: hubSeq } };
+      const sponsor = await getMemberByName(db, teamId, sponsorName);
+      if (!sponsor)
+        return { stop: { kind: 'unresolved_seat', seat: sponsorName, hub_seq: hubSeq } };
+      await db.run(
+        `INSERT INTO host_provisions (id, team_id, member_id, sponsor_id, host, state, connect_origin, created_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) ON CONFLICT(id) DO NOTHING`,
+        [
+          id,
+          teamId,
+          agent.id,
+          sponsor.id,
+          host,
+          typeof d['connect_origin'] === 'string' ? d['connect_origin'] : null,
+          typeof d['created_at'] === 'number' ? d['created_at'] : e.ts,
+        ],
+      );
+    } else if (e.action === 'host.provision_cancelled') {
+      await db.run(
+        "UPDATE host_provisions SET state = 'cancelled' WHERE id = ? AND team_id = ? AND state = 'pending'",
+        [id, teamId],
+      );
+    }
+    return {};
+  }
+  if (d['actor_kind'] !== 'host' || !e.actor) return {};
+  const label = e.actor;
+  if (e.action === 'host.provision_claimed') {
+    await db.run(
+      `UPDATE host_provisions SET state = 'claimed', claimed_by = ?, claimed_at = ?
+        WHERE id = ? AND team_id = ? AND state = 'pending' AND host = ?`,
+      [label, e.ts, id, teamId, label],
+    );
+  } else if (e.action === 'host.provision_ready') {
+    await db.run(
+      `UPDATE host_provisions SET state = 'ready', ready_at = ?
+        WHERE id = ? AND team_id = ? AND state = 'claimed' AND claimed_by = ?`,
+      [e.ts, id, teamId, label],
+    );
+  } else if (e.action === 'host.provision_failed') {
+    await db.run(
+      `UPDATE host_provisions SET state = 'failed', failed_reason = ?
+        WHERE id = ? AND team_id = ? AND state IN ('pending', 'claimed') AND (claimed_by = ? OR host = ?)`,
+      [typeof d['reason'] === 'string' ? d['reason'] : 'failed', id, teamId, label, label],
+    );
+  }
+  return {};
+}
+
+/**
+ * ADR 689 decision 3: a joiner's host heartbeat lands in the hub's `host_liveness` — the hub
+ * only, for a label this hub minted a live host key for (ingest has already bound the label to
+ * the pushing node). The sponsor is resolved by name here; a heartbeat for a label the hub does
+ * not know is ignored, never a stop.
+ */
+async function projectHostHeartbeat(
+  db: Driver,
+  teamId: string,
+  e: { target: string | null; ts: number; detail: Record<string, unknown> | null },
+): Promise<void> {
+  const host = e.target ?? '';
+  if (!host) return;
+  const team = await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]);
+  if (!team || (await joinerEnrollment(db, teamId, team.slug)) !== null) return;
+  if (!(await isLiveHostLabel(db, teamId, host))) return;
+  const sponsorName = typeof e.detail?.['sponsor'] === 'string' ? e.detail['sponsor'] : '';
+  const sponsor = sponsorName ? await getMemberByName(db, teamId, sponsorName) : undefined;
+  await recordHostSeen(db, teamId, host, e.ts, sponsor?.id ?? null);
 }
 
 /**
@@ -1305,6 +1415,11 @@ export async function foldBatch(
         }
         await projectCredentialLedger(t, teamId, e, event.origin_node, local);
         await answerCredentialRequest(t, teamId, e, event.origin_node, local);
+        const provisioned = await projectProvisionLedger(t, teamId, e, event.hub_seq);
+        if (provisioned.stop) {
+          stop = provisioned.stop;
+          return await finish();
+        }
         await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -128,6 +128,12 @@ at the joiner (minting is a listed high-authority act, ADR 662 d4; the sponsor i
   `credential.accepted` with `requested_from` and inserts nothing, and the projector skips any
   acceptance carrying `requested_from`: a joiner-minted seat credential is a bearer only where it
   was minted, and a record everywhere else. Replicated host keys (decision 1) are unchanged.
+- _(2026-10-21, third landing.)_ Decision 3 needed one thing it did not name: the hub never sees
+  a cloud joiner's host poll, so a pinned mint (`--host <label>`) could not find the label live.
+  The joiner's wake-lease and claim routes now stage `residency.host_seen` — a host-actor ledger
+  row, one per five-minute window — and the hub projects it into its `host_liveness`. The sweep's
+  `cancelled` crosses to the pinned joiner, and a joiner's `claimed` / `ready` / `failed` move the
+  hub's row only where its state and claimant agree.
 
 - Phase 2b can stand a hosted seat up at a laptop hub with no human on the machine, on the
   phase 1 provisioner pointed at `127.0.0.1`. Delta's friction items 1, 3 and 4 disappear at the

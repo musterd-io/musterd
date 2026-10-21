@@ -2144,6 +2144,39 @@ async function assertHubFresh(ctx: Ctx, team: TeamRow): Promise<void> {
     );
 }
 
+/** ADR 689 decision 3: one heartbeat per window, so a busy host's polls stay one row at the hub. */
+const HOST_HEARTBEAT_WINDOW_MS = 5 * 60_000;
+
+/**
+ * ADR 689 decision 3: on an enrolled joiner, a host's poll becomes a replicated `host_seen` row
+ * (actor = the label, `actor_kind: 'host'`) at most once per window, so the hub — which never
+ * sees a cloud joiner's host poll — learns the label is up and a pinned mint can name it.
+ * Nothing on a hub or a single machine: their own `host_liveness` already has the poll.
+ */
+async function stageHostHeartbeat(
+  ctx: Ctx,
+  team: TeamRow,
+  host: string,
+  scope: HostScope,
+  now: number,
+): Promise<void> {
+  if ((await joinerEnrollment(ctx.db, team.id, team.slug)) === null) return;
+  const last = await ctx.db.get<{ ts: number }>(
+    `SELECT ts FROM audit WHERE team_id = ? AND action = 'residency.host_seen' AND target = ?
+      ORDER BY ts DESC LIMIT 1`,
+    [team.id, host],
+  );
+  if (last && now - last.ts < HOST_HEARTBEAT_WINDOW_MS) return;
+  const sponsor = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
+  await appendAudit(ctx.db, team.id, {
+    actor: host,
+    action: 'residency.host_seen',
+    target: host,
+    result: 'allow',
+    detail: { actor_kind: 'host', host, ...(sponsor ? { sponsor: sponsor.name } : {}) },
+  });
+}
+
 /** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
 async function authGovernanceOrSponsorOf(
   ctx: Ctx,
@@ -5674,6 +5707,7 @@ export async function handleHttp(
         // is derived from it.
         const now = Date.now();
         await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        await stageHostHeartbeat(ctx, team, body.host, scope, now);
         // ADR 611 and ADR 641. One read of each cap per poll. A throw inside a reader allows the poll.
         const breach = await readSpendCapBreach(ctx.db, team.id, now);
         const unpriced = await readUnpricedWakeBreach(ctx.db, team.id, now);
@@ -5747,6 +5781,10 @@ export async function handleHttp(
         const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
         const now = Date.now();
         await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        await stageHostHeartbeat(ctx, team, body.host, scope, now);
+        // ADR 689 d7: a claim is a privileged verb at a joiner. d3/d5: its rows name the host.
+        await assertHubFresh(ctx, team);
+        const asHost = (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
         const agentHost = (await getPolicy(ctx.db, team.id)).agent_host;
         const claimed = await claimProvisions(
           ctx.db,
@@ -5761,20 +5799,29 @@ export async function handleHttp(
           const agent = (await getMemberById(ctx.db, row.member_id))!;
           const sponsor = await getMemberById(ctx.db, row.sponsor_id);
           await appendAudit(ctx.db, team.id, {
-            actor: null,
+            actor: asHost ? body.host : null,
             action: 'host.provision_claimed',
             target: row.id,
             result: 'allow',
-            detail: { host: body.host, agent: agent.name },
+            detail: {
+              host: body.host,
+              agent: agent.name,
+              ...(asHost ? { actor_kind: 'host', sponsor: sponsor?.name ?? null } : {}),
+            },
           });
           if (agentHost.policy.budget_usd === undefined) {
             await failProvision(ctx.db, row.id, 'no_budget');
             await appendAudit(ctx.db, team.id, {
-              actor: null,
+              actor: asHost ? body.host : null,
               action: 'host.provision_failed',
               target: row.id,
               result: 'deny',
-              detail: { host: body.host, agent: agent.name, reason: 'no_budget' },
+              detail: {
+                host: body.host,
+                agent: agent.name,
+                reason: 'no_budget',
+                ...(asHost ? { actor_kind: 'host', sponsor: sponsor?.name ?? null } : {}),
+              },
             });
             if (sponsor)
               await tellSponsorOfProvision(
@@ -5830,8 +5877,9 @@ export async function handleHttp(
           throw new MusterdError('not_found', `no provision "${id}" for this host`);
         const { row, refused } = await reportProvision(ctx.db, team.id, id, claimant, body);
         const sponsor = await getMemberById(ctx.db, row.sponsor_id);
+        const reportAsHost = (await joinerEnrollment(ctx.db, team.id, slug)) !== null;
         await appendAudit(ctx.db, team.id, {
-          actor: null,
+          actor: reportAsHost ? claimant : null,
           action: row.state === 'ready' ? 'host.provision_ready' : 'host.provision_failed',
           target: row.id,
           result: row.state === 'ready' ? 'allow' : 'deny',
@@ -5839,6 +5887,7 @@ export async function handleHttp(
             host: claimant,
             agent: agent.name,
             ...(row.failed_reason ? { reason: row.failed_reason } : {}),
+            ...(reportAsHost ? { actor_kind: 'host', sponsor: sponsor?.name ?? null } : {}),
           },
         });
         if (refused)

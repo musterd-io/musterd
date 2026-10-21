@@ -623,4 +623,248 @@ withDrivers('credentials', (_o, kind) => {
       ).toEqual({ state: 'active', replicated_from: null });
     });
   });
+
+  describe('ADR 689 decision 3 — a cloud joiner`s host is live at the hub, so a pinned mint can name it', () => {
+    it('13. a replicated host key`s poll at the joiner reaches the hub as one heartbeat per window, and the hub then pins a mint to that label', async () => {
+      const ht = await hubTeam();
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+
+      // Before any poll reaches the hub, the label is unseen there and a pinned mint is refused.
+      const unseen = await post(
+        hubBase,
+        '/teams/bravo/members/agents',
+        { name: 'cal', host: 'cloud-bea' },
+        nickOnHub,
+      );
+      expect(unseen.status).toBe(409);
+
+      for (let i = 0; i < 3; i += 1) {
+        expect(
+          (
+            await post(
+              joinerBase,
+              '/teams/bravo/residency/wake-leases',
+              { host: 'cloud-bea' },
+              hostKey,
+            )
+          ).status,
+        ).toBe(200);
+      }
+      await roundTrip();
+
+      const seen = await hub.store.get<{ seen_at: number; node: string | null }>(
+        'SELECT seen_at, node FROM host_liveness WHERE team_id = ? AND host = ?',
+        [ht.id, 'cloud-bea'],
+      );
+      expect(seen?.seen_at).toBeGreaterThan(Date.now() - 60_000);
+      expect(seen?.node).not.toBeNull();
+      const heartbeats = await hub.store.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = 'residency.host_seen' AND target = 'cloud-bea'",
+        [ht.id],
+      );
+      expect(Number(heartbeats?.n)).toBe(1);
+
+      const pinned = await post(
+        hubBase,
+        '/teams/bravo/members/agents',
+        { name: 'cal', host: 'cloud-bea' },
+        nickOnHub,
+      );
+      expect(pinned.status).toBe(201);
+      expect(pinned.json).toMatchObject({ hosting: 'sponsor_host', host: 'cloud-bea' });
+    });
+
+    it('14. a pinned provision reaches the joiner; its host claims and reports ready there; the hub`s row follows', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      expect(
+        (
+          await post(
+            hubBase,
+            '/teams/bravo/policy',
+            { agent_host: { policy: { budget_usd: 2 } } },
+            nickOnHub,
+          )
+        ).status,
+      ).toBe(200);
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-bea' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      await roundTrip();
+      await post(joinerBase, '/teams/bravo/residency/wake-leases', { host: 'cloud-bea' }, hostKey);
+      await roundTrip();
+      const minted = await post(
+        hubBase,
+        '/teams/bravo/members/agents',
+        { name: 'cal', host: 'cloud-bea' },
+        nickOnHub,
+      );
+      expect(minted.status).toBe(201);
+      // Roster identity replicates via git (ADR 058): cal exists on the joiner too, sponsored by nick.
+      const nickJoiner = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+      await addMember(joiner.store, jt, { name: 'cal', kind: 'agent', sponsoredBy: nickJoiner.id });
+      await roundTrip();
+
+      const claim = await post(
+        joinerBase,
+        '/teams/bravo/host/provisions',
+        { host: 'cloud-bea' },
+        hostKey,
+      );
+      expect(claim.status).toBe(200);
+      expect(claim.json.provisions).toHaveLength(1);
+      expect(claim.json.provisions[0]).toMatchObject({
+        agent: 'cal',
+        sponsor: 'nick',
+        state: 'claimed',
+        claimed_by: 'cloud-bea',
+      });
+      const provisionId = claim.json.provisions[0].id as string;
+      expect(
+        (await post(joinerBase, '/teams/bravo/host/provisions', { host: 'cloud-bea' }, hostKey))
+          .json.provisions,
+      ).toEqual([]);
+      const report = await post(
+        joinerBase,
+        `/teams/bravo/host/provisions/${provisionId}/report`,
+        { state: 'ready' },
+        hostKey,
+      );
+      expect(report.status).toBe(200);
+
+      await roundTrip();
+      const hubRow = await hub.store.get<{ state: string; claimed_by: string | null }>(
+        'SELECT state, claimed_by FROM host_provisions WHERE id = ? AND team_id = ?',
+        [provisionId, ht.id],
+      );
+      expect(hubRow).toEqual({ state: 'ready', claimed_by: 'cloud-bea' });
+    });
+  });
+
+  describe('ADR 689 decision 6 — two joiners: the hub`s facts reach both, a forged one reaches neither', () => {
+    it('15. a hub-minted host key is honoured at a second joiner, and a forged acceptance staged on the first never reaches it', async () => {
+      // A second joiner, enrolled at the same hub with its own invite.
+      const second = createServer({
+        db: await openTestDriver(kind, { instance: 'c' }),
+        port: 0,
+        syncLoops: false,
+      });
+      const secondBase = `http://127.0.0.1:${(await second.listen()).port}`;
+      const secondCtx: Ctx = {
+        db: second.store,
+        hub: new Hub(),
+        config: resolveConfig(),
+        rosterRoots: [],
+      };
+      try {
+        await post(secondBase, '/teams', {
+          slug: 'bravo',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        const st = (await getTeamBySlug(second.store, 'bravo'))!;
+        await addMember(second.store, st, { name: 'ada', kind: 'agent' });
+        await insertMessage(
+          second.store,
+          st.id,
+          (await getMemberByName(second.store, st.id, 'ada'))!.id,
+          null,
+          makeEnvelope({
+            id: 'c-0',
+            team: 'bravo',
+            from: 'ada',
+            to: { kind: 'team' },
+            act: 'message',
+            body: 'second joiner',
+            ts: 1001,
+          }),
+        );
+        const invite = (
+          await post(hubBase, '/teams/bravo/nodes/invite', { label: 'second machine' }, nickOnHub)
+        ).json.invite as string;
+        // One node file holds one team; the second joiner enrols under its own state file.
+        const firstState = process.env['MUSTERD_NODE_STATE']!;
+        process.env['MUSTERD_NODE_STATE'] = join(dir, 'node-second.json');
+        expect(
+          (
+            await post(secondBase, '/node/enroll', {
+              hub_url: hubBase,
+              code: invite,
+              team: 'bravo',
+            })
+          ).status,
+        ).toBe(200);
+        const secondTrip = async () => {
+          await pushTeam(secondCtx, st);
+          await pullTeam(hubCtx(), await hubTeam());
+          await pushTeam(hubCtx(), await hubTeam());
+          await pullTeam(secondCtx, st);
+        };
+        process.env['MUSTERD_NODE_STATE'] = firstState;
+
+        const hostKey = (
+          await post(
+            hubBase,
+            '/teams/bravo/agent-bootstrap-credentials',
+            { use: 'host', target: 'cloud-two' },
+            nickOnHub,
+          )
+        ).json.agent_key as string;
+        // The first joiner also stages a forged acceptance for a key nobody minted.
+        const forgedKey = 'msak_forged_on_joiner_one';
+        await appendAudit(joiner.store, (await joinerTeam()).id, {
+          actor: null,
+          action: 'credential.accepted',
+          target: 'forged-two',
+          result: 'allow',
+          detail: {
+            use: 'host',
+            target: 'cloud-two',
+            sponsor: 'nick',
+            key_hash: hashToken(forgedKey),
+            created_at: Date.now(),
+          },
+        });
+        await expect(roundTrip()).rejects.toThrow(/403/);
+        process.env['MUSTERD_NODE_STATE'] = join(dir, 'node-second.json');
+        await secondTrip();
+        process.env['MUSTERD_NODE_STATE'] = firstState;
+
+        expect(
+          (
+            await post(
+              secondBase,
+              '/teams/bravo/residency/wake-leases',
+              { host: 'cloud-two' },
+              hostKey,
+            )
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await post(
+              secondBase,
+              '/teams/bravo/residency/wake-leases',
+              { host: 'cloud-two' },
+              forgedKey,
+            )
+          ).status,
+        ).toBe(401);
+      } finally {
+        await second.close();
+      }
+    });
+  });
 });
