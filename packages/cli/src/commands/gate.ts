@@ -386,6 +386,22 @@ export function clearUnenforcedCounter(dir: string): void {
   }
 }
 
+/**
+ * The attestation and audit posts this process floated (lane 01M5G3J54H). `recordActor` is bounded
+ * (HOOK_HTTP_TIMEOUT_MS) and swallows its own errors, so the posts never delay the decision — but
+ * `exitAfterFlush` calls `process.exit` once stdout drains, which kills a request still in flight.
+ * They used to survive only because the reachability nudge's inbox read held the process open after
+ * every hook; `gateCheck` now settles them itself, after the decision is on stdout.
+ */
+const inFlight = new Set<Promise<unknown>>();
+function track(p: Promise<unknown>): void {
+  inFlight.add(p);
+  void p.finally(() => inFlight.delete(p));
+}
+export async function settleTracked(): Promise<void> {
+  await Promise.allSettled([...inFlight]);
+}
+
 /** Flush any accumulated unenforced calls to `POST /teams/:slug/actor` on recovery. */
 export function flushUnenforcedCounter(
   http: HttpClient,
@@ -396,13 +412,15 @@ export function flushUnenforcedCounter(
   const pending = readUnenforcedCounter(dir);
   if (!pending) return;
   clearUnenforcedCounter(dir);
-  void http.recordActor(team, {
-    kind: 'unenforced',
-    tool,
-    count: pending.count,
-    since_ts: pending.since_ts,
-    until_ts: pending.until_ts,
-  });
+  track(
+    http.recordActor(team, {
+      kind: 'unenforced',
+      tool,
+      count: pending.count,
+      since_ts: pending.since_ts,
+      until_ts: pending.until_ts,
+    }),
+  );
 }
 
 /** Is this error an unreachable/unavailable team server (connection refused, timeout, or 5xx)? */
@@ -574,22 +592,26 @@ export function attest(http: HttpClient, team: string, call: GateToolCall): void
   // denied (and audited as session-denied) before attest runs. This function no longer records it.
   if (call.tool === 'Agent') {
     if (call.spawnType === undefined && call.spawnModel === undefined) return;
-    void http.recordActor(team, {
-      kind: 'subagent-spawn',
-      tool: call.tool,
-      ...(call.spawnType ? { spawnType: call.spawnType } : {}),
-      ...(call.spawnModel ? { spawnModel: call.spawnModel } : {}),
-    });
+    track(
+      http.recordActor(team, {
+        kind: 'subagent-spawn',
+        tool: call.tool,
+        ...(call.spawnType ? { spawnType: call.spawnType } : {}),
+        ...(call.spawnModel ? { spawnModel: call.spawnModel } : {}),
+      }),
+    );
     return;
   }
   if (call.actorId === undefined || !isWriteShaped(call)) return;
-  void http.recordActor(team, {
-    kind: 'subagent-write',
-    tool: call.tool,
-    actorId: call.actorId,
-    ...(call.actorType ? { actorType: call.actorType } : {}),
-    ...((call.path ?? call.command) ? { target: call.path ?? call.command } : {}),
-  });
+  track(
+    http.recordActor(team, {
+      kind: 'subagent-write',
+      tool: call.tool,
+      actorId: call.actorId,
+      ...(call.actorType ? { actorType: call.actorType } : {}),
+      ...((call.path ?? call.command) ? { target: call.path ?? call.command } : {}),
+    }),
+  );
 }
 
 async function gateCheck(parsed: Parsed): Promise<number> {
@@ -641,11 +663,13 @@ async function gateCheck(parsed: Parsed): Promise<number> {
           claimSeatPerRequest: false,
           timeoutMs: HOOK_HTTP_TIMEOUT_MS,
         });
-        void http.recordActor(team, {
-          kind: 'session-denied',
-          tool: call.tool,
-          ...(harnessFromEnv() ? { harness: harnessFromEnv() } : {}),
-        });
+        track(
+          http.recordActor(team, {
+            kind: 'session-denied',
+            tool: call.tool,
+            ...(harnessFromEnv() ? { harness: harnessFromEnv() } : {}),
+          }),
+        );
       } catch {
         // The audit is best-effort; the deny above already stands.
       }
@@ -806,5 +830,6 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       },
     });
   }
+  await settleTracked();
   return 0;
 }
