@@ -113,6 +113,9 @@ same guarantees a daemon-roster team gives.
   keeps its prior roster. It fails closed and never projects an agent unsponsored, so every
   daemon on a team should run this build before the team's first hosted mint. Export still omits
   a seat's `hue`, as it did before; that gap is unrelated to sponsorship.
+- _(2026-10-22, decision 5, lane `01M5G6F7ZZ2XARR38YZPED8PX8`.)_ The hosted mint writes the seat
+  file first, the hub requires that file in its roster root, and a refused mint deletes the
+  unpublished file. The hub-wait refusal leaves the file. `create.sh` is unchanged.
 - Follows-up: lane `01M5G6ERTFSRACVP1Z5C9CZBKX` (decisions 1–4: protocol field, replicated
   fact, reconcile and export) and lane `01M5G6F7ZZ2XARR38YZPED8PX8` (decision 5: the hosted
   mint on a seat-file team), then lane `01M5DTSQ7BKX54NG9V3PHVK4A5` (2b-5) on revive.

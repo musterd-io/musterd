@@ -1,6 +1,10 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
+import { getMemberByName } from '../store/members.js';
 import { SPONSORED_AGENT_CAP, redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
 import { __resetOAuthBucketsForTest } from './oauth.js';
@@ -168,5 +172,111 @@ withDrivers('sponsored-agents-http', (_o, kind) => {
       expect(r.status).toBe(403);
       expect(r.json.error.message).toMatch(/sponsor or an admin/);
     });
+  });
+});
+
+withDrivers('sponsored-agents-http file-backed mint (ADR 700 decision 5)', (_o, kind) => {
+  // The founder and the sponsor exist in the db BEFORE team.toml, so their credentials survive the
+  // moment the team becomes file-backed. `mint-t` will not match any roster root on the machine.
+  let server: RunningServer;
+  let base: string;
+  let root: string;
+  let dana: string;
+
+  async function post(path: string, body: unknown, bearer?: string) {
+    const res = await fetch(base + path, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
+  }
+
+  function writeSeat(name: string, body: string) {
+    writeFileSync(join(root, '.musterd', 'seats', `${name}.toml`), body);
+  }
+
+  beforeEach(async () => {
+    __resetOAuthBucketsForTest();
+    root = mkdtempSync(join(tmpdir(), 'mint-file-'));
+    mkdirSync(join(root, '.musterd', 'seats'), { recursive: true });
+    server = createServer({ db: await openTestDriver(kind), port: 0, rosterRoots: [root] });
+    const { port } = await server.listen();
+    base = `http://127.0.0.1:${port}`;
+    const created = await post('/teams', {
+      slug: 'mint-t',
+      creator: { name: 'nick', kind: 'human' },
+    });
+    const nick = created.json.human_credential as string;
+    dana = (await post('/teams/mint-t/members', { name: 'dana', kind: 'human' }, nick)).json
+      .human_credential as string;
+    writeFileSync(join(root, '.musterd', 'team.toml'), 'slug = "mint-t"\n');
+    writeSeat('nick', 'kind = "human"\n');
+    writeSeat('dana', 'kind = "human"\n');
+  });
+
+  afterEach(async () => {
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  async function scout() {
+    const team = await requireTeam(server.store, 'mint-t');
+    return getMemberByName(server.store, team.id, 'scout');
+  }
+
+  async function createdFact() {
+    return server.store.get<{ actor: string; target: string }>(
+      "SELECT actor, target FROM audit WHERE action = 'member.sponsored_agent_created'",
+    );
+  }
+
+  it('refuses a mint with no seat file and leaves no member (eval g)', async () => {
+    const r = await post('/teams/mint-t/members/agents', { name: 'scout' }, dana);
+    expect(r.status).toBe(409);
+    expect(r.json.error.message).toMatch(/no seat file in the hub's roster root/);
+    expect(await scout()).toBeUndefined();
+    expect(await createdFact()).toBeFalsy();
+  });
+
+  it('refuses a seat file that names another sponsor, and leaves the file (eval g)', async () => {
+    writeSeat('scout', 'kind = "agent"\nsponsored_by = "eve"\n');
+    const r = await post('/teams/mint-t/members/agents', { name: 'scout' }, dana);
+    expect(r.status).toBe(403);
+    expect(r.json.error.message).toMatch(/sponsored by dana/);
+    expect(await scout()).toBeUndefined();
+    expect(await createdFact()).toBeFalsy();
+  });
+
+  it('refuses an agent seat file with no sponsor', async () => {
+    writeSeat('scout', 'kind = "agent"\n');
+    const r = await post('/teams/mint-t/members/agents', { name: 'scout' }, dana);
+    expect(r.status).toBe(403);
+    expect(r.json.error.message).toMatch(/sponsored_by unset/);
+    expect(await scout()).toBeUndefined();
+  });
+
+  it('mints when the file names the caller, and records the fact', async () => {
+    writeSeat('scout', 'kind = "agent"\nsponsored_by = "dana"\n');
+    const r = await post('/teams/mint-t/members/agents', { name: 'scout', role: 'research' }, dana);
+    expect(r.status).toBe(201);
+    expect(r.json.member.name).toBe('scout');
+    const team = await requireTeam(server.store, 'mint-t');
+    const sponsor = await getMemberByName(server.store, team.id, 'dana');
+    expect((await scout())?.sponsored_by).toBe(sponsor?.id);
+    expect(await createdFact()).toEqual({ actor: 'dana', target: 'scout' });
+  });
+
+  it('still refuses an unknown host before creating anyone, file or not', async () => {
+    writeSeat('scout', 'kind = "agent"\nsponsored_by = "dana"\n');
+    const r = await post('/teams/mint-t/members/agents', { name: 'scout', host: 'nope' }, dana);
+    expect(r.status).toBe(409);
+    expect(r.json.error.message).toMatch(/not a host of yours/);
+    expect(await scout()).toBeUndefined();
+    expect(await createdFact()).toBeFalsy();
   });
 });

@@ -94,6 +94,14 @@ A provision is queued only while a host key of yours polled in the last ten minu
 minted earlier, the agent exists but nothing is queued and the host polls an empty queue. Plain
 `musterd agent $SEAT` (no `--hosted`) never queues one: it provisions a folder on this machine.
 
+On a file-backed team the same `--hosted` command writes `.musterd/seats/$SEAT.toml` in the
+sponsor's team home first (`kind = "agent"`, `sponsored_by` the sponsor, `until` copied from the
+sponsor's seat file when that seat expires), calls the mint, and publishes the file only after
+the mint succeeds (ADR 700 decision 5, ADR 592). A refusal for the host, the cap, the name, or
+the sponsor deletes that unpublished file. A hub that has not pulled the file yet refuses with
+a wait and leaves the file; commit and push it, wait for the hub's next git refresh, and run
+the command again. `create.sh` is unchanged.
+
 On the operator's machine:
 
 ```sh

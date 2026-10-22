@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +32,8 @@ const h = vi.hoisted(() => ({
   rosterHome: {} as Record<string, string>,
   // What `seatFileUnpublished` answers for the roster home (ADR 547): null = published / not git.
   unpublished: null as 'uncommitted' | 'unpushed' | null,
+  // `seatFileExists` for the hosted path. `'real'` reads the disk; `false` is the historical stub.
+  seatExists: false as boolean | 'real',
   // What `publishSeatFile` answers (ADR 592); the mock below returns it.
   publish: { state: 'skipped', detail: 'test' } as {
     state: 'published' | 'already' | 'skipped' | 'failed';
@@ -47,6 +50,7 @@ const h = vi.hoisted(() => ({
 vi.mock('./helpers.js', () => ({
   resolve: () => ({
     team: 'ritual',
+    identity: { name: 'nick' },
     config: { server: 'http://localhost:4849', agentKeys: h.agentKeys },
     http: {
       addMember: h.addMember,
@@ -67,7 +71,8 @@ vi.mock('../roster.js', async (importOriginal) => {
   return {
     ...real,
     writeSeatFile: h.writeSeatFile,
-    seatFileExists: () => false,
+    seatFileExists: (home: string, name: string) =>
+      h.seatExists === 'real' ? real.seatFileExists(home, name) : h.seatExists,
     seatFileUnpublished: () => h.unpublished,
     publishSeatFile: h.publishSeatFile,
     // The real helper calls the two above inside roster.ts, out of this mock's reach: the same
@@ -107,6 +112,8 @@ describe('musterd agent <name>', () => {
     vi.clearAllMocks();
     h.rosterHome = {};
     h.unpublished = null;
+    h.seatExists = false;
+    h.writeSeatFile.mockReset();
     h.publish = { state: 'skipped', detail: 'test' };
     h.agentKeys = { ritual: 'mskey_team' };
     delete process.env['MUSTERD_AGENT_KEY'];
@@ -142,6 +149,8 @@ describe('musterd agent <name>', () => {
       expect(h.mintSponsoredAgent).toHaveBeenCalledWith('ritual', { name: 'June', role: 'infra' });
       expect(h.addMember).not.toHaveBeenCalled();
       expect(h.reconcile).not.toHaveBeenCalled();
+      expect(h.writeSeatFile).not.toHaveBeenCalled();
+      expect(h.publishSeatFile).not.toHaveBeenCalled();
       expect(out).toContain('cloud-June');
     });
 
@@ -152,6 +161,139 @@ describe('musterd agent <name>', () => {
         name: 'June',
         host: 'cloud-June',
       });
+    });
+
+    it('a file-backed team writes the seat file, then mints, then publishes (ADR 700 decision 5)', async () => {
+      const home = mkdtempSync(join(tmpdir(), 'hosted-write-'));
+      mkdirSync(join(home, '.musterd', 'seats'), { recursive: true });
+      writeFileSync(
+        join(home, '.musterd', 'seats', 'nick.toml'),
+        'kind = "human"\nlifecycle = "until"\nuntil = "2026-12-01T00:00:00.000Z"\n',
+      );
+      h.rosterHome = { ritual: home };
+      h.unpublished = 'uncommitted';
+      h.publish = { state: 'published' };
+      try {
+        const { code, out } = await capture(['June', '--hosted', '--role', 'infra']);
+        expect(code).toBe(0);
+        expect(h.writeSeatFile).toHaveBeenCalledWith(home, 'June', {
+          kind: 'agent',
+          role: 'infra',
+          sponsored_by: 'nick',
+          lifecycle: 'until',
+          until: '2026-12-01T00:00:00.000Z',
+        });
+        expect(h.writeSeatFile.mock.invocationCallOrder[0]).toBeLessThan(
+          h.mintSponsoredAgent.mock.invocationCallOrder[0]!,
+        );
+        expect(h.publishSeatFile).toHaveBeenCalledWith(home, 'June');
+        expect(out).toContain('published .musterd/seats/June.toml');
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
+
+    it('a sponsor seat with no until does not invent one', async () => {
+      const home = mkdtempSync(join(tmpdir(), 'hosted-forever-'));
+      mkdirSync(join(home, '.musterd', 'seats'), { recursive: true });
+      writeFileSync(join(home, '.musterd', 'seats', 'nick.toml'), 'kind = "human"\n');
+      h.rosterHome = { ritual: home };
+      try {
+        await capture(['June', '--hosted']);
+        expect(h.writeSeatFile).toHaveBeenCalledWith(home, 'June', {
+          kind: 'agent',
+          sponsored_by: 'nick',
+        });
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
+
+    it('an existing seat file is not rewritten', async () => {
+      const home = mkdtempSync(join(tmpdir(), 'hosted-keep-'));
+      h.rosterHome = { ritual: home };
+      h.seatExists = true;
+      try {
+        const { code } = await capture(['June', '--hosted']);
+        expect(code).toBe(0);
+        expect(h.writeSeatFile).not.toHaveBeenCalled();
+        expect(h.mintSponsoredAgent).toHaveBeenCalledWith('ritual', { name: 'June' });
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
+
+    it('a refused mint deletes the unpublished file this call created (eval h)', async () => {
+      const roster = await vi.importActual<typeof import('../roster.js')>('../roster.js');
+      const home = mkdtempSync(join(tmpdir(), 'hosted-drop-'));
+      h.rosterHome = { ritual: home };
+      h.seatExists = 'real';
+      h.writeSeatFile.mockImplementation(roster.writeSeatFile);
+      h.mintSponsoredAgent.mockRejectedValueOnce(new CliError('cap of 3', 5, 'forbidden'));
+      try {
+        await expect(capture(['June', '--hosted'])).rejects.toThrow(/cap of 3/);
+        expect(existsSync(roster.seatFilePath(home, 'June'))).toBe(false);
+        expect(h.publishSeatFile).not.toHaveBeenCalled();
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
+
+    it('an unpublished file this call did not create is still deleted; a published one stays', async () => {
+      const roster = await vi.importActual<typeof import('../roster.js')>('../roster.js');
+      const home = mkdtempSync(join(tmpdir(), 'hosted-prior-'));
+      h.rosterHome = { ritual: home };
+      h.seatExists = true;
+      const path = roster.writeSeatFile(home, 'June', { kind: 'agent', sponsored_by: 'nick' });
+      h.unpublished = 'uncommitted';
+      h.mintSponsoredAgent.mockRejectedValueOnce(new CliError('cap of 3', 5, 'forbidden'));
+      try {
+        await expect(capture(['June', '--hosted'])).rejects.toThrow(/cap of 3/);
+        expect(existsSync(path)).toBe(false);
+        h.seatExists = true;
+        h.unpublished = null;
+        roster.writeSeatFile(home, 'June', { kind: 'agent', sponsored_by: 'nick' });
+        h.mintSponsoredAgent.mockRejectedValueOnce(new CliError('cap of 3', 5, 'forbidden'));
+        await expect(capture(['June', '--hosted'])).rejects.toThrow(/cap of 3/);
+        expect(existsSync(roster.seatFilePath(home, 'June'))).toBe(true);
+        expect(h.writeSeatFile).not.toHaveBeenCalled();
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    });
+
+    it('the hub-wait refusal keeps the file and names the publish (eval g, off-hub)', async () => {
+      const roster = await vi.importActual<typeof import('../roster.js')>('../roster.js');
+      const home = mkdtempSync(join(tmpdir(), 'hosted-wait-'));
+      execFileSync('git', ['init'], { cwd: home });
+      h.rosterHome = { ritual: home };
+      h.seatExists = 'real';
+      h.writeSeatFile.mockImplementation(roster.writeSeatFile);
+      h.mintSponsoredAgent.mockRejectedValueOnce(
+        new CliError(
+          '"June" has no seat file in the hub\'s roster root for "ritual" yet — publish and retry',
+          9,
+          'conflict',
+        ),
+      );
+      const errChunks: string[] = [];
+      const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation((c: never) => {
+        errChunks.push(String(c));
+        return true;
+      });
+      try {
+        await expect(capture(['June', '--hosted'])).rejects.toThrow(
+          /no seat file in the hub's roster root/,
+        );
+        expect(existsSync(roster.seatFilePath(home, 'June'))).toBe(true);
+        const text = readFileSync(roster.seatFilePath(home, 'June'), 'utf8');
+        expect(text).toContain('sponsored_by = "nick"');
+        expect(errChunks.join('')).toContain(`git -C ${home} add .musterd/seats/June.toml`);
+        expect(h.publishSeatFile).not.toHaveBeenCalled();
+      } finally {
+        errSpy.mockRestore();
+        rmSync(home, { recursive: true, force: true });
+      }
     });
 
     it('no host polled: exit 1 and says what to do, --json carries hosting for a script', async () => {
@@ -598,6 +740,8 @@ describe('musterd agent <name> --hue (ADR 374)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.rosterHome = {};
+    h.seatExists = false;
+    h.writeSeatFile.mockReset();
     h.agentKeys = { ritual: 'mskey_team' };
     h.workspace.dir = mkdtempSync(join(tmpdir(), 'magent-hue-'));
   });
