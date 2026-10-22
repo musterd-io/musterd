@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  parseRoleFile,
   parseSeatFile,
   type RoleFile,
+  roleToolkitName,
   seatNameFromPath,
   seatRoles,
   serializeRole,
@@ -250,6 +252,27 @@ async function roleAssign(
  * common case (`platform`, `designer` are labels, not ceilings) — and is silently skipped, because
  * inventing a ceiling for a label would be worse than doing nothing.
  */
+/**
+ * A role's toolkit for the permission recompile: the role file's `toolkit` field where the
+ * file is readable (ADR 708 — role commands run in the roster home, so it usually is), else
+ * the same-name convention that predates the field. Unloadable either way → undefined.
+ */
+function loadRoleToolkit(cwd: string, roleName: string): Toolkit | undefined {
+  let toolkitName = roleName;
+  try {
+    const rolePath = join(cwd, '.musterd', 'roles', `${roleName}.toml`);
+    if (existsSync(rolePath))
+      toolkitName = roleToolkitName(roleName, parseRoleFile(readFileSync(rolePath, 'utf8')));
+  } catch {
+    toolkitName = roleName;
+  }
+  try {
+    return loadToolkit(cwd, toolkitName);
+  } catch {
+    return undefined;
+  }
+}
+
 function recompileSeatPermissions(
   seatName: string,
   roleName: string,
@@ -258,10 +281,8 @@ function recompileSeatPermissions(
   stillHeld: readonly string[],
   seatWorkspace: (seat: string) => string | undefined,
 ): { lines: string[]; json: string } {
-  let template: Toolkit | undefined;
-  try {
-    template = loadToolkit(process.cwd(), roleName);
-  } catch {
+  const template = loadRoleToolkit(process.cwd(), roleName);
+  if (!template) {
     return { lines: [], json: 'no-template' }; // a roster label with no toolkit — nothing to compile
   }
   const perms = template.tools.permissions;
@@ -280,11 +301,8 @@ function recompileSeatPermissions(
   }
   if (remove) {
     const heldToolkits = stillHeld.flatMap((r) => {
-      try {
-        return [loadToolkit(process.cwd(), r)];
-      } catch {
-        return []; // a label with no toolkit compiles nothing, so it protects nothing
-      }
+      const t = loadRoleToolkit(process.cwd(), r);
+      return t ? [t] : []; // a label with no toolkit compiles nothing, so it protects nothing
     });
     const { lifted, kept } = liftSeatPermissions(ws, template, heldToolkits);
     const n = lifted.deny.length + lifted.ask.length;

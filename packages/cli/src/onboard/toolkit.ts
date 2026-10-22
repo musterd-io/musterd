@@ -29,13 +29,23 @@ import { BUILTIN_TOOLKIT_TEMPLATES } from './toolkits/builtins.js';
  * in `.musterd/toolkits/` loads.
  */
 
-/** A concrete MCP server entry inside a toolkit's `tools.mcp_servers`. Secrets are `${ENV}` refs. */
-export const ToolkitMcpServerSchema = z.object({
-  name: z.string().min(1),
-  command: z.string().min(1),
-  args: z.array(z.string()).default([]),
-  env: z.record(z.string()).default({}),
-});
+/**
+ * A concrete MCP server entry inside a toolkit's `tools.mcp_servers`. Secrets are `${ENV}` refs.
+ * Exactly one transport (ADR 708): `command` for a stdio server, or `url` for a remote HTTP
+ * server — Expo's MCP server is remote-only, and a toolkit that cannot name it cannot equip
+ * the iOS role. Each harness adapter writes the shape its own config uses.
+ */
+export const ToolkitMcpServerSchema = z
+  .object({
+    name: z.string().min(1),
+    command: z.string().min(1).optional(),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string()).default({}),
+    url: z.string().url().optional(),
+  })
+  .refine((s) => (s.command === undefined) !== (s.url === undefined), {
+    message: 'an MCP server carries exactly one transport: `command` (stdio) or `url` (remote)',
+  });
 export type ToolkitMcpServer = z.infer<typeof ToolkitMcpServerSchema>;
 
 /** Harness permission defaults, compiled into the harness permission layer (ADR 261). */

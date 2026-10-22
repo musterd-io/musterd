@@ -74,6 +74,22 @@ describe('claudeCode.provision — servers', () => {
     expect(add!.args).toEqual(expect.arrayContaining(['-s', 'local']));
   });
 
+  it('registers a remote server over http transport, with no stdio command (ADR 708)', async () => {
+    const result = await claudeCode.provision!(
+      {
+        servers: [{ name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} }],
+        permissions: { allow: [], ask: [], deny: [] },
+      },
+      'local',
+    );
+    expect(result.servers).toEqual(['expo']);
+    const add = calls.find((c) => c.args[1] === 'add' && c.args.includes('expo'))!;
+    expect(add.args).toEqual(
+      expect.arrayContaining(['--transport', 'http', 'https://mcp.expo.dev/mcp']),
+    );
+    expect(add.args).not.toContain('--');
+  });
+
   it('passes ${ENV} secrets through verbatim as a reference, never resolved/baked', async () => {
     await claudeCode.provision!({
       servers: [{ name: 's', command: 'npx', args: [], env: { TOKEN: '${MY_TOKEN}' } }],

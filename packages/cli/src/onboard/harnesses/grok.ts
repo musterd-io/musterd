@@ -420,6 +420,18 @@ function toTomlServer(entry: McpServerEntry): CodexServer {
   return { command: entry.command, args: entry.args, env: entry.env };
 }
 
+/** A provisioned role server in Grok's TOML shape — remote servers carry `url` (ADR 708). */
+function provisionedToTomlServer(s: {
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  url?: string;
+}): CodexServer {
+  return s.url !== undefined
+    ? { url: s.url, args: [], env: s.env }
+    : { command: s.command!, args: s.args, env: s.env };
+}
+
 /** ADR 442: Grok's PreToolUse gate matches write tools only; Grok has no session-reach tool names. */
 export const SESSION_REACH_WALL = 'Grok CLI: session-reach: not gateable (identity-only) (ADR 442)';
 
@@ -530,7 +542,7 @@ export const grok: Harness = {
     let toml = readText(path) ?? '';
     const servers: string[] = [];
     for (const s of plan.servers) {
-      toml = upsertServer(toml, s.name, toTomlServer(s));
+      toml = upsertServer(toml, s.name, provisionedToTomlServer(s));
       servers.push(s.name);
     }
     toml = mergePermissionFloor(toml);
@@ -656,7 +668,7 @@ export const grokAdapter: HarnessAdapter = {
       if (!observed) return;
       const { ['MUSTERD_SURFACE']: _retired, ...rest } = observed.env;
       toml = upsertServer(toml, 'musterd', {
-        command: observed.command,
+        command: observed.command!,
         args: observed.args,
         env: { ...rest, ...launchEntryEnv(GROK_SURFACE) },
       });

@@ -70,6 +70,54 @@ function input(over: Partial<ProvisionSeatInput> = {}): ProvisionSeatInput {
 
 const readBinding = () => JSON.parse(readFileSync(join(dir, '.musterd', 'binding.json'), 'utf8'));
 
+describe('provisionSeat — toolkit auto-provisioning (ADR 708)', () => {
+  it("provisions the recorded toolkit's servers into the wired harnesses and records role-tools", async () => {
+    const r = await provisionSeat(
+      input({
+        wiring: {
+          desired: ['opencode'],
+          toolkit: 'ios',
+          reconcile: vi.fn(async () => report() as never),
+        },
+      }),
+    );
+    expect(r.wiringError).toBeNull();
+    expect(r.toolkitProvision).toHaveLength(1);
+    expect(r.toolkitProvision[0]).toMatchObject({
+      harness: 'opencode',
+      servers: ['expo', 'xcodebuild', 'apple-docs'],
+    });
+    const oc = JSON.parse(readFileSync(join(dir, '.opencode', 'opencode.json'), 'utf8')) as {
+      mcp: Record<string, unknown>;
+    };
+    expect(oc.mcp['expo']).toEqual({ type: 'remote', url: 'https://mcp.expo.dev/mcp' });
+    expect(oc.mcp['xcodebuild']).toMatchObject({ type: 'local' });
+    const provisioned = JSON.parse(
+      readFileSync(join(dir, '.musterd', 'provisioned.json'), 'utf8'),
+    ) as { toolkit: string; contributions: Record<string, string[]> };
+    expect(provisioned.toolkit).toBe('ios');
+    expect(provisioned.contributions['role-tools']).toEqual([
+      'role-server opencode expo',
+      'role-server opencode xcodebuild',
+      'role-server opencode apple-docs',
+    ]);
+  });
+
+  it('provisions nothing for the generalist toolkit or no toolkit', async () => {
+    const generalist = await provisionSeat(
+      input({
+        wiring: {
+          desired: ['opencode'],
+          toolkit: 'generalist',
+          reconcile: vi.fn(async () => report() as never),
+        },
+      }),
+    );
+    expect(generalist.toolkitProvision).toEqual([]);
+    expect(existsSync(join(dir, '.opencode', 'opencode.json'))).toBe(false);
+  });
+});
+
 describe('provisionSeat (ADR 463 §3, ADR 491)', () => {
   it('writes the binding 0600, the secret-free spec and provisioned.json, then reconciles once', async () => {
     const i = input({ model: 'claude-opus-5-5', driver: 'dana' });

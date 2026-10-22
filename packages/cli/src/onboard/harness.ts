@@ -135,9 +135,16 @@ export interface ConfigureResult {
   warnings?: string[];
 }
 
-/** A named MCP server entry to provision (a role's `tools.mcp_servers`); secrets stay `${ENV}`. */
-export interface ProvisionServer extends McpServerEntry {
+/**
+ * A named MCP server entry to provision (a role's `tools.mcp_servers`); secrets stay `${ENV}`.
+ * Exactly one transport (ADR 708): `command` (stdio) or `url` (remote HTTP).
+ */
+export interface ProvisionServer {
   name: string;
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  url?: string;
 }
 
 /** Harness permission entries, split by disposition (Claude Code's `allow`/`ask`/`deny`). */
@@ -166,6 +173,8 @@ export interface ProvisionResult {
   servers: string[];
   /** Permission entries *newly* added (not ones the user already had) — recorded for exact removal. */
   permissions: ProvisionPermissions;
+  /** Servers this harness could not represent and skipped — reported, never dropped (ADR 708). */
+  skipped?: string[];
   /** Where they were written (CLI invoked / path). */
   target: string;
   /** Anything the user must do to activate them, if different from the musterd server's. */

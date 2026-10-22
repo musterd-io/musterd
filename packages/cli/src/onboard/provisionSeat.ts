@@ -5,6 +5,8 @@ import { loadProvisioning, saveProvisioning } from './manifest.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses, type ReconcileReport } from './reconcile/engine.js';
 import { withRoleSkills } from './roleSkills.js';
+import { loadToolkit } from './toolkit.js';
+import { provisionToolkitIntoHarnesses, type ToolkitProvisionOutcome } from './toolkitProvision.js';
 import type { Workspace } from './workspace.js';
 
 /**
@@ -52,6 +54,12 @@ export interface ProvisionSeatResult {
   wiring: ReconcileReport | null;
   /** Why wiring is incomplete, or null. The binding and spec are already written when this is set. */
   wiringError: string | null;
+  /**
+   * The recorded toolkit's tools, provisioned into every wired harness (ADR 708): one
+   * outcome per harness, empty when the toolkit names nothing to provision. Best-effort —
+   * failures ride the outcome's `error`, never `wiringError` or a throw.
+   */
+  toolkitProvision: ToolkitProvisionOutcome[];
 }
 
 /** `pending` (selected but not installed) is NOT wired: launching it would fail at spawn. */
@@ -84,6 +92,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
   // nowhere, so it cannot be left live (spec §4.7(3)). The standing grant has no revoke API.
   let ws: Workspace;
   let desired: string[];
+  let toolkitName = '';
   try {
     ws = input.workspace();
     const binding: Binding = {
@@ -108,9 +117,10 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     const prior = loadProvisioning(ws.dir);
     const recorded = prior.kind === 'valid' ? prior.value : null;
     desired = input.wiring.keepDesired && recorded ? recorded.desired : input.wiring.desired;
+    toolkitName = input.wiring.keepToolkit && recorded ? recorded.toolkit : input.wiring.toolkit;
     saveProvisioning(ws.dir, {
       version: 3,
-      toolkit: input.wiring.keepToolkit && recorded ? recorded.toolkit : input.wiring.toolkit,
+      toolkit: toolkitName,
       desired,
       contributions: recorded?.contributions ?? {},
       provisionedAt: new Date().toISOString(),
@@ -145,5 +155,44 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     process.chdir(prevCwd);
   }
 
-  return { workspace: ws, agentKey, granted: grant !== undefined, wiring, wiringError };
+  // The toolkit's tools, into every wired harness (ADR 708) — the step seat creation used
+  // to skip, so a role's seat started without its equipment. Best-effort like init: what
+  // was written is recorded under the manifest's `role-tools` contribution (the key
+  // `musterd uninstall` consults), merged with whatever a previous run recorded.
+  let toolkitProvision: ToolkitProvisionOutcome[] = [];
+  if (toolkitName && toolkitName !== 'generalist') {
+    try {
+      const toolkit = loadToolkit(ws.dir, toolkitName);
+      toolkitProvision = await provisionToolkitIntoHarnesses(toolkit, desired, ws.dir);
+      const added = toolkitProvision.flatMap((o) =>
+        o.servers.map((s) => `role-server ${o.harness} ${s}`),
+      );
+      if (added.length > 0) {
+        const current = loadProvisioning(ws.dir);
+        if (current.kind === 'valid') {
+          const existing = current.value.contributions['role-tools'] ?? [];
+          saveProvisioning(ws.dir, {
+            ...current.value,
+            contributions: {
+              ...current.value.contributions,
+              'role-tools': [...new Set([...existing, ...added])],
+            },
+          });
+        }
+      }
+    } catch {
+      // An unloadable toolkit must not fail a seat whose wiring already landed; the
+      // recorded toolkit name stays in provisioned.json for a later re-provision.
+      toolkitProvision = [];
+    }
+  }
+
+  return {
+    workspace: ws,
+    agentKey,
+    granted: grant !== undefined,
+    wiring,
+    wiringError,
+    toolkitProvision,
+  };
 }

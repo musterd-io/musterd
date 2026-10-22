@@ -353,4 +353,58 @@ describe('muse Harness detect/configure (hermetic HOME + cwd)', () => {
     expect(d.configured).toBe(true);
     expect(hasMuseHooks(readFileSync(museHooksPath(dir), 'utf8'))).toBe(true);
   });
+
+  it('provision writes role servers (stdio + remote) into muse settings, unprovision removes exactly them (ADR 708)', async () => {
+    await muse.configure(ENTRY); // a foreign server already lives in settings
+    const result = await muse.provision!({
+      servers: [
+        {
+          name: 'xcodebuild',
+          command: 'npx',
+          args: ['-y', 'xcodebuildmcp@latest', 'mcp'],
+          env: {},
+        },
+        { name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} },
+      ],
+      permissions: { allow: ['Edit'], ask: [], deny: [] },
+    });
+    expect(result.servers).toEqual(['xcodebuild', 'expo']);
+    // Muse's permission shape is unverified, so none are compiled — reported, not dropped.
+    expect(result.permissions).toEqual({ allow: [], ask: [], deny: [] });
+    const path = join(dir, '.config', 'muse', 'settings.json');
+    const doc = JSON.parse(readFileSync(path, 'utf8')) as {
+      mcpServers: Record<string, Record<string, unknown>>;
+    };
+    expect(doc.mcpServers['musterd']).toBeDefined();
+    expect(doc.mcpServers['xcodebuild']).toMatchObject({ transport: 'stdio', command: 'npx' });
+    expect(doc.mcpServers['expo']).toMatchObject({
+      transport: 'http',
+      url: 'https://mcp.expo.dev/mcp',
+    });
+    // Idempotent: a second provision changes no bytes.
+    const once = readFileSync(path, 'utf8');
+    await muse.provision!({
+      servers: [
+        {
+          name: 'xcodebuild',
+          command: 'npx',
+          args: ['-y', 'xcodebuildmcp@latest', 'mcp'],
+          env: {},
+        },
+        { name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} },
+      ],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    expect(readFileSync(path, 'utf8')).toBe(once);
+    await muse.unprovision!({
+      servers: ['expo', 'xcodebuild'],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    const after = JSON.parse(readFileSync(path, 'utf8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    expect(after.mcpServers['expo']).toBeUndefined();
+    expect(after.mcpServers['xcodebuild']).toBeUndefined();
+    expect(after.mcpServers['musterd']).toBeDefined();
+  });
 });

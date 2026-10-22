@@ -118,6 +118,18 @@ describe('opencode.provision / unprovision', () => {
       opencode.unprovision({ servers: ['a'], permissions: { allow: [], ask: [], deny: [] } }),
     ).resolves.toBeUndefined();
   });
+
+  it('provisions a remote server as a remote entry (ADR 708)', async () => {
+    const result = await opencode.provision({
+      servers: [{ name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} }],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    expect(result.servers).toEqual(['expo']);
+    const cfg = JSON.parse(readFileSync(cfgPath(), 'utf8')) as {
+      mcp: Record<string, unknown>;
+    };
+    expect(cfg.mcp['expo']).toEqual({ type: 'remote', url: 'https://mcp.expo.dev/mcp' });
+  });
 });
 
 describe('opencode detect reads its own entry back', () => {

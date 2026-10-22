@@ -54,6 +54,8 @@ export interface AgentSeatResult {
   granted: boolean;
   wiring: ReconcileReport | null;
   wiringError: string | null;
+  /** The recorded toolkit's tools provisioned per harness (ADR 708); empty when none. */
+  toolkitProvision: import('./toolkitProvision.js').ToolkitProvisionOutcome[];
   /** ADR 547: whether the seat's file has reached a remote; null on a db-only team, outside git, or when published. */
   seatFileUnpublished: SeatFilePublication | null;
 }
@@ -121,6 +123,7 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     granted: r.granted,
     wiring: r.wiring,
     wiringError: r.wiringError,
+    toolkitProvision: r.toolkitProvision,
     seatFileUnpublished: input.rosterHome ? seatFileUnpublished(input.rosterHome, name) : null,
   };
 }

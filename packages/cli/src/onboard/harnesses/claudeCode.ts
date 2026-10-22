@@ -1147,7 +1147,11 @@ export const claudeCode: Harness = {
     const servers: string[] = [];
     for (const s of plan.servers) {
       const envArgs = Object.entries(s.env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-      const args = ['mcp', 'add', s.name, '-s', 'local', ...envArgs, '--', s.command, ...s.args];
+      // A remote server registers over http transport with no stdio command (ADR 708).
+      const args =
+        s.url !== undefined
+          ? ['mcp', 'add', '--transport', 'http', s.name, s.url, '-s', 'local']
+          : ['mcp', 'add', s.name, '-s', 'local', ...envArgs, '--', s.command!, ...s.args];
       // Per-server idempotency: re-running replaces only this server's prior definition.
       await exec(bin, ['mcp', 'remove', s.name, '-s', 'local']).catch(() => undefined);
       await exec(bin, args, { timeout: 10000 });

@@ -100,6 +100,22 @@ describe('codex.provision / unprovision', () => {
       codex.unprovision!({ servers: ['musterd'], permissions: { allow: [], ask: [], deny: [] } }),
     ).resolves.toBeUndefined();
   });
+
+  it('provisions a remote server by url and unprovisions it (ADR 708)', async () => {
+    const result = await codex.provision!({
+      servers: [{ name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} }],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    expect(result.servers).toEqual(['expo']);
+    const toml = readFileSync(cfgPath(), 'utf8');
+    expect(toml).toContain('url = "https://mcp.expo.dev/mcp"');
+    expect(toml).not.toContain('[mcp_servers.expo.env]');
+    await codex.unprovision!({
+      servers: ['expo'],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    expect(hasServer(readFileSync(cfgPath(), 'utf8'), 'expo')).toBe(false);
+  });
 });
 
 // The doctor's baked-env inspection used to see only Claude Code, because it was the only harness

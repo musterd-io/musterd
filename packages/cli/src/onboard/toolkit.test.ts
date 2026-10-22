@@ -42,6 +42,33 @@ describe('parseToolkit', () => {
     expect(toolkit.tools.mcp_servers[0]).toEqual({ name: 's', command: 'npx', args: [], env: {} });
   });
 
+  it('parses a remote MCP server by url (ADR 708)', () => {
+    const toolkit = parseToolkit({
+      toolkit: 'x',
+      charter: 'c',
+      tools: { mcp_servers: [{ name: 'expo', url: 'https://mcp.expo.dev/mcp' }] },
+    });
+    expect(toolkit.tools.mcp_servers[0]).toEqual({
+      name: 'expo',
+      url: 'https://mcp.expo.dev/mcp',
+      args: [],
+      env: {},
+    });
+  });
+
+  it('rejects an MCP server with both command and url, or neither (ADR 708)', () => {
+    expect(() =>
+      parseToolkit({
+        toolkit: 'x',
+        charter: 'c',
+        tools: { mcp_servers: [{ name: 's', command: 'npx', url: 'https://example.com/mcp' }] },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseToolkit({ toolkit: 'x', charter: 'c', tools: { mcp_servers: [{ name: 's' }] } }),
+    ).toThrow();
+  });
+
   it('defaults tools.codex_plugins to []', () => {
     expect(parseToolkit({ toolkit: 'x', charter: 'c' }).tools.codex_plugins).toEqual([]);
   });
@@ -79,15 +106,28 @@ describe('parseToolkit', () => {
 });
 
 describe('built-in library', () => {
-  it('ships the six seed archetypes, all valid', () => {
+  it('ships the seed archetypes, all valid', () => {
     expect(Object.keys(BUILTIN_TOOLKITS).sort()).toEqual([
       'backend',
       'docs',
       'frontend',
       'generalist',
+      'ios', // ADR 708: the iOS engineer's equipment
       'read-only', // ADR 261: the ceiling archetype — deny-made-real
       'reviewer',
     ]);
+  });
+
+  it('ios references its servers, never hosting or inlining a secret (ADR 708)', () => {
+    const servers = BUILTIN_TOOLKITS['ios']!.tools.mcp_servers;
+    expect(servers.map((s) => s.name)).toEqual(['expo', 'xcodebuild', 'apple-docs']);
+    const expo = servers.find((s) => s.name === 'expo')!;
+    expect(expo.url).toBe('https://mcp.expo.dev/mcp');
+    expect(expo.command).toBeUndefined();
+    for (const s of servers) {
+      for (const v of Object.values(s.env)) expect(v).toMatch(/^\$\{[A-Z_]+\}$/);
+    }
+    expect(BUILTIN_TOOLKITS['ios']!.tools.resource_scopes).toContain('packages/mobile/**');
   });
 
   it('generalist gets nothing extra — only a bare charter', () => {
@@ -214,8 +254,15 @@ describe('round-trip: built-ins render the identical workspace', () => {
     }
   >;
 
-  it('covers exactly the shipped built-ins', () => {
-    expect(Object.keys(fixture).sort()).toEqual(Object.keys(BUILTIN_TOOLKITS).sort());
+  it('covers exactly the six pre-ADR-708 built-ins (ios is covered by its own tests)', () => {
+    expect(Object.keys(fixture).sort()).toEqual([
+      'backend',
+      'docs',
+      'frontend',
+      'generalist',
+      'read-only',
+      'reviewer',
+    ]);
   });
 
   for (const name of [
