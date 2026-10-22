@@ -11,4 +11,4 @@ hand-edit the PNG. Needs Chrome, the only dependency, not added to the repo:
   "file://$PWD/docs/brand/readme-header/readme-header.html"
 ```
 
-Then open the PNG and look at it. The lockup is the mark (ADR 497) beside the word.
+Then open the PNG and look at it. The lockup is the mark (ADR 702) beside the word.
