@@ -41,8 +41,13 @@ def rgb(c: str) -> np.ndarray:
 
 
 def layers_for(m: dict) -> list[tuple[str, str | None]]:
-    """`figure.ts` `layersFor`, v2 order: back to front, (layer id, tint or None)."""
-    out = [("skin", m["skin"]), ("eyes", None), ("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m["top"])]
+    """`figure.ts` `layersFor`, v2 order: back to front, (layer id, tint or None). An agent's tells take
+    its identity colour; there is no visor."""
+    agent = m["kind"] == "agent"
+    out = [("skin", m["skin"]), ("eyes", None)] + ([("tell/eyes", m["top"])] if agent else [])
+    out += [("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m["top"])]
+    if agent:
+        out.append(("tell/collar", m["top"]))
     if m["hair"] != "bald":
         out.append((f"hair/{m['hair']}", m["hairColor"]))
     if m["facialHair"] != "none":
@@ -51,8 +56,6 @@ def layers_for(m: dict) -> list[tuple[str, str | None]]:
         out.append((f"hat/{m['hat']}", m["hatColor"]))
     if m["accessory"] != "none":
         out.append((f"acc/{m['accessory']}", m["accessoryColor"]))
-    if m["kind"] == "agent":
-        out.append(("visor", None))
     return out
 
 

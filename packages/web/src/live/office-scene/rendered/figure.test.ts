@@ -46,11 +46,17 @@ describe('layersFor (office realism Task 11)', () => {
     expect(top?.color).toBe('#3366cc');
   });
 
-  it('an agent gets the visor last, and keeps its non-human skin tint', () => {
-    const agent = appearanceOf({ name: 'cy', kind: 'agent' });
-    const layers = layersFor(agent, 'agent');
-    expect(layers[layers.length - 1]).toEqual({ id: 'visor', color: null });
+  it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', accessory: 'none', cut: 'tee' };
+    const layers = layersFor(agent, 'agent', '#5b8def');
+    expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
+    expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');
+    expect(layers.find((l) => l.id === 'tell/collar')?.color).toBe('#5b8def');
     expect(layers[0]).toEqual({ id: 'skin', color: agent.skin });
+  });
+
+  it('a human has neither tell', () => {
+    expect(layersFor(femme, 'human', '#3366cc').some((l) => l.id.startsWith('tell/'))).toBe(false);
   });
 
   it('what they carry draws after the clothes: a carrying walker gets its laptop layer, untinted', () => {
@@ -236,14 +242,14 @@ describe('drawFigureFrame', () => {
     expect(tr[0]).toBeCloseTo(wide[5]! + 64 * k * 1.04);
   });
 
-  it('the room tint multiplies every layer, and the untinted visor is tinted by it alone', () => {
+  it('the room tint multiplies every layer, and the untinted eyes are tinted by it alone', () => {
     const { ctx, ops } = recordingCtx();
     const agent = appearanceOf({ name: 'cy', kind: 'agent' });
     const ids = layersFor(agent, 'agent').map((l) => l.id);
     const { create, made } = fakeCanvasFactory();
     drawFigureFrame({ ctx, fit, at: { lx: 0, ly: 0 }, sheets: allSheets(ids), spec, look: agent, kind: 'agent', anim: 'idle', dir: DIR8[0]!, t: 0, startT: 0, tint: '#b4bcd6', scratch: {}, create });
     const fills = made.flatMap((m) => m.ops.filter((o) => o.name === 'set:fillStyle').map((o) => o.args[0]));
-    expect(fills).toContain('#b4bcd6'); // the visor, untinted by appearance, still takes the room's tint
+    expect(fills).toContain('#b4bcd6'); // the eyes, untinted by appearance, still take the room's tint
     expect(fills).toContain(mulHex(agent.skin, '#b4bcd6'));
     expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
   });

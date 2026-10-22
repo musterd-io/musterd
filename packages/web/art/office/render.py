@@ -389,11 +389,12 @@ def render_figure(a: dict) -> None:
         - hair, facial hair, hats, accessories, a carried thing, the lanyard: a torso (the tee's — every
           top shares its shape), so hair behind the back is hidden and long hair in front still shows;
           the scarf sits on the torso, so it holds out the body alone;
+        - an agent's tell (glowing irises, the collar light): the body alone — it sits on the surface;
         - the plant: the box it sits in, as before."""
         b = set(base)
         if layer.startswith("top/") or layer == "shoes":
             return b | {"bottom"}
-        if layer == "acc/scarf" or layer in ("bottom", "visor"):
+        if layer == "acc/scarf" or layer == "bottom" or layer.startswith("tell/"):
             return b
         return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 

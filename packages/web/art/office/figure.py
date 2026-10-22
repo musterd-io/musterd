@@ -69,7 +69,9 @@ LAYERS = (
     + ["bottom", "shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
-    + ["visor"]
+    # an agent's tell (nick, 2026-10-22: no visors on anyone): its eyes and a collar light glow, white
+    # here and tinted with the agent's identity colour at runtime
+    + ["tell/eyes", "tell/collar"]
     + [f"carry/{c}" for c in CARRY]
     # a first arrival's badge: the cord and the card's band take their colour, the card stays paper
     + ["lanyard", "lanyard-card"]
@@ -131,7 +133,7 @@ def hair_mat(name: str, v: float) -> bpy.types.Material:
 
 
 def flat(name: str, rgb) -> bpy.types.Material:
-    """An untinted layer's own colour (the visor), matte."""
+    """An untinted layer's own colour, matte."""
     return scene.matte(name, rgb, 0.3)
 
 
@@ -245,7 +247,6 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     eye_white = scene.matte("fig-eye-white", scene.srgb("#f2ece4"), 0.35)
     brow = grey("fig-brow", 0.3, 0.8)
     mouth = scene.matte("fig-mouth", (0.42, 0.22, 0.2), 0.5)
-    visor = flat("fig-visor", (0.25, 0.75, 0.85))
 
     # joints
     r.joint("root", None, 0, 0, 0)
@@ -329,7 +330,8 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     cap("hair/ponytail")
     clump("hair/ponytail", "tie", HEAD_X - R * 1.0, 0, HEAD_C + R * 0.2, R * 0.28, R * 0.28, R * 0.28)
     clump("hair/ponytail", "tail", HEAD_X - R * 1.2, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.3, R * 0.85)
-    clump("hair/afro", "afro", HEAD_X - R * 0.25, 0, HEAD_C + R * 0.25, R * 1.3, R * 1.45, R * 1.38)
+    # centred well back of the face, so the face stands in front of it (it covered the face at -0.25)
+    clump("hair/afro", "afro", HEAD_X - R * 0.5, 0, HEAD_C + R * 0.3, R * 1.15, R * 1.42, R * 1.32)
     cap("hair/bun")
     clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
 
@@ -394,14 +396,19 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.torus("lens", "head", "acc/glasses", frame, HEAD_X + R * 0.95, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.2, 0.32, (0, math.radians(90), 0))
         r.box("arm", "head", "acc/glasses", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.34, R * 0.95, 0.3, 0.35)
     r.box("bridge", "head", "acc/glasses", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.34, 0.4, R * 0.2, 0.35)
-    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (math.radians(90), 0, 0))
+    # over the top of the head from ear to ear: the ring's axis turned onto x (about x it looped through the face)
+    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (0, math.radians(90), 0))
     for sy in (1, -1):
         r.orb("cup", "head", "acc/headphones", acc, HEAD_X - R * 0.05, sy * R * 0.98, HEAD_C + R * 0.3, R * 0.36, R * 0.2, R * 0.4)
     r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
     r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 
-    # ── the visor (agents): a band across the eyes, its own colour
-    r.box("visor", "head", "visor", visor, HEAD_X + R * 0.88, 0, HEAD_C + R * 0.2, 1.7, R * 1.5, R * 0.42, 0.9)
+    # ── an agent's tell: the irises glow, and a thin ring of light sits at the neckline — read from every
+    # side, quieter than the visor it replaces (nick, 2026-10-22)
+    light = scene.glow("fig-tell", (1.0, 1.0, 1.0), 3.0)
+    for sy in (1, -1):
+        r.orb("iris", "head", "tell/eyes", light, HEAD_X + R * 0.87, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.04, R * 0.1, R * 0.12)
+    r.torus("collar", "spine", "tell/collar", light, HEAD_X * 0.4, 0, NECK - 2.6 * FIG, 3.9 * FIG, 0.45)
 
     # ── the lanyard (a first arrival, from the toss until they sit): a cord round the back of the neck
     # and down both sides of the chest to a badge. Rigid on the spine — it rides the torso's sway.

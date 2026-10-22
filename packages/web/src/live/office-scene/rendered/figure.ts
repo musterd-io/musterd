@@ -21,7 +21,8 @@ export type LayerId =
   | 'bottom'
   | 'shoes'
   | `acc/${Accessory}`
-  | 'visor'
+  | 'tell/eyes'
+  | 'tell/collar'
   | `carry/${CarryLayer}`
   | 'lanyard'
   | 'lanyard-card';
@@ -68,30 +69,35 @@ function carried(h: Held): Layer[] {
 
 export interface Layer {
   id: LayerId;
-  /** Multiply tint for the neutral sheet; null draws the sheet as rendered (the visor). */
+  /** Multiply tint for the neutral sheet; null draws the sheet as rendered (the eyes). */
   color: string | null;
 }
 
 /**
  * Back to front (figure v2, plan Task 7): skin and its untinted eyes, shoes, trousers, the top over
  * them, whatever they carry and a lanyard, then hair and facial hair (their sheets already have the
- * torso cut out behind them, so long hair in front of the shoulders shows), hat, accessory, and the
- * visor last for an agent — "the one tell the office cannot afford to lose". Pieces overlap now (the
- * body is only skin), so this order is what decides what is in front. `topColor` is the member's
- * identity colour, which `appearance.ts` deliberately does not carry.
+ * torso cut out behind them, so long hair in front of the shoulders shows), hat, accessory. Pieces
+ * overlap now (the body is only skin), so this order is what decides what is in front.
+ *
+ * An agent wears no visor (nick, 2026-10-22: "i actually dont like the use of visors for any
+ * members"); it is told apart by two glows in its identity colour — its eyes, and a thin collar light
+ * at the neckline, which reads from every side. `topColor` is that identity colour, which
+ * `appearance.ts` deliberately does not carry.
  */
 export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: string | null = null, held: Held = {}): Layer[] {
   const out: Layer[] = [{ id: 'skin', color: a.skin }, { id: 'eyes', color: null }];
+  const agent = kind === 'agent';
+  if (agent) out.push({ id: 'tell/eyes', color: topColor });
   out.push({ id: 'shoes', color: a.shoes });
   out.push({ id: 'bottom', color: a.bottom });
   out.push({ id: `top/${a.cut}`, color: topColor });
   out.push(...carried(held));
   if (held.lanyard) out.push({ id: 'lanyard', color: held.lanyard }, { id: 'lanyard-card', color: null });
+  if (agent) out.push({ id: 'tell/collar', color: topColor });
   if (a.hair !== 'bald') out.push({ id: `hair/${a.hair}`, color: a.hairColor });
   if (a.facialHair !== 'none') out.push({ id: `facial/${a.facialHair}`, color: a.hairColor });
   if (a.hat !== 'none') out.push({ id: `hat/${a.hat}`, color: a.hatColor });
   if (a.accessory !== 'none') out.push({ id: `acc/${a.accessory}`, color: a.accessoryColor });
-  if (kind === 'agent') out.push({ id: 'visor', color: null });
   return out;
 }
 
