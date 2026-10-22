@@ -26,6 +26,7 @@ const panel = (s: TourState, over: Record<string, unknown> = {}) =>
       onToNext: noop,
       onDone: noop,
       onStop: noop,
+      onDismiss: noop,
       onNote: noop,
       onVerdict: noop,
       ...over,
@@ -188,5 +189,12 @@ describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
     const html = panel(at('next'));
     expect(html).toContain('<code class="tour__cmd">musterd board');
     expect(html).toContain('>Done<');
+  });
+
+  it('offers to skip the tour from any running step, and to start over once a lane exists', () => {
+    const html = panel(at('claims'), { onStartOver: noop });
+    expect(html).toContain('Skip the tour');
+    expect(html).toContain('Start over');
+    expect(panel(at('claims'))).not.toContain('Start over');
   });
 });
