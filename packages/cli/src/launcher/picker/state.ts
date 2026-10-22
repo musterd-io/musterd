@@ -90,6 +90,11 @@ export interface PickerState {
   } | null;
   /** The member workspace this picker was opened from (ADR 717). Null keeps ADR 491. */
   scope: FolderScope | null;
+  /**
+   * The answering daemon's node label (ADR 720). Null until a loopback roster names it.
+   * Painted only; `where` stays `here` for what ⏎ can do. Never a guessed hostname.
+   */
+  machine: string | null;
   /** One line after a refused start. The next key clears it. */
   notice: string | null;
   /** True until the first key, so a late catalog can still open this folder's harness step. */
@@ -116,6 +121,8 @@ export type PickerEvent =
       status: 'ok' | 'offline';
       unknown?: string[];
       members?: Record<string, MemberEntry[]>;
+      /** Absent keeps the label already on screen. Null means this read had none. */
+      machine?: string | null;
       now: number;
     };
 
@@ -128,7 +135,7 @@ export type PickerOutcome =
   | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] }
   /** ⏎ on a `wake` row: ring the seat's doorbell — an ordinary steer (ADR 503 Decision 2). */
   | { kind: 'wake'; entry: MemberEntry }
-  /** ⏎ on "change harnesses": run this workspace's configure, then return to the step (ADR 717). */
+  /** ⏎ on "configure harnesses": run this workspace's configure, then return to the step (ADR 720). */
   | { kind: 'configure'; seat: Seat };
 
 type Step = { state: PickerState; outcome: PickerOutcome | null };
@@ -160,6 +167,7 @@ export function initialState(
     create: null,
     now,
     scope,
+    machine: null,
     notice: null,
     held: scope !== null,
     prefer: null,
@@ -224,7 +232,14 @@ export function rows(s: PickerState): Row[] {
       const used = s.seats
         .filter((x) => lastUsedAt(x, s.file) !== null)
         .sort((a, b) => (lastUsedAt(b, s.file) ?? 0) - (lastUsedAt(a, s.file) ?? 0));
-      const list = (used.length ? used : [...s.seats]).slice(0, RECENT_LIMIT);
+      let list = (used.length ? used : [...s.seats]).slice(0, RECENT_LIMIT);
+      // ADR 720: this folder's member stays on the recent screen even with no launch yet.
+      if (s.scope) {
+        const scope = s.scope;
+        const mine = s.seats.find((x) => x.team === scope.team && x.member === scope.member);
+        if (mine && !list.some((x) => x.address === mine.address))
+          list = [mine, ...list].slice(0, RECENT_LIMIT);
+      }
       const teams = s.teams.length
         ? [{ kind: 'heading', label: 'teams' } as Row, ...teamRows(s)]
         : [];
@@ -609,6 +624,7 @@ export function reduce(s: PickerState, e: PickerEvent): Step {
         liveStatus: e.status,
         unknownLive: e.unknown ?? [],
         members: e.members ?? s.members,
+        machine: e.machine !== undefined ? e.machine : s.machine,
         now: e.now,
       },
       outcome: null,

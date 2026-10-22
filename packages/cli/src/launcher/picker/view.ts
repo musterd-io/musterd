@@ -1,4 +1,4 @@
-import { theme } from '../../render/theme.js';
+import { sinceLabel, theme } from '../../render/theme.js';
 import { padEndVisible, paintKeys, visibleLen } from '../../render/ui.js';
 import { harnessLabel, LAUNCHABLE_HARNESSES } from '../labels.js';
 import {
@@ -8,6 +8,7 @@ import {
   describeMove,
   describeWhere,
   liveQuestion,
+  plainLabel,
   wakeMenu,
   seatLine,
 } from '../rows.js';
@@ -51,7 +52,12 @@ function header(s: PickerState, cols: number): string {
       : s.liveStatus === 'offline'
         ? ' · offline · live state unavailable'
         : '';
-  const right = theme.meta(`${teams ? `${teams} · ` : ''}${s.seats.length} seats here${status}`);
+  // ADR 720: inside a member workspace the header names that member. Elsewhere, frame 20.
+  const right = theme.meta(
+    s.scope
+      ? `${teams ? `${teams} · ` : ''}this member · ${s.scope.member} · ${s.seats.length} seats${status}`
+      : `${teams ? `${teams} · ` : ''}${s.seats.length} seats here${status}`,
+  );
   const gap = Math.max(1, cols - visibleLen(left) - visibleLen(right));
   return left + ' '.repeat(gap) + right;
 }
@@ -92,7 +98,7 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         const verb = canVerb(row.entry.can);
         const name = theme.memberName(row.entry.member, row.entry.kind);
         return {
-          line: `${marker}${padEndVisible(selected ? theme.bold(name) : name, nameWidth)}${theme.meta(describeWhere(row.entry))}${verb ? `  ${theme.meta(verb)}` : ''}`,
+          line: `${marker}${padEndVisible(selected ? theme.bold(name) : name, nameWidth)}${theme.meta(scopedWhere(s, row.entry))}${verb ? `  ${theme.meta(verb)}` : ''}`,
           selected,
         };
       }
@@ -116,8 +122,9 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         const { seat } = row;
         const live = s.live[seat.address];
         const used = lastUsedAt(seat, s.file);
+        const mine = isThisMember(s, seat);
         let tail = live
-          ? describeLive(live, s.now)
+          ? scopedLive(s, seat, live)
           : seat.problem
             ? theme.warn('needs repair')
             : used !== null
@@ -127,7 +134,12 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         const entry = entryFor(s, seat);
         if (entry && entry.can !== 'launch' && !live) {
           const verb = canVerb(entry.can);
-          tail = `${tail ? `${tail} · ` : ''}${theme.meta(describeWhere(entry))}${verb ? `  ${theme.meta(verb)}` : ''}`;
+          tail = `${tail ? `${tail} · ` : ''}${theme.meta(scopedWhere(s, entry))}${verb ? `  ${theme.meta(verb)}` : ''}`;
+        } else if (s.scope && !live && mine) {
+          tail = tail ? `this member · ${tail}` : 'this member';
+        } else if (s.scope && !live && s.machine) {
+          const phrase = machinePhrase(s);
+          tail = tail ? `${phrase} · ${tail}` : phrase;
         }
         const harness = seat.kind === 'human' ? 'human' : (shownHarness(s, seat) ?? 'claude-code');
         return {
@@ -176,7 +188,7 @@ function footerLines(s: PickerState, cols: number): string[] {
     const n = c.options.length;
     const onChange = c.change && c.index === n;
     const changeMarker = onChange ? `${theme.accent('›')} ` : '  ';
-    const changeLabel = onChange ? theme.bold('change harnesses') : 'change harnesses';
+    const changeLabel = onChange ? theme.bold('configure harnesses') : 'configure harnesses';
     return [
       `  ${c.seat.member} · ${n} harness${n === 1 ? '' : 'es'} configured`,
       ...c.options.map((h, i) => {
@@ -189,7 +201,7 @@ function footerLines(s: PickerState, cols: number): string[] {
       ...(c.change ? [`  ${changeMarker}${changeLabel}`] : []),
       paintKeys(
         onChange
-          ? '  ⏎ change harnesses · ↑↓ choose · esc back'
+          ? '  ⏎ configure harnesses · ↑↓ choose · esc back'
           : '  ⏎ launch · ↑↓ choose · esc back',
       ),
     ];
@@ -249,6 +261,44 @@ function footerLines(s: PickerState, cols: number): string[] {
     return [paintKeys('  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back')];
   }
   return [paintKeys('  ⏎ open · ← back · type to search · esc back')];
+}
+
+/** This folder's member (ADR 720). Unscoped pickers have none. */
+function isThisMember(s: PickerState, seat: { team: string; member: string }): boolean {
+  return s.scope !== null && s.scope.team === seat.team && s.scope.member === seat.member;
+}
+
+/**
+ * The roster node's label, with nick's same-machine words. No label yet reads `this machine` —
+ * never a hostname this process guessed (ADR 503, ADR 720).
+ */
+function machinePhrase(s: PickerState): string {
+  const name = s.machine ? plainLabel(s.machine).trim() : '';
+  return name ? `${name} (this machine)` : 'this machine';
+}
+
+/** Where a member lives. Unscoped stays on `describeWhere`, so frame 20 and frame 23 do not move. */
+function scopedWhere(
+  s: PickerState,
+  entry: { team: string; member: string } & Parameters<typeof describeWhere>[0],
+): string {
+  if (!s.scope) return describeWhere(entry);
+  if (entry.where === 'here') return isThisMember(s, entry) ? 'this member' : machinePhrase(s);
+  const where = describeWhere(entry);
+  return isThisMember(s, entry) ? `this member · ${where}` : where;
+}
+
+function scopedLive(
+  s: PickerState,
+  seat: { team: string; member: string },
+  live: NonNullable<PickerState['live'][string]>,
+): string {
+  if (!s.scope || live.where !== 'here') {
+    const base = describeLive(live, s.now);
+    return s.scope && isThisMember(s, seat) ? `this member · ${base}` : base;
+  }
+  const where = isThisMember(s, seat) ? 'this member' : machinePhrase(s);
+  return live.since !== null ? `${where} · since ${sinceLabel(live.since, s.now)}` : where;
 }
 
 /** Word-wrap plain text to `width` columns; a word longer than the width is left to `clip`. */

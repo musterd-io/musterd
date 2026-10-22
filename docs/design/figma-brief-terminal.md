@@ -239,16 +239,19 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     With several, `↑↓` (or `⇥`) moves the accent `›`; `⏎` launches the pick (a live seat then asks
     frame 22's question); `esc` returns to the list.
 24a. `cmd/launcher-workspace` — bare `musterd` inside an agent member's workspace opens that
-    member's harness step (ADR 717). The list behind it is still the recent screen, so teams stay
-    one key away. The last row changes this workspace's harnesses. The count does not include that
-    row:
+    member's harness step (ADR 717, [ADR 720](../decisions/720-launcher-names-this-member.md)). The
+    list behind it is still the recent screen, so teams stay one key away. The header names the
+    folder: `this member · ghost`, and that member's row carries `this member`. Every other member
+    shows a machine. The same machine reads `mac (this machine)`; before the roster names the node
+    it reads `this machine`. Another machine stays `on air-2`. The last row configures this
+    workspace's harnesses. The count does not include that row:
     ```
       ghost · 1 harness configured
       › claude    last used
-        change harnesses
+        configure harnesses
       ⏎ launch · ↑↓ choose · esc back
     ```
-    With the cursor on the last row the keys read `⏎ change harnesses · ↑↓ choose · esc back`.
+    With the cursor on the last row the keys read `⏎ configure harnesses · ↑↓ choose · esc back`.
     `⏎` on another member does not launch. The footer gains one line:
     ```
       this folder is ghost — stanley starts from /w/stanley

@@ -92,6 +92,17 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
     const lines = renderPicker(onTeam, { cols: 80, rows: 24 });
     expect(lines[lines.length - 1]).toBe('  ⏎ open · type to search · → teams · esc quit');
     expect(lines).toContain('› revive   ● here  3 seats  ★');
+    // A node label does not rename `here` until the picker is inside a member workspace (ADR 720).
+    const named = reduce(s, {
+      type: 'live',
+      live: s.live,
+      status: 'ok',
+      now: NOW,
+      machine: 'mac',
+    }).state;
+    expect(renderPicker(named, { cols: 80, rows: 24 })).toEqual(
+      renderPicker(s, { cols: 80, rows: 24 }),
+    );
   });
 
   it('says it is still checking before the roster answers, and offline when it cannot', () => {
@@ -294,14 +305,14 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
     expect(renderPicker(open, { cols: 80, rows: 24 }).slice(-4)).toEqual([
       '  ghost · 1 harness configured',
       '  › claude    last used',
-      '    change harnesses',
+      '    configure harnesses',
       '  ⏎ launch · ↑↓ choose · esc back',
     ]);
     const onChange = { ...open, choose: { ...open.choose!, index: 1 } };
     expect(renderPicker(onChange, { cols: 80, rows: 24 }).slice(-3)).toEqual([
       '    claude    last used',
-      '  › change harnesses',
-      '  ⏎ change harnesses · ↑↓ choose · esc back',
+      '  › configure harnesses',
+      '  ⏎ configure harnesses · ↑↓ choose · esc back',
     ]);
 
     let list = initialState(FILE, '', NOW);
@@ -312,6 +323,91 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       '  this folder is ghost — stanley starts from /w/stanley',
       '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit',
     ]);
+  });
+
+  it('a member workspace names this member and each machine (ADR 720)', () => {
+    const ghost = seat('ghost');
+    const seats = [...SEATS, ghost];
+    const scopedFile: LauncherFile = {
+      ...FILE,
+      snapshot: {
+        taken_at: NOW,
+        seats,
+        teams: [{ team: 'revive', here: true }],
+      },
+    };
+    const scope = { team: 'revive', member: 'ghost', root: '/w/ghost' };
+    const live = {
+      'revive/agents/miley': {
+        where: 'here' as const,
+        label: 'here',
+        surface: 'claude-code',
+        since: NOW - H,
+      },
+    };
+    const open = reduce(initialState(scopedFile, '', NOW, scope), {
+      type: 'live',
+      live,
+      status: 'ok',
+      now: NOW,
+      machine: 'mac',
+    }).state;
+    const lines = renderPicker(open, { cols: 120, rows: 40 });
+    const seatRow = (member: string) =>
+      lines.find((l) => new RegExp(`\\b${member}\\s+revive/agents`).test(l));
+    expect(lines[0]).toContain('this member · ghost');
+    expect(lines[0]).not.toContain('seats here');
+    expect(seatRow('miley')).toContain(`mac (this machine) · since ${sinceLabel(NOW - H, NOW)}`);
+    expect(seatRow('miley')).not.toMatch(/\bhere\b/);
+    expect(seatRow('stanley')).toContain('mac (this machine) · ★ last used · 2h');
+    expect(seatRow('ghost')).toContain('this member');
+    expect(lines.some((l) => l.includes('configure harnesses'))).toBe(true);
+
+    const unnamed = reduce(initialState(scopedFile, '', NOW, scope), {
+      type: 'live',
+      live,
+      status: 'ok',
+      now: NOW,
+    }).state;
+    const waiting = renderPicker(unnamed, { cols: 120, rows: 40 });
+    const waitingMiley = waiting.find((l) => /\bmiley\s+revive\/agents/.test(l));
+    expect(waitingMiley).toContain(`this machine · since ${sinceLabel(NOW - H, NOW)}`);
+    expect(waitingMiley).not.toMatch(/\bhere\b/);
+
+    const members = renderPicker(
+      {
+        ...open,
+        level: { kind: 'members', team: 'revive', project: 'agents' },
+        stack: [{ kind: 'recent' }],
+        members: {
+          revive: [
+            {
+              team: 'revive',
+              member: 'bo',
+              kind: 'agent',
+              address: null,
+              where: 'here',
+              node: 'n-mac',
+              where_label: null,
+              can: 'none',
+            },
+            {
+              team: 'revive',
+              member: 'cy',
+              kind: 'agent',
+              address: null,
+              where: 'node',
+              node: 'n-air',
+              where_label: 'air-2',
+              can: 'wake',
+            },
+          ],
+        },
+      },
+      { cols: 120, rows: 40 },
+    );
+    expect(members.some((l) => /bo\s+mac \(this machine\)/.test(l))).toBe(true);
+    expect(members.some((l) => /cy\s+on air-2\s+wake$/.test(l))).toBe(true);
   });
 });
 
