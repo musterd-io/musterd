@@ -272,6 +272,12 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   why the condition is recorded here.
   Follows-up: `01M5JEKY6R4184RXMY40SEQQ9K`
 
+- _2026-10-22 (claim-gated continuation, [ADR 716](716-claim-gated-continuation.md))._
+  The chain-gate named in the consequences above is decided in that record. Its input is the
+  latest `lane.claims_filed` reading. Cross-vendor replay is the rehydrate path the engine lane
+  landed.
+  Follows-up: `01M5JJJAGBA1J8ZEBB50GM5Z2S`
+
 ## Observability & Evaluation
 
 - **Traces.** The existing residency rails with surface `musterd`: `wake_leases`, `wake_turns`
