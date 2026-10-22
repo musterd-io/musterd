@@ -2164,3 +2164,15 @@ down to "Experiment". Raised tight: measured + ~0.03%.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 358,650 B.
 
+### 2026-10-22 — experiment tiles explain themselves (nick)
+
+| Budget   | Before (main) | This branch | Ceiling                    |
+| -------- | ------------- | ----------- | -------------------------- |
+| total JS | 358,650 B     | 359,055 B   | RAISED 358,650 → 359,150 B |
+
+A flask replaces the calendar leaf; each row gets a "?" explainer (question, what is measured, goal and
+direction, decision day) and a goal caption under its chart. +~405 B total JS gz; the leaf's CSS removal
+offsets the new rules, so live CSS is unchanged in budget. Raised tight: measured + ~0.03%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 359,150 B.
+

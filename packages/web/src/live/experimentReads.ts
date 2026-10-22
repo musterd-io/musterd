@@ -23,6 +23,12 @@ export interface ExperimentEntry {
   phrase: string;
   /** Line 1, right: weekday plus `MM-DD` (`Mon 10-20`). */
   date: string;
+  /** `Nov 4`: the day the read is decided, as the row prints it beside its clock. */
+  readsLabel: string;
+  /** The lane's own account of what it asks, one sentence, or null. Shown in the row's explainer. */
+  about: string | null;
+  /** What the metric is aiming at, `≤ 1 min` / `≥ 90%`, or null without a metric. */
+  goal: string | null;
   /** The calendar leaf: `TUE` over `20`, and `Oct` for a screen that wants the month. */
   leaf: { weekday: string; day: number; month: string };
   /** Days from today to `readsOn`: negative is past, 0 is today. Places the read on the fortnight strip. */
@@ -188,6 +194,23 @@ export function resultPhrase(e: Pick<ExperimentEntry, 'status' | 'phrase' | 'met
   const value = formatValue(e.measured.value, unit);
   const target = e.metric ? `target ${formatValue(e.metric.target, unit)}, ` : '';
   return `${e.phrase} · ${value} (${target}n ${e.measured.n})`;
+}
+
+/** What a lane asks, in one plain sentence: its detail's first sentence, without the ADR and lane
+ *  references a stranger cannot follow. Null when the lane says nothing. */
+export function aboutOf(detail: string | null | undefined): string | null {
+  const t = (detail ?? '')
+    .replace(/\s*\((?:ADRs?|lane|finding)[^)]*\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return null;
+  const s = firstSentence(t);
+  return s.length > 200 ? `${s.slice(0, 197)}…` : s;
+}
+
+/** The metric's aim as a short phrase: `≤ 1 min` (lower is better) or `≥ 90%`. */
+export function goalOf(m: ExperimentMetric): string {
+  return `${m.direction === 'down' ? '≤' : '≥'} ${formatValue(m.target, m.unit)}`;
 }
 
 /** The first sentence of a note — what the stream shows under a read row (§6). */
@@ -384,6 +407,9 @@ export function experimentEntries(board: LaneBoard | null, now: number): Experim
         phrase,
         date: date.short,
         leaf: { weekday: date.weekday.toUpperCase(), day: Number(lane.reads_on.slice(8)), month: date.month },
+        readsLabel: `${date.month} ${Number(lane.reads_on.slice(8))}`,
+        about: aboutOf(lane.detail),
+        goal: metric ? goalOf(metric) : null,
         offset: -days,
         note,
         metric,
