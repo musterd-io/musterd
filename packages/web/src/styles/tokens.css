@@ -65,6 +65,7 @@
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; /* literal code and traces; /live re-points --font-mono to sans, never this */
 
   /* Motion — the SITE's easing. /live has its own scale in Live.css (ADR 329), and the site has not
      adopted it: that lane has not happened. --ease-in-out was removed on 2026-08-26 once /live's
