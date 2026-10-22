@@ -5,7 +5,7 @@
  * A layer whose sheet is missing is skipped, so a new hair style or hat added to `appearance.ts`
  * before its sheet is rendered draws the figure without it, never nothing (Review Focus 2).
  */
-import type { Accessory, Appearance, FacialHair, Hat, HairStyle, TopCut } from '../appearance';
+import { type Accessory, type Appearance, type FacialHair, type Hat, type HairStyle, lookFor, type TopCut } from '../appearance';
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
@@ -170,3 +170,31 @@ export function drawFigureFrame(d: FigureDraw): void {
   }
   if (alpha < 1) ctx.restore();
 }
+
+/**
+ * The sheets a roster needs: every layer its members wear (`lookFor`, so a dnd member's headphones
+ * count), plus the carried things and the lanyard — small, and wanted the moment an errand or a first
+ * arrival starts, not a fetch later. Every other hair style, hat, top and accessory stays on the server
+ * until someone wearing it joins.
+ */
+export function wornLayers(nodes: Iterable<Pick<OfficeNode, 'name' | 'kind' | 'dnd'>>): Set<LayerId> {
+  const out = new Set<LayerId>(ALWAYS_LOADED);
+  for (const n of nodes) for (const l of layersFor(lookFor(n), n.kind)) out.add(l.id);
+  return out;
+}
+
+const ALWAYS_LOADED: readonly LayerId[] = [
+  'skin',
+  'bottom',
+  'shoes',
+  'carry/laptop',
+  'carry/box',
+  'carry/plant',
+  'carry/plate',
+  'carry/card',
+  'carry/mug',
+  'carry/bottle',
+  'carry/phone',
+  'lanyard',
+  'lanyard-card',
+];

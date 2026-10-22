@@ -113,26 +113,53 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
   };
 }
 
-/** Load every layer sheet of `spec`; a sheet that fails is left out (its layer is skipped). Never rejects. */
+/**
+ * Load the layer sheets of `spec` — only those in `wanted` when given (`wornLayers`: what the roster
+ * wears), else all. A sheet that fails is left out (its layer is skipped). Never rejects.
+ */
 export async function loadFigureAssets(
   spec: FigureSpecJson,
   urlFor: (file: string) => string,
   loadImage: (url: string) => Promise<CanvasImageSource> = domImage,
+  wanted?: ReadonlySet<LayerId>,
 ): Promise<FigureAssets & { missing: string[] }> {
   const sheets = new Map<LayerId, CanvasImageSource>();
-  const missing: string[] = [];
-  await Promise.all(
-    spec.layers.map(async (l) => {
-      try {
-        sheets.set(l.id, await loadImage(urlFor(l.file)));
-      } catch {
-        missing.push(l.file);
-      }
-    }),
-  );
+  const files = new Map(spec.layers.map((l) => [l.id, l.file] as const));
+  const missing = await loadFigureLayers(sheets, files, wanted ?? files.keys(), urlFor, loadImage);
   const { layers: _layers, ...sheet } = spec;
   void _layers;
   return { spec: sheet, sheets, scratch: {}, missing };
+}
+
+/**
+ * Load into `sheets` every sheet of `ids` it lacks — the rest of a roster's wardrobe as members join
+ * (or go dnd and put the headphones on). `inFlight` keeps two calls from fetching one sheet twice.
+ * Resolves to the files that failed. Never rejects.
+ */
+export async function loadFigureLayers(
+  sheets: Map<LayerId, CanvasImageSource>,
+  files: ReadonlyMap<LayerId, string>,
+  ids: Iterable<LayerId>,
+  urlFor: (file: string) => string,
+  loadImage: (url: string) => Promise<CanvasImageSource> = domImage,
+  inFlight: Set<LayerId> = new Set(),
+): Promise<string[]> {
+  const missing: string[] = [];
+  const todo = [...ids].filter((id) => !sheets.has(id) && !inFlight.has(id) && files.has(id));
+  for (const id of todo) inFlight.add(id);
+  await Promise.all(
+    todo.map(async (id) => {
+      const file = files.get(id)!;
+      try {
+        sheets.set(id, await loadImage(urlFor(file)));
+      } catch {
+        missing.push(file);
+      } finally {
+        inFlight.delete(id);
+      }
+    }),
+  );
+  return missing;
 }
 
 function domImage(url: string): Promise<CanvasImageSource> {

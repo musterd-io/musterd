@@ -262,3 +262,10 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     presents,
   };
 }
+
+/** The look a member wears this frame: their hashed one, and the headphones whatever their hashed
+ *  accessory is while they are dnd — the room-readable signal (§4). */
+export function lookFor(node: Pick<OfficeNode, 'name' | 'kind' | 'dnd'>): Appearance {
+  const a = appearanceOf(node);
+  return node.dnd ? { ...a, accessory: 'headphones' } : a;
+}

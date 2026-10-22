@@ -1,4 +1,4 @@
-import { appearanceOf, type Appearance } from './appearance';
+import { type Appearance, lookFor } from './appearance';
 import type { FigureAssets } from './rendered/assets';
 import { drawFigureFrame } from './rendered/figure';
 import { type Anim, type CarryAnim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
@@ -788,10 +788,9 @@ export function drawWisp(ctx: CanvasRenderingContext2D, base: Pt, top: Pt, u: nu
   disc(ctx, { x: tx, y: ty }, 1.7 * u, 1.7 * u, 'rgba(255, 248, 228, 0.96)');
 }
 
-/** The member's look: their own, or hashed from the name — and a dnd member wears the headphones whatever
- *  their hashed accessory is, the room-readable signal (§4). */
+/** The member's look: their own (the receptionist's is designed), or `lookFor`'s. */
 function lookOf(o: CharacterOpts): Appearance {
-  return o.look ?? (o.node.dnd ? { ...appearanceOf(o.node), accessory: 'headphones' as const } : appearanceOf(o.node));
+  return o.look ?? lookFor(o.node);
 }
 
 /** The little mug a sip beat raises — drawn at the right wrist in the desk mug's own colour. */

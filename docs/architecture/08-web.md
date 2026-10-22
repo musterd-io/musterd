@@ -323,7 +323,7 @@ live/
     character.ts                // paints a skeleton in an appearance (facing + limb self-occlusion)
     rendered/                   // pre-rendered art behind `?office=rendered` (office realism, spec 2026-10-20; the art source is packages/web/art/office/)
       manifest.ts               // the render's manifest contract: parseManifest / assetById (id, file, size, anchor, px per floor unit, camera KX/KY)
-      assets.ts                 // the flag (`renderedOfficeFromSearch`) and the never-rejecting loader (`loadRenderedAssets`: images by id + the files that failed)
+      assets.ts                 // the flag (`renderedOfficeFromSearch`) and the never-rejecting loaders (`loadRenderedAssets`: images by id + the files that failed; `loadFigureAssets`/`loadFigureLayers`: only the figure sheets the roster wears, more as members join)
       blit.ts                   // blitAsset: one image at a floor point through project(), its anchor on the point, sized by fit.scale / asset.scale
       roomState.ts              // which rendered light state the room shows: roomMixFor (day/evening/night × ceiling on/off/spill, a 45-minute crossfade at each edge), figureTintFor
       figureSheet.ts            // sprite-sheet geometry for the figure: SheetSpec, frameRect from the scene clock, dir8FromHeading with hysteresis (increment 3)

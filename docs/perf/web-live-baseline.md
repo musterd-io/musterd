@@ -1635,6 +1635,28 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
+### 2026-10-22 — the rendered office fetches only the figure sheets its team wears (lane `01M5GX1F3J`)
+
+No budget moves: `officeArtBytes` gates what the build carries, and this changes what a viewer downloads.
+The figure's sheets were all fetched up front; now the base layers, the carried props and the lanyard
+are, plus only the hair, facial hair, top, hat and accessory sheets the roster wears (`wornLayers`, with
+a dnd member's headphones). A member who joins wearing something new fetches it then.
+
+| Roster (figure sheets fetched)       | Bytes      | Saved |
+| ------------------------------------ | ---------- | ----- |
+| every sheet (before)                 | 12,120,007 | —     |
+| revive, 27 members (32 of 37 sheets) | 11,597,779 | 4%    |
+| preview fixture, 24 members          | 10,810,620 | 11%   |
+| preview fixture, 8 members           | 10,340,841 | 15%   |
+| one member (a first run)             | 3,703,420  | 69%   |
+
+Looks are hashed from names, so a team of any size wears nearly every style, and the tops and skin
+(1.0–1.5 MB each) are what everyone wears. This helps a stranger's first run, not a full team. The levers
+for a full team are the sheets' format (lossless WebP measured 16–20% smaller on the heaviest sheets) and
+their resolution (2 → 1.5 px per unit is ~44% fewer pixels); nick chose both, in that order.
+
+- Falsify: on `/office-preview?office=rendered&n=1` the network panel shows 16 figure sheets, not 37.
+
 ### 2026-10-21 — `officeArtBytes` 9,935,000 → 13,900,000 B: carried props and the seated overlay (lanes `01M5D8FCC9` + `01M5GF82SB`, office realism 3b Task 16)
 
 | Budget     | Before (main) | This branch  | Ceiling                        |
