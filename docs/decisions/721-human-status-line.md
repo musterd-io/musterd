@@ -67,7 +67,10 @@ without making the status a front-end decoration that one browser knows and the 
    It is **not** an MCP tool: the tool surface is an agent's, and an agent can never set one.
 
 7. **Where it shows:** the nameplate's second line on /live and /broadcast (the colour footer, the
-   hourglass first), and a second line under the name on the team panel. /broadcast is public, so the
+   hourglass first), and a second line under the name on the team panel. **It shows on a folded
+   nameplate too** (nick, 2026-10-22). Plates fold to dot and name when a member is idle or away (lane
+   01M5G7A9H1, against crowding); a status is set exactly when its human is away, so it is the one
+   extra that does not fold. Statuses are rare and last an hour, so the crowding it adds is small. /broadcast is public, so the
    words are public; the field's help text says so where it is typed.
 
 8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `ok`, detail
