@@ -42,7 +42,7 @@ def rgb(c: str) -> np.ndarray:
 
 def layers_for(m: dict) -> list[tuple[str, str | None]]:
     """`figure.ts` `layersFor`, v2 order: back to front, (layer id, tint or None)."""
-    out = [("skin", m["skin"]), ("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m["top"])]
+    out = [("skin", m["skin"]), ("eyes", None), ("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m["top"])]
     if m["hair"] != "bald":
         out.append((f"hair/{m['hair']}", m["hairColor"]))
     if m["facialHair"] != "none":

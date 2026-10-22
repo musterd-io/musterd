@@ -31,11 +31,19 @@ import scene
 # rendered one is FIG × that: ~83 tall, and a 9.4 head — five heads, as spec §2.1 asks.
 FIG = 0.92  # 0.86 read "a tiny bit" too small (nick, the second look)
 HEIGHT = 96 * FIG
-ANKLE, KNEE, HIP, CHEST, SHOULDER, NECK = (v * FIG for v in (3, 19, 36, 52, 58, 64))
-HEAD_R = 9.4 * FIG
+# v2 (office figure v2 spec §2.1, nick 2026-10-22): a quarter of the way from the v1 figure's five
+# heads toward the painted figure's 3.7 — "between A and B" — with the crown held where v1 had it, so
+# labels, bubbles and the seat do not move: a bigger head sits on a body scaled down by `_K`.
+_V1_HEAD_R = 9.4 * FIG
+_V1_NECK = 64 * FIG
+_CROWN = _V1_NECK + 2.5 * FIG + _V1_HEAD_R * 2.06
+HEAD_R = _V1_HEAD_R + (HEIGHT / 3.7 / 2 - _V1_HEAD_R) * 0.25
+_K = (_CROWN - 2.5 * FIG - HEAD_R * 2.06) / _V1_NECK
+ANKLE, KNEE, HIP, CHEST, SHOULDER, NECK = (v * FIG * _K for v in (3, 19, 36, 52, 58, 64))
 HEAD_C = NECK + 2.5 * FIG + HEAD_R * 1.02
-HIP_W, SHOULDER_W = 7 * FIG, 14.5 * FIG
-THIGH, SHIN, UPPER_ARM, FORE_ARM = (v * FIG for v in (17, 16, 15, 14))
+HIP_W, SHOULDER_W = 6.6 * FIG, 13.2 * FIG
+THIGH, SHIN, UPPER_ARM, FORE_ARM = (v * FIG * _K for v in (17, 16, 15, 14))
+WRIST = SHOULDER - UPPER_ARM - FORE_ARM
 # Not scaled: the chair cushion is where it is. A smaller figure sits lower in it, which reads right.
 SEAT_TOP = 22  # layout.ts: top of the chair cushion, where a seated pelvis rests
 # "it looks like the weight of the head is causing the bodies to lean back": the head and neck sit
@@ -54,7 +62,7 @@ ACCS = ["glasses", "headphones", "scarf"]
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it.
 CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
 LAYERS = (
-    ["skin"]
+    ["skin", "eyes"]
     + [f"hair/{h}" for h in HAIR]
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
@@ -68,7 +76,7 @@ LAYERS = (
 )
 # Base layers are on every member and split by the ID pass; every other layer is one of an exclusive
 # group (one hair style, one top, …) and is rendered alone with the base as a holdout.
-BASE_LAYERS = ["skin", "bottom", "shoes", "visor"]
+BASE_LAYERS = ["skin", "eyes", "bottom", "shoes"]
 # the ID pass stores 9·(index+1) in the red byte — spaced so a nearest match survives rounding. Only
 # the base is split by ID, so only the base needs a byte (the whole list would overflow 255).
 ID_STEP = 9
@@ -143,6 +151,22 @@ class Rig:
         o = scene.ball(f"{layer}/{name}", self.origin.x + x, self.origin.y + y, ztop - 2 * rz, rx, ry, rz, mat, self.zs)
         return self._attach(o, joint, layer, mat)
 
+    def orb(self, name, joint, layer, mat, x, y, zc, rx, ry, rz, fuse: str | None = None) -> bpy.types.Object:
+        """`ball` by its centre, tagged with the fuse group it melts into (figure_fuse.py), if any."""
+        o = self.ball(name, joint, layer, mat, x, y, zc + rz, rx, ry, rz)
+        if fuse:
+            o["fuse"] = fuse
+        return o
+
+    @staticmethod
+    def turn(o: bpy.types.Object, euler: tuple[float, float, float]) -> bpy.types.Object:
+        """Turn a part's mesh about its own centre. Setting `rotation_euler` after parenting turns it
+        about the parent-inverse origin and flings it across the frame."""
+        from mathutils import Euler, Matrix
+        c = sum((Vector(b) for b in o.bound_box), Vector()) / 8
+        o.data.transform(Matrix.Translation(c) @ Euler(euler).to_matrix().to_4x4() @ Matrix.Translation(-c))
+        return o
+
     def cyl(self, name, joint, layer, mat, x, y, z0, r0, r1, h) -> bpy.types.Object:
         o = scene.cyl(f"{layer}/{name}", self.origin.x + x, self.origin.y + y, z0, r0, r1, h, mat, self.zs, 16)
         return self._attach(o, joint, layer, mat)
@@ -182,8 +206,10 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     hair = grey("fig-hair", 0.75, 0.85)
     shoe = grey("fig-shoe", 0.7, 0.6)
     acc = grey("fig-acc", 0.72, 0.5)
-    eye = scene.matte("fig-eye", (0.03, 0.03, 0.035), 0.4)
-    mouth = scene.matte("fig-mouth", (0.35, 0.18, 0.18), 0.6)
+    eye = scene.matte("fig-eye", (0.03, 0.025, 0.02), 0.15)  # the iris: gloss, so it catches the light
+    eye_white = scene.matte("fig-eye-white", scene.srgb("#f2ece4"), 0.35)
+    brow = grey("fig-brow", 0.3, 0.8)
+    mouth = scene.matte("fig-mouth", (0.42, 0.22, 0.2), 0.5)
     visor = flat("fig-visor", (0.25, 0.75, 0.85))
 
     # joints
@@ -200,28 +226,44 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.joint(f"knee{side}", f"hip{side}", 0, sy * HIP_W, KNEE)
         r.joint(f"ankle{side}", f"knee{side}", 0, sy * HIP_W, ANKLE)
 
-    # ── skin: head with a face, neck, hands, forearms (a short sleeve leaves them bare)
-    r.ball("head", "head", "skin", skin, HEAD_X, 0, HEAD_C + HEAD_R * 1.04, HEAD_R * 0.92, HEAD_R * 0.96, HEAD_R * 1.04)
-    # tapered: a broader base where it meets the shoulders, so the head does not sit on a post
-    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.6, 0, NECK - 2.5 * FIG, 3.6 * FIG, 2.7 * FIG, 7 * FIG)
-    r.ball("nose", "head", "skin", skin, HEAD_X + HEAD_R * 0.86, 0, HEAD_C - 0.8 + 1.8, 1.9, 1.5, 1.8)
+    # ── skin (v2, spec §2.1–2.2): one fused surface for the neck, arms, hands and legs, and a head
+    # fused from a skull, a narrower jaw and cheeks — a chin, not a ball. Limbs taper to the wrist and
+    # the ankle: one thickness everywhere is what read as a toy (nick, 2026-10-22).
+    R = HEAD_R
+    sk = lambda name, joint, x, y, zc, rx, ry, rz: r.orb(name, joint, "skin", skin, x, y, zc, rx, ry, rz, "skin")  # noqa: E731
+    hd = lambda name, x, y, zc, rx, ry, rz: r.orb(name, "head", "skin", skin, x, y, zc, rx, ry, rz, "head")  # noqa: E731
+    hd("head", HEAD_X, 0, HEAD_C + R * 0.02, R * 0.9, R * 0.88, R * 1.0)
+    hd("jaw", HEAD_X + R * 0.18, 0, HEAD_C - R * 0.05, R * 0.72, R * 0.7, R * 0.72)
     for sy in (1, -1):
-        # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): at 2 px a unit a
-        # 2.4-unit eye was a pixel or two and vanished. Taller ovals, set a touch wider, still under
-        # the visor (its band runs HEAD_C + 0.4 … + 4.8).
-        r.ball("eye", "head", "skin", eye, HEAD_X + HEAD_R * 0.8, sy * 3.4, HEAD_C + 4.1, 1.2, 1.45, 1.75)
-        r.ball("ear", "head", "skin", skin, HEAD_X, sy * HEAD_R * 0.95, HEAD_C + 1.0 + 2.1, 1.3, 1.0, 2.1)
-    r.box("mouth", "head", "skin", mouth, HEAD_X + HEAD_R * 0.84, 0, HEAD_C - 4.3, 0.9, 3.4, 1.0)
+        hd("cheek", HEAD_X + R * 0.45, sy * R * 0.35, HEAD_C + R * 0.05, R * 0.38, R * 0.3, R * 0.3)
+        hd("ear", HEAD_X - R * 0.05, sy * R * 0.86, HEAD_C + R * 0.3, R * 0.12, R * 0.08, R * 0.2)
+        hd("lid", HEAD_X + R * 0.74, sy * R * 0.3, HEAD_C + R * 0.47, R * 0.13, R * 0.19, R * 0.08)
+    hd("nose", HEAD_X + R * 0.9, 0, HEAD_C + R * 0.02, R * 0.16, R * 0.12, R * 0.2)
+    # eyes are their own untinted layer: a skin tint over a white would turn it mint on a mint skin
+    for sy in (1, -1):
+        # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): a white and an iris
+        # that catches the light read at 1.5 px a unit where a dark dot vanished
+        r.orb("eyewhite", "head", "eyes", eye_white, HEAD_X + R * 0.76, sy * R * 0.3, HEAD_C + R * 0.38, R * 0.1, R * 0.16, R * 0.15)
+        r.orb("iris", "head", "eyes", eye, HEAD_X + R * 0.85, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.05, R * 0.105, R * 0.125)
+        r.turn(r.orb("brow", "head", "skin", brow, HEAD_X + R * 0.8, sy * R * 0.32, HEAD_C + R * 0.6, R * 0.08, R * 0.2, R * 0.045), (math.radians(sy * -8), 0, 0))
+    r.orb("mouth", "head", "skin", mouth, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.3, R * 0.1, R * 0.22, R * 0.055)
+    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.5, 0, NECK - 3 * FIG, 3.4 * FIG, 2.9 * FIG, 7.5 * FIG)["fuse"] = "skin"
     for side, sy in (("L", 1), ("R", -1)):
-        # The whole arm is skin under the sleeves: a sleeveless top (the vest) left the forearms
-        # hanging in the air, and a swung sleeve opened a gap at the shoulder and the elbow (nick,
-        # 2026-10-21: "the arms look very detached"). Balls at both joints keep the limb whole at any
-        # angle; a sleeve, a size larger, covers them.
-        r.ball("shoulder", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER + 2.3 * FIG, 3.2 * FIG, 3.2 * FIG, 3.2 * FIG)
-        r.cyl("upperarm", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM, 2.7 * FIG, 3.1 * FIG, UPPER_ARM)
-        r.ball("elbow", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 2.7 * FIG, 2.7 * FIG, 2.7 * FIG, 2.7 * FIG)
-        r.cyl("forearm", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM, 2.4 * FIG, 2.9 * FIG, FORE_ARM)
-        r.ball("hand", f"wrist{side}", "skin", skin, 0.6, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM - 1.5 * FIG + 3.2 * FIG, 3.0 * FIG, 2.4 * FIG, 3.2 * FIG)
+        y = sy * SHOULDER_W
+        sk("shoulder", f"shoulder{side}", 0, y, SHOULDER - 0.4 * FIG, 3.1 * FIG, 3.0 * FIG, 3.0 * FIG)
+        r.cyl("upperarm", f"shoulder{side}", "skin", skin, 0, y, SHOULDER - UPPER_ARM, 2.5 * FIG, 3.1 * FIG, UPPER_ARM)["fuse"] = "skin"
+        sk("elbow", f"elbow{side}", 0, y, SHOULDER - UPPER_ARM, 2.4 * FIG, 2.4 * FIG, 2.4 * FIG)
+        r.cyl("forearm", f"elbow{side}", "skin", skin, 0, y, WRIST, 2.05 * FIG, 2.65 * FIG, FORE_ARM)["fuse"] = "skin"
+        sk("hand", f"wrist{side}", 0.4, y, WRIST - 1.2 * FIG, 2.6 * FIG, 1.9 * FIG, 3.3 * FIG)
+        sk("thumb", f"wrist{side}", 1.9 * FIG, y - sy * 0.4 * FIG, WRIST - 1.4 * FIG, 1.0 * FIG, 0.9 * FIG, 1.7 * FIG)
+    # legs, under the trousers: a skirt or a dress shows them (spec §3, the skin-only base)
+    sk("hips", "hips", 0, 0, HIP + 1.5 * FIG, 5.2 * FIG, 7.8 * FIG, 4.4 * FIG)
+    for side, sy in (("L", 1), ("R", -1)):
+        y = sy * HIP_W
+        r.cyl("thigh", f"hip{side}", "skin", skin, 0, y, KNEE, 2.6 * FIG, 3.7 * FIG, HIP - KNEE)["fuse"] = "skin"
+        sk("knee", f"knee{side}", 0, y, KNEE, 2.6 * FIG, 2.6 * FIG, 2.6 * FIG)
+        r.cyl("shin", f"knee{side}", "skin", skin, 0, y, ANKLE + 0.5 * FIG, 1.9 * FIG, 2.6 * FIG, KNEE - ANKLE - 0.5 * FIG)["fuse"] = "skin"
+        sk("ankle", f"ankle{side}", 0.6, y, ANKLE + 0.6 * FIG, 1.9 * FIG, 1.8 * FIG, 1.4 * FIG)
 
     # ── hair: one silhouette each, all on the head
     # A hair cap sits BEHIND the hairline: centred back of the head's centre and a touch higher, so
