@@ -57,6 +57,9 @@ no tier. It is the third field that mirror had resolved-then-dropped, after `wor
    read null/null. A replicated row keeps the origin's stamp: the fold carries both fields through,
    because the origin saw the model and the folding node may hold a different presence for that
    seat, or none.
+   _(Amended 2026-10-22: the fold did, once the event carried the fields. `toSyncEvent` omitted
+   both, so a joiner stored null while the origin row kept the stamp. The push copies them.
+   Rows folded before that fix stay null — Decision 4, no backfill.)_
 
 3. **The HTTP claim mirror accepts `model_source`** beside `model`, carries it onto the occupancy
    it creates and across the approval gap on the requests row, gated exactly as `model` is.

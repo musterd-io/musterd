@@ -92,6 +92,10 @@ acceptance goes — cannot be asked, because nothing records the kind.
   settled there: `docs` and `tests` are exclusive classes, so a test-only diff is `tests` even when
   every test lives under `packages/server/src/`, and a diff of docs plus tests (nothing else) is
   `code`. The stage-two human ask opens with the class too, not only the peer ask.
+- 2026-10-22: the eval below is pre-registered as
+  [`docs/watches/2026-10-22-change-class-sent-back.md`](../watches/2026-10-22-change-class-sent-back.md).
+  The model on the submit is a count beside the class, read only where both nodes hold the same
+  stamp. It is not a ranking of models.
 
 ## Observability & Evaluation
 

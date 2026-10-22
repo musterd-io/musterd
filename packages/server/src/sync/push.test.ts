@@ -697,6 +697,7 @@ withDrivers('push', (_o, kind) => {
       await addMember(hub.store, await hubTeam(), { name: 'ada', kind: 'agent' });
       await attach(joiner.store, await memberId(joiner, 'ada'), 'codex', 'c1', {
         model: 'gpt-5',
+        model_source: 'observed',
       });
       const before = Date.now();
       await pushTeam(joinerCtx, await joinerTeam(), before);
@@ -706,6 +707,14 @@ withDrivers('push', (_o, kind) => {
       expect(
         staged.some((e) => e.kind === 'presence' && e.event.action === 'presence.attached'),
       ).toBe(true);
+      // ADR 416 §2: the origin's stamp rides the push. The fold must not re-read presence.
+      const attached = staged.find(
+        (e) => e.kind === 'presence' && e.event.action === 'presence.attached',
+      );
+      expect(attached.event).toMatchObject({
+        actor_model: 'gpt-5',
+        actor_model_source: 'observed',
+      });
       const joinerNode = readNodeState().nodes['bravo']!.node_id;
       expect(
         (await hub.store.get('SELECT last_seen_at FROM nodes WHERE id = ?', [joinerNode]))!

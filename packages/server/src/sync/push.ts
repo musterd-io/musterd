@@ -6,6 +6,7 @@ import {
   type SyncWedge,
   type SyncWedgeKind,
   SyncWedgeSchema,
+  isWireAttestationSource,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
@@ -241,6 +242,14 @@ function toSyncEvent(pending: Pending, slug: string): SyncEvent {
         target: row.target,
         result: row.result,
         detail: row.detail ? (JSON.parse(row.detail) as Record<string, unknown>) : null,
+        // ADR 416 §2: the fold keeps the origin's stamp, because the folding node may hold a
+        // different presence for that seat, or none. Leaving these off made every joiner store
+        // null — the origin had the model, and the replica read "not recorded".
+        actor_model: row.actor_model,
+        actor_model_source:
+          row.actor_model && isWireAttestationSource(row.actor_model_source)
+            ? row.actor_model_source
+            : null,
       },
       origin_node: row.origin_node,
       origin_seq: row.origin_seq,
