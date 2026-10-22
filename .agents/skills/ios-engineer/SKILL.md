@@ -14,8 +14,8 @@ This file is the core and is always read. `references/` holds one file per craft
 table says which to open. `references/team.md` is this team's own map: its app, toolchain pins,
 commands, decisions and incidents. Read it before the first piece of work in a session.
 
-Built with the `building-a-role-skill` method. Until step 5 has a recorded run in
-`evals/results.md`, this skill is a draft.
+Built with the `building-a-role-skill` method. Steps 5 and 6 are recorded in
+`evals/results.md`. Step 7, acceptance, is still open.
 
 ## Sources (read, never restated here)
 
