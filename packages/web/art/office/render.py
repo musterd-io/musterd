@@ -37,7 +37,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None}
+           "resample_from": None, "stills": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -55,6 +55,9 @@ def args() -> dict:
             out["figure"] = True; i += 1
         elif k == "--force":
             out["force"] = True; i += 1
+        elif k == "--stills":
+            # clip:frame:dir,… — a look check at office size instead of sheets (figure_stills.py)
+            out["stills"] = [(c, d, int(f)) for c, f, d in (x.split(":") for x in argv[i + 1].split(","))]; i += 2
         elif k == "--resample-from":
             out["resample_from"] = float(argv[i + 1]); i += 2
         else:
@@ -281,6 +284,7 @@ def render_figure(a: dict) -> None:
     (clip, direction), columns are frames."""
     import figure
     import figure_resample
+    import figure_stills
 
     scene.clear()
     zs = scene.z_scale(a["ky"])
@@ -465,6 +469,8 @@ def render_figure(a: dict) -> None:
             if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # drawn flipped from its source direction at runtime (`frameCell`)
             for f in range(frames):
+                if a["stills"] is not None and (name, d, f) not in a["stills"]:
+                    continue  # a look check renders only the stills it was asked for
                 pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
                 figure.place_props(rig, name, math.radians(45 * di))
@@ -529,6 +535,12 @@ def render_figure(a: dict) -> None:
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
             os.remove(p)
+    if a["stills"] is not None:
+        bad = [s for s in a["stills"] if s[1] in MIRRORED]
+        if bad:
+            raise SystemExit(f"render.py: --stills takes rendered directions only (not {sorted(MIRRORED)}): {bad}")
+        figure_stills.write(crops, a["stills"], fw, fh, a["out"], write_pixels)
+        return
     # Pack each layer's frames cropped to their own pixels (an atlas, not a grid): a glasses frame
     # is a few hundred pixels, not a 112×208 cell, and the browser decodes only what is drawn.
     # figure.json records each cell's rect in the atlas and its offset inside the nominal frame.
