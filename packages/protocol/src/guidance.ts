@@ -405,6 +405,8 @@ export function renderSkillBody(opts: { team: string }): string {
     'answer the same act just because its pointer appears again.',
     'For a `request_help` that needs an answer, send `accept` or `decline` with `reply_to` set to its',
     'exact id. A separate `message` may explain your answer, but do not assume it discharged the act.',
+    'After accepting, the request stays open until the work is done: then send `resolve` for its thread.',
+    'For a request without a thread, pass its own id to `resolve`.',
     '',
     '## Shared blockers — report, park, converge (incident convergence)',
     '',
