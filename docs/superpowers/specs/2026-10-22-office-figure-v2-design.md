@@ -219,12 +219,12 @@ directions) with nick, because the figure can only be judged there.
 
 | # | Increment | Render | Lane |
 | --- | --- | --- | --- |
-| v2-1 | The body: proportions, fused surfaces, anatomy, face, materials; skin-only base with legs, bottoms and shoes as pieces; today's wardrobe re-fitted; checked in /live on a few frames first; the build stretch in `figure.ts` | full, ~2 h+ | to open |
-| v2-2 | Tops upgraded (cuffs, hems, collars, drawstrings, plackets) | tops only | to open |
-| v2-3 | Hair and facial hair upgraded, with polished and unkempt versions | hair, facial | to open |
-| v2-4 | Hats and accessories upgraded; earrings, headbands, watches, bracelets, headphones around the neck, more frames | accessories | to open |
-| v2-5 | Style, grooming and per-spot accessory picks in `appearance.ts`, `presents` retired; outer layers; the first new pieces of each style. After realism increment 4 | new pieces | to open |
-| v2-6… | More pieces per style, including the one-piece layer and dresses, a few per PR | new pieces | to open |
+| v2-1 | The body: proportions, fused surfaces, anatomy, face, materials; skin-only base with legs, bottoms and shoes as pieces; today's wardrobe re-fitted; checked in /live on a few frames first; the build stretch in `figure.ts` | full, ~2 h+ | `01M5JHEEGT55EDJYG51H6ZAQVJ` |
+| v2-2 | Tops upgraded (cuffs, hems, collars, drawstrings, plackets) | tops only | `01M5JHEGY8S4BSJDWS1M6SYZMG` |
+| v2-3 | Hair and facial hair upgraded, with polished and unkempt versions | hair, facial | `01M5JHEK4HNPFY7XC3RKQWJFV9` |
+| v2-4 | Hats and accessories upgraded; earrings, headbands, watches, bracelets, headphones around the neck, more frames | accessories | `01M5JHENHB2ACVDJ767XP0RH8X` |
+| v2-5 | Style, grooming and per-spot accessory picks in `appearance.ts`, `presents` retired; outer layers; the first new pieces of each style. After realism increment 4 | new pieces | `01M5JHERVT03C6VDN13M8FE3NK` |
+| v2-6… | More pieces per style, including the one-piece layer and dresses, a few per PR | new pieces | `01M5JHEV51D8G1FKGSNVK9CJ81` |
 
 Order: v2-1 → nick accepts the rendered people → realism increment 4 (flag off, painters deleted) →
 v2-5. v2-2 to v2-4 can land before or after increment 4; they only upgrade pieces the painted office
