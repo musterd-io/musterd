@@ -2346,8 +2346,7 @@
    quietly undo that. */
 .lc-gl-label__dot {
   /* A lit glass bead (nick, 2026-10-22: "more visually polished"): the state colour is `--dot`, set by
-     the modifiers below, and the bead is built from it — a radial highlight at the upper left, a darker
-     foot, a hairline ring in the state colour so it holds its edge on the chalk, and a paper-sheen halo
+     the modifiers below, and the bead is built from it — a radial highlight at the upper left, a hairline ring in the state colour so it holds its edge on the chalk, and a paper-sheen halo
      seating it into the plate. 7px, up from 5. `--idle` stays unglowed (see below). */
   --dot: var(--lc-dot-off);
   display: inline-block;
@@ -2361,45 +2360,15 @@
   align-self: center;
   background:
     radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 52%),
-    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--dot) 55%, #000) 0%, transparent 62%),
     var(--dot);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
-    0 0 0 2px var(--lc-paper-sheen),
+  --dot-ring:
+    0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)), 0 0 0 2px var(--lc-paper-sheen),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: var(--dot-ring);
 }
 .lc-gl-label__dot--on {
   --dot: var(--lc-success);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
-    0 0 0 2px var(--lc-paper-sheen),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
-    0 0 7px color-mix(in srgb, var(--lc-success) 70%, transparent);
-}
-/* Working breathes: the halo swells and settles on a slow beat, so "running" is a pulse you catch in
-   the corner of your eye rather than a colour you have to decode. /live only — the broadcast capture
-   stays still (the house no-per-frame-cost rule) — and off under reduced motion. */
-@media (prefers-reduced-motion: no-preference) {
-  .lc-gl-label:not(.is-broadcast) .lc-gl-label__dot--on {
-    animation: lc-dot-breathe 2.8s ease-in-out infinite;
-  }
-}
-@keyframes lc-dot-breathe {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
-      0 0 0 2px var(--lc-paper-sheen),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
-      0 0 5px color-mix(in srgb, var(--lc-success) 55%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
-      0 0 0 2px var(--lc-paper-sheen),
-      inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
-      0 0 10px color-mix(in srgb, var(--lc-success) 85%, transparent);
-  }
+  box-shadow: var(--dot-ring), 0 0 7px color-mix(in srgb, var(--lc-success) 70%, transparent);
 }
 /* Live but holding no task (ADR 140). Amber, and *unglowed* — the green dot's halo is what reads as
    "lit up and running" from across the panel, so an idle dot must not have one. */
