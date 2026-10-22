@@ -365,7 +365,7 @@ Maps `to` → Recipient (`@team`/`@broadcast`/name), builds an Envelope (`from`=
 ```json
 {
   "name": "team_inbox_check",
-  "description": "Check unread, marking them read. Call at task boundaries. Past `limit` nothing is marked read. `ids` reads named acts in full; `full` a longer reply. `wait` (s) blocks for a directed act.",
+  "description": "Check unread, marking them read. Past `limit` nothing is marked read. `ids` reads named acts in full; `full` longer. `wait` blocks for a directed act.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -373,7 +373,8 @@ Maps `to` → Recipient (`@team`/`@broadcast`/name), builds an Envelope (`from`=
       "limit": { "type": "number", "default": 50 },
       "ids": { "type": "array", "items": { "type": "string" } },
       "full": { "type": "boolean" },
-      "wait": { "type": "number" }
+      "wait": { "type": "number" },
+      "until_lane": { "type": "string" }
     }
   }
 }
@@ -381,7 +382,7 @@ Maps `to` → Recipient (`@team`/`@broadcast`/name), builds an Envelope (`from`=
 
 Drains the in-memory buffer + `GET /inbox?unread=1`, advances the cursor, returns rows as structured `{from, act, body, ts, thread, meta}` plus a compact text rendering. Dedupes by envelope id (at-least-once). **Refuses until ready** (pending → claim a seat; dormant → `team_join`) — a session that hasn't joined cannot drain the shared inbox cursor.
 
-**Blocking wait (ADR 705).** `wait` (seconds) is the MCP form of `musterd inbox --wait`: when nothing is already waiting, the call blocks on the live socket's directed-act listener until a directed act arrives or the budget runs out (clamped to 50s, under the harness tool timeout), then runs the ordinary check. No new tool and no polling loop — finding 019 measured 257 polling calls where one blocking call per wait suffices.
+**Blocking wait (ADR 705).** `wait` (seconds) is the MCP form of `musterd inbox --wait`: when nothing is already waiting, the call blocks on the live socket's directed-act listener until a directed act arrives or the budget runs out (clamped to 50s, under the harness tool timeout), then runs the ordinary check. No new tool and no polling loop — finding 019 measured 257 polling calls where one blocking call per wait suffices. `until_lane` (fix C) also wakes the call on the daemon's `lane_resolve` broadcast for that lane and leads the reply with its holder branch — resolving the holder's lane is what releases its hold, so a hold-refused seat waits on that lane in one call instead of messaging for an ETA.
 
 **Reply size (lane 01M4S53FQT).** The default reply stays under 12,000 characters, about 3k tokens, and clips each body at 600 characters. `full: true` raises that to 30,000 and 1,200, the ceiling set after a harness refused a larger reply (lane 01M2JZYTAH). `ids` returns named acts whole, with their stored meta. A row is costed as the larger of its text line and its structured row, because the harness shows the model one or the other (Claude Code shows the structured content). The rendered meta leaves out `otel` and `model_source`, which the reader never acts on. Folded and digested rows appear in the structured content as the same one-line summaries the text shows (`· from [act] → to: head (id=…)`), not bare ids, so a reader that sees only the structured form can tell what it was marked as having read (lane 01M4VR8FSP). Measured before the change, over 241 checks on one machine: median 4,169 characters, p90 17,284, max 25,176. In the large replies, bodies were half the size and meta 18%. The native host builds the same server in process, so it gets the same default.
 

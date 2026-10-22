@@ -259,6 +259,9 @@ export class MusterdClient {
   private seen = new Set<string>();
   /** ADR 588 §6: who wants a directed act the moment it lands — the resident engine's steer. */
   private readonly directedListeners = new Set<(env: Envelope) => void>();
+  /** ADR 705 (fix C): who wants every delivery the moment it lands — a blocking wait watching
+   *  for a named lane's resolve broadcast, which is team traffic, not a directed act. */
+  private readonly deliveryListeners = new Set<(env: Envelope) => void>();
   /** A fixed hearing attestation for a holder with no idle-wake core: a resident seat hears
    *  in-process, so it is `idle` (pushable) for as long as it holds the seat. */
   private fixedHearing: { hearing: Hearing; reason?: string } | null = null;
@@ -507,6 +510,13 @@ export class MusterdClient {
   onDirected(listener: (env: Envelope) => void): () => void {
     this.directedListeners.add(listener);
     return () => void this.directedListeners.delete(listener);
+  }
+
+  /** ADR 705 (fix C): be told about every delivery, directed or team — a blocking wait watching
+   *  for a named lane's resolve broadcast listens here. Returns the unsubscribe. */
+  onDelivery(listener: (env: Envelope) => void): () => void {
+    this.deliveryListeners.add(listener);
+    return () => void this.deliveryListeners.delete(listener);
   }
 
   /** The seat this client is configured to hold, or null for a role claim / a chat folder. */
@@ -1918,6 +1928,15 @@ export class MusterdClient {
     }
     if (this.directedListeners.size > 0 && this.isDirectedToMe(env)) {
       for (const listener of this.directedListeners) {
+        try {
+          listener(env);
+        } catch {
+          // a listener's bug must never cost a delivery either
+        }
+      }
+    }
+    if (this.deliveryListeners.size > 0) {
+      for (const listener of this.deliveryListeners) {
         try {
           listener(env);
         } catch {

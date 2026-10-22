@@ -2,10 +2,12 @@ import { makeEnvelope } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import type { MusterdClient } from '../client.js';
 import {
+  isLaneResolve,
   MAX_INBOX_WAIT_MS,
   registerInboxCheck,
   resolveInboxWaitMs,
   waitForDirectedAct,
+  waitForWake,
 } from './inboxCheck.js';
 
 type Handler = (args: any) => Promise<{ content: { text: string }[]; structuredContent?: any }>;
@@ -137,6 +139,104 @@ describe('team_inbox_check wait', () => {
     const r = await handler({ unread_only: true, limit: 50, wait: 0.05 });
     expect(text(r)).toContain('no new messages');
     expect(Date.now() - started).toBeGreaterThanOrEqual(40);
+  });
+
+  it('isLaneResolve reads only the daemon resolve broadcast for that lane', () => {
+    const broadcast = makeEnvelope({
+      id: '01BBBBBBBBBBBBBBBBBBBBBBBB',
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'team' },
+      act: 'message',
+      body: '[lane] resolved "x"',
+      ts: 1000,
+      meta: { lane_resolve: { lane: 'L1', title: 'x', state: 'done' } },
+    });
+    expect(isLaneResolve(broadcast, 'L1')).toBe(true);
+    expect(isLaneResolve(broadcast, 'L2')).toBe(false);
+    expect(isLaneResolve(directed, 'L1')).toBe(false);
+  });
+
+  it('waitForWake wakes on the named lane resolving, not on another lane', async () => {
+    let deliver: ((env: any) => void) | undefined;
+    const client = {
+      onDirected: () => () => undefined,
+      onDelivery: (fn: (env: any) => void) => {
+        deliver = fn;
+        return () => undefined;
+      },
+    };
+    const pending = waitForWake(client as any, 5_000, 'L1');
+    const other = makeEnvelope({
+      id: '01CCCCCCCCCCCCCCCCCCCCCCCC',
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'team' },
+      act: 'message',
+      body: '[lane] resolved "y"',
+      ts: 1000,
+      meta: { lane_resolve: { lane: 'L2', title: 'y', state: 'done' } },
+    });
+    deliver!(other);
+    const winner = await Promise.race([
+      pending.then(() => 'woke'),
+      new Promise((r) => setTimeout(() => r('still waiting'), 30)),
+    ]);
+    expect(winner).toBe('still waiting');
+    deliver!({ ...other, meta: { lane_resolve: { lane: 'L1', title: 'x', state: 'done' } } });
+    await expect(pending).resolves.toMatchObject({ woke: 'lane' });
+  });
+
+  it('until_lane wakes with the holder branch and needs no partner message', async () => {
+    let deliver: ((env: any) => void) | undefined;
+    let laneShows = 0;
+    const handler = capture(
+      fakeClient({
+        onDirected: (() => () => undefined) as any,
+        onDelivery: ((fn: (env: any) => void) => {
+          deliver = fn;
+          return () => undefined;
+        }) as any,
+        laneShow: (async () => ({
+          lane: { state: laneShows++ === 0 ? 'active' : 'done', branch: 'feat/holder-work' },
+        })) as any,
+        fetchInbox: (async () => ({ messages: [], cursor: null })) as any,
+      }),
+    );
+    const pending = handler({ unread_only: true, limit: 50, wait: 30, until_lane: 'L1' });
+    await vi.waitFor(() => expect(deliver).toBeDefined());
+    deliver!(
+      makeEnvelope({
+        id: '01DDDDDDDDDDDDDDDDDDDDDDDD',
+        team: 'dawn',
+        from: 'nick',
+        to: { kind: 'team' },
+        act: 'message',
+        body: '[lane] resolved "x"',
+        ts: 1000,
+        meta: { lane_resolve: { lane: 'L1', title: 'x', state: 'done' } },
+      }),
+    );
+    const r = await pending;
+    expect(text(r)).toContain('wait woke: lane L1 resolved');
+    expect(text(r)).toContain('holder branch feat/holder-work');
+  });
+
+  it('until_lane already done returns at once with its branch', async () => {
+    const onDelivery = vi.fn(() => () => undefined);
+    const handler = capture(
+      fakeClient({
+        onDirected: (() => () => undefined) as any,
+        onDelivery: onDelivery as any,
+        laneShow: (async () => ({
+          lane: { state: 'done', branch: 'feat/holder-work' },
+        })) as any,
+        fetchInbox: (async () => ({ messages: [], cursor: null })) as any,
+      }),
+    );
+    const r = await handler({ unread_only: true, limit: 50, wait: 30, until_lane: 'L1' });
+    expect(text(r)).toContain('holder branch feat/holder-work');
+    expect(onDelivery).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid wait instead of blocking', async () => {
