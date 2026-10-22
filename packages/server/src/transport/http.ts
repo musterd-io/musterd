@@ -10808,7 +10808,9 @@ export async function handleHttp(
       // down rather than keep a copy the stream never sees.
       if ((method === 'POST' || method === 'DELETE') && rest === '/status-line') {
         const { team, member } = await authTouch(ctx, slug, req);
-        if (member.kind !== 'human' || member.observer === 1 || actingSeat(req) !== undefined) {
+        // A human credential cannot act as another seat (authByCredential refuses it), so a human
+        // `member` here is the caller themselves; an agent seat, a service or an observer is not.
+        if (member.kind !== 'human' || member.observer === 1) {
           throw new MusterdError(
             'forbidden',
             'a status line is set by a human, for themselves (ADR 721)',
