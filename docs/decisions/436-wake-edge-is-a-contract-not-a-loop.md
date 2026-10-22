@@ -139,16 +139,23 @@ fix five contract holes.
   from usage, and enforces `budget_usd` before the next call; the engine-per-provider option is
   reversed. Decision 2 stands unchanged: the native backend remains the reference row.
 
-- **2026-10-21 (lane `01M3TB1GPMMH2VKFJ2V97CSP9P`, the binding read).** `pnpm wake:rail` over wakes
-  since clause 1 printed `FIRES — opencode: 0/54 settled wakes priced`. That is the pricing clause,
-  and only that clause: OpenCode 0/35 reply and 0/19 work orders, all `harness_price_unverified`,
-  none through the gateway. The floor clause does not fire. Reply medians: claude-code 1617k
-  (n=45), grok 3001k (n=32, about 1.9×), codex 484k (n=36), opencode 359k (n=35), musterd 280k
-  (n=22). Grok 7/46 and Codex 1/42 are priced, each of those prices via the gateway. The 2026-10-13
-  reading (both clauses, Grok at 12.2×) is the early read; this one is the date Decision 5 named.
-  [ADR 583](583-metering-gateway-not-a-loop.md) remains the ADR that answers the trigger. This read
-  writes none. Snapshot: the wiki page
+- **2026-10-21 (lane `01M3TB1GPMMH2VKFJ2V97CSP9P`, the binding read).** `pnpm wake:rail` on
+  MacBook-Air-2.local, over wakes since clause 1, printed
+  `FIRES — opencode: 0/54 settled wakes priced`. Pricing is the replicated ledger: OpenCode 0/35
+  reply and 0/19 work orders, all `harness_price_unverified`, none through the gateway. The floor
+  figures are that machine's trace. Where a cost row has no usage block, the rail sums `usage`
+  rows from the local `trace.db`. Reply medians there: claude-code 1617k (n=45), grok 3001k
+  (n=32, about 1.9×), codex 484k (n=36), opencode 359k (n=35), musterd 280k (n=22). No floor
+  ratio was named. Grok 7/46 and Codex 1/42 are priced, each of those prices via the gateway.
+  The 2026-10-13 reading (both clauses, Grok at 12.2×) is the early read; this one is the date
+  Decision 5 named. [ADR 583](583-metering-gateway-not-a-loop.md) remains the ADR that answers
+  the trigger. This read writes none. Snapshot: the wiki page
   `resume-bound-is-below-one-wake-life.md`, section "binding read".
+- **2026-10-22 (same lane, sent back).** A re-run on mac.lan at about 05:10Z had the same wake
+  counts and a trigger line that also named a Grok floor ratio (the note is cut at
+  `grok: median floor 4…`). The first snapshot's falsifier treated that as an overturn of the
+  Air's row. The floor is per machine, so the falsifier now names MacBook-Air-2.local and these
+  wake counts. The pricing clause is the part both machines share.
 
 ## Observability & Evaluation
 
