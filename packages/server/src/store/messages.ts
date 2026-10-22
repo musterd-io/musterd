@@ -625,9 +625,12 @@ export function pendingInterrupts(
   // need one — the discharging act is an envelope in the very list being scanned.
   const discharged = new Set<string>();
   // Clause 7(iv) of the doorbell contract: a steer has no accept/decline — the addressee's reply
-  // IS the answer, whatever act it rides on. Only `me`'s own replies count here; an obligation is
-  // still discharged only by an accept/decline (any sender), as before.
+  // IS the answer, whatever act it rides on. Only `me`'s own replies count here. An obligation is
+  // discharged for every named seat by an accept/decline (any sender). A `wait` from me silences
+  // the bell for me only (ADR 712): it does not decide the lane and it does not stand a
+  // co-addressee down. A chat reply does not silence an obligation.
   const answeredByMe = new Set<string>();
+  const ackedByMe = new Set<string>();
   // ADR 434 shape 4: my newest turn per thread. A steer inside a thread is answered by my next turn
   // IN that thread, `in_reply_to` or not — that is how ryder answered stanley's on 2026-09-21 and
   // was woken for it again sixteen minutes later. Keyed the way `resolve` closes a thread:
@@ -644,6 +647,7 @@ export function pendingInterrupts(
     if (typeof ref !== 'string') continue;
     if (m.act === 'accept' || m.act === 'decline') discharged.add(ref);
     if (m.from === me) answeredByMe.add(ref);
+    if (m.from === me && m.act === 'wait') ackedByMe.add(ref);
   }
   const answeredInThreadByMe = (m: Envelope): boolean => {
     const mine = myLatestOnThread.get(m.thread ?? m.id);
@@ -796,8 +800,9 @@ export function pendingInterrupts(
         // Directed obligations (no eligible set) were missing this: `discharged` only ran inside
         // the eligible-set branch of `actionNeeded`, so a self-answered `lane_review` ask kept
         // ringing. A huddle OPEN is the opposite — one named seat accepting must not stand the
-        // rest down (ADR 378 inc 4).
-        !(isObligation(m) && discharged.has(m.id)) &&
+        // rest down (ADR 378 inc 4). `ackedByMe` is the ADR 712 half: my own `wait` stops the
+        // bell for me and leaves every other named seat still owing a verdict.
+        !(isObligation(m) && (discharged.has(m.id) || ackedByMe.has(m.id))) &&
         // Newest steer wins: any steer that isn't the single winner is superseded — it neither
         // interrupts nor counts (a ts tie is broken by id, so no two steers survive together).
         // A winner this seat already replied to is discharged (clause 7(iv)) — and because the

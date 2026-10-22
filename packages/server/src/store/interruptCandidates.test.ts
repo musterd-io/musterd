@@ -244,6 +244,16 @@ withDrivers('interruptCandidates', (o) => {
       expect(await viaWholeWindow(db, team, ada, true)).toContain('oblig-mine');
     });
 
+    it("silences a routed acceptance this seat already waited on — the wait is the seat's own suppress act", async () => {
+      const { db, team, nick, ada } = await seed();
+      await say(db, team, nick, ada, 'ask', 'oblig-wait', {
+        meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L1' } },
+      });
+      await say(db, team, ada, nick, 'wait', 'wait-mine', { meta: { in_reply_to: 'oblig-wait' } });
+      expect(await viaCandidates(db, team, ada, true)).not.toContain('oblig-wait');
+      expect(await viaWholeWindow(db, team, ada, true)).toContain('oblig-wait');
+    });
+
     it('silences a routed acceptance this seat declined, and a thread this seat resolved', async () => {
       const { db, team, nick, ada } = await seed();
       await say(db, team, nick, ada, 'ask', 'oblig-no', {
