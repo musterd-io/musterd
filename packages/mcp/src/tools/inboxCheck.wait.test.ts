@@ -88,17 +88,81 @@ describe('waitForDirectedAct', () => {
 });
 
 describe('team_inbox_check wait', () => {
-  it('returns at once when an act is already waiting, without subscribing', async () => {
-    const onDirected = vi.fn(() => () => undefined);
+  it('returns at once when an act is already waiting, and lets go of its listener', async () => {
+    const off = vi.fn();
     const handler = capture(
       fakeClient({
-        onDirected: onDirected as any,
+        onDirected: (() => off) as any,
         fetchInbox: (async () => ({ messages: [directed], cursor: null })) as any,
       }),
     );
+    const started = Date.now();
     const r = await handler({ unread_only: true, limit: 50, wait: 30 });
     expect(text(r)).toContain('partner done');
-    expect(onDirected).not.toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(off).toHaveBeenCalledOnce();
+  });
+
+  // Review (big-body, 01M5JBSTS7): an act delivered after the empty pre-check started but before
+  // the wait subscribed fired no listener, so the wait slept to its timeout. Armed first, it wakes.
+  it('wakes on a directed act delivered while the pre-check is in flight (no lost wakeup)', async () => {
+    let listener: ((env: any) => void) | undefined;
+    let calls = 0;
+    const handler = capture(
+      fakeClient({
+        onDirected: ((fn: (env: any) => void) => {
+          listener = fn;
+          return () => undefined;
+        }) as any,
+        fetchInbox: (async () => {
+          calls++;
+          if (calls === 1) {
+            // The pre-check's read already happened server-side; the act lands in the gap.
+            listener?.(directed);
+            return { messages: [], cursor: null };
+          }
+          return { messages: [directed], cursor: null };
+        }) as any,
+      }),
+    );
+    const started = Date.now();
+    const r = await handler({ unread_only: true, limit: 50, wait: 30 });
+    expect(text(r)).toContain('partner done');
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it('wakes on the named lane resolving while the pre-check reads that lane', async () => {
+    let deliver: ((env: any) => void) | undefined;
+    const handler = capture(
+      fakeClient({
+        onDirected: (() => () => undefined) as any,
+        onDelivery: ((fn: (env: any) => void) => {
+          deliver = fn;
+          return () => undefined;
+        }) as any,
+        laneShow: (async () => {
+          // The lane read says active; its resolve broadcast arrives before the wait would subscribe.
+          deliver?.(
+            makeEnvelope({
+              id: '01EEEEEEEEEEEEEEEEEEEEEEEE',
+              team: 'dawn',
+              from: 'nick',
+              to: { kind: 'team' },
+              act: 'message',
+              body: '[lane] resolved "x"',
+              ts: 1000,
+              meta: { lane_resolve: { lane: 'L1', title: 'x', state: 'done' } },
+            }),
+          );
+          return { lane: { state: 'active', branch: 'feat/holder-work' } };
+        }) as any,
+        fetchInbox: (async () => ({ messages: [], cursor: null })) as any,
+      }),
+    );
+    const started = Date.now();
+    const r = await handler({ unread_only: true, limit: 50, wait: 30, until_lane: 'L1' });
+    expect(text(r)).toContain('wait woke: lane L1 resolved');
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it('blocks in one call until a directed act arrives, then returns it', async () => {
@@ -223,11 +287,11 @@ describe('team_inbox_check wait', () => {
   });
 
   it('until_lane already done returns at once with its branch', async () => {
-    const onDelivery = vi.fn(() => () => undefined);
+    const off = vi.fn();
     const handler = capture(
       fakeClient({
         onDirected: (() => () => undefined) as any,
-        onDelivery: onDelivery as any,
+        onDelivery: (() => off) as any,
         laneShow: (async () => ({
           lane: { state: 'done', branch: 'feat/holder-work' },
         })) as any,
@@ -236,7 +300,7 @@ describe('team_inbox_check wait', () => {
     );
     const r = await handler({ unread_only: true, limit: 50, wait: 30, until_lane: 'L1' });
     expect(text(r)).toContain('holder branch feat/holder-work');
-    expect(onDelivery).not.toHaveBeenCalled();
+    expect(off).toHaveBeenCalledOnce();
   });
 
   it('rejects an invalid wait instead of blocking', async () => {
