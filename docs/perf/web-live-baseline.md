@@ -2137,3 +2137,19 @@ seated viewer's desk paints over it, so it bought nothing), and the SVG lost its
 The ceiling was still saturated, and lazy-loading cannot move total (ADR 183). Raised tight: measured + ~0.1%.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 311,700 B with this change in.
+
+### 2026-10-22 — compact team rows and a foldable Experiments head (nick)
+
+The experiments section took the room the team rows had: a /live row was ~110px, so five working seats
+needed a scroll. A row is now two lines (~42px) and the Experiments head folds, remembered per browser.
+
+| Budget   | Before (main)    | This branch      | Ceiling                       |
+| -------- | ---------------- | ---------------- | ----------------------------- |
+| total JS | 358,400 B (cap)  | 358,456 B        | RAISED 358,400 → 358,500 B    |
+| live CSS | ~26,680 B        | ~27,000 B         | RAISED 26,700 → 27,100 B      |
+
+The CSS is an overlay on `:not(.is-still)`: the stream's column (/broadcast) keeps its read-from-across-a-room
+size, so the old rules cannot be edited in place. Lazy-loading cannot move either number (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports live CSS at or under 27,100 B and total JS at or under 358,500 B.
+
