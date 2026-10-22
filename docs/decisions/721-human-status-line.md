@@ -83,6 +83,7 @@ without making the status a front-end decoration that one browser knows and the 
 - `SPEC.md` gains the field and the two routes. On 2026-10-22 another lane holds `SPEC.md`
   (big-body, ADR 662 coverage); the SPEC edit lands in this ADR's first increment once that lane
   releases it, and until then this ADR and `02-protocol.md` are the record.
+  Follows-up: `01M5JV0M5MG5T6QA44Q1W7RZN2`
 - The figure work and this are independent: the nameplate is DOM over the office, not the rendered
   scene.
 
