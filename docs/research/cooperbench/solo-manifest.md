@@ -1,7 +1,7 @@
 # CooperBench solo reference: pre-registration
 
-**Lane:** `01M5GCF88Z` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-21,
-not yet run. Nothing below changes once a measured pair has run; what the run teaches goes in the
+**Lane:** `01M5GCF88Z` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-21; run 2026-10-21 → [finding 018](../018-cooperbench-solo-reference.md).
+Nothing below changes once a measured pair has run; what the run teaches goes in the
 finding, not here. **CooperBench:** `63b9d44`. **Reads with:** [finding 017](../017-cooperbench-pilot-3.md).
 
 ## Why

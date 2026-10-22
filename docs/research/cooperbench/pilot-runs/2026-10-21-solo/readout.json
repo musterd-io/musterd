@@ -1,0 +1,322 @@
+[
+ {
+  "task": "dottxt_ai_outlines_task/1655",
+  "features": [
+   1,
+   3
+  ],
+  "passed": true,
+  "cost": 0.18746069999999998,
+  "steps": 8,
+  "patch_lines": 31,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "dottxt_ai_outlines_task",
+   "task_id": 1655,
+   "features": [
+    1,
+    3
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": true,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:54:07.134850"
+  }
+ },
+ {
+  "task": "dspy_task/8563",
+  "features": [
+   1,
+   4
+  ],
+  "passed": false,
+  "cost": 0.34429109999999996,
+  "steps": 15,
+  "patch_lines": 143,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "dspy_task",
+   "task_id": 8563,
+   "features": [
+    1,
+    4
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": false
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": false,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:54:08.467237"
+  }
+ },
+ {
+  "task": "go_chi_task/27",
+  "features": [
+   3,
+   4
+  ],
+  "passed": false,
+  "cost": 0.6833198999999999,
+  "steps": 34,
+  "patch_lines": 293,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "go_chi_task",
+   "task_id": 27,
+   "features": [
+    3,
+    4
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": false
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": false,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:37.249157"
+  }
+ },
+ {
+  "task": "llama_index_task/17244",
+  "features": [
+   5,
+   6
+  ],
+  "passed": false,
+  "cost": 0.11404035,
+  "steps": 5,
+  "patch_lines": 53,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "llama_index_task",
+   "task_id": 17244,
+   "features": [
+    5,
+    6
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": false
+   },
+   "both_passed": false,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:37.248641"
+  }
+ },
+ {
+  "task": "openai_tiktoken_task/0",
+  "features": [
+   4,
+   8
+  ],
+  "passed": true,
+  "cost": 0.4877933999999999,
+  "steps": 20,
+  "patch_lines": 109,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "openai_tiktoken_task",
+   "task_id": 0,
+   "features": [
+    4,
+    8
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": true,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:37.250550"
+  }
+ },
+ {
+  "task": "pallets_click_task/2800",
+  "features": [
+   1,
+   4
+  ],
+  "passed": false,
+  "cost": 1.2818383500000003,
+  "steps": 52,
+  "patch_lines": 154,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "pallets_click_task",
+   "task_id": 2800,
+   "features": [
+    1,
+    4
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": false
+   },
+   "both_passed": false,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:37.244537"
+  }
+ },
+ {
+  "task": "pallets_jinja_task/1559",
+  "features": [
+   5,
+   8
+  ],
+  "passed": true,
+  "cost": 0.7558702499999999,
+  "steps": 29,
+  "patch_lines": 378,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "pallets_jinja_task",
+   "task_id": 1559,
+   "features": [
+    5,
+    8
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": true,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:36.421176"
+  }
+ },
+ {
+  "task": "pallets_jinja_task/1621",
+  "features": [
+   6,
+   10
+  ],
+  "passed": true,
+  "cost": 0.70170705,
+  "steps": 25,
+  "patch_lines": 250,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "pallets_jinja_task",
+   "task_id": 1621,
+   "features": [
+    6,
+    10
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": true,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:53:37.238831"
+  }
+ },
+ {
+  "task": "react_hook_form_task/153",
+  "features": [
+   2,
+   6
+  ],
+  "passed": false,
+  "cost": 1.0009623,
+  "steps": 40,
+  "patch_lines": 237,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "react_hook_form_task",
+   "task_id": 153,
+   "features": [
+    2,
+    6
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": false
+   },
+   "both_passed": false,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:54:11.752551"
+  }
+ },
+ {
+  "task": "typst_task/6554",
+  "features": [
+   2,
+   6
+  ],
+  "passed": true,
+  "cost": 0.5596648499999999,
+  "steps": 24,
+  "patch_lines": 119,
+  "status": "Submitted",
+  "eval_error": null,
+  "eval": {
+   "repo": "typst_task",
+   "task_id": 6554,
+   "features": [
+    2,
+    6
+   ],
+   "setting": "solo",
+   "merge": null,
+   "feature1": {
+    "passed": true
+   },
+   "feature2": {
+    "passed": true
+   },
+   "both_passed": true,
+   "error": null,
+   "evaluated_at": "2026-10-21T23:55:56.406044"
+  }
+ }
+]
