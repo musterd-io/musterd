@@ -314,7 +314,10 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   if (notInstalled.length > 0) {
     throw new CliError(
       `not installed here: ${notInstalled
-        .map((id) => `${id} (${availability.get(id)?.detail ?? 'not installed'})`)
+        .map((id) => {
+          const hint = registry.find((a) => a.id === id)?.interactive?.installHint;
+          return `${id} (${availability.get(id)?.detail ?? 'not installed'}${hint ? `; install: ${hint}` : ''})`;
+        })
         .join(', ')} — install it, then run \`musterd harness configure\` again`,
       2,
     );
@@ -407,14 +410,7 @@ async function promptSelection(
   // ADR 643: only installed harnesses are offered, plus any already selected (so it can be
   // deselected). The rest are named once, with the way in, instead of being selectable.
   const { offered, missing } = selectableHarnesses(registry, availability, current);
-  if (missing.length > 0) {
-    p.log.info(
-      pc.dim(
-        `not installed here: ${missing.map((a) => a.id).join(', ')} — install it, then run ` +
-          '`musterd harness configure` again',
-      ),
-    );
-  }
+  if (missing.length > 0) p.log.info(missingBlock(missing));
   const picked = await p.multiselect({
     message:
       "Which harnesses should launch this worktree's member? (space toggles, enter confirms)",
@@ -433,6 +429,19 @@ async function promptSelection(
   });
   if (p.isCancel(picked)) return null;
   return picked as string[];
+}
+
+/** One row per uninstalled harness, each with its own install command, so a harness the picker
+ *  leaves out reads as "install this", not as unsupported (ADR 643 §1). */
+export function missingBlock(missing: HarnessAdapter[]): string {
+  const width = Math.max(...missing.map((a) => a.id.length));
+  return [
+    'not installed here — install one, then run `musterd harness configure` again:',
+    ...missing.map(
+      (a) =>
+        `  ${a.id.padEnd(width)}  ${pc.dim(a.interactive?.installHint ?? 'no install command known')}`,
+    ),
+  ].join('\n');
 }
 
 async function confirmPrompt(message: string): Promise<boolean> {
