@@ -2176,3 +2176,18 @@ offsets the new rules, so live CSS is unchanged in budget. Raised tight: measure
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 359,150 B.
 
+
+
+### 2026-10-22 — richer experiment graphs and an info mark (nick)
+
+| Budget   | Before (main) | This branch | Ceiling                    |
+| -------- | ------------- | ----------- | -------------------------- |
+| total JS | 359,150 B     | 359,369 B   | RAISED 359,150 → 359,500 B |
+| live CSS | ~27,000 B     | 27,046 B    | unchanged (27,100 B)       |
+
+The chart is 84x28 (was 60x16) with a goal zone, a point per sample, an end halo and a trend arrow, and its
+scale is logarithmic once a series spans 30x. The row's explainer button is a drawn info mark and only appears
+on rows that have a question or a metric. Raised tight: measured + ~0.04%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 359,500 B.
+\n
