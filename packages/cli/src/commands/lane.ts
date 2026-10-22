@@ -19,7 +19,7 @@ import {
   type LaneWarning,
   type MetricInput,
 } from '@musterd/protocol';
-import { resolveProject } from '@musterd/protocol/project';
+import { projectAliases, resolveProject } from '@musterd/protocol/project';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
@@ -347,6 +347,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         2,
       );
     }
+    // ADR 710: the name this checkout was known by before the origin remote won (the folder
+    // name), so the daemon heals in-flight lanes still carrying it. Empty for a declared project.
+    const explicitProject = flagStr(parsed.flags, 'project');
+    const aliases = projectAliases({ explicit: explicitProject });
     const res = await http.openLane(team, {
       title,
       ...(flagStr(parsed.flags, 'detail') !== undefined
@@ -354,7 +358,8 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
       // Derived here, not in the store: the daemon's cwd is the daemon's, so only the caller knows
       // which repo this lane belongs to (--project > MUSTERD_PROJECT > repo identity > 'default').
-      project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
+      project: resolveProject({ explicit: explicitProject }),
+      ...(aliases.length > 0 ? { project_aliases: aliases } : {}),
       ...(flagStr(parsed.flags, 'role') !== undefined
         ? { role: flagStr(parsed.flags, 'role')! }
         : {}),

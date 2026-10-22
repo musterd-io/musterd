@@ -156,3 +156,8 @@ export async function abstainReconcile(): Promise<Map<string, Landed>> {
 export function remoteProject(explicit: string | undefined): string {
   return explicit?.trim() ? resolveProject({ explicit, env: {} }) : DEFAULT_PROJECT;
 }
+
+/** ADR 710: a remote request has no checkout to heal a rename from, so it reports no aliases. */
+export function remoteProjectAliases(_explicit: string | undefined): string[] {
+  return [];
+}

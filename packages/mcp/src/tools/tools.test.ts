@@ -1687,6 +1687,30 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
     expect(openLane).toHaveBeenNthCalledWith(2, { title: 'b', project: 'explicit' });
   });
 
+  it('lane_open sends the checkout’s folder alias with the derived project (ADR 710)', async () => {
+    const openLane = vi.fn(async () => ({ lane: lane(), warnings: [] }));
+    const handlers = captureAll(
+      (s: any, c: any) =>
+        registerLanes(
+          s,
+          c,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          () => 'musterd',
+          () => ['runtime'],
+        ),
+      { openLane } as Partial<MusterdClient>,
+    );
+    await handlers['lane_open']!({ title: 'a' });
+    expect(openLane).toHaveBeenCalledWith({
+      title: 'a',
+      project: 'musterd',
+      project_aliases: ['runtime'],
+    });
+  });
+
   it('lane_open and lane_update take source_ref, and the lane line prints src= (ADR 561)', async () => {
     const schemas: Record<
       string,

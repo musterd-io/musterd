@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PROJECT,
+  projectAliases,
   repoProject,
   resolveProject,
   resolveWorkspace,
@@ -98,6 +99,25 @@ describe('resolveProject', () => {
     mkdirSync(noOrigin);
     git(['init', '-q', '-b', 'main'], noOrigin);
     expect(repoProject(noOrigin)).toBe('no-origin-repo');
+  });
+
+  /**
+   * ADR 710 — the alias the daemon heals an in-flight lane from. `repo` and `clone` above both have
+   * the acme origin: `repo` IS the remote name (no alias), while `acme-fork` was known by its folder
+   * name until ADR 695 landed.
+   */
+  it('reports the folder name as the alias when the origin remote wins (ADR 710)', () => {
+    const clone = join(root, 'acme-fork');
+    expect(projectAliases({ cwd: clone, env: {} })).toEqual(['acme-fork']);
+    expect(projectAliases({ cwd: repo, env: {} })).toEqual([]);
+    // The no-origin repo derived its folder name, so there is nothing to heal either.
+    expect(projectAliases({ cwd: join(root, 'no-origin-repo'), env: {} })).toEqual([]);
+  });
+
+  it('reports no alias for a declared project — a declaration is not a derivation', () => {
+    const clone = join(root, 'acme-fork');
+    expect(projectAliases({ explicit: 'mine', cwd: clone, env: {} })).toEqual([]);
+    expect(projectAliases({ cwd: clone, env: { MUSTERD_PROJECT: 'env' } })).toEqual([]);
   });
 
   it('prefers an explicit project over everything', () => {

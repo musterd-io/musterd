@@ -43,6 +43,20 @@ export interface ResolveProjectOpts {
  * shape independently: a slot shared by N seats may hold only what is identical across all N.)
  */
 export function repoProject(cwd: string = process.cwd()): string | null {
+  return repoIdentity(cwd)?.project ?? null;
+}
+
+interface RepoIdentity {
+  /** The project name this checkout derives (ADR 695: the origin remote's repo name when there is one). */
+  project: string;
+  /** The OTHER names the same checkout is known by — currently the ADR 165 folder name when the
+   *  remote name won. Empty when there is nothing to heal. */
+  aliases: string[];
+}
+
+/** One derivation, two consumers: {@link repoProject} and {@link projectAliases} must not disagree
+ *  (nor pay a second pair of git spawns) about what this checkout is called. */
+function repoIdentity(cwd: string = process.cwd()): RepoIdentity | null {
   const common = git(['rev-parse', '--git-common-dir'], cwd);
   if (!common) return null;
   // git answers relative (`.git`) at the top of the main work tree and absolute everywhere else.
@@ -58,10 +72,29 @@ export function repoProject(cwd: string = process.cwd()): string | null {
     const remoteName = remoteRepoName(remote);
     if (remoteName) {
       const sanitized = sanitizeProject(remoteName);
-      if (sanitized) return sanitized;
+      if (sanitized) {
+        return {
+          project: sanitized,
+          // ADR 710: the folder name is the alias an in-flight lane may still carry from before
+          // this checkout derived the remote name. Not an alias when they agree.
+          aliases: folderName && folderName !== sanitized ? [folderName] : [],
+        };
+      }
     }
   }
-  return folderName;
+  return { project: folderName, aliases: [] };
+}
+
+/**
+ * The names this checkout's repo was known by before ADR 695 — the folder name, when the origin
+ * remote now wins. A client sends them with a lane open so the daemon can heal in-flight lanes that
+ * were opened under the old name (ADR 710); an explicit `--project` / `MUSTERD_PROJECT` is a
+ * declaration, not a derivation, and heals nothing.
+ */
+export function projectAliases(opts: ResolveProjectOpts = {}): string[] {
+  if (sanitizeProject(opts.explicit ?? '')) return [];
+  if (sanitizeProject((opts.env ?? process.env)['MUSTERD_PROJECT'] ?? '')) return [];
+  return repoIdentity(opts.cwd ?? process.cwd())?.aliases ?? [];
 }
 
 /** `git@github.com:Org/musterd.git` / `https://…/Org/musterd` → `musterd`; null when unparseable. */

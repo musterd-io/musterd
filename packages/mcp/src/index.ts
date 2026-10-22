@@ -32,6 +32,7 @@ import {
   edgeFetch,
   remoteConfig,
   remoteProject,
+  remoteProjectAliases,
   type RemoteSeat,
 } from './remote.js';
 import { instrumentToolRepair } from './repair.js';
@@ -397,6 +398,7 @@ export function buildMcpServer(
       abstainEvidence,
       abstainChangeLabel,
       remoteProject,
+      remoteProjectAliases,
     );
   } else registerLanes(server, client);
   registerGoals(server, client);

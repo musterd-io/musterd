@@ -992,6 +992,13 @@ export const OpenLaneSchema = z.object({
   title: z.string().min(1),
   detail: z.string().optional(),
   project: z.string().optional(),
+  /**
+   * ADR 710: the other names this checkout's repo was known by (the ADR 165 folder name, when the
+   * ADR 695 origin remote now wins). The daemon rewrites non-terminal lanes carrying an alias to
+   * `project`, so one repo never splits into two non-contending projects across the upgrade.
+   * Client-derived only — an explicit `--project` / `MUSTERD_PROJECT` sends none.
+   */
+  project_aliases: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
   role: z.string().optional(),
   /** The paths this lane touches (ADR 296). */
   scope: z.array(z.string()).optional(),
