@@ -142,6 +142,34 @@ describe('musterd move (ADR 696)', () => {
     expect(h.text()).toContain('end it once the new one is up');
   });
 
+  it('--to carries the revoked wake enrollment into the finish, knobs and all (ADR 703)', async () => {
+    const h = harness({});
+    h.deps.move = async (seat) => ({
+      ...moved(seat),
+      residency: {
+        harness: 'muse',
+        policy: { cooldown_ms: 60_000, hourly_cap: 20, flow: 'auto', idle_wake: false },
+      },
+    });
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      h.deps,
+    );
+    expect(h.text()).toContain('on macbook-air-2.lan: musterd move wallow --harness muse');
+    expect(h.text()).toContain(
+      'musterd residency on --seat wallow --harness muse --cooldown 1m --hourly-cap 20 --flow auto --idle-wake off',
+    );
+  });
+
+  it('--to with no wake enrollment names only the move', async () => {
+    const h = harness({});
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      h.deps,
+    );
+    expect(h.text()).not.toContain('residency on');
+  });
+
   it('a seat cannot bring itself here — that is run from the person at the destination', async () => {
     const h = harness({});
     await expect(runMove({ ...base, caller: 'wallow' }, h.deps)).rejects.toThrow(/--to <machine>/);

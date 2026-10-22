@@ -9,6 +9,7 @@ import {
   collectPolicyFlags,
   ensureHostKey,
   harnessDrift,
+  policyFlags,
   registryDrift,
   renderPolicy,
   seatWorkspace,
@@ -197,6 +198,33 @@ describe('seatWorkspace — which folder receives the grant (ADR 442)', () => {
     expect(seatWorkspace({ positionals: [], flags: {} })?.dir).toBe(root);
     spy.mockRestore();
     rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('policyFlags (ADR 703)', () => {
+  it('round-trips every knob through collectPolicyFlags', () => {
+    const policy = {
+      lane: 'both',
+      cooldown_ms: 90_000,
+      hourly_cap: 20,
+      attempt_cap: 3,
+      tool_policy: 'seat-policy',
+      timeout_ms: 300_000,
+      work_timeout_ms: 1_800_000,
+      flow: 'auto',
+      convene_huddles: false,
+      idle_wake: true,
+      max_turns: 80,
+      budget_usd: 5,
+      transcript_max_bytes: 262_144,
+      dream_enabled: true,
+      dream_nightly_wakes: 2,
+      dream_budget_usd: 1.5,
+    } as const;
+    expect(collectPolicyFlags(parseArgs(['on', ...policyFlags(policy)]))).toEqual(policy);
+  });
+  it('an empty override is no flags', () => {
+    expect(policyFlags({})).toEqual([]);
   });
 });
 

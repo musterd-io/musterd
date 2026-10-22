@@ -190,12 +190,29 @@ export async function runMove(input: MoveInput, deps: MoveDeps): Promise<MoveOut
         next: `on ${moved.to.label}: musterd human ${seat.name}  (a Workspace there, if you want one)`,
       }) + '\n',
     );
-  else if (!here)
+  else if (!here) {
+    // The wake enrollment the hub revoked comes back HERE, not to the target, and the target's own
+    // `musterd move` finds nothing left to hand back — so the finish carries it (ADR 703).
+    const r = moved.residency;
+    const finish = [`on ${moved.to.label}: musterd move ${seat.name}`];
+    if (r && r.harness !== 'musterd') {
+      // Lazy, as in `arrive`: a static import reads to cli-flags:check as `move` handing its flags on.
+      const { policyFlags } = await import('./residency.js');
+      finish[0] += ` --harness ${r.harness}`;
+      finish.push(
+        `then, in the Workspace it prints: musterd residency on --seat ${seat.name} --harness ${r.harness}` +
+          [...(r.policy ? policyFlags(r.policy) : [])].map((a) => ` ${a}`).join(''),
+      );
+    } else if (r)
+      finish.push(
+        `then, in the Workspace it prints: musterd residency on --seat ${seat.name} --harness musterd --key-env <VAR>  (it ran on its own key, ADR 588)`,
+      );
     deps.out(
       success(`${seat.name} now belongs to ${moved.to.label}`, {
-        next: `on ${moved.to.label}: musterd move ${seat.name}  (sets up its Workspace there)`,
+        next: finish.join('\n  '),
       }) + '\n',
     );
+  }
   if (self && seat.kind === 'agent')
     deps.out(
       theme.meta(

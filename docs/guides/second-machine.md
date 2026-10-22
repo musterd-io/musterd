@@ -140,9 +140,14 @@ Or from anywhere — including from the seat's own session — send it, then fin
 
 ```sh
 musterd move ryder --to macbook-air-2.lan   # a label from `musterd node list`, or a node id
-# then, on macbook-air-2.lan:
-musterd move ryder
+# then, on macbook-air-2.lan, the lines it printed — for a seat with a wake enrollment:
+musterd move ryder --harness claude-code
+musterd residency on --seat ryder --harness claude-code --cooldown 1m …   # in the Workspace it printed
 ```
+
+The second line re-enrolls the wake with the same harness and knobs. `--to` prints it because the
+enrollment the hub revoked comes back to the machine that ran `--to`, not to the target (ADR 703).
+A target with nobody at it cannot run these yet; the host doing it is lane `01M5GDGC5Z`.
 
 The hub re-binds the seat in one act, so there is no unbound window for the old machine's next push
 to take it back (the race `docs/wiki/joiner-wedges.md` records for the old `node unbind` path). It
