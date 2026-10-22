@@ -9766,3 +9766,19 @@ a.lc-xp__hit:focus-visible {
   color: var(--lc-muted);
   white-space: nowrap;
 }
+/* Between tasks / away (nick, 2026-10-22: "some kind of slight visual distinction"): a seat that is here
+   but not on anything reads one step quieter than one at work — a softer face, a lighter name, and
+   a hollow dot where a working seat has a filled one. Ink and weight only,
+   never opacity, so the contrast gate's measured pairs hold. /live only; the stream's column has its
+   own idle strip. */
+:is(.lc-team-card--between, .lc-team-card--away):not(.is-still) .mface {
+  filter: saturate(0.5);
+}
+:is(.lc-team-card--between, .lc-team-card--away):not(.is-still) .lc-team-card__name {
+  font-weight: 500;
+  color: var(--lc-dim);
+}
+.lc-team-card--between:not(.is-still) .lc-team-card__dot {
+  background: var(--lc-ground-2);
+  border: 1.5px solid var(--lc-warn);
+}
