@@ -386,6 +386,11 @@ export type AuditAction =
   | 'residency.revoked'
   | 'residency.wake_leased'
   | 'residency.dispatch_suppressed'
+  // ADR 716: a musterd continuation the picker skipped because the lane's latest
+  // `lane.claims_filed` reading has an unconfirmed claim. One row per filing id
+  // (detail: { lane_id, edge, reason: 'claims_unconfirmed', claims_filed, unconfirmed }).
+  // Actor null — a machine decision, like `dispatch_suppressed`.
+  | 'residency.continuation_held'
   | 'residency.woke'
   | 'residency.wake_failed'
   | 'residency.wake_exhausted'
@@ -862,6 +867,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.revoked': 'actor',
   'residency.wake_leased': 'none',
   'residency.dispatch_suppressed': 'none',
+  'residency.continuation_held': 'none',
   'residency.woke': 'none',
   'residency.wake_failed': 'none',
   'residency.wake_exhausted': 'none',
