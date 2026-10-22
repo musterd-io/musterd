@@ -1,0 +1,94 @@
+### cats.py
+== p3-team total $13.76 calls 635 median calls/agent 28
+   work (read/edit/test/bash)        407 calls $  9.00   65%
+   git                               171 calls $  3.39   25%
+   messages                           24 calls $  0.60    4%
+   text-only                          20 calls $  0.50    4%
+   other                               7 calls $  0.15    1%
+   musterd other / wait / gate         6 calls $  0.12    1%
+== p3-musterd total $24.59 calls 938 median calls/agent 44
+   musterd other / wait / gate       365 calls $  9.34   38%
+   work (read/edit/test/bash)        258 calls $  7.14   29%
+   git                               159 calls $  4.03   16%
+   messages                          134 calls $  3.39   14%
+   text-only                          20 calls $  0.63    3%
+   other                               2 calls $  0.06    0%
+== claim-musterd-core total $17.29 calls 813 median calls/agent 43
+   work (read/edit/test/bash)        280 calls $  5.95   34%
+   musterd other / wait / gate       215 calls $  4.77   28%
+   git                               150 calls $  3.01   17%
+   messages                          104 calls $  2.18   13%
+   other                              44 calls $  0.84    5%
+   text-only                          20 calls $  0.54    3%
+== claim-musterd-new total $18.70 calls 838 median calls/agent 41
+   work (read/edit/test/bash)        283 calls $  6.57   35%
+   musterd other / wait / gate       220 calls $  4.87   26%
+   git                               158 calls $  3.37   18%
+   messages                          116 calls $  2.54   14%
+   other                              41 calls $  0.79    4%
+   text-only                          20 calls $  0.57    3%
+### mtools.py
+== p3-team
+   wait:bash-sleep                             6 $ 0.12
+   other:ToolSearch                            5 $ 0.10
+== p3-musterd
+   musterd:team_inbox_check (plain)          165 $ 4.13
+   wait:bash-sleep                            55 $ 1.34
+   musterd:lane_board                         45 $ 1.02
+   gate:edit-refused                          30 $ 1.01
+   musterd:lane_update                        21 $ 0.55
+   musterd:lane_open                          19 $ 0.50
+   musterd:team_status                        16 $ 0.37
+   musterd:lane_resolve                       11 $ 0.33
+   musterd:lane_submit                         1 $ 0.03
+   musterd:lane_release                        1 $ 0.03
+   musterd:team_report                         1 $ 0.02
+== claim-musterd-core
+   musterd:team_inbox_check (plain)           39 $ 1.22
+   musterd:team_inbox_check (wait)            65 $ 1.20
+   gate:edit-refused                          33 $ 0.91
+   other:ToolSearch                           44 $ 0.84
+   musterd:lane_board                         33 $ 0.59
+   musterd:lane_open                          18 $ 0.32
+   musterd:lane_resolve                        8 $ 0.18
+   musterd:team_status                         8 $ 0.14
+   musterd:lane_release                        3 $ 0.06
+   musterd:lane_handoff                        3 $ 0.05
+   musterd:lane_update                         2 $ 0.05
+   musterd:lane_submit                         2 $ 0.04
+   wait:bash-sleep                             1 $ 0.02
+== claim-musterd-new
+   musterd:team_inbox_check (wait)            72 $ 1.37
+   musterd:team_inbox_check (plain)           38 $ 1.16
+   gate:edit-refused                          33 $ 0.89
+   other:ToolSearch                           41 $ 0.79
+   musterd:lane_board                         27 $ 0.47
+   musterd:lane_open                          20 $ 0.36
+   musterd:team_status                         8 $ 0.16
+   musterd:lane_resolve                        6 $ 0.14
+   musterd:lane_release                        5 $ 0.11
+   musterd:lane_update                         5 $ 0.10
+   musterd:lane_handoff                        3 $ 0.05
+   wait:bash-sleep                             2 $ 0.04
+   musterd:lane_claim                          1 $ 0.01
+### deeper.py
+== p3-team
+ sends by kind {}
+ wait episodes 1 median len 2
+ calls after the first in an episode {'wait:bash-sleep': [1, 0.02]}
+ wait args []
+== p3-musterd
+ sends by kind {'state signal': [47, 1.22], 'status_update (other)': [43, 1.16], 'message (other)': [40, 1.1], 'plan/scope': [41, 0.98], 'request_help': [6, 0.16], 'accept': [1, 0.02]}
+ wait episodes 51 median len 3
+ calls after the first in an episode {'inbox plain': [66, 1.52], 'wait:bash-sleep': [40, 0.96], 'musterd:lane_board': [37, 0.84], 'git:partner': [31, 0.74], 'git:inspect': [23, 0.56], 'musterd:team_status': [9, 0.21]}
+ wait args []
+== claim-musterd-core
+ sends by kind {'status_update (other)': [40, 0.94], 'message (other)': [36, 0.75], 'state signal': [34, 0.69], 'plan/scope': [26, 0.47], 'request_help': [3, 0.06], 'accept': [2, 0.04]}
+ wait episodes 29 median len 3
+ calls after the first in an episode {'inbox WAIT': [31, 0.56], 'git:partner': [21, 0.39], 'git:inspect': [16, 0.29], 'musterd:lane_board': [9, 0.16], 'musterd:team_status': [6, 0.1], 'wait:bash-sleep': [1, 0.02]}
+ wait args [(45, 37), (60, 7), (30, 3), (90, 1), (10, 1)]
+== claim-musterd-new
+ sends by kind {'message (other)': [40, 0.83], 'state signal': [35, 0.78], 'status_update (other)': [33, 0.72], 'plan/scope': [31, 0.7], 'request_help': [2, 0.04]}
+ wait episodes 22 median len 3
+ calls after the first in an episode {'inbox WAIT': [26, 0.48], 'git:partner': [22, 0.42], 'git:inspect': [11, 0.21], 'musterd:team_status': [6, 0.12], 'musterd:lane_board': [5, 0.07], 'wait:bash-sleep': [1, 0.02]}
+ wait args [(45, 21), (60, 4), (120, 4), (30, 4), (180, 2), (90, 2)]
