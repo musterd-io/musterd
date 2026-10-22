@@ -226,3 +226,24 @@ Corrected 2026-09-24 (lane 01M3309Y1V, ADR 436 clause 3): "Grok wakes post no ca
 
 **Revisit 2026-10-21**: run `pnpm wake:rail`, record the snapshot here, and write the ADR 436 Decision 5 follow-up if either clause fires.
 Follows-up: 01M3TB1GPMMH2VKFJ2V97CSP9P
+
+Read on 2026-10-21, next section. OpenCode still has no priced settled wake, so the overturn named in this section's heading did not happen. Codex and Grok each have at least one.
+
+## The wake contract rail, binding read: Decision 5 fires on OpenCode's price, and the floor holds (2026-10-21, lane 01M3TB1GPMMH2VKFJ2V97CSP9P; falsify: a re-run of this same command against wakes since 2026-09-21 whose trigger line names a harness other than opencode, or names a floor ratio) <!-- claim: other -->
+
+`pnpm wake:rail` on 2026-10-21, default window (wakes since clause 1, 2026-09-21 21:04). The script printed one trigger line: `FIRES — opencode: 0/54 settled wakes priced`. No floor ratio was named. Reply medians below are the printed figures; 3001k / 1617k is about 1.9×, and 3× of the Claude Code reply median would be about 4851k. Board work orders stay out of that ratio. A harness with any priced settled wake, reply or work order, does not trip the pricing clause, so Claude Code's 19 unpriced wakes and Grok's 39 do not.
+
+| harness | wakes | priced / settled | via gateway | floor (median prompt tokens) | musterd reads before first act | tool calls before first act | first act in thread | no act |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code | 108 | 84/103 (`no_reason_given` ×19) | 42 | 1617k (n=45) | 0 (n=80) | 5 (n=16) | 39/80 | 28 |
+| grok | 56 | 7/46 (`harness_price_unverified` ×39) | 7 | 3001k (n=32) | 0 (n=39) | — (n=0) | 15/39 | 17 |
+| codex | 42 | 1/42 (`harness_prints_no_price` ×41) | 1 | 484k (n=36) | 1 (n=24) | — (n=0) | 19/24 | 18 |
+| opencode | 35 | 0/35 (`harness_price_unverified` ×35) | 0 | 359k (n=35) | 1 (n=28) | 40 (n=3) | 15/28 | 7 |
+| musterd | 22 | 22/22 | 22 | 280k (n=22) | 1 (n=20) | — (n=0) | 10/20 | 2 |
+| claude-code, board work orders | 85 | 79/80 (`no_reason_given` ×1) | 35 | 1012k (n=37) | 1 (n=39) | 6 (n=6) | 4/11 | 46 |
+| musterd, board work orders | 61 | 56/56 | 56 | 114k (n=56) | 1 (n=35) | — (n=0) | 2/24 | 26 |
+| opencode, board work orders | 24 | 0/19 (`harness_price_unverified` ×19) | 0 | 1011k (n=19) | 1 (n=17) | 8 (n=9) | 7/9 | 7 |
+| codex, board work orders | 10 | 0/9 (`harness_prints_no_price` ×9) | 0 | 2729k (n=9) | 1 (n=8) | 17 (n=1) | 0/1 | 2 |
+| grok, board work orders | 3 | 2/3 (`harness_price_unverified` ×1) | 2 | 4679k (n=3) | 1 (n=3) | — (n=0) | 2/2 | 0 |
+
+**The binding read fires on the pricing clause and only there.** OpenCode is the one harness with settled wakes and a price on none of them: 0/35 reply and 0/19 work orders, 54 together, every one `harness_price_unverified`, none through the gateway. Grok 7/46 and Codex 1/42 are priced, and every one of those prices is `via gateway`. Musterd, the row that was not on the 2026-09-30 snapshot, is 22/22 reply and 56/56 work orders, all through the gateway. The floor clause stays under its bar. The highest reply median against Claude Code is Grok at about 1.9×, on n=32 against n=45. The 2026-10-13 early read had Grok at 12.2× against a Claude Code median of 237k; this window's Claude Code reply median is 1617k (n=45). [ADR 583](../decisions/583-metering-gateway-not-a-loop.md) already answers the trigger this clause raises. This read writes no new ADR. The verdict on the lane is the rule's own word: FIRES, because one clause held.
