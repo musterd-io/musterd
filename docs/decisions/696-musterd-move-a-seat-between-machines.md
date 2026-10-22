@@ -168,10 +168,16 @@ has no hub half.
 - `node unbind` stays, unchanged, as the admin's escape valve.
 - The unbind race in `joiner-wedges.md` is closed for any move made through `move`. A bare unbind
   still has it.
-- **Amended 2026-10-21 (ADR 703).** §4's `--to` host path did not ship. `move --to` makes the hub
-  act, then prints the finish to run at the target, carrying the revoked wake enrollment as a
-  `residency on` line. The provision row of `kind: 'move'` and the host's report are lane
-  `01M5GDGC5ZGTMXPFBXE482WJQ0`. See [ADR 703](703-move-to-finishes-at-the-target.md).
+- **Amended 2026-10-21 (ADR 703).** §4's `--to` host path did not ship with the parent lane.
+  `move --to` makes the hub act, then prints the finish to run at the target, carrying the revoked
+  wake enrollment as a `residency on` line. See [ADR 703](703-move-to-finishes-at-the-target.md).
+- **Landed 2026-10-22 (lane `01M5GDGC5Z`, ADR 703 Decision 2).** The opt-in is `kinds` on the claim
+  body: omitted means mint only, and it has no default, so a host that does not know `move` never
+  claims one. The knobs are `hand_to_host` on the sync move (set only when the caller passed
+  `--to`), `HostProvision.kind` (default `mint`) and `move` (`{harness, policy}`, default null),
+  optional `SeatMoved.provision` (no default), and `host_provisions.move_json`. A move enrolls the
+  row's harness and policy, not the host's. `musterd` without a key env fails that enroll, and the
+  CLI prints the `--key-env` finish.
 - An agent can move itself. This is new authority. It is bounded: the seat can only move itself,
   only to an unrevoked node of its own team, and every move is audited as `seat.moved` with `by`.
 

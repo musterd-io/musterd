@@ -225,6 +225,58 @@ withDrivers('hostProvisions', (o) => {
       expect(await sponsorHostsSeen(db, team.id, dana.id, now + 1)).toEqual(['h1']);
     });
 
+    it('a claim that does not name move leaves a move row pending', async () => {
+      const { db, team, dana, scopeOf } = await teamWithHumans();
+      const { row: wallow } = await addMember(db, team, { name: 'wallow', kind: 'agent' });
+      const now = Date.now();
+      const moveJson = JSON.stringify({ harness: 'claude-code', policy: null });
+      const move = await insertProvision(
+        db,
+        team.id,
+        wallow.id,
+        dana.id,
+        now,
+        null,
+        'shared',
+        'move',
+        moveJson,
+      );
+      // A sponsor-scoped key cannot serve an unsponsored seat, even when it asks for moves.
+      expect(
+        await claimProvisions(db, team.id, 'shared', scopeOf(dana.id), 5, now, ['mint', 'move']),
+      ).toEqual([]);
+      // The default claim is mint-only, so a host that has not opted in never sees the row.
+      expect(await claimProvisions(db, team.id, 'shared', TEAM_WIDE_HOST, 5, now)).toEqual([]);
+      const claimed = await claimProvisions(db, team.id, 'shared', TEAM_WIDE_HOST, 5, now, [
+        'mint',
+        'move',
+      ]);
+      expect(claimed.map((r) => r.id)).toEqual([move.id]);
+      expect(claimed[0]?.kind).toBe('move');
+    });
+
+    it('takeProvisionedWake ignores a ready move row', async () => {
+      const { db, team, dana } = await teamWithHumans();
+      const { row: wallow } = await addMember(db, team, { name: 'wallow', kind: 'agent' });
+      const now = Date.now();
+      const move = await insertProvision(
+        db,
+        team.id,
+        wallow.id,
+        dana.id,
+        now,
+        null,
+        'shared',
+        'move',
+        JSON.stringify({ harness: 'claude-code', policy: null }),
+      );
+      await db.run("UPDATE host_provisions SET state = 'ready', ready_at = ? WHERE id = ?", [
+        now,
+        move.id,
+      ]);
+      expect(await takeProvisionedWake(db, team.id, wallow.id, now)).toBeUndefined();
+    });
+
     it('takeProvisionedWake yields a ready row once', async () => {
       const { db, team, dana, scopeOf } = await teamWithHumans();
       const { member: agent } = await createSponsoredAgent(db, team, dana, { name: 'scout' });

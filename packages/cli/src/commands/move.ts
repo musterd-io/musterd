@@ -7,6 +7,7 @@ import {
   type Lane,
   type MemberSummary,
   makeEnvelope,
+  type MoveProvisionStatus,
   type SeatMoved,
   type SeatMoveRequest,
 } from '@musterd/protocol';
@@ -31,8 +32,9 @@ import { resolve } from './helpers.js';
  *
  * Without `--to` the seat comes to THIS machine: the hub re-binds it here in one act, and this
  * command stands its Workspace up and re-enrolls its wake. With `--to` it is sent to an enrolled
- * machine by label or node id; the destination half then runs there (`musterd move <seat>` at the
- * target, or — once ADR 696 §4's host path lands — its `musterd host`).
+ * machine by label or node id. When that machine's `musterd host` has polled within the staleness
+ * window, this command waits for it to stand the Workspace up (ADR 703). Otherwise it prints the
+ * finish to run there.
  *
  * A live seat is told first: a `steer` in its own thread asks it to push and save, and the move
  * waits up to `--wait` for its `accept` (`--now` skips). The hub's re-bind replaces the binding in
@@ -58,6 +60,8 @@ const USAGE =
 
 /** How long a live seat gets to push and reply before the move goes ahead (ADR 696 §3). */
 export const DEFAULT_WRAP_UP_MS = 5 * 60_000;
+/** How long `--to` waits for the target host to report before printing the finish (ADR 703). */
+export const HOST_REPORT_WAIT_MS = 120_000;
 const POLL_MS = 3_000;
 const GIT = 'git';
 const RESIDENCY_ON = 'on';
@@ -77,6 +81,8 @@ export interface MoveDeps {
   move(seat: string, body: SeatMoveRequest): Promise<SeatMoved>;
   /** The destination half (ADR 696 §4), run only when the seat came to this machine. */
   arrive(moved: SeatMoved, opts: { harness?: string }): Promise<string[]>;
+  /** ADR 703: the move provision the target host is standing up. Absent in tests that predate it. */
+  provisionStatus?(id: string): Promise<MoveProvisionStatus>;
   now(): number;
   sleep(ms: number): Promise<void>;
   out(line: string): void;
@@ -191,27 +197,23 @@ export async function runMove(input: MoveInput, deps: MoveDeps): Promise<MoveOut
       }) + '\n',
     );
   else if (!here) {
-    // The wake enrollment the hub revoked comes back HERE, not to the target, and the target's own
-    // `musterd move` finds nothing left to hand back — so the finish carries it (ADR 703).
-    const r = moved.residency;
-    const finish = [`on ${moved.to.label}: musterd move ${seat.name}`];
-    if (r && r.harness !== 'musterd') {
-      // Lazy, as in `arrive`: a static import reads to cli-flags:check as `move` handing its flags on.
-      const { policyFlags } = await import('./residency.js');
-      finish[0] += ` --harness ${r.harness}`;
-      finish.push(
-        `then, in the Workspace it prints: musterd residency on --seat ${seat.name} --harness ${r.harness}` +
-          [...(r.policy ? policyFlags(r.policy) : [])].map((a) => ` ${a}`).join(''),
+    const handed = moved.provision;
+    const status = handed ? await waitForMoveProvision(handed.id, deps) : null;
+    if (handed && status?.state === 'ready') {
+      deps.out(
+        success(`${seat.name} is ready on ${moved.to.label}`, {
+          next: `${handed.host} stood the Workspace up`,
+        }) + '\n',
       );
-    } else if (r)
-      finish.push(
-        `then, in the Workspace it prints: musterd residency on --seat ${seat.name} --harness musterd --key-env <VAR>  (it ran on its own key, ADR 588)`,
-      );
-    deps.out(
-      success(`${seat.name} now belongs to ${moved.to.label}`, {
-        next: finish.join('\n  '),
-      }) + '\n',
-    );
+    } else {
+      const why =
+        handed && (status?.state === 'failed' || status?.state === 'cancelled')
+          ? `${handed.host} could not stand ${seat.name} up (${status.failed_reason ?? status.state})`
+          : handed
+            ? `${handed.host} did not finish standing ${seat.name} up`
+            : undefined;
+      await printFinish(seat.name, moved, deps, why);
+    }
   }
   if (self && seat.kind === 'agent')
     deps.out(
@@ -226,6 +228,66 @@ export async function runMove(input: MoveInput, deps: MoveDeps): Promise<MoveOut
     ),
   );
   return { moved, wrapUp, unpushed, arrived };
+}
+
+/**
+ * The commands to run on the target when no host there finished the move (ADR 703). The wake
+ * enrollment the hub revoked does not come back by itself, so the finish carries it.
+ */
+async function finishCommands(seat: string, moved: SeatMoved): Promise<string[]> {
+  const r = moved.residency;
+  const finish = [`on ${moved.to.label}: musterd move ${seat}`];
+  if (r && r.harness !== 'musterd') {
+    // Lazy, as in `arrive`: a static import reads to cli-flags:check as `move` handing its flags on.
+    const { policyFlags } = await import('./residency.js');
+    finish[0] += ` --harness ${r.harness}`;
+    finish.push(
+      `then, in the Workspace it prints: musterd residency on --seat ${seat} --harness ${r.harness}` +
+        [...(r.policy ? policyFlags(r.policy) : [])].map((a) => ` ${a}`).join(''),
+    );
+  } else if (r)
+    finish.push(
+      `then, in the Workspace it prints: musterd residency on --seat ${seat} --harness musterd --key-env <VAR>  (it ran on its own key, ADR 588)`,
+    );
+  return finish;
+}
+
+async function printFinish(
+  seat: string,
+  moved: SeatMoved,
+  deps: MoveDeps,
+  why?: string,
+): Promise<void> {
+  if (why) deps.out(`${theme.warn(sym.warn)} ${theme.warn(why)}\n`);
+  const finish = await finishCommands(seat, moved);
+  deps.out(
+    success(`${seat} now belongs to ${moved.to.label}`, {
+      next: finish.join('\n  '),
+    }) + '\n',
+  );
+}
+
+/** Poll until the host reports, or the wait runs out. A blip is not a failure. */
+async function waitForMoveProvision(
+  id: string,
+  deps: MoveDeps,
+): Promise<MoveProvisionStatus | null> {
+  const ask = deps.provisionStatus;
+  if (!ask) return null;
+  const deadline = deps.now() + HOST_REPORT_WAIT_MS;
+  let last: MoveProvisionStatus | null = null;
+  while (deps.now() <= deadline) {
+    try {
+      last = await ask(id);
+    } catch {
+      // Keep the last answer. The finish is what a dead poll falls through to.
+    }
+    if (last && (last.state === 'ready' || last.state === 'failed' || last.state === 'cancelled'))
+      return last;
+    if (deps.now() >= deadline) break;
+    await deps.sleep(POLL_MS);
+  }
+  return null;
 }
 
 async function askToWrapUp(
@@ -337,6 +399,7 @@ export async function moveCommand(parsed: Parsed): Promise<number> {
       }
     },
     move: (seat, body) => http.moveSeat(team, seat, body),
+    provisionStatus: (id) => http.moveProvision(team, id),
     arrive: async (moved, opts) => {
       const lines: string[] = [];
       if (moved.kind === 'human') {

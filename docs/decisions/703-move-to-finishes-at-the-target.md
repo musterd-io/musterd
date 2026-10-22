@@ -39,7 +39,7 @@ Hard rule 3 forbids that, and an accepted ADR's `## Decision` cannot be edited t
      `musterd move <seat> --harness <h>`, followed by the exact `musterd residency on --seat <seat>
      --harness <h> <knob flags…>` line, which re-creates the enrollment from the target's Workspace.
      For a seat on its own key (ADR 588), it prints the `--harness musterd --key-env <VAR>` form.
-2. **The host-run destination half is not part of this command yet.** The provision row of
+2. **The host-run destination half is not part of this command yet.** _(Amended 2026-10-22: it landed in lane `01M5GDGC5Z`. `--to` waits for a live host and prints the finish when none has polled; it does not refuse. See Consequences.)_ The provision row of
    `kind: 'move'`, the host's `ready`/`failed` report, the wait for that report and the
    `HOST_STALE_MS` refusal all move to lane `01M5GDGC5ZGTMXPFBXE482WJQ0`. That lane will add them
    for headless VM and cloud targets, where no person is at the target to run the second command.
@@ -62,6 +62,7 @@ Hard rule 3 forbids that, and an accepted ADR's `## Decision` cannot be edited t
 - ADR 696's Consequences name `kind: 'move'` on a provision row as a protocol addition. It was not
   added, and it goes to lane `01M5GDGC5Z` with the host path. This ADR makes no protocol change.
 - ADR 696 §4 carries a dated marker that points here. Its Consequences carry the matching note.
+- **Landed 2026-10-22 (lane `01M5GDGC5Z`).** `move --to` writes a `kind: 'move'` provision when a host on the target has polled within `HOST_STALE_MS`, pinned to that label. The CLI waits up to 120 seconds. Ready: the host stood the Workspace up, and the finish is not printed. Failed, cancelled, or timed out: the reason when there is one, and the finish. No live host: the finish only. A human seat stays on `musterd human`. The claim body's `kinds` is omitted for mint-only (no default). A move row is not failed `no_budget` and gets no connect link. `takeProvisionedWake` ignores it. `hand_to_host` is set only when the caller passed `--to`. The gap described above remains only when no host on the target is live.
 
 ## Observability & Evaluation
 
@@ -69,9 +70,13 @@ Hard rule 3 forbids that, and an accepted ADR's `## Decision` cannot be edited t
   seat's claim from the target Workspace.
 - **Eval:** `packages/cli/src/commands/move.test.ts` asserts the `--to` finish: with no residency
   row it is the `musterd move` line alone, and with one it carries `--harness` and a `residency on`
-  line whose knob flags match the revoked policy. `residency.test.ts` round-trips every knob through
-  `policyFlags` and `collectPolicyFlags`.
-- **Experiment:** the next `--to` move of a seat that has a wake enrollment. It succeeds if running
-  the two printed lines at the target leaves `musterd residency status` there showing the seat
-  enrolled with the same harness and starred knobs as before. The host path is lane `01M5GDGC5Z`'s
-  to measure.
+  line whose knob flags match the revoked policy. The same file asserts a ready host report prints
+  no finish, and a failed report prints the reason and the finish. `sync/move.test.ts` asserts a
+  live host on the target gets a `kind: 'move'` row carrying the revoked harness, and a stale host,
+  a `seen_at` of 0, a null node on another machine, a human, and a move that did not pass
+  `handToHost` get none. `provisioner.test.ts` asserts a move row enrolls the row's harness.
+  `residency.test.ts` round-trips every knob through `policyFlags` and `collectPolicyFlags`.
+- **Experiment:** the next `--to` move of a seat that has a wake enrollment, onto a machine whose
+  `musterd host` polled within five minutes. It succeeds if the command returns without printing
+  the finish and `musterd residency status` on the target shows the seat enrolled with the same
+  harness and starred knobs. A target with no live host still succeeds by the printed finish.

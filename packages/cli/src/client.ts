@@ -3,9 +3,12 @@ import {
   type CiRunBatch,
   type HostProvision,
   type HostProvisionReportBody,
+  HostProvisionKindSchema,
   HostProvisionSchema,
   type HostProvisionsClaimResponse,
   HostProvisionsClaimResponseSchema,
+  type MoveProvisionStatus,
+  MoveProvisionStatusSchema,
   AuditResponseSchema,
   DecideResponseSchema,
   ErrorBodySchema,
@@ -875,6 +878,10 @@ export class HttpClient {
   async claimProvisions(slug: string, host: string): Promise<HostProvisionsClaimResponse> {
     const json = await this.request('POST', `/teams/${encodeURIComponent(slug)}/host/provisions`, {
       host,
+      // Every kind this protocol build knows. Omitted `kinds` is mint-only, so an older
+      // host never receives a move row (ADR 703). The names come from the schema: a
+      // string list in this file is scanned as CLI flags.
+      kinds: [...HostProvisionKindSchema.options],
     });
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
     if (!parsed.success)
@@ -1937,6 +1944,21 @@ export class HttpClient {
     );
     const parsed = SeatMovedSchema.safeParse(json);
     if (!parsed.success) throw new CliError('move response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+
+  /**
+   * ADR 703: how a move provision the hub handed to the target host is doing. Seat auth — the
+   * mover — not the host key. A joiner forwards this to the hub.
+   */
+  async moveProvision(slug: string, id: string): Promise<MoveProvisionStatus> {
+    const json = await this.request(
+      'GET',
+      `/teams/${encodeURIComponent(slug)}/provisions/${encodeURIComponent(id)}/status`,
+    );
+    const parsed = MoveProvisionStatusSchema.safeParse(json);
+    if (!parsed.success)
+      throw new CliError('provision status did not match the protocol schema', 1);
     return parsed.data;
   }
 

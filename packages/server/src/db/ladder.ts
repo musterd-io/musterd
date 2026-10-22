@@ -1009,6 +1009,28 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     version: 127,
     sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_members_team_account ON members(team_id, account_id) WHERE account_id IS NOT NULL',
   },
+  {
+    // ADR 696 / ADR 703: a provision row can be a seat move, not only a sponsored mint. `kind`
+    // defaults to mint so every existing row stays one. `move_json` is the revoked harness and
+    // knobs, null on a mint.
+    version: 128,
+    sqlite: (db) => {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('host_provisions')")
+        .pluck()
+        .all();
+      if (!cols.includes('kind'))
+        db.exec("ALTER TABLE host_provisions ADD COLUMN kind TEXT NOT NULL DEFAULT 'mint'");
+      if (!cols.includes('move_json'))
+        db.exec('ALTER TABLE host_provisions ADD COLUMN move_json TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec(
+        "ALTER TABLE host_provisions ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'mint'",
+      );
+      await d.exec('ALTER TABLE host_provisions ADD COLUMN IF NOT EXISTS move_json TEXT');
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

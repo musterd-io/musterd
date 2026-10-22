@@ -23,10 +23,22 @@ describe('host provision schemas (ADR 463)', () => {
     created_at: 0,
   };
   it('round-trips a row and a claim response', () => {
-    expect(HostProvisionSchema.parse(row)).toEqual(row);
+    // `kind` and `move` default on parse: a payload from before they existed is a mint.
+    expect(HostProvisionSchema.parse(row)).toEqual({ ...row, kind: 'mint', move: null });
     expect(HostProvisionsClaimResponseSchema.parse({ provisions: [row] }).provisions).toHaveLength(
       1,
     );
+  });
+  it('a move row keeps its harness, and a claim that omits kinds does not gain a default', () => {
+    const move = {
+      ...row,
+      kind: 'move' as const,
+      move: { harness: 'muse', policy: { cooldown_ms: 60_000 } },
+    };
+    expect(HostProvisionSchema.parse(move)).toEqual(move);
+    expect(
+      HostProvisionsClaimBodySchema.parse({ host: 'dana-mbp', kinds: ['mint', 'move'] }),
+    ).toEqual({ host: 'dana-mbp', kinds: ['mint', 'move'] });
   });
   it('refuses an unknown state', () => {
     expect(HostProvisionSchema.safeParse({ ...row, state: 'running' }).success).toBe(false);

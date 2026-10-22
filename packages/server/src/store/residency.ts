@@ -1758,7 +1758,8 @@ export async function takeProvisionedWake(
 ): Promise<{ id: string; sponsor_id: string } | undefined> {
   const row = await db.get<{ id: string; sponsor_id: string }>(
     `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
-         AND state = 'ready' AND first_wake_at IS NULL ORDER BY ready_at ASC LIMIT 1`,
+         AND state = 'ready' AND first_wake_at IS NULL
+         AND COALESCE(kind, 'mint') = 'mint' ORDER BY ready_at ASC LIMIT 1`,
     [teamId, memberId],
   );
   if (!row) return undefined;
@@ -2266,7 +2267,8 @@ async function deriveSeatPasses(
     // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
     const provisioned = await db.get<{ id: string; sponsor_id: string }>(
       `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
-         AND state = 'ready' AND first_wake_at IS NULL ORDER BY ready_at ASC LIMIT 1`,
+         AND state = 'ready' AND first_wake_at IS NULL
+         AND COALESCE(kind, 'mint') = 'mint' ORDER BY ready_at ASC LIMIT 1`,
       [teamId, member.id],
     );
     if (provisioned) {
