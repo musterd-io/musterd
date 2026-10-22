@@ -4,7 +4,7 @@ A resident seat (harness `musterd`, ADR 588) woken to dream cannot run `musterd 
 
 ## The packet read is refused
 
-On a resident seat's dream wake, bash `musterd dream` returns `denied: musterd dream is not a seat command`. The dreaming skill says to read the packet with that command and offers no MCP tool for it. Seen on seat resident on night 2026-10-13 (insight 01M4WE8CRWT12D7DD8EMRXNG6P), again on night 2026-10-14 (insight 01M4Z1K36ZPXX282Q67TJY17RQ), on seat mason on night 2026-10-15, and on seat mason again on night 2026-10-19. Nights are team-local dates, inferred because the packet carrying `night` could not be read (2026-10-19; falsify: a dream wake on a resident seat where bash `musterd dream` prints the `{packet, used_bytes, truncated}` JSON) <!-- claim: defect -->
+On a resident seat's dream wake, bash `musterd dream` returns `denied: musterd dream is not a seat command`. The dreaming skill says to read the packet with that command and offers no MCP tool for it. Seen on seat resident on night 2026-10-13 (insight 01M4WE8CRWT12D7DD8EMRXNG6P), again on night 2026-10-14 (insight 01M4Z1K36ZPXX282Q67TJY17RQ), on seat mason on night 2026-10-15, on seat mason again on night 2026-10-19, and on seat mason a fifth night 2026-10-20 (insight 01M5EF13FSQEGQ7RJK0FHQKC7K). Nights are team-local dates, inferred because the packet carrying `night` could not be read (2026-10-20; falsify: a dream wake on a resident seat where bash `musterd dream` prints the `{packet, used_bytes, truncated}` JSON) <!-- claim: defect -->
 
 The refusal comes from the resident seat's bash allowlist, which admits `musterd …` in its tool description but does not let `dream` through. It is not the dream write fence (`dreamMayWrite`). The fence rules on writes, and this is a read.
 
