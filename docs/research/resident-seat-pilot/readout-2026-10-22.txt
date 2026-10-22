@@ -1,0 +1,50 @@
+resident seat pilot readout — db /Users/swethadhamodharan/.musterd/musterd.db
+window 2026-10-15T00:11Z → 2026-10-22T00:11Z, tail to 2026-10-24T00:11Z; read at 2026-10-22T18:31Z
+PROVISIONAL — the acceptance tail has not ended
+
+attestation (A/B leases in window)
+  A: 3/6 attested
+  B: 9/96 attested
+
+1. directed act → first in-thread answer (seconds)
+  A: 0/0 answered · p50 — · p95 — · steers delivered in-loop 0
+  B: 18/44 answered · p50 4535.3 · p95 9768.4 · steers delivered in-loop 6
+  C: 108/315 answered · p50 126.4 · p95 50519.5 · steers delivered in-loop 0
+
+2–4. per lane
+  B p1 01M3ZC3G35 done                wakes   2   $3.24 ACCEPTED by claude
+  C p1 01M41PX0XB done                wakes   0   $0.00 ACCEPTED by gpt — EXCLUDED: recipient never wakeable (delta)
+  B p1 01M4FF0P6H done                wakes  33   $8.94 ACCEPTED by grok — EXCLUDED: amendment 1, released with intervention
+  C p1 01M4FF0S55 done                wakes   0   $0.00 ACCEPTED by grok — EXCLUDED: amendment 1 (needs a Twitch viewer)
+  B p1 01M4HGY13Z done                wakes   0   $0.00 ACCEPTED by gemini
+  C p1 01M4S53AV4 done                wakes   3   $1.80 ACCEPTED by gemini
+  B p1 01M4S7N1HV done                wakes   0   $0.00 ACCEPTED by claude
+  C p1 01M4VTQ66X done                wakes   0   $0.00 ACCEPTED by grok — delta never wakeable; dolly took it, attended
+  B p1 01M4W7HY7Z done                wakes   0   $0.00 ACCEPTED by claude
+  B p2 01M3AMY549 open                wakes   0   $0.00 open     — EXCLUDED: amendment 1, released with intervention
+  C p2 01M3W3EQ67 done                wakes   0   $0.00 ACCEPTED by claude
+  B p2 01M3W6GWVN done                wakes   6   $6.93 ACCEPTED by claude
+  C p2 01M3W815KR done                wakes   0   $0.00 ACCEPTED by beam — EXCLUDED: recipient never wakeable (delta)
+  B p2 01M4RX7NE2 claimed             wakes   0   $0.00 open     — stalled 10-15→10-19; steered 01M5AMG4H8
+  C p2 01M4SB4CJP done                wakes   0   $0.00 ACCEPTED by grok
+  B p2 01M4SB4D7R done                wakes   1   $0.64 ACCEPTED by grok
+  C p2 01M4VPY8JV done                wakes   0   $0.00 ACCEPTED by grok — delta never wakeable; dolly took it, attended
+  B p3 01M3W815KR done                wakes   1   $3.17 ACCEPTED by beam
+  C p3 01M41PX0XB done                wakes   0   $0.00 ACCEPTED by gpt
+  B p3 01M46GR8AC done                wakes   2   $1.66 ACCEPTED by grok
+  C p3 01M4S9AVXF done                wakes   0   $0.00 ACCEPTED by grok
+  B p3 01M50ZB4YM blocked             wakes   5   $1.31 open    
+  C p3 01M50ZJ9F9 done                wakes   0   $0.00 ACCEPTED by gemini
+  B p3 01M5162W38 done                wakes   4   $1.17 ACCEPTED by grok — stalled 10-16→10-19; steered 01M5AMG4H8
+  B: handed 11, verdicts 9, accepted 9; comparable 7 (4 without a priced wake), $18.12 → $3.02 per accepted · submits 12, sent back 0, re-routed 2 · claims 36/47 confirmed
+  C: handed 8, verdicts 8, accepted 8; comparable 1 (7 without a priced wake), $1.80 → $1.80 per accepted · submits 13, sent back 0, re-routed 3 · claims 9/10 confirmed
+
+kill criterion: B costs more per accepted lane — ship coordination-only; the worker shape waits (C priced on 1 lane(s) — honest-N caveat)
+
+5. cost reconciles (wake_turns vs wake_cost, $0.001)
+  A: 6 leases · 1 with no cost row · 0 mismatched
+  B: 81 leases · 17 with no cost row · 2 mismatched
+    01M4YZYY6ECQSPNEM80GRR5285 turns 0.2574 cost 0.2465
+    01M5AMGEPX41GZTJHKEZGSFTJA turns 2.2951 cost 2.1970
+
+6. adversarial probe: read from window-start.md (failed 10-15, passed 10-16 under ADR 627)
