@@ -3784,6 +3784,7 @@
   overflow: hidden;
 }
 .lc-team__head {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--lc-4);
@@ -3800,6 +3801,9 @@
 }
 .lc-team__caption {
   display: block;
+  /* `flex: none`: the column is a flex stack and its cards list may claim a third of it, so a caption left
+     shrinkable was squeezed to 0 height while its pill, overflowing, painted over the first member rows. */
+  flex: none;
   min-height: 0;
   padding: 0 var(--lc-5);
 }
