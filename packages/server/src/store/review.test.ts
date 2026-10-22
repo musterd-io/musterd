@@ -1362,7 +1362,7 @@ withDrivers('review', (o) => {
    * standing.
    */
   describe('refused human verdicts do not answer the ask (lane 01M5G1W1269E6YRR4K45NPNF2G)', () => {
-    async function room() {
+    async function room(verdict: { ts?: number; receivedAt?: number } = {}) {
       const { openLane } = await import('./lanes.js');
       const { db, team } = await seed();
       const worker = (await addMember(db, team, { kind: 'agent', name: 'ada', role: '' })).row;
@@ -1401,8 +1401,9 @@ withDrivers('review', (o) => {
           act: 'accept',
           body: 'ACCEPTED',
           meta: { in_reply_to: 'ask-1', lane_review: { lane: lane.id } },
-          ts: 2_000,
+          ts: verdict.ts ?? 2_000,
         }),
+        verdict.receivedAt === undefined ? {} : { now: verdict.receivedAt },
       );
       return { db, team, lane, reviewer };
     }
@@ -1467,6 +1468,28 @@ withDrivers('review', (o) => {
         reviewer: 'ghost',
         route: 'peer_selected',
       });
+    });
+
+    it('a verdict whose sender clock runs ahead of the daemon still leaves the refused ask open', async () => {
+      const { openAcceptanceAsk, acceptanceAskUnanswered, acceptanceWaits } =
+        await import('./review.js');
+      // The verdict's envelope ts is the SENDER's clock (SPEC envelope), while the refusal's ts and
+      // the message's created_at are both the daemon's. A device five seconds ahead stamps its
+      // verdict AFTER the refusal the daemon writes, though the daemon received it before. The old
+      // rule compared the refusal against ts and answered the ask away again; every reader must
+      // compare against created_at (server receive time).
+      const receivedAt = Date.now();
+      const { db, team, lane } = await room({ ts: receivedAt + 5_000, receivedAt });
+      await appendAudit(db, team.id, {
+        actor: 'ghost',
+        action: 'authority.refused',
+        target: lane.id,
+        result: 'deny',
+        detail: { act: 'human_accept', reason: 'no_signature' },
+      });
+      expect(await openAcceptanceAsk(db, team.id, lane.id)).toEqual({ id: 'ask-1', to: 'ghost' });
+      expect(await acceptanceAskUnanswered(db, team.id, 'ask-1')).toBe(true);
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)?.reviewer).toBe('ghost');
     });
   });
 });
