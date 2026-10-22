@@ -7,7 +7,7 @@
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
 import type { LayerId } from './figure';
-import { ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
+import { type Anim, ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
 
 export function renderedOfficeFromSearch(search: string): boolean {
@@ -60,9 +60,22 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
     if (!isRecord(v) || !isNum(v['row']) || !isNum(v['frames']) || !isNum(v['fps']) || typeof v['loop'] !== 'boolean')
       throw new Error(`figure.json anim ${a} needs {row, frames, fps, loop}`);
     const dirs = v['dirs'];
+    const baseOf = v['base'];
+    const own = v['layers'];
+    if (baseOf !== undefined && !(ANIMS as readonly unknown[]).includes(baseOf)) throw new Error(`figure.json anim ${a} base is not a clip`);
+    if (own !== undefined && (!Array.isArray(own) || own.some((x) => typeof x !== 'string')))
+      throw new Error(`figure.json anim ${a} layers is not a list of layer ids`);
     if (dirs !== undefined && (!Array.isArray(dirs) || dirs.some((d) => !(DIR8 as readonly unknown[]).includes(d))))
       throw new Error(`figure.json anim ${a} dirs is not a list of directions`);
-    out[a] = { row: v['row'], frames: v['frames'], fps: v['fps'], loop: v['loop'], ...(dirs ? { dirs: dirs as Dir8[] } : {}) };
+    out[a] = {
+      row: v['row'],
+      frames: v['frames'],
+      fps: v['fps'],
+      loop: v['loop'],
+      ...(dirs ? { dirs: dirs as Dir8[] } : {}),
+      ...(baseOf !== undefined ? { base: baseOf as Anim } : {}),
+      ...(own !== undefined ? { layers: own as string[] } : {}),
+    };
   }
   if (!Array.isArray(layers)) throw new Error('figure.json needs a layers array');
   const cellsIn = json['cells'];

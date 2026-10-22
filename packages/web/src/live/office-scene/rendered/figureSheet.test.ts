@@ -130,3 +130,26 @@ describe('mirrored directions (increment 3b: S, W and SW are drawn, not stored)'
     expect(s).toMatchObject({ sx: 10, sy: 20, sw: 30, sh: 40, ox: 100 - 5 - 30, oy: 6, flip: true });
   });
 });
+
+describe('carrying clips store only the layers they change (plan Task 16)', () => {
+  const carrying: SheetSpec = {
+    ...spec,
+    anims: { ...spec.anims, 'walk-hold2': { row: 64, frames: 6, fps: 12, loop: true, base: 'walk', layers: ['skin', 'top/', 'carry/'] } },
+  };
+  const n = (8 * 8 + 6 * 8 + 6 * 8 + 8 * 8 + 8 * 8 + 4 * 8 + 6 * 8 + 6 * 8 + 6 * 8) * 6;
+  const withCell = (anim: 'walk' | 'walk-hold2', rect: number[]) => {
+    const cells: number[] = new Array(n).fill(0);
+    cells.splice(cellIndex(carrying, anim, 'SE', 2) * 6, 6, ...rect);
+    return cells;
+  };
+
+  it('a layer the clip does not store plays the same frame of the base clip', () => {
+    const packed: SheetSpec = { ...carrying, cells: { 'hair/bob': withCell('walk', [7, 8, 9, 10, 1, 2]) } };
+    expect(frameCell(packed, 'hair/bob', 'walk-hold2', 'SE', 0, 0, 2)).toMatchObject({ sx: 7, sy: 8, sw: 9, sh: 10, ox: 1, oy: 2 });
+  });
+
+  it('a layer it stores (by prefix: every top) reads its own cells', () => {
+    const packed: SheetSpec = { ...carrying, cells: { 'top/tee': withCell('walk-hold2', [3, 4, 5, 6, 0, 0]) } };
+    expect(frameCell(packed, 'top/tee', 'walk-hold2', 'SE', 0, 0, 2)).toMatchObject({ sx: 3, sw: 5 });
+  });
+});

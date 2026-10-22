@@ -316,6 +316,9 @@ def render_figure(a: dict) -> None:
     MIRRORED = {"S": "E", "W": "N", "SW": "NE"}
     for name, frames, loop, dirs in figure.CLIPS:
         anims[name] = {"row": rows, "frames": frames, "fps": figure.FPS, "loop": loop}
+        if name in figure.CARRY_BASE:
+            anims[name]["base"] = figure.CARRY_BASE[name]
+            anims[name]["layers"] = list(figure.CARRY_OWN)
         if dirs is not None:
             # the directions this clip has: the rendered ones and their mirrors (the runtime falls back
             # to the base clip anywhere else)
@@ -433,7 +436,7 @@ def render_figure(a: dict) -> None:
                 figure.place_props(rig, name, math.radians(45 * di))
                 seated = name in figure.SEATED_CLIPS
                 cname = f"{name}/{d}/{f}"
-                calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants]
+                calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants if figure.stored_in(name, l)]
                 for kind, layers, holdout in calls:
                     if not show(layers, holdout, name):
                         continue  # nothing of it in this clip (a prop, the lanyard)
@@ -516,7 +519,7 @@ def render_figure(a: dict) -> None:
             for name, frames, _, _ in figure.CLIPS:
                 for d in figure.DIRS:
                     for f in range(frames):
-                        c = crops[gk].get(f"{name}/{d}/{f}")
+                        c = crops[gk].get(f"{name}/{d}/{f}") if figure.stored_in(name, layer) else None
                         items.append(None if c is None else (c[0].astype(np.float32) / 255, c[1], c[2]))
         crops_l = items
         shelf_x, shelf_y, shelf_h = 0, 0, 0

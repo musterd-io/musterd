@@ -1635,6 +1635,26 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
+### 2026-10-21 — `officeArtBytes` 9,935,000 → 13,900,000 B: carried props and the seated overlay (lanes `01M5D8FCC9` + `01M5GF82SB`, office realism 3b Task 16)
+
+| Budget     | Before (main) | This branch  | Ceiling                        |
+| ---------- | ------------- | ------------ | ------------------------------ |
+| office art | 9,896,246 B   | 13,790,751 B | RAISED 9,935,000 → 13,900,000 B |
+
+The figure now carries things: eight prop sheets and a lanyard, five carrying clips (both hands at the
+chest, one hand out in front, the phone at the ear on a call) and, for the seated clips, a second copy of
+the arm pixels that the overlay draws over the desk. First cut measured 15,802,298 B; nick called double
+"pretty heavy", so the carrying clips now store only the layers they change (skin, tops, props, lanyard)
+and every other layer reads the walk's or idle's frame — −2.0 MB, no visible difference since those pixels
+are the same. The seated-arm copies (~1.4 MB) stay: drawing the arms from the layer's own pixels would
+paint the torso over the desk too. The sheets are rendered at 16 lit samples (was 32; indistinguishable at
+panel and broadcast scale), which makes no measurable difference to their size.
+
+All of this loads eagerly behind `?office=rendered` and is downloaded by nobody else today. Loading only
+the layers a team actually wears is the follow-up before the flag goes on (increment 4).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 13,900,000 B with this change in.
+
 ### 2026-10-20 — `officeArtBytes` 2,003,000 → 9,935,000 B; `totalJsGzipBytes` 347,900 → 352,000 B: the rendered figure (lane `01M5D8F93K`, office realism increment 3)
 
 | Budget     | Before (main `cd85cb50`, same laptop) | This branch (laptop)    | Ceiling                          |

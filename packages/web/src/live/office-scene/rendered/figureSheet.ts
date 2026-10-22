@@ -70,6 +70,10 @@ export interface AnimSpec {
   /** The directions this clip was rendered in (or mirrored to); absent means all eight. A gesture
    *  is only seen facing a desk or a fixture, so it has four — elsewhere the base clip plays. */
   dirs?: Dir8[];
+  /** A carrying clip stores only the layers it changes (`layers`, matched as a prefix: `top/` is every
+   *  top); any other layer plays the same frame of `base`, its pixels being the same. */
+  base?: Anim;
+  layers?: string[];
 }
 
 export interface SheetSpec {
@@ -199,6 +203,13 @@ export function frameCell(
   const cells = spec.cells?.[layer];
   if (!cells) return { ...frameRect(spec, anim, dir, t, startT), ox: 0, oy: 0 };
   const { i, done } = frameIndex(spec, anim, t, startT, frame);
+  const a = spec.anims[anim]!;
+  const id = layer.split('@')[0]!;
+  if (a.base && a.layers && !a.layers.some((p) => id.startsWith(p)) && spec.anims[a.base]) {
+    // Not stored in this clip: the base clip's frame (same index) is the same pixels.
+    const b = frameCell(spec, layer, a.base, dir, t, startT, i % spec.anims[a.base]!.frames);
+    return { ...b, done };
+  }
   const src = spec.mirror?.[dir];
   const at = cellIndex(spec, anim, src ?? dir, i) * 6;
   const [sx = 0, sy = 0, sw = 0, sh = 0, ox = 0, oy = 0] = cells.slice(at, at + 6);

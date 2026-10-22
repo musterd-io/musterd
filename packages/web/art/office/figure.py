@@ -689,6 +689,18 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     ("idle-hold2", 8, True, None),
     ("idle-hold1", 8, True, None),
 ]
+# A carrying clip changes only the arms, the sleeves and what is held (and the lanyard the arms can
+# cover): every other layer is the same pixels as the walk or the idle it is laid over, so it is not
+# stored again — `frameCell` reads those layers from the base clip (`base` and `layers` in figure.json).
+CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "idle-hold2": "idle", "idle-hold1": "idle"}
+CARRY_OWN = ("skin", "top/", "carry/", "lanyard")
+
+
+def stored_in(clip: str, layer: str) -> bool:
+    """Whether `layer` has frames of its own in `clip`."""
+    return clip not in CARRY_BASE or layer.startswith(CARRY_OWN)
+
+
 # The clips a member plays seated at a desk — the ones whose arms the overlay pass redraws.
 SEATED_CLIPS = {"sit-type", "sit-idle"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
     f"g-{g}" for g, base in SEQ_BASE.items() if base == "seated"}

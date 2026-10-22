@@ -140,7 +140,10 @@ colour.
 Carrying changes the arms, so five clips carry the painter's carry overlays: `walk-hold2` and
 `idle-hold2` (both hands at the chest: a box, a plate), `walk-hold1` and `idle-hold1` (the right hand
 out in front: the card, a mug, a bottle) and `walk-call` (the phone at the ear on a pacing call).
-`character.ts` `animFor` picks them from the pose's carry. The frame is 72 units wide for them — a
+`character.ts` `animFor` picks them from the pose's carry. A carrying clip changes only the arms, the
+sleeves, the prop and the lanyard, so only those layers store its frames; every other layer reads the
+same frame of the walk or idle it is laid over (`base` and `layers` on the clip in `figure.json`) — the
+first cut stored them all and came to 15.8 MB, this is 13.8 MB. The frame is 72 units wide for them — a
 held-out hand reaches ~30 from the floor point and clipped at 56.
 
 A desk paints over a member sitting behind it, but their forearms rest on it. For the seated clips
