@@ -153,3 +153,17 @@ describe('carrying clips store only the layers they change (plan Task 16)', () =
     expect(frameCell(packed, 'top/tee', 'walk-hold2', 'SE', 0, 0, 2)).toMatchObject({ sx: 3, sw: 5 });
   });
 });
+
+describe('a shorter clip over a longer base reads the base at the same point of the loop (Task 17)', () => {
+  it('frame 1 of a two-frame clip over an eight-frame idle reads idle frame 4', () => {
+    const over: SheetSpec = {
+      ...spec,
+      anims: { ...spec.anims, 'sit-hand': { row: 64, frames: 2, fps: 3, loop: true, base: 'sit-idle', layers: ['skin', 'top/'] } },
+    };
+    const n = 8 * 8 * 6 + 6 * 8 * 6 + 6 * 8 * 6 + 8 * 8 * 6 + 2000;
+    const cells: number[] = new Array(n).fill(0);
+    cells.splice(cellIndex(over, 'sit-idle', 'E', 4) * 6, 6, 11, 12, 13, 14, 0, 0);
+    const packed: SheetSpec = { ...over, cells: { 'hair/bob': cells } };
+    expect(frameCell(packed, 'hair/bob', 'sit-hand', 'E', 0, 0, 1)).toMatchObject({ sx: 11, sw: 13 });
+  });
+});

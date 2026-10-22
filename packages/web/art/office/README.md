@@ -146,6 +146,11 @@ same frame of the walk or idle it is laid over (`base` and `layers` on the clip 
 first cut stored them all and came to 15.8 MB, this is 13.8 MB. The frame is 72 units wide for them — a
 held-out hand reaches ~30 from the floor point and clipped at 56.
 
+A seated member with a bubble puts the right hand up (`sit-hand`, the painter's help overlay) — one
+held frame over the seated idle: each frame stores whole skin and top cells, and an eight-frame wave
+cost 519 KB for a ±3-unit wobble nobody reads at office scale. A clip shorter than its base reads the
+base at the same point of the loop, so the hair stays on the head.
+
 A desk paints over a member sitting behind it, but their forearms rest on it. For the seated clips
 the ID pass also marks every mesh on a shoulder, elbow or wrist joint (the green byte), and each of
 `ARM_LAYERS` (skin, the tops' sleeves, a mug or plate held at the desk) packs those pixels into its

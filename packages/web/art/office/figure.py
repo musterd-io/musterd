@@ -606,6 +606,12 @@ def action(name: str, t: float) -> tuple[dict, float]:
     """The pose and root lift of action `name` at phase `t` (0 → 1 over the clip)."""
     if name.startswith("g-"):
         return gesture_pose(name[2:], t)
+    if name == "sit-hand":
+        # Seated with something to say (a bubble): the painter's help hand — the right hand up and a
+        # little out, so it reads as "over here" from across the room.
+        pose, lift = action("sit-idle", t)
+        return _merge(pose, {"shoulderR": (_abduct("R", 24), swing(158), 0), "elbowR": (0, swing(18), 0),
+                             "head": (0, swing(-4), 0)}), lift
     if name.startswith(("walk-", "idle-")):
         base, arms = name.split("-", 1)
         pose, lift = action(base, t)
@@ -688,11 +694,18 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     ("walk-call", 12, True, None),
     ("idle-hold2", 8, True, None),
     ("idle-hold1", 8, True, None),
+    # Task 17 (parity): the raised hand of a seated member with a bubble
+    # one frame, held: every frame of it stores whole skin and top cells (the sleeve brings the torso),
+    # so an eight-frame wave cost 519 KB and two frames 165 KB — the painter's wave is a ±3-unit
+    # wobble nobody reads at office scale, the raised hand is what reads
+    ("sit-hand", 1, True, None),
 ]
 # A carrying clip changes only the arms, the sleeves and what is held (and the lanyard the arms can
 # cover): every other layer is the same pixels as the walk or the idle it is laid over, so it is not
 # stored again — `frameCell` reads those layers from the base clip (`base` and `layers` in figure.json).
-CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "idle-hold2": "idle", "idle-hold1": "idle"}
+CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "idle-hold2": "idle", "idle-hold1": "idle",
+              # the raised hand is the same: only the arm moves over the seated idle
+              "sit-hand": "sit-idle"}
 CARRY_OWN = ("skin", "top/", "carry/", "lanyard")
 
 
@@ -702,7 +715,7 @@ def stored_in(clip: str, layer: str) -> bool:
 
 
 # The clips a member plays seated at a desk — the ones whose arms the overlay pass redraws.
-SEATED_CLIPS = {"sit-type", "sit-idle"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
+SEATED_CLIPS = {"sit-type", "sit-idle", "sit-hand"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
     f"g-{g}" for g, base in SEQ_BASE.items() if base == "seated"}
 FPS = 12
 DIRS = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]  # figureSheet.ts DIR8, heading 0 = E, +45° clockwise

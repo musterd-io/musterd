@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { animFor, gestureFrame } from './character';
+import { appearanceOf } from './appearance';
+import { animFor, drawCharacter, gestureFrame } from './character';
+import { fitFloor } from './iso';
+import { recordingCtx } from './recording-ctx';
+import type { FigureAssets } from './rendered/assets';
 import { GESTURE_ANIMS, type SheetSpec } from './rendered/figureSheet';
-import { GESTURE, IDLE_GESTURES } from './skeleton';
-import type { Pose } from './types';
+import { GESTURE, IDLE_GESTURES, type Skel } from './skeleton';
+import type { OfficeNode, Pose } from './types';
 
 const anims: SheetSpec['anims'] = {
   idle: { row: 0, frames: 6, fps: 12, loop: true },
@@ -120,5 +124,44 @@ describe('gesture clips (increment 3b: every beat the painter plays has a sprite
     expect(gestureFrame('rise', 1, 6)).toBe(5);
     expect(gestureFrame('fall', 1, 6)).toBe(0);
     expect([0, 0.3, 0.6, 0.99].map((g) => gestureFrame('seq', g, 10))).toEqual([0, 3, 6, 9]);
+  });
+});
+
+describe('rendered parity (plan Task 17: what the painter drew per member, the sprite path draws too)', () => {
+  const spec: SheetSpec = { scale: 2, frame: { w: 64, h: 96 }, anchor: { x: 32, y: 88 }, height: 85, anims: { ...anims, 'sit-idle': anims['sit-idle'] } };
+  const fakeCanvas = () => {
+    const rec = recordingCtx();
+    return { width: 64, height: 96, getContext: () => rec.ctx } as unknown as HTMLCanvasElement;
+  };
+  const sheet = { width: 64, height: 96 } as unknown as CanvasImageSource;
+  const draw = (node: OfficeNode, armsOnly = false) => {
+    const { ctx, ops } = recordingCtx();
+    const assets: FigureAssets = { spec, sheets: new Map([['acc/headphones', sheet]]), scratch: { canvas: fakeCanvas() } };
+    drawCharacter(
+      ctx,
+      fitFloor(1200, 900),
+      { lx: 300, ly: 300, dir: 'S', node, skel: {} as Skel, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
+      armsOnly,
+    );
+    return ops;
+  };
+  // A name whose hashed accessory is not the headphones, so only dnd can put them on.
+  const name = ['ada', 'bo', 'cy', 'dev', 'eli', 'fen', 'gus'].find((n) => appearanceOf({ name: n, kind: 'human' }).accessory !== 'headphones')!;
+  const member = { name, kind: 'human', color: '#3366cc' } as OfficeNode;
+
+  it('a dnd member wears the headphones, as the painter has them', () => {
+    expect(draw(member).filter((o) => o.name === 'drawImage')).toHaveLength(0);
+    expect(draw({ ...member, dnd: true } as OfficeNode).filter((o) => o.name === 'drawImage')).toHaveLength(1);
+  });
+
+  it('every rendered member carries the wisp over the crown — but not in the seated overlay pass', () => {
+    expect(draw(member).some((o) => o.name === 'quadraticCurveTo')).toBe(true);
+    expect(draw(member, true).some((o) => o.name === 'quadraticCurveTo')).toBe(false);
+  });
+
+  it('seated with a bubble, the hand goes up (sit-hand) when the sheet has it', () => {
+    const withHand = { ...anims, 'sit-hand': { row: 64, frames: 8, fps: 12, loop: true, base: 'sit-idle' as const, layers: ['skin', 'top/'] } };
+    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, withHand).anim).toBe('sit-hand');
+    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, anims).anim).toBe('sit-type');
   });
 });
