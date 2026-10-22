@@ -10,18 +10,20 @@ import { MusterdWord } from './MusterdWord';
  * URL in the corner of the page it points at.
  */
 describe('MusterdWord', () => {
-  it('is the bare product name by default', () => {
+  it('is the bare wordmark by default', () => {
     const html = renderToStaticMarkup(<MusterdWord />);
-    expect(html).toContain('musterd');
+    expect(html).toContain('aria-label="musterd"');
     expect(html).not.toContain('.io');
   });
 
-  it('carries the address when asked, with the suffix as its own span', () => {
+  it('carries the address when asked, as its own span after the wordmark', () => {
     const html = renderToStaticMarkup(<MusterdWord domain />);
-    expect(html).toContain('musterd');
-    expect(html).toContain('brand__tld');
-    // One flex item, not two: the lockup puts a gap between its children, so a bare `musterd`
-    // beside a `.io` span rendered as "musterd .io".
-    expect(html).toMatch(/musterd<span class="brand__tld">\.io<\/span>/);
+    expect(html).toContain('aria-label="musterd"');
+    expect(html).toMatch(/<\/svg><span class="brand__tld">\.io<\/span>/);
+  });
+
+  it('sizes the plate from chipSize, so old chip sizes keep their footprint', () => {
+    expect(renderToStaticMarkup(<MusterdWord chipSize={16} />)).toContain('height="28"');
+    expect(renderToStaticMarkup(<MusterdWord chipSize={15} />)).toContain('height="26"');
   });
 });
