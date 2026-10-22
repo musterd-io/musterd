@@ -15,6 +15,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   audit: async () => (await import('./commands/audit.js')).auditCommand,
   authority: async () => (await import('./commands/authority.js')).authorityCommand,
   availability: async () => (await import('./commands/availability.js')).availabilityCommand,
+  'status-line': async () => (await import('./commands/statusLine.js')).statusLineCommand,
   board: async () => (await import('./commands/board.js')).boardCommand,
   broadcast: async () => (await import('./commands/broadcast.js')).broadcastCommand,
   calendar: async () => (await import('./commands/calendar.js')).calendarCommand,
