@@ -1,0 +1,651 @@
+{
+ "agents": {
+  "claim-musterd-core/coop/dottxt_ai_outlines_task/1655/f1_f3/agent1_stream.jsonl": {
+   "first_ctx": 25456,
+   "calls": {
+    "inbox_plain": 3,
+    "toolsearch": 3,
+    "send": 8,
+    "board_status": 2,
+    "inbox_wait": 3
+   },
+   "cost": 0.6235174499999998,
+   "turns": 43
+  },
+  "claim-musterd-core/coop/dottxt_ai_outlines_task/1655/f1_f3/agent2_stream.jsonl": {
+   "first_ctx": 25423,
+   "calls": {
+    "inbox_plain": 3,
+    "board_status": 2,
+    "toolsearch": 3,
+    "send": 4,
+    "inbox_wait": 2
+   },
+   "cost": 0.6222085500000001,
+   "turns": 37
+  },
+  "claim-musterd-core/coop/dspy_task/8563/f1_f4/agent1_stream.jsonl": {
+   "first_ctx": 25344,
+   "calls": {
+    "inbox_plain": 3,
+    "toolsearch": 4,
+    "send": 6,
+    "inbox_wait": 4,
+    "board_status": 4
+   },
+   "cost": 1.0210653,
+   "turns": 50
+  },
+  "claim-musterd-core/coop/dspy_task/8563/f1_f4/agent2_stream.jsonl": {
+   "first_ctx": 25613,
+   "calls": {
+    "inbox_plain": 3,
+    "send": 5,
+    "inbox_wait": 4,
+    "toolsearch": 2,
+    "board_status": 2
+   },
+   "cost": 0.6452968499999999,
+   "turns": 40
+  },
+  "claim-musterd-core/coop/go_chi_task/27/f3_f4/agent1_stream.jsonl": {
+   "first_ctx": 24876,
+   "calls": {
+    "inbox_plain": 2,
+    "send": 6,
+    "inbox_wait": 4,
+    "toolsearch": 1
+   },
+   "cost": 0.7293396000000001,
+   "turns": 47
+  },
+  "claim-musterd-core/coop/go_chi_task/27/f3_f4/agent2_stream.jsonl": {
+   "first_ctx": 24857,
+   "calls": {
+    "inbox_plain": 3,
+    "board_status": 4,
+    "toolsearch": 3,
+    "send": 9,
+    "inbox_wait": 5
+   },
+   "cost": 0.9874275,
+   "turns": 68
+  },
+  "claim-musterd-core/coop/llama_index_task/17244/f5_f6/agent1_stream.jsonl": {
+   "first_ctx": 25149,
+   "calls": {
+    "inbox_plain": 4,
+    "toolsearch": 4,
+    "send": 7,
+    "board_status": 3,
+    "inbox_wait": 3
+   },
+   "cost": 0.5869225499999999,
+   "turns": 42
+  },
+  "claim-musterd-core/coop/llama_index_task/17244/f5_f6/agent2_stream.jsonl": {
+   "first_ctx": 25149,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 3,
+    "send": 5,
+    "inbox_wait": 5
+   },
+   "cost": 0.4877583,
+   "turns": 35
+  },
+  "claim-musterd-core/coop/openai_tiktoken_task/0/f4_f8/agent1_stream.jsonl": {
+   "first_ctx": 25059,
+   "calls": {
+    "inbox_plain": 3,
+    "board_status": 4,
+    "toolsearch": 3,
+    "send": 8,
+    "inbox_wait": 4
+   },
+   "cost": 1.0021832999999998,
+   "turns": 65
+  },
+  "claim-musterd-core/coop/openai_tiktoken_task/0/f4_f8/agent2_stream.jsonl": {
+   "first_ctx": 25047,
+   "calls": {
+    "inbox_plain": 3,
+    "toolsearch": 4,
+    "send": 8,
+    "board_status": 2,
+    "inbox_wait": 5
+   },
+   "cost": 0.6830446499999999,
+   "turns": 43
+  },
+  "claim-musterd-core/coop/pallets_click_task/2800/f1_f4/agent1_stream.jsonl": {
+   "first_ctx": 25224,
+   "calls": {
+    "inbox_plain": 2,
+    "board_status": 4,
+    "toolsearch": 4,
+    "send": 8,
+    "inbox_wait": 4
+   },
+   "cost": 1.1084018999999998,
+   "turns": 59
+  },
+  "claim-musterd-core/coop/pallets_click_task/2800/f1_f4/agent2_stream.jsonl": {
+   "first_ctx": 25179,
+   "calls": {
+    "inbox_plain": 1,
+    "toolsearch": 3,
+    "send": 11,
+    "inbox_wait": 5,
+    "board_status": 3
+   },
+   "cost": 1.0900893000000003,
+   "turns": 67
+  },
+  "claim-musterd-core/coop/pallets_jinja_task/1559/f5_f8/agent1_stream.jsonl": {
+   "first_ctx": 25633,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 7,
+    "inbox_wait": 7,
+    "board_status": 2
+   },
+   "cost": 0.8888742000000001,
+   "turns": 67
+  },
+  "claim-musterd-core/coop/pallets_jinja_task/1559/f5_f8/agent2_stream.jsonl": {
+   "first_ctx": 25801,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 7,
+    "board_status": 3,
+    "inbox_wait": 4
+   },
+   "cost": 1.4625091499999998,
+   "turns": 82
+  },
+  "claim-musterd-core/coop/pallets_jinja_task/1621/f6_f10/agent1_stream.jsonl": {
+   "first_ctx": 25770,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 5,
+    "board_status": 2,
+    "inbox_wait": 4
+   },
+   "cost": 0.93354285,
+   "turns": 48
+  },
+  "claim-musterd-core/coop/pallets_jinja_task/1621/f6_f10/agent2_stream.jsonl": {
+   "first_ctx": 25483,
+   "calls": {
+    "inbox_plain": 3,
+    "toolsearch": 2,
+    "board_status": 3,
+    "send": 10,
+    "inbox_wait": 4
+   },
+   "cost": 1.2299955000000005,
+   "turns": 60
+  },
+  "claim-musterd-core/coop/react_hook_form_task/153/f2_f6/agent1_stream.jsonl": {
+   "first_ctx": 25491,
+   "calls": {
+    "inbox_plain": 3,
+    "toolsearch": 3,
+    "send": 8,
+    "board_status": 2,
+    "inbox_wait": 3
+   },
+   "cost": 0.8144322,
+   "turns": 39
+  },
+  "claim-musterd-core/coop/react_hook_form_task/153/f2_f6/agent2_stream.jsonl": {
+   "first_ctx": 25759,
+   "calls": {
+    "inbox_plain": 2,
+    "board_status": 3,
+    "toolsearch": 2,
+    "send": 11,
+    "inbox_wait": 4,
+    "bash_sleep": 1
+   },
+   "cost": 1.0303231499999999,
+   "turns": 57
+  },
+  "claim-musterd-core/coop/typst_task/6554/f2_f6/agent1_stream.jsonl": {
+   "first_ctx": 25169,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 1,
+    "send": 8,
+    "inbox_wait": 4
+   },
+   "cost": 0.6589876499999999,
+   "turns": 40
+  },
+  "claim-musterd-core/coop/typst_task/6554/f2_f6/agent2_stream.jsonl": {
+   "first_ctx": 25218,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 1,
+    "send": 8,
+    "board_status": 1,
+    "inbox_wait": 6
+   },
+   "cost": 0.6885079500000001,
+   "turns": 43
+  },
+  "claim-musterd-new/coop/dottxt_ai_outlines_task/1371/f3_f4/agent1_stream.jsonl": {
+   "first_ctx": 26040,
+   "calls": {
+    "inbox_plain": 2,
+    "send": 9,
+    "inbox_wait": 5,
+    "toolsearch": 1,
+    "board_status": 1
+   },
+   "cost": 0.9445474500000003,
+   "turns": 50
+  },
+  "claim-musterd-new/coop/dottxt_ai_outlines_task/1371/f3_f4/agent2_stream.jsonl": {
+   "first_ctx": 25648,
+   "calls": {
+    "inbox_plain": 3,
+    "send": 7,
+    "toolsearch": 3,
+    "board_status": 1,
+    "inbox_wait": 4
+   },
+   "cost": 1.1022613499999998,
+   "turns": 64
+  },
+  "claim-musterd-new/coop/dottxt_ai_outlines_task/1706/f1_f8/agent1_stream.jsonl": {
+   "first_ctx": 26463,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 5,
+    "board_status": 1,
+    "inbox_wait": 3
+   },
+   "cost": 1.7371446,
+   "turns": 67
+  },
+  "claim-musterd-new/coop/dottxt_ai_outlines_task/1706/f1_f8/agent2_stream.jsonl": {
+   "first_ctx": 25815,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 3,
+    "board_status": 2,
+    "send": 4,
+    "inbox_wait": 7
+   },
+   "cost": 0.8607628500000001,
+   "turns": 50
+  },
+  "claim-musterd-new/coop/dspy_task/8587/f1_f6/agent1_stream.jsonl": {
+   "first_ctx": 25294,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 3,
+    "send": 9,
+    "board_status": 3,
+    "inbox_wait": 5
+   },
+   "cost": 0.6981313500000002,
+   "turns": 48
+  },
+  "claim-musterd-new/coop/dspy_task/8587/f1_f6/agent2_stream.jsonl": {
+   "first_ctx": 25356,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 7,
+    "board_status": 1,
+    "inbox_wait": 2
+   },
+   "cost": 0.6376538999999999,
+   "turns": 37
+  },
+  "claim-musterd-new/coop/go_chi_task/26/f1_f2/agent1_stream.jsonl": {
+   "first_ctx": 25136,
+   "calls": {
+    "inbox_plain": 3,
+    "send": 10,
+    "toolsearch": 2,
+    "board_status": 1,
+    "inbox_wait": 5
+   },
+   "cost": 0.8281577999999998,
+   "turns": 69
+  },
+  "claim-musterd-new/coop/go_chi_task/26/f1_f2/agent2_stream.jsonl": {
+   "first_ctx": 25318,
+   "calls": {
+    "inbox_plain": 3,
+    "board_status": 5,
+    "toolsearch": 1,
+    "send": 9,
+    "inbox_wait": 4
+   },
+   "cost": 0.96710655,
+   "turns": 71
+  },
+  "claim-musterd-new/coop/huggingface_datasets_task/7309/f1_f2/agent1_stream.jsonl": {
+   "first_ctx": 25098,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 3,
+    "board_status": 2,
+    "send": 6,
+    "inbox_wait": 4
+   },
+   "cost": 0.5253671999999999,
+   "turns": 40
+  },
+  "claim-musterd-new/coop/huggingface_datasets_task/7309/f1_f2/agent2_stream.jsonl": {
+   "first_ctx": 24948,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 1,
+    "send": 4,
+    "inbox_wait": 3
+   },
+   "cost": 0.3532092,
+   "turns": 31
+  },
+  "claim-musterd-new/coop/llama_index_task/18813/f3_f6/agent1_stream.jsonl": {
+   "first_ctx": 24979,
+   "calls": {
+    "inbox_plain": 3,
+    "send": 8,
+    "inbox_wait": 4,
+    "toolsearch": 4,
+    "board_status": 2
+   },
+   "cost": 0.8245027500000002,
+   "turns": 45
+  },
+  "claim-musterd-new/coop/llama_index_task/18813/f3_f6/agent2_stream.jsonl": {
+   "first_ctx": 25147,
+   "calls": {
+    "inbox_plain": 2,
+    "send": 5,
+    "board_status": 2,
+    "inbox_wait": 4,
+    "toolsearch": 1
+   },
+   "cost": 0.5141823000000001,
+   "turns": 33
+  },
+  "claim-musterd-new/coop/pallets_click_task/2068/f2_f5/agent1_stream.jsonl": {
+   "first_ctx": 25202,
+   "calls": {
+    "inbox_plain": 1,
+    "toolsearch": 4,
+    "send": 5,
+    "board_status": 3,
+    "inbox_wait": 3
+   },
+   "cost": 0.8081595,
+   "turns": 53
+  },
+  "claim-musterd-new/coop/pallets_click_task/2068/f2_f5/agent2_stream.jsonl": {
+   "first_ctx": 25359,
+   "calls": {
+    "inbox_plain": 2,
+    "board_status": 3,
+    "send": 7,
+    "inbox_wait": 3,
+    "toolsearch": 2
+   },
+   "cost": 0.84076575,
+   "turns": 40
+  },
+  "claim-musterd-new/coop/pallets_click_task/2956/f1_f8/agent1_stream.jsonl": {
+   "first_ctx": 25212,
+   "calls": {
+    "inbox_plain": 4,
+    "send": 12,
+    "board_status": 3,
+    "inbox_wait": 8,
+    "bash_sleep": 2,
+    "toolsearch": 1
+   },
+   "cost": 1.4131873499999996,
+   "turns": 82
+  },
+  "claim-musterd-new/coop/pallets_click_task/2956/f1_f8/agent2_stream.jsonl": {
+   "first_ctx": 25607,
+   "calls": {
+    "inbox_plain": 3,
+    "board_status": 3,
+    "toolsearch": 2,
+    "send": 11,
+    "inbox_wait": 3
+   },
+   "cost": 1.6454142,
+   "turns": 75
+  },
+  "claim-musterd-new/coop/pallets_jinja_task/1465/f7_f9/agent1_stream.jsonl": {
+   "first_ctx": 25136,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 4,
+    "send": 8,
+    "board_status": 2,
+    "inbox_wait": 6
+   },
+   "cost": 0.9415121999999999,
+   "turns": 48
+  },
+  "claim-musterd-new/coop/pallets_jinja_task/1465/f7_f9/agent2_stream.jsonl": {
+   "first_ctx": 25572,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 2,
+    "send": 9,
+    "inbox_wait": 4
+   },
+   "cost": 1.3662667499999999,
+   "turns": 56
+  },
+  "claim-musterd-new/coop/react_hook_form_task/85/f3_f5/agent1_stream.jsonl": {
+   "first_ctx": 25260,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "send": 6,
+    "inbox_wait": 4,
+    "board_status": 1
+   },
+   "cost": 0.9731261999999999,
+   "turns": 36
+  },
+  "claim-musterd-new/coop/react_hook_form_task/85/f3_f5/agent2_stream.jsonl": {
+   "first_ctx": 25178,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 3,
+    "send": 7,
+    "inbox_wait": 4
+   },
+   "cost": 0.7158578999999998,
+   "turns": 57
+  },
+  "claim-smoke/coop/pallets_click_task/2068/f1_f2/agent1_stream.jsonl": {
+   "first_ctx": 25195,
+   "calls": {
+    "inbox_plain": 1,
+    "toolsearch": 3,
+    "board_status": 2,
+    "send": 10,
+    "inbox_wait": 6
+   },
+   "cost": 1.0552014,
+   "turns": 58
+  },
+  "claim-smoke/coop/pallets_click_task/2068/f1_f2/agent2_stream.jsonl": {
+   "first_ctx": 25202,
+   "calls": {
+    "inbox_plain": 2,
+    "toolsearch": 2,
+    "board_status": 4,
+    "send": 8,
+    "inbox_wait": 4
+   },
+   "cost": 1.01905035,
+   "turns": 46
+  },
+  "claim-solo-core/solo/dottxt_ai_outlines_task/1655/f1_f3/solo_stream.jsonl": {
+   "first_ctx": 22981,
+   "calls": {},
+   "cost": 0.1205079,
+   "turns": 6
+  },
+  "claim-solo-core/solo/dspy_task/8563/f1_f4/solo_stream.jsonl": {
+   "first_ctx": 23048,
+   "calls": {},
+   "cost": 0.31627725,
+   "turns": 12
+  },
+  "claim-solo-core/solo/go_chi_task/27/f3_f4/solo_stream.jsonl": {
+   "first_ctx": 21847,
+   "calls": {},
+   "cost": 0.6285667500000001,
+   "turns": 29
+  },
+  "claim-solo-core/solo/llama_index_task/17244/f5_f6/solo_stream.jsonl": {
+   "first_ctx": 22364,
+   "calls": {},
+   "cost": 0.1498893,
+   "turns": 8
+  },
+  "claim-solo-core/solo/openai_tiktoken_task/0/f4_f8/solo_stream.jsonl": {
+   "first_ctx": 22229,
+   "calls": {},
+   "cost": 0.34352699999999997,
+   "turns": 16
+  },
+  "claim-solo-core/solo/pallets_click_task/2800/f1_f4/solo_stream.jsonl": {
+   "first_ctx": 22478,
+   "calls": {},
+   "cost": 0.55966005,
+   "turns": 18
+  },
+  "claim-solo-core/solo/pallets_jinja_task/1559/f5_f8/solo_stream.jsonl": {
+   "first_ctx": 23544,
+   "calls": {},
+   "cost": 1.01402025,
+   "turns": 38
+  },
+  "claim-solo-core/solo/pallets_jinja_task/1621/f6_f10/solo_stream.jsonl": {
+   "first_ctx": 23361,
+   "calls": {},
+   "cost": 1.1540133000000001,
+   "turns": 42
+  },
+  "claim-solo-core/solo/react_hook_form_task/153/f2_f6/solo_stream.jsonl": {
+   "first_ctx": 23279,
+   "calls": {},
+   "cost": 0.59882415,
+   "turns": 22
+  },
+  "claim-solo-core/solo/typst_task/6554/f2_f6/solo_stream.jsonl": {
+   "first_ctx": 22483,
+   "calls": {},
+   "cost": 0.2195031,
+   "turns": 8
+  },
+  "claim-solo-new/solo/dottxt_ai_outlines_task/1371/f3_f4/solo_stream.jsonl": {
+   "first_ctx": 23785,
+   "calls": {},
+   "cost": 0.7582430999999998,
+   "turns": 31
+  },
+  "claim-solo-new/solo/dottxt_ai_outlines_task/1706/f1_f8/solo_stream.jsonl": {
+   "first_ctx": 24384,
+   "calls": {},
+   "cost": 0.8155667999999998,
+   "turns": 30
+  },
+  "claim-solo-new/solo/dspy_task/8587/f1_f6/solo_stream.jsonl": {
+   "first_ctx": 22741,
+   "calls": {},
+   "cost": 0.40132185,
+   "turns": 19
+  },
+  "claim-solo-new/solo/go_chi_task/26/f1_f2/solo_stream.jsonl": {
+   "first_ctx": 22562,
+   "calls": {},
+   "cost": 0.41445449999999995,
+   "turns": 25
+  },
+  "claim-solo-new/solo/huggingface_datasets_task/7309/f1_f2/solo_stream.jsonl": {
+   "first_ctx": 22144,
+   "calls": {},
+   "cost": 0.42652889999999993,
+   "turns": 20
+  },
+  "claim-solo-new/solo/llama_index_task/18813/f3_f6/solo_stream.jsonl": {
+   "first_ctx": 22199,
+   "calls": {},
+   "cost": 0.36788775,
+   "turns": 20
+  },
+  "claim-solo-new/solo/pallets_click_task/2068/f2_f5/solo_stream.jsonl": {
+   "first_ctx": 22658,
+   "calls": {},
+   "cost": 0.7424593500000001,
+   "turns": 28
+  },
+  "claim-solo-new/solo/pallets_click_task/2956/f1_f8/solo_stream.jsonl": {
+   "first_ctx": 22919,
+   "calls": {},
+   "cost": 1.0261111499999997,
+   "turns": 54
+  },
+  "claim-solo-new/solo/pallets_jinja_task/1465/f7_f9/solo_stream.jsonl": {
+   "first_ctx": 22797,
+   "calls": {},
+   "cost": 0.69363405,
+   "turns": 20
+  },
+  "claim-solo-new/solo/react_hook_form_task/85/f3_f5/solo_stream.jsonl": {
+   "first_ctx": 22499,
+   "calls": {},
+   "cost": 0.43468995,
+   "turns": 15
+  }
+ },
+ "solo_status": {
+  "llama_index_task/17244/f5_f6/result.json": "Submitted",
+  "dspy_task/8563/f1_f4/result.json": "Submitted",
+  "pallets_jinja_task/1559/f5_f8/result.json": "Submitted",
+  "pallets_jinja_task/1621/f6_f10/result.json": "Submitted",
+  "go_chi_task/27/f3_f4/result.json": "Submitted",
+  "typst_task/6554/f2_f6/result.json": "Submitted",
+  "openai_tiktoken_task/0/f4_f8/result.json": "Submitted",
+  "react_hook_form_task/153/f2_f6/result.json": "Submitted",
+  "pallets_click_task/2800/f1_f4/result.json": "Submitted",
+  "dottxt_ai_outlines_task/1655/f1_f3/result.json": "Submitted",
+  "llama_index_task/18813/f3_f6/result.json": "Submitted",
+  "dspy_task/8587/f1_f6/result.json": "Submitted",
+  "huggingface_datasets_task/7309/f1_f2/result.json": "Submitted",
+  "pallets_jinja_task/1465/f7_f9/result.json": "Submitted",
+  "go_chi_task/26/f1_f2/result.json": "Submitted",
+  "react_hook_form_task/85/f3_f5/result.json": "Submitted",
+  "pallets_click_task/2956/f1_f8/result.json": "Submitted",
+  "pallets_click_task/2068/f2_f5/result.json": "Submitted",
+  "dottxt_ai_outlines_task/1706/f1_f8/result.json": "Submitted",
+  "dottxt_ai_outlines_task/1371/f3_f4/result.json": "Submitted"
+ }
+}

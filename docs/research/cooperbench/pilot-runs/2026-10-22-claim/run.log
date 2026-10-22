@@ -1,0 +1,50 @@
+# CooperBench claim run — run log (lane 01M5GWBB17, claim-manifest.md)
+
+## Pre-flight, 2026-10-22 (machine musterd-cooperbench, performance-8x)
+
+- **Deploy.** First deploy at main b3017222 carried `latest` Claude Code, 2.1.308. The host
+  `gate_smoke.py` failed before testing anything: "--dangerously-skip-permissions cannot be used with
+  root/sudo privileges". Redeployed with Claude Code pinned to 2.1.307 (the version every pilot 3 and
+  solo stream records) for the host and, through CooperBench's `setup.sh`, every agent container
+  (commit 7e795fcb on this lane's branch; musterd code identical to b3017222).
+- **2.1.307 refuses root too.** The pilots' agents never hit it, because CooperBench's adapter exports
+  `IS_SANDBOX=1` inside each container. Only the host-side smokes run as plain root. They now run as an
+  unprivileged user (`runuser -u smoke`). This touches no arm.
+- **API check:** `claude -p` → ok.
+- **`gate_smoke.py`** (tool search on): PASS, $0.0046. The claimed `src/a.py` was edited, the unclaimed
+  `src/b.py` was refused by the gate, and there was no deaf warning.
+- **`hold_smoke.py` as committed** FAILs (it predates ADR 697: it expects the post-lapse edit to be
+  allowed, while 697 refuses it once as `denied_handover`), as in pilot 3. **`hold_smoke_697.py`**
+  (pilot 3's copy): PASS, $0.0076. Rows: held → handover → lapsed.
+- **musterd smoke pair** `pallets_click` 2068 f1+f2, `--git`: both agents Submitted, scored
+  (eval_error null; both features failed tests, cause `task`), and `lookup_failures` 0 for both agents.
+  Each agent ran `git fetch team` and merged its partner (partner_merges 1 each). **$2.07**, against pilot 3's
+  $2.85 on the same pair (−27%). The first model call's context is 25.2k tokens (pilot 3: 39.6k).
+  Tool search was on: agents loaded tools with `ToolSearch` (3 and 2 calls). The blocking wait was
+  used: `team_inbox_check {wait: 45|90}` (5 and 4 calls). PASS.
+- **Re-estimate** at −27% on pilot 3's $2.46 a pair: musterd ≈ $36, solo ≈ $12, smokes $2.10, about
+  $50 in all, under the $60 hard stop.
+
+## Run
+
+- 18:12:22Z `claim.sh` started. **Aborted start:** `cooperbench prepare` takes no `-s` (it only downloads
+  the dataset), so no images were pulled. The script had no `set -e`, so both arms started at 18:12:29Z and
+  would have paid for image pulls in their wall time. Killed at ~18:14Z, before any pair finished
+  (spend still $2.07, the smoke pair). The logs were moved to `logs/aborted-claim-*` and
+  `claim-2026-10-22/aborted/`. The script now `docker pull`s every claim20 image and stops on a
+  failed pull. The pilot manifest's `cooperbench prepare -s core` line was wrong in the same way.
+- 18:15:40Z `claim.sh` restarted. It pulled all 20 images by 18:21:03Z, which filled the 79 GB volume
+  (the 20 images are 83.4 GB). Every musterd agent container then failed its Claude Code install with
+  "E: You don't have enough free space in /var/cache/apt/archives/", the arms "finished" in under 20 s,
+  and **$0** was spent. These are errors, not scores. Their logs were moved to `logs/aborted2-claim-*`
+  and `claim-2026-10-22/aborted2/`.
+- 18:24:36Z **restarted in two halves** (`claim.sh` as committed): `core` first, then the ten new tasks
+  (`claimnew`). Before each half the other half's images are removed and this half's are pulled. Both
+  arms still run side by side within each half, on the same machine and day, under one $60 stop
+  across both. Run names: `claim-{musterd,solo}-{core,new}`. 14 GB free at the start of the core half.
+- Core half: solo 18:24:37–18:36:41Z, musterd 18:24:37–18:52:02Z; evaluated by 18:56:07Z; spent $24.47.
+  No errored pair (all 20 scored; every musterd agent Submitted; zero lookup failures).
+- New half: images pulled 18:57–19:01Z; solo 19:01:16–19:13:36Z, musterd 19:01:16–19:28:34Z;
+  evaluated by 19:31:15Z. All done 19:31:25Z, **$49.25** model spend. No errored pair; all 20 solo
+  agents and all 40 musterd agents Submitted; nothing re-run.
+- Machine stopped after copying `readout.json`, `agentstats.json` (from `agentstats.py`) and `claim.log`.
