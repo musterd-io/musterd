@@ -101,11 +101,10 @@ thing signed", in a response whose first line is a refusal. The pattern was froz
 before run 1 and is not edited retroactively; it is recorded here as a known-bad check
 to fix before the next run, with all outputs re-scored then.
 
-## What remains before a seat
+## What remains
 
-- The skill is proven against the baseline by run 1's totals, with run 2 confirming the
-  four fixes. It may now be proposed for a seat.
-- Still owed (building-a-role-skill steps 6–7): a holder of the role — or, with no
-  holder yet, a human on the team (nick) — accepts the landed skill via `lane_submit`.
-  Only after that acceptance is `ios-engineer` eligible to be added to the CLI's
-  built-in role skills, and an agent seat created on it.
+- Steps 5 and 6 are recorded above (run 1 on 2026-10-21, run 2 the same day). cider
+  holds `ios-engineer` and reads this skill from the repo.
+- Step 7 is open. wallow wrote the skill. The method asks a holder who did not write it;
+  this record names nick for that accept. Until then, `ios-engineer` stays out of the
+  CLI's built-in role skills.
