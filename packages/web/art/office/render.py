@@ -381,11 +381,21 @@ def render_figure(a: dict) -> None:
         return any_on
 
     def holdout_for(layer: str) -> set[str]:
-        """What occludes a variant: the body; for a prop also a torso (any top's: they share it) and,
-        for the plant, the box it sits in."""
-        if not layer.startswith("carry/") and not layer.startswith("lanyard"):
-            return set(base)
-        return set(base) | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
+        """What occludes a variant: the body (skin and eyes), plus a stand-in for each kind of piece that
+        can be in front of it (office figure v2, plan Task 4) — the runtime draws pieces back to front,
+        so a piece's own render must already have the holes the pieces drawn under it cannot make.
+        - a top: the trousers (seated thighs come in front of the hem);
+        - shoes: the trousers (a hem over the ankle);
+        - hair, facial hair, hats, accessories, a carried thing, the lanyard: a torso (the tee's — every
+          top shares its shape), so hair behind the back is hidden and long hair in front still shows;
+          the scarf sits on the torso, so it holds out the body alone;
+        - the plant: the box it sits in, as before."""
+        b = set(base)
+        if layer.startswith("top/") or layer == "shoes":
+            return b | {"bottom"}
+        if layer == "acc/scarf" or layer in ("bottom", "visor"):
+            return b
+        return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 
     # Five directions are rendered and three are mirrored. A horizontal flip in the canvas's frame
     # swaps lx and ly (screen-right is +lx −ly), so the mirror of E (+lx) is S (+ly), of N is W,
@@ -503,7 +513,7 @@ def render_figure(a: dict) -> None:
                                 lit_mats[o.name] = [slot.material for slot in o.material_slots]
                         figure_fuse.show_for_call(fused)
                         if kind == "base":
-                            # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
+                            # the base body — skin and eyes — split by ID, no piece in the way
                             set_id_pass(False)
                             s.render.filepath = tmp_lit
                             bpy.ops.render.render(write_still=True)

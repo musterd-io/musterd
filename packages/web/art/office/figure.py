@@ -76,7 +76,7 @@ LAYERS = (
 )
 # Base layers are on every member and split by the ID pass; every other layer is one of an exclusive
 # group (one hair style, one top, …) and is rendered alone with the base as a holdout.
-BASE_LAYERS = ["skin", "eyes", "bottom", "shoes"]
+BASE_LAYERS = ["skin", "eyes"]  # v2: the body alone; trousers and shoes are pieces over it (plan Task 4)
 # the ID pass stores 9·(index+1) in the red byte — spaced so a nearest match survives rounding. Only
 # the base is split by ID, so only the base needs a byte (the whole list would overflow 255).
 ID_STEP = 9
