@@ -135,7 +135,12 @@ access; roster handles and Presence remain visible.
   with a metric draws its daily series as a sparkline, and its last point is live (ADR 701):
   `useLiveSamples` polls `GET /experiments/live` every 30 s while some open read has a metric and the
   tab is visible (no poll while hidden), and `withLivePoints` puts today's point on the series as a
-  dot that breathes (still under reduced motion), with `now` beside the number.
+  dot that breathes (still under reduced motion), with `now` beside the number. A chart draws from its
+  first point (lane 01M5GE8AX4, 2026-10-21; nick, via ryder): one sample shows the number with `· day 1`,
+  a dotted trail fading in from the left to the point, and the dot. Every chart has a soft fill under
+  the line and lands on an end dot that pops in once. `/broadcast`'s five-row cap
+  (`capEntries(entries, true)`) gives a free slot to a charted row before an uncharted one, because
+  nobody can press "show all" on a stream; urgent rows still come first.
   `/broadcast` mounts the same column `still` beside the room (ADR 464 lane 5): no hover, no
   expanding, no operator notes, sized off the 16:9 stage rather than the window.
 - **Room framing** (2026-10-01): `/live` and `/broadcast` fit the *furnished* room (`furnishedBox` in
@@ -290,6 +295,7 @@ live/
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)
   Experiments.tsx               // the team column's Experiments section (ADR 644): the dated reads as rows with shape marks, capped at five (urgent never hidden), linked to /board on /live, still on /broadcast
+  ExperimentSpark.tsx           // an experiment's sparkline, a lazy chunk off /live's first paint (lane 01M5GE8AX4): one sample is the number · day 1, a dotted trail and the dot; more draw the line over a soft fill to an end dot; today's live point breathes beside `now`
   experimentReads.ts            // lane board → the dated reads in group order, phrases and day counts in the team's calendar zone; status is the server's read_status, never derived here (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
   briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
@@ -447,7 +453,7 @@ teammate's session. Consequences worth internalising:
   the speech bubble — no glow, no extra drop. The three stocks tried are recorded beside the rule.
 - **An experiment row shows its result, not just the word** (lane 01M5B1ZM80, 2026-10-19;
   [experiment results](../superpowers/specs/2026-10-19-experiment-results-design.md)). A lane that
-  carries a `metric` and two or more daily `samples` draws a sparkline (`experimentReads.sparkline`:
+  carries a `metric` and at least one daily sample draws a sparkline (`experimentReads.sparkline`:
   baseline rule, dashed target rule, latest value; ink only until `read`); a verdict with `measured`
   reads `met · 61% (target 60%, n 23)` (`resultPhrase`); the note's first sentence shows under the
   row, the whole note on a click on `/live`; an `evidence` URL is a link. The fields are read off the

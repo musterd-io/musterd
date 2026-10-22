@@ -156,6 +156,17 @@ describe('capEntries', () => {
     expect(shown).toHaveLength(7);
     expect(shown.every((e) => e.status !== 'waiting')).toBe(true);
   });
+
+  it('on the stream, a charted row takes a free slot before an uncharted one, in group order', () => {
+    const all = entries(Array(8).fill('waiting')).map((e, i) =>
+      i === 6 ? { ...e, metric: { name: 'm', unit: '%', baseline: null, target: 1, direction: 'up' } as never, samples: [{ day: '2026-10-21', value: 1, n: 1 }] } : e,
+    );
+    expect(capEntries(all).map((e) => e.id)).not.toContain(all[6]!.id);
+    const stream = capEntries(all, true);
+    expect(stream).toHaveLength(5);
+    expect(stream.map((e) => e.id)).toContain(all[6]!.id);
+    expect(stream.at(-1)!.id).toBe(all[6]!.id); // still in its place in the order
+  });
 });
 
 describe('experimentsCount', () => {
@@ -246,9 +257,9 @@ describe('the result beside the word (experiment-results design §5–6, lane 01
     expect(resultPhrase({ status: 'waiting', phrase: 'in 2 days', metric, measured: null })).toBe('in 2 days');
   });
 
-  it('draws nothing without a metric or below two samples; keeps the target in frame otherwise', () => {
+  it('draws nothing without a metric or a sample; keeps the target in frame otherwise', () => {
     expect(sparkline(null, [{ day: '2026-10-18', value: 50, n: 3 }, { day: '2026-10-19', value: 55, n: 4 }])).toBeNull();
-    expect(sparkline(metric, [{ day: '2026-10-18', value: 50, n: 3 }])).toBeNull();
+    expect(sparkline(metric, [])).toBeNull();
     const s = sparkline(metric, [
       { day: '2026-10-17', value: 42, n: 5 },
       { day: '2026-10-18', value: 50, n: 3 },
@@ -351,7 +362,21 @@ describe('live points (ADR 701)', () => {
     // One day of history plus today's live point is a line, ending on a dot.
     const spark = sparkline(byId('L2').metric, byId('L2').samples)!;
     expect(spark.now).toMatchObject({ x: expect.any(Number), y: expect.any(Number), asOf: NOW });
-    expect(sparkline(byId('L3').metric, byId('L3').samples)).toBeNull();
+    // One past day, no live point: the number and a still dot at the right edge, no line.
+    const lone = sparkline(byId('L3').metric, byId('L3').samples)!;
+    expect(lone.path).toBe('');
+    expect(lone.now).toBeNull();
+    expect(lone.lone).toMatchObject({ x: expect.any(Number), y: expect.any(Number) });
+    expect(lone.latest).not.toBe('');
+  });
+
+  it('one sample is enough: today alone shows the number, `now` and the breathing dot (no line)', () => {
+    const s = sparkline(metric, [{ day: '2026-10-21', value: 40, n: 2, live: true, asOf: 1 }])!;
+    expect(s.path).toBe('');
+    expect(s.latest).toMatch(/^40\b/);
+    expect(s.now).toMatchObject({ y: expect.any(Number), asOf: 1 });
+    expect(Number.isFinite(s.now!.x)).toBe(true);
+    expect(s.lone).toBeNull();
   });
 
   it('a read that is in takes no live point: its chart is the record', () => {
