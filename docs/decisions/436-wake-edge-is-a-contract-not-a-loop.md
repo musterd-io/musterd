@@ -139,6 +139,17 @@ fix five contract holes.
   from usage, and enforces `budget_usd` before the next call; the engine-per-provider option is
   reversed. Decision 2 stands unchanged: the native backend remains the reference row.
 
+- **2026-10-21 (lane `01M3TB1GPMMH2VKFJ2V97CSP9P`, the binding read).** `pnpm wake:rail` over wakes
+  since clause 1 printed `FIRES — opencode: 0/54 settled wakes priced`. That is the pricing clause,
+  and only that clause: OpenCode 0/35 reply and 0/19 work orders, all `harness_price_unverified`,
+  none through the gateway. The floor clause does not fire. Reply medians: claude-code 1617k
+  (n=45), grok 3001k (n=32, about 1.9×), codex 484k (n=36), opencode 359k (n=35), musterd 280k
+  (n=22). Grok 7/46 and Codex 1/42 are priced, each of those prices via the gateway. The 2026-10-13
+  reading (both clauses, Grok at 12.2×) is the early read; this one is the date Decision 5 named.
+  [ADR 583](583-metering-gateway-not-a-loop.md) remains the ADR that answers the trigger. This read
+  writes none. Snapshot: the wiki page
+  `resume-bound-is-below-one-wake-life.md`, section "binding read".
+
 ## Observability & Evaluation
 
 - **Traces:** per wake, the existing `residency.woke` / `residency.wake_cost` / `session_captured`
