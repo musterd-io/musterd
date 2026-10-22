@@ -15,7 +15,7 @@ table says which to open. `references/team.md` is this team's own map: its app, 
 commands, decisions and incidents. Read it before the first piece of work in a session.
 
 Built with the `building-a-role-skill` method. Steps 5 and 6 are recorded in
-`evals/results.md`. Step 7, acceptance, is still open.
+`evals/results.md`. Nick accepted it on 2026-10-22.
 
 ## Sources (read, never restated here)
 
