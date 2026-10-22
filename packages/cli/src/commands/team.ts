@@ -2400,7 +2400,8 @@ export interface RosterMember {
   lifecycle_until?: number | null;
   /** The seat's EFFECTIVE capabilities. Admin-visible only, and load-bearing — see below. */
   capabilities?: Capabilities | undefined;
-  /** ADR 449 §3: the member who created this agent, if any. A seat file cannot carry it. */
+  /** ADR 449 §3 / ADR 700: the NAME of the member who created this agent, if any — written to the
+   *  seat file, where it takes effect only as far as the hub's mint record vouches for it. */
   sponsored_by?: string | null | undefined;
 }
 
@@ -2447,23 +2448,11 @@ export function rosterToFiles(
   slug: string,
   members: RosterMember[],
 ): { teamToml: string; seatFiles: Record<string, string> } {
-  // ADR 463 §4.2: a seat file cannot carry `sponsored_by`, and on a file-backed team reconcile is the
-  // account-status writer — so after a cutover, disabling a sponsor would reach none of its agents
-  // (and each agent's own file would re-enable it). The daemon refuses that projection; say so here,
-  // before any file is written, with the way out.
-  const sponsored = members.filter((m) => m.sponsored_by);
-  if (sponsored.length > 0) {
-    throw new CliError(
-      `"${slug}" still holds sponsored agents (${sponsored.map((m) => m.name).join(', ')}) — seat ` +
-        'files cannot carry sponsorship, so the roster must stay in the daemon. Remove them first ' +
-        '(`musterd team remove <name>`), then export again. (ADR 463 §4.2)',
-      1,
-    );
-  }
   const team: TeamFile = { slug, lifecycle: 'forever' };
   const seatFiles: Record<string, string> = {};
   for (const m of members) {
     const seat: SeatFile = { kind: m.kind, role: m.role ?? '' };
+    if (m.sponsored_by && m.kind === 'agent') seat.sponsored_by = m.sponsored_by;
     if (m.lifecycle && m.lifecycle !== 'forever') {
       seat.lifecycle = m.lifecycle;
       if (m.lifecycle === 'until' && m.lifecycle_until) {
@@ -2565,7 +2554,10 @@ async function teamExport(parsed: Parsed): Promise<number> {
       // Admin-visible only; when the roster does not carry them the seat file simply omits them and
       // reconcile keeps rebuilding from the role, exactly as before this change.
       capabilities: m.capabilities,
-      sponsored_by: m.sponsored_by ?? null,
+      // The roster names a sponsor by member id; a seat file names it (ADR 700).
+      sponsored_by: m.sponsored_by
+        ? (members.find((s) => s.id === m.sponsored_by)?.name ?? null)
+        : null,
     })),
   );
 

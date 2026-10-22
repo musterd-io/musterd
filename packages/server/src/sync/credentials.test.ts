@@ -229,6 +229,23 @@ withDrivers('credentials', (_o, kind) => {
       ).toBe(401);
     });
 
+    it('3b. a joiner cannot vouch for a sponsorship: a pushed member.sponsored_agent_created is refused at the hub (ADR 700)', async () => {
+      await appendAudit(joiner.store, (await joinerTeam()).id, {
+        actor: 'nick',
+        action: 'member.sponsored_agent_created',
+        target: 'forged-scout',
+        result: 'allow',
+      });
+      await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/403/);
+      const hubTeamRow = await hubTeam();
+      expect(
+        await hub.store.get(
+          "SELECT id FROM audit WHERE team_id = ? AND action = 'member.sponsored_agent_created' AND target = 'forged-scout'",
+          [hubTeamRow.id],
+        ),
+      ).toBeUndefined();
+    });
+
     it('4. a replicated key is sponsor-only at the joiner: an admin`s hub-minted key gets no order for an unsponsored seat there', async () => {
       // ada is unsponsored on both rosters. On the hub an admin's host key is team-wide and would
       // serve her; the replicated copy at the joiner must not (ADR 689 decision 2).

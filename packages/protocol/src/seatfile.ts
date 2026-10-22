@@ -66,10 +66,17 @@ export const SeatFileSchema = z
     /** The seat's colour as an HSL hue 0–359 (ADR 374). The file owns it; the daemon projects it
      *  and never invents one — a seat without a hue renders from its name hash everywhere. */
     hue: z.number().int().min(0).max(359).optional(),
+    /** ADR 700: the member who minted this agent (ADR 449 `sponsored_by`), by name. The file
+     *  declares it; it takes effect only where the hub's own `member.sponsored_agent_created`
+     *  fact vouches for it, and once vouched a file that drops the line changes nothing. */
+    sponsored_by: z.string().min(1).optional(),
   })
   .superRefine((s, ctx) => {
     if (s.slack_user_id !== undefined && s.kind !== 'human') {
       ctx.addIssue({ code: 'custom', message: '`slack_user_id` is valid only on a human seat' });
+    }
+    if (s.sponsored_by !== undefined && s.kind !== 'agent') {
+      ctx.addIssue({ code: 'custom', message: '`sponsored_by` is valid only on an agent seat' });
     }
     if (s.lifecycle === 'until' && !s.until) {
       ctx.addIssue({ code: 'custom', message: 'lifecycle "until" requires an `until` timestamp' });
@@ -327,6 +334,7 @@ export function serializeSeat(seat: SeatFile): string {
   // active/provisioned case is derived, never written).
   if (seat.account_status) out += line('account_status', seat.account_status);
   if (seat.slack_user_id) out += line('slack_user_id', seat.slack_user_id);
+  if (seat.sponsored_by) out += line('sponsored_by', seat.sponsored_by);
   // The hue is a bare integer — the one top-level key that is not a string (ADR 374).
   if (seat.hue !== undefined) out += `hue = ${seat.hue}\n`;
   if (seat.working_hours) out += serializeWorkingHours(seat.working_hours, out);

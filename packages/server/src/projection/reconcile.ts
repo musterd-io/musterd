@@ -5,20 +5,22 @@ import {
   seatRoles,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
-import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import {
   addMember,
+  getMemberById,
   getMemberByName,
   leaveMember,
   listMembers,
   type MemberIdentityFields,
   reviveMember,
   setMemberGovernance,
+  setMemberSponsor,
   updateMemberIdentity,
 } from '../store/members.js';
 import { deleteRoles, listRoleNames, roleDefaultsMap, upsertRole } from '../store/roles.js';
-import { resolveCapabilities } from '../store/rows.js';
+import { type MemberRow, resolveCapabilities, type TeamRow } from '../store/rows.js';
+import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { createTeam, getTeamBySlug, updateTeam } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 import { type LoadedSeat, loadTeamSpec, type TeamSpec } from './load.js';
@@ -56,26 +58,43 @@ function resolveLifecycle(
   return { lifecycle, lifecycleUntil };
 }
 
+/** ADR 700: the admin statuses that take a member's standing (a halt, ADR 501, is a pause, not a loss). */
+const STANDING_LOST = new Set(['disabled', 'banned', 'archived']);
+
+/** ADR 700 decision 3: whether a member row stands as a sponsor now. */
+function rowStands(m: MemberRow, now: number): boolean {
+  if (m.left_at !== null) return false;
+  if (m.account_status !== null && STANDING_LOST.has(m.account_status)) return false;
+  return !(m.lifecycle === 'until' && m.lifecycle_until !== null && m.lifecycle_until < now);
+}
+
+/**
+ * ADR 700 decision 2: does this daemon hold the hub's own record that `sponsor` minted `agent`? At
+ * the hub that is its own row. At a joiner it is a row folded from another node: the hub's ingest
+ * refuses a pushed copy, so a folded row is the hub's by construction, and a joiner's own mint
+ * never vouches.
+ */
+async function sponsorshipVouched(
+  db: Driver,
+  team: TeamRow,
+  agent: string,
+  sponsor: string,
+): Promise<boolean> {
+  const joiner = await joinerEnrollment(db, team.id, team.slug);
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM audit WHERE team_id = ? AND action = 'member.sponsored_agent_created'
+       AND actor = ? AND target = ?${joiner ? ' AND origin_node IS NOT NULL AND origin_node <> ?' : ''}
+     LIMIT 1`,
+    joiner ? [team.id, sponsor, agent, joiner.node_id] : [team.id, sponsor, agent],
+  );
+  return row !== undefined;
+}
+
 /** Reconcile one team spec into the db. Returns the delta applied + any tokens minted. */
 export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<ReconcileResult> {
   const teamLifecycle = spec.team.lifecycle as Lifecycle;
   // Upsert the team identity (durable fields only; id + created_at preserved).
   let team = await getTeamBySlug(db, spec.team.slug);
-  // ADR 463 §4.2: sponsored agents live only on daemon-rostered teams. A seat file carries no
-  // `sponsored_by`, and reconcile is the account-status writer on a file-backed team, so projecting
-  // files over a team that still holds sponsored agents would disable/ban a sponsor with no cascade
-  // — and the descendant's own seat file would re-enable it on the same pass. Refuse the whole
-  // projection (fail closed: the prior db state stays) until those agents are removed.
-  if (team) {
-    const sponsored = (await listMembers(db, team.id)).filter((m) => m.sponsored_by !== null);
-    if (sponsored.length > 0)
-      throw new MusterdError(
-        'conflict',
-        `"${spec.team.slug}" still holds sponsored agents (${sponsored.map((m) => m.name).join(', ')}) — ` +
-          'seat files cannot carry sponsorship, so the roster stays in the daemon until they are removed ' +
-          '(`musterd team remove <name>`) (ADR 463 §4.2)',
-      );
-  }
   if (!team) {
     team = await createTeam(db, {
       slug: spec.team.slug,
@@ -123,9 +142,91 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
     drift: [...spec.drift],
   };
   const desired = new Set(spec.seats.map((s) => s.name));
+  const now = Date.now();
+  const seatOf = new Map(spec.seats.map((s) => [s.name, s.seat]));
+
+  // ADR 700 decision 2: who sponsors each seat this pass. A sponsorship the db already holds was
+  // vouched for, and stands whatever the file says — clearing it would widen `hostMayServe` from the
+  // sponsor's own key to every team-wide one. A file's line counts only where the hub's mint fact
+  // vouches for it; otherwise the agent projects unsponsored, so a forged line grants nothing.
+  const sponsorOf = new Map<string, string>();
+  const newlyVouched = new Set<string>();
+  for (const { name, seat } of spec.seats) {
+    const existing = await getMemberByName(db, team.id, name);
+    const held = existing?.sponsored_by
+      ? (await getMemberById(db, existing.sponsored_by))?.name
+      : undefined;
+    if (held !== undefined) {
+      sponsorOf.set(name, held);
+      if (seat.sponsored_by === undefined) {
+        result.warnings.push(
+          `seat "${name}" omits sponsored_by — its vouched sponsor ${held} stands; only removing the ` +
+            'agent or the sponsor losing standing ends it (ADR 700)',
+        );
+      } else if (seat.sponsored_by !== held) {
+        result.warnings.push(
+          `seat "${name}" names sponsor "${seat.sponsored_by}", but its vouched sponsor is ${held} — kept (ADR 700)`,
+        );
+      }
+    } else if (seat.sponsored_by !== undefined) {
+      if (await sponsorshipVouched(db, team, name, seat.sponsored_by)) {
+        sponsorOf.set(name, seat.sponsored_by);
+        newlyVouched.add(name);
+      } else {
+        result.warnings.push(
+          `seat "${name}" names sponsor "${seat.sponsored_by}" with no mint of theirs on record here — ` +
+            'projected unsponsored (ADR 700)',
+        );
+      }
+    }
+  }
+
+  // ADR 700 decision 3: whether a sponsor stands AFTER this pass — its file decides (removed, an
+  // admin status, a lapsed `until`); a sponsor with no file keeps its db row's word.
+  const standsAfter = async (sponsor: string): Promise<boolean> => {
+    const seat = seatOf.get(sponsor);
+    if (!seat) {
+      const row = await getMemberByName(db, team!.id, sponsor);
+      return row !== undefined && desired.has(sponsor) && rowStands(row, now);
+    }
+    if (seat.account_status !== undefined && STANDING_LOST.has(seat.account_status)) return false;
+    const { lifecycleUntil } = resolveLifecycle(seat, teamLifecycle);
+    return lifecycleUntil === null || lifecycleUntil >= now;
+  };
+  const chainStands = async (name: string): Promise<boolean> => {
+    const seen = new Set<string>([name]);
+    for (let s = sponsorOf.get(name); s !== undefined; s = sponsorOf.get(s)) {
+      if (seen.has(s)) break;
+      seen.add(s);
+      if (!(await standsAfter(s))) return false;
+    }
+    return true;
+  };
+  // A sponsor's standing as the db holds it before this pass, for each live sponsor — what the
+  // cascade below compares against.
+  const sponsorsBefore: MemberRow[] = [];
+  const live = await listMembers(db, team.id);
+  for (const m of live) {
+    if (live.some((c) => c.sponsored_by === m.id) && rowStands(m, now)) sponsorsBefore.push(m);
+  }
 
   for (const { name, seat } of spec.seats) {
-    const { lifecycle, lifecycleUntil } = resolveLifecycle(seat, teamLifecycle);
+    let { lifecycle, lifecycleUntil } = resolveLifecycle(seat, teamLifecycle);
+    // ADR 449 §2, held on a seat-file team (ADR 700 decision 3): an agent never outlives its sponsor.
+    const sponsor = sponsorOf.get(name);
+    if (sponsor !== undefined) {
+      const sponsorSeat = seatOf.get(sponsor);
+      const sponsorRow = sponsorSeat ? undefined : await getMemberByName(db, team.id, sponsor);
+      const sponsorUntil = sponsorSeat
+        ? resolveLifecycle(sponsorSeat, teamLifecycle).lifecycleUntil
+        : sponsorRow?.lifecycle === 'until'
+          ? sponsorRow.lifecycle_until
+          : null;
+      if (sponsorUntil !== null && (lifecycleUntil === null || lifecycleUntil > sponsorUntil)) {
+        lifecycle = 'until';
+        lifecycleUntil = sponsorUntil;
+      }
+    }
     const fields: MemberIdentityFields = {
       kind: seat.kind,
       role: seat.role ?? '',
@@ -176,6 +277,12 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
     }
   }
 
+  for (const name of newlyVouched) {
+    const agent = await getMemberByName(db, team.id, name);
+    const sponsor = await getMemberByName(db, team.id, sponsorOf.get(name)!);
+    if (agent && sponsor) await setMemberSponsor(db, agent.id, sponsor.id);
+  }
+
   // Project each seat's governance state (ADR 070), separate from the identity/mint paths above so
   // reconcile is the single writer of capabilities + the admin account-status override. Effective caps
   // = role defaults ⊕ per-seat narrowing (clampNarrow, never widening); the account-status override is
@@ -220,7 +327,17 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
         `seat "${name}" is ${m.kind === 'service' ? 'a service' : 'an agent'} declaring is_admin — clamped to false (admins are human-only, ADR 172)`,
       );
     }
-    await setMemberGovernance(db, m.id, seat.account_status ?? null, JSON.stringify(caps), held);
+    // ADR 700 decision 3: an agent whose sponsor chain lost standing projects disabled, whatever its
+    // own file says — so a file can never re-enable what the cascade took on the same pass.
+    let accountStatus = seat.account_status ?? null;
+    if (
+      sponsorOf.has(name) &&
+      (accountStatus === null || !STANDING_LOST.has(accountStatus)) &&
+      !(await chainStands(name))
+    ) {
+      accountStatus = 'disabled';
+    }
+    await setMemberGovernance(db, m.id, accountStatus, JSON.stringify(caps), held);
   }
 
   // REMOVE — a live member with no file is soft-tombstoned (never hard-deleted: the message log FK
@@ -232,6 +349,16 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
     if (!desired.has(m.name) && m.observer !== 1) {
       await leaveMember(db, m.id, { releaseClaims });
       result.removed.push(m.name);
+    }
+  }
+
+  // ADR 700 decision 4: a sponsor this pass took the standing of — its file removed, an admin
+  // status, a lapsed `until` — takes its agents' residency, grants, OAuth chains and presence with
+  // it, through the one cascade the remove route and the expiry sweep call (ADR 463 §4.2).
+  for (const before of sponsorsBefore) {
+    const after = await getMemberById(db, before.id);
+    if (after && !rowStands(after, now)) {
+      await revokeSponsoredDescendants(db, team.id, after, 'reconcile', null, now);
     }
   }
 

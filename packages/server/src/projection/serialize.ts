@@ -51,9 +51,12 @@ export function teamRowToFile(row: TeamRow): TeamFile {
 export function memberRowToSeat(
   row: MemberRow,
   roleDefaults: PartialCapabilities = {},
+  /** ADR 700: the sponsor's NAME — a seat file names members, never ids. */
+  sponsorName?: string,
 ): { seat: SeatFile; unrepresentable?: string } {
   const seat: SeatFile = { kind: row.kind, role: row.role };
   if (row.slack_user_id) seat.slack_user_id = row.slack_user_id;
+  if (sponsorName !== undefined && row.kind === 'agent') seat.sponsored_by = sponsorName;
   if (row.lifecycle !== 'forever') {
     seat.lifecycle = row.lifecycle;
     if (row.lifecycle === 'until' && row.lifecycle_until != null) {
@@ -137,8 +140,11 @@ export async function projectTeamToFiles(db: Driver, slug: string): Promise<Proj
   if (!t) return null;
   const roleDefaults = await roleDefaultsMap(db, t.id);
   const unrepresentable: string[] = [];
-  const seats = (await listMembers(db, t.id)).map((m) => {
-    const projected = memberRowToSeat(m, roleDefaults.get(m.role) ?? {});
+  const members = await listMembers(db, t.id);
+  const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  const seats = members.map((m) => {
+    const sponsor = m.sponsored_by ? nameOf.get(m.sponsored_by) : undefined;
+    const projected = memberRowToSeat(m, roleDefaults.get(m.role) ?? {}, sponsor);
     if (projected.unrepresentable) unrepresentable.push(`${m.name}: ${projected.unrepresentable}`);
     return { name: m.name, seat: projected.seat };
   });

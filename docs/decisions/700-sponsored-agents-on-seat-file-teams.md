@@ -106,6 +106,13 @@ same guarantees a daemon-roster team gives.
   that joiner's checkout, and the hub refuses the mint until its roster root has the file after
   its next git refresh. The refusal names that wait, and the sponsor retries. Minting at a
   joiner is not added here.
+- _(2026-10-21, first landing, lane `01M5G6ERTFSRACVP1Z5C9CZBKX`.)_ Decisions 1–4 shipped as
+  written. On mixed versions (big-body's review): a daemon built before this ADR drops the
+  unknown `sponsored_by` key with a warning, and its reconcile still holds the 2026-09-28
+  refusal. Once the team holds a sponsored agent, that daemon refuses the whole projection and
+  keeps its prior roster. It fails closed and never projects an agent unsponsored, so every
+  daemon on a team should run this build before the team's first hosted mint. Export still omits
+  a seat's `hue`, as it did before; that gap is unrelated to sponsorship.
 - Follows-up: lane `01M5G6ERTFSRACVP1Z5C9CZBKX` (decisions 1–4: protocol field, replicated
   fact, reconcile and export) and lane `01M5G6F7ZZ2XARR38YZPED8PX8` (decision 5: the hosted
   mint on a seat-file team), then lane `01M5DTSQ7BKX54NG9V3PHVK4A5` (2b-5) on revive.

@@ -1201,6 +1201,9 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'host.provision_ready',
   'host.provision_failed',
   'host.provision_cancelled',
+  // ADR 700 decision 2 — the hub's record that a sponsor minted an agent crosses as a hub fact, so a
+  // joiner's reconcile can vouch for a seat file's `sponsored_by`. A pushed copy is refused at ingest.
+  'member.sponsored_agent_created',
 ]);
 
 /**

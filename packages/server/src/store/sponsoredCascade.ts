@@ -45,7 +45,8 @@ export async function revokeSponsoredDescendants(
   db: Driver,
   teamId: string,
   root: { id: string; name: string },
-  trigger: 'remove' | 'expired',
+  /** ADR 700 decision 4: `reconcile` — a seat-file pass that took the sponsor's standing. */
+  trigger: 'remove' | 'expired' | 'reconcile',
   actor: string | null,
   now = Date.now(),
 ): Promise<DescendantRevocation[]> {
