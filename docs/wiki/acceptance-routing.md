@@ -178,7 +178,14 @@ Against this page's own evidence those fast rows are the tails of a wide distrib
 The section above is about lanes that were declined and re-submitted. This one is the first ask on a lane, answered by the seat it was sent to, with no earlier decline and no re-route. Seen on two nights, all on non-risky lanes:
 
 - 2026-10-14, lane `01M4YE8CGD` (ADR 597, #2599): ask `1792023967784`, resolved by alfie `1792024008984` — **41.2s** (lazara insight `01M4Z1HC7A`). The same night, lane `01M4W5VFAB` took **17m 3s** on the same shape, so the fast case is not every case.
-- 2026-10-15, lane `01M4S0WNZ5` (spend controls increment 1): ask `01M50DYTWC` at `1792089746316`, resolved by miley `1792089826230` — **79.9s**. Lane `01M4SB4BZB` (spend controls increment 2): ask `01M50J4TGE` at `1792094136846`, resolved by fifty `1792094236266` — **99.4s**.
+- 2026-10-15, lane `01M4S0WNZ5` (spend controls increment 1): ask `01M50DYTWC` at `1792089746316`, resolved by miley `1792089826230` — **79.9s**. Lane `01M4SB4BZB` (spend controls increment 2): ask `01M50J4TGE` at `1792094136846`, resolved by fifty `1792094236266` — **99.4s**. The same night, alfie's lanes `01M51E51TZ` (console sign-in copy, #2723) and `01M3W3EQ67` (cloud per-team rate limits) closed in **75.3s** (ryder) and **124.0s** (miley) (alfie insight `01M51K3T5D`).
+
+Two more nights put the "inside two minutes" case in proportion. Of seven first-submit asks on alfie's lanes, none re-routed or declined, three closed under two minutes and four did not (2026-10-17; falsify: on the seven lanes below, a `resolve`-then-`ask` pair before the close, or ask-to-resolve gaps other than those listed, in the acts table): <!-- claim: other -->
+
+- 2026-10-16, ryder on all three spend-approval lanes: `01M4SB4CJP` (spec) **161.7s**, `01M531GZGV` (`spend_approval_usd` key) **247.6s**, `01M531H8WG` (gateway hold) **456.8s**.
+- 2026-10-17: `01M538R4YQ` (empty Approve) **209.0s** and `01M50M8W8F` (`unpriced_wake_cap` key) **100.7s**, both ghost; `01M55XT74C` (experiments copy) **107.4s** and `01M55YZ4VF` (console sign-in strings) **102.1s**, both ryder.
+
+The copy lanes sat near 100s and the code-bearing spend lanes ran 2.7–7.6 minutes. "Can close inside two minutes" is true; quoting it as the typical first-submit time is not.
 
 Same reading as the re-reviewed case: these are the fast tail, seen when the acceptor is live and the lane needs no human stage. A risky lane does not close this way however quick the peer is — its peer accept is only stage one (see the 2026-10-15 izzo insight `01M50BPJVJ`, and ADR 603).
 
@@ -243,10 +250,14 @@ The tie-break's recency rung — "least recently picked", `lastPickedAt` in `pac
 
 Measured on the team's own database (2026-10-19): of 133 declines that were followed by another acceptance ask on the same lane, **52 were picker-routed and 42 of those went to a different seat**; 57 were `route: "named"` and **48 of those stayed with the same seat**; 24 rows carry no route at all. The picker moves the reviewer off the lane about four times in five; the named route does not.
 
-Two dated sightings:
+Two dated sightings of the picker doing it:
 
 - **2026-10-16**, lane `01M4S9AVXF` (sloane's branch-overlap spike): five picker-routed asks and five declines between 11:11:55 and 12:55:03 (1h43m08s) — wanderer (11:11), big-body (11:39), schmidt (12:03), wanderer (12:39), stanley (12:52). The sixth ask, at 13:11:50, went to **wanderer** again and was accepted 2h03m04s after the first ask. stanley's decline named two hand-restated figures that disagreed with their own sums, and wanderer was never asked after it: the lane closed on a seat that had not seen the finding.
 - **2026-10-19**, lane `01M5BC0CJQK8DR6J1CWM63FWXC` (ADR 680): alfie declined #3000 on one sentence of the ack. The fix (#3008) changed exactly that sentence. The resubmit's ask was minted at `1792471309621` and named **stanley**; the picker snapshot on that submit records alfie as `tie_break` and stanley as the only `eligible` candidate. stanley accepted 2m08s later. Nobody in the rail was asked whether alfie's sentence had been fixed.
+
+A third sighting reaches the same end by another route:
+
+- **2026-10-20**, lane `01M5AWZWGPEN3TF2TQH306BF9J` (ADR 665 surfaces 3, landscape.md): dreamy declined #2983 on one paragraph. alfie resubmitted on #3020 at 09:57:28, and this time the picker *did* name the decliner: `review_selection.selected.reviewer` is dreamy on the `lane.ready_for_review` row (`1792515448714`). Ten seconds later a `lane.review_rerouted` row with actor dreamy and `route: "reaped"` moved the ask to **big-body** (`1792515458919`). big-body accepted 31s after that; `lane.closed` records `time_in_review_ms: 41393`. So the decliner was asked, and the ask still left before anyone checked the paragraph (2026-10-20; falsify: the `lane.review_rerouted` row on that lane at `1792515458919` names dreamy as `reviewer`, or an accept/decline from dreamy on that lane after `1792515448715`). <!-- claim: other -->
 
 The counter-case sits in the first sighting: wanderer was asked a third time, because the candidate set had narrowed to seats that were busy or offline and the recency rung had nobody else to prefer. The rule is not "the decliner is never re-asked" — it is that the decliner is re-asked only by default, and the default points elsewhere.
 
