@@ -35,6 +35,7 @@ import { installSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget, renderRepositoryPrimer, upsertPrimer } from './primer.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses } from './reconcile/engine.js';
+import { finishRoleEquipment, installMissingBuiltinRoleSkills } from './roleEquipment.js';
 import { roleSkillNotes, withRoleSkills } from './roleSkills.js';
 import { GENERALIST, isBuiltin, listToolkitNames, loadToolkit, type Toolkit } from './toolkit.js';
 import { provisionToolkitIntoHarnesses } from './toolkitProvision.js';
@@ -920,8 +921,8 @@ export async function runInit(): Promise<number> {
   try {
     saveProvisioning(process.cwd(), {
       version: 3,
-      // The provisioned TOOLKIT (workspace equipment), never the roster label — the two are
-      // independent since ADR 272 inc 2.
+      // The toolkit the human picked. A held role's toolkit is equipped beside it after
+      // wiring (ADR 713). The roster label stays a separate fact (ADR 272 inc 2).
       toolkit: template?.toolkit ?? '',
       desired,
       contributions: {},
@@ -947,6 +948,15 @@ export async function runInit(): Promise<number> {
 
   const sc = p.spinner();
   sc.start(`Wiring ${selectionLabel}`);
+  const equipTarget = {
+    workspace: process.cwd(),
+    rosterHome: config.rosterHome[team],
+    seat: name,
+    team,
+    harnessIds: desired,
+    recorded: template?.toolkit ?? '',
+  };
+  installMissingBuiltinRoleSkills(equipTarget);
   const reconcileCtx = withRoleSkills(defaultHarnessContext(process.cwd(), process.env, { team }));
   const report = await reconcileHarnesses(reconcileCtx, desired, { legacyRepair: false });
   sc.stop(
@@ -954,7 +964,8 @@ export async function runInit(): Promise<number> {
       ? `Harness set wired ${pc.dim(`(${selectionLabel})`)}`
       : pc.yellow('Wired with warnings — `musterd harness status` has the detail'),
   );
-  for (const line of roleSkillNotes(reconcileCtx.worktreeRoot, team)) p.log.warn(pc.yellow(line));
+  const skillWarned = roleSkillNotes(reconcileCtx.worktreeRoot, team);
+  for (const line of skillWarned) p.log.warn(pc.yellow(line));
   for (const r of report.results) {
     if (
       r.result !== 'applied' &&
@@ -978,6 +989,14 @@ export async function runInit(): Promise<number> {
   // provision path until they are fragment-modeled; the musterd entry/hooks/permissions/guidance
   // are the reconciler's. This is Universe-2 only — nothing here touches the roster.
   if (chosen) await provisionToolkitTools(chosen, template);
+  // After the one-harness replace above, merge every held role's toolkit into the desired set.
+  const equipped = await finishRoleEquipment(equipTarget);
+  for (const line of equipped.lines) {
+    if (skillWarned.includes(line)) continue;
+    if (line.startsWith('toolkit tools not') || line.startsWith('role '))
+      p.log.warn(pc.yellow(line));
+    else p.log.info(line);
+  }
 
   // 5b) Seed the repository primer so every Workspace knows the Team working-loop (ADR 307) -----
   // The prompt is honest about what writing does *at the decision point*: against an existing,

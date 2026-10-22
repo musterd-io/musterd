@@ -5,8 +5,8 @@ import type { Toolkit } from './toolkit.js';
  * The one toolkit-provisioning path (ADR 708): a toolkit's MCP servers + permission defaults
  * into every named harness that can provision, additively (ADR 027) and best-effort — a
  * harness that cannot provision, or a provision that throws, is reported per harness and
- * never fails the caller. `init` (one harness, interactive) and seat creation (every wired
- * harness, unattended) both run this so the two cannot drift into different behaviours.
+ * never fails the caller. `init`, seat creation, `role assign`, `wire`, and `harness configure`
+ * all run this so they cannot drift into different behaviours (ADR 713).
  */
 export interface ToolkitProvisionOutcome {
   harness: string;

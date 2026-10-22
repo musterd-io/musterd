@@ -10,6 +10,7 @@ import { loadProvisioning } from '../onboard/manifest.js';
 import { defaultHarnessContext, type HarnessContext } from '../onboard/reconcile/context.js';
 import { reconcileHarnesses } from '../onboard/reconcile/engine.js';
 import type { HarnessAdapter } from '../onboard/reconcile/fragments.js';
+import { finishRoleEquipment, installMissingBuiltinRoleSkills } from '../onboard/roleEquipment.js';
 import { roleSkillNotes, withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
 import { renderWireReceipts } from './harnessVerdict.js';
@@ -269,12 +270,20 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
 
   // ── Reconcile actual state to the SAVED desire. Never `legacyRepair` from here. ───────────────
   // The seat comes from the binding just saved, so role-skill bridges resolve after it (ADR 586 §4).
+  // A bundled built-in the repo lacks has to be on disk before that resolve (ADR 713).
+  const seat = bindingSeat(binding) ?? null;
+  const equipTarget = {
+    workspace: ctx.worktreeRoot,
+    seat: seat ?? undefined,
+    team,
+    harnessIds: desired,
+  };
+  installMissingBuiltinRoleSkills(equipTarget);
   const report = await reconcileHarnesses(deps?.ctx ? ctx : withRoleSkills(ctx), desired, {
     legacyRepair: false,
     ...(deps?.registry ? { registry: deps.registry } : {}),
   });
-
-  const seat = bindingSeat(binding) ?? null;
+  const equipped = await finishRoleEquipment(equipTarget);
 
   if (flags['json']) {
     process.stdout.write(
@@ -291,8 +300,12 @@ export async function wireCommand(parsed: Parsed, deps?: WireDeps): Promise<numb
   }
 
   for (const line of renderWireReceipts(report.results)) process.stdout.write(`${line}\n`);
-  for (const line of roleSkillNotes(ctx.worktreeRoot, team))
+  const skillWarned = roleSkillNotes(ctx.worktreeRoot, team);
+  for (const line of skillWarned) process.stdout.write(`${theme.warn('⚠')} ${line}\n`);
+  for (const line of equipped.lines) {
+    if (skillWarned.includes(line)) continue;
     process.stdout.write(`${theme.warn('⚠')} ${line}\n`);
+  }
   if (report.ok) {
     process.stdout.write(
       `${theme.ok('✓')} wired this worktree's harness set ${theme.meta(`(team ${team}${desired.length > 0 ? `, ${desired.join(', ')}` : ', empty selection'})`)}\n`,

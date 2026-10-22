@@ -56,6 +56,8 @@ export interface AgentSeatResult {
   wiringError: string | null;
   /** The recorded toolkit's tools provisioned per harness (ADR 708); empty when none. */
   toolkitProvision: import('./toolkitProvision.js').ToolkitProvisionOutcome[];
+  /** Skill bridge and missing-skill lines from equipping the seat's roles (ADR 713). */
+  skillNotes: string[];
   /** ADR 547: whether the seat's file has reached a remote; null on a db-only team, outside git, or when published. */
   seatFileUnpublished: SeatFilePublication | null;
 }
@@ -116,6 +118,8 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     },
     model: input.model,
     driver: input.driver,
+    rosterHome: input.rosterHome,
+    role: input.role,
   });
   return {
     workspace: r.workspace,
@@ -124,6 +128,7 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     wiring: r.wiring,
     wiringError: r.wiringError,
     toolkitProvision: r.toolkitProvision,
+    skillNotes: r.skillNotes,
     seatFileUnpublished: input.rosterHome ? seatFileUnpublished(input.rosterHome, name) : null,
   };
 }

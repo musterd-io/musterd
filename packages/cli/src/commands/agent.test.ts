@@ -85,10 +85,17 @@ vi.mock('../roster.js', async (importOriginal) => {
     },
   };
 });
-vi.mock('../onboard/harnesses/index.js', () => ({
-  harnessAdapters: () =>
-    ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
-}));
+vi.mock('../onboard/harnesses/index.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../onboard/harnesses/index.js')>();
+  return {
+    ...real,
+    // Reconcile is stubbed below. Adapters stay inert so a profile's permission ceiling
+    // does not write harness files through the fragment engine. Toolkit provisioning uses
+    // the real HARNESSES registry (ADR 713).
+    harnessAdapters: () =>
+      ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
+  };
+});
 vi.mock('../onboard/reconcile/engine.js', () => ({ reconcileHarnesses: h.reconcile }));
 vi.mock('../onboard/workspace.js', () => ({ provisionWorkspace: () => h.workspace }));
 

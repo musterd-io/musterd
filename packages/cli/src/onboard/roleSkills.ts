@@ -10,7 +10,7 @@ import {
   SKILL_NAME_RE,
 } from '@musterd/protocol';
 import { loadConfig, readBindingAt } from '../config.js';
-import { staysInside } from '../roster-roles/skills.js';
+import { BUILTIN_ROLE_SKILLS, staysInside } from '../roster-roles/skills.js';
 import { applyFileMap, observeFileMap, stamped } from './guidance.js';
 import type { FsSeam, HarnessContext } from './reconcile/context.js';
 import {
@@ -135,9 +135,12 @@ export function roleSkillNotes(worktreeRoot: string, team: string | undefined): 
 
 /** The line `wire`, `init` and `doctor` print for each role whose skill this repo does not have. */
 export function missingSkillLine(m: { role: string; skill: string }): string {
+  const hint = (BUILTIN_ROLE_SKILLS as readonly string[]).includes(m.skill)
+    ? `musterd role create --from ${m.role} adds the built-in`
+    : 'it is not a bundled built-in, so equipping does not copy one in';
   return (
     `role ${m.role} names skill "${m.skill}", which this repo does not have at ` +
-    `.agents/skills/${m.skill}/SKILL.md — no bridge written (musterd role create --from ${m.role} adds a built-in one)`
+    `.agents/skills/${m.skill}/SKILL.md — no bridge written (${hint})`
   );
 }
 
@@ -206,8 +209,12 @@ export function isRoleSkillFragment(fragmentKey: string): boolean {
   return fragmentKey.startsWith(FRAGMENT_PREFIX);
 }
 
-/** Harnesses that catalog a skill through a bridge file. The others read `.agents/skills/` directly. */
-const BRIDGE_BY_HARNESS: Partial<Record<HarnessId, BridgeShape>> = {
+/**
+ * Harnesses that catalog a skill through a bridge file. Codex and Muse read
+ * `.agents/skills/<skill>/SKILL.md` and get no bridge. OpenCode's project surface is the
+ * AGENTS.md primer, which stays free of a seat's role (ADR 713).
+ */
+export const BRIDGE_BY_HARNESS: Partial<Record<HarnessId, BridgeShape>> = {
   'claude-code': CLAUDE_BRIDGE,
   cursor: CURSOR_BRIDGE,
   grok: GROK_BRIDGE,

@@ -117,6 +117,12 @@ with whatever each harness cannot represent reported rather than dropped silentl
 - Role-assign's permission recompile resolves through `roleToolkitName` where the role
   file is readable (the roster home, where that command runs); where no role file is
   readable it keeps the same-name convention, so existing teams see no change.
+- 2026-10-22: [ADR 713](713-role-equipment-on-every-harness.md) extends decision 4.
+  Seat creation, `role assign`, `wire`, and `harness configure` equip the recorded
+  toolkit and every held role's loaded toolkit into every desired harness, and install
+  or bridge the role skill. `--profile` stays the explicit recorded name. `role assign
+  --remove` does not unprovision; when the recorded name was only that role's toolkit,
+  it is cleared and the servers stay until `musterd uninstall --role-tools`.
 
 ## Observability & Evaluation
 
