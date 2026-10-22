@@ -94,7 +94,8 @@ import {
   type Unit,
   type UnitHook,
 } from './damage';
-import { loadFigureAssets, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
+import { type LayerId, wornLayers } from './rendered/figure';
+import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
@@ -423,6 +424,23 @@ export function mountOffice(
   /* The rendered room is drawn from the corner camera (spec §2.2, plan Task 5); the painted room
      keeps the iso it was drawn at. The camera rides on the fit, so every `project()` follows. */
   const cam: Camera | undefined = renderedFlag ? CORNER_CAMERA : undefined;
+  /* The figure's sheet files and the asset URLs, once figure.json is in: what `wearNow` loads more
+     of as the roster changes (lane 01M5GX1F3J — only what the team wears is fetched). */
+  let figureFiles: Map<LayerId, string> | null = null;
+  let figureSheetUrl: (file: string) => string = (f) => f;
+  const figureInFlight = new Set<LayerId>();
+  /** Fetch the sheets the roster now wears and the figure lacks; repaint the resting office when they land. */
+  function wearNow(): void {
+    const fig = rendered?.figure;
+    if (!fig || !figureFiles) return;
+    const wanted = wornLayers(actors.nodes().values());
+    if ([...wanted].every((id) => fig.sheets.has(id) || !figureFiles!.has(id))) return;
+    const before = fig.sheets.size;
+    void loadFigureLayers(fig.sheets, figureFiles, wanted, figureSheetUrl, undefined, figureInFlight).then((failed) => {
+      if (failed.length) console.warn(`office: ${failed.length} figure sheet(s) failed to load: ${failed.join(', ')}`);
+      if (!disposed && fig.sheets.size > before) bake();
+    });
+  }
   if (renderedFlag) {
     const files = import.meta.glob('./rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<
       string,
@@ -450,7 +468,10 @@ export function mountOffice(
           if (figureUrl) {
             try {
               const spec = parseFigureSpec(await (await fetch(figureUrl)).json());
-              const fig = await loadFigureAssets(spec, (file) => files[`./rendered/assets/${file}`] ?? file);
+              figureFiles = new Map(spec.layers.map((l) => [l.id, l.file] as const));
+              figureSheetUrl = (file) => files[`./rendered/assets/${file}`] ?? file;
+              // Only what the roster wears; `wearNow` fetches the rest of a wardrobe as members join.
+              const fig = await loadFigureAssets(spec, figureSheetUrl, undefined, wornLayers(actors.nodes().values()));
               if (fig.missing.length) console.warn(`office: ${fig.missing.length} figure sheet(s) failed to load: ${fig.missing.join(', ')}`);
               // No skin sheet means no figure at all: keep the painted members rather than draw nobody.
               if (fig.sheets.has('skin')) r.figure = { spec: fig.spec, sheets: fig.sheets, scratch: fig.scratch };
@@ -467,6 +488,7 @@ export function mountOffice(
           rendered = r;
           sprites?.clear();
           bake();
+          wearNow(); // the roster may have grown while the sheets were in flight
         })
         .catch((e: unknown) => console.warn('office: rendered manifest unusable — painting', e));
     }
@@ -2966,6 +2988,7 @@ export function mountOffice(
     refreshLightEnv(); // fold the new occupancy (+ current clock) into the lighting before we bake
     // Animate presence changes (walk in/out, drift) unless reduced-motion asked for stillness.
     actors.setHomes(placements, byName, !reduced);
+    wearNow(); // a new member, or a dnd member's headphones, may need a sheet not yet fetched
     if (replayPending) ensureLoop(); // the queued replay drains on the next frame, now that people are placed
     // The pulse is read ONCE, above the motion gate: the door's sound plays under reduced-motion
     // (audio is not motion, E3 spec §2); only the visual glow stays gated.
