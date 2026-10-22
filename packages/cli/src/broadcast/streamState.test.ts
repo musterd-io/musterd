@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -224,6 +224,18 @@ describe('stream state file', () => {
     const state = live({ reason: 'nick asked' });
     writeStreamState(p, state);
     expect(readStreamState(p)).toEqual(state);
+  });
+
+  it('keeps a session title and drops one that must not become a fly env value', () => {
+    const p = join(dir, 'state.json');
+    const title = 'Coffee & musterd - the twitch channel audit';
+    writeStreamState(p, live({ title }));
+    expect(readStreamState(p)?.title).toBe(title);
+    writeFileSync(p, JSON.stringify({ ...live(), title: `${title}\nmore` }));
+    expect(readStreamState(p)?.desired).toBe('live');
+    expect(readStreamState(p)?.title).toBeUndefined();
+    writeFileSync(p, JSON.stringify({ ...live(), title: 'not our shape' }));
+    expect(readStreamState(p)?.title).toBeUndefined();
   });
 
   it('reads null for a missing or unparseable file (fail-safe: no state, no enforcement)', () => {

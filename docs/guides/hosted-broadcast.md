@@ -89,6 +89,14 @@ context.
    fly secrets set -a musterd-broadcast TS_AUTHKEY=<key> MUSTERD_STREAM_KEY=<twitch key> --stage
    ```
 
+   Titles are optional. Until both `MUSTERD_TWITCH_CLIENT_ID` and `MUSTERD_TWITCH_TOKEN` are set,
+   the stream still starts and the channel title is left alone. `musterd stream doctor` names the
+   gap. The values never pass through musterd — set them the same way:
+
+   ```sh
+   fly secrets set -a musterd-broadcast MUSTERD_TWITCH_CLIENT_ID=<app client id> MUSTERD_TWITCH_TOKEN=<user token with channel:manage:broadcast> --stage
+   ```
+
 5. **Build the image** (repeat only after broadcast-relevant code changes):
 
    ```sh

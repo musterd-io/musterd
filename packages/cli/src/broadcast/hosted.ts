@@ -36,10 +36,15 @@ import {
   serveForwardsPort,
 } from '../integrations/tailscale.js';
 import type { Exec } from '../process.js';
+import { TITLE_SECRET_NAMES } from './channelTitle.js';
 
 /** The Fly app that hosts the stream. Overridable for a second environment. */
 export const DEFAULT_APP = 'musterd-broadcast';
-/** The secrets the container needs. Values never pass through musterd — only presence is checked. */
+/**
+ * The secrets the container needs before a stream can start. Values never pass through musterd —
+ * only presence is checked. The Twitch title token is not in this list (ADR 711): missing it turns
+ * the title off, and a missing optional secret must not fail doctor.
+ */
 export const REQUIRED_SECRETS = ['TS_AUTHKEY', 'MUSTERD_STREAM_KEY'] as const;
 /** The proven configuration (see the hosting spec + the 2026-07-27 run that passed). */
 export const VM_SIZE = 'performance-4x';
@@ -269,6 +274,12 @@ export interface DoctorCtx {
   image: CaptureImage | null;
 }
 
+/**
+ * Doctor row for the optional title token. A variable, not a string passed to `skip`: the flag
+ * checker treats a call's first string as a flag name, and this is not a flag `stream` takes.
+ */
+const TITLE_CHECK_KEY = 'twitch-title';
+
 const skip = (key: string, label: string, why: string): Check => ({
   key,
   label,
@@ -469,19 +480,25 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
   //
   // Presence only. musterd never reads, prints, or accepts these values: the operator sets them
   // directly so a stream key never passes through an agent, a script argument, or the repo.
+  //
+  // 8b — the optional title token (ADR 711). A skip, never a fail: the stream still starts, and
+  // the repair has to live in `detail` because skip rows are not copied into the fail-fix block.
+  // `fly secrets list` cannot show expiry; a rejected token is the apply line in the machine log.
+  let secretRows: SecretRow[] = [];
   if (!appExists) {
     checks.push(skip('secrets', 'stream + tailnet secrets set', 'needs the app'));
+    checks.push(skip(TITLE_CHECK_KEY, 'twitch title token set', 'needs the app'));
   } else {
     const sec = exec('fly', ['secrets', 'list', '-a', ctx.app, '--json']);
-    const rows = sec.code === 0 ? parseSecrets(sec.stdout) : [];
-    const missing = REQUIRED_SECRETS.filter((s) => !rows.some((r) => r.name === s));
+    secretRows = sec.code === 0 ? parseSecrets(sec.stdout) : [];
+    const missing = REQUIRED_SECRETS.filter((s) => !secretRows.some((r) => r.name === s));
     checks.push({
       key: 'secrets',
       label: 'stream + tailnet secrets set',
       state: missing.length === 0 ? 'ok' : 'fail',
       detail:
-        rows.length > 0
-          ? rows.map((r) => `${r.name} ${r.digest?.slice(0, 8) ?? '?'}`).join(' · ')
+        secretRows.length > 0
+          ? secretRows.map((r) => `${r.name} ${r.digest?.slice(0, 8) ?? '?'}`).join(' · ')
           : 'none set',
       ...(missing.length === 0
         ? {}
@@ -491,6 +508,26 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
               missing.map((s) => `${s}=<${secretHint(s)}>`).join(' '),
           }),
     });
+    const titleMissing = TITLE_SECRET_NAMES.filter((s) => !secretRows.some((r) => r.name === s));
+    checks.push(
+      titleMissing.length === 0
+        ? {
+            key: TITLE_CHECK_KEY,
+            label: 'twitch title token set',
+            state: 'ok',
+            detail: 'a rejected token is named in the machine log when the stream starts',
+          }
+        : {
+            key: TITLE_CHECK_KEY,
+            label: 'twitch title token set',
+            state: 'skip',
+            detail:
+              `optional — the stream still starts and the title is left alone. ` +
+              `fly secrets set -a ${ctx.app} --stage ` +
+              'MUSTERD_TWITCH_CLIENT_ID=<app client id> ' +
+              'MUSTERD_TWITCH_TOKEN=<user token, channel:manage:broadcast>',
+          },
+    );
   }
 
   // 9 — an image has been built and its digest recorded
