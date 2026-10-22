@@ -237,6 +237,14 @@ function ExperimentRow({
           {entry.status !== 'read' && <span className="lc-xp__date">{entry.readsLabel}</span>}
           <span className="lc-xp__status lc-xp__clock">{clockPhrase(entry, now)}</span>
         </span>
+        {entry.goal && entry.metric && (
+          <span
+            className="lc-xp__goal"
+            title={`${entry.metric.name}: aiming ${entry.metric.direction === 'down' ? 'under' : 'over'} ${formatValue(entry.metric.target, entry.metric.unit)}`}
+          >
+            goal {entry.goal}
+          </span>
+        )}
         {whyOpen && !still && (
           <span className="lc-xp__why">
             {entry.about && <span className="lc-xp__why-q">{entry.about}</span>}

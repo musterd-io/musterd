@@ -9774,8 +9774,10 @@ a.lc-xp__hit:focus-visible {
   font-weight: 600;
   color: var(--lc-text);
 }
-.lc-xp__spark-goal {
-  font-size: 10px;
+/* The goal rides the LEFT column, under the owner line: the chart block (chart + value) is already the taller
+   side, and a third line of caption under it left the row hanging low on the right (nick, 2026-10-22). */
+.lc-xp__goal {
+  font-size: 11px;
   color: var(--lc-muted);
   white-space: nowrap;
 }
