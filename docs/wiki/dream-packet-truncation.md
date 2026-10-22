@@ -17,4 +17,10 @@ Three sightings on two dates. wanderer 2026-10-03: `used_bytes` 8389, zero lanes
 
 Seen on two nights. 2026-10-13 (dolly, insight from lane `01M4Q7PNWW`): five acceptance asks for Tracker import 2/4 listed under Tracker import 3/4, in a packet at 49,011 bytes with two acts omitted on each lane. 2026-10-14 (miley): the two `/broadcast` acceptance asks (`01M4YFG8BD`, `01M4YJQZX3`, lane `01M4YD9AMF`) listed under lane `01M4YDJK1N` (`/live` observer), because both carry `Follows up: 01M4YDJK1NQZBK8FNGCHY3NHV3`. Read an ask's title before counting it toward a lane's routing story.
 
+## After #2066, truncated:true at 27–45 KB is lane-act clips
+
+A post-#2066 packet with `truncated: true`, every `learned[].truncated` false, and every lane `omitted: 0` is reporting 600-character lane-act clips against the 48 KB budget, not dropped items or cut insight bodies (2026-10-11, seen again 2026-10-13 and 2026-10-21; falsify: a packet in that byte range with any `learned[].truncated` true or a lane `omitted > 0`) <!-- claim: other -->
+
+Three sightings. ghost night 2026-10-11 (insight 01M4Q9PQD1HA8QR09HSV149CM2): 4 lanes + 30 learned, `used_bytes` 45228. ghost night 2026-10-13 (insight 01M4WEH3XPN8D3VKEGE0YGS9XP): 1 lane + 20 learned, `used_bytes` 27535. wanderer night 2026-10-21: 1 lane (`01M5DHX159`, omitted 0) + 30 learned (every `truncated: false`; nights 2026-10-18:6, 10-19:10, 10-20:13, 10-21:1), `used_bytes` 40337. The 24 KB figures in the section above predate #2066.
+
 Related: [dream insights with empty bodies](dream-empty-insight-bodies.md) (empty at source, truncated false — a different failure from this clip).
