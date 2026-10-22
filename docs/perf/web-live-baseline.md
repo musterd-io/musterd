@@ -1670,6 +1670,22 @@ their resolution (2 → 1.5 px per unit is ~44% fewer pixels); nick chose both, 
 
 - Falsify: on `/office-preview?office=rendered&n=1` the network panel shows 16 figure sheets, not 37.
 
+### 2026-10-22 — `officeArtBytes` 10,700,000 → 8,420,000 B: the figure at 1.5 px per floor unit (lane `01M5J8DXCH`)
+
+| Budget        | Before (main) | This branch | Ceiling                                |
+| ------------- | ------------- | ----------- | -------------------------------------- |
+| office art    | 10,601,138 B  | 7,325,820 B | RE-BASELINED 10,700,000 → 8,420,000 B  |
+| figure sheets | 9,057,268 B   | 5,781,950 B | (part of office art; −36%)             |
+
+The figure ships at 1.5 px per floor unit instead of 2: 44% fewer pixels, 36% fewer bytes. /live draws
+it at ~1.66 px/unit on retina and the broadcast at ~1.4, and side by side nick saw no difference but a
+hair softer glasses rims. The sheets were not re-rendered (the scale is in every render call's key, so
+that was ~80 min): `render.py --resample-from 2` scaled each call's stored scale-2 cells down
+(`figure_resample.py`), 13 min for the whole figure. Against 753 calls rendered at 1.5 for real, mean
+RMSE 0.96/255 and no seam between layers. The room keeps its scale.
+
+- Falsify: `pnpm perf:check` after a build reports office art above 8,420,000 B with this change in.
+
 ### 2026-10-21 — `officeArtBytes` 9,935,000 → 13,900,000 B: carried props and the seated overlay (lanes `01M5D8FCC9` + `01M5GF82SB`, office realism 3b Task 16)
 
 | Budget     | Before (main) | This branch  | Ceiling                        |

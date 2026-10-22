@@ -36,7 +36,8 @@ import scene  # noqa: E402  (the scene builder beside this file)
 
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False}
+    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
+           "resample_from": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -54,6 +55,8 @@ def args() -> dict:
             out["figure"] = True; i += 1
         elif k == "--force":
             out["force"] = True; i += 1
+        elif k == "--resample-from":
+            out["resample_from"] = float(argv[i + 1]); i += 2
         else:
             raise SystemExit(f"render.py: unknown argument {k}")
     if not out["out"]:
@@ -277,6 +280,7 @@ def render_figure(a: dict) -> None:
     colours with no anti-aliasing — and the lit frame is split by ID into its layers. Rows are
     (clip, direction), columns are frames."""
     import figure
+    import figure_resample
 
     scene.clear()
     zs = scene.z_scale(a["ky"])
@@ -391,19 +395,31 @@ def render_figure(a: dict) -> None:
     # The frame's WIDTH is not in the key: the camera spans the frame's height (ortho_scale is the
     # larger side), so a wider frame is the same pixels with more margin. Stored crops are placed
     # from the frame's centre line, so they land right in a frame of any width that holds them.
-    g_key = _h(FIG_PIPELINE, LIT_SAMPLES, bpy.app.version_string, s.render.engine, s.view_settings.view_transform,
-               s.view_settings.look, px, fh, cam.data.ortho_scale, _r(np.array(cam.matrix_world).ravel()), lights, world)
+    def scale_key(p: float, h: int) -> str:
+        return _h(FIG_PIPELINE, LIT_SAMPLES, bpy.app.version_string, s.render.engine, s.view_settings.view_transform,
+                  s.view_settings.look, p, h, cam.data.ortho_scale, _r(np.array(cam.matrix_world).ravel()), lights, world)
 
-    def call_key(kind: str, seated: bool) -> str:
+    g_key = scale_key(px, fh)
+    # `--resample-from <p>`: a call missing at this scale is scaled down from its cells at <p>
+    # (figure_resample.py) instead of rendered. The camera does not depend on the scale, so the
+    # call's key at <p> differs only in the scale and the frame's height.
+    src_px = a["resample_from"]
+    if src_px is not None and src_px <= px:
+        raise SystemExit("render.py: --resample-from must be a bigger scale than --scale")
+    sfw, sfh = (int(round(figure.FRAME_W * src_px)), int(round(figure.FRAME_H * src_px))) if src_px else (fw, fh)
+    g_key_src = scale_key(src_px, sfh) if src_px else None
+
+    def call_key(kind: str, seated: bool, g: str = g_key) -> str:
         """The key of the render about to happen: what `show` left visible, where it is, and how."""
         objs = sorted((geom[o.name], _r(np.array(o.matrix_world).ravel(), 3), bool(o.is_holdout)) for o in rig.meshes if not o.hide_render)
-        return _h(g_key, kind, seated, objs)
+        return _h(g, kind, seated, objs)
 
     store = os.path.join(FIG_CACHE, "calls")
     os.makedirs(store, exist_ok=True)
 
-    def unstash(k: str) -> dict | None:
-        """A call's cells from the store, or None (never rendered here, `--force`, or too wide for this frame)."""
+    def unstash(k: str, w: int = fw) -> dict | None:
+        """A call's cells from the store, or None (never rendered here, `--force`, or too wide for a
+        frame `w` wide)."""
         path = os.path.join(store, k + ".npz")
         if a["force"] or not os.path.exists(path):
             return None
@@ -413,8 +429,8 @@ def render_figure(a: dict) -> None:
                 if n.endswith(".o"):
                     continue
                 img, (cx, y0) = z[n], z[n + ".o"]
-                x0 = int(cx) + fw // 2
-                if x0 < 0 or x0 + img.shape[1] > fw:
+                x0 = int(cx) + w // 2
+                if x0 < 0 or x0 + img.shape[1] > w:
                     return None
                 out[n.replace("|", "/")] = (img, x0, int(y0))
         return out
@@ -442,7 +458,7 @@ def render_figure(a: dict) -> None:
         if c is not None:
             outs[gk] = c
 
-    done = reused = rendered = 0
+    done = reused = rendered = resampled = 0
     t0 = time.time()
     for name, frames, _, dirs in figure.CLIPS:
         for di, d in enumerate(figure.DIRS):
@@ -460,8 +476,13 @@ def render_figure(a: dict) -> None:
                         continue  # nothing of it in this clip (a prop, the lanyard)
                     k = call_key(kind, seated)
                     outs = unstash(k)
+                    src = unstash(call_key(kind, seated, g_key_src), sfw) if outs is None and src_px else None
                     if outs is not None:
                         reused += 1
+                    elif src is not None:
+                        resampled += 1
+                        outs = figure_resample.resample_call(src, (sfw, sfh), (fw, fh))
+                        stash(k, outs)
                     else:
                         rendered += 1
                         outs = {}
@@ -504,7 +525,7 @@ def render_figure(a: dict) -> None:
                     for gk, c in outs.items():
                         crops.setdefault(gk, {})[cname] = c
                 done += 1
-        print(f"figure: {name} done ({done} frames so far; {rendered} calls rendered, {reused} reused, {time.time() - t0:.0f}s)", flush=True)
+        print(f"figure: {name} done ({done} frames so far; {rendered} calls rendered, {reused} reused, {resampled} resampled, {time.time() - t0:.0f}s)", flush=True)
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
             os.remove(p)
@@ -578,7 +599,7 @@ def render_figure(a: dict) -> None:
         fjson.write("\n")
     if a["save"]:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a["save"]))
-    print(f"figure: {done} frames, {rendered} render calls, {reused} reused, {time.time() - t0:.0f}s; {len(spec['layers'])} layer sheets, figure.json")
+    print(f"figure: {done} frames, {rendered} render calls, {reused} reused, {resampled} resampled, {time.time() - t0:.0f}s; {len(spec['layers'])} layer sheets, figure.json")
 
 
 def main() -> None:
