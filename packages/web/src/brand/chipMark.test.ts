@@ -2,48 +2,53 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   CHIP_BG,
+  CHIP_DOTS,
+  CHIP_DOT_RADIUS,
+  CHIP_FG,
   CHIP_GLYPH_PATH,
-  CHIP_RING_PATH,
+  CHIP_RADIUS,
+  CHIP_SMALL_DOT_EXTRA,
+  CHIP_SMALL_EXTRA,
+  CHIP_STROKE,
   musterdChipSvg,
 } from './chipMark';
 
 const asset = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
 /**
- * ADR 497: the mark is one geometry in three files (the module, the docs asset, the web asset) and
- * the old chip's six hand-copied paths are exactly how it drifted. The files are the design source;
- * these tests make the module — and the favicon — agree with them.
+ * ADR 702: the mark is one geometry in several files (the module, the docs assets, the web assets)
+ * and the old chip's hand-copied paths are exactly how it drifted. The files are the design source;
+ * these tests make the module agree with them.
  */
-describe('the mark (ADR 497)', () => {
-  it('keeps the brand accent as its ground, not the logo-art yellow', () => {
-    expect(CHIP_BG).toBe('#E1AD01');
+describe('the mark (ADR 702)', () => {
+  it('is a flat sand tile with cool ink', () => {
+    expect(CHIP_BG).toBe('#EBD9A0');
+    expect(CHIP_FG).toBe('#1F6F6B');
+    expect(CHIP_RADIUS).toBe(307);
   });
 
   it.each([
-    ['web chip.svg', './chip.svg'],
-    ['docs chip.svg', '../../../../docs/design/assets/chip.svg'],
-  ])('%s carries the module geometry', (_name, rel) => {
-    const svg = asset(rel);
-    expect(svg).toContain(CHIP_RING_PATH);
-    expect(svg).toContain(CHIP_GLYPH_PATH);
-    expect(svg).toContain('fill="#E1AD01"');
-    // The full cut is the file's: it carries the hairline outlines the code does not.
-    expect(svg.length).toBeGreaterThan(8000);
+    ['chip.svg', CHIP_STROKE, CHIP_DOT_RADIUS],
+    ['chip-sm.svg', CHIP_STROKE + CHIP_SMALL_EXTRA, CHIP_DOT_RADIUS + CHIP_SMALL_DOT_EXTRA],
+  ])('%s carries the module geometry at its own weight', (name, stroke, dot) => {
+    for (const rel of [`./${name}`, `../../../../docs/design/assets/${name}`]) {
+      const svg = asset(rel);
+      expect(svg).toContain(`fill="${CHIP_BG}"`);
+      expect(svg).not.toContain('Gradient');
+      expect(svg).toContain(`d="${CHIP_GLYPH_PATH}"`);
+      expect(svg).toContain(`stroke="${CHIP_FG}" stroke-width="${stroke}"`);
+      for (const [x, y] of CHIP_DOTS) {
+        expect(svg).toContain(`<circle cx="${x}" cy="${y}" r="${dot}" fill="${CHIP_FG}"/>`);
+      }
+    }
   });
 
-  it.each([
-    ['web chip-sm.svg', './chip-sm.svg'],
-    ['docs chip-sm.svg', '../../../../docs/design/assets/chip-sm.svg'],
-  ])('%s is the outline-free cut over the same ring and glyph', (_name, rel) => {
-    const svg = asset(rel);
-    expect(svg).toContain(CHIP_RING_PATH);
-    expect(svg).toContain(CHIP_GLYPH_PATH);
-    expect(svg.length).toBeLessThan(6000);
-  });
-
-  it('renders the thickened, outline-free cut, hidden from assistive tech', () => {
+  it('renders the thickened cut, flat and hidden from assistive tech', () => {
     const svg = musterdChipSvg(13);
-    expect(svg).toContain(CHIP_RING_PATH);
+    expect(svg).toContain(`fill="${CHIP_BG}"`);
+    expect(svg).not.toContain('Gradient');
+    expect(svg).toContain(`d="${CHIP_GLYPH_PATH}"`);
+    expect(svg).toContain(`stroke-width="${CHIP_STROKE + CHIP_SMALL_EXTRA}"`);
     expect(svg).toContain('stroke-linejoin="round"');
     expect(svg).toContain('aria-hidden="true"');
   });

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CHIP_SVG, MCP_ICONS, chipIconDataUri } from './brand.js';
 
-describe('brand (ADR 497)', () => {
+describe('brand (ADR 702)', () => {
   it('mirrors docs/design/assets/chip.svg exactly', () => {
     const asset = readFileSync(
       new URL('../../../docs/design/assets/chip.svg', import.meta.url),
@@ -11,9 +11,9 @@ describe('brand (ADR 497)', () => {
     expect(CHIP_SVG).toBe(asset.trimEnd());
   });
 
-  it('chip SVG is the mark on a mustard tile', () => {
-    expect(CHIP_SVG).toContain('#E1AD01');
-    expect(CHIP_SVG).toContain('#18181B');
+  it('chip SVG is the mark on the flat sand tile', () => {
+    expect(CHIP_SVG).toContain('#EBD9A0');
+    expect(CHIP_SVG).toContain('#1F6F6B');
     expect(CHIP_SVG).toContain('aria-label="musterd"');
   });
 

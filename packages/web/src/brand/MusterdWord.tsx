@@ -1,10 +1,14 @@
 import {
   CHIP_BG,
+  CHIP_DOTS,
+  CHIP_DOT_RADIUS,
   CHIP_FG,
   CHIP_GLYPH_PATH,
   CHIP_RADIUS,
-  CHIP_RING_PATH,
-  CHIP_SMALL_STROKE,
+  CHIP_RING,
+  CHIP_SMALL_DOT_EXTRA,
+  CHIP_SMALL_EXTRA,
+  CHIP_STROKE,
   CHIP_VIEWBOX,
 } from './chipMark';
 
@@ -13,7 +17,7 @@ type MusterdChipProps = {
   className?: string;
 };
 
-/** Brand mark — the hand-drawn m in a white ring on mustard (ADR 497). Always the small cut: in-product renders are 13–18px, where the hairline outlines vanish, so the glyph is thickened instead. */
+/** Brand mark — a split m with a seat at each stem foot, in a white ring on a flat sand tile (ADR 702). Always the small cut: in-product renders are 13–18px, where the cuts between the stems would fill in, so the stroke and seats are thickened by a fixed amount. */
 export function MusterdChip({ size = 16, className }: MusterdChipProps) {
   return (
     <svg
@@ -26,14 +30,28 @@ export function MusterdChip({ size = 16, className }: MusterdChipProps) {
       role="img"
     >
       <rect width={CHIP_VIEWBOX} height={CHIP_VIEWBOX} rx={CHIP_RADIUS} fill={CHIP_BG} />
-      <path fill="#fff" fillRule="evenodd" d={CHIP_RING_PATH} />
+      <rect x="10" y="10" width="1004" height="1004" rx="302" fill="none" stroke="#785A0A" strokeOpacity=".4" strokeWidth="20" />
+      <rect
+        x={CHIP_RING.x}
+        y={CHIP_RING.x}
+        width={CHIP_RING.size}
+        height={CHIP_RING.size}
+        rx={CHIP_RING.radius}
+        fill="none"
+        stroke="#fff"
+        strokeWidth={CHIP_RING.stroke}
+      />
       <path
-        fill={CHIP_FG}
         d={CHIP_GLYPH_PATH}
+        fill="none"
         stroke={CHIP_FG}
-        strokeWidth={CHIP_SMALL_STROKE}
+        strokeWidth={CHIP_STROKE + CHIP_SMALL_EXTRA}
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
+      {CHIP_DOTS.map(([x, y]) => (
+        <circle key={x} cx={x} cy={y} r={CHIP_DOT_RADIUS + CHIP_SMALL_DOT_EXTRA} fill={CHIP_FG} />
+      ))}
     </svg>
   );
 }
