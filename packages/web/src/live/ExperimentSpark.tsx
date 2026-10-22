@@ -1,5 +1,7 @@
 import { useId } from 'react';
 import {
+  formatValue,
+  goalOf,
   SPARK_H,
   SPARK_W,
   sparkline,
@@ -81,7 +83,10 @@ export default function ExperimentSpark({
       >
         {spark.latest}
         {spark.firstDay && <span className="lc-xp__spark-day"> · day 1</span>}
-        {live && <span className="lc-xp__spark-live"> now</span>}
+        {live && <span className="lc-xp__spark-live"> today</span>}
+      </span>
+      <span className="lc-xp__spark-goal" title={`${metricName}: aiming ${metric.direction === 'down' ? 'under' : 'over'} ${formatValue(metric.target, metric.unit)}`}>
+        goal {goalOf(metric)}
       </span>
     </span>
   );

@@ -153,6 +153,8 @@ export function Experiments({
                       avatarOf={avatarOf}
                       noteOpen={openNotes.has(e.id)}
                       onToggleNote={() => toggleNote(e.id)}
+                      whyOpen={openNotes.has(`why:${e.id}`)}
+                      onToggleWhy={() => toggleNote(`why:${e.id}`)}
                     />
                   </a>
                 )}
@@ -182,6 +184,8 @@ function ExperimentRow({
   still = false,
   noteOpen,
   onToggleNote,
+  whyOpen = false,
+  onToggleWhy,
 }: {
   entry: ExperimentEntry;
   /** The minute tick: the row's clock counts toward (or from) the read day against it. */
@@ -191,15 +195,37 @@ function ExperimentRow({
   /** The note disclosure (§6): open shows the whole note; closed shows its first sentence. */
   noteOpen: boolean;
   onToggleNote?: (() => void) | undefined;
+  /** The explainer (question, what is measured, goal, decision day), /live only. */
+  whyOpen?: boolean;
+  onToggleWhy?: (() => void) | undefined;
 }) {
   const av = entry.owner ? avatarOf?.(entry.owner) : null;
   const link = still ? null : evidenceUrl(entry.evidence);
   return (
     <>
-      <Leaf entry={entry} />
+      <Flask entry={entry} />
       <span className="lc-xp__body">
-        <span className="lc-xp__title" title={!still && entry.short !== entry.title ? entry.title : undefined}>
-          {entry.short}
+        <span className="lc-xp__titlerow">
+          <span className="lc-xp__title" title={!still && entry.short !== entry.title ? entry.title : undefined}>
+            {entry.short}
+          </span>
+          {!still && onToggleWhy && (
+            <button
+              type="button"
+              className="lc-xp__why-btn"
+              aria-expanded={whyOpen}
+              aria-label="What is this experiment?"
+              title="What is this experiment?"
+              onClick={(ev) => {
+                // The row is a link to the board; the explainer opens in place instead.
+                ev.preventDefault();
+                ev.stopPropagation();
+                onToggleWhy();
+              }}
+            >
+              ?
+            </button>
+          )}
         </span>
         <span className="lc-xp__meta">
           {av && (
@@ -208,8 +234,27 @@ function ExperimentRow({
             </span>
           )}
           {entry.owner && <span className="lc-xp__owner">{entry.owner}</span>}
+          {entry.status !== 'read' && <span className="lc-xp__date">{entry.readsLabel}</span>}
           <span className="lc-xp__status lc-xp__clock">{clockPhrase(entry, now)}</span>
         </span>
+        {whyOpen && !still && (
+          <span className="lc-xp__why">
+            {entry.about && <span className="lc-xp__why-q">{entry.about}</span>}
+            {entry.metric && (
+              <span className="lc-xp__why-row">
+                <b>Measures</b> {entry.metric.name}
+              </span>
+            )}
+            {entry.goal && entry.metric && (
+              <span className="lc-xp__why-row">
+                <b>Goal</b> {entry.goal} ({entry.metric.direction === 'down' ? 'lower' : 'higher'} is better)
+              </span>
+            )}
+            <span className="lc-xp__why-row">
+              <b>Decided</b> {entry.readsLabel}
+            </span>
+          </span>
+        )}
         {entry.note && (
           <span className={`lc-xp__note${noteOpen ? ' is-open' : ''}`}>
             {still || !onToggleNote ? (
@@ -264,16 +309,19 @@ function ExperimentRow({
  * `met` before the rule does. Inline SVG, never a font glyph (the capturer has no emoji font).
  */
 
-/** The tear-off leaf, desk-calendar small: the month on its band, the day under it, a tack at the
- *  top — and, once a read is in, its verdict stamped across it. Decoration over words the row
- *  already says; the weekday rides the leaf's tooltip (nick, 2026-10-18: the first leaves took "too
- *  much real estate"). */
-function Leaf({ entry }: { entry: ExperimentEntry }) {
+/** The experiment's mark: a flask, two-tone like the role glyphs — an outline and a liquid whose tint
+ *  is the read's status (CSS `--band`) — and, once a read is in, its verdict stamped on the corner.
+ *  Decoration over words the row already says; the date is printed beside the clock. */
+function Flask({ entry }: { entry: ExperimentEntry }) {
   return (
-    <span className="lc-xp__leaf" aria-hidden="true" title={`${entry.leaf.weekday} ${entry.leaf.day} ${entry.leaf.month}`}>
-      <span className="lc-xp__tack" />
-      <span className="lc-xp__leaf-mo">{entry.leaf.month}</span>
-      <span className="lc-xp__leaf-day">{entry.leaf.day}</span>
+    <span className="lc-xp__flask" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="18" height="18">
+        <path className="lc-xp__flask-liquid" d="M4.2 10.4h7.6l1.5 2.4a.9.9 0 0 1-.8 1.4H3.5a.9.9 0 0 1-.8-1.4z" />
+        <path
+          className="lc-xp__flask-glass"
+          d="M6.2 1.8h3.6M6.7 1.8v4L2.8 12.5a1.5 1.5 0 0 0 1.3 2.2h7.8a1.5 1.5 0 0 0 1.3-2.2L9.3 5.8v-4"
+        />
+      </svg>
       {entry.status === 'read' && (
         <span className={`lc-xp__stamp lc-xp__stamp--${entry.phrase}`}>{entry.phrase}</span>
       )}

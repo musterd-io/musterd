@@ -31,6 +31,6 @@ describe('ExperimentSpark (lane 01M5GE8AX4)', () => {
     expect(html).not.toContain('lc-xp__spark-line');
     expect(html).toContain('lc-xp__spark-now');
     expect(html).toContain('· day 1');
-    expect(html).toContain(' now');
+    expect(html).toContain(' today');
   });
 });

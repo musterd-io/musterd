@@ -194,10 +194,12 @@ describe('TeamColumn', () => {
       );
       expect(order.every((i) => i > 0)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
-      // The date rides a calendar leaf: the month on its band, the day under it, the weekday in its tooltip.
-      expect(html).toMatch(/title="MON 2 Nov"><span class="lc-xp__tack"><\/span><span class="lc-xp__leaf-mo">Nov<.*lc-xp__leaf-day">2</);
+      // The date is printed beside the clock, and the row wears a flask rather than a calendar leaf.
+      expect(html).toContain('<span class="lc-xp__date">Nov 2</span>');
+      expect(html).toContain('lc-xp__flask');
+      expect(html).not.toContain('lc-xp__leaf');
       expect(html).toContain('“lost to baseline”');
-      // A verdict is stamped on its leaf.
+      // A verdict is stamped on its flask.
       expect(html).toContain('lc-xp__stamp lc-xp__stamp--missed');
     });
 

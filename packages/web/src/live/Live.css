@@ -8926,7 +8926,7 @@
 }
 .lc-xp__hit {
   display: grid;
-  grid-template-columns: 24px 1fr auto;
+  grid-template-columns: 22px 1fr auto;
   column-gap: var(--lc-4);
   align-items: start;
   padding: var(--lc-2) var(--lc-3);
@@ -8945,76 +8945,41 @@ a.lc-xp__hit:focus-visible {
   outline-offset: -2px;
 }
 
-/* The leaf: a weekday band over paper, tacked at the top. Each sits a hair off true, the way a hand
-   pins paper; an overdue one has slipped on its tack, like its tag on the corkboard. */
-.lc-xp__leaf {
+/* The experiment's mark: a flask, two-tone like the role glyphs. The liquid wears the read's state
+   (`--band`): quiet while it waits, ink on the day, accent once overdue, green when met. */
+.lc-xp__flask {
   --band: var(--lc-muted);
-  --tack: var(--lc-dim);
   position: relative;
   display: grid;
-  justify-items: center;
-  margin-top: 2px;
-  padding-bottom: 1px;
-  border-radius: 3px 3px 4px 4px;
-  background: var(--lc-ground-2);
-  box-shadow: 0 1px 0 var(--lc-surface-3), 0 2px 4px rgba(60, 40, 20, 0.16);
-  transform: rotate(-1.5deg);
-  transform-origin: 50% 2px;
-  transition: transform var(--lc-dur-3) var(--lc-ease-out), box-shadow var(--lc-dur-3) var(--lc-ease-out);
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
 }
-.lc-xp__row:nth-child(even) .lc-xp__leaf {
-  transform: rotate(1.25deg);
-}
-.lc-xp__row--overdue .lc-xp__leaf {
-  --band: var(--lc-accent-ink);
-  --tack: var(--lc-accent);
-  transform: rotate(-6deg) translateX(-1px);
-}
-.lc-xp__row--due .lc-xp__leaf {
+.lc-xp__row--due .lc-xp__flask {
   --band: var(--lc-text);
-  --tack: var(--lc-text);
 }
-.lc-xp__row--read .lc-xp__leaf {
-  --band: var(--lc-surface-3);
+.lc-xp__row--overdue .lc-xp__flask {
+  --band: var(--lc-accent);
 }
-.lc-xp__row.is-hot .lc-xp__leaf {
-  transform: rotate(0deg) translateY(-1px) scale(1.08);
-  box-shadow: 0 1px 0 var(--lc-surface-3), 0 6px 10px rgba(60, 40, 20, 0.2);
+.lc-xp__row--read .lc-xp__flask {
+  --band: var(--lc-success);
 }
-.lc-xp__tack {
-  position: absolute;
-  top: -2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--tack);
-  box-shadow: inset -1px -1px 0 rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.2);
+.lc-xp__flask-glass {
+  fill: none;
+  stroke: var(--lc-dim);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.lc-xp__leaf-mo {
-  width: 100%;
-  padding: 2px 0 1px;
-  border-radius: 3px 3px 0 0;
-  background: var(--band);
-  color: var(--lc-ground-2);
-  font-family: var(--font-mono, monospace);
-  font-size: 7px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  text-align: center;
-  text-transform: uppercase;
+.lc-xp__flask-liquid {
+  fill: var(--band);
+  opacity: 0.85;
 }
-.lc-xp__row--read .lc-xp__leaf-mo {
-  color: var(--lc-text);
+.lc-xp__row.is-hot .lc-xp__flask-glass {
+  stroke: var(--lc-text);
 }
-.lc-xp__leaf-day {
-  font-family: var(--font-display, sans-serif);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--lc-text);
-}
-/* A verdict is a wax seal pressed on the leaf's corner — a shape, not a word, at this size (the
+/* A verdict is a seal pressed on the flask's corner — a shape, not a word, at this size (the
    status line says it in words): a slashed ring for missed, a filled one for met, dashed for "?". */
 .lc-xp__stamp {
   position: absolute;
@@ -9046,16 +9011,6 @@ a.lc-xp__hit:focus-visible {
   color: var(--lc-muted);
   border-style: dashed;
 }
-/* A status that moves turns the leaf over, a page torn to the next day. */
-.lc-xp__row.is-changed .lc-xp__leaf {
-  animation: lc-xp-turn var(--lc-dur-5) var(--lc-ease-out);
-}
-@keyframes lc-xp-turn {
-  from {
-    transform: perspective(160px) rotateX(-100deg);
-  }
-}
-
 .lc-xp__body {
   display: grid;
   row-gap: 1px;
@@ -9249,11 +9204,11 @@ a.lc-xp__hit:focus-visible {
   }
 }
 /* Stale: the marks dim, never the words (local rule 2026-08-13). */
-.lc-xp.is-stale :is(.lc-xp__pin, .lc-xp__tack) {
+.lc-xp.is-stale :is(.lc-xp__pin, .lc-xp__flask) {
   opacity: 0.45;
 }
 @media (prefers-reduced-motion: reduce) {
-  .lc-xp :is(.lc-xp__row, .lc-xp__pin, .lc-xp__leaf, .lc-xp__hit) {
+  .lc-xp :is(.lc-xp__row, .lc-xp__pin, .lc-xp__hit) {
     animation: none !important;
     transition: none;
   }
@@ -9680,4 +9635,67 @@ a.lc-xp__hit:focus-visible {
 }
 .lc__canvas:not(.bc__canvas) .lc-team__cards {
   min-height: 34%;
+}
+
+.lc-xp__titlerow {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-3);
+  min-width: 0;
+}
+.lc-xp__why-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -4px -4px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lc-muted);
+  cursor: pointer;
+}
+.lc-xp__why-btn:hover,
+.lc-xp__why-btn[aria-expanded='true'] {
+  color: var(--lc-text);
+}
+.lc-xp__why-btn:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: -2px;
+}
+.lc-xp__date {
+  color: var(--lc-dim);
+}
+.lc-xp__date::after {
+  content: '·';
+  margin-left: 5px;
+  color: var(--lc-muted);
+}
+.lc-xp__why {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--lc-surface);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--lc-dim);
+  white-space: normal;
+}
+.lc-xp__why-q {
+  color: var(--lc-text);
+}
+.lc-xp__why-row b {
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.lc-xp__spark-goal {
+  font-size: 10px;
+  color: var(--lc-muted);
+  white-space: nowrap;
 }

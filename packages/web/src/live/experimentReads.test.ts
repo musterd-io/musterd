@@ -13,6 +13,8 @@ import {
   experimentsCount,
   READ_SHOWN_MS,
   shortTitle,
+  aboutOf,
+  goalOf,
   stripDays,
   teamToday,
   readLiveSamples,
@@ -114,6 +116,7 @@ describe('experimentEntries', () => {
     expect(by.w16!.phrase).toBe('in 16 days');
     expect(by.w16!.date).toBe('Mon 11-02');
     expect(by.w16!.leaf).toEqual({ weekday: 'MON', day: 2, month: 'Nov' });
+    expect(by.w16!.readsLabel).toBe('Nov 2');
     expect(by.w16!.offset).toBe(16);
     expect(by.o2!.offset).toBe(-2);
     expect(by.r!.phrase).toBe('met');
@@ -178,6 +181,21 @@ describe('experimentsCount', () => {
   it('falls back to reads when nothing is urgent', () => {
     expect(experimentsCount([e('waiting')])).toBe('1 read');
     expect(experimentsCount([e('waiting'), e('read'), e('read')])).toBe('3 reads');
+  });
+});
+
+describe('aboutOf / goalOf', () => {
+  it('keeps one plain sentence, without the references a stranger cannot follow', () => {
+    expect(aboutOf('Does Codex wake as cheaply as Claude Code (ADR 701)? Read on 2026-11-04.')).toBe(
+      'Does Codex wake as cheaply as Claude Code?',
+    );
+    expect(aboutOf('Median wake time. Second sentence.')).toBe('Median wake time.');
+    expect(aboutOf('  ')).toBeNull();
+    expect(aboutOf(null)).toBeNull();
+  });
+  it('says which way is better', () => {
+    expect(goalOf({ name: 'm', unit: 'ms', baseline: null, target: 60000, direction: 'down' })).toBe('≤ 1 min');
+    expect(goalOf({ name: 'm', unit: '%', baseline: null, target: 90, direction: 'up' })).toBe('≥ 90%');
   });
 });
 
