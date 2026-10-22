@@ -88,7 +88,8 @@ In each container (`adapter.py`):
   with `measureToolSurface` (tools/list JSON, bytes/4): all 31 tools 21,713 B ≈ 5,428 tokens; the
   four hot tools that load up front 3,002 B ≈ 751 tokens, plus the server instructions — against
   pilot 3's 39.6k first-call context (a runtime ruler, not this one; the residual is the ~4k
-  finding 019 assumed). The gate/hold smokes and one smoke pair still owe a run on the next
+  finding 019 assumed). Falsifier: a first-call context on the claim run materially above the
+  team arm's, with tool search on, puts the 16k back on the table. The gate/hold smokes and one smoke pair still owe a run on the next
   run-machine start — the local attempt on 2026-10-21 could not start its scratch daemon in the
   seat's sandbox, so no PASS is claimed here; the claim run's pre-flight (below) is where they run.
 
