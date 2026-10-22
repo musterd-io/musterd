@@ -173,6 +173,24 @@ def quantize(path: str) -> None:
     subprocess.run([exe, "--force", "--ext", ".png", "--speed", "1", "--quality", "70-95", "256", path], check=False)
 
 
+def to_webp(path: str) -> str:
+    """Re-encode the (quantized) PNG as lossless WebP when cwebp is on PATH (brew install webp) and
+    return the file to record: the same pixels, 16–20% smaller on the figure's heaviest sheets
+    (2026-10-22, lane 01M5GYGJD0). The PNG is removed — the scene globs this folder, so a stale
+    copy would ship. Without cwebp the PNG stays, and the runtime reads either."""
+    exe = shutil.which("cwebp")
+    if not exe:
+        print("render.py: cwebp not on PATH — assets left as PNG (bigger than they need be)")
+        return path
+    out = path[: -len(".png")] + ".webp"
+    r = subprocess.run([exe, "-quiet", "-lossless", "-z", "9", path, "-o", out], check=False)
+    if r.returncode != 0 or not os.path.exists(out):
+        print(f"render.py: cwebp failed on {os.path.basename(path)} — kept the PNG")
+        return path
+    os.remove(path)
+    return out
+
+
 def read_pixels(path: str, mirror: bool = True) -> np.ndarray:
     """A PNG as float32 (h, w, 4), y down — mirrored left-to-right for a render (see project_px); an
     atlas this script wrote reads back with `mirror=False`, since `write_pixels` does not flip."""
@@ -544,16 +562,17 @@ def render_figure(a: dict) -> None:
             x, y, w, h, ox, oy = pl
             atlas[y : y + h, x : x + w] = c[0]
             cells.extend([x, y, w, h, ox, oy])
-        file = "office-art-fig-" + layer.replace("/", "-") + ".png"
-        path = os.path.join(a["out"], file)
+        path = os.path.join(a["out"], "office-art-fig-" + layer.replace("/", "-") + ".png")
         write_pixels(path, atlas)
         quantize(path)
+        path = to_webp(path)
+        file = os.path.basename(path)
         spec["layers"].append({"id": layer, "file": file})
         n = len(cells) // len(grids)
         spec["cells"][layer] = cells[:n]
         if len(grids) > 1:
             spec["cells"][f"{layer}@arms"] = cells[n:]
-        print(f"figure: wrote {file} {ATLAS_W}x{atlas_h} {os.path.getsize(path)} B")
+        print(f"figure: wrote {file} {ATLAS_W}x{atlas_h} {os.path.getsize(path)} B", flush=True)
     with open(fig_json, "w") as fjson:
         json.dump(spec, fjson, separators=(",", ":"))
         fjson.write("\n")
@@ -590,9 +609,10 @@ def main() -> None:
     shell = [o for o in export.objects if o.get("shell")]
 
     def record(asset_id: str, path: str, origin: Vector, down: int) -> None:
-        file = os.path.basename(path)
         x0, y0, cw, ch = crop_alpha(path, down)
         quantize(path)
+        path = to_webp(path)
+        file = os.path.basename(path)
         ox, oy = project_px(origin, w, h)
         manifest["assets"].append(
             {

@@ -7,7 +7,7 @@
   "assets": [
     {
       "id": "bench/base",
-      "file": "office-art-bench-base.png",
+      "file": "office-art-bench-base.webp",
       "w": 712,
       "h": 451,
       "anchor": {
@@ -18,7 +18,7 @@
     },
     {
       "id": "desk/base",
-      "file": "office-art-desk-base.png",
+      "file": "office-art-desk-base.webp",
       "w": 360,
       "h": 274,
       "anchor": {
@@ -29,7 +29,7 @@
     },
     {
       "id": "desk/base-ew",
-      "file": "office-art-desk-base-ew.png",
+      "file": "office-art-desk-base-ew.webp",
       "w": 360,
       "h": 274,
       "anchor": {
@@ -40,7 +40,7 @@
     },
     {
       "id": "desk/fan-0",
-      "file": "office-art-desk-fan-0.png",
+      "file": "office-art-desk-fan-0.webp",
       "w": 70,
       "h": 94,
       "anchor": {
@@ -51,7 +51,7 @@
     },
     {
       "id": "desk/fan-1",
-      "file": "office-art-desk-fan-1.png",
+      "file": "office-art-desk-fan-1.webp",
       "w": 70,
       "h": 94,
       "anchor": {
@@ -62,7 +62,7 @@
     },
     {
       "id": "desk/fan-2",
-      "file": "office-art-desk-fan-2.png",
+      "file": "office-art-desk-fan-2.webp",
       "w": 70,
       "h": 94,
       "anchor": {
@@ -73,7 +73,7 @@
     },
     {
       "id": "desk/fan-3",
-      "file": "office-art-desk-fan-3.png",
+      "file": "office-art-desk-fan-3.webp",
       "w": 70,
       "h": 94,
       "anchor": {
@@ -84,7 +84,7 @@
     },
     {
       "id": "desk/lamp-off",
-      "file": "office-art-desk-lamp-off.png",
+      "file": "office-art-desk-lamp-off.webp",
       "w": 60,
       "h": 115,
       "anchor": {
@@ -95,7 +95,7 @@
     },
     {
       "id": "desk/lamp-on",
-      "file": "office-art-desk-lamp-on.png",
+      "file": "office-art-desk-lamp-on.webp",
       "w": 122,
       "h": 138,
       "anchor": {
@@ -106,7 +106,7 @@
     },
     {
       "id": "entrance",
-      "file": "office-art-entrance.png",
+      "file": "office-art-entrance.webp",
       "w": 259,
       "h": 438,
       "anchor": {
@@ -117,7 +117,7 @@
     },
     {
       "id": "meeting/chair-0",
-      "file": "office-art-meeting-chair-0.png",
+      "file": "office-art-meeting-chair-0.webp",
       "w": 126,
       "h": 182,
       "anchor": {
@@ -128,7 +128,7 @@
     },
     {
       "id": "meeting/chair-1",
-      "file": "office-art-meeting-chair-1.png",
+      "file": "office-art-meeting-chair-1.webp",
       "w": 125,
       "h": 182,
       "anchor": {
@@ -139,7 +139,7 @@
     },
     {
       "id": "meeting/chair-2",
-      "file": "office-art-meeting-chair-2.png",
+      "file": "office-art-meeting-chair-2.webp",
       "w": 126,
       "h": 182,
       "anchor": {
@@ -150,7 +150,7 @@
     },
     {
       "id": "meeting/chair-3",
-      "file": "office-art-meeting-chair-3.png",
+      "file": "office-art-meeting-chair-3.webp",
       "w": 126,
       "h": 162,
       "anchor": {
@@ -161,7 +161,7 @@
     },
     {
       "id": "meeting/table",
-      "file": "office-art-meeting-table.png",
+      "file": "office-art-meeting-table.webp",
       "w": 494,
       "h": 349,
       "anchor": {
@@ -172,7 +172,7 @@
     },
     {
       "id": "nook/cooler",
-      "file": "office-art-nook-cooler.png",
+      "file": "office-art-nook-cooler.webp",
       "w": 117,
       "h": 260,
       "anchor": {
@@ -183,7 +183,7 @@
     },
     {
       "id": "nook/couch",
-      "file": "office-art-nook-couch.png",
+      "file": "office-art-nook-couch.webp",
       "w": 330,
       "h": 259,
       "anchor": {
@@ -194,7 +194,7 @@
     },
     {
       "id": "nook/counter",
-      "file": "office-art-nook-counter.png",
+      "file": "office-art-nook-counter.webp",
       "w": 325,
       "h": 306,
       "anchor": {
@@ -205,7 +205,7 @@
     },
     {
       "id": "nook/fridge",
-      "file": "office-art-nook-fridge.png",
+      "file": "office-art-nook-fridge.webp",
       "w": 145,
       "h": 299,
       "anchor": {
@@ -216,7 +216,7 @@
     },
     {
       "id": "nook/table",
-      "file": "office-art-nook-table.png",
+      "file": "office-art-nook-table.webp",
       "w": 208,
       "h": 146,
       "anchor": {
@@ -227,7 +227,7 @@
     },
     {
       "id": "plant/fiddle",
-      "file": "office-art-plant-fiddle.png",
+      "file": "office-art-plant-fiddle.webp",
       "w": 118,
       "h": 277,
       "anchor": {
@@ -238,7 +238,7 @@
     },
     {
       "id": "plant/snake",
-      "file": "office-art-plant-snake.png",
+      "file": "office-art-plant-snake.webp",
       "w": 118,
       "h": 428,
       "anchor": {
@@ -249,7 +249,7 @@
     },
     {
       "id": "printer",
-      "file": "office-art-printer.png",
+      "file": "office-art-printer.webp",
       "w": 172,
       "h": 187,
       "anchor": {
@@ -260,7 +260,7 @@
     },
     {
       "id": "reception/armchair",
-      "file": "office-art-reception-armchair.png",
+      "file": "office-art-reception-armchair.webp",
       "w": 145,
       "h": 142,
       "anchor": {
@@ -271,7 +271,7 @@
     },
     {
       "id": "reception/desk",
-      "file": "office-art-reception-desk.png",
+      "file": "office-art-reception-desk.webp",
       "w": 308,
       "h": 281,
       "anchor": {
@@ -282,7 +282,7 @@
     },
     {
       "id": "reception/endtable",
-      "file": "office-art-reception-endtable.png",
+      "file": "office-art-reception-endtable.webp",
       "w": 115,
       "h": 105,
       "anchor": {
@@ -293,7 +293,7 @@
     },
     {
       "id": "room/ceiling-on",
-      "file": "office-art-room-ceiling-on.png",
+      "file": "office-art-room-ceiling-on.webp",
       "w": 1909,
       "h": 1236,
       "anchor": {
@@ -304,7 +304,7 @@
     },
     {
       "id": "room/ceiling-spill",
-      "file": "office-art-room-ceiling-spill.png",
+      "file": "office-art-room-ceiling-spill.webp",
       "w": 1909,
       "h": 1236,
       "anchor": {
@@ -315,7 +315,7 @@
     },
     {
       "id": "room/light-day",
-      "file": "office-art-room-light-day.png",
+      "file": "office-art-room-light-day.webp",
       "w": 1909,
       "h": 1236,
       "anchor": {
@@ -326,7 +326,7 @@
     },
     {
       "id": "room/light-evening",
-      "file": "office-art-room-light-evening.png",
+      "file": "office-art-room-light-evening.webp",
       "w": 1909,
       "h": 1236,
       "anchor": {
@@ -337,7 +337,7 @@
     },
     {
       "id": "room/light-night",
-      "file": "office-art-room-light-night.png",
+      "file": "office-art-room-light-night.webp",
       "w": 1909,
       "h": 1236,
       "anchor": {
@@ -348,7 +348,7 @@
     },
     {
       "id": "rug/meeting",
-      "file": "office-art-rug-meeting.png",
+      "file": "office-art-rug-meeting.webp",
       "w": 908,
       "h": 440,
       "anchor": {
@@ -359,7 +359,7 @@
     },
     {
       "id": "rug/nook",
-      "file": "office-art-rug-nook.png",
+      "file": "office-art-rug-nook.webp",
       "w": 642,
       "h": 314,
       "anchor": {
@@ -370,7 +370,7 @@
     },
     {
       "id": "rug/pod-0",
-      "file": "office-art-rug-pod-0.png",
+      "file": "office-art-rug-pod-0.webp",
       "w": 1024,
       "h": 495,
       "anchor": {
@@ -381,7 +381,7 @@
     },
     {
       "id": "rug/pod-1",
-      "file": "office-art-rug-pod-1.png",
+      "file": "office-art-rug-pod-1.webp",
       "w": 1024,
       "h": 495,
       "anchor": {
@@ -392,7 +392,7 @@
     },
     {
       "id": "rug/pod-2",
-      "file": "office-art-rug-pod-2.png",
+      "file": "office-art-rug-pod-2.webp",
       "w": 664,
       "h": 324,
       "anchor": {
@@ -403,7 +403,7 @@
     },
     {
       "id": "rug/pod-3",
-      "file": "office-art-rug-pod-3.png",
+      "file": "office-art-rug-pod-3.webp",
       "w": 537,
       "h": 262,
       "anchor": {
@@ -414,7 +414,7 @@
     },
     {
       "id": "rug/reception",
-      "file": "office-art-rug-reception.png",
+      "file": "office-art-rug-reception.webp",
       "w": 685,
       "h": 334,
       "anchor": {
@@ -425,7 +425,7 @@
     },
     {
       "id": "shelf/0",
-      "file": "office-art-shelf-0.png",
+      "file": "office-art-shelf-0.webp",
       "w": 143,
       "h": 333,
       "anchor": {
@@ -436,7 +436,7 @@
     },
     {
       "id": "shelf/1",
-      "file": "office-art-shelf-1.png",
+      "file": "office-art-shelf-1.webp",
       "w": 224,
       "h": 240,
       "anchor": {
@@ -447,7 +447,7 @@
     },
     {
       "id": "shelf/2",
-      "file": "office-art-shelf-2.png",
+      "file": "office-art-shelf-2.webp",
       "w": 172,
       "h": 284,
       "anchor": {
@@ -458,7 +458,7 @@
     },
     {
       "id": "shelf/3",
-      "file": "office-art-shelf-3.png",
+      "file": "office-art-shelf-3.webp",
       "w": 201,
       "h": 245,
       "anchor": {
