@@ -498,6 +498,17 @@ export const SyncStyleRequestSchema = z.object({
 export type SyncStyleRequest = z.infer<typeof SyncStyleRequestSchema>;
 
 /**
+ * The joiner→hub forward of a human's own status line (ADR 721 Decision 5). The hub re-checks `actor`
+ * against ITS roster — a human, not an observer, resident on the forwarding node — writes it on its
+ * own clock, and stamps a replicated `status_line` every node folds. `text: null` clears it.
+ */
+export const SyncStatusLineRequestSchema = z.object({
+  actor: z.string().min(1),
+  text: z.string().nullable(),
+});
+export type SyncStatusLineRequest = z.infer<typeof SyncStatusLineRequestSchema>;
+
+/**
  * The joiner→hub forward of a halt or resume (ADR 525). The hub re-authorizes `actor` against ITS
  * roster — human, and an admin or the target's sponsor (ADR 501 §2) — applies it, and stamps a
  * replicated `seat.halted` / `seat.resumed` every node folds.

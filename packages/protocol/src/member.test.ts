@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MemberSchema, MemberSummarySchema, PresenceSchema, ResidenceSchema, STATUS_LINE_MAX, STATUS_LINE_TTL_MS, StatusLineTextSchema } from './member.js';
+import {
+  MemberSchema,
+  MemberSummarySchema,
+  PresenceSchema,
+  ResidenceSchema,
+  STATUS_LINE_MAX,
+  STATUS_LINE_TTL_MS,
+  StatusLineTextSchema,
+} from './member.js';
 
 const base = {
   id: '01M',
@@ -80,11 +88,19 @@ describe('MemberSummary.residence (ADR 503 Decision 5)', () => {
 });
 
 describe('Member.status_line (ADR 721)', () => {
-  const line = { text: 'assembling a new dresser for the nursery', set_at: 1_000, expires_at: 1_000 + 3_600_000 };
+  const line = {
+    text: 'assembling a new dresser for the nursery',
+    set_at: 1_000,
+    expires_at: 1_000 + 3_600_000,
+  };
 
   it('rides on a member and its summary, and is optional', () => {
-    expect(MemberSchema.parse({ ...base, kind: 'human', status_line: line }).status_line).toEqual(line);
-    expect(MemberSummarySchema.parse({ ...base, presence: 'offline', status_line: line }).status_line).toEqual(line);
+    expect(MemberSchema.parse({ ...base, kind: 'human', status_line: line }).status_line).toEqual(
+      line,
+    );
+    expect(
+      MemberSummarySchema.parse({ ...base, presence: 'offline', status_line: line }).status_line,
+    ).toEqual(line);
     expect(MemberSchema.parse(base).status_line).toBeUndefined();
   });
 

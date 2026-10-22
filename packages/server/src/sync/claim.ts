@@ -26,6 +26,7 @@ import {
   type SyncNoteRecipientsRequest,
   type SyncPolicyRequest,
   type SyncPullRequest,
+  type SyncStatusLineRequest,
   type SyncStyleRequest,
   type SyncTrustRequest,
   type UpdateLane,
@@ -1026,6 +1027,50 @@ export async function styleAtHub(
       );
     }
     throw new Error(`the hub answered ${res.status} to the style change: ${JSON.stringify(body)}`);
+  }
+  return body;
+}
+
+/**
+ * Joiner side of a human's status line (ADR 721 Decision 5): the hub decides and answers what the
+ * self route would have; the joiner writes nothing and learns the row back through the fold.
+ */
+export async function statusLineAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncStatusLineRequest,
+): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/status-line`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_status_line_hub_unreachable', team: slug, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const b = body as { error?: { code?: string; message?: string } } | null;
+    const code = b?.error?.code;
+    if (
+      code === 'forbidden' ||
+      code === 'not_found' ||
+      code === 'bad_request' ||
+      code === 'bound_elsewhere'
+    ) {
+      throw new MusterdError(
+        code === 'bound_elsewhere' ? 'forbidden' : code,
+        b?.error?.message ?? 'the hub refused the status line',
+      );
+    }
+    throw new Error(`the hub answered ${res.status} to the status line: ${JSON.stringify(body)}`);
   }
   return body;
 }

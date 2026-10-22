@@ -43,7 +43,10 @@ export const StatusLineTextSchema = z
   .string()
   .trim()
   .min(1, 'a status line needs some words')
-  .refine((t) => [...t].length <= STATUS_LINE_MAX, `a status line is at most ${STATUS_LINE_MAX} characters`);
+  .refine(
+    (t) => [...t].length <= STATUS_LINE_MAX,
+    `a status line is at most ${STATUS_LINE_MAX} characters`,
+  );
 export const StatusLineSchema = z.object({
   text: z.string().min(1),
   /** When it was set (ms epoch). */

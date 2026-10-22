@@ -11,6 +11,7 @@ import {
   LaneSampleSchema,
   requestedRecordJson,
   type LaneState,
+  StatusLineSchema,
   StylePrefsSchema,
 } from '@musterd/protocol';
 import { z } from 'zod';
@@ -447,6 +448,8 @@ const POLICY_VERBS = new Set([
   'seat.resumed',
   // ADR 514 (lane 01M46RWP23): a human's own style prefs, written on the hub.
   'style.prefs',
+  // ADR 721: a human's own status line, written on the hub.
+  'status_line',
 ]);
 
 /**
@@ -497,6 +500,21 @@ async function projectPolicyEvent(
     const human = await getMemberByName(db, teamId, event.actor);
     if (!human || human.kind !== 'human') return 'applied';
     await setStylePrefs(db, human.id, prefs.data);
+    return 'applied';
+  }
+  if (event.action === 'status_line') {
+    // ADR 721: the hub's status line for a human, whole, or null to clear. A human this node does not
+    // know is applied, not a stop; a shape the schema refuses is a stop.
+    const raw = event.detail?.['line'];
+    const line = raw === null || raw === undefined ? null : StatusLineSchema.safeParse(raw).data;
+    if (line === undefined || !event.actor) return 'unknown';
+    const human = await getMemberByName(db, teamId, event.actor);
+    if (!human || human.kind !== 'human') return 'applied';
+    await db.run('UPDATE members SET status_line = ?, updated_at = ? WHERE id = ?', [
+      line ? JSON.stringify(line) : null,
+      now,
+      human.id,
+    ]);
     return 'applied';
   }
   if (event.action !== 'policy.change') return 'unknown';

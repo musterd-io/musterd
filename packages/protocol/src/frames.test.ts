@@ -214,7 +214,15 @@ describe('member_updated (ADR 721)', () => {
   it('pushes one member summary to the team, so every surface replaces that member', () => {
     const f = WSServerFrame.parse({
       type: 'member_updated',
-      member: { id: '01M', team: 'revive', name: 'nick', kind: 'human', created_at: 1, presence: 'online', status_line: null },
+      member: {
+        id: '01M',
+        team: 'revive',
+        name: 'nick',
+        kind: 'human',
+        created_at: 1,
+        presence: 'online',
+        status_line: null,
+      },
     });
     expect(f.type).toBe('member_updated');
   });

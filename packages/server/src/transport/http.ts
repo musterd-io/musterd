@@ -17,6 +17,9 @@ import {
   type Act,
   MemberKindSchema,
   LifecycleSchema,
+  STATUS_LINE_MAX,
+  STATUS_LINE_TTL_MS,
+  StatusLineTextSchema,
   SurfaceSchema,
   PresenceStatusSchema,
   ProvenanceSchema,
@@ -125,6 +128,7 @@ import {
   SyncLanePatchRequestSchema,
   SyncLanesResponseSchema,
   SyncPolicyRequestSchema,
+  SyncStatusLineRequestSchema,
   SyncStyleRequestSchema,
   SyncTrustRequestSchema,
   SeatMoveRequestSchema,
@@ -551,6 +555,7 @@ import {
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
+import { applyStatusLine } from '../store/statusLine.js';
 import { healthStoreSizes } from '../store/storeSizesHealth.js';
 import {
   applyStylePrefs,
@@ -611,6 +616,7 @@ import {
   joinerEnrollment,
   noteRecipientsAtHub,
   policyAtHub,
+  statusLineAtHub,
   styleAtHub,
   localNodeWithLabel,
   patchAtHub,
@@ -1424,6 +1430,25 @@ const AvailabilityBody = z.object({
   status: AvailabilityStatusSchema,
   until: z.number().int().positive().nullish(),
 });
+
+/** ADR 721: the `member.status_line` row — the length, never the words. */
+async function auditStatusLine(
+  db: Driver,
+  teamId: string,
+  actor: string,
+  text: string | null,
+): Promise<void> {
+  await appendAudit(db, teamId, {
+    actor,
+    action: 'member.status_line',
+    target: actor,
+    result: 'allow',
+    detail: text === null ? { action: 'clear' } : { action: 'set', length: [...text].length },
+  });
+}
+
+/** ADR 721: the text is checked by `StatusLineTextSchema` so the 400 names the 48-character limit. */
+const StatusLineBody = z.object({ text: z.string() });
 
 const PresenceBody = z.object({
   surface: SurfaceSchema,
@@ -7476,6 +7501,55 @@ export async function handleHttp(
         return sendJson(res, 200, applied);
       }
 
+      // ADR 721 Decision 5, hub side: a joiner forwards a human's own status line. The `/sync/style`
+      // order: machine, then residence, then who the actor is on the HUB's roster — a human, not an
+      // observer. The hub writes it on its own clock, stamps the replicated `status_line`, pushes the
+      // member to its own surfaces, and answers what the self route would have.
+      if (method === 'POST' && rest === '/sync/status-line') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncStatusLineRequestSchema, await readJson(req));
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
+        try {
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'status line');
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          throw err;
+        }
+        if (actor.kind !== 'human' || actor.observer === 1)
+          throw new MusterdError(
+            'forbidden',
+            'a status line is set by a human, for themselves (ADR 721)',
+          );
+        let text: string | null = null;
+        if (body.text !== null) {
+          const parsed = StatusLineTextSchema.safeParse(body.text);
+          if (!parsed.success)
+            throw new MusterdError(
+              'bad_request',
+              parsed.error.issues[0]?.message ?? 'a status line is at most 48 characters',
+            );
+          text = parsed.data;
+        }
+        await applyStatusLine(ctx.db, team.id, actor, text);
+        await auditStatusLine(ctx.db, team.id, actor.name, text);
+        await pushTeam(ctx, team).catch(() => undefined);
+        const fresh = (await getMemberById(ctx.db, actor.id)) ?? actor;
+        const me = (await summarize(ctx, team.slug, team.id, fresh, { fresh: true })).find(
+          (m) => m.name === actor.name,
+        );
+        if (me) ctx.hub.broadcastTeam(team.id, { type: 'member_updated', member: me });
+        return sendJson(res, 200, { member: me });
+      }
+
       // ADR 514 (lane 01M46RWP23), hub side: a joiner forwards a human's own style prefs. The same
       // order as `/sync/policy`: machine, then residence, then who the actor is on the HUB's roster —
       // a human, not an observer; the capability is self-ownership, not admin. The hub writes the
@@ -10724,6 +10798,62 @@ export async function handleHttp(
         const me = (await summarize(ctx, team.slug, team.id, member, { fresh: true })).find(
           (m) => m.name === member.name,
         );
+        return sendJson(res, 200, { member: me });
+      }
+
+      // ADR 721: a human's own status line. Self only — the URL carries no name — and only a HUMAN
+      // signed in as itself: not an agent, not an observer seat, not a credential acting as another
+      // seat. No admin override. Every connected surface is pushed the member at once. On a team that
+      // spans machines the hub decides (Decision 5): a joiner forwards, and refuses if the hub is
+      // down rather than keep a copy the stream never sees.
+      if ((method === 'POST' || method === 'DELETE') && rest === '/status-line') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        if (member.kind !== 'human' || member.observer === 1 || actingSeat(req) !== undefined) {
+          throw new MusterdError(
+            'forbidden',
+            'a status line is set by a human, for themselves (ADR 721)',
+          );
+        }
+        let text: string | null = null;
+        if (method === 'POST') {
+          const body = parseOrBadRequest(StatusLineBody, await readJson(req));
+          const parsed = StatusLineTextSchema.safeParse(body.text);
+          if (!parsed.success) {
+            throw new MusterdError(
+              'bad_request',
+              parsed.error.issues[0]?.message ??
+                `a status line is at most ${STATUS_LINE_MAX} characters`,
+            );
+          }
+          text = parsed.data;
+        }
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        if (enrollment) {
+          try {
+            await statusLineAtHub(enrollment, team.slug, { actor: member.name, text });
+          } catch (err) {
+            if (err instanceof HubUnreachableError)
+              throw new MusterdError('hub_unreachable', err.message);
+            throw err;
+          }
+          await pullTeam(ctx, team).catch(() => undefined);
+        } else {
+          await applyStatusLine(ctx.db, team.id, member, text);
+          await auditStatusLine(ctx.db, team.id, member.name, text);
+          await pushTeam(ctx, team).catch(() => undefined);
+        }
+        const fresh = (await getMemberById(ctx.db, member.id)) ?? member;
+        const me = (await summarize(ctx, team.slug, team.id, fresh, { fresh: true })).find(
+          (m) => m.name === member.name,
+        );
+        // A forwarded set reaches this machine through the fold; until it lands, answer with what
+        // the hub decided, so the caller's own screen shows it at once.
+        if (me && enrollment && text !== null && !me.status_line) {
+          const now = Date.now();
+          me.status_line = { text, set_at: now, expires_at: now + STATUS_LINE_TTL_MS };
+        }
+        if (me && enrollment && text === null) me.status_line = null;
+        if (me) ctx.hub.broadcastTeam(team.id, { type: 'member_updated', member: me });
         return sendJson(res, 200, { member: me });
       }
 

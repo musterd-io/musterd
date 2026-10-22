@@ -222,7 +222,8 @@ function toSyncEvent(pending: Pending, slug: string): SyncEvent {
               row.action.startsWith('hold.') ||
               row.action === 'seat.halted' ||
               row.action === 'seat.resumed' ||
-              row.action === 'style.prefs'
+              row.action === 'style.prefs' ||
+              row.action === 'status_line'
             ? 'policy'
             : row.action.startsWith('continuity.')
               ? 'continuity'

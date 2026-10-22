@@ -27,7 +27,11 @@ withDrivers('statusLine', (o) => {
     it('sets a line that lasts an hour, and the member carries it', async () => {
       const { db, nick } = await seed();
       const line = await setStatusLine(db, nick, 'assembling a new dresser for the nursery', 1_000);
-      expect(line).toEqual({ text: 'assembling a new dresser for the nursery', set_at: 1_000, expires_at: 1_000 + STATUS_LINE_TTL_MS });
+      expect(line).toEqual({
+        text: 'assembling a new dresser for the nursery',
+        set_at: 1_000,
+        expires_at: 1_000 + STATUS_LINE_TTL_MS,
+      });
       const row = (await getMemberById(db, nick.id))!;
       expect(toMember(row, 'revive', 1_000 + 60_000).status_line).toEqual(line);
     });
@@ -62,7 +66,9 @@ withDrivers('statusLine', (o) => {
     it('refuses 49 characters and counts an emoji as one', async () => {
       const { db, nick } = await seed();
       await expect(setStatusLine(db, nick, 'x'.repeat(49), 1_000)).rejects.toThrow(/48/);
-      await expect(setStatusLine(db, nick, '🛠'.repeat(48), 1_000)).resolves.toMatchObject({ text: '🛠'.repeat(48) });
+      await expect(setStatusLine(db, nick, '🛠'.repeat(48), 1_000)).resolves.toMatchObject({
+        text: '🛠'.repeat(48),
+      });
     });
   });
 });

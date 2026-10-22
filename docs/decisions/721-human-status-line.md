@@ -74,7 +74,7 @@ without making the status a front-end decoration that one browser knows and the 
    accumulate on the floor. /broadcast is public, so the
    words are public; the field's help text says so where it is typed.
 
-8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `ok`, detail
+8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `allow`, detail
    `{ action: 'set' | 'clear', length }`). The words themselves are not copied into the audit log: a
    status is personal and meant to vanish in an hour.
 
