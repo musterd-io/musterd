@@ -66,6 +66,10 @@ import { deriveContext } from './wakeContextBody.js';
 /** Lease TTL: a wake the host hasn't reported within this window re-becomes due (crash-safe).
  *  Mechanism, not owner policy — deliberately NOT a `ResidencyPolicySchema` knob. */
 export const WAKE_LEASE_TTL_MS = 120_000;
+
+/** A harness id as stored and compared (ADR 715): trimmed, no trailing slash — `claude-code/` once
+ *  enrolled a seat that then matched no per-harness chart. */
+export const normalizeHarness = (h: string): string => h.trim().replace(/\/+$/, '');
 /** The launch-default wake policy (increment 5): every rate gate — cooldown, hourly cap, attempt
  *  cap, lanes — now reads from the effective policy (team defaults ⊕ per-seat override), and the
  *  defaults live in ONE place, the protocol schema. */
@@ -437,7 +441,7 @@ export async function enrollResidency(
       `UPDATE residency SET harness = ?, host = ?, grant_id = ?, authorized_by = ?, policy = ?, updated_at = ?
        WHERE id = ?`,
       [
-        input.harness,
+        normalizeHarness(input.harness),
         input.host,
         input.grant_id,
         input.authorized_by,
@@ -455,7 +459,7 @@ export async function enrollResidency(
     id: ulid(),
     team_id: teamId,
     member_id: input.member_id,
-    harness: input.harness,
+    harness: normalizeHarness(input.harness),
     host: input.host,
     grant_id: input.grant_id,
     authorized_by: input.authorized_by,
@@ -552,7 +556,14 @@ export async function applyFoldedEnrollment(
     await db.run(
       `UPDATE residency SET harness = ?, host = ?, authorized_by = ?, policy = ?, updated_at = ?
        WHERE id = ?`,
-      [input.harness, input.host, input.authorized_by, policyJson, now, previous.id],
+      [
+        normalizeHarness(input.harness),
+        input.host,
+        input.authorized_by,
+        policyJson,
+        now,
+        previous.id,
+      ],
     );
     return;
   }

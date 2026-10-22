@@ -18,7 +18,7 @@ import type { Driver } from '../db/driver.js';
 import { appendAudit, REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
-import { upsertSample } from '../store/laneSamples.js';
+import { deleteSample, upsertSample } from '../store/laneSamples.js';
 import { getMemberByName, hostServiceSeat, hostServiceSeatName } from '../store/members.js';
 import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
@@ -174,6 +174,8 @@ const LANE_VERBS = new Set([
   // ADR 673: a moved goalpost is held in audit; a sample projects into `lane_samples`.
   'lane.metric_changed',
   'lane.sample_recorded',
+  // ADR 715: a derived sample taken back; the fold deletes the same row.
+  'lane.sample_removed',
   'lane.state_changed',
   'lane.ready_for_review',
   'lane.closed',
@@ -411,6 +413,13 @@ async function projectLaneEvent(
       // audit and projects nothing. Same upsert as the origin's write.
       const sample = LaneSampleSchema.safeParse(d);
       if (sample.success) await upsertSample(db, teamId, laneId, sample.data);
+      return 'applied';
+    }
+    case 'lane.sample_removed': {
+      // ADR 715: only a well-formed day is acted on; anything else is held in audit and projects nothing.
+      const day = d['day'];
+      if (typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day))
+        await deleteSample(db, teamId, laneId, day);
       return 'applied';
     }
     default:

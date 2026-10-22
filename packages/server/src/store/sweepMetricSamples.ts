@@ -9,7 +9,7 @@ import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { dayDisputeRate, dayWakeLatency } from './insights.js';
 import { getLane } from './lanes.js';
-import { recordSample } from './laneSamples.js';
+import { recordSample, removeRecordedSample } from './laneSamples.js';
 
 /**
  * ADR 673 §2, lane 2: the daemon's own samples. A metric lane whose `source` names a number the
@@ -161,6 +161,65 @@ export async function sweepMetricSamples(
     if (!lane?.metric) continue;
     await recordSample(db, teamId, lane, { day, value: v.value, n: v.n }, by, now);
     out.push({ lane: id, source, day, value: v.value, n: v.n });
+  }
+  return out;
+}
+
+/** ADR 715: how many days back the daily pass re-checks the samples the daemon wrote. */
+export const RECONCILE_DAYS = 30;
+
+/** One day the reconcile pass changed. */
+export interface ReconciledSample {
+  lane: string;
+  day: string;
+  action: 'replaced' | 'removed';
+}
+
+/**
+ * ADR 715: re-measure the days the daemon itself sampled (`by`) on each open derived lane, over the
+ * last {@link RECONCILE_DAYS}, and make the stored row say what the lane's CURRENT scope measures.
+ * A sample is written once, so a lane that later gained a harness filter (or a day answered after
+ * it was written) kept a number its own definition no longer produces: the codex wake-latency
+ * chart held the claude-code chart's points. A differing value is replaced; a day nothing now
+ * measures is removed (`lane.sample_removed`), because absence is not a zero (ADR 236). Samples
+ * written by anyone else — a seat's backfill, a manual point — are never touched.
+ */
+export async function reconcileDerivedSamples(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  now: number,
+  by: string,
+): Promise<ReconciledSample[]> {
+  const tz = CALENDAR_DEFAULT_TZ;
+  const today = dayInZone(now, tz);
+  const oldest = shiftDate(today, -RECONCILE_DAYS);
+  const out: ReconciledSample[] = [];
+  for (const { id, source, harness } of await derivedMetricLanes(db, teamId, teamSlug)) {
+    const rows = await db.all<{ day: string; value: number; n: number }>(
+      `SELECT day, value, n FROM lane_samples
+        WHERE team_id = ? AND lane_id = ? AND by_name = ? AND day >= ? AND day < ?
+        ORDER BY day`,
+      [teamId, id, by, oldest, today],
+    );
+    for (const row of rows) {
+      const measure = derivedMeasurer(
+        db,
+        teamId,
+        zoneMidnight(tz, row.day),
+        zoneMidnight(tz, shiftDate(row.day, 1)),
+      );
+      const v = await measure(source, harness);
+      if (!v) {
+        await removeRecordedSample(db, teamId, id, row.day, by, now);
+        out.push({ lane: id, day: row.day, action: 'removed' });
+      } else if (v.value !== Number(row.value) || v.n !== Number(row.n)) {
+        const lane = await getLane(db, teamId, id, teamSlug);
+        if (!lane?.metric) continue;
+        await recordSample(db, teamId, lane, { day: row.day, value: v.value, n: v.n }, by, now);
+        out.push({ lane: id, day: row.day, action: 'replaced' });
+      }
+    }
   }
   return out;
 }

@@ -353,6 +353,58 @@ withDrivers('fold', (_o, kind) => {
       expect(lane?.samples).toEqual([{ day: '2026-10-19', value: 61, n: 23, by: 'nick', at: 2 }]);
     });
 
+    it('folds a sample removal: the day is deleted, a malformed day deletes nothing (ADR 715)', async () => {
+      const { db, team } = await seed();
+      const metric = {
+        name: 'm',
+        unit: 'ms',
+        baseline: 1,
+        target: 2,
+        direction: 'down',
+        source: 'manual',
+        by: 'nick',
+        at: 1,
+      };
+      await foldBatch(db, team.id, [
+        foreignLane('r-1', 1, 1, 'lane.opened', {
+          lane: 'LR',
+          title: 'measured',
+          project: 'musterd',
+          reads_on: '2026-10-21',
+          metric,
+          created_by: 'nick',
+          created_at: 1,
+        }),
+        foreignLane('r-2', 2, 2, 'lane.sample_recorded', {
+          lane: 'LR',
+          day: '2026-10-19',
+          value: 5,
+          n: 1,
+          by: 'digest',
+          at: 2,
+          replaced: null,
+        }),
+        foreignLane('r-3', 3, 3, 'lane.sample_removed', {
+          lane: 'LR',
+          day: 'not-a-day',
+          by: 'digest',
+          at: 3,
+          removed: { value: 5, n: 1, by: 'digest' },
+        }),
+      ]);
+      expect((await getLane(db, team.id, 'LR', team.slug))?.samples).toHaveLength(1);
+      await foldBatch(db, team.id, [
+        foreignLane('r-4', 4, 4, 'lane.sample_removed', {
+          lane: 'LR',
+          day: '2026-10-19',
+          by: 'digest',
+          at: 4,
+          removed: { value: 5, n: 1, by: 'digest' },
+        }),
+      ]);
+      expect((await getLane(db, team.id, 'LR', team.slug))?.samples).toEqual([]);
+    });
+
     it('projects a birth into lanes, holds the row in audit with its stamp, and leaves the allocator alone', async () => {
       const { db, team } = await seed();
       const before = await localNextSeq(db, team.id);
