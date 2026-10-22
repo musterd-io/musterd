@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { loadProvisioning } from '../onboard/manifest.js';
@@ -13,7 +14,7 @@ import {
   type ObservedFragment,
 } from '../onboard/reconcile/fragments.js';
 import { CLAUDE_BRIDGE, roleSkillFragments } from '../onboard/roleSkills.js';
-import { deltaLine, harnessCommand, selectableHarnesses } from './harness.js';
+import { deltaLine, harnessCommand, missingBlock, selectableHarnesses } from './harness.js';
 
 let cwd: string;
 let machineRoot: string;
@@ -363,6 +364,41 @@ describe('musterd harness configure', () => {
     const { offered, missing } = selectableHarnesses(registry, avail, ['fake-c']);
     expect(offered.map((a) => a.id)).toEqual(['fake-a', 'fake-c']);
     expect(missing.map((a) => a.id)).toEqual(['fake-b']);
+  });
+
+  it('names each missing harness on its own row with its install command (ADR 643 §1)', () => {
+    const withHint = {
+      ...fakeAdapter('muse'),
+      interactive: {
+        resolveBin: async () => null,
+        installHint: 'curl -fsSL https://dev.meta.ai/install.sh | bash',
+        fresh: () => [],
+        resume: () => [],
+      },
+    };
+    const lines = stripVTControlCharacters(missingBlock([withHint, fakeAdapter('fake-b')])).split(
+      '\n',
+    );
+    expect(lines[0]).toMatch(/not installed here .*musterd harness configure/);
+    expect(lines[1]).toBe('  muse    curl -fsSL https://dev.meta.ai/install.sh | bash');
+    expect(lines[2]).toBe('  fake-b  no install command known');
+  });
+
+  it('the headless refusal carries the install command', async () => {
+    writeV2Identity();
+    writeV3Provisioning([]);
+    const a = {
+      ...fakeAdapter('fake-a', { available: false }),
+      interactive: {
+        resolveBin: async () => null,
+        installHint: 'npm install -g fake-a',
+        fresh: () => [],
+        resume: () => [],
+      },
+    };
+    await expect(
+      run(['configure'], { ctx: ctxOf(), registry: [a], select: ['fake-a'] }),
+    ).rejects.toThrow(/install: npm install -g fake-a/);
   });
 
   it('refuses a folder with no musterd identity at all', async () => {

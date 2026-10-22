@@ -258,10 +258,15 @@ export async function runConnect(input: RunConnectInput): Promise<number> {
   sd.start('Looking for the agents on this machine');
   const detected = await Promise.all(HARNESSES.map(async (h) => ({ h, d: await h.detect() })));
   sd.stop('Scanned for agents');
-  for (const { h, d } of detected)
-    p.log.step(
-      `${pc.bold(h.label)} ${pc.dim('—')} ${d.installed ? pc.yellow('installed') : pc.dim('not installed')}`,
-    );
+  // The way in for each one this machine lacks (ADR 643 §1): its adapter's install command.
+  const installHints = new Map(harnessAdapters().map((a) => [a.id, a.interactive?.installHint]));
+  for (const { h, d } of detected) {
+    const hint = installHints.get(h.id);
+    const tag = d.installed
+      ? pc.yellow('installed')
+      : pc.dim('not installed') + (hint ? `${pc.dim(' — install: ')}${pc.cyan(hint)}` : '');
+    p.log.step(`${pc.bold(h.label)} ${pc.dim('—')} ${tag}`);
+  }
 
   const labels: Record<string, string> = Object.fromEntries(HARNESSES.map((h) => [h.id, h.label]));
   const installed = new Set(detected.filter((x) => x.d.installed).map((x) => x.h.id));

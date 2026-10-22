@@ -742,9 +742,14 @@ export async function runInit(): Promise<number> {
   const detected = await Promise.all(HARNESSES.map(async (h) => ({ h, d: await h.detect() })));
   sd.stop('Scanned for places an agent can run');
 
+  // The way in for each one this machine lacks (ADR 643 §1): its adapter's install command.
+  const installHints = new Map(harnessAdapters().map((a) => [a.id, a.interactive?.installHint]));
   for (const { h, d } of detected) {
+    const hint = installHints.get(h.id);
     const tag = !d.installed
-      ? pc.dim('not installed — `musterd harness configure` adds it once installed')
+      ? pc.dim('not installed — ') +
+        (hint ? `install: ${pc.cyan(hint)}${pc.dim(', then ')}` : '') +
+        pc.dim('`musterd harness configure` adds it')
       : d.configured
         ? pc.green('installed · musterd already configured')
         : pc.yellow('installed');

@@ -49,13 +49,18 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 ### Multi-harness frames (ADR 281/282/286)
 
 8. `cmd/harness-configure` — `$ musterd harness configure` → a registry-ordered **multi-select**
-   (checkbox list), preselecting the current desired set; unavailable adapters stay selectable with
-   a dim `(pending — not installed here)` hint:
+   (checkbox list), preselecting the current desired set. Only installed harnesses are offered
+   (ADR 643); one already selected but now uninstalled stays, with a dim `(pending — not installed
+   here)` hint, so it can be deselected. Above the list, each uninstalled harness gets its own row
+   with its install command, in dim:
    ```
+   ●  not installed here — install one, then run `musterd harness configure` again:
+        codex  npm install -g @openai/codex
+        muse   curl -fsSL https://dev.meta.ai/install.sh | bash
    ◆ Which harnesses should launch this worktree's member? (space toggles, enter confirms)
-   ◼ Claude Code
-   ◻ Cursor
-   ◻ Codex (pending — not installed here)
+   ◼ claude-code
+   ◻ cursor
+   ◻ grok (pending — grok install not found)
    ◼ musterd (native host)
    ```
    On confirm: `✓ desired harnesses: claude-code, musterd`, then a dim delta against the prior set
