@@ -30,6 +30,29 @@ export const AvailabilitySchema = z.object({
 });
 export type Availability = z.infer<typeof AvailabilitySchema>;
 
+/**
+ * ADR 721: a human's own status line — a few words a human sets for themselves ("assembling a new
+ * dresser for the nursery"), shown on /live, /broadcast and the team panel. Humans only; only the
+ * human it belongs to sets or clears it, and it lapses an hour after it is set. Not called
+ * `status`: presence and availability already use that word.
+ */
+export const STATUS_LINE_MAX = 48;
+export const STATUS_LINE_TTL_MS = 3_600_000;
+/** The text as a human types it: trimmed, 1–48 characters counted as code points (an emoji is one). */
+export const StatusLineTextSchema = z
+  .string()
+  .trim()
+  .min(1, 'a status line needs some words')
+  .refine((t) => [...t].length <= STATUS_LINE_MAX, `a status line is at most ${STATUS_LINE_MAX} characters`);
+export const StatusLineSchema = z.object({
+  text: z.string().min(1),
+  /** When it was set (ms epoch). */
+  set_at: z.number().int(),
+  /** When it lapses (ms epoch): `set_at + STATUS_LINE_TTL_MS`. A reader drops it at this moment. */
+  expires_at: z.number().int(),
+});
+export type StatusLine = z.infer<typeof StatusLineSchema>;
+
 /** ADR 501: the halt standing as it travels — the halter's NAME (not id) and the reason. */
 export const HaltedSchema = z.object({
   at: z.number().int(),
@@ -67,6 +90,8 @@ export const MemberSchema = z.object({
   lifecycle: LifecycleSchema.default('forever'),
   lifecycle_until: z.number().int().nullish(),
   availability: AvailabilitySchema.nullish(),
+  /** ADR 721: the human's own status line while it lasts; absent on agents and services, and once lapsed. */
+  status_line: StatusLineSchema.nullish(),
   /** Optional recurring schedule; a Member value replaces the Team default (ADR 206). */
   working_hours: WorkingHoursSchema.nullish(),
   /** ADR 311: optional Slack identity used to attribute captured Seeds to this human Member. */

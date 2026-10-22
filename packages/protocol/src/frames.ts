@@ -4,7 +4,7 @@ import { ClaimFrame, OccupiedFrame, PendingFrame, RefusedFrame } from './claim-h
 import { EnvelopeSchema } from './envelope.js';
 import { ErrorCodeSchema } from './errors.js';
 import { HearingReasonSchema, HearingSchema } from './idleWake.js';
-import { MemberSchema } from './member.js';
+import { MemberSchema, MemberSummarySchema } from './member.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
 import { StyleEpochSchema } from './style.js';
 import { PROTOCOL_VERSION } from './version.js';
@@ -118,6 +118,16 @@ export const PresenceEvtFrame = z.object({
   surface: SurfaceSchema.optional(),
 });
 
+/**
+ * `member_updated` (server → client, team broadcast; ADR 721) — one member's roster summary, pushed
+ * when something a surface shows about them changes (first: a human's status line). A client replaces
+ * that member from it. Additive: a client that does not know the type ignores it.
+ */
+export const MemberUpdatedFrame = z.object({
+  type: z.literal('member_updated'),
+  member: MemberSummarySchema,
+});
+
 export const ErrorFrame = z.object({
   type: z.literal('error'),
   code: ErrorCodeSchema,
@@ -172,6 +182,7 @@ export const WSServerFrame = z.discriminatedUnion('type', [
   AckFrame,
   DeliverFrame,
   PresenceEvtFrame,
+  MemberUpdatedFrame,
   ErrorFrame,
   LeaseFrame,
   SeatPulseFrame,
