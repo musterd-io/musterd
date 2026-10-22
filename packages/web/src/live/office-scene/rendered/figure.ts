@@ -13,6 +13,7 @@ import { type CreateCanvas, defaultCreate, mulHex, tintFrame } from './tint';
 
 export type LayerId =
   | 'skin'
+  | 'eyes'
   | `hair/${HairStyle}`
   | `facial/${FacialHair}`
   | `hat/${Hat}`
@@ -72,20 +73,22 @@ export interface Layer {
 }
 
 /**
- * Back to front: skin, hair, facial hair, top, bottom, shoes, whatever they carry and a lanyard, hat,
- * accessory, and the visor last for an agent — "the one tell the office cannot afford to lose".
- * `topColor` is the member's identity colour, which `appearance.ts` deliberately does not carry. A
- * carried thing's sheet already has the hands and body cut out of it where they are in front.
+ * Back to front (figure v2, plan Task 7): skin and its untinted eyes, shoes, trousers, the top over
+ * them, whatever they carry and a lanyard, then hair and facial hair (their sheets already have the
+ * torso cut out behind them, so long hair in front of the shoulders shows), hat, accessory, and the
+ * visor last for an agent — "the one tell the office cannot afford to lose". Pieces overlap now (the
+ * body is only skin), so this order is what decides what is in front. `topColor` is the member's
+ * identity colour, which `appearance.ts` deliberately does not carry.
  */
 export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: string | null = null, held: Held = {}): Layer[] {
-  const out: Layer[] = [{ id: 'skin', color: a.skin }];
-  if (a.hair !== 'bald') out.push({ id: `hair/${a.hair}`, color: a.hairColor });
-  if (a.facialHair !== 'none') out.push({ id: `facial/${a.facialHair}`, color: a.hairColor });
-  out.push({ id: `top/${a.cut}`, color: topColor });
-  out.push({ id: 'bottom', color: a.bottom });
+  const out: Layer[] = [{ id: 'skin', color: a.skin }, { id: 'eyes', color: null }];
   out.push({ id: 'shoes', color: a.shoes });
+  out.push({ id: 'bottom', color: a.bottom });
+  out.push({ id: `top/${a.cut}`, color: topColor });
   out.push(...carried(held));
   if (held.lanyard) out.push({ id: 'lanyard', color: held.lanyard }, { id: 'lanyard-card', color: null });
+  if (a.hair !== 'bald') out.push({ id: `hair/${a.hair}`, color: a.hairColor });
+  if (a.facialHair !== 'none') out.push({ id: `facial/${a.facialHair}`, color: a.hairColor });
   if (a.hat !== 'none') out.push({ id: `hat/${a.hat}`, color: a.hatColor });
   if (a.accessory !== 'none') out.push({ id: `acc/${a.accessory}`, color: a.accessoryColor });
   if (kind === 'agent') out.push({ id: 'visor', color: null });
@@ -128,6 +131,8 @@ export function drawFigureFrame(d: FigureDraw): void {
   const tint = d.tint ?? '#ffffff';
   const size = d.size ?? 1;
   const k = (fit.scale * size) / spec.scale;
+  // the member's build: wider or narrower about the floor point, never taller (spec §2.1)
+  const kx = k * (d.look.build ?? 1);
   const p = project(d.at.lx, d.at.ly, fit);
   const alpha = d.alpha ?? 1;
   if (alpha < 1) {
@@ -143,7 +148,7 @@ export function drawFigureFrame(d: FigureDraw): void {
     if (arms && !spec.cells?.[key]) continue;
     const c = frameCell(spec, key, d.anim, d.dir, d.t, d.startT, d.frame);
     if (c.sw <= 0 || c.sh <= 0) continue;
-    const dx = p.x - (spec.anchor.x - c.ox) * k;
+    const dx = p.x - (spec.anchor.x - c.ox) * kx;
     const dy = p.y - (spec.anchor.y - c.oy) * k;
     const color = layer.color ? mulHex(layer.color, tint) : tint === '#ffffff' ? null : tint;
     let src: CanvasImageSource = sheet;
@@ -160,12 +165,12 @@ export function drawFigureFrame(d: FigureDraw): void {
     if (c.flip) {
       // A mirrored direction: the stored one, flipped about the cell's own right edge.
       ctx.save();
-      ctx.translate(dx + c.sw * k, dy);
+      ctx.translate(dx + c.sw * kx, dy);
       ctx.scale(-1, 1);
-      ctx.drawImage(src, sx, sy, c.sw, c.sh, 0, 0, c.sw * k, c.sh * k);
+      ctx.drawImage(src, sx, sy, c.sw, c.sh, 0, 0, c.sw * kx, c.sh * k);
       ctx.restore();
     } else {
-      ctx.drawImage(src, sx, sy, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
+      ctx.drawImage(src, sx, sy, c.sw, c.sh, dx, dy, c.sw * kx, c.sh * k);
     }
   }
   if (alpha < 1) ctx.restore();
@@ -185,6 +190,7 @@ export function wornLayers(nodes: Iterable<Pick<OfficeNode, 'name' | 'kind' | 'd
 
 const ALWAYS_LOADED: readonly LayerId[] = [
   'skin',
+  'eyes',
   'bottom',
   'shoes',
   'carry/laptop',
