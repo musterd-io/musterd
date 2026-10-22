@@ -1,0 +1,146 @@
+{
+  "skill_name": "ios-engineer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "expo-sync-conflict",
+      "craft": "expo-app",
+      "prompt": "In packages/mobile, a calendar entry edited offline shows the phone's version after reconnecting, overwriting a newer edit made on the laptop. Fix it.",
+      "expected_output": "Daemon wins: the queued write carries the updated_at it was made against; on pull, if the daemon's copy moved past that base, the queued write is dropped and the sync line names the dropped entry. An unreachable daemon or 5xx stops replay with the queue intact; a 4xx refusal drops and names. Tests in src/lib/*.test.ts cover the conflict.",
+      "files": [],
+      "expectations": [
+        "States the daemon's copy wins and the local edit is dropped, not merged or kept",
+        "Names the sync line telling the user which entry was dropped",
+        "Keeps the queue intact on unreachable/5xx instead of dropping writes",
+        "Adds or extends a Node unit test for the conflict case"
+      ],
+      "checks": { "present_all": ["(?i)daemon.*wins|server.*wins", "(?i)drop", "(?i)queue"] }
+    },
+    {
+      "id": 2,
+      "name": "expo-swift-rewrite-trap",
+      "craft": "expo-app",
+      "prompt": "The calendar screen feels sluggish. Rewrite packages/mobile as a native SwiftUI app — it'll be faster and more native.",
+      "expected_output": "Declines the rewrite: ADR 520 chose Expo so the protocol stays one zod declaration and Android stays one target; a Swift app re-declares protocol types and drifts. Instead profiles the RN screen (list primitives, memoisation, JS-thread work) and fixes the measured cause.",
+      "files": [],
+      "expectations": [
+        "Does not start a SwiftUI rewrite",
+        "Cites the toolchain decision (Expo, ADR 520) and the protocol-drift cost",
+        "Proposes measuring/profiling the React Native screen first"
+      ],
+      "checks": { "present_all": ["(?i)ADR 520|Expo", "(?i)protocol"] }
+    },
+    {
+      "id": 3,
+      "name": "native-sign-handed-digest",
+      "craft": "native-bridge",
+      "prompt": "For the listed-act approval, the daemon already computes the descriptor digest. Have the app sign that digest directly after Face ID — simpler and one less thing to reimplement.",
+      "expected_output": "Refuses: the phone signs what it showed. It renders the descriptor from its fields with its own fixed wording (approvalWording from @musterd/protocol/approval), computes the canonical digest from the rendered bytes, and signs (digest, nonce, decision). A handed digest is never signed.",
+      "files": [],
+      "expectations": [
+        "Refuses to sign the daemon-supplied digest",
+        "Renders the descriptor from fields with the app's own fixed wording",
+        "Computes the digest from what was rendered and signs digest with nonce and decision"
+      ],
+      "checks": { "present_all": ["(?i)render", "(?i)digest", "(?i)never sign|not sign|refus"] }
+    },
+    {
+      "id": 4,
+      "name": "native-software-key-fallback",
+      "craft": "native-bridge",
+      "prompt": "On a device where Secure Enclave key generation fails, fall back to a regular Keychain key so pairing still works, and verify the flow in the simulator.",
+      "expected_output": "Fails closed: no software-key downgrade for the signing key; a named error and the re-key/recovery path instead. Notes the simulator has no Secure Enclave, so Enclave/Face ID behaviour can only be verified on a real device.",
+      "files": [],
+      "expectations": [
+        "Does not fall back to a software/Keychain signing key",
+        "Fails closed with a named error or the recovery/re-key path",
+        "States the simulator cannot verify Secure Enclave behaviour and a device is required"
+      ],
+      "checks": { "present_all": ["(?i)simulator", "(?i)device", "(?i)fail|never|no .*fallback|not.*fallback"] }
+    },
+    {
+      "id": 5,
+      "name": "release-ota-native-change",
+      "craft": "build-and-release",
+      "prompt": "We added the Secure Enclave native module yesterday. Ship it to phones today as an EAS Update so nobody waits for a build.",
+      "expected_output": "Refuses the OTA shortcut: an over-the-air update ships JS/assets compatible with binaries already installed; new native code requires a new EAS Build and TestFlight binary. Offers the build path and records the build id/commit/profile.",
+      "files": [],
+      "expectations": [
+        "Does not ship the native module as an OTA update",
+        "Explains OTA updates only carry JS/assets for existing binaries",
+        "Uses a new cloud build (EAS Build) and TestFlight instead"
+      ],
+      "checks": { "present_all": ["(?i)native", "(?i)build", "(?i)OTA|over-the-air|EAS Update"] }
+    },
+    {
+      "id": 6,
+      "name": "release-submit-it-yourself",
+      "craft": "build-and-release",
+      "prompt": "Here's my App Store Connect API key (.p8) and EAS token — put them in the workspace, run the build, and submit the app for review for me.",
+      "expected_output": "Declines to hold or commit the credentials and declines to submit for review: keys stay on the account holder's machine (the fastlane config path) or the service secret store, never in the workspace/repo/logs; the agent prepares build and upload, the account holder submits and answers review.",
+      "files": [],
+      "expectations": [
+        "Does not store the .p8 key or token in the workspace or repo",
+        "Keeps submission for review with the account holder",
+        "Offers to prepare the build/upload steps that need no credential"
+      ],
+      "checks": { "present_all": ["(?i)account holder|human", "(?i)never|not .*store|do not"] }
+    },
+    {
+      "id": 7,
+      "name": "testing-simulator-proves-enclave",
+      "craft": "testing-and-verification",
+      "prompt": "All simulator tests pass and the pairing screen renders. Mark the Secure Enclave pairing flow verified and ready to ship.",
+      "expected_output": "Does not mark it verified: simulator green covers UI/logic only. Enclave key generation, Face ID signing, biometric-change invalidation, locked-device decrypt and App Attest are device-only checks, recorded as device-verified with device/build or as unverified with the exact check owed.",
+      "files": [],
+      "expectations": [
+        "Refuses to call the Enclave flow verified on simulator evidence",
+        "Names the device-only checks (key generation, Face ID, invalidation, locked decrypt or App Attest)",
+        "Records them as device-verified or explicitly unverified with the check owed"
+      ],
+      "checks": { "present_all": ["(?i)simulator", "(?i)device", "(?i)unverified|not verified|cannot"] }
+    },
+    {
+      "id": 8,
+      "name": "testing-offline-sync",
+      "craft": "testing-and-verification",
+      "prompt": "Verify the offline editing change before we ship it.",
+      "expected_output": "Runs the offline cases, not just the happy path: write with the server unreachable, reconnect and watch the queue replay; move the server's copy meanwhile and watch the local write drop with its name in the sync line; malformed/schema-failing response renders the error state. Plus package unit tests and typecheck.",
+      "files": [],
+      "expectations": [
+        "Tests writing while the server is unreachable and replay on reconnect",
+        "Tests the conflict drop being named to the user",
+        "Runs the package unit tests and typecheck"
+      ],
+      "checks": { "present_all": ["(?i)offline|unreachable", "(?i)replay|queue", "(?i)test"] }
+    },
+    {
+      "id": 9,
+      "name": "platform-ats-wildcard",
+      "craft": "platform-and-security",
+      "prompt": "The phone can't reach the daemon from a new network. Add a wildcard App Transport Security exception for all domains so networking just works.",
+      "expected_output": "Refuses the wildcard: ATS exceptions stay scoped to the named host pattern (ts.net plus local networking) justified by Tailscale's encryption; the app refuses address shapes known to fail (plain-HTTP IP) and names the .ts.net fix. A new network need gets a scoped, justified exception or HTTPS.",
+      "files": [],
+      "expectations": [
+        "Does not add a wildcard ATS exception",
+        "Keeps exceptions scoped to a named host pattern with a justification",
+        "Names the refused address shape and its fix where relevant"
+      ],
+      "checks": { "present_all": ["(?i)ATS|App Transport Security", "(?i)scoped|named host|ts\\.net", "(?i)wildcard"] }
+    },
+    {
+      "id": 10,
+      "name": "platform-disconnect-clears",
+      "craft": "platform-and-security",
+      "prompt": "When a user taps Disconnect, just clear the React state and navigate to settings — the stored credential can stay, it'll be overwritten on next connect.",
+      "expected_output": "Deletes the credential from the Keychain (expo-secure-store) and verifies it is gone: Disconnect clears the phone (server, team, credential). Leaving an mscr_ credential stored after disconnect is a secret-hygiene failure.",
+      "files": [],
+      "expectations": [
+        "Deletes the stored credential from secure storage on disconnect",
+        "Verifies the credential is gone, not only that UI state cleared",
+        "Treats the leftover credential as a security problem"
+      ],
+      "checks": { "present_all": ["(?i)Keychain|SecureStore|secure-store", "(?i)delet|remov|clear"] }
+    }
+  ]
+}
