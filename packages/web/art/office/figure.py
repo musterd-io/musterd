@@ -99,6 +99,37 @@ def grey(name: str, v: float = 0.78, rough: float = 0.8) -> bpy.types.Material:
     return scene.matte(name, (v, v, v), rough)
 
 
+def skin_mat(name: str, v: float) -> bpy.types.Material:
+    """Neutral skin with a soft subsurface: light passes a little way in, so it reads as skin, not paint."""
+    m = scene.matte(name, (v, v, v), 0.55)
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Subsurface Weight"].default_value = 0.35
+    b.inputs["Subsurface Radius"].default_value = (1.0, 1.0, 1.0)
+    b.inputs["Subsurface Scale"].default_value = 1.2
+    return m
+
+
+def hair_mat(name: str, v: float) -> bpy.types.Material:
+    """Neutral hair with strands: a stretched wave bump the key light catches."""
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = scene._nodes(m)
+    bsdf.inputs["Base Color"].default_value = (v, v, v, 1)
+    bsdf.inputs["Roughness"].default_value = 0.5
+    bsdf.inputs["Specular IOR Level"].default_value = 0.35
+    tc = nodes.new("ShaderNodeTexCoord")
+    wave = nodes.new("ShaderNodeTexWave")
+    wave.inputs["Scale"].default_value = 1.6
+    wave.inputs["Distortion"].default_value = 6
+    wave.inputs["Detail"].default_value = 4
+    wave.bands_direction = "Z"
+    bump = nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.35
+    links.new(tc.outputs["Object"], wave.inputs["Vector"])
+    links.new(wave.outputs["Fac"], bump.inputs["Height"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
 def flat(name: str, rgb) -> bpy.types.Material:
     """An untinted layer's own colour (the visor), matte."""
     return scene.matte(name, rgb, 0.3)
@@ -200,10 +231,14 @@ class Rig:
 def build_figure(zs: float, origin: Vector) -> Rig:
     """The whole figure in its rest pose (standing, arms at the sides, facing +x), every layer built."""
     r = Rig(zs, origin)
-    skin = grey("fig-skin", 0.8, 0.7)
-    cloth = grey("fig-cloth", 0.78, 0.9)
-    cloth_dark = grey("fig-cloth-dark", 0.55, 0.9)
-    hair = grey("fig-hair", 0.75, 0.85)
+    # v2 materials (spec §2.3): skin that lets a little light through, cloth with a weave, hair with a
+    # strand texture. All neutral: `figure.ts` tints every layer, so a warm subsurface would warm a mint
+    # skin too — the radius is equal in r, g and b.
+    skin = skin_mat("fig-skin", 0.8)
+    cloth = scene.fabric("fig-cloth", (0.78, 0.78, 0.78), 1.4)
+    cloth_dark = scene.fabric("fig-cloth-dark", (0.55, 0.55, 0.55), 1.4)
+    denim = scene.fabric("fig-denim", (0.78, 0.78, 0.78), 3.0)
+    hair = hair_mat("fig-hair", 0.75)
     shoe = grey("fig-shoe", 0.7, 0.6)
     acc = grey("fig-acc", 0.72, 0.5)
     eye = scene.matte("fig-eye", (0.03, 0.025, 0.02), 0.15)  # the iris: gloss, so it catches the light
@@ -325,11 +360,11 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     torso("top/vest", cloth_dark)
 
     # ── bottom: pelvis and trouser legs; shoes on the feet
-    r.ball("pelvis", "hips", "bottom", cloth, 0, 0, HIP + 2.5 * FIG, 6.0 * FIG, 8.6 * FIG, 5.0 * FIG)
+    r.ball("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 6.0 * FIG, 8.6 * FIG, 5.0 * FIG)
     for side, sy in (("L", 1), ("R", -1)):
-        r.cyl("thigh", f"hip{side}", "bottom", cloth, 0, sy * HIP_W, KNEE - 1 * FIG, 3.6 * FIG, 4.4 * FIG, THIGH + 1 * FIG)
-        r.ball("knee", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, KNEE + 3.7 * FIG, 3.7 * FIG, 3.7 * FIG, 3.7 * FIG)
-        r.cyl("shin", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, ANKLE + 1 * FIG, 3.0 * FIG, 3.6 * FIG, SHIN - 1 * FIG)
+        r.cyl("thigh", f"hip{side}", "bottom", denim, 0, sy * HIP_W, KNEE - 1 * FIG, 3.6 * FIG, 4.4 * FIG, THIGH + 1 * FIG)
+        r.ball("knee", f"knee{side}", "bottom", denim, 0, sy * HIP_W, KNEE + 3.7 * FIG, 3.7 * FIG, 3.7 * FIG, 3.7 * FIG)
+        r.cyl("shin", f"knee{side}", "bottom", denim, 0, sy * HIP_W, ANKLE + 1 * FIG, 3.0 * FIG, 3.6 * FIG, SHIN - 1 * FIG)
         r.box("shoe", f"ankle{side}", "shoes", shoe, 2.5 * FIG, sy * HIP_W, 0, 10 * FIG, 5.5 * FIG, 4 * FIG, 1.2)
 
     # ── hats
