@@ -81,6 +81,17 @@ In each container (`adapter.py`):
   move. `gate_smoke.py` now fails if the warning appears. The coop arm has no MCP tools, so turning
   tool search off changes nothing there except that the musterd arm's context holds the musterd tool
   schemas from the start.
+  **Retired 2026-10-21 (finding 019 fixes A+B, ADR 705/707):** the MCP server now joins at session
+  start (before any tool call, after a probe grace), and `team_inbox_check {wait, until_lane}` is
+  the blocking wait, so the arm no longer sets `ENABLE_TOOL_SEARCH=false` and the instructions name
+  the one-call wait instead of polling. Always-loaded surface, measured 2026-10-21 on this build
+  with `measureToolSurface` (tools/list JSON, bytes/4): all 31 tools 21,713 B ≈ 5,428 tokens; the
+  four hot tools that load up front 3,002 B ≈ 751 tokens, plus the server instructions — against
+  pilot 3's 39.6k first-call context (a runtime ruler, not this one; the residual is the ~4k
+  finding 019 assumed). Falsifier: a first-call context on the claim run materially above the
+  team arm's, with tool search on, puts the 16k back on the table. The gate/hold smokes and one smoke pair still owe a run on the next
+  run-machine start — the local attempt on 2026-10-21 could not start its scratch daemon in the
+  seat's sandbox, so no PASS is claimed here; the claim run's pre-flight (below) is where they run.
 
 - **The first end-to-end run (2026-10-20) scored a musterd arm that wasn't one.** The adapter
   hard-coded the MCP entry at `/usr/local/lib/node_modules`, but the task image's Node, installed
