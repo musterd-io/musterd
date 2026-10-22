@@ -3433,6 +3433,7 @@ export function drawActor(
       carry: pose.carry,
       gesture: pose.gesture,
       gestureT: pose.gestureT,
+      sit: pose.sit,
       ...(mug !== undefined ? { mug } : {}),
       ...(lanyard !== undefined ? { lanyard } : {}),
       t,

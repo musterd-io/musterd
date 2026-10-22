@@ -56,7 +56,7 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
   for (const a of ANIMS) {
     const v = anims[a];
     // A gesture or carrying clip is optional (a sheet from before increment 3b has none; the base clip plays).
-    if (v === undefined && (a.startsWith('g-') || (CARRY_ANIMS as readonly string[]).includes(a))) continue;
+    if (v === undefined && (a.startsWith('g-') || a === 'sit-hand' || (CARRY_ANIMS as readonly string[]).includes(a))) continue;
     if (!isRecord(v) || !isNum(v['row']) || !isNum(v['frames']) || !isNum(v['fps']) || typeof v['loop'] !== 'boolean')
       throw new Error(`figure.json anim ${a} needs {row, frames, fps, loop}`);
     const dirs = v['dirs'];

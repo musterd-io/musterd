@@ -47,7 +47,7 @@ export type GestureAnim = (typeof GESTURE_ANIMS)[number];
  */
 export const CARRY_ANIMS = ['walk-hold2', 'walk-hold1', 'walk-call', 'idle-hold2', 'idle-hold1'] as const;
 export type CarryAnim = (typeof CARRY_ANIMS)[number];
-export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim | CarryAnim;
+export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim | CarryAnim | 'sit-hand';
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -59,6 +59,8 @@ export const ANIMS: readonly Anim[] = [
   'stand-up',
   ...GESTURE_ANIMS,
   ...CARRY_ANIMS,
+  // Task 17: a seated member with a bubble puts a hand up, as the painter's help overlay does
+  'sit-hand',
 ];
 
 export interface AnimSpec {
@@ -206,8 +208,10 @@ export function frameCell(
   const a = spec.anims[anim]!;
   const id = layer.split('@')[0]!;
   if (a.base && a.layers && !a.layers.some((p) => id.startsWith(p)) && spec.anims[a.base]) {
-    // Not stored in this clip: the base clip's frame (same index) is the same pixels.
-    const b = frameCell(spec, layer, a.base, dir, t, startT, i % spec.anims[a.base]!.frames);
+    // Not stored in this clip: the base clip's frame at the same point of the loop is the same pixels
+    // (proportional, so a two-frame clip over an eight-frame idle reads frames 0 and 4).
+    const bf = spec.anims[a.base]!.frames;
+    const b = frameCell(spec, layer, a.base, dir, t, startT, Math.floor((i * bf) / a.frames) % bf);
     return { ...b, done };
   }
   const src = spec.mirror?.[dir];

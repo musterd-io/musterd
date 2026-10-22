@@ -137,6 +137,8 @@ export interface CharacterOpts {
   /** Scene clock (s) and the member's seed — the face's own small life: a blink, an LED pulse. */
   t: number;
   seed: number;
+  /** How far into a sit (0 standing … 1 seated) — where the rendered figure's crown, and its wisp, are. */
+  sit?: number;
   /**
    * Override the wardrobe instead of hashing it from the name.
    *
@@ -254,6 +256,8 @@ export function animFor(
     const a = anims[anim]!;
     return { anim, startT: t - pose.phase * (a.frames / a.fps) };
   }
+  // Seated with something to say: the hand goes up (the painter's help overlay), over the typing.
+  if (pose.sit > 0.9 && pose.bubble && anims['sit-hand']) return { anim: 'sit-hand', startT: seed * 10 };
   if (pose.sit > 0.9) return { anim: typing > 0 ? 'sit-type' : 'sit-idle', startT: seed * 10 };
   if (pose.sit > 0) {
     const a = anims['sit-down'];
@@ -276,7 +280,7 @@ export function drawCharacter(
   if (o.rendered) {
     // The rendered path: one composed sprite frame. The seated overlay (armsOnly) draws the same frame's
     // arm cells again, over the desk slab (plan Task 16).
-    const look = o.look ?? appearanceOf(node);
+    const look = lookOf(o);
     const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
     // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
     let anim = o.anim ?? 'idle';
@@ -312,6 +316,17 @@ export function drawCharacter(
       size,
       scratch: o.rendered.scratch,
     });
+    if (!armsOnly && o.alpha > 0) {
+      // The wisp over the sprite's crown — lowered through a sit the way the nameplate is (render.ts).
+      const crown = o.rendered.spec.height ?? 96;
+      const u = fit.scale * size;
+      const p = project(o.lx, o.ly, fit);
+      const base = { x: p.x, y: p.y - (crown - 1 - (o.sit ?? 0) * 22 * (crown / 96)) * u };
+      const prev = ctx.globalAlpha;
+      if (o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
+      drawWisp(ctx, base, { x: base.x, y: base.y - 12 * u }, u, o.topColor ?? node.color, o.t, o.seed);
+      ctx.globalAlpha = prev;
+    }
     return;
   }
   /*
@@ -332,9 +347,7 @@ export function drawCharacter(
   const sway = (Math.sin(swayT) * 0.026 + Math.sin(swayT * 0.37) * 0.011) * size;
   const px = projector(o.lx, o.ly, dir, fit, size, o.heading, sway);
   const u = fit.scale * size; // one logical unit, in screen px, at this character's size
-  // dnd wears the headphones whatever their hashed accessory is — the room-readable signal (§4).
-  const look =
-    o.look ?? (node.dnd ? { ...appearanceOf(node), accessory: 'headphones' as const } : appearanceOf(node));
+  const look = lookOf(o);
   const acc = node.color; // the identity hue — the top, and only the top
   const accDark = hslL(acc, 0.72);
 
@@ -737,38 +750,48 @@ function drawHead(
     }
   }
 
-  // ── the wisp: a curved little antenna topped with a warm firefly glow, drawn last so it pokes through any
-  // hat. Once the agents' "sign of life" (a straight mast + a green LED); now every member carries one, and
-  // it's the quirky-warm counterpart to the floating nameplate above — a mote that hovers over the head,
-  // gently drifting and breathing. It also stays the only from-behind tell, so it must read at office scale.
-  {
-    const swayDir = seed % 2 === 0 ? 1 : -1;
-    const base = px({ x: H.x, y: H.y + R - 1, z: H.z }).p; // just off the crown
-    const top = px({ x: H.x, y: H.y + R + 11, z: H.z }).p;
-    const drift = Math.sin(t * 1.05 + seed * 5) * 1.7 * u; // a firefly's idle wander
-    const tx = top.x + drift;
-    const ty = top.y - Math.abs(Math.sin(t * 0.9 + seed * 3)) * 1.3 * u; // and a gentle bob
-    // A curved stalk in the member's own hue, bowed to one side so it reads as a whimsical antenna, not a
-    // mast. The control point is offset sideways from the straight line between crown and tip.
-    const cx = (base.x + tx) / 2 + swayDir * 4.6 * u;
-    const cy = (base.y + ty) / 2;
-    ctx.strokeStyle = acc;
-    ctx.lineWidth = 1.7 * u;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(base.x, base.y);
-    ctx.quadraticCurveTo(cx, cy, tx, ty);
-    ctx.stroke();
-    // The firefly at the tip: two additive warm layers (halo + mid) glowing under a bright near-white core,
-    // breathing. Additive so it reads as *light*, not a bead — the warm counterpart to the old green LED.
-    const pulse = 0.72 + 0.28 * Math.sin(t * 1.7 + seed * 6);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    disc(ctx, { x: tx, y: ty }, 5.4 * u * pulse, 5.2 * u * pulse, 'rgba(245, 188, 92, 0.5)');
-    disc(ctx, { x: tx, y: ty }, 3.0 * u * pulse, 2.9 * u * pulse, 'rgba(255, 214, 130, 0.55)');
-    ctx.restore();
-    disc(ctx, { x: tx, y: ty }, 1.7 * u, 1.7 * u, 'rgba(255, 248, 228, 0.96)');
-  }
+  // ── the wisp (see `drawWisp`), from just off the crown ──
+  drawWisp(ctx, px({ x: H.x, y: H.y + R - 1, z: H.z }).p, px({ x: H.x, y: H.y + R + 11, z: H.z }).p, u, acc, t, seed);
+}
+
+/**
+ * The wisp: a curved little antenna topped with a warm firefly glow, drawn last so it pokes through any hat.
+ * Once the agents' "sign of life" (a straight mast + a green LED); now every member carries one, and it's the
+ * quirky-warm counterpart to the floating nameplate above — a mote that hovers over the head, gently
+ * drifting and breathing. It also stays the only from-behind tell, so it must read at office scale. `base`
+ * is just off the crown and `top` where the stalk would end standing still; both painters call it.
+ */
+export function drawWisp(ctx: CanvasRenderingContext2D, base: Pt, top: Pt, u: number, acc: string, t: number, seed: number): void {
+  const swayDir = seed % 2 === 0 ? 1 : -1;
+  const drift = Math.sin(t * 1.05 + seed * 5) * 1.7 * u; // a firefly's idle wander
+  const tx = top.x + drift;
+  const ty = top.y - Math.abs(Math.sin(t * 0.9 + seed * 3)) * 1.3 * u; // and a gentle bob
+  // A curved stalk in the member's own hue, bowed to one side so it reads as a whimsical antenna, not a
+  // mast. The control point is offset sideways from the straight line between crown and tip.
+  const cx = (base.x + tx) / 2 + swayDir * 4.6 * u;
+  const cy = (base.y + ty) / 2;
+  ctx.strokeStyle = acc;
+  ctx.lineWidth = 1.7 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(base.x, base.y);
+  ctx.quadraticCurveTo(cx, cy, tx, ty);
+  ctx.stroke();
+  // The firefly at the tip: two additive warm layers (halo + mid) glowing under a bright near-white core,
+  // breathing. Additive so it reads as *light*, not a bead — the warm counterpart to the old green LED.
+  const pulse = 0.72 + 0.28 * Math.sin(t * 1.7 + seed * 6);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  disc(ctx, { x: tx, y: ty }, 5.4 * u * pulse, 5.2 * u * pulse, 'rgba(245, 188, 92, 0.5)');
+  disc(ctx, { x: tx, y: ty }, 3.0 * u * pulse, 2.9 * u * pulse, 'rgba(255, 214, 130, 0.55)');
+  ctx.restore();
+  disc(ctx, { x: tx, y: ty }, 1.7 * u, 1.7 * u, 'rgba(255, 248, 228, 0.96)');
+}
+
+/** The member's look: their own, or hashed from the name — and a dnd member wears the headphones whatever
+ *  their hashed accessory is, the room-readable signal (§4). */
+function lookOf(o: CharacterOpts): Appearance {
+  return o.look ?? (o.node.dnd ? { ...appearanceOf(o.node), accessory: 'headphones' as const } : appearanceOf(o.node));
 }
 
 /** The little mug a sip beat raises — drawn at the right wrist in the desk mug's own colour. */
