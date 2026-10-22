@@ -54,6 +54,7 @@ the terminal around every harness.
    seat as you type, and drills down team → project → member. Every level marks what is on this
    machine and what is only on the team, and which entry was used last. Piped or redirected, bare
    `musterd` prints the help page as before; `musterd help` is unchanged.
+   _(Amended 2026-10-22: inside a member workspace, bare musterd starts only that member. See [ADR 717](717-workspace-scoped-launcher.md).)_
 2. **A word that is not a command is a seat address.** `musterd <word>` resolves, in order: a
    command (commands always win); `-` (the seat launched last); an exact address
    (`team/project/member`, or `team@host/project/member` when two servers host same-named teams) or
@@ -165,6 +166,8 @@ the terminal around every harness.
   configured for one harness still show that it has one and still be picked. `⏎`/`⌃R` on an agent
   seat now opens a harness step (spec §2 item 8, terminal frame 24); `musterd <seat>` by name is
   unchanged (lane `01M3WTTQ6V81YVCKS2FZ5FKNDZ`).
+- 2026-10-22: inside a member workspace, bare `musterd` and `musterd <member>` start only that
+  member. The picker still lists the other seats. ADR 717; Decision 1 carries the marker.
 
 ## Observability & Evaluation
 

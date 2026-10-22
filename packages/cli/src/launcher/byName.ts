@@ -27,8 +27,11 @@ import {
   wakeReason,
 } from './rows.js';
 import {
+  elsewhereLine,
+  folderSeat,
   launcherFilePath,
   readLauncherFile,
+  sameFolder,
   withExit,
   withLaunch,
   writeLauncherFile,
@@ -90,6 +93,8 @@ export interface LaunchDeps {
   watch?: (wake: LocalWake, seat: Seat) => Promise<WatchEnd>;
   /** Plans the launch (tests). */
   plan?: typeof planLaunch;
+  /** Working directory for the member-workspace check (ADR 717; tests). */
+  cwd?: string;
 }
 
 /** What a take-over adds to the launch: the wake's conversation, and why the session exists. */
@@ -111,16 +116,24 @@ export async function launchByName(
 ): Promise<number> {
   if (word.startsWith('-') && word !== '-') throw unknownCommand(word, null);
   const catalog = (deps.catalog ?? defaultCatalog)();
-  const file = readLauncherFile(launcherFilePath(deps.env ?? process.env));
-  const res = resolveSeatWord(word, catalog.seats, file.last);
-  if (res.kind === 'none') {
+  const env = deps.env ?? process.env;
+  const file = readLauncherFile(launcherFilePath(env));
+  const found = resolveSeatWord(word, catalog.seats, file.last);
+  const scope = folderSeat(deps.cwd ?? process.cwd(), env);
+  if (found.kind === 'none') {
     if (word === '-') throw new CliError('no seat launched yet — run `musterd` to pick one', 2);
     // ADR 503: a team member with no Workspace here follows the same `can` rule as the picker row.
     const away = (file.snapshot?.members ?? []).filter(
       (m) => m.address === null && m.member === word,
     );
-    if (away.length === 1) return actOnMember(away[0]!, catalog.seats, deps);
-    throw unknownCommand(word, res.nearest);
+    if (away.length === 1) {
+      const entry = away[0]!;
+      if (scope && (entry.team !== scope.team || entry.member !== scope.member)) {
+        throw new CliError(elsewhereLine(scope.member, entry.member, null), 1);
+      }
+      return actOnMember(entry, catalog.seats, deps);
+    }
+    throw unknownCommand(word, found.nearest);
   }
   const mode =
     parsed.positionals.includes('-r') || parsed.flags['resume'] !== undefined ? 'resume' : 'fresh';
@@ -131,35 +144,61 @@ export async function launchByName(
     ...(parsed.flags['take-over'] === true ? { takeOver: true } : {}),
     ...(parsed.flags['watch'] === true ? { watch: true } : {}),
   };
-  if (res.kind === 'ambiguous') {
-    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
-    // `--path` prints a folder: the picker launches, so an ambiguous `--path` names the candidates.
-    if (isTTY && parsed.flags['path'] === undefined) {
-      const open =
-        deps.picker ?? (async (o: PickerOpenOptions) => (await import('./index.js')).openPicker(o));
-      return open({ query: word, defaults: opts });
+  let seat: Seat;
+  if (found.kind === 'ambiguous') {
+    const mine = scope ? found.candidates.filter((s) => sameFolder(scope, s)) : [];
+    if (mine.length === 1) {
+      seat = mine[0]!;
+    } else if (scope && mine.length === 0 && parsed.flags['path'] === undefined) {
+      const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+      if (isTTY) {
+        throw new CliError(
+          found.candidates.map((s) => elsewhereLine(scope.member, s.member, s.path)).join('\n'),
+          1,
+        );
+      }
+      throw ambiguousSeats(word, found.candidates);
+    } else {
+      const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+      // `--path` prints a folder: the picker launches, so an ambiguous `--path` names the candidates.
+      if (isTTY && parsed.flags['path'] === undefined) {
+        const open =
+          deps.picker ??
+          (async (o: PickerOpenOptions) => (await import('./index.js')).openPicker(o));
+        return open({ query: word, defaults: opts });
+      }
+      throw ambiguousSeats(word, found.candidates);
     }
-    throw new CliError(
-      `"${word}" matches ${res.candidates.length} seats — name one:\n` +
-        res.candidates.map((s) => `  musterd ${s.address}`).join('\n'),
-      2,
-    );
+  } else {
+    seat = found.seat;
   }
   if (parsed.flags['path'] !== undefined) {
-    (deps.out ?? ((s: string) => void process.stdout.write(s)))(`${res.seat.path}\n`);
+    (deps.out ?? ((s: string) => void process.stdout.write(s)))(`${seat.path}\n`);
     return 0;
+  }
+  // ADR 717: this folder starts only its own member. `--path` already returned above.
+  if (scope && !sameFolder(scope, seat)) {
+    throw new CliError(elsewhereLine(scope.member, seat.member, seat.path), 1);
   }
   // ADR 503 Decision 2: the same rule as the picker row — a folder here whose seat is resident on
   // another node is not launched from here; moving it is the guide's ceremony, never a side effect.
   const resident = (file.snapshot?.members ?? []).find(
     (m) =>
-      m.team === res.seat.team &&
-      m.member === res.seat.member &&
+      m.team === seat.team &&
+      m.member === seat.member &&
       m.can === 'none' &&
       (m.where === 'node' || m.where === 'cloud'),
   );
-  if (resident) throw new CliError(`${res.seat.address} is ${describeMove(resident)}`, 1);
-  return launchSeat(res.seat, opts, deps);
+  if (resident) throw new CliError(`${seat.address} is ${describeMove(resident)}`, 1);
+  return launchSeat(seat, opts, deps);
+}
+
+function ambiguousSeats(word: string, candidates: readonly Seat[]): CliError {
+  return new CliError(
+    `"${word}" matches ${candidates.length} seats — name one:\n` +
+      candidates.map((s) => `  musterd ${s.address}`).join('\n'),
+    2,
+  );
 }
 
 /** Live check → plan → record → supervise → record → receipt. Shared by the name path and the picker. */

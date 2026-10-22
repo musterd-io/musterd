@@ -18,6 +18,9 @@ describe('openPicker (ADR 491)', () => {
       const code = await openPicker({
         env: { MUSTERD_CONFIG: join(dir, 'config.json'), MUSTERD_PAINT_PROBE: '1' },
         home: dir,
+        // The temp dir is not a member workspace. Without this, the probe walks up to this
+        // checkout and paints that member's harness step.
+        cwd: dir,
       });
       expect(code).toBe(0);
       expect(String(out.mock.calls[0]?.[0])).toContain('musterd');

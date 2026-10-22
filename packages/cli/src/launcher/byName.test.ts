@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { launchByName, launchSeat, type LaunchDeps } from './byName.js';
 import type { Catalog } from './catalog.js';
-import type { Seat } from './store.js';
+import { elsewhereLine, type Seat } from './store.js';
 
 let dir: string;
 let env: NodeJS.ProcessEnv;
@@ -52,6 +52,9 @@ function deps(over: Partial<LaunchDeps> = {}) {
     out: (s) => out.push(s),
     err: (s) => err.push(s),
     env,
+    // The temp dir is not a member workspace. Without this, folderSeat(process.cwd())
+    // walks up to this checkout and scopes every name in the suite.
+    cwd: dir,
     now: () => 10_000,
     ...over,
   };
@@ -540,5 +543,177 @@ describe('`musterd <seat>` for a folder here whose seat lives elsewhere (ADR 503
         'revive/agents/stanley is resident on air-2 — move it: musterd residency off + node unbind there',
     });
     expect(supervise).not.toHaveBeenCalled();
+  });
+});
+
+describe('launchByName inside a member workspace (ADR 717)', () => {
+  function claim(root: string, name: string, mode = 'seat'): void {
+    mkdirSync(join(root, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(root, '.musterd', 'workspace.json'),
+      JSON.stringify({
+        version: 2,
+        server: 'http://127.0.0.1:4849',
+        team: 'revive',
+        claim: { mode, name },
+      }),
+    );
+  }
+
+  it('starts this member, refuses another, and still prints --path', async () => {
+    const ghostRoot = join(dir, 'ghost');
+    const stanleyRoot = join(dir, 'stanley');
+    mkdirSync(ghostRoot);
+    mkdirSync(stanleyRoot);
+    claim(ghostRoot, 'ghost');
+    const ghost = seat('revive/agents/ghost', { path: ghostRoot, member: 'ghost' });
+    const stanley = seat('revive/agents/stanley', { path: stanleyRoot });
+    const { d, out, supervise } = deps({
+      cwd: ghostRoot,
+      catalog: catalog(ghost, stanley),
+    });
+    await expect(launchByName('stanley', parseArgs([]), d)).rejects.toMatchObject({
+      exitCode: 1,
+      message: elsewhereLine('ghost', 'stanley', stanleyRoot),
+    });
+    expect(supervise).not.toHaveBeenCalled();
+    expect(await launchByName('stanley', parseArgs(['--path']), d)).toBe(0);
+    expect(out).toEqual([`${stanleyRoot}\n`]);
+    expect(await launchByName('ghost', parseArgs([]), d)).toBe(0);
+    expect(supervise).toHaveBeenCalledWith(expect.objectContaining({ cwd: ghostRoot }));
+
+    const sub = join(ghostRoot, 'src');
+    mkdirSync(sub);
+    await expect(launchByName('stanley', parseArgs([]), { ...d, cwd: sub })).rejects.toMatchObject({
+      exitCode: 1,
+      message: elsewhereLine('ghost', 'stanley', stanleyRoot),
+    });
+  });
+
+  it('a chat claim does not scope, and a broken workspace file stops the walk', async () => {
+    const room = join(dir, 'room');
+    claim(room, 'ghost', 'chat');
+    const { d, supervise } = deps({ cwd: room });
+    expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+    expect(supervise).toHaveBeenCalled();
+
+    const parent = join(dir, 'ghost');
+    const child = join(parent, 'nested');
+    claim(parent, 'ghost');
+    mkdirSync(join(child, '.musterd'), { recursive: true });
+    writeFileSync(join(child, '.musterd', 'workspace.json'), 'not json');
+    const again = deps({ cwd: child });
+    expect(await launchByName('stanley', parseArgs([]), again.d)).toBe(0);
+  });
+
+  it('a binding outside the tree does not scope, and one inside it does without echoing the file', async () => {
+    const outside = join(dir, 'aside', '.musterd', 'binding.json');
+    mkdirSync(join(dir, 'aside', '.musterd'), { recursive: true });
+    writeFileSync(
+      outside,
+      JSON.stringify({
+        team: 'revive',
+        claim: { mode: 'seat', name: 'ghost' },
+        note: 'LEAKED-BINDING-BODY',
+      }),
+    );
+    const loose = deps({
+      cwd: dir,
+      env: { ...env, MUSTERD_BINDING: outside },
+    });
+    expect(await launchByName('stanley', parseArgs([]), loose.d)).toBe(0);
+
+    const root = join(dir, 'ghost');
+    const binding = join(root, '.musterd', 'binding.json');
+    mkdirSync(join(root, '.musterd'), { recursive: true });
+    writeFileSync(
+      binding,
+      JSON.stringify({
+        team: 'revive',
+        claim: { mode: 'seat', name: 'ghost' },
+        note: 'LEAKED-BINDING-BODY',
+      }),
+    );
+    const stanleyRoot = join(dir, 'stanley');
+    mkdirSync(stanleyRoot);
+    const held = deps({
+      cwd: root,
+      env: { ...env, MUSTERD_BINDING: binding },
+      catalog: catalog(seat('revive/agents/stanley', { path: stanleyRoot })),
+    });
+    await expect(launchByName('stanley', parseArgs([]), held.d)).rejects.toSatisfy((err: Error) => {
+      expect(err.message).toBe(elsewhereLine('ghost', 'stanley', stanleyRoot));
+      expect(err.message).not.toContain('LEAKED-BINDING-BODY');
+      return true;
+    });
+  });
+
+  it('`-` refuses when the last seat is not this member', async () => {
+    const ghostRoot = join(dir, 'ghost');
+    const stanleyRoot = join(dir, 'stanley');
+    mkdirSync(stanleyRoot);
+    claim(ghostRoot, 'ghost');
+    const { d } = deps({
+      catalog: catalog(
+        seat('revive/agents/ghost', { path: ghostRoot, member: 'ghost' }),
+        seat('revive/agents/stanley', { path: stanleyRoot }),
+      ),
+    });
+    expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+    await expect(launchByName('-', parseArgs([]), { ...d, cwd: ghostRoot })).rejects.toMatchObject({
+      exitCode: 1,
+      message: elsewhereLine('ghost', 'stanley', stanleyRoot),
+    });
+  });
+
+  it('an ambiguous name on a TTY refuses every candidate that is not this folder', async () => {
+    const ghostRoot = join(dir, 'ghost');
+    claim(ghostRoot, 'ghost');
+    const picker = vi.fn(async () => 0);
+    const a = join(dir, 'miley-a');
+    const b = join(dir, 'miley-b');
+    const { d } = deps({
+      isTTY: true,
+      picker,
+      cwd: ghostRoot,
+      catalog: catalog(
+        seat('revive/agents/miley', { path: a }),
+        seat('revive/site/miley', { path: b, project: 'site' }),
+      ),
+    });
+    await expect(launchByName('miley', parseArgs([]), d)).rejects.toMatchObject({
+      exitCode: 1,
+      message: [elsewhereLine('ghost', 'miley', a), elsewhereLine('ghost', 'miley', b)].join('\n'),
+    });
+    expect(picker).not.toHaveBeenCalled();
+    await expect(launchByName('miley', parseArgs(['--path']), d)).rejects.toMatchObject({
+      exitCode: 2,
+    });
+    const quiet = deps({
+      cwd: ghostRoot,
+      catalog: catalog(
+        seat('revive/agents/miley', { path: a }),
+        seat('revive/site/miley', { path: b, project: 'site' }),
+      ),
+    });
+    await expect(launchByName('miley', parseArgs([]), quiet.d)).rejects.toMatchObject({
+      exitCode: 2,
+    });
+  });
+
+  it('an ambiguous name launches the one candidate that is this folder', async () => {
+    const mileyRoot = join(dir, 'miley');
+    mkdirSync(mileyRoot);
+    claim(mileyRoot, 'miley');
+    const other = join(dir, 'miley-other');
+    const { d, supervise } = deps({
+      cwd: mileyRoot,
+      catalog: catalog(
+        seat('revive/agents/miley', { path: mileyRoot }),
+        seat('revive/site/miley', { path: other, project: 'site' }),
+      ),
+    });
+    expect(await launchByName('miley', parseArgs([]), d)).toBe(0);
+    expect(supervise).toHaveBeenCalledWith(expect.objectContaining({ cwd: mileyRoot }));
   });
 });

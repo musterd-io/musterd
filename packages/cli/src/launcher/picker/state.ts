@@ -2,7 +2,11 @@ import { rankSeats } from '../fuzzy.js';
 import { chooseHarness, LAUNCHABLE_HARNESSES } from '../labels.js';
 import type { Live } from '../live.js';
 import {
+  elsewhereLine,
   lastUsedAt,
+  sameFolder,
+  seatInFolder,
+  type FolderScope,
   type LauncherFile,
   type MemberEntry,
   type Seat,
@@ -76,7 +80,22 @@ export interface PickerState {
    * The harness step: an agent seat's configured harnesses, shown even when there is one, and
    * launched only on an explicit pick (nick, 2026-10-01).
    */
-  choose: { seat: Seat; mode: 'fresh' | 'resume'; options: string[]; index: number } | null;
+  choose: {
+    seat: Seat;
+    mode: 'fresh' | 'resume';
+    options: string[];
+    index: number;
+    /** ADR 717: the extra row that rewrites this workspace's harness set. Unscoped steps omit it. */
+    change: boolean;
+  } | null;
+  /** The member workspace this picker was opened from (ADR 717). Null keeps ADR 491. */
+  scope: FolderScope | null;
+  /** One line after a refused start. The next key clears it. */
+  notice: string | null;
+  /** True until the first key, so a late catalog can still open this folder's harness step. */
+  held: boolean;
+  /** After a harness-set change, the id to land on once the catalog lists it. */
+  prefer: string | null;
   /** `wake`: the live Presence is a wake on this machine, so the question is take over / watch
    *  (ADR 546) instead of "open a second session?". */
   confirm: { seat: Seat; mode: 'fresh' | 'resume'; wake: boolean } | null;
@@ -108,12 +127,19 @@ export type PickerOutcome =
   | { kind: 'quit'; code: number }
   | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] }
   /** ⏎ on a `wake` row: ring the seat's doorbell — an ordinary steer (ADR 503 Decision 2). */
-  | { kind: 'wake'; entry: MemberEntry };
+  | { kind: 'wake'; entry: MemberEntry }
+  /** ⏎ on "change harnesses": run this workspace's configure, then return to the step (ADR 717). */
+  | { kind: 'configure'; seat: Seat };
 
 type Step = { state: PickerState; outcome: PickerOutcome | null };
 
-export function initialState(file: LauncherFile, query: string, now: number): PickerState {
-  return {
+export function initialState(
+  file: LauncherFile,
+  query: string,
+  now: number,
+  scope: FolderScope | null = null,
+): PickerState {
+  const base: PickerState = {
     seats: file.snapshot?.seats ?? [],
     teams: file.snapshot?.teams ?? [],
     stale: 0,
@@ -133,7 +159,19 @@ export function initialState(file: LauncherFile, query: string, now: number): Pi
     members: groupByTeam(file.snapshot?.members ?? []),
     create: null,
     now,
+    scope,
+    notice: null,
+    held: scope !== null,
+    prefer: null,
   };
+  if (!scope) return base;
+  const seat = seatInFolder(base.seats, scope);
+  if (!seat) return base;
+  if (seat.kind === 'human') {
+    const at = cursorFor(base, seat);
+    return at < 0 ? base : clamp(base, at);
+  }
+  return { ...base, choose: harnessChoice(base, seat, 'fresh', true) };
 }
 
 const seatRow = (seat: Seat, showAddress: boolean): Row => ({ kind: 'seat', seat, showAddress });
@@ -290,6 +328,8 @@ function pop(s: PickerState): PickerState {
 
 function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
   const row = selectableRows(s)[s.cursor];
+  const refused = scopeRefusal(s, row);
+  if (refused) return { state: { ...s, notice: refused }, outcome: null };
   if (mode === 'fresh' && row?.kind === 'member') {
     // The `can` table (ADR 503 Decision 2): set up only a seat that lives nowhere; wake one that
     // lives elsewhere when it is yours to wake; otherwise the row only says where it is.
@@ -319,11 +359,11 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
       return { state: s, outcome: null };
     // An agent seat always goes through the harness step; a human seat gets a login shell.
     if (row.seat.kind !== 'human') {
-      const configured = row.seat.harnesses.filter((h) => h !== 'musterd');
-      const current = shownHarness(s, row.seat)!;
-      const options = configured.length ? configured : [current];
-      const index = Math.max(0, options.indexOf(current));
-      return { state: { ...s, choose: { seat: row.seat, mode, options, index } }, outcome: null };
+      const change = s.scope !== null && sameFolder(s.scope, row.seat);
+      return {
+        state: { ...s, choose: harnessChoice(s, row.seat, mode, change) },
+        outcome: null,
+      };
     }
     return launchOrConfirm(s, row.seat, mode);
   }
@@ -356,13 +396,17 @@ function launchOrConfirm(s: PickerState, seat: Seat, mode: 'fresh' | 'resume'): 
 /** Keys in the harness step: ↑↓ choose, ⏎ launches the chosen one, esc goes back to the list. */
 function onChooseKey(s: PickerState, c: NonNullable<PickerState['choose']>, key: Key): Step {
   const set = (choose: PickerState['choose']): Step => ({ state: { ...s, choose }, outcome: null });
-  const n = c.options.length;
+  const span = c.options.length + (c.change ? 1 : 0);
   if (key.name === 'escape' || key.name === 'left') return set(null);
+  if (span === 0) return set(c);
   if (key.name === 'up' || (key.ctrl && key.name === 'p'))
-    return set({ ...c, index: (c.index - 1 + n) % n });
+    return set({ ...c, index: (c.index - 1 + span) % span });
   if (key.name === 'down' || key.name === 'tab' || (key.ctrl && key.name === 'n'))
-    return set({ ...c, index: (c.index + 1) % n });
+    return set({ ...c, index: (c.index + 1) % span });
   if (key.name === 'return') {
+    if (c.change && c.index === c.options.length) {
+      return { state: { ...s, choose: null }, outcome: { kind: 'configure', seat: c.seat } };
+    }
     const picked = {
       ...s,
       choose: null,
@@ -371,6 +415,70 @@ function onChooseKey(s: PickerState, c: NonNullable<PickerState['choose']>, key:
     return launchOrConfirm(picked, c.seat, c.mode);
   }
   return set(c);
+}
+
+/** One line when this folder may not start that row. Null means the row proceeds. */
+function scopeRefusal(s: PickerState, row: Row | undefined): string | null {
+  const scope = s.scope;
+  if (!scope || !row) return null;
+  if (row.kind === 'seat' && !sameFolder(scope, row.seat))
+    return elsewhereLine(scope.member, row.seat.member, row.seat.path);
+  if (row.kind === 'member' && (row.entry.team !== scope.team || row.entry.member !== scope.member))
+    return elsewhereLine(scope.member, row.entry.member, null);
+  if (row.kind === 'new-seat')
+    return `this folder is ${scope.member} — a new seat starts from a folder that is not a member workspace`;
+  return null;
+}
+
+function harnessChoice(
+  s: PickerState,
+  seat: Seat,
+  mode: 'fresh' | 'resume',
+  change: boolean,
+): NonNullable<PickerState['choose']> {
+  const configured = seat.harnesses.filter((h) => h !== 'musterd');
+  const current = shownHarness(s, seat) ?? configured[0] ?? 'claude-code';
+  const options = configured.length ? configured : [current];
+  let index = Math.max(0, options.indexOf(current));
+  if (s.prefer) {
+    const at = options.indexOf(s.prefer);
+    if (at >= 0) index = at;
+  }
+  return { seat, mode, options, index, change };
+}
+
+function cursorFor(s: PickerState, seat: Seat): number {
+  return selectableRows(s).findIndex((r) => r.kind === 'seat' && r.seat.address === seat.address);
+}
+
+/** Keep the highlighted harness across a catalog refresh, or land on `prefer` while it is set. */
+function refreshedChoose(
+  s: PickerState,
+  seats: readonly Seat[],
+): NonNullable<PickerState['choose']> {
+  const prev = s.choose!;
+  const fresh = seats.find((x) => x.address === prev.seat.address) ?? prev.seat;
+  const configured = fresh.harnesses.filter((h) => h !== 'musterd');
+  const options = configured.length
+    ? configured
+    : prev.options.length
+      ? prev.options
+      : ['claude-code'];
+  const preferred = s.prefer ? options.indexOf(s.prefer) : -1;
+  let index = preferred >= 0 ? preferred : keptIndex(prev, options);
+  if (!prev.change && index >= options.length) index = Math.max(0, options.length - 1);
+  if (prev.change && index > options.length) index = options.length;
+  return { ...prev, seat: fresh, options, index };
+}
+
+function keptIndex(prev: NonNullable<PickerState['choose']>, options: string[]): number {
+  if (prev.change && prev.index >= prev.options.length) return options.length;
+  const id = prev.options[prev.index];
+  if (id) {
+    const at = options.indexOf(id);
+    if (at >= 0) return at;
+  }
+  return Math.min(prev.index, Math.max(0, options.length - 1));
 }
 
 /**
@@ -395,9 +503,12 @@ function cycleHarness(s: PickerState): PickerState {
   return { ...s, harness: { ...s.harness, [row.seat.address]: next } };
 }
 
-function onKey(s: PickerState, key: Key): Step {
+function onKey(s0: PickerState, key: Key): Step {
   const none = (state: PickerState): Step => ({ state, outcome: null });
-  if (key.ctrl && key.name === 'c') return { state: s, outcome: { kind: 'quit', code: 130 } };
+  if (key.ctrl && key.name === 'c') return { state: s0, outcome: { kind: 'quit', code: 130 } };
+  // The key that sets a notice keeps it; this clear is what the next key does. `held` drops so a
+  // catalog that arrives after the person has started moving does not reopen the harness step.
+  const s: PickerState = { ...s0, held: false, notice: null, prefer: null };
   if (s.create) return onCreateKey(s, s.create, key);
   if (s.choose) return onChooseKey(s, s.choose, key);
   if (s.confirm?.wake) {
@@ -467,7 +578,7 @@ function onKey(s: PickerState, key: Key): Step {
 export function reduce(s: PickerState, e: PickerEvent): Step {
   if (e.type === 'catalog') {
     const keep = identity(selectableRows(s)[s.cursor]);
-    const next: PickerState = {
+    let next: PickerState = {
       ...s,
       seats: e.seats,
       teams: e.teams,
@@ -475,8 +586,20 @@ export function reduce(s: PickerState, e: PickerEvent): Step {
       scanning: false,
       now: e.now,
     };
+    let pinHuman: Seat | null = null;
+    if (next.choose) next = { ...next, choose: refreshedChoose(next, e.seats) };
+    else if (next.held && next.scope) {
+      const seat = seatInFolder(e.seats, next.scope);
+      if (seat?.kind === 'human') pinHuman = seat;
+      else if (seat) next = { ...next, choose: harnessChoice(next, seat, 'fresh', true) };
+    }
     const at = selectableRows(next).findIndex((r) => identity(r) === keep);
-    return { state: clamp(next, at === -1 ? s.cursor : at), outcome: null };
+    next = clamp(next, at === -1 ? s.cursor : at);
+    if (pinHuman) {
+      const hit = cursorFor(next, pinHuman);
+      if (hit >= 0) next = clamp(next, hit);
+    }
+    return { state: next, outcome: null };
   }
   if (e.type === 'live')
     return {
