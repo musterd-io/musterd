@@ -5,8 +5,10 @@
 > and no model spend.
 > **Result:** on `core`, musterd's coordination still costs about **$7.8 of $17.29**, but very little
 > of it is polling any more. Three things remain. **(1)** A held-file refusal tells the agent to
-> *ask* first, and agents do: over all 20 pairs, after every one of the 29 held refusals the refused agent
-> messaged or asked the holder, and none used the one-call `until_lane` wait. **(2)** CooperBench's own protocol messages (plan at the start, "Done"
+> *ask* first, and agents do. Over all 20 pairs, after every one of the 29 refusals for a held file
+> (16 on `core`, 13 on the new ten), the refused agent messaged or asked the holder, and none used
+> the one-call `until_lane` wait. The gate's 21 other `denied` rows are a different refusal: a file
+> no lane of theirs covers (ADR 150), not a hold. **(2)** CooperBench's own protocol messages (plan at the start, "Done"
 > at the end) and musterd's status updates are about $2.2, and are mostly instructed. **(3)** State
 > signals ("pushed", "you can edit now") fell from $1.22 to $0.69. That was finding 019's C, and the
 > fixes already took about 40% of it.
@@ -76,18 +78,52 @@ long wait is several calls. Each one costs about $0.018.
 - **Status updates are musterd's own instruction** ("report status as you work"). In a two-seat team
   where the partner is messaged directly, the start and finish updates mostly repeat the direct message.
   At $0.94 they are worth knowing about, and not worth a product change for a two-agent case.
-- **State signals are what fix C was for**, and the fixes already took about 40% of their cost. The rest
-  are mostly "pushed to `team/agent2`" and "merged, `patch.txt` ready". A lane that resolves with its
-  branch (ADR 697, fix C) carries the first. The second is the protocol's "Done".
+- **State signals are what fix C was for**, and the fixes already took about 40% of their cost. They
+  are split by kind below.
+
+### State signals by kind, and what already carries each
+
+Calls that 019's `is_signal` marks, split by a second keyword pass (`residue/sends.py`, first match
+wins, in the row order below). Each cell is calls and dollars.
+
+| Kind | `core` | New ten |
+| --- | --- | --- |
+| Pushed / fetch ("pushed to `team/agent2`") | 10, $0.20 | 14, $0.32 |
+| Merged / complete / submitted | 16, $0.34 | 8, $0.19 |
+| Lane done / you can edit | 4, $0.08 | 8, $0.18 |
+| Waiting / ETA | 2, $0.04 | 2, $0.04 |
+| Thanks / ack | 1, $0.02 | none |
+| Other | 1, $0.01 | 3, $0.05 |
+| **All signals** | **34, $0.69** | **35, $0.78** |
+| Run cost as run → with every signal call dropped (019's C counterfactual) | $17.29 → **$16.60** | $18.70 → **$17.92** |
+
+What already carries each kind, or the gap:
+
+- **Pushed / fetch: a gap.** musterd never sees a push. ADR 697 learns a lane's branch from the
+  agent's edits, and fix C hands that branch over when the lane resolves. A partner who pushes
+  mid-lane, so the other can build on it, has no product event to carry that, so a message is the
+  only way. This is the largest kind left.
+- **Merged / complete / submitted:** the lane's resolve carries "my part is done" (a team-wide
+  broadcast, and `until_lane` wakes on it). The rest is the protocol's closing "Done. I changed: …",
+  which is not musterd's to remove here.
+- **Lane done / you can edit:** carried. A lane resolving releases its hold, and
+  `team_inbox_check {wait, until_lane}` wakes the waiting partner with the holder's branch (fix C).
+  Agents sent these anyway because the held-file refusal sent them to ask (next section, fixed in
+  #3219).
+- **Waiting / ETA:** carried. The same `until_lane` wait replaces asking "ETA?", and the refusal now
+  names it.
+- **Thanks / ack:** no product state applies, and none should. At $0.02 it is not worth a change.
+- **Plan / scope:** CooperBench's protocol, step 1. Kept byte-identical across arms.
 
 ## The gap that is musterd's: a held file says "ask"
 
 | ADR 691 / 697 at the gate | Pilot 3 (10 pairs) | Claim run (20 pairs) |
 | --- | --- | --- |
-| Edits refused: file held | 25 | 50 |
+| Edits refused: file held (ADR 691) | 18 | **29** (16 `core`, 13 new) |
+| Edits refused: no lane of theirs covers the file (ADR 150, not a hold) | 7 | 21 |
 | Edits refused once: hand-over (ADR 697) | 7 | 19 |
 | Hand-over followed by a merge of the holder's branch before the next edit | 1 of 7 | **8 of 19 (42%)** |
-| What the refused agent did next | 9 messaged, 7 `request_help`, 2 retried | **25 messaged, 4 `request_help`** |
+| After a held refusal, the refused agent's next act (`readout.py`, one per held refusal) | 9 messaged, 7 `request_help`, 2 retried (of 18) | **25 messaged, 4 `request_help` (of 29)** |
 | …used `team_inbox_check {wait, until_lane}` | (did not exist) | **0** |
 
 The refusal text (`packages/server/src/protocol/gate.ts`, held case) reads:
@@ -108,11 +144,17 @@ hand-overs) still fails, at 42%. It is up from 1 of 7 in pilot 3.
    branch when the lane resolves (fix C). Keep "ask them to hand it off" as the second option. This
    costs nothing for a real team, and it is the one place where musterd's own words send an agent to
    message. It is a gate-text change, so it needs a lane, not a run. Re-measured on the next run:
-   messages after a held refusal, and `until_lane` use.
-2. **Not worth doing for this benchmark:** removing status updates or the protocol's plan/"Done"
+   messages after a held refusal, and `until_lane` use. _(Landed 2026-10-22 as #3219, lane
+   01M5JMN1X5.)_
+2. **The one signal kind no product state carries: "pushed".** A push mid-lane is invisible to
+   musterd, so agents announce it ($0.20 on `core`, $0.32 on the new ten). Carrying it would mean the
+   daemon seeing a lane's branch move (ADR 697 already records the branch from edits), and waking a
+   partner who waits on that lane. This is worth a design note before any lane: it is a new event,
+   not a wording change, and it is small money here.
+3. **Not worth doing for this benchmark:** removing status updates or the protocol's plan/"Done"
    messages (instructed, and the protocol must match the other arms); raising the 50 s wait cap
    (about $0.56 on `core`, and bounded by the harness's tool timeout).
-3. **The cost floor, honestly:** with the gate-text fix, the reachable saving is perhaps a further
+4. **The cost floor, honestly:** with the gate-text fix, the reachable saving is perhaps a further
    $0.5–1 on `core`, out of the $3.5 left above the team arm. musterd's remaining premium over
    CooperBench's own harness is mostly the lanes and gate doing their job (opening lanes, refusals,
    hand-overs), plus messages the benchmark's protocol requires.
