@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import {
   capEntries,
   clockPhrase,
@@ -7,12 +7,28 @@ import {
   firstSentence,
   SPARK_H,
   SPARK_W,
-  sparkline,
+  formatValue,
   STRIP_DAYS,
   stripDays,
   type ExperimentEntry,
   type ReadStatus,
 } from './experimentReads';
+
+/** The chart is drawn in its own chunk (lane 01M5GE8AX4): /live's first paint carries the list, and
+ *  the sparklines (their geometry, gradients and dots) arrive a moment after (ADR 183: lazy-loading is
+ *  what moves the initial budget). */
+const ExperimentSpark = lazy(() => import('./ExperimentSpark'));
+
+/** While the chart's chunk loads: the same box, already saying the number, so nothing shifts. */
+function SparkPending({ entry }: { entry: ExperimentEntry }) {
+  const last = entry.samples[entry.samples.length - 1]!;
+  return (
+    <span className={`lc-xp__spark${entry.status === 'read' ? ' is-read' : ''}`} title={entry.metric!.name}>
+      <span style={{ display: 'block', width: SPARK_W, height: SPARK_H }} aria-hidden="true" />
+      <span className="lc-xp__spark-latest">{formatValue(last.value, entry.metric!.unit)}</span>
+    </span>
+  );
+}
 
 /** An owner's avatar: the roster's colour for them and their initial. Null for a seat not on it. */
 export type AvatarOf = (seat: string) => { background: string; initial: string } | null;
@@ -58,7 +74,7 @@ export function Experiments({
   const changed = useStatusChanges(entries);
   const tick = useMinuteTick(now);
   if (still && entries.length === 0) return null;
-  const capped = capEntries(entries);
+  const capped = capEntries(entries, still);
   const shown = all && !still ? entries : capped;
   const more = entries.length - capped.length;
   const hover = still ? () => undefined : setHot;
@@ -138,7 +154,6 @@ function ExperimentRow({
   onToggleNote?: (() => void) | undefined;
 }) {
   const av = entry.owner ? avatarOf?.(entry.owner) : null;
-  const spark = sparkline(entry.metric, entry.samples);
   const link = still ? null : evidenceUrl(entry.evidence);
   return (
     <>
@@ -191,7 +206,15 @@ function ExperimentRow({
           </span>
         )}
       </span>
-      {spark && <Sparkline spark={spark} read={entry.status === 'read'} metricName={entry.metric!.name} />}
+      {entry.metric && entry.samples.length > 0 && (
+        <Suspense fallback={<SparkPending entry={entry} />}>
+          <ExperimentSpark
+            metric={entry.metric}
+            samples={entry.samples}
+            read={entry.status === 'read'}
+          />
+        </Suspense>
+      )}
     </>
   );
 }
@@ -201,40 +224,6 @@ function ExperimentRow({
  * rule, the latest value as the only number. Ink only until the read is in — a chart must not say
  * `met` before the rule does. Inline SVG, never a font glyph (the capturer has no emoji font).
  */
-function Sparkline({
-  spark,
-  read,
-  metricName,
-}: {
-  spark: NonNullable<ReturnType<typeof sparkline>>;
-  read: boolean;
-  metricName: string;
-}) {
-  return (
-    <span className={`lc-xp__spark${read ? ' is-read' : ''}`} title={metricName}>
-      <svg viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} width={SPARK_W} height={SPARK_H} aria-hidden="true">
-        {spark.baselineY !== null && (
-          <line className="lc-xp__spark-base" x1="0" x2={SPARK_W} y1={spark.baselineY} y2={spark.baselineY} />
-        )}
-        <line className="lc-xp__spark-target" x1="0" x2={SPARK_W} y1={spark.targetY} y2={spark.targetY} />
-        <path className="lc-xp__spark-line" d={spark.path} />
-        {/* ADR 701: today's point, live — it moves as the day's acts land. */}
-        {spark.now && <circle className="lc-xp__spark-now" cx={spark.now.x} cy={spark.now.y} r="2.5" />}
-      </svg>
-      <span
-        className={`lc-xp__spark-latest${spark.now ? ' is-live' : ''}`}
-        title={
-          spark.now
-            ? `today so far${spark.now.asOf ? `, as of ${new Date(spark.now.asOf).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`
-            : undefined
-        }
-      >
-        {spark.latest}
-        {spark.now && <span className="lc-xp__spark-live"> now</span>}
-      </span>
-    </span>
-  );
-}
 
 /** The tear-off leaf, desk-calendar small: the month on its band, the day under it, a tack at the
  *  top — and, once a read is in, its verdict stamped across it. Decoration over words the row

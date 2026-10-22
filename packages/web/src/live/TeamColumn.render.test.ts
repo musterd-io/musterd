@@ -223,8 +223,9 @@ describe('TeamColumn', () => {
       );
       const html = render({ roster: [m('ryder')], board, now: NOW });
       expect(html).toContain('met · 61% (target 60%, n 23)');
+      // The chart itself is a lazy chunk (ExperimentSpark, lane 01M5GE8AX4): a static render holds its
+      // place with the number, so the row never shows an empty slot.
       expect(html).toContain('lc-xp__spark is-read');
-      expect(html).toContain('lc-xp__spark-target');
       expect(html).toContain('lc-xp__spark-latest">61%');
       // Closed, the note is its first sentence; the evidence is a link because it is a URL.
       expect(html).toContain('“Ranked picks won.”');

@@ -195,8 +195,8 @@ export const SPARK_H = 16;
 /**
  * The sparkline's geometry (§6), pure: the series as an SVG path, the baseline and target as y
  * positions, the latest value formatted. The y-range is the min and max of {baseline, target,
- * samples} with 10% headroom, so the target is always in frame. Null below two samples — one point
- * is not a trend, and a chart with no metric is decoration.
+ * samples} with 10% headroom, so the target is always in frame. Null with no metric (a chart with no
+ * metric is decoration) or no sample; one sample draws a dot and the number, no line.
  */
 export function sparkline(
   metric: ExperimentMetric | null,
@@ -210,8 +210,20 @@ export function sparkline(
   latest: string;
   /** ADR 701: where today's live point sits, when the series ends on one. */
   now: { x: number; y: number; asOf: number | null } | null;
+  /** A lone sample that is not live: a still dot where the line would end. */
+  lone: { x: number; y: number } | null;
+  /** The soft fill under the line, down to the box's floor; '' with one sample. */
+  area: string;
+  /** Where the series ends, live or not: the dot every chart lands on. */
+  end: { x: number; y: number };
+  /** One sample: the first day of the series, so the number can say `day 1`. */
+  firstDay: boolean;
 } | null {
-  if (!metric || samples.length < 2) return null;
+  // One sample still says something (nick, 2026-10-21: a newly charted experiment showed nothing on
+  // its first day, not even the number): the number, and a dot at the right edge, where today sits —
+  // `now` and the breathing dot when it is today's live point, a still dot when it is a past day.
+  // No line: one point has no slope to draw.
+  if (!metric || samples.length === 0) return null;
   const values = samples.map((s) => s.value);
   const all = [...values, metric.target, ...(metric.baseline === null ? [] : [metric.baseline])];
   let lo = Math.min(...all);
@@ -220,16 +232,23 @@ export function sparkline(
   lo -= pad;
   hi += pad;
   const y = (v: number) => +(h - ((v - lo) / (hi - lo)) * h).toFixed(2);
-  const x = (i: number) => +((i / (samples.length - 1)) * w).toFixed(2);
-  const path = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)} ${y(v)}`).join(' ');
+  const x = (i: number) =>
+    samples.length === 1 ? w : +((i / (samples.length - 1)) * w).toFixed(2);
+  const path =
+    samples.length === 1 ? '' : values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)} ${y(v)}`).join(' ');
+  const last = samples[samples.length - 1]!;
   return {
     path,
     targetY: y(metric.target),
     baselineY: metric.baseline === null ? null : y(metric.baseline),
     latest: formatValue(values[values.length - 1]!, metric.unit),
-    now: samples[samples.length - 1]!.live
-      ? { x: x(samples.length - 1), y: y(values[values.length - 1]!), asOf: samples[samples.length - 1]!.asOf ?? null }
+    now: last.live
+      ? { x: x(samples.length - 1), y: y(values[values.length - 1]!), asOf: last.asOf ?? null }
       : null,
+    lone: samples.length === 1 && !last.live ? { x: w, y: y(values[0]!) } : null,
+    area: samples.length === 1 ? '' : `${path} L${w} ${h} L0 ${h} Z`,
+    end: { x: x(samples.length - 1), y: y(values[values.length - 1]!) },
+    firstDay: samples.length === 1,
   };
 }
 
@@ -446,9 +465,26 @@ export function clockPhrase(
 }
 
 /** The rows shown under the cap: every urgent row, then the rest up to `EXPERIMENTS_CAP`. */
-export function capEntries(entries: readonly ExperimentEntry[]): ExperimentEntry[] {
+export function capEntries(
+  entries: readonly ExperimentEntry[],
+  /** /broadcast: nobody can press "show all" on a stream, so a charted row (a metric with at least
+   *  one sample) takes a free slot before an uncharted one. Urgent rows still come first, and the
+   *  shown rows keep their group order. */
+  preferCharted = false,
+): ExperimentEntry[] {
   const urgent = entries.filter(isUrgent).length;
-  return entries.slice(0, Math.max(urgent, EXPERIMENTS_CAP));
+  const cap = Math.max(urgent, EXPERIMENTS_CAP);
+  if (!preferCharted || entries.length <= cap) return entries.slice(0, cap);
+  const charted = (e: ExperimentEntry) => e.metric !== null && e.samples.length > 0;
+  const rank = (e: ExperimentEntry) => (isUrgent(e) ? 0 : charted(e) ? 1 : 2);
+  const keep = new Set(
+    entries
+      .map((e, i) => ({ e, i }))
+      .sort((a, b) => rank(a.e) - rank(b.e) || a.i - b.i)
+      .slice(0, cap)
+      .map(({ e }) => e),
+  );
+  return entries.filter((e) => keep.has(e));
 }
 
 /** The head's count: the urgent statuses above 0, else the number of reads. */

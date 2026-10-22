@@ -1448,6 +1448,25 @@ to trim that is not the feature. A re-baseline would loosen.
 
 - Falsify: `pnpm perf:check` in CI reports total JS at or under 355,000 B with this change in.
 
+### 2026-10-21 — `initialJsGzipBytes` 149,250 → 149,350 B and `totalJsGzipBytes` 357,500 → 358,400 B: experiment charts from the first point (lane `01M5GE8AX4`)
+
+| Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
+| ---------- | ----------------------------- | ------------------- | -------------------------- |
+| initial JS | 149,103 B                     | 149,162 B (+59)     | RAISED 149,250 → 149,350 B |
+| total JS   | 356,992 B                     | 357,891 B (+899)    | RAISED 357,500 → 358,400 B |
+| live CSS   | 26,509 B                      | 26,604 B (+95)      | unchanged, 26,700 B        |
+
+A newly charted experiment showed nothing on its first day (`sparkline` was null below two samples).
+nick also asked for the charts to feel alive and to fit the SaaS frame. One sample now shows the
+number with `· day 1`, a dotted trail and the dot. Every chart has a soft fill and an end dot, and the
+stream's cap keeps charted rows. Built eagerly, initial JS was +416 B, so lazy-loading came first
+(ADR 183): the sparkline moved to its own chunk, `ExperimentSpark.tsx`, and the row shows the number
+while it loads. Initial fell to +59 B (the placeholder and the loader). Total is +899 B: the features
+plus the new chunk's overhead, which lazy-loading cannot reduce.
+
+- Falsify: `pnpm perf:check` in CI reports initial JS at or under 149,250 B and total JS at or under
+  357,500 B with this change in.
+
 ### 2026-10-21 — `totalJsGzipBytes` 357,000 → 357,500 B: the role icons, redrawn two-tone (lane `01M5GCMN2S`)
 
 | Budget     | main (local, built beside it) | This branch (local) | Ceiling                    |
