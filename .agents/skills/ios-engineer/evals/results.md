@@ -101,10 +101,10 @@ thing signed", in a response whose first line is a refusal. The pattern was froz
 before run 1 and is not edited retroactively; it is recorded here as a known-bad check
 to fix before the next run, with all outputs re-scored then.
 
-## What remains
+## Accepted
 
 - Steps 5 and 6 are recorded above (run 1 on 2026-10-21, run 2 the same day). cider
   holds `ios-engineer` and reads this skill from the repo.
-- Step 7 is open. wallow wrote the skill. The method asks a holder who did not write it;
-  this record names nick for that accept. Until then, `ios-engineer` stays out of the
-  CLI's built-in role skills.
+- Nick accepted it on 2026-10-22. wallow wrote the skill, so this is the step 7
+  accept the record named. The skill is eligible for the CLI's built-in role skills.
+  This record does not add it there.
