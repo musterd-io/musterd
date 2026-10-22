@@ -22,11 +22,13 @@ const hooksPath = () => join(cwd, '.grok', 'hooks', 'musterd.json');
 beforeEach(() => {
   origCwd = process.cwd();
   cwd = mkdtempSync(join(tmpdir(), 'musterd-grok-'));
+  process.env['MUSTERD_GROK_HOOKS_HOME'] = join(cwd, 'grok-user-hooks');
   process.chdir(cwd);
   cwd = process.cwd();
 });
 afterEach(() => {
   process.chdir(origCwd);
+  delete process.env['MUSTERD_GROK_HOOKS_HOME'];
   rmSync(cwd, { recursive: true, force: true });
 });
 
@@ -105,9 +107,14 @@ describe('grok hooks (Claude-parity set)', () => {
     };
     expect(file.hooks['Notification']?.[0]?.hooks[0]?.command).toContain('musterd inbox --waiting');
     const preCmds = (file.hooks['PreToolUse'] ?? []).flatMap((g) => g.hooks.map((h) => h.command));
-    expect(preCmds.some((c) => c.includes(INTERRUPT_MARKER))).toBe(true);
+    expect(preCmds.some((c) => c.includes(INTERRUPT_MARKER))).toBe(false);
     expect(preCmds.some((c) => c.includes(GATE_MARKER))).toBe(true);
-    expect(file.hooks['Stop']?.[0]?.hooks[0]?.command).toContain(STOP_MARKER);
+    expect(file.hooks['Stop']).toBeUndefined();
+    const globalFile = JSON.parse(
+      readFileSync(join(process.env['MUSTERD_GROK_HOOKS_HOME']!, 'musterd-interrupt.json'), 'utf8'),
+    ) as { hooks: Record<string, { hooks: { command: string }[] }[]> };
+    expect(globalFile.hooks['PreToolUse']?.[0]?.hooks[0]?.command).toContain(INTERRUPT_MARKER);
+    expect(globalFile.hooks['Stop']?.[0]?.hooks[0]?.command).toContain(STOP_MARKER);
     expect(file.hooks['SessionStart']?.[0]?.hooks[0]?.command).toContain('session start');
     expect(file.hooks['SessionEnd']?.[0]?.hooks[0]?.command).toContain('session end');
   });

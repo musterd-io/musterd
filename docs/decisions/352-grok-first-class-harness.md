@@ -85,7 +85,7 @@ Grok has a Claude-shaped hook table. Use every event Claude uses that Grok fires
 
 `refreshHooks` is declared, same contract as Claude (ADR 168).
 
-Global self-gating SessionStart lives in `~/.grok/hooks/musterd-sessionstart.json` with the same AGENTS.md `musterd:start` gate Claude uses — so a fresh clone that has the primer but no project hooks still gets the "run musterd init" path. This is the one intentional write outside the project tree, and it is the same exception Claude's `~/.claude/settings.json` SessionStart already is.
+Global self-gating SessionStart lives in `~/.grok/hooks/musterd-sessionstart.json` with the same AGENTS.md `musterd:start` gate Claude uses — so a fresh clone that has the primer but no project hooks still gets the "run musterd init" path. This is the one intentional write outside the project tree, and it is the same exception Claude's `~/.claude/settings.json` SessionStart already is. _(Amended 2026-10-22: the interrupt's PreToolUse and Stop commands are a second global file, `~/.grok/hooks/musterd-interrupt.json`. See ADR 718.)_
 
 Honest omissions (Grok does not expose the seam, so we do not fake it):
 

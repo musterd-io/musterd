@@ -57,6 +57,7 @@ No `list_sessions`, no `send_message`, no writing `updates.jsonl` or TTY stdin. 
 - `docs/wiki/driver-support-matrix.md` Grok hook-capture row is the observation, dated, with a falsifier.
 - Fail-open unchanged: missing `musterd`/`node`, a dead daemon, or a parse error prints nothing and exits 0.
 - _(2026-10-14.)_ Grok 1.0.52 delivers PostToolUse stdout. The native interrupt stays on PreToolUse. The second copy was Claude's hook file, which Grok was still scanning. [ADR 597](597-grok-stops-loading-claude-hooks.md) turns that scan off. This is not a move back onto PostToolUse.
+- _(2026-10-22.)_ The same two commands are installed in `~/.grok/hooks/musterd-interrupt.json`, not in `.grok/hooks/musterd.json`. Grok snapshots hooks before SessionStart, and that SessionStart is what creates the project file on a first session. A leftover project copy is drift. [ADR 718](718-grok-interrupt-on-the-global-hook.md). The scripts in Decision 1 and 2 are unchanged.
 
 ## Observability & Evaluation
 

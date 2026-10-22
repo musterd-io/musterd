@@ -40,7 +40,10 @@ import {
 
 /**
  * Grok CLI (ADR 352). Project-local `.grok/config.toml` for MCP + statusline + permission floor;
- * `.grok/hooks/musterd.json` for Claude-parity hooks. Never writes `~/.grok/config.toml`.
+ * `.grok/hooks/musterd.json` for notification, the gate, capture, and session end.
+ * The interrupt (PreToolUse additionalContext + Stop) lives in `~/.grok/hooks/musterd-interrupt.json`
+ * so it is already on disk when Grok snapshots hooks — the project file is often created during
+ * that session's own SessionStart (ADR 718). Never writes `~/.grok/config.toml`.
  * Cursor MCP compat stays on (other servers). Cursor and Claude *hook* compat are turned off
  * so inherited hooks do not double-fire or attest the wrong harness (ADR 352, ADR 597).
  */
@@ -67,8 +70,23 @@ function projectHooksPath(dir: string = process.cwd()): string {
 function globalConfigPath(): string {
   return join(homedir(), '.grok', 'config.toml');
 }
+
+/**
+ * Grok loads user hooks from `~/.grok/hooks`. Tests set `MUSTERD_GROK_HOOKS_HOME` so a run does
+ * not rewrite the machine's real hook files. The override is ignored outside Vitest.
+ */
+function grokUserHooksDir(): string {
+  const fromTest = process.env['MUSTERD_GROK_HOOKS_HOME'];
+  if (fromTest && process.env['VITEST'] === 'true') return fromTest;
+  return join(homedir(), '.grok', 'hooks');
+}
+
 function globalStartHookPath(): string {
-  return join(homedir(), '.grok', 'hooks', 'musterd-sessionstart.json');
+  return join(grokUserHooksDir(), 'musterd-sessionstart.json');
+}
+
+function globalInterruptHookPath(): string {
+  return join(grokUserHooksDir(), 'musterd-interrupt.json');
 }
 
 function readText(path: string): string | null {
@@ -154,6 +172,19 @@ export function grokInterruptStopCommand(): string {
   );
 }
 
+/** Same self-gate as the global SessionStart: silent outside a musterd folder. */
+function musterdFolderGate(): string {
+  return 'grep -q musterd:start AGENTS.md 2>/dev/null || grep -q musterd:start Agents.md 2>/dev/null || exit 0; ';
+}
+
+/**
+ * A decline is per workspace (ADR 332). The interrupt file is one copy for the machine, so the
+ * command exits 0 where this workspace's tombstone names the surface. Other workspaces keep it.
+ */
+function declinedSurfaceGate(surface: string): string {
+  return `grep -q '${surface}' .musterd/declined.json 2>/dev/null && exit 0; `;
+}
+
 interface GrokHookFile {
   hooks?: Record<
     string,
@@ -225,6 +256,32 @@ function dropJsonHook(path: string, event: string, marker: string): void {
   writeText(path, `${JSON.stringify(file, null, 2)}\n`);
 }
 
+const GLOBAL_INTERRUPT_HOOKS: readonly {
+  event: string;
+  marker: string;
+  command: string;
+  timeout: number;
+  missing: string;
+}[] = [
+  {
+    event: 'PreToolUse',
+    marker: INTERRUPT_MARKER,
+    command:
+      musterdFolderGate() + declinedSurfaceGate('grok:PreToolUse') + grokInterruptPreCommand(),
+    timeout: 10,
+    missing:
+      'the Grok PreToolUse interrupt hook is missing from ~/.grok/hooks/musterd-interrupt.json — a busy agent will not see urgent steering mid-loop, including the session that first writes the project hook file (ADR 370, ADR 718). Run `musterd init --refresh-hooks`.',
+  },
+  {
+    event: 'Stop',
+    marker: STOP_MARKER,
+    command: musterdFolderGate() + declinedSurfaceGate('grok:Stop') + grokInterruptStopCommand(),
+    timeout: 10,
+    missing:
+      'the Grok Stop interrupt hook is missing from ~/.grok/hooks/musterd-interrupt.json — an idle-at-turn-end agent will not see urgent steering (ADR 370, ADR 718). Run `musterd init --refresh-hooks`.',
+  },
+];
+
 const LOCAL_HOOKS: readonly {
   event: string;
   marker: string;
@@ -240,28 +297,12 @@ const LOCAL_HOOKS: readonly {
   },
   {
     event: 'PreToolUse',
-    marker: INTERRUPT_MARKER,
-    command: grokInterruptPreCommand(),
-    timeout: 10,
-    missing:
-      'the Grok PreToolUse interrupt hook is missing from .grok/hooks/musterd.json — a busy agent will not see urgent steering mid-loop (ADR 088/370). Run `musterd init --refresh-hooks`.',
-  },
-  {
-    event: 'PreToolUse',
     marker: GATE_MARKER,
     matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash|run_terminal_command|search_replace',
     command: cmd('gate check --stdin', GATE_MARKER, true),
     timeout: 10,
     missing:
       'the Grok PreToolUse enforcement-gate hook is missing from .grok/hooks/musterd.json — declared ADR 150 classes fail open here. Run `musterd init --refresh-hooks`.',
-  },
-  {
-    event: 'Stop',
-    marker: STOP_MARKER,
-    command: grokInterruptStopCommand(),
-    timeout: 10,
-    missing:
-      'the Grok Stop interrupt hook is missing from .grok/hooks/musterd.json — an idle-at-turn-end agent will not see urgent steering (ADR 370). Run `musterd init --refresh-hooks`.',
   },
   {
     event: 'SessionStart',
@@ -280,11 +321,24 @@ const LOCAL_HOOKS: readonly {
   },
 ];
 
+function installGlobalInterrupt(): string[] {
+  const path = globalInterruptHookPath();
+  const warnings: string[] = [];
+  for (const spec of GLOBAL_INTERRUPT_HOOKS) {
+    const w = upsertJsonHook(path, spec.event, spec.marker, spec.command, undefined, spec.timeout);
+    if (w) warnings.push(w);
+  }
+  return warnings;
+}
+
 export function installMusterdGrokHooks(dir: string = process.cwd()): string[] {
   const path = projectHooksPath(dir);
-  const warnings: string[] = [];
-  // ADR 370: interrupt moved off PostToolUse (stdout/JSON ignored on Grok 1.0.13).
+  const warnings: string[] = [...installGlobalInterrupt()];
+  // ADR 370: interrupt moved off PostToolUse. ADR 718: it also leaves the project file,
+  // or the next session loads both copies and the line arrives twice.
   dropJsonHook(path, 'PostToolUse', INTERRUPT_MARKER);
+  dropJsonHook(path, 'PreToolUse', INTERRUPT_MARKER);
+  dropJsonHook(path, 'Stop', STOP_MARKER);
   for (const spec of LOCAL_HOOKS) {
     if (isDeclined(dir, `${GROK_PREFIX}:${spec.event}`)) continue;
     const w = upsertJsonHook(
@@ -314,40 +368,48 @@ export function removeMusterdGrokHooks(dir: string = process.cwd()): void {
   const path = projectHooksPath(dir);
   if (!existsSync(path)) return;
   dropJsonHook(path, 'PostToolUse', INTERRUPT_MARKER);
+  dropJsonHook(path, 'PreToolUse', INTERRUPT_MARKER);
+  dropJsonHook(path, 'Stop', STOP_MARKER);
   for (const spec of LOCAL_HOOKS) dropJsonHook(path, spec.event, spec.marker);
 }
 
-export function inspectGrokHookDrift(cwd: string): string[] {
-  const path = projectHooksPath(cwd);
-  const file = readHooks(path);
-  if (!file) return [];
+function commandDrift(
+  cwd: string,
+  file: GrokHookFile,
+  specs: readonly { event: string; marker: string; command: string; missing?: string }[],
+  fileLabel: string,
+  missingRespectsDecline: boolean,
+): string[] {
   const drift: string[] = [];
-  for (const spec of LOCAL_HOOKS) {
+  for (const spec of specs) {
     const groups = file.hooks?.[spec.event] ?? [];
     const installed = groups
       .flatMap((g) => g.hooks.map((h) => h.command))
       .find((c) => c.includes(spec.marker));
     if (installed === undefined) {
-      // ADR 332, same as claude-code: only the MISSING branch consults the tombstone.
-      // A STALE hook is still installed, and refusing a surface was never a licence to leave a wrong one.
-      if (spec.missing && !isDeclined(cwd, `${GROK_PREFIX}:${spec.event}`)) {
+      // ADR 332: only the MISSING branch consults the tombstone, and only for a project file.
+      // A machine-wide hook missing is still drift when this workspace declined it: other
+      // workspaces read the same file. A STALE hook is never silenced by a tombstone.
+      if (
+        spec.missing &&
+        (!missingRespectsDecline || !isDeclined(cwd, `${GROK_PREFIX}:${spec.event}`))
+      ) {
         drift.push(spec.missing);
       }
       continue;
     }
-    // Present — but presence was never the question (ADR 168). Compare against what THIS build writes.
     if (installed !== spec.command) {
       const theirs = hookEpochOf(installed);
       if (theirs > FEATURE_EPOCH) {
         drift.push(
-          `the Grok ${spec.event} hook \`${spec.marker}\` in .grok/hooks/musterd.json was written ` +
+          `the Grok ${spec.event} hook \`${spec.marker}\` in ${fileLabel} was written ` +
             `by a NEWER musterd (epoch ${String(theirs)}) than this checkout (epoch ${String(FEATURE_EPOCH)}). ` +
             'The hook is fine — this checkout is behind. Update it (`git pull` + `pnpm build`); do NOT run ' +
             '`musterd init` here, which would downgrade the hook (ADR 168).',
         );
       } else {
         drift.push(
-          `the Grok ${spec.event} hook \`${spec.marker}\` in .grok/hooks/musterd.json was ` +
+          `the Grok ${spec.event} hook \`${spec.marker}\` in ${fileLabel} was ` +
             'written by a different musterd build and no longer matches this one — it is present but ' +
             'STALE, which no presence check can see (ADR 168). Run `musterd init --refresh-hooks` ' +
             'here to rewrite it.',
@@ -355,12 +417,46 @@ export function inspectGrokHookDrift(cwd: string): string[] {
       }
     }
   }
-  const leftoverPost = (file.hooks?.['PostToolUse'] ?? []).some((g) =>
-    g.hooks.some((h) => h.command.includes(INTERRUPT_MARKER)),
-  );
-  if (leftoverPost) {
-    drift.push(
+  return drift;
+}
+
+export function inspectGrokHookDrift(cwd: string): string[] {
+  const file = readHooks(projectHooksPath(cwd));
+  const drift: string[] = [];
+  if (file) {
+    drift.push(...commandDrift(cwd, file, LOCAL_HOOKS, '.grok/hooks/musterd.json', true));
+    const leftover = (event: string, marker: string, sentence: string) => {
+      const present = (file.hooks?.[event] ?? []).some((g) =>
+        g.hooks.some((h) => h.command.includes(marker)),
+      );
+      if (present) drift.push(sentence);
+    };
+    leftover(
+      'PostToolUse',
+      INTERRUPT_MARKER,
       'a leftover Grok PostToolUse interrupt hook is still installed — current Grok delivers that seam, so it doubles the PreToolUse line (ADR 370, ADR 597). Run `musterd init --refresh-hooks`.',
+    );
+    leftover(
+      'PreToolUse',
+      INTERRUPT_MARKER,
+      'a leftover Grok PreToolUse interrupt hook is still in .grok/hooks/musterd.json — the global hook already carries it, so the line would arrive twice (ADR 718). Run `musterd init --refresh-hooks`.',
+    );
+    leftover(
+      'Stop',
+      STOP_MARKER,
+      'a leftover Grok Stop interrupt hook is still in .grok/hooks/musterd.json — the global hook already carries it, so the line would arrive twice (ADR 718). Run `musterd init --refresh-hooks`.',
+    );
+  }
+  const globalFile = readHooks(globalInterruptHookPath());
+  if (globalFile) {
+    drift.push(
+      ...commandDrift(
+        cwd,
+        globalFile,
+        GLOBAL_INTERRUPT_HOOKS,
+        '~/.grok/hooks/musterd-interrupt.json',
+        false,
+      ),
     );
   }
   return drift;
@@ -529,11 +625,20 @@ export const grok: Harness = {
         writeText(projectConfigPath(dir), toml);
         if (sl.warning) warnings.push(sl.warning);
       }
-      return { files: [projectHooksPath(dir), projectConfigPath(dir)], warnings, skipped: [] };
+      return {
+        files: [
+          projectHooksPath(dir),
+          projectConfigPath(dir),
+          globalInterruptHookPath(),
+          globalStartHookPath(),
+        ],
+        warnings,
+        skipped: [],
+      };
     },
     surfaces: () => [
       SURFACE_STATUSLINE,
-      ...new Set(LOCAL_HOOKS.map((s) => `${GROK_PREFIX}:${s.event}`)),
+      ...new Set([...LOCAL_HOOKS.map((s) => `${GROK_PREFIX}:${s.event}`), `${GROK_PREFIX}:Stop`]),
     ],
   },
 
