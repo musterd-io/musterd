@@ -149,12 +149,39 @@ the ID pass also marks every mesh on a shoulder, elbow or wrist joint (the green
 own atlas a second time as `<layer>@arms` cells. `drawFigureFrame(part: 'arms')` draws only those,
 in the overlay slot over the desk slab, as the painter's `armsOnly` pass does.
 
-### Re-rendering part of the figure
+### Rendering the figure fast (lane 01M5GF82SB)
 
-`--clips g-sip,g-wave` renders only the named clips and takes every other clip's frames back out of
-the atlases on disk — a change to one beat is minutes, not the whole figure. `--only <layer>,…`
-does the same along the other axis (a hair style, a top). Change the body itself (`skin`) and
-every layer's holdout changes, so that one is the full render.
+Run the figure through the watchdog, not Blender directly:
+
+```sh
+python3 packages/web/art/office/render_watch.py -- \
+  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 2 --ky 0.31
+```
+
+- **Only what changed renders.** Each render call is keyed on what decides its pixels — the meshes
+  it shows (geometry, modifiers, materials, layer and arm tags) where the pose put them, which are
+  holdouts, the lights, the camera, the render settings and `FIG_PIPELINE` — and its cells are
+  saved under that key the moment it finishes, in `~/.cache/musterd/office-figure/calls/`
+  (`MUSTERD_FIG_CACHE` moves it; ~5 KB a call, ~100 MB for the whole figure). A call whose key is
+  there is not rendered. Measured 2026-10-21 on a three-clip test: first run 214 s, unchanged
+  re-run 2 s with byte-identical sheets; changing the one-handed hold re-rendered only that clip.
+  The frame's width is not in the key — the camera spans the height — so widening the frame
+  re-renders nothing; stored cells are placed from the frame's centre line. Bump `FIG_PIPELINE`
+  when what a render's pixels *become* changes (a mask threshold, the arm split); `--force`
+  ignores the store. The store is this machine's: a fresh machine renders everything once.
+- **A hang costs one call.** EEVEE on this laptop can hang on a GPU read (2026-10-21: stuck in
+  `MTLStorageBuf::read` at 0% CPU, 70% through a two-hour run that, writing only at the end, lost
+  all of it). `render_watch.py` restarts Blender after three quiet minutes, and the store resumes
+  the run where it stopped.
+- **Lit samples: 16**, down from 32. Side by side at the /live panel's and the 1080p broadcast's
+  scale the two were indistinguishable (~0.1% RMSE on three poses), and a lit render takes ~0.18 s
+  instead of ~0.32 s (2026-10-21; nick looked and agreed).
+- **Many layers per render call was measured and dropped.** One call rendering 23 view layers took
+  the same time as 23 calls (4.0 s against 4.0 s, warm, 2026-10-21): EEVEE renders each view layer
+  in full either way, and the per-call overhead it would save is small.
+
+`--clips` and `--only` are gone from the figure (`--only` still re-renders room assets): the store
+does what they did, without having to name what changed.
 
 ## Original art
 
