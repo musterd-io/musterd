@@ -1001,6 +1001,14 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS account_id TEXT');
     },
   },
+  {
+    // ADR 698, ryder's #3138 review: one console account binds at most one live member per
+    // team. The partial unique index is the race backstop under bindMemberAccount's atomic
+    // write-once UPDATE; departed members (left_at set) still hold their row, so the index
+    // covers every row — a rejoin is a new member row and must not steal the account either.
+    version: 127,
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS idx_members_team_account ON members(team_id, account_id) WHERE account_id IS NOT NULL',
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

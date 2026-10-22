@@ -93,5 +93,42 @@ withDrivers('members', (o) => {
       await expect(bindMemberAccount(db, row.id, 'acct_2')).rejects.toThrow();
       expect((await getMemberByName(db, team.id, 'nick'))!.account_id).toBe('acct_1');
     });
+
+    it('concurrent first binds of one member: exactly one account wins, the other is refused', async () => {
+      const { db, team } = await freshTeam();
+      const { row } = await addMember(db, team, { name: 'nick', kind: 'human' });
+      const results = await Promise.allSettled([
+        bindMemberAccount(db, row.id, 'acct_a'),
+        bindMemberAccount(db, row.id, 'acct_b'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      const winner = (await getMemberByName(db, team.id, 'nick'))!.account_id;
+      expect(['acct_a', 'acct_b']).toContain(winner);
+    });
+
+    it('refuses to bind an account already held by another live member of the team', async () => {
+      const { db, team } = await freshTeam();
+      const { row: ann } = await addMember(db, team, { name: 'ann', kind: 'human' });
+      const { row: bob } = await addMember(db, team, { name: 'bob', kind: 'human' });
+      await bindMemberAccount(db, ann.id, 'acct_1');
+      await expect(bindMemberAccount(db, bob.id, 'acct_1')).rejects.toThrow();
+      expect((await getMemberByName(db, team.id, 'bob'))!.account_id).toBeNull();
+      expect((await memberByAccount(db, team.id, 'acct_1'))!.id).toBe(ann.id);
+    });
+
+    it('concurrent binds of one account to two members: exactly one member wins', async () => {
+      const { db, team } = await freshTeam();
+      const { row: ann } = await addMember(db, team, { name: 'ann', kind: 'human' });
+      const { row: bob } = await addMember(db, team, { name: 'bob', kind: 'human' });
+      const results = await Promise.allSettled([
+        bindMemberAccount(db, ann.id, 'acct_1'),
+        bindMemberAccount(db, bob.id, 'acct_1'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      const holder = (await memberByAccount(db, team.id, 'acct_1'))!;
+      expect([ann.id, bob.id]).toContain(holder.id);
+    });
   });
 });

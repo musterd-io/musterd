@@ -480,11 +480,58 @@ export async function bindMemberAccount(
       'conflict',
       `member "${member.name}" is already bound to a different console account`,
     );
-  await db.run('UPDATE members SET account_id = ?, updated_at = ? WHERE id = ?', [
-    accountId,
-    Date.now(),
-    memberId,
-  ]);
+  const holder = await memberByAccount(db, member.team_id, accountId);
+  if (holder && holder.id !== memberId)
+    throw new MusterdError(
+      'conflict',
+      `console account is already bound to member "${holder.name}" on this team`,
+    );
+  // Atomic write-once: the IS NULL guard makes a concurrent first bind lose instead of
+  // re-pointing the member (ryder, #3138 review). The v127 unique index is the backstop
+  // for two members racing one account; its violation is classified below, not leaked raw.
+  let result: { changes: number };
+  try {
+    result = await db.run(
+      'UPDATE members SET account_id = ?, updated_at = ? WHERE id = ? AND account_id IS NULL',
+      [accountId, Date.now(), memberId],
+    );
+  } catch (err) {
+    if (isAccountBindingConflict(err))
+      throw new MusterdError(
+        'conflict',
+        'console account is already bound to another member on this team',
+      );
+    throw err;
+  }
+  if (result.changes === 1) return;
+  const after = await getMemberById(db, memberId);
+  if (after?.account_id === accountId) return;
+  throw new MusterdError(
+    'conflict',
+    `member "${member.name}" is already bound to a different console account`,
+  );
+}
+
+/** The v127 `idx_members_team_account` unique violation, and nothing else (cf. messages.ts). */
+function isAccountBindingConflict(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    const code = 'code' in current && typeof current.code === 'string' ? current.code : '';
+    const constraint =
+      'constraint' in current && typeof current.constraint === 'string' ? current.constraint : '';
+    if (code === '23505') {
+      if (constraint) return constraint === 'idx_members_team_account';
+      return /idx_members_team_account/.test(current.message);
+    }
+    // SQLite names the columns, not the index; this UPDATE touches only account_id, so a
+    // constraint failure here can only be the account index (cf. team+name, untouched).
+    if (code.startsWith('SQLITE_CONSTRAINT')) return true;
+    if (/UNIQUE constraint failed/.test(current.message)) return true;
+    current = current.cause;
+  }
+  return false;
 }
 
 /** The member of a team bound to a console account (ADR 698), if one has signed in yet. */
