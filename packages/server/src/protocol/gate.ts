@@ -146,10 +146,14 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
             `what you changed in it.`,
         };
       }
+      // The wait leads, with the call spelled out (finding 022): led by "ask them", every refused
+      // agent in the claim run messaged the holder and none waited on the lane in one call.
       const detail =
-        `'${path}' is held by ${holder.owner_seat} (lane "${holder.title}", named it first, since ${since}) — ` +
-        `ask them to hand it off or narrow their lane, wait for that lane to finish, or split the ` +
-        `work by handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
+        `'${path}' is held by ${holder.owner_seat} (lane ${holder.id} "${holder.title}", named it first, ` +
+        `since ${since}). Wait for that lane to finish in one call — team_inbox_check ` +
+        `{wait: 45, until_lane: "${holder.id}"} wakes when it resolves, with their branch — rather ` +
+        `than messaging them; or ask them to hand it off or narrow their lane; or split the work by ` +
+        `handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
       const hold = { state: 'held' as const, holder: holder.owner_seat! };
       await recordHoldRefusal(db, teamId, ctx.member.name, path, holder.owner_seat!, holder.id);
       if (ctx.req.posture === 'warn') {
