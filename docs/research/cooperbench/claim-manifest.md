@@ -1,6 +1,6 @@
 # CooperBench claim run: pre-registration
 
-**Lane:** `01M5GWBB17` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-22; not yet run.
+**Lane:** `01M5GWBB17` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-22; run 2026-10-22 (in two halves; see [run log](./pilot-runs/2026-10-22-claim/run.log)).
 Nothing below changes once a measured pair has run; what the run teaches goes in the
 finding, not here. **CooperBench:** `63b9d44`. **Before this:** [pilot 3](./pilot3-manifest.md) →
 [finding 017](../017-cooperbench-pilot-3.md), [solo reference](./solo-manifest.md) →

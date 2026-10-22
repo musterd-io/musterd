@@ -1,0 +1,3186 @@
+{
+ "arms": {
+  "claude_code_musterd": {
+   "pairs": 20,
+   "passed": 5,
+   "cause:None": 0,
+   "cause:task": 15
+  },
+  "claude_code": {
+   "pairs": 20,
+   "passed": 6,
+   "cause:None": 0,
+   "cause:coordination": 14
+  }
+ },
+ "pairs": [
+  {
+   "pair": "logs/claim-musterd-core/coop/dottxt_ai_outlines_task/1655/f1_f3",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    1,
+    3
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 95,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 87,
+    "tests_failed": 0
+   },
+   "cost": 1.2457259999999999,
+   "steps": 80,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/types/__init__.py"
+    ],
+    "agent2": [
+     "outlines/types/__init__.py"
+    ]
+   },
+   "common_files": [
+    "outlines/types/__init__.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JDV3D70Z0QYT9PYRWHSCSS",
+      "title": "Add octal_str type to outlines.types",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "outlines/types/__init__.py"
+      ],
+      "named": [
+       "outlines/types/__init__.py"
+      ],
+      "claimed_at": 1792693712433
+     },
+     {
+      "id": "01M5JDV5WR28D978NM04GSRV2N",
+      "title": "Add IPv4, UUID4, and Hex String types to regex DSL",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "outlines/types/__init__.py"
+      ],
+      "named": [
+       "outlines/types/__init__.py"
+      ],
+      "claimed_at": 1792693606295
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 8,
+     "status_update": 5,
+     "handoff": 1,
+     "accept": 1
+    },
+    "acts_directed": 7,
+    "gate": {
+     "allow:allowed": 2,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/dspy_task/8563/f1_f4",
+   "task": "dspy_task/8563",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 45,
+    "tests_failed": 5
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 59,
+    "tests_failed": 0
+   },
+   "cost": 1.6663621499999999,
+   "steps": 90,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/adapters/types/tool.py"
+    ],
+    "agent2": [
+     "dspy/adapters/types/tool.py"
+    ]
+   },
+   "common_files": [
+    "dspy/adapters/types/tool.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JDV3NBNT43ZHE09Q5M3Q0A",
+      "title": "Add deterministic fingerprinting to ToolCalls",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "named": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "claimed_at": 1792693768105
+     },
+     {
+      "id": "01M5JDV94HPT6VNC4YRH6KCC7X",
+      "title": "Add flexible parsing for dspy.ToolCalls",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "named": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "claimed_at": 1792693609617
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 7,
+     "status_update": 7,
+     "handoff": 2
+    },
+    "acts_directed": 5,
+    "gate": {
+     "allow:allowed": 3,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/go_chi_task/27/f3_f4",
+   "task": "go_chi_task/27",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 4,
+    "tests_failed": 0
+   },
+   "cost": 1.7167671000000002,
+   "steps": 115,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "mux.go"
+    ],
+    "agent2": [
+     "mux.go"
+    ]
+   },
+   "common_files": [
+    "mux.go"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JDVCG1PGXJ24Q7DMMRGPQ3",
+      "title": "Add debug logging for route pattern handling",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "mux.go"
+      ],
+      "named": [
+       "mux.go"
+      ],
+      "claimed_at": 1792693613056
+     },
+     {
+      "id": "01M5JDVKVTNK9MRG8WB6YN5QFK",
+      "title": "Add path prefix support in HTTP method patterns",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "mux.go"
+      ],
+      "named": [
+       "mux.go"
+      ],
+      "claimed_at": 1792693620602
+     }
+    ],
+    "named_common_files": [
+     "mux.go"
+    ],
+    "acts": {
+     "message": 11,
+     "status_update": 5,
+     "request_help": 1,
+     "handoff": 1,
+     "accept": 1
+    },
+    "acts_directed": 10,
+    "gate": {
+     "allow:allowed": 5,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/llama_index_task/17244/f5_f6",
+   "task": "llama_index_task/17244",
+   "features": [
+    5,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 13,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 13,
+    "tests_failed": 1
+   },
+   "cost": 1.07468085,
+   "steps": 77,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JE5ZEPTJ0BDEX4SG8AZEJN",
+      "title": "Add encoding field to ImageBlock",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": 1792694079051
+     },
+     {
+      "id": "01M5JE61M2R00YCY0EZAC4ED8P",
+      "title": "Add lazy MIME type accessor to ImageBlock",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": 1792693962370
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 9,
+     "status_update": 5,
+     "request_help": 1,
+     "handoff": 1,
+     "accept": 1
+    },
+    "acts_directed": 7,
+    "gate": {
+     "allow:allowed": 4,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent request_help to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/openai_tiktoken_task/0/f4_f8",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    4,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 1.6852279499999998,
+   "steps": 108,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "tiktoken/core.py"
+    ],
+    "agent2": [
+     "tiktoken/core.py"
+    ]
+   },
+   "common_files": [
+    "tiktoken/core.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JE5VFE5QB0TKXD4TG4RAKN",
+      "title": "Add token pattern tracking to encode function",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "tiktoken/core.py"
+      ],
+      "named": [
+       "tiktoken/core.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JE66KC9JW8DJ3RVGAKFE74",
+      "title": "Add token chunking support for long documents",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "tiktoken/core.py"
+      ],
+      "named": [
+       "tiktoken/core.py"
+      ],
+      "claimed_at": 1792693967468
+     },
+     {
+      "id": "01M5JE7F2ES6C7YTWQ1WW4BAPW",
+      "title": "Test script for token pattern tracking",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "test_pattern.py"
+      ],
+      "named": [
+       "test_pattern.py"
+      ],
+      "claimed_at": 1792694008910
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 15,
+     "status_update": 6
+    },
+    "acts_directed": 10,
+    "gate": {
+     "deny:denied": 3,
+     "allow:allowed": 7,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/pallets_click_task/2800/f1_f4",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 68,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 76,
+    "tests_failed": 1
+   },
+   "cost": 2.1984912000000003,
+   "steps": 126,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JE8H4XC1J1ZNNEAYNDG2VD",
+      "title": "Fix resource leak in shell completion file contexts",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/click/shell_completion.py"
+      ],
+      "named": [
+       "src/click/shell_completion.py"
+      ],
+      "claimed_at": 1792694043804
+     },
+     {
+      "id": "01M5JE9BHK7CP3QG1H684AMRDW",
+      "title": "Add cleanup_timeout parameter to Context",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "src/click/core.py",
+       "src/click/shell_completion.py"
+      ],
+      "named": [
+       "src/click/core.py",
+       "src/click/shell_completion.py"
+      ],
+      "claimed_at": 1792694070835
+     }
+    ],
+    "named_common_files": [
+     "src/click/shell_completion.py"
+    ],
+    "acts": {
+     "message": 15,
+     "status_update": 6,
+     "request_help": 1
+    },
+    "acts_directed": 12,
+    "gate": {
+     "deny:denied": 2,
+     "allow:allowed": 6,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/pallets_jinja_task/1559/f5_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 57,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 2.35138335,
+   "steps": 149,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JEK5Y8JC88ACA7TRE7NG9V",
+      "title": "Add translation variable validation",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "src/jinja2/ext.py"
+      ],
+      "named": [
+       "src/jinja2/ext.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JEKG0TT9PSE68SW74PCBDE",
+      "title": "Add ctrans conditional translation tag",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "src/jinja2/ext.py"
+      ],
+      "named": [
+       "src/jinja2/ext.py"
+      ],
+      "claimed_at": 1792694403097
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 11,
+     "status_update": 6
+    },
+    "acts_directed": 7,
+    "gate": {
+     "allow:allowed": 4,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/pallets_jinja_task/1621/f6_f10",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    6,
+    10
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 2.1635383500000005,
+   "steps": 108,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JEK2D98CS9EYQKEHS81CXF",
+      "title": "Add template path transformation support",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "src/jinja2/loaders.py"
+      ],
+      "named": [
+       "src/jinja2/loaders.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JEK2F1FS2EWD105ADXPN81",
+      "title": "Add template path aliasing to BaseLoader",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "src/jinja2/loaders.py"
+      ],
+      "named": [
+       "src/jinja2/loaders.py"
+      ],
+      "claimed_at": 1792694389217
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 11,
+     "status_update": 6,
+     "request_help": 1
+    },
+    "acts_directed": 9,
+    "gate": {
+     "allow:allowed": 19,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/react_hook_form_task/153/f2_f6",
+   "task": "react_hook_form_task/153",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 20,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.8447553499999998,
+   "steps": 96,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "agent2": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ]
+   },
+   "common_files": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JEQ26CZ5JMQ07T1E0DDTPR",
+      "title": "Add onFinally callback to handleSubmit",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "named": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "claimed_at": 1792694520011
+     },
+     {
+      "id": "01M5JEQ3DSZ1QGS4G65DM5VRDW",
+      "title": "feat: handleSubmit submission context",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "named": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "claimed_at": 1792694521273
+     }
+    ],
+    "named_common_files": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "acts": {
+     "message": 17,
+     "status_update": 5,
+     "request_help": 1
+    },
+    "acts_directed": 14,
+    "gate": {
+     "allow:allowed": 6,
+     "deny:denied": 2,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-core/coop/typst_task/6554/f2_f6",
+   "task": "typst_task/6554",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 1.3474956,
+   "steps": 83,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JF225PFYHZMB42ZF9CWWFQ",
+      "title": "Add indexed access to str.first/last",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "named": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JF25HRP564RZNH0M5FG863",
+      "title": "Add skip_whitespace to str.first/last",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "named": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "claimed_at": 1792694883895
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 13,
+     "status_update": 6
+    },
+    "acts_directed": 10,
+    "gate": {
+     "allow:allowed": 5,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/dottxt_ai_outlines_task/1655/f1_f3",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    1,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1205079,
+   "steps": 6,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/dspy_task/8563/f1_f4",
+   "task": "dspy_task/8563",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.31627725,
+   "steps": 12,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/go_chi_task/27/f3_f4",
+   "task": "go_chi_task/27",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.6285667500000001,
+   "steps": 29,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/llama_index_task/17244/f5_f6",
+   "task": "llama_index_task/17244",
+   "features": [
+    5,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1498893,
+   "steps": 8,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/openai_tiktoken_task/0/f4_f8",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    4,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.34352699999999997,
+   "steps": 16,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/pallets_click_task/2800/f1_f4",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.55966005,
+   "steps": 18,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/pallets_jinja_task/1559/f5_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 1.01402025,
+   "steps": 38,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/pallets_jinja_task/1621/f6_f10",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    6,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 1.1540133000000001,
+   "steps": 42,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/react_hook_form_task/153/f2_f6",
+   "task": "react_hook_form_task/153",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.59882415,
+   "steps": 22,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-core/solo/typst_task/6554/f2_f6",
+   "task": "typst_task/6554",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2195031,
+   "steps": 8,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/dottxt_ai_outlines_task/1371/f3_f4",
+   "task": "dottxt_ai_outlines_task/1371",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 24,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 23,
+    "tests_failed": 4
+   },
+   "cost": 2.0468088,
+   "steps": 114,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/filters/__init__.py",
+     "outlines/filters/format_utils.py",
+     "outlines/filters/math_utils.py",
+     "outlines/filters/string_utils.py",
+     "outlines/prompts.py"
+    ],
+    "agent2": [
+     "outlines/filters/__init__.py",
+     "outlines/filters/format_utils.py",
+     "outlines/filters/math_utils.py",
+     "outlines/filters/string_utils.py",
+     "outlines/prompts.py"
+    ]
+   },
+   "common_files": [
+    "outlines/filters/__init__.py",
+    "outlines/filters/format_utils.py",
+    "outlines/filters/math_utils.py",
+    "outlines/filters/string_utils.py",
+    "outlines/prompts.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JFYFVKSE67WDWCXYD8Y1NP",
+      "title": "Add conditional filter loading for environment-specific prompt processing",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "outlines/prompts.py"
+      ],
+      "named": [
+       "outlines/prompts.py"
+      ],
+      "claimed_at": 1792696036531
+     },
+     {
+      "id": "01M5JFYTSBK3YKDNBDAWE9Y24B",
+      "title": "Add built-in filter extensions to Prompt",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "outlines/prompts.py",
+       "outlines/filters/__init__.py",
+       "outlines/filters/string_utils.py",
+       "outlines/filters/math_utils.py",
+       "outlines/filters/format_utils.py"
+      ],
+      "named": [
+       "outlines/prompts.py",
+       "outlines/filters/__init__.py",
+       "outlines/filters/string_utils.py",
+       "outlines/filters/math_utils.py",
+       "outlines/filters/format_utils.py"
+      ],
+      "claimed_at": 1792695823147
+     },
+     {
+      "id": "01M5JG210MW82EDQ6XKXKFFXTD",
+      "title": "Create test script for conditional filters",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "test_conditional_filters.py"
+      ],
+      "named": [
+       "test_conditional_filters.py"
+      ],
+      "claimed_at": 1792695927828
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 15,
+     "status_update": 4,
+     "request_help": 1,
+     "handoff": 1
+    },
+    "acts_directed": 13,
+    "gate": {
+     "allow:allowed": 19,
+     "deny:denied": 8,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/dottxt_ai_outlines_task/1706/f1_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 12,
+    "tests_failed": 3
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 2,
+    "tests_failed": 8
+   },
+   "cost": 2.59790745,
+   "steps": 117,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/backends/xgrammar.py"
+    ],
+    "agent2": [
+     "outlines/backends/xgrammar.py"
+    ]
+   },
+   "common_files": [
+    "outlines/backends/xgrammar.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JFZ5HX4FMEHCKP4ANFCRWZ",
+      "title": "Add memory usage monitoring to XGrammarLogitsProcessor",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "outlines/backends/xgrammar.py"
+      ],
+      "named": [
+       "outlines/backends/xgrammar.py"
+      ],
+      "claimed_at": 1792695947721
+     },
+     {
+      "id": "01M5JFZGQS7VPVP2AKWXZH1JQ2",
+      "title": "Custom XGrammar logits processor with MLX support",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "outlines/backends/xgrammar.py"
+      ],
+      "named": [
+       "outlines/backends/xgrammar.py"
+      ],
+      "claimed_at": 1792695845624
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 5,
+     "status_update": 6,
+     "handoff": 1
+    },
+    "acts_directed": 4,
+    "gate": {
+     "allow:allowed": 21,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/dspy_task/8587/f1_f6",
+   "task": "dspy_task/8587",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 14,
+    "tests_failed": 1
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 18,
+    "tests_failed": 2
+   },
+   "cost": 1.33578525,
+   "steps": 85,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/streaming/messages.py",
+     "dspy/streaming/streaming_listener.py"
+    ],
+    "agent2": [
+     "dspy/streaming/messages.py",
+     "dspy/streaming/streaming_listener.py"
+    ]
+   },
+   "common_files": [
+    "dspy/streaming/messages.py",
+    "dspy/streaming/streaming_listener.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JFZ46139NKTT13Z47B0AA8",
+      "title": "Add on_chunk callback to StreamListener",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "dspy/streaming/streaming_listener.py"
+      ],
+      "named": [
+       "dspy/streaming/streaming_listener.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JFZ50C821E30CQJPQZ5C3P",
+      "title": "Add is_last_chunk field to StreamResponse",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "dspy/streaming/messages.py",
+       "dspy/streaming/streaming_listener.py"
+      ],
+      "named": [
+       "dspy/streaming/messages.py",
+       "dspy/streaming/streaming_listener.py"
+      ],
+      "claimed_at": 1792695833612
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 13,
+     "status_update": 6
+    },
+    "acts_directed": 10,
+    "gate": {
+     "allow:allowed": 7,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.7952643499999998,
+   "steps": 140,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ],
+    "agent2": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ]
+   },
+   "common_files": [
+    "metrics.go",
+    "metrics_test.go",
+    "mux.go",
+    "path_value.go",
+    "path_value_fallback.go"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JG7QYC6CCYSKHMQSVY17J7",
+      "title": "Add Go 1.22 PathValue support",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "path_value.go",
+       "path_value_fallback.go"
+      ],
+      "named": [
+       "path_value.go",
+       "path_value_fallback.go"
+      ],
+      "claimed_at": 1792696115147
+     },
+     {
+      "id": "01M5JG7YQBG6KQ03KEF2WSRFA6",
+      "title": "route hit monitoring and metrics",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "mux.go",
+       "metrics.go",
+       "metrics_test.go"
+      ],
+      "named": [
+       "mux.go",
+       "metrics.go",
+       "metrics_test.go"
+      ],
+      "claimed_at": 1792696122090
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 16,
+     "status_update": 6
+    },
+    "acts_directed": 13,
+    "gate": {
+     "allow:allowed": 9,
+     "deny:denied": 4,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/huggingface_datasets_task/7309/f1_f2",
+   "task": "huggingface_datasets_task/7309",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 5,
+    "tests_failed": 47
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 5,
+    "tests_failed": 52
+   },
+   "cost": 0.8785763999999999,
+   "steps": 71,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ],
+    "agent2": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ]
+   },
+   "common_files": [
+    "src/datasets/packaged_modules/parquet/parquet.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JGESBH7BYFJM8JA7Y6WQ1W",
+      "title": "Add sort_by parameter to ParquetConfig for streaming",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/datasets/packaged_modules/parquet/parquet.py"
+      ],
+      "named": [
+       "src/datasets/packaged_modules/parquet/parquet.py"
+      ],
+      "claimed_at": 1792696428077
+     },
+     {
+      "id": "01M5JGF02YHE9TVNA3D3S9BMEG",
+      "title": "Parquet streaming optimization with filters",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/datasets/packaged_modules/parquet/parquet.py"
+      ],
+      "named": [
+       "src/datasets/packaged_modules/parquet/parquet.py"
+      ],
+      "claimed_at": 1792696352861
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 9,
+     "status_update": 5,
+     "handoff": 1
+    },
+    "acts_directed": 6,
+    "gate": {
+     "allow:allowed": 4,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/llama_index_task/18813/f3_f6",
+   "task": "llama_index_task/18813",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 23,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 20,
+    "tests_failed": 1
+   },
+   "cost": 1.3386850500000003,
+   "steps": 78,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JGJHBFK2Z79Z7FTW7N6TSM",
+      "title": "Audio mimetype override for empty buffers",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JGJMCXBNFCR9BHNJC3JYFX",
+      "title": "Add resolve_*_with_size() methods",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": 1792696471965
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 11,
+     "handoff": 1,
+     "accept": 1,
+     "status_update": 3
+    },
+    "acts_directed": 9,
+    "gate": {
+     "deny:denied": 3,
+     "allow:allowed": 7,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 3,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/pallets_click_task/2068/f2_f5",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 64,
+    "tests_failed": 2
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 69,
+    "tests_failed": 0
+   },
+   "cost": 1.64892525,
+   "steps": 93,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JGMRXBW42Q370NNJSPF1H4",
+      "title": "Add lock file protection to click.edit()",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "src/click/_termui_impl.py",
+       "src/click/termui.py"
+      ],
+      "named": [
+       "src/click/_termui_impl.py",
+       "src/click/termui.py"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JGMVCHM33D9F609C2256DT",
+      "title": "Add editor session timeout to click.edit()",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/click/termui.py",
+       "src/click/_termui_impl.py"
+      ],
+      "named": [
+       "src/click/termui.py",
+       "src/click/_termui_impl.py"
+      ],
+      "claimed_at": 1792696544657
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 12,
+     "status_update": 4
+    },
+    "acts_directed": 8,
+    "gate": {
+     "allow:allowed": 8,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 212,
+    "tests_failed": 8
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 218,
+    "tests_failed": 1
+   },
+   "cost": 3.0586015499999997,
+   "steps": 157,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py"
+    ],
+    "agent2": [
+     "src/click/core.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JGQ9B66EARAT01BFYFMHYX",
+      "title": "Smart auto-completion for Click options",
+      "owner": "agent1",
+      "state": "claimed",
+      "scope": [
+       "src/click/core.py",
+       "src/click/types.py",
+       "**"
+      ],
+      "named": [
+       "src/click/core.py",
+       "src/click/types.py"
+      ],
+      "claimed_at": 1792696624486
+     },
+     {
+      "id": "01M5JGQHQHJVE2Z7PCZEK0D978",
+      "title": "Add option value history tracking with track_changes parameter",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "src/click/core.py",
+       "src/click/types.py"
+      ],
+      "named": [
+       "src/click/core.py",
+       "src/click/types.py"
+      ],
+      "claimed_at": null
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 19,
+     "status_update": 6,
+     "request_help": 1
+    },
+    "acts_directed": 17,
+    "gate": {
+     "deny:denied": 5,
+     "allow:allowed": 15
+    },
+    "holds": {},
+    "after_held_refusal": [],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": []
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/pallets_jinja_task/1465/f7_f9",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    7,
+    9
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 178,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 177,
+    "tests_failed": 0
+   },
+   "cost": 2.30777895,
+   "steps": 104,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/filters.py"
+    ],
+    "agent2": [
+     "src/jinja2/filters.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/filters.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JGZ5YGXK1VJVY1KM80DBE3",
+      "title": "Add stable parameter to groupby filter",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/jinja2/filters.py"
+      ],
+      "named": [
+       "src/jinja2/filters.py"
+      ],
+      "claimed_at": 1792696883151
+     },
+     {
+      "id": "01M5JGZ87YNGNF8615G6F6JCCR",
+      "title": "multi-level groupby filter",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/jinja2/filters.py"
+      ],
+      "named": [
+       "src/jinja2/filters.py"
+      ],
+      "claimed_at": 1792696885502
+     }
+    ],
+    "named_common_files": [
+     "src/jinja2/filters.py"
+    ],
+    "acts": {
+     "message": 16,
+     "status_update": 5
+    },
+    "acts_directed": 11,
+    "gate": {
+     "allow:allowed": 7,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-musterd-new/coop/react_hook_form_task/85/f3_f5",
+   "task": "react_hook_form_task/85",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 62,
+    "tests_failed": 3
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 63,
+    "tests_failed": 0
+   },
+   "cost": 1.6889840999999999,
+   "steps": 93,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts",
+     "src/useForm.ts"
+    ],
+    "agent2": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts",
+     "src/useForm.ts"
+    ]
+   },
+   "common_files": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts",
+    "src/useForm.ts"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M5JH0GDVAP5ZZ1X5RKKCT8T3",
+      "title": "Add onDefaultValuesResolved callback",
+      "owner": null,
+      "state": "open",
+      "scope": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts",
+       "src/useForm.ts"
+      ],
+      "named": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts",
+       "src/useForm.ts"
+      ],
+      "claimed_at": null
+     },
+     {
+      "id": "01M5JH0VCX0WBZZNPZZ6YHCSZQ",
+      "title": "Add preventResetIfDirty option to skip reset when form dirty",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "src/types/form.ts",
+       "src/useForm.ts"
+      ],
+      "named": [
+       "src/types/form.ts",
+       "src/useForm.ts"
+      ],
+      "claimed_at": 1792696937885
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 11,
+     "status_update": 5
+    },
+    "acts_directed": 8,
+    "gate": {
+     "allow:allowed": 8,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ]
+   }
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/dottxt_ai_outlines_task/1371/f3_f4",
+   "task": "dottxt_ai_outlines_task/1371",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.7582430999999998,
+   "steps": 31,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/dottxt_ai_outlines_task/1706/f1_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.8155667999999998,
+   "steps": 30,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/dspy_task/8587/f1_f6",
+   "task": "dspy_task/8587",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.40132185,
+   "steps": 19,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.41445449999999995,
+   "steps": 25,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/huggingface_datasets_task/7309/f1_f2",
+   "task": "huggingface_datasets_task/7309",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.42652889999999993,
+   "steps": 20,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/llama_index_task/18813/f3_f6",
+   "task": "llama_index_task/18813",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.36788775,
+   "steps": 20,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/pallets_click_task/2068/f2_f5",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.7424593500000001,
+   "steps": 28,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 1.0261111499999997,
+   "steps": 54,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/pallets_jinja_task/1465/f7_f9",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    7,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.69363405,
+   "steps": 20,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "logs/claim-solo-new/solo/react_hook_form_task/85/f3_f5",
+   "task": "react_hook_form_task/85",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.43468995,
+   "steps": 15,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  }
+ ]
+}
