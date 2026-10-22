@@ -230,8 +230,8 @@ export function evidenceUrl(evidence: string | null): string | null {
   }
 }
 
-export const SPARK_W = 60;
-export const SPARK_H = 16;
+export const SPARK_W = 84;
+export const SPARK_H = 28;
 
 /**
  * The sparkline's geometry (§6), pure: the series as an SVG path, the baseline and target as y
@@ -259,6 +259,14 @@ export function sparkline(
   end: { x: number; y: number };
   /** One sample: the first day of the series, so the number can say `day 1`. */
   firstDay: boolean;
+  /** The goal zone: the band from the target to the edge a good value lies toward. */
+  zone: { y: number; h: number };
+  /** Every sample as a point (up to 24; a long series is the line alone). */
+  points: { x: number; y: number }[];
+  /** Which way the latest sample moved from the one before; null with one sample or no change. */
+  trend: 'up' | 'down' | null;
+  /** The scale is logarithmic: the series spans more than 30x, which a straight scale would flatten. */
+  log: boolean;
 } | null {
   // One sample still says something (nick, 2026-10-21: a newly charted experiment showed nothing on
   // its first day, not even the number): the number, and a dot at the right edge, where today sits —
@@ -267,12 +275,18 @@ export function sparkline(
   if (!metric || samples.length === 0) return null;
   const values = samples.map((s) => s.value);
   const all = [...values, metric.target, ...(metric.baseline === null ? [] : [metric.baseline])];
-  let lo = Math.min(...all);
-  let hi = Math.max(...all);
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  // A wake-latency chart runs from a minute to three days; on a straight scale the minute is a flat
+  // line at the floor. Past 30x the scale is logarithmic (positive values only).
+  const log = min > 0 && max / min > 30;
+  const f = log ? Math.log : (v: number) => v;
+  let lo = f(min);
+  let hi = f(max);
   const pad = (hi - lo || Math.abs(hi) || 1) * 0.1;
   lo -= pad;
   hi += pad;
-  const y = (v: number) => +(h - ((v - lo) / (hi - lo)) * h).toFixed(2);
+  const y = (v: number) => +(h - ((f(v) - lo) / (hi - lo)) * h).toFixed(2);
   const x = (i: number) =>
     samples.length === 1 ? w : +((i / (samples.length - 1)) * w).toFixed(2);
   const path =
@@ -290,6 +304,18 @@ export function sparkline(
     area: samples.length === 1 ? '' : `${path} L${w} ${h} L0 ${h} Z`,
     end: { x: x(samples.length - 1), y: y(values[values.length - 1]!) },
     firstDay: samples.length === 1,
+    zone:
+      metric.direction === 'down'
+        ? { y: y(metric.target), h: +(h - y(metric.target)).toFixed(2) }
+        : { y: 0, h: y(metric.target) },
+    points: samples.length > 1 && samples.length <= 24 ? values.map((v, i) => ({ x: x(i), y: y(v) })) : [],
+    trend:
+      samples.length < 2 || values[values.length - 1] === values[values.length - 2]
+        ? null
+        : values[values.length - 1]! > values[values.length - 2]!
+          ? 'up'
+          : 'down',
+    log,
   };
 }
 

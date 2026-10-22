@@ -36,7 +36,7 @@ export default function ExperimentSpark({
       <svg viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} width={SPARK_W} height={SPARK_H} aria-hidden="true">
         <defs>
           <linearGradient id={`${gid}a`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="currentColor" stopOpacity="0.16" />
+            <stop offset="0" stopColor="currentColor" stopOpacity="0.26" />
             <stop offset="1" stopColor="currentColor" stopOpacity="0" />
           </linearGradient>
           {/* In the chart's own units: a flat line has a zero-height box, which an objectBoundingBox
@@ -46,6 +46,7 @@ export default function ExperimentSpark({
             <stop offset="1" stopColor="currentColor" stopOpacity="0.55" />
           </linearGradient>
         </defs>
+        <rect className="lc-xp__spark-zone" x="0" y={spark.zone.y} width={SPARK_W} height={spark.zone.h} />
         {spark.baselineY !== null && (
           <line className="lc-xp__spark-base" x1="0" x2={SPARK_W} y1={spark.baselineY} y2={spark.baselineY} />
         )}
@@ -63,6 +64,10 @@ export default function ExperimentSpark({
             stroke={`url(#${gid}l)`}
           />
         )}
+        {spark.points.slice(0, -1).map((p, i) => (
+          <circle key={i} className="lc-xp__spark-pt" cx={p.x} cy={p.y} r="1.3" />
+        ))}
+        {!live && spark.path && <circle className="lc-xp__spark-halo" cx={spark.end.x} cy={spark.end.y} r="4.5" />}
         {/* ADR 701: today's point, live — it moves as the day's acts land. Otherwise the line's end. */}
         <circle
           className={live ? 'lc-xp__spark-now' : 'lc-xp__spark-dot'}
@@ -81,6 +86,7 @@ export default function ExperimentSpark({
               : undefined
         }
       >
+        {spark.trend && <i className={`lc-xp__trend lc-xp__trend--${spark.trend}`} aria-hidden="true" />}
         {spark.latest}
         {spark.firstDay && <span className="lc-xp__spark-day"> · day 1</span>}
         {live && <span className="lc-xp__spark-live"> today</span>}

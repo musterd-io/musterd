@@ -13,6 +13,7 @@ import {
   experimentsCount,
   READ_SHOWN_MS,
   shortTitle,
+  SPARK_H,
   aboutOf,
   goalOf,
   stripDays,
@@ -199,6 +200,36 @@ describe('aboutOf / goalOf', () => {
   });
 });
 
+describe('sparkline richness', () => {
+  const m = { name: 'wake', unit: 'ms', baseline: null, target: 60000, direction: 'down' as const };
+  it('goes logarithmic past 30x so an outlier does not flatten the rest', () => {
+    const s = sparkline(m, [
+      { day: '2026-10-17', value: 45000, n: 1 },
+      { day: '2026-10-18', value: 60000, n: 1 },
+      { day: '2026-10-19', value: 235_000_000, n: 2 },
+    ])!;
+    expect(s.log).toBe(true);
+    const flat = sparkline(m, [
+      { day: '2026-10-17', value: 45000, n: 1 },
+      { day: '2026-10-18', value: 50000, n: 1 },
+    ])!;
+    expect(flat.log).toBe(false);
+  });
+  it('shades the good side of the target, draws every point, and says which way it moved', () => {
+    const s = sparkline(m, [
+      { day: '2026-10-17', value: 90000, n: 1 },
+      { day: '2026-10-18', value: 50000, n: 1 },
+    ])!;
+    expect(s.zone.y).toBe(s.targetY);
+    expect(s.zone.y + s.zone.h).toBeCloseTo(SPARK_H, 1);
+    expect(s.points).toHaveLength(2);
+    expect(s.trend).toBe('down');
+    const up = sparkline({ ...m, direction: 'up' }, [{ day: 'a', value: 1, n: 1 }, { day: 'b', value: 5, n: 1 }])!;
+    expect(up.zone.y).toBe(0);
+    expect(up.trend).toBe('up');
+  });
+});
+
 describe('shortTitle', () => {
   it('keeps the name, drops the repeated date and the instructions', () => {
     expect(shortTitle('ADR 536 14-day read (2026-10-20): run `pnpm next:readout`')).toBe('ADR 536 14-day read');
@@ -297,7 +328,7 @@ describe('the result beside the word (experiment-results design §5–6, lane 01
     expect(s.path.split(' L')).toHaveLength(3);
     // The target rule sits inside the box, above the baseline rule (higher value → smaller y).
     expect(s.targetY).toBeGreaterThan(0);
-    expect(s.targetY).toBeLessThan(16);
+    expect(s.targetY).toBeLessThan(SPARK_H);
     expect(s.targetY).toBeLessThan(s.baselineY!);
   });
 

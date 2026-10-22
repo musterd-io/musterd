@@ -9137,9 +9137,38 @@ a.lc-xp__hit:focus-visible {
 .lc-xp__spark-line {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.75;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+/* The goal zone: the band a good value lies in, a faint ink tint under the dashed target rule. It says
+   where to aim, never that the aim was met (the read's own word does that). */
+.lc-xp__spark-zone {
+  fill: currentColor;
+  opacity: 0.07;
+}
+.lc-xp__spark-pt {
+  fill: var(--lc-ground-2);
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.lc-xp__spark-halo {
+  fill: currentColor;
+  opacity: 0.14;
+}
+.lc-xp__trend {
+  display: inline-block;
+  margin-right: 3px;
+  border: 3px solid transparent;
+  vertical-align: 1px;
+}
+.lc-xp__trend--up {
+  border-bottom: 5px solid currentColor;
+  border-top-width: 0;
+}
+.lc-xp__trend--down {
+  border-top: 5px solid currentColor;
+  border-bottom-width: 0;
 }
 .lc-xp__spark-base {
   stroke: var(--lc-muted);
@@ -9667,10 +9696,35 @@ a.lc-xp__hit:focus-visible {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 11px;
-  font-weight: 700;
   color: var(--lc-muted);
   cursor: pointer;
+}
+/* An info mark, not a question mark: a ringed `i` (a `?` read as "unknown", which a finished read's own
+   dashed seal already means). Drawn, so it needs no glyph. */
+.lc-xp__why-btn i {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 1.3px solid currentColor;
+  border-radius: 50%;
+}
+.lc-xp__why-btn i::before,
+.lc-xp__why-btn i::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: currentColor;
+}
+.lc-xp__why-btn i::before {
+  top: 2.6px;
+  height: 1.5px;
+  border-radius: 50%;
+}
+.lc-xp__why-btn i::after {
+  top: 5px;
+  height: 4px;
 }
 .lc-xp__why-btn:hover,
 .lc-xp__why-btn[aria-expanded='true'] {

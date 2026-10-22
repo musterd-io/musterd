@@ -209,7 +209,7 @@ function ExperimentRow({
           <span className="lc-xp__title" title={!still && entry.short !== entry.title ? entry.title : undefined}>
             {entry.short}
           </span>
-          {!still && onToggleWhy && (
+          {!still && onToggleWhy && (entry.about || entry.metric) && (
             <button
               type="button"
               className="lc-xp__why-btn"
@@ -223,7 +223,7 @@ function ExperimentRow({
                 onToggleWhy();
               }}
             >
-              ?
+              <i aria-hidden="true" />
             </button>
           )}
         </span>
