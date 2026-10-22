@@ -1091,7 +1091,7 @@ function wallText(
   ctx.translate(o.x, o.y);
   const cam = cameraOf(fit);
   ctx.transform(cam.kx * fit.scale, cam.ky * fit.scale, 0, fit.scale, 0, 0);
-  ctx.font = canvasFont(size, '--font-mono', 700);
+  ctx.font = canvasFont(size, '--font-sans', 700);
   ctx.fillStyle = fill;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
@@ -1107,7 +1107,7 @@ function wallText(
  */
 function fitTextSize(ctx: CanvasRenderingContext2D, text: string, size: number, maxUnits: number): number {
   ctx.save();
-  ctx.font = canvasFont(size, '--font-mono', 700);
+  ctx.font = canvasFont(size, '--font-sans', 700);
   const width = ctx.measureText(text).width;
   ctx.restore();
   return width > maxUnits ? (size * maxUnits) / width : size;
@@ -2518,7 +2518,7 @@ function spineTitle(
   ctx.clip();
   ctx.translate(cx, cy);
   ctx.rotate(-Math.PI / 2);
-  ctx.font = canvasFont(Math.round(size * fit.scale * 10) / 10, '--font-mono', 700);
+  ctx.font = canvasFont(Math.round(size * fit.scale * 10) / 10, '--font-sans', 700);
   ctx.fillStyle = b.ink;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -5683,7 +5683,7 @@ function drawWelcomeGlows(
     ctx.globalAlpha = Math.sin((age / HELLO_S) * Math.PI); // lights up and fades, one breath
     roundRect(ctx, m.x - 17 * s, m.y - (DESK_UP + 34) * s, 34 * s, 16 * s, 3 * s, POLAROID_WHITE);
     ctx.fillStyle = '#26221e';
-    ctx.font = canvasFont(Math.round(9 * s * 1.5), '--font-mono', 700);
+    ctx.font = canvasFont(Math.round(9 * s * 1.5), '--font-sans', 700);
     ctx.textAlign = 'center';
     ctx.fillText('hello', m.x, m.y - (DESK_UP + 23) * s);
     ctx.globalAlpha = 1;
