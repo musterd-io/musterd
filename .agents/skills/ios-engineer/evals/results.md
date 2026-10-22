@@ -106,5 +106,5 @@ to fix before the next run, with all outputs re-scored then.
 - Steps 5 and 6 are recorded above (run 1 on 2026-10-21, run 2 the same day). cider
   holds `ios-engineer` and reads this skill from the repo.
 - Nick accepted it on 2026-10-22. wallow wrote the skill, so this is the step 7
-  accept the record named. The skill is eligible for the CLI's built-in role skills.
-  This record does not add it there.
+  accept the record named. `ios-engineer` is a built-in role skill (ADR 719): `role create`
+  copies it and ships a blank `references/team.md`.

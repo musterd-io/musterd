@@ -90,6 +90,17 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
       'team file holds local systems, decisions and approved channels.',
     capabilities: {},
   },
+  'ios-engineer': {
+    summary:
+      'Builds the iOS app — Expo and React Native surface, Swift native bridge, store delivery',
+    charter:
+      "You build the team's app on a phone: the Expo and React Native surface, and the Swift " +
+      'native bridge where the platform is the point (Secure Enclave, CryptoKit, App Attest, a ' +
+      'notification extension). The ios-engineer skill is the playbook, and the ios toolkit is ' +
+      'the equipment. Signing keys and store credentials stay with the human.',
+    toolkit: 'ios',
+    capabilities: {},
+  },
   courier: {
     summary:
       "Moves team material between the team's machines when git and sync are the wrong carrier",

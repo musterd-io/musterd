@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bundledSkillsRoot, shippedSkillFiles } from '../roster-roles/skills.js';
 import { provisionSeat, type ProvisionSeatInput } from './provisionSeat.js';
 import type { Workspace } from './workspace.js';
 
@@ -132,7 +133,13 @@ describe('provisionSeat — toolkit auto-provisioning (ADR 708)', () => {
       harness: 'opencode',
       servers: ['expo', 'xcodebuild', 'apple-docs'],
     });
-    expect(r.skillNotes.join('\n')).toMatch(/not a bundled built-in/);
+    const shipped = shippedSkillFiles(bundledSkillsRoot(), 'ios-engineer');
+    const installed = join(dir, '.agents', 'skills', 'ios-engineer');
+    expect(readFileSync(join(installed, 'SKILL.md'), 'utf8')).toMatch(/^name: ios-engineer$/m);
+    expect(readFileSync(join(installed, 'references', 'team.md'))).toEqual(
+      shipped.get(join('references', 'team.md')),
+    );
+    expect(r.skillNotes.join('\n')).not.toMatch(/not a bundled built-in/);
   });
 
   it('reports an unloadable recorded toolkit without provisioning or throwing', async () => {

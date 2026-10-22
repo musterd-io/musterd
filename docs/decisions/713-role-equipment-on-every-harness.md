@@ -26,6 +26,7 @@ The association between a role and its equipment was recorded, and only one of t
 - Assigning a role, wiring a folder, or changing the desired set equips the skill and the toolkit on the harnesses in that set. A harness whose binary is absent still receives the bridge file and the toolkit servers.
 - Removing a role drops it from the recorded toolkit name when it was the only reason for that name. The servers remain until an uninstall. A later wire does not put them back from the recorded name.
 - `init` still provisions the human's pick into the one harness it always has, then the shared equip fills the rest of the desired set.
+- _(2026-10-22, lane `01M5JT4WQ`.)_ Decision 4's last sentence, that `ios-engineer` stays unbundled, is reversed by [ADR 719](719-ios-engineer-builtin-skill.md). Nick accepted the skill the same day. The rest of this decision stands.
 
 ## Observability & Evaluation
 

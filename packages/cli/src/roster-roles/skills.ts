@@ -30,6 +30,7 @@ export const BUILTIN_ROLE_SKILLS: readonly string[] = [
   'comms',
   'security',
   'steward',
+  'ios-engineer',
 ];
 
 /** The method skill: a custom role's skeleton lives in it, and it ships beside the built-ins. */
