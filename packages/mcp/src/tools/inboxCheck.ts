@@ -79,32 +79,59 @@ export function waitForWake(
   waitMs: number,
   untilLane?: string,
 ): Promise<WakeResult> {
+  return armWake(client, waitMs, untilLane).result;
+}
+
+/** A wake already listening: `result` settles on the wake or the timeout; `cancel` ends it early. */
+export interface ArmedWake {
+  result: Promise<WakeResult>;
+  cancel(): void;
+}
+
+/**
+ * Subscribe now, wait later. A caller that checks state before blocking must arm first: an act
+ * the socket delivers between an empty check and the subscription fires no listener, and the wait
+ * would sleep through it to the timeout (the lost wakeup). Armed first, that act settles `result`
+ * at once, and the caller cancels if its check finds work already waiting.
+ */
+export function armWake(
+  client: Pick<MusterdClient, 'onDirected'> & Partial<Pick<MusterdClient, 'onDelivery'>>,
+  waitMs: number,
+  untilLane?: string,
+): ArmedWake {
   if (waitMs <= 0 || typeof client.onDirected !== 'function') {
-    return new Promise((r) => {
+    let cancel = (): void => undefined;
+    const result = new Promise<WakeResult>((r) => {
       const t = setTimeout(() => r({ woke: null }), Math.max(0, waitMs));
       (t as { unref?: () => void }).unref?.();
+      cancel = () => {
+        clearTimeout(t);
+        r({ woke: null });
+      };
     });
+    return { result, cancel: () => cancel() };
   }
-  return new Promise((resolve) => {
-    let done = false;
-    const offs: (() => void)[] = [client.onDirected((env) => finish({ woke: 'directed', env }))];
-    if (untilLane && typeof client.onDelivery === 'function') {
-      offs.push(
-        client.onDelivery((env) => {
-          if (isLaneResolve(env, untilLane)) finish({ woke: 'lane', env });
-        }),
-      );
-    }
-    const timer = setTimeout(() => finish({ woke: null }), waitMs);
-    (timer as { unref?: () => void }).unref?.();
-    function finish(result: WakeResult): void {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      for (const off of offs) off();
-      resolve(result);
-    }
-  });
+  let done = false;
+  let resolve!: (r: WakeResult) => void;
+  const result = new Promise<WakeResult>((r) => (resolve = r));
+  const offs: (() => void)[] = [client.onDirected((env) => finish({ woke: 'directed', env }))];
+  if (untilLane && typeof client.onDelivery === 'function') {
+    offs.push(
+      client.onDelivery((env) => {
+        if (isLaneResolve(env, untilLane)) finish({ woke: 'lane', env });
+      }),
+    );
+  }
+  const timer = setTimeout(() => finish({ woke: null }), waitMs);
+  (timer as { unref?: () => void }).unref?.();
+  function finish(r: WakeResult): void {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    for (const off of offs) off();
+    resolve(r);
+  }
+  return { result, cancel: () => finish({ woke: null }) };
 }
 
 /**
@@ -651,6 +678,8 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
             '\n\n';
         };
         if (waitMs > 0 && preBuffered.length === 0 && args.ids === undefined) {
+          // Armed before the pre-check, so an act delivered while it runs still wakes the wait.
+          const armed = armWake(client, waitMs, args.until_lane);
           const pre = await client
             .fetchInbox(args.unread_only ?? true, args.limit ?? 50)
             .catch(() => null);
@@ -662,11 +691,14 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
                 .then((d) => d.lane.state === 'done')
                 .catch(() => false));
             if (laneDone) {
+              armed.cancel();
               await laneWoke(args.until_lane!);
             } else {
-              const wake = await waitForWake(client, waitMs, args.until_lane);
+              const wake = await armed.result;
               if (wake.woke === 'lane' && args.until_lane) await laneWoke(args.until_lane);
             }
+          } else {
+            armed.cancel();
           }
         }
         // Combine buffered live deliveries with the authoritative inbox fetch, dedup by id.

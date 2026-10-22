@@ -51,6 +51,12 @@ wait by timeout — the retry then meets the ADR 697 hand-over.)_
   N=20 claim run (01M5GWBB17) measures whether the counterfactual saving is real.
 - A wait on a dead socket returns the ordinary empty reply at timeout rather than
   hanging; the act itself is never lost (server log + cursor are authoritative).
+- 2026-10-22: the claim run measured the saving (finding 021: all 40 agents used `wait`,
+  musterd's `core` cost fell from $24.59 to $17.29). Acceptance review (big-body) found a lost
+  wakeup. The wait subscribed only after the empty pre-check, so an act delivered during that
+  check fired no listener, and the wait slept to its timeout. The fix arms the wait (`armWake`)
+  before the pre-check and cancels it when the check finds work. Two regression tests deliver an act
+  and a lane resolve in that gap.
 
 ## Observability & Evaluation
 
