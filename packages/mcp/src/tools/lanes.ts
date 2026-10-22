@@ -32,7 +32,7 @@ import {
   type NextBrief,
   type ReviewPromiseReference,
 } from '@musterd/protocol';
-import { resolveProject } from '@musterd/protocol/project';
+import { projectAliases, resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { reconcileLanded, type Landed } from '../landed.js';
@@ -202,6 +202,9 @@ export function registerLanes(
   /** The project a new lane belongs to: the explicit argument, else this workspace's repo. A
    *  remote server (ADR 630 §3) has no workspace and passes the team default instead. */
   project: (explicit: string | undefined) => string = (explicit) => resolveProject({ explicit }),
+  /** ADR 710: the other names this checkout's repo was known by (its folder name), so the daemon
+   *  heals in-flight lanes still carrying one. A remote server heals nothing. */
+  aliases: (explicit: string | undefined) => string[] = (explicit) => projectAliases({ explicit }),
 ): void {
   // ADR 585: the claims this seat files, judged by the one rule in @musterd/protocol from the SHA
   // tier `verify` produced plus whatever `gather` could read. The daemon stamps `checked_by`.
@@ -295,9 +298,11 @@ export function registerLanes(
         }
         // Derived here, not in the store: the daemon's cwd is the daemon's, so only this adapter —
         // running in the seat's own workspace — knows which repo the lane belongs to.
+        const projectAliasesForOpen = aliases(args.project);
         const { lane, warnings } = await client.openLane({
           ...args,
           project: project(args.project),
+          ...(projectAliasesForOpen.length > 0 ? { project_aliases: projectAliasesForOpen } : {}),
         });
         const hint = lane.requested ? undefined : `\n${LANE_REQUESTED_NUDGE}`;
         return laneResult('lane opened', lane, warnings, hint);

@@ -1,0 +1,9 @@
+{
+  "hash": "c6a102cc32fbbadbb8b00cc81e955fa7bb942b6dfec0b28fc5f1fa25d08b736c",
+  "harnesses": [
+    "opencode"
+  ],
+  "servers": [
+    "whiteboard"
+  ]
+}

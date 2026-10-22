@@ -574,8 +574,54 @@ export async function openLane(
         at_open: true,
       });
     }
+    // ADR 710: heal in-flight lanes still carrying a name this checkout was known by before its
+    // origin remote won (ADR 695). Same transaction: the new lane and the healed ones are one
+    // project before anything reads the board.
+    await healProjectAliases(t, teamId, audit, row.project, input.project_aliases ?? []);
   });
   return rowToLane(row, teamSlug);
+}
+
+/**
+ * ADR 710 — a project rename heals its in-flight lanes. A repo whose folder name differs from its
+ * origin remote's repo name derives the remote name (ADR 695). Lanes opened before that checkout
+ * upgraded still carry the folder name, and contention is checked within one project string (ADR
+ * 083), so the two generations would never overlap-warn or hold against each other — the silent
+ * no-contention failure ADR 695 set out to fix, inverted and team-wide. The opener reports the
+ * folder name as an alias; every NON-terminal lane carrying it moves to the derived name.
+ *
+ * Closed lanes keep their stored project, so ADR 695's "historical lanes are not rewritten" stays
+ * true for history. The move is audited as a `lane.updated` project change, not a silent UPDATE:
+ * a peer folding the log must see the same project a local reader does. `updated_at` deliberately
+ * does not move — a rename is a label change, and awaiting lanes derive their wait age from it.
+ */
+async function healProjectAliases(
+  t: Driver,
+  teamId: string,
+  audit: LaneAudit,
+  project: string,
+  aliases: string[],
+): Promise<void> {
+  const healed = [...new Set(aliases)].filter((a) => a !== project);
+  if (healed.length === 0) return;
+  const marks = healed.map(() => '?').join(', ');
+  const rows = await t.all<{ id: string; project: string }>(
+    `SELECT id, project FROM lanes
+      WHERE team_id = ? AND project IN (${marks}) AND state NOT IN ('done','abandoned')`,
+    [teamId, ...healed],
+  );
+  for (const lane of rows) {
+    await t.run('UPDATE lanes SET project = ? WHERE team_id = ? AND id = ?', [
+      project,
+      teamId,
+      lane.id,
+    ]);
+    await laneAuditRow(t, teamId, audit, 'lane.updated', lane.id, {
+      lane: lane.id,
+      fields: ['project'],
+      changes: { project: { from: lane.project, to: project } },
+    });
+  }
 }
 
 /**

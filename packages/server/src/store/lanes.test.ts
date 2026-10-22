@@ -1842,4 +1842,63 @@ withDrivers('lanes', (o) => {
       expect((await getLane(db, team.id, bareCopy.id, 'bravo'))?.requested).toBeUndefined();
     });
   });
+
+  /**
+   * ADR 710 (wallow's #3128 review). ADR 695 derives a repo's project from its origin remote, but
+   * this checkout derived `runtime` from its folder for months: every in-flight lane carries the
+   * old name, and ADR 083 checks contention within one project string, so the two generations would
+   * never warn or hold against each other. The opener reports the folder name as an alias and the
+   * daemon heals the in-flight lanes in the same transaction.
+   */
+  describe('a project rename heals in-flight lanes (ADR 710)', () => {
+    it('moves a non-terminal lane from the folder alias, and the two lanes contend', async () => {
+      const { db, team } = await seed();
+      const legacy = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'opened before the upgrade',
+        project: 'runtime',
+        scope: ['packages/server/src/store/review.ts'],
+        claim: true,
+      });
+      const fresh = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'opened after the upgrade',
+        project: 'musterd',
+        project_aliases: ['runtime'],
+        scope: ['packages/server/src/**'],
+        claim: true,
+      });
+      expect((await getLane(db, team.id, legacy.id, 'bravo'))?.project).toBe('musterd');
+      const warnings = await laneWarnings(db, team.id, 'bravo', fresh);
+      expect(warnings.some((w) => w.kind === 'surface_overlap' && w.with === legacy.id)).toBe(true);
+    });
+
+    it('leaves done and abandoned lanes on their stored project', async () => {
+      const { db, team } = await seed();
+      const closed = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'history',
+        project: 'runtime',
+        claim: true,
+      });
+      await updateLane(db, team.id, closed.id, 'bravo', { state: 'done' });
+      await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'new work',
+        project: 'musterd',
+        project_aliases: ['runtime'],
+      });
+      expect((await getLane(db, team.id, closed.id, 'bravo'))?.project).toBe('runtime');
+    });
+
+    it('heals nothing when no alias is reported, and never moves a lane into its own name', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'old name, no reporter',
+        project: 'runtime',
+      });
+      await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'declared project',
+        project: 'musterd',
+        project_aliases: ['musterd'],
+      });
+      expect((await getLane(db, team.id, lane.id, 'bravo'))?.project).toBe('runtime');
+    });
+  });
 });
