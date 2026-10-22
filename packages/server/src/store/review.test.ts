@@ -2,6 +2,7 @@ import { GENERALIST_CAPABILITIES, describeFamilyPosture, makeEnvelope } from '@m
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { appendAudit } from './audit.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
@@ -1349,6 +1350,123 @@ withDrivers('review', (o) => {
       await ask(db, team.id, owner.id, ghost.id, lane.id, 'ask-1', 1_000);
       await db.run(`UPDATE lanes SET state = 'done' WHERE id = ?`, [lane.id]);
       expect(await acceptanceWaits(db, team.id)).toEqual(new Map());
+    });
+  });
+
+  /**
+   * Lane 01M5G1W1269E6YRR4K45NPNF2G — a refused human verdict does not answer the ask
+   * (ADR 662 / route.ts `lane_authority_refused`). The refusal is audited as `authority.refused`
+   * (target = lane, result 'deny'), but `openAcceptanceAsk` / `acceptanceWaits` used to count any
+   * accept/decline reply as answering, so a lane still awaiting a verdict showed no reviewer and
+   * `lane show` listed no acceptance ask. A refusal at or after the latest reply leaves the ask
+   * standing.
+   */
+  describe('refused human verdicts do not answer the ask (lane 01M5G1W1269E6YRR4K45NPNF2G)', () => {
+    async function room() {
+      const { openLane } = await import('./lanes.js');
+      const { db, team } = await seed();
+      const worker = (await addMember(db, team, { kind: 'agent', name: 'ada', role: '' })).row;
+      const reviewer = (await addMember(db, team, { kind: 'agent', name: 'ghost', role: '' })).row;
+      const lane = await openLane(db, team.id, team.slug, worker.name, {
+        title: 'a lane awaiting acceptance',
+        claim: true,
+      });
+      await db.run(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`, [lane.id]);
+      await insertMessage(
+        db,
+        team.id,
+        worker.id,
+        reviewer.id,
+        makeEnvelope({
+          id: 'ask-1',
+          team: team.slug,
+          from: worker.name,
+          to: { kind: 'member', name: reviewer.name },
+          act: 'ask',
+          body: '[lane] acceptance requested',
+          meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
+          ts: 1_000,
+        }),
+      );
+      await insertMessage(
+        db,
+        team.id,
+        reviewer.id,
+        null,
+        makeEnvelope({
+          id: 'verdict-1',
+          team: team.slug,
+          from: reviewer.name,
+          to: { kind: 'team' },
+          act: 'accept',
+          body: 'ACCEPTED',
+          meta: { in_reply_to: 'ask-1', lane_review: { lane: lane.id } },
+          ts: 2_000,
+        }),
+      );
+      return { db, team, lane, reviewer };
+    }
+
+    it('openAcceptanceAsk still names the holder when the verdict was refused', async () => {
+      const { openAcceptanceAsk } = await import('./review.js');
+      const { db, team, lane } = await room();
+      await appendAudit(db, team.id, {
+        actor: 'ghost',
+        action: 'authority.refused',
+        target: lane.id,
+        result: 'deny',
+        detail: { act: 'human_accept', reason: 'no_signature' },
+      });
+      expect(await openAcceptanceAsk(db, team.id, lane.id)).toEqual({
+        id: 'ask-1',
+        to: 'ghost',
+      });
+    });
+
+    it('acceptanceAskUnanswered still owes a verdict when it was refused', async () => {
+      const { acceptanceAskUnanswered } = await import('./review.js');
+      const { db, team, lane } = await room();
+      await appendAudit(db, team.id, {
+        actor: 'ghost',
+        action: 'authority.refused',
+        target: lane.id,
+        result: 'deny',
+        detail: { act: 'human_accept', reason: 'no_signature' },
+      });
+      expect(await acceptanceAskUnanswered(db, team.id, 'ask-1')).toBe(true);
+    });
+
+    it('a valid reply with no refusal still answers the ask', async () => {
+      const { openAcceptanceAsk } = await import('./review.js');
+      const { db, team, lane } = await room();
+      expect(await openAcceptanceAsk(db, team.id, lane.id)).toBeNull();
+    });
+
+    it('acceptanceWaits keeps naming the reviewer after a refused verdict', async () => {
+      const { acceptanceWaits } = await import('./review.js');
+      const { db, team, lane } = await room();
+      await appendAudit(db, team.id, {
+        actor: 'ghost',
+        action: 'authority.refused',
+        target: lane.id,
+        result: 'deny',
+        detail: { act: 'human_accept', reason: 'no_signature' },
+      });
+      await appendAudit(db, team.id, {
+        actor: 'ada',
+        action: 'lane.ready_for_review',
+        target: lane.id,
+        result: 'allow',
+        detail: {
+          lane: lane.id,
+          review_selection: { outcome: 'peer_selected', selected: { reviewer: 'ghost' } },
+          reviewer: 'ghost',
+        },
+      });
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)).toEqual({
+        reviewer: 'ghost',
+        route: 'peer_selected',
+      });
     });
   });
 });
