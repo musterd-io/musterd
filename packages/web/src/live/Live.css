@@ -3788,7 +3788,13 @@
   display: flex;
   align-items: center;
   gap: var(--lc-4);
-  padding: var(--lc-5) var(--lc-6);
+  /* Tight (nick, 2026-10-22: the header and the gap under it took too much room): the 28px collapse pill
+     was setting the row's height, so it is 24px here (still the target floor) and the padding follows. */
+  padding: var(--lc-3) var(--lc-6) var(--lc-2);
+}
+.lc-team__head .lc-collapse {
+  width: 24px;
+  height: 24px;
 }
 .lc-team__title {
   font-size: 13px;
@@ -3800,12 +3806,15 @@
   color: var(--lc-muted);
 }
 .lc-team__caption {
-  display: block;
+  display: flex;
   /* `flex: none`: the column is a flex stack and its cards list may claim a third of it, so a caption left
      shrinkable was squeezed to 0 height while its pill, overflowing, painted over the first member rows. */
   flex: none;
   min-height: 0;
-  padding: 0 var(--lc-5);
+  padding: 0 var(--lc-5) var(--lc-2);
+}
+.lc-team__caption .lc-caption__pill {
+  line-height: 1.2;
 }
 .lc-team__caption:empty {
   padding: 0;
