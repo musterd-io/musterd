@@ -114,12 +114,20 @@ export function TeamCard({
         )}
       </span>
       <span className="lc-team-card__state">{card.stateLabel}</span>
-      {card.title && (
+      {(card.title || (!still && card.state !== 'working')) && (
         <span
           className={`lc-team-card__work${card.source === 'status' ? ' is-said' : ''}`}
           title={still ? undefined : [card.title, meta].filter(Boolean).join(' — ')}
         >
-          {card.source === 'status' ? `“${card.title}”` : card.title}
+          {/* /live: the state word (asking, in review, blocked, between tasks) leads the work line, so a
+              row is always two lines. The stream's column keeps its own state line above. */}
+          {!still && card.state !== 'working' && (
+            <span className="lc-team-card__st">
+              {card.stateLabel}
+              {card.title ? ' · ' : ''}
+            </span>
+          )}
+          {card.title && (card.source === 'status' ? `“${card.title}”` : card.title)}
           {card.moreLanes > 0 && (
             <span className="lc-team-card__more"> +{card.moreLanes} more</span>
           )}

@@ -154,11 +154,29 @@ function evidenceOf(lane: Lane): string | null {
 export function formatValue(value: number, unit: string): string {
   const u = unit.trim();
   if (u === '%') return `${trimZeros(value.toFixed(1))}%`;
-  if (u === 'ms') return `${Math.round(value)} ms`;
+  if (u === 'ms') return formatMs(value);
   const body = Math.abs(value) >= 100 ? String(Math.round(value)) : trimZeros(value.toFixed(2));
   return u ? `${body} ${u}` : body;
 }
 const trimZeros = (s: string) => s.replace(/\.?0+$/, '');
+
+/** Milliseconds as a duration a glance can read: `2223647 ms` is 37 min, and a column of seven-digit
+ *  numbers hides that a chart is climbing from a minute to a day. */
+const MS_UNITS: readonly (readonly [number, string])[] = [
+  [86_400_000, 'd'],
+  [3_600_000, 'h'],
+  [60_000, 'min'],
+  [1000, 's'],
+];
+function formatMs(ms: number): string {
+  for (const [size, name] of MS_UNITS) {
+    if (Math.abs(ms) >= size) {
+      const v = ms / size;
+      return `${trimZeros(v.toFixed(v < 10 ? 1 : 0))} ${name}`;
+    }
+  }
+  return `${Math.round(ms)} ms`;
+}
 
 /**
  * The result beside the word (§5): `met · 61% (target 40%, n 23)`. The word's meaning is unchanged —
@@ -313,8 +331,10 @@ export function stripDays(now: number): { offset: number; weekend: boolean }[] {
  * cut that leaves almost nothing keeps the whole title instead.
  */
 export function shortTitle(title: string): string {
-  const head = title.split(/:\s| — | – /)[0]!.replace(/\s*\(\d{4}-\d{2}-\d{2}\)\s*$/, '').trim();
-  return head.length >= 8 ? head : title;
+  // "Experiment: felt vs real — …" names its kind first; the kind is no name (it cut to "Experiment").
+  const body = title.replace(/^(experiment|read|test)\s*\d*\s*:\s+/i, '');
+  const head = body.split(/:\s| — | – /)[0]!.replace(/\s*\(\d{4}-\d{2}-\d{2}\)\s*$/, '').trim();
+  return head.length >= 8 ? head : body.length >= 8 ? body : title;
 }
 
 function phraseFor(status: ReadStatus, days: number, lane: Lane): string {

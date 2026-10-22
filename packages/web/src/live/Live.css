@@ -9615,14 +9615,15 @@ a.lc-xp__hit:focus-visible {
   font-size: 11px;
   padding: 0 5px;
 }
-.lc-team-card--working:not(.is-still) .lc-team-card__state,
+.lc-team-card:not(.is-still) .lc-team-card__state,
 .lc-team-card:not(.is-still) .lc-team-card__meta {
   display: none;
 }
-.lc-team-card:not(.is-still) .lc-team-card__state {
-  grid-row: 2;
-  grid-column: 2;
-  font-size: 11px;
+.lc-team-card__st {
+  color: var(--lc-muted);
+}
+.lc-team-card--asking .lc-team-card__st {
+  color: var(--lc-warn-ink);
 }
 .lc-team-card:not(.is-still) .lc-team-card__work {
   font-size: 12.5px;
@@ -9634,11 +9635,6 @@ a.lc-xp__hit:focus-visible {
   margin: 0 0 var(--lc-2);
   font-size: 11px;
   color: var(--lc-muted);
-}
-/* A state word (asking, in review, blocked) shares the work line's row: the grid puts it on row 2 and
-   the work line would land under it, so give the work its own row only when a state word is shown. */
-.lc-team-card:not(.is-still):not(.lc-team-card--working) .lc-team-card__work {
-  grid-row: 3;
 }
 .lc-xp__fold {
   display: inline-flex;
