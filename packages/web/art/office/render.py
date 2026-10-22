@@ -228,7 +228,7 @@ def write_pixels(path: str, px: np.ndarray) -> None:
 # the same key takes them from there instead of rendering — so changing one beat, one prop or one
 # hair style renders that and nothing else, and a run that hangs or crashes resumes where it
 # stopped. The store is this machine's: a fresh machine renders everything once.
-FIG_PIPELINE = 1  # bump when what a render's pixels BECOME changes (masks, thresholds, the arm split)
+FIG_PIPELINE = 2  # 2: surfaces fused before they render (office figure v2).  bump when what a render's pixels BECOME changes (masks, thresholds, the arm split)
 LIT_SAMPLES = 16  # 32 was indistinguishable at panel and broadcast size, ~0.1% RMSE (nick, 2026-10-21)
 FIG_CACHE = os.environ.get("MUSTERD_FIG_CACHE") or os.path.expanduser("~/.cache/musterd/office-figure")
 
@@ -283,6 +283,7 @@ def render_figure(a: dict) -> None:
     colours with no anti-aliasing — and the lit frame is split by ID into its layers. Rows are
     (clip, direction), columns are frames."""
     import figure
+    import figure_fuse
     import figure_resample
     import figure_stills
 
@@ -325,8 +326,9 @@ def render_figure(a: dict) -> None:
     lit_mats = {o.name: [slot.material for slot in o.material_slots] for o in rig.meshes}
 
     def set_id_pass(on: bool) -> None:
-        for o in rig.meshes:
-            mats = [id_mats[(o["layer"], bool(o["arm"]))]] * len(o.material_slots) if on else lit_mats[o.name]
+        for o in rig.meshes + (fused or []):
+            arms = o.get("arm_slots") or [bool(o["arm"])] * len(o.material_slots)  # a fused copy: per slot
+            mats = [id_mats[(o["layer"], bool(a))] for a in arms] if on else lit_mats[o.name]
             for slot, m in zip(o.material_slots, mats):
                 slot.material = m
         s.render.filter_size = 0.0 if on else 1.5
@@ -476,6 +478,7 @@ def render_figure(a: dict) -> None:
                 figure.place_props(rig, name, math.radians(45 * di))
                 seated = name in figure.SEATED_CLIPS
                 cname = f"{name}/{d}/{f}"
+                fused = None  # this frame's fused copies, made at its first render
                 calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants if figure.stored_in(name, l)]
                 for kind, layers, holdout in calls:
                     if not show(layers, holdout, name):
@@ -492,6 +495,13 @@ def render_figure(a: dict) -> None:
                     else:
                         rendered += 1
                         outs = {}
+                        # each continuous surface as one soft shape (figure_fuse.py), fused once a
+                        # frame; the key above was taken from the posed parts, not the copies
+                        if fused is None:
+                            fused = figure_fuse.fuse_frame(rig.meshes)
+                            for o in fused:
+                                lit_mats[o.name] = [slot.material for slot in o.material_slots]
+                        figure_fuse.show_for_call(fused)
                         if kind == "base":
                             # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
                             set_id_pass(False)
@@ -530,6 +540,10 @@ def render_figure(a: dict) -> None:
                         stash(k, outs)
                     for gk, c in outs.items():
                         crops.setdefault(gk, {})[cname] = c
+                if fused:
+                    for o in fused:
+                        del lit_mats[o.name]
+                    figure_fuse.clear(fused)
                 done += 1
         print(f"figure: {name} done ({done} frames so far; {rendered} calls rendered, {reused} reused, {resampled} resampled, {time.time() - t0:.0f}s)", flush=True)
     for p in (tmp_lit, tmp_id):
