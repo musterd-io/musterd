@@ -232,6 +232,52 @@ describe('pendingInterrupts (ADR 088)', () => {
       expect(pendingInterrupts(msgs, 'me', { obligations: true })).toEqual([]);
     });
 
+    it('stops raising for this seat once they waited, and still raises it for a co-addressee', () => {
+      const shared = {
+        ...review,
+        eligible: ['me', 'izzo'],
+      };
+      const msgs = [
+        env({
+          id: 'ask',
+          from: 'miley',
+          to: { kind: 'team' },
+          act: 'ask',
+          meta: shared,
+          ts: 10,
+        }),
+        env({
+          id: 'w',
+          from: 'me',
+          to: { kind: 'member', name: 'miley' },
+          act: 'wait',
+          meta: { in_reply_to: 'ask' },
+          ts: 20,
+        }),
+      ];
+      expect(pendingInterrupts(msgs, 'me', { obligations: true })).toEqual([]);
+      expect(pendingInterrupts(msgs, 'izzo', { obligations: true }).map((m) => m.id)).toEqual([
+        'ask',
+      ]);
+    });
+
+    it('a chat reply from this seat does not silence an acceptance ask', () => {
+      const msgs = [
+        env({ id: 'ask', from: 'miley', to: toMe, act: 'ask', meta: review, ts: 10 }),
+        env({
+          id: 'chat',
+          from: 'me',
+          to: { kind: 'member', name: 'miley' },
+          act: 'message',
+          meta: { in_reply_to: 'ask' },
+          ts: 20,
+        }),
+      ];
+      expect(pendingInterrupts(msgs, 'me', { obligations: true }).map((m) => m.id)).toEqual([
+        'ask',
+      ]);
+    });
+
     it('does not supersede: two open acceptances are two obligations, unlike steers', () => {
       // A steer is a *direction* (newest wins, ADR 103). An acceptance is an *obligation* against a
       // specific lane — a second one does not discharge the first, so both must stay on the line.
