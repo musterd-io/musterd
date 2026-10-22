@@ -1659,7 +1659,10 @@
       rgba(255, 255, 255, 0.12) 42%,
       rgba(255, 255, 255, 0) 68%
     ),
-    #fffaf0;
+    /* 2026-10-22 (nick: "a little bit of glassmorphism/transparency"): 84% chalk. Worst case is the
+       darkest actor (#2c3b40) under the plate: the stock composites to ~#e3d9cf there and
+       `--lc-paper-ink` still clears 9:1. No backdrop-filter — the broadcast capture rule stands. */
+    color-mix(in srgb, #fffaf0 84%, transparent);
   /* nick, 2026-10-12, twice: "slightly more transparent", then — at a whole-plate opacity of 82% —
      "too light, they look greyed out / idle". The ink was the tell: a dimmed name reads as a dimmed
      member, because that is what the dot and the dozing plate already mean. So the stock thins
@@ -2342,38 +2345,74 @@
    in the base rule, NOT a glow: `--idle` is deliberately unglowed (see below), so a halo here would
    quietly undo that. */
 .lc-gl-label__dot {
+  /* A lit glass bead (nick, 2026-10-22: "more visually polished"): the state colour is `--dot`, set by
+     the modifiers below, and the bead is built from it — a radial highlight at the upper left, a darker
+     foot, a hairline ring in the state colour so it holds its edge on the chalk, and a paper-sheen halo
+     seating it into the plate. 7px, up from 5. `--idle` stays unglowed (see below). */
+  --dot: var(--lc-dot-off);
   display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 4px;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
   margin-bottom: 1px;
   border-radius: 50%;
   vertical-align: middle;
   flex: 0 0 auto;
   align-self: center;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 52%),
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--dot) 55%, #000) 0%, transparent 62%),
+    var(--dot);
   box-shadow:
-    0 0 0 1px var(--lc-paper-sheen),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.75);
+    0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
+    0 0 0 2px var(--lc-paper-sheen),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.8);
 }
 .lc-gl-label__dot--on {
-  background: var(--lc-success);
+  --dot: var(--lc-success);
   box-shadow:
-    0 0 0 1px var(--lc-paper-sheen),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.75),
-    0 0 6px color-mix(in srgb, var(--lc-success) 70%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
+    0 0 0 2px var(--lc-paper-sheen),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
+    0 0 7px color-mix(in srgb, var(--lc-success) 70%, transparent);
+}
+/* Working breathes: the halo swells and settles on a slow beat, so "running" is a pulse you catch in
+   the corner of your eye rather than a colour you have to decode. /live only — the broadcast capture
+   stays still (the house no-per-frame-cost rule) — and off under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .lc-gl-label:not(.is-broadcast) .lc-gl-label__dot--on {
+    animation: lc-dot-breathe 2.8s ease-in-out infinite;
+  }
+}
+@keyframes lc-dot-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
+      0 0 0 2px var(--lc-paper-sheen),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
+      0 0 5px color-mix(in srgb, var(--lc-success) 55%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--dot) 62%, var(--lc-paper-rim)),
+      0 0 0 2px var(--lc-paper-sheen),
+      inset 0 0.5px 0 rgba(255, 255, 255, 0.8),
+      0 0 10px color-mix(in srgb, var(--lc-success) 85%, transparent);
+  }
 }
 /* Live but holding no task (ADR 140). Amber, and *unglowed* — the green dot's halo is what reads as
    "lit up and running" from across the panel, so an idle dot must not have one. */
 .lc-gl-label__dot--idle {
-  background: var(--lc-warn, #f4cf52);
+  --dot: var(--lc-warn, #f4cf52);
 }
 /* Away sits between idle and offline: the same amber family (they're a person, not a cold seat) but
    drained, so a glance separates "here but between tasks" from "stepped out". */
 .lc-gl-label__dot--away {
-  background: color-mix(in srgb, var(--lc-warn, #f4cf52) 55%, var(--lc-dot-off));
+  --dot: color-mix(in srgb, var(--lc-warn, #f4cf52) 55%, var(--lc-dot-off));
 }
 .lc-gl-label__dot--off {
-  background: var(--lc-dot-off);
+  --dot: var(--lc-dot-off);
 }
 /* ─── ephemeral speech bubble (act body typed over the sender's head, then fades) ───────────────
  *
@@ -2439,17 +2478,20 @@
       rgba(255, 255, 255, 0.16) 24%,
       rgba(255, 255, 255, 0) 48%
     ),
-    /* The stock beneath it, at 93% — see the glass note above for why not less. */
+    /* The stock beneath it, at 80% (nick, 2026-10-22: "a little bit of glassmorphism/transparency"; was
+       93%). Worst case is the darkest actor (#2c3b40) under the bubble: paper composites to ~#cfc4ab and
+       `--lc-paper-ink` still clears 9:1. Still no backdrop-filter, so below ~75% the room's motion would
+       start to show through the words — that is the floor. */
     linear-gradient(
         180deg,
         color-mix(
             in srgb,
-            color-mix(in srgb, var(--lc-paper) 88%, var(--lc-speech-tone)) 93%,
+            color-mix(in srgb, var(--lc-paper) 88%, var(--lc-speech-tone)) 80%,
             transparent
           )
           0%,
-        color-mix(in srgb, var(--lc-paper) 93%, transparent) 34%,
-        color-mix(in srgb, var(--lc-paper-2) 93%, transparent) 100%
+        color-mix(in srgb, var(--lc-paper) 80%, transparent) 34%,
+        color-mix(in srgb, var(--lc-paper-2) 80%, transparent) 100%
       );
   /* ── the glass, and exactly how much of it there is ───────────────────────────────────────────
      (nick, 2026-09-02: "a tiny bit of glassmorphism")
