@@ -38,6 +38,12 @@ decision covers acts addressed to the seat only.
 
 Follows-up: 01M5GWB209A0JCK8ZCY77E3QY0
 
+_(Amended 2026-10-21: fix C landed in lane 01M5GWB209 — `until_lane` on the same call
+also wakes on the daemon's `lane_resolve` broadcast for a named lane and returns the
+holder's branch; resolving the holder's lane is what releases its hold. A hold that
+lapses because its holder left (ADR 693), with no resolve broadcast, still ends the
+wait by timeout — the retry then meets the ADR 697 hand-over.)_
+
 ## Consequences
 
 - An MCP agent waits for a partner in one call; the CooperBench harness lane

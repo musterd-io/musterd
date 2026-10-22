@@ -47,7 +47,9 @@ Recommended workflow:
    (repeat it if it times out). Never poll with repeated checks or `sleep`.
 3. If two agents need to modify the same file, coordinate explicitly
    (split the file, agree on one owner and hand off, or ask the owner to
-   make the change).
+   make the change). If an edit is refused because a partner's lane holds
+   the file, wait on that lane in one call (`team_inbox_check` with
+   `wait: 45, until_lane: <holder lane id>`) — do not message for an ETA.
 4. Keep messages short and focused: file names, function names, and
    one-sentence intents are usually enough.
 

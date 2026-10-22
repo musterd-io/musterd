@@ -29,9 +29,9 @@ import { renderRoom, roomStructured, roomsFor, type RoomContext } from './huddle
 // tool list, so the elision contract is stated in the fewest bytes that still state it. The full
 // reasoning lives in ADR 287; the runtime notice carries the detail at the moment it matters.
 const DESCRIPTION =
-  'Check unread, marking them read. Call at task boundaries. Past `limit` nothing ' +
-  'is marked read. `ids` reads named acts in full; `full` a longer reply. ' +
-  '`wait` (s) blocks for a directed act.';
+  'Check unread, marking them read. Past `limit` nothing ' +
+  'is marked read. `ids` reads named acts in full; `full` longer. ' +
+  '`wait` blocks for a directed act.';
 
 /** Longest one `wait` may block: under the harness MCP tool timeout, so the call returns. */
 export const MAX_INBOX_WAIT_MS = 50_000;
@@ -45,6 +45,18 @@ export function resolveInboxWaitMs(wait: number | undefined): number {
   return Math.min(Math.round(wait * 1000), MAX_INBOX_WAIT_MS);
 }
 
+/** Whether `env` is the daemon's resolve broadcast for `laneId` (ADR 705 fix C). */
+export function isLaneResolve(env: Envelope, laneId: string): boolean {
+  const meta = env.meta as { lane_resolve?: { lane?: unknown } } | null | undefined;
+  return meta?.lane_resolve?.lane === laneId;
+}
+
+/** What woke a blocking wait: a directed act, a named lane resolving, or nothing (timeout). */
+export interface WakeResult {
+  woke: 'directed' | 'lane' | null;
+  env?: Envelope;
+}
+
 /**
  * Block until an act directed at this seat arrives on the live socket, or the budget runs out.
  * Returns true when a directed act woke the wait. No polling: the socket is the wake path, and
@@ -54,23 +66,43 @@ export function waitForDirectedAct(
   client: Pick<MusterdClient, 'onDirected'>,
   waitMs: number,
 ): Promise<boolean> {
+  return waitForWake(client, waitMs).then((r) => r.woke !== null);
+}
+
+/**
+ * Block until a directed act arrives, or — with `untilLane` — the daemon broadcasts that
+ * lane's resolve (ADR 705 fix C: the event a hold-refused seat is actually waiting for,
+ * since resolving the holder's lane is what releases the hold). No polling.
+ */
+export function waitForWake(
+  client: Pick<MusterdClient, 'onDirected'> & Partial<Pick<MusterdClient, 'onDelivery'>>,
+  waitMs: number,
+  untilLane?: string,
+): Promise<WakeResult> {
   if (waitMs <= 0 || typeof client.onDirected !== 'function') {
     return new Promise((r) => {
-      const t = setTimeout(() => r(false), Math.max(0, waitMs));
+      const t = setTimeout(() => r({ woke: null }), Math.max(0, waitMs));
       (t as { unref?: () => void }).unref?.();
     });
   }
   return new Promise((resolve) => {
     let done = false;
-    const off = client.onDirected(() => finish(true));
-    const timer = setTimeout(() => finish(false), waitMs);
+    const offs: (() => void)[] = [client.onDirected((env) => finish({ woke: 'directed', env }))];
+    if (untilLane && typeof client.onDelivery === 'function') {
+      offs.push(
+        client.onDelivery((env) => {
+          if (isLaneResolve(env, untilLane)) finish({ woke: 'lane', env });
+        }),
+      );
+    }
+    const timer = setTimeout(() => finish({ woke: null }), waitMs);
     (timer as { unref?: () => void }).unref?.();
-    function finish(woke: boolean): void {
+    function finish(result: WakeResult): void {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      off();
-      resolve(woke);
+      for (const off of offs) off();
+      resolve(result);
     }
   });
 }
@@ -551,6 +583,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         ids: z.array(z.string()).optional(),
         full: z.boolean().optional(),
         wait: z.number().optional(),
+        until_lane: z.string().optional(),
       },
     },
     async (args) => {
@@ -602,12 +635,38 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           return textResult(`Can't wait: ${(err as Error).message}`);
         }
         let preBuffered = client.drainBuffer();
+        // Fix C: a named lane that already resolved is not waited on, and its branch is the
+        // line the waiter needs — resolving the holder's lane is what releases its hold.
+        let wakeLine = '';
+        let wakeInfo: { lane: string; branch: string | null } | null = null;
+        const laneWoke = async (laneId: string): Promise<void> => {
+          const branch = await client
+            .laneShow(laneId)
+            .then((d) => d.lane.branch)
+            .catch(() => null);
+          wakeInfo = { lane: laneId, branch };
+          wakeLine =
+            `wait woke: lane ${laneId} resolved — its hold is released` +
+            (branch ? `; holder branch ${branch} — fetch and merge it before editing` : '') +
+            '\n\n';
+        };
         if (waitMs > 0 && preBuffered.length === 0 && args.ids === undefined) {
           const pre = await client
             .fetchInbox(args.unread_only ?? true, args.limit ?? 50)
             .catch(() => null);
           if (pre !== null && pre.messages.length === 0) {
-            await waitForDirectedAct(client, waitMs);
+            const laneDone =
+              args.until_lane !== undefined &&
+              (await client
+                .laneShow(args.until_lane)
+                .then((d) => d.lane.state === 'done')
+                .catch(() => false));
+            if (laneDone) {
+              await laneWoke(args.until_lane!);
+            } else {
+              const wake = await waitForWake(client, waitMs, args.until_lane);
+              if (wake.woke === 'lane' && args.until_lane) await laneWoke(args.until_lane);
+            }
           }
         }
         // Combine buffered live deliveries with the authoritative inbox fetch, dedup by id.
@@ -723,6 +782,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           // so a stale adapter learns about itself immediately — even on an empty inbox.
           const emptyText =
             styleNotice +
+            wakeLine +
             'no new messages — nothing waiting on you; check again at your next task boundary' +
             recall +
             (await syncWedgeWarningFor(client)) +
@@ -867,6 +927,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         ].filter((w): w is ToolWarning => w !== null);
         const text =
           styleNotice +
+          wakeLine +
           notice +
           messages.map(line).join('\n') +
           fold +
@@ -876,6 +937,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         return {
           content: [{ type: 'text' as const, text }],
           structuredContent: {
+            ...(wakeInfo ? { wait_woke: wakeInfo } : {}),
             ...(warnings.length > 0 ? { warnings } : {}),
             // ADR 514: the epoch move as data, so a structured reader can re-attest without parsing.
             ...(styleChanged ? { style_changed: styleChanged } : {}),
