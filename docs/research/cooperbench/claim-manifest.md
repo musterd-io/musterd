@@ -135,7 +135,12 @@ and the arm re-run whole.
 On `musterd-cooperbench` (`performance-8x`, 16 GB, 80 GB volume), in one session. A failed check
 stops the procedure before measured spend.
 
-1. **Deploy** from `main` at or after #3177, with `MUSTERD_REF` = that commit.
+1. **Deploy** from `main` at or after #3177, with `MUSTERD_REF` = that commit, and Claude Code
+   pinned to **2.1.307** for the host and every agent container (`CLAUDE_CODE_VERSION` in the
+   Dockerfile). CooperBench's `setup.sh` installs `latest` in each container, and pilot 3's and the
+   solo reference's streams all record 2.1.307. By 2026-10-22, `latest` was 2.1.308, and its first
+   smoke refused to start as root on the host. Pinning keeps the comparison with 017 and 018 on one
+   Claude Code, and both arms here install the same version.
 2. **API check:** one one-word `claude -p` call returns without error.
 3. **Smokes, under $0.05:** `gate_smoke.py` and `hold_smoke.py` both PASS, with tool search on (the
    pre-flight the harness lane owed, README "Tool search").
