@@ -446,7 +446,7 @@ export function headersFile(): string {
  * reading the page's <link rel="icon">: /favicon.ico and /apple-touch-icon.png both 404'd until
  * 2026-10-19 (ADR 666). Rendered once and committed as files — a rasterizer in the build would be
  * a dependency for five images that change when the mark does. brand.md's two cuts hold: the ICO's
- * 16px frame is the small cut (`src/brand/chip-sm.svg`), everything 24px and up is the full cut
+ * 16px frame is the small cut with a firmer rim (ADR 702: the standard rim is under a pixel at 16px) (`src/brand/chip-sm.svg`), everything 24px and up is the full cut
  * (`docs/design/assets/chip.svg`). The touch and maskable icons are full-bleed, because iOS and
  * Android round their own corners and a pre-rounded one shows black in them.
  */
