@@ -1678,7 +1678,7 @@
      stock is one chalk for everyone. The tinted stock's firm 85%-into-bark rim would put twelve
      strong outlines back on the floor, the colour-everywhere result nick turned down. */
   border: 1px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 55%, var(--lc-paper-rim));
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-name);
   letter-spacing: -0.01em;
   color: var(--lc-paper-ink);
@@ -1963,7 +1963,7 @@
   border-radius: 999px;
   border: 1px solid var(--lc-plate-hue);
   background: color-mix(in srgb, var(--lc-plate-hue) 14%, transparent);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-tag);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1980,7 +1980,7 @@
   padding: 1px 4px;
   border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--lc-paper-ink) 26%, transparent);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-tag);
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -1999,7 +1999,7 @@
   padding: 1px 4px;
   border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--lc-warn-ink) 55%, transparent);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-tag);
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -2067,7 +2067,7 @@
   padding: 1.5px 5px;
   border-radius: 999px;
   background: var(--lc-woken-fill);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-tag);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2274,7 +2274,7 @@
     inset 0 1px 0 var(--lc-paper-sheen),
     0 6px 18px -4px var(--lc-paper-drop),
     0 0 16px -6px color-mix(in srgb, var(--lc-accent) 30%, transparent);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--lc-type-aside);
   line-height: 1.4;
   white-space: pre-wrap;
