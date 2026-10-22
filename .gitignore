@@ -60,6 +60,13 @@ coverage-blobs/
 # tree dirty: the dream-wake freshen skipped (2026-10-20) and builds could stamp `<sha>-dirty`.
 **/.musterd/enforcement-cache.json
 **/.musterd/gate-unenforced.json
+# Per-machine state that `musterd init` and the OpenCode plugin rewrite in place: the plugin's own
+# stamp (generation, pid, status, at) and the machine-scope MCP mirror's memory (hash → what was
+# mirrored where). Both change on every workspace with no source change, so tracking them aborted
+# `git switch` for any seat whose copy was untracked (slippy, 2026-10-22, on b3017222); their
+# untracked copies are removed from the index in the same change that adds these lines.
+**/.musterd/opencode-plugin.json
+**/.musterd/repo-servers.json
 # ADR 442 wall 1c: the per-session ledger of subagents this session spawned (the Agent PostToolUse
 # hook writes it; the SendMessage gate reads it). Machine-local and per-session — unignored, it
 # stamped every seat's build `<sha>-dirty` (ryder, 2026-09-25, on 434c9625).
