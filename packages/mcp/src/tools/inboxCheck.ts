@@ -31,7 +31,50 @@ import { renderRoom, roomStructured, roomsFor, type RoomContext } from './huddle
 const DESCRIPTION =
   'Check unread addressed to you or the team, marking them read. Call at task start, ' +
   'task end, and after heads-down work. Past `limit` nothing is marked read. `ids` reads ' +
-  'named acts in full; `full` returns a longer reply.';
+  'named acts in full; `full` returns a longer reply. `wait` (s) blocks for the next ' +
+  'directed act instead of polling.';
+
+/** Longest one `wait` may block: under the harness MCP tool timeout, so the call returns. */
+export const MAX_INBOX_WAIT_MS = 50_000;
+
+/** Resolve `wait` (seconds) to a block budget in ms, clamped to MAX_INBOX_WAIT_MS. */
+export function resolveInboxWaitMs(wait: number | undefined): number {
+  if (wait === undefined) return 0;
+  if (!Number.isFinite(wait) || wait < 0) {
+    throw new RangeError('wait must be a non-negative number of seconds (0 = do not block)');
+  }
+  return Math.min(Math.round(wait * 1000), MAX_INBOX_WAIT_MS);
+}
+
+/**
+ * Block until an act directed at this seat arrives on the live socket, or the budget runs out.
+ * Returns true when a directed act woke the wait. No polling: the socket is the wake path, and
+ * the caller's fetch after the wait is the authority if the socket was down.
+ */
+export function waitForDirectedAct(
+  client: Pick<MusterdClient, 'onDirected'>,
+  waitMs: number,
+): Promise<boolean> {
+  if (waitMs <= 0 || typeof client.onDirected !== 'function') {
+    return new Promise((r) => {
+      const t = setTimeout(() => r(false), Math.max(0, waitMs));
+      (t as { unref?: () => void }).unref?.();
+    });
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    const off = client.onDirected(() => finish(true));
+    const timer = setTimeout(() => finish(false), waitMs);
+    (timer as { unref?: () => void }).unref?.();
+    function finish(woke: boolean): void {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      off();
+      resolve(woke);
+    }
+  });
+}
 
 /**
  * How far back the room fold reads (ADR 378). Matches the CLI's room view deliberately: a huddle is
@@ -508,6 +551,10 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // something it was already shown.
         ids: z.array(z.string()).optional(),
         full: z.boolean().optional(),
+        wait: z
+          .number()
+          .optional()
+          .describe('seconds to block for the next directed act (max 50); 0 = return at once'),
       },
     },
     async (args) => {
@@ -550,8 +597,26 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
             },
           };
         }
+        // Blocking wait (finding 019 fix B): when nothing is already waiting, one call blocks
+        // on the live socket for the next directed act instead of the agent polling this tool.
+        let waitMs: number;
+        try {
+          waitMs = resolveInboxWaitMs(args.wait);
+        } catch (err) {
+          return textResult(`Can't wait: ${(err as Error).message}`);
+        }
+        let preBuffered = client.drainBuffer();
+        if (waitMs > 0 && preBuffered.length === 0 && args.ids === undefined) {
+          const pre = await client
+            .fetchInbox(args.unread_only ?? true, args.limit ?? 50)
+            .catch(() => null);
+          if (pre !== null && pre.messages.length === 0) {
+            await waitForDirectedAct(client, waitMs);
+          }
+        }
         // Combine buffered live deliveries with the authoritative inbox fetch, dedup by id.
-        const buffered = client.drainBuffer();
+        const buffered = [...preBuffered, ...client.drainBuffer()];
+        preBuffered = [];
         const fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
         // ADR 514 inc 3: the daemon says which style epoch it resolves for this seat now. When it
         // differs from the envelope held since team_join, fetch the new block and lead with it —
