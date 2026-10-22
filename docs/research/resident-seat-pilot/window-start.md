@@ -1,7 +1,9 @@
 # Resident seat pilot — window start
 
 Recorded per [the manifest](../resident-seat-pilot-manifest.md) §Run protocol step 1, before any
-in-class lane was handed to the worker seat.
+in-class lane was handed to the worker seat. Scored 2026-10-22 in
+[finding 020](../020-resident-seat-pilot.md). The acceptance tail was still open at that read
+(it runs to 2026-10-23 17:11:37 PDT).
 
 | Term | Value |
 | --- | --- |

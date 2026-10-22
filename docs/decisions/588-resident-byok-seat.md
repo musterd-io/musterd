@@ -257,6 +257,21 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   01M50GH51Z). ADR 627 has the host make that read itself and hand it to the loop as a tool exchange
   after the line. Decision 6's delivery point is unchanged.
 
+- _2026-10-22 (pilot lane `01M4VTAEJZYTYACT224Y8T309F`, [finding 020](../research/020-resident-seat-pilot.md))._
+  The week was read from the joiner replica that holds `wake_leases` and `wake_turns`. The hub has
+  the same `residency.wake_cost` totals for mason ($32.0786, 64 rows) and resident ($0.0465, 5 rows)
+  and none of those lease rows. B was handed 11 in-class lanes and 9 were accepted, past the floor
+  of 8 and 4. The kill comparison was not readable: C's priced record is one accepted lane, $1.80
+  across 3 wakes. Six of B's nine accepts carry a `lane_id` sum of $16.80. Nick's decision of
+  2026-10-19, in the window record, stands: report measure 2 as underpowered on C, do not amend the
+  manifest, do not extend the window, and the worker shape waits. The finding is 020 because 015 is
+  the CooperBench pilot. Nick had already revoked both enrollments on 2026-10-22, before the
+  acceptance tail closed; this note does not put the coordination seat back. ADR 656's re-land of
+  resident bash is conditioned on this read keeping it. Working bash is the worker wake, and that
+  shape waits, so the condition is not met. The 656 file is outside this lane's surface, which is
+  why the condition is recorded here.
+  Follows-up: `01M5JEKY6R4184RXMY40SEQQ9K`
+
 ## Observability & Evaluation
 
 - **Traces.** The existing residency rails with surface `musterd`: `wake_leases`, `wake_turns`
