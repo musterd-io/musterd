@@ -9627,7 +9627,7 @@ a.lc-xp__hit:focus-visible {
 .lc-team-card:not(.is-still) .lc-team-card__work {
   font-size: 12.5px;
   line-height: 1.35;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   color: var(--lc-dim);
 }
 .lc-team-card__detail-meta {
