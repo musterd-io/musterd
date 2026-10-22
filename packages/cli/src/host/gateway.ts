@@ -6,7 +6,6 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import type { Socket } from 'node:net';
 import { priceUsage, type UsageLike } from './prices.js';
 import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalVerdict } from './spendApproval.js';
 
@@ -166,6 +165,8 @@ export interface MeteringGatewayOptions {
   }) => Promise<SpendApprovalVerdict>;
   price?: (model: string, usage: UsageLike) => number | undefined;
   log?: (line: string) => void;
+  /** Bound on `close`'s wait for in-flight relays. Default 3s. */
+  drainMs?: number;
 }
 
 export interface MeteringGateway {
@@ -198,6 +199,10 @@ const PARSE_LIMIT_BYTES = 4 * 1024 * 1024;
 const LINE_LIMIT_BYTES = 256 * 1024;
 /** The field names an SSE stream can open with (WHATWG event stream), for the content-type sniff. */
 const SSE_FIELDS = ['event:', 'data:', 'id:', 'retry:'];
+/** How long `close` waits for a provider response already in flight. The body is on the wire;
+ *  a hung upstream must not hold settle open. After this, metering freezes so a late `end`
+ *  cannot post a turn the summary missed (lane 01M5JEKY6R). */
+const DRAIN_MS = 3_000;
 
 const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
@@ -363,7 +368,6 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   let unpriceable = false;
   let spent = 0;
   let budgetExhausted = false;
-  const sockets = new Set<Socket>();
   type ApprovalDecision = 'forward' | 'decline' | 'wake_ended';
   let decided: ApprovalDecision | undefined;
   let gate: Promise<ApprovalDecision> | undefined;
@@ -373,6 +377,15 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   const approvalAbort = new AbortController();
   const approvalWrites: Promise<void>[] = [];
   let closePromise: Promise<void> | undefined;
+  let closing = false;
+  /** Set once `close` has snapshotted. A later `end` must not post a turn the summary missed. */
+  let frozen = false;
+  interface LiveRelay {
+    done: Promise<void>;
+    /** Record usage already parsed, once. No-op once recorded, frozen, or the body had no usage. */
+    commitParsed: () => void;
+  }
+  const live: LiveRelay[] = [];
 
   const relay = (
     req: IncomingMessage,
@@ -388,7 +401,53 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
     }
     headers['host'] = target.host;
     const fn = target.protocol === 'https:' ? httpsRequest : httpRequest;
+
+    let resolveDone: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      resolveDone();
+    };
+    let recorded = false;
+    let status = 0;
+    let parser: UsageParser | undefined;
+    const commit = (fromEnd: boolean): void => {
+      if (recorded || frozen) return;
+      const { usage, model } = parser?.result() ?? { usage: null, model: null };
+      if (!usage || status >= 400) {
+        // A GET (Codex's `/models` catalog) is no model call: relayed, never counted unmetered.
+        // An abort with no usage is not "unmetered" — the response never finished.
+        if (fromEnd && !usage && status < 400 && req.method !== 'GET') unmetered += 1;
+        if (fromEnd) recorded = true;
+        return;
+      }
+      recorded = true;
+      const cost = model ? price(model, usage) : undefined;
+      if (cost === undefined) unpriceable = true;
+      else spent += cost;
+      const call: MeteredCall = {
+        turn: calls.length + 1,
+        provider: up.name,
+        model,
+        usage,
+        cost_usd: cost,
+        status,
+      };
+      calls.push(call);
+      try {
+        opts.onCall?.(call);
+      } catch (err) {
+        log(`! gateway onCall threw: ${(err as Error).message}`);
+      }
+    };
+    live.push({ done, commitParsed: () => commit(false) });
+
     const upstream = fn(target, { method: req.method ?? 'POST', headers }, (upRes) => {
+      status = upRes.statusCode ?? 0;
       const resHeaders: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(upRes.headers)) {
         if (v === undefined) continue;
@@ -396,46 +455,34 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
         if (lk === 'connection' || lk === 'keep-alive' || lk === 'transfer-encoding') continue;
         resHeaders[k] = v;
       }
-      res.writeHead(upRes.statusCode ?? 502, resHeaders);
+      if (!res.destroyed && !res.headersSent) res.writeHead(status || 502, resHeaders);
       const contentType = upRes.headers['content-type'];
-      const parser = new UsageParser(
+      parser = new UsageParser(
         contentType === undefined ? undefined : /text\/event-stream/i.test(String(contentType)),
       );
       upRes.on('data', (chunk: Buffer) => {
-        parser.push(chunk);
-        res.write(chunk);
+        parser?.push(chunk);
+        if (!res.destroyed && !res.writableEnded) res.write(chunk);
       });
       upRes.on('end', () => {
-        res.end();
-        const { usage, model } = parser.result();
-        const status = upRes.statusCode ?? 0;
-        if (!usage || status >= 400) {
-          // A GET (Codex's `/models` catalog) is no model call: relayed, never counted unmetered.
-          if (status < 400 && req.method !== 'GET') unmetered += 1;
-          return;
-        }
-        const cost = model ? price(model, usage) : undefined;
-        if (cost === undefined) unpriceable = true;
-        else spent += cost;
-        const call: MeteredCall = {
-          turn: calls.length + 1,
-          provider: up.name,
-          model,
-          usage,
-          cost_usd: cost,
-          status,
-        };
-        calls.push(call);
-        try {
-          opts.onCall?.(call);
-        } catch (err) {
-          log(`! gateway onCall threw: ${(err as Error).message}`);
-        }
+        if (!res.destroyed && !res.writableEnded) res.end();
+        commit(true);
+        finish();
       });
-      upRes.on('error', () => res.destroy());
+      upRes.on('error', () => {
+        // Usage already folded from earlier chunks still counts; `end` may never follow a destroy.
+        commit(false);
+        if (!res.destroyed) res.destroy();
+        finish();
+      });
+      upRes.on('close', () => {
+        if (finished) return;
+        commit(false);
+        finish();
+      });
     });
     upstream.on('error', (err) => {
-      if (!res.headersSent) {
+      if (!res.headersSent && !res.destroyed) {
         res.writeHead(502, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -446,7 +493,8 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
             },
           }),
         );
-      } else res.destroy();
+      } else if (!res.destroyed) res.destroy();
+      if (!finished && status === 0) finish();
     });
     req.on('aborted', () => upstream.destroy());
     req.pipe(upstream);
@@ -544,6 +592,17 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       });
 
   const handle = (req: IncomingMessage, res: ServerResponse): void => {
+    if (closing) {
+      res.writeHead(503, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'api_error', message: 'musterd gateway: wake ended' },
+        }),
+      );
+      req.resume();
+      return;
+    }
     const matched = /^\/([^/]+)(\/.*)?$/.exec(req.url ?? '');
     const upstream = matched ? upstreams.find((u) => u.name === matched[1]) : undefined;
     if (!matched || !upstream) {
@@ -584,10 +643,6 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   };
 
   const server: Server = createServer(handle);
-  server.on('connection', (s) => {
-    sockets.add(s);
-    s.on('close', () => sockets.delete(s));
-  });
   server.keepAliveTimeout = 0;
   server.headersTimeout = 0;
   server.requestTimeout = 0;
@@ -644,12 +699,27 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       if (closePromise) return closePromise;
       closePromise = (async () => {
         // A finished accept or decline stays. Abort must not turn it into wake_ended.
+        closing = true;
         if (gate && decided !== 'forward' && decided !== 'decline') approvalWakeEnded = true;
         approvalAbort.abort();
         if (gate) await gate;
-        // The handler waiting on `gate` writes its 402 before this continuation runs.
+        // holdThen's continuation starts its relay or writes the 402 before we snapshot.
+        await Promise.resolve();
         await Promise.all(approvalWrites);
-        for (const s of sockets) s.destroy();
+        const pending = live.map((r) => r.done);
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, opts.drainMs ?? DRAIN_MS);
+          void Promise.all(pending).then(() => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        // A body already parsed but not `end`ed (the client aborted, or the drain timed out)
+        // still counts. Freeze before the sockets die, so that `end` cannot post a turn
+        // `summary()` — called by the loop once `close` resolves — will not include.
+        for (const r of live) r.commitParsed();
+        frozen = true;
+        server.closeAllConnections();
         await new Promise<void>((resolve) => {
           server.close(() => resolve());
         });
