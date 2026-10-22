@@ -48,6 +48,38 @@ describe('animFor (office realism Task 13: the pose picks the clip)', () => {
   });
 });
 
+describe('carrying clips (plan Task 16: the hands hold what is carried)', () => {
+  const withCarry: SheetSpec['anims'] = {
+    ...anims,
+    'walk-hold2': { row: 64, frames: 6, fps: 12, loop: true },
+    'walk-hold1': { row: 72, frames: 6, fps: 12, loop: true },
+    'walk-call': { row: 80, frames: 6, fps: 12, loop: true },
+    'idle-hold2': { row: 88, frames: 6, fps: 12, loop: true },
+    'idle-hold1': { row: 96, frames: 6, fps: 12, loop: true },
+  };
+
+  it('a walker with a box or plate holds it in both hands; a card, mug or bottle in one; the laptop needs neither', () => {
+    expect(animFor(pose({ moving: true, carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold2');
+    expect(animFor(pose({ moving: true, carry: 'plate' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold2');
+    expect(animFor(pose({ moving: true, carry: 'card' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold1');
+    expect(animFor(pose({ moving: true, carry: 'laptop' }), 0, 5, 0.3, withCarry).anim).toBe('walk');
+    // still scrubbed by the gait phase
+    const a = animFor(pose({ moving: true, carry: 'box', phase: 0.5 }), 0, 10, 0.3, withCarry);
+    expect(10 - a.startT).toBeCloseTo(0.5 * (6 / 12), 9);
+  });
+
+  it('a pacing call walks with the phone at the ear; standing still, a held thing outranks the talking hand', () => {
+    expect(animFor(pose({ moving: true, carry: 'phone', gesture: GESTURE.call, gestureT: 0.5 }), 0, 5, 0.3, withCarry).anim).toBe('walk-call');
+    expect(animFor(pose({ carry: 'mug', bubble: '!' as never }), 0, 5, 0.3, withCarry).anim).toBe('idle-hold1');
+    expect(animFor(pose({ carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe('idle-hold2');
+  });
+
+  it('a sheet from before the carrying clips falls back to the plain walk and idle', () => {
+    expect(animFor(pose({ moving: true, carry: 'box' }), 0, 5, 0.3, anims).anim).toBe('walk');
+    expect(animFor(pose({ carry: 'card' }), 0, 5, 0.3, anims).anim).toBe('idle');
+  });
+});
+
 describe('gesture clips (increment 3b: every beat the painter plays has a sprite)', () => {
   // A sheet with every gesture clip, six frames each, at rows past the base clips.
   const withGestures: SheetSpec['anims'] = {

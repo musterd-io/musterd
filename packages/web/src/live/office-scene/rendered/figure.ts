@@ -7,7 +7,7 @@
  */
 import type { Accessory, Appearance, FacialHair, Hat, HairStyle, TopCut } from '../appearance';
 import { project, type Fit } from '../iso';
-import type { OfficeNode } from '../types';
+import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
 import { type CreateCanvas, defaultCreate, mulHex, tintFrame } from './tint';
 
@@ -20,7 +20,50 @@ export type LayerId =
   | 'bottom'
   | 'shoes'
   | `acc/${Accessory}`
-  | 'visor';
+  | 'visor'
+  | `carry/${CarryLayer}`
+  | 'lanyard'
+  | 'lanyard-card';
+
+/** The carried things' sheets (`figure.py` CARRY): the moving box is the box in kraft, a plant in it. */
+export type CarryLayer = 'laptop' | 'box' | 'plant' | 'plate' | 'card' | 'mug' | 'bottle' | 'phone';
+
+/** The handoff box's blue, and the moving box's kraft — the painter's colours (`character.ts`). */
+const BOX = '#8fd0dd';
+const MOVING_BOX = '#c9a26b';
+/** The break nook's ceramic, for a mug that is not a desk mug. */
+const NOOK_MUG = '#d6d0c6';
+
+/** What a member has with them this frame, beyond what they wear (plan Task 16). */
+export interface Held {
+  carry?: CarryKind | null;
+  /** The desk mug's colour while a sip beat raises it. */
+  mug?: string;
+  /** A first arrival's lanyard, in their colour. */
+  lanyard?: string;
+}
+
+function carried(h: Held): Layer[] {
+  switch (h.carry) {
+    case 'box':
+      return [{ id: 'carry/box', color: BOX }];
+    case 'movingBox':
+      return [
+        { id: 'carry/box', color: MOVING_BOX },
+        { id: 'carry/plant', color: null },
+      ];
+    case 'mug':
+      return [{ id: 'carry/mug', color: h.mug ?? NOOK_MUG }];
+    case 'laptop':
+    case 'plate':
+    case 'card':
+    case 'bottle':
+    case 'phone':
+      return [{ id: `carry/${h.carry}`, color: null }];
+    default:
+      return h.mug ? [{ id: 'carry/mug', color: h.mug }] : [];
+  }
+}
 
 export interface Layer {
   id: LayerId;
@@ -29,17 +72,20 @@ export interface Layer {
 }
 
 /**
- * Back to front: skin, hair, facial hair, top, bottom, shoes, hat, accessory, and the visor last
- * for an agent — "the one tell the office cannot afford to lose". `topColor` is the member's
- * identity colour, which `appearance.ts` deliberately does not carry.
+ * Back to front: skin, hair, facial hair, top, bottom, shoes, whatever they carry and a lanyard, hat,
+ * accessory, and the visor last for an agent — "the one tell the office cannot afford to lose".
+ * `topColor` is the member's identity colour, which `appearance.ts` deliberately does not carry. A
+ * carried thing's sheet already has the hands and body cut out of it where they are in front.
  */
-export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: string | null = null): Layer[] {
+export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: string | null = null, held: Held = {}): Layer[] {
   const out: Layer[] = [{ id: 'skin', color: a.skin }];
   if (a.hair !== 'bald') out.push({ id: `hair/${a.hair}`, color: a.hairColor });
   if (a.facialHair !== 'none') out.push({ id: `facial/${a.facialHair}`, color: a.hairColor });
   out.push({ id: `top/${a.cut}`, color: topColor });
   out.push({ id: 'bottom', color: a.bottom });
   out.push({ id: 'shoes', color: a.shoes });
+  out.push(...carried(held));
+  if (held.lanyard) out.push({ id: 'lanyard', color: held.lanyard }, { id: 'lanyard-card', color: null });
   if (a.hat !== 'none') out.push({ id: `hat/${a.hat}`, color: a.hatColor });
   if (a.accessory !== 'none') out.push({ id: `acc/${a.accessory}`, color: a.accessoryColor });
   if (kind === 'agent') out.push({ id: 'visor', color: null });
@@ -57,6 +103,10 @@ export interface FigureDraw {
   kind: OfficeNode['kind'];
   /** The member's identity colour, for the top. */
   topColor?: string | null;
+  /** What they carry, a sip's mug, a lanyard. */
+  held?: Held;
+  /** `arms` is the seated overlay: only each layer's `@arms` cells, drawn again over the desk. */
+  part?: 'all' | 'arms';
   anim: Anim;
   dir: Dir8;
   t: number;
@@ -84,10 +134,14 @@ export function drawFigureFrame(d: FigureDraw): void {
     ctx.save();
     ctx.globalAlpha = alpha;
   }
-  for (const layer of layersFor(d.look, d.kind, d.topColor ?? null)) {
+  const arms = d.part === 'arms';
+  for (const layer of layersFor(d.look, d.kind, d.topColor ?? null, d.held)) {
     const sheet = d.sheets.get(layer.id);
     if (!sheet) continue;
-    const c = frameCell(spec, layer.id, d.anim, d.dir, d.t, d.startT, d.frame);
+    // The overlay draws only the layers that stored arm pixels; the rest of the figure stays behind the desk.
+    const key = arms ? `${layer.id}@arms` : layer.id;
+    if (arms && !spec.cells?.[key]) continue;
+    const c = frameCell(spec, key, d.anim, d.dir, d.t, d.startT, d.frame);
     if (c.sw <= 0 || c.sh <= 0) continue;
     const dx = p.x - (spec.anchor.x - c.ox) * k;
     const dy = p.y - (spec.anchor.y - c.oy) * k;

@@ -40,7 +40,14 @@ export const GESTURE_ANIMS = [
   'g-wave',
 ] as const;
 export type GestureAnim = (typeof GESTURE_ANIMS)[number];
-export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim;
+/**
+ * The carrying clips (plan Task 16), after the gestures in `figure.py` CLIPS order: the walk and the
+ * idle with both hands holding something at the chest (`hold2`: a box, a plate), the right hand out in
+ * front (`hold1`: the card, a mug, a bottle), or the phone at the ear on a pacing call.
+ */
+export const CARRY_ANIMS = ['walk-hold2', 'walk-hold1', 'walk-call', 'idle-hold2', 'idle-hold1'] as const;
+export type CarryAnim = (typeof CARRY_ANIMS)[number];
+export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim | CarryAnim;
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -51,6 +58,7 @@ export const ANIMS: readonly Anim[] = [
   'sit-down',
   'stand-up',
   ...GESTURE_ANIMS,
+  ...CARRY_ANIMS,
 ];
 
 export interface AnimSpec {
@@ -81,6 +89,8 @@ export interface SheetSpec {
    * frame. A frame with no pixels on that layer is all zeros. Cropping each frame to its own
    * pixels is what keeps 27 layers from decoding to gigabytes: a glasses cell is a few hundred
    * pixels, not a whole frame. Absent (an older figure.json), the sheet is a plain grid.
+   * `<layer>@arms` is the same list for the seated overlay — only the arm pixels of the seated
+   * clips, packed into that layer's own atlas (plan Task 16).
    */
   cells?: Record<string, number[]>;
   /**

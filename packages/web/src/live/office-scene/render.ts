@@ -5468,11 +5468,12 @@ export function renderScene(
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
     // slab. One character, two depth slots: the body at the chair, the arms on the desk. Without this the
     // hands disappear into the desk and the typing is invisible. Skipped while a beat has dropped the
-    // hands into the lap — lap arms painted over the slab would float on the desk.
-    if (seated && !figure && !handsInLap(pose.gesture, pose.gestureT)) {
+    // hands into the lap — lap arms painted over the slab would float on the desk. The rendered figure
+    // does the same with the arm cells its seated clips store (plan Task 16).
+    if (seated && !handsInLap(pose.gesture, pose.gestureT)) {
       items.push({
         d: seatedArmsDepth(slot),
-        fn: () => drawActor(ctx, fit, pose, node, t, true, mug),
+        fn: () => drawActor(ctx, fit, pose, node, t, true, mug, undefined, figure),
       });
     }
 

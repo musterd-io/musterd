@@ -50,6 +50,9 @@ FACIAL = ["stubble", "moustache", "goatee", "beard"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 ACCS = ["glasses", "headphones", "scarf"]
+# Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
+# moving box is `carry/box` in kraft with `carry/plant` poking out of it.
+CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
 LAYERS = (
     ["skin"]
     + [f"hair/{h}" for h in HAIR]
@@ -59,16 +62,27 @@ LAYERS = (
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
     + ["visor"]
+    + [f"carry/{c}" for c in CARRY]
+    # a first arrival's badge: the cord and the card's band take their colour, the card stays paper
+    + ["lanyard", "lanyard-card"]
 )
 # Base layers are on every member and split by the ID pass; every other layer is one of an exclusive
 # group (one hair style, one top, …) and is rendered alone with the base as a holdout.
-BASE_LAYERS = {"skin", "bottom", "shoes", "visor"}
-# the ID pass stores 9·(index+1) in the red byte — spaced so a nearest match survives rounding
+BASE_LAYERS = ["skin", "bottom", "shoes", "visor"]
+# the ID pass stores 9·(index+1) in the red byte — spaced so a nearest match survives rounding. Only
+# the base is split by ID, so only the base needs a byte (the whole list would overflow 255).
 ID_STEP = 9
 
 
 def layer_id_byte(layer: str) -> int:
-    return ID_STEP * (LAYERS.index(layer) + 1)
+    return ID_STEP * (BASE_LAYERS.index(layer) + 1) if layer in BASE_LAYERS else 0
+
+
+# The seated overlay (plan Task 16): a desk paints over a member sitting behind it, but their forearms
+# rest ON it. For the seated clips, these layers also store just their arm pixels (`<layer>@arms`
+# cells) — every mesh on a shoulder, elbow or wrist joint, plus the whole of a prop held at the desk —
+# which `drawFigureFrame(part: 'arms')` draws again over the slab.
+ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate"]
 
 
 # ── materials ──────────────────────────────────────────────────────────────────────────────
@@ -111,6 +125,7 @@ class Rig:
     def _attach(self, o: bpy.types.Object, joint: str, layer: str, mat) -> bpy.types.Object:
         o.data.materials.append(mat)
         o["layer"] = layer
+        o["arm"] = joint.startswith(("shoulder", "elbow", "wrist"))
         o.parent = self.joints[joint]
         o.matrix_parent_inverse = self.joints[joint].matrix_world.inverted()
         self.meshes.append(o)
@@ -294,7 +309,149 @@ def build_figure(zs: float, origin: Vector) -> Rig:
 
     # ── the visor (agents): a band across the eyes, its own colour
     r.box("visor", "head", "visor", visor, HEAD_X + HEAD_R * 0.92, 0, HEAD_C + 0.4, 1.7, HEAD_R * 1.5, 4.4, 0.9)
+
+    # ── the lanyard (a first arrival, from the toss until they sit): a cord round the back of the neck
+    # and down both sides of the chest to a badge. Rigid on the spine — it rides the torso's sway.
+    card = scene.matte("fig-lanyard-card", scene.srgb("#f7f3ea"), 0.6)
+    front = 0.3 + 6.4 * FIG * 0.98  # the torso's front at the chest
+    cord = [r.torus("cord", "spine", "lanyard", cloth, HEAD_X * 0.4, 0, NECK - 0.5 * FIG, 4.6 * FIG, 0.55, (0, math.radians(-16), 0))]
+    for sy in (1, -1):
+        bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.55, depth=13 * FIG)
+        o = bpy.context.active_object
+        o.name = "lanyard/side"
+        o.location = (r.origin.x + front - 1.2, r.origin.y + sy * 2.6 * FIG, (CHEST + 6.5 * FIG) * zs)
+        o.rotation_euler = (math.radians(sy * 14), math.radians(-14), 0)
+        o.scale = (1, 1, zs)
+        cord.append(r._attach(o, "spine", "lanyard", cloth))
+    cord.append(r.box("band", "spine", "lanyard", cloth, front + 0.5, 0, CHEST - 3.4 * FIG, 0.7, 5.2, 1.8))
+    cord.append(r.box("badge", "spine", "lanyard-card", card, front + 0.4, 0, CHEST - 8.2 * FIG, 0.7, 5.2, 6.4))
+    for o in cord:
+        o["clips"] = STANDING_CLIPS
+    build_props(r)
     return r
+
+
+# ── carried things (increment 3b, plan Task 16) ─────────────────────────────────────────────────
+# A prop is not jointed: after a frame is posed, `place_props` stands each one where the hands are —
+# upright, turned with the body — the way the painter's `drawCarry` reads the solved wrists. A rigid
+# child of the wrist would tip a mug upside down at the top of a sip. Each prop renders only on the
+# clips that carry it (`clips`), so the rest of the sheet costs it nothing.
+HOLD2 = ["walk-hold2", "idle-hold2"]  # both hands forward: the box, the moving box, a plate of food
+HOLD1 = ["walk-hold1", "idle-hold1"]  # the right hand out in front: the card, a mug, a bottle
+# the clips a standing member plays, which is where the lanyard shows
+STANDING_CLIPS = ["idle", "walk", "speak", "turn", *HOLD2, *HOLD1, "walk-call",
+                  "g-browse", "g-fill", "g-pour", "g-call", "g-reach", "g-wave"]
+
+
+class Prop:
+    def __init__(self, name: str, clips: list[str], place):
+        bpy.ops.object.empty_add(type="PLAIN_AXES", radius=1)
+        self.empty = bpy.context.active_object
+        self.empty.name = f"prop/{name}"
+        self.clips = clips
+        self.place = place
+
+    def add(self, rig: Rig, o: bpy.types.Object, layer: str) -> None:
+        """`o` built at the world origin in floor units, unstretched (zs = 1); the empty stretches it."""
+        o["layer"] = layer
+        o["arm"] = False
+        o["clips"] = self.clips
+        o.parent = self.empty
+        rig.meshes.append(o)
+
+
+def _hand(rig: Rig, side: str) -> Vector:
+    """The middle of a hand, in world space: past the wrist along the forearm."""
+    w = rig.joints[f"wrist{side}"].matrix_world.translation
+    e = rig.joints[f"elbow{side}"].matrix_world.translation
+    return w + (w - e).normalized() * 2.6
+
+
+def build_props(r: Rig) -> None:
+    m = lambda name, hex6, rough=0.6: scene.matte(f"fig-prop-{name}", scene.srgb(hex6), rough)  # noqa: E731
+    tint = grey("fig-prop-tint", 0.82, 0.7)
+    tint_dark = grey("fig-prop-tint-dark", 0.58, 0.7)
+    r.props = []
+    up = lambda zs, dz: Vector((0, 0, dz * zs))  # noqa: E731
+
+    # the member's own closed laptop, tucked under the right arm — it rides the elbow, so the arm's
+    # swing carries it, and sits just inside the arm against the body
+    lap = Prop("laptop", ["idle", "walk", "speak", "turn"],
+               lambda rig, f, l, zs: rig.joints["elbowR"].matrix_world.translation + l * 2.2 - up(zs, 1.5))
+    o = scene.box("carry/laptop", 0, 0, -6, 17, 1.4, 12, m("laptop", "#c7ccd2", 0.35), 1)
+    scene.bevel(o, 0.5, 2)
+    lap.add(r, o, "carry/laptop")
+    r.props.append(lap)
+
+    # the handoff box (and the moving box, in kraft) at the chest between both hands; the plant in it
+    mid = lambda rig: (_hand(rig, "L") + _hand(rig, "R")) / 2  # noqa: E731
+    box = Prop("box", HOLD2, lambda rig, f, l, zs: mid(rig) - f * 1.2)
+    box.add(r, scene.box("carry/box", 0, 0, -6.5, 12, 14.4, 13, tint, 1), "carry/box")
+    box.add(r, scene.box("carry/box-lid", 0, 0, 3.3, 12.2, 14.6, 3.4, tint_dark, 1), "carry/box")
+    r.props.append(box)
+    plant = Prop("plant", HOLD2, lambda rig, f, l, zs: mid(rig) - f * 1.2)
+    plant.add(r, scene.ball("carry/plant", 1.5, 1, 4.5, 4.6, 4.6, 4.0, m("leaf", "#4f8a4b", 0.8), 1), "carry/plant")
+    plant.add(r, scene.ball("carry/plant-lit", -1, -1.5, 8.5, 3.2, 3.2, 3.0, m("leaf-lit", "#79b36a", 0.8), 1), "carry/plant")
+    r.props.append(plant)
+
+    # a plate of food: resting on both palms on the way back from the fridge; in the left hand to eat
+    def plate_meshes(p: Prop) -> None:
+        p.add(r, scene.cyl("carry/plate", 0, 0, 0, 7.6, 8.2, 1.0, m("plate", "#f2e7d5", 0.4), 1, 24), "carry/plate")
+        p.add(r, scene.ball("carry/food", 0, 0, 0.6, 4.4, 4.0, 1.6, m("food", "#c9744a", 0.8), 1), "carry/plate")
+
+    held = Prop("plate", HOLD2, lambda rig, f, l, zs: mid(rig) + up(zs, 2.2))
+    plate_meshes(held)
+    r.props.append(held)
+    eat = Prop("plate-eat", ["g-eat"], lambda rig, f, l, zs: _hand(rig, "L") + f * 2.5 + up(zs, 1.6))
+    plate_meshes(eat)
+    r.props.append(eat)
+
+    # the lane's card, held up in front — the wall's own sticky size, a dark rim so pale paper reads
+    # against a pale shirt; `g-reach` has it too, and the runtime only draws it once it's been taken
+    card = Prop("card", [*HOLD1, "g-reach"], lambda rig, f, l, zs: _hand(rig, "R") + f * 0.8 + up(zs, 1.0))
+    card.add(r, scene.box("carry/card-rim", 0, 0, 0, 0.5, 15.6, 10.6, m("card-rim", "#8f8470", 0.8), 1), "carry/card")
+    card.add(r, scene.box("carry/card", 0.3, 0, 0.3, 0.4, 15, 10, m("card", "#efe8d8", 0.8), 1), "carry/card")
+    card.add(r, scene.box("carry/card-tab", 0.5, 0, 9.0, 0.3, 7, 2.6, m("card-tab", "#b4a88f", 0.8), 1), "carry/card")
+    r.props.append(card)
+
+    # a mug held by its handle, the body just ahead of the fist (a hand this chunky hides a mug held
+    # any other way): tinted — the desk mug's colour on a sip,
+    # the break nook's ceramic on the way back from it
+    mug = Prop("mug", [*HOLD1, "g-sip"], lambda rig, f, l, zs: _hand(rig, "R") + f * 5.4 - up(zs, 3.0))
+    mug.add(r, scene.cyl("carry/mug", 0, 0, 0, 3.0, 3.2, 6.0, tint, 1, 20), "carry/mug")
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.8, minor_radius=0.6, major_segments=16, minor_segments=6)
+    h = bpy.context.active_object
+    h.name = "carry/mug-handle"
+    h.location = (-3.4, 0, 3.0)
+    h.rotation_euler = (math.radians(90), 0, 0)
+    h.data.materials.append(tint)
+    mug.add(r, h, "carry/mug")
+    r.props.append(mug)
+
+    # a mini of the desk water bottle, upright in the right hand, to and from the water cooler
+    bottle = Prop("bottle", [*HOLD1, "g-fill"], lambda rig, f, l, zs: _hand(rig, "R") + f * 2.6 - up(zs, 4.0))
+    bottle.add(r, scene.cyl("carry/bottle", 0, 0, 0, 2.3, 2.3, 10, m("bottle", "#bfe3f2", 0.25), 1, 20), "carry/bottle")
+    bottle.add(r, scene.cyl("carry/bottle-cap", 0, 0, 10, 1.5, 1.5, 1.8, m("bottle-cap", "#5aa0c9", 0.5), 1, 16), "carry/bottle")
+    r.props.append(bottle)
+
+    # the phone: at the ear on a call, in the hand at the desk
+    phone = Prop("phone", ["walk-call", "g-call", "g-pocketPhone"], lambda rig, f, l, zs: _hand(rig, "R") - up(zs, 2.3))
+    phone.add(r, scene.box("carry/phone", 0, 0, 0, 0.8, 2.6, 4.8, m("phone", "#2b2b31", 0.3), 1), "carry/phone")
+    r.props.append(phone)
+
+
+def place_props(rig: Rig, clip: str, heading_rad: float) -> None:
+    """Stand each prop the clip carries at its hands, upright and turned with the body."""
+    from mathutils import Matrix
+
+    f = Vector((math.cos(heading_rad), math.sin(heading_rad), 0))
+    l = Vector((-math.sin(heading_rad), math.cos(heading_rad), 0))
+    for p in rig.props:
+        if clip not in p.clips:
+            continue
+        at = p.place(rig, f, l, rig.zs)
+        p.empty.matrix_world = Matrix.Translation(at) @ Matrix.Diagonal((1, 1, rig.zs, 1)) @ Matrix.Rotation(heading_rad, 4, "Z")
+    bpy.context.view_layer.update()
 
 
 # ── actions ────────────────────────────────────────────────────────────────────────────────
@@ -435,10 +592,24 @@ def sample(name: str, f: int, frames: int) -> float:
     return f / frames
 
 
+# The carrying arms (plan Task 16), laid over a walk or the idle — the painter's carry overlays: both
+# hands forward and a little in at the chest, or the right hand out in front, or the phone at the ear.
+# The other arm keeps its counter-swing.
+ARMS_HOLD2 = {"shoulderL": (_abduct("L", -12), swing(22), 0), "shoulderR": (_abduct("R", -12), swing(22), 0),
+              "elbowL": (0, swing(78), 0), "elbowR": (0, swing(78), 0)}
+ARMS_HOLD1 = {"shoulderR": (0, swing(22), 0), "elbowR": (0, swing(88), 0)}
+ARMS_CALL = {k: v for k, v in GESTURES["call"][2].items() if k in ("shoulderR", "elbowR")}
+CARRY_ARMS = {"hold2": ARMS_HOLD2, "hold1": ARMS_HOLD1, "call": ARMS_CALL}
+
+
 def action(name: str, t: float) -> tuple[dict, float]:
     """The pose and root lift of action `name` at phase `t` (0 → 1 over the clip)."""
     if name.startswith("g-"):
         return gesture_pose(name[2:], t)
+    if name.startswith(("walk-", "idle-")):
+        base, arms = name.split("-", 1)
+        pose, lift = action(base, t)
+        return _merge(pose, CARRY_ARMS[arms]), lift
     ph = 2 * math.pi * t
     if name == "idle":
         breath = math.sin(ph)
@@ -511,10 +682,19 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     # increment 3b — every beat the painter plays (figureSheet.ts ANIMS lists them in this order)
     *[(f"g-{g}", 6, False, CARDINAL) for g in GESTURES],
     *[(f"g-{g}", n, False, CARDINAL) for g, n in (("scratch", 8), ("sip", 8), ("swivel", 8), ("shoulders", 8), ("eat", 10), ("wave", 10))],
+    # plan Task 16 — the carrying walks and holds (appended, so every earlier clip keeps its cells)
+    ("walk-hold2", 12, True, None),
+    ("walk-hold1", 12, True, None),
+    ("walk-call", 12, True, None),
+    ("idle-hold2", 8, True, None),
+    ("idle-hold1", 8, True, None),
 ]
+# The clips a member plays seated at a desk — the ones whose arms the overlay pass redraws.
+SEATED_CLIPS = {"sit-type", "sit-idle"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
+    f"g-{g}" for g, base in SEQ_BASE.items() if base == "seated"}
 FPS = 12
 DIRS = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]  # figureSheet.ts DIR8, heading 0 = E, +45° clockwise
-FRAME_W, FRAME_H = 56, 104  # floor units; the figure is ~83 tall plus a hat, ~26 wide with the arms out
+FRAME_W, FRAME_H = 72, 104  # floor units; ~83 tall plus a hat; 72 wide since a held-out hand (a mug, a card) reaches ~30 from the floor point
 ANCHOR_UP = 6  # the floor point sits this far above the frame's bottom edge
 
 

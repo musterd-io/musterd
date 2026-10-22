@@ -98,7 +98,7 @@ decode to about 2 GB in the browser. Tinting happens per frame on one scratch ca
 time; a tinted copy of a whole sheet per member colour is never made.
 
 Every mesh carries the **layer** its pixels belong to (`LAYERS`: skin, one per hair style, facial
-hair, hat, top cut, accessory, bottom, shoes, visor). Per frame the renderer draws the base body
+hair, hat, top cut, accessory, bottom, shoes, visor, and the carried things below). Per frame the renderer draws the base body
 (skin, bottom, shoes, visor) twice — lit, neutral grey, and as flat ID colours, no anti-aliasing —
 and splits the lit pixels by ID; then each variant alone, with the body as a **holdout**, so a
 hand in front of a hoodie keeps its pixels and the hoodie has a hand-shaped hole. `figure.ts`
@@ -123,7 +123,31 @@ frames down:
 
 A gesture is only ever seen facing a desk or a fixture, so it is rendered E and N and mirrored to S
 and W (`dirs` in `figure.json`); in any other direction, or in the wrong posture, the base clip
-plays. The carried prop (mug, plate, bottle, card) is not on these frames yet.
+plays.
+
+### Carried things and the seated overlay (plan Task 16)
+
+What a member carries is its own layer, `carry/<thing>` (laptop, box, plant, plate, card, mug,
+bottle, phone), plus `lanyard` and `lanyard-card` for a first arrival's badge. A prop is not
+jointed: after a frame is posed, `place_props` stands it at the hands — upright, turned with the
+body — the way the painter's `drawCarry` reads the solved wrists (a rigid child of the wrist would
+tip a mug upside down at the top of a sip). Each prop renders only on the clips that carry it, so
+the rest of the sheet costs it nothing, and it is rendered with the body *and a torso* as the
+holdout, so a hand in front of a box cuts it. The moving box is `carry/box` in kraft with
+`carry/plant` in it; the box and the mug are neutral grey and tinted, everything else keeps its own
+colour.
+
+Carrying changes the arms, so five clips carry the painter's carry overlays: `walk-hold2` and
+`idle-hold2` (both hands at the chest: a box, a plate), `walk-hold1` and `idle-hold1` (the right hand
+out in front: the card, a mug, a bottle) and `walk-call` (the phone at the ear on a pacing call).
+`character.ts` `animFor` picks them from the pose's carry. The frame is 72 units wide for them — a
+held-out hand reaches ~30 from the floor point and clipped at 56.
+
+A desk paints over a member sitting behind it, but their forearms rest on it. For the seated clips
+the ID pass also marks every mesh on a shoulder, elbow or wrist joint (the green byte), and each of
+`ARM_LAYERS` (skin, the tops' sleeves, a mug or plate held at the desk) packs those pixels into its
+own atlas a second time as `<layer>@arms` cells. `drawFigureFrame(part: 'arms')` draws only those,
+in the overlay slot over the desk slab, as the painter's `armsOnly` pass does.
 
 ### Re-rendering part of the figure
 

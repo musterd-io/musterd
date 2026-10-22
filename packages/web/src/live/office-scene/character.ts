@@ -1,7 +1,7 @@
 import { appearanceOf, type Appearance } from './appearance';
 import type { FigureAssets } from './rendered/assets';
 import { drawFigureFrame } from './rendered/figure';
-import { type Anim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
+import { type Anim, type CarryAnim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
 import { FWD } from './layout';
 import { arcEnv, GESTURE, holdEnv, type Skel, smooth, type V3 } from './skeleton';
@@ -214,6 +214,25 @@ export function gestureFrame(map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq', gest
   return Math.round(Math.max(0, Math.min(1, e)) * (frames - 1));
 }
 
+/**
+ * How the hands hold what a member carries (plan Task 16) — the painter's carry overlays: both hands at
+ * the chest for the box and the plate, the right hand out in front for the card, a mug or a bottle. The
+ * laptop rides under the arm and the phone needs no grip of its own, so those keep the plain clips.
+ */
+function grip(carry: CarryKind | null): 'hold2' | 'hold1' | null {
+  if (carry === 'box' || carry === 'movingBox' || carry === 'plate') return 'hold2';
+  if (carry === 'card' || carry === 'mug' || carry === 'bottle') return 'hold1';
+  return null;
+}
+
+/** The carrying variant of the walk or the idle, when the sheet has it (an older one falls back). */
+function carrying(base: 'walk' | 'idle', pose: Pose, anims: SheetSpec['anims']): 'walk' | 'idle' | CarryAnim {
+  const g = grip(pose.carry);
+  const call = base === 'walk' && pose.gesture === GESTURE.call;
+  const anim = call ? 'walk-call' : g ? (`${base}-${g}` as CarryAnim) : base;
+  return anims[anim] ? anim : base;
+}
+
 export function animFor(
   pose: Pose,
   typing: number,
@@ -231,8 +250,9 @@ export function animFor(
   if (pose.moving) {
     // The walk is scrubbed by the gait PHASE, which the actor system advances by distance (STRIDE
     // floor units per cycle), never by the clock — a clock-driven loop is the skating nick saw.
-    const a = anims.walk;
-    return { anim: 'walk', startT: t - pose.phase * (a.frames / a.fps) };
+    const anim = carrying('walk', pose, anims);
+    const a = anims[anim]!;
+    return { anim, startT: t - pose.phase * (a.frames / a.fps) };
   }
   if (pose.sit > 0.9) return { anim: typing > 0 ? 'sit-type' : 'sit-idle', startT: seed * 10 };
   if (pose.sit > 0) {
@@ -240,6 +260,8 @@ export function animFor(
     const duration = a.frames / a.fps;
     return { anim: 'sit-down', startT: t - pose.sit * duration };
   }
+  // A held box or mug outranks the talking hand — the speak clip would wave it about.
+  if (grip(pose.carry)) return { anim: carrying('idle', pose, anims), startT: seed * 10 };
   if (pose.bubble) return { anim: 'speak', startT: seed * 10 };
   return { anim: 'idle', startT: seed * 10 };
 }
@@ -252,9 +274,8 @@ export function drawCharacter(
 ): void {
   const { skel: k, node, dir, size } = o;
   if (o.rendered) {
-    // The rendered path: one composed sprite frame. The seated arms overlay (armsOnly) has no
-    // separate pass until Task 16 — the frame already has the arms where the pose put them.
-    if (armsOnly) return;
+    // The rendered path: one composed sprite frame. The seated overlay (armsOnly) draws the same frame's
+    // arm cells again, over the desk slab (plan Task 16).
     const look = o.look ?? appearanceOf(node);
     const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
     // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
@@ -274,6 +295,13 @@ export function drawCharacter(
       look,
       kind: node.kind,
       topColor: o.topColor ?? node.color,
+      held: {
+        carry: o.carry,
+        // the desk mug is in the hand only through the middle of the beat, as the painter has it
+        ...(o.mug !== undefined && anim === 'g-sip' && (o.gestureT ?? 0) > 0.12 && (o.gestureT ?? 0) < 0.95 ? { mug: o.mug } : {}),
+        ...(o.lanyard !== undefined ? { lanyard: o.lanyard } : {}),
+      },
+      part: armsOnly ? 'arms' : 'all',
       anim,
       dir: dir8,
       t: o.t,

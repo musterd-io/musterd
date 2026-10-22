@@ -7,7 +7,7 @@
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
 import type { LayerId } from './figure';
-import { ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
+import { ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
 
 export function renderedOfficeFromSearch(search: string): boolean {
@@ -55,8 +55,8 @@ export function parseFigureSpec(json: unknown): FigureSpecJson {
   const out = {} as SheetSpec['anims'];
   for (const a of ANIMS) {
     const v = anims[a];
-    // A gesture clip is optional (a sheet from before increment 3b has none; the base clip plays).
-    if (v === undefined && a.startsWith('g-')) continue;
+    // A gesture or carrying clip is optional (a sheet from before increment 3b has none; the base clip plays).
+    if (v === undefined && (a.startsWith('g-') || (CARRY_ANIMS as readonly string[]).includes(a))) continue;
     if (!isRecord(v) || !isNum(v['row']) || !isNum(v['frames']) || !isNum(v['fps']) || typeof v['loop'] !== 'boolean')
       throw new Error(`figure.json anim ${a} needs {row, frames, fps, loop}`);
     const dirs = v['dirs'];

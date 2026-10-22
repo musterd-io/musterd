@@ -223,24 +223,26 @@ def render_figure(a: dict) -> None:
     def lin(c: float) -> float:
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
-    id_mats: dict[str, bpy.types.Material] = {}
+    # …and the green byte says the pixel is an arm's (the seated overlay's `@arms` cells)
+    id_mats: dict[tuple[str, bool], bpy.types.Material] = {}
     for layer in figure.LAYERS:
-        m = bpy.data.materials.new(f"id/{layer}")
-        m.use_nodes = True
-        nt = m.node_tree
-        for n in list(nt.nodes):
-            nt.nodes.remove(n)
-        em = nt.nodes.new("ShaderNodeEmission")
-        em.inputs["Color"].default_value = (lin(figure.layer_id_byte(layer) / 255), 0, 0, 1)
-        em.inputs["Strength"].default_value = 1.0
-        out = nt.nodes.new("ShaderNodeOutputMaterial")
-        nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
-        id_mats[layer] = m
+        for arm in (False, True):
+            m = bpy.data.materials.new(f"id/{layer}{'@arms' if arm else ''}")
+            m.use_nodes = True
+            nt = m.node_tree
+            for n in list(nt.nodes):
+                nt.nodes.remove(n)
+            em = nt.nodes.new("ShaderNodeEmission")
+            em.inputs["Color"].default_value = (lin(figure.layer_id_byte(layer) / 255), 1.0 if arm else 0.0, 0, 1)
+            em.inputs["Strength"].default_value = 1.0
+            out = nt.nodes.new("ShaderNodeOutputMaterial")
+            nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+            id_mats[(layer, arm)] = m
     lit_mats = {o.name: [slot.material for slot in o.material_slots] for o in rig.meshes}
 
     def set_id_pass(on: bool) -> None:
         for o in rig.meshes:
-            mats = [id_mats[o["layer"]]] * len(o.material_slots) if on else lit_mats[o.name]
+            mats = [id_mats[(o["layer"], bool(o["arm"]))]] * len(o.material_slots) if on else lit_mats[o.name]
             for slot, m in zip(o.material_slots, mats):
                 slot.material = m
         s.render.filter_size = 0.0 if on else 1.5
@@ -263,6 +265,8 @@ def render_figure(a: dict) -> None:
         rows += len(figure.DIRS)
     cols = max(c[1] for c in figure.CLIPS)
     sheets = {layer: np.zeros((rows * fh, cols * fw, 4), dtype=np.float32) for layer in figure.LAYERS}
+    # the seated overlay's arm pixels, per layer that has any (figure.ARM_LAYERS), on the same grid
+    arm_sheets = {layer: np.zeros((rows * fh, cols * fw, 4), dtype=np.float32) for layer in figure.ARM_LAYERS}
     tmp_lit = os.path.join(a["out"], "_fig-lit.png")
     tmp_id = os.path.join(a["out"], "_fig-id.png")
     only = a["only"]
@@ -273,12 +277,29 @@ def render_figure(a: dict) -> None:
     for o in rig.meshes:
         by_layer.setdefault(o["layer"], []).append(o)
 
-    def show(layers: set[str], holdout: set[str]) -> None:
-        """Only `layers` render; `holdout` ones render as holes (they occlude, but leave no pixels)."""
+    def on_clip(o: bpy.types.Object, clip: str) -> bool:
+        """A mesh limited to some clips (a prop, the lanyard) is not there in any other."""
+        clips = o.get("clips")
+        return clips is None or clip in clips
+
+    def show(layers: set[str], holdout: set[str], clip: str) -> bool:
+        """Only `layers` render; `holdout` ones render as holes (they occlude, but leave no pixels).
+        False when nothing of `layers` is in this clip — the render can be skipped."""
+        any_on = False
         for o in rig.meshes:
             l = o["layer"]
-            o.hide_render = l not in layers and l not in holdout
+            here = on_clip(o, clip)
+            o.hide_render = not here or (l not in layers and l not in holdout)
             o.is_holdout = l in holdout
+            any_on = any_on or (here and l in layers)
+        return any_on
+
+    def holdout_for(layer: str) -> set[str]:
+        """What occludes a variant: the body; for a prop also a torso (any top's: they share it) and,
+        for the plant, the box it sits in."""
+        if not layer.startswith("carry/") and not layer.startswith("lanyard"):
+            return set(base)
+        return set(base) | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 
     # Five directions are rendered and three are mirrored. A horizontal flip in the canvas's frame
     # swaps lx and ly (screen-right is +lx −ly), so the mirror of E (+lx) is S (+ly), of N is W,
@@ -296,18 +317,21 @@ def render_figure(a: dict) -> None:
             if ent is None:
                 continue
             atlas_px = read_pixels(os.path.join(a["out"], ent["file"]), mirror=False)
-            pc = prev["cells"].get(layer, [])
-            k = 0
-            for pname, pa in prev_order:
-                for di in range(len(figure.DIRS)):
-                    for f in range(pa["frames"]):
-                        x, y, w, h, ox, oy = pc[k * 6 : k * 6 + 6] if k * 6 + 6 <= len(pc) else (0, 0, 0, 0, 0, 0)
-                        k += 1
-                        if w == 0 or pname in clips or pname not in anims or f >= anims[pname]["frames"]:
-                            continue
-                        r0 = (anims[pname]["row"] + di) * fh + oy
-                        c0 = f * fw + ox
-                        sheets[layer][r0 : r0 + h, c0 : c0 + w] = atlas_px[y : y + h, x : x + w]
+            for key, grid in ((layer, sheets[layer]), (f"{layer}@arms", arm_sheets.get(layer))):
+                pc = prev["cells"].get(key, [])
+                if grid is None or not pc:
+                    continue
+                k = 0
+                for pname, pa in prev_order:
+                    for di in range(len(figure.DIRS)):
+                        for f in range(pa["frames"]):
+                            x, y, w, h, ox, oy = pc[k * 6 : k * 6 + 6] if k * 6 + 6 <= len(pc) else (0, 0, 0, 0, 0, 0)
+                            k += 1
+                            if w == 0 or pname in clips or pname not in anims or f >= anims[pname]["frames"]:
+                                continue
+                            r0 = (anims[pname]["row"] + di) * fh + oy
+                            c0 = f * fw + ox
+                            grid[r0 : r0 + h, c0 : c0 + w] = atlas_px[y : y + h, x : x + w]
         print(f"figure: kept every clip but {sorted(clips)} from the atlases on disk")
     done = 0
     for name, frames, _, dirs in figure.CLIPS:
@@ -320,10 +344,12 @@ def render_figure(a: dict) -> None:
             for f in range(frames):
                 pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
+                figure.place_props(rig, name, math.radians(45 * di))
                 cell = (slice(row * fh, (row + 1) * fh), slice(f * fw, (f + 1) * fw))
+                seated = name in figure.SEATED_CLIPS
                 # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
                 if render_base:
-                    show(set(base), set())
+                    show(set(base), set(), name)
                     set_id_pass(False)
                     s.render.filepath = tmp_lit
                     bpy.ops.render.render(write_still=True)
@@ -332,28 +358,45 @@ def render_figure(a: dict) -> None:
                     bpy.ops.render.render(write_still=True)
                     set_id_pass(False)
                     lit = read_pixels(tmp_lit)
-                    ids = np.rint(read_pixels(tmp_id)[:, :, 0] * 255).astype(np.int32)
+                    id_px = read_pixels(tmp_id)
+                    ids = np.rint(id_px[:, :, 0] * 255).astype(np.int32)
+                    arm = id_px[:, :, 1] > 0.5
                     for layer in base:
                         mask = (np.abs(ids - figure.layer_id_byte(layer)) <= figure.ID_STEP // 2) & (lit[:, :, 3] > 0.002)
                         if mask.any():
                             sheets[layer][cell][mask] = lit[mask]
+                            if seated and layer in arm_sheets and (mask & arm).any():
+                                arm_sheets[layer][cell][mask & arm] = lit[mask & arm]
                 # each variant alone, the body as a holdout: its pixels are exactly the ones a wearer shows
                 for layer in variants:
-                    show({layer}, set(base))
+                    if not show({layer}, holdout_for(layer), name):
+                        continue
                     s.render.filepath = tmp_lit
                     bpy.ops.render.render(write_still=True)
                     px_l = read_pixels(tmp_lit)
                     mask = px_l[:, :, 3] > 0.002
                     if mask.any():
                         sheets[layer][cell][mask] = px_l[mask]
+                        if seated and layer in arm_sheets:
+                            if layer.startswith("carry/"):
+                                arm_sheets[layer][cell][mask] = px_l[mask]  # a prop at the desk is all "arm"
+                            else:
+                                # which of a top's pixels are its sleeves: the same view as flat ID colours
+                                set_id_pass(True)
+                                s.render.filepath = tmp_id
+                                bpy.ops.render.render(write_still=True)
+                                set_id_pass(False)
+                                sleeve = mask & (read_pixels(tmp_id)[:, :, 1] > 0.5)
+                                if sleeve.any():
+                                    arm_sheets[layer][cell][sleeve] = px_l[sleeve]
                 done += 1
         # the mirrored rows copy whole rows, so they must run after their source direction: DIRS
         # lists E, SE, S, SW, W, NW, N, NE — SW and W follow SE and E, but NW precedes NE.
         for d, src in MIRRORED.items():
             row, src_row = anims[name]["row"] + figure.DIRS.index(d), anims[name]["row"] + figure.DIRS.index(src)
-            for layer in figure.LAYERS:
+            for grid in [*sheets.values(), *arm_sheets.values()]:
                 for f in range(frames):  # flip each frame within its own cell — a row flip reverses the frame order
-                    sheets[layer][row * fh : (row + 1) * fh, f * fw : (f + 1) * fw] = sheets[layer][src_row * fh : (src_row + 1) * fh, f * fw : (f + 1) * fw][:, ::-1]
+                    grid[row * fh : (row + 1) * fh, f * fw : (f + 1) * fw] = grid[src_row * fh : (src_row + 1) * fh, f * fw : (f + 1) * fw][:, ::-1]
         print(f"figure: {name} rendered ({done} frames so far)")
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
@@ -387,28 +430,33 @@ def render_figure(a: dict) -> None:
             if layer in kept:
                 spec["layers"].append(kept[layer])
                 spec["cells"][layer] = kept_cells.get(layer, [])
+                if f"{layer}@arms" in kept_cells:
+                    spec["cells"][f"{layer}@arms"] = kept_cells[f"{layer}@arms"]
             continue
         sheet = sheets[layer]
         if sheet[:, :, 3].max() <= 0.002:
             print(f"figure: layer {layer} rendered nothing — not written")
             continue
-        # crop every cell; shelf-pack them left to right, top to bottom
+        # crop every cell; shelf-pack them left to right, top to bottom. A layer with arm pixels packs
+        # its `@arms` cells into the same atlas after its own, so the overlay needs no second image.
         cells = []  # flat, six per (anim, dir, frame): x, y, w, h, ox, oy — all zero when empty
         crops = []
-        for name, frames, _, _ in figure.CLIPS:
-            for di in range(len(figure.DIRS)):
-                row = anims[name]["row"] + di
-                for f in range(frames):
-                    if figure.DIRS[di] in MIRRORED:
-                        crops.append(None)
-                        continue
-                    cell = sheet[row * fh : (row + 1) * fh, f * fw : (f + 1) * fw]
-                    ys, xs = np.nonzero(cell[:, :, 3] > 0.002)
-                    if len(xs) == 0:
-                        crops.append(None)
-                        continue
-                    x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-                    crops.append((cell[y0:y1, x0:x1], x0, y0))
+        grids = [sheet] + ([arm_sheets[layer]] if layer in arm_sheets and arm_sheets[layer][:, :, 3].max() > 0.002 else [])
+        for grid in grids:
+            for name, frames, _, _ in figure.CLIPS:
+                for di in range(len(figure.DIRS)):
+                    row = anims[name]["row"] + di
+                    for f in range(frames):
+                        if figure.DIRS[di] in MIRRORED:
+                            crops.append(None)
+                            continue
+                        cell = grid[row * fh : (row + 1) * fh, f * fw : (f + 1) * fw]
+                        ys, xs = np.nonzero(cell[:, :, 3] > 0.002)
+                        if len(xs) == 0:
+                            crops.append(None)
+                            continue
+                        x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
+                        crops.append((cell[y0:y1, x0:x1], x0, y0))
         shelf_x, shelf_y, shelf_h = 0, 0, 0
         placed = []
         for c in crops:
@@ -436,7 +484,10 @@ def render_figure(a: dict) -> None:
         write_pixels(path, atlas)
         quantize(path)
         spec["layers"].append({"id": layer, "file": file})
-        spec["cells"][layer] = cells
+        n = len(cells) // len(grids)
+        spec["cells"][layer] = cells[:n]
+        if len(grids) > 1:
+            spec["cells"][f"{layer}@arms"] = cells[n:]
         print(f"figure: wrote {file} {ATLAS_W}x{atlas_h} {os.path.getsize(path)} B")
     with open(fig_json, "w") as fjson:
         json.dump(spec, fjson, separators=(",", ":"))

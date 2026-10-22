@@ -52,6 +52,27 @@ describe('layersFor (office realism Task 11)', () => {
     expect(layers[0]).toEqual({ id: 'skin', color: agent.skin });
   });
 
+  it('what they carry draws after the clothes: a carrying walker gets its laptop layer, untinted', () => {
+    const ids = layersFor(femme, 'human', null, { carry: 'laptop' }).map((l) => l.id);
+    expect(ids).toEqual(['skin', 'hair/bun', 'top/hoodie', 'bottom', 'shoes', 'carry/laptop', 'acc/glasses']);
+    expect(layersFor(femme, 'human', null, { carry: 'laptop' }).find((l) => l.id === 'carry/laptop')?.color).toBeNull();
+  });
+
+  it('the moving box is the box in kraft with the plant; a mug takes the desk mug colour; a lanyard its own', () => {
+    const moving = layersFor(femme, 'human', null, { carry: 'movingBox' });
+    expect(moving.filter((l) => l.id.startsWith('carry/'))).toEqual([
+      { id: 'carry/box', color: '#c9a26b' },
+      { id: 'carry/plant', color: null },
+    ]);
+    expect(layersFor(femme, 'human', null, { mug: '#aa3344' }).find((l) => l.id === 'carry/mug')?.color).toBe('#aa3344');
+    expect(layersFor(femme, 'human', null, { carry: 'mug' }).find((l) => l.id === 'carry/mug')?.color).toBe('#d6d0c6');
+    const badge = layersFor(femme, 'human', null, { lanyard: '#22aa66' });
+    expect(badge.filter((l) => l.id.startsWith('lanyard'))).toEqual([
+      { id: 'lanyard', color: '#22aa66' },
+      { id: 'lanyard-card', color: null },
+    ]);
+  });
+
   it('bald, clean-shaven, hatless, no accessory: only the base layers', () => {
     const plain: Appearance = { ...femme, hair: 'bald', accessory: 'none' };
     expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'top/hoodie', 'bottom', 'shoes']);
@@ -153,6 +174,41 @@ describe('drawFigureFrame', () => {
       create,
     });
     expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
+  });
+
+  it('the seated overlay (part arms) draws only the layers that stored arm cells, from those cells', () => {
+    const { ctx, ops } = recordingCtx();
+    const { create, made } = fakeCanvasFactory();
+    const ids = layersFor(femme, 'human').map((l) => l.id);
+    const cellsOf = (n: number) => Array.from({ length: 64 * 8 * 8 }, (_, i) => (i % 6 < 4 ? n : 0));
+    const packed: SheetSpec = {
+      ...spec,
+      cells: {
+        ...Object.fromEntries(ids.map((id) => [id, cellsOf(10)])),
+        'skin@arms': cellsOf(3),
+        'top/hoodie@arms': cellsOf(3),
+      },
+    };
+    drawFigureFrame({
+      ctx,
+      fit,
+      at: { lx: 300, ly: 300 },
+      sheets: allSheets(ids),
+      spec: packed,
+      look: femme,
+      kind: 'human',
+      anim: 'sit-type',
+      dir: 'E',
+      t: 0,
+      startT: 0,
+      part: 'arms',
+      scratch: {},
+      create,
+    });
+    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(2);
+    // read from the @arms cells (3×3), not the layer's own (10×10)
+    const reads = made.flatMap((m) => m.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9));
+    expect(reads.every((r) => r.args[3] === 3 && r.args[4] === 3)).toBe(true);
   });
 
   it('the room tint multiplies every layer, and the untinted visor is tinted by it alone', () => {
