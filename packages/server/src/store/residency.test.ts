@@ -2877,6 +2877,146 @@ withDrivers('residency', (o, kind) => {
       expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
     });
 
+    /** ADR 716. A filing the picker can read without going through submit. Actor null so the
+     *  row is not the owner's own recent act (ADR 628 would suppress the continuation first). */
+    async function fileClaims(
+      db: Database,
+      teamId: string,
+      laneId: string,
+      claims: {
+        kind: string;
+        ref: string;
+        verdict: 'confirmed' | 'unconfirmed' | 'unverifiable';
+      }[],
+    ) {
+      const tally = { confirmed: 0, unconfirmed: 0, unverifiable: 0 };
+      for (const claim of claims) tally[claim.verdict] += 1;
+      await appendAudit(db, teamId, {
+        actor: null,
+        action: 'lane.claims_filed',
+        target: laneId,
+        result: 'allow',
+        detail: { lane: laneId, by: 'Ada', ...tally, claims },
+      });
+    }
+
+    /** A seat whose lane moved after its last continuation, owner engagement aged out. */
+    async function musterdContinuationDue(harness = 'musterd') {
+      const { db, team, ada } = await seed();
+      await setPolicy(db, team.id, { loops: { dispatch: true } });
+      await enrollResidency(db, team.id, {
+        member_id: ada.id,
+        harness,
+        host: HOST,
+        grant_id: 'g1',
+        authorized_by: 'nick',
+        policy: { flow: 'auto', hourly_cap: 10 },
+      });
+      const lane = await openLane(db, team.id, team.slug, ada.name, { title: 'c', claim: true });
+      const wokeTs = Date.now() - WAKE_COOLDOWN_MS - 1;
+      await wokeEdge(db, team.id, lane.id, 'dispatch_continuation', wokeTs);
+      await laneTouched(db, lane.id, wokeTs + 1);
+      await db.run(`UPDATE audit SET ts = ? WHERE team_id = ? AND target = ? AND actor = ?`, [
+        Date.now() - OWNER_ENGAGEMENT_MS - 60_000,
+        team.id,
+        lane.id,
+        ada.name,
+      ]);
+      return { db, team, ada, lane };
+    }
+
+    it('ADR 716: a musterd continuation waits on an unconfirmed filing, once', async () => {
+      const { db, team, lane } = await musterdContinuationDue();
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'ci_green', ref: '1', verdict: 'unconfirmed' },
+      ]);
+      const first = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(first.some((o) => o.lane_id === lane.id)).toBe(false);
+      const held = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.continuation_held',
+      );
+      expect(held).toHaveLength(1);
+      expect(held[0]?.actor).toBeNull();
+      expect(held[0]?.result).toBe('deny');
+      const filed = (await listAudit(db, team.id)).filter((r) => r.action === 'lane.claims_filed');
+      // `listAudit` returns `detail` as stored text on both drivers.
+      expect(JSON.parse(held[0]!.detail as string)).toMatchObject({
+        lane_id: lane.id,
+        edge: 'dispatch_continuation',
+        reason: 'claims_unconfirmed',
+        claims_filed: filed[0]!.id,
+        unconfirmed: 1,
+      });
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const again = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.continuation_held',
+      );
+      expect(again).toHaveLength(1);
+    });
+
+    it('ADR 716: a newer filing with no unconfirmed claim lifts the hold', async () => {
+      const { db, team, lane } = await musterdContinuationDue();
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'ci_green', ref: '1', verdict: 'unconfirmed' },
+      ]);
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'commit_landed', ref: 'abc', verdict: 'confirmed' },
+      ]);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
+      expect(
+        (await listAudit(db, team.id)).filter((r) => r.action === 'residency.continuation_held'),
+      ).toHaveLength(1);
+    });
+
+    it('ADR 716: a newer unconfirmed filing holds again, once', async () => {
+      const { db, team, lane } = await musterdContinuationDue();
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'ci_green', ref: '1', verdict: 'unconfirmed' },
+      ]);
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'pr_merged', ref: '2', verdict: 'unconfirmed' },
+      ]);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.some((o) => o.lane_id === lane.id)).toBe(false);
+      expect(
+        (await listAudit(db, team.id)).filter((r) => r.action === 'residency.continuation_held'),
+      ).toHaveLength(2);
+    });
+
+    it('ADR 716: confirmed plus unverifiable still mints a musterd continuation', async () => {
+      const { db, team, lane } = await musterdContinuationDue();
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'commit_landed', ref: 'abc', verdict: 'confirmed' },
+        { kind: 'ci_green', ref: '1', verdict: 'unverifiable' },
+      ]);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
+      expect(
+        (await listAudit(db, team.id)).some((r) => r.action === 'residency.continuation_held'),
+      ).toBe(false);
+    });
+
+    it('ADR 716: a musterd continuation with no filing still mints', async () => {
+      const { db, team, lane } = await musterdContinuationDue();
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
+    });
+
+    it('ADR 716: a claude-code enrollment with an unconfirmed filing still mints', async () => {
+      const { db, team, lane } = await musterdContinuationDue('claude-code');
+      await fileClaims(db, team.id, lane.id, [
+        { kind: 'ci_green', ref: '1', verdict: 'unconfirmed' },
+      ]);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.some((o) => o.lane_id === lane.id)).toBe(true);
+      expect(
+        (await listAudit(db, team.id)).some((r) => r.action === 'residency.continuation_held'),
+      ).toBe(false);
+    });
+
     /**
      * ADR 661 — the mason replay (2026-10-16): the owner goes away, a continuation wakes inside the
      * away and moves nothing, the away runs out. The lane re-arms at `until`, once.

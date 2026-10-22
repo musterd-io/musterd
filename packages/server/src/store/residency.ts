@@ -1461,6 +1461,27 @@ async function boardCanSpeak(db: Driver, teamId: string): Promise<boolean> {
 }
 
 /**
+ * ADR 716. The lane's latest `lane.claims_filed` reading, the submitter's own verdicts.
+ * `unconfirmed` is the count `summariseClaims` spreads onto that row. Absent means no filing.
+ */
+async function latestClaimsFiling(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<{ id: string; unconfirmed: number } | null> {
+  const row = await db.get<{ id: string; unconfirmed: number | string | null }>(
+    `SELECT id, json_extract(detail, '$.unconfirmed') AS unconfirmed
+       FROM audit
+      WHERE team_id = ? AND action = 'lane.claims_filed' AND target = ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  if (!row) return null;
+  const unconfirmed = Number(row.unconfirmed ?? 0);
+  return { id: row.id, unconfirmed: Number.isFinite(unconfirmed) ? unconfirmed : 0 };
+}
+
+/**
  * Board-owned claimed/active lanes with no triggering act (ADR 199 continuation edge).
  * Never wakes for unowned open work.
  */
@@ -1866,6 +1887,12 @@ interface SeatPass {
   /** ADR 628. Suppression rows, written unconditionally (the eval counts them; the nudge cooldown
    *  reads their recency — the exhausted trip-dedup would eat both). */
   suppressed: AuditEntry[];
+  /** ADR 716. One `residency.continuation_held` row per unconfirmed filing, written on the poll
+   *  that first skips the continuation. Empty when that row already exists. */
+  held: AuditEntry[];
+  /** ADR 716. The continuation was skipped for an unconfirmed filing, whether or not this poll
+   *  still had a row to write. A dream must not spend the pass the hold just refused. */
+  claimsHeld: boolean;
   /** ADR 628. Nudges this pass held back: the derivation owns no hub, so the poll handler sends
    *  them (it owns the response). Non-empty also blocks the dream fallthrough below — a dream
    *  would duplicate the engaged seat exactly like the suppressed continuation. */
@@ -2271,6 +2298,8 @@ async function deriveSeatPasses(
       exhausted: [],
       spendHold: null,
       suppressed: [],
+      held: [],
+      claimsHeld: false,
       nudges: [],
     };
     passes.push(pass);
@@ -2438,6 +2467,36 @@ async function deriveSeatPasses(
             ))
           )
             continue;
+          // ADR 716 — after ADR 306 would fund this continuation, a musterd seat waits while the
+          // lane's latest claims filing has an unconfirmed claim. Other harnesses are unchanged.
+          // unverifiable does not hold. No filing does not hold.
+          if (normalizeHarness(enrollment.harness) === 'musterd') {
+            const filing = await latestClaimsFiling(db, teamId, candidate.lane_id);
+            if (filing !== null && filing.unconfirmed > 0) {
+              pass.claimsHeld = true;
+              const recorded = await db.get<{ id: string }>(
+                `SELECT id FROM audit WHERE team_id = ? AND action = 'residency.continuation_held'
+                   AND json_extract(detail, '$.claims_filed') = ?`,
+                [teamId, filing.id],
+              );
+              if (!recorded) {
+                pass.held.push({
+                  actor: null,
+                  action: 'residency.continuation_held',
+                  target: member.name,
+                  result: 'deny',
+                  detail: {
+                    lane_id: candidate.lane_id,
+                    edge,
+                    reason: 'claims_unconfirmed',
+                    claims_filed: filing.id,
+                    unconfirmed: filing.unconfirmed,
+                  },
+                });
+              }
+              continue;
+            }
+          }
         }
       }
       // ADR 600: never hand a seat an act_id buildWakeContext would refuse. A missing row is the
@@ -2511,7 +2570,13 @@ async function deriveSeatPasses(
     // hours, inside tonight's count and budget. A dream never shares a pass with another wake.
     // ADR 628: nor with a suppressed continuation — the seat is engaged, and a dream session
     // would duplicate it exactly like the suppressed wake.
-    if (pass.plan === null && pass.suppressed.length === 0 && policy.dream_enabled && cooled) {
+    if (
+      pass.plan === null &&
+      pass.suppressed.length === 0 &&
+      !pass.claimsHeld &&
+      policy.dream_enabled &&
+      cooled
+    ) {
       const hours = parseWorkingHours(member.working_hours) ?? teamHours;
       const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
       const night =
@@ -2542,6 +2607,7 @@ async function deriveSeatPasses(
       p.exhausted.length > 0 ||
       p.spendHold !== null ||
       p.suppressed.length > 0 ||
+      p.held.length > 0 ||
       p.nudges.length > 0,
   );
 }
@@ -2572,6 +2638,9 @@ async function writeSeatPass(
         await appendAudit(t, teamId, pass.spendHold);
       }
       for (const entry of pass.suppressed) {
+        await appendAudit(t, teamId, entry);
+      }
+      for (const entry of pass.held) {
         await appendAudit(t, teamId, entry);
       }
       if (plan === null) return null;
