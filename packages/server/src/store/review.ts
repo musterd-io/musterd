@@ -1057,7 +1057,11 @@ export async function openAcceptanceAsk(
                    AND a.target = ?
                    AND a.result = 'deny'
                    AND json_extract(a.detail, '$.act') = 'human_accept'
-                   AND a.ts >= r.ts))
+                   -- Both clocks are the DAEMON's: audit.ts is Date.now() in the gate, and
+                   -- created_at is the server's receive time. r.ts is the SENDER's clock, so a
+                   -- phone running ahead would make its refused verdict look later than the
+                   -- refusal and count as an answer again.
+                   AND a.ts >= r.created_at))
           AND NOT EXISTS (
             SELECT 1 FROM messages v
              WHERE v.team_id = m.team_id
@@ -1099,10 +1103,10 @@ export async function acceptanceAskUnanswered(
   );
   const laneId = asked?.lane ?? null;
 
-  const answered = await db.get<{ id: string; ts: number }>(
-    `SELECT id, ts FROM messages
+  const answered = await db.get<{ id: string; created_at: number }>(
+    `SELECT id, created_at FROM messages
         WHERE team_id = ? AND act IN ('accept','decline') AND in_reply_to = ?
-      ORDER BY ts DESC, id DESC LIMIT 1`,
+      ORDER BY created_at DESC, id DESC LIMIT 1`,
     [teamId, askId],
   );
   if (answered && laneId) {
@@ -1111,7 +1115,9 @@ export async function acceptanceAskUnanswered(
     // answering the ask, or a lane still awaiting a verdict shows no reviewer and `lane show`
     // lists no acceptance ask. The refusal is audited as `authority.refused` (target = lane,
     // result 'deny', detail.act 'human_accept'); a refusal at or after the latest reply means the
-    // verdict did not stick.
+    // verdict did not stick. Both sides are the DAEMON's clock: the audit's ts and the message's
+    // created_at (server receive time). The message body's ts is the sender's clock, so comparing
+    // against it lets a device running ahead answer a refusal away.
     const refused = await db.get<{ ts: number }>(
       `SELECT ts FROM audit
           WHERE team_id = ? AND action = 'authority.refused' AND target = ? AND result = 'deny'
@@ -1119,7 +1125,7 @@ export async function acceptanceAskUnanswered(
           ORDER BY ts DESC, id DESC LIMIT 1`,
       [teamId, laneId],
     );
-    if (refused && refused.ts >= answered.ts) return true;
+    if (refused && refused.ts >= answered.created_at) return true;
   }
   if (answered) return false;
 
@@ -1198,10 +1204,12 @@ export async function acceptanceWaits(
 
   // The reviewer: openAcceptanceAsk's rule, batched — the newest ask per lane that no
   // accept/decline answered and no resolve closed; held by nobody if a re-route superseded it.
-  // Asks an accept/decline replied to, with the latest reply's ts per ask.
+  // Asks an accept/decline replied to, with the latest reply's SERVER receive time per ask.
+  // created_at, not ts: ts is the sender's clock, and comparing it with an audit ts lets a
+  // device running ahead look like it answered after its own refusal.
   const answered = new Map<string, number>();
   for (const r of await db.all<{ ref: string | null; ts: number }>(
-    `SELECT in_reply_to AS ref, MAX(ts) AS ts FROM messages
+    `SELECT in_reply_to AS ref, MAX(created_at) AS ts FROM messages
       WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL
       GROUP BY in_reply_to`,
     [teamId],
