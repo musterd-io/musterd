@@ -85,6 +85,8 @@ brand accent used by buttons, links and the rest of the UI.
 - The mark's glyph is geometric strokes rather than traced outlines, so it is edited as numbers;
   there is no longer a design source other than the SVG.
 
+_(2026-10-21: the derived art landed in lane 01M5GFDR0Z: `tile.svg`, `avatar.svg`, the console favicon and its design previews, and the raster icons re-rendered from the new files, with a 16px favicon frame that carries a firmer rim. Still open: social card / README header / deck art, the wordmark review, the clearance check.)_
+
 ## Observability & Evaluation
 
 n/a — a brand asset change with no agent-facing behaviour. It is checked by `chipMark.test.ts`
