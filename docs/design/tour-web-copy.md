@@ -42,7 +42,10 @@ tour started in one surface resumes in the other, and a closed lane starts a fre
 |---|---|---|---|
 | `/live`, `/board` | Entry: human viewer, at least one agent member, no tour lane of theirs in any state | `Take the tour` | Button. Show it once per page, out of the way of the roster and the board. |
 | `/live`, `/board` | Entry: an open tour lane of theirs exists | `Resume the tour` | Button. Resumes at `claims` with that lane (§5). |
-| `/live`, `/board` | Entry: beside `Resume the tour` | `Start over` | Link. Abandons the open lane (`state: 'abandoned'`, `abandon_reason: 'tour reset'`), then starts at `what`. |
+| Tour panel | Any running step, beside `Stop` | `Start over` | Link, once a lane exists. Abandons the open lane (`state: 'abandoned'`, `abandon_reason: 'tour reset'`), then starts at `what`. (Moved here from the topbar entry, 2026-10-22.) |
+| `/live`, `/board` | Entry: beside `Resume the tour` / `Take the tour` | `×` (aria-label `Dismiss the tour`) | A 24px mark. With an open lane it abandons it (`abandon_reason: 'tour dismissed'`) so the dismissal follows the viewer to every browser; with none it only remembers the choice in this browser. Either way the entry becomes the quiet link `Tour` and the note `Tour dismissed. “Tour” in the top bar brings it back.` shows for 8s. |
+| `/live`, `/board` | Entry: dismissed, or an open tour lane untouched for 7 days | `Tour` | Quiet link in place of the chip. Starts, or resumes an open lane, and clears the dismissal. |
+| Tour panel | Any running step, beside `Stop` | `Skip the tour` | Link. The same dismissal as the entry's `×`. |
 | `/live`, `/board` | Entry: their newest tour lane is closed | `Take the tour again` | Button, same place as `Take the tour`. Starts at `what` and opens a new lane at `give_work`; the closed lane stays as the record. _(2026-10-12, lane `01M4RGKQ8P`: this row said "no entry point", and nick could not find the tour after finishing it once. The CLI already starts a fresh tour on a closed lane; the web now matches.)_ |
 | Tour panel | Every step | step title (§1), then the step's `body` lines from `TOUR_STEPS` by id | Render each body line as its own line. Lines starting with two spaces on `add_seat` are a list. |
 | Tour panel | `what`, `add_seat` | `Continue` | Button. Advances to the next step. |

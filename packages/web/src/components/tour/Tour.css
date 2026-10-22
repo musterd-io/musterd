@@ -520,3 +520,37 @@
     display: none;
   }
 }
+
+/* The entry's dismiss mark: a 24px target around a drawn ×, so a viewer who does not want the tour can
+   say so once (nick, 2026-10-22: no way to skip or dismiss it). */
+.tour-entry__x {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-color: transparent;
+  background: none;
+  color: var(--lc-dim);
+}
+.tour-entry__x i {
+  position: relative;
+  width: 10px;
+  height: 10px;
+}
+.tour-entry__x i::before,
+.tour-entry__x i::after {
+  content: '';
+  position: absolute;
+  inset: 4.25px 0 auto;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.tour-entry__x i::after {
+  transform: rotate(-45deg);
+}
+.tour-entry__x:hover {
+  color: var(--lc-text);
+}

@@ -55,14 +55,15 @@ import './Tour.css';
  */
 export interface TourPort {
   openLane(cfg: LiveConfig, title: string): Promise<string>;
-  abandon(cfg: LiveConfig, id: string): Promise<unknown>;
+  abandon(cfg: LiveConfig, id: string, reason?: string): Promise<unknown>;
   send: typeof sendAct;
   history(cfg: LiveConfig, since: number): Promise<Envelope[]>;
 }
 
 const livePort: TourPort = {
   openLane: async (cfg, title) => (await createLane(cfg, { title, stakes: 'normal' })).lane.id,
-  abandon: (cfg, id) => updateLane(cfg, id, { state: 'abandoned', abandon_reason: 'tour reset' }),
+  abandon: (cfg, id, reason = 'tour reset') =>
+    updateLane(cfg, id, { state: 'abandoned', abandon_reason: reason }),
   send: sendAct,
   history: (cfg, since) => fetchHistory(cfg, { since, limit: 200 }),
 };
@@ -70,6 +71,25 @@ const livePort: TourPort = {
 /** The resume replay starts this long before the lane opened (spec §5). */
 const OVERLAP_MS = 5_000;
 const STOPPED = 'Stopped. Resume the tour any time to pick up where you left off.';
+const DISMISSED = 'Tour dismissed. “Tour” in the top bar brings it back.';
+/** An open tour lane nobody has touched for this long stops being a chip and becomes a quiet link. */
+const STALE_MS = 7 * 86_400_000;
+const dismissKey = (viewer: string) => `musterd.tour.dismissed.${viewer}`;
+function readDismissed(viewer: string): boolean {
+  try {
+    return window.localStorage.getItem(dismissKey(viewer)) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeDismissed(viewer: string, on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(dismissKey(viewer), '1');
+    else window.localStorage.removeItem(dismissKey(viewer));
+  } catch {
+    /* private window: the dismissal is simply not remembered on this browser */
+  }
+}
 
 interface Run {
   s: TourState;
@@ -129,6 +149,8 @@ export function Tour({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
+  const [quiet, setQuiet] = useState(() => readDismissed(viewer));
+  const [dismissedNote, setDismissedNote] = useState(false);
   const [mini, setMini] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -152,6 +174,9 @@ export function Tour({
     setRun((r) => r && { ...r, s: next, at: next.step === r.s.step ? r.at : Date.now() });
 
   const start = (agent: string) => {
+    writeDismissed(viewer, false);
+    setQuiet(false);
+    setDismissedNote(false);
     seen.current = new Set();
     opening.current = false;
     setStopped(false);
@@ -163,6 +188,9 @@ export function Tour({
 
   const resume = (lane: Lane) => {
     const agent = lane.owner_seat ?? (agents.length === 1 ? agents[0]! : '');
+    writeDismissed(viewer, false);
+    setQuiet(false);
+    setDismissedNote(false);
     seen.current = new Set();
     setStopped(false);
     setMini(false);
@@ -177,10 +205,10 @@ export function Tour({
       });
   };
 
-  const startOver = async (lane: Lane) => {
+  const startOver = async (laneId: string) => {
     setBusy(true);
     try {
-      await port.abandon(cfg, lane.id);
+      await port.abandon(cfg, laneId);
       start(agents.length === 1 ? agents[0]! : '');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -192,6 +220,27 @@ export function Tour({
   const stop = () => {
     setRun(null);
     setStopped(true);
+  };
+
+  // "No thanks": the open tour lane (if any) is abandoned on the server so the dismissal follows the
+  // viewer to every browser and the stale lane leaves the board's open set; a browser flag keeps the
+  // entry quiet for a viewer who never started one. The quiet "Tour" link is the way back.
+  const dismiss = async (laneId?: string | null) => {
+    setBusy(true);
+    try {
+      if (laneId) await port.abandon(cfg, laneId, 'tour dismissed');
+      writeDismissed(viewer, true);
+      setQuiet(true);
+      setRun(null);
+      setStopped(false);
+      setMini(false);
+      setDismissedNote(true);
+      setTimeout(() => setDismissedNote(false), 8000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Fold the acts about this lane, oldest first, each once (spec §5).
@@ -317,35 +366,47 @@ export function Tour({
     }
   };
 
+  const openLane = entry.kind === 'resume' ? entry.lane : null;
+  const stale = openLane !== null && Date.now() - ulidTime(openLane.id) > STALE_MS;
   const entryButtons =
     !run &&
-    (stopped ? (
+    (dismissedNote ? (
+      <span className="tour-entry__note" role="status">
+        {DISMISSED}
+      </span>
+    ) : stopped ? (
       <span className="tour-entry__note" role="status">
         {STOPPED}
       </span>
-    ) : entryLabel(entry) ? (
+    ) : entry.kind === 'none' ? null : quiet || stale ? (
       <button
         type="button"
-        className="tour-entry"
-        onClick={() => start(agents.length === 1 ? agents[0]! : '')}
+        className="tour-entry tour-entry--link"
+        onClick={() => (openLane ? resume(openLane) : start(agents.length === 1 ? agents[0]! : ''))}
       >
-        {entryLabel(entry)}
+        Tour
       </button>
-    ) : entry.kind === 'resume' ? (
+    ) : (
       <>
-        <button type="button" className="tour-entry" onClick={() => resume(entry.lane)}>
-          Resume the tour
+        <button
+          type="button"
+          className="tour-entry"
+          onClick={() => (openLane ? resume(openLane) : start(agents.length === 1 ? agents[0]! : ''))}
+        >
+          {entryLabel(entry) ?? 'Resume the tour'}
         </button>
         <button
           type="button"
-          className="tour-entry tour-entry--link"
+          className="tour-entry tour-entry__x"
+          aria-label="Dismiss the tour"
+          title="Dismiss the tour"
           disabled={busy}
-          onClick={() => void startOver(entry.lane)}
+          onClick={() => void dismiss(openLane?.id)}
         >
-          Start over
+          <i aria-hidden="true" />
         </button>
       </>
-    ) : null);
+    ));
 
   const elapsed = waiting && run ? clock(now - run.at) : null;
 
@@ -402,6 +463,8 @@ export function Tour({
           onToNext={() => go({ ...s, step: 'next' })}
           onDone={() => setRun(null)}
           onStop={stop}
+          onDismiss={() => void dismiss(s.laneId)}
+          onStartOver={s.laneId ? () => void startOver(s.laneId!) : undefined}
           onMinimize={() => setMini(true)}
           onNote={setNote}
           onVerdict={verdict}
@@ -486,6 +549,8 @@ export function TourPanel({
   onToNext,
   onDone,
   onStop,
+  onDismiss,
+  onStartOver,
   onMinimize,
   onNote,
   onVerdict,
@@ -510,6 +575,8 @@ export function TourPanel({
   onToNext: () => void;
   onDone: () => void;
   onStop: () => void;
+  onDismiss: () => void;
+  onStartOver?: (() => void) | undefined;
   onMinimize?: () => void;
   onNote: (note: string | null) => void;
   onVerdict: (accept: boolean, note?: string) => void;
@@ -772,6 +839,16 @@ export function TourPanel({
           {stoppable && !declined && (
             <button type="button" className="tour__link" onClick={onStop}>
               Stop
+            </button>
+          )}
+          {stoppable && onStartOver && (
+            <button type="button" className="tour__link" onClick={onStartOver}>
+              Start over
+            </button>
+          )}
+          {stoppable && (
+            <button type="button" className="tour__link" onClick={onDismiss}>
+              Skip the tour
             </button>
           )}
         </div>

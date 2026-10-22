@@ -2203,3 +2203,13 @@ CI gap over a ceiling that was exactly met.
 
 - Falsify: `pnpm perf:check` after a build reports live CSS at or under 27,250 B.
 
+### 2026-10-22 — the tour can be skipped and dismissed (nick)
+
+| Budget   | Before (main) | This branch | Ceiling                    |
+| -------- | ------------- | ----------- | -------------------------- |
+| total JS | 359,500 B     | 359,654 B   | RAISED 359,500 → 359,800 B |
+
+Dismiss mark, quiet "Tour" link, "Skip the tour" and "Start over" in the panel. Lazy chunk already; total only.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 359,800 B.
+
