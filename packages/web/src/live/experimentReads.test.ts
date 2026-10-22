@@ -189,6 +189,9 @@ describe('shortTitle', () => {
     );
     expect(shortTitle('Wake rail — binding read')).toBe('Wake rail');
   });
+  it("does not name a read by its kind: 'Experiment: felt vs real — …' is 'felt vs real'", () => {
+    expect(shortTitle('Experiment: felt vs real — does work nick asks for take longer')).toBe('felt vs real');
+  });
   it('keeps the whole title when the cut would leave almost nothing', () => {
     expect(shortTitle('Inc 2: the pins')).toBe('Inc 2: the pins');
     expect(shortTitle('a plain title')).toBe('a plain title');
@@ -241,6 +244,12 @@ describe('the result beside the word (experiment-results design §5–6, lane 01
   it('formats a value in its unit', () => {
     expect(formatValue(61.04, '%')).toBe('61%');
     expect(formatValue(61.25, '%')).toBe('61.3%');
+    // Durations read as durations: the wake-latency chart showed "2223647 ms" for 37 minutes.
+    expect(formatValue(840, 'ms')).toBe('840 ms');
+    expect(formatValue(53076, 'ms')).toBe('53 s');
+    expect(formatValue(60000, 'ms')).toBe('1 min');
+    expect(formatValue(2223647, 'ms')).toBe('37 min');
+    expect(formatValue(235728726, 'ms')).toBe('2.7 d');
     expect(formatValue(812.6, 'ms')).toBe('813 ms');
     expect(formatValue(0.4567, 'per day')).toBe('0.46 per day');
     expect(formatValue(1234, 'count')).toBe('1234 count');

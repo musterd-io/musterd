@@ -2153,3 +2153,14 @@ size, so the old rules cannot be edited in place. Lazy-loading cannot move eithe
 
 - Falsify: `pnpm perf:check` after a build reports live CSS at or under 27,100 B and total JS at or under 358,500 B.
 
+### 2026-10-22 — durations read as durations; a read keeps its name (nick)
+
+| Budget   | Before (#3199 ceiling) | This branch | Ceiling                    |
+| -------- | ---------------------- | ----------- | -------------------------- |
+| total JS | 358,500 B              | 358,529 B   | RAISED 358,500 → 358,650 B |
+
+`formatValue` turns `ms` into `s`/`min`/`h`/`d`, and `shortTitle` no longer cuts "Experiment: felt vs real"
+down to "Experiment". Raised tight: measured + ~0.03%.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 358,650 B.
+
