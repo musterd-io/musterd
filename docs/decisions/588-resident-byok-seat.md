@@ -272,6 +272,16 @@ agent loop of musterd's own, and without pretending this is a harness for a pers
   why the condition is recorded here.
   Follows-up: `01M5JEKY6R4184RXMY40SEQQ9K`
 
+- _2026-10-22 (lane `01M5JEKY6R4184RXMY40SEQQ9K`)._ Measure 5's gap was two host writes.
+  `close()` destroyed the gateway's sockets and then read `summary()`, so a response still in flight was
+  missing from `residency.wake_cost` while its `end` could still post the `wake_turns` row. On the two
+  mason leases that differed, the dollar gap was the last turn. A fast-fail whose primary report
+  already carried `cost_usd` returned before the supplementary report, so those dollars sat on
+  `residency.wake_failed` and the turn sum had no `wake_cost` row to join. `close()` now waits out
+  in-flight relays and then freezes metering, and every settled completion posts `wake_cost`.
+  `wake_leases` and `wake_turns` stay on the joiner (ADR 325, ADR 361): the replicated record is the
+  cost row. Rows already written are left as they were.
+
 - _2026-10-22 (claim-gated continuation, [ADR 716](716-claim-gated-continuation.md))._
   The chain-gate named in the consequences above is decided in that record. Its input is the
   latest `lane.claims_filed` reading. Cross-vendor replay is the rehydrate path the engine lane

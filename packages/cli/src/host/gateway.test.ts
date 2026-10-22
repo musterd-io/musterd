@@ -4,6 +4,7 @@ import {
   request,
   type IncomingMessage,
   type Server,
+  type ServerResponse,
 } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -403,6 +404,106 @@ describe('startMeteringGateway (ADR 583)', () => {
     expect((await post(gw.env['ANTHROPIC_BASE_URL']!, '/v1/messages', '{}')).status).toBe(429);
     expect((await post(gw.env['OPENAI_BASE_URL']!, '/responses', '{}')).status).toBe(502);
     expect(gw.summary().calls).toBe(0);
+  });
+
+  it('close waits for a response still in flight, and summary counts that call once', async () => {
+    let release: () => void = () => undefined;
+    const seen = new Promise<void>((resolve) => {
+      up = createServer((req, res) => {
+        req.resume();
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(anthropicSse().slice(0, 3).join(''));
+        release = () => res.end();
+        resolve();
+      });
+    });
+    await new Promise<void>((resolve) => up!.listen(0, '127.0.0.1', () => resolve()));
+    const addr = up!.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    const calls: MeteredCall[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L-drain',
+      drainMs: 2_000,
+      upstreams: [
+        {
+          name: 'anthropic',
+          url: `http://127.0.0.1:${String(port)}`,
+          envVar: 'ANTHROPIC_BASE_URL',
+        },
+      ],
+      onCall: (c) => calls.push(c),
+    });
+    const pending = post(gw.env['ANTHROPIC_BASE_URL']!, '/v1/messages', '{}');
+    await seen;
+    const closing = gw.close();
+    release();
+    await closing;
+    await pending;
+    expect(gw.summary().calls).toBe(1);
+    expect(gw.summary().usage).toEqual({
+      input_tokens: 1000,
+      output_tokens: 50,
+      cache_read_input_tokens: 400,
+      cache_creation_input_tokens: 100,
+    });
+    expect(gw.summary().cost_usd).toBeTypeOf('number');
+    expect(calls).toHaveLength(1);
+    await gw.close();
+    expect(gw.summary().calls).toBe(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('close meters usage already parsed when the upstream never ends, once', async () => {
+    let inbound: ServerResponse | undefined;
+    const seen = new Promise<void>((resolve) => {
+      up = createServer((req, res) => {
+        inbound = res;
+        req.resume();
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(anthropicSse().slice(0, 3).join(''));
+        resolve();
+      });
+    });
+    await new Promise<void>((resolve) => up!.listen(0, '127.0.0.1', () => resolve()));
+    const addr = up!.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    const calls: MeteredCall[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L-sweep',
+      drainMs: 200,
+      upstreams: [
+        {
+          name: 'anthropic',
+          url: `http://127.0.0.1:${String(port)}`,
+          envVar: 'ANTHROPIC_BASE_URL',
+        },
+      ],
+      onCall: (c) => calls.push(c),
+    });
+    let got = false;
+    const req = request(
+      gw.env['ANTHROPIC_BASE_URL']! + '/v1/messages',
+      { method: 'POST', headers: { 'content-type': 'application/json' } },
+      (res) => {
+        res.on('data', () => {
+          got = true;
+        });
+        res.on('error', () => undefined);
+      },
+    );
+    req.on('error', () => undefined);
+    req.end('{}');
+    await seen;
+    const deadline = Date.now() + 1_000;
+    while (!got && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5));
+    expect(got).toBe(true);
+    await gw.close();
+    inbound?.destroy();
+    expect(gw.summary().calls).toBe(1);
+    expect(gw.summary().usage.output_tokens).toBe(50);
+    expect(calls).toHaveLength(1);
+    await gw.close();
+    expect(calls).toHaveLength(1);
   });
 
   it('budgetRefusal names the lease, the spend and the budget without any credential', () => {

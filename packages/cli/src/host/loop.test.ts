@@ -1098,7 +1098,7 @@ describe('the supplementary wake-cost report (inc 5)', () => {
     ]);
   });
 
-  it('no supplement when the primary already carried cost (fast-fail merge) or none exists', async () => {
+  it('a fast-fail whose primary already carried cost still posts wake_cost; a run with no summary does not', async () => {
     const { client, calls } = fakeClient([order(), order({ lease_id: 'L2', act_id: 'A2' })]);
     let call = 0;
     const backend: ActuatorBackend = {
@@ -1107,7 +1107,8 @@ describe('the supplementary wake-cost report (inc 5)', () => {
         call += 1;
         return call === 1
           ? {
-              // Fast-fail: the primary outcome already carries the summary.
+              // Fast-fail: the primary outcome already carries the summary. The cost ledger
+              // is still the supplement — measure 5 joins wake_turns to residency.wake_cost.
               outcome: { occupied: false, session: 'fresh', reason: 'x', cost_usd: 0.05 },
               settled: Promise.resolve({ cost_usd: 0.05, duration_ms: 900 }),
             }
@@ -1126,7 +1127,13 @@ describe('the supplementary wake-cost report (inc 5)', () => {
       }),
     );
     await Promise.all(result.settled);
-    expect(calls.reports).toHaveLength(2); // the two primaries, zero supplements
+    expect(calls.reports.filter((r) => r.lease_id === 'L1')).toEqual([
+      { lease_id: 'L1', occupied: false, session: 'fresh', reason: 'x', cost_usd: 0.05 },
+      { lease_id: 'L1', occupied: false, cost_usd: 0.05, duration_ms: 900 },
+    ]);
+    expect(calls.reports.filter((r) => r.lease_id === 'L2')).toEqual([
+      { lease_id: 'L2', occupied: false, session: 'fresh', reason: 'y' },
+    ]);
   });
 
   it('an OCCUPIED wake whose backend settles with nothing gets a host-stamped duration row (ADR 436 clause 1)', async () => {
@@ -1694,6 +1701,60 @@ describe('the metering gateway rides every wake (ADR 583)', () => {
     });
     expect(supplement.unpriced_reason).toBeUndefined();
     expect(supplement.duration_ms).toBeTypeOf('number');
+  });
+
+  it('a fast-fail whose primary already carried cost still posts the gateway summary as wake_cost', async () => {
+    const { client, calls } = fakeClient([order()]);
+    const backend: ActuatorBackend = {
+      harness: 'claude-code',
+      wake: async () => ({
+        outcome: {
+          occupied: false,
+          session: 'fresh',
+          reason: 'x',
+          cost_usd: 0.05,
+          duration_ms: 900,
+        },
+        settled: Promise.resolve({ cost_usd: 0.05, duration_ms: 900 }),
+      }),
+    };
+    const g = fakeGateway(
+      {
+        calls: 1,
+        usage: { input_tokens: 100, output_tokens: 10 },
+        cost_usd: 0.02,
+        models: ['claude-haiku-5-5'],
+      },
+      [
+        {
+          turn: 1,
+          provider: 'anthropic',
+          model: 'claude-haiku-5-5',
+          usage: { input_tokens: 100, output_tokens: 10 },
+          cost_usd: 0.02,
+          status: 200,
+        },
+      ],
+    );
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        gateway: g.gateway,
+      }),
+    );
+    await Promise.all(result.settled);
+    const supplement = calls.reports.find((r) => r.price_source === 'gateway');
+    expect(supplement).toMatchObject({
+      lease_id: 'L1',
+      occupied: false,
+      cost_usd: 0.02,
+      price_source: 'gateway',
+      harness_cost_usd: 0.05,
+      duration_ms: 900,
+    });
+    expect(calls.reports.filter((r) => r.lease_id === 'L1')).toHaveLength(2);
   });
 
   it("a metered wake with no price row reports tokens and no_price_row; the harness's own figure rides as its claim", async () => {

@@ -881,8 +881,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       span.end();
       // The supplementary cost report (increment 5): harness-attested cost exists only at run
       // exit, long after the primary report settled the lease at verification — so the settled
-      // completion posts a second report and the daemon records `residency.wake_cost`. Skipped
-      // when the primary already carried the summary (fast-fail merge) — one record per lease.
+      // completion posts a second report and the daemon records `residency.wake_cost`. The
+      // primary may already carry that summary (fast-fail merge). Spend readers prefer the
+      // `wake_cost` row, and a turn sum has nothing to reconcile against when it was never
+      // written (lane 01M5JEKY6R).
       const actuatedAt = Date.now();
       settled.push(
         actuation.settled.then(async (settledWith) => {
@@ -937,11 +939,6 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             completion.cost_usd === undefined &&
             completion.duration_ms === undefined &&
             completion.yielded !== true
-          )
-            return;
-          if (
-            actuation.outcome.cost_usd !== undefined ||
-            actuation.outcome.duration_ms !== undefined
           )
             return;
           await client
