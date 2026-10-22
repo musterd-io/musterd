@@ -44,8 +44,8 @@ Frames:
 ## Page: Type
 
 - `type/scale` frame: every text style from the ramp, rendered with its token name + specs.
-- `type/mono-grid` frame: Recursive Mono at `14/22` over an 80-column grid guide (this is the shared reference the Terminal brief builds on). Re-fonted from JetBrains Mono under [ADR 477](../decisions/477-web-type-recursive.md), 2026-09-30.
-- `type/pairing` frame: Recursive Casual heading, linear body and a Recursive Mono code block, showing the three cuts ([ADR 477](../decisions/477-web-type-recursive.md)). The Wordmark and Assets pages keep JetBrains Mono: they are wordmark lockups, and the wordmark is unchanged.
+- `type/mono-grid` frame: JetBrains Mono at `14/22` over an 80-column grid guide (this is the shared reference the Terminal brief builds on). [ADR 705](../decisions/705-web-type-dm-sans.md), 2026-10-21.
+- `type/pairing` frame: a DM Sans heading, DM Sans body and a JetBrains Mono code block ([ADR 705](../decisions/705-web-type-dm-sans.md)). The Wordmark and Assets pages show the drawn nameplate ([ADR 704](../decisions/704-the-wordmark-nameplate.md)).
 
 ## Page: Assets (export targets)
 

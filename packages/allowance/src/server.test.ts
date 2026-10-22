@@ -67,7 +67,7 @@ describe('start', () => {
     const css = await fetch(`${base}/allowance.css`);
     expect(await css.text()).toContain('.p10{width:10%}');
 
-    const font = await fetch(`${base}/fonts/recursive-linear.woff2`);
+    const font = await fetch(`${base}/fonts/dm-sans-latin.woff2`);
     expect(font.status).toBe(200);
     expect(font.headers.get('content-type')).toBe('font/woff2');
 

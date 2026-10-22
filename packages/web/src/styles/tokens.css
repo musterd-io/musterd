@@ -55,16 +55,16 @@
    * every screen and component. Faces are declared in styles/global.css
    * (@font-face) before a slot can point at them.
    *
-   * ACTIVE (ADR 477) — one family, Recursive, in three cuts:
-   *   --font-sans    Recursive         linear sans, the body face
-   *   --font-display Recursive Casual  the casual axis: headings, names, chyron labels
-   *   --font-mono    Recursive Mono    telemetry, timestamps, ids, the CLI mirror
+   * ACTIVE (ADR 705) — DM Sans for text, JetBrains Mono for data:
+   *   --font-sans    DM Sans          body, chrome, marketing
+   *   --font-display DM Sans          headings, names, chyron labels (same file)
+   *   --font-mono    JetBrains Mono   telemetry, timestamps, ids, the CLI mirror
    *
    * A new family is an ADR (brand.md §3) and a budgets.json allowlist change.
    * ------------------------------------------------------------------------ */
-  --font-sans: 'Recursive', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: 'Recursive Casual', 'Recursive', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Recursive Mono', ui-monospace, Menlo, monospace;
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 
   /* Motion — the SITE's easing. /live has its own scale in Live.css (ADR 329), and the site has not
      adopted it: that lane has not happened. --ease-in-out was removed on 2026-08-26 once /live's

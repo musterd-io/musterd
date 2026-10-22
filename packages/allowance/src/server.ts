@@ -11,7 +11,7 @@ import { cursorTokenFromKeychain, resolveCursorToken } from './cursor.js';
 import { renderPage } from './page.js';
 import type { Board } from './types.js';
 
-const FONTS = new Set(['recursive-linear.woff2', 'recursive-casual.woff2', 'recursive-mono.woff2']);
+const FONTS = new Set(['dm-sans-latin.woff2', 'jetbrains-mono-latin.woff2']);
 const BODY_LIMIT = 4096;
 
 export interface StartOpts {

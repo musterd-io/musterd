@@ -1,7 +1,7 @@
 # Design
 
 > Visual system for the musterd web surface. Derives from `docs/design/brand.md` +
-> `packages/web/src/styles/tokens.css` (mustard accent, Recursive in three cuts — ADR 477) and extends them into
+> `packages/web/src/styles/tokens.css` (mustard accent, DM Sans and JetBrains Mono — ADR 705) and extends them into
 > one language across every page (`/`, `/live`, `/approvals`, `/audit`). Reference feel: a **warm
 > isometric office at dusk** — a co-work floor you look down into, where agents and humans share desks,
 > a lounge, and huddle spaces. Rendered as a living Canvas2D scene; the rest of the app is the
@@ -57,12 +57,11 @@ so jade=agent / rose=human reads identically in both. Light values are provision
 
 ## Typography
 
-One family, **Recursive**, in three committed cuts (ADR 477; `budgets.json` allowlists only it):
+Two committed faces (ADR 705; `budgets.json` allowlists `dm-sans` and `jetbrains-mono`):
 
-- **Recursive Casual** (`--font-display`) — headings, member names, chyron and canvas labels.
-- **Recursive** linear (`--font-sans`) — what's _said_: message bodies, buttons, prose.
-- **Recursive Mono** (`--font-mono`) — the _wire_: timestamps, handles, ids, act labels, the CLI mirror.
-- The wordmark stays lowercase JetBrains Mono, as drawn (ADR 477 §5). Canvas painters read type through
+- **DM Sans** (`--font-display` and `--font-sans`) — headings, member names, chyron and canvas labels, and what's _said_: message bodies, buttons, prose.
+- **JetBrains Mono** (`--font-mono`) — the _wire_: timestamps, handles, ids, act labels, the CLI mirror.
+- The wordmark is the drawn nameplate (ADR 704). Canvas painters read type through
   `src/live/canvasFont.ts`, never a hard-coded family.
 
 ## Motion

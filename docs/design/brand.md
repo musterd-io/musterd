@@ -97,26 +97,26 @@ The CLI uses only these mappings so output stays on-brand and degrades cleanly i
 
 ## 3. Typography
 
-One family, **Recursive**, in three cuts ([ADR 477](../decisions/477-web-type-recursive.md), 2026-09-29; it replaced Inter + JetBrains Mono here and the Inter + Space Grotesk + Space Mono the web had drifted to).
+Two typefaces ([ADR 705](../decisions/705-web-type-dm-sans.md), 2026-10-21). **DM Sans** is the text face for display and body. **JetBrains Mono** is the data face. Successor to Recursive ([ADR 477](../decisions/477-web-type-recursive.md)).
 
-- **Display (headings, member names, chyron labels):** `Recursive Casual` — Recursive's casual axis. CSS token `--font-display`. On the public site and the console, headings use the linear cut instead ([ADR 681](../decisions/681-site-neutral-product-palette.md)): the casual cut lives in /live and the office.
-- **Sans (body, web chrome, marketing):** `Recursive` — the linear cut. CSS token `--font-sans`.
-- **Mono (data, timestamps, ids, CLI-mirroring UI, Figma terminal frames):** `Recursive Mono`. CSS token `--font-mono`. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
+- **Display and sans (headings, member names, chyron labels, body, web chrome, marketing):** `DM Sans`. CSS tokens `--font-display` and `--font-sans` name the same family. One committed variable file: optical size 9–40 and weight 100–1000. The DOM uses optical sizing. Canvas paints the file's default, optical size 9, because `ctx.font` cannot set axes.
+- **Mono (data, timestamps, ids, CLI-mirroring UI, Figma terminal frames):** `JetBrains Mono`. CSS token `--font-mono`. Digits are equal width. The weight axis runs 100–800, so 600 and 700 are real. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
+- **Wordmark:** the drawn nameplate ([ADR 704](../decisions/704-the-wordmark-nameplate.md)).
 
-The three cuts are committed files cut from the upstream variable font by `scripts/fonts/instance-recursive.py` (latin only, weight axis 400–800). The **wordmark** is unchanged: lowercase JetBrains Mono, as drawn.
+The two files are committed latin cuts. DM Sans is `@fontsource-variable/dm-sans@5.2.8` (the CSS family is `DM Sans`; the name table says `DM Sans 9pt`). JetBrains Mono is a latin subset of the upstream variable font, version 2.305, name table left intact.
 
 ### Type ramp (web/docs)
 
-| Token     | Size / line-height | Weight | Family           |
-| --------- | ------------------ | ------ | ---------------- |
-| display   | 40 / 48            | 780    | Recursive Casual |
-| h1        | 28 / 36            | 700    | Recursive Casual |
-| h2        | 22 / 30            | 600    | Recursive Casual |
-| h3        | 18 / 26            | 600    | Recursive        |
-| body      | 15 / 24            | 400    | Recursive        |
-| small     | 13 / 20            | 400    | Recursive        |
-| mono-body | 14 / 22            | 400    | Recursive Mono   |
-| mono-sm   | 12 / 18            | 400    | Recursive Mono   |
+| Token     | Size / line-height | Weight | Family         |
+| --------- | ------------------ | ------ | -------------- |
+| display   | 40 / 48            | 780    | DM Sans        |
+| h1        | 28 / 36            | 700    | DM Sans        |
+| h2        | 22 / 30            | 600    | DM Sans        |
+| h3        | 18 / 26            | 600    | DM Sans        |
+| body      | 15 / 24            | 400    | DM Sans        |
+| small     | 13 / 20            | 400    | DM Sans        |
+| mono-body | 14 / 22            | 400    | JetBrains Mono |
+| mono-sm   | 12 / 18            | 400    | JetBrains Mono |
 
 ### Terminal type ramp (Figma terminal frames)
 
@@ -176,4 +176,4 @@ This entire identity is intentionally small: one name, one accent color, one wor
 
 ## 7. Web surface (carve-out)
 
-The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — an immersive scene (Canvas2D since ADR 094 removed WebGL), gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, Recursive (§3) is still the only type family, the wordmark is still lowercase JetBrains Mono, and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`. Since [ADR 681](../decisions/681-site-neutral-product-palette.md) (2026-10-20), the site's light ground and ink are the product's neutral palette (white and cool grey, as /live's frame), with no mustard tint bands; the spectacle is the office, not the paper.
+The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — an immersive scene (Canvas2D since ADR 094 removed WebGL), gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, DM Sans and JetBrains Mono are the two typefaces (§3), the wordmark is the drawn nameplate ([ADR 704](../decisions/704-the-wordmark-nameplate.md)), and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`. Since [ADR 681](../decisions/681-site-neutral-product-palette.md) (2026-10-20), the site's light ground and ink are the product's neutral palette (white and cool grey, as /live's frame), with no mustard tint bands; the spectacle is the office, not the paper.

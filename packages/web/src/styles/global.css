@@ -1,32 +1,27 @@
 /*
- * Web fonts (ADR 477). One family, Recursive, cut into three faces by
- * scripts/fonts/instance-recursive.py: casual for display, linear for body,
- * mono for data. Each face is latin-only with a 400-800 weight axis, so any
- * weight in that range renders without another file. The tokens in tokens.css
- * point at these names; budgets.json allowlists the `recursive-` files.
+ * Web fonts (ADR 705). DM Sans for text, JetBrains Mono for data.
+ * Latin cuts, committed:
+ *   dm-sans-latin.woff2          opsz 9–40, wght 100–1000
+ *   jetbrains-mono-latin.woff2   wght 100–800
+ * The CSS family is `DM Sans`. The file's name table says `DM Sans 9pt`
+ * (the opsz-9 default). Canvas cannot set axes, so it paints that cut.
+ * budgets.json allowlists `dm-sans-` and `jetbrains-mono-`.
  */
 /* @import must precede every other rule, @font-face included, or the browser drops it — and
  * with it every token (ADR 477 shipped that way for one publish). */
 @import './tokens.css';
 
 @font-face {
-  font-family: 'Recursive Casual';
-  src: url('./fonts/recursive-casual.woff2') format('woff2');
-  font-weight: 400 800;
+  font-family: 'DM Sans';
+  src: url('./fonts/dm-sans-latin.woff2') format('woff2');
+  font-weight: 100 1000;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Recursive';
-  src: url('./fonts/recursive-linear.woff2') format('woff2');
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Recursive Mono';
-  src: url('./fonts/recursive-mono.woff2') format('woff2');
-  font-weight: 400 800;
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 800;
   font-style: normal;
   font-display: swap;
 }

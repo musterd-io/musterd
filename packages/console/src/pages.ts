@@ -24,7 +24,7 @@ function asset(name: string, type: string, cache: string): void {
 }
 asset('console.css', 'text/css; charset=utf-8', 'public, max-age=300');
 asset('favicon.svg', 'image/svg+xml', 'public, max-age=300');
-for (const f of ['recursive-linear.woff2', 'recursive-casual.woff2', 'recursive-mono.woff2'])
+for (const f of ['dm-sans-latin.woff2', 'jetbrains-mono-latin.woff2'])
   asset(`fonts/${f}`, 'font/woff2', 'public, max-age=31536000, immutable');
 
 export function assetFor(path: string): { type: string; body: Buffer; cache: string } | null {
