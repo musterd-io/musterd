@@ -46,7 +46,7 @@ picker stays the front door.
    and drops the rest of the file. It does not write the file to stderr.
 3. **An agent member's workspace opens on that member's harness step.** The step is the one ADR
    491 already shows, including when one harness is configured, with the one used last marked.
-   The last row reads `change harnesses`. `⏎` on it runs the existing configure prompt for this
+   The last row reads `change harnesses`. _(Amended 2026-10-22: the row reads `configure harnesses`, and the scoped screen names this member and each machine. See [ADR 720](720-launcher-names-this-member.md).)_ `⏎` on it runs the existing configure prompt for this
    workspace, which replaces the set, and returns to the step with the cursor on the harness just
    added — the first new id in the saved order. Cancelling writes nothing and leaves the cursor
    on the one used last. The count line counts configured harnesses and does not count the extra
@@ -77,6 +77,9 @@ picker stays the front door.
   keeps the list.
 - Configure runs after the terminal is restored, through a dynamic import, so the paint path
   still does not load a command module.
+- 2026-10-22: [ADR 720](720-launcher-names-this-member.md) renames the extra row to
+  `configure harnesses`. Inside a member workspace the screen marks this member and names each
+  machine. From `~`, frame 20 is unchanged.
 
 ## Observability & Evaluation
 

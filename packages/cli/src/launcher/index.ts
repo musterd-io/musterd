@@ -165,9 +165,17 @@ async function refresh(
     } catch {
       // the snapshot is a cache
     }
-    const { fetchRosters, liveFor, memberRowsFor, membersByTeam, rosterKey, rosterTargets } =
-      await import('./live.js');
-    const rosters = await fetchRosters(rosterTargets(catalog.seats, catalog.teams, config.server));
+    const {
+      fetchRosters,
+      liveFor,
+      localNodeLabel,
+      memberRowsFor,
+      membersByTeam,
+      rosterKey,
+      rosterTargets,
+    } = await import('./live.js');
+    const targets = rosterTargets(catalog.seats, catalog.teams, config.server);
+    const rosters = await fetchRosters(targets);
     const live: Record<string, Live> = {};
     let answered = catalog.seats.length === 0;
     const unknown: string[] = [];
@@ -186,6 +194,7 @@ async function refresh(
       status: answered ? 'ok' : 'offline',
       unknown,
       members: membersByTeam(members),
+      machine: localNodeLabel(targets, rosters),
       now: Date.now(),
     });
     if (members.length) {

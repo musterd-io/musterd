@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 import { canonicalServer, isLoopbackServer } from '../host/registry.js';
 import { serverHost } from './address.js';
+import { plainLabel } from './rows.js';
 import type { Can, MemberEntry, Seat, TeamEntry, Where } from './store.js';
 import { pidAlive } from './yield.js';
 
@@ -85,6 +86,23 @@ export async function fetchRosterPage(
   } catch {
     return null;
   }
+}
+
+/**
+ * The label of the node that answered on this machine (ADR 720). A remote roster's label is
+ * someone else's machine. No label, or only control bytes, is null — the screen then says
+ * `this machine` rather than inventing a hostname (ADR 503).
+ */
+export function localNodeLabel(
+  targets: readonly { server: string; team: string }[],
+  rosters: ReadonlyMap<string, RosterPage | null>,
+): string | null {
+  for (const t of targets) {
+    if (!isLoopbackServer(t.server)) continue;
+    const label = plainLabel(rosters.get(rosterKey(t))?.node?.label ?? '').trim();
+    if (label) return label;
+  }
+  return null;
 }
 
 /** The members alone — what a live-seat check needs. */

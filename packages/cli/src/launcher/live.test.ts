@@ -9,6 +9,7 @@ import {
   fetchRosterPage,
   fetchRosters,
   liveFor,
+  localNodeLabel,
   localWake,
   rosterKey,
   rosterTargets,
@@ -65,6 +66,40 @@ const okFetch = (async () =>
 
 let server: Server | undefined;
 afterEach(() => server?.close());
+
+describe('localNodeLabel (ADR 720)', () => {
+  const loop = { server: 'http://127.0.0.1:4849', team: 'acme' };
+  const remote = { server: 'https://cloud.example', team: 'acme' };
+
+  it('uses the loopback node label and ignores a remote roster', () => {
+    const rosters = new Map([
+      [rosterKey(remote), { members: [], node: { id: 'n-fly', label: 'fly' } }],
+      [rosterKey(loop), { members: [], node: { id: 'n-mac', label: 'mac' } }],
+    ]);
+    expect(localNodeLabel([remote, loop], rosters)).toBe('mac');
+  });
+
+  it('returns null when this machine has not named itself', () => {
+    expect(
+      localNodeLabel([loop], new Map([[rosterKey(loop), { members: [], node: null }]])),
+    ).toBeNull();
+  });
+
+  it('drops control bytes and ignores a label that was only those bytes', () => {
+    expect(
+      localNodeLabel(
+        [loop],
+        new Map([[rosterKey(loop), { members: [], node: { id: 'n', label: 'mac\x1b[31m' } }]]),
+      ),
+    ).toBe('mac[31m');
+    expect(
+      localNodeLabel(
+        [loop],
+        new Map([[rosterKey(loop), { members: [], node: { id: 'n', label: '\x1b' } }]]),
+      ),
+    ).toBeNull();
+  });
+});
 
 describe('the roster read (ADR 491)', () => {
   it('parses members through the protocol schema', async () => {
