@@ -300,92 +300,108 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.cyl("shin", f"knee{side}", "skin", skin, 0, y, ANKLE + 0.5 * FIG, 1.9 * FIG, 2.6 * FIG, KNEE - ANKLE - 0.5 * FIG)["fuse"] = "skin"
         sk("ankle", f"ankle{side}", 0.6, y, ANKLE + 0.6 * FIG, 1.9 * FIG, 1.8 * FIG, 1.4 * FIG)
 
-    # ── hair: one silhouette each, all on the head
-    # A hair cap sits BEHIND the hairline: centred back of the head's centre and a touch higher, so
-    # the face (x > 0) stands proud of it and the body holdout cuts the cap off at the brow.
-    cap = lambda layer, top=1.0, back=1.0, side=1.02: r.ball("cap", "head", layer, hair, HEAD_X - HEAD_R * 0.22, 0, HEAD_C + 2.4 + HEAD_R * top, HEAD_R * back, HEAD_R * side, HEAD_R * top)  # noqa: E731
-    cap("hair/buzz", 0.98, 1.0, 0.98)
-    cap("hair/short", 1.06, 1.1, 1.05)
-    r.box("fringe", "head", "hair/short", hair, HEAD_X + HEAD_R * 0.7, 0, HEAD_C + 4.5, 3.2, 11, 4, 0.8)
-    cap("hair/side", 1.06, 1.1, 1.05)
-    r.box("sweep", "head", "hair/side", hair, HEAD_X + HEAD_R * 0.6, 3, HEAD_C + 4, 5, 10, 5, 1.2)
-    cap("hair/bob", 1.08, 1.15, 1.12)
+    # ── hair (v2): a cap and clumps per style, fused into one sculpted volume — not a helmet, not a
+    # slab fringe (spec §2.3). The cap sits back of the face and a touch high, so no scalp shows.
+    def clump(layer, name, x, y, zc, rx, ry, rz, rot=None):
+        o = r.orb(name, "head", layer, hair, x, y, zc, rx, ry, rz, layer)
+        return r.turn(o, rot) if rot else o
+
+    def cap(layer, k=1.0):
+        clump(layer, "cap", HEAD_X - R * 0.22, 0, HEAD_C + R * 0.14, R * 1.02 * k, R * 1.0 * k, R * 1.04 * k)
+
+    cap("hair/buzz", 0.97)
+    cap("hair/short")
+    for i, (y, dz, lean) in enumerate(((-0.5, 0.0, -10), (-0.15, 0.08, 6), (0.2, 0.02, -4), (0.52, -0.05, 12))):
+        clump("hair/short", f"fringe{i}", HEAD_X + R * 0.55, y * R, HEAD_C + R * (0.77 + dz), R * 0.32, R * 0.3, R * 0.22, (math.radians(lean), math.radians(-25), 0))
+    for i, (x, y) in enumerate(((0.0, -0.45), (0.1, 0.4), (-0.4, 0.0), (0.25, 0.0))):
+        clump("hair/short", f"top{i}", HEAD_X + x * R, y * R, HEAD_C + R * 1.02, R * 0.4, R * 0.38, R * 0.32)
+    cap("hair/side")
+    for i, (y, dz) in enumerate(((-0.55, 0.15), (-0.2, 0.25), (0.15, 0.32), (0.5, 0.28))):
+        clump("hair/side", f"sweep{i}", HEAD_X + R * 0.45, y * R, HEAD_C + R * (0.76 + dz * 0.4), R * 0.4, R * 0.35, R * 0.26, (math.radians(25), math.radians(-15), 0))
+    cap("hair/bob", 1.04)
     for sy in (1, -1):
-        r.box("bobside", "head", "hair/bob", hair, HEAD_X - 1.5, sy * HEAD_R * 0.95, HEAD_C - 6.5, 10, 3.4, 13, 1.2)
-    cap("hair/long", 1.08, 1.15, 1.1)
-    r.box("fall", "head", "hair/long", hair, HEAD_X - HEAD_R * 0.8, 0, HEAD_C - 17, 5, 13, 24, 1.6)
-    cap("hair/ponytail", 1.04, 1.08, 1.03)
-    r.cyl("tail", "head", "hair/ponytail", hair, HEAD_X - HEAD_R * 1.1, 0, HEAD_C - 8, 1.9, 3.0, 15)
-    r.ball("afro", "head", "hair/afro", hair, HEAD_X - HEAD_R * 0.25, 0, HEAD_C + 2.4 + HEAD_R * 1.4, HEAD_R * 1.25, HEAD_R * 1.45, HEAD_R * 1.4)
-    cap("hair/bun", 1.04, 1.06, 1.03)
-    r.ball("bun", "head", "hair/bun", hair, HEAD_X - HEAD_R * 0.9, 0, HEAD_C + 5 + 3.8, 3.8, 3.8, 3.8)
+        clump("hair/bob", "side", HEAD_X - R * 0.1, sy * R * 0.78, HEAD_C - R * 0.25, R * 0.62, R * 0.32, R * 0.62)
+    clump("hair/bob", "back", HEAD_X - R * 0.55, 0, HEAD_C - R * 0.2, R * 0.6, R * 0.9, R * 0.62)
+    cap("hair/long", 1.04)
+    clump("hair/long", "fall", HEAD_X - R * 0.7, 0, HEAD_C - R * 1.1, R * 0.45, R * 0.85, R * 1.5)
+    for sy in (1, -1):  # strands over the front of the shoulders
+        clump("hair/long", "front", HEAD_X - R * 0.05, sy * R * 0.75, HEAD_C - R * 1.0, R * 0.3, R * 0.28, R * 1.2)
+    cap("hair/ponytail")
+    clump("hair/ponytail", "tie", HEAD_X - R * 1.0, 0, HEAD_C + R * 0.2, R * 0.28, R * 0.28, R * 0.28)
+    clump("hair/ponytail", "tail", HEAD_X - R * 1.2, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.3, R * 0.85)
+    clump("hair/afro", "afro", HEAD_X - R * 0.25, 0, HEAD_C + R * 0.25, R * 1.3, R * 1.45, R * 1.38)
+    cap("hair/bun")
+    clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
 
-    # ── facial hair
-    r.box("stubble", "head", "facial/stubble", hair, HEAD_X + HEAD_R * 0.55, 0, HEAD_C - 8.5, 6.5, 11, 4, 1.2)
-    r.box("moustache", "head", "facial/moustache", hair, HEAD_X + HEAD_R * 0.86, 0, HEAD_C - 2.9, 1.3, 5.6, 1.5, 0.4)
-    r.box("goatee", "head", "facial/goatee", hair, HEAD_X + HEAD_R * 0.8, 0, HEAD_C - 9.6, 2.8, 4, 4, 0.8)
-    r.ball("beard", "head", "facial/beard", hair, HEAD_X + HEAD_R * 0.45, 0, HEAD_C - 9.6 + 5.6, HEAD_R * 0.7, HEAD_R * 0.98, 5.6)
+    # ── facial hair, following the jaw
+    stub = lambda name, *a: r.orb(name, "head", "facial/stubble", hair, *a, "facial/stubble")  # noqa: E731
+    stub("jaw", HEAD_X + R * 0.25, 0, HEAD_C - R * 0.3, R * 0.7, R * 0.74, R * 0.42)
+    stub("chin", HEAD_X + R * 0.55, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.4, R * 0.2)
+    r.orb("moustache", "head", "facial/moustache", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07)
+    r.orb("goatee", "head", "facial/goatee", hair, HEAD_X + R * 0.62, 0, HEAD_C - R * 0.6, R * 0.22, R * 0.24, R * 0.2)
+    r.orb("beard", "head", "facial/beard", hair, HEAD_X + R * 0.32, 0, HEAD_C - R * 0.5, R * 0.6, R * 0.66, R * 0.36, "facial/beard")
+    r.orb("tache", "head", "facial/beard", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07, "facial/beard")
 
-    # ── tops: a torso with a slight waist, and sleeves that follow the arms
-    def torso(layer, mat=cloth):
-        # "a little bit too block-ish" (nick): one smooth tapered volume from the waist to the
-        # shoulders, oval in section — a slight waist, wider chest, rounded edges, no seams.
-        z0 = HIP - 1 * FIG
-        h = SHOULDER - z0
-        r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, 5.0 * FIG, 6.4 * FIG, h, sy=1.75)
-        # The shoulders: a flattened ellipsoid over the top of the torso, so the line from the neck
-        # falls away to each arm instead of meeting it at a flat lid ("the shoulders/neck are too
-        # block-y", nick, 2026-10-21).
-        r.ball("yoke", "spine", layer, mat, 0.3, 0, SHOULDER + 3.6 * FIG, 6.7 * FIG, 13.6 * FIG, 3.6 * FIG)
+    # ── tops (v2): a torso with a waist that comes down over the trouser top, shoulders, sleeves —
+    # all one fused garment per cut, so the sleeve flows out of the shoulder (spec §2.1)
+    def torso(layer, mat=cloth, waist=5.2, chest=6.6):
+        z0 = HIP - 1.5 * FIG
+        r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, waist * FIG, chest * FIG, SHOULDER - z0, sy=1.7)["fuse"] = layer
+        r.orb("yoke", "spine", layer, mat, 0.3, 0, SHOULDER, 6.2 * FIG, 12.6 * FIG, 3.4 * FIG, layer)
+        r.orb("belly", "hips", layer, mat, 0.5, 0, HIP + 2 * FIG, 5.6 * FIG, 8.4 * FIG, 4.0 * FIG, layer)
 
     def sleeves(layer, long: bool, mat=cloth):
         for side, sy in (("L", 1), ("R", -1)):
-            # a rounded cap where the sleeve meets the yoke, turning with the arm
-            r.ball("cap", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER + 2.9 * FIG, 3.9 * FIG, 3.9 * FIG, 3.9 * FIG)
-            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 1 * FIG, 3.6 * FIG, 4.2 * FIG, UPPER_ARM - 1 * FIG)
+            y = sy * SHOULDER_W
+            r.orb("cap", f"shoulder{side}", layer, mat, 0, y, SHOULDER - 0.5 * FIG, 3.7 * FIG, 3.6 * FIG, 3.6 * FIG, layer)
+            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.1 * FIG, 3.7 * FIG, UPPER_ARM)["fuse"] = layer
             if long:
-                r.ball("elbow", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 3.5 * FIG, 3.5 * FIG, 3.5 * FIG, 3.5 * FIG)
-                r.cyl("cuff", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM + 1 * FIG, 3.0 * FIG, 3.4 * FIG, FORE_ARM - 1 * FIG)
+                r.orb("elbow", f"elbow{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.0 * FIG, 3.0 * FIG, 3.0 * FIG, layer)
+                r.cyl("cuff", f"elbow{side}", layer, mat, 0, y, WRIST + 1.2 * FIG, 2.5 * FIG, 3.0 * FIG, FORE_ARM - 1.2 * FIG)["fuse"] = layer
 
     torso("top/tee"); sleeves("top/tee", False)
     torso("top/long"); sleeves("top/long", True)
     torso("top/stripe"); sleeves("top/stripe", True)
     for dz in (3, 9, 15, 20):
-        z = HIP + dz * FIG
+        z = HIP + dz * FIG * _K
         on_chest = z > CHEST - 5 * FIG
-        r.ball("stripe", "spine" if dz > 5 else "hips", "top/stripe", cloth_dark, 0.5 if on_chest else 0, 0, z + 1.3 * FIG, (6.8 if on_chest else 5.8) * FIG, (11.5 if on_chest else 8.2) * FIG, 1.3 * FIG)
+        r.ball("stripe", "spine" if dz > 5 else "hips", "top/stripe", cloth_dark, 0.5 if on_chest else 0, 0, z + 1.3 * FIG, (6.9 if on_chest else 6.0) * FIG, (11.6 if on_chest else 8.6) * FIG, 1.3 * FIG)
     torso("top/hoodie"); sleeves("top/hoodie", True)
-    r.ball("pocket", "hips", "top/hoodie", cloth_dark, 5.4 * FIG, 0, HIP + 7 * FIG, 1.2, 5.5 * FIG, 3.0 * FIG)
-    r.ball("hood", "spine", "top/hoodie", cloth, -5 * FIG, 0, NECK - 1 * FIG + 5 * FIG, 6 * FIG, 9 * FIG, 5 * FIG)
+    r.orb("pocket", "hips", "top/hoodie", cloth_dark, 5.4 * FIG, 0, HIP + 2.6 * FIG, 0.8, 5.0 * FIG, 2.6 * FIG)
+    r.orb("hood", "spine", "top/hoodie", cloth, -4.2 * FIG, 0, NECK + 0.4 * FIG, 5.0 * FIG, 8.6 * FIG, 4.0 * FIG, "top/hoodie")
     torso("top/vest", cloth_dark)
 
-    # ── bottom: pelvis and trouser legs; shoes on the feet
-    r.ball("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 6.0 * FIG, 8.6 * FIG, 5.0 * FIG)
+    # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
+    r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
     for side, sy in (("L", 1), ("R", -1)):
-        r.cyl("thigh", f"hip{side}", "bottom", denim, 0, sy * HIP_W, KNEE - 1 * FIG, 3.6 * FIG, 4.4 * FIG, THIGH + 1 * FIG)
-        r.ball("knee", f"knee{side}", "bottom", denim, 0, sy * HIP_W, KNEE + 3.7 * FIG, 3.7 * FIG, 3.7 * FIG, 3.7 * FIG)
-        r.cyl("shin", f"knee{side}", "bottom", denim, 0, sy * HIP_W, ANKLE + 1 * FIG, 3.0 * FIG, 3.6 * FIG, SHIN - 1 * FIG)
-        r.box("shoe", f"ankle{side}", "shoes", shoe, 2.5 * FIG, sy * HIP_W, 0, 10 * FIG, 5.5 * FIG, 4 * FIG, 1.2)
+        y = sy * HIP_W
+        r.cyl("thigh", f"hip{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 4.2 * FIG, HIP - KNEE + 1 * FIG)["fuse"] = "bottom"
+        r.orb("knee", f"knee{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 3.0 * FIG, 3.1 * FIG, "bottom")
+        r.cyl("shin", f"knee{side}", "bottom", denim, 0, y, ANKLE + 1.5 * FIG, 2.5 * FIG, 3.0 * FIG, KNEE - ANKLE - 1.5 * FIG)["fuse"] = "bottom"
+        # shoes: a rounded upper on a sole, not a block
+        r.orb("shoe", f"ankle{side}", "shoes", shoe, 2.2 * FIG, y, 0.9 * FIG + 2.4 * FIG * 0.5, 5.2 * FIG, 2.7 * FIG, 2.4 * FIG, "shoes")
+        r.orb("sole", f"ankle{side}", "shoes", shoe, 2.4 * FIG, y, 0.65 * FIG, 5.4 * FIG, 2.8 * FIG, 0.65 * FIG, "shoes")
 
-    # ── hats
-    r.ball("cap", "head", "hat/cap", acc, HEAD_X - HEAD_R * 0.2, 0, HEAD_C + 4 + HEAD_R * 0.95, HEAD_R * 1.0, HEAD_R * 1.06, HEAD_R * 0.95)
-    r.box("brim", "head", "hat/cap", acc, HEAD_X + HEAD_R * 1.05, 0, HEAD_C + 5.5, 7.5, 9, 1.2, 0.4)
-    r.ball("beanie", "head", "hat/beanie", acc, HEAD_X - HEAD_R * 0.2, 0, HEAD_C + 5 + HEAD_R * 1.05, HEAD_R * 1.0, HEAD_R * 1.06, HEAD_R * 1.05)
-    r.torus("band", "head", "hat/band", acc, HEAD_X, 0, HEAD_C + 4.8, HEAD_R * 1.0, 1.3)
+    # ── hats, sized to the v2 head
+    r.orb("cap", "head", "hat/cap", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.6, R * 1.04, R * 1.08, R * 0.7)
+    r.box("brim", "head", "hat/cap", acc, HEAD_X + R * 0.95, 0, HEAD_C + R * 0.66, R * 0.75, R * 0.95, 1.0, 0.4)
+    r.orb("beanie", "head", "hat/beanie", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.42, R * 1.06, R * 1.08, R * 0.95)
+    r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.62, R * 0.98, 1.3)
 
-    # ── accessories
+    # ── accessories: thin frames on the nose, cups over the ears, a scarf at the neck
+    frame = scene.matte("fig-frame", (0.72, 0.72, 0.72), 0.3)
     for sy in (1, -1):
-        r.torus("lens", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 1.02, sy * 3.3, HEAD_C + 2.0, 2.3, 0.8, (0, math.radians(90), 0))
-        r.box("arm", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 0.5, sy * HEAD_R * 0.98, HEAD_C + 1.8, HEAD_R * 1.0, 0.7, 0.7)
-    r.box("bridge", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 1.02, 0, HEAD_C + 1.8, 0.8, 2.8, 0.8)
-    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - 0.8, 0, HEAD_C + 3.2, HEAD_R * 1.08, 1.0, (math.radians(90), 0, 0))
+        r.torus("lens", "head", "acc/glasses", frame, HEAD_X + R * 0.95, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.2, 0.32, (0, math.radians(90), 0))
+        r.box("arm", "head", "acc/glasses", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.34, R * 0.95, 0.3, 0.35)
+    r.box("bridge", "head", "acc/glasses", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.34, 0.4, R * 0.2, 0.35)
+    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (math.radians(90), 0, 0))
     for sy in (1, -1):
-        r.ball("cup", "head", "acc/headphones", acc, HEAD_X, sy * HEAD_R * 1.1, HEAD_C + 0.8 + 3.6, 3.6, 1.8, 3.6)
-    r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.6, 0, NECK + 1 * FIG, 5.6, 2.6)
-    r.box("scarf-tail", "spine", "acc/scarf", acc, 6 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
+        r.orb("cup", "head", "acc/headphones", acc, HEAD_X - R * 0.05, sy * R * 0.98, HEAD_C + R * 0.3, R * 0.36, R * 0.2, R * 0.4)
+    r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
+    r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 
     # ── the visor (agents): a band across the eyes, its own colour
-    r.box("visor", "head", "visor", visor, HEAD_X + HEAD_R * 0.92, 0, HEAD_C + 0.4, 1.7, HEAD_R * 1.5, 4.4, 0.9)
+    r.box("visor", "head", "visor", visor, HEAD_X + R * 0.88, 0, HEAD_C + R * 0.2, 1.7, R * 1.5, R * 0.42, 0.9)
 
     # ── the lanyard (a first arrival, from the toss until they sit): a cord round the back of the neck
     # and down both sides of the chest to a badge. Rigid on the spine — it rides the torso's sway.

@@ -475,13 +475,24 @@ def render_figure(a: dict) -> None:
             outs[gk] = c
 
     done = reused = rendered = resampled = 0
+    frames_of = {n: fr for n, fr, _, _ in figure.CLIPS}
+
+    def base_frame(clip: str, d: str, f: int) -> tuple[str, str, int]:
+        """Where a layer a carrying clip does not store comes from: its base clip's frame at the same
+        point of the loop (`frameCell` in figureSheet.ts does the same at runtime)."""
+        b = figure.CARRY_BASE[clip]
+        return (b, d, (f * frames_of[b]) // frames_of[clip] % frames_of[b])
+
+    wanted = None
+    if a["stills"] is not None:
+        wanted = set(a["stills"]) | {base_frame(*w) for w in a["stills"] if w[0] in figure.CARRY_BASE}
     t0 = time.time()
     for name, frames, _, dirs in figure.CLIPS:
         for di, d in enumerate(figure.DIRS):
             if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # drawn flipped from its source direction at runtime (`frameCell`)
             for f in range(frames):
-                if a["stills"] is not None and (name, d, f) not in a["stills"]:
+                if wanted is not None and (name, d, f) not in wanted:
                     continue  # a look check renders only the stills it was asked for
                 pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
@@ -563,7 +574,12 @@ def render_figure(a: dict) -> None:
         bad = [s for s in a["stills"] if s[1] in MIRRORED]
         if bad:
             raise SystemExit(f"render.py: --stills takes rendered directions only (not {sorted(MIRRORED)}): {bad}")
-        figure_stills.write(crops, a["stills"], fw, fh, a["out"], write_pixels)
+        def resolve(layer: str, clip: str, d: str, f: int) -> str:
+            if clip in figure.CARRY_BASE and not figure.stored_in(clip, layer):
+                clip, d, f = base_frame(clip, d, f)
+            return f"{clip}/{d}/{f}"
+
+        figure_stills.write(crops, a["stills"], fw, fh, a["out"], write_pixels, resolve)
         return
     # Pack each layer's frames cropped to their own pixels (an atlas, not a grid): a glasses frame
     # is a few hundred pixels, not a 112×208 cell, and the browser decodes only what is drawn.

@@ -56,11 +56,21 @@ def layers_for(m: dict) -> list[tuple[str, str | None]]:
     return out
 
 
-def composite(crops: dict, cname: str, m: dict, fw: int, fh: int) -> np.ndarray:
-    """One member's frame: each layer's cell multiplied by its tint (sRGB, like `tintFrame`), drawn over."""
+CARRIED = ["carry/box", "carry/laptop", "carry/plate", "carry/mug", "carry/card", "carry/bottle", "carry/phone"]
+
+
+def composite(crops: dict, still: tuple[str, str, int], m: dict, fw: int, fh: int, resolve) -> np.ndarray:
+    """One member's frame: each layer's cell multiplied by its tint (sRGB, like `tintFrame`), drawn over.
+    A carrying clip draws the first thing it holds a cell for, after the clothes, as `layersFor` does."""
     frame = np.zeros((fh, fw, 4))
-    for layer, tint in layers_for(m):
-        c = crops.get(layer, {}).get(cname)
+    clip, d, f = still
+    layers = layers_for(m)
+    held = next((l for l in CARRIED if crops.get(l, {}).get(resolve(l, clip, d, f)) is not None), None)
+    if held:
+        at = next(i for i, (l, _) in enumerate(layers) if l.startswith("top/")) + 1
+        layers.insert(at, (held, None))
+    for layer, tint in layers:
+        c = crops.get(layer, {}).get(resolve(layer, clip, d, f))
         if c is None:
             continue
         img, x0, y0 = c
@@ -75,16 +85,16 @@ def composite(crops: dict, cname: str, m: dict, fw: int, fh: int) -> np.ndarray:
     return frame
 
 
-def write(crops: dict, stills: list[tuple[str, str, int]], fw: int, fh: int, out: str, write_png) -> None:
-    """`stills` as (clip, dir, frame). `write_png(path, float32 (h, w, 4))` is render.py's writer."""
+def write(crops: dict, stills: list[tuple[str, str, int]], fw: int, fh: int, out: str, write_png, resolve) -> None:
+    """`stills` as (clip, dir, frame). `write_png(path, float32 (h, w, 4))` is render.py's writer;
+    `resolve(layer, clip, dir, frame)` names the cell a layer draws from (a carrying clip's base)."""
     os.makedirs(out, exist_ok=True)
     floor = rgb(FLOOR)
     rows = []
     for clip, d, f in stills:
-        cname = f"{clip}/{d}/{f}"
         tiles = []
         for name, m in SAMPLE.items():
-            fr = composite(crops, cname, m, fw, fh)
+            fr = composite(crops, (clip, d, f), m, fw, fh, resolve)
             tile = np.ones((fh, fw, 4))
             tile[:, :, :3] = fr[:, :, :3] + floor * (1 - fr[:, :, 3:4])
             tiles.append(tile)
