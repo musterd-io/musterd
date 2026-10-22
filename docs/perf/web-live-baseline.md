@@ -2191,3 +2191,15 @@ on rows that have a question or a metric. Raised tight: measured + ~0.04%.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 359,500 B.
 \n
+
+### 2026-10-22 — between-tasks and away team rows read one step quieter (nick)
+
+| Budget   | Before (main) | This branch | Ceiling                  |
+| -------- | ------------- | ----------- | ------------------------ |
+| live CSS | 27,046 B      | 27,100 B    | RAISED 27,100 → 27,250 B |
+
+A softer face, a lighter name and a hollow dot (ink and weight, never opacity). Trimmed first. Raised to leave the
+CI gap over a ceiling that was exactly met.
+
+- Falsify: `pnpm perf:check` after a build reports live CSS at or under 27,250 B.
+
