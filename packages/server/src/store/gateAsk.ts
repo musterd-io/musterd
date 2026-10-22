@@ -68,6 +68,10 @@ export async function gateAskHumanAnswer(
         continue;
       }
       if (answerAuthority(null, meta) !== 'authority') continue;
+      // Only a human accept/decline that passed the route's ADR 662 gate releases this action.
+      // Rows written before the gate existed, and caller-forged copies of the stamp, are not
+      // authority: route.ts strips client copies before it stamps a successful check.
+      if (meta?.['human_authority_checked'] !== true) continue;
       return { act: row.act as 'accept' | 'decline', by: row.by, ts: row.ts };
     }
     return null;

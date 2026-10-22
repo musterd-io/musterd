@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApprovalProofSchema } from './approval.js';
 import { GrantLifetimeSchema } from './grants.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
 
@@ -53,8 +54,9 @@ export const DecideRequestSchema = z.discriminatedUnion('decision', [
     decision: z.literal('approve'),
     lifetime: GrantLifetimeSchema,
     ttl_hours: z.number().positive().optional(),
+    approval: ApprovalProofSchema.optional(),
   }),
-  z.object({ decision: z.literal('deny') }),
+  z.object({ decision: z.literal('deny'), approval: ApprovalProofSchema.optional() }),
 ]);
 export type DecideRequest = z.infer<typeof DecideRequestSchema>;
 

@@ -118,6 +118,41 @@ function laneVerdict(payload: unknown): 'accept' | 'decline' | null {
   return verdict === 'accept' || verdict === 'decline' ? verdict : null;
 }
 
+/** The descriptor contract for a human answering a daemon-classified privileged ask. */
+export function humanAskAnswerApproval(askId: string, verdict: 'accept' | 'decline') {
+  return {
+    act: 'human_accept' as const,
+    target: askId,
+    payload: { ask_id: askId, verdict },
+  };
+}
+
+/** The descriptor contract for an admin deciding a pending seat request. */
+export function requestDecisionApproval(input: {
+  requestId: string;
+  requestTarget: string | null;
+  decision: 'approve' | 'deny';
+  lifetime?: 'once' | 'ttl' | 'standing';
+  ttlHours?: number;
+}) {
+  const action =
+    input.decision === 'approve'
+      ? `approve ${input.requestTarget ?? 'request'}${input.lifetime ? ` (${input.lifetime})` : ''}`
+      : `deny ${input.requestTarget ?? 'request'}`;
+  return {
+    act: 'human_accept' as const,
+    target: `request ${input.requestId}: ${action}`,
+    payload: {
+      request_id: input.requestId,
+      request_target: input.requestTarget,
+      decision: input.decision,
+      ...(input.decision === 'approve'
+        ? { lifetime: input.lifetime, ttl_hours: input.ttlHours }
+        : {}),
+    },
+  };
+}
+
 /**
  * ADR 676 §6: the app's own fixed wording for each act on the closed list. A `Record` over the list,
  * so a new listed act fails to compile until it has words. Nothing an agent wrote reaches the
@@ -127,6 +162,14 @@ function laneVerdict(payload: unknown): 'accept' | 'decline' | null {
 const WORDING: Record<HighAuthorityAct, (target: string, payload: unknown) => string> = {
   human_accept: (target, payload) => {
     const verdict = laneVerdict(payload);
+    if (
+      typeof payload === 'object' &&
+      payload !== null &&
+      typeof (payload as { ask_id?: unknown }).ask_id === 'string'
+    ) {
+      if (verdict === 'accept') return `Answer privileged ask ${target}`;
+      if (verdict === 'decline') return `Decline privileged ask ${target}`;
+    }
     if (verdict === 'accept') return `Accept lane ${target} as done`;
     if (verdict === 'decline') return `Send lane ${target} back to its owner`;
     return `Give your verdict on ${target}`;

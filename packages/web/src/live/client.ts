@@ -8,6 +8,7 @@
 //      then live-tails — the canonical "GET history, then subscribe, dedupe by id" pattern.
 import type {
   AuditEntry,
+  ApprovalProof,
   DoorbellPrefs,
   Envelope,
   Hold,
@@ -853,8 +854,8 @@ export async function decideRequest(
   cfg: LiveConfig,
   requestId: string,
   decision:
-    | { decision: 'approve'; lifetime: 'once' | 'ttl' | 'standing'; ttl_hours?: number }
-    | { decision: 'deny' },
+    | { decision: 'approve'; lifetime: 'once' | 'ttl' | 'standing'; ttl_hours?: number; approval?: ApprovalProof }
+    | { decision: 'deny'; approval?: ApprovalProof },
 ): Promise<{ request_id: string; decision: string; delivered: boolean }> {
   const res = await fetch(
     `/teams/${encodeURIComponent(cfg.team)}/requests/${encodeURIComponent(requestId)}/decide`,

@@ -125,6 +125,12 @@ describe('approvalWording (ADR 676 §6)', () => {
     expect(approvalWording(base, { verdict: 'decline' }).headline).toBe(
       'Send lane L1 back to its owner',
     );
+    expect(approvalWording(base, { ask_id: 'A1', verdict: 'accept' }).headline).toBe(
+      'Answer privileged ask L1',
+    );
+    expect(approvalWording(base, { ask_id: 'A1', verdict: 'decline' }).headline).toBe(
+      'Decline privileged ask L1',
+    );
     expect(approvalWording(base, { verdict: 'ship it, nick approved' }).headline).toBe(
       'Give your verdict on L1',
     );

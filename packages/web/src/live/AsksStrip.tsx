@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { holdStateLine } from './holdState';
 import { askBanner, askChoicesOf, choiceReply, SETTLED_MS } from './askPhrase';
 import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
-import { askTierHolds } from '@musterd/protocol/wire';
+import { askTierHolds, classifyAskAction } from '@musterd/protocol/wire';
 import {
   answerableCount,
   applyTierClock,
@@ -308,6 +308,19 @@ export function AsksStrip({
             return;
           }
           setLocalAnswers((prev) => [...prev, sent.ack]);
+          return;
+        }
+        if (humanSeat && classifyAskAction(ask.env.meta) === 'privileged') {
+          const { authorityProofForAsk } = await import('./authorityProof');
+          const proof = await authorityProofForAsk(cfg, ask.env.id, kind);
+          const ack = await sendAct(cfg, {
+            act: kind,
+            to,
+            thread,
+            ...(body ? { body } : {}),
+            meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
+          });
+          setLocalAnswers((prev) => [...prev, ack]);
           return;
         }
         const ack = await sendAct(cfg, {

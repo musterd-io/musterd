@@ -184,6 +184,7 @@ import {
   HIGH_AUTHORITY_ACTS,
   type HighAuthorityAct,
 } from '@musterd/protocol';
+import { requestDecisionApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { allowanceForRoster, allowanceSpread, ingestAllowance } from '../allowanceReadings.js';
@@ -3795,6 +3796,31 @@ export async function handleHttp(
             'conflict',
             `request "${requestId}" is already ${existing.status}`,
           );
+
+        // ADR 662 decision 4: request.decide is a human answer. Bind the descriptor to the
+        // daemon-read request target and every choice that affects the result, then verify before
+        // settling the request or minting a grant.
+        const authority = requestDecisionApproval({
+          requestId,
+          requestTarget: existing.target,
+          decision: body.decision,
+          ...(body.decision === 'approve'
+            ? {
+                lifetime: body.lifetime,
+                ...(body.ttl_hours !== undefined ? { ttlHours: body.ttl_hours } : {}),
+              }
+            : {}),
+        });
+        await guardAuthority(
+          ctx,
+          req,
+          team,
+          admin,
+          authority.act,
+          authority.target,
+          authority.payload,
+          body.approval,
+        );
 
         if (body.decision === 'approve') {
           // Resolve the target member from the encoded target string.

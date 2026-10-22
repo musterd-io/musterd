@@ -7,6 +7,7 @@ import { ApprovalQueue, isPendingRequest, type Decision } from '../live/Approval
 import { ReceptionScene } from '../live/ReceptionScene';
 import type { ApprovalRequest, GrantLifetime } from '../live/ApprovalCard';
 import { AuditFetchError, decideRequest, fetchRequests, type LiveConfig, type Request } from '../live/client';
+import { authorityProofForRequest } from '../live/authorityProof';
 
 export const Route = createFileRoute('/approvals')({
   head: () => ({
@@ -105,7 +106,22 @@ function ApprovalsPage() {
         typeof lifetime === 'object'
           ? { decision: 'approve' as const, lifetime: 'ttl' as const, ttl_hours: lifetime.ttl_hours }
           : { decision: 'approve' as const, lifetime };
-      await decideRequest(cfg, id, apiLifetime);
+      try {
+        await decideRequest(cfg, id, apiLifetime);
+      } catch (e) {
+        if (!(e instanceof AuditFetchError && /authority refused \(no_signature\)/.test(e.message)))
+          throw e;
+        const source = await fetchRequests(cfg, { pendingOnly: true });
+        const request = source.find((r) => r.id === id);
+        if (!request) throw e;
+        const approval = await authorityProofForRequest(cfg, {
+          requestId: id,
+          requestTarget: request.target,
+          decision: 'approve',
+          ...('ttl_hours' in apiLifetime ? { lifetime: 'ttl' as const, ttlHours: apiLifetime.ttl_hours } : { lifetime: apiLifetime.lifetime }),
+        });
+        await decideRequest(cfg, id, { ...apiLifetime, ...(approval ? { approval } : {}) });
+      }
       void load(cfg);
     } catch (e) {
       setError(e instanceof AuditFetchError ? e.message : String(e));
@@ -116,7 +132,21 @@ function ApprovalsPage() {
     if (!cfg) return;
     setDecided((prev) => new Map(prev).set(id, { kind: 'denied', at: Date.now() }));
     try {
-      await decideRequest(cfg, id, { decision: 'deny' });
+      try {
+        await decideRequest(cfg, id, { decision: 'deny' });
+      } catch (e) {
+        if (!(e instanceof AuditFetchError && /authority refused \(no_signature\)/.test(e.message)))
+          throw e;
+        const source = await fetchRequests(cfg, { pendingOnly: true });
+        const request = source.find((r) => r.id === id);
+        if (!request) throw e;
+        const approval = await authorityProofForRequest(cfg, {
+          requestId: id,
+          requestTarget: request.target,
+          decision: 'deny',
+        });
+        await decideRequest(cfg, id, { decision: 'deny', ...(approval ? { approval } : {}) });
+      }
       void load(cfg);
     } catch (e) {
       setError(e instanceof AuditFetchError ? e.message : String(e));

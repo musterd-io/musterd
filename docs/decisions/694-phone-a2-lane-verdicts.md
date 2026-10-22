@@ -38,6 +38,8 @@ The app half (lane `01M50XQ1TG`) has started, so the contract it builds to has t
    ask carrying the daemon-stamped `lane_review` that is not advisory (ADR 225, ADR 667). Its answer is
    ADR 662's `human_accept` on that lane, and the act path already gates it (`applyAcceptanceVerdict`).
    Other privileged asks (an `approve` or `escalate` from an agent, a gate release) are not delivered
+   _(Amended 2026-10-21: asks whose answer act now has an ADR 662 authority gate are delivered with
+   the descriptor for that answer; the phone still requires A2.)_
    to the app. The phone takes them once the act they answer has a gate of its own. Until then, an A2
    answer to them would be worth no more than the Bearer answer on /live.
    Follows-up: 01M5FZ5R2VF8YZB48DQ357YYWM
@@ -113,6 +115,10 @@ The app half (lane `01M50XQ1TG`) has started, so the contract it builds to has t
 - The protocol package gains two subpath exports and three optional schema fields: `approval` and
   `lane` on an ask delivery, and `approval` on an answer. All are additive. An advisory delivery and
   answer are byte-for-byte what 3a sent.
+- _(2026-10-21, lane 01M5FZ5R2VF8YZB48DQ357YYWM: the phone now also carries other privileged asks
+  whose answer act is gated, using `human_accept` descriptors bound to the ask id and verdict.
+  Lane-review verdicts keep their existing queue and lane transition; generic privileged answers
+  use the same route and A2 gate without a lane transition.)_
 
 ## Observability & Evaluation
 

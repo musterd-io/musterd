@@ -1,4 +1,6 @@
 import { apiGet, apiPost, type LiveConfig } from './client';
+import type { ApprovalProof } from '@musterd/protocol';
+import { humanAskAnswerApproval, requestDecisionApproval } from '@musterd/protocol/approval';
 
 /**
  * The A2 proof a human's verdict on a lane needs (ADR 662, lane 01M5DTPMXN): the server
@@ -28,12 +30,44 @@ export async function authorityProofForVerdict(
   cfg: LiveConfig,
   lane: string,
   verdict: 'accept' | 'decline',
-): Promise<Record<string, string> | null> {
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'human_accept', lane, { lane, verdict });
+}
+
+export async function authorityProofForAsk(
+  cfg: LiveConfig,
+  askId: string,
+  verdict: 'accept' | 'decline',
+): Promise<ApprovalProof | null> {
+  const approval = humanAskAnswerApproval(askId, verdict);
+  return authorityProofForDescriptor(cfg, approval.act, approval.target, approval.payload);
+}
+
+export async function authorityProofForRequest(
+  cfg: LiveConfig,
+  input: {
+    requestId: string;
+    requestTarget: string | null;
+    decision: 'approve' | 'deny';
+    lifetime?: 'once' | 'ttl' | 'standing';
+    ttlHours?: number;
+  },
+): Promise<ApprovalProof | null> {
+  const approval = requestDecisionApproval(input);
+  return authorityProofForDescriptor(cfg, approval.act, approval.target, approval.payload);
+}
+
+async function authorityProofForDescriptor(
+  cfg: LiveConfig,
+  act: string,
+  target: string,
+  payload: unknown,
+): Promise<ApprovalProof | null> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
   const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
-    act: 'human_accept',
-    target: lane,
-    payload: { lane, verdict },
+    act,
+    target,
+    payload,
   });
   const nonce = created.descriptor.nonce;
   const view = await apiGet<{ passkeys?: { key_id: string; credential_id: string }[] }>(

@@ -315,7 +315,7 @@ Delivery is unchanged (at-least-once, cursor-based); **notification tiering** is
 | `POST`                | `/teams/:slug/agent-bootstrap-cutover`            | admin; `{ force?: boolean }`; transactionally retire legacy bootstrap authority                                                                                                                                                                                                                                                                                                                            |
 | `POST`                | `/teams/:slug/policy`                             | admin; e.g. `{ allow_pre_issued_grants: bool }`, `{ agent_connect: 'sponsor' \| 'any_member' }` (ADR 456); `{ style: { floor, defaults, prose } }` — the agent-style floor, default dials and team prose, sparse (ADR 514; additive optional key, no version bump)                                                                                                                                         |
 | `GET`                 | `/teams/:slug/requests`                           | admin; pending claim/teammate requests                                                                                                                                                                                                                                                                                                                                                                     |
-| `POST`                | `/teams/:slug/requests/:id/decide`                | admin; `{ decision:'approve', lifetime:'once'\|'ttl'\|'standing', ttl_hours? }` \| `{ decision:'deny' }` — approve issues a grant of the admin-chosen lifetime                                                                                                                                                                                                                                             |
+| `POST`                | `/teams/:slug/requests/:id/decide`                | admin; `{ decision:'approve', lifetime:'once'\|'ttl'\|'standing', ttl_hours?, approval? }` \| `{ decision:'deny', approval? }` — approve issues a grant of the admin-chosen lifetime after human A2 authority when the admin has an enrolled key                                                                                                                                                                     |
 | `POST`                | `/teams/:slug/claim`                              | stateless claim mirror of WS `claim` — carries `workspace` + `workspace_key` (ADR 014/368) and `provenance` (ADR 131 §6), so a stateless claim is scoped by workspace and reads its animation source exactly as a WS one does. The server records `provenance` on **agent** seats only (the ADR 121 gate the ambient-touch path applies): a human shell must not be able to label its own occupancy `wake` |
 | `GET`                 | `/teams/:slug/members`                            | roster **projected by viewer**: seats with role, account/availability/activity + `watching` list; non-admins never see credentials/grants/audit/policy/other charters                                                                                                                                                                                                                                      |
 | `POST`                | `/teams/:slug/availability`                       | set the caller's seat availability (`available\|away\|dnd\|away_until`)                                                                                                                                                                                                                                                                                                                                    |
@@ -1036,12 +1036,21 @@ advisory for every listed act.
 - A listed act carries its proof as `approval: {key_id, nonce, signature}` (request body, a
   lane patch's `approval` field, or an act's `meta.approval`). Signatures are Ed25519 over
   the descriptor's canonical signing bytes.
+- `POST /teams/:slug/requests/:id/decide` carries optional `approval` on both decisions. Its
+  `human_accept` descriptor binds the request id, stored target, decision, and (for approval) grant
+  lifetime and TTL. The CLI and web approvals surface retry the same decision with the passkey proof
+  after `no_signature`; no request state or grant changes before the gate accepts it.
+- A human `accept` or `decline` answering a server-classified privileged ask carries the
+  `human_accept` proof in `meta.approval`, bound to the ask id and verdict. The server strips any
+  client `human_authority_checked` marker and writes its own marker only after the gate succeeds;
+  ADR 150 gate release ignores older bearer-only answer rows. `/live`, the CLI, and the phone run the
+  same descriptor ceremony.
 - Every act on the closed list has a wired caller: human verdicts (act path and counterpart
   lane closes), `merged.authorized_by`, team and governed policy, grant issue on the admin
   path, agent create, roster add/remove/ceiling (`POST /members`, `…/remove`, `…/ceiling`),
   team archive as `admin.team_settings`, and credential mints (`POST
   /agent-bootstrap-credentials` including host keys, `…/credential/rotate`, `POST
-  /agent-key/rotate`). The sponsor/host-key provisioning paths of ADR 648 decision 1 are
+  /agent-key/rotate`), request decisions, and human answers to privileged asks. The sponsor/host-key provisioning paths of ADR 648 decision 1 are
   agent-kind and stay off the list. The nonce is spent by one conditional update, so
   concurrent presentations of one proof yield exactly one approval.
 - Refusals write `authority.refused` with a reason (`no_signature`, `assurance_too_low`,

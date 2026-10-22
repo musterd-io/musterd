@@ -28,6 +28,11 @@ const USAGE =
 type Http = ReturnType<typeof resolve>['http'];
 type Proof = Awaited<ReturnType<Http['getParkedApproval']>>['proof'];
 
+function printJson(value: unknown): number {
+  process.stdout.write(JSON.stringify(value, null, 2) + '\n');
+  return 0;
+}
+
 /**
  * WebAuthn refuses an IP-literal relying-party ID ("invalid domain"), so a
  * ceremony URL on 127.0.0.1/::1 can never complete. `localhost` is a valid
@@ -45,11 +50,6 @@ export function browserOrigin(server: string): string {
   } catch {
     return server;
   }
-}
-
-function printJson(value: unknown): number {
-  process.stdout.write(JSON.stringify(value, null, 2) + '\n');
-  return 0;
 }
 
 /** Build the server's descriptor, send the human to approve it with their passkey, and wait for the
