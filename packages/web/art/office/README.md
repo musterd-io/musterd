@@ -78,8 +78,13 @@ projects inside the crop; `blit.ts` puts that point on `project(lx, ly, fit)`.
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender -b --python packages/web/art/office/render.py -- \
-  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 2 --ky 0.31
+  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 1.5 --ky 0.31
 ```
+
+The figure ships at **1.5 px per floor unit** (lane 01M5J8DXCH, 2026-10-22; 2 until then). /live
+shows it at ~1.66 px/unit on a retina screen and the 1080p broadcast at ~1.4; side by side at those
+scales 2 and 1.5 were indistinguishable but for a hair softer glasses rims on retina. The figure
+sheets went 9,057,268 → 5,781,950 B (−36%, for 44% fewer pixels). The room keeps its own scale.
 
 `figure.py` builds the member from `skeleton.ts`'s proportions (96 tall, five heads): rigid parts
 parented to an Empty at each joint — no armature, no weights — and an **action** is a function of
@@ -166,7 +171,7 @@ Run the figure through the watchdog, not Blender directly:
 
 ```sh
 python3 packages/web/art/office/render_watch.py -- \
-  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 2 --ky 0.31
+  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 1.5 --ky 0.31
 ```
 
 - **Only what changed renders.** Each render call is keyed on what decides its pixels — the meshes
@@ -191,6 +196,15 @@ python3 packages/web/art/office/render_watch.py -- \
 - **Many layers per render call was measured and dropped.** One call rendering 23 view layers took
   the same time as 23 calls (4.0 s against 4.0 s, warm, 2026-10-21): EEVEE renders each view layer
   in full either way, and the per-call overhead it would save is small.
+- **A new, smaller scale need not render at all.** The scale is in every call's key, so going from
+  2 to 1.5 missed the whole store: ~19,800 calls, ~80 min. `--resample-from 2` takes each missing
+  call's cells at scale 2 and scales them down instead (`figure_resample.py`): the call's layers are
+  put back into one frame, scaled premultiplied with lanczos2, and split again by the source pixel
+  nearest each target pixel — the hard split the ID pass makes — so no gap opens where two layers
+  meet. Against 753 calls rendered at 1.5 for real (2026-10-22): mean RMSE 0.96/255, p95 1.17, worst
+  9.1, and no pixel solid in the render goes see-through (tent 1.28, lanczos3 1.07, box 1.92). The
+  whole figure took 13 min, ~4 of them the WebP pass. Only for a smaller scale; a larger one must
+  render.
 
 `--clips` and `--only` are gone from the figure (`--only` still re-renders room assets): the store
 does what they did, without having to name what changed.
