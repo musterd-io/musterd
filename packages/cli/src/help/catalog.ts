@@ -280,7 +280,9 @@ export const CATALOG: readonly CommandEntry[] = [
       'pushes the capture image on Fly’s remote builders and records the pushed DIGEST — `start` runs ' +
       'that digest, never the tag, because a rebuilt tag can resolve to the previous image. `start` ' +
       'discovers the tailnet address itself. Secrets stay the operator’s: musterd checks that ' +
-      'TS_AUTHKEY and MUSTERD_STREAM_KEY are set and never reads, prints, or accepts their values.',
+      'TS_AUTHKEY and MUSTERD_STREAM_KEY are set and never reads, prints, or accepts their values. ' +
+      'An optional Twitch user token (MUSTERD_TWITCH_CLIENT_ID and MUSTERD_TWITCH_TOKEN) is ' +
+      'presence-checked the same way; missing, the stream still starts and the title is left alone.',
     examples: ['musterd stream doctor', 'musterd stream build', 'musterd stream start'],
   },
   {

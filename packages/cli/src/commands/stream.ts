@@ -24,6 +24,13 @@ import { ulid } from 'ulid';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import {
+  STANDING_TITLE,
+  applyChannelTitle,
+  isSessionTitle,
+  sessionTitle,
+  streamTitleEnv,
+} from '../broadcast/channelTitle.js';
+import {
   DEFAULT_APP,
   describeStaleness,
   findRepoRoot,
@@ -89,7 +96,16 @@ export interface StreamDeps {
   mintSeat?: (team: string) => Promise<BroadcastSeat>;
   /** Stage the seat as the app's MUSTERD_BROADCAST_SEAT Fly secret, over stdin (ADR 594). */
   stageSeat?: (app: string, seat: BroadcastSeat) => { code: number; output: string };
+  /**
+   * The session title `start` should ask for (ADR 711). Injected so a test never dials the daemon.
+   * Absent, `start` reads the board itself and a failed read keeps the previous title.
+   */
+  titleFor?: (flags: Record<string, string | boolean>) => Promise<TitleRead>;
+  /** Env for `apply-title`. The container's process env; tests pass a closed set. */
+  env?: NodeJS.ProcessEnv;
 }
+
+export type TitleRead = { ok: true; title: string } | { ok: false };
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
 function daemonOrigin(server: string): { hostname: string; port: number } {
@@ -189,7 +205,18 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
     deps.mintSeat ??
     (async (team: string) => seatFromEnv(team) ?? (await mintBroadcastSeat(parsed.flags, team)));
   const stageSeat = deps.stageSeat ?? realStageSeat;
-  const sup = { statePath, now, who, launch, sleep, sendAsk, fetchEpitaph, mintSeat, stageSeat };
+  const sup = {
+    statePath,
+    now,
+    who,
+    launch,
+    sleep,
+    sendAsk,
+    fetchEpitaph,
+    mintSeat,
+    stageSeat,
+    ...(deps.titleFor ? { titleFor: deps.titleFor } : {}),
+  };
 
   switch (sub) {
     case 'doctor':
@@ -224,6 +251,8 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
       return statusVerb({ exec, app, out, ...sup });
     case 'ensure':
       return ensureVerb({ exec, app, repoRoot, parsed, out, err, ...sup });
+    case 'apply-title':
+      return applyTitleVerb(out, deps.env ?? process.env);
     default:
       throw new CliError(`unknown subcommand \`${sub}\`\n${USAGE}`, 2);
   }
@@ -412,6 +441,7 @@ interface Sup {
   fetchEpitaph: (team: string) => Promise<StreamEpitaph | null>;
   mintSeat: (team: string) => Promise<BroadcastSeat>;
   stageSeat: (app: string, seat: BroadcastSeat) => { code: number; output: string };
+  titleFor?: (flags: Record<string, string | boolean>) => Promise<TitleRead>;
 }
 
 /**
@@ -435,6 +465,8 @@ function launchArgs(a: {
   addr: string;
   team: string;
   extra?: string | undefined;
+  /** Set on `start` and on a relaunch that has a stored title. Omitted, the machine is not told one. */
+  title?: { desired: string; prev: string };
 }): string[] {
   return [
     'machine',
@@ -457,7 +489,29 @@ function launchArgs(a: {
     '--env',
     `MUSTERD_TEAM=${a.team}`,
     ...(a.extra ? ['--env', `BROADCAST_ARGS=${a.extra}`] : []),
+    ...(a.title ? streamTitleEnv(a.title.desired, a.title.prev) : []),
   ];
+}
+
+/** One line, exit 0. A missing token, a rejected token, or a human title does not stop the stream. */
+async function applyTitleVerb(out: (s: string) => void, env: NodeJS.ProcessEnv): Promise<number> {
+  out(`${await applyChannelTitle(env)}\n`);
+  return 0;
+}
+
+/**
+ * The board, with a hard timeout. A failure is `{ ok: false }` — not the standing title. The
+ * standing title is what a successful read returns when the session has no single subject, and a
+ * daemon blip must not be mistaken for that.
+ */
+async function defaultTitleFor(flags: Record<string, string | boolean>): Promise<TitleRead> {
+  try {
+    const { http, team } = resolveRead(flags, { timeoutMs: 4_000 });
+    const [board, goals] = await Promise.all([http.laneBoard(team), http.goals(team)]);
+    return { ok: true, title: sessionTitle({ lanes: board.lanes, goals: goals.goals }) };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /** Resolve the launch preconditions (image digest + tailnet address) or throw the doctor hint. */
@@ -533,12 +587,27 @@ async function startVerb(
   // Intent is recorded BEFORE the launch (ADR 293): a start that fails at `fly` still says "this
   // stream should be live", and the supervisor's next tick retries it inside the flap budget. The
   // exception is `--once` — a deliberately unsupervised run records `stopped` so nothing ever
-  // resurrects it (time-boxed `--duration` streams ride this).
+  // resurrects it (time-boxed `--duration` streams ride this). The title is part of that intent
+  // (ADR 711), read after the seat is staged so a refusal leaves no live record behind.
   const once = a.parsed.flags['once'] === true;
+  const previous = readStreamState(a.statePath)?.title;
+  const read = await (a.titleFor ?? defaultTitleFor)(a.parsed.flags);
+  const title = read.ok && isSessionTitle(read.title) ? read.title : (previous ?? STANDING_TITLE);
+  if (!read.ok) {
+    a.err(`${theme.warn('!')} could not read the board — keeping the last title\n`);
+  }
   writeStreamState(
     a.statePath,
     once
-      ? { desired: 'stopped', by: a.who(), at: a.now(), reason: '--once run', team, restarts: [] }
+      ? {
+          desired: 'stopped',
+          by: a.who(),
+          at: a.now(),
+          reason: '--once run',
+          team,
+          restarts: [],
+          title,
+        }
       : {
           desired: 'live',
           by: a.who(),
@@ -546,6 +615,7 @@ async function startVerb(
           team,
           image: digest,
           restarts: [],
+          title,
           ...(extra ? { args: extra } : {}),
         },
   );
@@ -553,7 +623,15 @@ async function startVerb(
   a.out(
     `${theme.accent('stream')} ${theme.meta(`${team} · via ${addr} · ${VM_SIZE} ${REGION}`)}\n`,
   );
-  const args = launchArgs({ app: a.app, digest, addr, team, extra });
+  a.out(`${theme.meta(`title · ${title}`)}\n`);
+  const args = launchArgs({
+    app: a.app,
+    digest,
+    addr,
+    team,
+    extra,
+    title: { desired: title, prev: previous ?? '' },
+  });
   // Captured across every attempt so the `finally` can record whichever machine the attempt left,
   // including one whose output named an id and then threw.
   let launchedOutput = '';
@@ -920,7 +998,15 @@ async function ensureVerb(
       const digest = d.state.image ?? checkoutDigest;
       const team = d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive';
       const { code, output } = await a.launch(
-        launchArgs({ app: a.app, digest, addr, team, extra: d.state.args }),
+        launchArgs({
+          app: a.app,
+          digest,
+          addr,
+          team,
+          extra: d.state.args,
+          // The stored title, as both desired and previous. A relaunch must not derive a new one.
+          ...(d.state.title ? { title: { desired: d.state.title, prev: d.state.title } } : {}),
+        }),
       );
       if (code !== 0) {
         a.err(`${theme.err('✗')} relaunch failed (fly exit ${code}) — next tick retries\n`);
