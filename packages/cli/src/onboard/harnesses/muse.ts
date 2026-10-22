@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
 import { resolveMuseBin } from '../../museBin.js';
+import { SERVICE_LABEL } from '../../service/launchd.js';
 import {
   registeredFromEnv,
   type Harness,
@@ -10,6 +11,7 @@ import {
   type UnprovisionPlan,
 } from '../harness.js';
 import {
+  daemonMcpLaunch,
   launchEntryEnv,
   markerGenerationOfEnv,
   resolveMcpLaunch,
@@ -453,7 +455,22 @@ export const museAdapter: HarnessAdapter = {
   },
 
   async desiredFragments(ctx) {
-    const launch = resolveMcpLaunch();
+    // The installed daemon's checkout — not whichever checkout is reconciling — launches the
+    // machine-global entry, so every writer on one machine wants the same bytes (lane
+    // 01M5J9QGFC9K0DV3F8NVK7WYYE). Null where no daemon is installed; then the
+    // checkout-relative resolution stands, as before. Env HOME (not the process home) keeps
+    // this deterministic in tests, whose memory fs has no plist.
+    const plist = join(
+      ctx.env['HOME'] ?? homedir(),
+      'Library',
+      'LaunchAgents',
+      `${SERVICE_LABEL}.plist`,
+    );
+    const daemon = daemonMcpLaunch(
+      () => ctx.fs.readFile(plist),
+      (p) => ctx.fs.readFile(p) !== null,
+    );
+    const launch = daemon ?? resolveMcpLaunch();
     const mcp = museServerEntry({
       command: launch.command,
       args: launch.args,

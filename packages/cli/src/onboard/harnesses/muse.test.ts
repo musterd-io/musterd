@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { launchEntryEnv } from '../mcpEntry.js';
 import { memoryFs, type HarnessContext } from '../reconcile/context.js';
+import { canonicalFingerprint } from '../reconcile/fragments.js';
 import {
   hasMuseHooks,
   muse,
@@ -35,6 +37,49 @@ function ctxOf(worktreeRoot: string, xdg: string): HarnessContext {
     clock: { now: () => 1_000_000 },
   };
 }
+
+describe('muse desiredFragments — machine entry follows the daemon checkout (lane 01M5J9QGFC9K0DV3F8NVK7WYYE)', () => {
+  const plistPath = join('/home', 'Library', 'LaunchAgents', 'studio.sandrise.musterd.plist');
+  const plistFor = (nodeBin: string, binJs: string): string =>
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0"><dict>',
+      '<key>ProgramArguments</key><array>',
+      `<string>${nodeBin}</string>`,
+      `<string>${binJs}</string>`,
+      '<string>serve</string>',
+      '</array></dict></plist>',
+    ].join('');
+
+  it('prefers the daemon checkout so every writer on one machine wants the same bytes', async () => {
+    const adapter = '/daemon/packages/mcp/dist/index.js';
+    const ctx = ctxOf('/ws', '/xdg');
+    ctx.env['HOME'] = '/home';
+    ctx.fs.writeFile(
+      plistPath,
+      plistFor('/usr/local/bin/node', '/daemon/packages/cli/dist/bin.js'),
+      0o600,
+    );
+    ctx.fs.writeFile(adapter, '// adapter', 0o644);
+    const intents = await museAdapter.desiredFragments(ctx, await museAdapter.target(ctx));
+    const mcp = intents.find((i) => i.fragmentKey === 'mcp.musterd')!;
+    expect(mcp.fingerprint).toBe(
+      canonicalFingerprint(
+        museServerEntry({
+          command: '/usr/local/bin/node',
+          args: [adapter],
+          env: launchEntryEnv('muse'),
+        }),
+      ),
+    );
+  });
+
+  it('falls back to the checkout-relative launch where no daemon is installed', async () => {
+    const ctx = ctxOf('/ws', '/xdg');
+    const intents = await museAdapter.desiredFragments(ctx, await museAdapter.target(ctx));
+    expect(intents.find((i) => i.fragmentKey === 'mcp.musterd')).toBeDefined();
+  });
+});
 
 describe('muse settings.json (ADR 619)', () => {
   it('creates the file with schema_version 1 and the musterd stdio server', () => {

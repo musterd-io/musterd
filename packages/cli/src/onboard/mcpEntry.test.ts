@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildMcpEnv, canonicalizeAdapterPath, type AgentBinding } from './mcpEntry.js';
+import {
+  buildMcpEnv,
+  canonicalizeAdapterPath,
+  daemonMcpLaunch,
+  type AgentBinding,
+} from './mcpEntry.js';
 
 /**
  * The regression guard for the attestation-truth incident: a seat attested `grok-4.5` for weeks
@@ -99,5 +104,71 @@ describe('canonicalizeAdapterPath', () => {
     const wt = makeWorktree('agents-izzo', primary);
     const p = join(wt, adapterRel);
     expect(canonicalizeAdapterPath(p)).toBe(p);
+  });
+});
+
+/**
+ * Lane 01M5J9QGFC9K0DV3F8NVK7WYYE: the machine-global muse entry must not embed whichever
+ * checkout ran the writer. The installed daemon's checkout — read back from its plist the
+ * same way `service refresh` reads it — is the one canonical answer every writer can
+ * compute, so two checkouts on one machine want the same bytes.
+ */
+describe('daemonMcpLaunch', () => {
+  const adapterRel = join('packages', 'mcp', 'dist', 'index.js');
+
+  function plistFor(nodeBin: string, binJs: string): string {
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0"><dict>',
+      '<key>ProgramArguments</key><array>',
+      `<string>${nodeBin}</string>`,
+      `<string>${binJs}</string>`,
+      '<string>serve</string>',
+      '</array></dict></plist>',
+    ].join('');
+  }
+
+  it('reads the adapter (and node) back from the daemon plist when it exists on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcpentry-daemon-'));
+    try {
+      const binJs = join(dir, 'repo', 'packages', 'cli', 'dist', 'bin.js');
+      mkdirSync(join(dir, 'repo', 'packages', 'mcp', 'dist'), { recursive: true });
+      const adapter = join(dir, 'repo', adapterRel);
+      writeFileSync(adapter, '// adapter');
+      const xml = plistFor('/usr/local/bin/node', binJs);
+      expect(
+        daemonMcpLaunch(
+          () => xml,
+          (p) => p === adapter,
+        ),
+      ).toEqual({
+        command: '/usr/local/bin/node',
+        args: [adapter],
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('abstains when there is no plist, it does not parse, or the adapter is not built', () => {
+    expect(
+      daemonMcpLaunch(
+        () => null,
+        () => true,
+      ),
+    ).toBeNull();
+    expect(
+      daemonMcpLaunch(
+        () => 'not xml <',
+        () => true,
+      ),
+    ).toBeNull();
+    const xml = plistFor('/usr/local/bin/node', '/repo/packages/cli/dist/bin.js');
+    expect(
+      daemonMcpLaunch(
+        () => xml,
+        () => false,
+      ),
+    ).toBeNull();
   });
 });

@@ -140,6 +140,33 @@ export function canonicalizeAdapterPath(adapter: string): string {
   return existsSync(candidate) ? candidate : adapter;
 }
 
+/**
+ * The musterd adapter + node the INSTALLED daemon runs, read back from its LaunchAgent
+ * plist's `ProgramArguments` (`[node, binJs, 'serve', …]`, the repo root four levels up
+ * from `…/packages/cli/dist/bin.js`). The machine-global muse MCP entry uses this — not
+ * whichever checkout happens to be reconciling — so every writer on one machine computes
+ * the same content and the shared file stops changing hands (lane 01M5J9QGFC9K0DV3F8NVK7WYYE).
+ * Null when there is no plist, it does not parse, or the daemon's adapter is not built; the
+ * caller then falls back to the checkout-relative resolution. A path that exists beats a
+ * canonical one that does not.
+ */
+export function daemonMcpLaunch(
+  readPlist: () => string | null,
+  exists: (p: string) => boolean = existsSync,
+): { command: string; args: string[] } | null {
+  const xml = readPlist();
+  if (xml === null) return null;
+  const array = xml.match(/<key>\s*ProgramArguments\s*<\/key>\s*<array>([\s\S]*?)<\/array>/);
+  if (!array) return null;
+  const items = [...array[1]!.matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) => m[1]!.trim());
+  const [nodeBin, binJs] = items;
+  if (nodeBin === undefined || nodeBin === '' || binJs === undefined || binJs === '') return null;
+  const repoRoot = resolve(binJs, '..', '..', '..', '..');
+  const adapter = join(repoRoot, 'packages', 'mcp', 'dist', 'index.js');
+  if (!exists(adapter)) return null;
+  return { command: nodeBin, args: [adapter] };
+}
+
 /** The nearest ancestor of `p` carrying a `.git` entry (dir or worktree pointer file), or undefined. */
 function checkoutRootOf(p: string): string | undefined {
   let dir = dirname(resolve(p));

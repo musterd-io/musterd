@@ -55,8 +55,13 @@ with whatever each harness cannot represent reported rather than dropped silentl
    supports headers/env for it, and any adapter that cannot represent a remote server
    skips that server and reports it in the provision result's activation/warnings
    rather than failing the whole provision.
-3. **The muse harness implements `provision`/`unprovision`.** Servers are written into
-   the machine-global Muse settings (`mcpServers`, the same file and 0o600 handling as
+3. **The muse harness implements `provision`/`unprovision`.** _(Amended 2026-10-22: the
+   machine-global `mcp.musterd` entry additionally resolves its adapter from the installed
+   daemon's checkout — read back from its plist the way `service refresh` reads it — so
+   every checkout on one machine wants the same bytes. Falls back to the
+   checkout-relative resolution where no daemon is installed. The muse binary was
+   measured to offer no project-local MCP scope, so folder-scoping is not an option.)_
+   Servers are written into the machine-global Muse settings (`mcpServers`, the same file and 0o600 handling as
    its musterd entry — machine-global is muse's existing scope for MCP, named in the
    result's target/scope). Permission defaults are not compiled for muse (its settings
    permission shape is not one musterd has verified); the result reports permissions as
@@ -83,6 +88,20 @@ with whatever each harness cannot represent reported rather than dropped silentl
 
 ## Consequences
 
+- 2026-10-22: the machine-scope question is settled. Measured against the muse 1.4.11
+  binary: MCP servers live only in `$CONFIG_DIR/muse/settings.json` (no project-local
+  scope exists), and the remote shape is `{id, transport: "http", url}` — exactly what
+  this record specified, so the ios toolkit's Expo entry was correct as written. The
+  remaining conflict was checkout-relative adapter paths: every checkout wanted different
+  bytes in one shared file, and the engine rightly refused to let a non-owner rewrite
+  it. The machine-global entry now resolves from the installed daemon's checkout
+  (decision 3, amended). Verified live: `wire` in two checkouts on one machine both
+  read owned (one unchanged, one add-owner), and the shared file converged with a
+  single deliberate hand-edit (the `enabled: true` field the current writer emits) —
+  after the engine correctly refused every automatic route, including owner-side
+  `configure` and deselect/reselect (release-blocked by design). Standing rule
+  re-confirmed: machine-scope owned drift never auto-converges; a human rewrites it
+  deliberately or it stays red.
 - `musterd agent cider --role ios-engineer --profile ios` now equips the seat on every
   wired harness in one step; `--profile` stays the explicit override, and the recorded
   toolkit name in `provisioned.json` is what later re-provisions resolve.
