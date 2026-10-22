@@ -7,7 +7,7 @@
   one-slide fell into: copy three weeks behind the positioning decision with nobody able to fix it.
   Copy is derived, not invented: the headline is the brand.md §1 tagline and the paragraph under it
   is the brand.md §1 subhead, both verbatim (ADR 563, 2026-10-12). Voice: brand.md §4. Palette: brand.md §2 (zinc-900
-  ground, mustard-500 accent). The lockup is the mark (ADR 702, ../../design/assets/chip.svg) beside the word. 1200×630. Self-contained: no network, no font files, no build step.
+  ground, mustard-500 accent). The lockup is the nameplate wordmark (ADR 704, ../../design/assets/wordmark.svg). 1200×630. Self-contained: no network, no font files, no build step.
 -->
 <html lang="en">
 <meta charset="utf-8" />
@@ -31,15 +31,13 @@
     display: flex; flex-direction: column; justify-content: space-between;
   }
   .lockup { display: flex; align-items: center; gap: 28px; }
-  .lockup img { width: 96px; height: 96px; display: block; }
-  .word { font-size: 64px; font-weight: 700; letter-spacing: 0; line-height: 1; }
-  .word b { color: var(--accent); font-weight: 700; }
+  .lockup img { height: 104px; width: auto; display: block; }
   .line { font-size: 58px; font-weight: 700; line-height: 1.2; color: var(--ink); max-width: 1000px; margin: 0; }
   .line b { color: var(--accent); font-weight: 700; }
   .sub { font-size: 21px; line-height: 1.55; color: var(--muted); margin: 0; max-width: 1000px; }
 </style>
 <div class="card">
-  <div class="lockup"><img src="../../design/assets/chip.svg" alt="" /><div class="word">muster<b>d</b></div></div>
+  <div class="lockup"><img src="../../design/assets/wordmark.svg" alt="musterd" /></div>
   <p class="line">Agents that work as a team<br /><b>alongside you.</b></p>
   <p class="sub">Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.</p>
 </div>

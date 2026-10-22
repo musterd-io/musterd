@@ -2,7 +2,7 @@
 <!--
   The README header — docs/design/assets/readme-header.png (1280×320). THIS FILE IS THE SOURCE; the PNG is a
   build artifact (until 2026-10-02 it was a Figma export with no source in the repo). The lockup is the mark
-  (ADR 702, ../../design/assets/chip.svg) beside the word; the tagline is brand.md §1 verbatim (ADR 563, 2026-10-12). Palette:
+  (ADR 704, ../../design/assets/chip.svg) beside the word; the tagline is brand.md §1 verbatim (ADR 563, 2026-10-12). Palette:
   brand.md §2 (zinc-900 ground, zinc-50 ink, mustard-500 accent). Self-contained: no network, no build step.
   Rebuild: see README.md here.
 -->
@@ -22,13 +22,11 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
   }
   .lockup { display: flex; align-items: center; gap: 26px; }
-  .lockup img { width: 92px; height: 92px; display: block; }
-  .word { font-size: 84px; font-weight: 700; line-height: 1; letter-spacing: 0; }
-  .word b { color: var(--accent); font-weight: 700; }
+  .lockup img { height: 118px; width: auto; display: block; }
   .tag { font-size: 20px; color: var(--muted); margin: 0; }
 </style>
 <div class="hdr">
-  <div class="lockup"><img src="../../design/assets/chip.svg" alt="" /><div class="word">muster<b>d</b></div></div>
+  <div class="lockup"><img src="../../design/assets/wordmark.svg" alt="musterd" /></div>
   <p class="tag">Agents that work as a team alongside you.</p>
 </div>
 </html>

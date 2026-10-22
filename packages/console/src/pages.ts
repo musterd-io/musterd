@@ -39,11 +39,12 @@ export function esc(s: string): string {
   );
 }
 
-// The lockup mark is the favicon's own SVG, inlined (it is markup, not a resource).
+// The lockup is the nameplate wordmark (ADR 704), inlined (it is markup, not a resource). It names
+// itself (`role="img"`, `aria-label="musterd"`), so the link carries no text beside it.
 const MARK = (() => {
   try {
-    return readFileSync(new URL('../assets/favicon.svg', import.meta.url), 'utf8')
-      .replace('<svg ', '<svg aria-hidden="true" focusable="false" ')
+    return readFileSync(new URL('../assets/wordmark.svg', import.meta.url), 'utf8')
+      .replace('<svg ', '<svg focusable="false" ')
       .trim();
   } catch {
     return '';
@@ -65,7 +66,7 @@ function shell(title: string, main: string): string {
     `<meta name="viewport" content="width=device-width, initial-scale=1">\n` +
     `<meta name="color-scheme" content="light">\n<title>${esc(title)}</title>\n` +
     `<link rel="stylesheet" href="/console.css">\n<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n</head>\n<body>\n` +
-    `<div class="c-shell">\n<a class="c-brand" href="https://musterd.io">${MARK}musterd</a>\n<main>\n${main}\n</main>\n` +
+    `<div class="c-shell">\n<a class="c-brand" href="https://musterd.io">${MARK}</a>\n<main>\n${main}\n</main>\n` +
     `<footer class="c-foot"><a href="https://musterd.io/privacy">Privacy</a><a href="https://musterd.io">musterd.io</a></footer>\n</div>\n</body>\n</html>\n`
   );
 }

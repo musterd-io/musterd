@@ -128,8 +128,8 @@ body {
   border-radius: 6px;
 }
 .c-brand svg {
-  width: 24px;
-  height: 24px;
+  height: 32px;
+  width: auto;
   flex: none;
 }
 
