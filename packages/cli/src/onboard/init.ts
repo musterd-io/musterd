@@ -37,6 +37,7 @@ import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses } from './reconcile/engine.js';
 import { roleSkillNotes, withRoleSkills } from './roleSkills.js';
 import { GENERALIST, isBuiltin, listToolkitNames, loadToolkit, type Toolkit } from './toolkit.js';
+import { provisionToolkitIntoHarnesses } from './toolkitProvision.js';
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -1233,17 +1234,25 @@ async function provisionToolkitTools(
 
   const sp = p.spinner();
   sp.start(`Provisioning ${toolkit.toolkit} tools into ${harness.label}`);
+  // The shared provisioning path (ADR 708) — seat creation runs the same helper, so the
+  // two cannot drift. The outcome carries no target string; the harness label names it.
+  const [outcome] = await provisionToolkitIntoHarnesses(toolkit, [harness.id], process.cwd());
+  if (!outcome || outcome.error) {
+    sp.stop(
+      pc.yellow(
+        `Couldn't provision ${toolkit.toolkit} tools: ${outcome?.error ?? 'no outcome reported'}`,
+      ),
+    );
+    return;
+  }
+  const result = { servers: outcome.servers };
+  const permCount = outcome.permissionsAdded;
   try {
-    const result = await harness.provision({ servers, permissions }, 'local');
-    const permCount =
-      result.permissions.allow.length +
-      result.permissions.ask.length +
-      result.permissions.deny.length;
     sp.stop(
       `Provisioned ${result.servers.length} MCP server${result.servers.length === 1 ? '' : 's'}` +
         (result.servers.length ? `: ${pc.cyan(result.servers.join(', '))}` : '') +
         (permCount ? ` + ${permCount} permission${permCount === 1 ? '' : 's'}` : '') +
-        ` ${pc.dim(`(${result.target})`)}`,
+        (outcome.skipped.length ? ` (skipped: ${outcome.skipped.join(', ')})` : ''),
     );
     // Recorded for exact removal in the v2 manifest's contributions — never the v1 shape, which
     // would clobber the strict v2 file init just saved (ADR 281). Role MCP servers are not yet

@@ -92,6 +92,15 @@ export function roleSkillName(roleName: string, role: Pick<RoleFile, 'skill'>): 
   return role.skill ?? roleName;
 }
 
+/** A toolkit name: the file stem under `.musterd/toolkits/` or a built-in's name. */
+export const TOOLKIT_NAME_RE = SKILL_NAME_RE;
+
+/** The toolkit a role names (ADR 708): its `toolkit`, else the role's own name — the
+ *  same-name convention the permission recompiler has always used. */
+export function roleToolkitName(roleName: string, role: Pick<RoleFile, 'toolkit'>): string {
+  return role.toolkit ?? roleName;
+}
+
 /**
  * `roles/<name>.toml` — one per role (ADR 070). The filename stem is the role name (like seats); the
  * body carries the role's **default capabilities** (a partial — unset fields fall back to generalist)
@@ -108,6 +117,13 @@ export const RoleFileSchema = z.object({
   skill: z
     .string()
     .regex(SKILL_NAME_RE, 'a skill name is lowercase letters, digits and hyphens, at most 64')
+    .optional(),
+  /** The role's default toolkit (ADR 708): a name the toolkit loader resolves. Absent, it
+   *  is the role's own name (the same-name convention), so a role file written before the
+   *  field stays valid. A toolkit never asserts a role (ADR 296). */
+  toolkit: z
+    .string()
+    .regex(TOOLKIT_NAME_RE, 'a toolkit name is lowercase letters, digits and hyphens, at most 64')
     .optional(),
 });
 export type RoleFile = z.infer<typeof RoleFileSchema>;
@@ -348,8 +364,8 @@ export function serializeSeat(seat: SeatFile): string {
 }
 
 /**
- * Canonical `roles/<name>.toml`. Key order: `summary`, `charter`, `skill` (top-level) then the
- * `[capabilities]` table.
+ * Canonical `roles/<name>.toml`. Key order: `summary`, `charter`, `skill`, `toolkit`
+ * (top-level) then the `[capabilities]` table.
  * An empty role (no charter, no caps) serializes to the empty string — the minimal form; the role
  * still exists by virtue of its filename.
  */
@@ -358,6 +374,7 @@ export function serializeRole(role: RoleFile): string {
   if (role.summary) out += line('summary', role.summary);
   if (role.charter) out += line('charter', role.charter);
   if (role.skill) out += line('skill', role.skill);
+  if (role.toolkit) out += line('toolkit', role.toolkit);
   const body = serializeCapabilities(role.capabilities ?? {});
   if (body) out += tableHeader('capabilities', out) + body;
   return out;

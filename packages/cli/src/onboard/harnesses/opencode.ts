@@ -108,6 +108,22 @@ function toOpencodeServer(entry: McpServerEntry): OpencodeLocalMcp {
   };
 }
 
+/** A provisioned role server — remote servers become opencode `remote` entries (ADR 708). */
+function provisionedToOpencodeServer(s: {
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  url?: string;
+}): OpencodeMcpEntry {
+  if (s.url !== undefined) return { type: 'remote', url: s.url };
+  return {
+    type: 'local',
+    command: [s.command!, ...s.args],
+    enabled: true,
+    environment: s.env,
+  };
+}
+
 /** Our registered entry from an opencode config, or undefined when the file does not carry one. */
 function musterdEntry(cfg: OpencodeConfig | null): OpencodeLocalMcp | undefined {
   const entry = cfg?.mcp?.['musterd'];
@@ -245,7 +261,7 @@ export const opencode: Harness = {
     cfg.mcp = cfg.mcp ?? {};
     const servers: string[] = [];
     for (const s of plan.servers) {
-      cfg.mcp[s.name] = toOpencodeServer(s);
+      cfg.mcp[s.name] = provisionedToOpencodeServer(s);
       servers.push(s.name);
     }
     if (servers.length > 0) writeConfig(path, cfg);

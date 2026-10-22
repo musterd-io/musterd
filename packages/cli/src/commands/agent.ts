@@ -292,5 +292,18 @@ export async function agentCommand(
         '\n',
     );
   }
+  // The toolkit's tools, provisioned into each wired harness (ADR 708) — named so a seat
+  // that starts without its equipment is visible at creation, not discovered later.
+  for (const o of r.toolkitProvision ?? []) {
+    if (o.error) {
+      process.stdout.write(
+        `${theme.warn(sym.warn)} toolkit tools not provisioned for ${o.harness}: ${o.error}\n`,
+      );
+    } else if (o.servers.length > 0) {
+      process.stdout.write(
+        `${theme.ok(sym.ok)} provisioned toolkit tools for ${o.harness}: ${o.servers.join(', ')}${o.skipped.length ? ` (skipped: ${o.skipped.join(', ')})` : ''}\n`,
+      );
+    }
+  }
   return 0;
 }

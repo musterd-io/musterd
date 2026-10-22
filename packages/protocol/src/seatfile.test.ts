@@ -6,6 +6,7 @@ import {
   parseTeamFile,
   type RoleFile,
   roleSkillName,
+  roleToolkitName,
   seatNameFromPath,
   seatRoles,
   serializeRole,
@@ -156,6 +157,24 @@ describe('a role names its skill (ADR 586 §3)', () => {
     for (const bad of ['../etc', 'Platform', 'a b', '-lead', 'x'.repeat(65)])
       expect(() => parseRoleFile(`skill = "${bad}"\n`)).toThrow();
     expect(parseRoleFile(`skill = "${'x'.repeat(64)}"\n`).skill).toHaveLength(64);
+  });
+});
+
+describe('a role names its toolkit (ADR 708)', () => {
+  it('keeps `toolkit` through serialize, after `skill` and before the capabilities table', () => {
+    const text =
+      'summary = "Builds apps"\ncharter = "lead"\nskill = "ios-engineer"\ntoolkit = "ios"\n\n[capabilities]\nis_admin = false\n';
+    expect(serializeRole(parseRoleFile(text))).toBe(text);
+  });
+
+  it("defaults to the role's own name when the file names none (the same-name convention)", () => {
+    expect(roleToolkitName('backend', parseRoleFile('summary = "x"\n'))).toBe('backend');
+    expect(roleToolkitName('ios-engineer', parseRoleFile('toolkit = "ios"\n'))).toBe('ios');
+  });
+
+  it('refuses a toolkit that is not a toolkit name', () => {
+    for (const bad of ['../etc', 'IOS', 'a b', '-lead', 'x'.repeat(65)])
+      expect(() => parseRoleFile(`toolkit = "${bad}"\n`)).toThrow();
   });
 });
 

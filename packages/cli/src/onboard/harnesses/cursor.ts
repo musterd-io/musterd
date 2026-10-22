@@ -31,7 +31,11 @@ import {
 } from '../roleSkills.js';
 
 interface CursorConfig {
-  mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+  mcpServers?: Record<
+    string,
+    // Stdio carries command/args/env; a remote server carries only `url` (ADR 708).
+    { command?: string; args?: string[]; env?: Record<string, string>; url?: string }
+  >;
 }
 
 /** Cursor's project hooks file (ADR 198) — versioned map of event → command hooks. */
@@ -413,7 +417,8 @@ export const cursor: Harness = {
     cfg.mcpServers = cfg.mcpServers ?? {};
     const servers: string[] = [];
     for (const s of plan.servers) {
-      cfg.mcpServers[s.name] = { command: s.command, args: s.args, env: s.env };
+      cfg.mcpServers[s.name] =
+        s.url !== undefined ? { url: s.url } : { command: s.command!, args: s.args, env: s.env };
       servers.push(s.name);
     }
     if (servers.length > 0) writeConfig(path, cfg);

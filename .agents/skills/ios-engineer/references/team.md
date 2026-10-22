@@ -7,6 +7,12 @@ work in a session. A team adopting this skill replaces this file with its own.
 
 - **Role file**: `ios-engineer` in the team home (`.musterd/roles/ios-engineer.toml`,
   outside the repository). Charter: Expo-first plus the Swift native bridge; harness-agnostic.
+  It names this skill (`skill = "ios-engineer"`) and its equipment (`toolkit = "ios"`,
+  ADR 708): the built-in `ios` toolkit carries Expo's remote MCP server
+  (`https://mcp.expo.dev/mcp` — authenticate with your own Expo account on first use),
+  XcodeBuildMCP and an Apple-docs MCP server, both `npx`-launched. Creating the seat
+  (`musterd agent <name> --role ios-engineer --profile ios`, or any seat whose recorded
+  toolkit is `ios`) provisions those into every wired harness automatically.
 - **Holder**: none yet. The seat is created only after this skill has a recorded blind
   eval run and a human accepts it (building-a-role-skill steps 5–7).
 - **The human who approves**: nick — Apple Developer Program and App Store Connect account

@@ -15,9 +15,12 @@
 export type CodexToolApprovalMode = 'auto' | 'prompt' | 'approve';
 
 export interface CodexServer {
-  command: string;
+  /** Stdio transport; absent for a remote (`url`) server — exactly one of the two (ADR 708). */
+  command?: string;
   args: string[];
   env: Record<string, string>;
+  /** Remote HTTP transport (ADR 708); absent for a stdio server. */
+  url?: string;
   /** ADR 495: absent means Codex's own default — which prompts, and a headless wake cannot answer. */
   default_tools_approval_mode?: CodexToolApprovalMode | undefined;
 }
@@ -34,8 +37,13 @@ function key(k: string): string {
 
 /** Render one server as a `[mcp_servers.<name>]` table (+ `.env` subtable when it has env). */
 export function renderServer(name: string, s: CodexServer): string {
-  const lines = [`[mcp_servers.${key(name)}]`, `command = ${str(s.command)}`];
-  lines.push(`args = [${s.args.map(str).join(', ')}]`);
+  const lines = [`[mcp_servers.${key(name)}]`];
+  if (s.url !== undefined) {
+    lines.push(`url = ${str(s.url)}`);
+  } else {
+    lines.push(`command = ${str(s.command!)}`);
+    lines.push(`args = [${s.args.map(str).join(', ')}]`);
+  }
   if (s.default_tools_approval_mode !== undefined) {
     lines.push(`default_tools_approval_mode = ${str(s.default_tools_approval_mode)}`);
   }
@@ -171,12 +179,16 @@ import { z } from 'zod';
 
 export const CodexServerSchema = z
   .object({
-    command: z.string().min(1),
+    command: z.string().min(1).optional(),
     args: z.array(z.string()),
     env: z.record(z.string(), z.string()),
+    url: z.string().url().optional(),
     default_tools_approval_mode: z.enum(['auto', 'prompt', 'approve']).optional(),
   })
-  .strict();
+  .strict()
+  .refine((s) => (s.command === undefined) !== (s.url === undefined), {
+    message: 'exactly one transport: `command` (stdio) or `url` (remote)',
+  });
 
 /**
  * Validate one intended `[mcp_servers.<name>]` representation, throwing with the file kind and
@@ -184,7 +196,18 @@ export const CodexServerSchema = z
  */
 export function assertWritableServer(name: string, s: unknown): CodexServer {
   const parsed = CodexServerSchema.safeParse(s);
-  if (parsed.success) return parsed.data;
+  if (parsed.success) {
+    const d = parsed.data;
+    return {
+      args: d.args,
+      env: d.env,
+      ...(d.command !== undefined ? { command: d.command } : {}),
+      ...(d.url !== undefined ? { url: d.url } : {}),
+      ...(d.default_tools_approval_mode !== undefined
+        ? { default_tools_approval_mode: d.default_tools_approval_mode }
+        : {}),
+    };
+  }
   const detail = parsed.error.issues
     .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
     .join('; ');

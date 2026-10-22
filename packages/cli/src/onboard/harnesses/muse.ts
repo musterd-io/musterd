@@ -3,7 +3,12 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
 import { resolveMuseBin } from '../../museBin.js';
-import { registeredFromEnv, type Harness } from '../harness.js';
+import {
+  registeredFromEnv,
+  type Harness,
+  type ProvisionPlan,
+  type UnprovisionPlan,
+} from '../harness.js';
 import {
   launchEntryEnv,
   markerGenerationOfEnv,
@@ -313,6 +318,84 @@ export const muse: Harness = {
       detail: bin ? `muse on PATH (${bin})` : 'muse install not found',
       ...registeredFromEnv(env),
     };
+  },
+
+  // Provision a role's MCP servers into the machine-global Muse settings, additively
+  // (ADR 708 — muse was the one harness without `provision`). Machine-global is muse's
+  // existing scope for MCP entries, so role servers land beside musterd's own and are
+  // visible to every muse workspace on the machine; the target string says so. Permission
+  // defaults are NOT compiled: muse's settings permission shape is not one musterd has
+  // verified, so they degrade to declared intent and the result reports none added —
+  // the same degradation codex applies. A remote server's env is not written (muse's
+  // remote-entry header shape is unverified); those names ride `skipped`, never dropped.
+  async provision(plan: ProvisionPlan) {
+    const path = museSettingsPath();
+    const raw = readText(path);
+    let settings: MuseSettings = {};
+    if (raw !== null) {
+      try {
+        settings = JSON.parse(raw) as MuseSettings;
+      } catch {
+        throw new Error('muse settings.json does not parse — refusing to rewrite it');
+      }
+    }
+    settings = { ...settings, schema_version: MUSE_SETTINGS_VERSION };
+    // Canonical camelCase, migrating a legacy snake block exactly as upsertMuseServer does.
+    const camel: Record<string, unknown> = {
+      ...((settings.mcpServers ?? {}) as Record<string, unknown>),
+    };
+    const snake = settings.mcp_servers;
+    if (typeof snake === 'object' && snake !== null) {
+      for (const [name, server] of Object.entries(snake as Record<string, unknown>)) {
+        if (!(name in camel)) camel[name] = server;
+      }
+      delete settings.mcp_servers;
+    }
+    const servers: string[] = [];
+    const skipped: string[] = [];
+    for (const s of plan.servers) {
+      if (s.url !== undefined) {
+        camel[s.name] = { transport: 'http', url: s.url, enabled: true, mode: 'optional' };
+        if (Object.keys(s.env).length > 0) skipped.push(s.name);
+      } else {
+        camel[s.name] = {
+          transport: 'stdio',
+          command: s.command,
+          args: s.args,
+          env: s.env,
+          enabled: true,
+          mode: 'optional',
+        };
+      }
+      servers.push(s.name);
+    }
+    settings.mcpServers = camel;
+    writeText(path, `${JSON.stringify(settings, null, 2)}\n`, 0o600);
+    return {
+      servers,
+      ...(skipped.length > 0 ? { skipped } : {}),
+      permissions: { allow: [], ask: [], deny: [] },
+      target: `${path} (machine-global Muse settings)`,
+      activation:
+        'restart the muse session to pick up the new MCP servers; permission defaults are not compiled for Muse Code (declared intent only)',
+    };
+  },
+
+  // Reverse a provision (ADR 027): remove exactly the named servers from muse settings.
+  async unprovision(plan: UnprovisionPlan) {
+    const path = museSettingsPath();
+    const settings = readMuseSettings(path);
+    if (settings === null) return;
+    const block = museServersBlock(settings);
+    if (block === null) return;
+    let changed = false;
+    for (const name of plan.servers) {
+      if (name in block.servers) {
+        delete block.servers[name];
+        changed = true;
+      }
+    }
+    if (changed) writeText(path, `${JSON.stringify(settings, null, 2)}\n`, 0o600);
   },
 
   async configure(entry: McpServerEntry) {

@@ -143,6 +143,23 @@ describe('grok.unprovision', () => {
   });
 });
 
+describe('grok.provision — remote servers (ADR 708)', () => {
+  it('writes a remote server by url and unprovisions it', async () => {
+    await grok.provision!({
+      servers: [{ name: 'expo', url: 'https://mcp.expo.dev/mcp', args: [], env: {} }],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    const toml = readFileSync(cfgPath(), 'utf8');
+    expect(toml).toContain('[mcp_servers.expo]');
+    expect(toml).toContain('url = "https://mcp.expo.dev/mcp"');
+    await grok.unprovision!({
+      servers: ['expo'],
+      permissions: { allow: [], ask: [], deny: [] },
+    });
+    expect(readFileSync(cfgPath(), 'utf8')).not.toContain('[mcp_servers.expo]');
+  });
+});
+
 describe('grok.refreshHooks', () => {
   it('installs hooks, statusline, and the permission floor without rewriting MCP', () => {
     mkdirSync(join(cwd, '.grok'), { recursive: true });

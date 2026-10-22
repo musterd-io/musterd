@@ -115,6 +115,36 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     },
   },
 
+  // ADR 708: the iOS engineer's equipment, named by the ios-engineer role (`toolkit = "ios"`).
+  // Servers are referenced, never hosted: Expo's is remote (the seat authenticates with its
+  // own Expo account on first use — no secret lives here), XcodeBuildMCP and the Apple-docs
+  // server are npx-launched stdio. EAS/TestFlight credentials stay with the account holder.
+  ios: {
+    toolkit: 'ios',
+    capacity: 1,
+    charter: [
+      'Build the iOS app: the Expo / React Native surface, and the Swift native bridge where the platform is the point.',
+      'Verify on a running app, never by reading code alone; hardware-gated behaviour is device-verified or named unverified.',
+    ],
+    tools: {
+      resource_scopes: ['packages/mobile/**'],
+      mcp_servers: [
+        { name: 'expo', url: 'https://mcp.expo.dev/mcp' },
+        {
+          name: 'xcodebuild',
+          command: 'npx',
+          args: ['-y', 'xcodebuildmcp@latest', 'mcp'],
+        },
+        {
+          name: 'apple-docs',
+          command: 'npx',
+          args: ['-y', '@kimsungwhee/apple-docs-mcp@latest'],
+        },
+      ],
+      permissions: { allow: ['Edit', 'Read', 'Bash(pnpm test*)'], ask: ['Bash'] }, // ADR 261 canonical syntax
+    },
+  },
+
   docs: {
     toolkit: 'docs',
     charter: [

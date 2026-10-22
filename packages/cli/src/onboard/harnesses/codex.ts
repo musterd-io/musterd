@@ -205,7 +205,13 @@ export const codex: Harness = {
     let toml = readToml(path);
     const servers: string[] = [];
     for (const s of plan.servers) {
-      toml = upsertServer(toml, s.name, { command: s.command, args: s.args, env: s.env });
+      toml = upsertServer(
+        toml,
+        s.name,
+        s.url !== undefined
+          ? { url: s.url, args: s.args, env: s.env }
+          : { command: s.command!, args: s.args, env: s.env },
+      );
       servers.push(s.name);
     }
     if (servers.length > 0) writeToml(path, toml);
