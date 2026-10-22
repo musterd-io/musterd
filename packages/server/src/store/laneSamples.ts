@@ -89,6 +89,59 @@ export async function recordSample(
   });
 }
 
+/** Delete one day's sample. Shared by {@link removeRecordedSample} and the fold. */
+export async function deleteSample(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  day: string,
+): Promise<void> {
+  await db.run('DELETE FROM lane_samples WHERE team_id = ? AND lane_id = ? AND day = ?', [
+    teamId,
+    laneId,
+    day,
+  ]);
+}
+
+/**
+ * ADR 715: take back a day's sample that nothing now measures (a derived lane whose scope changed
+ * after the day was written). One `lane.sample_removed` row carries what was removed, so the log
+ * still says what the chart once showed; a peer folding it deletes the same row. Nothing to remove
+ * is not an error.
+ */
+export async function removeRecordedSample(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  day: string,
+  by: string,
+  now: number = Date.now(),
+): Promise<LaneSample | null> {
+  return db.tx(async (t) => {
+    const prior = await t.get<SampleRow>(
+      'SELECT * FROM lane_samples WHERE team_id = ? AND lane_id = ? AND day = ?',
+      [teamId, laneId, day],
+    );
+    if (!prior) return null;
+    await deleteSample(t, teamId, laneId, day);
+    const removed = toSample(prior);
+    await appendLaneEventRequired(t, teamId, {
+      actor: by,
+      action: 'lane.sample_removed',
+      target: laneId,
+      result: 'allow',
+      detail: {
+        lane: laneId,
+        day,
+        by,
+        at: now,
+        removed: { value: removed.value, n: removed.n, by: removed.by },
+      },
+    });
+    return removed;
+  });
+}
+
 /**
  * The newest {@link LANE_SAMPLES_SERVED} samples per metric lane, oldest first, attached to the
  * lanes that declare a metric. One query for the whole set; lanes without a metric are untouched.

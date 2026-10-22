@@ -29,6 +29,7 @@ import {
   claimWakeLeases,
   effectiveWakePolicy,
   enrollResidency,
+  normalizeHarness,
   expireWakeLeases,
   firstWakeLeaseTs,
   getResidency,
@@ -172,6 +173,19 @@ withDrivers('residency', (o, kind) => {
   });
 
   describe('buildWakeContext (ADR 209)', async () => {
+    it('stores a harness trimmed and without a trailing slash (ADR 715)', async () => {
+      const { db, team, ada } = await seed();
+      const first = await enrollResidency(db, team.id, {
+        member_id: ada.id,
+        harness: ' claude-code/ ',
+        host: 'host-a',
+        grant_id: 'g1',
+        authorized_by: 'nick',
+      });
+      expect(first.row.harness).toBe('claude-code');
+      expect(normalizeHarness('codex//')).toBe('codex');
+    });
+
     it('derives a body-free reply packet only for the directed recipient', async () => {
       const { db, team, nick, ada, bob } = await seed();
       await msg(db, team, nick, ada, 'message', 'm1', 1_000, { thread: 't1' });

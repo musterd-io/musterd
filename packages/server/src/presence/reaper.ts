@@ -24,7 +24,11 @@ import {
   listResidencyTeamIds,
   wakeExhaustionKey,
 } from '../store/residency.js';
-import { metricSampleGate, sweepMetricSamples } from '../store/sweepMetricSamples.js';
+import {
+  metricSampleGate,
+  reconcileDerivedSamples,
+  sweepMetricSamples,
+} from '../store/sweepMetricSamples.js';
 import { getPolicy, getTeamById, getTeamBySlug, listActiveTeams } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 
@@ -316,9 +320,13 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
       if (joinerTeams.has(team.id) || !metricSamples.due(team.id, now)) continue;
       try {
         const written = await sweepMetricSamples(ctx.db, team.id, team.slug, now, DIGEST_SEAT);
+        // ADR 715: and the days it wrote before, against the lane's scope as it is now.
+        const fixed = await reconcileDerivedSamples(ctx.db, team.id, team.slug, now, DIGEST_SEAT);
         metricSamples.done(team.id, now);
         if (written.length > 0)
           log.info({ msg: 'metric_samples_swept', team: team.slug, count: written.length });
+        if (fixed.length > 0)
+          log.info({ msg: 'metric_samples_reconciled', team: team.slug, count: fixed.length });
       } catch (err) {
         log.warn({ msg: 'metric_samples_sweep_failed', team: team.slug, err: String(err) });
       }

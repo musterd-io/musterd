@@ -33,7 +33,12 @@ import { listBlockedLanes } from './lanes.js';
 import { deriveMast } from './mast.js';
 import { getMemberByName } from './members.js';
 import { listTeamMessages, longDeferred } from './messages.js';
-import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
+import {
+  effectiveWakePolicy,
+  getResidency,
+  normalizeHarness,
+  seatWakeDefaults,
+} from './residency.js';
 import { teamFamilyPosture } from './review.js';
 import type { MessageRow } from './rows.js';
 import { getPolicy, spendApprovalUsd, spendCapUsd, unpricedWakeCap } from './teams.js';
@@ -869,7 +874,7 @@ export async function dayWakeLatency(
         'SELECT harness FROM residency WHERE team_id = ? AND member_id = ? LIMIT 1',
         [teamId, recipient.id],
       );
-      if (enrolled?.harness !== harness) continue;
+      if (!enrolled || normalizeHarness(enrolled.harness) !== normalizeHarness(harness)) continue;
     }
     const latency = await wokenActLatency(db, teamId, msg, recipient.id);
     if (latency !== null) latencies.push(latency);

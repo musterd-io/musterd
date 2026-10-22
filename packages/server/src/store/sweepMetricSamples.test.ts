@@ -10,6 +10,7 @@ import { insertMessage } from './messages.js';
 import {
   __clearLiveSamplesCache,
   liveMetricSamples,
+  reconcileDerivedSamples,
   SAMPLE_SWEEP_DELAY_MS,
   metricSampleGate,
   sweepMetricSamples,
@@ -277,6 +278,80 @@ withDrivers('sweepMetricSamples', (o) => {
       // Still cached: the new sample shows on the next window.
       expect(await liveMetricSamples(db, team.id, team.slug, MID + 1_000)).toEqual([]);
       expect(await liveMetricSamples(db, team.id, team.slug, MID + 31_000)).toHaveLength(1);
+    });
+  });
+
+  describe('reconcile (ADR 715)', () => {
+    async function enroll(db: Driver, teamId: string, memberId: string, harness: string) {
+      await db.run(
+        `INSERT INTO residency (id, team_id, member_id, harness, host, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'h', 0, 0)`,
+        [`r-${memberId}`, teamId, memberId, harness],
+      );
+    }
+
+    it('re-measures the days the digest wrote, removes one nothing measures, and leaves others’ points', async () => {
+      const { db, team, nick, ada, bo } = await seed();
+      // A trailing slash on the enrolled harness still counts as claude-code.
+      await enroll(db, team.id, ada.id, 'claude-code/');
+      await enroll(db, team.id, bo.id, 'codex');
+      const codexLane = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'codex wakes',
+        reads_on: '2026-10-30',
+        metric: { ...metric('wake_latency_p50_ms'), harness: 'codex' },
+      });
+      const claudeLane = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'claude wakes',
+        reads_on: '2026-10-30',
+        metric: { ...metric('wake_latency_p50_ms'), harness: 'claude-code' },
+      });
+      await put(db, team.id, nick, 'h1', 'handoff', START + 60 * MIN);
+      await woke(db, team.id, 'ada', 'h1', START + 61 * MIN);
+      await put(db, team.id, ada, 'r1', 'status_update', START + 64 * MIN);
+      await put(db, team.id, nick, 'h2', 'handoff', START + 70 * MIN);
+      await woke(db, team.id, 'bo', 'h2', START + 71 * MIN);
+      await put(db, team.id, bo, 'r2', 'status_update', START + 80 * MIN);
+
+      // The codex lane holds what the claude-code lane measures (written before it had a harness),
+      // a day with no wakes at all, and a point a seat backfilled.
+      const codex = (await getLane(db, team.id, codexLane.id, team.slug))!;
+      await recordSample(db, team.id, codex, { day: DAY, value: 4 * MIN, n: 1 }, 'digest', NOW);
+      await recordSample(
+        db,
+        team.id,
+        codex,
+        { day: '2026-10-17', value: 53076, n: 1 },
+        'digest',
+        NOW,
+      );
+      await recordSample(db, team.id, codex, { day: '2026-10-16', value: 99, n: 1 }, 'ryder', NOW);
+      const claude = (await getLane(db, team.id, claudeLane.id, team.slug))!;
+      await recordSample(db, team.id, claude, { day: DAY, value: 4 * MIN, n: 1 }, 'digest', NOW);
+
+      const fixed = await reconcileDerivedSamples(db, team.id, team.slug, NOW, 'digest');
+      expect(fixed).toEqual([
+        { lane: codexLane.id, day: '2026-10-17', action: 'removed' },
+        { lane: codexLane.id, day: DAY, action: 'replaced' },
+      ]);
+      const after = (await getLane(db, team.id, codexLane.id, team.slug))!;
+      expect(after.samples?.map((x) => [x.day, x.value, x.by])).toEqual([
+        ['2026-10-16', 99, 'ryder'],
+        [DAY, 10 * MIN, 'digest'],
+      ]);
+      // The claude-code lane was already right: nothing written.
+      expect((await getLane(db, team.id, claudeLane.id, team.slug))?.samples).toHaveLength(1);
+      const removed = (await listAudit(db, team.id))
+        .filter((r) => r.action === 'lane.sample_removed')
+        .map((r) => JSON.parse(r.detail ?? '{}'));
+      expect(removed).toEqual([
+        expect.objectContaining({
+          lane: codexLane.id,
+          day: '2026-10-17',
+          removed: { value: 53076, n: 1, by: 'digest' },
+        }),
+      ]);
+      // Run again: nothing left to fix.
+      expect(await reconcileDerivedSamples(db, team.id, team.slug, NOW, 'digest')).toEqual([]);
     });
   });
 });
