@@ -50,18 +50,27 @@ without making the status a front-end decoration that one browser knows and the 
    the next time it writes that member. Surfaces also drop it at `expires_at` on their own clock, so
    an open /live tab or the stream clears it on the minute without a new event. Nothing sweeps.
 
-4. **It travels with the roster.** A set or clear updates the member and is carried to every
-   connected surface the way an availability change is, so /live, /broadcast and the CLI agree.
+4. **It is pushed, not polled.** Today an availability change pushes nothing: /live re-reads the
+   roster on a `presence` frame or a 60-second poll, and /broadcast has no poll at all, so a status
+   would reach the stream late or never. A set or clear therefore broadcasts a new team socket frame,
+   `member_updated`, carrying that member's roster summary, and /live and /broadcast replace the
+   member from it. (The frame is general on purpose; availability can ride it later, outside this
+   ADR.) The `presence` frame keeps its meaning.
 
-5. **Where it is set:** the CLI (`musterd status-line "…"`, `musterd status-line --clear`, and the
+5. **On a team that spans machines, the hub's copy is the one shown.** A status set on a joiner's
+   daemon is forwarded to the hub, as the style settings are (`/members/me/style`): the hub's value
+   wins, and an unreachable hub refuses the set rather than keep a local copy the stream never sees.
+   `expires_at` is the hub's clock.
+
+6. **Where it is set:** the CLI (`musterd status-line "…"`, `musterd status-line --clear`, and the
    bare command prints the caller's own) and /live (the caller's own nameplate opens a small field).
    It is **not** an MCP tool: the tool surface is an agent's, and an agent can never set one.
 
-6. **Where it shows:** the nameplate's second line on /live and /broadcast (the colour footer, the
+7. **Where it shows:** the nameplate's second line on /live and /broadcast (the colour footer, the
    hourglass first), and a second line under the name on the team panel. /broadcast is public, so the
    words are public; the field's help text says so where it is typed.
 
-7. **Audit:** each set and clear writes `member.status_line` (actor the member, result `ok`, detail
+8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `ok`, detail
    `{ action: 'set' | 'clear', length }`). The words themselves are not copied into the audit log: a
    status is personal and meant to vanish in an hour.
 
@@ -76,8 +85,8 @@ without making the status a front-end decoration that one browser knows and the 
 
 Increments (lane `01M5JV0M5MG5T6QA44Q1W7RZN2`):
 
-1. Protocol and server — the field, the two routes and their refusals, read-time expiry, roster
-   propagation, the audit row; `SPEC.md` and `02-protocol.md`.
+1. Protocol and server — the field, the two routes and their refusals, read-time expiry, the
+   `member_updated` frame, forwarding to the hub, the audit row; `SPEC.md` and `02-protocol.md`.
 2. CLI — `musterd status-line`, with the refusal an agent seat gets in plain words.
 3. /live and /broadcast — the nameplate footer and hourglass, the team panel line, the field on the
    caller's own nameplate, the local clock that clears it at `expires_at`.
