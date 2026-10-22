@@ -217,6 +217,44 @@ function armAutojoinOnFirstToolCall(
     );
 }
 
+/**
+ * ADR 707: how long after MCP `initialized` the session-start join waits before firing. A health
+ * probe completes `initialize` and exits within milliseconds; the grace lets it die first, so its
+ * claim never displaces the live session (the ADR 068 defect the first-tool-call deferral exists
+ * to prevent). A real session is still joined before its first model tool call, which is the
+ * window finding 019 (A) prices: with tool search on, that first call may be ToolSearch, and
+ * until a join lands the edit gate fails open.
+ */
+export const SESSION_START_JOIN_GRACE_MS = 750;
+
+/** One shared autojoin attempt: success memoized, failure re-arms (same contract as the
+ *  first-tool-call arming, shared so the session-start and first-call paths never join twice). */
+export function createAutojoinAttempt(run: () => Promise<void>): () => Promise<void> {
+  let fired: Promise<void> | undefined;
+  return () =>
+    (fired ??= run().catch((err: unknown) => {
+      fired = undefined;
+      throw err;
+    }));
+}
+
+/** Fire `run` once after the probe grace, unless cancelled first. Failures are the run's own
+ *  record (autojoin notes them on the client); this seam must never crash the adapter. */
+export function scheduleSessionStartJoin(
+  run: () => Promise<void>,
+  graceMs: number = SESSION_START_JOIN_GRACE_MS,
+): () => void {
+  let cancelled = false;
+  const timer = setTimeout(() => {
+    if (!cancelled) void run().catch(() => {});
+  }, graceMs);
+  (timer as { unref?: () => void }).unref?.();
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
+}
+
 /** Claude Code's per-tool deferral override, read from a `tools/list` entry's `_meta`: `true`
  *  keeps the schema in the prompt instead of behind ToolSearch (Claude Code 2.1.296, lane
  *  01M4S53E79). A server-side key, so it needs no setting in the user's MCP config. */
@@ -259,6 +297,9 @@ export function buildMcpServer(
   config: ReturnType<typeof loadMcpConfig>,
   opts: {
     onFirstToolCall?: () => Promise<void>;
+    /** ADR 707: fired once the client session has started (legacy `initialized`, or the first
+     *  modern-era request) — main() turns it into the grace-delayed session-start join. */
+    onSessionStart?: () => void;
     recorder?: ToolCallRecorder;
     onHarness?: (harness: HarnessContext) => void;
     /** ADR 630 §3: serving one remote MCP request inside the daemon — the git and gh checks
@@ -291,6 +332,10 @@ export function buildMcpServer(
   // after this still runs.
   const recorder = opts.recorder;
   if (recorder) observeHarnessInitialization(server.server, () => recorder.markInitialized());
+  // ADR 707: session start, legacy era — the client finished `initialize`. Chained like the
+  // capture above, so every observer still runs.
+  if (opts.onSessionStart)
+    observeHarnessInitialization(server.server, () => opts.onSessionStart?.());
   // Repair hints on invalid-input bounces (ADR 144 inc 3) hook the same seam — the SDK bounces
   // before handlers run, so this is the only place a hint can be attached. Installed after the
   // telemetry patch, which makes telemetry the outer wrapper: it classifies the repaired result
@@ -304,10 +349,14 @@ export function buildMcpServer(
   // stateless protocol, read once at the tools/call seam. Installed here with the sibling patches
   // because it must precede the first registerTool — the legacy `oninitialized` path stays wired
   // in main(), and the caller's memo makes whichever fires first win.
-  if (opts.onHarness) {
+  if (opts.onHarness || opts.onSessionStart) {
     observeHarnessRequests(
       server.server as unknown as Parameters<typeof observeHarnessRequests>[0],
-      opts.onHarness,
+      (harness) => {
+        opts.onHarness?.(harness);
+        // ADR 707: session start, modern era — the first request is the start signal.
+        opts.onSessionStart?.();
+      },
     );
   }
   // Patched second so the deferred autojoin runs INSIDE the first tool's span — the join latency it
@@ -492,6 +541,7 @@ export function startStdioEntry(
   config: McpConfig,
   opts: {
     onFirstToolCall?: () => Promise<void>;
+    onSessionStart?: () => void;
     recorder?: ToolCallRecorder;
     onHarness?: (harness: HarnessContext | undefined) => void;
     /** Tests inject an in-memory wire; production defaults to the process's stdio. */
@@ -541,6 +591,8 @@ async function main(): Promise<void> {
   // The launch autojoin is DEFERRED to the first tool call (probe safety, see
   // armAutojoinOnFirstToolCall): a health probe that only completes `initialize` must not claim —
   // the boot-time claim is what let every `claude mcp get musterd` displace the live seat.
+  // ADR 707 adds the second path: at `initialized` plus a probe grace, the same attempt fires —
+  // a probe has exited by then, a real session is joined before its first tool call.
   // The tool-call recorder (ADR 144 inc 1) is probe-safe by the same construction: it only ever
   // sends after a real tool call gave the session a seat to attribute to.
   const recorder = new ToolCallRecorder({ surface: config.surface ?? null });
@@ -558,8 +610,17 @@ async function main(): Promise<void> {
   // The transport is constructed here (not defaulted inside serveStdio) so the shutdown seam
   // below can keep watching `transport.onclose` — serveStdio owns start/close, we wrap after.
   const transport = new StdioServerTransport();
+  // ADR 707: one autojoin attempt shared by the first-tool-call path and the session-start
+  // path, so whichever fires first joins and the other is the same memoized promise.
+  const joinAttempt = createAutojoinAttempt(() => autojoin(client, config));
+  let startJoinScheduled = false;
   startStdioEntry(client, config, {
-    onFirstToolCall: () => autojoin(client, config),
+    onFirstToolCall: joinAttempt,
+    onSessionStart: () => {
+      if (startJoinScheduled) return;
+      startJoinScheduled = true;
+      scheduleSessionStartJoin(joinAttempt);
+    },
     recorder,
     onHarness: captureHarnessOnce,
     transport,
