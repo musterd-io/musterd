@@ -1,0 +1,288 @@
+{
+  "name": "claim20",
+  "description": "core (10) + 10 tasks core does not use, one pair each, random.Random(20261022) (musterd claim-manifest.md)",
+  "new": [
+    {
+      "repo": "llama_index_task",
+      "task_id": 18813,
+      "pair": [
+        3,
+        6
+      ]
+    },
+    {
+      "repo": "react_hook_form_task",
+      "task_id": 85,
+      "pair": [
+        3,
+        5
+      ]
+    },
+    {
+      "repo": "huggingface_datasets_task",
+      "task_id": 7309,
+      "pair": [
+        1,
+        2
+      ]
+    },
+    {
+      "repo": "go_chi_task",
+      "task_id": 26,
+      "pair": [
+        1,
+        2
+      ]
+    },
+    {
+      "repo": "dottxt_ai_outlines_task",
+      "task_id": 1706,
+      "pair": [
+        1,
+        8
+      ]
+    },
+    {
+      "repo": "pallets_click_task",
+      "task_id": 2956,
+      "pair": [
+        1,
+        8
+      ]
+    },
+    {
+      "repo": "dspy_task",
+      "task_id": 8587,
+      "pair": [
+        1,
+        6
+      ]
+    },
+    {
+      "repo": "pallets_jinja_task",
+      "task_id": 1465,
+      "pair": [
+        7,
+        9
+      ]
+    },
+    {
+      "repo": "pallets_click_task",
+      "task_id": 2068,
+      "pair": [
+        2,
+        5
+      ]
+    },
+    {
+      "repo": "dottxt_ai_outlines_task",
+      "task_id": 1371,
+      "pair": [
+        3,
+        4
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "repo": "dottxt_ai_outlines_task",
+      "task_id": 1655,
+      "pairs": [
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "repo": "dspy_task",
+      "task_id": 8563,
+      "pairs": [
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "repo": "go_chi_task",
+      "task_id": 27,
+      "pairs": [
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "repo": "llama_index_task",
+      "task_id": 17244,
+      "pairs": [
+        [
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "repo": "openai_tiktoken_task",
+      "task_id": 0,
+      "pairs": [
+        [
+          4,
+          8
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_click_task",
+      "task_id": 2800,
+      "pairs": [
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_jinja_task",
+      "task_id": 1559,
+      "pairs": [
+        [
+          5,
+          8
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_jinja_task",
+      "task_id": 1621,
+      "pairs": [
+        [
+          6,
+          10
+        ]
+      ]
+    },
+    {
+      "repo": "react_hook_form_task",
+      "task_id": 153,
+      "pairs": [
+        [
+          2,
+          6
+        ]
+      ]
+    },
+    {
+      "repo": "typst_task",
+      "task_id": 6554,
+      "pairs": [
+        [
+          2,
+          6
+        ]
+      ]
+    },
+    {
+      "repo": "llama_index_task",
+      "task_id": 18813,
+      "pairs": [
+        [
+          3,
+          6
+        ]
+      ]
+    },
+    {
+      "repo": "react_hook_form_task",
+      "task_id": 85,
+      "pairs": [
+        [
+          3,
+          5
+        ]
+      ]
+    },
+    {
+      "repo": "huggingface_datasets_task",
+      "task_id": 7309,
+      "pairs": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "repo": "go_chi_task",
+      "task_id": 26,
+      "pairs": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "repo": "dottxt_ai_outlines_task",
+      "task_id": 1706,
+      "pairs": [
+        [
+          1,
+          8
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_click_task",
+      "task_id": 2956,
+      "pairs": [
+        [
+          1,
+          8
+        ]
+      ]
+    },
+    {
+      "repo": "dspy_task",
+      "task_id": 8587,
+      "pairs": [
+        [
+          1,
+          6
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_jinja_task",
+      "task_id": 1465,
+      "pairs": [
+        [
+          7,
+          9
+        ]
+      ]
+    },
+    {
+      "repo": "pallets_click_task",
+      "task_id": 2068,
+      "pairs": [
+        [
+          2,
+          5
+        ]
+      ]
+    },
+    {
+      "repo": "dottxt_ai_outlines_task",
+      "task_id": 1371,
+      "pairs": [
+        [
+          3,
+          4
+        ]
+      ]
+    }
+  ]
+}

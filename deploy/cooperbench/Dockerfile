@@ -12,6 +12,11 @@ ARG COOPERBENCH_COMMIT=63b9d44
 # cannot stamp it; create.sh passes `git rev-parse HEAD`, and every pair's log records it.
 ARG MUSTERD_REF=unknown
 ENV MUSTERD_REF=${MUSTERD_REF}
+# Claude Code, pinned for the host smokes and every agent container alike. CooperBench's setup.sh
+# installs `latest` in each container, so runs on different days ran different versions; pilot 3 and
+# the solo reference ran 2.1.307 (their streams' claude_code_version), and the claim run must match.
+ARG CLAUDE_CODE_VERSION=2.1.307
+ENV CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gnupg iptables jq python3 python3-venv python3-pip redis-server \
@@ -34,7 +39,7 @@ RUN corepack enable \
 # For gate_smoke.py on the machine: the packed seat-side musterd in its own prefix (what a container
 # gets), and Claude Code to drive it. The agent containers install their own copies.
 RUN npm install -g --prefix /opt/musterd-seat --ignore-scripts --no-audit --no-fund /opt/musterd-pack/musterd-*.tgz \
-  && npm install -g --no-audit --no-fund @anthropic-ai/claude-code
+  && npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # CooperBench at the commit the adapter was written and tested against. Its openhands-sdk dependency
 # needs Python >= 3.12 and bookworm ships 3.11, so the venv uses a uv-managed 3.12.
@@ -43,7 +48,10 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN git clone https://github.com/cooperbench/CooperBench.git /opt/cooperbench \
   && git -C /opt/cooperbench checkout --quiet "${COOPERBENCH_COMMIT}" \
   && uv venv --python 3.12 /opt/cb-venv \
-  && uv pip install --quiet --python /opt/cb-venv/bin/python -e /opt/cooperbench
+  && uv pip install --quiet --python /opt/cb-venv/bin/python -e /opt/cooperbench \
+  && sed -i "s/CLAUDE_CODE_VERSION:-latest/CLAUDE_CODE_VERSION:-${CLAUDE_CODE_VERSION}/" \
+       /opt/cooperbench/src/cooperbench/agents/claude_code/setup.sh \
+  && grep -q "CLAUDE_CODE_VERSION:-${CLAUDE_CODE_VERSION}" /opt/cooperbench/src/cooperbench/agents/claude_code/setup.sh
 
 ENV PATH=/opt/cb-venv/bin:$PATH \
     PYTHONPATH=/app/scripts/research/cooperbench \
