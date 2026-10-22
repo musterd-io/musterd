@@ -4,9 +4,13 @@ import { saveBinding, saveWorkspaceSpec } from '../config.js';
 import { loadProvisioning, saveProvisioning } from './manifest.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses, type ReconcileReport } from './reconcile/engine.js';
+import {
+  defaultRecordedToolkit,
+  finishRoleEquipment,
+  installMissingBuiltinRoleSkills,
+} from './roleEquipment.js';
 import { withRoleSkills } from './roleSkills.js';
-import { loadToolkit } from './toolkit.js';
-import { provisionToolkitIntoHarnesses, type ToolkitProvisionOutcome } from './toolkitProvision.js';
+import type { ToolkitProvisionOutcome } from './toolkitProvision.js';
 import type { Workspace } from './workspace.js';
 
 /**
@@ -39,6 +43,12 @@ export interface ProvisionSeatInput {
     keepToolkit?: boolean;
     reconcile?: typeof reconcileHarnesses;
   };
+  /**
+   * Roster home and the role this call is giving the seat, when the caller has them. An omitted
+   * `--profile` records the role's toolkit from here (ADR 713). Absent on a db-only team.
+   */
+  rosterHome?: string | undefined;
+  role?: string | undefined;
   /** A declared model for the seat's binding (ADR 101). Never a guess. */
   model?: string | undefined;
   /** The human steering this seat, if any (ADR 155). */
@@ -60,6 +70,8 @@ export interface ProvisionSeatResult {
    * failures ride the outcome's `error`, never `wiringError` or a throw.
    */
   toolkitProvision: ToolkitProvisionOutcome[];
+  /** Skill bridges written because reconcile left them absent, and missing-skill lines (ADR 713). */
+  skillNotes: string[];
 }
 
 /** `pending` (selected but not installed) is NOT wired: launching it would fail at spawn. */
@@ -118,6 +130,11 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     const recorded = prior.kind === 'valid' ? prior.value : null;
     desired = input.wiring.keepDesired && recorded ? recorded.desired : input.wiring.desired;
     toolkitName = input.wiring.keepToolkit && recorded ? recorded.toolkit : input.wiring.toolkit;
+    // `--profile` omitted and nothing recorded yet: the role file's toolkit is the equipment
+    // (ADR 713). An explicit profile, or a re-run that keeps a recorded name, wins.
+    if (!toolkitName && input.rosterHome) {
+      toolkitName = defaultRecordedToolkit(input.rosterHome, name, ws.dir);
+    }
     saveProvisioning(ws.dir, {
       version: 3,
       toolkit: toolkitName,
@@ -138,6 +155,14 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
   try {
     // Claude Code's `claude mcp` local scope is keyed by the process cwd, not ctx.worktreeRoot.
     process.chdir(ws.dir);
+    // A bundled built-in the repo lacks has to be on disk before reconcile plans its bridge.
+    installMissingBuiltinRoleSkills({
+      workspace: ws.dir,
+      rosterHome: input.rosterHome,
+      seat: name,
+      team,
+      harnessIds: desired,
+    });
     wiring = await (input.wiring.reconcile ?? reconcileHarnesses)(
       withRoleSkills(defaultHarnessContext(ws.dir, process.env, { team })),
       desired,
@@ -155,37 +180,17 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     process.chdir(prevCwd);
   }
 
-  // The toolkit's tools, into every wired harness (ADR 708) — the step seat creation used
-  // to skip, so a role's seat started without its equipment. Best-effort like init: what
-  // was written is recorded under the manifest's `role-tools` contribution (the key
-  // `musterd uninstall` consults), merged with whatever a previous run recorded.
-  let toolkitProvision: ToolkitProvisionOutcome[] = [];
-  if (toolkitName && toolkitName !== 'generalist') {
-    try {
-      const toolkit = loadToolkit(ws.dir, toolkitName);
-      toolkitProvision = await provisionToolkitIntoHarnesses(toolkit, desired, ws.dir);
-      const added = toolkitProvision.flatMap((o) =>
-        o.servers.map((s) => `role-server ${o.harness} ${s}`),
-      );
-      if (added.length > 0) {
-        const current = loadProvisioning(ws.dir);
-        if (current.kind === 'valid') {
-          const existing = current.value.contributions['role-tools'] ?? [];
-          saveProvisioning(ws.dir, {
-            ...current.value,
-            contributions: {
-              ...current.value.contributions,
-              'role-tools': [...new Set([...existing, ...added])],
-            },
-          });
-        }
-      }
-    } catch {
-      // An unloadable toolkit must not fail a seat whose wiring already landed; the
-      // recorded toolkit name stays in provisioned.json for a later re-provision.
-      toolkitProvision = [];
-    }
-  }
+  // The role's toolkit, plus whatever was recorded, into every wired harness (ADR 708, ADR 713).
+  // Best-effort: a failure is an outcome, never a failed seat. What was written is recorded
+  // under the manifest's `role-tools` contribution, the key `musterd uninstall` consults.
+  const equipped = await finishRoleEquipment({
+    workspace: ws.dir,
+    rosterHome: input.rosterHome,
+    seat: name,
+    team,
+    harnessIds: desired,
+    recorded: toolkitName,
+  });
 
   return {
     workspace: ws,
@@ -193,6 +198,10 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     granted: grant !== undefined,
     wiring,
     wiringError,
-    toolkitProvision,
+    toolkitProvision: equipped.outcomes,
+    skillNotes: [
+      ...equipped.skills.written.map((w) => `wrote role skill bridge ${w}`),
+      ...equipped.skills.notes,
+    ],
   };
 }

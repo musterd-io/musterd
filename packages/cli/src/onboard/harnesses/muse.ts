@@ -35,8 +35,9 @@ import {
  * is how the shape was found).
  *
  * Muse reads `.agents/skills` natively, which is where musterd's canonical skill already lives —
- * so unlike Grok/Codex there is no per-harness skill bridge to write; guidance.skillPath names
- * the shared path. The env channel does NOT reach Muse's MCP stdio children (measured: only
+ * so, like Codex, there is no per-harness role-skill bridge (ADR 713); Grok, Claude Code, and
+ * Cursor write one. guidance.skillPath names the shared path. The env channel does NOT reach
+ * Muse's MCP stdio children (measured: only
  * `MUSE_SESSION_ID` arrives), so the ADR 354 lease file is the attestation (as for Codex).
  */
 

@@ -209,7 +209,89 @@ describe('role assign (ADR 227 — roster roles, run in the roster home)', () =>
       writeRosterHome();
       await roleCommand(parsed(['assign', 'izzo', 'platform']), { seatWorkspace: () => ws });
       expect(readPerms(ws).deny ?? []).toEqual([]);
+      expect(out).not.toMatch(/provisioned toolkit|uninstall --role-tools/);
     });
+  });
+
+  it('equips the role skill and toolkit into the seat harnesses (ADR 713)', async () => {
+    const m = writeRosterHome();
+    writeFileSync(
+      join(m, 'roles', 'ios-engineer.toml'),
+      'summary = "iOS"\ntoolkit = "ios"\nskill = "ios-engineer"\n',
+    );
+    const ws = join(cwd, 'seat-worktree');
+    mkdirSync(join(ws, '.musterd'), { recursive: true });
+    mkdirSync(join(ws, '.agents', 'skills', 'ios-engineer'), { recursive: true });
+    mkdirSync(join(ws, '.grok'), { recursive: true });
+    writeFileSync(
+      join(ws, '.agents', 'skills', 'ios-engineer', 'SKILL.md'),
+      '---\nname: ios-engineer\ndescription: Build the iOS app.\n---\n\nFollow it.\n',
+    );
+    writeFileSync(
+      join(ws, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: '',
+        desired: ['grok', 'opencode'],
+        contributions: {},
+        provisionedAt: '2026-10-22T00:00:00.000Z',
+      }),
+    );
+    writeFileSync(
+      join(ws, '.grok', 'config.toml'),
+      '[mcp_servers.musterd]\ncommand = "node"\nargs = ["bin.js"]\n\n[permission]\nallow = [\n  "Read",\n]\n',
+    );
+    const reconcile = vi.fn(async () => ({ ok: true, results: [] }));
+    expect(
+      await roleCommand(parsed(['assign', 'izzo', 'ios-engineer']), {
+        seatWorkspace: () => ws,
+        reconcile: reconcile as never,
+      }),
+    ).toBe(0);
+    expect(reconcile).toHaveBeenCalledOnce();
+    const bridge = readFileSync(join(ws, '.grok', 'skills', 'ios-engineer', 'SKILL.md'), 'utf8');
+    expect(bridge).toContain('Build the iOS app.');
+    expect(bridge).toContain('.agents/skills/ios-engineer/SKILL.md');
+    const grok = readFileSync(join(ws, '.grok', 'config.toml'), 'utf8');
+    expect(grok.match(/\[permission\]/g)).toHaveLength(1);
+    expect(grok).toContain('[mcp_servers.musterd]');
+    expect(grok).toContain('url = "https://mcp.expo.dev/mcp"');
+    expect(grok).toContain('xcodebuildmcp@latest');
+    const oc = JSON.parse(readFileSync(join(ws, '.opencode', 'opencode.json'), 'utf8')) as {
+      mcp: Record<string, unknown>;
+    };
+    expect(oc.mcp['expo']).toEqual({ type: 'remote', url: 'https://mcp.expo.dev/mcp' });
+    expect(oc.mcp['apple-docs']).toMatchObject({ type: 'local' });
+    expect(out).toMatch(/opencode has no project skill catalog/);
+    const provisioned = JSON.parse(readFileSync(join(ws, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(provisioned.toolkit).toBe('ios');
+    expect(provisioned.contributions['role-tools']).toEqual(
+      expect.arrayContaining([
+        'role-server grok expo',
+        'role-server grok xcodebuild',
+        'role-server grok apple-docs',
+        'role-server opencode expo',
+      ]),
+    );
+
+    out = '';
+    expect(
+      await roleCommand(parsed(['assign', 'izzo', 'ios-engineer'], { remove: true }), {
+        seatWorkspace: () => ws,
+        reconcile: reconcile as never,
+      }),
+    ).toBe(0);
+    expect(out).toMatch(/uninstall --role-tools/);
+    const cleared = JSON.parse(readFileSync(join(ws, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(cleared.toolkit).toBe('');
+    expect(
+      (
+        JSON.parse(readFileSync(join(ws, '.opencode', 'opencode.json'), 'utf8')) as {
+          mcp: Record<string, unknown>;
+        }
+      ).mcp['expo'],
+    ).toBeDefined();
+    expect(existsSync(join(ws, '.grok', 'skills', 'ios-engineer', 'SKILL.md'))).toBe(true);
   });
 
   it('refuses an unknown role, naming the library (typo-guard; --force overrides)', async () => {

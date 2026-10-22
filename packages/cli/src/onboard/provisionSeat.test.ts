@@ -103,6 +103,53 @@ describe('provisionSeat — toolkit auto-provisioning (ADR 708)', () => {
     ]);
   });
 
+  it('records the held role toolkit when the caller named none', async () => {
+    const roster = join(dir, 'roster');
+    mkdirSync(join(roster, '.musterd', 'seats'), { recursive: true });
+    mkdirSync(join(roster, '.musterd', 'roles'), { recursive: true });
+    writeFileSync(
+      join(roster, '.musterd', 'seats', 'dana-scout.toml'),
+      'kind = "agent"\nrole = "ios-engineer"\n',
+    );
+    writeFileSync(
+      join(roster, '.musterd', 'roles', 'ios-engineer.toml'),
+      'summary = "iOS"\ntoolkit = "ios"\nskill = "ios-engineer"\n',
+    );
+    const r = await provisionSeat(
+      input({
+        rosterHome: roster,
+        role: 'ios-engineer',
+        wiring: {
+          desired: ['opencode'],
+          toolkit: '',
+          reconcile: vi.fn(async () => report() as never),
+        },
+      }),
+    );
+    const provisioned = JSON.parse(readFileSync(join(dir, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(provisioned.toolkit).toBe('ios');
+    expect(r.toolkitProvision[0]).toMatchObject({
+      harness: 'opencode',
+      servers: ['expo', 'xcodebuild', 'apple-docs'],
+    });
+    expect(r.skillNotes.join('\n')).toMatch(/not a bundled built-in/);
+  });
+
+  it('reports an unloadable recorded toolkit without provisioning or throwing', async () => {
+    const r = await provisionSeat(
+      input({
+        wiring: {
+          desired: ['opencode'],
+          toolkit: 'no-such-toolkit',
+          reconcile: vi.fn(async () => report() as never),
+        },
+      }),
+    );
+    expect(r.wiringError).toBeNull();
+    expect(r.toolkitProvision.some((o) => o.error?.includes('unknown toolkit'))).toBe(true);
+    expect(existsSync(join(dir, '.opencode', 'opencode.json'))).toBe(false);
+  });
+
   it('provisions nothing for the generalist toolkit or no toolkit', async () => {
     const generalist = await provisionSeat(
       input({

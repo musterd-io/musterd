@@ -95,8 +95,8 @@ export async function agentCommand(
       2,
     );
   }
-  // ADR 272 inc 2 — the split: `--role` is the team fact (roster label) and `--profile` is the
-  // local setup (the Workspace's toolkit); neither implies the other.
+  // `--role` is the team fact. `--profile` records an explicit toolkit. When `--profile` is
+  // omitted and the Workspace has none yet, seat creation records the role's toolkit (ADR 713).
   const role = flagStr(parsed.flags, 'role');
   const toolkit = flagStr(parsed.flags, 'profile') ?? '';
   // ADR 374: the seat's colour, if the creator chose one. Validated first so a typo touches nothing.
@@ -304,6 +304,9 @@ export async function agentCommand(
         `${theme.ok(sym.ok)} provisioned toolkit tools for ${o.harness}: ${o.servers.join(', ')}${o.skipped.length ? ` (skipped: ${o.skipped.join(', ')})` : ''}\n`,
       );
     }
+  }
+  for (const line of r.skillNotes ?? []) {
+    process.stdout.write(`${theme.warn(sym.warn)} ${line}\n`);
   }
   return 0;
 }

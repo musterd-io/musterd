@@ -26,6 +26,7 @@ import {
   type HarnessInspection,
 } from '../onboard/reconcile/engine.js';
 import { registryOrder, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
+import { finishRoleEquipment, installMissingBuiltinRoleSkills } from '../onboard/roleEquipment.js';
 import { withRoleSkills } from '../onboard/roleSkills.js';
 import { theme } from '../render/theme.js';
 import { renderConfigureReceipt, statusFragmentLine } from './harnessVerdict.js';
@@ -344,11 +345,16 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   out(`${theme.ok('✓')} desired harnesses: ${desired.length > 0 ? desired.join(', ') : '(none)'}`);
   out(pc.dim(`  ${deltaLine(current, desired)}`));
 
-  const report = await reconcileHarnesses(ctx, desired, {
+  // Install a missing bundled skill, then resolve bridges again so reconcile sees the new file.
+  const equipTarget = { workspace: ctx.worktreeRoot, team: ctx.team, harnessIds: desired };
+  installMissingBuiltinRoleSkills(equipTarget);
+  const report = await reconcileHarnesses(withRoleSkills(ctx), desired, {
     legacyRepair: true, // the ONE caller allowed to: the human just confirmed the complete set
     ...(deps?.registry ? { registry: deps.registry } : {}),
   });
+  const equipped = await finishRoleEquipment(equipTarget);
   for (const r of report.results) out(renderConfigureReceipt(r, report.results));
+  for (const line of equipped.lines) out(theme.meta(line));
   if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
   if (report.ok) {
     out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);

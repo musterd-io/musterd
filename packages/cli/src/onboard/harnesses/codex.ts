@@ -103,8 +103,9 @@ export const codex: Harness = {
   surface: 'codex',
   // `.codex/config.toml` is per-folder — and in-tree, so a secret here is committable (ADR 031).
   entryScope: 'folder',
-  // No native `guidance` (ADR 085): Codex has no project-level skill/rule shell. The primer points
-  // at `.musterd/skill/SKILL.md`; ADR 333 adds canonical `.musterd/skill/orient.md` the same way.
+  // No native `guidance` shell for the musterd primer (ADR 085): it points at `.musterd/skill/SKILL.md`,
+  // and ADR 333 adds canonical `.musterd/skill/orient.md` the same way. A role skill is read from
+  // `.agents/skills/<skill>/SKILL.md`; Codex gets no per-harness bridge (ADR 713).
 
   // Codex rollout logs are JSONL carrying the same `message.model` shape, so the shared reader
   // handles both. A `musterd host`-spawned Codex seat is authoritative from its spawn arguments and

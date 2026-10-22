@@ -12,9 +12,14 @@ import {
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, readBindingAt } from '../config.js';
 import { CliError } from '../errors.js';
 import { installSeatPermissions, liftSeatPermissions } from '../onboard/permissions.js';
+import {
+  equipWiredRole,
+  type RoleReconcile,
+  syncRecordedToolkit,
+} from '../onboard/roleEquipment.js';
 import { isBuiltin, loadToolkit, toolkitHomes, type Toolkit } from '../onboard/toolkit.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -63,6 +68,8 @@ export interface RoleDeps {
   fetchRoster?: (flags: Parsed['flags']) => Promise<RosterRead | null>;
   /** Where a seat's worktree lives (ADR 261 inc 2) — injectable so tests need no global registry. */
   seatWorkspace?: (seat: string) => string | undefined;
+  /** Harness reconcile for an assign that has a desired set. Tests stub it; production runs the engine. */
+  reconcile?: RoleReconcile;
 }
 
 /**
@@ -152,7 +159,7 @@ export async function roleCommand(parsed: Parsed, deps: RoleDeps = {}): Promise<
   if (sub === 'list') return roleList(parsed, await fetchRoster(parsed.flags));
   if (sub === 'show') return roleShow(parsed, await fetchRoster(parsed.flags));
   if (sub === 'create') return roleCreate(parsed);
-  if (sub === 'assign') return roleAssign(parsed, deps.seatWorkspace ?? defaultSeatWorkspace);
+  if (sub === 'assign') return roleAssign(parsed, deps);
   throw new CliError('usage: musterd role <list|show|create|assign> ...', 2);
 }
 
@@ -169,10 +176,8 @@ function holdersOf(roster: RosterRead, name: string): string[] {
  * An unknown role is refused with the library named (a typo-guard, not enforcement — `--force`
  * writes it anyway and reconcile will warn).
  */
-async function roleAssign(
-  parsed: Parsed,
-  seatWorkspace: (seat: string) => string | undefined,
-): Promise<number> {
+async function roleAssign(parsed: Parsed, deps: RoleDeps): Promise<number> {
+  const seatWorkspace = deps.seatWorkspace ?? defaultSeatWorkspace;
   const seatName = parsed.positionals[1];
   const roleName = parsed.positionals[2];
   if (!seatName || !roleName) {
@@ -212,6 +217,13 @@ async function roleAssign(
   writeFileSync(seatPath, serializeSeat(body), 'utf8');
 
   const recompile = recompileSeatPermissions(seatName, roleName, remove, next, seatWorkspace);
+  const equipment = await equipAssignedRole(deps, seatWorkspace, {
+    rosterHome: home,
+    seat: seatName,
+    role: roleName,
+    remove,
+    stillHeld: next,
+  });
 
   if (parsed.flags['json']) {
     process.stdout.write(
@@ -228,7 +240,48 @@ async function roleAssign(
     ) + '\n',
   );
   for (const line of recompile.lines) process.stdout.write(`${line}\n`);
+  for (const line of equipment) process.stdout.write(`  ${theme.meta(line)}\n`);
   return 0;
+}
+
+/**
+ * Equip the seat's roles into the harnesses that Workspace already wants (ADR 713).
+ * No desired set means nothing to do — a roster label with no wiring stays quiet.
+ * Reconcile runs so a bridge is ledger-owned when the harness is installed; a bridge
+ * it leaves absent is written afterwards. Failures are lines, never a failed assign.
+ */
+async function equipAssignedRole(
+  deps: RoleDeps,
+  seatWorkspace: (seat: string) => string | undefined,
+  args: {
+    rosterHome: string;
+    seat: string;
+    role: string;
+    remove: boolean;
+    stillHeld: readonly string[];
+  },
+): Promise<string[]> {
+  const ws = seatWorkspace(args.seat);
+  if (!ws) return [];
+  const synced = syncRecordedToolkit({
+    workspace: ws,
+    rosterHome: args.rosterHome,
+    seat: args.seat,
+    role: args.role,
+    remove: args.remove,
+    stillHeld: args.stillHeld,
+  });
+  if (!synced || synced.desired.length === 0) return synced?.lines ?? [];
+  const team = readBindingAt(ws)?.team;
+  const target = {
+    workspace: ws,
+    rosterHome: args.rosterHome,
+    seat: args.seat,
+    team,
+    harnessIds: synced.desired,
+  };
+  const equipped = await equipWiredRole(target, deps.reconcile);
+  return [...synced.lines, ...equipped.lines];
 }
 
 /**
