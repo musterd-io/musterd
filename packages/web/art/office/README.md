@@ -42,7 +42,10 @@ to half the item resolution** before it is cropped (`SHELL_DOWNSAMPLE`; the mani
 `scale` records it, so `blit.ts` needs no special case), and every PNG is **palette-quantized with
 pngquant** when it is on PATH (`brew install pngquant`; without it the script says so and the files
 are two to three times bigger). Both are lossy in a way nobody can see at the panel's scale, and
-both are the render script's business, not the runtime's.
+both are the render script's business, not the runtime's. After pngquant every file is re-encoded as
+**lossless WebP** when `cwebp` is on PATH (`brew install webp`): the same pixels, ~24% smaller across the
+set at `-z 9` (lane 01M5GYGJD0); the PNG is removed, because the scene globs this folder and a stale copy
+would ship. Without `cwebp` the PNG stays and the runtime reads either.
 
 ## What is rendered (increment 2)
 
@@ -179,7 +182,8 @@ python3 packages/web/art/office/render_watch.py -- \
   ignores the store. The store is this machine's: a fresh machine renders everything once.
 - **A hang costs one call.** EEVEE on this laptop can hang on a GPU read (2026-10-21: stuck in
   `MTLStorageBuf::read` at 0% CPU, 70% through a two-hour run that, writing only at the end, lost
-  all of it). `render_watch.py` restarts Blender after three quiet minutes, and the store resumes
+  all of it). `render_watch.py` restarts Blender after three quiet minutes (it runs Blender unbuffered — a held
+  print once read as silence and got a slow WebP pass killed twenty times), and the store resumes
   the run where it stopped.
 - **Lit samples: 16**, down from 32. Side by side at the /live panel's and the 1080p broadcast's
   scale the two were indistinguishable (~0.1% RMSE on three poses), and a lit render takes ~0.18 s

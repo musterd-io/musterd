@@ -25,7 +25,10 @@ MAX_RESTARTS = 20
 
 def run_once(args: list[str]) -> int | None:
     """Exit code, or None when the watchdog killed it for going quiet."""
-    proc = subprocess.Popen([BLENDER, "-b", "--python", RENDER, "--", *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    # Unbuffered: a print held in Blender's buffer reads as silence, and the watchdog would kill a run
+    # that is only slow (cwebp at -z 9 takes ~40 s a sheet) — which it did, twenty times, 2026-10-22.
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen([BLENDER, "-b", "--python", RENDER, "--", *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
     last = [time.monotonic()]
 
     def pump() -> None:

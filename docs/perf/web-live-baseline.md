@@ -1635,6 +1635,19 @@ link's own origin.
 
 - Falsify: the same command on the hub machine reports the answer line over 3,000 ms.
 
+### 2026-10-22 — `officeArtBytes` 13,900,000 → 10,700,000 B: the office art as lossless WebP (lane `01M5GYGJD0`)
+
+| Budget     | Before (main) | This branch  | Ceiling                                |
+| ---------- | ------------- | ------------ | -------------------------------------- |
+| office art | 13,897,996 B  | 10,601,138 B | RE-BASELINED 13,900,000 → 10,700,000 B |
+
+Every room asset and figure sheet is re-encoded losslessly after pngquant (`render.py` `to_webp`,
+`cwebp -lossless -z 9`), so the pixels are the ones the PNGs carried. Effort matters: the hoodie sheet is
+1,218,058 B at `-z 6` and 1,106,598 B at `-z 9` (40 s against 1 s to encode, paid once at render time).
+Decode is not the cost it could have been: the two heaviest sheets (skin, 1024×8180; hoodie) decode in
+~30 ms each in Chrome. A full team still downloads most of the figure; resolution is the next lever.
+
+- Falsify: `pnpm perf:check` after a build reports office art above 10,700,000 B with this change in.
 ### 2026-10-22 — the rendered office fetches only the figure sheets its team wears (lane `01M5GX1F3J`)
 
 No budget moves: `officeArtBytes` gates what the build carries, and this changes what a viewer downloads.
