@@ -1,13 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { LANE_CONTENDING_STATES } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseArgs } from '../args.js';
+import { STANDING_TITLE } from '../broadcast/channelTitle.js';
 import { prepareBuildSource, writeCaptureImage } from '../broadcast/hosted.js';
 import { readStreamState, writeStreamState } from '../broadcast/streamState.js';
 import { CliError } from '../errors.js';
 import type { Exec, ExecResult } from '../process.js';
-import { streamCommand, type StreamDeps } from './stream.js';
+import { TITLE_BOARD_QUERY, streamCommand, type StreamDeps } from './stream.js';
 
 const ok = (stdout = ''): ExecResult => ({ code: 0, stdout, stderr: '' });
 
@@ -66,6 +68,8 @@ describe('musterd stream', () => {
       mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
       stageSeat: () => ({ code: 0, output: '' }),
       postWindDown: async () => true,
+      // Hermetic: the real reader dials the daemon. A test that cares about the title overrides this.
+      titleFor: async () => ({ ok: true, title: STANDING_TITLE }),
     };
   });
 
@@ -540,6 +544,62 @@ describe('musterd stream', () => {
       expect(flyArgs.join(' ')).not.toContain('mscr_test');
     });
 
+    it('start asks the machine for the derived title and records it', async () => {
+      withImage();
+      const title = 'Coffee & musterd - building the /watch page';
+      let flyArgs: string[] = [];
+      expect(
+        await run(['start'], {
+          ...sup(),
+          titleFor: async () => ({ ok: true, title }),
+          launch: (args) => ((flyArgs = args), (launches += 1), { code: 0, output: '' }),
+        }),
+      ).toBe(0);
+      expect(flyArgs).toContain(`MUSTERD_STREAM_TITLE=${title}`);
+      expect(flyArgs).toContain('MUSTERD_STREAM_TITLE_PREV=');
+      expect(readStreamState(statePath)!.title).toBe(title);
+      expect(out.join('')).toContain(title);
+      expect(flyArgs.join(' ')).not.toContain('mscr_test');
+    });
+
+    it('a board read failure keeps the previous title', async () => {
+      withImage();
+      const prev = 'Coffee & musterd - the twitch channel audit';
+      writeStreamState(statePath, {
+        desired: 'stopped',
+        at: 1,
+        restarts: [],
+        title: prev,
+      });
+      let flyArgs: string[] = [];
+      expect(
+        await run(['start'], {
+          ...sup(),
+          titleFor: async () => ({ ok: false }),
+          launch: (args) => ((flyArgs = args), (launches += 1), { code: 0, output: '' }),
+        }),
+      ).toBe(0);
+      expect(flyArgs).toContain(`MUSTERD_STREAM_TITLE=${prev}`);
+      expect(flyArgs).toContain(`MUSTERD_STREAM_TITLE_PREV=${prev}`);
+      expect(readStreamState(statePath)!.title).toBe(prev);
+      expect(out.join('')).toContain('could not read the board — keeping the last title');
+    });
+
+    it('the title board read asks only for the contending states', () => {
+      // One term per state the derivation can use, and nothing else: an unfiltered board carries
+      // lanes the title ignores, and one over-long `claims` row fails the whole schema.
+      for (const state of LANE_CONTENDING_STATES) {
+        expect(TITLE_BOARD_QUERY.split(' ')).toContain(`state:${state}`);
+      }
+      expect(TITLE_BOARD_QUERY.split(' ').filter((t) => !t.startsWith('state:'))).toEqual([]);
+      expect(TITLE_BOARD_QUERY.split(' ')).toHaveLength(LANE_CONTENDING_STATES.size);
+    });
+
+    it('apply-title prints one line and exits 0 when the token is unset', async () => {
+      expect(await run(['apply-title'], { env: {} })).toBe(0);
+      expect(out.join('')).toBe('title off — twitch token unset\n');
+    });
+
     it('a seat that cannot be staged launches nothing', async () => {
       withImage();
       await expect(
@@ -854,6 +914,63 @@ describe('musterd stream', () => {
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
       expect(out.join('')).toContain('broadcast args kept (--duration 600)');
       expect(readStreamState(statePath)!.args).toBe('--duration 600');
+    });
+
+    it('a crash relaunch repeats the stored title and does not read the board', async () => {
+      withImage();
+      const title = 'Coffee & musterd - the twitch channel audit';
+      writeStreamState(statePath, {
+        desired: 'live',
+        team: 'revive',
+        at: NOW - 60_000,
+        restarts: [],
+        title,
+      });
+      let flyArgs: string[] = [];
+      let asked = 0;
+      expect(
+        await run(
+          ['ensure'],
+          sup({
+            titleFor: async () => {
+              asked += 1;
+              return { ok: true, title: STANDING_TITLE };
+            },
+            launch: (args) => {
+              flyArgs = args;
+              launches += 1;
+              return { code: 0, output: '' };
+            },
+          }),
+        ),
+      ).toBe(0);
+      expect(asked).toBe(0);
+      expect(flyArgs).toContain(`MUSTERD_STREAM_TITLE=${title}`);
+      expect(flyArgs).toContain(`MUSTERD_STREAM_TITLE_PREV=${title}`);
+    });
+
+    it('a crash relaunch with no stored title passes no title env', async () => {
+      withImage();
+      writeStreamState(statePath, {
+        desired: 'live',
+        team: 'revive',
+        at: NOW - 60_000,
+        restarts: [],
+      });
+      let flyArgs: string[] = [];
+      expect(
+        await run(
+          ['ensure'],
+          sup({
+            launch: (args) => {
+              flyArgs = args;
+              launches += 1;
+              return { code: 0, output: '' };
+            },
+          }),
+        ),
+      ).toBe(0);
+      expect(flyArgs.join(' ')).not.toContain('MUSTERD_STREAM_TITLE');
     });
 
     it('start records --args on the stream record so a later relaunch can replay them', async () => {

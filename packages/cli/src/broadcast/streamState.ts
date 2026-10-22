@@ -11,6 +11,7 @@
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { isSessionTitle } from './channelTitle.js';
 
 export interface StreamState {
   desired: 'live' | 'stopped';
@@ -60,6 +61,13 @@ export interface StreamState {
    * and the real stop cannot drift apart. Absent when no stop is queued.
    */
   stopAt?: number;
+  /**
+   * The session title the last `stream start` asked the machine to apply (ADR 711). A supervisor
+   * relaunch passes this same string as both desired and previous, so a bounce does not read the
+   * board again and does not move the title. Absent on state written before the field existed —
+   * those relaunches pass no title env, and an empty env does not replace a human-set title.
+   */
+  title?: string;
   /**
    * When the supervisor stopped a machine that was up but not encoding (ADR 737). The next tick
    * finds no machine and relaunches it as the same event: the restart was charged when the stall
@@ -251,15 +259,19 @@ export function readStreamState(path: string): StreamState | null {
     if (raw.desired !== 'live' && raw.desired !== 'stopped') return null;
     // A tampered or legacy value must not become a `fly` argument. Hex only; anything else is
     // absent — the key is omitted, so a file from before this field still round-trips.
-    const { machine: rawMachine, ...rest } = raw;
+    const { machine: rawMachine, title: rawTitle, ...rest } = raw;
     const machine =
       typeof rawMachine === 'string' && /^[0-9a-f]{4,}$/i.test(rawMachine)
         ? rawMachine.toLowerCase()
         : undefined;
+    // Same rule as `machine`: a tampered title must not become a `fly` env value. A newline here
+    // would split the argument. Anything that is not a session title is absent.
+    const title = typeof rawTitle === 'string' && isSessionTitle(rawTitle) ? rawTitle : undefined;
     return {
       ...rest,
       restarts: Array.isArray(raw.restarts) ? raw.restarts : [],
       ...(machine ? { machine } : {}),
+      ...(title ? { title } : {}),
     };
   } catch {
     return null; // missing or unparseable — fail safe: no state, no enforcement
