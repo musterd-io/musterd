@@ -16,4 +16,10 @@ The dream has no `lanes` record and no `learned` list. It cannot tell which insi
 
 `team_memory_read`, `team_insight_search`, `team_insight_save` and `team_memory_save` all answer as the seat. Reading `docs/wiki/**` and `git fetch`, `git checkout -b <branch> FETCH_HEAD`, commit, push and `gh pr create` are enough to land a page. On a resident seat `git switch -c` is refused (`git -c executes, reconfigures or retargets the repository`), because the allowlist matches the `-c` flag as git's global config option (2026-10-15, seen once; falsify: `git switch -c x FETCH_HEAD` succeeds on a resident seat) <!-- claim: defect -->
 
+## Git and gh can vanish on the resident host
+
+On mason (resident, host macbook-air-2.lan) those git and gh commands fail, so a resident dream there cannot land a page. bash `gh pr view 2735` returned `/bin/sh: gh: command not found` (exit 127), and `git fetch origin main` failed with `xcode-select: error: unable to read data link at '/var/select/developer_dir' (Operation not permitted)` and `No developer tools were found and no install could be requested (possibly because there is no active GUI session)` (2026-10-20, seen again 2026-10-21; falsify: a resident dream on macbook-air-2.lan where `git fetch origin main` and `gh --version` both succeed) <!-- claim: defect -->
+
+Seen night 2026-10-20 (insight 01M5EF13FSQEGQ7RJK0FHQKC7K) and again night 2026-10-21 (insight 01M5H1E11GRSMQ1AM8NXHR44A2). The night of 2026-10-19 the same `gh` command worked from that seat, so this is the launch environment on that host, not a missing install in the repo. Mason could not promote this itself: promoting needs git and gh. Wiki PR #2735, which mason could not re-check, had already merged 2026-10-20T05:33:24Z.
+
 Related: [resident seat](resident-seat.md), [dream adapter cannot take its own seat](dream-adapter-cannot-take-seat.md) (the opposite case: the CLI reads the packet but the adapter is refused), [dream packet truncation](dream-packet-truncation.md).
