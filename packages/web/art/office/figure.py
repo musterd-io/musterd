@@ -62,7 +62,7 @@ ACCS = ["glasses", "headphones", "scarf"]
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it.
 CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
 LAYERS = (
-    ["skin", "eyes"]
+    ["skin", "eyes", "mouth/soft", "mouth/wide"]
     + [f"hair/{h}" for h in HAIR]
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
@@ -246,7 +246,8 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     eye = scene.matte("fig-eye", (0.03, 0.025, 0.02), 0.15)  # the iris: gloss, so it catches the light
     eye_white = scene.matte("fig-eye-white", scene.srgb("#f2ece4"), 0.35)
     brow = grey("fig-brow", 0.3, 0.8)
-    mouth = scene.matte("fig-mouth", (0.42, 0.22, 0.2), 0.5)
+    lips = grey("fig-lips", 0.42, 0.5)  # tinted with the skin at runtime: a darker shade of it
+    mouth_in = grey("fig-mouth-in", 0.08, 0.6)
 
     # joints
     r.joint("root", None, 0, 0, 0)
@@ -274,7 +275,12 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         hd("cheek", HEAD_X + R * 0.45, sy * R * 0.35, HEAD_C + R * 0.05, R * 0.38, R * 0.3, R * 0.3)
         hd("ear", HEAD_X - R * 0.05, sy * R * 0.86, HEAD_C + R * 0.3, R * 0.12, R * 0.08, R * 0.2)
         hd("lid", HEAD_X + R * 0.74, sy * R * 0.3, HEAD_C + R * 0.47, R * 0.13, R * 0.19, R * 0.08)
-    hd("nose", HEAD_X + R * 0.9, 0, HEAD_C + R * 0.02, R * 0.16, R * 0.12, R * 0.2)
+    # a nose with a bridge from the brow, a rounded tip that catches the light, and small wings — it was a
+    # dot that vanished at office size (nick, 2026-10-22: "what about noses and mouths?")
+    hd("bridge", HEAD_X + R * 0.86, 0, HEAD_C + R * 0.18, R * 0.12, R * 0.09, R * 0.26)
+    hd("nose", HEAD_X + R * 0.96, 0, HEAD_C - R * 0.02, R * 0.15, R * 0.13, R * 0.14)
+    for sy in (1, -1):
+        hd("nostril", HEAD_X + R * 0.86, sy * R * 0.11, HEAD_C - R * 0.06, R * 0.1, R * 0.08, R * 0.08)
     # eyes are their own untinted layer: a skin tint over a white would turn it mint on a mint skin
     for sy in (1, -1):
         # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): a white and an iris
@@ -282,8 +288,24 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.orb("eyewhite", "head", "eyes", eye_white, HEAD_X + R * 0.76, sy * R * 0.3, HEAD_C + R * 0.38, R * 0.1, R * 0.16, R * 0.15)
         r.orb("iris", "head", "eyes", eye, HEAD_X + R * 0.85, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.05, R * 0.105, R * 0.125)
         r.turn(r.orb("brow", "head", "skin", brow, HEAD_X + R * 0.8, sy * R * 0.32, HEAD_C + R * 0.6, R * 0.08, R * 0.2, R * 0.045), (math.radians(sy * -8), 0, 0))
-    r.orb("mouth", "head", "skin", mouth, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.3, R * 0.1, R * 0.22, R * 0.055)
-    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.5, 0, NECK - 3 * FIG, 3.4 * FIG, 2.9 * FIG, 7.5 * FIG)["fuse"] = "skin"
+    # the mouth is the member's own smile (`appearance.ts` smile): its own layer, tinted with their skin,
+    # so a darker grey reads as lips on any skin. Soft: corners just turned up. Wide: a broader curve,
+    # parted, the inside dark.
+    def smile(layer, half, lift, parted):
+        for i in range(-3, 4):
+            t = i / 3
+            r.orb("lip", "head", layer, lips, HEAD_X + R * (0.83 - 0.06 * t * t), t * R * half, HEAD_C - R * 0.32 + lift * R * t * t,
+                  R * 0.07, R * half / 3.2, R * (0.05 if parted else 0.04))
+        if parted:
+            r.orb("inside", "head", layer, mouth_in, HEAD_X + R * 0.84, 0, HEAD_C - R * 0.31, R * 0.05, R * half * 0.7, R * 0.025)
+    smile("mouth/soft", 0.2, 0.05, False)
+    smile("mouth/wide", 0.27, 0.09, True)
+    # the neck: wider where it meets the shoulders and sloping into them (the trapezius), not a post the
+    # head sits on (nick, 2026-10-22: "make their necks a little smoother/more natural looking")
+    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.5, 0, NECK - 3 * FIG, 4.0 * FIG, 3.0 * FIG, 6.5 * FIG)["fuse"] = "skin"
+    sk("nape", "neck", HEAD_X * 0.3, 0, NECK - 1.6 * FIG, 3.6 * FIG, 4.4 * FIG, 2.6 * FIG)
+    for sy in (1, -1):
+        r.turn(sk("trap", "spine", -0.4 * FIG, sy * 4.6 * FIG, SHOULDER + 1.0 * FIG, 3.0 * FIG, 4.6 * FIG, 1.7 * FIG), (math.radians(sy * 18), 0, 0))
     for side, sy in (("L", 1), ("R", -1)):
         y = sy * SHOULDER_W
         sk("shoulder", f"shoulder{side}", 0, y, SHOULDER - 0.4 * FIG, 3.1 * FIG, 3.0 * FIG, 3.0 * FIG)

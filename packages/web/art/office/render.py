@@ -394,7 +394,7 @@ def render_figure(a: dict) -> None:
         b = set(base)
         if layer.startswith("top/") or layer == "shoes":
             return b | {"bottom"}
-        if layer == "acc/scarf" or layer == "bottom" or layer.startswith("tell/"):
+        if layer == "acc/scarf" or layer == "bottom" or layer.startswith(("tell/", "mouth/")):
             return b
         return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 

@@ -36,6 +36,7 @@ describe('layersFor (office realism Task 11)', () => {
     expect(layersFor(femme, 'human', '#3366cc').map((l) => l.id)).toEqual([
       'skin',
       'eyes',
+      'mouth/soft',
       'shoes',
       'bottom',
       'top/hoodie',
@@ -49,10 +50,16 @@ describe('layersFor (office realism Task 11)', () => {
   it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
     const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', accessory: 'none', cut: 'tee' };
     const layers = layersFor(agent, 'agent', '#5b8def');
-    expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
+    expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
     expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');
     expect(layers.find((l) => l.id === 'tell/collar')?.color).toBe('#5b8def');
     expect(layers[0]).toEqual({ id: 'skin', color: agent.skin });
+  });
+
+  it("a member's mouth is their own smile, in a darker shade of their skin", () => {
+    const wide: Appearance = { ...femme, smile: 'wide' };
+    const mouth = layersFor(wide, 'human').find((l) => l.id.startsWith('mouth/'));
+    expect(mouth).toEqual({ id: 'mouth/wide', color: wide.skin });
   });
 
   it('a human has neither tell', () => {
@@ -61,7 +68,7 @@ describe('layersFor (office realism Task 11)', () => {
 
   it('what they carry draws after the clothes: a carrying walker gets its laptop layer, untinted', () => {
     const ids = layersFor(femme, 'human', null, { carry: 'laptop' }).map((l) => l.id);
-    expect(ids).toEqual(['skin', 'eyes', 'shoes', 'bottom', 'top/hoodie', 'carry/laptop', 'hair/bun', 'acc/glasses']);
+    expect(ids).toEqual(['skin', 'eyes', 'mouth/soft', 'shoes', 'bottom', 'top/hoodie', 'carry/laptop', 'hair/bun', 'acc/glasses']);
     expect(layersFor(femme, 'human', null, { carry: 'laptop' }).find((l) => l.id === 'carry/laptop')?.color).toBeNull();
   });
 
@@ -82,7 +89,7 @@ describe('layersFor (office realism Task 11)', () => {
 
   it('bald, clean-shaven, hatless, no accessory: only the base layers', () => {
     const plain: Appearance = { ...femme, hair: 'bald', accessory: 'none' };
-    expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'eyes', 'shoes', 'bottom', 'top/hoodie']);
+    expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'eyes', 'mouth/soft', 'shoes', 'bottom', 'top/hoodie']);
   });
 });
 

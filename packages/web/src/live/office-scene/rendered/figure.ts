@@ -5,7 +5,7 @@
  * A layer whose sheet is missing is skipped, so a new hair style or hat added to `appearance.ts`
  * before its sheet is rendered draws the figure without it, never nothing (Review Focus 2).
  */
-import { type Accessory, type Appearance, type FacialHair, type Hat, type HairStyle, lookFor, type TopCut } from '../appearance';
+import { type Accessory, type Appearance, type FacialHair, type Hat, type HairStyle, lookFor, type Smile, type TopCut } from '../appearance';
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
@@ -14,6 +14,7 @@ import { type CreateCanvas, defaultCreate, mulHex, tintFrame } from './tint';
 export type LayerId =
   | 'skin'
   | 'eyes'
+  | `mouth/${Smile}`
   | `hair/${HairStyle}`
   | `facial/${FacialHair}`
   | `hat/${Hat}`
@@ -88,6 +89,8 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   const out: Layer[] = [{ id: 'skin', color: a.skin }, { id: 'eyes', color: null }];
   const agent = kind === 'agent';
   if (agent) out.push({ id: 'tell/eyes', color: topColor });
+  // their own smile (`appearance.ts`), a darker grey tinted with their skin, so it reads as lips on any skin
+  out.push({ id: `mouth/${a.smile}`, color: a.skin });
   out.push({ id: 'shoes', color: a.shoes });
   out.push({ id: 'bottom', color: a.bottom });
   out.push({ id: `top/${a.cut}`, color: topColor });
