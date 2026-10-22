@@ -17,7 +17,7 @@
 
 Create a component `terminal/frame`:
 
-- **80 columns × variable rows**, JetBrains Mono `14/22` ([ADR 705](../decisions/705-web-type-dm-sans.md); the real CLI inherits the user's terminal font).
+- **80 columns × variable rows**, JetBrains Mono `14/22` ([ADR 706](../decisions/706-web-type-dm-sans.md); the real CLI inherits the user's terminal font).
 - Background `zinc-900` (`#18181B`), default text `zinc-50`.
 - A 2-row chrome header is optional and OFF by default (we show raw output, not a fake window). If shown, use a minimal dotless bar.
 - Define **ANSI color styles** as Figma styles, mapped per `brand.md` §2: `ansi/yellow-bold` (accent), `ansi/cyan` (agent name), `ansi/magenta` (human name), `ansi/green` (online/success), `ansi/yellow` (away/warning), `ansi/red` (error/decline), `ansi/bright-black` (dim/meta), `ansi/white` (default).

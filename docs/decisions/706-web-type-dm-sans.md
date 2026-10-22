@@ -1,4 +1,4 @@
-# 705 — Web type: DM Sans replaces Recursive
+# 706 — Web type: DM Sans replaces Recursive
 
 - Status: accepted — 2026-10-21
 - Date: 2026-10-21
@@ -9,7 +9,7 @@
 
 ## Context
 
-ADR 477 put the web on one family, Recursive, in three committed cuts: casual for display, linear for body, mono for data. On 2026-10-21 nick compared Figtree, Plus Jakarta Sans, Bricolage Grotesque, Lexend, DM Sans and Onest on the same /live slice and chose DM Sans: warm, SaaS-clean, rounded enough to sit with the mark. The wordmark is the drawn nameplate (ADR 704) and does not depend on the text face.
+ADR 477 put the web on one family, Recursive, in three committed cuts: casual for display, linear for body, mono for data. On 2026-10-21 nick compared Figtree, Plus Jakarta Sans, Bricolage Grotesque, Lexend, DM Sans and Onest on the same /live slice and chose DM Sans: warm, SaaS-clean, rounded enough to sit with the mark. The wordmark is the drawn nameplate (ADR 704) and does not depend on the text face. This record is 706 because 705 landed first as the MCP inbox blocking wait (PR #3169) while this one was still a draft reservation.
 
 The companion mono was open. An ask to nick (`01M5GWP59C67EGQWY251HJBR1A`, standard, 5 minutes) named DM Mono. The window passed with no answer. Measurement then changed the recommendation, recorded on `01M5GX3XBQA73BXH3TQ67CYWNW`.
 

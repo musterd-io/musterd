@@ -55,7 +55,7 @@
    * every screen and component. Faces are declared in styles/global.css
    * (@font-face) before a slot can point at them.
    *
-   * ACTIVE (ADR 705) — DM Sans for text, JetBrains Mono for data:
+   * ACTIVE (ADR 706) — DM Sans for text, JetBrains Mono for data:
    *   --font-sans    DM Sans          body, chrome, marketing
    *   --font-display DM Sans          headings, names, chyron labels (same file)
    *   --font-mono    JetBrains Mono   telemetry, timestamps, ids, the CLI mirror

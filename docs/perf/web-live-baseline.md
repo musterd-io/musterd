@@ -1655,7 +1655,7 @@ the layers a team actually wears is the follow-up before the flag goes on (incre
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 13,900,000 B with this change in.
 
-### 2026-10-21 — `totalFontBytes` 164,000 → 127,000 B: DM Sans and JetBrains Mono (ADR 705, lane `01M5GW3H03`)
+### 2026-10-21 — `totalFontBytes` 164,000 → 127,000 B: DM Sans and JetBrains Mono (ADR 706, lane `01M5GW3H03`)
 
 | Budget | Before | This change | Ceiling |
 | ------ | ------ | ----------- | ------- |

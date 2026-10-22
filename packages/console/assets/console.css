@@ -46,7 +46,7 @@
   --c-focus: #15181e;
 
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  /* Same family as the body (ADR 705). Headings and the room are both DM Sans. */
+  /* Same family as the body (ADR 706). Headings and the room are both DM Sans. */
   --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 

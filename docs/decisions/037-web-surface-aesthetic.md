@@ -34,7 +34,7 @@ Split the brand into two registers with one shared anchor.
 
 - **Anchor (unchanged):** mustard `#E1AD01` stays the single accent and the warm through-line on
   every surface. Inter + JetBrains Mono remain the only typefaces. _(Amended 2026-10-21: ADR 477
-  replaced these typefaces with Recursive. ADR 705 replaces Recursive: DM Sans for text, JetBrains
+  replaced these typefaces with Recursive. ADR 706 replaces Recursive: DM Sans for text, JetBrains
   Mono for data.)_ Voice stays plain and declarative
   — copy never says "magic"/"revolutionary"; the *experience* carries the spectacle, the *words* do
   not. The wordmark is still set in lowercase JetBrains Mono. _(Amended 2026-10-21: ADR 704. The

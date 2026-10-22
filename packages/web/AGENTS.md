@@ -115,7 +115,7 @@ against the markdown the moment either changed.
   idle cost is paid by every viewer, forever.
 - **The stream DOM stays windowed** (~60 mounted rows, reveal-on-scrollback, live-edge collapse,
   1,000-envelope memory cap — #328). Don't mount unbounded lists anywhere; window them.
-- **Fonts: DM Sans for text, JetBrains Mono for data** (ADR 705 — two committed latin files;
+- **Fonts: DM Sans for text, JetBrains Mono for data** (ADR 706 — two committed latin files;
   `budgets.json` allowlists `dm-sans-` and `jetbrains-mono-`). A new family is a re-font decision
   with an ADR, not a side-effect (#329). Canvas painters read type via `src/live/canvasFont.ts`
   tokens — never hard-code a family name in a painter.

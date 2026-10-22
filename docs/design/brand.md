@@ -97,7 +97,7 @@ The CLI uses only these mappings so output stays on-brand and degrades cleanly i
 
 ## 3. Typography
 
-Two typefaces ([ADR 705](../decisions/705-web-type-dm-sans.md), 2026-10-21). **DM Sans** is the text face for display and body. **JetBrains Mono** is the data face. Successor to Recursive ([ADR 477](../decisions/477-web-type-recursive.md)).
+Two typefaces ([ADR 706](../decisions/706-web-type-dm-sans.md), 2026-10-21). **DM Sans** is the text face for display and body. **JetBrains Mono** is the data face. Successor to Recursive ([ADR 477](../decisions/477-web-type-recursive.md)).
 
 - **Display and sans (headings, member names, chyron labels, body, web chrome, marketing):** `DM Sans`. CSS tokens `--font-display` and `--font-sans` name the same family. One committed variable file: optical size 9–40 and weight 100–1000. The DOM uses optical sizing. Canvas paints the file's default, optical size 9, because `ctx.font` cannot set axes.
 - **Mono (data, timestamps, ids, CLI-mirroring UI, Figma terminal frames):** `JetBrains Mono`. CSS token `--font-mono`. Digits are equal width. The weight axis runs 100–800, so 600 and 700 are real. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.

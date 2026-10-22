@@ -31,7 +31,7 @@ budget. Canvas painters need a real family name, because `ctx.font` cannot set v
 
 ## Decision
 
-1. **The web uses one family, Recursive** _(Amended 2026-10-21: ADR 705 supersedes this choice. The text face is DM Sans and the data face is JetBrains Mono.)_ (OFL-1.1, Arrow Type), in three cuts:
+1. **The web uses one family, Recursive** _(Amended 2026-10-21: ADR 706 supersedes this choice. The text face is DM Sans and the data face is JetBrains Mono.)_ (OFL-1.1, Arrow Type), in three cuts:
    - `Recursive Casual` (CASL=1) for display: headings, member names, chyron labels, and canvas
      labels, through `--font-display`;
    - `Recursive` (linear) for body, through `--font-sans`;
@@ -51,7 +51,7 @@ budget. Canvas painters need a real family name, because `ctx.font` cannot set v
 
 ## Consequences
 
-- 2026-10-21: [ADR 705](705-web-type-dm-sans.md) supersedes the type choice. The text face is DM Sans and the data face is JetBrains Mono. The three Recursive cuts remain in `docs/demo/fonts/` for the dated decks.
+- 2026-10-21: [ADR 706](706-web-type-dm-sans.md) supersedes the type choice. The text face is DM Sans and the data face is JetBrains Mono. The three Recursive cuts remain in `docs/demo/fonts/` for the dated decks.
 - 2026-10-20: [ADR 681](681-site-neutral-product-palette.md) sets the public site's and the console's
   headings in the linear cut. The casual cut keeps the display role inside /live and the office.
 - Fonts in `dist/client` go from 554.5 KB (the 2026-07-29 baseline) to 139.1 KB in three files. The
