@@ -257,6 +257,7 @@ describe('version-bump discipline (ADR 085)', () => {
     54: '236797f6d10c2c4f', // claim --token (dead since ADR 075) → `musterd move` for moving a seat between machines (ADR 696, lane 01M5G22C7N)
     55: '24dec683fae8b4ce', // + waiting without polling names the MCP form `team_inbox_check {wait}` (ADR 705, lane 01M5GWAW8J)
     56: '08fdbde67bc0bfd6', // + the MCP wait names `until_lane` (ADR 705 fix C, lane 01M5GWB209)
+    57: '7306e6bc111de4dd', // + closing teaches the ADR 603 two-stage risky-lane close; `lane_update` taught + pinned; `team_agent_create` pinned via the remote rail in guidance:check (lane 01M5GYXTK1)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
