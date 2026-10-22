@@ -1,8 +1,10 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -11,10 +13,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  elsewhereLine,
   EMPTY_LAUNCHER_FILE,
+  folderSeat,
   lastUsedAt,
   launcherFilePath,
   readLauncherFile,
+  sameFolder,
+  seatInFolder,
   type Seat,
   withExit,
   withLaunch,
@@ -135,5 +141,130 @@ describe('the snapshot caches the roster-first rows (ADR 503 Decision 4)', () =>
       withSnapshot(structuredClone(EMPTY_LAUNCHER_FILE), { taken_at: 1, seats: [], teams: [] }),
     );
     expect(readLauncherFile(path).snapshot?.members).toBeUndefined();
+  });
+});
+
+describe('folderSeat (ADR 717)', () => {
+  const claim = (name: string, mode = 'seat') =>
+    JSON.stringify({
+      version: 2,
+      server: 'http://127.0.0.1:4849',
+      team: 'revive',
+      claim: { mode, name },
+      note: 'LEAKED-BINDING-BODY',
+    });
+
+  function workspace(root: string, body: string): void {
+    mkdirSync(join(root, '.musterd'), { recursive: true });
+    writeFileSync(join(root, '.musterd', 'workspace.json'), body);
+  }
+
+  it('reads a seat claim, including from a subfolder, and drops the rest of the file', () => {
+    const root = join(dir, 'ghost');
+    workspace(root, claim('ghost'));
+    const sub = join(root, 'src');
+    mkdirSync(sub);
+    expect(folderSeat(sub, {})).toEqual({
+      team: 'revive',
+      member: 'ghost',
+      root: realpathSync(root),
+    });
+    expect(JSON.stringify(folderSeat(root, {}))).not.toContain('LEAKED-BINDING-BODY');
+  });
+
+  it('stops at a chat or role claim and does not use a parent seat', () => {
+    const parent = join(dir, 'ghost');
+    workspace(parent, claim('ghost'));
+    const chat = join(parent, 'room');
+    workspace(chat, claim('ghost', 'chat'));
+    const role = join(parent, 'desk');
+    workspace(role, claim('designer', 'role'));
+    expect(folderSeat(join(chat, 'src'), {})).toBeNull();
+    expect(folderSeat(role, {})).toBeNull();
+  });
+
+  it('stops at an unreadable claim and does not use a parent seat', () => {
+    const parent = join(dir, 'ghost');
+    workspace(parent, claim('ghost'));
+    const child = join(parent, 'nested');
+    workspace(child, 'not json');
+    expect(folderSeat(child, {})).toBeNull();
+  });
+
+  it('keeps walking when the directory has no workspace file', () => {
+    const root = join(dir, 'ghost');
+    workspace(root, claim('ghost'));
+    expect(folderSeat(join(root, 'src', 'launcher'), {})).toEqual({
+      team: 'revive',
+      member: 'ghost',
+      root: realpathSync(root),
+    });
+  });
+
+  it('honors MUSTERD_BINDING only when its workspace is inside the walked directory', () => {
+    const root = join(dir, 'ghost');
+    const binding = join(root, '.musterd', 'binding.json');
+    mkdirSync(join(root, '.musterd'), { recursive: true });
+    writeFileSync(binding, claim('ghost'));
+    const outside = join(dir, 'other', '.musterd', 'binding.json');
+    mkdirSync(join(dir, 'other', '.musterd'), { recursive: true });
+    writeFileSync(outside, claim('stanley'));
+    expect(folderSeat(join(root, 'src'), { MUSTERD_BINDING: binding })).toEqual({
+      team: 'revive',
+      member: 'ghost',
+      root: realpathSync(root),
+    });
+    expect(folderSeat(root, { MUSTERD_BINDING: outside })).toBeNull();
+  });
+
+  it('a workspace file wins over a binding that points somewhere else', () => {
+    const root = join(dir, 'ghost');
+    workspace(root, claim('ghost'));
+    const outside = join(dir, 'other', '.musterd', 'binding.json');
+    mkdirSync(join(dir, 'other', '.musterd'), { recursive: true });
+    writeFileSync(outside, claim('stanley'));
+    expect(folderSeat(root, { MUSTERD_BINDING: outside })?.member).toBe('ghost');
+  });
+
+  it('matches an existing path by realpath, and a missing path only when the strings match', () => {
+    const root = join(dir, 'ghost');
+    const other = join(dir, 'stanley');
+    mkdirSync(root);
+    mkdirSync(other);
+    const scope = { team: 'revive', member: 'ghost', root };
+    const here = seat({
+      address: 'revive/agents/ghost',
+      member: 'ghost',
+      path: root,
+    });
+    const away = seat({
+      address: 'revive/site/ghost',
+      project: 'site',
+      member: 'ghost',
+      path: other,
+    });
+    expect(sameFolder(scope, here)).toBe(true);
+    expect(sameFolder(scope, away)).toBe(false);
+    expect(seatInFolder([away, here], scope)?.address).toBe('revive/agents/ghost');
+
+    const missing = join(dir, 'not-here');
+    const only = seat({ member: 'ghost', path: missing, address: 'revive/agents/ghost' });
+    expect(seatInFolder([only], scope)).toBe(only);
+    expect(sameFolder(scope, only)).toBe(false);
+
+    const neither = { team: 'revive', member: 'ghost', root: missing };
+    expect(sameFolder(neither, only)).toBe(true);
+  });
+
+  it('names where the other member starts', () => {
+    expect(elsewhereLine('ghost', 'stanley', '/w/stanley')).toBe(
+      'this folder is ghost — stanley starts from /w/stanley',
+    );
+    expect(elsewhereLine('ghost', 'bo', null)).toBe(
+      "this folder is ghost — bo starts from bo's own workspace",
+    );
+    expect(elsewhereLine('ghost', 'bo', '')).toBe(
+      "this folder is ghost — bo starts from bo's own workspace",
+    );
   });
 });

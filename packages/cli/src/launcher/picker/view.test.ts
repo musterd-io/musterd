@@ -264,6 +264,55 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       '  ⏎ launch · ↑↓ choose · esc back',
     ]);
   });
+
+  it('a member workspace adds the change row, and a refusal sits above the keys (ADR 717)', () => {
+    const ghost = seat('ghost');
+    const scoped: LauncherFile = {
+      ...FILE,
+      seats: {
+        ...FILE.seats,
+        'revive/agents/ghost': {
+          path: '/w/ghost',
+          harness: 'claude-code',
+          mode: 'fresh',
+          launched_at: NOW - H,
+          ended_at: null,
+          exit: null,
+        },
+      },
+      snapshot: {
+        taken_at: NOW,
+        seats: [...SEATS, ghost],
+        teams: [{ team: 'revive', here: true }],
+      },
+    };
+    const open = initialState(scoped, '', NOW, {
+      team: 'revive',
+      member: 'ghost',
+      root: '/w/ghost',
+    });
+    expect(renderPicker(open, { cols: 80, rows: 24 }).slice(-4)).toEqual([
+      '  ghost · 1 harness configured',
+      '  › claude    last used',
+      '    change harnesses',
+      '  ⏎ launch · ↑↓ choose · esc back',
+    ]);
+    const onChange = { ...open, choose: { ...open.choose!, index: 1 } };
+    expect(renderPicker(onChange, { cols: 80, rows: 24 }).slice(-3)).toEqual([
+      '    claude    last used',
+      '  › change harnesses',
+      '  ⏎ change harnesses · ↑↓ choose · esc back',
+    ]);
+
+    let list = initialState(FILE, '', NOW);
+    list = reduce(list, { type: 'live', live: {}, status: 'ok', now: NOW }).state;
+    list = { ...list, notice: 'this folder is ghost — stanley starts from /w/stanley' };
+    const lines = renderPicker(list, { cols: 80, rows: 24 });
+    expect(lines.slice(-2)).toEqual([
+      '  this folder is ghost — stanley starts from /w/stanley',
+      '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit',
+    ]);
+  });
 });
 
 describe('roster-first rows in the picker (ADR 503 Decision 3)', () => {

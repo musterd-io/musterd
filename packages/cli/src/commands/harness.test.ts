@@ -409,6 +409,23 @@ describe('musterd harness configure', () => {
 });
 
 describe('musterd harness status', () => {
+  it('reads the workspace passed as root when the process is in a subfolder', async () => {
+    writeV2Identity();
+    writeV3Provisioning(['fake-a']);
+    const sub = join(cwd, 'src');
+    mkdirSync(sub);
+    vi.spyOn(process, 'cwd').mockReturnValue(sub);
+    const missing = await run(['status'], { ctx: ctxOf(), registry: [fakeAdapter('fake-a')] });
+    expect(missing.code).not.toBe(0);
+    const found = await run(['status'], {
+      ctx: ctxOf(),
+      registry: [fakeAdapter('fake-a')],
+      root: cwd,
+    });
+    expect(found.out).toContain('fake-a');
+    expect(found.out).toContain('selected');
+  });
+
   it('reports missing selection with the configure repair and exits 1', async () => {
     writeV2Identity();
     const { code, out } = await run(['status'], {

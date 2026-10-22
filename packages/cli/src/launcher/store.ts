@@ -1,5 +1,12 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { machineConfigRoot } from '../machinePaths.js';
 
@@ -204,4 +211,144 @@ export function lastUsedAt(seat: Seat, file: LauncherFile): number | null {
   if (mine === null) return captured;
   if (captured === null) return mine;
   return Math.max(mine, captured);
+}
+
+/**
+ * The member workspace the process is standing in (ADR 717). `team` and `member` come from
+ * `.musterd/workspace.json`'s claim; `root` is the directory that holds `.musterd`. Secret-free:
+ * the read copies those two strings and drops the rest of the file. A chat or role claim, or a
+ * file that is not a seat claim, is no scope — the walk stops there. `MUSTERD_BINDING` counts
+ * only when it names a seat claim inside this directory and the walk found no workspace file.
+ */
+export interface FolderScope {
+  team: string;
+  member: string;
+  root: string;
+}
+
+export function folderSeat(
+  startDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): FolderScope | null {
+  const walked = walkScope(startDir);
+  if (walked === 'stop') return null;
+  if (walked) return walked;
+  return scopeFromBinding(startDir, env);
+}
+
+/** The catalog seat this folder is, for opening its harness step. */
+export function seatInFolder(seats: readonly Seat[], scope: FolderScope): Seat | undefined {
+  const named = seats.filter((s) => s.team === scope.team && s.member === scope.member);
+  const matched = named.filter((s) => pathRelation(scope.root, s.path) === 'match');
+  if (matched.length > 0) return matched[0];
+  const only = named.length === 1 ? named[0] : undefined;
+  if (only && pathRelation(scope.root, only.path) !== 'differ') return only;
+  return undefined;
+}
+
+/** Launch permission. A second seat with the same name and a different existing path is refused. */
+export function sameFolder(scope: FolderScope, seat: Seat): boolean {
+  if (scope.team !== seat.team || scope.member !== seat.member) return false;
+  return pathRelation(scope.root, seat.path) === 'match';
+}
+
+/** The one line a refused start shows. `path` null means this machine has no folder for them. */
+export function elsewhereLine(here: string, other: string, path: string | null): string {
+  const where = path && path.length > 0 ? path : `${other}'s own workspace`;
+  return `this folder is ${here} — ${other} starts from ${where}`;
+}
+
+type ClaimRead = { kind: 'seat'; team: string; member: string } | { kind: 'other' };
+
+/** `match` when the paths are the same, `differ` when both exist and are not, else `unknown`. */
+function pathRelation(a: string, b: string): 'match' | 'differ' | 'unknown' {
+  try {
+    if (existsSync(a) && existsSync(b)) {
+      return realpathSync(a) === realpathSync(b) ? 'match' : 'differ';
+    }
+  } catch {
+    return 'unknown';
+  }
+  return resolve(a) === resolve(b) ? 'match' : 'unknown';
+}
+
+function walkStart(startDir: string): string {
+  const missing: string[] = [];
+  let dir = resolve(startDir);
+  for (;;) {
+    try {
+      const real = realpathSync(dir);
+      return missing.length ? join(real, ...missing.reverse()) : real;
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) return resolve(startDir);
+      missing.push(dir.slice(parent.length + 1));
+      dir = parent;
+    }
+  }
+}
+
+function insideRoot(root: string, startDir: string): boolean {
+  const r = walkStart(root);
+  const s = walkStart(startDir);
+  return s === r || s.startsWith(r.endsWith(sep) ? r : r + sep);
+}
+
+/** Seat claim, or `stop` when a workspace file is here and is not one. Null means keep walking. */
+function walkScope(startDir: string): FolderScope | 'stop' | null {
+  let dir = walkStart(startDir);
+  for (;;) {
+    const file = join(dir, '.musterd', 'workspace.json');
+    if (existsSync(file)) {
+      const got = readClaimFile(file);
+      if (got?.kind === 'seat') return { team: got.team, member: got.member, root: dir };
+      return 'stop';
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function scopeFromBinding(startDir: string, env: NodeJS.ProcessEnv): FolderScope | null {
+  const explicit = env['MUSTERD_BINDING'];
+  if (!explicit) return null;
+  const bindingPath = resolve(explicit);
+  const root = dirname(dirname(bindingPath));
+  if (!insideRoot(root, startDir)) return null;
+  const got = readClaimFile(bindingPath);
+  if (got?.kind !== 'seat') return null;
+  return { team: got.team, member: got.member, root: walkStart(root) };
+}
+
+/** Copy `team` and a seat-claim `name` only. Anything else, including a secret, is dropped. */
+function readClaimFile(file: string): ClaimRead | null {
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof data !== 'object' || data === null) return null;
+  const team = token((data as { team?: unknown }).team);
+  const claim = (data as { claim?: unknown }).claim;
+  if (!team) return null;
+  if (typeof claim !== 'object' || claim === null) return { kind: 'other' };
+  const mode = (claim as { mode?: unknown }).mode;
+  const name = token((claim as { name?: unknown }).name);
+  if (mode === 'seat' && name) return { kind: 'seat', team, member: name };
+  return { kind: 'other' };
+}
+
+function token(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s || /\s/.test(s)) return null;
+  return s;
 }

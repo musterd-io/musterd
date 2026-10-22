@@ -238,6 +238,26 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     ```
     With several, `↑↓` (or `⇥`) moves the accent `›`; `⏎` launches the pick (a live seat then asks
     frame 22's question); `esc` returns to the list.
+24a. `cmd/launcher-workspace` — bare `musterd` inside an agent member's workspace opens that
+    member's harness step (ADR 717). The list behind it is still the recent screen, so teams stay
+    one key away. The last row changes this workspace's harnesses. The count does not include that
+    row:
+    ```
+      ghost · 1 harness configured
+      › claude    last used
+        change harnesses
+      ⏎ launch · ↑↓ choose · esc back
+    ```
+    With the cursor on the last row the keys read `⏎ change harnesses · ↑↓ choose · esc back`.
+    `⏎` on another member does not launch. The footer gains one line:
+    ```
+      this folder is ghost — stanley starts from /w/stanley
+      ⏎ launch · ⌃R resume · type to search · → teams · esc quit
+    ```
+    A member with no workspace on this machine reads `this folder is ghost — bo starts from bo's own workspace`.
+    A new seat reads `this folder is ghost — a new seat starts from a folder that is not a member workspace`.
+    A human member's workspace stays the recent screen with the cursor on that member; `⏎` opens a login shell.
+    From a directory that is not a member workspace, frame 20 is unchanged.
 
 ### Huddle trace frame (ADR 493)
 

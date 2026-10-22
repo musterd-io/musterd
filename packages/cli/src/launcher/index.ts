@@ -1,40 +1,74 @@
 import type { Live } from './live.js';
-import { initialState, type PickerEvent } from './picker/state.js';
+import { initialState, type PickerEvent, type PickerOutcome } from './picker/state.js';
 import { runPicker, type PickerIO } from './picker/tty.js';
 import { renderPicker } from './picker/view.js';
-import { launcherFilePath, readLauncherFile, withSnapshot, writeLauncherFile } from './store.js';
+import {
+  folderSeat,
+  launcherFilePath,
+  readLauncherFile,
+  withSnapshot,
+  writeLauncherFile,
+} from './store.js';
+
+interface PickerOpts {
+  query?: string;
+  /** Flags typed with an ambiguous name (`musterd stan -r`): they apply to the seat picked. */
+  defaults?: { mode: 'fresh' | 'resume'; harness: string | null; force: boolean };
+  io?: PickerIO;
+  env?: NodeJS.ProcessEnv;
+  home?: string;
+  /** Directory treated as the working directory (tests). */
+  cwd?: string;
+}
 
 /**
- * Bare `musterd` on a terminal (ADR 491 Decision 1). Paints from the snapshot first — this module's
- * static imports are zod, picocolors and node builtins only (`importClosure.test.ts`) — then loads
- * the catalog scan and the roster reads, which patch rows in place. `MUSTERD_PAINT_PROBE=1` renders
- * the first frame to stdout and reports the time since process start: the bench's first-paint probe.
+ * Bare `musterd` on a terminal (ADR 491 Decision 1, scoped by ADR 717). Paints from the snapshot
+ * first — this module's static imports are zod, picocolors and node builtins only
+ * (`importClosure.test.ts`) — then loads the catalog scan and the roster reads, which patch rows
+ * in place. Inside a member workspace the first frame is that member's harness step.
+ * `MUSTERD_PAINT_PROBE=1` renders the first frame to stdout and reports the time since process
+ * start: the bench's first-paint probe.
  */
-export async function openPicker(
-  opts: {
-    query?: string;
-    /** Flags typed with an ambiguous name (`musterd stan -r`): they apply to the seat picked. */
-    defaults?: { mode: 'fresh' | 'resume'; harness: string | null; force: boolean };
-    io?: PickerIO;
-    env?: NodeJS.ProcessEnv;
-    home?: string;
-  } = {},
-): Promise<number> {
+export async function openPicker(opts: PickerOpts = {}): Promise<number> {
   const env = opts.env ?? process.env;
   const path = launcherFilePath(env);
-  const state = initialState(readLauncherFile(path), opts.query ?? '', Date.now());
-  if (env['MUSTERD_PAINT_PROBE'] === '1') {
-    process.stdout.write(renderPicker(state, { cols: 80, rows: 24 }).join('\n') + '\n');
-    process.stderr.write(`first-paint ${performance.now().toFixed(1)}ms\n`);
-    return 0;
+  let prefer: string | null = null;
+  for (;;) {
+    const scope = folderSeat(opts.cwd ?? process.cwd(), env);
+    let state = initialState(readLauncherFile(path), opts.query ?? '', Date.now(), scope);
+    if (prefer) {
+      const at = state.choose?.options.indexOf(prefer) ?? -1;
+      state = {
+        ...state,
+        prefer,
+        ...(state.choose && at >= 0 ? { choose: { ...state.choose, index: at } } : {}),
+      };
+    }
+    if (env['MUSTERD_PAINT_PROBE'] === '1') {
+      process.stdout.write(renderPicker(state, { cols: 80, rows: 24 }).join('\n') + '\n');
+      process.stderr.write(`first-paint ${performance.now().toFixed(1)}ms\n`);
+      return 0;
+    }
+    const outcome = await runPicker(
+      state,
+      opts.io ?? { input: process.stdin, output: process.stdout },
+      (dispatch) => {
+        void refresh(dispatch, path, opts.home);
+      },
+    );
+    if (outcome.kind !== 'configure') return finishLaunch(outcome, opts);
+    const before = new Set(outcome.seat.harnesses);
+    const root = scope?.root ?? outcome.seat.path;
+    const { harnessCommand } = await import('../commands/harness.js');
+    await harnessCommand({ positionals: ['configure'], flags: {}, metaPairs: [] }, { root });
+    prefer = await addedHarness(root, before);
   }
-  const outcome = await runPicker(
-    state,
-    opts.io ?? { input: process.stdin, output: process.stdout },
-    (dispatch) => {
-      void refresh(dispatch, path, opts.home);
-    },
-  );
+}
+
+async function finishLaunch(
+  outcome: Exclude<PickerOutcome, { kind: 'configure' }>,
+  opts: PickerOpts,
+): Promise<number> {
   if (outcome.kind === 'quit') return outcome.code;
   if (outcome.kind === 'wake') {
     // ADR 503: ⏎ on a seat resident elsewhere rings its doorbell as the viewer — from the viewer's
@@ -85,6 +119,17 @@ export async function openPicker(
     ...(outcome.kind === 'take-over' ? { takeOver: true } : {}),
     ...(outcome.kind === 'watch' ? { watch: true } : {}),
   });
+}
+
+/** The first harness id the configure save added, ignoring the internal guidance id. */
+async function addedHarness(root: string, before: ReadonlySet<string>): Promise<string | null> {
+  const { loadProvisioning } = await import('../onboard/manifest.js');
+  const got = loadProvisioning(root);
+  if (got.kind !== 'valid') return null;
+  const added = got.value.desired.filter(
+    (id) => !before.has(id) && id !== 'musterd' && id !== 'musterd-core',
+  );
+  return added[0] ?? null;
 }
 
 /** The post-paint work: scan, snapshot, roster reads. Every failure degrades to "offline". */

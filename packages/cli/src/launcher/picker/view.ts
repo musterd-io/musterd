@@ -162,20 +162,36 @@ function window(items: { line: string; selected: boolean }[], room: number): str
 }
 
 function footer(s: PickerState, cols: number): string[] {
+  const lines = footerLines(s, cols);
+  if (!s.notice || s.choose) return lines;
+  const note = wrap(s.notice, Math.max(1, cols - 2)).map((l) => `  ${theme.warn(l)}`);
+  return [...note, ...lines];
+}
+
+function footerLines(s: PickerState, cols: number): string[] {
   if (s.choose) {
     // The harness step: always shown for an agent seat, so a one-harness seat says it has one.
     const c = s.choose;
     const last = s.file.seats[c.seat.address]?.harness ?? null;
     const n = c.options.length;
+    const onChange = c.change && c.index === n;
+    const changeMarker = onChange ? `${theme.accent('›')} ` : '  ';
+    const changeLabel = onChange ? theme.bold('change harnesses') : 'change harnesses';
     return [
       `  ${c.seat.member} · ${n} harness${n === 1 ? '' : 'es'} configured`,
       ...c.options.map((h, i) => {
-        const marker = i === c.index ? `${theme.accent('›')} ` : '  ';
-        const name = i === c.index ? theme.bold(harnessLabel(h)) : harnessLabel(h);
+        const selected = !onChange && i === c.index;
+        const marker = selected ? `${theme.accent('›')} ` : '  ';
+        const name = selected ? theme.bold(harnessLabel(h)) : harnessLabel(h);
         const label = h === last ? `${padEndVisible(name, 10)}${theme.meta('last used')}` : name;
         return `  ${marker}${label}`;
       }),
-      paintKeys('  ⏎ launch · ↑↓ choose · esc back'),
+      ...(c.change ? [`  ${changeMarker}${changeLabel}`] : []),
+      paintKeys(
+        onChange
+          ? '  ⏎ change harnesses · ↑↓ choose · esc back'
+          : '  ⏎ launch · ↑↓ choose · esc back',
+      ),
     ];
   }
   if (s.create) {

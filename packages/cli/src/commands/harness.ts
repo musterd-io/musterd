@@ -93,6 +93,8 @@ export interface HarnessDeps {
   select?: string[];
   confirm?: boolean;
   out?: (line: string) => void;
+  /** Workspace to read and write. The launcher passes it from a subfolder and does not chdir. */
+  root?: string;
 }
 
 interface LocalState {
@@ -103,7 +105,7 @@ interface LocalState {
 }
 
 function localState(deps?: HarnessDeps): LocalState {
-  const cwd = process.cwd();
+  const cwd = deps?.root ?? process.cwd();
   const workspace = loadWorkspace(cwd);
   const team =
     workspace.kind === 'valid'
