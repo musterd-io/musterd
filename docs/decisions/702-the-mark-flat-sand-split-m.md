@@ -28,6 +28,8 @@ Findings that shaped it, in order:
 - A glass tile (translucent gold gradient) was built and reviewed by slippy on #3152: on a dark
   ground it goes muddy olive-brown, and on white at 16px it washes out. nick also did not like the
   gradient look. Glass was dropped; the tile is flat.
+- Dark slate ink on a pale yellow tile echoed Miro's tile at a distance (nick's look). Brown inks read
+  as food or worse, and blue on yellow is IKEA's pair, so the ink is deep teal.
 - Seats as heavy as the stems (66 against a 72 stroke) made the mark read as keyholes at 32–64px,
   and the `m` filled only a third of the tile. Slippy's fix is adopted below.
 
@@ -44,7 +46,8 @@ brand accent used by buttons, links and the rest of the UI.
    light greys. No gradient, no transparency, no blur.
 2. **Ring.** A clean rounded-square stroke, 48 units wide, centred on the tile. The ink outline of
    ADR 497 is dropped; nothing is traced.
-3. **Ink.** Cool slate `#2E3647`, for the `m` and the seats. It replaces zinc-900.
+3. **Ink.** Deep teal `#1F6F6B` (4.2:1 against the sand), for the `m` and the seats. It replaces
+   zinc-900.
 4. **The `m`.** Straight stems and flat-topped shoulders with soft corners. The left stem runs into
    the first shoulder; the second and third stems stop a thin cut short of their shoulders; each
    stem ends in a round **seat**, one per member. The stroke is 80 units and the seat radius 50, so

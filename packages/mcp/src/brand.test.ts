@@ -13,7 +13,7 @@ describe('brand (ADR 702)', () => {
 
   it('chip SVG is the mark on the flat sand tile', () => {
     expect(CHIP_SVG).toContain('#EBD9A0');
-    expect(CHIP_SVG).toContain('#2E3647');
+    expect(CHIP_SVG).toContain('#1F6F6B');
     expect(CHIP_SVG).toContain('aria-label="musterd"');
   });
 

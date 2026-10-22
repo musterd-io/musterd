@@ -17,8 +17,8 @@
  * no transparency, no blur.
  */
 
-/** The ink: strokes and seats. Cool slate, not the old zinc-900. */
-export const CHIP_FG = '#2E3647';
+/** The ink: strokes and seats. Deep teal, not the old zinc-900. */
+export const CHIP_FG = '#1F6F6B';
 /** The tile: one flat sand colour, on every surface (ADR 702). */
 export const CHIP_BG = '#EBD9A0';
 /** Corner radius on the 1024 viewBox (30%). */

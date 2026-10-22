@@ -23,7 +23,7 @@ const asset = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8
 describe('the mark (ADR 702)', () => {
   it('is a flat sand tile with cool ink', () => {
     expect(CHIP_BG).toBe('#EBD9A0');
-    expect(CHIP_FG).toBe('#2E3647');
+    expect(CHIP_FG).toBe('#1F6F6B');
     expect(CHIP_RADIUS).toBe(307);
   });
 
