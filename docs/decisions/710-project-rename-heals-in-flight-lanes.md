@@ -80,6 +80,16 @@ opens a lane from that checkout.
 - The import path (`musterd import …`) derives a project too, but its stage file predates the field
   and opens lanes without aliases; the next ordinary lane open heals whichever names it used.
 
+_(Observed 2026-10-22, the day it landed.)_ The first `lane open` from an upgraded CLI — at 17:39:43Z,
+about four minutes after the merge reached the daemon — moved the 85 lanes still non-terminal in
+`runtime` to `musterd` in one transaction: 85 `lane.updated` rows with `changes.project.from =
+"runtime"` and `updated_at` untouched. Three others had closed in the minutes before the heal
+(`01M5G1W1…`, `01M5GW3H0…`, `01M5FSHZ…`) and kept `runtime`; that is the decided behaviour for closed
+lanes, not a lane the heal missed. The falsifier reads zero: the `SELECT` above returns no `runtime`
+row, and no stale client re-created one in the hours after. The contention half showed in the same
+window — `01M5FZ5R2VF8…`, opened under `runtime`, warns `surface_overlap` against a fresh
+`packages/server/src/**` lane in `musterd`.
+
 ## Observability & Evaluation
 
 - **Traces:** `lane.updated` rows with `changes.project` and an actor. A reader can count healed
