@@ -1049,14 +1049,22 @@ export async function openAcceptanceAsk(
             SELECT 1 FROM messages r
              WHERE r.team_id = m.team_id
                AND r.act IN ('accept','decline')
-               AND r.in_reply_to = m.id)
+               AND r.in_reply_to = m.id
+               AND NOT EXISTS (
+                 SELECT 1 FROM audit a
+                 WHERE a.team_id = r.team_id
+                   AND a.action = 'authority.refused'
+                   AND a.target = ?
+                   AND a.result = 'deny'
+                   AND json_extract(a.detail, '$.act') = 'human_accept'
+                   AND a.ts >= r.ts))
           AND NOT EXISTS (
             SELECT 1 FROM messages v
              WHERE v.team_id = m.team_id
                AND v.act = 'resolve'
                AND v.thread_id = m.id)
         ORDER BY m.ts DESC, m.id DESC LIMIT 1`,
-    [teamId, laneId],
+    [teamId, laneId, laneId],
   );
   if (!row || !row.to) return null;
   const superseded = await supersededAcceptanceAsks(db, teamId, laneId);
@@ -1084,13 +1092,37 @@ export async function acceptanceAskUnanswered(
   teamId: string,
   askId: string,
 ): Promise<boolean> {
-  const answered = await db.get<{ id: string }>(
-    `SELECT id FROM messages
-        WHERE team_id = ? AND act IN ('accept','decline') AND in_reply_to = ?
-      LIMIT 1`,
+  const asked = await db.get<{ lane: string | null }>(
+    `SELECT json_extract(meta, '$.lane_review.lane') AS lane
+         FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'`,
     [teamId, askId],
   );
+  const laneId = asked?.lane ?? null;
+
+  const answered = await db.get<{ id: string; ts: number }>(
+    `SELECT id, ts FROM messages
+        WHERE team_id = ? AND act IN ('accept','decline') AND in_reply_to = ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, askId],
+  );
+  if (answered && laneId) {
+    // ADR 662 (lane 01M5DTPMXN): a human verdict refused by the authority gate lands as a message
+    // but binds nothing — the refusal goes on the ack, but the store must not count it as
+    // answering the ask, or a lane still awaiting a verdict shows no reviewer and `lane show`
+    // lists no acceptance ask. The refusal is audited as `authority.refused` (target = lane,
+    // result 'deny', detail.act 'human_accept'); a refusal at or after the latest reply means the
+    // verdict did not stick.
+    const refused = await db.get<{ ts: number }>(
+      `SELECT ts FROM audit
+          WHERE team_id = ? AND action = 'authority.refused' AND target = ? AND result = 'deny'
+            AND json_extract(detail, '$.act') = 'human_accept'
+          ORDER BY ts DESC, id DESC LIMIT 1`,
+      [teamId, laneId],
+    );
+    if (refused && refused.ts >= answered.ts) return true;
+  }
   if (answered) return false;
+
   const closed = await db.get<{ id: string }>(
     `SELECT id FROM messages
         WHERE team_id = ? AND act = 'resolve' AND thread_id = ?
@@ -1166,17 +1198,30 @@ export async function acceptanceWaits(
 
   // The reviewer: openAcceptanceAsk's rule, batched — the newest ask per lane that no
   // accept/decline answered and no resolve closed; held by nobody if a re-route superseded it.
-  const answered = new Set(
-    (
-      await db.all<{ ref: string | null }>(
-        `SELECT in_reply_to AS ref FROM messages
-          WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL`,
-        [teamId],
-      )
-    )
-      .map((r) => r.ref)
-      .filter((r): r is string => typeof r === 'string'),
-  );
+  // Asks an accept/decline replied to, with the latest reply's ts per ask.
+  const answered = new Map<string, number>();
+  for (const r of await db.all<{ ref: string | null; ts: number }>(
+    `SELECT in_reply_to AS ref, MAX(ts) AS ts FROM messages
+      WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL
+      GROUP BY in_reply_to`,
+    [teamId],
+  )) {
+    if (typeof r.ref === 'string') answered.set(r.ref, r.ts);
+  }
+  // A human verdict refused by the ADR 662 authority gate lands as a message but binds nothing
+  // (lane 01M5DTPMXN): its refusal is audited as `authority.refused` (target = lane, result
+  // 'deny'). A reply that was refused does not answer the ask — the lane still awaits a verdict,
+  // so the board must keep naming a reviewer.
+  const refused = new Map<string, number>();
+  for (const r of await db.all<{ target: string | null; ts: number }>(
+    `SELECT target, MAX(ts) AS ts FROM audit
+      WHERE team_id = ? AND action = 'authority.refused' AND result = 'deny'
+        AND json_extract(detail, '$.act') = 'human_accept'
+      GROUP BY target`,
+    [teamId],
+  )) {
+    if (typeof r.target === 'string') refused.set(r.target, r.ts);
+  }
   const resolved = new Set(
     (
       await db.all<{ thread_id: string | null }>(
@@ -1212,7 +1257,13 @@ export async function acceptanceWaits(
   const newest = new Map<string, { id: string; holder: string | null }>();
   for (const a of asks) {
     if (!a.lane || !awaiting.has(a.lane)) continue;
-    if (answered.has(a.id) || resolved.has(a.id)) continue;
+    const latestReply = answered.get(a.id);
+    if (latestReply !== undefined) {
+      const latestRefusal = refused.get(a.lane);
+      // Answered only if no refusal came at or after the latest reply.
+      if (latestRefusal === undefined || latestRefusal < latestReply) continue;
+    }
+    if (resolved.has(a.id)) continue;
     newest.set(a.lane, { id: a.id, holder: a.holder }); // ascending, so the last write is newest
   }
 
