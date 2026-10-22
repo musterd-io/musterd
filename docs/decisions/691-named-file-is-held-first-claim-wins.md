@@ -98,6 +98,11 @@ look the same at claim time.
   `holder` when a hold decides the edit. The response is unchanged; the row gains two fields.
 - Dogfood run 8's question ("does one-owner-per-task stop the collision or just report it?") now
   has a product answer to test against: for named files, it stops it.
+- 2026-10-22 (lane 01M5JMN1X5, [finding 022](../research/022-cooperbench-coordination-residue.md)):
+  the refusal still names Decision 3's three ways through, but the wait now leads, with the
+  holder's lane id and the one call that does it (`team_inbox_check {wait, until_lane}`, ADR 705).
+  Led by "ask them", every one of the claim run's 29 held refusals was followed by a message to the
+  holder, and none by that wait.
 
 ## Observability & Evaluation
 

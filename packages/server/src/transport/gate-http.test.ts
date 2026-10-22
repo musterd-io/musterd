@@ -278,7 +278,7 @@ withDrivers('gate-http', (_o, kind) => {
 
     it('both lanes name the file; the later claim is refused under block and warned under warn', async () => {
       await bo();
-      await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+      const boLane = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
         title: 'bo first',
         scope: ['src/tariff.ts'],
         claim: true,
@@ -292,7 +292,10 @@ withDrivers('gate-http', (_o, kind) => {
       const blocked = await gateA('block', 'src/tariff.ts');
       expect(blocked.json.decision).toBe('deny');
       expect(blocked.json.reason).toContain('held by Bo');
-      expect(blocked.json.reason).toContain('hand it off');
+      // Finding 022: the one-call wait on the holder's lane leads, by id; asking is the fallback.
+      const reason = blocked.json.reason as string;
+      expect(reason).toContain(`until_lane: "${boLane.id}"`);
+      expect(reason.indexOf('until_lane')).toBeLessThan(reason.indexOf('hand it off'));
       const warned = await gateA('warn', 'src/tariff.ts');
       expect(warned.json.decision).toBe('allow');
       expect(warned.json.outcome).toBe('warned');
