@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 56;
+export const GUIDANCE_CONTENT_VERSION = 57;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -50,9 +50,13 @@ export const SKILL_MCP_TOOLS = [
   'lane_claim',
   'lane_release',
   'lane_handoff',
+  'lane_update',
   'lane_submit',
   'lane_resolve',
   'lane_board',
+  // Remote rail only (ADR 630): a human sponsors agents from a phone with this; the skill body
+  // names it in the remote-members playbook, so it is pinned here like every other taught name.
+  'team_agent_create',
 ] as const;
 
 /** CLI command names the skill references by name. CI (`guidance:check`) asserts each appears in the CLI
@@ -181,6 +185,10 @@ export function renderSkillBody(opts: { team: string }): string {
     '- **Park work you stop carrying.** If you claimed a lane and are not doing it, `lane_release` /',
     '  `musterd lane release <id>` hands it back to the board — a claimed lane sitting idle reserves work',
     '  nobody is doing. Releasing is not failing; it is the honest board state.',
+    '- **Keep the lane current while you work.** `lane_update` / `musterd lane update <id>` edits it',
+    '  in place — `state: blocked` (and back to `active`), the branch you are actually on, scope,',
+    '  detail, the goal link, a measured metric. The board is only as true as the lane; carrying a',
+    '  stale lane reads as still carrying the work.',
     '- Link a lane to a Goal with `--goal <id>` so status derives up the plan — `team_goal_declare` /',
     '  `musterd goal declare` opens one, `team_goals` / `musterd goal list` shows the board, and',
     '  `team_goal_outcome` / `team_goal_retract` record how it ended or withdraw it.',
@@ -242,6 +250,11 @@ export function renderSkillBody(opts: { team: string }): string {
     '     `acceptance_review_window_ms`, default 20m — ADR 506), then self-close on silence;',
     '   - **nobody** asked — no eligible acceptor, or acceptance-exempt (ADR 234): self-close now.',
     '   A self-close is `lane_resolve` / `musterd lane resolve`, recorded **unconfirmed**, never a wedge.',
+    "4. **A risk-tagged lane closes in two stages (ADR 603).** A peer's accept is only the first",
+    "   stage: while a human review is still owed and its window is running, the owner's `done`",
+    '   is **refused** — the refusal names the confirming peer and the window, and is the rule',
+    '   working, not a wedge. Do not route around it: wait for the human stage (the daemon asks',
+    '   the first human who comes live). `abandoned` is never refused — giving up is not shipping.',
     '',
     '## Disputes — a critique is answered with a check, not a verdict (ADR 476, ADR 505)',
     '',

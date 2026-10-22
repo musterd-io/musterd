@@ -25,7 +25,7 @@
  * the playbook.
  */
 import { CATALOG } from '../packages/cli/src/help/catalog.ts';
-import { TOOL_NAMES } from '../packages/mcp/src/toolNames.ts';
+import { REMOTE_TOOL_NAMES, TOOL_NAMES } from '../packages/mcp/src/toolNames.ts';
 import { SKILL_CLI_COMMANDS, SKILL_MCP_TOOLS } from '../packages/protocol/src/guidance.ts';
 
 const problems: string[] = [];
@@ -44,8 +44,10 @@ for (const cmd of SKILL_CLI_COMMANDS) {
   }
 }
 
-// Every MCP tool the skill names must be a registered tool.
-const tools = new Set<string>(TOOL_NAMES);
+// Every MCP tool the skill names must be a registered tool — on either rail: the skill body
+// teaches `team_agent_create` for sponsored agents, and that tool lives on the remote rail
+// (ADR 630), so the desk registry alone would false-flag a taught name.
+const tools = new Set<string>([...TOOL_NAMES, ...REMOTE_TOOL_NAMES]);
 for (const tool of SKILL_MCP_TOOLS) {
   if (!tools.has(tool)) {
     problems.push(
