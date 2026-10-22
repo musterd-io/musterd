@@ -37,7 +37,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None, "stills": None}
+           "resample_from": None, "stills": None, "warm": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -58,6 +58,10 @@ def args() -> dict:
         elif k == "--stills":
             # clip:frame:dir,… — a look check at office size instead of sheets (figure_stills.py)
             out["stills"] = [(c, d, int(f)) for c, f, d in (x.split(":") for x in argv[i + 1].split(","))]; i += 2
+        elif k == "--warm":
+            # clip,clip,… — render these clips into the store and write no sheets, so a long figure
+            # render can be split across runs (the last, plain run writes the sheets from the store)
+            out["warm"] = set(argv[i + 1].split(",")); i += 2
         elif k == "--resample-from":
             out["resample_from"] = float(argv[i + 1]); i += 2
         else:
@@ -489,6 +493,8 @@ def render_figure(a: dict) -> None:
         wanted = set(a["stills"]) | {base_frame(*w) for w in a["stills"] if w[0] in figure.CARRY_BASE}
     t0 = time.time()
     for name, frames, _, dirs in figure.CLIPS:
+        if a["warm"] is not None and name not in a["warm"]:
+            continue
         for di, d in enumerate(figure.DIRS):
             if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # drawn flipped from its source direction at runtime (`frameCell`)
@@ -571,6 +577,9 @@ def render_figure(a: dict) -> None:
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
             os.remove(p)
+    if a["warm"] is not None:
+        print(f"figure: warmed {sorted(a['warm'])}: {rendered} render calls, {reused} reused, {time.time() - t0:.0f}s; no sheets written", flush=True)
+        return
     if a["stills"] is not None:
         bad = [s for s in a["stills"] if s[1] in MIRRORED]
         if bad:
