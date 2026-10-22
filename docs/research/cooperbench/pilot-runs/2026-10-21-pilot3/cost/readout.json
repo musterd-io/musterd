@@ -1,0 +1,258 @@
+{
+ "arms": {
+  "p3-musterd": {
+   "first_call_context_tokens": 39589,
+   "phases": {
+    "2 edit": {
+     "calls": 150,
+     "usd": 4.28
+    },
+    "total": {
+     "calls": 938,
+     "usd": 24.59
+    },
+    "save:surface": {
+     "calls": 0,
+     "usd": 4.62
+    },
+    "3 tail": {
+     "calls": 495,
+     "usd": 12.78
+    },
+    "save:wait": {
+     "calls": 206,
+     "usd": 4.84
+    },
+    "1 setup": {
+     "calls": 293,
+     "usd": 7.52
+    }
+   },
+   "categories": {
+    "musterd:team_inbox_check": {
+     "calls": 165,
+     "usd": 4.13
+    },
+    "musterd:team_send": {
+     "calls": 134,
+     "usd": 3.39
+    },
+    "work:bash": {
+     "calls": 103,
+     "usd": 2.83
+    },
+    "git:inspect": {
+     "calls": 75,
+     "usd": 1.96
+    },
+    "work:edit": {
+     "calls": 62,
+     "usd": 1.94
+    },
+    "work:read": {
+     "calls": 67,
+     "usd": 1.67
+    },
+    "git:partner": {
+     "calls": 56,
+     "usd": 1.34
+    },
+    "wait:bash-sleep": {
+     "calls": 55,
+     "usd": 1.34
+    },
+    "musterd:lane_board": {
+     "calls": 45,
+     "usd": 1.02
+    },
+    "gate:edit-refused": {
+     "calls": 30,
+     "usd": 1.01
+    },
+    "git:publish": {
+     "calls": 28,
+     "usd": 0.72
+    },
+    "work:test": {
+     "calls": 26,
+     "usd": 0.69
+    },
+    "text-only": {
+     "calls": 20,
+     "usd": 0.63
+    },
+    "musterd:lane_update": {
+     "calls": 21,
+     "usd": 0.55
+    },
+    "musterd:lane_open": {
+     "calls": 19,
+     "usd": 0.5
+    },
+    "musterd:team_status": {
+     "calls": 16,
+     "usd": 0.37
+    },
+    "musterd:lane_resolve": {
+     "calls": 11,
+     "usd": 0.33
+    },
+    "meta:todo": {
+     "calls": 2,
+     "usd": 0.06
+    },
+    "musterd:lane_submit": {
+     "calls": 1,
+     "usd": 0.03
+    },
+    "musterd:lane_release": {
+     "calls": 1,
+     "usd": 0.03
+    },
+    "musterd:team_report": {
+     "calls": 1,
+     "usd": 0.02
+    }
+   }
+  },
+  "p3-team": {
+   "first_call_context_tokens": 23619,
+   "phases": {
+    "1 setup": {
+     "calls": 84,
+     "usd": 1.8
+    },
+    "total": {
+     "calls": 635,
+     "usd": 13.76
+    },
+    "save:surface": {
+     "calls": 0,
+     "usd": 0.0
+    },
+    "2 edit": {
+     "calls": 386,
+     "usd": 8.56
+    },
+    "3 tail": {
+     "calls": 165,
+     "usd": 3.41
+    },
+    "save:wait": {
+     "calls": 1,
+     "usd": 0.02
+    }
+   },
+   "categories": {
+    "work:edit": {
+     "calls": 135,
+     "usd": 3.41
+    },
+    "work:bash": {
+     "calls": 162,
+     "usd": 3.34
+    },
+    "git:inspect": {
+     "calls": 83,
+     "usd": 1.69
+    },
+    "work:read": {
+     "calls": 78,
+     "usd": 1.43
+    },
+    "git:publish": {
+     "calls": 50,
+     "usd": 1.01
+    },
+    "work:test": {
+     "calls": 32,
+     "usd": 0.81
+    },
+    "git:partner": {
+     "calls": 38,
+     "usd": 0.69
+    },
+    "coord:coop-cli": {
+     "calls": 24,
+     "usd": 0.6
+    },
+    "text-only": {
+     "calls": 20,
+     "usd": 0.5
+    },
+    "wait:bash-sleep": {
+     "calls": 6,
+     "usd": 0.12
+    },
+    "other:ToolSearch": {
+     "calls": 5,
+     "usd": 0.1
+    },
+    "meta:todo": {
+     "calls": 2,
+     "usd": 0.05
+    }
+   }
+  },
+  "solo-core": {
+   "first_call_context_tokens": 22761,
+   "phases": {
+    "1 setup": {
+     "calls": 35,
+     "usd": 0.92
+    },
+    "total": {
+     "calls": 248,
+     "usd": 6.12
+    },
+    "save:surface": {
+     "calls": 0,
+     "usd": 0.0
+    },
+    "2 edit": {
+     "calls": 134,
+     "usd": 3.46
+    },
+    "3 tail": {
+     "calls": 79,
+     "usd": 1.74
+    }
+   },
+   "categories": {
+    "work:edit": {
+     "calls": 65,
+     "usd": 1.97
+    },
+    "work:bash": {
+     "calls": 75,
+     "usd": 1.79
+    },
+    "work:read": {
+     "calls": 40,
+     "usd": 0.92
+    },
+    "work:test": {
+     "calls": 34,
+     "usd": 0.71
+    },
+    "git:inspect": {
+     "calls": 24,
+     "usd": 0.47
+    },
+    "text-only": {
+     "calls": 10,
+     "usd": 0.26
+    }
+   }
+  }
+ },
+ "counterfactual_musterd": {
+  "as_run": 24.59,
+  "A_surface_16k_to_4k": 20.38,
+  "B_blocking_wait": 19.75,
+  "C_drop_state_signal_sends": 23.37,
+  "A+B": 16.29,
+  "A+B+C": 15.24,
+  "A0+B+C_surface_to_0": 14.14
+ }
+}
