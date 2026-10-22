@@ -115,14 +115,17 @@ export function TeamCard({
       </span>
       <span className="lc-team-card__state">{card.stateLabel}</span>
       {card.title && (
-        <span className={`lc-team-card__work${card.source === 'status' ? ' is-said' : ''}`}>
+        <span
+          className={`lc-team-card__work${card.source === 'status' ? ' is-said' : ''}`}
+          title={still ? undefined : [card.title, meta].filter(Boolean).join(' — ')}
+        >
           {card.source === 'status' ? `“${card.title}”` : card.title}
           {card.moreLanes > 0 && (
             <span className="lc-team-card__more"> +{card.moreLanes} more</span>
           )}
         </span>
       )}
-      {meta && <span className="lc-team-card__meta">{meta}</span>}
+      {meta && still && <span className="lc-team-card__meta">{meta}</span>}
     </>
   );
   if (still) {
@@ -157,6 +160,7 @@ export function TeamCard({
       </button>
       {open && (
         <div className="lc-team-card__detail">
+          {meta && <p className="lc-team-card__detail-meta">{meta}</p>}
           <Suspense fallback={null}>
             <SeatDetail m={card.member} cfg={cfg} />
           </Suspense>

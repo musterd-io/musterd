@@ -20,6 +20,22 @@ import {
 const ExperimentSpark = lazy(() => import('./ExperimentSpark'));
 
 /** While the chart's chunk loads: the same box, already saying the number, so nothing shifts. */
+const OPEN_KEY = 'musterd.live.experiments.open';
+function readOpen(): boolean {
+  try {
+    return window.localStorage.getItem(OPEN_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+function writeOpen(v: boolean): void {
+  try {
+    window.localStorage.setItem(OPEN_KEY, v ? '1' : '0');
+  } catch {
+    /* private window: the fold simply isn't remembered */
+  }
+}
+
 function SparkPending({ entry }: { entry: ExperimentEntry }) {
   const last = entry.samples[entry.samples.length - 1]!;
   return (
@@ -60,6 +76,13 @@ export function Experiments({
   stale?: boolean;
 }) {
   const [all, setAll] = useState(false);
+  // /live only: fold the list under its head, leaving the fortnight strip as the summary. Remembered.
+  const [open, setOpen] = useState(readOpen);
+  const toggleOpen = () =>
+    setOpen((v) => {
+      writeOpen(!v);
+      return !v;
+    });
   // The read under the pointer, on the strip or in the list: both light up together.
   const [hot, setHot] = useState<string | null>(null);
   // Rows whose note is open (the §6 disclosure, /live only) — by lane id, so a board refetch keeps it.
@@ -81,7 +104,20 @@ export function Experiments({
   return (
     <section className={`lc-xp${stale ? ' is-stale' : ''}`} aria-label="Experiments">
       <header className="lc-xp__head">
-        <span className="lc-team__title">Experiments</span>
+        {still || entries.length === 0 ? (
+          <span className="lc-team__title">Experiments</span>
+        ) : (
+          <button
+            type="button"
+            className="lc-xp__fold"
+            aria-expanded={open}
+            onClick={toggleOpen}
+            title={open ? 'Fold the list' : 'Show the list'}
+          >
+            <span className="lc-team__title">Experiments</span>
+            <i className="lc-xp__chev" aria-hidden="true" />
+          </button>
+        )}
         {entries.length > 0 && <span className="lc-team__count">{experimentsCount(entries)}</span>}
       </header>
       {entries.length === 0 ? (
@@ -89,6 +125,7 @@ export function Experiments({
       ) : (
         <>
           <Fortnight entries={entries} now={now} hot={hot} onHot={hover} />
+          {(open || still) && (
           <ul className="lc-xp__rows">
             {shown.map((e, i) => (
               <li
@@ -122,9 +159,11 @@ export function Experiments({
               </li>
             ))}
           </ul>
+          )}
         </>
       )}
       {more > 0 &&
+        (open || still) &&
         (still ? (
           <p className="lc-xp__more">+{more} more on the board</p>
         ) : (

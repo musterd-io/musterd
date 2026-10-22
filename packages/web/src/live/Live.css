@@ -9580,3 +9580,108 @@ a.lc-xp__hit:focus-visible {
     animation: none;
   }
 }
+
+/* ─── the team panel, compacted (nick, 2026-10-22: the experiments section took the room the team rows
+   had). /live only — `.is-still` is the stream's column, read from across a room, and keeps its size.
+   A row was ~110px (state line, a two-line work title, a goal/areas/age line); it is now two lines,
+   ~42px: name + model, then the work on ONE line. "working on" is dropped (the dot already says it);
+   asking / review / blocked keep their state word, in front of the work. The goal, areas and age moved
+   into the title tooltip and the open card. */
+.lc-team-card:not(.is-still) .lc-team-card__hit {
+  grid-template-columns: 22px 1fr;
+  column-gap: var(--lc-3);
+  row-gap: 0;
+  padding: 5px var(--lc-5);
+}
+.lc-team-card:not(.is-still) .lc-team-card__avatar {
+  grid-row: 1 / -1;
+  width: 22px;
+  height: 22px;
+  align-self: center;
+}
+.lc-team-card:not(.is-still) .lc-team-card__avatar .mface {
+  width: 22px;
+  height: 22px;
+}
+.lc-team-card:not(.is-still) .lc-team-card__dot {
+  width: 8px;
+  height: 8px;
+}
+.lc-team-card:not(.is-still) .lc-team-card__who {
+  flex-wrap: nowrap;
+  gap: var(--lc-3);
+}
+.lc-team-card:not(.is-still) .lc-team-card__model {
+  font-size: 11px;
+  padding: 0 5px;
+}
+.lc-team-card--working:not(.is-still) .lc-team-card__state,
+.lc-team-card:not(.is-still) .lc-team-card__meta {
+  display: none;
+}
+.lc-team-card:not(.is-still) .lc-team-card__state {
+  grid-row: 2;
+  grid-column: 2;
+  font-size: 11px;
+}
+.lc-team-card:not(.is-still) .lc-team-card__work {
+  font-size: 12.5px;
+  line-height: 1.35;
+  -webkit-line-clamp: 1;
+  color: var(--lc-dim);
+}
+.lc-team-card__detail-meta {
+  margin: 0 0 var(--lc-2);
+  font-size: 11px;
+  color: var(--lc-muted);
+}
+/* A state word (asking, in review, blocked) shares the work line's row: the grid puts it on row 2 and
+   the work line would land under it, so give the work its own row only when a state word is shown. */
+.lc-team-card:not(.is-still):not(.lc-team-card--working) .lc-team-card__work {
+  grid-row: 3;
+}
+.lc-xp__fold {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  gap: var(--lc-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.lc-xp__fold:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.lc-xp__chev {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--lc-muted);
+  border-bottom: 1.5px solid var(--lc-muted);
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-xp__fold[aria-expanded='false'] .lc-xp__chev {
+  transform: rotate(-45deg);
+}
+/* Rows tighten a notch: the leaf stays, the padding around it goes. */
+.lc-xp__hit {
+  padding-block: 3px;
+}
+.lc-xp__head {
+  padding-bottom: 0;
+}
+/* The split: the experiments section scrolls inside ~45% of the column and the team rows keep at least
+   a third, instead of the team list taking whatever the experiments left over. /live only. */
+.lc__canvas:not(.bc__canvas) .lc-xp {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45%;
+  overflow-y: auto;
+}
+.lc__canvas:not(.bc__canvas) .lc-team__cards {
+  min-height: 34%;
+}
