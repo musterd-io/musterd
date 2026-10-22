@@ -428,8 +428,17 @@ export const SyncMoveRequestSchema = SeatMoveRequestSchema.extend({
   to: z.string().min(1),
   seat: z.string().min(1),
   actor: z.string().min(1),
+  /**
+   * ADR 703: the caller passed `--to`. The hub then hands the destination half to a live host
+   * on that machine. Omitted, the move is "bring it here" and this daemon stands the seat up.
+   */
+  hand_to_host: z.boolean().optional(),
 });
 export type SyncMoveRequest = z.infer<typeof SyncMoveRequestSchema>;
+
+/** ADR 703: a joiner asks the hub how a move provision the hub wrote is doing. */
+export const SyncProvisionStatusRequestSchema = z.object({ id: z.string().min(1) });
+export type SyncProvisionStatusRequest = z.infer<typeof SyncProvisionStatusRequestSchema>;
 
 /**
  * What a move did. `from` is every node the seat was bound to before (empty for a seat no machine
@@ -448,6 +457,11 @@ export const SeatMovedSchema = z.object({
       policy: ResidencyPolicyOverrideSchema.nullable(),
     })
     .nullable(),
+  /**
+   * ADR 703: set when a live host on the target was handed the destination half. The CLI waits
+   * on this row. Absent when no host had polled, and the CLI prints the finish instead.
+   */
+  provision: z.object({ id: z.string().min(1), host: z.string().min(1) }).optional(),
 });
 export type SeatMoved = z.infer<typeof SeatMovedSchema>;
 

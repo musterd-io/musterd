@@ -1,4 +1,10 @@
-import type { HostProvision, HostProvisionReportBody, HostProvisionState } from '@musterd/protocol';
+import {
+  type HostProvision,
+  type HostProvisionKind,
+  HostProvisionMoveSchema,
+  type HostProvisionReportBody,
+  type HostProvisionState,
+} from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
@@ -33,6 +39,10 @@ export interface HostProvisionRow {
   /** The public origin the mint was reached at — the fallback connect link is built on it. */
   connect_origin: string | null;
   created_at: number;
+  /** ADR 703. `mint` for every row written before the column existed. */
+  kind: HostProvisionKind;
+  /** JSON `{ harness, policy }` for a move; null for a mint. */
+  move_json: string | null;
 }
 
 export async function insertProvision(
@@ -45,6 +55,8 @@ export async function insertProvision(
   /** Lane 01M5DR34Y2: the host label this row is pinned to — only that host claims it. `null` is
    *  ADR 463 §2's original shape: any live host of the sponsor's claims it, first poll wins. */
   host: string | null = null,
+  kind: HostProvisionKind = 'mint',
+  moveJson: string | null = null,
 ): Promise<HostProvisionRow> {
   const row: HostProvisionRow = {
     id: ulid(),
@@ -60,12 +72,14 @@ export async function insertProvision(
     failed_reason: null,
     connect_origin: connectOrigin,
     created_at: now,
+    kind,
+    move_json: moveJson,
   };
   await db.run(
     `INSERT INTO host_provisions (id, team_id, member_id, sponsor_id, host, state, claimed_by,
-       claimed_at, ready_at, first_wake_at, failed_reason, connect_origin, created_at)
+       claimed_at, ready_at, first_wake_at, failed_reason, connect_origin, created_at, kind, move_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?, ?)`,
+       ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id,
       row.team_id,
@@ -80,6 +94,8 @@ export async function insertProvision(
       row.failed_reason,
       row.connect_origin,
       row.created_at,
+      row.kind,
+      row.move_json,
     ],
   );
   return row;
@@ -147,6 +163,11 @@ export async function claimProvisions(
   scope: HostScope,
   maxPerHost: number,
   now = Date.now(),
+  /**
+   * ADR 703: omitted means mint only. A host binary that does not know `move` must not be
+   * handed one — it would stand the seat up as a new sponsored agent.
+   */
+  kinds: readonly HostProvisionKind[] = ['mint'],
 ): Promise<HostProvisionRow[]> {
   return db.tx(async (t): Promise<HostProvisionRow[]> => {
     const pending = await t.all<HostProvisionRow>(
@@ -157,6 +178,7 @@ export async function claimProvisions(
     const claimed: HostProvisionRow[] = [];
     for (const row of pending) {
       if (room <= 0) break;
+      if (!kinds.includes(row.kind ?? 'mint')) continue;
       if (row.host !== null && row.host !== host) continue;
       const agent = await getMemberById(t, row.member_id);
       if (!agent || agent.left_at !== null || !hostMayServe(scope, agent)) continue;
@@ -296,6 +318,15 @@ export function toProvision(
   agentName: string,
   sponsorName: string,
 ): HostProvision {
+  let move: HostProvision['move'] = null;
+  if (row.kind === 'move' && row.move_json) {
+    try {
+      const parsed = HostProvisionMoveSchema.safeParse(JSON.parse(row.move_json));
+      if (parsed.success) move = parsed.data;
+    } catch {
+      move = null;
+    }
+  }
   return {
     id: row.id,
     team: teamSlug,
@@ -308,5 +339,7 @@ export function toProvision(
     ready_at: row.ready_at,
     failed_reason: row.failed_reason,
     created_at: row.created_at,
+    kind: row.kind ?? 'mint',
+    move,
   };
 }

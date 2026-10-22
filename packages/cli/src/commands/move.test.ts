@@ -161,6 +161,74 @@ describe('musterd move (ADR 696)', () => {
     );
   });
 
+  it('--to waits for the target host and does not print the finish once it is ready', async () => {
+    const h = harness({});
+    h.deps.move = async (seat) => ({
+      ...moved(seat),
+      provision: { id: '01PROV', host: 'air-host' },
+    });
+    h.deps.provisionStatus = async () => ({
+      id: '01PROV',
+      state: 'ready',
+      host: 'air-host',
+      failed_reason: null,
+    });
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      h.deps,
+    );
+    expect(h.text()).toContain('air-host stood the Workspace up');
+    expect(h.text()).not.toContain('on macbook-air-2.lan: musterd move wallow');
+  });
+
+  it('--to prints the finish when the host reports it could not, and when none was handed it', async () => {
+    const failed = harness({});
+    failed.deps.move = async (seat) => ({
+      ...moved(seat),
+      provision: { id: '01PROV', host: 'air-host' },
+    });
+    failed.deps.provisionStatus = async () => ({
+      id: '01PROV',
+      state: 'failed',
+      host: 'air-host',
+      failed_reason: 'enroll',
+    });
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      failed.deps,
+    );
+    expect(failed.text()).toContain('could not stand wallow up (enroll)');
+    expect(failed.text()).toContain('on macbook-air-2.lan: musterd move wallow');
+
+    const none = harness({});
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      none.deps,
+    );
+    expect(none.text()).toContain('on macbook-air-2.lan: musterd move wallow');
+    expect(none.text()).not.toContain('stood the Workspace up');
+  });
+
+  it('--to prints the finish when the host never reports', async () => {
+    const h = harness({});
+    h.deps.move = async (seat) => ({
+      ...moved(seat),
+      provision: { id: '01PROV', host: 'air-host' },
+    });
+    h.deps.provisionStatus = async () => ({
+      id: '01PROV',
+      state: 'claimed',
+      host: 'air-host',
+      failed_reason: null,
+    });
+    await runMove(
+      { team: 'revive', caller: 'wallow', seat: 'wallow', to: 'macbook-air-2.lan' },
+      h.deps,
+    );
+    expect(h.text()).toContain('did not finish standing wallow up');
+    expect(h.text()).toContain('on macbook-air-2.lan: musterd move wallow');
+  });
+
   it('--to with no wake enrollment names only the move', async () => {
     const h = harness({});
     await runMove(

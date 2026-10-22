@@ -136,18 +136,31 @@ musterd move ryder                 # bring ryder to THIS machine
 musterd move ryder --dry-run       # say what would happen, change nothing
 ```
 
-Or from anywhere — including from the seat's own session — send it, then finish at the target:
+Or from anywhere — including from the seat's own session — send it:
 
 ```sh
 musterd move ryder --to macbook-air-2.lan   # a label from `musterd node list`, or a node id
-# then, on macbook-air-2.lan, the lines it printed — for a seat with a wake enrollment:
+```
+
+When that machine's `musterd host` has polled in the last five minutes, the command waits up to
+two minutes for the host to stand the Workspace up and re-enroll the wake with the same harness
+and knobs (ADR 703, lane `01M5GDGC5Z`). It then says the host did so. It does not also print a
+second command. A human seat still prints `musterd human <seat>`: the host holds no human
+credential.
+
+When no host there is live, or the host reports it could not, `--to` prints the finish to run on
+the target. For a seat with a wake enrollment:
+
+```sh
 musterd move ryder --harness claude-code
 musterd residency on --seat ryder --harness claude-code --cooldown 1m …   # in the Workspace it printed
 ```
 
-The second line re-enrolls the wake with the same harness and knobs. `--to` prints it because the
-enrollment the hub revoked comes back to the machine that ran `--to`, not to the target (ADR 703).
-A target with nobody at it cannot run these yet; the host doing it is lane `01M5GDGC5Z`.
+The second line re-enrolls the wake. `--to` prints it because the enrollment the hub revoked
+comes back to the machine that ran `--to`, not to the target. A seat that ran on its own key
+(`--harness musterd`, ADR 588) needs `--key-env`, which is machine-local, so that step fails on
+the host and the same finish is what you run. An older host that does not ask for move rows never
+receives one; the finish is the path then too.
 
 The hub re-binds the seat in one act, so there is no unbound window for the old machine's next push
 to take it back (the race `docs/wiki/joiner-wedges.md` records for the old `node unbind` path). It

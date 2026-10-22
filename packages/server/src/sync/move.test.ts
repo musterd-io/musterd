@@ -3,9 +3,15 @@ import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { listAuditByAction } from '../store/audit.js';
+import { getProvision } from '../store/hostProvisions.js';
 import { addMember, getMemberByName } from '../store/members.js';
 import { bindSeatToNode, seatBindings } from '../store/nodes.js';
-import { enrollResidency, getResidency } from '../store/residency.js';
+import {
+  enrollResidency,
+  getResidency,
+  HOST_STALE_MS,
+  recordHostSeen,
+} from '../store/residency.js';
 import type { MemberRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
 import { TrustRefusedError } from './claim.js';
@@ -168,5 +174,131 @@ withDrivers('sync.move', (o) => {
     });
     expect((await seatBindings(db, wallow.id)).map((b) => b.node_id)).toEqual(['nA']);
     expect(await listAuditByAction(db, team.id, 'seat.moved')).toEqual([]);
+  });
+
+  it('a live host on the target is handed the move, with the revoked harness', async () => {
+    const { db, team, wallow } = await seed();
+    await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
+    await enrollResidency(db, team.id, {
+      member_id: wallow.id,
+      harness: 'muse',
+      host: 'mac.lan',
+      grant_id: null,
+      authorized_by: 'nick',
+      policy: { cooldown_ms: 900_000 },
+    });
+    const now = 1_000_000;
+    await db.run('INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)', [
+      team.id,
+      'air-host',
+      now,
+      'nB',
+    ]);
+    const moved = await applyMove(db, team.id, {
+      seat: wallow,
+      actor: wallow,
+      speaker: hub,
+      to: 'nB',
+      now,
+      handToHost: true,
+      homeNodeId: 'nA',
+    });
+    expect(moved.provision?.host).toBe('air-host');
+    const row = await getProvision(db, team.id, moved.provision!.id);
+    expect(row?.kind).toBe('move');
+    expect(row?.host).toBe('air-host');
+    expect(JSON.parse(row!.move_json!)).toEqual({
+      harness: 'muse',
+      policy: { cooldown_ms: 900_000 },
+    });
+    const [pending] = await listAuditByAction(db, team.id, 'host.provision_pending');
+    expect(JSON.parse(pending!.detail!)).toMatchObject({
+      agent: 'wallow',
+      sponsor: 'wallow',
+      host: 'air-host',
+      kind: 'move',
+    });
+  });
+
+  it('no live host, a stale one, or a poll that never named a node, queues nothing', async () => {
+    const { db, team, wallow } = await seed();
+    await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
+    const now = 1_000_000;
+    await db.run('INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)', [
+      team.id,
+      'stale',
+      now - HOST_STALE_MS - 1,
+      'nB',
+    ]);
+    await db.run('INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)', [
+      team.id,
+      'bound-only',
+      0,
+      'nB',
+    ]);
+    // A host that only polled here, with no node binding, is not on the other machine.
+    await recordHostSeen(db, team.id, 'local-only', now, null);
+    const missed = await applyMove(db, team.id, {
+      seat: wallow,
+      actor: wallow,
+      speaker: hub,
+      to: 'nB',
+      now,
+      handToHost: true,
+      homeNodeId: 'nA',
+    });
+    expect(missed.provision).toBeUndefined();
+    expect(await listAuditByAction(db, team.id, 'host.provision_pending')).toEqual([]);
+  });
+
+  it('a host with no node binding counts only when the target is this daemon', async () => {
+    const { db, team, wallow } = await seed();
+    await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
+    const now = 1_000_000;
+    await recordHostSeen(db, team.id, 'here-host', now, null);
+    const moved = await applyMove(db, team.id, {
+      seat: wallow,
+      actor: wallow,
+      speaker: hub,
+      to: 'nA',
+      now,
+      handToHost: true,
+      homeNodeId: 'nA',
+    });
+    expect(moved.provision).toMatchObject({ host: 'here-host' });
+    const row = await getProvision(db, team.id, moved.provision!.id);
+    expect(JSON.parse(row!.move_json!)).toEqual({ harness: 'claude-code', policy: null });
+  });
+
+  it('omitting the hand, or moving a person, writes no provision even when a host is live', async () => {
+    const { db, team, nick, wallow } = await seed();
+    await bindSeatToNode(db, team.id, wallow.id, 'nA', 10);
+    await bindSeatToNode(db, team.id, nick.id, 'nA', 10);
+    const now = 1_000_000;
+    await db.run('INSERT INTO host_liveness (team_id, host, seen_at, node) VALUES (?, ?, ?, ?)', [
+      team.id,
+      'air-host',
+      now,
+      'nB',
+    ]);
+    const quiet = await applyMove(db, team.id, {
+      seat: wallow,
+      actor: wallow,
+      speaker: hub,
+      to: 'nB',
+      now,
+    });
+    expect(quiet.provision).toBeUndefined();
+    const person = await applyMove(db, team.id, {
+      seat: nick,
+      actor: nick,
+      speaker: hub,
+      to: 'nB',
+      now,
+      handToHost: true,
+      homeNodeId: 'nA',
+    });
+    expect(person.provision).toBeUndefined();
+    expect(person.kind).toBe('human');
   });
 });

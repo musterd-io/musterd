@@ -1070,9 +1070,15 @@ async function projectProvisionLedger(
       const sponsor = await getMemberByName(db, teamId, sponsorName);
       if (!sponsor)
         return { stop: { kind: 'unresolved_seat', seat: sponsorName, hub_seq: hubSeq } };
+      const kind = d['kind'] === 'move' ? 'move' : 'mint';
+      const moveJson =
+        kind === 'move' && d['move'] !== null && typeof d['move'] === 'object'
+          ? JSON.stringify(d['move'])
+          : null;
       await db.run(
-        `INSERT INTO host_provisions (id, team_id, member_id, sponsor_id, host, state, connect_origin, created_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) ON CONFLICT(id) DO NOTHING`,
+        `INSERT INTO host_provisions
+           (id, team_id, member_id, sponsor_id, host, state, connect_origin, created_at, kind, move_json)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
         [
           id,
           teamId,
@@ -1081,6 +1087,8 @@ async function projectProvisionLedger(
           host,
           typeof d['connect_origin'] === 'string' ? d['connect_origin'] : null,
           typeof d['created_at'] === 'number' ? d['created_at'] : e.ts,
+          kind,
+          moveJson,
         ],
       );
     } else if (e.action === 'host.provision_cancelled') {

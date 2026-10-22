@@ -129,6 +129,7 @@ import {
   SyncTrustRequestSchema,
   SeatMoveRequestSchema,
   SyncMoveRequestSchema,
+  SyncProvisionStatusRequestSchema,
   NoteRecipientsRequestSchema,
   parseSealedNote,
   SyncNoteRecipientsRequestSchema,
@@ -630,7 +631,7 @@ import {
   SyncOriginError,
   SyncResidenceError,
 } from '../sync/log.js';
-import { applyMove, moveAtHub } from '../sync/move.js';
+import { applyMove, moveAtHub, provisionStatusAtHub } from '../sync/move.js';
 import { kickSyncPull, peekPullStop, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
 import { describeSeatFileReach, seatFileReach } from '../sync/rosterRefresh.js';
@@ -5807,6 +5808,9 @@ export async function handleHttp(
           scope,
           agentHost.max_per_host,
           now,
+          // Omitted kinds means mint only: a host that does not know `move` must not be
+          // handed one (ADR 703). An empty list is the same refusal.
+          body.kinds?.length ? body.kinds : ['mint'],
         );
         const ready: ReturnType<typeof toProvision>[] = [];
         for (const row of claimed) {
@@ -5823,7 +5827,9 @@ export async function handleHttp(
               ...(asHost ? { actor_kind: 'host', sponsor: sponsor?.name ?? null } : {}),
             },
           });
-          if (agentHost.policy.budget_usd === undefined) {
+          // A move stands up a seat that already exists. The mint budget does not apply,
+          // and failing it `no_budget` would throw away the only host that can finish `--to`.
+          if (row.kind !== 'move' && agentHost.policy.budget_usd === undefined) {
             await failProvision(ctx.db, row.id, 'no_budget');
             await appendAudit(ctx.db, team.id, {
               actor: asHost ? body.host : null,
@@ -5907,7 +5913,12 @@ export async function handleHttp(
         });
         if (refused)
           throw new MusterdError('forbidden', `provision "${id}" cannot go ready: ${refused}`);
-        if (row.state === 'failed' && sponsor && !memberStandingRefusal(sponsor)) {
+        if (
+          row.state === 'failed' &&
+          existing.kind !== 'move' &&
+          sponsor &&
+          !memberStandingRefusal(sponsor)
+        ) {
           await unhostFailedProvision(ctx, team, agent, row.failed_reason ?? 'failed');
           const { nonce } = await issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
           await tellSponsorOfProvision(
@@ -7641,12 +7652,14 @@ export async function handleHttp(
         if (!seat) throw new MusterdError('not_found', `no seat "${body.seat}" on this roster`);
         try {
           await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'move');
+          const home = await localNodeWithLabel(ctx.db, team.id);
           const moved = await applyMove(ctx.db, team.id, {
             seat,
             actor,
             speaker: node,
             to: body.to,
             ...(body.only ? { only: true } : {}),
+            ...(body.hand_to_host === true ? { handToHost: true, homeNodeId: home.id } : {}),
           });
           await pushTeam(ctx, team).catch(() => undefined);
           return sendJson(res, 200, moved);
@@ -7676,6 +7689,60 @@ export async function handleHttp(
         return sendJson(res, 200, await noteRecipients(ctx.db, seat, node.id));
       }
 
+      // ADR 703: a joiner asks how a move provision this hub wrote is doing. The id is the
+      // secret (a ULID); the node credential only proves the ask came from an enrolled machine.
+      if (method === 'POST' && rest === '/sync/provision-status') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncProvisionStatusRequestSchema, await readJson(req));
+        const row = await getProvision(ctx.db, team.id, body.id);
+        if (!row) throw new MusterdError('not_found', `no provision "${body.id}"`);
+        return sendJson(res, 200, {
+          id: row.id,
+          state: row.state,
+          host: row.host,
+          failed_reason: row.failed_reason,
+        });
+      }
+
+      // ADR 703: the mover polls a provision the move just handed to a host. Host-key auth on
+      // `GET /host/provisions` cannot serve this — the mover holds a seat credential. A joiner
+      // forwards to the hub, which is where the row was written.
+      const provisionStatusMatch = rest.match(/^\/provisions\/([^/]+)\/status$/);
+      if (method === 'GET' && provisionStatusMatch) {
+        const { team } = await authTouch(ctx, slug, req);
+        let id: string;
+        try {
+          id = decodeURIComponent(provisionStatusMatch[1]!);
+        } catch {
+          throw new MusterdError('bad_request', 'provision id has invalid URL encoding');
+        }
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        try {
+          if (enrollment)
+            return sendJson(res, 200, await provisionStatusAtHub(enrollment, team.slug, id));
+          const row = await getProvision(ctx.db, team.id, id);
+          if (!row) throw new MusterdError('not_found', `no provision "${id}"`);
+          return sendJson(res, 200, {
+            id: row.id,
+            state: row.state,
+            host: row.host,
+            failed_reason: row.failed_reason,
+          });
+        } catch (err) {
+          if (err instanceof HubUnreachableError)
+            throw new MusterdError('hub_unreachable', err.message);
+          throw err;
+        }
+      }
+
       // ADR 696, the seat-facing move (`musterd move`): authenticated as the mover; `to` omitted is
       // the machine whose daemon took the request. On an enrolled joiner it is forwarded to the hub
       // (the binding lives there); otherwise it is decided here with the local row as speaker.
@@ -7686,6 +7753,9 @@ export async function handleHttp(
         const seatName = decodeURIComponent(seatMoveMatch[1]!);
         const here = await localNodeWithLabel(ctx.db, team.id);
         const to = body.to ?? here.id;
+        // `--to` is the only signal: by here `to` is filled in either way, and "bring it here"
+        // must not queue a provision on this machine's own host.
+        const handToHost = body.to !== undefined;
         const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
         try {
           if (enrollment) {
@@ -7697,6 +7767,7 @@ export async function handleHttp(
                 actor: member.name,
                 to,
                 ...(body.only ? { only: true } : {}),
+                ...(handToHost ? { hand_to_host: true } : {}),
               }),
             );
           }
@@ -7708,6 +7779,7 @@ export async function handleHttp(
             speaker: here,
             to,
             ...(body.only ? { only: true } : {}),
+            ...(handToHost ? { handToHost: true, homeNodeId: here.id } : {}),
           });
           await pushTeam(ctx, team).catch(() => undefined);
           return sendJson(res, 200, moved);

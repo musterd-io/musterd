@@ -16,6 +16,8 @@ const provision: HostProvision = {
   ready_at: null,
   failed_reason: null,
   created_at: 900,
+  kind: 'mint',
+  move: null,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -33,6 +35,7 @@ describe('HttpClient provisions (ADR 463 §2)', () => {
     expect(fetchFn.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
     expect(JSON.parse((fetchFn.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({
       host: 'dana-mbp',
+      kinds: ['mint', 'move'],
     });
   });
 

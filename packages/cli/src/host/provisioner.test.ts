@@ -17,6 +17,8 @@ const row = (over: Partial<HostProvision> = {}): HostProvision => ({
   ready_at: null,
   failed_reason: null,
   created_at: 900,
+  kind: 'mint',
+  move: null,
   ...over,
 });
 
@@ -304,5 +306,54 @@ describe('provisionOnce (ADR 463 §3)', () => {
     expect(t.provisionSeat).toHaveBeenCalledTimes(2);
     expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', { state: 'ready' });
     expect(deferred).toHaveLength(0);
+  });
+
+  it('a move row enrolls the revoked harness and policy, not the host harness', async () => {
+    const moving = row({
+      kind: 'move',
+      move: { harness: 'muse', policy: { cooldown_ms: 60_000 } },
+    });
+    const t = deps({}, [moving]);
+    const r = await provisionOnce(t.d);
+    expect(r).toEqual({ claimed: 1, ready: 1, failed: 0, deferred: 0 });
+    expect(t.provisionSeat.mock.calls[0]![0]).toMatchObject({
+      wiring: { desired: ['muse'], toolkit: '' },
+    });
+    expect(t.sponsor.enrollResidency).toHaveBeenCalledWith('acme', {
+      seat: 'dana-scout',
+      harness: 'muse',
+      host: 'dana-mbp',
+      policy: { cooldown_ms: 60_000 },
+    });
+  });
+
+  it('a move onto the musterd harness with no key env fails enroll and mints nothing', async () => {
+    const moving = row({
+      kind: 'move',
+      move: { harness: 'musterd', policy: null },
+    });
+    const t = deps({}, [moving]);
+    const r = await provisionOnce(t.d);
+    expect(r.failed).toBe(1);
+    expect(t.provisionSeat).not.toHaveBeenCalled();
+    expect(t.sponsor.enrollResidency).not.toHaveBeenCalled();
+    expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', {
+      state: 'failed',
+      reason: 'enroll',
+    });
+  });
+
+  it('arriveMove supplies the workspace and still enrolls the row harness', async () => {
+    const moving = row({ kind: 'move', move: { harness: 'codex', policy: null } });
+    const arriveMove = vi.fn(async () => '/ws/arrived');
+    const t = deps({ arriveMove }, [moving]);
+    await provisionOnce(t.d);
+    expect(t.provisionSeat).not.toHaveBeenCalled();
+    expect(arriveMove).toHaveBeenCalledWith(moving);
+    expect(t.sponsor.enrollResidency).toHaveBeenCalledWith('acme', {
+      seat: 'dana-scout',
+      harness: 'codex',
+      host: 'dana-mbp',
+    });
   });
 });
