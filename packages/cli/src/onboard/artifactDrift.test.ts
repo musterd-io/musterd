@@ -30,11 +30,13 @@ beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'musterd-artifact-drift-'));
   globalDir = mkdtempSync(join(tmpdir(), 'musterd-artifact-drift-global-'));
   process.env['CLAUDE_CONFIG_DIR'] = globalDir; // never touch the real ~/.claude
+  process.env['MUSTERD_GROK_HOOKS_HOME'] = join(globalDir, 'grok-hooks');
   h.folderBinding = { team: 'revive' };
 });
 
 afterEach(() => {
   delete process.env['CLAUDE_CONFIG_DIR'];
+  delete process.env['MUSTERD_GROK_HOOKS_HOME'];
   rmSync(cwd, { recursive: true, force: true });
   rmSync(globalDir, { recursive: true, force: true });
 });
@@ -80,7 +82,8 @@ describe('inspectArtifactDrift — every provisioned harness, not Claude Code al
     grokFolder();
     const hooks = inspectArtifactDrift(cwd).hooks;
     expect(hooks.length).toBeGreaterThan(0);
-    expect(hooks.every((l) => l.includes('.grok/hooks/musterd.json'))).toBe(true);
+    expect(hooks.some((l) => l.includes('.grok/hooks/musterd.json'))).toBe(true);
+    expect(hooks.some((l) => l.includes('musterd-interrupt.json'))).toBe(true);
   });
 
   it('a stale OpenCode doorbell plugin reads as drift', () => {
