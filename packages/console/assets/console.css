@@ -11,23 +11,17 @@
  */
 
 @font-face {
-  font-family: 'Recursive';
-  src: url('fonts/recursive-linear.woff2') format('woff2');
-  font-weight: 400 800;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Recursive Casual';
-  src: url('fonts/recursive-casual.woff2') format('woff2');
-  font-weight: 400 800;
+  font-family: 'DM Sans';
+  src: url('fonts/dm-sans-latin.woff2') format('woff2');
+  font-weight: 100 1000;
   font-display: swap;
 }
 /* Only the pages that show a code or a request id use mono, and a face downloads only when text on
    the page uses it, so sign-in itself never fetches this one. */
 @font-face {
-  font-family: 'Recursive Mono';
-  src: url('fonts/recursive-mono.woff2') format('woff2');
-  font-weight: 400 800;
+  font-family: 'JetBrains Mono';
+  src: url('fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 800;
   font-display: swap;
 }
 
@@ -51,11 +45,10 @@
   --c-success-ink: #1f6f45; /* presence: online — brand success, deepened for paper */
   --c-focus: #15181e;
 
-  --font-sans: 'Recursive', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  /* The linear cut, as the site's headings (ADR 681). The casual face stays declared above and served,
-     but no text uses it, so it never downloads. */
-  --font-display: 'Recursive', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Recursive Mono', ui-monospace, Menlo, monospace;
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Same family as the body (ADR 706). Headings and the room are both DM Sans. */
+  --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 
   /* Type ramp — brand.md §3 */
   --t-h1: 700 28px/36px var(--font-display);

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Cut the three Recursive faces the web type tokens use (ADR 477).
+"""Cut the three Recursive faces the web type tokens used (ADR 477).
+
+ADR 706 (2026-10-21) replaced these outputs. The web, the console and allowance
+no longer ship them. A rerun writes recursive-*.woff2 back into
+packages/web/src/styles/fonts/, and those names fail the font allowlist.
+The three cuts dated decks still load live in docs/demo/fonts/.
 
 Recursive is one variable family with MONO and CASL axes. CSS cannot pin those
 axes per family name in every browser, and canvas cannot set them at all, so we

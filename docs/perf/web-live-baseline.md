@@ -1655,6 +1655,17 @@ the layers a team actually wears is the follow-up before the flag goes on (incre
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 13,900,000 B with this change in.
 
+### 2026-10-21 — `totalFontBytes` 164,000 → 127,000 B: DM Sans and JetBrains Mono (ADR 706, lane `01M5GW3H03`)
+
+| Budget | Before | This change | Ceiling |
+| ------ | ------ | ----------- | ------- |
+| fonts  | 142,476 B (3 Recursive files) | 110,000 B source (62,724 + 47,276) | TIGHTENED 164,000 → 127,000 B |
+| JS     | unchanged | unchanged | unchanged |
+
+The web ships two latin files: DM Sans opsz+wght (`@fontsource-variable/dm-sans@5.2.8`) and a JetBrains Mono variable subset (version 2.305, wght 100–800). 127,000 B is 110,000 plus 15%, rounded (ADR 183: a re-baseline may only tighten). The allowlist is `dm-sans` and `jetbrains-mono`. Dated decks keep the Recursive cuts under `docs/demo/fonts/`, outside `dist/client`.
+
+- Falsify: `pnpm perf:check` after a web build reports font bytes over 127,000, or a font file whose name starts with neither `dm-sans-` nor `jetbrains-mono-`.
+
 ### 2026-10-20 — `officeArtBytes` 2,003,000 → 9,935,000 B; `totalJsGzipBytes` 347,900 → 352,000 B: the rendered figure (lane `01M5D8F93K`, office realism increment 3)
 
 | Budget     | Before (main `cd85cb50`, same laptop) | This branch (laptop)    | Ceiling                          |

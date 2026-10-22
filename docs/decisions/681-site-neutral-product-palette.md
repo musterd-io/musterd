@@ -38,7 +38,7 @@ the new grounds, not assumed.
 
 ## Decision
 
-The site and the console take the product's neutral palette. Site headings take the linear cut.
+The site and the console take the product's neutral palette. Site headings take the linear cut. _(Amended 2026-10-21: ADR 706 removes the casual cut. Headings and the room are both DM Sans.)_
 
 - **Site tokens:** `:root[data-theme='light']` in `packages/web/src/styles/tokens.css` takes /live's
   frame values:
@@ -61,7 +61,8 @@ The site and the console take the product's neutral palette. Site headings take 
   `--font-display: var(--font-sans)` and tighten h1–h3 to `-0.015em`. This is scoped, not a change to
   the token's root value, because /live's member names and chyron labels (DOM and canvas) also read
   `--font-display` and keep the casual cut. That is ADR 477's display role, now held only inside
-  the product's room.
+  the product's room. _(Amended 2026-10-21: ADR 706. `--font-display` and `--font-sans` are both
+  DM Sans, including inside /live.)_
 - **The console:** `packages/console/assets/console.css` takes the same values. Its control edge is
   `#7f848e`, opaque, at ≥3:1 on both the ground and a field. The session notice is a white strip with
   the mustard mark. The h1 uses the linear cut.

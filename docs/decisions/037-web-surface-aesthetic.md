@@ -33,9 +33,12 @@ Treating these as one system forces a bad compromise. Treating them as two lets 
 Split the brand into two registers with one shared anchor.
 
 - **Anchor (unchanged):** mustard `#E1AD01` stays the single accent and the warm through-line on
-  every surface. Inter + JetBrains Mono remain the only typefaces. Voice stays plain and declarative
+  every surface. Inter + JetBrains Mono remain the only typefaces. _(Amended 2026-10-21: ADR 477
+  replaced these typefaces with Recursive. ADR 706 replaces Recursive: DM Sans for text, JetBrains
+  Mono for data.)_ Voice stays plain and declarative
   — copy never says "magic"/"revolutionary"; the *experience* carries the spectacle, the *words* do
-  not. The wordmark is still set in lowercase JetBrains Mono.
+  not. The wordmark is still set in lowercase JetBrains Mono. _(Amended 2026-10-21: ADR 704. The
+  wordmark is the drawn nameplate.)_
 - **Web surface (expanded, opt-in):** the marketing/landing surface MAY use immersive WebGL
   (three.js), gradients, glows, depth, and motion, plus a deep-black ground darker than `zinc-950`.
   This expansion is scoped to `packages/web` and does not touch the CLI/terminal briefs or the

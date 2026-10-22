@@ -121,7 +121,7 @@ describe('console sign-in pages (design 2026-10-15, copy spec)', () => {
     expect(css.headers['content-type']).toContain('text/css');
     expect(css.body).toContain('--c-accent: #e1ad01');
     expect((await call('/favicon.svg')).status).toBe(200);
-    for (const f of ['recursive-linear.woff2', 'recursive-casual.woff2', 'recursive-mono.woff2']) {
+    for (const f of ['dm-sans-latin.woff2', 'jetbrains-mono-latin.woff2']) {
       const font = await call(`/fonts/${f}`);
       expect(font.status, f).toBe(200);
       expect(font.headers['content-type']).toContain('font/woff2');
