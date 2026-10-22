@@ -20,10 +20,22 @@ import { getPolicy, getTeamById } from '../store/teams.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 
 /**
+ * ADR 700 decision 5. The phrase the sponsor's CLI matches so a hub that has not pulled the seat
+ * file yet keeps the local file (publish it, then retry). Any other refusal deletes that file.
+ */
+export function hubSeatFileWait(team: string, name: string, sponsor: string): string {
+  return (
+    `"${name}" has no seat file in the hub's roster root for "${team}" yet — ` +
+    `publish .musterd/seats/${name}.toml (kind = "agent", sponsored_by = "${sponsor}") ` +
+    `and retry after the hub's next git refresh`
+  );
+}
+
+/**
  * The one mint path for member-created agents (ADR 449 §3), behind `POST …/members/agents` — which
- * the adapter's remote `team_agent_create` calls (ADR 630), so there is one surface: the file-backed refusal,
- * the store's invariants (human-only, inherited expiry, cap, no revived names), the audit row, the
- * team notice, and the connect link.
+ * the adapter's remote `team_agent_create` calls (ADR 630), so there is one surface: the file-backed
+ * seat-file check (ADR 700 decision 5), the store's invariants (human-only, inherited expiry, cap,
+ * no revived names), the audit row, the team notice, and the connect link.
  */
 export async function mintSponsoredAgent(
   ctx: Ctx,
@@ -39,14 +51,27 @@ export async function mintSponsoredAgent(
   connect_url: string;
   connect_expires_at: number;
 }> {
-  // A file-backed team's seat files are the single writer (ADR 058): a db-originated seat would be
-  // double-sourced there. Member-created agents need a team whose roster lives in the daemon.
-  if (teamSpecForSlug([...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])], team.slug))
-    throw new MusterdError(
-      'forbidden',
-      `"${team.slug}" keeps its roster in seat files — add an agent there (\`musterd agent\`); ` +
-        'member-created agents need a team whose roster lives in the daemon',
-    );
+  // ADR 700 decision 5: a file-backed team can mint a hosted agent, but only from a seat file
+  // already in THIS hub's roster root. The file is written first so reconcile's remove pass cannot
+  // tombstone the member the mint is about to create. A joiner's checkout is not this root: the
+  // refusal names the wait, and the sponsor publishes and retries. No member is created first.
+  const spec = teamSpecForSlug(
+    [...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])],
+    team.slug,
+  );
+  if (spec) {
+    const declared = spec.seats.find((s) => s.name === input.name);
+    if (!declared) {
+      throw new MusterdError('conflict', hubSeatFileWait(team.slug, input.name, sponsor.name));
+    }
+    if (declared.seat.kind !== 'agent' || declared.seat.sponsored_by !== sponsor.name) {
+      throw new MusterdError(
+        'forbidden',
+        `seats/${input.name}.toml must be an agent sponsored by ${sponsor.name} ` +
+          `(kind ${declared.seat.kind}, sponsored_by ${declared.seat.sponsored_by ?? 'unset'})`,
+      );
+    }
+  }
   // A named host (`musterd agent --hosted --host <label>`, lane 01M5DR34Y2) pins the row to that
   // label; checked BEFORE the member exists, so a refusal leaves no seat behind; it must be one of the sponsor's hosts seen in the window, else the mint is refused with
   // the labels that were. Unnamed keeps the original shape: the newest-seen host, any host claims.

@@ -804,6 +804,7 @@ export class HttpClient {
    * {@link addMember} this is the path that QUEUES a provision — when a host key of the sponsor's
    * polled in the last ten minutes, `hosting` is `sponsor_host` and that host stands the seat up;
    * otherwise nothing is queued and `connect_url` is the way in. `musterd agent --hosted`.
+   * `host`, when set, pins the provision to that live host of the sponsor's.
    */
   mintSponsoredAgent(
     slug: string,
@@ -817,6 +818,7 @@ export class HttpClient {
     return this.request('POST', `/teams/${slug}/members/agents`, {
       name: body.name,
       ...(body.role !== undefined ? { role: body.role } : {}),
+      ...(body.host !== undefined ? { host: body.host } : {}),
     });
   }
   /** ADR 374: set a member's hue on a DB-only team (a file-backed team edits the seat file). */

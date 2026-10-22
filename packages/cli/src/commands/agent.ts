@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import { resolveAttestedModel } from '@musterd/protocol';
 import { flagHue, flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { loadConfig } from '../config.js';
@@ -9,11 +10,68 @@ import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
 import {
   publishSeatFileReport,
+  readSeatFiles,
+  seatFileExists,
   seatFilePath,
   seatFileUnpublished,
   seatReachLines,
+  writeSeatFile,
 } from '../roster.js';
 import { resolve, resolveRead } from './helpers.js';
+
+/**
+ * ADR 700 decision 5. The hub's `hubSeatFileWait` sentence contains this, and only this refusal
+ * keeps the seat file: the sponsor publishes it and retries after the hub's next git refresh.
+ * Any other refusal deletes the unpublished file.
+ */
+const HUB_SEAT_FILE_WAIT = "no seat file in the hub's roster root";
+
+/**
+ * Write `seats/<name>.toml` before the hosted mint, when none exists. `until` is copied from the
+ * sponsor's own seat file so the file matches the expiry the mint stores from that member.
+ * Returns whether this call created the file.
+ */
+function writeHostedSeatFile(
+  home: string,
+  name: string,
+  sponsor: string,
+  role: string | undefined,
+): boolean {
+  if (seatFileExists(home, name)) return false;
+  const sponsorSeat = readSeatFiles(home)[sponsor];
+  const expiring = sponsorSeat?.lifecycle === 'until' && sponsorSeat.until;
+  writeSeatFile(home, name, {
+    kind: 'agent',
+    ...(role ? { role } : {}),
+    sponsored_by: sponsor,
+    ...(expiring ? { lifecycle: 'until' as const, until: sponsorSeat.until } : {}),
+  });
+  return true;
+}
+
+/** A refused hosted mint drops the unpublished file. The hub-wait refusal leaves it and says how. */
+function settleHostedSeatFile(
+  home: string,
+  name: string,
+  created: boolean,
+  err: unknown,
+  role: string | undefined,
+): void {
+  if (err instanceof CliError && err.message.includes(HUB_SEAT_FILE_WAIT)) {
+    const reach = seatReachLines(name, home, 'agent', role);
+    if (reach) {
+      process.stderr.write(
+        `${theme.warn(sym.warn)} ${theme.warn(reach[0])}\n${theme.meta(`  ${reach[1]}`)}\n`,
+      );
+    }
+    return;
+  }
+  // This call's file, or an unpublished leftover from an earlier try. A file already on a remote
+  // (`seatFileUnpublished` is null) stays — deleting it would unseat someone the hub can see.
+  if (created || seatFileUnpublished(home, name) !== null) {
+    rmSync(seatFilePath(home, name), { force: true });
+  }
+}
 
 /**
  * `musterd agent <name>` — one command to add an agent AND give it an isolated, ready-to-run
@@ -135,7 +193,7 @@ export async function agentCommand(
   }
 
   // Adding a member is an admin act — needs an active identity, like `team add`.
-  const { team, http, config } = resolve(parsed.flags);
+  const { team, http, config, identity } = resolve(parsed.flags);
 
   // `--hosted` (ADR 463 §2 / ADR 647): the seat lives on a host of the sponsor's, not in a folder
   // here. The sponsored mint is the ONE path that queues a provision, and only while a host key of
@@ -146,11 +204,34 @@ export async function agentCommand(
     // `--host <label>` pins the provision to one live host of the sponsor's (lane 01M5DR34Y2);
     // without it the newest-seen host is named and any live host of the sponsor's may claim.
     const host = flagStr(parsed.flags, 'host');
-    const minted = await http.mintSponsoredAgent(team, {
-      name,
-      ...(role ? { role } : {}),
-      ...(host ? { host } : {}),
-    });
+    // ADR 700 decision 5: on a file-backed team the file is written first, the mint runs every
+    // check it runs today, and the file is published only after that mint succeeds. A db-only
+    // team has no roster home and keeps the mint-only path.
+    const rosterHome = loadConfig().rosterHome[team];
+    let created = false;
+    if (rosterHome) {
+      if (!identity?.name) {
+        throw new CliError(
+          'no identity in this folder — a hosted seat on a file-backed team records you as sponsored_by',
+          4,
+        );
+      }
+      created = writeHostedSeatFile(rosterHome, name, identity.name, role);
+    }
+    let minted: Awaited<ReturnType<typeof http.mintSponsoredAgent>>;
+    try {
+      minted = await http.mintSponsoredAgent(team, {
+        name,
+        ...(role ? { role } : {}),
+        ...(host ? { host } : {}),
+      });
+    } catch (err) {
+      if (rosterHome) settleHostedSeatFile(rosterHome, name, created, err, role);
+      throw err;
+    }
+    const publication = rosterHome
+      ? publishSeatFileReport(name, rosterHome, { publish: parsed.flags['no-publish'] !== true })
+      : null;
     if (parsed.flags['json']) {
       process.stdout.write(
         JSON.stringify({
@@ -159,6 +240,15 @@ export async function agentCommand(
           hosting: minted.hosting,
           host: minted.host,
           connect_url: minted.connect_url,
+          ...(publication?.outcome ? { seat_file_published: publication.outcome } : {}),
+          ...(rosterHome && seatFileUnpublished(rosterHome, name)
+            ? {
+                seat_file_unpublished: {
+                  path: seatFilePath(rosterHome, name),
+                  state: seatFileUnpublished(rosterHome, name),
+                },
+              }
+            : {}),
         }) + '\n',
       );
       return minted.hosting === 'sponsor_host' ? 0 : 1;
@@ -166,6 +256,11 @@ export async function agentCommand(
     process.stdout.write(
       `${theme.ok(sym.ok)} added ${theme.memberName(minted.member.name, 'agent')} (agent) to ${theme.accent(team)}\n`,
     );
+    if (publication?.ok) process.stdout.write(`${theme.ok(sym.ok)} ${publication.ok}\n`);
+    if (publication?.warn)
+      process.stdout.write(
+        `${theme.warn(sym.warn)} ${theme.warn(publication.warn[0])}\n${theme.meta(`  ${publication.warn[1]}`)}\n`,
+      );
     if (minted.hosting === 'sponsor_host') {
       process.stdout.write(
         `${theme.ok(sym.ok)} provision queued — host ${theme.accent(minted.host ?? '?')} stands it up on its next poll\n`,

@@ -23,6 +23,8 @@ export interface SeatFields {
   lifecycle?: Lifecycle | undefined;
   /** ISO-8601 or any Date-parseable string; normalized to canonical ISO on write. */
   until?: string | undefined;
+  /** ADR 700: the sponsoring member's name. Valid only on an agent seat; ignored otherwise. */
+  sponsored_by?: string | undefined;
   /** The seat's colour (ADR 374). Undefined ⇒ assigned at write, clear of the sibling seat files. */
   hue?: number | undefined;
 }
@@ -30,6 +32,7 @@ export interface SeatFields {
 /** Build a canonical {@link SeatFile} body from CLI inputs (drops `lifecycle`/`until` when forever). */
 export function buildSeat(fields: SeatFields): SeatFile {
   const seat: SeatFile = { kind: fields.kind, role: fields.role ?? '' };
+  if (fields.kind === 'agent' && fields.sponsored_by) seat.sponsored_by = fields.sponsored_by;
   if (fields.hue !== undefined) seat.hue = fields.hue;
   if (fields.lifecycle && fields.lifecycle !== 'forever') {
     seat.lifecycle = fields.lifecycle;
