@@ -374,6 +374,48 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
   return Object.keys(out).length > 0 ? (out as ResidencyPolicyOverride) : undefined;
 }
 
+/**
+ * The inverse of {@link collectPolicyFlags}: a sparse override as the `residency on` knob flags that
+ * re-create it. `move --to` prints it, because the wake enrollment the hub hands back reaches the
+ * machine that ran the move, not the target that re-enrolls it (ADR 703).
+ */
+export function policyFlags(policy: ResidencyPolicyOverride): string[] {
+  const dur = (ms: number) => (ms % 1_000 === 0 ? fmtDurationMs(ms) : `${Math.round(ms / 1_000)}s`);
+  const onOff = (b: boolean) => (b ? 'on' : 'off');
+  const out: string[] = [];
+  const add = (flag: string, value: string | undefined) => {
+    if (value !== undefined) out.push(`--${flag}`, value);
+  };
+  add('lane', policy.lane);
+  add('cooldown', policy.cooldown_ms === undefined ? undefined : dur(policy.cooldown_ms));
+  add('hourly-cap', policy.hourly_cap?.toString());
+  add('attempt-cap', policy.attempt_cap?.toString());
+  add('tool-policy', policy.tool_policy);
+  add('timeout', policy.timeout_ms === undefined ? undefined : dur(policy.timeout_ms));
+  add(
+    'work-timeout',
+    policy.work_timeout_ms === undefined ? undefined : dur(policy.work_timeout_ms),
+  );
+  add('flow', policy.flow);
+  add(
+    'convene-huddles',
+    policy.convene_huddles === undefined ? undefined : onOff(policy.convene_huddles),
+  );
+  add('idle-wake', policy.idle_wake === undefined ? undefined : onOff(policy.idle_wake));
+  add('max-turns', policy.max_turns?.toString());
+  add('budget', policy.budget_usd?.toString());
+  add(
+    'transcript-max',
+    policy.transcript_max_bytes === undefined
+      ? undefined
+      : String(policy.transcript_max_bytes / 1_048_576),
+  );
+  add('dream', policy.dream_enabled === undefined ? undefined : onOff(policy.dream_enabled));
+  add('dream-nightly', policy.dream_nightly_wakes?.toString());
+  add('dream-budget', policy.dream_budget_usd?.toString());
+  return out;
+}
+
 /** One-line policy summary. With `override`, starred knobs are the seat-overridden ones. */
 export function renderPolicy(
   policy: ResidencyPolicy,

@@ -110,7 +110,7 @@ The destination half is one function, `arriveSeat(seat, residency)`. It runs on 
 machine either way:
 
 - **Without `--to`:** the CLI runs it in place, after the hub act.
-- **With `--to`:** the target's `musterd host` loop runs it. The hub writes a provision row pinned to
+- **With `--to`:** _(Amended 2026-10-21: superseded by ADR 703 — `--to` prints the finish to run at the target; the host path is lane `01M5GDGC5Z`. See the amendment below.)_ the target's `musterd host` loop runs it. The hub writes a provision row pinned to
   that node, the same row ADR 463 §3 already uses for a sponsored mint with a host (bf33cfe26), with
   `kind: 'move'`. The host claims it and reports `ready` or `failed`, and the CLI waits for that
   report and prints it. If no host on the target has polled within `HOST_STALE_MS`, `move --to`
@@ -168,6 +168,10 @@ has no hub half.
 - `node unbind` stays, unchanged, as the admin's escape valve.
 - The unbind race in `joiner-wedges.md` is closed for any move made through `move`. A bare unbind
   still has it.
+- **Amended 2026-10-21 (ADR 703).** §4's `--to` host path did not ship. `move --to` makes the hub
+  act, then prints the finish to run at the target, carrying the revoked wake enrollment as a
+  `residency on` line. The provision row of `kind: 'move'` and the host's report are lane
+  `01M5GDGC5ZGTMXPFBXE482WJQ0`. See [ADR 703](703-move-to-finishes-at-the-target.md).
 - An agent can move itself. This is new authority. It is bounded: the seat can only move itself,
   only to an unrevoked node of its own team, and every move is audited as `seat.moved` with `by`.
 
