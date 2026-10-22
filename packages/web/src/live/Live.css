@@ -1711,6 +1711,19 @@
 .lc-gl-label:not(.is-broadcast) .lc-gl-label__plate {
   cursor: pointer;
 }
+/* A seat that is working (the green dot) wears a firmer plate than one that is merely here (nick,
+   2026-10-22): 93% chalk against the 84% above, so the room's active hands read first. Idle, away and
+   offline plates keep the 84%. The same ground under the ink, so the contrast only improves. */
+.lc-gl-label__plate:has(.lc-gl-label__dot--on) {
+  background:
+    linear-gradient(
+      170deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.12) 42%,
+      rgba(255, 255, 255, 0) 68%
+    ),
+    color-mix(in srgb, #fffaf0 93%, transparent);
+}
 /* The divider: a real vertical rule, not a typographic dot. At 8px, a mid-dot is a smudge between
    two words; a 1px rule at reduced height reads as structure. */
 .lc-gl-label__rule {
