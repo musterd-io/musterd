@@ -42,6 +42,9 @@ Recommended workflow:
    and your lane.
 2. Check `team_inbox_check` at minimum after major edits and before
    submitting. Acts addressed to you also appear after your tool calls.
+   When you must wait for a partner, wait in ONE call —
+   `team_inbox_check` with `wait: 45` blocks until a directed act arrives
+   (repeat it if it times out). Never poll with repeated checks or `sleep`.
 3. If two agents need to modify the same file, coordinate explicitly
    (split the file, agree on one owner and hand off, or ask the owner to
    make the change).

@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 54;
+export const GUIDANCE_CONTENT_VERSION = 55;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -349,6 +349,9 @@ export function renderSkillBody(opts: { team: string }): string {
     'When you are idle and want to resume the moment a teammate addresses you, `musterd inbox --wait` blocks',
     'until the next directed act, then exits. Under a harness re-invoker pair it with `/loop`: `musterd inbox',
     '--wait && <do the work>` — the cheap, no-poll wake loop. Do not bolt inbox-polling onto a timer.',
+    'On the MCP surface the same wait is `team_inbox_check {wait: <seconds>}` (ADR 705): one call blocks',
+    'for the next directed act (max 50s) and then returns it. Waiting on a partner is that one call,',
+    'never repeated `team_inbox_check` / `sleep` polls.',
     '',
     '**`--wait` and `--waiting` are one letter apart and are not the same thing.** `--wait` *blocks* —',
     'it is the wake loop above. `--waiting` *returns immediately*: a read-only banner naming the acts',

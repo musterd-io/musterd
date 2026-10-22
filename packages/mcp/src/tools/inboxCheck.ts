@@ -29,10 +29,9 @@ import { renderRoom, roomStructured, roomsFor, type RoomContext } from './huddle
 // tool list, so the elision contract is stated in the fewest bytes that still state it. The full
 // reasoning lives in ADR 287; the runtime notice carries the detail at the moment it matters.
 const DESCRIPTION =
-  'Check unread addressed to you or the team, marking them read. Call at task start, ' +
-  'task end, and after heads-down work. Past `limit` nothing is marked read. `ids` reads ' +
-  'named acts in full; `full` returns a longer reply. `wait` (s) blocks for the next ' +
-  'directed act instead of polling.';
+  'Check unread, marking them read. Call at task boundaries. Past `limit` nothing ' +
+  'is marked read. `ids` reads named acts in full; `full` a longer reply. ' +
+  '`wait` (s) blocks for a directed act.';
 
 /** Longest one `wait` may block: under the harness MCP tool timeout, so the call returns. */
 export const MAX_INBOX_WAIT_MS = 50_000;
@@ -551,10 +550,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // something it was already shown.
         ids: z.array(z.string()).optional(),
         full: z.boolean().optional(),
-        wait: z
-          .number()
-          .optional()
-          .describe('seconds to block for the next directed act (max 50); 0 = return at once'),
+        wait: z.number().optional(),
       },
     },
     async (args) => {
