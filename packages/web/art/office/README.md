@@ -98,7 +98,7 @@ decode to about 2 GB in the browser. Tinting happens per frame on one scratch ca
 time; a tinted copy of a whole sheet per member colour is never made.
 
 Every mesh carries the **layer** its pixels belong to (`LAYERS`: skin, one per hair style, facial
-hair, hat, top cut, accessory, bottom, shoes, visor). Per frame the renderer draws the base body
+hair, hat, top cut, accessory, bottom, shoes, visor, and the carried things below). Per frame the renderer draws the base body
 (skin, bottom, shoes, visor) twice — lit, neutral grey, and as flat ID colours, no anti-aliasing —
 and splits the lit pixels by ID; then each variant alone, with the body as a **holdout**, so a
 hand in front of a hoodie keeps its pixels and the hoodie has a hand-shaped hole. `figure.ts`
@@ -123,14 +123,68 @@ frames down:
 
 A gesture is only ever seen facing a desk or a fixture, so it is rendered E and N and mirrored to S
 and W (`dirs` in `figure.json`); in any other direction, or in the wrong posture, the base clip
-plays. The carried prop (mug, plate, bottle, card) is not on these frames yet.
+plays.
 
-### Re-rendering part of the figure
+### Carried things and the seated overlay (plan Task 16)
 
-`--clips g-sip,g-wave` renders only the named clips and takes every other clip's frames back out of
-the atlases on disk — a change to one beat is minutes, not the whole figure. `--only <layer>,…`
-does the same along the other axis (a hair style, a top). Change the body itself (`skin`) and
-every layer's holdout changes, so that one is the full render.
+What a member carries is its own layer, `carry/<thing>` (laptop, box, plant, plate, card, mug,
+bottle, phone), plus `lanyard` and `lanyard-card` for a first arrival's badge. A prop is not
+jointed: after a frame is posed, `place_props` stands it at the hands — upright, turned with the
+body — the way the painter's `drawCarry` reads the solved wrists (a rigid child of the wrist would
+tip a mug upside down at the top of a sip). Each prop renders only on the clips that carry it, so
+the rest of the sheet costs it nothing, and it is rendered with the body *and a torso* as the
+holdout, so a hand in front of a box cuts it. The moving box is `carry/box` in kraft with
+`carry/plant` in it; the box and the mug are neutral grey and tinted, everything else keeps its own
+colour.
+
+Carrying changes the arms, so five clips carry the painter's carry overlays: `walk-hold2` and
+`idle-hold2` (both hands at the chest: a box, a plate), `walk-hold1` and `idle-hold1` (the right hand
+out in front: the card, a mug, a bottle) and `walk-call` (the phone at the ear on a pacing call).
+`character.ts` `animFor` picks them from the pose's carry. A carrying clip changes only the arms, the
+sleeves, the prop and the lanyard, so only those layers store its frames; every other layer reads the
+same frame of the walk or idle it is laid over (`base` and `layers` on the clip in `figure.json`) — the
+first cut stored them all and came to 15.8 MB, this is 13.8 MB. The frame is 72 units wide for them — a
+held-out hand reaches ~30 from the floor point and clipped at 56.
+
+A desk paints over a member sitting behind it, but their forearms rest on it. For the seated clips
+the ID pass also marks every mesh on a shoulder, elbow or wrist joint (the green byte), and each of
+`ARM_LAYERS` (skin, the tops' sleeves, a mug or plate held at the desk) packs those pixels into its
+own atlas a second time as `<layer>@arms` cells. `drawFigureFrame(part: 'arms')` draws only those,
+in the overlay slot over the desk slab, as the painter's `armsOnly` pass does.
+
+### Rendering the figure fast (lane 01M5GF82SB)
+
+Run the figure through the watchdog, not Blender directly:
+
+```sh
+python3 packages/web/art/office/render_watch.py -- \
+  --figure --out packages/web/src/live/office-scene/rendered/assets --scale 2 --ky 0.31
+```
+
+- **Only what changed renders.** Each render call is keyed on what decides its pixels — the meshes
+  it shows (geometry, modifiers, materials, layer and arm tags) where the pose put them, which are
+  holdouts, the lights, the camera, the render settings and `FIG_PIPELINE` — and its cells are
+  saved under that key the moment it finishes, in `~/.cache/musterd/office-figure/calls/`
+  (`MUSTERD_FIG_CACHE` moves it; ~5 KB a call, ~100 MB for the whole figure). A call whose key is
+  there is not rendered. Measured 2026-10-21 on a three-clip test: first run 214 s, unchanged
+  re-run 2 s with byte-identical sheets; changing the one-handed hold re-rendered only that clip.
+  The frame's width is not in the key — the camera spans the height — so widening the frame
+  re-renders nothing; stored cells are placed from the frame's centre line. Bump `FIG_PIPELINE`
+  when what a render's pixels *become* changes (a mask threshold, the arm split); `--force`
+  ignores the store. The store is this machine's: a fresh machine renders everything once.
+- **A hang costs one call.** EEVEE on this laptop can hang on a GPU read (2026-10-21: stuck in
+  `MTLStorageBuf::read` at 0% CPU, 70% through a two-hour run that, writing only at the end, lost
+  all of it). `render_watch.py` restarts Blender after three quiet minutes, and the store resumes
+  the run where it stopped.
+- **Lit samples: 16**, down from 32. Side by side at the /live panel's and the 1080p broadcast's
+  scale the two were indistinguishable (~0.1% RMSE on three poses), and a lit render takes ~0.18 s
+  instead of ~0.32 s (2026-10-21; nick looked and agreed).
+- **Many layers per render call was measured and dropped.** One call rendering 23 view layers took
+  the same time as 23 calls (4.0 s against 4.0 s, warm, 2026-10-21): EEVEE renders each view layer
+  in full either way, and the per-call overhead it would save is small.
+
+`--clips` and `--only` are gone from the figure (`--only` still re-renders room assets): the store
+does what they did, without having to name what changed.
 
 ## Original art
 

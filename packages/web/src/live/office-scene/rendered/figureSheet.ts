@@ -40,7 +40,14 @@ export const GESTURE_ANIMS = [
   'g-wave',
 ] as const;
 export type GestureAnim = (typeof GESTURE_ANIMS)[number];
-export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim;
+/**
+ * The carrying clips (plan Task 16), after the gestures in `figure.py` CLIPS order: the walk and the
+ * idle with both hands holding something at the chest (`hold2`: a box, a plate), the right hand out in
+ * front (`hold1`: the card, a mug, a bottle), or the phone at the ear on a pacing call.
+ */
+export const CARRY_ANIMS = ['walk-hold2', 'walk-hold1', 'walk-call', 'idle-hold2', 'idle-hold1'] as const;
+export type CarryAnim = (typeof CARRY_ANIMS)[number];
+export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim | CarryAnim;
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -51,6 +58,7 @@ export const ANIMS: readonly Anim[] = [
   'sit-down',
   'stand-up',
   ...GESTURE_ANIMS,
+  ...CARRY_ANIMS,
 ];
 
 export interface AnimSpec {
@@ -62,6 +70,10 @@ export interface AnimSpec {
   /** The directions this clip was rendered in (or mirrored to); absent means all eight. A gesture
    *  is only seen facing a desk or a fixture, so it has four — elsewhere the base clip plays. */
   dirs?: Dir8[];
+  /** A carrying clip stores only the layers it changes (`layers`, matched as a prefix: `top/` is every
+   *  top); any other layer plays the same frame of `base`, its pixels being the same. */
+  base?: Anim;
+  layers?: string[];
 }
 
 export interface SheetSpec {
@@ -81,6 +93,8 @@ export interface SheetSpec {
    * frame. A frame with no pixels on that layer is all zeros. Cropping each frame to its own
    * pixels is what keeps 27 layers from decoding to gigabytes: a glasses cell is a few hundred
    * pixels, not a whole frame. Absent (an older figure.json), the sheet is a plain grid.
+   * `<layer>@arms` is the same list for the seated overlay — only the arm pixels of the seated
+   * clips, packed into that layer's own atlas (plan Task 16).
    */
   cells?: Record<string, number[]>;
   /**
@@ -189,6 +203,13 @@ export function frameCell(
   const cells = spec.cells?.[layer];
   if (!cells) return { ...frameRect(spec, anim, dir, t, startT), ox: 0, oy: 0 };
   const { i, done } = frameIndex(spec, anim, t, startT, frame);
+  const a = spec.anims[anim]!;
+  const id = layer.split('@')[0]!;
+  if (a.base && a.layers && !a.layers.some((p) => id.startsWith(p)) && spec.anims[a.base]) {
+    // Not stored in this clip: the base clip's frame (same index) is the same pixels.
+    const b = frameCell(spec, layer, a.base, dir, t, startT, i % spec.anims[a.base]!.frames);
+    return { ...b, done };
+  }
   const src = spec.mirror?.[dir];
   const at = cellIndex(spec, anim, src ?? dir, i) * 6;
   const [sx = 0, sy = 0, sw = 0, sh = 0, ox = 0, oy = 0] = cells.slice(at, at + 6);

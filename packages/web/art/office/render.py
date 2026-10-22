@@ -22,6 +22,7 @@ import subprocess
 import sys
 
 import math
+import time
 
 import bpy
 import numpy as np
@@ -35,7 +36,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "clips": None}
+    out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -51,8 +52,8 @@ def args() -> dict:
             out["only"] = set(argv[i + 1].split(",")); i += 2
         elif k == "--figure":
             out["figure"] = True; i += 1
-        elif k == "--clips":
-            out["clips"] = set(argv[i + 1].split(",")); i += 2
+        elif k == "--force":
+            out["force"] = True; i += 1
         else:
             raise SystemExit(f"render.py: unknown argument {k}")
     if not out["out"]:
@@ -195,6 +196,63 @@ def write_pixels(path: str, px: np.ndarray) -> None:
     bpy.data.images.remove(img)
 
 
+# ── the figure's render cache ──────────────────────────────────────────────────────────────
+# A render call is keyed on everything that decides its pixels: the meshes it shows (geometry,
+# modifiers, materials, layer and arm tags) where the pose put them, which of them are holdouts,
+# the lights, the camera, the render settings and FIG_PIPELINE. Its cells are saved under that key
+# the moment it finishes (`~/.cache/musterd/office-figure/calls/<key>.npz`), and a later call with
+# the same key takes them from there instead of rendering — so changing one beat, one prop or one
+# hair style renders that and nothing else, and a run that hangs or crashes resumes where it
+# stopped. The store is this machine's: a fresh machine renders everything once.
+FIG_PIPELINE = 1  # bump when what a render's pixels BECOME changes (masks, thresholds, the arm split)
+LIT_SAMPLES = 16  # 32 was indistinguishable at panel and broadcast size, ~0.1% RMSE (nick, 2026-10-21)
+FIG_CACHE = os.environ.get("MUSTERD_FIG_CACHE") or os.path.expanduser("~/.cache/musterd/office-figure")
+
+
+def _h(*parts) -> str:
+    import hashlib
+
+    m = hashlib.sha1()
+    for p in parts:
+        m.update(p if isinstance(p, bytes) else repr(p).encode())
+        m.update(b"\0")
+    return m.hexdigest()[:20]
+
+
+def _r(v, nd: int = 4) -> tuple:
+    return tuple(round(float(x), nd) for x in v)
+
+
+def _socket_vals(node_tree) -> tuple:
+    out = []
+    for n in node_tree.nodes:
+        for i in n.inputs:
+            dv = getattr(i, "default_value", None)
+            if dv is None:
+                continue
+            try:
+                out.append((n.bl_idname, i.identifier, _r(dv)))
+            except TypeError:
+                out.append((n.bl_idname, i.identifier, repr(dv)))
+    return tuple(sorted(out))
+
+
+def _mat_key(m) -> tuple:
+    if m is None:
+        return ()
+    return (m.name, _socket_vals(m.node_tree)) if m.use_nodes and m.node_tree else (m.name,)
+
+
+def _geom_key(o) -> str:
+    me = o.data
+    co = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    sm = np.empty(len(me.polygons), dtype=bool)
+    me.polygons.foreach_get("use_smooth", sm)
+    mods = tuple((md.type, *(repr(getattr(md, k, None)) for k in ("width", "segments", "limit_method"))) for md in o.modifiers)
+    return _h(np.round(co, 4).tobytes(), sm.tobytes(), mods, [_mat_key(sl.material) for sl in o.material_slots], o["layer"], bool(o["arm"]))
+
+
 def render_figure(a: dict) -> None:
     """`--figure`: the member sprite sheets, one per identity layer, plus `figure.json` (figureSheet.ts's
     SheetSpec). Each frame is rendered twice — lit, neutral grey, under the day rig; and as flat ID
@@ -223,29 +281,31 @@ def render_figure(a: dict) -> None:
     def lin(c: float) -> float:
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
-    id_mats: dict[str, bpy.types.Material] = {}
+    # …and the green byte says the pixel is an arm's (the seated overlay's `@arms` cells)
+    id_mats: dict[tuple[str, bool], bpy.types.Material] = {}
     for layer in figure.LAYERS:
-        m = bpy.data.materials.new(f"id/{layer}")
-        m.use_nodes = True
-        nt = m.node_tree
-        for n in list(nt.nodes):
-            nt.nodes.remove(n)
-        em = nt.nodes.new("ShaderNodeEmission")
-        em.inputs["Color"].default_value = (lin(figure.layer_id_byte(layer) / 255), 0, 0, 1)
-        em.inputs["Strength"].default_value = 1.0
-        out = nt.nodes.new("ShaderNodeOutputMaterial")
-        nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
-        id_mats[layer] = m
+        for arm in (False, True):
+            m = bpy.data.materials.new(f"id/{layer}{'@arms' if arm else ''}")
+            m.use_nodes = True
+            nt = m.node_tree
+            for n in list(nt.nodes):
+                nt.nodes.remove(n)
+            em = nt.nodes.new("ShaderNodeEmission")
+            em.inputs["Color"].default_value = (lin(figure.layer_id_byte(layer) / 255), 1.0 if arm else 0.0, 0, 1)
+            em.inputs["Strength"].default_value = 1.0
+            out = nt.nodes.new("ShaderNodeOutputMaterial")
+            nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+            id_mats[(layer, arm)] = m
     lit_mats = {o.name: [slot.material for slot in o.material_slots] for o in rig.meshes}
 
     def set_id_pass(on: bool) -> None:
         for o in rig.meshes:
-            mats = [id_mats[o["layer"]]] * len(o.material_slots) if on else lit_mats[o.name]
+            mats = [id_mats[(o["layer"], bool(o["arm"]))]] * len(o.material_slots) if on else lit_mats[o.name]
             for slot, m in zip(o.material_slots, mats):
                 slot.material = m
         s.render.filter_size = 0.0 if on else 1.5
         try:
-            s.eevee.taa_render_samples = 1 if on else 32
+            s.eevee.taa_render_samples = 1 if on else LIT_SAMPLES
         except Exception:
             pass
         for light in [x for x in bpy.data.objects if x.type == "LIGHT"]:
@@ -256,105 +316,177 @@ def render_figure(a: dict) -> None:
     MIRRORED = {"S": "E", "W": "N", "SW": "NE"}
     for name, frames, loop, dirs in figure.CLIPS:
         anims[name] = {"row": rows, "frames": frames, "fps": figure.FPS, "loop": loop}
+        if name in figure.CARRY_BASE:
+            anims[name]["base"] = figure.CARRY_BASE[name]
+            anims[name]["layers"] = list(figure.CARRY_OWN)
         if dirs is not None:
             # the directions this clip has: the rendered ones and their mirrors (the runtime falls back
             # to the base clip anywhere else)
             anims[name]["dirs"] = [d for d in figure.DIRS if d in dirs or MIRRORED.get(d) in dirs]
         rows += len(figure.DIRS)
-    cols = max(c[1] for c in figure.CLIPS)
-    sheets = {layer: np.zeros((rows * fh, cols * fw, 4), dtype=np.float32) for layer in figure.LAYERS}
+    # Every cell's pixels, cropped to themselves: grid key (a layer, or `<layer>@arms`) → cell name
+    # ("clip/dir/frame") → (uint8 RGBA, x0, y0 inside the nominal frame).
+    crops: dict[str, dict[str, tuple]] = {}
     tmp_lit = os.path.join(a["out"], "_fig-lit.png")
     tmp_id = os.path.join(a["out"], "_fig-id.png")
-    only = a["only"]
     base = [l for l in figure.LAYERS if l in figure.BASE_LAYERS]
-    variants = [l for l in figure.LAYERS if l not in figure.BASE_LAYERS and (not only or l in only)]
-    render_base = not only or any(l in only for l in base)
+    variants = [l for l in figure.LAYERS if l not in figure.BASE_LAYERS]
     by_layer: dict[str, list] = {}
     for o in rig.meshes:
         by_layer.setdefault(o["layer"], []).append(o)
 
-    def show(layers: set[str], holdout: set[str]) -> None:
-        """Only `layers` render; `holdout` ones render as holes (they occlude, but leave no pixels)."""
+    def on_clip(o: bpy.types.Object, clip: str) -> bool:
+        """A mesh limited to some clips (a prop, the lanyard) is not there in any other."""
+        clips = o.get("clips")
+        return clips is None or clip in clips
+
+    def show(layers: set[str], holdout: set[str], clip: str) -> bool:
+        """Only `layers` render; `holdout` ones render as holes (they occlude, but leave no pixels).
+        False when nothing of `layers` is in this clip — the render can be skipped."""
+        any_on = False
         for o in rig.meshes:
             l = o["layer"]
-            o.hide_render = l not in layers and l not in holdout
+            here = on_clip(o, clip)
+            o.hide_render = not here or (l not in layers and l not in holdout)
             o.is_holdout = l in holdout
+            any_on = any_on or (here and l in layers)
+        return any_on
+
+    def holdout_for(layer: str) -> set[str]:
+        """What occludes a variant: the body; for a prop also a torso (any top's: they share it) and,
+        for the plant, the box it sits in."""
+        if not layer.startswith("carry/") and not layer.startswith("lanyard"):
+            return set(base)
+        return set(base) | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 
     # Five directions are rendered and three are mirrored. A horizontal flip in the canvas's frame
     # swaps lx and ly (screen-right is +lx −ly), so the mirror of E (+lx) is S (+ly), of N is W,
     # of NE is SW; SE and NW face straight down and up the screen and mirror onto themselves.
     fig_json = os.path.join(a["out"], "figure.json")
-    clips = a["clips"]
-    if clips:
-        # `--clips a,b`: render only those; every other clip's frames come back from the atlases on
-        # disk, so a change to one beat is a short render, not the whole figure.
-        with open(fig_json) as f:
-            prev = json.load(f)
-        prev_order = sorted(prev["anims"].items(), key=lambda kv: kv[1]["row"])
-        for layer in figure.LAYERS:
-            ent = next((l for l in prev["layers"] if l["id"] == layer), None)
-            if ent is None:
-                continue
-            atlas_px = read_pixels(os.path.join(a["out"], ent["file"]), mirror=False)
-            pc = prev["cells"].get(layer, [])
-            k = 0
-            for pname, pa in prev_order:
-                for di in range(len(figure.DIRS)):
-                    for f in range(pa["frames"]):
-                        x, y, w, h, ox, oy = pc[k * 6 : k * 6 + 6] if k * 6 + 6 <= len(pc) else (0, 0, 0, 0, 0, 0)
-                        k += 1
-                        if w == 0 or pname in clips or pname not in anims or f >= anims[pname]["frames"]:
-                            continue
-                        r0 = (anims[pname]["row"] + di) * fh + oy
-                        c0 = f * fw + ox
-                        sheets[layer][r0 : r0 + h, c0 : c0 + w] = atlas_px[y : y + h, x : x + w]
-        print(f"figure: kept every clip but {sorted(clips)} from the atlases on disk")
-    done = 0
+    geom = {o.name: _geom_key(o) for o in rig.meshes}  # before the ID pass swaps any material
+    lights = sorted(
+        (l.data.type, round(l.data.energy, 4), _r(l.data.color), _r(np.array(l.matrix_world).ravel()),
+         round(getattr(l.data, "shadow_soft_size", 0.0), 4), round(getattr(l.data, "size", 0.0), 4))
+        for l in bpy.data.objects if l.type == "LIGHT"
+    )
+    world = _socket_vals(s.world.node_tree) if s.world and s.world.use_nodes else ()
+    # The frame's WIDTH is not in the key: the camera spans the frame's height (ortho_scale is the
+    # larger side), so a wider frame is the same pixels with more margin. Stored crops are placed
+    # from the frame's centre line, so they land right in a frame of any width that holds them.
+    g_key = _h(FIG_PIPELINE, LIT_SAMPLES, bpy.app.version_string, s.render.engine, s.view_settings.view_transform,
+               s.view_settings.look, px, fh, cam.data.ortho_scale, _r(np.array(cam.matrix_world).ravel()), lights, world)
+
+    def call_key(kind: str, seated: bool) -> str:
+        """The key of the render about to happen: what `show` left visible, where it is, and how."""
+        objs = sorted((geom[o.name], _r(np.array(o.matrix_world).ravel(), 3), bool(o.is_holdout)) for o in rig.meshes if not o.hide_render)
+        return _h(g_key, kind, seated, objs)
+
+    store = os.path.join(FIG_CACHE, "calls")
+    os.makedirs(store, exist_ok=True)
+
+    def unstash(k: str) -> dict | None:
+        """A call's cells from the store, or None (never rendered here, `--force`, or too wide for this frame)."""
+        path = os.path.join(store, k + ".npz")
+        if a["force"] or not os.path.exists(path):
+            return None
+        out = {}
+        with np.load(path) as z:
+            for n in z.files:
+                if n.endswith(".o"):
+                    continue
+                img, (cx, y0) = z[n], z[n + ".o"]
+                x0 = int(cx) + fw // 2
+                if x0 < 0 or x0 + img.shape[1] > fw:
+                    return None
+                out[n.replace("|", "/")] = (img, x0, int(y0))
+        return out
+
+    def stash(k: str, outs: dict) -> None:
+        """Save a call's cells the moment it is rendered — a hang or a crash loses one call, not the run."""
+        arrs = {}
+        for gk, (img, x0, y0) in outs.items():
+            arrs[gk.replace("/", "|")] = img
+            arrs[gk.replace("/", "|") + ".o"] = np.array([x0 - fw // 2, y0])
+        tmp = os.path.join(store, k + ".tmp.npz")
+        np.savez_compressed(tmp, **arrs)
+        os.replace(tmp, os.path.join(store, k + ".npz"))
+
+    def crop(img: np.ndarray, mask: np.ndarray) -> tuple | None:
+        """The masked pixels as 8-bit RGBA, cropped to themselves (the sheet is 8-bit anyway)."""
+        if not mask.any():
+            return None
+        ys, xs = np.nonzero(mask)
+        x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
+        part = np.where(mask[y0:y1, x0:x1, None], img[y0:y1, x0:x1], 0.0)
+        return (np.clip(np.rint(part * 255), 0, 255).astype(np.uint8), x0, y0)
+
+    def keep(outs: dict, gk: str, c: tuple | None) -> None:
+        if c is not None:
+            outs[gk] = c
+
+    done = reused = rendered = 0
+    t0 = time.time()
     for name, frames, _, dirs in figure.CLIPS:
-        if clips and name not in clips:
-            continue
         for di, d in enumerate(figure.DIRS):
-            row = anims[name]["row"] + di
             if d in MIRRORED or (dirs is not None and d not in dirs):
-                continue  # filled from its source direction after the clip, cell by cell
+                continue  # drawn flipped from its source direction at runtime (`frameCell`)
             for f in range(frames):
                 pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
-                cell = (slice(row * fh, (row + 1) * fh), slice(f * fw, (f + 1) * fw))
-                # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
-                if render_base:
-                    show(set(base), set())
-                    set_id_pass(False)
-                    s.render.filepath = tmp_lit
-                    bpy.ops.render.render(write_still=True)
-                    set_id_pass(True)
-                    s.render.filepath = tmp_id
-                    bpy.ops.render.render(write_still=True)
-                    set_id_pass(False)
-                    lit = read_pixels(tmp_lit)
-                    ids = np.rint(read_pixels(tmp_id)[:, :, 0] * 255).astype(np.int32)
-                    for layer in base:
-                        mask = (np.abs(ids - figure.layer_id_byte(layer)) <= figure.ID_STEP // 2) & (lit[:, :, 3] > 0.002)
-                        if mask.any():
-                            sheets[layer][cell][mask] = lit[mask]
-                # each variant alone, the body as a holdout: its pixels are exactly the ones a wearer shows
-                for layer in variants:
-                    show({layer}, set(base))
-                    s.render.filepath = tmp_lit
-                    bpy.ops.render.render(write_still=True)
-                    px_l = read_pixels(tmp_lit)
-                    mask = px_l[:, :, 3] > 0.002
-                    if mask.any():
-                        sheets[layer][cell][mask] = px_l[mask]
+                figure.place_props(rig, name, math.radians(45 * di))
+                seated = name in figure.SEATED_CLIPS
+                cname = f"{name}/{d}/{f}"
+                calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants if figure.stored_in(name, l)]
+                for kind, layers, holdout in calls:
+                    if not show(layers, holdout, name):
+                        continue  # nothing of it in this clip (a prop, the lanyard)
+                    k = call_key(kind, seated)
+                    outs = unstash(k)
+                    if outs is not None:
+                        reused += 1
+                    else:
+                        rendered += 1
+                        outs = {}
+                        if kind == "base":
+                            # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
+                            set_id_pass(False)
+                            s.render.filepath = tmp_lit
+                            bpy.ops.render.render(write_still=True)
+                            set_id_pass(True)
+                            s.render.filepath = tmp_id
+                            bpy.ops.render.render(write_still=True)
+                            set_id_pass(False)
+                            lit = read_pixels(tmp_lit)
+                            id_px = read_pixels(tmp_id)
+                            ids = np.rint(id_px[:, :, 0] * 255).astype(np.int32)
+                            arm = id_px[:, :, 1] > 0.5
+                            for layer in base:
+                                mask = (np.abs(ids - figure.layer_id_byte(layer)) <= figure.ID_STEP // 2) & (lit[:, :, 3] > 0.002)
+                                keep(outs, layer, crop(lit, mask))
+                                if seated and layer in figure.ARM_LAYERS:
+                                    keep(outs, f"{layer}@arms", crop(lit, mask & arm))
+                        else:
+                            # each variant alone, the body as a holdout: its pixels are exactly the ones a wearer shows
+                            s.render.filepath = tmp_lit
+                            bpy.ops.render.render(write_still=True)
+                            px_l = read_pixels(tmp_lit)
+                            mask = px_l[:, :, 3] > 0.002
+                            keep(outs, kind, crop(px_l, mask))
+                            if seated and kind in figure.ARM_LAYERS and mask.any():
+                                if kind.startswith("carry/"):
+                                    keep(outs, f"{kind}@arms", crop(px_l, mask))  # a prop at the desk is all "arm"
+                                else:
+                                    # which of a top's pixels are its sleeves: the same view as flat ID colours
+                                    set_id_pass(True)
+                                    s.render.filepath = tmp_id
+                                    bpy.ops.render.render(write_still=True)
+                                    set_id_pass(False)
+                                    keep(outs, f"{kind}@arms", crop(px_l, mask & (read_pixels(tmp_id)[:, :, 1] > 0.5)))
+                        stash(k, outs)
+                    for gk, c in outs.items():
+                        crops.setdefault(gk, {})[cname] = c
                 done += 1
-        # the mirrored rows copy whole rows, so they must run after their source direction: DIRS
-        # lists E, SE, S, SW, W, NW, N, NE — SW and W follow SE and E, but NW precedes NE.
-        for d, src in MIRRORED.items():
-            row, src_row = anims[name]["row"] + figure.DIRS.index(d), anims[name]["row"] + figure.DIRS.index(src)
-            for layer in figure.LAYERS:
-                for f in range(frames):  # flip each frame within its own cell — a row flip reverses the frame order
-                    sheets[layer][row * fh : (row + 1) * fh, f * fw : (f + 1) * fw] = sheets[layer][src_row * fh : (src_row + 1) * fh, f * fw : (f + 1) * fw][:, ::-1]
-        print(f"figure: {name} rendered ({done} frames so far)")
+        print(f"figure: {name} done ({done} frames so far; {rendered} calls rendered, {reused} reused, {time.time() - t0:.0f}s)", flush=True)
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
             os.remove(p)
@@ -374,44 +506,25 @@ def render_figure(a: dict) -> None:
         "layers": [],
         "cells": {},
     }
-    kept = {}
-    kept_cells = {}
-    if only and os.path.exists(fig_json):
-        with open(fig_json) as f:
-            prev = json.load(f)
-        kept = {l["id"]: l for l in prev["layers"]}
-        kept_cells = prev.get("cells", {})
-    rendered_now = set(variants) | (set(base) if render_base else set())
     for layer in figure.LAYERS:
-        if layer not in rendered_now:
-            if layer in kept:
-                spec["layers"].append(kept[layer])
-                spec["cells"][layer] = kept_cells.get(layer, [])
-            continue
-        sheet = sheets[layer]
-        if sheet[:, :, 3].max() <= 0.002:
+        if not crops.get(layer):
             print(f"figure: layer {layer} rendered nothing — not written")
             continue
-        # crop every cell; shelf-pack them left to right, top to bottom
+        # shelf-pack every cell left to right, top to bottom. A layer with arm pixels packs its
+        # `@arms` cells into the same atlas after its own, so the overlay needs no second image.
         cells = []  # flat, six per (anim, dir, frame): x, y, w, h, ox, oy — all zero when empty
-        crops = []
-        for name, frames, _, _ in figure.CLIPS:
-            for di in range(len(figure.DIRS)):
-                row = anims[name]["row"] + di
-                for f in range(frames):
-                    if figure.DIRS[di] in MIRRORED:
-                        crops.append(None)
-                        continue
-                    cell = sheet[row * fh : (row + 1) * fh, f * fw : (f + 1) * fw]
-                    ys, xs = np.nonzero(cell[:, :, 3] > 0.002)
-                    if len(xs) == 0:
-                        crops.append(None)
-                        continue
-                    x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-                    crops.append((cell[y0:y1, x0:x1], x0, y0))
+        grids = [layer] + ([f"{layer}@arms"] if crops.get(f"{layer}@arms") else [])
+        items = []
+        for gk in grids:
+            for name, frames, _, _ in figure.CLIPS:
+                for d in figure.DIRS:
+                    for f in range(frames):
+                        c = crops[gk].get(f"{name}/{d}/{f}") if figure.stored_in(name, layer) else None
+                        items.append(None if c is None else (c[0].astype(np.float32) / 255, c[1], c[2]))
+        crops_l = items
         shelf_x, shelf_y, shelf_h = 0, 0, 0
         placed = []
-        for c in crops:
+        for c in crops_l:
             if c is None:
                 placed.append(None)
                 continue
@@ -424,7 +537,7 @@ def render_figure(a: dict) -> None:
             shelf_h = max(shelf_h, h)
         atlas_h = shelf_y + shelf_h
         atlas = np.zeros((max(1, atlas_h), ATLAS_W, 4), dtype=np.float32)
-        for c, pl in zip(crops, placed):
+        for c, pl in zip(crops_l, placed):
             if pl is None:
                 cells.extend([0, 0, 0, 0, 0, 0])
                 continue
@@ -436,14 +549,17 @@ def render_figure(a: dict) -> None:
         write_pixels(path, atlas)
         quantize(path)
         spec["layers"].append({"id": layer, "file": file})
-        spec["cells"][layer] = cells
+        n = len(cells) // len(grids)
+        spec["cells"][layer] = cells[:n]
+        if len(grids) > 1:
+            spec["cells"][f"{layer}@arms"] = cells[n:]
         print(f"figure: wrote {file} {ATLAS_W}x{atlas_h} {os.path.getsize(path)} B")
     with open(fig_json, "w") as fjson:
         json.dump(spec, fjson, separators=(",", ":"))
         fjson.write("\n")
     if a["save"]:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a["save"]))
-    print(f"figure: {done} frames, {len(spec['layers'])} layer sheets, figure.json")
+    print(f"figure: {done} frames, {rendered} render calls, {reused} reused, {time.time() - t0:.0f}s; {len(spec['layers'])} layer sheets, figure.json")
 
 
 def main() -> None:
