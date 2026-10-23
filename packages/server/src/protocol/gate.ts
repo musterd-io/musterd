@@ -6,6 +6,7 @@ import {
   askContractText,
   type GateCheckRequest,
   type GateDecision,
+  type Lane,
   makeEnvelope,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -16,7 +17,13 @@ import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import { laneHead, recordHoldRefusal, recordLaneHead, takeHandover } from '../store/handover.js';
 import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
-import { getLane, laneCoveringPath, laneHoldingFile, updateLane } from '../store/lanes.js';
+import {
+  getLane,
+  laneCoveringPath,
+  laneHoldingFile,
+  listLanes,
+  updateLane,
+} from '../store/lanes.js';
 import { getMemberByName, listMembers } from '../store/members.js';
 import { isPresentOrReclaimable } from '../store/presence.js';
 import { unblockerReachable } from '../store/reachability.js';
@@ -110,6 +117,20 @@ async function learnFromEdit(ctx: GateContext, laneId: string, laneBranch: strin
   }
 }
 
+/** The seat's most recently claimed lane still in flight, for the one-call repair. */
+async function ownContendingLane(
+  db: Driver,
+  teamId: string,
+  slug: string,
+  seat: string,
+): Promise<Lane | null> {
+  const lanes = (await listLanes(db, teamId, slug, { owner: seat })).filter((l) =>
+    ['claimed', 'active', 'blocked'].includes(l.state),
+  );
+  lanes.sort((a, b) => (b.claimed_at ?? 0) - (a.claimed_at ?? 0));
+  return lanes[0] ?? null;
+}
+
 export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
   const { db } = ctx.srv;
   const { id: teamId, slug } = ctx.team;
@@ -189,9 +210,14 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
 
   // block: the forcing function. Name whether someone else holds it, or it's simply unclaimed.
   const otherLane = await laneCoveringPath(db, teamId, slug, path);
+  // Lane 01M5N3SVYV: a seat already working a lane gets the one call that adds this path to it,
+  // not a second lane. The claim is still the only way to the edit (ADR 150); it is just one call.
+  const mine = otherLane ? null : await ownContendingLane(db, teamId, slug, ctx.member.name);
   const detail = otherLane
     ? `it is owned by ${otherLane.owner_seat ?? 'another seat'} (lane "${otherLane.title}") — coordinate with them, take a different surface, or hand off`
-    : `no lane covers it — claim one first: lane_open "<what>" --surface ${path} --claim`;
+    : mine
+      ? `no lane covers it — add it to your lane "${mine.title}" in one call: lane_update ${mine.id} --surface ${[...mine.scope, path].join(',')}`
+      : `no lane covers it — claim one first: lane_open "<what>" --surface ${path} --claim`;
   return {
     decision: 'deny',
     outcome: 'denied',

@@ -248,6 +248,14 @@ count**, never a headline rate alone.
   another seat's edit of a held file is denied under `block` and warned under `warn` even when its
   own lane covers the path. Area globs kept the covering rule above. The datum was finding 015,
   where every CooperBench pair named the same file and both agents edited it.
+- _2026-10-23 (lane 01M5N3SVYV):_ the block deny's repair, for a seat that already has a lane in
+  flight, now names the one call that adds the path to that lane (`lane_update <id> --surface
+  <its scope>,<path>`) instead of `lane_open … --claim`. The deny, its outcome and its audit row are
+  unchanged, and claiming is still the only way to the edit. A bare path added this way names the
+  file, so it becomes an ADR 691 hold, as any named file does. Automatic widening was considered and
+  rejected: it would end the forcing function and create holds no one chose. Finding 022's
+  CooperBench refusals of this kind came from a harness policy that marks every path (`'**'`) as
+  contested, so the measured win is modest. The friction is real for any team with broad surfaces.
 
 ## Related
 

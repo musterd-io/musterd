@@ -210,6 +210,22 @@ withDrivers('gate-http', (_o, kind) => {
       expect(row.result).toBe('deny');
     });
 
+    it('no lane covering the path but the seat has a lane in flight, block → DENY with the one call that adds it', async () => {
+      const mine = await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+        title: 'billing work',
+        scope: ['src/billing/**'],
+        claim: true,
+      });
+      const r = await gateA('block', 'src/tariff.ts');
+      expect(r.json.decision).toBe('deny');
+      expect(r.json.outcome).toBe('denied');
+      expect(r.json.reason).toContain(`add it to your lane "billing work" in one call`);
+      expect(r.json.reason).toContain(
+        `lane_update ${mine.id} --surface src/billing/**,src/tariff.ts`,
+      );
+      expect(r.json.reason).not.toContain('claim one first');
+    });
+
     it('ANOTHER seat owns the covering lane, block → DENY naming that owner', async () => {
       await post('/teams/dawn/members', { name: 'Bo', kind: 'agent' }, bearer(nickCred));
       await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
