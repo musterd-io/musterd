@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch } from './assets';
+import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages } from './assets';
 import { parseManifest } from './manifest';
 import { type LayerId, wornLayers } from './figure';
 import { appearanceOf } from '../appearance';
@@ -42,6 +42,52 @@ describe('loadRenderedAssets', () => {
     expect(r.images.has('desk/lamp-on')).toBe(false);
     expect(r.missing).toEqual(['office-desk-lamp.png']);
     expect(r.manifest).toBe(manifest);
+  });
+});
+
+describe('the room images on demand (lane 01M5D8EJ40)', () => {
+  const rooms = parseManifest({
+    version: 1,
+    camera: { kx: 0.70710678, ky: 0.35355339 },
+    assets: ['room/light-day', 'room/light-evening', 'room/light-night', 'desk/base'].map((id) => ({
+      id,
+      file: `${id.replace('/', '-')}.webp`,
+      w: 4,
+      h: 4,
+      anchor: { x: 2, y: 3 },
+      scale: 2,
+    })),
+  });
+  const isRoom = (id: string) => id.startsWith('room/');
+  const img = (url: string) => ({ url }) as unknown as CanvasImageSource;
+
+  it('the first load takes only what `want` names', async () => {
+    const r = await loadRenderedAssets(rooms, (f) => f, async (u) => img(u), (id) => !isRoom(id) || id === 'room/light-day');
+    expect([...r.images.keys()].sort()).toEqual(['desk/base', 'room/light-day']);
+  });
+
+  it('a sync loads what is now wanted, drops what is not, and leaves the rest of the room alone', async () => {
+    const r = await loadRenderedAssets(rooms, (f) => f, async (u) => img(u), (id) => !isRoom(id) || id === 'room/light-day');
+    const loads: string[] = [];
+    const arrived = await syncImages(r, isRoom, new Set(['room/light-evening']), (f) => f, async (u) => (loads.push(u), img(u)));
+    expect(arrived).toBe(true);
+    expect(loads).toEqual(['room-light-evening.webp']);
+    expect([...r.images.keys()].sort()).toEqual(['desk/base', 'room/light-evening']);
+    // nothing new wanted: no load, no rebake
+    expect(await syncImages(r, isRoom, new Set(['room/light-evening']), (f) => f, async (u) => img(u))).toBe(false);
+  });
+
+  it('a failed load stays absent and is tried again; an image no longer wanted when it lands is not kept', async () => {
+    const r = await loadRenderedAssets(rooms, (f) => f, async (u) => img(u), (id) => !isRoom(id));
+    expect(await syncImages(r, isRoom, new Set(['room/light-night']), (f) => f, async () => Promise.reject(new Error('404')))).toBe(false);
+    expect(r.images.has('room/light-night')).toBe(false);
+    const wanted = new Set(['room/light-night']);
+    const late = syncImages(r, isRoom, wanted, (f) => f, async (u) => {
+      wanted.clear(); // the clock moved on while it decoded
+      return img(u);
+    });
+    expect(await late).toBe(false);
+    expect(r.images.has('room/light-night')).toBe(false);
   });
 });
 

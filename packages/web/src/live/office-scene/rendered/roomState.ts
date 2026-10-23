@@ -86,3 +86,28 @@ export function figureTintFor(env: LightEnv): string {
   const hex = (n: number) => Math.round(n).toString(16).padStart(2, '0');
   return `#${night.map((n) => hex(n + (255 - n) * t)).join('')}`;
 }
+
+/** How far ahead the room's light images are fetched: a fade starts at a fixed edge, so the next state is in hand before it. */
+export const ROOM_AHEAD_HOURS = 0.5;
+
+/** The ids of the full-room images: the day-state shells and the ceiling overlays, ~9 MB each decoded. */
+export function isRoomImage(id: string): boolean {
+  return id.startsWith('room/light-') || id.startsWith('room/ceiling-');
+}
+
+/**
+ * The full-room images the room needs now, and within `ahead` hours: the shells either side of a
+ * fade in progress or about to start, and the current ceiling overlay. Everything else stays
+ * unloaded — all five decoded is ~47 MB, and at most three are ever in view (lane 01M5D8EJ40).
+ */
+export function roomImagesWanted(env: LightEnv, ahead = ROOM_AHEAD_HOURS): Set<string> {
+  const out = new Set<string>();
+  for (const h of [env.hours, (env.hours + ahead) % 24]) {
+    const d = dayMixAt(h);
+    out.add(`room/light-${d.from}`);
+    out.add(`room/light-${d.to}`);
+  }
+  const c = ceilingStateFor(env);
+  if (c !== 'off') out.add(`room/ceiling-${c}`);
+  return out;
+}
