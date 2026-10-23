@@ -26,7 +26,7 @@
     "android": {
       "package": "io.musterd.app"
     },
-    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
+    "plugins": ["expo-router", "expo-secure-store"],
     "extra": {
       "router": {},
       "eas": {
