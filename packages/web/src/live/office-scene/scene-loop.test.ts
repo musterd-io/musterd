@@ -352,6 +352,18 @@ describe('the dog tags along to the cooler (spec 2026-10-13 L2)', () => {
   });
 });
 
+describe('a speech bubble hangs from its speaker\'s nameplate, above and aligned with it', () => {
+  it('records each plate\'s centre and top after layout, and anchors the bubble there', () => {
+    const place = index.slice(index.indexOf('function positionLabels'), index.indexOf('The light-trace'));
+    expect(place).toContain('plateTops.set(name, { x: at.x, y: at.y - size.h })');
+    const repo = index.slice(index.indexOf('function repositionSpeeches'), index.indexOf('function clearSpeech'));
+    expect(repo).toContain('plateTops.get(name)');
+    expect(repo).toContain('plate.y - SPEECH_PLATE_GAP + SPEECH_LIFT');
+    // no plate yet: the head anchor, as before
+    expect(repo).toContain(': head');
+  });
+});
+
 describe('a bubble slides off the wall board instead of covering it (lane 01M4VMFE3A)', () => {
   it('positionSpeech shifts the bubble by bubbleShiftOffBoard and never hides it', () => {
     const fn = index.slice(index.indexOf('function positionSpeech'), index.indexOf('function clearSpeech'));
