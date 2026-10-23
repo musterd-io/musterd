@@ -134,6 +134,8 @@ export type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode, OfficeStats } f
 
 
 const DPR_CAP = 2;
+/** How long the room is held invisible for the rendered art before the painted office shows instead. */
+const ART_WAIT_MS = 2500;
 
 /**
  * The synthetic head the receptionist's bubble hangs from, and the key `showSpeech` recognises as
@@ -426,6 +428,8 @@ export function mountOffice(
      never saw the images). A manifest that is not there — a checkout before the art landed — logs
      once and leaves the room painted. */
   let rendered: RenderedAssets | undefined;
+  /** The rendered art is on its way: `revealOffice` shows the room when it lands (below). */
+  let artPending = false;
   const renderedFlag = typeof window !== 'undefined' && renderedOfficeFromSearch(window.location.search);
   /* The rendered room is drawn from the corner camera (spec §2.2, plan Task 5); the painted room
      keeps the iso it was drawn at. The camera rides on the fit, so every `project()` follows. */
@@ -470,6 +474,7 @@ export function mountOffice(
       string
     >;
     const manifestUrl = files['./rendered/assets/manifest.json'];
+    artPending = !!manifestUrl;
     if (!manifestUrl) {
       console.warn('office: rendered/assets/manifest.json is not in this build — painting');
     } else {
@@ -524,9 +529,13 @@ export function mountOffice(
           rendered = r;
           sprites?.clear();
           bake();
+          revealOffice();
           wearNow(); // the roster may have grown while the sheets were in flight
         })
-        .catch((e: unknown) => console.warn('office: rendered manifest unusable — painting', e));
+        .catch((e: unknown) => {
+          console.warn('office: rendered manifest unusable — painting', e);
+          revealOffice();
+        });
     }
   }
   /* The dirty-rect state (see drawDamaged): the measure-pass recorder, sized to the canvas, and the
@@ -537,6 +546,25 @@ export function mountOffice(
   const canvas = document.createElement('canvas');
   canvas.style.display = 'block';
   host.appendChild(canvas);
+  /* No flash of the painted office (nick, 2026-10-23: "why does it show the old painted office briefly
+     before cutting over?"). While the rendered art loads, the room and its plates are held invisible,
+     so the page's ground shows; they fade in on the rendered room, or after ART_WAIT_MS with the
+     painted one if the art is slow or will not come. */
+  let artWait: ReturnType<typeof setTimeout> | null = null;
+  if (artPending) {
+    canvas.style.opacity = '0';
+    labelHost.style.opacity = '0';
+    artWait = setTimeout(revealOffice, ART_WAIT_MS);
+  }
+  function revealOffice(): void {
+    if (artWait === null) return;
+    clearTimeout(artWait);
+    artWait = null;
+    for (const el of [canvas, labelHost]) {
+      if (!reduced) el.style.transition = 'opacity 220ms ease-out';
+      el.style.opacity = '';
+    }
+  }
 
   // The agile board's hotspot — a real button laid over the painted board (the canvas takes no
   // pointer events; every click target in the office is DOM in the label layer). Created before any
@@ -3800,6 +3828,7 @@ export function mountOffice(
     },
     dispose: () => {
       disposed = true;
+      if (artWait !== null) clearTimeout(artWait);
       sprites?.clear();
       cancelAnimationFrame(raf);
       stopDrift(); // the heartbeat outlives nothing
