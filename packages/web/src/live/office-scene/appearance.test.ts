@@ -28,6 +28,15 @@ describe('determinism', () => {
   });
 });
 
+describe('build (office figure v2)', () => {
+  it('gives everyone a build within 4% of the base, stable per name, and varied', () => {
+    const builds = NAMES.map((n) => human(n).build);
+    expect(builds.every((b) => b >= 0.96 && b <= 1.04)).toBe(true);
+    expect(human('ada').build).toBe(human('ada').build);
+    expect(new Set(builds).size).toBeGreaterThan(2);
+  });
+});
+
 describe('variety', () => {
   const looks = NAMES.map(human);
   const spread = (key: keyof Appearance) => new Set(looks.map((l) => String(l[key]))).size;

@@ -197,6 +197,13 @@ const NEUTRAL_FACIAL_HAIR: readonly FacialHair[] = ['none', 'none', 'none', 'stu
 export type Smile = 'soft' | 'wide';
 const SMILES: readonly Smile[] = ['soft', 'soft', 'wide'];
 
+/**
+ * Build, the one bodily difference between members (office figure v2, spec §2.1): the rendered figure is
+ * drawn this much wider or narrower about its floor point. Everyone is the same height; nick's line is
+ * "too much variation in avatar build" — so it stays within 4%.
+ */
+const BUILDS = [0.96, 0.98, 1.0, 1.02, 1.04] as const;
+
 export interface Appearance {
   skin: string;
   hair: HairStyle;
@@ -218,6 +225,8 @@ export interface Appearance {
   smile: Smile;
   /** Presentation — coordinates hair length with facial hair. See {@link Presents}. */
   presents: Presents;
+  /** Horizontal draw scale of the rendered figure, 0.96–1.04 — see `BUILDS`. */
+  build: number;
 }
 
 /**
@@ -260,6 +269,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     accessoryColor: pick(ACCESSORY_COLORS, name, 12),
     smile: pick(SMILES, name, 13),
     presents,
+    build: pick(BUILDS, name, 15),
   };
 }
 

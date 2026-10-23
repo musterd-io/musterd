@@ -31,11 +31,19 @@ import scene
 # rendered one is FIG × that: ~83 tall, and a 9.4 head — five heads, as spec §2.1 asks.
 FIG = 0.92  # 0.86 read "a tiny bit" too small (nick, the second look)
 HEIGHT = 96 * FIG
-ANKLE, KNEE, HIP, CHEST, SHOULDER, NECK = (v * FIG for v in (3, 19, 36, 52, 58, 64))
-HEAD_R = 9.4 * FIG
+# v2 (office figure v2 spec §2.1, nick 2026-10-22): a quarter of the way from the v1 figure's five
+# heads toward the painted figure's 3.7 — "between A and B" — with the crown held where v1 had it, so
+# labels, bubbles and the seat do not move: a bigger head sits on a body scaled down by `_K`.
+_V1_HEAD_R = 9.4 * FIG
+_V1_NECK = 64 * FIG
+_CROWN = _V1_NECK + 2.5 * FIG + _V1_HEAD_R * 2.06
+HEAD_R = _V1_HEAD_R + (HEIGHT / 3.7 / 2 - _V1_HEAD_R) * 0.25
+_K = (_CROWN - 2.5 * FIG - HEAD_R * 2.06) / _V1_NECK
+ANKLE, KNEE, HIP, CHEST, SHOULDER, NECK = (v * FIG * _K for v in (3, 19, 36, 52, 58, 64))
 HEAD_C = NECK + 2.5 * FIG + HEAD_R * 1.02
-HIP_W, SHOULDER_W = 7 * FIG, 14.5 * FIG
-THIGH, SHIN, UPPER_ARM, FORE_ARM = (v * FIG for v in (17, 16, 15, 14))
+HIP_W, SHOULDER_W = 6.6 * FIG, 13.2 * FIG
+THIGH, SHIN, UPPER_ARM, FORE_ARM = (v * FIG * _K for v in (17, 16, 15, 14))
+WRIST = SHOULDER - UPPER_ARM - FORE_ARM
 # Not scaled: the chair cushion is where it is. A smaller figure sits lower in it, which reads right.
 SEAT_TOP = 22  # layout.ts: top of the chair cushion, where a seated pelvis rests
 # "it looks like the weight of the head is causing the bodies to lean back": the head and neck sit
@@ -54,21 +62,23 @@ ACCS = ["glasses", "headphones", "scarf"]
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it.
 CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
 LAYERS = (
-    ["skin"]
+    ["skin", "eyes", "mouth/soft", "mouth/wide"]
     + [f"hair/{h}" for h in HAIR]
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
     + ["bottom", "shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
-    + ["visor"]
+    # an agent's tell (nick, 2026-10-22: no visors on anyone): its eyes and a collar light glow, white
+    # here and tinted with the agent's identity colour at runtime
+    + ["tell/eyes", "tell/collar"]
     + [f"carry/{c}" for c in CARRY]
     # a first arrival's badge: the cord and the card's band take their colour, the card stays paper
     + ["lanyard", "lanyard-card"]
 )
 # Base layers are on every member and split by the ID pass; every other layer is one of an exclusive
 # group (one hair style, one top, …) and is rendered alone with the base as a holdout.
-BASE_LAYERS = ["skin", "bottom", "shoes", "visor"]
+BASE_LAYERS = ["skin", "eyes"]  # v2: the body alone; trousers and shoes are pieces over it (plan Task 4)
 # the ID pass stores 9·(index+1) in the red byte — spaced so a nearest match survives rounding. Only
 # the base is split by ID, so only the base needs a byte (the whole list would overflow 255).
 ID_STEP = 9
@@ -91,8 +101,39 @@ def grey(name: str, v: float = 0.78, rough: float = 0.8) -> bpy.types.Material:
     return scene.matte(name, (v, v, v), rough)
 
 
+def skin_mat(name: str, v: float) -> bpy.types.Material:
+    """Neutral skin with a soft subsurface: light passes a little way in, so it reads as skin, not paint."""
+    m = scene.matte(name, (v, v, v), 0.55)
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Subsurface Weight"].default_value = 0.35
+    b.inputs["Subsurface Radius"].default_value = (1.0, 1.0, 1.0)
+    b.inputs["Subsurface Scale"].default_value = 1.2
+    return m
+
+
+def hair_mat(name: str, v: float) -> bpy.types.Material:
+    """Neutral hair with strands: a stretched wave bump the key light catches."""
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = scene._nodes(m)
+    bsdf.inputs["Base Color"].default_value = (v, v, v, 1)
+    bsdf.inputs["Roughness"].default_value = 0.5
+    bsdf.inputs["Specular IOR Level"].default_value = 0.35
+    tc = nodes.new("ShaderNodeTexCoord")
+    wave = nodes.new("ShaderNodeTexWave")
+    wave.inputs["Scale"].default_value = 1.6
+    wave.inputs["Distortion"].default_value = 6
+    wave.inputs["Detail"].default_value = 4
+    wave.bands_direction = "Z"
+    bump = nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.35
+    links.new(tc.outputs["Object"], wave.inputs["Vector"])
+    links.new(wave.outputs["Fac"], bump.inputs["Height"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
 def flat(name: str, rgb) -> bpy.types.Material:
-    """An untinted layer's own colour (the visor), matte."""
+    """An untinted layer's own colour, matte."""
     return scene.matte(name, rgb, 0.3)
 
 
@@ -143,6 +184,22 @@ class Rig:
         o = scene.ball(f"{layer}/{name}", self.origin.x + x, self.origin.y + y, ztop - 2 * rz, rx, ry, rz, mat, self.zs)
         return self._attach(o, joint, layer, mat)
 
+    def orb(self, name, joint, layer, mat, x, y, zc, rx, ry, rz, fuse: str | None = None) -> bpy.types.Object:
+        """`ball` by its centre, tagged with the fuse group it melts into (figure_fuse.py), if any."""
+        o = self.ball(name, joint, layer, mat, x, y, zc + rz, rx, ry, rz)
+        if fuse:
+            o["fuse"] = fuse
+        return o
+
+    @staticmethod
+    def turn(o: bpy.types.Object, euler: tuple[float, float, float]) -> bpy.types.Object:
+        """Turn a part's mesh about its own centre. Setting `rotation_euler` after parenting turns it
+        about the parent-inverse origin and flings it across the frame."""
+        from mathutils import Euler, Matrix
+        c = sum((Vector(b) for b in o.bound_box), Vector()) / 8
+        o.data.transform(Matrix.Translation(c) @ Euler(euler).to_matrix().to_4x4() @ Matrix.Translation(-c))
+        return o
+
     def cyl(self, name, joint, layer, mat, x, y, z0, r0, r1, h) -> bpy.types.Object:
         o = scene.cyl(f"{layer}/{name}", self.origin.x + x, self.origin.y + y, z0, r0, r1, h, mat, self.zs, 16)
         return self._attach(o, joint, layer, mat)
@@ -176,15 +233,21 @@ class Rig:
 def build_figure(zs: float, origin: Vector) -> Rig:
     """The whole figure in its rest pose (standing, arms at the sides, facing +x), every layer built."""
     r = Rig(zs, origin)
-    skin = grey("fig-skin", 0.8, 0.7)
-    cloth = grey("fig-cloth", 0.78, 0.9)
-    cloth_dark = grey("fig-cloth-dark", 0.55, 0.9)
-    hair = grey("fig-hair", 0.75, 0.85)
+    # v2 materials (spec §2.3): skin that lets a little light through, cloth with a weave, hair with a
+    # strand texture. All neutral: `figure.ts` tints every layer, so a warm subsurface would warm a mint
+    # skin too — the radius is equal in r, g and b.
+    skin = skin_mat("fig-skin", 0.8)
+    cloth = scene.fabric("fig-cloth", (0.78, 0.78, 0.78), 1.4)
+    cloth_dark = scene.fabric("fig-cloth-dark", (0.55, 0.55, 0.55), 1.4)
+    denim = scene.fabric("fig-denim", (0.78, 0.78, 0.78), 3.0)
+    hair = hair_mat("fig-hair", 0.75)
     shoe = grey("fig-shoe", 0.7, 0.6)
     acc = grey("fig-acc", 0.72, 0.5)
-    eye = scene.matte("fig-eye", (0.03, 0.03, 0.035), 0.4)
-    mouth = scene.matte("fig-mouth", (0.35, 0.18, 0.18), 0.6)
-    visor = flat("fig-visor", (0.25, 0.75, 0.85))
+    eye = scene.matte("fig-eye", (0.03, 0.025, 0.02), 0.15)  # the iris: gloss, so it catches the light
+    eye_white = scene.matte("fig-eye-white", scene.srgb("#f2ece4"), 0.35)
+    brow = grey("fig-brow", 0.3, 0.8)
+    lips = grey("fig-lips", 0.42, 0.5)  # tinted with the skin at runtime: a darker shade of it
+    mouth_in = grey("fig-mouth-in", 0.08, 0.6)
 
     # joints
     r.joint("root", None, 0, 0, 0)
@@ -200,115 +263,174 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.joint(f"knee{side}", f"hip{side}", 0, sy * HIP_W, KNEE)
         r.joint(f"ankle{side}", f"knee{side}", 0, sy * HIP_W, ANKLE)
 
-    # ── skin: head with a face, neck, hands, forearms (a short sleeve leaves them bare)
-    r.ball("head", "head", "skin", skin, HEAD_X, 0, HEAD_C + HEAD_R * 1.04, HEAD_R * 0.92, HEAD_R * 0.96, HEAD_R * 1.04)
-    # tapered: a broader base where it meets the shoulders, so the head does not sit on a post
-    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.6, 0, NECK - 2.5 * FIG, 3.6 * FIG, 2.7 * FIG, 7 * FIG)
-    r.ball("nose", "head", "skin", skin, HEAD_X + HEAD_R * 0.86, 0, HEAD_C - 0.8 + 1.8, 1.9, 1.5, 1.8)
+    # ── skin (v2, spec §2.1–2.2): one fused surface for the neck, arms, hands and legs, and a head
+    # fused from a skull, a narrower jaw and cheeks — a chin, not a ball. Limbs taper to the wrist and
+    # the ankle: one thickness everywhere is what read as a toy (nick, 2026-10-22).
+    R = HEAD_R
+    sk = lambda name, joint, x, y, zc, rx, ry, rz: r.orb(name, joint, "skin", skin, x, y, zc, rx, ry, rz, "skin")  # noqa: E731
+    hd = lambda name, x, y, zc, rx, ry, rz: r.orb(name, "head", "skin", skin, x, y, zc, rx, ry, rz, "head")  # noqa: E731
+    hd("head", HEAD_X, 0, HEAD_C + R * 0.02, R * 0.9, R * 0.88, R * 1.0)
+    hd("jaw", HEAD_X + R * 0.18, 0, HEAD_C - R * 0.05, R * 0.72, R * 0.7, R * 0.72)
     for sy in (1, -1):
-        # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): at 2 px a unit a
-        # 2.4-unit eye was a pixel or two and vanished. Taller ovals, set a touch wider, still under
-        # the visor (its band runs HEAD_C + 0.4 … + 4.8).
-        r.ball("eye", "head", "skin", eye, HEAD_X + HEAD_R * 0.8, sy * 3.4, HEAD_C + 4.1, 1.2, 1.45, 1.75)
-        r.ball("ear", "head", "skin", skin, HEAD_X, sy * HEAD_R * 0.95, HEAD_C + 1.0 + 2.1, 1.3, 1.0, 2.1)
-    r.box("mouth", "head", "skin", mouth, HEAD_X + HEAD_R * 0.84, 0, HEAD_C - 4.3, 0.9, 3.4, 1.0)
+        hd("cheek", HEAD_X + R * 0.45, sy * R * 0.35, HEAD_C + R * 0.05, R * 0.38, R * 0.3, R * 0.3)
+        hd("ear", HEAD_X - R * 0.05, sy * R * 0.86, HEAD_C + R * 0.3, R * 0.12, R * 0.08, R * 0.2)
+        hd("lid", HEAD_X + R * 0.74, sy * R * 0.3, HEAD_C + R * 0.47, R * 0.13, R * 0.19, R * 0.08)
+    # a nose with a bridge from the brow, a rounded tip that catches the light, and small wings — it was a
+    # dot that vanished at office size (nick, 2026-10-22: "what about noses and mouths?")
+    hd("bridge", HEAD_X + R * 0.86, 0, HEAD_C + R * 0.18, R * 0.12, R * 0.09, R * 0.26)
+    hd("nose", HEAD_X + R * 0.96, 0, HEAD_C - R * 0.02, R * 0.15, R * 0.13, R * 0.14)
+    for sy in (1, -1):
+        hd("nostril", HEAD_X + R * 0.86, sy * R * 0.11, HEAD_C - R * 0.06, R * 0.1, R * 0.08, R * 0.08)
+    # eyes are their own untinted layer: a skin tint over a white would turn it mint on a mint skin
+    for sy in (1, -1):
+        # "some of the avatars look like they don't have eyes" (nick, 2026-10-21): a white and an iris
+        # that catches the light read at 1.5 px a unit where a dark dot vanished
+        r.orb("eyewhite", "head", "eyes", eye_white, HEAD_X + R * 0.76, sy * R * 0.3, HEAD_C + R * 0.38, R * 0.1, R * 0.16, R * 0.15)
+        r.orb("iris", "head", "eyes", eye, HEAD_X + R * 0.85, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.05, R * 0.105, R * 0.125)
+        r.turn(r.orb("brow", "head", "skin", brow, HEAD_X + R * 0.8, sy * R * 0.32, HEAD_C + R * 0.6, R * 0.08, R * 0.2, R * 0.045), (math.radians(sy * -8), 0, 0))
+    # the mouth is the member's own smile (`appearance.ts` smile): its own layer, tinted with their skin,
+    # so a darker grey reads as lips on any skin. Soft: corners just turned up. Wide: a broader curve,
+    # parted, the inside dark.
+    def smile(layer, half, lift, parted):
+        for i in range(-3, 4):
+            t = i / 3
+            r.orb("lip", "head", layer, lips, HEAD_X + R * (0.83 - 0.06 * t * t), t * R * half, HEAD_C - R * 0.32 + lift * R * t * t,
+                  R * 0.07, R * half / 3.2, R * (0.05 if parted else 0.04))
+        if parted:
+            r.orb("inside", "head", layer, mouth_in, HEAD_X + R * 0.84, 0, HEAD_C - R * 0.31, R * 0.05, R * half * 0.7, R * 0.025)
+    smile("mouth/soft", 0.2, 0.05, False)
+    smile("mouth/wide", 0.27, 0.09, True)
+    # the neck: wider where it meets the shoulders and sloping into them (the trapezius), not a post the
+    # head sits on (nick, 2026-10-22: "make their necks a little smoother/more natural looking")
+    r.cyl("neck", "neck", "skin", skin, HEAD_X * 0.5, 0, NECK - 3 * FIG, 4.0 * FIG, 3.0 * FIG, 6.5 * FIG)["fuse"] = "skin"
+    sk("nape", "neck", HEAD_X * 0.3, 0, NECK - 1.6 * FIG, 3.6 * FIG, 4.4 * FIG, 2.6 * FIG)
+    for sy in (1, -1):
+        r.turn(sk("trap", "spine", -0.4 * FIG, sy * 4.6 * FIG, SHOULDER + 1.0 * FIG, 3.0 * FIG, 4.6 * FIG, 1.7 * FIG), (math.radians(sy * 18), 0, 0))
     for side, sy in (("L", 1), ("R", -1)):
-        # The whole arm is skin under the sleeves: a sleeveless top (the vest) left the forearms
-        # hanging in the air, and a swung sleeve opened a gap at the shoulder and the elbow (nick,
-        # 2026-10-21: "the arms look very detached"). Balls at both joints keep the limb whole at any
-        # angle; a sleeve, a size larger, covers them.
-        r.ball("shoulder", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER + 2.3 * FIG, 3.2 * FIG, 3.2 * FIG, 3.2 * FIG)
-        r.cyl("upperarm", f"shoulder{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM, 2.7 * FIG, 3.1 * FIG, UPPER_ARM)
-        r.ball("elbow", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 2.7 * FIG, 2.7 * FIG, 2.7 * FIG, 2.7 * FIG)
-        r.cyl("forearm", f"elbow{side}", "skin", skin, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM, 2.4 * FIG, 2.9 * FIG, FORE_ARM)
-        r.ball("hand", f"wrist{side}", "skin", skin, 0.6, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM - 1.5 * FIG + 3.2 * FIG, 3.0 * FIG, 2.4 * FIG, 3.2 * FIG)
+        y = sy * SHOULDER_W
+        sk("shoulder", f"shoulder{side}", 0, y, SHOULDER - 0.4 * FIG, 3.1 * FIG, 3.0 * FIG, 3.0 * FIG)
+        r.cyl("upperarm", f"shoulder{side}", "skin", skin, 0, y, SHOULDER - UPPER_ARM, 2.5 * FIG, 3.1 * FIG, UPPER_ARM)["fuse"] = "skin"
+        sk("elbow", f"elbow{side}", 0, y, SHOULDER - UPPER_ARM, 2.4 * FIG, 2.4 * FIG, 2.4 * FIG)
+        r.cyl("forearm", f"elbow{side}", "skin", skin, 0, y, WRIST, 2.05 * FIG, 2.65 * FIG, FORE_ARM)["fuse"] = "skin"
+        sk("hand", f"wrist{side}", 0.4, y, WRIST - 1.2 * FIG, 2.6 * FIG, 1.9 * FIG, 3.3 * FIG)
+        sk("thumb", f"wrist{side}", 1.9 * FIG, y - sy * 0.4 * FIG, WRIST - 1.4 * FIG, 1.0 * FIG, 0.9 * FIG, 1.7 * FIG)
+    # legs, under the trousers: a skirt or a dress shows them (spec §3, the skin-only base)
+    sk("hips", "hips", 0, 0, HIP + 1.5 * FIG, 5.2 * FIG, 7.8 * FIG, 4.4 * FIG)
+    for side, sy in (("L", 1), ("R", -1)):
+        y = sy * HIP_W
+        r.cyl("thigh", f"hip{side}", "skin", skin, 0, y, KNEE, 2.6 * FIG, 3.7 * FIG, HIP - KNEE)["fuse"] = "skin"
+        sk("knee", f"knee{side}", 0, y, KNEE, 2.6 * FIG, 2.6 * FIG, 2.6 * FIG)
+        r.cyl("shin", f"knee{side}", "skin", skin, 0, y, ANKLE + 0.5 * FIG, 1.9 * FIG, 2.6 * FIG, KNEE - ANKLE - 0.5 * FIG)["fuse"] = "skin"
+        sk("ankle", f"ankle{side}", 0.6, y, ANKLE + 0.6 * FIG, 1.9 * FIG, 1.8 * FIG, 1.4 * FIG)
 
-    # ── hair: one silhouette each, all on the head
-    # A hair cap sits BEHIND the hairline: centred back of the head's centre and a touch higher, so
-    # the face (x > 0) stands proud of it and the body holdout cuts the cap off at the brow.
-    cap = lambda layer, top=1.0, back=1.0, side=1.02: r.ball("cap", "head", layer, hair, HEAD_X - HEAD_R * 0.22, 0, HEAD_C + 2.4 + HEAD_R * top, HEAD_R * back, HEAD_R * side, HEAD_R * top)  # noqa: E731
-    cap("hair/buzz", 0.98, 1.0, 0.98)
-    cap("hair/short", 1.06, 1.1, 1.05)
-    r.box("fringe", "head", "hair/short", hair, HEAD_X + HEAD_R * 0.7, 0, HEAD_C + 4.5, 3.2, 11, 4, 0.8)
-    cap("hair/side", 1.06, 1.1, 1.05)
-    r.box("sweep", "head", "hair/side", hair, HEAD_X + HEAD_R * 0.6, 3, HEAD_C + 4, 5, 10, 5, 1.2)
-    cap("hair/bob", 1.08, 1.15, 1.12)
+    # ── hair (v2): a cap and clumps per style, fused into one sculpted volume — not a helmet, not a
+    # slab fringe (spec §2.3). The cap sits back of the face and a touch high, so no scalp shows.
+    def clump(layer, name, x, y, zc, rx, ry, rz, rot=None):
+        o = r.orb(name, "head", layer, hair, x, y, zc, rx, ry, rz, layer)
+        return r.turn(o, rot) if rot else o
+
+    def cap(layer, k=1.0):
+        clump(layer, "cap", HEAD_X - R * 0.22, 0, HEAD_C + R * 0.14, R * 1.02 * k, R * 1.0 * k, R * 1.04 * k)
+
+    cap("hair/buzz", 0.97)
+    cap("hair/short")
+    for i, (y, dz, lean) in enumerate(((-0.5, 0.0, -10), (-0.15, 0.08, 6), (0.2, 0.02, -4), (0.52, -0.05, 12))):
+        clump("hair/short", f"fringe{i}", HEAD_X + R * 0.55, y * R, HEAD_C + R * (0.77 + dz), R * 0.32, R * 0.3, R * 0.22, (math.radians(lean), math.radians(-25), 0))
+    for i, (x, y) in enumerate(((0.0, -0.45), (0.1, 0.4), (-0.4, 0.0), (0.25, 0.0))):
+        clump("hair/short", f"top{i}", HEAD_X + x * R, y * R, HEAD_C + R * 1.02, R * 0.4, R * 0.38, R * 0.32)
+    cap("hair/side")
+    for i, (y, dz) in enumerate(((-0.55, 0.15), (-0.2, 0.25), (0.15, 0.32), (0.5, 0.28))):
+        clump("hair/side", f"sweep{i}", HEAD_X + R * 0.45, y * R, HEAD_C + R * (0.76 + dz * 0.4), R * 0.4, R * 0.35, R * 0.26, (math.radians(25), math.radians(-15), 0))
+    cap("hair/bob", 1.04)
     for sy in (1, -1):
-        r.box("bobside", "head", "hair/bob", hair, HEAD_X - 1.5, sy * HEAD_R * 0.95, HEAD_C - 6.5, 10, 3.4, 13, 1.2)
-    cap("hair/long", 1.08, 1.15, 1.1)
-    r.box("fall", "head", "hair/long", hair, HEAD_X - HEAD_R * 0.8, 0, HEAD_C - 17, 5, 13, 24, 1.6)
-    cap("hair/ponytail", 1.04, 1.08, 1.03)
-    r.cyl("tail", "head", "hair/ponytail", hair, HEAD_X - HEAD_R * 1.1, 0, HEAD_C - 8, 1.9, 3.0, 15)
-    r.ball("afro", "head", "hair/afro", hair, HEAD_X - HEAD_R * 0.25, 0, HEAD_C + 2.4 + HEAD_R * 1.4, HEAD_R * 1.25, HEAD_R * 1.45, HEAD_R * 1.4)
-    cap("hair/bun", 1.04, 1.06, 1.03)
-    r.ball("bun", "head", "hair/bun", hair, HEAD_X - HEAD_R * 0.9, 0, HEAD_C + 5 + 3.8, 3.8, 3.8, 3.8)
+        clump("hair/bob", "side", HEAD_X - R * 0.1, sy * R * 0.78, HEAD_C - R * 0.25, R * 0.62, R * 0.32, R * 0.62)
+    clump("hair/bob", "back", HEAD_X - R * 0.55, 0, HEAD_C - R * 0.2, R * 0.6, R * 0.9, R * 0.62)
+    cap("hair/long", 1.04)
+    clump("hair/long", "fall", HEAD_X - R * 0.7, 0, HEAD_C - R * 1.1, R * 0.45, R * 0.85, R * 1.5)
+    for sy in (1, -1):  # strands over the front of the shoulders
+        clump("hair/long", "front", HEAD_X - R * 0.05, sy * R * 0.75, HEAD_C - R * 1.0, R * 0.3, R * 0.28, R * 1.2)
+    cap("hair/ponytail")
+    clump("hair/ponytail", "tie", HEAD_X - R * 1.0, 0, HEAD_C + R * 0.2, R * 0.28, R * 0.28, R * 0.28)
+    clump("hair/ponytail", "tail", HEAD_X - R * 1.2, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.3, R * 0.85)
+    # centred well back of the face, so the face stands in front of it (it covered the face at -0.25)
+    clump("hair/afro", "afro", HEAD_X - R * 0.5, 0, HEAD_C + R * 0.3, R * 1.15, R * 1.42, R * 1.32)
+    cap("hair/bun")
+    clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
 
-    # ── facial hair
-    r.box("stubble", "head", "facial/stubble", hair, HEAD_X + HEAD_R * 0.55, 0, HEAD_C - 8.5, 6.5, 11, 4, 1.2)
-    r.box("moustache", "head", "facial/moustache", hair, HEAD_X + HEAD_R * 0.86, 0, HEAD_C - 2.9, 1.3, 5.6, 1.5, 0.4)
-    r.box("goatee", "head", "facial/goatee", hair, HEAD_X + HEAD_R * 0.8, 0, HEAD_C - 9.6, 2.8, 4, 4, 0.8)
-    r.ball("beard", "head", "facial/beard", hair, HEAD_X + HEAD_R * 0.45, 0, HEAD_C - 9.6 + 5.6, HEAD_R * 0.7, HEAD_R * 0.98, 5.6)
+    # ── facial hair, following the jaw
+    stub = lambda name, *a: r.orb(name, "head", "facial/stubble", hair, *a, "facial/stubble")  # noqa: E731
+    stub("jaw", HEAD_X + R * 0.25, 0, HEAD_C - R * 0.3, R * 0.7, R * 0.74, R * 0.42)
+    stub("chin", HEAD_X + R * 0.55, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.4, R * 0.2)
+    r.orb("moustache", "head", "facial/moustache", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07)
+    r.orb("goatee", "head", "facial/goatee", hair, HEAD_X + R * 0.62, 0, HEAD_C - R * 0.6, R * 0.22, R * 0.24, R * 0.2)
+    r.orb("beard", "head", "facial/beard", hair, HEAD_X + R * 0.32, 0, HEAD_C - R * 0.5, R * 0.6, R * 0.66, R * 0.36, "facial/beard")
+    r.orb("tache", "head", "facial/beard", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07, "facial/beard")
 
-    # ── tops: a torso with a slight waist, and sleeves that follow the arms
-    def torso(layer, mat=cloth):
-        # "a little bit too block-ish" (nick): one smooth tapered volume from the waist to the
-        # shoulders, oval in section — a slight waist, wider chest, rounded edges, no seams.
-        z0 = HIP - 1 * FIG
-        h = SHOULDER - z0
-        r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, 5.0 * FIG, 6.4 * FIG, h, sy=1.75)
-        # The shoulders: a flattened ellipsoid over the top of the torso, so the line from the neck
-        # falls away to each arm instead of meeting it at a flat lid ("the shoulders/neck are too
-        # block-y", nick, 2026-10-21).
-        r.ball("yoke", "spine", layer, mat, 0.3, 0, SHOULDER + 3.6 * FIG, 6.7 * FIG, 13.6 * FIG, 3.6 * FIG)
+    # ── tops (v2): a torso with a waist that comes down over the trouser top, shoulders, sleeves —
+    # all one fused garment per cut, so the sleeve flows out of the shoulder (spec §2.1)
+    def torso(layer, mat=cloth, waist=5.2, chest=6.6):
+        z0 = HIP - 1.5 * FIG
+        r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, waist * FIG, chest * FIG, SHOULDER - z0, sy=1.7)["fuse"] = layer
+        r.orb("yoke", "spine", layer, mat, 0.3, 0, SHOULDER, 6.2 * FIG, 12.6 * FIG, 3.4 * FIG, layer)
+        r.orb("belly", "hips", layer, mat, 0.5, 0, HIP + 2 * FIG, 5.6 * FIG, 8.4 * FIG, 4.0 * FIG, layer)
 
     def sleeves(layer, long: bool, mat=cloth):
         for side, sy in (("L", 1), ("R", -1)):
-            # a rounded cap where the sleeve meets the yoke, turning with the arm
-            r.ball("cap", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER + 2.9 * FIG, 3.9 * FIG, 3.9 * FIG, 3.9 * FIG)
-            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 1 * FIG, 3.6 * FIG, 4.2 * FIG, UPPER_ARM - 1 * FIG)
+            y = sy * SHOULDER_W
+            r.orb("cap", f"shoulder{side}", layer, mat, 0, y, SHOULDER - 0.5 * FIG, 3.7 * FIG, 3.6 * FIG, 3.6 * FIG, layer)
+            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.1 * FIG, 3.7 * FIG, UPPER_ARM)["fuse"] = layer
             if long:
-                r.ball("elbow", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM + 3.5 * FIG, 3.5 * FIG, 3.5 * FIG, 3.5 * FIG)
-                r.cyl("cuff", f"elbow{side}", layer, mat, 0, sy * SHOULDER_W, SHOULDER - UPPER_ARM - FORE_ARM + 1 * FIG, 3.0 * FIG, 3.4 * FIG, FORE_ARM - 1 * FIG)
+                r.orb("elbow", f"elbow{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.0 * FIG, 3.0 * FIG, 3.0 * FIG, layer)
+                r.cyl("cuff", f"elbow{side}", layer, mat, 0, y, WRIST + 1.2 * FIG, 2.5 * FIG, 3.0 * FIG, FORE_ARM - 1.2 * FIG)["fuse"] = layer
 
     torso("top/tee"); sleeves("top/tee", False)
     torso("top/long"); sleeves("top/long", True)
     torso("top/stripe"); sleeves("top/stripe", True)
     for dz in (3, 9, 15, 20):
-        z = HIP + dz * FIG
+        z = HIP + dz * FIG * _K
         on_chest = z > CHEST - 5 * FIG
-        r.ball("stripe", "spine" if dz > 5 else "hips", "top/stripe", cloth_dark, 0.5 if on_chest else 0, 0, z + 1.3 * FIG, (6.8 if on_chest else 5.8) * FIG, (11.5 if on_chest else 8.2) * FIG, 1.3 * FIG)
+        r.ball("stripe", "spine" if dz > 5 else "hips", "top/stripe", cloth_dark, 0.5 if on_chest else 0, 0, z + 1.3 * FIG, (6.9 if on_chest else 6.0) * FIG, (11.6 if on_chest else 8.6) * FIG, 1.3 * FIG)
     torso("top/hoodie"); sleeves("top/hoodie", True)
-    r.ball("pocket", "hips", "top/hoodie", cloth_dark, 5.4 * FIG, 0, HIP + 7 * FIG, 1.2, 5.5 * FIG, 3.0 * FIG)
-    r.ball("hood", "spine", "top/hoodie", cloth, -5 * FIG, 0, NECK - 1 * FIG + 5 * FIG, 6 * FIG, 9 * FIG, 5 * FIG)
+    r.orb("pocket", "hips", "top/hoodie", cloth_dark, 5.4 * FIG, 0, HIP + 2.6 * FIG, 0.8, 5.0 * FIG, 2.6 * FIG)
+    r.orb("hood", "spine", "top/hoodie", cloth, -4.2 * FIG, 0, NECK + 0.4 * FIG, 5.0 * FIG, 8.6 * FIG, 4.0 * FIG, "top/hoodie")
     torso("top/vest", cloth_dark)
 
-    # ── bottom: pelvis and trouser legs; shoes on the feet
-    r.ball("pelvis", "hips", "bottom", cloth, 0, 0, HIP + 2.5 * FIG, 6.0 * FIG, 8.6 * FIG, 5.0 * FIG)
+    # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
+    r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
     for side, sy in (("L", 1), ("R", -1)):
-        r.cyl("thigh", f"hip{side}", "bottom", cloth, 0, sy * HIP_W, KNEE - 1 * FIG, 3.6 * FIG, 4.4 * FIG, THIGH + 1 * FIG)
-        r.ball("knee", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, KNEE + 3.7 * FIG, 3.7 * FIG, 3.7 * FIG, 3.7 * FIG)
-        r.cyl("shin", f"knee{side}", "bottom", cloth, 0, sy * HIP_W, ANKLE + 1 * FIG, 3.0 * FIG, 3.6 * FIG, SHIN - 1 * FIG)
-        r.box("shoe", f"ankle{side}", "shoes", shoe, 2.5 * FIG, sy * HIP_W, 0, 10 * FIG, 5.5 * FIG, 4 * FIG, 1.2)
+        y = sy * HIP_W
+        r.cyl("thigh", f"hip{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 4.2 * FIG, HIP - KNEE + 1 * FIG)["fuse"] = "bottom"
+        r.orb("knee", f"knee{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 3.0 * FIG, 3.1 * FIG, "bottom")
+        r.cyl("shin", f"knee{side}", "bottom", denim, 0, y, ANKLE + 1.5 * FIG, 2.5 * FIG, 3.0 * FIG, KNEE - ANKLE - 1.5 * FIG)["fuse"] = "bottom"
+        # shoes: a rounded upper on a sole, not a block
+        r.orb("shoe", f"ankle{side}", "shoes", shoe, 2.2 * FIG, y, 0.9 * FIG + 2.4 * FIG * 0.5, 5.2 * FIG, 2.7 * FIG, 2.4 * FIG, "shoes")
+        r.orb("sole", f"ankle{side}", "shoes", shoe, 2.4 * FIG, y, 0.65 * FIG, 5.4 * FIG, 2.8 * FIG, 0.65 * FIG, "shoes")
 
-    # ── hats
-    r.ball("cap", "head", "hat/cap", acc, HEAD_X - HEAD_R * 0.2, 0, HEAD_C + 4 + HEAD_R * 0.95, HEAD_R * 1.0, HEAD_R * 1.06, HEAD_R * 0.95)
-    r.box("brim", "head", "hat/cap", acc, HEAD_X + HEAD_R * 1.05, 0, HEAD_C + 5.5, 7.5, 9, 1.2, 0.4)
-    r.ball("beanie", "head", "hat/beanie", acc, HEAD_X - HEAD_R * 0.2, 0, HEAD_C + 5 + HEAD_R * 1.05, HEAD_R * 1.0, HEAD_R * 1.06, HEAD_R * 1.05)
-    r.torus("band", "head", "hat/band", acc, HEAD_X, 0, HEAD_C + 4.8, HEAD_R * 1.0, 1.3)
+    # ── hats, sized to the v2 head
+    r.orb("cap", "head", "hat/cap", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.6, R * 1.04, R * 1.08, R * 0.7)
+    r.box("brim", "head", "hat/cap", acc, HEAD_X + R * 0.95, 0, HEAD_C + R * 0.66, R * 0.75, R * 0.95, 1.0, 0.4)
+    r.orb("beanie", "head", "hat/beanie", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.42, R * 1.06, R * 1.08, R * 0.95)
+    r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.62, R * 0.98, 1.3)
 
-    # ── accessories
+    # ── accessories: thin frames on the nose, cups over the ears, a scarf at the neck
+    frame = scene.matte("fig-frame", (0.72, 0.72, 0.72), 0.3)
     for sy in (1, -1):
-        r.torus("lens", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 1.02, sy * 3.3, HEAD_C + 2.0, 2.3, 0.8, (0, math.radians(90), 0))
-        r.box("arm", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 0.5, sy * HEAD_R * 0.98, HEAD_C + 1.8, HEAD_R * 1.0, 0.7, 0.7)
-    r.box("bridge", "head", "acc/glasses", acc, HEAD_X + HEAD_R * 1.02, 0, HEAD_C + 1.8, 0.8, 2.8, 0.8)
-    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - 0.8, 0, HEAD_C + 3.2, HEAD_R * 1.08, 1.0, (math.radians(90), 0, 0))
+        r.torus("lens", "head", "acc/glasses", frame, HEAD_X + R * 0.95, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.2, 0.32, (0, math.radians(90), 0))
+        r.box("arm", "head", "acc/glasses", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.34, R * 0.95, 0.3, 0.35)
+    r.box("bridge", "head", "acc/glasses", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.34, 0.4, R * 0.2, 0.35)
+    # over the top of the head from ear to ear: the ring's axis turned onto x (about x it looped through the face)
+    r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (0, math.radians(90), 0))
     for sy in (1, -1):
-        r.ball("cup", "head", "acc/headphones", acc, HEAD_X, sy * HEAD_R * 1.1, HEAD_C + 0.8 + 3.6, 3.6, 1.8, 3.6)
-    r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.6, 0, NECK + 1 * FIG, 5.6, 2.6)
-    r.box("scarf-tail", "spine", "acc/scarf", acc, 6 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
+        r.orb("cup", "head", "acc/headphones", acc, HEAD_X - R * 0.05, sy * R * 0.98, HEAD_C + R * 0.3, R * 0.36, R * 0.2, R * 0.4)
+    r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
+    r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 
-    # ── the visor (agents): a band across the eyes, its own colour
-    r.box("visor", "head", "visor", visor, HEAD_X + HEAD_R * 0.92, 0, HEAD_C + 0.4, 1.7, HEAD_R * 1.5, 4.4, 0.9)
+    # ── an agent's tell: the irises glow, and a thin ring of light sits at the neckline — read from every
+    # side, quieter than the visor it replaces (nick, 2026-10-22)
+    light = scene.glow("fig-tell", (1.0, 1.0, 1.0), 3.0)
+    for sy in (1, -1):
+        r.orb("iris", "head", "tell/eyes", light, HEAD_X + R * 0.87, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.04, R * 0.1, R * 0.12)
+    r.torus("collar", "spine", "tell/collar", light, HEAD_X * 0.4, 0, NECK - 2.6 * FIG, 3.9 * FIG, 0.45)
 
     # ── the lanyard (a first arrival, from the toss until they sit): a cord round the back of the neck
     # and down both sides of the chest to a badge. Rigid on the spine — it rides the torso's sway.

@@ -37,7 +37,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None}
+           "resample_from": None, "stills": None, "warm": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -55,6 +55,13 @@ def args() -> dict:
             out["figure"] = True; i += 1
         elif k == "--force":
             out["force"] = True; i += 1
+        elif k == "--stills":
+            # clip:frame:dir,… — a look check at office size instead of sheets (figure_stills.py)
+            out["stills"] = [(c, d, int(f)) for c, f, d in (x.split(":") for x in argv[i + 1].split(","))]; i += 2
+        elif k == "--warm":
+            # clip,clip,… — render these clips into the store and write no sheets, so a long figure
+            # render can be split across runs (the last, plain run writes the sheets from the store)
+            out["warm"] = set(argv[i + 1].split(",")); i += 2
         elif k == "--resample-from":
             out["resample_from"] = float(argv[i + 1]); i += 2
         else:
@@ -225,7 +232,7 @@ def write_pixels(path: str, px: np.ndarray) -> None:
 # the same key takes them from there instead of rendering — so changing one beat, one prop or one
 # hair style renders that and nothing else, and a run that hangs or crashes resumes where it
 # stopped. The store is this machine's: a fresh machine renders everything once.
-FIG_PIPELINE = 1  # bump when what a render's pixels BECOME changes (masks, thresholds, the arm split)
+FIG_PIPELINE = 2  # 2: surfaces fused before they render (office figure v2).  bump when what a render's pixels BECOME changes (masks, thresholds, the arm split)
 LIT_SAMPLES = 16  # 32 was indistinguishable at panel and broadcast size, ~0.1% RMSE (nick, 2026-10-21)
 FIG_CACHE = os.environ.get("MUSTERD_FIG_CACHE") or os.path.expanduser("~/.cache/musterd/office-figure")
 
@@ -280,7 +287,9 @@ def render_figure(a: dict) -> None:
     colours with no anti-aliasing — and the lit frame is split by ID into its layers. Rows are
     (clip, direction), columns are frames."""
     import figure
+    import figure_fuse
     import figure_resample
+    import figure_stills
 
     scene.clear()
     zs = scene.z_scale(a["ky"])
@@ -321,8 +330,9 @@ def render_figure(a: dict) -> None:
     lit_mats = {o.name: [slot.material for slot in o.material_slots] for o in rig.meshes}
 
     def set_id_pass(on: bool) -> None:
-        for o in rig.meshes:
-            mats = [id_mats[(o["layer"], bool(o["arm"]))]] * len(o.material_slots) if on else lit_mats[o.name]
+        for o in rig.meshes + (fused or []):
+            arms = o.get("arm_slots") or [bool(o["arm"])] * len(o.material_slots)  # a fused copy: per slot
+            mats = [id_mats[(o["layer"], bool(a))] for a in arms] if on else lit_mats[o.name]
             for slot, m in zip(o.material_slots, mats):
                 slot.material = m
         s.render.filter_size = 0.0 if on else 1.5
@@ -375,11 +385,22 @@ def render_figure(a: dict) -> None:
         return any_on
 
     def holdout_for(layer: str) -> set[str]:
-        """What occludes a variant: the body; for a prop also a torso (any top's: they share it) and,
-        for the plant, the box it sits in."""
-        if not layer.startswith("carry/") and not layer.startswith("lanyard"):
-            return set(base)
-        return set(base) | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
+        """What occludes a variant: the body (skin and eyes), plus a stand-in for each kind of piece that
+        can be in front of it (office figure v2, plan Task 4) — the runtime draws pieces back to front,
+        so a piece's own render must already have the holes the pieces drawn under it cannot make.
+        - a top: the trousers (seated thighs come in front of the hem);
+        - shoes: the trousers (a hem over the ankle);
+        - hair, facial hair, hats, accessories, a carried thing, the lanyard: a torso (the tee's — every
+          top shares its shape), so hair behind the back is hidden and long hair in front still shows;
+          the scarf sits on the torso, so it holds out the body alone;
+        - an agent's tell (glowing irises, the collar light): the body alone — it sits on the surface;
+        - the plant: the box it sits in, as before."""
+        b = set(base)
+        if layer.startswith("top/") or layer == "shoes":
+            return b | {"bottom"}
+        if layer == "acc/scarf" or layer == "bottom" or layer.startswith(("tell/", "mouth/")):
+            return b
+        return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 
     # Five directions are rendered and three are mirrored. A horizontal flip in the canvas's frame
     # swaps lx and ly (screen-right is +lx −ly), so the mirror of E (+lx) is S (+ly), of N is W,
@@ -459,17 +480,33 @@ def render_figure(a: dict) -> None:
             outs[gk] = c
 
     done = reused = rendered = resampled = 0
+    frames_of = {n: fr for n, fr, _, _ in figure.CLIPS}
+
+    def base_frame(clip: str, d: str, f: int) -> tuple[str, str, int]:
+        """Where a layer a carrying clip does not store comes from: its base clip's frame at the same
+        point of the loop (`frameCell` in figureSheet.ts does the same at runtime)."""
+        b = figure.CARRY_BASE[clip]
+        return (b, d, (f * frames_of[b]) // frames_of[clip] % frames_of[b])
+
+    wanted = None
+    if a["stills"] is not None:
+        wanted = set(a["stills"]) | {base_frame(*w) for w in a["stills"] if w[0] in figure.CARRY_BASE}
     t0 = time.time()
     for name, frames, _, dirs in figure.CLIPS:
+        if a["warm"] is not None and name not in a["warm"]:
+            continue
         for di, d in enumerate(figure.DIRS):
             if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # drawn flipped from its source direction at runtime (`frameCell`)
             for f in range(frames):
+                if wanted is not None and (name, d, f) not in wanted:
+                    continue  # a look check renders only the stills it was asked for
                 pose, lift = figure.action(name, figure.sample(name, f, frames))
                 figure.apply_pose(rig, pose, lift, math.radians(45 * di))
                 figure.place_props(rig, name, math.radians(45 * di))
                 seated = name in figure.SEATED_CLIPS
                 cname = f"{name}/{d}/{f}"
+                fused = None  # this frame's fused copies, made at its first render
                 calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants if figure.stored_in(name, l)]
                 for kind, layers, holdout in calls:
                     if not show(layers, holdout, name):
@@ -486,8 +523,15 @@ def render_figure(a: dict) -> None:
                     else:
                         rendered += 1
                         outs = {}
+                        # each continuous surface as one soft shape (figure_fuse.py), fused once a
+                        # frame; the key above was taken from the posed parts, not the copies
+                        if fused is None:
+                            fused = figure_fuse.fuse_frame(rig.meshes)
+                            for o in fused:
+                                lit_mats[o.name] = [slot.material for slot in o.material_slots]
+                        figure_fuse.show_for_call(fused)
                         if kind == "base":
-                            # the base body — skin, bottom, shoes, visor — split by ID, no variant in the way
+                            # the base body — skin and eyes — split by ID, no piece in the way
                             set_id_pass(False)
                             s.render.filepath = tmp_lit
                             bpy.ops.render.render(write_still=True)
@@ -524,11 +568,29 @@ def render_figure(a: dict) -> None:
                         stash(k, outs)
                     for gk, c in outs.items():
                         crops.setdefault(gk, {})[cname] = c
+                if fused:
+                    for o in fused:
+                        del lit_mats[o.name]
+                    figure_fuse.clear(fused)
                 done += 1
         print(f"figure: {name} done ({done} frames so far; {rendered} calls rendered, {reused} reused, {resampled} resampled, {time.time() - t0:.0f}s)", flush=True)
     for p in (tmp_lit, tmp_id):
         if os.path.exists(p):
             os.remove(p)
+    if a["warm"] is not None:
+        print(f"figure: warmed {sorted(a['warm'])}: {rendered} render calls, {reused} reused, {time.time() - t0:.0f}s; no sheets written", flush=True)
+        return
+    if a["stills"] is not None:
+        bad = [s for s in a["stills"] if s[1] in MIRRORED]
+        if bad:
+            raise SystemExit(f"render.py: --stills takes rendered directions only (not {sorted(MIRRORED)}): {bad}")
+        def resolve(layer: str, clip: str, d: str, f: int) -> str:
+            if clip in figure.CARRY_BASE and not figure.stored_in(clip, layer):
+                clip, d, f = base_frame(clip, d, f)
+            return f"{clip}/{d}/{f}"
+
+        figure_stills.write(crops, a["stills"], fw, fh, a["out"], write_pixels, resolve)
+        return
     # Pack each layer's frames cropped to their own pixels (an atlas, not a grid): a glasses frame
     # is a few hundred pixels, not a 112×208 cell, and the browser decodes only what is drawn.
     # figure.json records each cell's rect in the atlas and its offset inside the nominal frame.

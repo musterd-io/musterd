@@ -36,7 +36,7 @@ waits for nick to accept v2-1 on /live.
 - One height. Build varies only by a per-member horizontal draw stretch in **[0.96, 1.04]** (spec: 3–6%).
 - Nothing tied to gender or race; no stereotypes; every pick independent from the name (spec §2.5).
 - Skin stays the full-rainbow `SKINS` palette; sheets render neutral and are tinted at runtime, so the skin material's subsurface must stay **neutral in colour** (equal radii), or it would warm a mint skin.
-- The outermost top carries the identity hue (`topColor`); agents keep the visor, no glasses, no facial hair.
+- The outermost top carries the identity hue (`topColor`); agents wear no visor: `tell/eyes` and `tell/collar` glow in `topColor` (spec §2.2); no glasses, no facial hair.
 - Figure scale stays **1.5** px per floor unit; ky **0.31**; run through `render_watch.py`.
 - `officeArtBytes` rises only with a log entry in `docs/perf/web-live-baseline.md` (ADR 151/183).
 - Each continuous surface is fused: no tube end, cap or seam visible at any joint in any clip.

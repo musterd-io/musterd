@@ -54,7 +54,11 @@ the repo; the renders are described here so the decision does not depend on them
 
 A jaw and cheeks, so the face has a chin rather than being a ball; eyes with a white, an iris that catches
 the light, and a lid of skin over the top; brows; a small nose; lips. Warm, not a toy's dots and slit.
-Agents keep the visor across the eyes (the realism design's §3.2: the one tell the office cannot lose).
+**No visors on anyone** (nick, 2026-10-22, at the v2-1 look check: "i actually dont like the use of
+visors for any members"). An agent is told apart by two quiet glows in its identity colour: its
+irises, and a thin collar light at the neckline, which reads from every side. Chosen from four rendered
+candidates (collar, earpiece, chest pin, eye glow); nick picked collar and eye glow together. This
+replaces the realism design's §3.2 visor.
 
 ### 2.3 Materials
 
@@ -122,7 +126,7 @@ legs, so it cannot sit over trousers. A skirt is a bottom.
 - **A member's look is still a pure function of their name**, stable across frames, reloads and
   machines. The new wardrobe reshuffles everyone's look once; that is expected (the wardrobe was always
   "stable per name", never "these people look like this").
-- Agents: no glasses, no facial hair, the visor always (unchanged).
+- Agents: no glasses, no facial hair; the eye glow and collar light always (§2.2).
 
 ## 3. How it gets made
 

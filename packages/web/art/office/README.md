@@ -106,15 +106,14 @@ decode to about 2 GB in the browser. Tinting happens per frame on one scratch ca
 time; a tinted copy of a whole sheet per member colour is never made.
 
 Every mesh carries the **layer** its pixels belong to (`LAYERS`: skin, one per hair style, facial
-hair, hat, top cut, accessory, bottom, shoes, visor, and the carried things below). Per frame the renderer draws the base body
-(skin, bottom, shoes, visor) twice — lit, neutral grey, and as flat ID colours, no anti-aliasing —
+hair, hat, top cut, accessory, bottom, shoes, eyes, mouth, the agent tells, and the carried things below). Per frame the renderer draws the base body
+(skin and eyes since v2, below) twice — lit, neutral grey, and as flat ID colours, no anti-aliasing —
 and splits the lit pixels by ID; then each variant alone, with the body as a **holdout**, so a
 hand in front of a hoodie keeps its pixels and the hoodie has a hand-shaped hole. `figure.ts`
 can therefore draw the layers in any order and occlusion is already right. The sheets are
 `office-art-fig-<layer>.png`: one row per (clip, direction) — directions clockwise from E, as
 `figureSheet.ts`'s `DIR8` — one column per frame; `figure.json` is the `SheetSpec` plus the file
-per layer. Sheets are neutral grey; `appearance.ts` tints them at draw time (`tint.ts`), and the
-visor keeps its own colour. The base clips — 265 frames × (2 + 23) renders at 2 px/unit — took 77
+per layer. Sheets are neutral grey; `appearance.ts` tints them at draw time (`tint.ts`). The base clips — 265 frames × (2 + 23) renders at 2 px/unit — took 77
 minutes on the shared laptop (2026-10-21).
 
 ### Gestures (increment 3b)
@@ -208,6 +207,31 @@ python3 packages/web/art/office/render_watch.py -- \
 
 `--clips` and `--only` are gone from the figure (`--only` still re-renders room assets): the store
 does what they did, without having to name what changed.
+
+### Figure v2 (lane 01M5JHEEGT)
+
+The v2 body (spec `docs/superpowers/specs/2026-10-22-office-figure-v2-design.md`) changes the rig, not
+the runtime contract:
+
+- **One surface, not tubes.** Each figure surface is a fuse group; `figure_fuse.py` voxel-remeshes and
+  smooths each group **once per frame** before any call renders (fusing per call cost 2.2 s a call,
+  ~12 h for the figure; once a frame it is 0.29–0.5 s a call).
+- **The base is skin and eyes.** Bottoms and shoes are pieces like any other, held out against the
+  base plus the bottom (`holdout_for` in `render.py`). Eyes are their own layer, so no face goes
+  see-through.
+- **Faces:** a nose with a bridge, tip and nostrils, a neck that slopes into the trapezius, and each
+  member's smile as a layer (`mouth/soft`, `mouth/wide`).
+- **No visors** (nick, 2026-10-22). An agent is told by two glows in its colour, `tell/eyes` and
+  `tell/collar`, drawn only for agents. Sunglasses are gone; glasses are clear frames.
+- **Build** is a draw-time stretch, `build` 0.96–1.04 in `appearance.ts`, applied as `kx` in
+  `figure.ts`: everyone is the same height, nothing in the pick reads gender or race.
+- **Look-check before the long render:** `--stills clip:frame:dir,…` (`figure_stills.py`) draws a few members at
+  office size from chosen frames; `--warm clip,clip` renders those clips into the store and writes no
+  sheets, so a long render can run in parts and the last part only packs.
+
+The full v2 render (2026-10-22, scale 1.5): 802 frames; the second part rendered 9,510 calls and
+reused 10,079 from the first, in 3 h 30 min. 41 sheets plus `figure.json`, 7.40 MB of office art in
+the build against the 8.42 MB budget.
 
 ## Original art
 

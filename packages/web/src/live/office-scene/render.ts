@@ -1851,6 +1851,7 @@ const RECEPTIONIST_LOOK: Appearance = {
   accessoryColor: '#2f7f6a',
   smile: 'soft',
   presents: 'femme',
+  build: 1,
 };
 const RECEPTIONIST_NODE: OfficeNode = {
   name: 'receptionist',

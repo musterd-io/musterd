@@ -32,29 +32,43 @@ const femme: Appearance = {
 };
 
 describe('layersFor (office realism Task 11)', () => {
-  it('orders a femme member with a bun, glasses and a hoodie back to front, no visor', () => {
+  it('draws the eyes over the skin, shoes and trousers under the top, and hair over it (figure v2)', () => {
     expect(layersFor(femme, 'human', '#3366cc').map((l) => l.id)).toEqual([
       'skin',
-      'hair/bun',
-      'top/hoodie',
-      'bottom',
+      'eyes',
+      'mouth/soft',
       'shoes',
+      'bottom',
+      'top/hoodie',
+      'hair/bun',
       'acc/glasses',
     ]);
     const top = layersFor(femme, 'human', '#3366cc').find((l) => l.id === 'top/hoodie');
     expect(top?.color).toBe('#3366cc');
   });
 
-  it('an agent gets the visor last, and keeps its non-human skin tint', () => {
-    const agent = appearanceOf({ name: 'cy', kind: 'agent' });
-    const layers = layersFor(agent, 'agent');
-    expect(layers[layers.length - 1]).toEqual({ id: 'visor', color: null });
+  it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', accessory: 'none', cut: 'tee' };
+    const layers = layersFor(agent, 'agent', '#5b8def');
+    expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
+    expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');
+    expect(layers.find((l) => l.id === 'tell/collar')?.color).toBe('#5b8def');
     expect(layers[0]).toEqual({ id: 'skin', color: agent.skin });
+  });
+
+  it("a member's mouth is their own smile, in a darker shade of their skin", () => {
+    const wide: Appearance = { ...femme, smile: 'wide' };
+    const mouth = layersFor(wide, 'human').find((l) => l.id.startsWith('mouth/'));
+    expect(mouth).toEqual({ id: 'mouth/wide', color: wide.skin });
+  });
+
+  it('a human has neither tell', () => {
+    expect(layersFor(femme, 'human', '#3366cc').some((l) => l.id.startsWith('tell/'))).toBe(false);
   });
 
   it('what they carry draws after the clothes: a carrying walker gets its laptop layer, untinted', () => {
     const ids = layersFor(femme, 'human', null, { carry: 'laptop' }).map((l) => l.id);
-    expect(ids).toEqual(['skin', 'hair/bun', 'top/hoodie', 'bottom', 'shoes', 'carry/laptop', 'acc/glasses']);
+    expect(ids).toEqual(['skin', 'eyes', 'mouth/soft', 'shoes', 'bottom', 'top/hoodie', 'carry/laptop', 'hair/bun', 'acc/glasses']);
     expect(layersFor(femme, 'human', null, { carry: 'laptop' }).find((l) => l.id === 'carry/laptop')?.color).toBeNull();
   });
 
@@ -75,7 +89,7 @@ describe('layersFor (office realism Task 11)', () => {
 
   it('bald, clean-shaven, hatless, no accessory: only the base layers', () => {
     const plain: Appearance = { ...femme, hair: 'bald', accessory: 'none' };
-    expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'top/hoodie', 'bottom', 'shoes']);
+    expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'eyes', 'mouth/soft', 'shoes', 'bottom', 'top/hoodie']);
   });
 });
 
@@ -211,14 +225,38 @@ describe('drawFigureFrame', () => {
     expect(reads.every((r) => r.args[3] === 3 && r.args[4] === 3)).toBe(true);
   });
 
-  it('the room tint multiplies every layer, and the untinted visor is tinted by it alone', () => {
+  it('a stretched build draws each layer wider about the floor point, mirrored or not', () => {
+    const draw = (build: number, dir: 'SE' | 'S') => {
+      const { ctx, ops } = recordingCtx();
+      const { create } = fakeCanvasFactory();
+      const look: Appearance = { ...femme, hair: 'bald', accessory: 'none', build };
+      const ids = layersFor(look, 'human').map((l) => l.id);
+      // packed 64×64 cells at offset 0 (mirroring applies to packed cells only)
+      const cells = Array.from({ length: 64 * 8 * 8 * 6 }, (_, i) => (i % 6 < 4 ? 64 : 0));
+      const mirrored: SheetSpec = { ...spec, mirror: { S: 'E' }, cells: Object.fromEntries(ids.map((id) => [id, cells])) };
+      drawFigureFrame({ ctx, fit, at: { lx: 450, ly: 450 }, sheets: allSheets(ids), spec: mirrored, look, kind: 'human', anim: 'idle', dir, t: 0, startT: 0, scratch: {}, create });
+      return ops;
+    };
+    const k = fit.scale / spec.scale;
+    const flat = draw(1, 'SE').find((o) => o.name === 'drawImage')!.args as number[];
+    const wide = draw(1.04, 'SE').find((o) => o.name === 'drawImage')!.args as number[];
+    // the floor point (anchor.x = 32 into a 64-wide cell) stays put; the width grows 4%
+    expect(wide[7]).toBeCloseTo(64 * k * 1.04);
+    expect(wide[5]).toBeCloseTo(flat[5]! + 32 * k - 32 * k * 1.04);
+    expect(wide[8]).toBeCloseTo(flat[8]!);
+    // a mirrored direction flips about the same stretched cell: its translate is the wide cell's right edge
+    const tr = draw(1.04, 'S').find((o) => o.name === 'translate')!.args as number[];
+    expect(tr[0]).toBeCloseTo(wide[5]! + 64 * k * 1.04);
+  });
+
+  it('the room tint multiplies every layer, and the untinted eyes are tinted by it alone', () => {
     const { ctx, ops } = recordingCtx();
     const agent = appearanceOf({ name: 'cy', kind: 'agent' });
     const ids = layersFor(agent, 'agent').map((l) => l.id);
     const { create, made } = fakeCanvasFactory();
     drawFigureFrame({ ctx, fit, at: { lx: 0, ly: 0 }, sheets: allSheets(ids), spec, look: agent, kind: 'agent', anim: 'idle', dir: DIR8[0]!, t: 0, startT: 0, tint: '#b4bcd6', scratch: {}, create });
     const fills = made.flatMap((m) => m.ops.filter((o) => o.name === 'set:fillStyle').map((o) => o.args[0]));
-    expect(fills).toContain('#b4bcd6'); // the visor, untinted by appearance, still takes the room's tint
+    expect(fills).toContain('#b4bcd6'); // the eyes, untinted by appearance, still take the room's tint
     expect(fills).toContain(mulHex(agent.skin, '#b4bcd6'));
     expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
   });

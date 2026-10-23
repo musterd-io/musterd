@@ -71,7 +71,7 @@ describe('parseFigureSpec (increment 3b)', () => {
 });
 
 describe('only the sheets the team wears (lane 01M5GX1F3J)', () => {
-  const ids: LayerId[] = ['skin', 'bottom', 'shoes', 'visor', 'hair/bob', 'hair/afro', 'top/tee', 'top/vest', 'acc/headphones', 'carry/laptop', 'lanyard'];
+  const ids: LayerId[] = ['skin', 'bottom', 'shoes', 'tell/collar', 'hair/bob', 'hair/afro', 'top/tee', 'top/vest', 'acc/headphones', 'carry/laptop', 'lanyard'];
   const spec = parseFigureSpec({
     scale: 2,
     frame: { w: 144, h: 208 },
@@ -106,9 +106,10 @@ describe('only the sheets the team wears (lane 01M5GX1F3J)', () => {
     const name = ['ada', 'bo', 'cy', 'dev', 'eli'].find((n) => appearanceOf({ name: n, kind: 'human' }).accessory !== 'headphones')!;
     const worn = wornLayers([{ name, kind: 'human', dnd: false }]);
     expect(worn.has('skin') && worn.has('carry/laptop') && worn.has('lanyard')).toBe(true);
-    expect(worn.has('visor')).toBe(false); // no agent on this roster
+    expect(worn.has('tell/collar') || worn.has('tell/eyes')).toBe(false); // no agent on this roster
     expect(worn.has('acc/headphones')).toBe(false);
     expect(wornLayers([{ name, kind: 'human', dnd: true }]).has('acc/headphones')).toBe(true);
-    expect(wornLayers([{ name, kind: 'agent', dnd: false }]).has('visor')).toBe(true);
+    const agents = wornLayers([{ name, kind: 'agent', dnd: false }]);
+    expect(agents.has('tell/collar') && agents.has('tell/eyes')).toBe(true);
   });
 });
