@@ -72,6 +72,16 @@ export default tseslint.config(
     rules: { 'import/no-default-export': 'off' },
   },
   {
+    // Expo's config-plugin loader `require()`s a plugin file at prebuild time, so these must be
+    // CommonJS (`packages/mobile/package.json` is not `"type": "module"`); `import` syntax would
+    // fail to load. The one exception, scoped to the plugins dir.
+    files: ['packages/mobile/plugins/**/*.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'import/order': 'off',
+    },
+  },
+  {
     // AGENTS.md hard rule 5 / 00-overview: the CLI and MCP adapter talk to the server **over the
     // wire**. Only `@musterd/protocol` crosses a package boundary. Importing `@musterd/server`
     // links the daemon into a client process — it compiles and the tests pass, so nothing else
