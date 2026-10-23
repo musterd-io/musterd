@@ -267,7 +267,7 @@ describe('the rendered figure (plan Task 13)', () => {
   const sheetImg = (id: string) => ({ width: 1024, height: 14848, id }) as unknown as CanvasImageSource;
   const withFigure = (): RenderedAssets => {
     const r = rendered(ids);
-    const layers = ['skin', 'hair/short', 'top/tee', 'bottom', 'shoes', 'visor'] as const;
+    const layers = ['skin', 'hair/short', 'top/tee', 'bottom', 'shoes', 'tell/eyes'] as const;
     r.figure = {
       spec: { ...spec, anims: { ...spec.anims } },
       sheets: new Map(layers.map((l) => [l, sheetImg(l)])),
@@ -295,7 +295,7 @@ describe('the rendered figure (plan Task 13)', () => {
       (globalThis as { document?: unknown }).document = origCreate;
     }
     const sheetBlits = ops.filter((o) => o.name === 'drawImage' && o.args.length === 9);
-    // five layers for ada (no visor) plus the receptionist's, each tinted on the scratch and blitted from it
+    // five layers for ada (no agent tell) plus the receptionist's, each tinted on the scratch and blitted from it
     expect(sheetBlits.length).toBeGreaterThanOrEqual(5);
     // …and the scratch read ada's five from the walk row for SE (row 8 + 1) of their sheets; the
     // receptionist (seated, facing S) reads from a sit row

@@ -71,7 +71,7 @@ describe('parseFigureSpec (increment 3b)', () => {
 });
 
 describe('only the sheets the team wears (lane 01M5GX1F3J)', () => {
-  const ids: LayerId[] = ['skin', 'bottom', 'shoes', 'visor', 'hair/bob', 'hair/afro', 'top/tee', 'top/vest', 'acc/headphones', 'carry/laptop', 'lanyard'];
+  const ids: LayerId[] = ['skin', 'bottom', 'shoes', 'tell/collar', 'hair/bob', 'hair/afro', 'top/tee', 'top/vest', 'acc/headphones', 'carry/laptop', 'lanyard'];
   const spec = parseFigureSpec({
     scale: 2,
     frame: { w: 144, h: 208 },
