@@ -74,9 +74,9 @@ without making the status a front-end decoration that one browser knows and the 
    accumulate on the floor. /broadcast is public, so the
    words are public; the field's help text says so where it is typed.
 
-8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `allow`, detail
+8. **Audit:** each set and clear writes `member.status_line` (actor the member, result `ok`, detail
    `{ action: 'set' | 'clear', length }`). The words themselves are not copied into the audit log: a
-   status is personal and meant to vanish in an hour.
+   status is personal and meant to vanish in an hour. _(Amended 2026-10-22: the result is `allow`. See the amendment below.)_
 
 ## Consequences
 
@@ -85,6 +85,9 @@ without making the status a front-end decoration that one browser knows and the 
   (big-body, ADR 662 coverage); the SPEC edit lands in this ADR's first increment once that lane
   releases it, and until then this ADR and `02-protocol.md` are the record.
   Follows-up: `01M5JV0M5MG5T6QA44Q1W7RZN2`
+- _2026-10-22 (increment 1)._ Decision 8's audit result is `allow`, not `ok`: the audit vocabulary is
+  `allow | deny`, and `ok` does not type-check. The row is otherwise as decided — the length, never the
+  words.
 - The figure work and this are independent: the nameplate is DOM over the office, not the rendered
   scene.
 
