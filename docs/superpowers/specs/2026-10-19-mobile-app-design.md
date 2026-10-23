@@ -171,8 +171,13 @@ Below a rule, labelled "the agent says", is the ask's body text. It never appear
 
 Open questions, settled in the increment that meets them, not here:
 
-1. Whether CryptoKit's HPKE recipient takes a Secure Enclave key directly. If not, the receive key is a
-   `ThisDeviceOnly` Keychain key. Nothing else in the design changes.
+1. ~~Whether CryptoKit's HPKE recipient takes a Secure Enclave key directly. If not, the receive key is a
+   `ThisDeviceOnly` Keychain key.~~ **Settled yes** (lane `01M5K5ZJRAAK8E935BQH6CXXAX`, 2026-10-22):
+   `SecureEnclave.P256.KeyAgreement.PrivateKey` conforms to `HPKEDiffieHellmanPrivateKey`, so
+   `HPKE.Recipient` takes the enclave key directly — no Keychain fallback needed. The receive key is an
+   enclave key-agreement key (`privateKeyUsage`, `AfterFirstUnlockThisDeviceOnly`, no biometry), and its
+   CryptoKit `dataRepresentation` is persisted in the app's own Keychain item so the notification
+   extension reloads the same key across processes.
 2. Whether a notification action can present Face ID for a Secure Enclave signature in place. If not,
    the advisory action opens the app to a one-tap confirm screen.
 

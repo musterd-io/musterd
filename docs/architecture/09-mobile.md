@@ -111,10 +111,39 @@ npx expo prebuild -p ios   # Continuous Native Generation still generates the pr
 npx expo export -p ios     # Metro still bundles it
 ```
 
+## Native keys (`modules/musterd-keys`)
+
+The phone's two keys and the three primitives over them (ADR 676 §2) are a local Expo native
+module — plain Swift over CryptoKit, Security and DeviceCheck, one config plugin, no eject:
+
+- `modules/musterd-keys/ios/PhoneKeys.swift` — the security surface: two Secure Enclave keys
+  (a Face ID–guarded signing key, `biometryCurrentSet`; a receive key usable while locked,
+  `AfterFirstUnlockThisDeviceOnly`), HPKE seal/open with the daemon's exact suite
+  (DHKEM(P-256, HKDF-SHA256) + AES-128-GCM, `info` = `musterd-app/v1 <purpose>`), and App
+  Attest. Every call fails closed with one of five named codes (`unavailable`,
+  `biometry-failed`, `key-invalidated`, `sealed-open-failed`, `attest-failed`) and no error
+  carries key material or plaintext.
+- `modules/musterd-keys/ios/MusterdKeysModule.swift` — the Expo DSL wrapper; the TypeScript
+  contract it matches is `src/native/phoneKeys.ts`. The module holds no wire format: `purpose`
+  and `aad` pass through to HPKE, so the delivery composition stays in TypeScript.
+- `plugins/withMusterdKeys.js` — prebuild-time it sets `NSFaceIDUsageDescription`, the App
+  Attest entitlement (`production`), a keychain access group scoped to the bundle id, and
+  refuses a prebuild whose `ios.deploymentTarget` is below 17 (CryptoKit HPKE is iOS 17+; the
+  deployment target lives in `app.json`).
+
+The enclave keys never leave it; CryptoKit persists each key's `dataRepresentation` in the app's
+own Keychain items so the notification extension reloads the same keys across processes. A reload
+failure is `key-invalidated` — the next `getPublicKeys()` re-creates the key, which the daemon
+sees as a new key at the next pair (ADR 662's recovery). Swift compile and the HPKE/signature
+interoperability with the daemon are proven on every change by `swiftc -typecheck` plus a local
+round-trip against `@hpke/core`; the on-device build is EAS's (below).
+
 ## File tree `packages/mobile/src/`
 
 ```
 src/
+  native/
+    phoneKeys.ts    // the typed TS contract of the native module modules/musterd-keys
   ui/
     theme.ts          // brand.md palette (mustard accent on zinc, light and dark)
 ```
