@@ -6,10 +6,14 @@
 
 ## What it is
 
-`@musterd/allowance` is one local page, `what's left`. It reads provider windows that a provider
-actually reports, and it says so when it cannot. It does not join a team, talk to the daemon, or
-import another musterd package. Keys are read from the environment on the server and never written
-into the HTML or the JSON.
+`@musterd/allowance` is one local page, `what's left` (0.1.2). It reads provider windows that a
+provider actually reports, and it says so when it cannot. It does not join a team and it does not
+import another musterd package. After a good read it posts the percents to the daemon named by
+`MUSTERD_SERVER`, or the local daemon, for the team in `MUSTERD_TEAM`, the workspace file, or the
+only team on this machine. The post carries a one-way account key and the windows. It does not
+carry a token or a raw account id. A daemon that is not on this machine is posted to only when
+`MUSTERD_CREDENTIAL` is set. A failed post leaves the page as it was. Keys are read from the
+environment on the server and never written into the HTML, the JSON, or a log.
 
 Which accounts appear is the person's choice. The page is a form (`POST /accounts`, no script).
 Live accounts sit two across, each window on one row with its sentence and a thin bar. An account
@@ -64,6 +68,7 @@ browser's own form sends `Origin: null`; that save is accepted when `Sec-Fetch-S
 ## File tree `packages/allowance/src/`
 
 ```
+accountKey.ts     // one-way account key: sha256 of the provider and a public id, a refresh token, or an API key; the raw value stays in the process
 bin.ts            // shebang: Node 22 gate, ALLOWANCE_PORT, open the page, say the window stays open
 board.ts          // readBoard: the accounts the user turned on; a token stays inside its fetch
 catalog.ts        // every account the page can offer, and the reason when it has no read
@@ -76,6 +81,8 @@ elevenlabs.ts     // parseElevenLabs + readElevenLabs (redirect:'error', 5s budg
 format.ts         // counts, "left of", a share of a named window, on-demand dollars, reset phrases
 launch.ts         // startup lines, and opening the browser when stdout is a terminal
 page.ts           // renderPage: live accounts two across, a quiet account on one line, the account form, every provider string escaped
+post.ts           // after a good read, post the percents to the daemon named by the env, the workspace file, or the only team on this machine
 server.ts         // 127.0.0.1 only; /, /api/board, POST /accounts, the stylesheet, the three font files
+snapshot.ts       // the post body: plan label and windows; a token and a raw account id are not on it
 types.ts          // Board, windows, live / missing / error / quiet
 ```

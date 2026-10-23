@@ -134,6 +134,7 @@ access; roster handles and Presence remain visible.
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), a `reported` chip when a human declined the seat's ask as "I did not expect this" (ADR 676 §8, also marked on the card itself), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
+  A 28px what's-left line sits under the name for the account that seat is signed into (ADR 723), and it is absent on a `still` card (`/broadcast`), when the column is collapsed, and when that member has no reading.
   At its foot, the Experiments section (`live/Experiments.tsx` + `experimentReads.ts`, ADR 644): every
   lane carrying `reads_on`, grouped by the server's `read_status` (overdue, due, waiting, read for 7
   days), so an overdue read is seen by the room; the folded rail carries the overdue count. A read
@@ -301,6 +302,7 @@ live/
   teamContact.ts                // the team's public address, per team and never derived from the slug; printed beside the office mark on /live and /broadcast
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
+  allowanceLine.ts              // the 28px what's-left line (ADR 723): tightest window, a 2px bar of what is left, no zod
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)
   Experiments.tsx               // the team column's Experiments section (ADR 644): the dated reads as rows with shape marks, capped at five (urgent never hidden), linked to /board on /live, still on /broadcast
   ExperimentSpark.tsx           // an experiment's sparkline, a lazy chunk off /live's first paint (lane 01M5GE8AX4): one sample is the number · day 1, a dotted trail and the dot; more draw the line over a soft fill to an end dot; today's live point breathes beside `now`

@@ -13,6 +13,8 @@
  * duplicates rather than re-homes a schema's list would reintroduce exactly the drift this avoids.
  */
 export * from './acts.wire.js';
+// ADR 723: allowance providers and window kinds, so /live can read a what's-left line without zod.
+export * from './allowance.wire.js';
 export * from './ask.wire.js';
 export * from './capabilities.wire.js';
 // The doorbell's ring rule (ADR 443): /live asks "does this act ring me?" without zod.

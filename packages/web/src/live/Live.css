@@ -4077,6 +4077,46 @@
   font-weight: 650;
   color: var(--lc-text);
 }
+/* ADR 723: what's left, one 28px line under the name. The bar is what is left. No new color, no motion.
+   Quiet comes after warn so a stale low window is muted; the title still carries the percent. */
+.lc-team-card__left {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--lc-text);
+}
+.lc-team-card__left.is-warn {
+  color: var(--lc-warn-ink);
+}
+.lc-team-card__left.is-quiet {
+  color: var(--lc-muted);
+}
+.lc-team-card__left-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-team-card__left-more {
+  color: var(--lc-muted);
+  font-size: 11px;
+}
+.lc-team-card__left-bar {
+  flex: 0 0 64px;
+  height: 2px;
+  background: var(--lc-border);
+}
+.lc-team-card__left-bar > i {
+  display: block;
+  height: 2px;
+  background: currentColor;
+}
 /* The viewer's own card (signed-in /live): the plate's "you", in the column's ink. */
 .lc-team-card__you {
   padding: 1px 5px;

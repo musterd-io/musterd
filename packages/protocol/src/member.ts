@@ -8,6 +8,7 @@ import {
   ProvenanceSchema,
   SurfaceSchema,
 } from './acts.js';
+import { AllowanceViewSchema } from './allowance.js';
 import { AccountStatusSchema, CapabilitiesSchema } from './capabilities.js';
 import { WAKEABILITIES, WIRE_ATTESTATION_SOURCES } from './model.js';
 import { OfflineReasonSchema } from './offline.js';
@@ -337,6 +338,12 @@ export const MemberSummarySchema = MemberSchema.extend({
   reported_asks: z
     .object({ count: z.number().int().positive(), last_at: z.number().int() })
     .nullish(),
+  /**
+   * ADR 723: what's left on the accounts this member is signed into. Absent means an older daemon,
+   * no reading, or a broadcast reader. Null is unused — the field is omitted instead. The account
+   * key is not on this object.
+   */
+  allowance: AllowanceViewSchema.nullish(),
 });
 
 /** The window `reported_asks` counts over: a week, so a flag fades unless it recurs. */

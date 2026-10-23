@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { claudeAccountKey, machineAccountKey } from './accountKey.js';
 import { shareWindow, type ShareMiss, type ShareRead } from './codex.js';
 import type { LiveProvider, Window } from './types.js';
 
@@ -34,6 +35,8 @@ const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9 .+-]{0,40}$/;
 export interface ClaudeSignIn {
   token: string;
   plan: string | null;
+  /** 16 hex. A public id or a refresh-token hash, never the access token (ADR 723). */
+  accountKey: string;
 }
 
 function labelFor(key: string): string | null {
@@ -157,11 +160,11 @@ export function claudeToken(body: unknown): string | null {
   return typeof token === 'string' && token.trim() !== '' ? token.trim() : null;
 }
 
-/** Token plus plan from a credentials body. Null when there is no access token. */
+/** Token, plan, and a one-way account key from a credentials body. Null when there is no access token. */
 export function claudeSignInFromBody(body: unknown): ClaudeSignIn | null {
   const token = claudeToken(body);
   if (token === null) return null;
-  return { token, plan: claudePlan(body) };
+  return { token, plan: claudePlan(body), accountKey: claudeAccountKey(body) };
 }
 
 /**
@@ -177,18 +180,27 @@ export async function resolveClaudeSignIn(
 ): Promise<ClaudeSignIn | null> {
   if (explicit !== undefined) {
     if (explicit === null || explicit === '') return null;
-    return { token: explicit, plan: claudePlan(file) };
+    return { token: explicit, plan: claudePlan(file), accountKey: claudeAccountKey(file) };
   }
   const fromEnv = env['CLAUDE_CODE_OAUTH_TOKEN']?.trim() ?? '';
   const fromFile = claudeSignInFromBody(file);
-  if (fromEnv !== '') return { token: fromEnv, plan: fromFile?.plan ?? null };
+  if (fromEnv !== '') {
+    return {
+      token: fromEnv,
+      plan: fromFile?.plan ?? null,
+      accountKey: fromFile?.accountKey ?? machineAccountKey('claude'),
+    };
+  }
   if (fromFile !== null) return fromFile;
-  return lookup();
+  const found = await lookup();
+  if (found === null) return null;
+  return found.accountKey ? found : { ...found, accountKey: machineAccountKey('claude') };
 }
 
 /**
  * Claude Code's macOS keychain item. It holds the credentials JSON.
- * Stdout is that JSON and is never logged. Only the access token and the plan word come back.
+ * Stdout is that JSON and is never logged. Only the access token, the plan word, and a one-way
+ * account key come back. The raw token is not the key.
  */
 export async function claudeSignInFromKeychain(): Promise<ClaudeSignIn | null> {
   if (process.platform !== 'darwin') return null;
@@ -207,7 +219,7 @@ export async function claudeSignInFromKeychain(): Promise<ClaudeSignIn | null> {
         return null;
       }
     }
-    return { token: text, plan: null };
+    return { token: text, plan: null, accountKey: machineAccountKey('claude') };
   } catch {
     return null;
   }
