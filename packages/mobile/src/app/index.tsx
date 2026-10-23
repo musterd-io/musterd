@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { radius, space, usePalette } from '../ui/theme';
 
@@ -9,10 +10,30 @@ import { radius, space, usePalette } from '../ui/theme';
  */
 export default function AsksScreen() {
   const p = usePalette();
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    let subscription: { remove(): void } | undefined;
+    let alive = true;
+    void (async () => {
+      try {
+        // Dynamic: Expo Go has no native module, and the import throws there.
+        const { watchNotificationAnswers } = await import('../native/notificationAnswers');
+        if (!alive) return;
+        subscription = watchNotificationAnswers(setNote);
+      } catch {
+        // The shell still opens. A dev build or TestFlight has the module.
+      }
+    })();
+    return () => {
+      alive = false;
+      subscription?.remove();
+    };
+  }, []);
   return (
     <View style={[styles.body, { backgroundColor: p.bg }]}>
       <View style={[styles.dot, { backgroundColor: p.accent }]} />
       <Text style={[styles.title, { color: p.text }]}>No asks yet</Text>
+      {note ? <Text style={[styles.copy, { color: p.text }]}>{note}</Text> : null}
       <Text style={[styles.copy, { color: p.muted }]}>
         Asks addressed to you arrive on this phone — sealed so only this phone can read them — and
         are answered with Face ID.
