@@ -178,7 +178,7 @@ export function TeamColumn({
           )}
         </span>
         <span className="lc-team__spacer" />
-        <MusterdWordmark height={22} className="lc-team__word" />
+        <MusterdWordmark height={18} className="lc-team__word" />
         <VersionBadge info={daemonInfo} still={still} />
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
