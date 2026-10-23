@@ -1,6 +1,7 @@
 # CooperBench rider run: rider 1 on the 9 claim-run pairs with held refusals
 
-**Lane:** `01M5MS3PK0` (goal `cooperbench`). **Status:** pre-registered 2026-10-23, before any pair ran.
+**Lane:** `01M5MS3PK0` (goal `cooperbench`). **Status:** pre-registered 2026-10-23, before any pair ran;
+run 2026-10-23 → [finding 024](../024-cooperbench-rider-run.md).
 **Spend:** nick approved about $17 of model spend, hard stop $25 (2026-10-23).
 
 ## What it reads
