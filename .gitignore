@@ -114,6 +114,7 @@ coverage-blobs/
 # name them `musterd-<role>.mdc` so `.cursor/rules/musterd-*.mdc` covers every future one — that
 # is a change to the provisioning writer, not to this file (lane 01M0K5ANE1).
 .cursor/rules/comms.mdc
+.cursor/rules/ios-engineer.mdc
 # `musterd wire` writes these per-workspace; they are machine-local, not project config.
 .cursor/hooks.json
 .codex/hooks.json
