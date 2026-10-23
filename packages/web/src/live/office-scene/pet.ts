@@ -96,6 +96,9 @@ export interface PetState {
    * the legs over faster for free.
    */
   speed: number;
+  /** The floor heading of the last leg walked, radians (`atan2(dy, dx)`, 0 = +lx) — the rendered dog
+   *  picks its direction from it, and keeps it through a sit or a nap (lane 01M5D8EJ40). */
+  heading?: number;
   /** What the dog is hauling this frame — the painter draws it. `none` outside a welcome errand. */
   cargo: 'none' | 'wagon';
   /**
@@ -233,6 +236,7 @@ export function createPet(rng: () => number = Math.random): PetState {
     face: 1,
     faceMag: 1,
     depthSign: 1,
+    heading: 0,
     vel: 0,
     path: [],
     seg: 0,
@@ -564,6 +568,7 @@ export function stepPet(pet: PetState, dt: number): boolean {
         pet.lx += (dx / d) * step;
         pet.ly += (dy / d) * step;
         pet.phase += step / STRIDE; // gait from distance, never wall time
+        pet.heading = Math.atan2(dy, dx);
         // Screen-space heading under the 2:1 iso: x grows with (lx − ly). Only a heading that points
         // decisively sideways changes the facing SIGN: a leg angled into the screen has a screen-x of
         // almost nothing, and honouring it would spin the dog on its own axis down a diagonal.

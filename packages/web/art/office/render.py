@@ -37,7 +37,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None, "stills": None, "warm": None}
+           "resample_from": None, "stills": None, "warm": None, "dog": False}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -53,6 +53,8 @@ def args() -> dict:
             out["only"] = set(argv[i + 1].split(",")); i += 2
         elif k == "--figure":
             out["figure"] = True; i += 1
+        elif k == "--dog":
+            out["dog"] = True; i += 1
         elif k == "--force":
             out["force"] = True; i += 1
         elif k == "--stills":
@@ -664,11 +666,109 @@ def render_figure(a: dict) -> None:
     print(f"figure: {done} frames, {rendered} render calls, {reused} reused, {resampled} resampled, {time.time() - t0:.0f}s; {len(spec['layers'])} layer sheets, figure.json")
 
 
+def render_dog(a: dict) -> None:
+    """`--dog`: the office dog's sprite sheet, `office-art-dog.webp`, and `dog.json` (dogSheet.ts's
+    DogSpec). One lit render per (clip, rendered direction, frame) under the day rig, cropped to its
+    own pixels and shelf-packed into one atlas; S, W and SW are their mirrors (lane 01M5D8EJ40)."""
+    import dog
+
+    scene.clear()
+    zs = scene.z_scale(a["ky"])
+    px = a["scale"]
+    centre = Vector((scene.FLOOR / 2, scene.FLOOR / 2, 0.0))
+    d = dog.build_dog(zs, centre)
+    scene.lights("day", "off", zs)
+    dog.dog_camera(a["ky"], px, zs, centre)
+    s = bpy.context.scene
+    s.render.engine = "BLENDER_EEVEE"
+    s.render.film_transparent = True
+    s.render.image_settings.file_format = "PNG"
+    s.render.image_settings.color_mode = "RGBA"
+    s.view_settings.view_transform = "Standard"
+    try:
+        s.eevee.taa_render_samples = LIT_SAMPLES
+    except Exception:
+        pass
+    fw, fh = int(round(dog.FRAME_W * px)), int(round(dog.FRAME_H * px))
+    s.render.resolution_x, s.render.resolution_y = fw, fh
+    s.render.resolution_percentage = 100
+    tmp = os.path.join(a["out"], "_dog_tmp.png")
+    anims: dict = {}
+    crops: list = []  # in cell order: clips, then DIRS, then frames; None for a mirrored direction
+    row = 0
+    t0 = time.time()
+    for name, frames, loop, _ in dog.CLIPS:
+        anims[name] = {"row": row, "frames": frames, "fps": dog.FPS, "loop": loop}
+        row += len(dog.DIRS)
+        for di, dname in enumerate(dog.DIRS):
+            for f in range(frames):
+                if dname not in dog.RENDERED:
+                    crops.append(None)
+                    continue
+                p, lift = dog.pose(name, f, frames)
+                dog.apply_pose(d, p, lift, math.radians(45 * di))
+                s.render.filepath = tmp
+                bpy.ops.render.render(write_still=True)
+                img = read_pixels(tmp)
+                ys, xs = np.nonzero(img[:, :, 3] > 0.004)
+                if len(xs) == 0:
+                    crops.append(None)
+                    continue
+                x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+                crops.append((img[y0:y1, x0:x1].copy(), int(x0), int(y0)))
+        print(f"dog: {name} rendered, {time.time() - t0:.0f}s", flush=True)
+    os.remove(tmp)
+    ATLAS_W = 1024
+    shelf_x, shelf_y, shelf_h = 0, 0, 0
+    placed = []
+    for c in crops:
+        if c is None:
+            placed.append(None)
+            continue
+        h, w = c[0].shape[:2]
+        if shelf_x + w > ATLAS_W:
+            shelf_x, shelf_y, shelf_h = 0, shelf_y + shelf_h, 0
+        placed.append((shelf_x, shelf_y, w, h, c[1], c[2]))
+        shelf_x += w
+        shelf_h = max(shelf_h, h)
+    atlas = np.zeros((max(1, shelf_y + shelf_h), ATLAS_W, 4), dtype=np.float32)
+    cells = []
+    for c, pl in zip(crops, placed):
+        if pl is None:
+            cells.extend([0, 0, 0, 0, 0, 0])
+            continue
+        x, y, w, h, ox, oy = pl
+        atlas[y : y + h, x : x + w] = c[0]
+        cells.extend([x, y, w, h, ox, oy])
+    path = os.path.join(a["out"], "office-art-dog.png")
+    write_pixels(path, atlas)
+    if a["save"]:
+        shutil.copy(path, a["save"])  # a PNG copy to look at before it is quantized
+    quantize(path)
+    path = to_webp(path)
+    spec = {
+        "scale": px,
+        "frame": {"w": fw, "h": fh},
+        "anchor": {"x": fw / 2, "y": fh - dog.ANCHOR_UP * px},
+        "anims": anims,
+        "mirror": dog.MIRRORED,
+        "file": os.path.basename(path),
+        "cells": cells,
+    }
+    with open(os.path.join(a["out"], "dog.json"), "w") as fj:
+        json.dump(spec, fj, separators=(",", ":"))
+        fj.write("\n")
+    print(f"dog: wrote {os.path.basename(path)} {ATLAS_W}x{atlas.shape[0]} {os.path.getsize(path)} B, dog.json, {time.time() - t0:.0f}s")
+
+
 def main() -> None:
     a = args()
     os.makedirs(a["out"], exist_ok=True)
     if a["figure"]:
         render_figure(a)
+        return
+    if a["dog"]:
+        render_dog(a)
         return
     assets = scene.build_scene(ky=a["ky"], px_per_unit=a["scale"])
     export = bpy.data.collections["export"]

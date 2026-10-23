@@ -466,6 +466,17 @@
         "y": 190.13
       },
       "scale": 3.0
+    },
+    {
+      "id": "welcome/wagon",
+      "file": "office-art-welcome-wagon.webp",
+      "w": 92,
+      "h": 98,
+      "anchor": {
+        "x": 46.0,
+        "y": 75.0
+      },
+      "scale": 3.0
     }
   ]
 }

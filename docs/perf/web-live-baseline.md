@@ -2335,3 +2335,25 @@ against a 355.4 KB ceiling. Measured + 15% would loosen it, so this is a raise, 
 - Falsify: at midday `/office-preview` fetches `office-art-room-light-day` and `office-art-room-ceiling-on`
   and no other `office-art-room-*`; if it fetches all five, the cut has been undone and this raise should
   be reverted with it.
+
+## 2026-10-23 — the rendered dog and wagon; figure sheets split by clip group, measured and dropped (lane 01M5D8EJ40)
+
+**Total JS RAISED 364,432 → 366,400 B gzip.** The rendered dog (`rendered/dogSheet.ts`, `drawRenderedDog`)
+ships beside the painted one, which `?office=painted` still needs. Local build 357.1 KB, plus the
+~450 B CI gap and ~250 B. A re-baseline would loosen (ADR 183). Deleting the painters pays it back:
+`drawDog` and its helpers alone are ~450 lines.
+
+**Office art:** `office-art-dog.webp` 1024 × 390, 93 KB (one sheet, 4 clips × 8 directions, 3 mirrored),
+and `office-art-welcome-wagon.webp`, 3.6 KB.
+
+**A split that did not pay, recorded so nobody re-chases it.** Each figure layer's atlas was split three
+ways: core clips, gestures (`g-*`) and carrying clips. The group sheets loaded on the first clip that
+used them, and the base clip played until then. Core sheets came to 2.4 MB and group sheets to 3.5 MB
+on disk. On `/office-preview?n=14&plates=broadcast&sprites=1` (production build, one tab at a time,
+45 s settled), the renderer read 500 MB with the split against 441 MB for `main` without it, because
+within 40 s the looping floor had fetched 31 gesture and 15 carry sheets. A busy office plays a
+gesture or an errand within seconds, so the groups never stay unloaded, and the extra atlases cost
+more than they saved. Dropped before merge.
+
+- Falsify: a floor where members rarely gesture or carry (e.g. a quiet `/live` at night) holding the
+  group sheets unloaded for minutes would make the split worth a second look for that case.

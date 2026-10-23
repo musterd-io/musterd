@@ -97,7 +97,8 @@ import {
 } from './damage';
 import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
 import { isRoomImage, roomImagesWanted } from './rendered/roomState';
-import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages, type RenderedAssets } from './rendered/assets';
+import { domImage, loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages, type RenderedAssets } from './rendered/assets';
+import { parseDogSpec } from './rendered/dogSheet';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
@@ -487,6 +488,16 @@ export function mountOffice(
           return loadRenderedAssets(manifest, roomUrl, undefined, (id) => !isRoomImage(id) || now.has(id));
         })
         .then(async (r) => {
+          /* The dog (increment 4): no dog.json, or one that will not parse, leaves it painted. */
+          const dogUrl = files['./rendered/assets/dog.json'];
+          if (dogUrl) {
+            try {
+              const spec = parseDogSpec(await (await fetch(dogUrl)).json());
+              r.dog = { spec, sheet: await domImage(files[`./rendered/assets/${spec.file}`] ?? spec.file) };
+            } catch (e: unknown) {
+              console.warn('office: the rendered dog is unusable — painting it', e);
+            }
+          }
           /* The figure sheets (increment 3) ride in beside the room: no figure.json, or one that
              will not parse, leaves the members painted and says so once. */
           const figureUrl = files['./rendered/assets/figure.json'];
