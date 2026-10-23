@@ -135,7 +135,7 @@ export function TeamCard({
           <span className="lc-team-card__left-words">
             {left.text}
             {left.suffixes.length > 0 && (
-              <span className="lc-team-card__left-more"> {left.suffixes.join('  ')}</span>
+              <span className="lc-team-card__left-more"> {left.suffixes.join(' · ')}</span>
             )}
           </span>
           <span className="lc-team-card__left-bar" aria-hidden="true">

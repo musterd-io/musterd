@@ -59,7 +59,7 @@ describe('allowanceLines', () => {
     expect(quiet[0]?.title).toContain('14%');
   });
 
-  it('prints no percent for an amount window, and keeps the counts in the title', () => {
+  it('shows the amount left, and keeps a percent off that line', () => {
     const lines = allowanceLines(
       view([
         {
@@ -80,10 +80,36 @@ describe('allowanceLines', () => {
       ]),
       NOW,
     );
-    expect(lines[0]?.text).toBe('ElevenLabs');
+    expect(lines[0]?.text).toBe('ElevenLabs 9,000 characters left');
     expect(lines[0]?.text).not.toContain('%');
     expect(lines[0]?.title).toContain('9,000');
     expect(lines[0]?.title).toContain('10,000');
+  });
+
+  it('puts the amount on a later window too, and skips the unit when the name already says it', () => {
+    const lines = allowanceLines(
+      view([
+        {
+          label: 'Cursor',
+          readAt: NOW,
+          windows: [
+            { name: '5h', left: 0.4, resetsAt: 1, kind: 'percent' },
+            {
+              name: 'on-demand',
+              left: 0.9,
+              resetsAt: null,
+              kind: 'amount',
+              used: 3.5,
+              limit: 10,
+              unit: 'dollars',
+            },
+          ],
+        },
+      ]),
+      NOW,
+    );
+    expect(lines[0]?.text).toBe('Cursor 40% left');
+    expect(lines[0]?.suffixes).toEqual(['on-demand 6.5 dollars']);
   });
 
   it('draws one line per account', () => {
