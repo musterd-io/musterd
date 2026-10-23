@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MemberSchema, MemberSummarySchema, PresenceSchema, ResidenceSchema } from './member.js';
+import {
+  MemberSchema,
+  MemberSummarySchema,
+  PresenceSchema,
+  ResidenceSchema,
+  STATUS_LINE_MAX,
+  STATUS_LINE_TTL_MS,
+  StatusLineTextSchema,
+} from './member.js';
 
 const base = {
   id: '01M',
@@ -76,5 +84,39 @@ describe('MemberSummary.residence (ADR 503 Decision 5)', () => {
   it('refuses an unknown kind and an empty node id', () => {
     expect(ResidenceSchema.safeParse({ ...residence, kind: 'laptop' }).success).toBe(false);
     expect(ResidenceSchema.safeParse({ ...residence, node: '' }).success).toBe(false);
+  });
+});
+
+describe('Member.status_line (ADR 721)', () => {
+  const line = {
+    text: 'assembling a new dresser for the nursery',
+    set_at: 1_000,
+    expires_at: 1_000 + 3_600_000,
+  };
+
+  it('rides on a member and its summary, and is optional', () => {
+    expect(MemberSchema.parse({ ...base, kind: 'human', status_line: line }).status_line).toEqual(
+      line,
+    );
+    expect(
+      MemberSummarySchema.parse({ ...base, presence: 'offline', status_line: line }).status_line,
+    ).toEqual(line);
+    expect(MemberSchema.parse(base).status_line).toBeUndefined();
+  });
+
+  it('lasts one hour and holds at most 48 characters', () => {
+    expect(STATUS_LINE_TTL_MS).toBe(3_600_000);
+    expect(STATUS_LINE_MAX).toBe(48);
+  });
+
+  it('counts characters, not UTF-16 units: an emoji is one', () => {
+    expect(StatusLineTextSchema.safeParse('x'.repeat(48)).success).toBe(true);
+    expect(StatusLineTextSchema.safeParse('x'.repeat(49)).success).toBe(false);
+    expect(StatusLineTextSchema.safeParse('🛠'.repeat(48)).success).toBe(true);
+  });
+
+  it('trims, and refuses a status that is empty once trimmed', () => {
+    expect(StatusLineTextSchema.parse('  away  ')).toBe('away');
+    expect(StatusLineTextSchema.safeParse('   ').success).toBe(false);
   });
 });

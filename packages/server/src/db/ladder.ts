@@ -1031,6 +1031,18 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE host_provisions ADD COLUMN IF NOT EXISTS move_json TEXT');
     },
   },
+  {
+    // ADR 721: a human's own status line — `{ text, set_at, expires_at }` as JSON, null when unset.
+    // Nullable, no backfill: nobody has one yet. Expiry is read-time (toMember), nothing sweeps.
+    version: 129,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+      if (!cols.includes('status_line')) db.exec('ALTER TABLE members ADD COLUMN status_line TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS status_line TEXT');
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

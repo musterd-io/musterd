@@ -1,6 +1,7 @@
 import {
   type AccountStatus,
   AvailabilitySchema,
+  StatusLineSchema,
   WorkingHoursSchema,
   type Capabilities,
   CapabilitiesSchema,
@@ -42,6 +43,8 @@ export interface MemberRow {
   lifecycle: 'forever' | 'session' | 'until';
   lifecycle_until: number | null;
   availability: string | null;
+  /** ADR 721: `{ text, set_at, expires_at }` JSON, or null. Older rows predate the column. */
+  status_line?: string | null;
   /** Recurring Member schedule, JSON-encoded; null inherits the Team default (ADR 206). */
   working_hours: string | null;
   /** ADR 311: Slack identity used only to attribute shared Seeds; human seats only. */
@@ -272,7 +275,7 @@ export function parseRoles(row: MemberRow): string[] {
 }
 
 /** Map a member row (+ its team slug) to the public protocol Member shape (no token_hash). */
-export function toMember(row: MemberRow, teamSlug: string): Member {
+export function toMember(row: MemberRow, teamSlug: string, now: number = Date.now()): Member {
   return {
     id: row.id,
     team: teamSlug,
@@ -287,6 +290,8 @@ export function toMember(row: MemberRow, teamSlug: string): Member {
     availability: row.availability
       ? (AvailabilitySchema.safeParse(JSON.parse(row.availability)).data ?? null)
       : null,
+    // ADR 721: a human's status line while it lasts — read-time expiry, so nothing has to sweep it.
+    status_line: statusLineOf(row, now),
     working_hours: parseWorkingHours(row.working_hours),
     slack_user_id: row.slack_user_id ?? null,
     hue: row.hue ?? null,
@@ -298,6 +303,19 @@ export function toMember(row: MemberRow, teamSlug: string): Member {
     halted: haltedOf(row),
     created_at: row.created_at,
   };
+}
+
+/** ADR 721: the stored status line, or null when unset, lapsed, malformed, or on a non-human row. */
+export function statusLineOf(row: MemberRow, now: number): Member['status_line'] {
+  if (!row.status_line || row.kind !== 'human') return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(row.status_line);
+  } catch {
+    return null;
+  }
+  const line = StatusLineSchema.safeParse(raw).data;
+  return line && line.expires_at > now ? line : null;
 }
 
 /** ADR 501: the halt standing, or null. `by` is the halter's member id until a read names it. */

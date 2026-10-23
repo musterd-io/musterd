@@ -29,6 +29,8 @@ export type AuditAction =
   | 'send.denied'
   | 'member.reclaim'
   | 'member.remove'
+  // ADR 721: a human set or cleared their own status line. Detail: { action, length } — never the text.
+  | 'member.status_line'
   // ADR 449: a sponsor's revocation disabling a sponsored member (one row per affected member).
   | 'member.revoked_cascade'
   // ADR 449 §3–4: a human member minted an agent they sponsor / re-issued its connect link.
@@ -561,6 +563,9 @@ export type AuditAction =
   // `{ prefs }` whole, prose included, because this row IS the transport; `style.prefs_set` above
   // stays the local, keys-only observability row. Rides the `policy` sync kind.
   | 'style.prefs'
+  // ADR 721 Decision 5: the hub-minted, replicated copy of a human's status line — detail `{ line }`
+  // whole (text included) because this row IS the transport; `member.status_line` keeps the length.
+  | 'status_line'
   // ADR 150 (structural inducement — PreToolUse enforcement gates): one decision row per intercepted
   // tool call that matched a declared enforcement class. `lane.gate` = Gate A (lane-ownership on a
   // contended surface); `action.gate` = Gate B (policy-classed action→ask). Both are SHAPES ONLY —
@@ -738,6 +743,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'send.denied': 'actor',
   'member.reclaim': 'actor',
   'member.remove': 'actor',
+  'member.status_line': 'actor',
   'member.revoked_cascade': 'actor',
   'member.sponsored_agent_created': 'actor',
   'member.agent_connect_issued': 'actor',
@@ -917,6 +923,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   // ADR 514: a human set their own style dials — their row.
   'style.prefs_set': 'actor',
   'style.prefs': 'actor',
+  status_line: 'actor',
   'lane.gate': 'actor',
   'action.gate': 'actor',
   'actor.subagent_write': 'actor',
