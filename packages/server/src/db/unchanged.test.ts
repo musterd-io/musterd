@@ -16,6 +16,7 @@ const REQUIRED = [
   'sync_log_rows',
   'connections',
   'epoch',
+  'guidance', // the version badge's guidance text version (added 2026-10-22; always present)
   'booted_at',
 ] as const;
 /** Present only when the store is file-backed, a git checkout, or a live agent has acted. */
@@ -26,6 +27,7 @@ const OPTIONAL = [
   'archive_bytes',
   'quietest_busy_ms',
   'build',
+  'release', // the package set's release version; omitted when no package.json is found
 ] as const;
 
 describe('/health after the async Driver (plan 1A Task 23)', () => {
