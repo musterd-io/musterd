@@ -60,6 +60,8 @@ import type { UnitHook } from './damage';
 import { blitAsset } from './rendered/blit';
 import { ceilingOf, dayOf, figureTintFor, roomMixFor } from './rendered/roomState';
 import type { FigureAssets, RenderedAssets } from './rendered/assets';
+import { dogCell, dogDir, dogFrame } from './rendered/dogSheet';
+import type { Dir8 } from './rendered/figureSheet';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
@@ -2862,8 +2864,12 @@ export function pawCycle(u: number): { x: number; lift: number } {
  * mid-tone ever was: the patches carry the shape, so the dog stays legible at office scale instead of
  * relying on its outline against whatever it happens to be standing on.
  */
-export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number): void {
+export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, rendered?: RenderedAssets): void {
   const p = project(pet.lx, pet.ly, fit);
+  if (rendered?.dog) {
+    drawRenderedDog(ctx, fit, pet, t, rendered.dog);
+    return;
+  }
   // The one place the dog's size is set: every offset and radius below is in these units, so scaling
   // here scales the whole animal without touching a single pose.
   const s = fit.scale * DOG_SIZE;
@@ -5378,11 +5384,11 @@ export function renderScene(
   }
 
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
-  if (pet) items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t) });
+  if (pet) items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered) });
   // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
   if (pet?.cargo === 'wagon') {
     const w = wagonTrail(pet);
-    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => drawWagon(ctx, fit, w.lx, w.ly) });
+    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => blitIf(ctx, fit, rendered, 'welcome/wagon', w.lx, w.ly) || drawWagon(ctx, fit, w.lx, w.ly) });
   }
   // The label maker's strips, curling up off the front desk's arrivals end.
   for (const label of opts.welcome?.labels ?? []) {
@@ -5592,6 +5598,35 @@ export function wagonTrail(pet: PetState): { lx: number; ly: number } {
     dy /= len;
   }
   return { lx: pet.lx - dx * WAGON_LAG, ly: pet.ly - dy * WAGON_LAG };
+}
+
+/** The rendered dog's last direction, per pet — the figure's hysteresis needs the one before. */
+const dogDirs = new WeakMap<PetState, Dir8>();
+
+/**
+ * The rendered dog (lane 01M5D8EJ40): one cell of `office-art-dog.webp` at the pet's floor point, in
+ * the direction of its last leg. Its shadow is in the render. Untinted, like the furniture: the night
+ * veil paints over it as it does over everything rendered under the day rig.
+ */
+function drawRenderedDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, dog: NonNullable<RenderedAssets['dog']>): void {
+  const dir = dogDir(pet.heading ?? 0, dogDirs.get(pet));
+  dogDirs.set(pet, dir);
+  const { anim, frame } = dogFrame(dog.spec, pet, t);
+  const c = dogCell(dog.spec, anim, dir, frame);
+  if (c.sw <= 0 || c.sh <= 0) return;
+  const k = fit.scale / dog.spec.scale;
+  const p = project(pet.lx, pet.ly, fit);
+  const dx = p.x - (dog.spec.anchor.x - c.ox) * k;
+  const dy = p.y - (dog.spec.anchor.y - c.oy) * k;
+  if (c.flip) {
+    ctx.save();
+    ctx.translate(dx + c.sw * k, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(dog.sheet, c.sx, c.sy, c.sw, c.sh, 0, 0, c.sw * k, c.sh * k);
+    ctx.restore();
+  } else {
+    ctx.drawImage(dog.sheet, c.sx, c.sy, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
+  }
 }
 
 /** The welcome wagon: a small red cart on four dark wheels, loaded with a monitor box and a plant. */

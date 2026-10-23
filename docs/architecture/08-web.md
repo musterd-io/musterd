@@ -338,6 +338,7 @@ live/
       roomState.ts              // which rendered light state the room shows: roomMixFor (day/evening/night × ceiling on/off/spill, a 45-minute crossfade at each edge), figureTintFor
       figureSheet.ts            // sprite-sheet geometry for the figure: SheetSpec, frameRect from the scene clock, dir8FromHeading with hysteresis (increment 3)
       tint.ts                   // tintedSheet: a member's colour multiplied over a neutral layer sheet, cached per (layer, colour); mulHex
+      dogSheet.ts               // the rendered office dog: parseDogSpec (dog.json), dogFrame (pet mode → clip and frame), dogCell (atlas cell, mirrored directions flipped), dogDir (heading → Dir8 with the figure's hysteresis)
       figure.ts                 // layersFor (appearance.ts + what they carry → back-to-front layers with a colour each) and drawFigureFrame (one composed frame at a floor point, or only its `@arms` cells for the seated overlay; the composite is cached per distinct frame, `COMPOSITE_CAP`)
     speech.ts                   // the over-head speech-bubble text model
     arrivals.ts                 // who is new: pure roster diff (created / firstOnline — never-seen-online this session, created ≤24 h). Its new-arrivals polaroid corner under the wall board was retired 2026-10-12 (nick: one kind of card on the wall)

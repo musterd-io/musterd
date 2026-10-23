@@ -233,6 +233,29 @@ The full v2 render (2026-10-22, scale 1.5): 802 frames; the second part rendered
 reused 10,079 from the first, in 3 h 30 min. 41 sheets plus `figure.json`, 7.40 MB of office art in
 the build against the 8.42 MB budget.
 
+## The dog and the welcome wagon (increment 4, lane 01M5D8EJ40)
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --python packages/web/art/office/render.py -- \
+  --dog --out packages/web/src/live/office-scene/rendered/assets --scale 1.5 --ky 0.31
+```
+
+`dog.py` builds the office dog the way `figure.py` builds a member: rigid parts on joint Empties, an
+action is a function of the clip's phase. It is the painter's terrier: a warm-white coat with the three
+dark patches (a material mask in the body joint's space, so a patch follows the surface), black ears and
+one eye patch, a cream muzzle, bib, paws and tail tip, and the mustard collar. It is drawn at `SIZE` 1.6
+(nick, 2026-10-23: "small, but not this small"; the painter's 1.25 read too small rendered). Four
+clips map onto `pet.ts` modes: `walk` (a trot, frame from the gait phase), `sit`, `curl` (sleep and curl;
+flopped on its side, since rigid legs could not tuck under a curl without reading as a leap) and
+`stretch` (the play-bow). Five directions are rendered, three mirrored, as for the figure. One lit render
+per cell, cropped and packed into `office-art-dog.webp`, plus `dog.json` (`dogSheet.ts`). The dog is
+never tinted. About 90 s on the shared laptop.
+
+The welcome wagon is a static item in `scene.py` (`welcome/wagon`), rendered at the floor's centre and
+blitted wherever the dog's trail puts it: `--only welcome/wagon`. The welcome's short effects (the label
+strip, the lanyard toss, the hello glows) stay painted: they are a second long and coloured per
+newcomer.
+
 ## Original art
 
 Everything in this folder is ours. No game's assets, palettes or character designs are referenced

@@ -7,6 +7,7 @@
  * painted scene draws, and an asset that fails to load is listed in `missing` rather than failing
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
+import type { DogSpec } from './dogSheet';
 import type { FigureScratch, LayerId } from './figure';
 import { type Anim, ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
@@ -25,6 +26,8 @@ export interface RenderedAssets {
   images: Map<string, CanvasImageSource>;
   /** The files that failed, by basename, for the one `console.warn` the scene prints. */
   missing: string[];
+  /** The office dog's sheet and spec (`dog.json`, increment 4), when in the build and loaded. */
+  dog?: { spec: DogSpec; sheet: CanvasImageSource } | undefined;
   /** The member figure's sprite sheets (increment 3), when `figure.json` is in the build and loaded. */
   figure?: FigureAssets | undefined;
 }
@@ -163,7 +166,7 @@ export async function loadFigureLayers(
   return missing;
 }
 
-function domImage(url: string): Promise<CanvasImageSource> {
+export function domImage(url: string): Promise<CanvasImageSource> {
   const img = new Image();
   img.decoding = 'async';
   img.src = url;

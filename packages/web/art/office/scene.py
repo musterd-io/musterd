@@ -748,6 +748,38 @@ def printer(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, lx, ly, col)
 
 
+def wagon(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """The welcome wagon (lane 01M5D8EJ40; the painter's `drawWagon`): a small red cart on four dark
+    wheels, loaded with a boxed monitor, a potted plant and the newcomer's nameplate. It moves with the
+    dog, so it is rendered at the floor's centre and blitted wherever the trail puts it."""
+    lx = ly = FLOOR / 2
+    red = paint("wagon-red", srgb("#c8483c"), 0.55)
+    rim = paint("wagon-rim", srgb("#963630"), 0.55)
+    tyre = matte("wagon-tyre", srgb("#2b2622"), 0.6)
+    kraft = fabric("wagon-kraft", srgb("#c9a26b"), 2.2)
+    pot = matte("wagon-pot", srgb("#8a5a3b"), 0.7)
+    leaf = matte("wagon-leaf", srgb("#4f8a4b"), 0.7)
+    card = matte("wagon-card", srgb("#fbf8f1"), 0.6)
+    parts = []
+    for dx, dy in ((-9, -6), (9, -6), (-9, 6), (9, 6)):
+        w = ball(f"{asset_id}/wheel", lx + dx, ly + dy * 1.15, 0, 2.3, 0.9, 2.3, tyre, zs)
+        smooth(w)
+        parts.append(w)
+    bed = box(f"{asset_id}/bed", lx, ly, 3, 24, 16, 6, red, zs)
+    bevel(bed, 1.0)
+    parts += [
+        bed,
+        box(f"{asset_id}/rim", lx, ly, 9, 24, 16, 1.5, rim, zs),
+        box(f"{asset_id}/handle", lx + 14, ly, 7, 6, 1.2, 1.2, tyre, zs),
+        box(f"{asset_id}/monitor", lx + 4, ly, 9, 12, 10, 9, kraft, zs),
+        cyl(f"{asset_id}/pot", lx - 6, ly + 2, 9, 2.6, 3.2, 5, pot, zs),
+        ball(f"{asset_id}/plant", lx - 6, ly + 2, 13, 4.0, 4.0, 4.4, leaf, zs),
+        box(f"{asset_id}/nameplate", lx - 5, ly - 5, 18, 6, 1, 2, card, zs),
+    ]
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, 15, 10.5, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
 # ── per-desk live overlays (plan Task 7) ───────────────────────────────────────────────────
 def desk_lamp(asset_id: str, lit: bool, zs: float, col) -> bpy.types.Object:
     """A desk lamp standing on the worktop at its floor point: base, pole, shade — and, lit, a
@@ -1061,6 +1093,7 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     for i, (dx, dy, facing) in enumerate(MEETING["chairs"]):
         a[f"meeting/chair-{i}"] = meeting_chair(f"meeting/chair-{i}", MEETING["lx"] + dx, MEETING["ly"] + dy, facing, zs, export)
     a["printer"] = printer("printer", zs, export)
+    a["welcome/wagon"] = wagon("welcome/wagon", zs, export)
     a["desk/lamp-off"] = desk_lamp("desk/lamp-off", False, zs, export)
     a["desk/lamp-on"] = desk_lamp("desk/lamp-on", True, zs, export)
     for frame in range(4):
