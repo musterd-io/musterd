@@ -146,8 +146,8 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
             `what you changed in it.`,
         };
       }
-      // The wait leads, with the call spelled out (finding 022): led by "ask them", every refused
-      // agent in the claim run messaged the holder and none waited on the lane in one call.
+      // The wait leads, with the call spelled out (finding 022): led by "ask them", 19 of the claim
+      // run's 29 refused agents messaged the holder first, and 2 waited on the lane in one call.
       const detail =
         `'${path}' is held by ${holder.owner_seat} (lane ${holder.id} "${holder.title}", named it first, ` +
         `since ${since}). Wait for that lane to finish in one call — team_inbox_check ` +

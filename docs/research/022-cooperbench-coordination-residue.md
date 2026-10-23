@@ -12,6 +12,11 @@
 > at the end) and musterd's status updates are about $2.2, and are mostly instructed. **(3)** State
 > signals ("pushed", "you can edit now") fell from $1.22 to $0.69. That was finding 019's C, and the
 > fixes already took about 40% of it.
+> **Corrected 2026-10-23 (lane 01M5KHD19K):** "every one of the 29 … none used the one-call
+> wait" was wrong. It came from the daemon's log, which records acts, and a blocking wait leaves no
+> act. Read from the agents' own streams, the 29 held refusals were followed first by a message in 19,
+> a plain wait or inbox check in 8, and the `until_lane` wait in **2**. Most refused agents still
+> messaged first, so the next product change stands, but "every" and "none" do not.
 
 ## Question
 
@@ -124,7 +129,8 @@ What already carries each kind, or the gap:
 | Edits refused once: hand-over (ADR 697) | 7 | 19 |
 | Hand-over followed by a merge of the holder's branch before the next edit | 1 of 7 | **8 of 19 (42%)** |
 | After a held refusal, the refused agent's next act (`readout.py`, one per held refusal) | 9 messaged, 7 `request_help`, 2 retried (of 18) | **25 messaged, 4 `request_help` (of 29)** |
-| …used `team_inbox_check {wait, until_lane}` | (did not exist) | **0** |
+| …used `team_inbox_check {wait, until_lane}` | (did not exist) | ~~0~~ **2** (corrected 2026-10-23: read from the streams) |
+| Next musterd move, read from the agents' streams (`held_refusal_moves`, added 2026-10-23) | — | 19 message, 4 plain wait, 4 inbox, 2 `until_lane` wait (of 29) |
 
 The refusal text (`packages/server/src/protocol/gate.ts`, held case) reads:
 *"'path' is held by agent1 (lane "…", named it first, since …) — ask them to hand it off or narrow
@@ -183,7 +189,7 @@ agent2's first coordination call after that refusal. It ran on the **old** refus
 | `request_help` to the holder | 1 |
 | Never refused: agent2 did not try the edit (most likely warned of the hold when it claimed) | 5 |
 
-On the old text, the scratch agents mostly **waited**, where the claim run's 29 of 29 messaged. A
+On the old text, the scratch agents mostly **waited**, where the claim run's agents messaged first in 19 of 29 (corrected above). A
 fresh agent with a two-line task follows the instruction's "wait in one call" line. An agent deep in
 a real feature does not. The setup does not reproduce the behaviour #3219 targets, so the new-text
 arm was not run: it could not have shown the fix working. #3219's effect waits for the next real

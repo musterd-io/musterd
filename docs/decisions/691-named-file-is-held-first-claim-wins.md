@@ -103,6 +103,10 @@ look the same at claim time.
   holder's lane id and the one call that does it (`team_inbox_check {wait, until_lane}`, ADR 705).
   Led by "ask them", every one of the claim run's 29 held refusals was followed by a message to the
   holder, and none by that wait.
+- 2026-10-23 (lane 01M5KHD19K): correction to the note above. Read from the agents' streams rather
+  than the daemon's acts, the 29 held refusals were followed first by a message in 19, a plain wait or
+  inbox check in 8, and the `until_lane` wait in 2. "Every" and "none" were wrong; the reason for
+  the change stands. Its effect is pre-registered as rider 1 in `docs/research/cooperbench/riders.md`.
 
 ## Observability & Evaluation
 

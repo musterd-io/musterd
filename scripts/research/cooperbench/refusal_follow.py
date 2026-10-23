@@ -1,10 +1,10 @@
 """Micro-test for the held-file refusal text (lane 01M5K4J42E, finding 022, #3219).
 
 After a held-file refusal, does an agent wait on the holder's lane in one call, or message the
-holder? Finding 022 saw all 29 held refusals in the claim run followed by a message, under a refusal
-text that said "ask them" first. #3219 makes the text lead with the one-call wait. This measures the
-first coordination move after the refusal, on whichever text the daemon in PREFIX carries, in
-TRIALS fresh scratch teams. It is a stand-in for a full benchmark run, not a benchmark.
+holder? Finding 022 saw 19 of the claim run's 29 held refusals followed first by a message (2 by the
+one-call wait; corrected 2026-10-23), under a refusal text that said "ask them" first. #3219 makes
+the text lead with the one-call wait. This measures the first coordination move after the refusal,
+on whichever text the daemon in PREFIX carries, in TRIALS fresh scratch teams. It is a stand-in for a full benchmark run, not a benchmark.
 
 Each trial is two headless Claude Code seats in gate_smoke.py's exact wiring:
 1. agent1 (HOLDER_MODEL, cheap) claims a lane naming src/a.py and edits it. Presence is raised for

@@ -9,7 +9,9 @@ Walks a run's log folder (CooperBench's `logs/<run>/`) and writes one JSON recor
   the two agents' lanes named a common file, acts by kind, `lane.gate` rows by outcome and by
   `hold` (ADR 691/693), and after each `held` refusal what the refused agent did next;
 - from each agent's stream, shell commands that wrote to a file another seat held (the gate does
-  not see Bash, README) — a heuristic, labelled as one.
+  not see Bash, README) — a heuristic, labelled as one;
+- from each agent's stream, its next musterd move after each held-file refusal (riders.md);
+- `error_reason: api_usage_limit` for a pair an agent of which stopped on the account's API limit.
 
 Usage: python3 readout.py <logs/run-dir> [<more run dirs>] > readout.json
 Reads only; run it on a copy if the run is still writing.
@@ -186,17 +188,22 @@ def shell_writes(pair: Path, held: list[str]) -> list[dict]:
 
 
 def stream_events(path: Path):
-    """(kind, payload) in stream order: ("bash", command) for each Bash call, ("result", text) for each tool result."""
+    """(kind, payload) in stream order: ("bash", command) for each Bash call, ("tool", (name, input))
+    for every other tool call, ("result", text) for each tool result."""
     for line in path.read_text(errors="replace").splitlines():
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if not isinstance(ev, dict):
             continue
         for block in (ev.get("message") or {}).get("content") or []:
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "tool_use" and block.get("name") == "Bash":
                 yield "bash", (block.get("input") or {}).get("command", "")
+            elif block.get("type") == "tool_use":
+                yield "tool", (block.get("name") or "", block.get("input") or {})
             elif block.get("type") == "tool_result":
                 out = block.get("content")
                 if isinstance(out, list):
@@ -238,6 +245,71 @@ def handover_follow(pair: Path) -> list[dict]:
     return found
 
 
+# The account's spend limit, as the API words it (pilot 2, finding 023). A pair it kills is an error
+# under every manifest's rules ("API outage or usage limit"), never a score of the arm.
+API_LIMIT = "reached your specified API usage limits"
+
+
+def api_limit(pair: Path) -> bool:
+    """Did any agent in this pair stop on the account's API usage limit?"""
+    return any(API_LIMIT in s.read_text(errors="replace") for s in pair.glob("agent*_stream.jsonl"))
+
+
+# A held-file refusal (ADR 691): "blocked: '<path>' is held by <seat> (lane …". The one-time hand-over
+# (ADR 697) says "blocked once: … was held by …" and is not one. Old and new (#3219) texts both match.
+HELD_REFUSAL = re.compile(r"blocked: '[^']+' is held by ")
+# Board reads that do not answer the refusal: the move is the first call after them that does.
+NOT_A_MOVE = {"lane_board", "team_status", "lane_show"}
+
+
+def classify_move(name: str, args: dict) -> str | None:
+    """A musterd call as a move after a refusal, or None for a call that is not one (a read, a non-musterd tool)."""
+    if not name.startswith("mcp__musterd__"):
+        return None
+    tool = name[len("mcp__musterd__"):]
+    if tool in NOT_A_MOVE:
+        return None
+    if tool == "team_inbox_check":
+        if args.get("until_lane"):
+            return "wait_until_lane"
+        return "wait" if args.get("wait") else "inbox"
+    if tool == "team_send":
+        return "message:" + str(args.get("act") or "message")
+    return tool
+
+
+def held_refusal_moves(pair: Path) -> list[dict]:
+    """Riders (riders.md, #3219): after each held-file refusal an agent saw, its next musterd move.
+
+    Read from the agent's own stream, so it sees blocking waits, which leave no act in the daemon's
+    log. A Bash command or a file edit before any musterd move is recorded as such: the agent acted
+    without coordinating first.
+    """
+    found = []
+    for stream in sorted(pair.glob("agent*_stream.jsonl")):
+        agent = stream.name.split("_")[0]
+        armed = False
+        for kind, payload in stream_events(stream):
+            if kind == "result" and HELD_REFUSAL.search(payload):
+                if armed:
+                    found.append({"agent": agent, "next": "refused again"})
+                armed = True
+            elif armed and kind == "tool":
+                name, args = payload
+                move = classify_move(name, args)
+                if move is None and name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+                    move = "edit"
+                if move is not None:
+                    found.append({"agent": agent, "next": move})
+                    armed = False
+            elif armed and kind == "bash":
+                found.append({"agent": agent, "next": "bash"})
+                armed = False
+        if armed:
+            found.append({"agent": agent, "next": "nothing before the run ended"})
+    return found
+
+
 def pair_record(pair: Path) -> dict:
     result = load_json(find_one(pair, "result.json", "*.result.json"))
     ev = load_json(find_one(pair, "eval.json", "*.eval.json", "eval_result.json"))
@@ -268,12 +340,17 @@ def pair_record(pair: Path) -> dict:
     if any(a["lookup_failures"] for a in rec["git_remote"].values()):
         rec["cause"] = "setup" if not rec["passed"] else rec["cause"]
         rec["git_remote_error"] = True
+    # An agent stopped by the account's API limit makes the pair an error, re-run once (every manifest).
+    if api_limit(pair):
+        rec["error_reason"] = "api_usage_limit"
+        rec["cause"] = "setup" if not rec["passed"] else rec["cause"]
     db = find_one(pair, "musterd-musterd.db")
     if db is not None:
         rec["musterd"] = db_readout(db)
         held = sorted({f for lane in rec["musterd"]["lanes"] for f in lane["named"]})
         rec["musterd"]["shell_writes_to_named_files_heuristic"] = shell_writes(pair, held)
         rec["musterd"]["handover_follow"] = handover_follow(pair)
+        rec["musterd"]["held_refusal_moves"] = held_refusal_moves(pair)
     return rec
 
 
