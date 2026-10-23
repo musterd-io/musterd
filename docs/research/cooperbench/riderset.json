@@ -1,0 +1,96 @@
+{
+ "name": "riderset",
+ "description": "Rider run (lane 01M5MS3PK0): the claim run's 9 musterd pairs with >=2 held refusals",
+ "tasks": [
+  {
+   "repo": "llama_index_task",
+   "task_id": 18813,
+   "pairs": [
+    [
+     3,
+     6
+    ]
+   ]
+  },
+  {
+   "repo": "react_hook_form_task",
+   "task_id": 153,
+   "pairs": [
+    [
+     2,
+     6
+    ]
+   ]
+  },
+  {
+   "repo": "pallets_jinja_task",
+   "task_id": 1621,
+   "pairs": [
+    [
+     6,
+     10
+    ]
+   ]
+  },
+  {
+   "repo": "pallets_click_task",
+   "task_id": 2800,
+   "pairs": [
+    [
+     1,
+     4
+    ]
+   ]
+  },
+  {
+   "repo": "openai_tiktoken_task",
+   "task_id": 0,
+   "pairs": [
+    [
+     4,
+     8
+    ]
+   ]
+  },
+  {
+   "repo": "go_chi_task",
+   "task_id": 27,
+   "pairs": [
+    [
+     3,
+     4
+    ]
+   ]
+  },
+  {
+   "repo": "go_chi_task",
+   "task_id": 26,
+   "pairs": [
+    [
+     1,
+     2
+    ]
+   ]
+  },
+  {
+   "repo": "dspy_task",
+   "task_id": 8563,
+   "pairs": [
+    [
+     1,
+     4
+    ]
+   ]
+  },
+  {
+   "repo": "dottxt_ai_outlines_task",
+   "task_id": 1371,
+   "pairs": [
+    [
+     3,
+     4
+    ]
+   ]
+  }
+ ]
+}
