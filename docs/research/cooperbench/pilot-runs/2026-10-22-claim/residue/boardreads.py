@@ -8,9 +8,12 @@ musterd agents' streams, with where it sat and what the agent said just before i
   already resolved, submitted or released its own lane), `after_wait` (the previous musterd call
   was a blocking wait), else `mid_work`.
 - `next`: the agent's next action (edit, git, wait, message, claim, read, end).
-- `said`: the last text the agent wrote before the call, cut to 200 characters, for hand labels.
+- `said`: the last text the agent wrote before the call, cut to 200 characters.
+- `intent`: a keyword label on `said` plus `context` (`intent()` below). The agent's last text can
+  be a few calls stale, so read intent shares as rough.
 
     python3 boardreads.py /data/runs/logs claim-musterd-core claim-musterd-new > boardreads.json
+    python3 boardreads.py --table boardreads.json   # the finding's table, from the file
 
 No model calls: it only reads the streams on disk.
 """
@@ -132,19 +135,63 @@ def scan(stream: Path) -> list[dict]:
     return out
 
 
+INTENTS = [
+    "start: orienting before it claimed a lane",
+    "routine check-in at a task boundary",
+    "held file: who holds it, is it free",
+    "partner progress: is my partner done",
+    "overlap warning: who else is on my file",
+    "other, or the text does not say",
+]
+
+
+def intent(r: dict) -> str:
+    """One label per read. Structural context first, then keywords on what the agent last wrote."""
+    s = r["said"].lower()
+    if r["context"] == "before_claim":
+        return INTENTS[0]
+    if r["context"] == "after_held_refusal" or re.search(r"blocked|holds it|lane is still claimed", s):
+        return INTENTS[2]
+    if re.search(r"overlap|also working|also modifying|same file", s):
+        return INTENTS[4]
+    if re.search(r"wait for|to complete|responded|completed their|their work|'s changes|released|finish", s):
+        return INTENTS[3]
+    if re.search(r"tests pass|commit|patch|final|works correctly|status update|submit|implementation works|clean up", s):
+        return INTENTS[1]
+    return INTENTS[5]
+
+
+def table(path: Path) -> int:
+    d = json.loads(path.read_text())
+    runs = list(d["summary"])
+    counts = {run: Counter(r["intent"] for r in d["calls"] if r["run"] == run) for run in runs}
+    totals = {run: sum(counts[run].values()) for run in runs}
+    print("| What the agent was after | " + " | ".join(f"{run} ({totals[run]})" for run in runs) + " |")
+    print("| --- | " + " | ".join("---" for _ in runs) + " |")
+    for label in INTENTS:
+        print(f"| {label} | " + " | ".join(str(counts[run][label]) for run in runs) + " |")
+    for run in runs:
+        print(f"\n{run} by structural context: {d['summary'][run]['by_context']}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--table":
+        return table(Path(argv[1]))
     logs, runs = Path(argv[0]), argv[1:]
     rows = []
     for run in runs:
         for stream in sorted((logs / run).rglob("agent*_stream.jsonl")):
             pair = str(stream.parent.relative_to(logs))
             for r in scan(stream):
-                rows.append({"run": run, "pair": pair, "agent": stream.name.split("_")[0], **r})
+                row = {"run": run, "pair": pair, "agent": stream.name.split("_")[0], **r}
+                rows.append({**row, "intent": intent(row)})
     summary = {
         run: {
             "by_tool": dict(Counter(r["tool"] for r in rows if r["run"] == run)),
             "by_context": dict(Counter(r["context"] for r in rows if r["run"] == run)),
             "by_next": dict(Counter(r["next"] for r in rows if r["run"] == run)),
+            "by_intent": dict(Counter(r["intent"] for r in rows if r["run"] == run)),
         }
         for run in runs
     }

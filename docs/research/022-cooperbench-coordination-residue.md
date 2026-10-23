@@ -200,13 +200,27 @@ run that refuses a held file. Its measure is unchanged: messages after a held re
 ## Follow-up, 2026-10-23: what the board reads were for (lane 01M5N3SR7H)
 
 Every `lane_board`, `team_status` and plain `team_inbox_check` (no `wait`) call in the claim run's
-musterd streams, labelled by where it sat and by the last thing the agent wrote before it. No model
-spend: `residue/boardreads.py` reads the streams on disk, and `residue/boardreads.json` holds every
-call with its label. These are tool calls, not API calls: one API call can carry several, so the
-count is higher than the 80 calls in the tables above. The intent labels are keyword matches on the
-agent's last text, which can be a few calls stale, so read them as rough shares.
+musterd streams, labelled twice by `residue/boardreads.py`, with no model spend. `boardreads.json`
+holds every call with both labels. These are tool calls, not API calls: one API call can carry
+several, so the count is higher than the 80 calls in the tables above.
 
-| What the agent was after | `core` (100 reads) | new ten (88) |
+**Where each read sat** (structural, from the stream alone; field `context`):
+
+| Context | `core` (100) | new ten (88) |
+| --- | --- | --- |
+| Before the agent's first claim | 27 | 28 |
+| Right after a held-file refusal (one of the last three results) | 8 | 10 |
+| Right after a blocking wait | 13 | 6 |
+| After the agent finished its own lane | 10 | 5 |
+| Mid-work, none of the above | 42 | 39 |
+
+**What the agent was after** (field `intent`; the table is printed by
+`python3 boardreads.py --table boardreads.json`). The label takes the structural context first,
+then keywords on the last thing the agent wrote. That text can be a few calls stale, so read these
+as rough shares. "Held file" is the 8 (`core`) reads right after a refusal plus 2 where the agent
+wrote "blocked" or "holds it" before reading.
+
+| What the agent was after | `core` (100) | new ten (88) |
 | --- | --- | --- |
 | Start: orienting before it claimed a lane | 27 | 28 |
 | Routine check-in at a task boundary (tests pass, commit, patch written) | 15 | 17 |
