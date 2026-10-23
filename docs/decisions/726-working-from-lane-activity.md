@@ -89,6 +89,12 @@ when it is fresher. Do not let a stale claim read as work.
   and `/live`'s kept-claim line reads `last on lane: …`. (c) The wake-context fallback moves to lane
   `01M5N3VG2D`. The wake packet schema is strict, so a new field there needs a rebuilt adapter, and
   agents keep sending status updates until that lane removes the instruction.
+- _2026-10-23 (lane 01M5N3VG2D):_ §6 done for the primer, the per-prompt Claude Code hook (it now only
+  runs the orient nudge), the MCP join text, the `team_send` description and the built-in toolkit
+  charters. The primer's inbox line changed too: check on start and before you wait or hand off,
+  since a harness with the interrupt line delivers directed acts as they arrive. Two parts are split
+  out: the skill text in `guidance.ts` (lane `01M5NBVB2Q`, after izzo's lane on that file) and the
+  wake-context fallback (lane `01M5NBVFFZ`).
 - Build lanes: `01M5N3V9EP` (server, wire, renderers), then `01M5N3VG2D` (instructions).
 
 Follows-up: 01M5N3V9EPHMZ08XJ4FDRN2DPX, 01M5N3VG2DG14Z81NRMHMXVFPC

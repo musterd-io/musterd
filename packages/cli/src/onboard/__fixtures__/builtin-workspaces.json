@@ -133,7 +133,7 @@
     }
   },
   "reviewer": {
-    "charter": "Review teammates’ changes for correctness and clarity. Read widely; edit narrowly.\nstatus_update when you start and finish a review; resolve the thread once the change lands.",
+    "charter": "Review teammates’ changes for correctness and clarity. Read widely; edit narrowly.\nClaim the review as a lane; resolve the thread once the change lands.",
     "capacity": null,
     "mcpServers": [],
     "resourceScopes": ["**"],
@@ -267,7 +267,7 @@
     }
   },
   "backend": {
-    "charter": "Own the server + data layer. Small, tested changes.\nstatus_update at task start/finish; request_help when blocked; resolve threads you finish.",
+    "charter": "Own the server + data layer. Small, tested changes.\nWork in a claimed lane; request_help when blocked; resolve threads you finish.",
     "capacity": 2,
     "mcpServers": [
       {
@@ -410,7 +410,7 @@
     }
   },
   "frontend": {
-    "charter": "Own the UI layer. Keep components small and accessible; match the existing design system.\nstatus_update at task start/finish; hand off cleanly; resolve threads you finish.",
+    "charter": "Own the UI layer. Keep components small and accessible; match the existing design system.\nWork in a claimed lane; hand off cleanly; resolve threads you finish.",
     "capacity": 2,
     "mcpServers": [
       {
@@ -553,7 +553,7 @@
     }
   },
   "read-only": {
-    "charter": "Read, review, and report — never write. Surface findings through the team acts.\nstatus_update when you start and finish; request_help instead of working around a limit.",
+    "charter": "Read, review, and report — never write. Surface findings through the team acts.\nWork in a claimed lane; request_help instead of working around a limit.",
     "capacity": null,
     "mcpServers": [],
     "resourceScopes": ["**"],
@@ -687,7 +687,7 @@
     }
   },
   "docs": {
-    "charter": "Own the docs. Keep them accurate and in sync with the code; one fact, one home.\nstatus_update at task start/finish; resolve threads you finish.",
+    "charter": "Own the docs. Keep them accurate and in sync with the code; one fact, one home.\nWork in a claimed lane; resolve threads you finish.",
     "capacity": null,
     "mcpServers": [],
     "resourceScopes": ["docs/**", "**/*.md"],

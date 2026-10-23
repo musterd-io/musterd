@@ -11,7 +11,6 @@ import {
   installMusterdHooks,
   installMusterdStatusline,
   surfaceName,
-  SURFACE_MACHINE_PROMPT_SUBMIT,
   SURFACE_MACHINE_SESSION_START,
   SURFACE_STATUSLINE,
 } from '../onboard/harnesses/claudeCode.js';
@@ -170,7 +169,9 @@ describe('musterd surface (ADR 332)', () => {
     const global = JSON.parse(readFileSync(join(globalDir, 'settings.json'), 'utf8')) as {
       hooks?: Record<string, { hooks?: { command?: string }[] }[]>;
     };
-    const cmd = global.hooks?.['UserPromptSubmit']?.[0]?.hooks?.[0]?.command ?? '';
+    // The SessionStart hook, because it always prints: the UserPromptSubmit hook stopped printing a
+    // nudge in lane 01M5N3VG2D (ADR 726). Both run the same `declinedGate` clause.
+    const cmd = global.hooks?.['SessionStart']?.[0]?.hooks?.[0]?.command ?? '';
     expect(cmd).not.toBe('');
 
     /** Fire the hook the way Claude Code does: this folder as CLAUDE_PROJECT_DIR, its stdout kept.
@@ -185,8 +186,8 @@ describe('musterd surface (ADR 332)', () => {
     // Installed and firing, before any refusal.
     expect(fire()).toContain('musterd:');
 
-    expect(run('decline', SURFACE_MACHINE_PROMPT_SUBMIT)).toBe(0);
-    expect(isDeclined(cwd, SURFACE_MACHINE_PROMPT_SUBMIT)).toBe(true);
+    expect(run('decline', SURFACE_MACHINE_SESSION_START)).toBe(0);
+    expect(isDeclined(cwd, SURFACE_MACHINE_SESSION_START)).toBe(true);
     expect(out).toContain('machine-wide');
 
     // The refusal is enforced where it has to be — at fire time, in this folder. Silence, not a
@@ -221,7 +222,7 @@ describe('musterd surface (ADR 332)', () => {
     const global = JSON.parse(readFileSync(join(globalDir, 'settings.json'), 'utf8')) as {
       hooks?: Record<string, { hooks?: { command?: string }[] }[]>;
     };
-    const cmd = global.hooks?.['UserPromptSubmit']?.[0]?.hooks?.[0]?.command ?? '';
+    const cmd = global.hooks?.['SessionStart']?.[0]?.hooks?.[0]?.command ?? '';
     const fired = execFileSync('sh', ['-c', cmd], {
       env: { PATH: '/usr/bin:/bin', CLAUDE_PROJECT_DIR: cwd },
       encoding: 'utf8',

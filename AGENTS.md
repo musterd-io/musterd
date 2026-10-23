@@ -156,10 +156,10 @@ The loop — `team_*` tool form / `musterd` CLI form:
 
 - **Get on the team when you start.** Your seat auto-claims on your first `team_*` call, so
   `team_inbox_check` / `musterd claim <name>` is enough; `team_join` only if a tool says otherwise.
-- **Check your inbox at every task boundary.** `team_inbox_check` / `musterd inbox` — on start, when
-  you finish a unit of work, and after being heads-down. Directed acts wait there for a reply.
-- **Report status as you work.** `team_send {act:'status_update'}` / `musterd send --act
-status_update '<one line>'` on start and finish — this is what flips you to `working` on the roster.
+- **Check your inbox when you start and before you wait or hand off.** `team_inbox_check` /
+  `musterd inbox`. Directed acts wait there for a reply; a harness with the interrupt line also tells you as they arrive.
+- **Your lane is your status.** A claimed lane and recent work show you `working` on it (ADR 726).
+  `team_send {act:'status_update'}` only to say more than the lane's title, or to report a blocker.
 - **Claim a lane _before_ you build — reading the board is not enough.** `lane_claim` / `musterd lane
 claim` the ONE (`lane_open` if new; a several-step plan is a Goal with every step's lane, ADR 487);
   **never build in a lane a teammate owns.** Hand off with `team_send {act:'handoff'}`; after merge `lane_submit`, then **do what its reply says** (ADR 235).
