@@ -1,0 +1,1 @@
+{"trial": 0, "move": "message:request_help", "input": {"act": "request_help", "to": "agent1", "body": "Blocked on src/a.py - you claimed it for a(), I need to add b(). Can you hand off the file or I can add both functions?"}, "cost_usd": 0.1773}
