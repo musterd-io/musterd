@@ -2,8 +2,8 @@
 
 Each run script used to carry its own inline spend counter, and none of them noticed the account's
 API usage limit. Pilot 2 lost 11 pairs and finding 023 four that way, still paying for the turns
-before each died. A run script calls this once a minute while its arms run and stops them on a
-non-zero exit:
+before each died. `run_arms.py` calls check() once a minute and stops the arms on a stop. A
+script can also call it directly and stop them on a non-zero exit:
 
     python3 spend_guard.py --logs /data/runs/logs --runs 'coord-*' --cap 34.95
 

@@ -350,9 +350,20 @@ scored.
 
 - **The account's API limit covers the hard stop.** A human confirms it, because the key cannot report
   its own remaining limit. Pilot 2 lost 11 pairs and finding 023 four when the limit hit mid-run.
-- **The run loop calls `spend_guard.py`** once a minute, with the manifest's run glob and hard stop,
-  and stops the arms on a non-zero exit: 3 at the hard stop, 4 on the API limit. Pairs the limit
-  killed are errors, re-run once when it allows.
+- **Arms run under `run_arms.py`**, not a hand-rolled loop. It starts each arm as its own process
+  group, checks `spend_guard.py` every minute with the manifest's run glob and hard stop, and on a
+  stop kills every arm and runs `--on-stop` (remove leftover agent containers). It exits 3 at the hard
+  stop and 4 on the API limit, and evaluates only arms that finished. Pairs the limit killed are
+  errors, re-run once when it allows. `tests/test_run_arms.py` shows a stop killing every arm. Runs
+  before 2026-10-23 used their own loops (`pilot-runs/*/…sh`), which are kept as they ran.
+
+  ```bash
+  python3 /app/scripts/research/cooperbench/run_arms.py --runs 'rider-*' --cap 24.95 \
+    --log /data/runs/rider/run.log \
+    --on-stop 'docker ps -q --filter name=minisweagent | xargs -r docker rm -f' \
+    --eval 'cooperbench eval -n {name} --backend docker' \
+    --arm rider-musterd='cooperbench run -n rider-musterd -s riderset -m claude-sonnet-4-5 -a claude_code_musterd --setting coop --git -c 3 --no-auto-eval'
+  ```
 - **Host smokes run as an unprivileged user** (`runuser -u smoke -- env HOME=/home/smoke …`). Claude Code
   refuses `--dangerously-skip-permissions` as root. CooperBench's containers set `IS_SANDBOX=1`, but
   the host does not. The ADR 697 hold check is `pilot-runs/2026-10-21-pilot3/hold_smoke_697.py` until
@@ -366,6 +377,6 @@ scored.
   pairs, `held_refusal_moves`. Any rider in [`riders.md`](./riders.md) that the run's data reaches is
   reported in its finding.
 
-`readout.py` and `spend_guard.py` have tests that need no CooperBench install:
-`python3 tests/test_readout.py` and `python3 tests/test_spend_guard.py`, or `pytest tests/test_readout.py
-tests/test_spend_guard.py`.
+`readout.py`, `spend_guard.py` and `run_arms.py` have tests that need no CooperBench install:
+`python3 tests/test_readout.py`, `python3 tests/test_spend_guard.py` and `python3 tests/test_run_arms.py`,
+or `pytest` on the same three files.
