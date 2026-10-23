@@ -51,3 +51,28 @@ beside it, with no rule.
 
 **Not gaming.** The rider adds no instruction, hint or tool to any arm. If a run reads it, the
 finding says which run, which build and which arm.
+
+## Rider 2: after a lane frees a held file, do holders stop announcing it? (ADR 724)
+
+**Lane:** `01M5N3THX3`. **Status:** pre-registered 2026-10-23, before ADR 724 is built.
+
+**What changed.** [ADR 724](../../decisions/724-held-refusal-watches-the-holders-lane.md): a
+held-file refusal opens a watch on the holder's lane. When the lane frees the file (done,
+abandoned, released, or the file leaves its scope), the refused seat gets one directed act with
+the holder's branch and head. The agents' instructions do not change.
+
+**Measure.** In the musterd pairs with at least one held refusal, the holder's state-signal sends
+per pair: `team_send` calls that finding 019's `is_signal` labels (`pilot-runs/2026-10-21-pilot3/cost/cf.py`,
+unchanged), sent by the seat whose lane held the file. Beside it, the time from the holder's lane
+freeing the file to the refused seat's next edit of it, read from the two streams and the daemon's
+audit rows.
+
+**Baseline.** The same two numbers, read with the same code from the claim run (2026-10-22, 20
+pairs) before the new run is read, and recorded in that run's finding next to the new ones.
+
+**Verdict rule.** None. Reported only: pairs with held refusals are few (5 of 9 in the rider run),
+and per-pair signal counts are small, so no test would be fair at the size of a run we would pay
+for. ADR 724's own falsifier reads these numbers: holder signals do not fall, or refused agents
+still wait for the holder's reply rather than the act.
+
+**Not gaming.** As rider 1: no instruction, hint or tool is added to any arm for it.
