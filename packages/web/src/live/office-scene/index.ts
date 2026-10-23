@@ -159,6 +159,8 @@ const SPEECH_OUT_MS = 560;
 
 /** How far above the head anchor the bubble sits (clears the name label). */
 const SPEECH_LIFT = 26;
+/** The air between a bubble's tail and the top of the speaker's nameplate. */
+const SPEECH_PLATE_GAP = 8;
 /** What an expanded bubble keeps clear of the stage's top edge: the asks bar laid over it (~36px
  *  tall at 10px from the top) plus a breath. */
 const SPEECH_TOP_CLEAR = 52;
@@ -816,6 +818,10 @@ export function mountOffice(
   let replaying = false;
   let asksSeeded = false; // the first update seeds the open set silently — no hands go up for backfill
   const speeches = new Map<string, Speech>(); // one live speech bubble per member (name → bubble)
+  // Where each nameplate sits after this frame's layout: its centre x and its top edge. A bubble hangs
+  // from THIS, not from the head — a plate that is taller than the head lift, or that plateLayout moved
+  // off home, would otherwise sit under or beside its own bubble.
+  const plateTops = new Map<string, { x: number; y: number }>();
   const queued = new Map<string, Utterance[]>(); // acts waiting behind a member's live bubble
   const cues: Cue[] = [];
 
@@ -1436,6 +1442,7 @@ export function mountOffice(
         plateFullW.delete(name);
         el.remove();
         labels.delete(name);
+        plateTops.delete(name);
         plateJobs.delete(name);
       }
     }
@@ -1621,6 +1628,7 @@ export function mountOffice(
       el.style.transform = `translate(-50%, -100%) translate(${homeX}px, ${head.y}px) rotate(${plateTilt(name)}deg)`;
       el.style.translate = `${(at.x - homeX).toFixed(1)}px ${(at.y - head.y).toFixed(1)}px`;
       el.classList.toggle('is-displaced', at.displaced);
+      plateTops.set(name, { x: at.x, y: at.y - size.h });
       // A plate whose "working on" chip would run across the wall board drops the chip (the name stays,
       // and the hover tip still carries the title) — it was hiding cards, lane 01M4VNDVF7.
       const work = el.querySelector<HTMLElement>('.lc-gl-label__work');
@@ -1711,7 +1719,13 @@ export function mountOffice(
     const board = speeches.size ? boardAnchor(fit) : undefined;
     for (const [name, s] of speeches) {
       const head = headMap.get(name);
-      if (head) positionSpeech(s.outer, head, board, s.w);
+      if (!head) continue;
+      // Aligned with, and above, the speaker's nameplate: the bubble's bottom edge rides a few pixels over
+      // the plate's top and its tail over the plate's centre. No plate yet (a member the layout has not
+      // reached, a service) falls back to the head anchor.
+      const plate = plateTops.get(name);
+      const anchor = plate ? { x: plate.x, y: plate.y - SPEECH_PLATE_GAP + SPEECH_LIFT } : head;
+      positionSpeech(s.outer, anchor, board, s.w);
     }
   }
 
@@ -3776,6 +3790,7 @@ export function mountOffice(
       plateRO?.disconnect();
       for (const el of labels.values()) el.remove();
       labels.clear();
+      plateTops.clear();
       for (const t of askSettleTimers.values()) clearTimeout(t);
       askSettleTimers.clear();
       for (const c of askCards.values()) c.el.remove();
