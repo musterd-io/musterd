@@ -24,7 +24,9 @@ Two design commitments follow from "read-only projection":
   browser `Origin` so the ADR 040 cross-origin gate sees a clean request. The CLI opens `/live` and
   `/board` on `localhost` when the configured daemon URL uses `127.0.0.1` or `::1`: WebAuthn rejects an
   IP literal as the relying-party ID (ADR 662). The staged sign-in nonce remains in the URL fragment,
-  and the generated URL matters because browser identity is stored per origin.
+  and the generated URL matters because browser identity is stored per origin. If a passkey ceremony
+  still gets a `SecurityError` on an IP URL, `/live` tells the human to rerun `musterd live` and use
+  its localhost URL; the failed attempt did not send the verdict.
 
 ## Routes
 
