@@ -1,0 +1,8 @@
+{"trial": 0, "move": "never refused", "cost_usd": 0.2315}
+{"trial": 1, "move": "never refused", "cost_usd": 0.2335}
+{"trial": 2, "move": "wait_until_lane", "input": {"wait": "45", "until_lane": "01M5K5QJ9B564CWN97TM2FZZYZ"}, "cost_usd": 0.1363}
+{"trial": 3, "move": "never refused", "cost_usd": 0.2137}
+{"trial": 4, "move": "wait_until_lane", "input": {"wait": "45", "until_lane": "01M5K60F2WE934V9MDCE4DC3Z2"}, "cost_usd": 0.1414}
+{"trial": 5, "move": "never refused", "cost_usd": 0.2301}
+{"trial": 6, "move": "never refused", "cost_usd": 0.2258}
+{"trial": 7, "move": "wait", "input": {"wait": "45"}, "cost_usd": 0.1198}

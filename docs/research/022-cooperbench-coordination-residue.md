@@ -167,3 +167,25 @@ is `readout.py`'s heuristic: the next musterd act after the refusal.
 
 Data: `docs/research/cooperbench/pilot-runs/2026-10-22-claim/residue/` (`residue.txt`,
 `sends.json` and the four scripts that made them).
+
+## Follow-up, 2026-10-23: a micro-test cannot stand in for the run (lane 01M5K4J42E)
+
+To check #3219 without a ~$17 benchmark run, `scripts/research/cooperbench/refusal_follow.py` ran
+a two-seat scratch team per trial. agent1 holds `src/a.py`. agent2 (`claude-sonnet-4-5`, the
+bench's own musterd instruction, a two-line task in the same file) is refused, and the trial records
+agent2's first coordination call after that refusal. It ran on the **old** refusal text (image
+`7e795fcb`, before #3219), 9 trials, $1.71 recorded (plus one earlier probe that timed out before its cost was read):
+
+| After the held refusal | Trials |
+| --- | --- |
+| `team_inbox_check {wait, until_lane}` | 2 |
+| `team_inbox_check {wait}` | 1 |
+| `request_help` to the holder | 1 |
+| Never refused: agent2 did not try the edit (most likely warned of the hold when it claimed) | 5 |
+
+On the old text, the scratch agents mostly **waited**, where the claim run's 29 of 29 messaged. A
+fresh agent with a two-line task follows the instruction's "wait in one call" line. An agent deep in
+a real feature does not. The setup does not reproduce the behaviour #3219 targets, so the new-text
+arm was not run: it could not have shown the fix working. #3219's effect waits for the next real
+run that refuses a held file. Its measure is unchanged: messages after a held refusal, and
+`until_lane` use. Records: `pilot-runs/2026-10-23-refusal-follow/`.
