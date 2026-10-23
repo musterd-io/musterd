@@ -1,0 +1,9 @@
+[2026-10-23T00:24:09Z] coop smoke start
+[2026-10-23T00:29:30Z] smoke ok=yes spent=2.03
+[2026-10-23T00:29:30Z] start coord-team
+[2026-10-23T00:29:30Z] start coord-coop
+[2026-10-23T00:49:15Z] coord-coop run exit=0
+[2026-10-23T00:49:29Z] coord-team run exit=0
+[2026-10-23T00:52:38Z] coord-coop eval exit=0
+[2026-10-23T00:53:13Z] coord-team eval exit=0
+[2026-10-23T00:53:39Z] spent=30.91 all done

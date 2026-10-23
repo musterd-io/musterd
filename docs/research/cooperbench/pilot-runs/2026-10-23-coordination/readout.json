@@ -1,0 +1,1164 @@
+{
+ "arms": {
+  "claude_code": {
+   "pairs": 20,
+   "passed": 3,
+   "cause:coordination": 10,
+   "cause:None": 0,
+   "cause:task": 3,
+   "cause:setup": 4
+  }
+ },
+ "pairs": [
+  {
+   "pair": "logs/coord-team/team/dottxt_ai_outlines_task/1371/f3_f4",
+   "task": "dottxt_ai_outlines_task/1371",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 2.4722158499999995,
+   "steps": 137,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/prompts.py"
+    ],
+    "agent2": [
+     "outlines/prompts.py"
+    ]
+   },
+   "common_files": [
+    "outlines/prompts.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 3
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/dottxt_ai_outlines_task/1706/f1_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.53413295,
+   "steps": 71,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/backends/xgrammar.py"
+    ],
+    "agent2": [
+     "outlines/backends/xgrammar.py"
+    ]
+   },
+   "common_files": [
+    "outlines/backends/xgrammar.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/dspy_task/8587/f1_f6",
+   "task": "dspy_task/8587",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.6432602999999999,
+   "steps": 39,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/streaming/messages.py",
+     "dspy/streaming/streaming_listener.py"
+    ],
+    "agent2": [
+     "dspy/streaming/streaming_listener.py"
+    ]
+   },
+   "common_files": [
+    "dspy/streaming/streaming_listener.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 3,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 1.3616717999999999,
+   "steps": 91,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ],
+    "agent2": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go"
+    ]
+   },
+   "common_files": [
+    "metrics.go",
+    "metrics_test.go",
+    "mux.go"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/huggingface_datasets_task/7309/f1_f2",
+   "task": "huggingface_datasets_task/7309",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.2453613499999998,
+   "steps": 88,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ],
+    "agent2": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ]
+   },
+   "common_files": [
+    "src/datasets/packaged_modules/parquet/parquet.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/llama_index_task/18813/f3_f6",
+   "task": "llama_index_task/18813",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 23,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 20,
+    "tests_failed": 1
+   },
+   "cost": 0.8526559499999999,
+   "steps": 71,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/pallets_click_task/2068/f2_f5",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 66,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 69,
+    "tests_failed": 0
+   },
+   "cost": 1.2359546999999997,
+   "steps": 66,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 216,
+    "tests_failed": 4
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 218,
+    "tests_failed": 1
+   },
+   "cost": 2.2008321,
+   "steps": 126,
+   "agent_status": {
+    "agent1": "Error",
+    "agent2": "Error"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py"
+    ],
+    "agent2": [
+     "src/click/core.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py"
+   ],
+   "eval_error": null,
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/pallets_jinja_task/1465/f7_f9",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    7,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.77368025,
+   "steps": 92,
+   "agent_status": {
+    "agent2": "Error",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/filters.py"
+    ],
+    "agent2": [
+     "src/jinja2/filters.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/filters.py"
+   ],
+   "eval_error": null,
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-team/team/react_hook_form_task/85/f3_f5",
+   "task": "react_hook_form_task/85",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "skipped",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 62,
+    "tests_failed": 3
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 63,
+    "tests_failed": 0
+   },
+   "cost": 0.86481225,
+   "steps": 60,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Error"
+   },
+   "patch_files": {
+    "agent1": [],
+    "agent2": [
+     "src/types/form.ts",
+     "src/useForm.ts"
+    ]
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/dottxt_ai_outlines_task/1371/f3_f4",
+   "task": "dottxt_ai_outlines_task/1371",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 2.0005739999999994,
+   "steps": 99,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/builtin_filters.py",
+     "outlines/prompts.py"
+    ],
+    "agent2": [
+     "outlines/builtin_filters.py",
+     "outlines/prompts.py"
+    ]
+   },
+   "common_files": [
+    "outlines/builtin_filters.py",
+    "outlines/prompts.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/dottxt_ai_outlines_task/1706/f1_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.65881685,
+   "steps": 82,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/backends/xgrammar.py"
+    ],
+    "agent2": [
+     "outlines/backends/xgrammar.py"
+    ]
+   },
+   "common_files": [
+    "outlines/backends/xgrammar.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/dspy_task/8587/f1_f6",
+   "task": "dspy_task/8587",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.9253892999999999,
+   "steps": 57,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/streaming/messages.py",
+     "dspy/streaming/streaming_listener.py"
+    ],
+    "agent2": [
+     "dspy/streaming/messages.py",
+     "dspy/streaming/streaming_listener.py"
+    ]
+   },
+   "common_files": [
+    "dspy/streaming/messages.py",
+    "dspy/streaming/streaming_listener.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.30351755,
+   "steps": 75,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ],
+    "agent2": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ]
+   },
+   "common_files": [
+    "mux.go",
+    "path_value.go",
+    "path_value_fallback.go"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/huggingface_datasets_task/7309/f1_f2",
+   "task": "huggingface_datasets_task/7309",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 52,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 57,
+    "tests_failed": 0
+   },
+   "cost": 1.1631138000000003,
+   "steps": 67,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ],
+    "agent2": [
+     "src/datasets/packaged_modules/parquet/parquet.py"
+    ]
+   },
+   "common_files": [
+    "src/datasets/packaged_modules/parquet/parquet.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/llama_index_task/18813/f3_f6",
+   "task": "llama_index_task/18813",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 23,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 20,
+    "tests_failed": 1
+   },
+   "cost": 0.8201682000000001,
+   "steps": 50,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/pallets_click_task/2068/f2_f5",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 2.0123664000000003,
+   "steps": 91,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 219,
+    "tests_failed": 1
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 219,
+    "tests_failed": 0
+   },
+   "cost": 2.33187015,
+   "steps": 117,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py"
+    ],
+    "agent2": [
+     "src/click/core.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/pallets_jinja_task/1465/f7_f9",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    7,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.2830706,
+   "steps": 71,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/filters.py"
+    ],
+    "agent2": [
+     "src/jinja2/filters.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/filters.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   }
+  },
+  {
+   "pair": "logs/coord-coop/coop/react_hook_form_task/85/f3_f5",
+   "task": "react_hook_form_task/85",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.1990659500000003,
+   "steps": 76,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Error"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts",
+     "src/useForm.ts"
+    ],
+    "agent2": [
+     "src/types/form.ts",
+     "src/useForm.ts"
+    ]
+   },
+   "common_files": [
+    "src/types/form.ts",
+    "src/useForm.ts"
+   ],
+   "eval_error": null,
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   }
+  }
+ ]
+}
