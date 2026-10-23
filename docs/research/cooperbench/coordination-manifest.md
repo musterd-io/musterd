@@ -111,4 +111,4 @@ first three pairs is stopped, the cause fixed, and the arm re-run whole.
 | --- | --- |
 | Measure coordination losses, not passes; keep the cost down | **yes**: nick, 2026-10-22 ("do 1", after declining a ~$190 powered pass-rate run) |
 | Claim on fresh pairs, not on `core` | this manifest: `core` is already decided by pilot 3's data |
-| Spend | **pending nick's approval**: about $29, hard stop $35 |
+| Spend | **about $29, hard stop $35**: nick, 2026-10-22 ("approve") |
