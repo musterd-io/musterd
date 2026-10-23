@@ -1055,33 +1055,40 @@
   right: var(--lc-5);
   bottom: var(--lc-4);
   z-index: var(--lc-z-overlay);
-  pointer-events: none;
-  opacity: 0.45; /* nick, 2026-07-28: 34% nearly vanished into the midday floor gradient */
-}
-
-.lc-office__mark-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  color: var(--lc-paper-ink, #2b1f13);
-  font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  gap: 8px;
+  pointer-events: none;
 }
-
-/* The address half of the lockup (`domain` on MusterdWord — /broadcast's mark only). A step quieter
-   than the name, because the brand is the word and the domain is how you reach it; at equal weight
-   the mark stops being a mark and becomes a URL. Quieter, not smaller: shrinking it would make the
-   half that has to survive the encode the half that survives it worst. */
-.lc-office__mark-lockup .brand__tld {
-  opacity: 0.72;
-}
-
-/* The chip's mustard block at full strength would be the loudest thing in the corner; the group
-   opacity above mutes chip and word together so they fade as one object. */
-.lc-office__mark svg {
+/* The corner is the mark and the address, no wordmark (nick, 2026-10-22). The chip is the washed-out
+   watermark it always was (45% on the midday floor, 50% on the stream); the address beside it is a fact
+   the page asserts, so it keeps its own measured ink and is not dimmed with the chip. */
+.lc-office__chip {
+  opacity: 0.45;
   border-radius: 4px;
+}
+.bc .lc-office__chip {
+  opacity: 0.5;
+}
+.lc-office__contact {
+  display: inline-flex;
+  color: var(--lc-text); /* the frame's ink, not the room's warm paper ink (lane 01M5BP0TEQ) */
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  /* MUTED BY WEIGHT, NOT BY ALPHA (nick, 2026-09-04: "make the revive@musterd.io line more muted
+     like we had originally"). The obvious lever is the wrong one here. This ink falls THROUGH AA on
+     the way down, and NOTHING CHECKS IT: `/broadcast` reports "0 measured" in `pnpm a11y:check`,
+     because the corner sits over a gradient the ancestor walk cannot resolve and the pixel pass
+     finds no line box — `bc__contact` lands in that gate's SKIPPED list, not its passing one.
+     Measured by hand instead, on a composited frame of this build over the real stage: 7.16:1 at
+     0.82 (darkest ink pixel 74,62,50 against backdrop 224,213,198). Weight does the rest of the
+     muting, because weight costs no contrast. */
+  font-weight: 400;
+  opacity: 0.82;
+  /* The `@` is the glyph that fails first: mono metrics give it no side bearing to spare, and this
+     string is mostly consonants around it. Tracking buys the whole line, not just that character. */
+  letter-spacing: 0.055em;
+  white-space: nowrap;
 }
 
 /* ─── the corner the route speaks from ────────────────────────────────────
@@ -3835,8 +3842,104 @@
   padding: var(--lc-3) var(--lc-6) var(--lc-2);
 }
 .lc-team__head .lc-collapse {
+  position: relative;
   width: 24px;
   height: 24px;
+  border-color: transparent;
+  background: none;
+}
+/* The button stays a 24px target but its drawn ring is 18px with a 13px chevron (nick, 2026-10-22: smaller). */
+.lc-team__head .lc-collapse::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 50%;
+}
+.lc-team__head .lc-collapse svg {
+  position: relative;
+  width: 13px;
+  height: 13px;
+}
+.lc-team__chip {
+  flex: none;
+  border-radius: 4px;
+}
+.lc-ver-wrap {
+  position: relative;
+  flex: none;
+}
+.lc-ver {
+  display: inline-block;
+  min-height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 24px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lc-ver--still {
+  cursor: default;
+  font-size: 11px;
+}
+.lc-ver:hover,
+.lc-ver[aria-expanded='true'] {
+  color: var(--lc-text);
+}
+.lc-ver:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: -2px;
+}
+.lc-ver-card {
+  position: absolute;
+  z-index: var(--lc-z-overlay);
+  top: 100%;
+  right: -30px;
+  width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 10px;
+  background: var(--lc-ground-2);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+}
+.lc-ver-card dl {
+  margin: 0;
+}
+.lc-ver-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 2px 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--lc-border);
+}
+.lc-ver-row:first-child {
+  border-top: 0;
+}
+.lc-ver-row dt {
+  color: var(--lc-dim);
+}
+.lc-ver-row dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.lc-ver-row small {
+  grid-column: 2;
+  font-size: 10.5px;
+  color: var(--lc-muted);
+}
+.lc-ver-note {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--lc-border);
+  font-size: 11px;
+  color: var(--lc-muted);
 }
 .lc-team__title {
   font-size: 13px;

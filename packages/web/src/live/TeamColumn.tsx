@@ -9,7 +9,9 @@ import { providerIconHtml } from './modelProviderIcon';
 import { Experiments, ReadMark } from './Experiments';
 import { useLiveSamples } from './useLiveSamples';
 import { experimentEntries, withLivePoints } from './experimentReads';
+import { MusterdChip } from '../brand/MusterdWord';
 import { CollapseButton, PanelRail } from './PanelChrome';
+import { VersionBadge, type DaemonInfo } from './VersionBadge';
 import { TeamCard } from './TeamCard';
 import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
 
@@ -56,6 +58,8 @@ export function TeamColumn({
   asks = [],
   still = false,
   you = null,
+  teamName = null,
+  daemonInfo = {},
 }: {
   /** Nothing loaded yet: card-shaped placeholders instead of an empty team saying "0 working". */
   loading?: boolean;
@@ -89,6 +93,10 @@ export function TeamColumn({
   still?: boolean;
   /** The signed-in viewer's seat — its card wears a "you" tag. `/live` only; observers pass null. */
   you?: string | null;
+  /** The team's name, for the header ("revive team"). */
+  teamName?: string | null | undefined;
+  /** What `/health` says about the daemon — the version badge in the header. */
+  daemonInfo?: DaemonInfo | undefined;
 }) {
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
@@ -158,11 +166,13 @@ export function TeamColumn({
   return (
     <aside className="lc-team" aria-label="The team">
       <header className="lc-team__head">
-        <span className="lc-team__title">The team</span>
+        <span className="lc-team__title">{teamName ? `${teamName} team` : 'The team'}</span>
         <span className="lc-team__count">
           {loading ? <i className="lc-skel" style={{ width: '5em' }} /> : `${working} working`}
         </span>
         <span className="lc-team__spacer" />
+        <MusterdChip size={15} className="lc-team__chip" />
+        <VersionBadge info={daemonInfo} still={still} />
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
       <CaptionPill caption={caption} color={captionColor} className="lc-team__caption" />

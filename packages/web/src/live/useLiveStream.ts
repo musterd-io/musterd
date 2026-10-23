@@ -14,6 +14,7 @@ import type { SeatPulse } from './pulse';
 import { coalesce } from './coalesce';
 import { firehoseSound } from './sound';
 import { replaceMember } from './statusLine';
+import type { DaemonInfo } from './VersionBadge';
 import { capNewest } from './window';
 
 /** Consecutive roster-refetch failures before the roster admits it is frozen. */
@@ -49,6 +50,8 @@ export interface LiveState {
   pulses: ReadonlyMap<string, SeatPulse>;
   /** The daemon's build ref (ADR 130/135) — an operator detail, surfaced in the roster tooltip. */
   daemonBuild?: string | undefined;
+  /** Everything `/health` says about the daemon, for the version badge. */
+  daemonInfo?: DaemonInfo | undefined;
   /** The daemon's feature epoch (ADR 148) — the reference the roster compares member epochs against
    *  to render a "behind" hint. Undefined until /health answers (skew simply doesn't render). */
   daemonEpoch?: number | undefined;
@@ -81,6 +84,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
   const [daemonBuild, setDaemonBuild] = useState<string | undefined>(undefined);
   // The daemon's feature epoch (ADR 148) — the reference the roster compares member epochs against.
   const [daemonEpoch, setDaemonEpoch] = useState<number | undefined>(undefined);
+  const [daemonInfo, setDaemonInfo] = useState<DaemonInfo>({});
   const [roster, setRoster] = useState<MemberSummary[]>([]);
   const [teamWorkingHours, setTeamWorkingHours] = useState<WorkingHours | null>(null);
   const [status, setStatus] = useState<ConnStatus>('idle');
@@ -148,8 +152,9 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     // — an unreachable daemon leaves both undefined and the roster skew hint simply never renders.
     fetch('/health', { signal: AbortSignal.timeout(2500) })
       .then((r) => r.json())
-      .then((h: { build?: string; epoch?: number }) => {
+      .then((h: { build?: string; epoch?: number; release?: string; v?: string; guidance?: number; schema?: number }) => {
         if (!alive) return;
+        setDaemonInfo({ release: h.release, build: h.build, epoch: h.epoch, wire: h.v, guidance: h.guidance, schema: h.schema });
         if (h.build) setDaemonBuild(h.build);
         if (typeof h.epoch === 'number') setDaemonEpoch(h.epoch);
       })
@@ -264,6 +269,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     pulses,
     daemonBuild,
     daemonEpoch,
+    daemonInfo,
     rosterUnreadable,
     rosterStale,
     fresh,

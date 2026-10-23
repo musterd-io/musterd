@@ -48,6 +48,21 @@ const render = (props: Record<string, unknown>) =>
   );
 
 describe('TeamColumn', () => {
+  it("the header names the team, wears the mark, and carries the release (nick, 2026-10-22)", () => {
+    const html = render({ teamName: 'revive', daemonInfo: { release: '0.5.0', build: 'faed6b79ef' } });
+    expect(html).toContain('revive team');
+    expect(html).toContain('lc-team__chip');
+    expect(html).toContain('>v0.5.0<');
+    // The stream's column prints the number but is not a button.
+    const still = render({ teamName: 'revive', still: true, daemonInfo: { release: '0.5.0' } });
+    expect(still).toContain('lc-ver--still');
+    expect(still).not.toContain('<button type="button" class="lc-ver"');
+    // Without a team name or a daemon read it falls back to the old title and shows no badge.
+    const bare = render({});
+    expect(bare).toContain('The team');
+    expect(bare).not.toContain('lc-ver');
+  });
+
   it('a card says who, which model, and what — in words a room can read', () => {
     const html = render({
       roster: [m('ryder')],

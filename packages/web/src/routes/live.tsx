@@ -14,6 +14,7 @@ import { Clock } from '../live/Clock';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
+import { teamContact } from '../live/teamContact';
 import { AsksStrip } from '../live/AsksStrip';
 import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../live/MemberSignIn';
 import { OfficeScene } from '../live/OfficeScene';
@@ -256,6 +257,7 @@ function LivePage() {
     liveIds,
     daemonBuild,
     daemonEpoch,
+    daemonInfo,
     rosterUnreadable,
     rosterStale,
     fresh,
@@ -749,6 +751,7 @@ function LivePage() {
                 could hit on purpose. `display: contents` keeps it a grid child of the canvas. */}
             <div className="lc__office-wrap" inert={phone}>
               <OfficeScene
+                markContact={teamContact(team)}
                 {...officeRoom(team, stream, { entries, board, asks })}
                 fit="furnished"
                 collapsed={collapsed.office}
@@ -774,6 +777,8 @@ function LivePage() {
             </div>
             <TeamColumn
               loading={loading}
+              teamName={team}
+              daemonInfo={daemonInfo}
               roster={roster}
               board={board}
               goals={report?.goals ?? []}

@@ -3,7 +3,12 @@ import { get as httpGet, type IncomingHttpHeaders } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
-import { type Envelope, FEATURE_EPOCH, PROTOCOL_VERSION } from '@musterd/protocol';
+import {
+  type Envelope,
+  FEATURE_EPOCH,
+  GUIDANCE_CONTENT_VERSION,
+  PROTOCOL_VERSION,
+} from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer } from '../index.js';
@@ -33,6 +38,9 @@ withDrivers('integration · http', (_o, kind) => {
       expect(r.json.booted_at).toBeLessThanOrEqual(Date.now());
       // ADR 148: the daemon always names its own feature epoch — the roster's skew reference.
       expect(r.json.epoch).toBe(FEATURE_EPOCH);
+      // The version badge's other reads: the release the package set shares, and the guidance text version.
+      expect(r.json.release).toMatch(/^\d+\.\d+\.\d+/);
+      expect(r.json.guidance).toBe(GUIDANCE_CONTENT_VERSION);
       // Quiescence (2026-08-03): a fresh daemon has no live agent action to age, so the field is
       // OMITTED — unknown must read as absence, never as 0 (0 would mean "someone acted just now",
       // the exact opposite, and would hold the auto-refresher's quiet-floor open forever).
