@@ -196,3 +196,33 @@ a real feature does not. The setup does not reproduce the behaviour #3219 target
 arm was not run: it could not have shown the fix working. #3219's effect waits for the next real
 run that refuses a held file. Its measure is unchanged: messages after a held refusal, and
 `until_lane` use. Records: `pilot-runs/2026-10-23-refusal-follow/`.
+
+## Follow-up, 2026-10-23: what the board reads were for (lane 01M5N3SR7H)
+
+Every `lane_board`, `team_status` and plain `team_inbox_check` (no `wait`) call in the claim run's
+musterd streams, labelled by where it sat and by the last thing the agent wrote before it. No model
+spend: `residue/boardreads.py` reads the streams on disk, and `residue/boardreads.json` holds every
+call with its label. These are tool calls, not API calls: one API call can carry several, so the
+count is higher than the 80 calls in the tables above. The intent labels are keyword matches on the
+agent's last text, which can be a few calls stale, so read them as rough shares.
+
+| What the agent was after | `core` (100 reads) | new ten (88) |
+| --- | --- | --- |
+| Start: orienting before it claimed a lane | 27 | 28 |
+| Routine check-in at a task boundary (tests pass, commit, patch written) | 15 | 17 |
+| Held file: who holds it, is it free | 10 | 12 |
+| Partner progress: is my partner done | 11 | 4 |
+| Overlap warning: who else is on my file | 7 | 7 |
+| Other, or the text does not say | 30 | 20 |
+
+**What it means for the planned fixes.** Waking the refused seat when the holder's lane ends (lane
+`01M5N3THX3`) covers the held-file and partner-progress reads: **21 of 100** on `core`, 16 of 88 on
+the new ten. That is worth building, but it is not most of the reads. The two biggest groups are
+both instructed. Orientation at the start (27–28) follows "get on the team when you start", and an
+agent reads the roster, the board and its inbox in separate calls before it claims. Check-ins at
+task boundaries (15–17) follow "check your inbox at every task boundary". The next fixes are
+therefore (a) one call that orients a seat at session start: the join answer carries the open
+lanes on this project and any directed acts, so `team_status` and `lane_board` are not needed
+before a claim; and (b) dropping the per-boundary inbox instruction where the harness already
+delivers directed acts (the Claude Code interrupt line), in the same lane that drops the
+status-update instruction (`01M5N3VG2D`).
