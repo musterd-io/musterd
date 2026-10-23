@@ -10,15 +10,19 @@
 //  contract it must match is `packages/mobile/src/native/phoneKeys.ts`.
 //
 //  This module holds no wire format: `purpose` and `aad` pass through to HPKE's `info` and AAD,
-//  so the delivery composition (the route, the inner `{p,s}` JSON, the daemon's Ed25519 check)
-//  stays in TypeScript where the protocol schemas live.
+//  and `verifyEd25519` takes raw bytes, so the delivery composition (the route, the inner `{p,s}`
+//  JSON, which bytes the daemon signed and which pinned key checks them) stays in TypeScript
+//  where the protocol schemas live.
 //
 
 import CryptoKit
-import DeviceCheck
 import Foundation
 import LocalAuthentication
 import Security
+
+#if !NOTIFICATION_EXTENSION
+  import DeviceCheck
+#endif
 
 /// Why a call refused, in the five shapes the design names (spec §9). Every case's message is
 /// safe to log: it names the situation, never key material, plaintext, or which check failed
@@ -180,6 +184,33 @@ enum PhoneKeys {
     }
   }
 
+  /// Verify an Ed25519 signature over `message` (base64url bytes) with `publicKey` — the daemon's
+  /// identity key as pinned at pairing (raw 32 bytes, base64url): the phone's check on everything
+  /// it displays (ADR 676 decision 3). Pure public-key work — no enclave, no keychain, no Face ID —
+  /// so the notification extension can run it while the device is locked.
+  ///
+  /// A malformed message or signature is a tampered byte: `false`, never which. A malformed
+  /// *pinned key* is our own stored value being wrong rather than the wire, so it throws instead
+  /// of reading as a bad signature. Either way the TypeScript side shows one generic failure.
+  static func verifyEd25519(publicKey: String, message: String, signature: String) throws -> Bool {
+    let keyData = try unb64url(publicKey)
+    guard keyData.count == 32 else {
+      throw PhoneKeysError.sealedOpenFailed("the pinned identity key is not 32 bytes")
+    }
+    guard let messageData = try? unb64url(message),
+      let signatureData = try? unb64url(signature),
+      signatureData.count == 64,
+      let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData)
+    else {
+      return false
+    }
+    // CryptoKit verifies Ed25519 over the raw 64-byte signature. There is no Signature type.
+    return key.isValidSignature(signatureData, for: messageData)
+  }
+
+  // App Attest is unavailable in an app extension. The extension compiles this file with
+  // NOTIFICATION_EXTENSION set and never calls these two methods.
+  #if !NOTIFICATION_EXTENSION
   /// App Attest: a fresh key and its attestation object (base64url). `challenge` is the pairing
   /// challenge, `sha256(code ‖ signing public ‖ receive public)`, base64url (spec §5 step 2) —
   /// computed in TypeScript by the daemon's `appPairingChallenge`; this method only hands the
@@ -217,6 +248,7 @@ enum PhoneKeys {
       throw PhoneKeysError.attestFailed("App Attest refused to assert")
     }
   }
+  #endif
 
   // MARK: - HPKE
 

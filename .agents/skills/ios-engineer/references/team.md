@@ -29,8 +29,8 @@ work in a session. A team adopting this skill replaces this file with its own.
 | Package | `packages/mobile` (`@musterd/mobile`, private) — surface doc [09-mobile.md](../../../../docs/architecture/09-mobile.md) |
 | Toolchain | Expo SDK 58 · React Native 0.88.0 (New Architecture) · React 19.3.0 · Expo Router — [ADR 520](../../../../docs/decisions/520-mobile-toolchain-expo.md) |
 | Current job | Sealed ask client and phone authenticator (asks + listed-act signatures; calendar screens leave) — [ADR 676](../../../../docs/decisions/676-mobile-app-sealed-ask-client.md), design `docs/superpowers/specs/2026-10-19-mobile-app-design.md` |
-| Wire | No network code yet — the calendar's HTTP client left on 2026-10-22. The design is sealed traffic through the away relay; the app imports `@musterd/protocol` only, via `/app-channel` and `/approval` subpaths (never the barrel, never `@musterd/server`), frames parsed with protocol schemas |
-| Storage | Nothing stored yet. The `expo-sqlite` device store, the `?since` pull and the queued writes left with the calendar (and took the `expo-sqlite` dep). `expo-secure-store` stays (this-device-only) for the pairing state; the app holds no `mscr_` credential |
+| Wire | The notification extension and the advisory answer are the first traffic (lane `01M5K5ZK0K`). A sealed body that was not in the push is `GET {relay}/app/{team}/body/{binding}/{ref}`; an answer is `POST {relay}/app/{team}/callback`. Both run only when a pairing pin is in the keychain, and pairing is what writes it. The app imports `@musterd/protocol` only, via `/app-channel` and `/approval` (never the barrel, never `@musterd/server`) |
+| Storage | Keychain service `dev.musterd.keys`: the enclave key references, the seen-nonce store, the APNs device token, and the pairing pin. No `expo-sqlite`, no `expo-notifications`. `expo-secure-store` stays. The app holds no `mscr_` credential |
 | Server address | None — the app holds no server URL. Pairing hands it the relay route, a one-time code and both daemon public keys, and every answer leaves sealed through the relay (ADR 676 §3). `app.json` still carries the calendar-era ATS exception for `ts.net`; dropping it is its own small change |
 
 ## Build and ship here
@@ -44,8 +44,8 @@ work in a session. A team adopting this skill replaces this file with its own.
   then `packages/mobile/scripts/upload-testflight.sh` (fastlane, App Store Connect API key
   at `~/.appstoreconnect/fastlane-musterd.json` on nick's machine — a human runs it).
   A build reaches TestFlight 10–15 min after Apple processes it.
-- **Gates**: root `pnpm test` runs no mobile tests (the calendar's Node tests left with it,
-  2026-10-22); `pnpm typecheck` runs its `tsc --noEmit`; the manual checks are `npx expo-doctor`,
+- **Gates**: root `pnpm test` runs the mobile tests under `packages/mobile/src/native/`;
+  `pnpm typecheck` runs its `tsc --noEmit`; the manual checks are `npx expo-doctor`,
   `npx expo prebuild -p ios` and `npx expo export -p ios`. No gate runs a native build or Metro.
 
 ## The native bridge owed by ADR 676
@@ -53,7 +53,9 @@ work in a session. A team adopting this skill replaces this file with its own.
 One Expo native module via config plugin (no eject): Secure Enclave P-256 signing key
 (`biometryCurrentSet`, Face ID per signature), CryptoKit HPKE receive key (this-device-only,
 usable locked), App Attest with challenge `sha256(code ‖ signing key ‖ receive key)`,
-and a notification service extension that decrypts and verifies before display.
+and a notification service extension that decrypts and verifies before display. The extension
+target is added by `plugins/withMusterdKeys.js` (no committed `ios/`). Token registration and
+the advisory category live in the same module; the seen-nonce store is a keychain item.
 Daemon-side pairing/verification already exists in `packages/protocol/src/appChannel.ts`;
 the app recomputes listed-act digests with `approvalWording` from `@musterd/protocol/approval`.
 Security review (big-body) is required before this ships; device verification is owed —

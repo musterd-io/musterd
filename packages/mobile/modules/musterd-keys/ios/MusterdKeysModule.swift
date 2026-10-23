@@ -10,6 +10,7 @@
 
 import ExpoModulesCore
 import Foundation
+import UIKit
 
 /// Object arguments, mirroring the TS interfaces. Fields are decoded positionally by key; a
 /// missing key keeps the default, and validation (lengths, purpose names) happens in PhoneKeys,
@@ -31,6 +32,12 @@ struct OpenInput: Record {
   @Field var sealed: SealedBodyRecord = SealedBodyRecord()
   @Field var purpose: String = ""
   @Field var aad: String = ""
+}
+
+struct VerifyInput: Record {
+  @Field var publicKey: String = ""
+  @Field var message: String = ""
+  @Field var signature: String = ""
 }
 
 struct AssertionInput: Record {
@@ -74,6 +81,16 @@ public final class MusterdKeysModule: Module {
       }
     }
 
+    AsyncFunction("verifyEd25519") { (input: VerifyInput) -> Bool in
+      try run {
+        try PhoneKeys.verifyEd25519(
+          publicKey: input.publicKey,
+          message: input.message,
+          signature: input.signature
+        )
+      }
+    }
+
     AsyncFunction("generateAttestationKey") { (challenge: String) async throws -> [String: String] in
       let result = try await runAsync { try await PhoneKeys.attestationKey(challenge: challenge) }
       return ["keyId": result.keyId, "attestation": result.attestation]
@@ -86,6 +103,36 @@ public final class MusterdKeysModule: Module {
           clientDataHash: input.clientDataHash
         )
       }
+    }
+
+    Events("onPendingAnswer")
+
+    OnCreate {
+      PendingAnswers.emitter = self
+    }
+
+    AsyncFunction("prepareNotifications") { () async in
+      await MainActor.run {
+        MusterdPushSubscriber.prepare(UIApplication.shared)
+      }
+    }
+
+    Function("getPushToken") { () -> [String: String]? in
+      guard let token = SharedStore.loadPushToken() else { return nil }
+      return ["token": token.token, "environment": token.environment]
+    }
+
+    Function("savePairingPin") { (json: String) throws in
+      try run { try SharedStore.savePairingPin(json: json) }
+    }
+
+    Function("loadPairingPin") { () -> String? in
+      SharedStore.loadPairingPin()
+    }
+
+    Function("takePendingAnswer") { () -> [String: String]? in
+      guard let pending = PendingAnswers.take() else { return nil }
+      return ["action": pending.action, "userInfo": pending.userInfoJSON]
     }
   }
 

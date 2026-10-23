@@ -190,6 +190,28 @@ one gets tapped through.
   recurs) on the asking seat, with the count and latest time in its tooltip. Only a team reader
   gets it: a broadcast or public roster never names a seat a human reported. It blocks and
   reroutes nothing.
+- 2026-10-23, lane 01M5K5ZK0K (the phone's notification extension, decisions 3, 7 and 8): the
+  extension opens the seal, checks the daemon's signature, and drops a seen nonce or an expiry
+  before display. A failure is exactly "an ask could not be verified", with no actions. The
+  extension cannot withdraw an alert — an empty body delivers the relay's placeholder — so a
+  replay or an expiry shows "This ask is no longer available." instead. That sentence is the
+  platform limit, and it is not the unverified sentence, so a bad seal and a late delivery stay
+  distinct without saying which byte failed. Decision 7 is followed as written: an advisory
+  action uses `authenticationRequired` and `foreground` (Decline also `destructive`), so the
+  action itself asks for Face ID and opens the app. The enclave signature is a second Face ID,
+  because a notification action cannot present a Secure Enclave `biometryCurrentSet` prompt.
+  The alternative of dropping `authenticationRequired` to avoid the double prompt was not
+  taken. A listed act has no actions. No new runtime dependency: the device token is
+  `UserNotifications` plus an `ExpoAppDelegateSubscriber` in the existing module, and the
+  seen-nonce store, the token and the pairing pin are keychain items on `dev.musterd.keys`
+  rather than `expo-notifications` or `expo-sqlite`. The app and the extension share them by
+  listing the same keychain access group first; the items set no access-group attribute,
+  because SecItem does not expand `$(AppIdentifierPrefix)`. Read-modify-write of the nonce item
+  is not atomic across the two processes. `aps-environment` is `production` (decision 11). A
+  debug device build will not receive a token. Locked open, a real push, the replay drop and
+  the action's Face ID were not run in this increment; they wait on an EAS build. The Swift is
+  on the security review path before it ships. Spec §9 open question 2 (a notification action
+  cannot present the enclave prompt) is settled by this note.
 
 ## Observability & Evaluation
 

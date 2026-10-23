@@ -18,6 +18,9 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
 
   s.source_files = '**/*.{h,m,swift,hpp,cpp}'
+  # The service extension principal class is its own target. Compiling it into the app
+  # would ship a second UNNotificationServiceExtension inside the host.
+  s.exclude_files = 'extension/NotificationService.swift'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_COMPILATION_MODE' => 'wholemodule'

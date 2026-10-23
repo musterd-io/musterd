@@ -6,5 +6,8 @@
     "sourceMap": false,
     "types": ["react"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts"],
+  // Like every package's tsconfig: tests run under vitest, they are not compiled by tsc —
+  // and the mobile tests import node:crypto, which app code must never see.
+  "exclude": ["src/**/*.test.ts"]
 }

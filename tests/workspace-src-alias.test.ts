@@ -10,11 +10,13 @@
 import { describe, expect, it } from 'vitest';
 import * as mcpViaName from '@musterd/mcp';
 import * as protocolViaName from '@musterd/protocol';
+import * as appChannelViaName from '@musterd/protocol/app-channel';
 import * as buildStampViaName from '@musterd/protocol/build-stamp';
 import * as projectViaName from '@musterd/protocol/project';
 import * as serverViaName from '@musterd/server';
 import * as telemetryViaName from '@musterd/telemetry';
 import * as mcpViaSrc from '../packages/mcp/src/index.ts';
+import * as appChannelViaSrc from '../packages/protocol/src/appChannel.ts';
 import * as buildStampViaSrc from '../packages/protocol/src/build-stamp.ts';
 import * as protocolViaSrc from '../packages/protocol/src/index.ts';
 import * as projectViaSrc from '../packages/protocol/src/project.ts';
@@ -24,6 +26,7 @@ import * as telemetryViaSrc from '../packages/telemetry/src/index.ts';
 describe('workspace imports resolve to src, not dist', () => {
   it.each([
     ['@musterd/protocol', protocolViaName, protocolViaSrc],
+    ['@musterd/protocol/app-channel', appChannelViaName, appChannelViaSrc],
     ['@musterd/protocol/project', projectViaName, projectViaSrc],
     ['@musterd/protocol/build-stamp', buildStampViaName, buildStampViaSrc],
     ['@musterd/server', serverViaName, serverViaSrc],
