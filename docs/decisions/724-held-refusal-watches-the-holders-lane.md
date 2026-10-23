@@ -42,7 +42,7 @@ without relying on the agent to pick the right call.
    lane's scope. The daemon that holds the watch fires it on observing that change, whether its own
    write made it or the fold brought it from the hub, so a holder on another machine works the same.
    A **handoff does not fire it**: ADR 691 §2 moves the hold with the lane, so the file is still
-   held, and the watch stays on the lane. An ADR 693 **lapse does not fire it** either: ADR 693 §2
+   held, and the watch stays on the lane. _(Amended 2026-10-23: a handoff sends the watching seat a short notice that the hold moved — see Consequences.)_ An ADR 693 **lapse does not fire it** either: ADR 693 §2
    says a lapse is no new state and no act. The refused seat's next edit then meets the ADR 697
    hand-over, as today.
 3. **One directed act per watching seat and lane.** The board seat (ADR 649) sends the watching seat
@@ -80,6 +80,13 @@ without relying on the agent to pick the right call.
   per held refusal (16 there), fewer after dedup per lane.
 - `gate_hold_refusals` gains a sibling table, created by a ladder migration on the daemon only. It
   is not replicated.
+- _2026-10-23 (big-body's review):_ the lane brief asked for a wake on handoff, and the Decision
+  says a handoff does not fire the watch. Both were right about something. The file is still held
+  after a handoff, so the "file is free" act would be false. But the refused seat may be waiting on
+  a reply from the old owner, who no longer holds the lane. So a handoff sends a different directed
+  act: `[lane] <old owner> handed "<title>" to <new owner>: <path(s)> are still held, now by <new
+  owner>. Ask them, or wait on the lane.` It carries `meta.lane_hold_moved` `{lane, from, to, paths}`.
+  The watch stays on the lane, and `until_lane` does not wake on this act: the file is not free.
 - Build lane: `01M5N3TRZY`.
 
 Follows-up: 01M5N3TRZY0TJ61TBM0NV1XJ2Z
