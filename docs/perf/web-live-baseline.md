@@ -2322,3 +2322,16 @@ frame's bounds) is the lever if a phone or the stream box needs it back.
   156 canvas reads above ~0.2 a frame after warm-up.
 
 Follows-up: `/broadcast`'s own frame-time A/B with `scripts/perf/broadcast-baseline.mjs` on a stream seat (this run had no stream seat, so `/broadcast` showed an empty floor), lane 01M5D8EJ40.
+
+## 2026-10-23 — Total JS budget RAISED +512 B for the room images on demand (lane 01M5D8EJ40, PR #3266)
+
+The rendered office kept all five full-room images decoded (1909 × 1236, ~9.4 MB each). Now only
+the light states in view, or due within half an hour, and the current ceiling overlay are loaded
+(`roomImagesWanted`, `syncImages`). Renderer memory on `/office-preview?n=14&plates=broadcast&sprites=1`,
+production build, a fresh tab, 40 s settled, single samples: painted 459 MB, rendered before 647 MB,
+rendered after 539 MB. The loader is a few hundred bytes of gzip, and CI read total JS at 355.4 KB
+against a 355.4 KB ceiling. Measured + 15% would loosen it, so this is a raise, not a re-baseline (ADR 183).
+
+- Falsify: at midday `/office-preview` fetches `office-art-room-light-day` and `office-art-room-ceiling-on`
+  and no other `office-art-room-*`; if it fetches all five, the cut has been undone and this raise should
+  be reverted with it.

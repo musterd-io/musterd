@@ -96,7 +96,8 @@ import {
   type UnitHook,
 } from './damage';
 import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
-import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
+import { isRoomImage, roomImagesWanted } from './rendered/roomState';
+import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages, type RenderedAssets } from './rendered/assets';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
@@ -434,6 +435,20 @@ export function mountOffice(
   let figureSheetUrl: (file: string) => string = (f) => f;
   const figureInFlight = new Set<LayerId>();
   /** Fetch the sheets the roster now wears and the figure lacks; repaint the resting office when they land. */
+  /* The full-room images (lane 01M5D8EJ40): only the light states in view now or within the half
+     hour are kept decoded, ~9 MB each; the rest are fetched ahead of their fade and dropped after. */
+  let roomUrl: ((file: string) => string) | null = null;
+  const roomInFlight = new Set<string>();
+  function syncRoom(): void {
+    const r = rendered;
+    if (!r || !roomUrl) return;
+    void syncImages(r, isRoomImage, roomImagesWanted(lightEnv), roomUrl, undefined, roomInFlight).then((arrived) => {
+      if (!disposed && arrived && r === rendered) {
+        bake();
+        if (!raf) paintResting();
+      }
+    });
+  }
   function wearNow(): void {
     const fig = rendered?.figure;
     if (!fig) return;
@@ -466,7 +481,10 @@ export function mountOffice(
               `rendered at camera (${manifest.camera.kx}, ${manifest.camera.ky}), scene projects through (${CORNER_CAMERA.kx}, ${CORNER_CAMERA.ky}) — re-render with --ky ${CORNER_CAMERA.ky}`,
             );
           }
-          return loadRenderedAssets(manifest, (file) => files[`./rendered/assets/${file}`] ?? file);
+          roomUrl = (file) => files[`./rendered/assets/${file}`] ?? file;
+          // only the room images this hour needs; `syncRoom` fetches the next light state ahead of its fade
+          const now = roomImagesWanted(lightEnv);
+          return loadRenderedAssets(manifest, roomUrl, undefined, (id) => !isRoomImage(id) || now.has(id));
         })
         .then(async (r) => {
           /* The figure sheets (increment 3) ride in beside the room: no figure.json, or one that
@@ -970,6 +988,7 @@ export function mountOffice(
       ? isWithinWorkingHours(teamWorkingHours, new Date(), lightOverrideHours() ?? undefined)
       : null;
     lightEnv = computeLightEnv(pstNowHours(), occupied, inShift);
+    syncRoom();
     if (!reduced) {
       // natural light enters as the soft-light wash — colour + strength straight off the clock
       ambientHost.style.setProperty('--lc-amb-strength', lightEnv.skyStrength.toFixed(3));

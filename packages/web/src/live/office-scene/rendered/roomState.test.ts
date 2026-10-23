@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeLightEnv } from '../lighting';
-import { DAY_EDGES, FADE_HOURS, ceilingStateFor, figureTintFor, roomMixFor } from './roomState';
+import { DAY_EDGES, FADE_HOURS, ceilingStateFor, figureTintFor, isRoomImage, roomImagesWanted, roomMixFor } from './roomState';
 
 const at = (h: number, occupied = true, inShift: boolean | null = null) => computeLightEnv(h, occupied, inShift);
 
@@ -81,5 +81,34 @@ describe('figureTintFor', () => {
       expect(d).toBeLessThanOrEqual(12);
       prev = cur;
     }
+  });
+});
+
+describe('roomImagesWanted (lane 01M5D8EJ40: only the light states in view, ~9 MB each decoded)', () => {
+  it('at noon with people in: the day shell and the ceiling — not evening, not night', () => {
+    expect([...roomImagesWanted(at(12))].sort()).toEqual(['room/ceiling-on', 'room/light-day']);
+  });
+
+  it('within half an hour of a fade, the next shell is already wanted', () => {
+    expect(roomImagesWanted(at(16.1)).has('room/light-evening')).toBe(true);
+    expect(roomImagesWanted(at(15.5)).has('room/light-evening')).toBe(false);
+  });
+
+  it('mid-fade: both sides of it', () => {
+    const w = roomImagesWanted(at(DAY_EDGES.eveningFrom + FADE_HOURS / 2));
+    expect(w.has('room/light-day')).toBe(true);
+    expect(w.has('room/light-evening')).toBe(true);
+  });
+
+  it('wraps past midnight: late night looks ahead to the small hours, still night', () => {
+    expect([...roomImagesWanted(at(23.8, false))].filter((id) => id.startsWith('room/light-'))).toEqual(['room/light-night']);
+  });
+
+  it('an empty room has no ceiling overlay to keep', () => {
+    expect([...roomImagesWanted(at(12, false))].some((id) => id.startsWith('room/ceiling-'))).toBe(false);
+  });
+
+  it('isRoomImage names the full-room images and nothing else', () => {
+    expect(['room/light-day', 'room/ceiling-spill', 'desk/base', 'rug/nook'].map(isRoomImage)).toEqual([true, true, false, false]);
   });
 });

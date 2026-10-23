@@ -178,11 +178,13 @@ export async function loadRenderedAssets(
   manifest: RenderedManifest,
   urlFor: (file: string) => string,
   loadImage: (url: string) => Promise<CanvasImageSource> = domImage,
+  /** Which ids to load now; the rest wait for `syncImages`. Every id when omitted. */
+  want: (id: string) => boolean = () => true,
 ): Promise<RenderedAssets> {
   const images = new Map<string, CanvasImageSource>();
   const missing: string[] = [];
   await Promise.all(
-    manifest.assets.map(async (a) => {
+    manifest.assets.filter((a) => want(a.id)).map(async (a) => {
       try {
         images.set(a.id, await loadImage(urlFor(a.file)));
       } catch {
@@ -191,4 +193,42 @@ export async function loadRenderedAssets(
     }),
   );
   return { manifest, images, missing };
+}
+
+/**
+ * Bring the loaded subset of `ids` in line with `wanted`: load what is wanted and absent, drop what
+ * is loaded and no longer wanted (the browser frees a dropped image's decoded pixels). Ids outside
+ * `ids` are never touched. Resolves true when an image arrived, so the caller can rebake. Never
+ * rejects; a file that fails stays absent and is tried again on the next sync.
+ */
+export async function syncImages(
+  r: RenderedAssets,
+  ids: (id: string) => boolean,
+  wanted: Set<string>,
+  urlFor: (file: string) => string,
+  loadImage: (url: string) => Promise<CanvasImageSource> = domImage,
+  inFlight: Set<string> = new Set(),
+): Promise<boolean> {
+  for (const id of [...r.images.keys()]) if (ids(id) && !wanted.has(id)) r.images.delete(id);
+  const fetch = r.manifest.assets.filter((a) => ids(a.id) && wanted.has(a.id) && !r.images.has(a.id) && !inFlight.has(a.id));
+  if (!fetch.length) return false;
+  let arrived = false;
+  await Promise.all(
+    fetch.map(async (a) => {
+      inFlight.add(a.id);
+      try {
+        const img = await loadImage(urlFor(a.file));
+        // still wanted? the clock or the room may have moved on while it decoded
+        if (wanted.has(a.id)) {
+          r.images.set(a.id, img);
+          arrived = true;
+        }
+      } catch {
+        /* absent until the next sync */
+      } finally {
+        inFlight.delete(a.id);
+      }
+    }),
+  );
+  return arrived;
 }
