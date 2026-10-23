@@ -15,7 +15,9 @@
  *   2. Tab and Shift+Tab keep focus inside the dialog, all the way round (the focus trap);
  *   3. ↓ moves the highlight (the filter's aria-activedescendant changes);
  *   4. Esc closes the picker and drops `?pick` from the address;
- *   5. reopened, ⏎ picks the highlighted lane and the picker says so.
+ *   5. reopened, and only once the filter is focused and the pick button is enabled, ⏎ picks the
+ *      highlighted lane and the picker says so. A first Enter that never starts the handoff is
+ *      pressed again. One early Enter, sent the moment a row exists, is what timed the gate out.
  *
  * Exit 0: all held. Exit 1: a check failed (named on stderr). Exit 2: the harness failed and nothing
  * was concluded (chrome.mjs's convention).
@@ -77,7 +79,12 @@ const waitFor = async (expression, what, ms = 20_000) => {
     if (await evalIn(expression)) return;
     await new Promise((r) => setTimeout(r, 200));
   }
-  console.error(`pick-keyboard — ${what} never happened on ${url}; nothing was concluded.`);
+  const snap = await evalIn(
+    `(document.querySelector('.pick__primary')?.textContent ?? 'no button').trim() + ' | ' + (document.querySelector('.pick')?.innerText ?? 'no picker').replace(/\\s+/g, ' ').slice(0, 240)`,
+  ).catch(() => 'unreadable');
+  console.error(
+    `pick-keyboard — ${what} never happened on ${url}; nothing was concluded. picker: ${snap}`,
+  );
   await exit(2);
 };
 
@@ -133,14 +140,32 @@ check(
   'Esc closes the picker and drops ?pick',
 );
 
-// 5. a keyboard-only pick
+// 5. a keyboard-only pick. A row can paint before the filter is focused and the button can take
+// the handoff, and one Enter in that gap starts nothing. Wait until both are true, then press
+// again if the button never leaves "ready".
 await send('Page.navigate', { url });
 await waitFor(`!!document.querySelector('.pick__row')`, 'the picker reopening');
-await press('Enter');
 await waitFor(
-  `!!document.querySelector('.pick__done') || !!document.querySelector('.pick__note')`,
-  'the pick being answered',
+  `document.activeElement?.classList.contains('pick__filter') && !!document.querySelector('.pick__primary:not([disabled])')`,
+  'the picker ready for Enter',
 );
+const answered = `!!document.querySelector('.pick__done') || !!document.querySelector('.pick__note')`;
+const handing = `(document.querySelector('.pick__primary')?.textContent ?? '').includes('Handing')`;
+await press('Enter');
+const started = Date.now() + 1_500;
+let began = false;
+while (Date.now() < started) {
+  if (await evalIn(`${answered} || ${handing}`)) {
+    began = true;
+    break;
+  }
+  await new Promise((r) => setTimeout(r, 100));
+}
+if (!began) {
+  await evalIn(`document.querySelector('.pick__filter')?.focus()`);
+  await press('Enter');
+}
+await waitFor(answered, 'the pick being answered', 40_000);
 check(await evalIn(`!!document.querySelector('.pick__done')`), '⏎ picks the highlighted lane');
 
 if (failures.length) {
