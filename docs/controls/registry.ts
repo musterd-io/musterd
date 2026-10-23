@@ -476,7 +476,7 @@ export const CONTROLS: Control[] = [
       'The standing-context budget set is internally satisfiable: no composite budget (perTurnTotalBytes, perSessionTotalBytes) may sit below the sum of its components’ budgets, so obeying every line item can never fail the headline.',
     where: 'scripts/context/budgetCoherence.ts, called from scripts/context/check-budgets.ts (`pnpm context:check`, wired into CI)',
     exercise:
-      'Lower `perTurnTotalBytes` in docs/perf/context-budgets.json below the sum of toolsListDefaultBytes + promptSubmitNudgeBytes + labelNudgeBytes and run `pnpm context:check`: it must fail naming the shortfall and both repairs. `scripts/context/budgetCoherence.test.ts` reconstructs the real 2026-08-20 violation and asserts "short by 795".',
+      'Lower `perTurnTotalBytes` in docs/perf/context-budgets.json below the sum of its parts (toolsListDefaultBytes, since ADR 726 retired promptSubmitNudgeBytes and ADR 468 labelNudgeBytes) and run `pnpm context:check`: it must fail naming the shortfall and both repairs. `scripts/context/budgetCoherence.test.ts` reconstructs the real 2026-08-20 violation and asserts "short by 795".',
     motivatedBy:
       '2026-08-20: perTurnTotalBytes sat 795 B below the sum of its parts (and perSessionTotalBytes 2 B below its own) after the components were re-baselined on 2026-08-19 while the composites kept an older baseline. The per-turn headroom was down to 7 B, so the next word added to any MCP tool description would have failed a gate that was already unsatisfiable — and the failure text said "trim it, or raise the budget", which could not work. dolly flagged the trap on #941; nick called it.',
     counterfactual:
