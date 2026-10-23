@@ -26,6 +26,7 @@ import {
   AvailabilityStatusSchema,
   PROTOCOL_VERSION,
   FEATURE_EPOCH,
+  GUIDANCE_CONTENT_VERSION,
   DISPUTE_EVIDENCE_NOTICE,
   DISPUTE_MESSAGE_NOTICE,
   GENERALIST_CAPABILITIES,
@@ -650,6 +651,7 @@ import {
   recordTraceNormalized,
   recordTraceReplicated,
 } from '../telemetry.js';
+import { RELEASE_VERSION } from '../version.js';
 import { passkeyApprovePage, passkeyEnrollPage } from './authorityPages.js';
 import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { scrubForReader } from './broadcastScrub.js';
@@ -2998,6 +3000,10 @@ export async function handleHttp(
         // The daemon's own feature epoch (ADR 148) — the compiled-in capability counter of the code it
         // runs. The roster compares each seat's attested epoch against this to render a "behind" hint.
         epoch: FEATURE_EPOCH,
+        // What the web version badge reads: the release the package set shares, and the guidance text
+        // version this build writes. Both omitted when unknown.
+        ...(RELEASE_VERSION ? { release: RELEASE_VERSION } : {}),
+        guidance: GUIDANCE_CONTENT_VERSION,
         // Guardian probes filter log lines against this; older lines are evidence of nothing.
         booted_at: BOOTED_AT,
       });

@@ -2230,3 +2230,16 @@ Dismiss mark, quiet "Tour" link, "Skip the tour" and "Start over" in the panel. 
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 359,800 B.
 
+### 2026-10-22 — version badge, "<team> team" header, the office corner is the chip and the address (nick)
+
+| Budget     | Before (main) | This branch | Ceiling                    |
+| ---------- | ------------- | ----------- | -------------------------- |
+| initial JS | 149,350 B     | ~149,600 B  | RAISED 149,350 → 149,700 B |
+| total JS   | 359,800 B     | 360,644 B   | RAISED 359,800 → 360,800 B |
+| live CSS   | 27,250 B      | 27,378 B    | RAISED 27,250 → 27,500 B   |
+
+The badge and the header chip are eager; the card is a lazy chunk (VersionCard). The office corner lost its
+wordmark and domain. Lazy-loading applied first (ADR 183). Raised tight: measured + ~0.1%.
+
+- Falsify: `pnpm perf:check` after a build reports each at or under its new ceiling.
+

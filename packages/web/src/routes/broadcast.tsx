@@ -5,6 +5,7 @@ import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { StreamAskBanner } from '../live/StreamAskBanner';
 import { OfficeScene } from '../live/OfficeScene';
+import { teamContact } from '../live/teamContact';
 import { broadcastSeat, type LiveConfig } from '../live/client';
 import { firehoseSound, roomTone } from '../live/sound';
 import type { OfficeHandle } from '../live/office-scene';
@@ -163,7 +164,7 @@ export const WORKSHOP_NOTICE = {
  * read twice at a glance across a room, short enough that it is a moment and not a second banner. */
 export const SHIPPED_MS = 9000;
 
-export function broadcastCorner(team: string | null, shipped = false) {
+export function broadcastCorner(_team: string | null, shipped = false) {
   return (
     <>
       {/* AT REST THERE IS NO NOTICE AT ALL — not a caption, and not the live dot either (nick,
@@ -182,7 +183,6 @@ export function broadcastCorner(team: string | null, shipped = false) {
           <span className="bc__notice-text">{WORKSHOP_NOTICE.shipped}</span>
         </span>
       )}
-      {team === 'revive' && <span className="bc__contact">revive@musterd.io</span>}
     </>
   );
 }
@@ -340,10 +340,13 @@ function BroadcastPage() {
                 fit="furnished"
                 topSlot={<StreamAskBanner envelopes={envelopes} roster={roster} />}
                 cornerSlot={broadcastCorner(team, shipped)}
+                markContact={teamContact(team)}
                 onReady={onSceneReady}
                 onCaption={setCaption}
               />
               <TeamColumn
+                teamName={team}
+                daemonInfo={stream.daemonInfo}
                 roster={roster}
                 board={board}
                 goals={report?.goals ?? []}

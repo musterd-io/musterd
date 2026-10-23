@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { consumeShipped, reloadedForBuild } from './buildSync';
 import { broadcastCorner, WORKSHOP_NOTICE } from '../routes/broadcast';
+import { teamContact } from './teamContact';
 
 /**
  * The corner /broadcast speaks from — facts asserted on a public surface, so they are pinned at the
@@ -25,11 +26,12 @@ describe('broadcastCorner', () => {
     );
   });
   it('names the address only for a team that has one, and never the bare product domain', () => {
-    expect(renderToStaticMarkup(broadcastCorner('revive'))).toContain('revive@musterd.io');
-    expect(renderToStaticMarkup(broadcastCorner(null))).not.toContain('musterd.io');
-    // A team with no mailbox shows no contact line at all rather than falling back to the product's
-    // — the corner would otherwise say musterd.io twice for every team but this one.
-    expect(renderToStaticMarkup(broadcastCorner('anyteam'))).not.toContain('musterd.io');
+    // The address moved out of the corner and into the office mark (both pages, 2026-10-22); it is
+    // still per team and never derived from the slug.
+    expect(teamContact('revive')).toBe('revive@musterd.io');
+    expect(teamContact(null)).toBeUndefined();
+    expect(teamContact('anyteam')).toBeUndefined();
+    expect(renderToStaticMarkup(broadcastCorner('revive'))).not.toContain('musterd.io');
   });
 
   /**
@@ -47,8 +49,8 @@ describe('broadcastCorner', () => {
       expect(html).not.toContain('live from the workshop');
       expect(html).not.toContain(WORKSHOP_NOTICE.shipped);
       expect(html).not.toContain('blink while we ship');
-      // What survives at rest is the address, and nothing that is only ever true.
-      expect(html).toContain('revive@musterd.io');
+      // At rest the corner holds nothing at all (the address now rides the office mark).
+      expect(html).toBe('');
     });
 
     it('names the blink in the past tense only when a build just landed', () => {

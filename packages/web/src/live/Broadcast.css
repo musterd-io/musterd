@@ -284,25 +284,8 @@
    at 720p, so 12.5px arrives as ~8.3px — and Space Mono's `@` closes into its neighbours well
    before that. It is the same argument the reel already makes for running ~1.5× /live's rail; the
    corner had simply never been held to it. Hence 15px and open tracking, not a colour change. */
-.bc__contact {
-  display: inline-flex;
-  color: var(--lc-text); /* the frame's ink, not the room's warm paper ink (lane 01M5BP0TEQ) */
-  font-family: var(--font-mono);
+.bc .lc-office__contact {
   font-size: 15px;
-  /* MUTED BY WEIGHT, NOT BY ALPHA (nick, 2026-09-04: "make the revive@musterd.io line more muted
-     like we had originally"). The obvious lever is the wrong one here. This ink falls THROUGH AA on
-     the way down, and NOTHING CHECKS IT: `/broadcast` reports "0 measured" in `pnpm a11y:check`,
-     because the corner sits over a gradient the ancestor walk cannot resolve and the pixel pass
-     finds no line box — `bc__contact` lands in that gate's SKIPPED list, not its passing one.
-     Measured by hand instead, on a composited frame of this build over the real stage: 7.16:1 at
-     0.82 (darkest ink pixel 74,62,50 against backdrop 224,213,198). Weight does the rest of the
-     muting, because weight costs no contrast. */
-  font-weight: 400;
-  opacity: 0.82;
-  /* The `@` is the glyph that fails first: mono metrics give it no side bearing to spare, and this
-     string is mostly consonants around it. Tracking buys the whole line, not just that character. */
-  letter-spacing: 0.055em;
-  white-space: nowrap;
 }
 
 /* The mark goes back to the watermark's own quiet (nick, same note). #1300 lifted it to 0.72 on the
@@ -313,11 +296,6 @@
    (12.5px on a 1920 stage arrives as ~8.3px), and it is not what was loud. */
 .bc .lc-office__mark {
   opacity: 0.5;
-}
-.bc .lc-office__mark-lockup {
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
 }
 
 /* ─── the ask banner (ADR 228 → ADR 464) ─────────────────────────────────

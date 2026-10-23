@@ -291,6 +291,9 @@ live/
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
   OfficeKey.tsx                 // "how to read the office" — the four postures in a closable corner card (ADR 464 §3.4), /live only
+  VersionBadge.tsx              // the version badge in the team column's header: /health's release (else build) as a button on /live, plain text on /broadcast; DaemonInfo + versionLabel
+  VersionCard.tsx               // the badge's card, its own lazy chunk (ADR 183): release, daemon build, wire protocol, feature epoch, guidance, schema, each named
+  teamContact.ts                // the team's public address, per team and never derived from the slug; printed beside the office mark on /live and /broadcast
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)

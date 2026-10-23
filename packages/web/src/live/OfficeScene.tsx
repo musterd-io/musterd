@@ -1,6 +1,6 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
-import { MusterdWord } from '../brand/MusterdWord';
+import { MusterdChip } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
 import { HuddleRail } from './HuddleRail';
@@ -213,6 +213,7 @@ export function OfficeScene({
   topSlot,
   bandSlot,
   cornerSlot,
+  markContact,
   /** Hybrid nameplate work cues, or none. Default none: who is on what lives in the team column on
    *  `/live` and `/broadcast` alike (ADR 464). */
   workCues = 'none',
@@ -271,6 +272,8 @@ export function OfficeScene({
   /** Chrome stacked in the bottom-right corner above the product watermark — the route's own
    * assertions about the page (a notice, a contact line). `/broadcast` fills it; `/live` does not. */
   cornerSlot?: ReactNode;
+  /** The team's address, printed beside the mark in the bottom-right corner (teamContact). */
+  markContact?: string | undefined;
   workCues?: 'hybrid' | 'none';
   /** ADR 464: the narration line, handed OUT to the route so chrome outside the room (the team
    * column's header) can carry it. */
@@ -523,8 +526,9 @@ export function OfficeScene({
         )}
         {!collapsed && cornerSlot && <div className="lc-office__corner">{cornerSlot}</div>}
         {!collapsed && (
-          <div className="lc-office__mark" aria-hidden="true">
-            <MusterdWord className="lc-office__mark-lockup" chipSize={15} domain />
+          <div className="lc-office__mark">
+            <MusterdChip size={15} className="lc-office__chip" />
+            {markContact && <span className="lc-office__contact">{markContact}</span>}
           </div>
         )}
       </div>
