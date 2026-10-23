@@ -1133,13 +1133,15 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--lc-muted);
+  /* Full ink, as the key's text: at night the key's paper dims to grey and --lc-muted measured 3.73:1
+     on it (contrast gate, light=21). Hover says itself with the circle instead. */
+  color: var(--lc-text);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
 .lc-office__key-close:hover {
-  color: var(--lc-text);
+  background: var(--lc-border);
 }
 .lc-office__key ul {
   list-style: none;
