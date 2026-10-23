@@ -302,6 +302,63 @@
 }
 
 /* ── numbers ── */
+/* ADR 721: your status line — a text field, a running count against 48, and Set / Clear. The field
+   matches the number field's paper; Set wears the segmented control's chosen look. */
+.lc-set__statusline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--lc-2);
+}
+.lc-set__text {
+  width: 15rem;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 var(--lc-3);
+  border: 1px solid rgba(120, 96, 60, 0.35);
+  border-radius: var(--lc-r-sm);
+  background: #fffaf0;
+  color: var(--lc-text);
+  font: 500 12.5px/1 var(--font-sans);
+}
+.lc-set__text:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 1px;
+}
+.lc-set__count {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--lc-dim);
+}
+.lc-set__count.is-over {
+  color: var(--lc-danger-ink);
+}
+.lc-set__act {
+  appearance: none;
+  min-height: 28px;
+  padding: 0 var(--lc-4);
+  border: 0;
+  border-radius: 999px;
+  background: #fffaf0;
+  color: var(--lc-text);
+  font: 700 11.5px/1 var(--font-sans);
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.22);
+  cursor: pointer;
+}
+.lc-set__act.is-quiet {
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+  color: var(--lc-dim);
+}
+.lc-set__act:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.lc-set__act:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
 .lc-set__num {
   display: inline-flex;
   align-items: center;

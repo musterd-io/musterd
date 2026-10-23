@@ -1,9 +1,10 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { LiveConfig } from './client';
 import { isFeatureBehind } from './format';
 import { MemberFace } from './MemberFace';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
+import { HOURGLASS_SVG, visibleStatusLine } from './statusLine';
 import { elapsed, type TeamCard as Card } from './teamCards';
 
 /** The expanded operator detail, fetched on the first expand: most visits never open a card, and
@@ -63,6 +64,15 @@ export function TeamCard({
         ? ` (build ${memberBuild.slice(0, 7)} vs ${daemonBuild.slice(0, 7)})`
         : '')
     : undefined;
+  // ADR 721: a human's own status line, under the name, until it lapses — then this card redraws
+  // without it on the minute, with no event and no poll.
+  const [, setTick] = useState(0);
+  const statusLine = visibleStatusLine(card.member, Date.now());
+  useEffect(() => {
+    if (!statusLine) return;
+    const t = window.setTimeout(() => setTick((n) => n + 1), statusLine.expiresAt - Date.now() + 50);
+    return () => window.clearTimeout(t);
+  }, [statusLine?.expiresAt]);
   const face = (
     <>
       {/* The member as the office draws them — the same head as their body on the floor — with a
@@ -113,6 +123,12 @@ export function TeamCard({
           </span>
         )}
       </span>
+      {statusLine && (
+        <span className="lc-team-card__status">
+          <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: HOURGLASS_SVG }} />
+          {statusLine.text}
+        </span>
+      )}
       <span className="lc-team-card__state">{card.stateLabel}</span>
       {(card.title || (!still && card.state !== 'working')) && (
         <span

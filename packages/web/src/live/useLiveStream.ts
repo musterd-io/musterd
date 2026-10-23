@@ -13,6 +13,7 @@ import { loadSnapshot, resumeSnapshot } from './liveCache';
 import type { SeatPulse } from './pulse';
 import { coalesce } from './coalesce';
 import { firehoseSound } from './sound';
+import { replaceMember } from './statusLine';
 import { capNewest } from './window';
 
 /** Consecutive roster-refetch failures before the roster admits it is frozen. */
@@ -220,6 +221,10 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
       // room joining at once was viewers × frames full-roster fetches (coalesce.ts has the numbers).
       onPresence: () => {
         if (alive) rosterRefetch.trigger();
+      },
+      // ADR 721: a status line set or cleared reaches the room at once, not on the next poll.
+      onMemberUpdated: (member) => {
+        if (alive) setRoster((prev) => replaceMember(prev, member));
       },
       onPulse: (p) => {
         if (!alive) return;

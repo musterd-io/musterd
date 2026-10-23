@@ -16,6 +16,7 @@ import { dreamingSeat, lingerUntil, wokenSeat } from './wokenSeat';
 import { blockedOwners, type OfficeRoomProps } from './officeRoom';
 import { stalledLaneIds } from './briefing';
 import { experimentEntries } from './experimentReads';
+import { nextStatusExpiry, visibleStatusLine } from './statusLine';
 import { projectWallBoard } from './office-scene/wallboard';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
@@ -127,6 +128,7 @@ function computeData(
         workSource: entry?.source ?? null,
         laneState: entry?.laneState ?? null,
         blocked: blocked.has(m.name),
+        statusLine: visibleStatusLine(m, now),
         moreLanes: entry?.moreLanes ?? 0,
         dnd: m.availability?.status === 'dnd',
         offline_reason: m.offline_reason ?? null,
@@ -292,8 +294,11 @@ export function OfficeScene({
   const [lingerTick, setLingerTick] = useState(0);
   useEffect(() => {
     const now = Date.now();
+    // ADR 721: the same one timer also lands on the minute a status line lapses, so it leaves the
+    // plate with no new event and no poll.
     const next = Math.min(
       ...roster.map((m) => lingerUntil(m, now) ?? Infinity),
+      nextStatusExpiry(roster, now) ?? Infinity,
     );
     if (!Number.isFinite(next)) return;
     const t = window.setTimeout(() => setLingerTick((n) => n + 1), next - now + 50);

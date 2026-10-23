@@ -176,6 +176,24 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
   });
 });
 
+describe('a human status line on the plate (ADR 721)', () => {
+  it('the plate carries the colour footer with the hourglass, only for a member who has one', () => {
+    const at = index.indexOf('if (node.statusLine) {');
+    expect(at).toBeGreaterThan(-1);
+    const block = index.slice(at, index.indexOf('el.appendChild(plate);', at));
+    expect(block).toContain("plate.classList.add('has-status')");
+    expect(block).toContain("status.className = 'lc-gl-label__status'");
+    expect(block).toContain('status.innerHTML = HOURGLASS_SVG');
+    expect(block).toContain('words.textContent = node.statusLine.text');
+  });
+
+  it('it is not in the compact fold, so a folded plate still shows it', () => {
+    const live = readFileSync(new URL('../Live.css', import.meta.url), 'utf8');
+    const fold = live.slice(live.indexOf('.lc-gl-label.is-compact:not(.is-spot)'), live.indexOf('.lc-gl-label.is-spot'));
+    expect(fold).not.toContain('lc-gl-label__status');
+  });
+});
+
 describe('folded plates and the roll call (lane 01M5G7A9H1)', () => {
   it('an idle or away member folds, unless they own a blocked lane', () => {
     expect(index).toMatch(
