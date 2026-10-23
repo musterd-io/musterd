@@ -1107,7 +1107,9 @@
   padding: var(--lc-4) var(--lc-5);
   border-radius: var(--lc-r-md);
   border: 1px solid var(--lc-border);
-  background: color-mix(in srgb, var(--lc-ground-2) 92%, transparent);
+  /* Opaque: at night the rendered room behind it is dark enough that 8% show-through took the close
+     button's muted ink under AA (3.25:1, contrast gate at light=21, lane 01M5D8EJ40). */
+  background: var(--lc-ground-2);
   font-size: 12px;
   color: var(--lc-text);
   animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
