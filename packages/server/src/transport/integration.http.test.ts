@@ -716,6 +716,29 @@ withDrivers('integration · http', (_o, kind) => {
       expect(adaRow?.presences?.[0]?.surface).toBe('claude-code');
     });
 
+    it('an agent that claimed a lane and just acted reads working on it, with no status_update (ADR 726)', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+      await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickTok);
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      const lin = { key: team.json.agent_key, seat: 'Lin' };
+      // The claim is itself an audited action; the inbox reads keep both seats live (ADR 057).
+      await post('/teams/dawn/lanes', { title: 'lane watch build', claim: true }, ada);
+      await get('/teams/dawn/inbox', ada);
+      await get('/teams/dawn/inbox', lin);
+
+      const roster = await get('/teams/dawn/members', nickTok);
+      const adaRow = roster.json.members.find((m: any) => m.name === 'Ada');
+      const linRow = roster.json.members.find((m: any) => m.name === 'Lin');
+      expect(adaRow?.activity).toBe('working');
+      expect(adaRow?.state).toBe('lane watch build');
+      expect(adaRow?.state_source).toBe('lane');
+      // No lane, no status: present but not working.
+      expect(linRow?.activity).toBe('active');
+      expect(linRow?.state_source ?? null).toBeNull();
+    });
+
     it('the roster carries quiescence beside the display fields, unknown when unevidenced (ADR 219)', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const nickTok = team.json.human_credential;

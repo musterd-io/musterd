@@ -94,6 +94,12 @@ describe('formatRoster (the agent-facing roster)', () => {
     expect(formatMember(long)).not.toContain('…');
   });
 
+  it("says when a working label came from the seat's lane, not a status (ADR 726)", () => {
+    const fromLane = { ...working, state: 'lane watch build', state_source: 'lane' as const };
+    expect(formatMember(fromLane)).toContain('— on lane: lane watch build');
+    expect(formatMember({ ...working, state_source: 'status' as const })).not.toContain('on lane:');
+  });
+
   it('collapses a multi-line status to one line', () => {
     const multi = { ...working, state: 'line one\n\nline two' };
     expect(formatMember(multi)).toContain('line one line two');

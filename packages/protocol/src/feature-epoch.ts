@@ -155,5 +155,8 @@
 // Epoch 37 — ADR 664: the `stalled_continuation` lane warning, and warnings arrays that drop a kind
 // the client cannot read instead of failing the response. A client behind this epoch fails its lane
 // and board reads while any lane carries the new kind, until it is rebuilt.
-export const FEATURE_EPOCH = 37 as const;
+// Epoch 38 — ADR 726: roster rows carry `state_source` (`status | lane | steering`), and an agent
+// reads `working` from its claimed lane plus a recent audited action without a `status_update`. A
+// renderer behind this epoch shows the lane title as if it were a status; nothing fails.
+export const FEATURE_EPOCH = 38 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

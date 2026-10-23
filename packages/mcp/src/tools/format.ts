@@ -111,7 +111,8 @@ export function formatMember(
     const state = m.state.replace(/\s+/g, ' ').trim();
     const clipped =
       stateMax && state.length > stateMax ? state.slice(0, stateMax - 1).trimEnd() + '…' : state;
-    line += ` — ${clipped}`;
+    // ADR 726: a label derived from the seat's claimed lane says so, so nobody reads it as a status.
+    line += m.state_source === 'lane' ? ` — on lane: ${clipped}` : ` — ${clipped}`;
   }
   if (group !== 'out' && p?.workspace) line += ` [${p.workspace}]`;
   return line;
