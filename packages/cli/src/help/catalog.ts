@@ -1009,6 +1009,20 @@ export const CATALOG: readonly CommandEntry[] = [
     primary: true,
   },
   {
+    name: 'status-line',
+    signature: '[<words…>] [--clear]',
+    summary:
+      'your own status line, shown on /live and /broadcast for an hour (humans only; no MCP tool)',
+    group: 'waiting',
+    primary: false,
+    detail:
+      'A few words you set for yourself — "assembling a new dresser for the nursery" — shown on your ' +
+      'nameplate on /live and /broadcast and on the team panel, then cleared an hour after you set it ' +
+      '(ADR 721). At most 48 characters; the words are joined, so no quotes are needed. Bare, it prints ' +
+      'yours and how long it has left; `--clear` clears it. Only you can set or clear yours, and agents ' +
+      'have none. /broadcast is public.',
+  },
+  {
     name: 'doorbell',
     signature:
       '[<live|os|slack|webhook> <on|off> [--url <u>] [--tiers <t,…>] [--host <label>]] | team [--allow …] [--defaults …] [--slack <url|off>] [--webhook <url|off>]',

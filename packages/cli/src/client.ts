@@ -1149,6 +1149,13 @@ export class HttpClient {
   ): Promise<{ member: MemberSummary }> {
     return this.request('POST', `/teams/${slug}/availability`, body);
   }
+  /** ADR 721: your own status line — humans signed in as themselves only. */
+  setStatusLine(slug: string, text: string): Promise<{ member: MemberSummary }> {
+    return this.request('POST', `/teams/${slug}/status-line`, { text });
+  }
+  clearStatusLine(slug: string): Promise<{ member: MemberSummary }> {
+    return this.request('DELETE', `/teams/${slug}/status-line`);
+  }
   // ── Seat memory (ADR 093): the caller's OWN seat's continuity note — seat-authenticated, no
   // cross-seat path. Save is last-write-wins (caps enforced server-side with the limit named).
   saveMemory(slug: string, input: { headline: string; body?: string }): Promise<void> {
