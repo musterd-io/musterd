@@ -1,6 +1,6 @@
 # CooperBench coordination run: pre-registration
 
-**Lane:** `01M5K1BCVG` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-22; not yet run.
+**Lane:** `01M5K1BCVG` (goal `cooperbench`), asked by nick. **Status:** pre-registered 2026-10-22; run 2026-10-23 → [finding 023](../023-cooperbench-coordination-run.md).
 Nothing below changes once a measured pair has run; what the run teaches goes in the finding, not
 here. **CooperBench:** `63b9d44`. **Before this:** [claim run](./claim-manifest.md) →
 [finding 021](../021-cooperbench-claim-run.md), [finding 022](../022-cooperbench-coordination-residue.md).
