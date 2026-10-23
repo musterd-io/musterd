@@ -20,6 +20,8 @@ describe('which background loops a server runs (1C task 8)', () => {
         'policy_review',
         // Lane 01M3W815KR: the relay pull is resolved, checked public and pinned (ADR 443 §5).
         'seeds_ingest',
+        // ADR 724: the lane watch reads the database only (refusals and lanes), so it runs on Cloud.
+        'lane_watch',
       ].sort(),
     );
   });

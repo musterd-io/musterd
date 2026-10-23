@@ -29,6 +29,7 @@ import { withHttpRequestSpan } from './otel/httpTrace.js';
 import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
+import { startLaneWatch, sweepLaneWatches } from './protocol/laneWatch.js';
 import { routeEnvelope } from './protocol/route.js';
 import { startSeedsIngest } from './seeds/ingest.js';
 import { appendAudit } from './store/audit.js';
@@ -154,6 +155,8 @@ export interface RunningServer {
   readonly pulses: SeatPulses;
   /** One provision sweep pass now (ADR 463 §2) — the 60 s loop's body, for tests. */
   runProvisionSweep: (now?: number) => Promise<number>;
+  /** One lane-watch sweep now (ADR 724) — the 2 s loop's body, for tests. */
+  runLaneWatchSweep: (now?: number) => Promise<number>;
   /** One policy review pass now (ADR 533) — the hourly loop's body, with its real send, for tests. */
   runPolicyReviewSweep: (now?: number) => Promise<number>;
   /** The bound port, available after listen() resolves. */
@@ -402,6 +405,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopReaper: (() => void) | null = null;
   let stopSeeds: (() => void) | null = null;
   let stopAwayRelay: (() => void) | null = null;
+  let stopLaneWatch: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
@@ -450,6 +454,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     traceStore: opTraceDb,
     pulses,
     runProvisionSweep: (now?: number) => sweepProvisionsPass(opCtx, now),
+    runLaneWatchSweep: (now?: number) => sweepLaneWatches(opCtx, now),
     runPolicyReviewSweep: (now?: number) => policyReviewTick(opDb, now, policyReviewSend),
     get port() {
       return boundPort;
@@ -495,6 +500,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           if (loops.has('seeds_ingest')) stopSeeds = startSeedsIngest(opCtx);
           // ADR 659: the away-relay client. Inert unless a team's policy names a relay.
           if (loops.has('away_relay')) stopAwayRelay = startAwayRelay(opCtx);
+          // ADR 724: a held refusal watches the holder's lane; this tells the refused seat when it frees.
+          if (loops.has('lane_watch')) stopLaneWatch = startLaneWatch(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
@@ -669,6 +676,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         affinity?.stop();
         stopSeeds?.();
         stopAwayRelay?.();
+        stopLaneWatch?.();
         pulses.dispose();
         stopDigest?.();
         stopSync?.();

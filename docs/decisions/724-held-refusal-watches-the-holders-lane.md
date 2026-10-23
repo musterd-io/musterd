@@ -90,6 +90,15 @@ without relying on the agent to pick the right call.
   learned from the old owner's edits (null when none was seen), so the waiting seat can bring the
   work in before it edits, as with a freed file (big-body's second review, 2026-10-23).
   The watch stays on the lane, and `until_lane` does not wake on this act: the file is not free.
+- _2026-10-23 (build, lane 01M5N3TRZY):_ three implementation choices, the decision unchanged.
+  (a) The watch is the `gate_hold_refusals` row itself plus one column (`watch_fired_at`, ladder
+  v130). There is no sibling table: the row already holds seat, path, holder and holder lane, and a
+  new refusal re-arms it. (b) The daemon observes the change with a 2 s sweep over
+  open watches (`protocol/laneWatch.ts`). There are no hooks at each lane-end path, so a lane that
+  ends here and one that arrives ended through the fold are seen the same way. (c) No `lane.watch_fired`
+  audit row: the directed act is itself the record (`meta.lane_freed` / `meta.lane_hold_moved` on a
+  board-seat message), with `lane_watch_fired` / `lane_watch_dropped` log lines. A submitted lane
+  (`awaiting_acceptance`) has left the contending states, so it frees the file as `submitted`.
 - Build lane: `01M5N3TRZY`.
 
 Follows-up: 01M5N3TRZY0TJ61TBM0NV1XJ2Z

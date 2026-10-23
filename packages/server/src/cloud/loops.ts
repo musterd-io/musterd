@@ -17,6 +17,7 @@ export const LOOPS = [
   'digest',
   'policy_review',
   'away_relay',
+  'lane_watch',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 
