@@ -9,7 +9,7 @@ import { boardUrl, buildOpenCommand, signinUrl, surfaceUrl } from './board.js';
 describe('signinUrl / boardUrl (ADR 170)', () => {
   it('puts the nonce in the fragment, never the query string', () => {
     const url = signinUrl('http://127.0.0.1:4849', 'revive', 'nonce123');
-    expect(url).toBe('http://127.0.0.1:4849/board?team=revive#s=nonce123');
+    expect(url).toBe('http://localhost:4849/board?team=revive#s=nonce123');
     const parsed = new URL(url);
     expect(parsed.search).toBe('?team=revive');
     expect(parsed.hash).toBe('#s=nonce123');
@@ -19,7 +19,7 @@ describe('signinUrl / boardUrl (ADR 170)', () => {
 
   it('the URL the terminal prints carries no nonce — scrollback stays clean', () => {
     expect(boardUrl('http://127.0.0.1:4849', 'revive')).toBe(
-      'http://127.0.0.1:4849/board?team=revive',
+      'http://localhost:4849/board?team=revive',
     );
     expect(boardUrl('http://127.0.0.1:4849', 'revive')).not.toContain('#');
   });
@@ -35,7 +35,7 @@ describe('signinUrl / boardUrl (ADR 170)', () => {
 
   it('tolerates a server with a trailing slash', () => {
     expect(boardUrl('http://127.0.0.1:4849/', 'revive')).toBe(
-      'http://127.0.0.1:4849/board?team=revive',
+      'http://localhost:4849/board?team=revive',
     );
   });
 });
