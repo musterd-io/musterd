@@ -2338,7 +2338,7 @@ against a 355.4 KB ceiling. Measured + 15% would loosen it, so this is a raise, 
 
 ## 2026-10-23 — the rendered dog and wagon; figure sheets split by clip group, measured and dropped (lane 01M5D8EJ40)
 
-**Total JS RAISED 364,432 → 366,400 B gzip.** The rendered dog (`rendered/dogSheet.ts`, `drawRenderedDog`)
+**Total JS RAISED 364,432 → 366,900 B gzip.** (CI read 357.9 KB against a first 366,400 ceiling; the CI gap on this branch was ~0.8 KB, not ~0.45.) The rendered dog (`rendered/dogSheet.ts`, `drawRenderedDog`)
 ships beside the painted one, which `?office=painted` still needs. Local build 357.1 KB, plus the
 ~450 B CI gap and ~250 B. A re-baseline would loosen (ADR 183). Deleting the painters pays it back:
 `drawDog` and its helpers alone are ~450 lines.
