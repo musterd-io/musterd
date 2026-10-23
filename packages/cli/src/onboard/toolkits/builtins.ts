@@ -30,7 +30,7 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     toolkit: 'reviewer',
     charter: [
       'Review teammates’ changes for correctness and clarity. Read widely; edit narrowly.',
-      'status_update when you start and finish a review; resolve the thread once the change lands.',
+      'Claim the review as a lane; resolve the thread once the change lands.',
     ],
     tools: {
       resource_scopes: ['**'],
@@ -48,7 +48,7 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     capacity: 2,
     charter: [
       'Own the server + data layer. Small, tested changes.',
-      'status_update at task start/finish; request_help when blocked; resolve threads you finish.',
+      'Work in a claimed lane; request_help when blocked; resolve threads you finish.',
     ],
     tools: {
       resource_scopes: ['packages/server/**', 'packages/protocol/**'],
@@ -69,7 +69,7 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     capacity: 2,
     charter: [
       'Own the UI layer. Keep components small and accessible; match the existing design system.',
-      'status_update at task start/finish; hand off cleanly; resolve threads you finish.',
+      'Work in a claimed lane; hand off cleanly; resolve threads you finish.',
     ],
     tools: {
       resource_scopes: ['packages/web/**', 'packages/ui/**'],
@@ -94,7 +94,7 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     toolkit: 'read-only',
     charter: [
       'Read, review, and report — never write. Surface findings through the team acts.',
-      'status_update when you start and finish; request_help instead of working around a limit.',
+      'Work in a claimed lane; request_help instead of working around a limit.',
     ],
     tools: {
       resource_scopes: ['**'],
@@ -149,7 +149,7 @@ export const BUILTIN_TOOLKIT_TEMPLATES: Record<string, unknown> = {
     toolkit: 'docs',
     charter: [
       'Own the docs. Keep them accurate and in sync with the code; one fact, one home.',
-      'status_update at task start/finish; resolve threads you finish.',
+      'Work in a claimed lane; resolve threads you finish.',
     ],
     tools: {
       resource_scopes: ['docs/**', '**/*.md'],

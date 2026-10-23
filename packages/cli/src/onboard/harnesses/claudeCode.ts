@@ -264,10 +264,6 @@ export const HOOK_NUDGE_TEXTS = {
     'musterd: this folder has the musterd:start primer but the musterd MCP server is NOT ' +
     'registered here — the team_* tools are unavailable. Run `musterd init` in this folder (or ' +
     '`musterd init --check` to confirm), then reload this session.',
-  // Paid every turn — the tightest text that still fires both halves of the ritual. What a
-  // status_update buys (the roster flip) is primer material, not per-turn material.
-  prompt_submit_ritual:
-    'musterd: finished a unit of work? team_send status_update (one line), then team_inbox_check.',
 } as const;
 
 /**
@@ -325,9 +321,10 @@ function sessionStartHookCommand(): string {
 }
 
 function promptSubmitHookCommand(): string {
-  // The per-turn boundary nudge (machine-wide, self-gating like the SessionStart orientation): at
-  // every prompt in a musterd folder, remind the agent of the status_update/inbox ritual, then run
-  // the due-gated orient nudge. The repeat is the load-bearing half: the one-shot SessionStart ask
+  // The per-turn hook (machine-wide, self-gating like the SessionStart orientation): at every prompt
+  // in a musterd folder, run the due-gated orient nudge. The status_update/inbox reminder that rode
+  // here was paid on every prompt in every session; ADR 726 made the roster read a claimed lane, so
+  // it went (lane 01M5N3VG2D), and directed acts already arrive on the interrupt line. The repeat is the load-bearing half: the one-shot SessionStart ask
   // was measured to fail (agents skip it under a busy first prompt — 3 days of unlabeled sidebar,
   // 2026-07-29, back when this clause carried the label-sweep nudge), and a nudge that REPEATS
   // until a stamp lands is the difference between "documented" and "happens". The label clause
@@ -337,7 +334,6 @@ function promptSubmitHookCommand(): string {
   return (
     'd="${CLAUDE_PROJECT_DIR:-.}"; test -f "$d/AGENTS.md" && grep -q musterd:start "$d/AGENTS.md" || exit 0; ' +
     declinedGate(SURFACE_MACHINE_PROMPT_SUBMIT) +
-    `echo '${HOOK_NUDGE_TEXTS.prompt_submit_ritual}'; ` +
     // orient-nudge repeats per turn on the measured grounds above — one-shot session-start asks
     // get skipped; a repeat that a stamp quiets actually lands.
     'command -v musterd >/dev/null 2>&1 && { musterd session orient-nudge 2>/dev/null; } || true ' +

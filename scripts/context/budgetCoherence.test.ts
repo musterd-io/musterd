@@ -75,13 +75,8 @@ describe('the real budget file', () => {
 
   // Kept in step with check-budgets.ts by the assertion below, not by hope.
   const REAL: Composition = {
-    perTurnTotalBytes: ['toolsListDefaultBytes', 'promptSubmitNudgeBytes'],
-    perSessionTotalBytes: [
-      'toolsListDefaultBytes',
-      'primerBytes',
-      'sessionStartNudgesBytes',
-      'promptSubmitNudgeBytes',
-    ],
+    perTurnTotalBytes: ['toolsListDefaultBytes'],
+    perSessionTotalBytes: ['toolsListDefaultBytes', 'primerBytes', 'sessionStartNudgesBytes'],
   };
 
   it('is coherent as committed', () => {
@@ -108,8 +103,9 @@ describe('the real budget file', () => {
 
     const [failure] = coherenceFailures(before, REAL);
     expect(failure).toContain('perTurnTotalBytes');
-    // 795 B when the composition still carried the 103 B label nudge; ADR 468 removed that part.
-    expect(failure).toContain('short by 692');
+    // 795 B when the composition still carried the 103 B label nudge (ADR 468 removed that part),
+    // then 692 B with the 97 B per-prompt nudge, which lane 01M5N3VG2D removed (ADR 726).
+    expect(failure).toContain('short by 595');
   });
 
   /*

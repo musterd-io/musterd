@@ -159,9 +159,8 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
           `Joined ${config.team} as ${result.member}${role} (${config.surface}). ` +
             `You are now the live occupant of this seat — that's who you are on this team. ` +
             `The server authenticated this occupancy.${charter}${memory}${style}\n\n` +
-            `IMPORTANT — stay in sync: call team_inbox_check now, then again whenever you finish a ` +
-            `task or a reply. Report progress with team_send {act:'status_update'}; hand work off ` +
-            `with {act:'handoff'}.`,
+            `IMPORTANT — stay in sync: call team_inbox_check now, and again before you wait or hand ` +
+            `off. Your claimed lane is your roster status; hand work off with {act:'handoff'}.`,
         );
       } catch (err) {
         if (err instanceof ClaimConflictError) {

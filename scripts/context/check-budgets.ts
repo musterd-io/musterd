@@ -80,8 +80,9 @@ const sessionStart =
   bytes(HOOK_NUDGE_TEXTS['orientation_joined'] ?? '') +
   bytes(HOOK_NUDGE_TEXTS['orientation_wire_fix'] ?? '') +
   bytes(HOOK_NUDGE_TEXTS['orientation_init_fix'] ?? '');
-const promptSubmit = bytes(HOOK_NUDGE_TEXTS['prompt_submit_ritual'] ?? '');
-if (sessionStart === 0 || promptSubmit === 0 || primer === 0 || toolsDefault === 0) {
+// The per-prompt nudge was a part until lane 01M5N3VG2D removed it (ADR 726): the UserPromptSubmit
+// hook now prints only the due-gated orient nudge, which is quiet once a session is oriented.
+if (sessionStart === 0 || primer === 0 || toolsDefault === 0) {
   console.error(
     'context:check: a surface measured 0 bytes — a source of truth moved; failing loud.',
   );
@@ -93,7 +94,6 @@ const parts: Record<string, number> = {
   toolsListMutedBytes: toolsMuted,
   primerBytes: primer,
   sessionStartNudgesBytes: sessionStart,
-  promptSubmitNudgeBytes: promptSubmit,
 };
 
 /*
@@ -115,14 +115,10 @@ const parts: Record<string, number> = {
  */
 const COMPOSITES: Composition = {
   // The headline: what multiplies on EVERY turn of every seat session. (The due-gated label nudge
-  // was a part until ADR 468 removed it with the sweep it announced.)
-  perTurnTotalBytes: ['toolsListDefaultBytes', 'promptSubmitNudgeBytes'],
-  perSessionTotalBytes: [
-    'toolsListDefaultBytes',
-    'primerBytes',
-    'sessionStartNudgesBytes',
-    'promptSubmitNudgeBytes',
-  ],
+  // was a part until ADR 468 removed it with the sweep it announced; the per-prompt nudge until
+  // ADR 726 made the roster read a claimed lane.)
+  perTurnTotalBytes: ['toolsListDefaultBytes'],
+  perSessionTotalBytes: ['toolsListDefaultBytes', 'primerBytes', 'sessionStartNudgesBytes'],
 };
 
 const sumOf = (item: string, of: Record<string, number>): number =>

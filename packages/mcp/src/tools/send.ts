@@ -40,7 +40,7 @@ import { errorResult, notReadyMessage, repairHint, textResult } from './format.j
 // ADR 318: keep the Act vocabulary and ask's conditionally-required fields in standing context;
 // examples, rationale, and plan-epoch mechanics are retrievable from the musterd skill.
 const DESCRIPTION =
-  'Send a coordination Act. Use status_update for progress, request_help when blocked, handoff to ' +
+  'Send a coordination Act. Use status_update to add to your lane, request_help when blocked, handoff to ' +
   'transfer work, accept/decline to answer, wait to pause, resolve to close a thread, steer to ' +
   'redirect, challenge for justification, defer to shelve a Goal, or ask a human. ask requires ' +
   'meta.species and meta.tier; handoff names its lane in meta.lane_handoff {lane, branch} or one ' +
