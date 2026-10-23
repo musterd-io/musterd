@@ -56,7 +56,10 @@ import { afterPullClaim, assertPullGranted } from '../store/pull.js';
 import { humanAskOutstanding, peerConfirmedPending } from '../store/review.js';
 import { type MemberRow, resolveCapabilities } from '../store/rows.js';
 import { getTeamById } from '../store/teams.js';
+import { diagnoseHubFailure, failureCode, HubUnreachableError } from './hubDiagnosis.js';
 import { peekPullStop } from './pull.js';
+
+export { HubUnreachableError };
 
 /**
  * Federation increment 3c: the hub-authoritative claim (ADR 325 §Authority split, residence 1).
@@ -282,24 +285,6 @@ export async function assertSeatResident(
     detail: { node: node.id, bound_to: result.node_id, bound_label: result.label },
   });
   throw new SeatBoundElsewhereError(seat.name, result.node_id, result.label);
-}
-
-/** The hub could not be asked. Distinct from a refusal by construction, never folded into one. */
-export class HubUnreachableError extends Error {
-  constructor(hubUrl: string, cause: string) {
-    // ADR 598: the sentence carries what ADR 355's refusal left the caller to guess — nothing was
-    // recorded here, what still works offline, and (on a timeout only) that the hub may have heard.
-    const timedOut = /timeout/i.test(cause);
-    super(
-      `the hub at ${hubUrl} ${timedOut ? 'did not answer in time' : 'could not be reached'} (${cause}), ` +
-        `so nothing was recorded here: claim, handoff, release, submit and close wait for the hub. ` +
-        `Messages, inbox, opening and editing lanes, and memory keep working and sync when it returns.` +
-        (timedOut
-          ? ` The hub may have received this before the timeout — read the board before retrying.`
-          : ``),
-    );
-    this.name = 'HubUnreachableError';
-  }
 }
 
 /** This daemon's own node row with its label — minted on first use, the `insertMessage` rule. */
@@ -702,8 +687,14 @@ export async function patchAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_claim_hub_unreachable', team: slug, lane: req.lane, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_claim_hub_unreachable',
+      team: slug,
+      lane: req.lane,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (res.status === 403) {
@@ -767,8 +758,14 @@ export async function pullAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_pull_hub_unreachable', team: slug, host: req.host, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_pull_hub_unreachable',
+      team: slug,
+      host: req.host,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok)
@@ -812,8 +809,14 @@ export async function trustAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_trust_hub_unreachable', team: slug, seat: req.seat, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_trust_hub_unreachable',
+      team: slug,
+      seat: req.seat,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (res.status === 403 || res.status === 404) {
@@ -864,8 +867,13 @@ export async function policyAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_policy_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_policy_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -915,8 +923,13 @@ export async function haltAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_halt_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_halt_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -962,8 +975,13 @@ export async function holdAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_hold_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_hold_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -1008,8 +1026,13 @@ export async function styleAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_style_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_style_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -1052,8 +1075,13 @@ export async function statusLineAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_status_line_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_status_line_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -1097,8 +1125,13 @@ export async function noteRecipientsAtHub(
       signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
     });
   } catch (err) {
-    log.warn({ msg: 'sync_note_recipients_hub_unreachable', team: slug, err: String(err) });
-    throw new HubUnreachableError(enrollment.hub_url, String(err));
+    log.warn({
+      msg: 'sync_note_recipients_hub_unreachable',
+      team: slug,
+      err: String(err),
+      code: failureCode(err),
+    });
+    throw await diagnoseHubFailure(enrollment.hub_url, err);
   }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
