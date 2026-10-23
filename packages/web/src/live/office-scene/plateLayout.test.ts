@@ -50,19 +50,28 @@ describe('layoutPlates', () => {
     expect(overlaps(rb, rf)).toBe(false);
   });
 
-  it('a plate never sits on another member’s head', () => {
+  it('a plate prefers the spot that covers a neighbour’s head least', () => {
     // In the isometric room the member BEHIND is drawn up-screen, so the front member's plate —
-    // hanging above the front head — lands exactly on the back member's head.
+    // hanging above the front head — lands on the back member's head. With one step up (nick,
+    // 2026-10-22) it cannot always clear that head, so it takes whichever spot covers it least.
     const plates = [plate('behind', 200, 150), plate('front', 200, 175)];
     const out = run(plates);
-    const f = out.placements.get('front')!;
-    expect(overlaps(plateRect(f, W, H), headBox({ x: 200, y: 150 }, 1))).toBe(false);
+    const head = headBox({ x: 200, y: 150 }, 1);
+    const area = (a: ReturnType<typeof plateRect>, b: ReturnType<typeof plateRect>) => {
+      const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+      const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+      return w > 0 && h > 0 ? w * h : 0;
+    };
+    const chosen = area(plateRect(out.placements.get('front')!, W, H), head);
+    const home = area(plateRect({ x: 200, y: 175 }, W, H), head);
+    expect(chosen).toBeLessThanOrEqual(home);
   });
 
-  it('the meeting-table cluster: nobody floats off, and no two names cover each other', () => {
+  it('the meeting-table cluster: nobody floats off, and names overlap only partly', () => {
     // Four seats round a table, heads 20–40 px apart — the screenshot that opened lane 01M3GPH5KB.
     // Vertical-only plates cannot all clear four heads this close, so this pins what matters: every
-    // plate stays within MAX_STEPS of its head, and plates overlap each other by no more than a sliver.
+    // plate stays within MAX_STEPS of its head, and (nick, 2026-10-22: some overlap is the price of low plates) no two
+    // names overlap by more than three quarters of one plate.
     const plates = [
       plate('autorefresh', 400, 300, 118),
       plate('sloane', 440, 305),
@@ -83,7 +92,7 @@ describe('layoutPlates', () => {
     for (const a of rects)
       for (const b of rects)
         if (a.name < b.name)
-          expect(area(a.r, b.r), `${a.name} × ${b.name}`).toBeLessThanOrEqual(0.15 * W * H);
+          expect(area(a.r, b.r), `${a.name} × ${b.name}`).toBeLessThanOrEqual(0.75 * W * H);
   });
 
   it('keeps a displaced plate where it is while that spot still works — no flicker as people walk', () => {
@@ -136,16 +145,14 @@ describe('layoutPlates', () => {
     for (const p of crowd) expect(out.memo.get(p.name)!.slot).toBeLessThanOrEqual(MAX_STEPS);
   });
 
-  it('a raised plate steps down to a lower step once it frees — not only all the way home', () => {
-    // Home stays taken by front's plate; one step up is clear. A plate parked two steps up comes down.
+  it('a plate remembered on a step this layout no longer has is placed again, within the cap', () => {
+    // The cap was two steps before 2026-10-22; a memo from then must not park a plate higher than one.
     const plates = [plate('back', 100, 100), plate('front', 160, 104)];
     const high = new Map<string, PlateMemo>([
       ['back', { slot: 2, blockedAt: null, lowerFreeAt: null }],
     ]);
     const t0 = run(plates, high, 0);
-    expect(t0.memo.get('back')!.slot).toBe(2);
-    const down = run(plates, t0.memo, HOME_HOLD_MS);
-    expect(down.memo.get('back')!.slot).toBe(1);
+    expect(t0.memo.get('back')!.slot).toBeLessThanOrEqual(MAX_STEPS);
   });
 
   it('walkers yield: someone passing never moves a seated plate, and keeps their own over their head', () => {

@@ -48,10 +48,10 @@ const render = (props: Record<string, unknown>) =>
   );
 
 describe('TeamColumn', () => {
-  it("the header names the team, wears the mark, and carries the release (nick, 2026-10-22)", () => {
+  it("the header names the team, wears the wordmark, and carries the release (nick, 2026-10-22)", () => {
     const html = render({ teamName: 'revive', daemonInfo: { release: '0.5.0', build: 'faed6b79ef' } });
-    expect(html).toContain('revive team');
-    expect(html).toContain('lc-team__chip');
+    expect(html).toContain('team revive');
+    expect(html).toContain('lc-team__word');
     expect(html).toContain('>v0.5.0<');
     // The stream's column prints the number but is not a button.
     const still = render({ teamName: 'revive', still: true, daemonInfo: { release: '0.5.0' } });

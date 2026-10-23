@@ -29,6 +29,9 @@ import type { Pt } from './iso';
  *     `SLACK` of its own area. A fresh placement still looks for a fully clear spot first.
  *  5. (In the scene, not here) the step is a glide, not a snap — see `.lc-gl-label`'s `translate`.
  *
+ * NOT TOO HIGH, AGAIN (nick, 2026-10-22): the cap went from two steps to one and he accepts the trade — a plate in a
+ * tight cluster that cannot clear within one step stays on its least-covered spot rather than floating higher.
+ *
  * NOT TOO HIGH (nick, same evening, on the build that shipped the rules above: "some of the
  * nameplates are too high above the member avatars"). Measured on the stream: in the lounge, dolly's
  * plate sat five steps (138px) up and miley's four (110px), each on a long leader. Three causes, each
@@ -150,8 +153,9 @@ export function plateCoversBoard(at: { x: number; y: number }, w: number, h: num
 function slotAt(i: number, p: PlateBox): PlatePlacement {
   return { x: p.anchor.x, y: p.anchor.y - i * (p.h + GAP), displaced: i > 0 };
 }
-/** How far up a plate may step. Past two it stops reading as the member's own. */
-export const MAX_STEPS = 2;
+/** How far up a plate may step: one plate-height (~25px). nick, 2026-10-22: two steps (~50px) still read as
+ *  "too high above the member", and he accepts some overlap between plates in a tight cluster instead. */
+export const MAX_STEPS = 1;
 const SLOTS = MAX_STEPS + 1;
 
 export function layoutPlates(

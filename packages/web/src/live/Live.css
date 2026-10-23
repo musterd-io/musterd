@@ -3861,9 +3861,22 @@
   width: 13px;
   height: 13px;
 }
-.lc-team__chip {
+.lc-team__word {
   flex: none;
-  border-radius: 4px;
+}
+/* The header holds: title, count, the wordmark, the version and the collapse mark. A narrow column
+   (the laptop default is ~300px) has no room for all of them, so the count sheds its word and the
+   gaps tighten; the number stays, and the title says whose team it is. */
+.lc-team__head {
+  container-type: inline-size;
+}
+@container (max-width: 340px) {
+  .lc-team__count-word {
+    display: none;
+  }
+  .lc-team__head {
+    gap: 6px;
+  }
 }
 .lc-ver-wrap {
   position: relative;
