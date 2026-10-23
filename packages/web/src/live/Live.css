@@ -2038,6 +2038,48 @@
    up from the classification tags, because it is what the walker is DOING — a phrase you read, not
    a code you decode (2026-10-18, goal live-delight: the 7.5px mono verb was the most crowded thing
    on a plate). It pops on once as the walk starts. */
+/* ADR 721: a human's own status line — the plate's second line, a footer washed with the member's
+   own colour (nick picked "A3" from three finishes), led by the glass-and-sand hourglass. The plate
+   leaves its pill for a soft rectangle while it carries one. The footer is not in the compact fold's
+   list above, so it stays on a folded plate: a status is set exactly when its human is away. Ink is
+   `--lc-paper-ink` drawn a quarter of the way to the hue, on paper washed 16% with it — the plate's
+   own pair, so it clears AA wherever the name does. Capped at 48 characters, so it never runs wide. */
+.lc-gl-label__plate.has-status {
+  flex-wrap: wrap;
+  border-radius: 9px;
+  padding-bottom: 0;
+}
+.lc-gl-label__status {
+  /* edge to edge: the plate's own side padding (6px + 5px) is given back with the margins below */
+  flex-basis: calc(100% + 11px);
+  order: 99;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 1.5px -5px 0 -6px;
+  padding: 1.5px 6px 2px;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 25%, var(--lc-paper-ink));
+  background: color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 16%, #fffaf0);
+  border-top: 1px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 28%, transparent);
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+/* the hourglass, on the plate and on the team panel */
+:is(.lc-gl-label__status, .lc-team-card__status) svg {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+}
+
 .lc-gl-label__walk {
   flex: none;
   margin-left: 4px;
@@ -3972,6 +4014,26 @@
 .lc-team-card__state {
   font-size: 11px;
   color: var(--lc-muted);
+}
+/* ADR 721: a human's own status line on the team panel — a second line under the name, the
+   plate's hourglass and the member's colour, in the column's own ink so it reads as theirs and
+   still clears AA on the column paper. */
+.lc-team-card__status {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--lc-text);
+  > span {
+    display: inline-flex;
+    color: var(--member, var(--lc-text));
+  }
+  svg {
+    width: 11px;
+    height: 11px;
+  }
 }
 .lc-team-card__work {
   font-size: 13.5px;
