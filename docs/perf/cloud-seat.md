@@ -669,7 +669,7 @@ course as trial 1 — the deaf line rode the first three tool results (two `Tool
 `Read`, none of them a musterd call), the fourth call was `team_join` **alone in its own turn**, it
 answered "You are now the live occupant of this seat" rather than "Already joined", and no tool
 result since has carried the line. Two for two, both non-no-op joins. And the binding again held a
-lease written before turn 1 (`msls_DhjMB5NF…`) *and* an `attested_at` stamped 227 ms after
+lease written before turn 1 (`[redacted]…`) *and* an `attested_at` stamped 227 ms after
 `started_at` — so the seat could read a lease, an attestation and a refusal at the same instant,
 which is worth more than the lease finding alone: **not even the seat's own attestation record
 distinguishes a live Presence from a dead one.**
@@ -706,13 +706,13 @@ in trials 1 and 2 was the absence of traffic, not the absence of a line (falsify
 whose interrupt line stays silent through a directed act sent to it).
 
 **The lease was not missing — it was on disk and refused.** `.musterd/binding.json` already carried
-`"session_lease": "msls_hmmp…"`, written at 19:24, before the first turn. So the woken session held
+`"session_lease": "[redacted]…"`, written at 19:24, before the first turn. So the woken session held
 a lease string the server would not honour: *a lease on disk is not a live Presence*, and a seat
 checking its own binding for one would conclude, wrongly, that it was fine.
 
 **And on trial 3 the lease turned out not to be stable either.** Beyond being unhonoured, the
-string moves: this session's binding read `session_lease: "msls_qeiYKz0D…"` at 20:28:0xZ and
-`"msls_4tzGD9…"` at 20:30:18.879Z (file mtime), with no `team_join` from this seat in between, so
+string moves: this session's binding read `session_lease: "[redacted]…"` at 20:28:0xZ and
+`"[redacted]…"` at 20:30:18.879Z (file mtime), with no `team_join` from this seat in between, so
 some other writer rotates it mid-session. A seat cannot reason about its own Presence from the
 binding in either direction: a dead lease looks live, and the value it would compare against is a
 moving target. What does the rotating was not measured here and should not be guessed (falsify: a
@@ -738,7 +738,7 @@ join; the join is the only variable (falsify: a pending directed act that rides 
 deaf seat, before any join).
 
 **And the binding records three local signs of a claim, all of them worthless to the seat.** Beyond
-the `session_lease` (`msls__gr-…`) written before turn 1 and the `attested_at` at +216 ms, the v12
+the `session_lease` (`[redacted]…`) written before turn 1 and the `attested_at` at +216 ms, the v12
 binding also carries **`claim_attempted_at`, stamped +78 ms** — a field the earlier trials did not
 read. So the seat can see that a claim was attempted, that an attestation was recorded, and a lease
 string to go with them, and its very next interrupt check is still refused. This is the sharpest
@@ -751,7 +751,7 @@ say so.** Trial 3 saw `session_lease` change value mid-session with no `team_joi
 offered "a session whose `session_lease` is byte-identical from turn 1 to wrap-up" as the test. In
 this session the binding *was* rewritten — key order reordered and `model_observed.observed_at`
 bumped to 21:33:05.873Z, +5m16s after `started_at` — and the lease came through that rewrite
-**byte-identical** (`msls__gr-xYmeNIQ-TxEql-u4AocQrBgUZjeg` before and after). So a binding rewrite
+**byte-identical** (`[redacted]` before and after). So a binding rewrite
 does not by itself rotate the lease, and whatever moved it in trial 3 is narrower than "some other
 writer rotates it mid-session". That weakens the rotation claim to *it can move, not it does move*;
 what has not changed is the part that matters, since the byte-stable lease here was refused just as
