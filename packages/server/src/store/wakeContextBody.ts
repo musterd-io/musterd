@@ -10,6 +10,7 @@ import { checkClaims } from './claimCheck.js';
 import { getLane } from './lanes.js';
 import { getMemberById } from './members.js';
 import { getMemory, memoryProvenance } from './memory.js';
+import { lastActionBySubject } from './quiescence.js';
 import type { MemberRow, MessageRow } from './rows.js';
 
 /**
@@ -143,12 +144,17 @@ export async function deriveContext(
         [team.id, recipient.id, lane.id],
       );
       const status = last ? truncateChars(last.body, B.act_body_chars) : undefined;
+      // ADR 726: agents no longer post a status for the roster's sake, so with none naming the lane
+      // the packet carries the lane's state and the seat's last audited action instead.
+      const lastAction = last
+        ? undefined
+        : ((await lastActionBySubject(db, team.id)).get(recipient.name) ?? null);
       context.lane = {
         detail: detail.text,
         truncated: detail.truncated,
         ...(last && status
           ? { last_status_update: { ts: last.ts, body: status.text, truncated: status.truncated } }
-          : {}),
+          : { activity: { state: lane.state, last_action_at: lastAction ?? null } }),
       };
       if (bytesOf(context.lane) > B.lane) {
         delete context.lane.last_status_update;
