@@ -91,6 +91,33 @@ times (team `go_chi/26` and `click/2068`, coop `datasets/7309`). The claim is ab
 - **Cost.** musterd $1.87 a pair against team $1.42 and coop $1.47. That is about 30% more, for zero
   collisions.
 
+## Robustness, 2026-10-23 (lane 01M5KHD19K, no new run)
+
+Three checks on the data already in hand
+([`robustness.py`](./cooperbench/pilot-runs/2026-10-23-coordination/robustness.py)):
+
+| Reading | team | coop |
+| --- | --- | --- |
+| As pre-registered: errored pairs count as no conflict | 6/10, p = 0.0054 | 7/10, p = 0.0015 |
+| Errored pairs left out | 6/7, p = 0.0006 | 7/9, p = 0.0007 |
+| Every conflict is on a source file both features change | yes (one also touches `metrics_test.go`) | yes |
+| Pairs whose two agents submitted byte-identical patches | 0/10 | 0/10 |
+
+musterd: 0/10 conflicted, and all 10 pairs submitted byte-identical patches.
+
+**How musterd's pairs avoided conflicts, stated plainly.** In every musterd pair the two agents ended
+on one tree and submitted the same patch, which carried both features. CooperBench's evaluator then
+tests that one tree. That path was open to the other arms: both had `--git`, and their agents did
+fetch and merge partner branches. None of their 20 pairs took it. Nothing in the musterd arm told the
+agents to converge. Its git and submission instructions are CooperBench's own blocks, imported unchanged
+(`prompt.py`), and the musterd block names no merge, fetch or branch. What pushes convergence is
+the product: a held file is edited by one agent at a time (ADR 691), and the waiting agent's first
+edit after the hold is refused once with the holder's branch (ADR 697). That reaches every musterd
+team, not only this benchmark. Same evaluator for every arm, unchanged.
+
+**What the convergence does not buy:** passes. An identical patch with both features still has to
+pass both suites. On these ten, musterd passed 1, team 2 and coop 1.
+
 ## Honest N
 
 Ten pairs per arm. The musterd arm ran on 2026-10-22 and the others on 2026-10-23, all on the same
