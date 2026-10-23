@@ -23,6 +23,14 @@
     "bash": 9,
     "wait": 12,
     "finish": 2
+   },
+   "by_intent": {
+    "start: orienting before it claimed a lane": 27,
+    "overlap warning: who else is on my file": 7,
+    "partner progress: is my partner done": 11,
+    "other, or the text does not say": 30,
+    "routine check-in at a task boundary": 15,
+    "held file: who holds it, is it free": 10
    }
   },
   "claim-musterd-new": {
@@ -48,6 +56,14 @@
     "end": 2,
     "edit": 2,
     "finish": 1
+   },
+   "by_intent": {
+    "start: orienting before it claimed a lane": 28,
+    "other, or the text does not say": 20,
+    "routine check-in at a task boundary": 17,
+    "overlap warning: who else is on my file": 7,
+    "held file: who holds it, is it free": 12,
+    "partner progress: is my partner done": 4
    }
   }
  },
@@ -59,7 +75,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team and then coordinate with my teammate."
+   "said": "I'll start by checking my inbox to join the team and then coordinate with my teammate.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -68,7 +85,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "edit",
-   "said": "I see there's a surface overlap - agent2 is also working on the same file. Let me check the team board to understand their work better."
+   "said": "I see there's a surface overlap - agent2 is also working on the same file. Let me check the team board to understand their work better.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -77,7 +95,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "git",
-   "said": "Let me check the current lane status and fetch agent2's changes."
+   "said": "Let me check the current lane status and fetch agent2's changes.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -86,7 +105,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Let me check my inbox for any updates."
+   "said": "Let me check my inbox for any updates.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -95,7 +115,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "end",
-   "said": "Excellent! The patch.txt is complete with all changes from both agents. Let me send a final status update."
+   "said": "Excellent! The patch.txt is complete with all changes from both agents. Let me send a final status update.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -104,7 +125,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the octal_str type feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the octal_str type feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -113,7 +135,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the octal_str type feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the octal_str type feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -122,7 +145,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Now let me verify the change and check if there are tests to validate the implementation."
+   "said": "Now let me verify the change and check if there are tests to validate the implementation.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -131,7 +155,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me verify the change and check if there are tests to validate the implementation."
+   "said": "Now let me verify the change and check if there are tests to validate the implementation.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -140,7 +165,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "Now I'll merge agent1's work and create the final patch.txt."
+   "said": "Now I'll merge agent1's work and create the final patch.txt.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -149,7 +175,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with my peer, then implement the flexible parsing for `dspy.ToolCalls`."
+   "said": "I'll start by joining the team and coordinating with my peer, then implement the flexible parsing for `dspy.ToolCalls`.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -158,7 +185,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "edit",
-   "said": "Let me send a status update and check if agent2 needs to coordinate."
+   "said": "Let me send a status update and check if agent2 needs to coordinate.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -167,7 +195,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "Let me check the lane board to see the current status."
+   "said": "Let me check the lane board to see the current status.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -176,7 +205,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "message",
-   "said": "I need to wait for agent2's lane to be released. Let me wait for their lane to finish."
+   "said": "I need to wait for agent2's lane to be released. Let me wait for their lane to finish.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -185,7 +215,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "finish",
-   "said": "Your lane is still claimed, blocking my edits. Can you resolve or release your lane so I can make my changes?"
+   "said": "Your lane is still claimed, blocking my edits. Can you resolve or release your lane so I can make my changes?",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -194,7 +225,8 @@
    "tool": "lane_board",
    "context": "after_own_finish",
    "next": "edit",
-   "said": "I now own both lanes which are conflicting. Let me resolve agent2's lane since their work is done."
+   "said": "I now own both lanes which are conflicting. Let me resolve agent2's lane since their work is done.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -203,7 +235,8 @@
    "tool": "inbox_plain",
    "context": "after_own_finish",
    "next": "git",
-   "said": "Excellent! All tests pass. Now let me commit my changes and coordinate the final merge."
+   "said": "Excellent! All tests pass. Now let me commit my changes and coordinate the final merge.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -212,7 +245,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the deterministic fingerprinting feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the deterministic fingerprinting feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -221,7 +255,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Perfect! All tests pass. Let me now commit my changes and coordinate with agent1:"
+   "said": "Perfect! All tests pass. Let me now commit my changes and coordinate with agent1:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -230,7 +265,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "git",
-   "said": "Now I'll wait for agent1 to complete their work on the file:"
+   "said": "Now I'll wait for agent1 to complete their work on the file:",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -239,7 +275,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "read",
-   "said": "Now I'll wait for agent1 to complete their work:"
+   "said": "Now I'll wait for agent1 to complete their work:",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -248,7 +285,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "wait",
-   "said": "Now I'll wait for agent1 to complete their work:"
+   "said": "Now I'll wait for agent1 to complete their work:",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -257,7 +295,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by checking my inbox to join the team, then explore the codebase to implement the logging feature."
+   "said": "I'll start by checking my inbox to join the team, then explore the codebase to implement the logging feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -266,7 +305,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me create a simple test to demonstrate the logging feature:"
+   "said": "Let me create a simple test to demonstrate the logging feature:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -275,7 +315,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -284,7 +325,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -293,7 +335,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -302,7 +345,8 @@
    "tool": "inbox_plain",
    "context": "after_wait",
    "next": "message",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -311,7 +355,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -320,7 +365,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "edit",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -329,7 +375,8 @@
    "tool": "inbox_plain",
    "context": "after_own_finish",
    "next": "end",
-   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement path prefix support in HTTP method patterns for the chi router. Let me start by joining the team and coordinating with agent1.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -338,7 +385,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the lazy MIME type accessor method."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the lazy MIME type accessor method.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -347,7 +395,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "read",
-   "said": "I see agent2 is also working on the same file. Let me check the lane board and my inbox to coordinate."
+   "said": "I see agent2 is also working on the same file. Let me check the lane board and my inbox to coordinate.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -356,7 +405,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "I see agent2 is also working on the same file. Let me check the lane board and my inbox to coordinate."
+   "said": "I see agent2 is also working on the same file. Let me check the lane board and my inbox to coordinate.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -365,7 +415,8 @@
    "tool": "team_status",
    "context": "mid_work",
    "next": "wait",
-   "said": "I see agent2 is also modifying the `image_to_base64` method, which relates to my work. Let me send a coordination message."
+   "said": "I see agent2 is also modifying the `image_to_base64` method, which relates to my work. Let me send a coordination message.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -374,7 +425,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "Let me check the lane board to see if anything changed and wait a bit more for agent2."
+   "said": "Let me check the lane board to see if anything changed and wait a bit more for agent2.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -383,7 +435,8 @@
    "tool": "inbox_plain",
    "context": "after_own_finish",
    "next": "git",
-   "said": "Now let me submit my lane to mark the work as complete."
+   "said": "Now let me submit my lane to mark the work as complete.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -392,7 +445,8 @@
    "tool": "inbox_plain",
    "context": "after_own_finish",
    "next": "message",
-   "said": "Perfect! The patch contains both features: - agent2's encoding field (line +58) - My get_image_mimetype() method (lines +68-85) - Both integrated correctly in image_to_base64 Let me resolve my lane an"
+   "said": "Perfect! The patch contains both features: - agent2's encoding field (line +58) - My get_image_mimetype() method (lines +68-85) - Both integrated correctly in image_to_base64 Let me resolve my lane an",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -401,7 +455,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the `encoding` field feature for `ImageBlock`."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the `encoding` field feature for `ImageBlock`.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -410,7 +465,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "claim",
-   "said": "Now I'll open a lane for my work and check the board to see what agent1 is working on."
+   "said": "Now I'll open a lane for my work and check the board to see what agent1 is working on.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -419,7 +475,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method."
+   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -428,7 +485,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method."
+   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -437,7 +495,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "wait",
-   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method."
+   "said": "Now I'll implement the feature. I need to add the `encoding` field to `ImageBlock` and update the `image_to_base64` method.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -446,7 +505,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by checking my inbox to join the team, then coordinate with agent2 about my work."
+   "said": "I'll start by checking my inbox to join the team, then coordinate with agent2 about my work.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -455,7 +515,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team, then coordinate with agent2 about my work."
+   "said": "I'll start by checking my inbox to join the team, then coordinate with agent2 about my work.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -464,7 +525,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I see there's overlap with agent2's work on the same file. Let me check the lane board to understand the situation better."
+   "said": "I see there's overlap with agent2's work on the same file. Let me check the lane board to understand the situation better.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -473,7 +535,8 @@
    "tool": "inbox_plain",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "The edit is blocked because agent2 claimed the file first. Let me check my inbox and coordinate with agent2."
+   "said": "The edit is blocked because agent2 claimed the file first. Let me check my inbox and coordinate with agent2.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -482,7 +545,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "Now I'll add the chunk_size parameter to enable text chunking. Let me implement this feature on top of agent2's changes."
+   "said": "Now I'll add the chunk_size parameter to enable text chunking. Let me implement this feature on top of agent2's changes.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -491,7 +555,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Perfect! The patch.txt contains both features. Let me send a final update and check my inbox."
+   "said": "Perfect! The patch.txt contains both features. Let me send a final update and check my inbox.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -500,7 +565,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "git",
-   "said": "Perfect! The patch.txt contains both features. Let me send a final update and check my inbox."
+   "said": "Perfect! The patch.txt contains both features. Let me send a final update and check my inbox.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -509,7 +575,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team, then open a lane for my work on token pattern tracking."
+   "said": "I'll start by checking my inbox to join the team, then open a lane for my work on token pattern tracking.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -518,7 +585,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Perfect! The implementation works correctly. Now let me check my inbox and the lane board to see what agent1 is working on:"
+   "said": "Perfect! The implementation works correctly. Now let me check my inbox and the lane board to see what agent1 is working on:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -527,7 +595,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Perfect! The implementation works correctly. Now let me check my inbox and the lane board to see what agent1 is working on:"
+   "said": "Perfect! The implementation works correctly. Now let me check my inbox and the lane board to see what agent1 is working on:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -536,7 +605,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "git",
-   "said": "Now let me wait for agent1 to complete their work:"
+   "said": "Now let me wait for agent1 to complete their work:",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -545,7 +615,8 @@
    "tool": "inbox_plain",
    "context": "after_own_finish",
    "next": "bash",
-   "said": "Let me clean up the test file and send final updates:"
+   "said": "Let me clean up the test file and send final updates:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -554,7 +625,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the resource leak fix."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the resource leak fix.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -563,7 +635,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the resource leak fix."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the resource leak fix.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -572,7 +645,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with"
+   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -581,7 +655,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with"
+   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -590,7 +665,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "message",
-   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with"
+   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -599,7 +675,8 @@
    "tool": "team_status",
    "context": "after_wait",
    "next": "git",
-   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with"
+   "said": "Now let me implement the fix. Based on the analysis, the issue is that contexts created during shell completion are never closed. The fix is to wrap the context usage in `get_completions` with a `with",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -608,7 +685,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the cleanup_timeout feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the cleanup_timeout feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -617,7 +695,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "I'm blocked from editing core.py because agent1 holds it. Let me check my inbox and coordinate."
+   "said": "I'm blocked from editing core.py because agent1 holds it. Let me check my inbox and coordinate.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -626,7 +705,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "message",
-   "said": "Great news! Agent1 only modified shell_completion.py, not core.py. Let me proceed with my changes."
+   "said": "Great news! Agent1 only modified shell_completion.py, not core.py. Let me proceed with my changes.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -635,7 +715,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "bash",
-   "said": "Now let me create the final patch.txt file with all changes from both agents:"
+   "said": "Now let me create the final patch.txt file with all changes from both agents:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -644,7 +725,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature."
+   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -653,7 +735,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature."
+   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -662,7 +745,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "finish",
-   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature."
+   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -671,7 +755,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature."
+   "said": "I'll start by joining the team and understanding the task, then implement the translation variable validation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -680,7 +765,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -689,7 +775,8 @@
    "tool": "team_status",
    "context": "mid_work",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -698,7 +785,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -707,7 +795,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "message",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -716,7 +805,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional translation feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -725,7 +815,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the template path transformation feature."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the template path transformation feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -734,7 +825,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Let me check my inbox and the team status to see if agent2 has responded or completed their work."
+   "said": "Let me check my inbox and the team status to see if agent2 has responded or completed their work.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -743,7 +835,8 @@
    "tool": "team_status",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me check my inbox and the team status to see if agent2 has responded or completed their work."
+   "said": "Let me check my inbox and the team status to see if agent2 has responded or completed their work.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -752,7 +845,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "git",
-   "said": "Now let me wait for agent2 to complete their work before doing the final merge."
+   "said": "Now let me wait for agent2 to complete their work before doing the final merge.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -761,7 +855,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the template path aliasing feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the template path aliasing feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -770,7 +865,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the template path aliasing feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the template path aliasing feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -779,7 +875,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me examine the loaders.py file to understand the structure."
+   "said": "Let me examine the loaders.py file to understand the structure.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -788,7 +885,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "The file is held by agent1. Let me wait for their lane to finish."
+   "said": "The file is held by agent1. Let me wait for their lane to finish.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -797,7 +895,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "Perfect! Agent1 didn't modify BaseLoader, so our changes are compatible. Let me proceed with implementation."
+   "said": "Perfect! Agent1 didn't modify BaseLoader, so our changes are compatible. Let me proceed with implementation.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -806,7 +905,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Excellent! All functionality works correctly. Let me commit my changes."
+   "said": "Excellent! All functionality works correctly. Let me commit my changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-core",
@@ -815,7 +915,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and claiming a lane for my work on the `onFinally` callback feature."
+   "said": "I'll start by joining the team and claiming a lane for my work on the `onFinally` callback feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -824,7 +925,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Now I'll update the implementation in `createFormControl.ts`:"
+   "said": "Now I'll update the implementation in `createFormControl.ts`:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -833,7 +935,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll update the implementation in `createFormControl.ts`:"
+   "said": "Now I'll update the implementation in `createFormControl.ts`:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -842,7 +945,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll update the implementation in `createFormControl.ts`:"
+   "said": "Now I'll update the implementation in `createFormControl.ts`:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -851,7 +955,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "Now I'll update the implementation in `createFormControl.ts`:"
+   "said": "Now I'll update the implementation in `createFormControl.ts`:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -860,7 +965,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the submission context feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the submission context feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -869,7 +975,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the submission context feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the submission context feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -878,7 +985,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I see there's a surface overlap with agent1 - we're both working on the same files. Let me check the lane board and coordinate."
+   "said": "I see there's a surface overlap with agent1 - we're both working on the same files. Let me check the lane board and coordinate.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -887,7 +995,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "wait",
-   "said": "Let me read the current files to understand the structure while I wait for agent1's response."
+   "said": "Let me read the current files to understand the structure while I wait for agent1's response.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-core",
@@ -896,7 +1005,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "Now I'll implement my submission context feature on top of agent1's changes."
+   "said": "Now I'll implement my submission context feature on top of agent1's changes.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-core",
@@ -905,7 +1015,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -914,7 +1025,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -923,7 +1035,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the indexed access feature for `str.first()` and `str.last()`.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-core",
@@ -932,7 +1045,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the `skip_whitespace` parameter for `str.first()` and `str.last()`."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the `skip_whitespace` parameter for `str.first()` and `str.last()`.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-core",
@@ -941,7 +1055,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I see agent1 is also working on `str.rs`. Let me check the board and coordinate with them."
+   "said": "I see agent1 is also working on `str.rs`. Let me check the board and coordinate with them.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-core",
@@ -950,7 +1065,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll follow the submission protocol to create the final patch."
+   "said": "Now I'll follow the submission protocol to create the final patch.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -959,7 +1075,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional filter loading feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the conditional filter loading feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -968,7 +1085,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me run the test script to verify the implementation."
+   "said": "Now let me run the test script to verify the implementation.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -977,7 +1095,8 @@
    "tool": "team_status",
    "context": "after_wait",
    "next": "git",
-   "said": "Now I'll commit my changes and push them."
+   "said": "Now I'll commit my changes and push them.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -986,7 +1105,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the built-in filter extensions feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the built-in filter extensions feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -995,7 +1115,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "read",
-   "said": "I see there's an overlap with agent1 on `outlines/prompts.py`. Let me check the lane board and coordinate:"
+   "said": "I see there's an overlap with agent1 on `outlines/prompts.py`. Let me check the lane board and coordinate:",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1004,7 +1125,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "I see there's an overlap with agent1 on `outlines/prompts.py`. Let me check the lane board and coordinate:"
+   "said": "I see there's an overlap with agent1 on `outlines/prompts.py`. Let me check the lane board and coordinate:",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1013,7 +1135,8 @@
    "tool": "inbox_plain",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "The edit is blocked. Let me check my inbox and send a more direct request to agent1:"
+   "said": "The edit is blocked. Let me check my inbox and send a more direct request to agent1:",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1022,7 +1145,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the custom XGrammarLogitsProcessor feature."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the custom XGrammarLogitsProcessor feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1031,7 +1155,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I see agent2 is also working on the same file. Let me coordinate with them."
+   "said": "I see agent2 is also working on the same file. Let me coordinate with them.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1040,7 +1165,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "The test failure is expected - my implementation now supports both Transformers and MLXLM models, so the error message has been updated to reflect that. The test expects the old message but I cannot m"
+   "said": "The test failure is expected - my implementation now supports both Transformers and MLXLM models, so the error message has been updated to reflect that. The test expects the old message but I cannot m",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1049,7 +1175,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by checking my inbox to join the team, then coordinate with my teammate and implement the memory usage monitoring feature."
+   "said": "I'll start by checking my inbox to join the team, then coordinate with my teammate and implement the memory usage monitoring feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1058,7 +1185,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by checking my inbox to join the team, then coordinate with my teammate and implement the memory usage monitoring feature."
+   "said": "I'll start by checking my inbox to join the team, then coordinate with my teammate and implement the memory usage monitoring feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1067,7 +1195,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Perfect! The implementation is complete. Now let me commit my changes:"
+   "said": "Perfect! The implementation is complete. Now let me commit my changes:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1076,7 +1205,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "wait",
-   "said": "Perfect! The implementation is complete. Now let me commit my changes:"
+   "said": "Perfect! The implementation is complete. Now let me commit my changes:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1085,7 +1215,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll implement the feature to add an explicit `is_last_chunk` field to streaming responses. Let me start by joining the team and coordinating with agent2."
+   "said": "I'll implement the feature to add an explicit `is_last_chunk` field to streaming responses. Let me start by joining the team and coordinating with agent2.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1094,7 +1225,8 @@
    "tool": "team_status",
    "context": "mid_work",
    "next": "read",
-   "said": "I see there's overlap with agent2 on `streaming_listener.py`. Let me check the team status and coordinate."
+   "said": "I see there's overlap with agent2 on `streaming_listener.py`. Let me check the team status and coordinate.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1103,7 +1235,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "I see there's overlap with agent2 on `streaming_listener.py`. Let me check the team status and coordinate."
+   "said": "I see there's overlap with agent2 on `streaming_listener.py`. Let me check the team status and coordinate.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1112,7 +1245,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "Agent2 has finished their changes. Let me fetch and merge their work, then add my parameter."
+   "said": "Agent2 has finished their changes. Let me fetch and merge their work, then add my parameter.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1121,7 +1255,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Great! Both edits are complete. Let me commit and push my changes."
+   "said": "Great! Both edits are complete. Let me commit and push my changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1130,7 +1265,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and checking my inbox, then open a lane for my work on the streaming listener feature."
+   "said": "I'll start by joining the team and checking my inbox, then open a lane for my work on the streaming listener feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1139,7 +1275,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me commit my changes and check for any messages from my teammate:"
+   "said": "Let me commit my changes and check for any messages from my teammate:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1148,7 +1285,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "Let me commit my changes and check for any messages from my teammate:"
+   "said": "Let me commit my changes and check for any messages from my teammate:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1157,7 +1295,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll implement support for `http.Request.PathValue` in Go 1.22 for the chi router. Let me start by joining the team and understanding the codebase."
+   "said": "I'll implement support for `http.Request.PathValue` in Go 1.22 for the chi router. Let me start by joining the team and understanding the codebase.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1166,7 +1305,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available."
+   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1175,7 +1315,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available."
+   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1184,7 +1325,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "end",
-   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available."
+   "said": "Now let me implement the PathValue support. I'll create two files with conditional compilation and update mux.go to populate PathValue when available.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1193,7 +1335,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1202,7 +1345,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1211,7 +1355,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1220,7 +1365,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1229,7 +1375,8 @@
    "tool": "inbox_plain",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1238,7 +1385,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1247,7 +1395,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "edit",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1256,7 +1405,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the route hit monitoring feature.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1265,7 +1415,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by checking my inbox to join the team and then claim a lane for the Parquet streaming and filters feature."
+   "said": "I'll start by checking my inbox to join the team and then claim a lane for the Parquet streaming and filters feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1274,7 +1425,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team and then claim a lane for the Parquet streaming and filters feature."
+   "said": "I'll start by checking my inbox to join the team and then claim a lane for the Parquet streaming and filters feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1283,7 +1435,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "Now I'll implement my changes for filters and buffered streaming. I need to add the filters parameter to ParquetConfig and use it for predicate pushdown, plus add buffered streaming for performance."
+   "said": "Now I'll implement my changes for filters and buffered streaming. I need to add the filters parameter to ParquetConfig and use it for predicate pushdown, plus add buffered streaming for performance.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1292,7 +1445,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "Perfect! The patch.txt contains both features - agent2's sort_by parameter and my filters parameter with buffered streaming. Let me check in with my teammate one final time."
+   "said": "Perfect! The patch.txt contains both features - agent2's sort_by parameter and my filters parameter with buffered streaming. Let me check in with my teammate one final time.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1301,7 +1455,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1310,7 +1465,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1319,7 +1475,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll help you implement the sorting support during streaming for Parquet data. Let me start by joining the team and coordinating with agent1.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1328,7 +1485,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with my teammate, then implement the feature."
+   "said": "I'll start by joining the team and coordinating with my teammate, then implement the feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1337,7 +1495,8 @@
    "tool": "inbox_plain",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "The file is held by agent2. Let me check my inbox and coordinate with them."
+   "said": "The file is held by agent2. Let me check my inbox and coordinate with them.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1346,7 +1505,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "I'll wait for agent2's response."
+   "said": "I'll wait for agent2's response.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-new",
@@ -1355,7 +1515,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "message",
-   "said": "Now let me add the `resolve_image_with_size()` method to ImageBlock:"
+   "said": "Now let me add the `resolve_image_with_size()` method to ImageBlock:",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1364,7 +1525,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Perfect! The patch.txt contains both my changes and agent2's changes. Let me check my inbox and submit my lane:"
+   "said": "Perfect! The patch.txt contains both my changes and agent2's changes. Let me check my inbox and submit my lane:",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-new",
@@ -1373,7 +1535,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the audio mimetype override feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the audio mimetype override feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1382,7 +1545,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "edit",
-   "said": "Now let me message agent1 about my work and check what they're working on."
+   "said": "Now let me message agent1 about my work and check what they're working on.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1391,7 +1555,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "git",
-   "said": "Good! My implementation is complete. Let me check my inbox for any messages from agent1 and then commit my changes."
+   "said": "Good! My implementation is complete. Let me check my inbox for any messages from agent1 and then commit my changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1400,7 +1565,8 @@
    "tool": "lane_board",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "Now let me wait for agent1 to finish their work."
+   "said": "Now let me wait for agent1 to finish their work.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-new",
@@ -1409,7 +1575,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team, then claim a lane for the files I need to modify."
+   "said": "I'll start by checking my inbox to join the team, then claim a lane for the files I need to modify.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1418,7 +1585,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "bash",
-   "said": "I see there's a surface overlap with agent2 who is also working on the same files. Let me check the lane board to understand the situation better."
+   "said": "I see there's a surface overlap with agent2 who is also working on the same files. Let me check the lane board to understand the situation better.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1427,7 +1595,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "read",
-   "said": "The edit is blocked because agent2 still holds the lane. Let me check when they'll finish or request a handoff."
+   "said": "The edit is blocked because agent2 still holds the lane. Let me check when they'll finish or request a handoff.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1436,7 +1605,8 @@
    "tool": "lane_board",
    "context": "after_held_refusal",
    "next": "wait",
-   "said": "The edit is blocked because agent2 still holds the lane. Let me check when they'll finish or request a handoff."
+   "said": "The edit is blocked because agent2 still holds the lane. Let me check when they'll finish or request a handoff.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1445,7 +1615,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the concurrent edit protection feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the concurrent edit protection feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1454,7 +1625,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the concurrent edit protection feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the concurrent edit protection feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1463,7 +1635,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "read",
-   "said": "Let me check my inbox and the lane board to see if agent1 needs to coordinate:"
+   "said": "Let me check my inbox and the lane board to see if agent1 needs to coordinate:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1472,7 +1645,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me check my inbox and the lane board to see if agent1 needs to coordinate:"
+   "said": "Let me check my inbox and the lane board to see if agent1 needs to coordinate:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1481,7 +1655,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "Let me commit my work:"
+   "said": "Let me commit my work:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1490,7 +1665,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and claiming a lane for my work on smart auto-completion for Click options."
+   "said": "I'll start by joining the team and claiming a lane for my work on smart auto-completion for Click options.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1499,7 +1675,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll implement the smart auto-completion feature. First, let me add the implementation:"
+   "said": "Now I'll implement the smart auto-completion feature. First, let me add the implementation:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1508,7 +1685,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "I see we're both working on the same files. Let me coordinate with agent2."
+   "said": "I see we're both working on the same files. Let me coordinate with agent2.",
+   "intent": "overlap warning: who else is on my file"
   },
   {
    "run": "claim-musterd-new",
@@ -1517,7 +1695,8 @@
    "tool": "team_status",
    "context": "after_wait",
    "next": "message",
-   "said": "Let me try a different approach - I'll make my implementation changes after the initialization:"
+   "said": "Let me try a different approach - I'll make my implementation changes after the initialization:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1526,7 +1705,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "message",
-   "said": "Now let me add the auto_complete parameter to the Option.__init__ method:"
+   "said": "Now let me add the auto_complete parameter to the Option.__init__ method:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1535,7 +1715,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me commit my changes and notify agent2:"
+   "said": "Now let me commit my changes and notify agent2:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1544,7 +1725,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "Perfect! Let me do a final verification and send a completion status:"
+   "said": "Perfect! Let me do a final verification and send a completion status:",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1553,7 +1735,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "read",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the option value history tracking feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the option value history tracking feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1562,7 +1745,8 @@
    "tool": "team_status",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent1, then implement the option value history tracking feature."
+   "said": "I'll start by joining the team and coordinating with agent1, then implement the option value history tracking feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1571,7 +1755,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Now let me read the relevant source files to understand the current implementation."
+   "said": "Now let me read the relevant source files to understand the current implementation.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1580,7 +1765,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me test the implementation directly:"
+   "said": "Let me test the implementation directly:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1589,7 +1775,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "Let me test the implementation directly:"
+   "said": "Let me test the implementation directly:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1598,7 +1785,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "git",
-   "said": "Let me test the implementation directly:"
+   "said": "Let me test the implementation directly:",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1607,7 +1795,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by checking my inbox to join the team and coordinate with agent2."
+   "said": "I'll start by checking my inbox to join the team and coordinate with agent2.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1616,7 +1805,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "Now let me check my inbox to see if agent2 has sent any messages, and then test the implementation."
+   "said": "Now let me check my inbox to see if agent2 has sent any messages, and then test the implementation.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1625,7 +1815,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "wait",
-   "said": "Perfect! The stable parameter works as expected. Now let me commit and push my changes."
+   "said": "Perfect! The stable parameter works as expected. Now let me commit and push my changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1634,7 +1825,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "Now I'll wait for agent2 to complete their work."
+   "said": "Now I'll wait for agent2 to complete their work.",
+   "intent": "partner progress: is my partner done"
   },
   {
    "run": "claim-musterd-new",
@@ -1643,7 +1835,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and checking my inbox, then claim a lane for my work on the multi-level groupby feature."
+   "said": "I'll start by joining the team and checking my inbox, then claim a lane for my work on the multi-level groupby feature.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1652,7 +1845,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "message",
-   "said": "Now I'll open and claim a lane for my work on the groupby filter."
+   "said": "Now I'll open and claim a lane for my work on the groupby filter.",
+   "intent": "other, or the text does not say"
   },
   {
    "run": "claim-musterd-new",
@@ -1661,7 +1855,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "bash",
-   "said": "Now let me prepare the final patch.txt for submission by merging all changes."
+   "said": "Now let me prepare the final patch.txt for submission by merging all changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1670,7 +1865,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "finish",
-   "said": "Now let me prepare the final patch.txt for submission by merging all changes."
+   "said": "Now let me prepare the final patch.txt for submission by merging all changes.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1679,7 +1875,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "claim",
-   "said": "I'll start by joining the team and coordinating with agent2, then implement the callback for initial default values resolution."
+   "said": "I'll start by joining the team and coordinating with agent2, then implement the callback for initial default values resolution.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1688,7 +1885,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "message",
-   "said": "Let me check if there are any messages from agent2 and then create the final patch."
+   "said": "Let me check if there are any messages from agent2 and then create the final patch.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1697,7 +1895,8 @@
    "tool": "team_status",
    "context": "after_own_finish",
    "next": "wait",
-   "said": "Now let me commit my changes to the branch."
+   "said": "Now let me commit my changes to the branch.",
+   "intent": "routine check-in at a task boundary"
   },
   {
    "run": "claim-musterd-new",
@@ -1706,7 +1905,8 @@
    "tool": "inbox_plain",
    "context": "before_claim",
    "next": "bash",
-   "said": "I'll implement the `preventResetIfDirty` feature for the form library. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement the `preventResetIfDirty` feature for the form library. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1715,7 +1915,8 @@
    "tool": "lane_board",
    "context": "before_claim",
    "next": "message",
-   "said": "I'll implement the `preventResetIfDirty` feature for the form library. Let me start by joining the team and coordinating with agent1."
+   "said": "I'll implement the `preventResetIfDirty` feature for the form library. Let me start by joining the team and coordinating with agent1.",
+   "intent": "start: orienting before it claimed a lane"
   },
   {
    "run": "claim-musterd-new",
@@ -1724,7 +1925,8 @@
    "tool": "lane_board",
    "context": "after_wait",
    "next": "git",
-   "said": "The system blocked my edit because agent1 holds those files. Let me wait for their lane to complete or for them to respond."
+   "said": "The system blocked my edit because agent1 holds those files. Let me wait for their lane to complete or for them to respond.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1733,7 +1935,8 @@
    "tool": "lane_board",
    "context": "mid_work",
    "next": "git",
-   "said": "The system blocked my edit because agent1 holds those files. Let me wait for their lane to complete or for them to respond."
+   "said": "The system blocked my edit because agent1 holds those files. Let me wait for their lane to complete or for them to respond.",
+   "intent": "held file: who holds it, is it free"
   },
   {
    "run": "claim-musterd-new",
@@ -1742,7 +1945,8 @@
    "tool": "inbox_plain",
    "context": "mid_work",
    "next": "end",
-   "said": "Perfect! I've successfully completed my feature implementation. Let me do a final verification:"
+   "said": "Perfect! I've successfully completed my feature implementation. Let me do a final verification:",
+   "intent": "routine check-in at a task boundary"
   }
  ]
 }
