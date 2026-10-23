@@ -1,20 +1,21 @@
 /**
  * The rendered-art flag and loader (office realism, plan Task 2).
  *
- * `?office=rendered` turns the pre-rendered path on for one page load (spec §7: the flag lives until
- * nick accepts the look on /live, then /broadcast, then it goes). Until the assets have decoded the
+ * The pre-rendered office is the default (lane 01M5D8EJ40, nick 2026-10-23: default first, painters
+ * go once the dog, welcome room and ambient overlays are rendered). `?office=painted` keeps the
+ * painted office for one page load, for the broadcast A/B and as a rollback. Until the assets have decoded the
  * painted scene draws, and an asset that fails to load is listed in `missing` rather than failing
  * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
  */
-import type { LayerId } from './figure';
+import type { FigureScratch, LayerId } from './figure';
 import { type Anim, ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
 
 export function renderedOfficeFromSearch(search: string): boolean {
   try {
-    return new URLSearchParams(search).get('office') === 'rendered';
+    return new URLSearchParams(search).get('office') !== 'painted';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -32,8 +33,8 @@ export interface FigureAssets {
   spec: SheetSpec;
   /** Neutral sheets by layer id; a layer absent here failed to load and is skipped by `drawFigureFrame`. */
   sheets: Map<LayerId, CanvasImageSource>;
-  /** The tint pass's one scratch canvas (`tintFrame`), shared by every member and frame. */
-  scratch: { canvas?: HTMLCanvasElement };
+  /** The tint pass's one scratch canvas (`tintFrame`) and the composed frames, shared by every member. */
+  scratch: FigureScratch;
 }
 
 /** What `render.py --figure` writes: a SheetSpec plus the sheet file per layer. */

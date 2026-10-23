@@ -2282,3 +2282,43 @@ paints with the card (ADR 183). A re-baseline would loosen. Ceilings are the loc
 JS CI gap and ~200 B, and the ~250 B CSS CI gap.
 
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 151,520 B, total JS at or under 363,920 B, and live CSS at or under 27,950 B.
+
+## 2026-10-23 — the rendered office becomes the default; the figure composes once per frame (lane 01M5D8EJ40)
+
+The rendered office is now on unless `?office=painted` (nick, 2026-10-23: default first, the
+painters go once the dog, welcome room and ambient overlays are rendered). Plan Task 20's gate is
+ms per draw on the rendered office ≤ the painted one's, so that was measured first.
+
+**Method.** `/office-preview?n=14&plates=broadcast&sprites=1` (14 members, looping choreography,
+broadcast plates, the sprite cache on, as `/broadcast` draws), headless-free Chrome at 1920×1080,
+production `pnpm build` under `vite preview`, the rAF callback timed in page, 25 s or 4×6 s after an
+8–10 s warm-up. The laptop hosts ~12 seats and its load swings several-fold within minutes (painted
+read 7.2, 14.2 and 2.6 ms across the afternoon), so **only back-to-back pairs compare**.
+
+| Build | Painted (ms/frame) | Rendered (ms/frame) |
+| --- | --- | --- |
+| `main` 9a547c4 (daemon), before | 7.2 | 23.6, 22.1 |
+| branch, composite cache at a fixed 320 | 14.2, 14.1 | 15.1, 15.3 |
+| branch, cap sized to the floor (`compositeCapFor`) | 2.6 (2.2–2.9) | 2.7 (2.65–2.8) |
+
+**What it was.** Each member's six-odd identity layers were tinted on a scratch canvas and blitted
+every frame: 425 `drawImage` a frame, 13.4 ms of them. The composite (one tinted, layered canvas per
+distinct frame, LRU) cut that to ~155. Two further findings:
+
+- The scratch and the composites are kept in CPU memory (`willReadFrequently`). A small canvas on the
+  GPU turned each scratch → composite copy into a readback of ~1 ms — measured 9.5 such copies a frame
+  at 8.7 ms. Off the GPU the same copies cost ~0.19 ms each.
+- At a fixed 320 composites the cache thrashed: the floor's working set is ~640 distinct frames (~46 a
+  figure), and misses stayed at ~1.1 a frame. `compositeCapFor` sizes it at 48 a figure (floor
+  minimum 320); misses fell to ~0.01–0.05 a frame.
+
+**The memory this costs.** A composite is 108 × 156 × 4 B ≈ 67 KB, so a 14-member floor holds up to
+16 × 48 ≈ 770 of them, ~51 MB, ~43 MB at the measured working set — CPU memory, paid only by a page
+showing the rendered office. A smaller composite (stored at the draw scale, or trimmed to the
+frame's bounds) is the lever if a phone or the stream box needs it back.
+
+- Falsify: on this branch, `/office-preview?n=14&plates=broadcast&sprites=1` reads more than ~10%
+  over `&office=painted` when the two run back to back, or a probe of composite clears on the 108 ×
+  156 canvas reads above ~0.2 a frame after warm-up.
+
+Follows-up: `/broadcast`'s own frame-time A/B with `scripts/perf/broadcast-baseline.mjs` on a stream seat (this run had no stream seat, so `/broadcast` showed an empty floor), lane 01M5D8EJ40.

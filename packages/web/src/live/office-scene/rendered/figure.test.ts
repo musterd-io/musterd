@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { appearanceOf, type Appearance } from '../appearance';
 import { fitFloor } from '../iso';
 import { recordingCtx } from '../recording-ctx';
-import { drawFigureFrame, layersFor, type LayerId } from './figure';
+import { COMPOSITE_CAP, compositeCapFor, drawFigureFrame, layersFor, type LayerId } from './figure';
 import { DIR8, type SheetSpec } from './figureSheet';
 import { mulHex, tintFrame } from './tint';
 
@@ -156,21 +156,25 @@ describe('drawFigureFrame', () => {
       scratch: {},
       create,
     });
+    // the room gets ONE blit: the member's composed frame, its anchor on the floor point
     const blits = ops.filter((o) => o.name === 'drawImage');
-    expect(blits).toHaveLength(ids.length);
-    // every layer is tinted, so each blit comes off the scratch's origin at the cell's size…
+    expect(blits).toHaveLength(1);
+    const k = fit.scale / spec.scale;
     expect(blits[0]!.args.slice(1, 5)).toEqual([0, 0, 64, 96]);
+    expect(blits[0]!.args[7]).toBeCloseTo(64 * k);
+    expect(blits[0]!.args[8]).toBeCloseTo(96 * k);
+    // the composite (the first canvas made) holds one layer per sheet, each off the scratch's origin…
+    const layers = made[0]!.ops.filter((o) => o.name === 'drawImage');
+    expect(layers).toHaveLength(ids.length);
+    expect(layers[0]!.args.slice(1, 9)).toEqual([0, 0, 64, 96, 0, 0, 64, 96]);
     // …and the scratch read frame 1 of the walk row for SE from the sheet: source x = 64, y = (8 + 1) * 96
-    const reads = made.flatMap((m) => m.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9));
+    const reads = made[1]!.ops.filter((o) => o.name === 'drawImage');
     expect(reads[0]!.args.slice(1, 5)).toEqual([64, 9 * 96, 64, 96]);
-    // every layer lands on the same destination rect
-    const dests = new Set(blits.map((b) => JSON.stringify(b.args.slice(5))));
-    expect(dests.size).toBe(1);
   });
 
   it('a missing sheet (a hair style with no render yet) is skipped, the rest still draw', () => {
     const { ctx, ops } = recordingCtx();
-    const { create } = fakeCanvasFactory();
+    const { create, made } = fakeCanvasFactory();
     const ids = layersFor(femme, 'human').map((l) => l.id).filter((id) => id !== 'hair/bun');
     drawFigureFrame({
       ctx,
@@ -187,7 +191,8 @@ describe('drawFigureFrame', () => {
       scratch: {},
       create,
     });
-    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
+    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(1);
+    expect(made[0]!.ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
   });
 
   it('the seated overlay (part arms) draws only the layers that stored arm cells, from those cells', () => {
@@ -219,34 +224,37 @@ describe('drawFigureFrame', () => {
       scratch: {},
       create,
     });
-    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(2);
+    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(1);
+    expect(made[0]!.ops.filter((o) => o.name === 'drawImage')).toHaveLength(2);
     // read from the @arms cells (3×3), not the layer's own (10×10)
-    const reads = made.flatMap((m) => m.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9));
+    const reads = made[1]!.ops.filter((o) => o.name === 'drawImage');
     expect(reads.every((r) => r.args[3] === 3 && r.args[4] === 3)).toBe(true);
   });
 
   it('a stretched build draws each layer wider about the floor point, mirrored or not', () => {
     const draw = (build: number, dir: 'SE' | 'S') => {
       const { ctx, ops } = recordingCtx();
-      const { create } = fakeCanvasFactory();
+      const { create, made } = fakeCanvasFactory();
       const look: Appearance = { ...femme, hair: 'bald', accessory: 'none', build };
       const ids = layersFor(look, 'human').map((l) => l.id);
       // packed 64×64 cells at offset 0 (mirroring applies to packed cells only)
       const cells = Array.from({ length: 64 * 8 * 8 * 6 }, (_, i) => (i % 6 < 4 ? 64 : 0));
       const mirrored: SheetSpec = { ...spec, mirror: { S: 'E' }, cells: Object.fromEntries(ids.map((id) => [id, cells])) };
       drawFigureFrame({ ctx, fit, at: { lx: 450, ly: 450 }, sheets: allSheets(ids), spec: mirrored, look, kind: 'human', anim: 'idle', dir, t: 0, startT: 0, scratch: {}, create });
-      return ops;
+      return { ops, composite: made[0]!.ops };
     };
     const k = fit.scale / spec.scale;
-    const flat = draw(1, 'SE').find((o) => o.name === 'drawImage')!.args as number[];
-    const wide = draw(1.04, 'SE').find((o) => o.name === 'drawImage')!.args as number[];
-    // the floor point (anchor.x = 32 into a 64-wide cell) stays put; the width grows 4%
+    const flat = draw(1, 'SE').ops.find((o) => o.name === 'drawImage')!.args as number[];
+    const wide = draw(1.04, 'SE').ops.find((o) => o.name === 'drawImage')!.args as number[];
+    // the floor point (anchor.x = 32 into a 64-wide frame) stays put; the width grows 4%
     expect(wide[7]).toBeCloseTo(64 * k * 1.04);
     expect(wide[5]).toBeCloseTo(flat[5]! + 32 * k - 32 * k * 1.04);
     expect(wide[8]).toBeCloseTo(flat[8]!);
-    // a mirrored direction flips about the same stretched cell: its translate is the wide cell's right edge
-    const tr = draw(1.04, 'S').find((o) => o.name === 'translate')!.args as number[];
-    expect(tr[0]).toBeCloseTo(wide[5]! + 64 * k * 1.04);
+    // a mirrored direction lands on the same stretched rect; the flip is inside the composite, about the cell's right edge
+    const s = draw(1.04, 'S');
+    expect(s.ops.find((o) => o.name === 'drawImage')!.args.slice(5)).toEqual(wide.slice(5));
+    expect(s.composite.find((o) => o.name === 'translate')!.args).toEqual([64, 0]);
+    expect(s.composite.find((o) => o.name === 'scale')!.args).toEqual([-1, 1]);
   });
 
   it('the room tint multiplies every layer, and the untinted eyes are tinted by it alone', () => {
@@ -258,6 +266,54 @@ describe('drawFigureFrame', () => {
     const fills = made.flatMap((m) => m.ops.filter((o) => o.name === 'set:fillStyle').map((o) => o.args[0]));
     expect(fills).toContain('#b4bcd6'); // the eyes, untinted by appearance, still take the room's tint
     expect(fills).toContain(mulHex(agent.skin, '#b4bcd6'));
-    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
+    expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(1);
+    expect(made[0]!.ops.filter((o) => o.name === 'drawImage')).toHaveLength(ids.length);
+  });
+
+  it('composes a frame once: the same pixels again are one blit and no tinting; a new frame composes anew', () => {
+    const { create, made } = fakeCanvasFactory();
+    const ids = layersFor(femme, 'human').map((l) => l.id);
+    const scratch = {};
+    const draw = (t: number, tint?: string) => {
+      const { ctx, ops } = recordingCtx();
+      drawFigureFrame({ ctx, fit, at: { lx: 450, ly: 450 }, sheets: allSheets(ids), spec, look: femme, kind: 'human', anim: 'walk', dir: 'SE', t, startT: 0, scratch, create, ...(tint ? { tint } : {}) });
+      return ops.filter((o) => o.name === 'drawImage').length;
+    };
+    const tinted = () => made.reduce((n, m) => n + m.ops.filter((o) => o.name === 'fillRect').length, 0);
+    expect(draw(1 / 12)).toBe(1);
+    const once = tinted();
+    expect(draw(1 / 12)).toBe(1);
+    expect(tinted()).toBe(once); // a hit: nothing re-tinted
+    expect(made).toHaveLength(2); // one composite + the scratch
+    draw(2 / 12); // the next walk frame
+    expect(made).toHaveLength(3);
+    draw(1 / 12, '#b4bcd6'); // the evening tint is different pixels
+    expect(made).toHaveLength(4);
+  });
+
+  it(`keeps at most ${COMPOSITE_CAP} composed frames, reusing the stalest canvas`, () => {
+    const { create, made } = fakeCanvasFactory();
+    const ids = layersFor(femme, 'human').map((l) => l.id);
+    const scratch: { composites?: Map<string, HTMLCanvasElement> } = {};
+    const { ctx } = recordingCtx();
+    for (let i = 0; i <= COMPOSITE_CAP; i++) {
+      const tint = `#${(0x100000 + i).toString(16)}`;
+      drawFigureFrame({ ctx, fit, at: { lx: 0, ly: 0 }, sheets: allSheets(ids), spec, look: femme, kind: 'human', anim: 'idle', dir: 'S', t: 0, startT: 0, tint, scratch, create });
+    }
+    expect(scratch.composites!.size).toBe(COMPOSITE_CAP);
+    expect(made).toHaveLength(COMPOSITE_CAP + 1); // the cap's canvases + the scratch; the last one reused the stalest
+  });
+
+  it('the cap grows with the floor: ~48 frames a figure, never under the floor minimum', () => {
+    expect(compositeCapFor(0)).toBe(COMPOSITE_CAP);
+    expect(compositeCapFor(14)).toBe(16 * 48);
+    const scratch: { composites?: Map<string, HTMLCanvasElement>; cap?: number } = { cap: 4 };
+    const { create } = fakeCanvasFactory();
+    const ids = layersFor(femme, 'human').map((l) => l.id);
+    const { ctx } = recordingCtx();
+    for (let i = 0; i < 10; i++) {
+      drawFigureFrame({ ctx, fit, at: { lx: 0, ly: 0 }, sheets: allSheets(ids), spec, look: femme, kind: 'human', anim: 'idle', dir: 'S', t: 0, startT: 0, tint: `#${(0x100000 + i).toString(16)}`, scratch, create });
+    }
+    expect(scratch.composites!.size).toBe(4);
   });
 });

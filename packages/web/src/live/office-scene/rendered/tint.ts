@@ -17,6 +17,13 @@ export const defaultCreate: CreateCanvas = (w, h) => {
 };
 
 /**
+ * The tint scratch and the composed frames stay in CPU memory. A small canvas Chrome puts on the GPU
+ * makes every copy from it into another small canvas a GPU readback, ~1 ms each — measured at ~9 ms a
+ * frame with a full floor before these two were kept off the GPU (lane 01M5D8EJ40).
+ */
+export const SOFT: CanvasRenderingContext2DSettings = { willReadFrequently: true };
+
+/**
  * Draw the `sw × sh` cell at `(sx, sy)` of `src` onto `scratch` at the origin, multiplied by `color`
  * and cut back to the cell's alpha. The scratch grows to fit and is reused; the caller blits
  * `scratch`'s top-left `sw × sh` straight after. Returns the scratch, or null if it has no context.
@@ -34,7 +41,7 @@ export function tintFrame(
     scratch.width = Math.max(scratch.width, sw);
     scratch.height = Math.max(scratch.height, sh);
   }
-  const g = scratch.getContext('2d');
+  const g = scratch.getContext('2d', SOFT);
   if (!g) return null;
   g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, sw, sh);
