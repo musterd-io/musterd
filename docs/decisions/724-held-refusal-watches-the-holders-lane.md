@@ -85,7 +85,10 @@ without relying on the agent to pick the right call.
   after a handoff, so the "file is free" act would be false. But the refused seat may be waiting on
   a reply from the old owner, who no longer holds the lane. So a handoff sends a different directed
   act: `[lane] <old owner> handed "<title>" to <new owner>: <path(s)> are still held, now by <new
-  owner>. Ask them, or wait on the lane.` It carries `meta.lane_hold_moved` `{lane, from, to, paths}`.
+  owner>. The work so far is on <branch> at <head>. Ask them, or wait on the lane.` It carries
+  `meta.lane_hold_moved` `{lane, from, to, paths, branch, head}`, the branch and head ADR 697
+  learned from the old owner's edits (null when none was seen), so the waiting seat can bring the
+  work in before it edits, as with a freed file (big-body's second review, 2026-10-23).
   The watch stays on the lane, and `until_lane` does not wake on this act: the file is not free.
 - Build lane: `01M5N3TRZY`.
 
