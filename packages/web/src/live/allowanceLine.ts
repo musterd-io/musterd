@@ -46,14 +46,23 @@ function amount(n: number): string {
     : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
+function amountLeft(window: AllowanceLineWindow): { left: string; unit: string } | null {
+  if (typeof window.used !== 'number' || typeof window.limit !== 'number') return null;
+  if (!Number.isFinite(window.used) || !Number.isFinite(window.limit)) return null;
+  return {
+    left: amount(Math.max(0, window.limit - window.used)),
+    unit: window.unit?.trim() ?? '',
+  };
+}
+
 function sentence(account: AllowanceLineAccount, window: AllowanceLineWindow): string {
   if (window.kind === 'percent') {
     return `${account.label} has ${percent(window.left)}% of the ${window.name} window left.`;
   }
-  const used = window.used ?? 0;
-  const limit = window.limit ?? 0;
-  const unit = window.unit ?? '';
-  return `${account.label} ${window.name}: ${amount(Math.max(0, limit - used))} ${unit} left of ${amount(limit)}.`;
+  const count = amountLeft(window);
+  if (!count) return `${account.label} ${window.name}.`;
+  const unit = count.unit === '' ? '' : ` ${count.unit}`;
+  return `${account.label} ${window.name}: ${count.left}${unit} left of ${amount(window.limit ?? 0)}.`;
 }
 
 function lineFor(account: AllowanceLineAccount, now: number): AllowanceLine | null {
@@ -64,11 +73,21 @@ function lineFor(account: AllowanceLineAccount, now: number): AllowanceLine | nu
   const top = ordered[0];
   if (!top) return null;
   const n = percent(top.left);
+  const count = top.kind === 'amount' ? amountLeft(top) : null;
   return {
-    text: top.kind === 'percent' ? `${account.label} ${n}% left` : account.label,
-    suffixes: ordered.slice(1).map((window) =>
-      window.kind === 'percent' ? `${window.name} ${percent(window.left)}%` : window.name,
-    ),
+    text:
+      top.kind === 'percent'
+        ? `${account.label} ${n}% left`
+        : count
+          ? `${account.label} ${count.left}${count.unit === '' ? '' : ` ${count.unit}`} left`
+          : account.label,
+    suffixes: ordered.slice(1).map((window) => {
+      if (window.kind === 'percent') return `${window.name} ${percent(window.left)}%`;
+      const more = amountLeft(window);
+      if (!more) return window.name;
+      if (more.unit === '' || more.unit === window.name) return `${window.name} ${more.left}`;
+      return `${window.name} ${more.left} ${more.unit}`;
+    }),
     title: ordered.map((window) => sentence(account, window)).join(' '),
     bar: n,
     warn: top.left < 0.15,

@@ -83,6 +83,31 @@ describe('TeamCard — what is left on the account (ADR 723)', () => {
     expect(html).toContain('width:10%');
   });
 
+  it('separates two extra windows with a middot, so the spaces do not collapse', () => {
+    const html = render(
+      card({
+        allowance: {
+          readAt: now,
+          accounts: [
+            {
+              provider: 'claude' as const,
+              label: 'Claude Max',
+              readAt: now,
+              windows: [
+                { name: '5h', left: 0.1, resetsAt: 1, kind: 'percent' as const },
+                { name: 'week', left: 0.4, resetsAt: 2, kind: 'percent' as const },
+                { name: 'month', left: 0.7, resetsAt: 3, kind: 'percent' as const },
+              ],
+            },
+          ],
+        },
+      }),
+      { now },
+    );
+    expect(html).toContain('week 40% · month 70%');
+    expect(html).not.toContain('week 40%  month 70%');
+  });
+
   it('is absent with no reading and on a stream card', () => {
     expect(render(card(), { now })).not.toContain('lc-team-card__left');
     expect(render(card({ allowance }), { now, still: true })).not.toContain('lc-team-card__left');
