@@ -25,13 +25,14 @@ export async function recordHoldRefusal(
   holderLaneId: string,
   now = Date.now(),
 ): Promise<void> {
-  // A new refusal re-arms the hand-over, even after an earlier one was given: it is a new hold.
+  // A new refusal re-arms the hand-over, even after an earlier one was given: it is a new hold. It
+  // re-arms the ADR 724 watch the same way.
   await db.run(
     `INSERT INTO gate_hold_refusals (team_id, seat, path, holder, holder_lane_id, refused_at, handed_over_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL)
      ON CONFLICT (team_id, seat, path) DO UPDATE SET
        holder = excluded.holder, holder_lane_id = excluded.holder_lane_id,
-       refused_at = excluded.refused_at, handed_over_at = NULL`,
+       refused_at = excluded.refused_at, handed_over_at = NULL, watch_fired_at = NULL`,
     [teamId, seat, path, holder, holderLaneId, now],
   );
 }
@@ -83,4 +84,59 @@ export async function laneHead(db: Driver, teamId: string, laneId: string): Prom
     [teamId, laneId],
   );
   return row?.head ?? null;
+}
+
+/** ADR 724: a held refusal still watching its holder's lane. */
+export interface PendingWatch {
+  team_id: string;
+  seat: string;
+  path: string;
+  holder: string;
+  holder_lane_id: string;
+  refused_at: number;
+}
+
+/**
+ * Every watch not yet answered: the refused seat has not been told the file is free, and has not
+ * already edited it through the ADR 697 hand-over (then it knows).
+ */
+export async function pendingWatches(db: Driver): Promise<PendingWatch[]> {
+  const rows = await db.all<PendingWatch>(
+    `SELECT team_id, seat, path, holder, holder_lane_id, refused_at FROM gate_hold_refusals
+      WHERE watch_fired_at IS NULL AND handed_over_at IS NULL`,
+  );
+  return rows.map((r) => ({ ...r, refused_at: Number(r.refused_at) }));
+}
+
+/** Close the watches for these paths: the seat was told, or the watch aged out. */
+export async function closeWatches(
+  db: Driver,
+  teamId: string,
+  seat: string,
+  paths: string[],
+  now = Date.now(),
+): Promise<void> {
+  for (const path of paths) {
+    await db.run(
+      `UPDATE gate_hold_refusals SET watch_fired_at = ?
+        WHERE team_id = ? AND seat = ? AND path = ? AND watch_fired_at IS NULL`,
+      [now, teamId, seat, path],
+    );
+  }
+}
+
+/** A handoff moved the hold (ADR 691 §2): the watch stays, now on the new owner. */
+export async function moveWatchHolder(
+  db: Driver,
+  teamId: string,
+  seat: string,
+  paths: string[],
+  holder: string,
+): Promise<void> {
+  for (const path of paths) {
+    await db.run(
+      'UPDATE gate_hold_refusals SET holder = ? WHERE team_id = ? AND seat = ? AND path = ?',
+      [holder, teamId, seat, path],
+    );
+  }
 }

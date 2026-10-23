@@ -47,8 +47,13 @@ export function resolveInboxWaitMs(wait: number | undefined): number {
 
 /** Whether `env` is the daemon's resolve broadcast for `laneId` (ADR 705 fix C). */
 export function isLaneResolve(env: Envelope, laneId: string): boolean {
-  const meta = env.meta as { lane_resolve?: { lane?: unknown } } | null | undefined;
-  return meta?.lane_resolve?.lane === laneId;
+  const meta = env.meta as
+    | { lane_resolve?: { lane?: unknown }; lane_freed?: { lane?: unknown } }
+    | null
+    | undefined;
+  // ADR 724: the daemon's directed "the file is free" act also ends a wait on that lane, which
+  // covers a release (no `lane_resolve` broadcast) as well as a resolve.
+  return meta?.lane_resolve?.lane === laneId || meta?.lane_freed?.lane === laneId;
 }
 
 /** What woke a blocking wait: a directed act, a named lane resolving, or nothing (timeout). */

@@ -328,6 +328,110 @@ withDrivers('gate-http', (_o, kind) => {
       expect(blocked.json.hold).toBeUndefined();
     });
 
+    describe("ADR 724: a held refusal watches the holder's lane", () => {
+      const notices = async (key: 'lane_freed' | 'lane_hold_moved') =>
+        (
+          await server.store.all<{ body: string; meta: string }>(
+            `SELECT body, meta FROM messages WHERE act = 'message' AND meta LIKE ? ORDER BY ts`,
+            [`%"${key}"%`],
+          )
+        ).map((r) => ({ body: r.body, meta: (JSON.parse(r.meta) as Record<string, any>)[key] }));
+
+      const heldByBo = async () => {
+        await bo();
+        const boLane = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+          title: 'bo first',
+          scope: ['src/tariff.ts', 'src/rates.ts'],
+          claim: true,
+        });
+        // Bo's own edit teaches the lane its branch and head (ADR 697).
+        await gateA('block', 'src/tariff.ts', 'Bo', {
+          git_branch: 'bo/feat',
+          git_head: 'abc123def4567890',
+        });
+        await new Promise((r) => setTimeout(r, 5));
+        await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+          title: 'ada second',
+          scope: ['src/tariff.ts', 'src/rates.ts'],
+          claim: true,
+        });
+        expect((await gateA('block', 'src/tariff.ts')).json.decision).toBe('deny');
+        return boLane;
+      };
+
+      it('nothing is sent while the holder still holds the file; its resolve frees it once, with the branch', async () => {
+        const boLane = await heldByBo();
+        expect(await server.runLaneWatchSweep()).toBe(0);
+        await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', boLane.id]);
+        expect(await server.runLaneWatchSweep()).toBe(1);
+        const [freed, ...rest] = await notices('lane_freed');
+        expect(rest).toHaveLength(0);
+        expect(freed!.meta).toMatchObject({
+          lane: boLane.id,
+          holder: 'Bo',
+          ended: 'done',
+          paths: ['src/tariff.ts'],
+          branch: 'bo/feat',
+          head: 'abc123def4567890',
+        });
+        expect(freed!.body).toContain("'src/tariff.ts' is free");
+        expect(freed!.body).toContain('bo/feat at abc123def456');
+        expect(await server.runLaneWatchSweep()).toBe(0);
+      });
+
+      it('two refused paths in one lane make one act; a release frees them', async () => {
+        const boLane = await heldByBo();
+        expect((await gateA('block', 'src/rates.ts')).json.decision).toBe('deny');
+        await server.store.run('UPDATE lanes SET state = ?, owner_seat = NULL WHERE id = ?', [
+          'open',
+          boLane.id,
+        ]);
+        expect(await server.runLaneWatchSweep()).toBe(1);
+        const [freed] = await notices('lane_freed');
+        expect(freed!.meta.ended).toBe('released');
+        expect([...freed!.meta.paths].sort()).toEqual(['src/rates.ts', 'src/tariff.ts']);
+      });
+
+      it("the file leaving the holder lane's scope frees it as narrowed", async () => {
+        const boLane = await heldByBo();
+        await server.store.run('UPDATE lanes SET surface_globs = ? WHERE id = ?', [
+          JSON.stringify(['src/rates.ts']),
+          boLane.id,
+        ]);
+        expect(await server.runLaneWatchSweep()).toBe(1);
+        const [freed] = await notices('lane_freed');
+        expect(freed!.meta).toMatchObject({ ended: 'narrowed', paths: ['src/tariff.ts'] });
+      });
+
+      it('a handoff says who holds it now and keeps watching; the later resolve still frees it', async () => {
+        const boLane = await heldByBo();
+        await server.store.run('UPDATE lanes SET owner_seat = ? WHERE id = ?', ['Cy', boLane.id]);
+        expect(await server.runLaneWatchSweep()).toBe(1);
+        const [moved] = await notices('lane_hold_moved');
+        expect(moved!.meta).toMatchObject({
+          lane: boLane.id,
+          from: 'Bo',
+          to: 'Cy',
+          paths: ['src/tariff.ts'],
+          branch: 'bo/feat',
+        });
+        expect(moved!.body).toContain('still held, now by Cy');
+        expect(await notices('lane_freed')).toHaveLength(0);
+        expect(await server.runLaneWatchSweep()).toBe(0);
+        await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', boLane.id]);
+        expect(await server.runLaneWatchSweep()).toBe(1);
+        expect((await notices('lane_freed'))[0]!.meta.holder).toBe('Cy');
+      });
+
+      it('a watch older than seven days is dropped without a notice', async () => {
+        const boLane = await heldByBo();
+        await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', boLane.id]);
+        expect(await server.runLaneWatchSweep(Date.now() + 8 * 24 * 60 * 60_000)).toBe(0);
+        expect(await notices('lane_freed')).toHaveLength(0);
+        expect(await server.runLaneWatchSweep()).toBe(0);
+      });
+    });
+
     it('naming the file beats covering it through an area glob, whatever the claim order', async () => {
       await bo();
       await openLane(server.store, (await team()).id, 'dawn', 'Bo', {

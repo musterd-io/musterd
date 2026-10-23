@@ -221,6 +221,21 @@ describe('team_inbox_check wait', () => {
     expect(isLaneResolve(directed, 'L1')).toBe(false);
   });
 
+  it('isLaneResolve also reads the ADR 724 directed "file is free" act for that lane', () => {
+    const freed = makeEnvelope({
+      id: '01DDDDDDDDDDDDDDDDDDDDDDDD',
+      team: 'dawn',
+      from: 'board',
+      to: { kind: 'member', name: 'ada' },
+      act: 'message',
+      body: "[lane] bo's lane \"x\" is released: 'src/a.py' is free.",
+      ts: 1000,
+      meta: { lane_freed: { lane: 'L1', holder: 'bo', ended: 'released', paths: ['src/a.py'] } },
+    });
+    expect(isLaneResolve(freed, 'L1')).toBe(true);
+    expect(isLaneResolve(freed, 'L2')).toBe(false);
+  });
+
   it('waitForWake wakes on the named lane resolving, not on another lane', async () => {
     let deliver: ((env: any) => void) | undefined;
     const client = {

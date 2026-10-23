@@ -1043,6 +1043,23 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS status_line TEXT');
     },
   },
+  {
+    // ADR 724: a held refusal is also a watch on the holder's lane. `watch_fired_at` is set once the
+    // refused seat has been told the file is free (or the watch aged out); null means still watching.
+    // Daemon-local like the rest of the table. Nullable, no backfill: older refusals watch from now.
+    version: 130,
+    sqlite: (db) => {
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('gate_hold_refusals')")
+        .pluck()
+        .all();
+      if (!cols.includes('watch_fired_at'))
+        db.exec('ALTER TABLE gate_hold_refusals ADD COLUMN watch_fired_at BIGINT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE gate_hold_refusals ADD COLUMN IF NOT EXISTS watch_fired_at BIGINT');
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (
