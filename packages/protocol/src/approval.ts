@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { humanAskAnswerApproval, requestDecisionApproval } from './approvalContracts.js';
 
 /**
  * The node-free half of human authority (ADR 662 decisions 4–5, ADR 694): the closed list of
@@ -116,41 +117,6 @@ function laneVerdict(payload: unknown): 'accept' | 'decline' | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const verdict = (payload as { verdict?: unknown }).verdict;
   return verdict === 'accept' || verdict === 'decline' ? verdict : null;
-}
-
-/** The descriptor contract for a human answering a daemon-classified privileged ask. */
-export function humanAskAnswerApproval(askId: string, verdict: 'accept' | 'decline') {
-  return {
-    act: 'human_accept' as const,
-    target: askId,
-    payload: { ask_id: askId, verdict },
-  };
-}
-
-/** The descriptor contract for an admin deciding a pending seat request. */
-export function requestDecisionApproval(input: {
-  requestId: string;
-  requestTarget: string | null;
-  decision: 'approve' | 'deny';
-  lifetime?: 'once' | 'ttl' | 'standing';
-  ttlHours?: number;
-}) {
-  const action =
-    input.decision === 'approve'
-      ? `approve ${input.requestTarget ?? 'request'}${input.lifetime ? ` (${input.lifetime})` : ''}`
-      : `deny ${input.requestTarget ?? 'request'}`;
-  return {
-    act: 'human_accept' as const,
-    target: `request ${input.requestId}: ${action}`,
-    payload: {
-      request_id: input.requestId,
-      request_target: input.requestTarget,
-      decision: input.decision,
-      ...(input.decision === 'approve'
-        ? { lifetime: input.lifetime, ttl_hours: input.ttlHours }
-        : {}),
-    },
-  };
 }
 
 /**

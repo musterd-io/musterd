@@ -68,6 +68,10 @@
       "types": "./dist/approval.d.ts",
       "default": "./dist/approval.js"
     },
+    "./approval-contracts": {
+      "types": "./dist/approvalContracts.d.ts",
+      "default": "./dist/approvalContracts.js"
+    },
     "./app-channel": {
       "types": "./dist/appChannel.d.ts",
       "default": "./dist/appChannel.js"

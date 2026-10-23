@@ -1,6 +1,9 @@
 import { apiGet, apiPost, type LiveConfig } from './client';
 import type { ApprovalProof } from '@musterd/protocol';
-import { humanAskAnswerApproval, requestDecisionApproval } from '@musterd/protocol/approval';
+import {
+  humanAskAnswerApproval,
+  requestDecisionApproval,
+} from '@musterd/protocol/approval-contracts';
 
 /**
  * The A2 proof a human's verdict on a lane needs (ADR 662, lane 01M5DTPMXN): the server
@@ -75,7 +78,7 @@ async function authorityProofForDescriptor(
     `${teamPath}/descriptors/${encodeURIComponent(nonce)}`,
   );
   if (!view.passkeys || view.passkeys.length === 0) return null;
-  if (!navigator.credentials?.get) throw new Error('this browser cannot use a passkey');
+  if (!navigator.credentials?.get) throw new Error('passkeys are unavailable in this browser');
   // A cancel or timeout rejects with NotAllowedError (or AbortError) rather than
   // returning null — translate it, or the person reads the browser's raw error and
   // never learns the verdict went nowhere (slippy, review of #3078).
@@ -100,19 +103,17 @@ async function authorityProofForDescriptor(
       e.name === 'SecurityError' &&
       isLoopbackIp(window.location.hostname)
     )
-      throw new Error(
-        'passkeys cannot sign when /live is opened with an IP address — rerun `musterd live` and use the localhost URL it opens; the verdict was not sent',
-      );
-    if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError'))
-      throw new Error('passkey cancelled — the verdict was not sent');
+      throw new Error('open musterd’s localhost URL to use passkeys; verdict not sent');
+    if (e instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(e.name))
+      throw new Error('passkey cancelled; verdict not sent');
     throw e;
   }
-  if (!assertion) throw new Error('passkey cancelled — the verdict was not sent');
+  if (!assertion) throw new Error('passkey cancelled; verdict not sent');
   const resp = assertion.response as AuthenticatorAssertionResponse;
   const key = view.passkeys.find(
     (p) => bytesToB64url(assertion.rawId) === p.credential_id.replace(/=+$/, ''),
   );
-  if (!key) throw new Error('that passkey is not the enrolled one — the verdict was not sent');
+  if (!key) throw new Error('passkey mismatch; verdict not sent');
   return {
     key_id: key.key_id,
     nonce,
