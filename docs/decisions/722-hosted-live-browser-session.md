@@ -39,9 +39,21 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
 1. **The hand-back is a form POST, not a redirect with the statement in the URL.** A **Sign in
    with musterd** button on a hosted `/live` goes to `GET /live/signin/start` on the team origin.
    That route:
-   - sets a short-lived `__Host-musterd_signin` cookie: a random `state`, 10 minutes,
-     HttpOnly, Secure, SameSite=Lax;
+   - writes a one-time **state record** to a new team-owned `signin_states` table: the `sha256`
+     of a random `state`, the mode (`signin`, `invite` or `link`), the invite or member it was
+     started for, and a 10-minute expiry. The callback consumes the record, so it works once;
+   - sets a `__Host-musterd_signin` cookie holding that `state`: 10 minutes, HttpOnly, Secure,
+     **SameSite=None**. The console (`app.musterd.io`) and the team (`<slug>.musterd.dev`) are
+     different sites, and a browser does not send a SameSite=Lax cookie on a cross-site form
+     POST, so a Lax cookie would never reach the callback. This is the OIDC `form_post` pattern.
+     None does not weaken the state check: the cookie is a random handle that an attacker can
+     neither read nor set on the `__Host-` team origin, and it authorizes nothing by itself;
    - redirects to `https://<console>/handback?aud=<consoleAudience>&team=<slug>&state=<state>`.
+
+   **Link** starts differently, because it must name a member. `/live` sends
+   `POST /live/signin/start` with the member's `mscr_` bearer and `mode: "link"`. The server
+   resolves the bearer through `authMember`, writes the state record with that verified member
+   id, sets the cookie, and answers with the console URL. `/live` then navigates to it.
 
    The console makes the person sign in if they have no session (`/handback` joins the allowed
    return paths). It then signs an identity statement (ADR 698 §1: `sub`, `email`, `aud`, `jti`,
@@ -54,16 +66,20 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
 
 2. **The callback trusts only what it can check.** `POST /live/signin/callback` refuses unless all
    of these hold:
-   - the form's `state` equals the signin cookie's (this blocks login CSRF; the cookie is cleared
-     either way);
+   - the request's `Origin` is the console origin;
+   - the form's `state` equals the signin cookie's, and its hash matches an unexpired state record,
+     which is consumed (this blocks login CSRF; the cookie is cleared either way);
    - `verifyIdentityStatement` passes, which brings ADR 698's refusals and the single-use `jti`;
    - `memberByAccount(team, sub)` finds a member who is still on the team.
 
    An unbound account binds in exactly two ways in this ADR:
-   - **Invite.** An invite secret carried in `state`'s server-side record redeems through the
-     existing ADR 450 path. The new member is bound with `bindMemberAccount`.
+   - **Invite.** An invite secret carried in the state record redeems through the existing
+     ADR 450 path. The new member is bound with `bindMemberAccount`.
    - **Link.** A member already signed in on this browser with their `mscr_` starts the round
-     trip as **Link my musterd account**. The callback binds the account to that member.
+     trip as **Link my musterd account**. The callback binds the account only to the member id
+     pinned in the state record. It does not look for a credential at the callback. It refuses
+     if that member has left, already has a different account, or if the account is already
+     bound to another member on this team.
 
    Otherwise the page says the account is not on this team and to ask an owner for an invite. It
    does not say which members exist.
@@ -120,8 +136,9 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
 
 - A hosted member signs in with one click after their first console sign-in. Nothing secret is
   ever pasted, and nothing long-lived sits in localStorage.
-- One new credential prefix (`mbs_`, never sent as a bearer, refused by `authMember`), one table,
-  and four routes. The console gains one route (`/handback`) and one statement signer next to
+- One new credential prefix (`mbs_`, never sent as a bearer, refused by `authMember`), two tables
+  (`browser_sessions`, `signin_states`; both team-owned, RLS, in the tenancy inventory), and four
+  routes. The console gains one route (`/handback`) and one statement signer next to
   `signConsoleToken`.
 - A member can see and end each browser where they are signed in. Losing a laptop no longer means
   rotating the credential that every one of their CLIs uses.
@@ -135,8 +152,15 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
   member, never the secret, the statement, the email or the account id (hard rule 5).
 - **Eval:** the server tests are the falsifiers.
   - A callback is refused on each of these, and each refusal leaves no session row: state
-    mismatch, a missing signin cookie, a replayed statement, the wrong `aud`, an unbound
-    account, and a member who has left.
+    mismatch, a missing signin cookie, a state record that is missing, expired or already
+    consumed, a foreign `Origin`, a replayed statement, the wrong `aud`, an unbound account, and
+    a member who has left.
+  - A real-browser test (Playwright, two hosts on two registrable domains) proves the signin
+    cookie reaches the cross-site POST callback. This is the test that would have caught a Lax
+    cookie.
+  - Link binds the member pinned at start and no other. It is refused when the start had no valid
+    `mscr_`, when the pinned member left between start and callback, and when the account or the
+    member is already bound elsewhere.
   - `/live/session/token` is refused with no cookie, a foreign `Origin`, cross-site
     `Sec-Fetch-Site`, a revoked session, or a session past idle or absolute expiry.
   - Revoking a session refuses its next exchange and closes its open socket.
