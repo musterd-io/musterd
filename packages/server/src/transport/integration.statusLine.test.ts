@@ -58,6 +58,18 @@ withDrivers('integration · status line', (_o, kind) => {
       expect(r.json.error.code ?? r.json.code).toMatch(/status_line_humans_only|forbidden/);
     });
 
+    it('the team agent key naming a human seat is refused, and nick is unchanged', async () => {
+      const { key, by } = await team();
+      const r = await post(
+        '/teams/dawn/status-line',
+        { text: 'not mine to set' },
+        { key, seat: 'nick' },
+      );
+      expect(r.status).toBeGreaterThanOrEqual(401);
+      expect(r.status).toBeLessThan(404);
+      expect((await by('nick')).status_line ?? null).toBeNull();
+    });
+
     it('refuses 49 characters and an empty status, naming the limit', async () => {
       const { tok } = await team();
       const long = await post('/teams/dawn/status-line', { text: 'x'.repeat(49) }, tok);

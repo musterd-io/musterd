@@ -10810,7 +10810,15 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req);
         // A human credential cannot act as another seat (authByCredential refuses it), so a human
         // `member` here is the caller themselves; an agent seat, a service or an observer is not.
-        if (member.kind !== 'human' || member.observer === 1) {
+        // Fail closed anyway: a request naming any seat but the caller's own is refused here too, so
+        // a later change to how a credential kind resolves cannot open this route. (The CLI always
+        // names its own seat, which passes.)
+        const named = actingSeat(req);
+        if (
+          member.kind !== 'human' ||
+          member.observer === 1 ||
+          (named !== undefined && named !== member.name)
+        ) {
           throw new MusterdError(
             'forbidden',
             'a status line is set by a human, for themselves (ADR 721)',
