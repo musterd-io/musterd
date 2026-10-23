@@ -180,7 +180,8 @@ To check #3219 without a ~$17 benchmark run, `scripts/research/cooperbench/refus
 a two-seat scratch team per trial. agent1 holds `src/a.py`. agent2 (`claude-sonnet-4-5`, the
 bench's own musterd instruction, a two-line task in the same file) is refused, and the trial records
 agent2's first coordination call after that refusal. It ran on the **old** refusal text (image
-`7e795fcb`, before #3219), 9 trials, $1.71 recorded (plus one earlier probe that timed out before its cost was read):
+`7e795fcb`, before #3219), 9 trials, $1.71: the 8 in `old.json` ($1.53) and the `request_help` row in
+`probe.trial.jsonl` ($0.18):
 
 | After the held refusal | Trials |
 | --- | --- |
