@@ -323,6 +323,26 @@ fly machine stop --app musterd-cooperbench
 Each daemon's log and database are copied next to the agent's logs when its pair finishes, so the
 team's acts and lanes are part of the run's record.
 
+### Reproducing finding 023
+
+Everything the collision claim rests on is pinned in the repo:
+
+| What | Where |
+| --- | --- |
+| CooperBench | commit `63b9d44` (`COOPERBENCH_COMMIT`, `deploy/cooperbench/Dockerfile`) |
+| Claude Code | 2.1.307 for host and containers (`CLAUDE_CODE_VERSION`, same Dockerfile) |
+| musterd | image `7e795fcb` (both runs); deploy from that commit with `MUSTERD_REF` set to it |
+| Model | `claude-sonnet-4-5`, concurrency 3, `--git` |
+| The ten tasks | `claim20.json`'s `new` list, drawn by `scripts/research/cooperbench/claim_pairs.py` with `random.Random(20261022)`; `claimnew` is rebuilt from it by `coord.sh` |
+| musterd arm | `pilot-runs/2026-10-22-claim/claim.sh`, second half (`claim-musterd-new`) |
+| team and coop arms | `pilot-runs/2026-10-23-coordination/coord.sh` |
+| Scoring and labels | `cooperbench eval --backend docker`, then `readout.py` over the run folders |
+| The verdict and its robustness | `coordination-manifest.md`, then `pilot-runs/2026-10-23-coordination/robustness.py` |
+
+Re-running costs about $19 for musterd and $29 for team plus coop at 2026-10 prices. Agents
+are not deterministic, so a re-run reproduces the method, not the exact pairs. The claim is the
+count, and a re-run that disagrees is a finding of its own.
+
 ### Before any measured spend (lane `01M5KHD19K`)
 
 Each line below has cost a run money once. None of them changes what an agent sees or how a pair is
