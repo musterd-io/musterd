@@ -1,3 +1,4 @@
+import { HOURGLASS_SVG } from '../statusLine';
 import type { Posture } from '@musterd/protocol';
 import { preloadCanvasFont } from '../canvasFont';
 import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
@@ -128,6 +129,7 @@ import type {
 } from './types';
 
 export type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode, OfficeStats } from './types';
+
 
 const DPR_CAP = 2;
 
@@ -1353,6 +1355,19 @@ export function mountOffice(
             toggleExpand(name);
           });
         }
+      }
+      // ADR 721: a human's own status line — the plate's second line, a footer washed with the
+      // member's colour (nick's pick, "A3"), led by the glass-and-sand hourglass. It is the one extra
+      // that does not fold on a compact plate: a status is set exactly when its human is away.
+      if (node.statusLine) {
+        plate.classList.add('has-status');
+        const status = document.createElement('span');
+        status.className = 'lc-gl-label__status';
+        status.innerHTML = HOURGLASS_SVG;
+        const words = document.createElement('span');
+        words.textContent = node.statusLine.text;
+        status.appendChild(words);
+        plate.appendChild(status);
       }
       el.appendChild(plate);
 

@@ -679,7 +679,7 @@ function postAsWeb<T>(cfg: LiveConfig, path: string, body?: unknown): Promise<T>
 /** One authenticated write from the web surface, any method; the refusal travels as a LiveFetchError. */
 async function sendAsWeb<T>(
   cfg: LiveConfig,
-  method: 'POST' | 'PUT',
+  method: 'POST' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -799,6 +799,15 @@ export function setMyAvailability(
   return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/availability`, body);
 }
 
+/** ADR 721: this viewer's own status line — a human signed in as themselves; an hour from now it clears. */
+export function setMyStatusLine(cfg: LiveConfig, text: string): Promise<{ member: MemberSummary }> {
+  return sendAsWeb(cfg, 'POST', `/teams/${encodeURIComponent(cfg.team)}/status-line`, { text });
+}
+
+export function clearMyStatusLine(cfg: LiveConfig): Promise<{ member: MemberSummary }> {
+  return sendAsWeb(cfg, 'DELETE', `/teams/${encodeURIComponent(cfg.team)}/status-line`);
+}
+
 /** The style slice of a sparse policy override (ADR 185): only what an admin chose. */
 export interface StylePolicyStored {
   floor?: Partial<StyleFloorWire>;
@@ -914,6 +923,8 @@ export interface LiveHandlers {
   /** A seat's tool-call pulse (ADR 660, SPEC A.25) — counts and a kind, at most every ~5 s per seat,
    * and nothing while the seat is idle; `live/pulse.ts` decides liveness from the frame's `ts`. */
   onPulse?: (pulse: SeatPulseFrame) => void;
+  /** ADR 721: one member's summary, pushed when something a surface shows about them changes. */
+  onMemberUpdated?: (member: MemberSummary) => void;
   onStatus: (status: ConnStatus) => void;
   onError?: (message: string) => void;
   /** The WS `claim` was refused for a stale/invalid credential — recoverable by re-provisioning a fresh
@@ -1002,6 +1013,9 @@ export class LiveClient {
           break;
         case 'seat_pulse':
           this.h.onPulse?.(frame as SeatPulseFrame);
+          break;
+        case 'member_updated':
+          this.h.onMemberUpdated?.(frame.member as MemberSummary);
           break;
         case 'refused': {
           // A bad/stale credential (e.g. a wiped DB, an expired observer TTL, or the seat reclaimed).

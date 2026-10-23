@@ -497,6 +497,9 @@ function OfficePreviewPage() {
             woken: WOKEN.has(m.name) && !isOffline,
             dreaming: dreamSet.has(m.name) && !isOffline,
             dnd: dndSet.has(m.name) && !isOffline,
+            // ADR 721: one human with a status line, so the plate's colour footer is on the preview.
+            statusLine:
+              m.name === 'Ada' ? { text: 'assembling a new dresser for the nursery', expiresAt: Date.now() + 3_600_000 } : null,
             // The first offline fixture wears the amber `disconnected` glint; the rest read released.
             offline_reason: isOffline
               ? [...offlineSet][0] === m.name

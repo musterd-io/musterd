@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   getMyDoorbell,
   putMyDoorbell,
+  clearMyStatusLine,
   setMyAvailability,
+  setMyStatusLine,
   type LiveConfig,
   type MyDoorbell,
 } from '../client';
@@ -18,6 +20,7 @@ import {
   type ChannelSettings,
 } from '../pairingClient';
 import { MyStylePart, StyleNote, useStyleEdit, type SheetNote } from '../StyleSheet';
+import { statusLineDraft, visibleStatusLine } from '../statusLine';
 import { Row, Segmented, Switch } from './controls';
 
 /**
@@ -202,11 +205,76 @@ function Presence({ cfg, me }: { cfg: LiveConfig; me: MemberSummary | null }) {
           onPick={(v) => void pick(v)}
         />
       </Row>
+      <StatusLineRow cfg={cfg} me={me} />
       <Row label="Your hours" hint="Yours where you set them, else the team's.">
         <span className="lc-set__read">{hours}</span>
       </Row>
       <Note note={note} />
     </section>
+  );
+}
+
+/**
+ * ADR 721: your own status line — a few words on your nameplate on /live and on the public stream, and
+ * on the team panel, for an hour. Humans only: the daemon refuses anyone else, and this row is on the
+ * You panel, which only a signed-in human sees.
+ */
+function StatusLineRow({ cfg, me }: { cfg: LiveConfig; me: MemberSummary | null }) {
+  const shown = me ? visibleStatusLine(me, Date.now()) : null;
+  const [text, setText] = useState(shown?.text ?? '');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<SheetNote>(null);
+  const draft = statusLineDraft(text);
+  const run = async (clear: boolean) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      if (clear) {
+        await clearMyStatusLine(cfg);
+        setText('');
+        setNote({ tone: 'ok', text: 'status line cleared' });
+      } else {
+        await setMyStatusLine(cfg, text);
+        setNote({ tone: 'ok', text: 'on your nameplate for an hour' });
+      }
+    } catch (e) {
+      setNote({ tone: 'err', text: message(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Row
+        label="Status line"
+        hint="A few words on your nameplate here and on the public stream. It clears itself after an hour."
+      >
+        <span className="lc-set__statusline">
+          <input
+            type="text"
+            className="lc-set__text"
+            aria-label="Status line"
+            placeholder="assembling a new dresser"
+            value={text}
+            disabled={busy}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && draft.ready) void run(false);
+            }}
+          />
+          <span className={`lc-set__count${draft.over ? ' is-over' : ''}`}>{draft.count}/48</span>
+          <button type="button" className="lc-set__act" disabled={busy || !draft.ready} onClick={() => void run(false)}>
+            Set
+          </button>
+          {shown && (
+            <button type="button" className="lc-set__act is-quiet" disabled={busy} onClick={() => void run(true)}>
+              Clear
+            </button>
+          )}
+        </span>
+      </Row>
+      <Note note={note} />
+    </>
   );
 }
 

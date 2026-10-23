@@ -1670,6 +1670,23 @@ their resolution (2 → 1.5 px per unit is ~44% fewer pixels); nick chose both, 
 
 - Falsify: on `/office-preview?office=rendered&n=1` the network panel shows 16 figure sheets, not 37.
 
+### 2026-10-22 — initial JS 149,350 → 150,080 B, total JS 359,800 → 361,010 B, live CSS 27,250 → 27,420 B: a human's status line (ADR 721, lane `01M5JV0M5M`)
+
+| Budget        | Main      | This branch | Ceiling                   |
+| ------------- | --------- | ----------- | ------------------------- |
+| initial JS gz | 149,141 B | 149,872 B   | RAISED 149,350 → 150,080 B |
+| total JS gz   | 359,369 B | 360,579 B   | RAISED 359,800 → 361,010 B |
+| live CSS gz   | 27,157 B  | 27,330 B    | RAISED 27,250 → 27,420 B   |
+
+nick asked for a status humans set for themselves ("assembling a new dresser for the nursery"), shown on
+the nameplate, the stream and the team panel. The cost is the `member_updated` handler, the status rules
+(`statusLine.ts`), the plate's colour footer with its hourglass, the team-card line and the You panel's
+field. Trimmed first: a shorter hourglass path and one CSS rule shared by plate and card. The room and the
+team column load eagerly, so lazy-loading cannot move initial here, and it never moves total (ADR 183).
+Ceilings are the measured size plus the gap main had.
+
+- Falsify: `pnpm perf:check` after a build reports any of the three above its new ceiling with this change in.
+
 ### 2026-10-22 — `officeArtBytes` 10,700,000 → 8,420,000 B: the figure at 1.5 px per floor unit (lane `01M5J8DXCH`)
 
 | Budget        | Before (main) | This branch | Ceiling                                |

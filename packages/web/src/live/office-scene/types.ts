@@ -51,6 +51,8 @@ export interface OfficeNode {
   moreLanes: number;
   /** Owns a lane that is blocked (briefing inc 2b) — a small flag on the plate. */
   blocked?: boolean;
+  /** ADR 721: a human's own status line while it lasts — the plate's colour footer. Never on an agent. */
+  statusLine?: { text: string; expiresAt: number } | null;
   /** Self-set do-not-disturb (ADR 044) — at their desk, headphones on, never walked to (§4). */
   dnd: boolean;
   /** The seat's latest tool-call pulse (ADR 660), attached by the scene from `OfficeHandle.pulse` —
