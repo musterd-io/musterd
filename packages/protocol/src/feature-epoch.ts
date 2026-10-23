@@ -158,5 +158,8 @@
 // Epoch 38 — ADR 726: roster rows carry `state_source` (`status | lane | steering`), and an agent
 // reads `working` from its claimed lane plus a recent audited action without a `status_update`. A
 // renderer behind this epoch shows the lane title as if it were a status; nothing fails.
-export const FEATURE_EPOCH = 38 as const;
+// Epoch 39 — ADR 726 (lane 01M5NBVFFZ): a wake packet's `context.lane` may carry `activity`
+// (`{state, last_action_at}`) when no status_update names the lane. The wake packet schema is strict,
+// so an adapter behind this epoch refuses such a packet until it is rebuilt.
+export const FEATURE_EPOCH = 39 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

@@ -39,6 +39,14 @@ export function render(context: WakeContextPacket): string {
       if (c.lane.last_status_update) {
         const u = c.lane.last_status_update;
         lines.push(`your last word on it: ${u.body}${u.truncated ? ' …' : ''}`);
+      } else if (c.lane.activity) {
+        // ADR 726: no status names the lane; say where the work stands from what the daemon saw.
+        const a = c.lane.activity;
+        const acted =
+          a.last_action_at != null
+            ? `, your last action ${ago(Date.now() - a.last_action_at)} ago`
+            : '';
+        lines.push(`lane state: ${a.state}${acted}`);
       }
     }
     for (const o of c.open)

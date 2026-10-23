@@ -439,6 +439,18 @@ export const WakeContextContextSchema = z
           .object({ ts: z.number().int().nonnegative(), body: z.string(), truncated: z.boolean() })
           .strict()
           .optional(),
+        /**
+         * ADR 726: when no status_update names the lane — the usual case once agents stop posting
+         * them — the lane's state and the seat's last audited action, so the woken seat still knows
+         * where it left the work. Absent when a status is present, or from an older daemon.
+         */
+        activity: z
+          .object({
+            state: z.string(),
+            last_action_at: z.number().int().nonnegative().nullable(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

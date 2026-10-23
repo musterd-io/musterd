@@ -417,7 +417,9 @@ POST /teams/:slug/wake-context
 carries the waking thread's last eight acts (each `{id, from, act, ts, body, truncated}`, bodies cut
 at 600 characters, plus `omitted`), an `open` ledger of unanswered directed acts and owned lanes
 (`{kind, id, from?, title, age_ms}`, titles only, at most 12), on lane wakes the lane `detail` and the
-recipient's own newest `status_update` naming it, and the recipient's memory body. Every body is
+recipient's own newest `status_update` naming it (or, when none does, `activity: {state,
+last_action_at}` from the lane and the recipient's last audited action — ADR 726, feature epoch 39),
+and the recipient's memory body. Every body is
 attributed to its sender and thread; the composed wake line and the interrupt line remain ids-only.
 The serialized `context` block is capped at 12,288 bytes, filled memory → thread → lane → open; a
 truncated or dropped category is named in `fetch`, which in v2 lists only what did not fit (new value

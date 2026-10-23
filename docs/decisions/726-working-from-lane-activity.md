@@ -95,6 +95,10 @@ when it is fresher. Do not let a stale claim read as work.
   since a harness with the interrupt line delivers directed acts as they arrive. Two parts are split
   out: the skill text in `guidance.ts` (lane `01M5NBVB2Q`, after izzo's lane on that file) and the
   wake-context fallback (lane `01M5NBVFFZ`).
+- _2026-10-23 (lane 01M5NBVFFZ):_ the wake-context fallback is in. When no status_update names the
+  lane, the wake packet's lane block carries `activity: {state, last_action_at}`, and `team_wake_context`
+  renders `lane state: <state>, your last action <age> ago`. The packet schema is strict, so this
+  is feature epoch 39: an adapter behind it refuses such a packet until it is rebuilt.
 - Build lanes: `01M5N3V9EP` (server, wire, renderers), then `01M5N3VG2D` (instructions).
 
 Follows-up: 01M5N3V9EPHMZ08XJ4FDRN2DPX, 01M5N3VG2DG14Z81NRMHMXVFPC

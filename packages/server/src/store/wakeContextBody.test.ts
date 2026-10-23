@@ -194,6 +194,23 @@ withDrivers('wakeContextBody', (o) => {
       });
     });
 
+    it("with no status naming the lane, carries its state and the seat's last action instead (ADR 726)", async () => {
+      const { db, team, ada } = await seed();
+      // The claim is an audited action by the seat, so it is the "last action" the packet reports.
+      const lane = await openLane(db, team.id, team.slug, ada.name, {
+        title: 'Lane',
+        detail: 'ACCEPTANCE: y',
+        claim: true,
+      });
+      const { context } = await deriveContext(db, team, ada, { laneId: lane.id });
+      expect(context.lane).toEqual({
+        detail: 'ACCEPTANCE: y',
+        truncated: false,
+        activity: { state: 'claimed', last_action_at: expect.any(Number) },
+      });
+      expect(context.lane?.last_status_update).toBeUndefined();
+    });
+
     it('carries the memory body whole when it fits, else the first 3 KiB flagged and named in fetch', async () => {
       const { db, team, ada } = await seed();
       await saveMemory(db, ada.id, { headline: 'short', body: 'carrying nothing' });

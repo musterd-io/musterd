@@ -38,6 +38,28 @@ describe('team_wake_context render (ADR 430)', () => {
     expect(text).not.toContain('explicit reads');
   });
 
+  it("ADR 726: with no status naming the lane, says its state and the seat's last action", () => {
+    const text = render({
+      version: 2,
+      wake: { kind: 'work_order', lane_id: 'L1' },
+      objective: { action: 'continue_lane' },
+      state: {},
+      context: {
+        open: [],
+        lane: {
+          detail: 'D',
+          truncated: false,
+          activity: { state: 'active', last_action_at: Date.now() - 20 * 60_000 },
+        },
+      },
+      budget: { limit_bytes: 12_288, used_bytes: 100 },
+      fetch: [],
+      delivery: { requirement: 'portable', intended: 'fresh' },
+    });
+    expect(text).toMatch(/lane state: active, your last action 20m ago/);
+    expect(text).not.toContain('your last word on it');
+  });
+
   it('names the follow-ups only for what did not fit', () => {
     const text = render({
       version: 2,
