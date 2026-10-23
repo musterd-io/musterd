@@ -88,6 +88,11 @@ without making the status a front-end decoration that one browser knows and the 
 - _2026-10-22 (increment 1)._ Decision 8's audit result is `allow`, not `ok`: the audit vocabulary is
   `allow | deny`, and `ok` does not type-check. The row is otherwise as decided — the length, never the
   words.
+- _2026-10-22 (fix after increment 3)._ The protocol's hand-written roster guard
+  (`readMemberSummary` in `guards.ts`, which /live reads through) had no branch for `status_line`,
+  so a refresh dropped a human's status the daemon still held; only the `member_updated` push showed
+  it. The guard now reads the field, and the guard/schema parity corpus carries it (#3242). No wire
+  change: the schema already had the field.
 - The figure work and this are independent: the nameplate is DOM over the office, not the rendered
   scene.
 

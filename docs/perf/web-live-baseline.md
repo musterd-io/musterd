@@ -2243,3 +2243,14 @@ wordmark and domain. Lazy-loading applied first (ADR 183). Raised tight: measure
 
 - Falsify: `pnpm perf:check` after a build reports each at or under its new ceiling.
 
+### 2026-10-22 — a human's status line survives a /live refresh (nick)
+
+| Budget   | Before (main) | This branch | Ceiling                    |
+| -------- | ------------- | ----------- | -------------------------- |
+| total JS | 361,571 B     | 361,659 B   | RAISED 362,100 → 362,300 B |
+
+The roster guard (`readMemberSummary`) now reads `status_line`; without it a refresh dropped the status
+the daemon still held (ADR 721, #3242). Eager guard code shared by every route; nothing to lazy-load.
+Local builds; CI measured about 450 B higher on the first run of this PR, so the raise covers that gap.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 362,300 B.
