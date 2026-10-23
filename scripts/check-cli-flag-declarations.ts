@@ -241,6 +241,26 @@ export function followFlags(file: string): Set<string> {
   return out;
 }
 
+/**
+ * Whether a caller hands its shared Parsed argv to an exported command. Ordinary helper calls
+ * can contain words such as `usage` or `stream` in data without transferring CLI vocabulary.
+ */
+export function forwardsParsedCommand(caller: string, callee: string, name: string): boolean {
+  const calledWithParsed = new RegExp(`(?<![.\\w])${name}\\s*\\(\\s*parsed\\s*(?=,|\\))`).test(
+    caller,
+  );
+  if (!calledWithParsed) return false;
+
+  const functionDeclaration = new RegExp(
+    `export\\s+(?:async\\s+)?function\\s+${name}\\s*\\(([^)]*)\\)`,
+  ).exec(callee);
+  const constDeclaration = new RegExp(
+    `export\\s+const\\s+${name}\\s*=\\s*(?:async\\s*)?\\(([^)]*)\\)`,
+  ).exec(callee);
+  const params = functionDeclaration?.[1] ?? constDeclaration?.[1];
+  return params !== undefined && /^\s*parsed\s*:\s*Parsed\b/.test(params);
+}
+
 /** The flags a file's whole module reads — the follow, at file granularity. */
 export function moduleFlags(file: string): Set<string> {
   const out = new Set<string>();
@@ -275,18 +295,18 @@ export function requiredByFile(): Map<string, Set<string>> {
     for (const n of followFlags(f)) if (!globals.has(n)) set.add(n);
     required.set(f, set);
   }
-  // Edges: F imports G (both declare) and calls a name G exports.
+  // Edges: F imports G (both declare) and forwards its Parsed argv to G's command.
   const exportsOf = (src: string): string[] =>
     [...src.matchAll(/export\s+(?:async\s+)?(?:function|const)\s+(\w+)/g)].map((m) => m[1]!);
   const edges: Array<[string, string]> = [];
   for (const f of required.keys()) {
     const src = srcs.get(f)!;
-    const calls = new Set([...src.matchAll(/(?<![.\w])(\w+)\s*\(/g)].map((m) => m[1]!));
     for (const g of imports(f)) {
       if (!required.has(g) || g === f) continue;
       const gExports = exportsOf(srcs.get(g)!);
       for (const name of importedNames(f)) {
-        if (calls.has(name) && gExports.includes(name)) edges.push([f, g]);
+        if (gExports.includes(name) && forwardsParsedCommand(src, srcs.get(g)!, name))
+          edges.push([f, g]);
       }
     }
   }
