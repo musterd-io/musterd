@@ -31,7 +31,8 @@ ask reaches him too, but says plainly that it needs a stronger surface.
   gate-raised ask carries `meta.gate = { class, fingerprint }`.
 - **`authorized_by`** (ADR 127/129) is the stable key for "who authorized this". ADR 129 says a path where
   actor and authorizer genuinely differ needs an ADR. A channel answer is such a path.
-- **`packages/mobile`** is an Expo app (calendar only today) with an EAS and TestFlight pipeline.
+- **`packages/mobile`** is an Expo app — the sealed ask client's home since 2026-10-22 (ADR 676);
+  its calendar screens left it — with an EAS and TestFlight pipeline.
 
 ## The two facts that shape the design
 

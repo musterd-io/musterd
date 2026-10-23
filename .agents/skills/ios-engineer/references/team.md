@@ -27,11 +27,11 @@ work in a session. A team adopting this skill replaces this file with its own.
 | Fact | Value |
 | --- | --- |
 | Package | `packages/mobile` (`@musterd/mobile`, private) — surface doc [09-mobile.md](../../../../docs/architecture/09-mobile.md) |
-| Toolchain | Expo SDK 57 · React Native 0.86.3 (New Architecture) · React 19.2.3 · Expo Router — [ADR 520](../../../../docs/decisions/520-mobile-toolchain-expo.md) |
+| Toolchain | Expo SDK 58 · React Native 0.88.0 (New Architecture) · React 19.3.0 · Expo Router — [ADR 520](../../../../docs/decisions/520-mobile-toolchain-expo.md) |
 | Current job | Sealed ask client and phone authenticator (asks + listed-act signatures; calendar screens leave) — [ADR 676](../../../../docs/decisions/676-mobile-app-sealed-ask-client.md), design `docs/superpowers/specs/2026-10-19-mobile-app-design.md` |
-| Wire | Daemon over HTTP; imports `@musterd/protocol` only, via `/calendar` and `/errors` subpaths (never the barrel, never `@musterd/server`); responses parsed with protocol schemas |
-| Local-first | `expo-sqlite` store, pull `?since` then replay queued writes, daemon wins and names drops; `expo-secure-store` for server/team/`mscr_` credential (this-device-only, after first unlock) |
-| Server address | Setting; laptop daemon via Tailscale MagicDNS `http://<laptop>.<tailnet>.ts.net:4849` (ATS exception for `ts.net` + local networking only; IP form refused by the app itself); host must be in daemon `MUSTERD_ALLOWED_HOSTS` |
+| Wire | No network code yet — the calendar's HTTP client left on 2026-10-22. The design is sealed traffic through the away relay; the app imports `@musterd/protocol` only, via `/app-channel` and `/approval` subpaths (never the barrel, never `@musterd/server`), frames parsed with protocol schemas |
+| Storage | Nothing stored yet. The `expo-sqlite` device store, the `?since` pull and the queued writes left with the calendar (and took the `expo-sqlite` dep). `expo-secure-store` stays (this-device-only) for the pairing state; the app holds no `mscr_` credential |
+| Server address | None — the app holds no server URL. Pairing hands it the relay route, a one-time code and both daemon public keys, and every answer leaves sealed through the relay (ADR 676 §3). `app.json` still carries the calendar-era ATS exception for `ts.net`; dropping it is its own small change |
 
 ## Build and ship here
 
@@ -44,8 +44,9 @@ work in a session. A team adopting this skill replaces this file with its own.
   then `packages/mobile/scripts/upload-testflight.sh` (fastlane, App Store Connect API key
   at `~/.appstoreconnect/fastlane-musterd.json` on nick's machine — a human runs it).
   A build reaches TestFlight 10–15 min after Apple processes it.
-- **Gates**: root `pnpm test` runs `packages/mobile/src/lib/*.test.ts` in Node;
-  `pnpm typecheck` runs its `tsc --noEmit`. No gate runs a native build or Metro.
+- **Gates**: root `pnpm test` runs no mobile tests (the calendar's Node tests left with it,
+  2026-10-22); `pnpm typecheck` runs its `tsc --noEmit`; the manual checks are `npx expo-doctor`,
+  `npx expo prebuild -p ios` and `npx expo export -p ios`. No gate runs a native build or Metro.
 
 ## The native bridge owed by ADR 676
 

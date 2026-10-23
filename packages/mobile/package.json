@@ -2,7 +2,7 @@
   "name": "@musterd/mobile",
   "version": "0.0.0",
   "private": true,
-  "description": "musterd on the phone — for now, the Team's calendar (ADR 519, ADR 520). Expo on React Native's New Architecture; talks to the daemon over the wire.",
+  "description": "musterd on the phone — the sealed ask client and the phone authenticator (ADR 676). Expo on React Native's New Architecture; every ask arrives sealed through the away relay and every answer is signed on this phone.",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -19,7 +19,6 @@
     "expo-linking": "~58.0.14",
     "expo-router": "~58.0.25",
     "expo-secure-store": "~58.0.2",
-    "expo-sqlite": "~58.0.13",
     "react": "19.3.0",
     "react-native": "0.88.0",
     "react-native-safe-area-context": "~5.10.1",

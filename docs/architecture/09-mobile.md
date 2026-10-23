@@ -2,74 +2,60 @@
 
 > **Living document.** Direction, not gospel: if it disagrees with the code, fix the smaller of the two
 > in the same commit; a real disagreement is an ADR. The decisions behind this surface are
-> [ADR 519](../decisions/519-calendar-entries-as-team-data.md) (the calendar as team data) and
-> [ADR 520](../decisions/520-mobile-toolchain-expo.md) (Expo on the New Architecture).
+> [ADR 676](../decisions/676-mobile-app-sealed-ask-client.md) (the app as a sealed ask client and the
+> phone authenticator) and [ADR 520](../decisions/520-mobile-toolchain-expo.md) (Expo on the New
+> Architecture). The calendar it replaces is [ADR 519](../decisions/519-calendar-entries-as-team-data.md),
+> which stays the daemon's data model.
 
 ## What the mobile package is
 
-`@musterd/mobile` is musterd on a phone. For now it does one thing: the Team's **calendar** — read it,
-add to it, edit it, on iOS (Android is one more build target, not a second app). It is an Expo app on
-React Native's New Architecture, with Expo Router for navigation.
+`@musterd/mobile` is musterd on a phone, with two jobs (ADR 676 §2): **answer asks** off the
+computer, and **be the phone authenticator** — its Secure Enclave key signs what the app showed, with
+Face ID. iOS only, TestFlight only (ADR 676 decision 11); the calendar, a team view, `/live` on the
+phone, Android and the App Store are out of scope by name.
 
-It is a surface like the CLI and the MCP adapter: it talks to the daemon **over the wire** and imports
-`@musterd/protocol` only — through the zod-carrying `@musterd/protocol/calendar` and
-`@musterd/protocol/errors` subpaths, never the barrel, because the barrel pulls Node built-ins a phone
-does not have. Every response is parsed through the protocol schemas (hard rule 4), and the edit form
-validates with `CalendarEntryInputSchema` itself, so the phone refuses exactly what the daemon would.
+The calendar shipped first (ADR 519 and ADR 520's app half) and left this package on 2026-10-22
+(lane `01M5K5ZJBZPE5SZC4HD6HHC0VJ`): screens, the local-first sync, the SQLite device store and the
+calendar wire client are gone. What remains is the asks shell — one screen — and the app half's next
+increments (pairing, the notification extension, the list, the descriptor screen) build on it.
 
-## How it talks to the daemon
+It is a surface like the CLI and the MCP adapter: it talks over the wire and never imports
+`@musterd/server`. When it starts reading frames it will take them through the node-free
+`@musterd/protocol/app-channel` and `@musterd/protocol/approval` subpaths, never the barrel, which
+pulls Node built-ins a phone does not have. Today no protocol subpath is imported at all, and every
+frame the app does read is parsed through a protocol schema at the boundary (hard rule 4).
 
-- **Routes:** the four calendar routes of SPEC A.16 — `GET /teams/:slug/calendar[?since]`, `POST`,
-  `PUT /:id`, `DELETE /:id` — with the Member's human credential (`mscr_`) as a bearer token, the same
-  shape `musterd calendar` sends.
-- **Where:** the server URL is a setting (ADR 520 §5). For a laptop daemon it is the laptop's Tailscale
-  address on port 4849 — the MagicDNS name (`http://<laptop>.<tailnet>.ts.net:4849`), or the laptop's
-  `100.x` Tailscale IP where MagicDNS does not resolve. Tailscale encrypts the link, so plain `http` is
-  correct here; `app.json` carries an App Transport Security exception for `ts.net` and local
-  networking, and nothing else. iOS refuses plain `http` to an IP address even over Tailscale (build
-  2, 2026-10-06: `http://100.x…:4849` failed with an App Transport Security error), so the
-  Connection screen refuses that shape itself and names the `.ts.net` fix. Whichever address the phone uses must be in the daemon's
-  `MUSTERD_ALLOWED_HOSTS` (`musterd service install --allowed-hosts …`,
-  `docs/guides/cross-network-overlay.md` §2b): the ADR 040 gate checks the `Host` of plain HTTP
-  requests too, not only WebSocket upgrades, and answers
-  `403 forbidden — request Host or Origin is not allowed` (measured 2026-10-05). The settings screen
-  shows that message on Connect. `musterd service status` prints the list.
-- **Credential:** server, Team and credential live in the iOS Keychain (`expo-secure-store`,
-  this-device-only, readable after first unlock). Connecting reads the calendar once before anything is
-  kept, so a wrong URL, Team or credential is refused on the settings screen.
+## How it talks
 
-## Local-first sync
+**Today: it does not.** The calendar's HTTP client and its `mscr_` credential went out with the
+calendar, and the app holds no team credential at all — its authority is the paired device key, not a
+bearer token (ADR 676 §3's trust table). Nothing in the app requests plain HTTP to a daemon now, so
+`app.json`'s App Transport Security exception for `ts.net` is a leftover of that direct link; it stays
+for the moment and dropping it is its own small change.
 
-The phone keeps the whole calendar in SQLite (`expo-sqlite`) and renders that copy, so it works on a
-plane and while the laptop sleeps. A sync — on launch, on every return to the foreground, after every
-write, and on pull-to-refresh — does two things in order:
+**What it is being wired to** ([spec §3–§6](../superpowers/specs/2026-10-19-mobile-app-design.md)):
 
-1. **Pull** `?since=<cursor>`, where the cursor is the daemon's `now` from the previous pull (never the
-   phone's clock). A first pull, or one after a refusal, reads everything and treats any entry the
-   phone holds that the daemon no longer lists as deleted.
-2. **Replay** the queue of writes made on the phone, oldest first.
-
-**The daemon wins a conflict, and the phone says so.** Each queued edit or delete remembers the
-`updated_at` it was made against. If a pull shows the daemon's copy moved past that, the queued write
-is dropped and the sync line names it (`"Demo day" — changed on the daemon while you were away — your
-edit was dropped`). A write the daemon refuses (`400`, `404`) is dropped and named the same way; an
-unreachable daemon or a `5xx` stops the replay with the queue intact. The queue holds one write per
-entry: a second edit folds into the first and keeps its base, and deleting an entry that never left
-the phone cancels its create. A create carries its local id as `source_ref`, the daemon's idempotency key, so
-when a POST commits but its answer is lost, the replay replaces that entry rather than adding a
-second. Every request gives up after 10 s and counts as offline, so a sleeping laptop cannot hold
-a sync, and every sync queued behind it, for the ~75 s a MagicDNS connect can hang.
+- **In.** The away relay pushes a sealed delivery with `mutable-content` and the `time-sensitive`
+  interruption level; the notification service extension opens the seal with this phone's HPKE
+  receive key and checks the daemon's Ed25519 signature against the key pinned at pairing. A sealed
+  body over 3 KB is not pushed: the push carries the ask ref and the phone fetches the body through
+  the relay. Any failure shows a generic "an ask could not be verified" with no actions.
+- **Out.** The answer is sealed to the daemon and POSTed to the relay's callback route; the daemon
+  redeems it through ADR 623 §6, re-checking current state. The relay answers `202` whatever the
+  daemon decides, so a phone learns the verdict only from a later redelivery — 202 means *delivered*,
+  not *accepted*.
+- **Pairing.** `musterd channels pair --channel app` (ADR 690) prints a QR carrying the relay route,
+  a one-time code and both daemon public keys. The app pins those keys, generates its own, and sends
+  an App Attest–vouched pair request sealed to the daemon through the relay. The phone never holds
+  the daemon's HTTP credential.
+- **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
+  (ADR 659): the daemon is the source of truth and the relay stores no sealed body.
 
 ## Screens
 
 | Route | What it is |
 | --- | --- |
-| `/` | The calendar: **Up next**, Upcoming / Month / Past, Picks / Everything, the kind chips, and the sync line. Pull to sync. |
-| `/entry/[id]` | The edit sheet (`id` = `new` to create; `?date=` prefills). Every SPEC A.16 field; Delete asks first. |
-| `/settings` | Server, Team, credential; Connect checks before keeping; Disconnect clears the phone. |
-
-Times are wall-clock in the entry's `tz` (ADR 519 §1). When that is not the phone's zone, the row and
-the edit sheet say whose clock the times are on.
+| `/` | The asks list. It opens on its empty state ("No asks yet"); the list itself, pairing and the descriptor screen arrive with the app half's next increments. |
 
 ## Running it on a phone (TestFlight)
 
@@ -105,41 +91,37 @@ The script needs an App Store Connect API key config at `~/.appstoreconnect/fast
 file. It stays on the account holder's machine, so the upload is a command the human runs, not a
 seat.
 
-Then on the phone: Tailscale on, open musterd, **Connection**, then enter the laptop's address, the
-Team slug, and your `mscr_` credential.
+Then on the phone: Tailscale on, open musterd. Pairing from the laptop lands with the app's pairing
+screen; until then the app opens on the asks shell.
 
 For JavaScript-only iteration without a store build, `npx expo start` and the Expo Go app run the same
 code against the same daemon. Expo Go on iOS supports only the current SDK.
 
 ## Gates
 
-The root `pnpm test` runs `src/lib/*.test.ts` (views, sync, the wire client) in Node; `pnpm typecheck`
-runs the package's `tsc --noEmit`. No gate runs a native build or Metro — those happen on a developer
-machine or EAS (ADR 520 §2).
+The root `pnpm test` runs no mobile tests today: the calendar's Node tests (views, sync, the wire
+client) left with it on 2026-10-22, and the ask client's tests arrive with its logic.
+`pnpm typecheck` runs the package's `tsc --noEmit`. No gate runs a native build or Metro (ADR 520 §2);
+for a change here the checks worth running by hand are:
+
+```bash
+cd packages/mobile
+npx expo-doctor            # 20/20
+npx expo prebuild -p ios   # Continuous Native Generation still generates the project
+npx expo export -p ios     # Metro still bundles it
+```
 
 ## File tree `packages/mobile/src/`
 
 ```
 src/
-  lib/
-    api.ts            // the wire client: the four SPEC A.16 routes with a bearer mscr_, responses parsed by protocol schemas; CalendarApiError tells unreachable (status 0) from a refusal
-    sync.ts           // LocalCalendar: optimistic save/remove into the device store, one queued write per entry, pull-then-replay sync, daemon-wins conflicts reported by name; memoryStore for tests
-    views.ts          // pure view rules: wall-clock in an entry's tz, isOver/upNext, Picks/kind filter, Upcoming/Past sections, the Sunday-first month grid, day and time labels
-  data/
-    settings.ts       // server, Team and credential in the iOS Keychain (expo-secure-store, this-device-only)
-    sqlite-store.ts   // the LocalStore over expo-sqlite: entries as wire JSON, the pending queue, the pull cursor
   ui/
-    theme.ts          // brand.md palette (mustard accent on zinc, light and dark) and the kind colours
+    theme.ts          // brand.md palette (mustard accent on zinc, light and dark)
 ```
 
-The screens and components are `.tsx` and outside the drift check; kept honest by hand:
+The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
-src/app/_layout.tsx        // the Stack and the CalendarProvider
-src/app/index.tsx          // the calendar screen
-src/app/entry/[id].tsx     // the edit sheet
-src/app/settings.tsx       // the connection screen
-src/data/calendar-context.tsx // the provider: opens the store, reads the Keychain, syncs on launch / foreground / write
-src/ui/components.tsx      // Segmented, Chip, KindDot, EntryRow, SyncLine
-src/ui/month-view.tsx      // the month grid
+src/app/_layout.tsx   // the Stack, themed from the palette
+src/app/index.tsx     // the asks list — its empty state until pairing and the list land
 ```

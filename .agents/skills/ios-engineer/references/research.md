@@ -14,9 +14,11 @@ with a Swift native bridge, harness-agnostic.
   screens with the sealed ask client; its Secure Enclave, CryptoKit HPKE and App Attest
   needs go through one Expo native module as a config plugin — ADR 520's falsifier
   (a required capability needing an eject) checked, not tripped.
-- Stack as built: Expo SDK 57, React Native 0.86.3, React 19.2.3, Expo Router,
-  `expo-sqlite`, `expo-secure-store`; protocol via `@musterd/protocol/calendar` and
-  `/errors` subpaths; no local Xcode; EAS cloud builds; fastlane upload script.
+- Stack as built: Expo SDK 58, React Native 0.88.0, React 19.3.0, Expo Router,
+  `expo-secure-store`; no local Xcode; EAS cloud builds; fastlane upload script. The calendar's
+  `expo-sqlite` store and its `@musterd/protocol/calendar` subpath left on 2026-10-22 — the ask
+  client's own traffic is sealed through the relay and will read `@musterd/protocol` through the
+  `/app-channel` and `/approval` subpaths.
 - Consequence for the craft split: the everyday craft is Expo/React Native; Swift is a
   small, security-critical bridge. A role skill written Swift-first would misfit the job.
 
