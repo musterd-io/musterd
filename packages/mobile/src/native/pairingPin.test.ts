@@ -44,4 +44,16 @@ describe('readPairingPin', () => {
     vi.mocked(phoneKeys.loadPairingPin).mockResolvedValue('not json');
     expect(await loadPairingPin()).toBeNull();
   });
+
+  it('stores a pin with no binding, and refuses a binding that is the wrong shape', async () => {
+    vi.mocked(phoneKeys.savePairingPin).mockResolvedValue(undefined);
+    const { binding: _binding, ...waiting } = pin;
+    await savePairingPin(waiting);
+    const stored = JSON.parse(String(vi.mocked(phoneKeys.savePairingPin).mock.calls.at(-1)?.[0]));
+    expect(stored).toEqual(waiting);
+    expect(stored).not.toHaveProperty('binding');
+    expect(readPairingPin(waiting)).toEqual(waiting);
+    expect(readPairingPin({ ...pin, binding: '' })).toBeNull();
+    expect(readPairingPin({ ...pin, binding: true })).toBeNull();
+  });
 });

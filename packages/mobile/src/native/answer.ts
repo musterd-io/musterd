@@ -73,7 +73,9 @@ function answerable(delivery: AppDelivery): delivery is AppDelivery & { kind: 'a
 }
 
 function samePlace(pin: PairingPin, route: PushRoute): boolean {
-  return pin.team === route.team && pin.binding === route.binding;
+  // A pin written at pair time has no binding yet. An answer waits until the extension has
+  // learned it from a verified delivery, and a missing binding is not a match for any route.
+  return pin.binding !== undefined && pin.team === route.team && pin.binding === route.binding;
 }
 
 /** `https://relay.example/app/<team>/...`, never leaving the pin's origin. */

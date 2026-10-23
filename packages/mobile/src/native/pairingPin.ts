@@ -1,11 +1,16 @@
 /**
  * The pairing pin the extension and the answer action share (ADR 676 §5).
  *
- * Pairing (the next increment) is what writes it. This increment defines the shape and the
- * keychain item, on the same service as the enclave key references (`dev.musterd.keys`,
+ * Pairing writes it, on the same service as the enclave key references (`dev.musterd.keys`,
  * account `pairing-pin`), so the extension can read it while the phone is locked. `relay` is
  * an `https` origin with no userinfo and no path: every answer and every body fetch is built
  * under it, and a pin that is not that shape is treated as absent.
+ *
+ * `binding` is absent until the first delivery the extension verifies. The phone does not
+ * know the channel binding id when it sends the pair request — that id is created when a
+ * standing key approves the phone — and the extension cannot require a binding it has not
+ * been told. After that verified open it writes the route's binding back here and does not
+ * overwrite it. An answer still requires the binding (`answer.ts`).
  */
 
 import { phoneKeys } from './phoneKeys';
@@ -18,7 +23,11 @@ export interface PairingPin {
   receive: string;
   relay: string;
   team: string;
-  binding: string;
+  /**
+   * The channel binding. Absent on the pin stored after the relay accepts the pair request,
+   * and set by the extension from the first delivery it verifies.
+   */
+  binding?: string;
 }
 
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -59,12 +68,25 @@ export function readPairingPin(value: unknown): PairingPin | null {
   const identity = b64(record.identity, 43);
   const receive = b64(record.receive, 87);
   const team = bounded(record.team, 64);
-  const binding = bounded(record.binding, 64);
-  if (!identity || !receive || !team || !binding) return null;
+  if (!identity || !receive || !team) return null;
   if (typeof record.relay !== 'string' || record.relay.length > 512 || !httpsOrigin(record.relay)) {
     return null;
   }
-  return { v: 1, identity, receive, relay: new URL(record.relay).origin, team, binding };
+  // Missing is "not yet". Present and wrong is a pin we will not trust.
+  let binding: string | undefined;
+  if (record.binding !== undefined) {
+    const text = bounded(record.binding, 64);
+    if (!text) return null;
+    binding = text;
+  }
+  return {
+    v: 1,
+    identity,
+    receive,
+    relay: new URL(record.relay).origin,
+    team,
+    ...(binding !== undefined ? { binding } : {}),
+  };
 }
 
 /** Validate, then write the JSON the extension reads back. A bad pin is not stored. */

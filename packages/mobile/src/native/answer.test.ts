@@ -151,6 +151,19 @@ describe('answerNotification', () => {
     });
   });
 
+  it('does not sign a pin that has no binding yet', async () => {
+    const { binding: _binding, ...waiting } = pin;
+    expect(
+      await answerNotification({
+        action: 'musterd.answer.approve',
+        userInfo,
+        pin: waiting,
+        now: 1,
+      }),
+    ).toBe('unverified');
+    expect(phoneKeys.sign).not.toHaveBeenCalled();
+  });
+
   it('does not sign when the phone is unpaired, the ask is listed, or the delivery expired', async () => {
     expect(
       await answerNotification({ action: 'musterd.answer.approve', userInfo, pin: null, now: 1 }),
