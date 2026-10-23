@@ -203,6 +203,17 @@ function readAvailability(v: unknown): Member['availability'] | typeof FAIL {
   return compact({ status, until });
 }
 
+/** ADR 721: a human's own status line, as the wire carries it. Lapsing is the reader's job, not this one's. */
+function readStatusLine(v: unknown): Member['status_line'] | typeof FAIL {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (!isRecord(v)) return FAIL;
+  const { text, set_at, expires_at } = v;
+  if (typeof text !== 'string' || text.length === 0) return FAIL;
+  if (!Number.isInteger(set_at) || !Number.isInteger(expires_at)) return FAIL;
+  return { text, set_at: set_at as number, expires_at: expires_at as number };
+}
+
 function readPresence(v: unknown): Presence | typeof FAIL {
   if (!isRecord(v)) return FAIL;
   const surface = oneOf(SURFACES, v['surface']);
@@ -333,6 +344,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
 
   const lifecycle_until = nullishInt(row['lifecycle_until']);
   const availability = readAvailability(row['availability']);
+  const status_line = readStatusLine(row['status_line']);
   const working_hours = memberWorkingHours(row['working_hours']);
   const slack_user_id = nullishString(row['slack_user_id'], 1);
   const hue = nullishInt(row['hue'], { min: 0, max: 359 });
@@ -345,6 +357,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
   if (
     failed(lifecycle_until) ||
     failed(availability) ||
+    failed(status_line) ||
     failed(working_hours) ||
     failed(slack_user_id) ||
     failed(hue) ||
@@ -410,6 +423,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
     lifecycle: lifecycle as Lifecycle,
     lifecycle_until,
     availability,
+    status_line,
     working_hours,
     slack_user_id,
     hue,

@@ -36,6 +36,11 @@ const corpus: unknown[] = [
   { ...row, availability: { status: 'away', until: 5 } },
   { ...row, availability: { status: 'available' } },
   { ...row, availability: null },
+  { ...row, status_line: { text: 'assembling a new dresser', set_at: 1, expires_at: 3_600_001 } },
+  { ...row, status_line: null },
+  { ...row, status_line: { text: '', set_at: 1, expires_at: 2 } },
+  { ...row, status_line: { text: 'lunch', set_at: 1.5, expires_at: 2 } },
+  { ...row, status_line: 'lunch' },
   { ...row, activity: 'idle' }, // legacy spelling, normalized to `active`
   { ...row, activity: 'working', posture: 'idle' },
   { ...row, posture: 'away', offline_reason: 'session_ended' },
