@@ -5,6 +5,7 @@ import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
+import { browserOrigin } from './authority.js';
 import { resolveRead } from './helpers.js';
 
 /**
@@ -25,9 +26,12 @@ import { resolveRead } from './helpers.js';
  */
 export type SigninSurface = 'board' | 'live';
 
-/** The plain surface URL — safe to print, carries nothing. */
+/**
+ * The plain surface URL — safe to print, carries nothing. Browser navigation normalizes loopback IPs
+ * to localhost so WebAuthn can use a valid relying-party ID; API calls keep using `server` as given.
+ */
 export function surfaceUrl(server: string, team: string, surface: SigninSurface): string {
-  return `${server.replace(/\/$/, '')}/${surface}?team=${encodeURIComponent(team)}`;
+  return `${browserOrigin(server)}/${surface}?team=${encodeURIComponent(team)}`;
 }
 
 /** The plain board URL. Kept as its own name because the board's call sites read better for it. */

@@ -21,6 +21,9 @@ const bytesToB64url = (b: ArrayBuffer): string =>
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
+const isLoopbackIp = (hostname: string): boolean =>
+  hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+
 export async function authorityProofForVerdict(
   cfg: LiveConfig,
   lane: string,
@@ -58,6 +61,14 @@ export async function authorityProofForVerdict(
       },
     })) as PublicKeyCredential | null;
   } catch (e) {
+    if (
+      e instanceof DOMException &&
+      e.name === 'SecurityError' &&
+      isLoopbackIp(window.location.hostname)
+    )
+      throw new Error(
+        'passkeys cannot sign when /live is opened with an IP address — rerun `musterd live` and use the localhost URL it opens; the verdict was not sent',
+      );
     if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError'))
       throw new Error('passkey cancelled — the verdict was not sent');
     throw e;
