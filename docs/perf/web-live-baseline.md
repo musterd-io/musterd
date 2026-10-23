@@ -2234,9 +2234,9 @@ Dismiss mark, quiet "Tour" link, "Skip the tour" and "Start over" in the panel. 
 
 | Budget     | Before (main) | This branch | Ceiling                    |
 | ---------- | ------------- | ----------- | -------------------------- |
-| initial JS | 149,350 B     | ~149,600 B  | RAISED 149,350 → 149,700 B |
-| total JS   | 359,800 B     | 360,644 B   | RAISED 359,800 → 360,800 B |
-| live CSS   | 27,250 B      | 27,378 B    | RAISED 27,250 → 27,500 B   |
+| initial JS | 150,080 B     | ~150,320 B  | RAISED 150,080 → 150,450 B |
+| total JS   | 361,010 B     | 361,950 B   | RAISED 361,010 → 362,100 B |
+| live CSS   | 27,420 B      | 27,552 B    | RAISED 27,420 → 27,700 B   |
 
 The badge and the header chip are eager; the card is a lazy chunk (VersionCard). The office corner lost its
 wordmark and domain. Lazy-loading applied first (ADR 183). Raised tight: measured + ~0.1%.
