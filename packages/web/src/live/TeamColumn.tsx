@@ -9,7 +9,7 @@ import { providerIconHtml } from './modelProviderIcon';
 import { Experiments, ReadMark } from './Experiments';
 import { useLiveSamples } from './useLiveSamples';
 import { experimentEntries, withLivePoints } from './experimentReads';
-import { MusterdChip } from '../brand/MusterdWord';
+import { MusterdWordmark } from '../brand/MusterdWord';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { VersionBadge, type DaemonInfo } from './VersionBadge';
 import { TeamCard } from './TeamCard';
@@ -166,12 +166,19 @@ export function TeamColumn({
   return (
     <aside className="lc-team" aria-label="The team">
       <header className="lc-team__head">
-        <span className="lc-team__title">{teamName ? `${teamName} team` : 'The team'}</span>
+        <span className="lc-team__title">{teamName ? `team ${teamName}` : 'The team'}</span>
         <span className="lc-team__count">
-          {loading ? <i className="lc-skel" style={{ width: '5em' }} /> : `${working} working`}
+          {loading ? (
+            <i className="lc-skel" style={{ width: '5em' }} />
+          ) : (
+            <>
+              {working}
+              <span className="lc-team__count-word"> working</span>
+            </>
+          )}
         </span>
         <span className="lc-team__spacer" />
-        <MusterdChip size={15} className="lc-team__chip" />
+        <MusterdWordmark height={22} className="lc-team__word" />
         <VersionBadge info={daemonInfo} still={still} />
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
