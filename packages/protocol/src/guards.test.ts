@@ -50,6 +50,45 @@ const corpus: unknown[] = [
   { ...row, quiescence: { state: 'unknown', quiet_for_ms: null, source: 'harness' } },
   { ...row, reported_asks: { count: 2, last_at: 9 } },
   { ...row, reported_asks: null },
+  { ...row, allowance: null },
+  {
+    ...row,
+    allowance: {
+      readAt: 10,
+      accounts: [
+        {
+          provider: 'claude',
+          label: 'Claude Max',
+          readAt: 10,
+          windows: [{ name: '5h', left: 0.38, resetsAt: 20, kind: 'percent' }],
+        },
+      ],
+    },
+  },
+  {
+    ...row,
+    allowance: {
+      readAt: 10,
+      accounts: [
+        {
+          provider: 'elevenlabs',
+          label: 'ElevenLabs',
+          readAt: 10,
+          windows: [
+            {
+              name: 'characters',
+              left: 0.4,
+              resetsAt: null,
+              kind: 'amount',
+              used: 1000,
+              limit: 10000,
+              unit: 'characters',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     ...row,
     presences: [
@@ -121,6 +160,50 @@ const corpus: unknown[] = [
   { ...row, quiescence: { state: 'busy', quiet_for_ms: 'a while', source: 'audit' } },
   { ...row, reported_asks: { count: 0, last_at: 9 } },
   { ...row, reported_asks: { count: 1 } },
+  { ...row, allowance: { readAt: 10, accounts: [] } },
+  {
+    ...row,
+    allowance: {
+      readAt: 10,
+      accounts: [
+        {
+          provider: 'grok',
+          label: 'Grok',
+          readAt: 10,
+          windows: [{ name: '5h', left: 0.5, resetsAt: null, kind: 'percent' }],
+        },
+      ],
+    },
+  },
+  {
+    ...row,
+    allowance: {
+      readAt: 10,
+      accounts: [
+        {
+          provider: 'claude',
+          label: 'Claude Max',
+          readAt: 10,
+          account: 'abcdef0123456789',
+          windows: [{ name: '5h', left: 0.5, resetsAt: null, kind: 'percent' }],
+        },
+      ],
+    },
+  },
+  {
+    ...row,
+    allowance: {
+      readAt: 10,
+      accounts: [
+        {
+          provider: 'claude',
+          label: 'Claude Max',
+          readAt: 10,
+          windows: [{ name: '5h', left: 1.2, resetsAt: null, kind: 'percent' }],
+        },
+      ],
+    },
+  },
   {
     ...row,
     working_hours: { timezone: 'Mars/Olympus', days: ['mon'], start: '09:00', end: '17:00' },

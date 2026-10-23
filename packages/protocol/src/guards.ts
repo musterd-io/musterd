@@ -41,6 +41,8 @@ import {
   type Surface,
 } from './acts.wire.js';
 import { LIFECYCLES } from './acts.wire.js';
+import type { AllowanceView } from './allowance.js';
+import { ALLOWANCE_KINDS, ALLOWANCE_PROVIDERS } from './allowance.wire.js';
 import { ASK_SPECIES, ASK_TIERS, type AskSpecies, type AskTier } from './ask.wire.js';
 import type { AuditResponse } from './audit.js';
 import type { Capabilities } from './capabilities.js';
@@ -412,6 +414,8 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
         ? { count: reportedRaw['count'] as number, last_at: reportedRaw['last_at'] as number }
         : FAIL;
   if (failed(reported_asks)) return null;
+  const allowance = readAllowance(row['allowance']);
+  if (failed(allowance)) return null;
 
   return compact({
     id: row['id'],
@@ -448,7 +452,76 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
     resumable_at,
     quiescence,
     reported_asks,
+    allowance,
   }) as MemberSummary;
+}
+
+const PERCENT_WINDOW_KEYS = ['name', 'left', 'resetsAt', 'kind'];
+const AMOUNT_WINDOW_KEYS = ['name', 'left', 'resetsAt', 'kind', 'used', 'limit', 'unit'];
+
+function onlyKeys(row: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(row).every((key) => keys.includes(key));
+}
+
+function readAllowanceWindow(
+  value: unknown,
+): AllowanceView['accounts'][number]['windows'][number] | typeof FAIL {
+  if (!isRecord(value)) return FAIL;
+  const name = value['name'];
+  const left = value['left'];
+  const resetsAt = value['resetsAt'];
+  const kind = oneOf(ALLOWANCE_KINDS, value['kind']);
+  if (typeof name !== 'string' || name.length < 1 || name.length > 40) return FAIL;
+  if (typeof left !== 'number' || !Number.isFinite(left) || left < 0 || left > 1) return FAIL;
+  if (resetsAt !== null && !Number.isInteger(resetsAt)) return FAIL;
+  if (kind === undefined) return FAIL;
+  if (kind === 'percent') {
+    if (!onlyKeys(value, PERCENT_WINDOW_KEYS)) return FAIL;
+    return { name, left, resetsAt: resetsAt as number | null, kind };
+  }
+  const used = value['used'];
+  const limit = value['limit'];
+  const unit = value['unit'];
+  if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return FAIL;
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return FAIL;
+  if (typeof unit !== 'string' || unit.length < 1 || unit.length > 24) return FAIL;
+  if (!onlyKeys(value, AMOUNT_WINDOW_KEYS)) return FAIL;
+  return { name, left, resetsAt: resetsAt as number | null, kind, used, limit, unit };
+}
+
+/** The roster's what's-left field (ADR 723). Null and absent pass. A bad shape fails the row. */
+function readAllowance(value: unknown): AllowanceView | null | undefined | typeof FAIL {
+  if (value === undefined || value === null) return value;
+  if (!isRecord(value) || !onlyKeys(value, ['readAt', 'accounts'])) return FAIL;
+  const readAt = value['readAt'];
+  const accountsRaw = value['accounts'];
+  if (!Number.isInteger(readAt) || (readAt as number) <= 0) return FAIL;
+  if (!Array.isArray(accountsRaw) || accountsRaw.length < 1 || accountsRaw.length > 8) return FAIL;
+  const accounts: AllowanceView['accounts'] = [];
+  for (const item of accountsRaw) {
+    if (!isRecord(item) || !onlyKeys(item, ['provider', 'label', 'readAt', 'windows'])) return FAIL;
+    const provider = oneOf(ALLOWANCE_PROVIDERS, item['provider']);
+    const label = item['label'];
+    const accountReadAt = item['readAt'];
+    const windowsRaw = item['windows'];
+    if (provider === undefined) return FAIL;
+    if (typeof label !== 'string' || label.length < 1 || label.length > 40) return FAIL;
+    if (!Number.isInteger(accountReadAt) || (accountReadAt as number) <= 0) return FAIL;
+    if (!Array.isArray(windowsRaw) || windowsRaw.length < 1 || windowsRaw.length > 8) return FAIL;
+    const windows: AllowanceView['accounts'][number]['windows'] = [];
+    for (const window of windowsRaw) {
+      const parsed = readAllowanceWindow(window);
+      if (failed(parsed)) return FAIL;
+      windows.push(parsed);
+    }
+    accounts.push({
+      provider,
+      label,
+      readAt: accountReadAt as number,
+      windows,
+    });
+  }
+  return { readAt: readAt as number, accounts };
 }
 
 /** `{ lanes, warnings }` from `GET /teams/:slug/lanes`, with an older daemon's omissions filled. */

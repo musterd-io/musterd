@@ -32,6 +32,7 @@ export * from './claim.js';
 export * from './claim-handshake.js';
 export * from './envelope.js';
 export * from './review-promise.js';
+export * from './allowance.js';
 export * from './member.js';
 export * from './working-hours.js';
 export * from './posture.js';

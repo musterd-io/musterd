@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { accountKey } from './accountKey.js';
 import { claudePlan, claudeToken, parseClaude, resolveClaudeSignIn } from './claude.js';
 
 describe('parseClaude', () => {
@@ -111,7 +112,11 @@ describe('claudePlan', () => {
 
 describe('resolveClaudeSignIn', () => {
   it('does not look the machine up when the caller passed null', async () => {
-    const lookup = vi.fn(async () => ({ token: 'from-machine', plan: 'Claude Max' }));
+    const lookup = vi.fn(async () => ({
+      token: 'from-machine',
+      plan: 'Claude Max',
+      accountKey: '0123456789abcdef',
+    }));
     expect(
       await resolveClaudeSignIn(null, { CLAUDE_CODE_OAUTH_TOKEN: 'from-env' }, null, lookup),
     ).toBeNull();
@@ -119,7 +124,11 @@ describe('resolveClaudeSignIn', () => {
   });
 
   it('prefers the environment over the keychain and keeps a plan from the file', async () => {
-    const lookup = vi.fn(async () => ({ token: 'from-machine', plan: 'Claude Pro' }));
+    const lookup = vi.fn(async () => ({
+      token: 'from-machine',
+      plan: 'Claude Pro',
+      accountKey: '0123456789abcdef',
+    }));
     const signIn = await resolveClaudeSignIn(
       undefined,
       { CLAUDE_CODE_OAUTH_TOKEN: ' from-env ' },
@@ -133,7 +142,11 @@ describe('resolveClaudeSignIn', () => {
       },
       lookup,
     );
-    expect(signIn).toEqual({ token: 'from-env', plan: 'Claude Max 20x' });
+    expect(signIn).toEqual({
+      token: 'from-env',
+      plan: 'Claude Max 20x',
+      accountKey: accountKey('claude', 'refresh:nope'),
+    });
     expect(lookup).not.toHaveBeenCalled();
     expect(JSON.stringify(signIn)).not.toContain('nope');
     expect(JSON.stringify(signIn)).not.toContain('file-token');

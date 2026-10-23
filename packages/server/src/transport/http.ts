@@ -5,6 +5,7 @@ import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import {
+  AllowancePostSchema,
   summariseClaims,
   ReviewPromisesQuerySchema,
   ReviewPromisesResponseSchema,
@@ -185,6 +186,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
+import { allowanceForRoster, allowanceSpread, ingestAllowance } from '../allowanceReadings.js';
 import { replayHeaders, replaySource } from '../cloud/affinity.js';
 import {
   CONSOLE_UNREACHABLE_SENTENCE,
@@ -2679,6 +2681,18 @@ async function summarize(
   // is not a human-to-human DM; an unauthenticated roster read (self-hosted, no bearer) is public.
   const viewerGrade = viewer ? messageVisibilityOf(viewer) : 'public';
   const openStatus = viewerGrade === 'broadcast' || viewerGrade === 'public';
+  // ADR 723: outside the 1s roster cache, so a post shows on the next read. Broadcast omits it;
+  // a public reader still gets it, which is how an unsigned local /live paints the line.
+  const allowanceByName = allowanceForRoster(
+    teamId,
+    presenceRows.map((s) => ({
+      name: s.member.name,
+      kind: s.member.kind,
+      present:
+        s.status !== 'offline' || (s.member.kind === 'human' && liveDrivers.has(s.member.name)),
+      presences: s.presences,
+    })),
+  );
   const quiescenceNow = Date.now();
   // One resolve per distinct prefs blob for the whole roster, not two per row (lane 01M4GQ2G7B).
   const resolveRowStyle = styleResolver(style);
@@ -2773,6 +2787,7 @@ async function summarize(
         ),
         // A team reader only: a broadcast or public roster does not name a seat a human reported.
         ...(openStatus ? {} : { reported_asks: reportedAsks.get(s.member.name) ?? null }),
+        ...allowanceSpread(viewerGrade, allowanceByName.get(s.member.name) ?? null),
       };
     }),
   );
@@ -3552,6 +3567,34 @@ export async function handleHttp(
             hub_stopped: readHubStop(ctx.config, team.id),
           },
         });
+      }
+
+      /* ─── allowance readings (ADR 723) ─────────────────────────────────────────────────────────
+       * Percents from the local what's-left page. A bearer names the holder. A local post with no
+       * bearer is this machine and no holder. Anything else with no bearer is refused: an
+       * off-machine reading must not paint on this daemon's agents. */
+      if (method === 'POST' && rest === '/allowance') {
+        const team = await requireTeam(ctx.db, slug);
+        const body = parseOrBadRequest(AllowancePostSchema, await readJson(req));
+        let holder: string | null = null;
+        const local = trustsLocalPeer(ctx, req);
+        if (hasBearer(req.headers['authorization'])) {
+          const auth = await authMember(
+            ctx.db,
+            slug,
+            bearer(req),
+            actingSeat(req),
+            agentSessionLease(req),
+          );
+          holder = auth.member.name;
+        } else if (!local) {
+          throw new MusterdError(
+            'unauthorized',
+            'an allowance reading from another machine needs a member credential',
+          );
+        }
+        ingestAllowance(team.id, body, { holder, local });
+        return sendJson(res, 200, { ok: true });
       }
 
       /* ─── sign-in handoff (ADR 170) ────────────────────────────────────────────────────────────

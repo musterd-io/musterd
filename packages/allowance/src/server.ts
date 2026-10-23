@@ -3,12 +3,16 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cursorAccountKey, elevenAccountKey, openaiAccountKey } from './accountKey.js';
 import { readBoard } from './board.js';
 import { claudeSignInFromKeychain, resolveClaudeSignIn } from './claude.js';
+import { codexSession } from './codex.js';
 import { loadSelection, saveSelection, selectionFromForm } from './config.js';
 import { percentCss } from './css.js';
 import { cursorTokenFromKeychain, resolveCursorToken } from './cursor.js';
 import { renderPage } from './page.js';
+import { publishAllowance } from './post.js';
+import { allowanceSnapshot, type AccountMaterial } from './snapshot.js';
 import type { Board } from './types.js';
 
 const FONTS = new Set(['dm-sans-latin.woff2', 'jetbrains-mono-latin.woff2']);
@@ -237,9 +241,10 @@ export function start(opts: StartOpts): Promise<Server> {
             claudeSignInFromKeychain,
           )
         : null;
-      return await readBoard({
+      const readAt = now();
+      const board = await readBoard({
         env,
-        now: now(),
+        now: readAt,
         timeZone,
         fetchSub,
         signal,
@@ -249,8 +254,55 @@ export function start(opts: StartOpts): Promise<Server> {
         claudePlan: claude?.plan ?? null,
         cursorToken: cursor,
       });
+      await publishReading(board, {
+        env,
+        fetchSub,
+        codexAuth,
+        claudeKey: claude?.accountKey ?? null,
+        cursorToken: cursor,
+        cursorFile,
+      });
+      return board;
     } catch {
       return null;
+    }
+  }
+
+  async function publishReading(
+    board: Board,
+    read: {
+      env: NodeJS.ProcessEnv;
+      fetchSub: typeof fetch;
+      codexAuth: unknown;
+      claudeKey: string | null;
+      cursorToken: string | null;
+      cursorFile: unknown;
+    },
+  ): Promise<void> {
+    try {
+      const keys: AccountMaterial[] = [];
+      const session = codexSession(read.codexAuth);
+      if (session) keys.push({ provider: 'openai', accountKey: openaiAccountKey(session.account) });
+      if (read.claudeKey) keys.push({ provider: 'claude', accountKey: read.claudeKey });
+      if (read.cursorToken) {
+        keys.push({ provider: 'cursor', accountKey: cursorAccountKey(read.cursorFile) });
+      }
+      const eleven = read.env['ELEVENLABS_API_KEY']?.trim() ?? '';
+      if (eleven !== '')
+        keys.push({ provider: 'elevenlabs', accountKey: elevenAccountKey(eleven) });
+      const snapshot = allowanceSnapshot(board, keys);
+      if (snapshot === null) return;
+      const musterdConfig =
+        read.env['MUSTERD_CONFIG']?.trim() || join(homedir(), '.musterd', 'config.json');
+      await publishAllowance({
+        env: read.env,
+        cwd: process.cwd(),
+        configPath: musterdConfig,
+        body: snapshot,
+        fetchSub: read.fetchSub,
+      });
+    } catch {
+      // A failed post leaves the page as it was.
     }
   }
 

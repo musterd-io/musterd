@@ -2267,3 +2267,18 @@ the prior ceiling while the local build remained under it. Miley authorized a 51
 the new ceiling is 354.3 KB.
 
 - Falsify: CI `perf:check` for PR #3257 reports total JS at or under 362,812 B.
+
+### 2026-10-23 — allowance on the member card (ADR 723, lane 01M5MZ1CS73W3BXPHHQKYY9Q17)
+
+| Budget     | Previous ceiling | Local branch | New ceiling |
+| ---------- | ---------------- | ------------ | ----------- |
+| initial JS | 150,450 B        | 150,868 B    | 151,520 B   |
+| total JS   | 362,812 B        | 363,265 B    | 363,920 B   |
+| live CSS   | 27,700 B         | 27,693 B     | 27,950 B    |
+
+The line is one 28px row per account, under the name, in the eager TeamColumn chunk (`allowanceLine.ts`).
+The roster guard reads the field. The new CSS rules are +96 B gzip. Lazy-loading cannot move a line that
+paints with the card (ADR 183). A re-baseline would loosen. Ceilings are the local measure plus the ~450 B
+JS CI gap and ~200 B, and the ~250 B CSS CI gap.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 151,520 B, total JS at or under 363,920 B, and live CSS at or under 27,950 B.

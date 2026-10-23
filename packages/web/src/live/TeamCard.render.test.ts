@@ -33,8 +33,15 @@ const card = (member: Partial<MemberSummary> = {}): Card => ({
   moreLanes: 0,
 });
 
-const render = (c: Card) =>
-  renderToStaticMarkup(createElement(TeamCard, { card: c, now: 0, linked: false }));
+const render = (c: Card, opts?: { still?: boolean; now?: number }) =>
+  renderToStaticMarkup(
+    createElement(TeamCard, {
+      card: c,
+      now: opts?.now ?? 0,
+      linked: false,
+      still: opts?.still ?? false,
+    }),
+  );
 
 describe('TeamCard — a reported seat is flagged on the card (ADR 676 §8)', () => {
   it('shows the mark with its count in the tooltip', () => {
@@ -47,5 +54,37 @@ describe('TeamCard — a reported seat is flagged on the card (ADR 676 §8)', ()
   it('stays quiet with no report, or from an older daemon', () => {
     expect(render(card({ reported_asks: null }))).not.toContain('lc-seat__reported');
     expect(render(card())).not.toContain('lc-seat__reported');
+  });
+});
+
+describe('TeamCard — what is left on the account (ADR 723)', () => {
+  const now = 1_000_000;
+  const allowance = {
+    readAt: now,
+    accounts: [
+      {
+        provider: 'claude' as const,
+        label: 'Claude Max',
+        readAt: now,
+        windows: [
+          { name: 'week', left: 0.18, resetsAt: 2, kind: 'percent' as const },
+          { name: '5h', left: 0.1, resetsAt: 1, kind: 'percent' as const },
+        ],
+      },
+    ],
+  };
+
+  it('prints the tightest window, a warn class under 15% left, and a muted suffix', () => {
+    const html = render(card({ allowance }), { now });
+    expect(html).toContain('lc-team-card__left is-warn');
+    expect(html).toContain('Claude Max 10% left');
+    expect(html).toContain('lc-team-card__left-more');
+    expect(html).toContain('week 18%');
+    expect(html).toContain('width:10%');
+  });
+
+  it('is absent with no reading and on a stream card', () => {
+    expect(render(card(), { now })).not.toContain('lc-team-card__left');
+    expect(render(card({ allowance }), { now, still: true })).not.toContain('lc-team-card__left');
   });
 });
