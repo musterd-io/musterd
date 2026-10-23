@@ -137,12 +137,19 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
   const draw = (node: OfficeNode, armsOnly = false) => {
     const { ctx, ops } = recordingCtx();
     const assets: FigureAssets = { spec, sheets: new Map([['acc/headphones', sheet]]), scratch: { canvas: fakeCanvas() } };
-    drawCharacter(
-      ctx,
-      fitFloor(1200, 900),
-      { lx: 300, ly: 300, dir: 'S', node, skel: {} as Skel, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
-      armsOnly,
-    );
+    // the composed frame is a canvas too; under node, a recording one
+    const doc = globalThis.document;
+    (globalThis as { document?: unknown }).document = { createElement: () => fakeCanvas() };
+    try {
+      drawCharacter(
+        ctx,
+        fitFloor(1200, 900),
+        { lx: 300, ly: 300, dir: 'S', node, skel: {} as Skel, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
+        armsOnly,
+      );
+    } finally {
+      (globalThis as { document?: unknown }).document = doc;
+    }
     return ops;
   };
   // A name whose hashed accessory is not the headphones, so only dnd can put them on.

@@ -14,12 +14,13 @@ const manifest = parseManifest({
 });
 
 describe('renderedOfficeFromSearch', () => {
-  it('is on only for ?office=rendered', () => {
+  it('is on unless ?office=painted', () => {
     expect(renderedOfficeFromSearch('?office=rendered')).toBe(true);
     expect(renderedOfficeFromSearch('?team=revive&office=rendered')).toBe(true);
-    expect(renderedOfficeFromSearch('')).toBe(false);
+    expect(renderedOfficeFromSearch('')).toBe(true);
+    expect(renderedOfficeFromSearch('?office')).toBe(true);
     expect(renderedOfficeFromSearch('?office=painted')).toBe(false);
-    expect(renderedOfficeFromSearch('?office')).toBe(false);
+    expect(renderedOfficeFromSearch('?team=revive&office=painted')).toBe(false);
   });
 });
 

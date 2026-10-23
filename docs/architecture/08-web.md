@@ -77,7 +77,7 @@ access; roster handles and Presence remain visible.
 
 ## The three `/live` panels
 
-- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079). Behind `?office=rendered` the scene loads pre-rendered PNG assets (`office-scene/rendered/`, source in `packages/web/art/office/`) and an item whose asset is present blits it where it painted vectors — the office re-make's build flag (spec `2026-10-20-office-realism-design.md`). Increment 2 draws the whole room from the corner camera (`CORNER_CAMERA` in `iso.ts`, carried on the `Fit`): the floor and walls as one image per day state crossfaded by `roomState.ts`, the ceiling bank as an additive overlay, every static item, and the lamp and fan per desk; people, chairs, monitors, desk props and the wall fixtures still paint on top until increments 3–4.
+- **Office** (`live/OfficeScene.tsx` + `live/office-scene/`) — a 2D isometric co-work office (ADR 079). By default the scene loads pre-rendered assets (`office-scene/rendered/`, source in `packages/web/art/office/`) and an item whose asset is present blits it where it painted vectors; `?office=painted` keeps the painted office for one page load (spec `2026-10-20-office-realism-design.md`; rendered became the default on 2026-10-23, lane 01M5D8EJ40, before the dog, welcome room and ambient overlays were rendered — those still paint until they are, and the painters go with them). A member's figure is composed once per distinct frame (tinted layers stacked on a small CPU-backed canvas, `COMPOSITE_CAP` of them, least recently used out) and blitted to the room as one image. Increment 2 draws the whole room from the corner camera (`CORNER_CAMERA` in `iso.ts`, carried on the `Fit`): the floor and walls as one image per day state crossfaded by `roomState.ts`, the ceiling bank as an additive overlay, every static item, and the lamp and fan per desk; people, chairs, monitors, desk props and the wall fixtures still paint on top until increments 3–4.
   Presence → placement, act → choreography, travel-intensity == notification tier. Members are drawn from a
   **procedural jointed skeleton** (ADR 133 — `skeleton.ts` solves the joints, `character.ts` paints them):
   a distance-driven walk cycle, a seated pose with the hands typing on the desk, and eased sit/stride
@@ -331,14 +331,14 @@ live/
     skeleton.ts                 // THE character animation: 3D joints, renderer-free (walk/sit/type) — ADR 133
     appearance.ts               // THE character identity: skin/hair/hats/clothes, name-seeded, pure — ADR 142
     character.ts                // paints a skeleton in an appearance (facing + limb self-occlusion)
-    rendered/                   // pre-rendered art behind `?office=rendered` (office realism, spec 2026-10-20; the art source is packages/web/art/office/)
+    rendered/                   // pre-rendered art, the default; `?office=painted` opts out (office realism, spec 2026-10-20; the art source is packages/web/art/office/)
       manifest.ts               // the render's manifest contract: parseManifest / assetById (id, file, size, anchor, px per floor unit, camera KX/KY)
-      assets.ts                 // the flag (`renderedOfficeFromSearch`) and the never-rejecting loaders (`loadRenderedAssets`: images by id + the files that failed; `loadFigureAssets`/`loadFigureLayers`: only the figure sheets the roster wears, more as members join)
+      assets.ts                 // the opt-out (`renderedOfficeFromSearch`: on unless `?office=painted`) and the never-rejecting loaders (`loadRenderedAssets`: images by id + the files that failed; `loadFigureAssets`/`loadFigureLayers`: only the figure sheets the roster wears, more as members join)
       blit.ts                   // blitAsset: one image at a floor point through project(), its anchor on the point, sized by fit.scale / asset.scale
       roomState.ts              // which rendered light state the room shows: roomMixFor (day/evening/night × ceiling on/off/spill, a 45-minute crossfade at each edge), figureTintFor
       figureSheet.ts            // sprite-sheet geometry for the figure: SheetSpec, frameRect from the scene clock, dir8FromHeading with hysteresis (increment 3)
       tint.ts                   // tintedSheet: a member's colour multiplied over a neutral layer sheet, cached per (layer, colour); mulHex
-      figure.ts                 // layersFor (appearance.ts + what they carry → back-to-front layers with a colour each) and drawFigureFrame (one composed frame at a floor point, or only its `@arms` cells for the seated overlay)
+      figure.ts                 // layersFor (appearance.ts + what they carry → back-to-front layers with a colour each) and drawFigureFrame (one composed frame at a floor point, or only its `@arms` cells for the seated overlay; the composite is cached per distinct frame, `COMPOSITE_CAP`)
     speech.ts                   // the over-head speech-bubble text model
     arrivals.ts                 // who is new: pure roster diff (created / firstOnline — never-seen-online this session, created ≤24 h). Its new-arrivals polaroid corner under the wall board was retired 2026-10-12 (nick: one kind of card on the wall)
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure

@@ -281,13 +281,13 @@ describe('the rendered figure (plan Task 13)', () => {
     return { poses, byName };
   };
 
-  it('a walking member is sprite layers (one blit per loaded layer) at the SE row, not a skeleton', () => {
+  it('a walking member is one composed sprite frame from its layers at the SE row, not a skeleton', () => {
     const { ctx, ops } = recordingCtx();
     const { poses, byName } = standing('ada');
     const r = withFigure();
     // the tint pass needs a canvas; under node, give it a recording one
     const origCreate = globalThis.document;
-    const scratch = recordingCtx(); // the one scratch canvas the tint pass draws every frame through
+    const scratch = recordingCtx(); // the tint scratch and the composed frames, one recording for all of them
     (globalThis as { document?: unknown }).document = { createElement: () => ({ width: 0, height: 0, getContext: () => scratch.ctx }) };
     try {
       renderScene(ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
@@ -295,8 +295,8 @@ describe('the rendered figure (plan Task 13)', () => {
       (globalThis as { document?: unknown }).document = origCreate;
     }
     const sheetBlits = ops.filter((o) => o.name === 'drawImage' && o.args.length === 9);
-    // five layers for ada (no agent tell) plus the receptionist's, each tinted on the scratch and blitted from it
-    expect(sheetBlits.length).toBeGreaterThanOrEqual(5);
+    // one composed frame each for ada and the receptionist: their layers were tinted and stacked off-screen
+    expect(sheetBlits.length).toBe(2);
     // …and the scratch read ada's five from the walk row for SE (row 8 + 1) of their sheets; the
     // receptionist (seated, facing S) reads from a sit row
     const reads = scratch.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9 && (o.args[0] as { id?: string }).id !== undefined);

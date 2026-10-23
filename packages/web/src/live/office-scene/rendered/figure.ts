@@ -9,7 +9,7 @@ import { type Accessory, type Appearance, type FacialHair, type Hat, type HairSt
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
-import { type CreateCanvas, defaultCreate, mulHex, tintFrame } from './tint';
+import { type CreateCanvas, defaultCreate, mulHex, SOFT, tintFrame } from './tint';
 
 export type LayerId =
   | 'skin'
@@ -104,6 +104,13 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   return out;
 }
 
+export interface FigureScratch {
+  canvas?: HTMLCanvasElement;
+  composites?: Map<string, HTMLCanvasElement>;
+  /** The cache's size limit (`compositeCapFor` the floor); `COMPOSITE_CAP` until the roster sets it. */
+  cap?: number;
+}
+
 export interface FigureDraw {
   ctx: CanvasRenderingContext2D;
   fit: Fit;
@@ -130,8 +137,8 @@ export interface FigureDraw {
   tint?: string;
   /** Uniform size multiplier (nook/queue actors render at 0.72). */
   size?: number;
-  /** The one scratch canvas the tint pass reuses (grown to fit; made on first use with `create`). */
-  scratch: { canvas?: HTMLCanvasElement };
+  /** The one scratch canvas the tint pass reuses (grown to fit; made on first use with `create`), and the composed frames (`composite`). */
+  scratch: FigureScratch;
   create?: CreateCanvas;
 }
 
@@ -142,24 +149,87 @@ export function drawFigureFrame(d: FigureDraw): void {
   const k = (fit.scale * size) / spec.scale;
   // the member's build: wider or narrower about the floor point, never taller (spec §2.1)
   const kx = k * (d.look.build ?? 1);
+  const arms = d.part === 'arms';
+  /* One frame's layers, with the cell each one reads and its colour under the room's tint. The key
+     names exactly those pixels, so a hit is the same composite this frame would build. */
+  const parts: Part[] = [];
+  let key = tint;
+  for (const layer of layersFor(d.look, d.kind, d.topColor ?? null, d.held)) {
+    const sheet = d.sheets.get(layer.id);
+    if (!sheet) continue;
+    // The overlay draws only the layers that stored arm pixels; the rest of the figure stays behind the desk.
+    const id = arms ? `${layer.id}@arms` : layer.id;
+    if (arms && !spec.cells?.[id]) continue;
+    const c = frameCell(spec, id, d.anim, d.dir, d.t, d.startT, d.frame);
+    if (c.sw <= 0 || c.sh <= 0) continue;
+    const color = layer.color ? mulHex(layer.color, tint) : tint === '#ffffff' ? null : tint;
+    parts.push({ sheet, c, color });
+    key += `|${id}:${color ?? ''}:${c.sx},${c.sy}${c.flip ? 'f' : ''}`;
+  }
+  if (!parts.length) return;
+  const img = composite(d, key, parts);
+  if (!img) return;
   const p = project(d.at.lx, d.at.ly, fit);
   const alpha = d.alpha ?? 1;
   if (alpha < 1) {
     ctx.save();
     ctx.globalAlpha = alpha;
   }
-  const arms = d.part === 'arms';
-  for (const layer of layersFor(d.look, d.kind, d.topColor ?? null, d.held)) {
-    const sheet = d.sheets.get(layer.id);
-    if (!sheet) continue;
-    // The overlay draws only the layers that stored arm pixels; the rest of the figure stays behind the desk.
-    const key = arms ? `${layer.id}@arms` : layer.id;
-    if (arms && !spec.cells?.[key]) continue;
-    const c = frameCell(spec, key, d.anim, d.dir, d.t, d.startT, d.frame);
-    if (c.sw <= 0 || c.sh <= 0) continue;
-    const dx = p.x - (spec.anchor.x - c.ox) * kx;
-    const dy = p.y - (spec.anchor.y - c.oy) * k;
-    const color = layer.color ? mulHex(layer.color, tint) : tint === '#ffffff' ? null : tint;
+  ctx.drawImage(img, 0, 0, spec.frame.w, spec.frame.h, p.x - spec.anchor.x * kx, p.y - spec.anchor.y * k, spec.frame.w * kx, spec.frame.h * k);
+  if (alpha < 1) ctx.restore();
+}
+
+interface Part {
+  sheet: CanvasImageSource;
+  c: ReturnType<typeof frameCell>;
+  color: string | null;
+}
+
+/**
+ * How many composed frames the figure keeps. A composite is one frame-sized canvas (108 × 156 at
+ * today's spec, ~67 KB). Tinting six layers per member per frame was ~400 draw calls a frame with 14
+ * on the floor, the bulk of the rendered office's frame time; caching the composite fixes that only
+ * if the floor's working set fits. Measured 2026-10-23 on /office-preview?n=14 (looping
+ * choreography): ~640 distinct frames, ~46 a figure. At a fixed 320 the cache thrashed (~1.1 misses
+ * a frame, ~7% over the painted office); sized to the floor, misses fell to ~0 and the rendered
+ * office matched the painted one (2.7 vs 2.6 ms a frame, back to back). Lane 01M5D8EJ40.
+ */
+export const COMPOSITE_PER_FIGURE = 48;
+/** The floor at its smallest: a two-person team still keeps a few hundred frames. */
+export const COMPOSITE_CAP = 320;
+
+/** The cap for a floor of `members` (the receptionist and a visitor or two on top). */
+export function compositeCapFor(members: number): number {
+  return Math.max(COMPOSITE_CAP, (members + 2) * COMPOSITE_PER_FIGURE);
+}
+
+/** The member's frame, tinted and layered once, then reused while the same pixels are asked for. */
+function composite(d: FigureDraw, key: string, parts: Part[]): HTMLCanvasElement | null {
+  const cache = (d.scratch.composites ??= new Map());
+  const hit = cache.get(key);
+  if (hit) {
+    // most recently used goes to the back, so eviction takes the stalest
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
+  const { w, h } = d.spec.frame;
+  let out: HTMLCanvasElement;
+  if (cache.size >= (d.scratch.cap ?? COMPOSITE_CAP)) {
+    const [oldest, canvas] = cache.entries().next().value as [string, HTMLCanvasElement];
+    cache.delete(oldest);
+    out = canvas;
+  } else {
+    out = (d.create ?? defaultCreate)(w, h);
+  }
+  if (out.width !== w || out.height !== h) {
+    out.width = w;
+    out.height = h;
+  }
+  const g = out.getContext('2d', SOFT);
+  if (!g) return null;
+  g.clearRect(0, 0, w, h);
+  for (const { sheet, c, color } of parts) {
     let src: CanvasImageSource = sheet;
     let sx = c.sx;
     let sy = c.sy;
@@ -173,16 +243,17 @@ export function drawFigureFrame(d: FigureDraw): void {
     }
     if (c.flip) {
       // A mirrored direction: the stored one, flipped about the cell's own right edge.
-      ctx.save();
-      ctx.translate(dx + c.sw * kx, dy);
-      ctx.scale(-1, 1);
-      ctx.drawImage(src, sx, sy, c.sw, c.sh, 0, 0, c.sw * kx, c.sh * k);
-      ctx.restore();
+      g.save();
+      g.translate(c.ox + c.sw, c.oy);
+      g.scale(-1, 1);
+      g.drawImage(src, sx, sy, c.sw, c.sh, 0, 0, c.sw, c.sh);
+      g.restore();
     } else {
-      ctx.drawImage(src, sx, sy, c.sw, c.sh, dx, dy, c.sw * kx, c.sh * k);
+      g.drawImage(src, sx, sy, c.sw, c.sh, c.ox, c.oy, c.sw, c.sh);
     }
   }
-  if (alpha < 1) ctx.restore();
+  cache.set(key, out);
+  return out;
 }
 
 /**

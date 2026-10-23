@@ -1,6 +1,6 @@
 # The office's pre-rendered art
 
-Source for the images the `/live` and `/broadcast` office draws when `?office=rendered` is on
+Source for the images the `/live` and `/broadcast` office draws (the default since 2026-10-23; `?office=painted` opts out)
 (office realism, [spec](../../../../docs/superpowers/specs/2026-10-20-office-realism-design.md),
 [plan](../../../../docs/superpowers/plans/2026-10-20-office-realism.md)). Nothing here ships: only
 the PNGs and `manifest.json` it writes into `packages/web/src/live/office-scene/rendered/assets/`

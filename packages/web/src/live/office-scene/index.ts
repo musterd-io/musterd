@@ -95,7 +95,7 @@ import {
   type Unit,
   type UnitHook,
 } from './damage';
-import { type LayerId, wornLayers } from './rendered/figure';
+import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
 import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, type RenderedAssets } from './rendered/assets';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
@@ -418,7 +418,7 @@ export function mountOffice(
      fit, so stale entries would only waste memory) and on dispose. */
   const sprites = options.sprites === true ? makeSpriteCache({ dpr }) : undefined;
   const dirtyRects = sprites !== undefined && options.dirtyRects === true;
-  /* Pre-rendered art behind `?office=rendered` (office realism, spec 2026-10-20 §7). Read once at
+  /* Pre-rendered art, the default; `?office=painted` opts out (office realism, spec 2026-10-20 §7). Read once at
      mount like the other flags. The painted room draws until the images have decoded; then one
      rebake switches every item whose asset arrived, and the sprite cache starts over (its keys
      never saw the images). A manifest that is not there — a checkout before the art landed — logs
@@ -436,7 +436,10 @@ export function mountOffice(
   /** Fetch the sheets the roster now wears and the figure lacks; repaint the resting office when they land. */
   function wearNow(): void {
     const fig = rendered?.figure;
-    if (!fig || !figureFiles) return;
+    if (!fig) return;
+    // the composed-frame cache holds the floor's working set: it grows with the team, never thrashes
+    fig.scratch.cap = compositeCapFor(actors.nodes().size);
+    if (!figureFiles) return;
     const wanted = wornLayers(actors.nodes().values());
     if ([...wanted].every((id) => fig.sheets.has(id) || !figureFiles!.has(id))) return;
     const before = fig.sheets.size;
@@ -452,7 +455,7 @@ export function mountOffice(
     >;
     const manifestUrl = files['./rendered/assets/manifest.json'];
     if (!manifestUrl) {
-      console.warn('office: ?office=rendered but rendered/assets/manifest.json is not in this build — painting');
+      console.warn('office: rendered/assets/manifest.json is not in this build — painting');
     } else {
       void fetch(manifestUrl)
         .then((r) => r.json())
