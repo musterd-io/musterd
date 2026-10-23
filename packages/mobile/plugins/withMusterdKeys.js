@@ -64,6 +64,7 @@ const EXTENSION_SOURCES = [
   'extension/SharedStore.swift',
   'extension/Notice.swift',
   'extension/DeliveryOpen.swift',
+  'extension/PinBinding.swift',
   'extension/NotificationService.swift',
 ];
 

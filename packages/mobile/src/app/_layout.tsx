@@ -32,6 +32,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Asks' }} />
+        <Stack.Screen name="pair" options={{ title: 'Pair' }} />
       </Stack>
     </ThemeProvider>
   );

@@ -16,8 +16,8 @@ phone, Android and the App Store are out of scope by name.
 
 The calendar shipped first (ADR 519 and ADR 520's app half) and left this package on 2026-10-22
 (lane `01M5K5ZJBZPE5SZC4HD6HHC0VJ`): screens, the local-first sync, the SQLite device store and the
-calendar wire client are gone. What remains is the asks shell — one screen — and the app half's next
-increments (pairing, the notification extension, the list, the descriptor screen) build on it.
+calendar wire client are gone. What remains is the asks shell and the pairing screen. The list and
+the descriptor screen are the next increment.
 
 It is a surface like the CLI and the MCP adapter: it talks over the wire and never imports
 `@musterd/server`. Frames go through the node-free `@musterd/protocol/app-channel` and
@@ -30,10 +30,13 @@ is parsed through a protocol schema at the boundary (hard rule 4).
 **The asks screen still does not fetch.** The calendar's HTTP client and its `mscr_` credential went
 out with the calendar, and the app holds no team credential — its authority is the paired device key,
 not a bearer token (ADR 676 §3's trust table). The notification extension and the advisory answer
-action are the first traffic: they read a pairing pin from the keychain and, only when that pin is
-there, fetch a sealed body and POST an answer to the relay. Nothing writes the pin until pairing.
-`app.json`'s App Transport Security exception for `ts.net` is a leftover of the calendar's direct
-link; it stays for the moment and dropping it is its own small change.
+action read a pairing pin from the keychain and, only when that pin names a binding, fetch a sealed
+body and POST an answer to the relay. Pairing writes the pin when the relay accepts the request, and
+leaves `binding` off: the channel binding id does not exist until a standing key approves the phone.
+The extension writes that id back after the first delivery whose daemon signature verifies, and does
+not replace a binding it already stored. `app.json`'s App Transport Security exception for `ts.net`
+is a leftover of the calendar's direct link; it stays for the moment and dropping it is its own
+small change.
 
 **What it is being wired to** ([spec §3–§6](../superpowers/specs/2026-10-19-mobile-app-design.md)):
 
@@ -49,9 +52,13 @@ link; it stays for the moment and dropping it is its own small change.
   daemon decides, so a phone learns the verdict only from a later redelivery — 202 means *delivered*,
   not *accepted*.
 - **Pairing.** `musterd channels pair --channel app` (ADR 690) prints a QR carrying the relay route,
-  a one-time code and both daemon public keys. The app pins those keys, generates its own, and sends
-  an App Attest–vouched pair request sealed to the daemon through the relay. The phone never holds
-  the daemon's HTTP credential.
+  a one-time code and both daemon public keys, and the daemon identity fingerprint beside it. The
+  app scans that QR ([ADR 727](../decisions/727-phone-scans-pairing-qr.md)), shows the same
+  fingerprint, and only then generates its keys and sends an App Attest–vouched pair request sealed
+  to the daemon through the relay. The phone never holds the daemon's HTTP credential, and it never
+  approves its own key. The screen stays on "Waiting for approval" until the extension has stored
+  the binding from the signed `paired` delivery. A phone with no push token pairs, and stays on
+  that screen, because nothing else can deliver the binding.
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body.
 
@@ -59,7 +66,8 @@ link; it stays for the moment and dropping it is its own small change.
 
 | Route | What it is |
 | --- | --- |
-| `/` | The asks list. It opens on its empty state ("No asks yet"). An advisory notification action is answered from here, and the screen says so only when the answer did not leave. The list, pairing and the descriptor screen are the next increments. |
+| `/` | The asks list. It opens on its empty state ("No asks yet"). An advisory notification action is answered from here, and the screen says so only when the answer did not leave. While this phone has no binding, the screen links to pairing. The list and the descriptor screen are the next increment. |
+| `/pair` | Scan the daemon page's QR (or paste it), compare the fingerprint, send the sealed pair request, and wait. The phone does not approve itself. |
 
 ## Running it on a phone (TestFlight)
 
@@ -95,8 +103,7 @@ The script needs an App Store Connect API key config at `~/.appstoreconnect/fast
 file. It stays on the account holder's machine, so the upload is a command the human runs, not a
 seat.
 
-Then on the phone: Tailscale on, open musterd. Pairing from the laptop lands with the app's pairing
-screen; until then the app opens on the asks shell.
+Then on the phone: Tailscale on, open musterd. Pairing from the laptop is the app's pairing screen.
 
 For JavaScript-only iteration without a store build, `npx expo start` and the Expo Go app run the same
 code against the same daemon. Expo Go on iOS supports only the current SDK.
@@ -104,9 +111,11 @@ code against the same daemon. Expo Go on iOS supports only the current SDK.
 ## Gates
 
 The root `pnpm test` runs the ask client's tests beside their source under `src/native/`:
-`bytes.test.ts` (codec parity with the daemon's `Buffer`), `delivery.test.ts` (the composition
-against route/signing literals and a real Ed25519 signature), and the notification tests
-(`nonceStore`, `notice`, `push`, `pairingPin`, `answer`, `swift-drift`). `swift-drift.test.ts`
+`bytes.test.ts` (codec parity with the daemon's `Buffer`), `sha256.test.ts` (the same, for the
+fingerprint and the App Attest challenge), `delivery.test.ts` (the composition against
+route/signing literals and a real Ed25519 signature), `pairingQr.test.ts` and `pair.test.ts` (the
+QR, the challenge, the sealed request and the pin written with no binding), and the notification
+tests (`nonceStore`, `notice`, `push`, `pairingPin`, `answer`, `swift-drift`). `swift-drift.test.ts`
 reads the Swift sources and pins the lock-screen sentences. The macOS `logic-check.swift` next
 to the module runs the same route, nonce and notice cases through the Swift copy; it is not a
 CI job. The mobile `tsconfig` excludes `*.test.ts` from `tsc --noEmit`, exactly as every
@@ -202,8 +211,14 @@ route) and POSTs it to `{relay}/app/{team}/callback`. The daemon opens that POST
 seen-nonce store blocks a second display; it does not block the answer of the notification
 already on screen.
 
-No new package. The device token is `UserNotifications` in the existing module. The seen-nonce
-store, the token and the pairing pin are keychain items on `dev.musterd.keys`
+The extension's binding check is skipped only while the stored pin has no binding. After the open
+verifies, `PinBinding` writes the route's binding into that pin. A stored binding that disagrees
+is still refused, and it is not overwritten. `logic-check.swift` runs that decision.
+
+The camera is `expo-camera` (ADR 727), used on the pairing screen to read a QR. The config plugin
+sets the camera usage string and does not add a microphone permission. No other package was added
+for the token, the nonce store, or the pin: the device token is `UserNotifications` in the existing
+module. The seen-nonce store, the token and the pairing pin are keychain items on `dev.musterd.keys`
 (`AfterFirstUnlockThisDeviceOnly`), shared because both targets list the same access group
 first. Read-modify-write of the nonce item is not atomic across processes; the extension is the
 writer when a delivery is displayed. A store that cannot be read fails closed.
@@ -224,9 +239,12 @@ src/
     nonceStore.ts          // seen-nonce verdicts; the extension's Swift copy follows this
     notice.ts              // lock-screen copy and which asks get actions
     notificationAnswers.ts // take a pending action once the app is open
+    pair.ts                // after the fingerprint matches: keys, attestation, seal, POST, pin
     pairingPin.ts          // the keychain pin pairing writes and the extension reads
+    pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
+    sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
     theme.ts               // brand.md palette (mustard accent on zinc, light and dark)
 ```
@@ -235,5 +253,6 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
 src/app/_layout.tsx   // the Stack, themed from the palette
-src/app/index.tsx     // the asks list — its empty state until pairing and the list land
+src/app/index.tsx     // the asks list — its empty state, and the way into pairing
+src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 ```

@@ -63,13 +63,17 @@ final class NotificationService: UNNotificationServiceExtension {
     guard let block = PushBlock.parse(userInfo), let pin = Pin.parse(SharedStore.loadPairingPin()) else {
       return Notice.unverified()
     }
-    if pin.team != block.team || pin.binding != block.binding { return Notice.unverified() }
+    if pin.team != block.team || !PinBinding.matches(stored: pin.binding, route: block.binding) {
+      return Notice.unverified()
+    }
 
     let opened: (route: RouteFields, enc: String, ct: String)
     if let enc = block.enc, let ct = block.ct {
       opened = (block.route, enc, ct)
     } else if let fetched = await fetchBody(relay: pin.relay, block: block) {
-      if fetched.route.team != pin.team || fetched.route.binding != pin.binding {
+      if fetched.route.team != pin.team
+        || !PinBinding.matches(stored: pin.binding, route: fetched.route.binding)
+      {
         return Notice.unverified()
       }
       opened = fetched
@@ -90,6 +94,18 @@ final class NotificationService: UNNotificationServiceExtension {
       return Notice.stale()
     } catch {
       return Notice.unverified()
+    }
+
+    // The signature held for this route. Remember its binding the first time, and never replace one.
+    if pin.binding == nil {
+      guard let current = SharedStore.loadPairingPin(),
+        let updated = PinBinding.withBinding(json: current, routeBinding: opened.route.binding)
+      else { return Notice.unverified() }
+      do {
+        try SharedStore.savePairingPin(json: updated)
+      } catch {
+        return Notice.unverified()
+      }
     }
 
     let now = Int(Date().timeIntervalSince1970 * 1000)
@@ -219,7 +235,8 @@ private struct Pin {
   var identity: String
   var relay: String
   var team: String
-  var binding: String
+  /// Nil until a verified delivery names the channel binding.
+  var binding: String?
 
   static func parse(_ json: String?) -> Pin? {
     guard let json, let data = json.data(using: .utf8),
@@ -228,9 +245,16 @@ private struct Pin {
       let identity = nonEmpty(object["identity"]),
       nonEmpty(object["receive"]) != nil,
       let relay = object["relay"] as? String, relay.hasPrefix("https://"), !relay.contains("@"),
-      let team = nonEmpty(object["team"]),
-      let binding = nonEmpty(object["binding"])
+      let team = nonEmpty(object["team"])
     else { return nil }
+    let binding: String?
+    if object["binding"] == nil {
+      binding = nil
+    } else if let text = nonEmpty(object["binding"]), text.count <= 64 {
+      binding = text
+    } else {
+      return nil
+    }
     return Pin(identity: identity, relay: relay, team: team, binding: binding)
   }
 }

@@ -212,6 +212,20 @@ one gets tapped through.
   the action's Face ID were not run in this increment; they wait on an EAS build. The Swift is
   on the security review path before it ships. Spec §9 open question 2 (a notification action
   cannot present the enclave prompt) is settled by this note.
+- 2026-10-23, lane 01M5K60EPK (pairing on the phone, decision 5): the app scans the QR with
+  `expo-camera` ([ADR 727](727-phone-scans-pairing-qr.md)), shows the daemon identity fingerprint,
+  and generates keys only after the person says that fingerprint matches the page. The code is
+  single-use, so a request sealed to the wrong daemon would burn it. The sealed `AppPairRequest`
+  goes to the relay with purpose `pair`. A relay `202` stores the pin without a binding. The
+  channel binding id does not exist until a standing key's `device_key_admin` approval, and this
+  phone does not approve itself (ADR 662 decision 6). The extension accepts one delivery while
+  the stored binding is absent, and after that open verifies it writes the route's binding into
+  the pin and does not replace it. An answer still requires the binding. A phone that paired
+  without a push token has no later delivery to learn the binding from, and the screen stays on
+  waiting. The fingerprint is shown again once the binding is stored, which is decision 5's
+  comparison as well as the check before the request. The camera scan, App Attest, Face ID on
+  the signing key, a real push, and the extension writing the binding were not run on a device.
+  That Swift and the attestation call are on the security review path before TestFlight.
 
 ## Observability & Evaluation
 

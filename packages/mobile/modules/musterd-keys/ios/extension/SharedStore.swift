@@ -87,13 +87,20 @@ enum SharedStore {
       relay.hasPrefix("https://"),
       !relay.contains("@"),
       object["team"] is String,
-      object["binding"] is String
+      bindingOk(object["binding"])
     else {
       throw PhoneKeysError.unavailable("pairing pin is malformed")
     }
     guard save(data, account: pinAccount) else {
       throw PhoneKeysError.unavailable("could not store the pairing pin")
     }
+  }
+
+  /// Absent until the extension learns it. Present and not a short string is a malformed pin.
+  private static func bindingOk(_ value: Any?) -> Bool {
+    if value == nil { return true }
+    guard let text = value as? String, !text.isEmpty, text.count <= 64 else { return false }
+    return true
   }
 
   static func loadPairingPin() -> String? {

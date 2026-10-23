@@ -48,6 +48,7 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     expect(plugin).toContain('aps-environment');
     expect(plugin).toContain('com.apple.usernotifications.service');
     expect(plugin).toContain('io.musterd.app.notify');
+    expect(plugin).toContain('extension/PinBinding.swift');
     expect(podspec).toContain('extension/NotificationService.swift');
     expect(config).toContain('MusterdPushSubscriber');
   });

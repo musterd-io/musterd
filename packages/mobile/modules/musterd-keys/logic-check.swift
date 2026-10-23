@@ -7,7 +7,7 @@
 //
 //    swiftc -o /tmp/nse-logic-check \
 //      ios/extension/RouteJson.swift ios/extension/SeenNonce.swift ios/extension/Notice.swift \
-//      logic-check.swift
+//      ios/extension/PinBinding.swift logic-check.swift
 //    /tmp/nse-logic-check
 //
 //  A multi-file swiftc invocation has no top-level entry unless one file is named main.swift,
@@ -76,6 +76,27 @@ check(Notice.gate(body: ask, routeExpiresAt: 10, now: 10) == .stale, "route expi
 check(Notice.gate(body: ask, routeExpiresAt: 20, now: 10) == .open, "a live ask is open")
 let empty = Notice.Body.ask(text: "", actionClass: "advisory", hasApproval: false, waiting: 0, nonce: "n")
 check(Notice.gate(body: empty, routeExpiresAt: 20, now: 10) == .unverified, "empty body")
+
+check(PinBinding.matches(stored: nil, route: "bind-1"), "a pin with no binding accepts the route")
+check(PinBinding.matches(stored: "bind-1", route: "bind-1"), "the stored binding matches itself")
+check(!PinBinding.matches(stored: "bind-1", route: "other"), "a different binding is refused")
+
+let waitingPin =
+  "{\"v\":1,\"identity\":\"abc\",\"receive\":\"def\",\"relay\":\"https://relay.example\",\"team\":\"revive\"}"
+let filled = PinBinding.withBinding(json: waitingPin, routeBinding: "bind-1")
+check(filled != nil, "the first verified route fills the binding")
+let filledObject = filled.flatMap {
+  try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
+}
+check(filledObject?["binding"] as? String == "bind-1", "filled binding")
+check(filledObject?["team"] as? String == "revive", "filled pin keeps the team")
+if let filled {
+  check(PinBinding.withBinding(json: filled, routeBinding: "other") == nil, "a stored binding is not replaced")
+  check(PinBinding.withBinding(json: filled, routeBinding: "bind-1") == filled, "the same binding is kept")
+}
+check(PinBinding.withBinding(json: waitingPin, routeBinding: "") == nil, "an empty binding is refused")
+let longBinding = String(repeating: "x", count: 65)
+check(PinBinding.withBinding(json: waitingPin, routeBinding: longBinding) == nil, "a long binding is refused")
 
 let shown = Notice.render(body: ask, verdict: .fresh)
 check(shown.body == "Ship it?" && shown.category == Notice.advisoryCategory, "advisory actions")
