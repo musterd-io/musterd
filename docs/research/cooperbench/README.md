@@ -352,9 +352,12 @@ scored.
   its own remaining limit. Pilot 2 lost 11 pairs and finding 023 four when the limit hit mid-run.
 - **Arms run under `run_arms.py`**, not a hand-rolled loop. It starts each arm as its own process
   group, checks `spend_guard.py` every minute with the manifest's run glob and hard stop, and on a
-  stop kills every arm and runs `--on-stop` (remove leftover agent containers). It exits 3 at the hard
+  stop kills every arm's whole process group and runs `--on-stop` (remove leftover agent containers).
+  The kill signals the group even when an arm's shell has already exited, and sends SIGKILL to
+  whatever is still alive 10 seconds after SIGTERM. It exits 3 at the hard
   stop and 4 on the API limit, and evaluates only arms that finished. Pairs the limit killed are
-  errors, re-run once when it allows. `tests/test_run_arms.py` shows a stop killing every arm. Runs
+  errors, re-run once when it allows. `tests/test_run_arms.py` shows a stop killing every arm,
+  including a child that ignores SIGTERM after its shell has exited. Runs
   before 2026-10-23 used their own loops (`pilot-runs/*/…sh`), which are kept as they ran.
 
   ```bash

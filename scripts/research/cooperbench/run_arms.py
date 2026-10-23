@@ -41,17 +41,46 @@ def log(path: Path | None, msg: str) -> None:
             f.write(line + "\n")
 
 
+GRACE = 10.0
+
+
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def wait_group(proc: subprocess.Popen, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        proc.poll()  # reap the leader, or its zombie keeps the group alive
+        if not group_alive(proc.pid):
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def kill_group(proc: subprocess.Popen) -> None:
-    if proc.poll() is None:
-        try:
-            os.killpg(proc.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait()
+    # Signal the whole group even when the shell leader has already exited: an agent it started
+    # can still be running and spending. Wait on the group, not the leader, so a child that
+    # ignores SIGTERM still gets SIGKILL (big-body, lane 01M5KHD19K review).
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        proc.poll()
+        return
+    if wait_group(proc, GRACE):
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    wait_group(proc, 5.0)
+    proc.wait()
 
 
 def run(arms: dict[str, str], logs: Path, runs: str, cap: float, every: float,
