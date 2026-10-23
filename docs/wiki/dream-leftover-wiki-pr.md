@@ -24,17 +24,25 @@ Still OPEN on 2026-10-19 grokbot: `gh pr view 2351 --json state,mergeable,mergeS
 
 Still OPEN on 2026-10-21 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,autoMergeRequest,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
 
+Still OPEN on 2026-10-22 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,autoMergeRequest,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
+
 #2863 (`docs/dream-skill-sibling-of-packet`, wanderer) is the two-seats-one-claim arrival again, on [dream wake checkout](dream-wake-checkout.md): OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-18T05:49:34Z, `statusCheckRollup` empty, `updatedAt` 2026-10-18T05:49:22Z. Wanderer promoted “skill is a sibling of packet” as #2863 (commit 12ca0811); grokbot promoted the same claim the same night as #2862, on origin/main as bb84e5bf7. Twenty-four hours later origin/main already carries the struck nested claim, and `git diff --stat origin/main...12ca0811` is two insertions and two deletions on that page (2026-10-18; insight 01M59AR97BH416H3EFMP4FRGX9; falsify: `gh pr view 2863 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
 
 Still OPEN on 2026-10-19 izzo and grokbot: `gh pr view 2863 --json state,mergeable` prints OPEN, UNKNOWN; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z (insight 01M5BWN21K7KTWDN1MTA8SZ8YP). The claim already landed via #2862 / #2887; close, do not merge.
 
 Still OPEN on 2026-10-21 wanderer: `gh pr view 2863 --json state,mergeable,autoMergeRequest,updatedAt` prints OPEN, UNKNOWN; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z. Closing remains a working-hours act.
 
+Still OPEN on 2026-10-22 wanderer: `gh pr view 2863 --json state,mergeable,autoMergeRequest,updatedAt` prints OPEN, UNKNOWN; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z. Closing remains a working-hours act.
+
 #2860 (`dream/alfie-acceptance-2026-10-17`, alfie) is the same leftover shape on [acceptance-routing](acceptance-routing.md): OPEN a second night (izzo 01M59A9X2G night 2026-10-18, 01M5BWN21K night 2026-10-19). `gh pr view 2860 --json state,mergedAt,mergeable` on 2026-10-19 prints OPEN, null, UNKNOWN; auto-merge is not armed; `updatedAt` 2026-10-19T05:31:01Z. Until it lands, the hold-after-hop claim is not on origin/main's acceptance-routing.md. Land or rebase is a working-hours act (2026-10-19; falsify: `gh pr view 2860 --json state` prints MERGED or CLOSED) <!-- claim: defect -->
 
 ~~OPEN~~ CLOSED unmerged 2026-10-22T05:32:58Z (`mergedAt` null); the #2860 instance of the stall has cleared (2026-10-21 wanderer; falsify: `gh pr view 2860 --json state` prints OPEN) <!-- claim: defect -->
 
 Origin/main already carries the hold-after-hop claim via #3180 (`06526f732`).
+
+#3113 (`docs/dream-night-2026-10-20`, grokbot) is the same leftover shape: OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-21T05:44:22Z, `updatedAt` 2026-10-21T05:44:09Z. On night 2026-10-21 it was OPEN, MERGEABLE, BLOCKED — `docs` and `gates` FAILURE on run 39551242478 after ledger:check treated an in-place rewrite of a marked claim line on [dream on a resident seat](dream-resident-seat-no-packet.md) as a strike (insight 01M5H260J39HNKQM27BE51DERE). Tonight, after #3181 merged 2026-10-22T05:48:57Z overlapping leftover and resident wiki, it is CONFLICTING (2026-10-22; insight 01M5KM669N4JK171XCDAS2H96X; falsify: `gh pr view 3113 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
+
+A dated note that keeps the original marked line passes; a dream cannot mint `docs/claims/entries` (the fence is `docs/wiki/**/*.md` only). Closing or rebasing #3113 is a working-hours act.
 
 #2588 (`docs/ghost-dream-acceptance-fast-verdict`, ghost) stalled one page over, on [acceptance-routing](acceptance-routing.md): OPEN, mergeable CONFLICTING from 2026-10-14T05:35:56Z, auto-merge never armed, after #2586–#2589 landed the same fast-verdict measurements it carried — the two-seats-one-claim arrival again. Its 2026-10-15 rebase found nothing main was missing (the claim had landed via #2586's sixty-second section, same ask/resolve timestamps), so it cleared by a close, not a rebase: ~~OPEN~~ CLOSED unmerged 2026-10-15, the page's second clear-by-close after #2018 (2026-10-15; falsify: `gh pr view 2588 --json state` prints OPEN) <!-- claim: defect -->
 
