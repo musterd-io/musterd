@@ -5,7 +5,7 @@ import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
 import { MusterdError } from '../errors.js';
-import { resolveActivity } from './activity.js';
+import { claimedLanesByOwner, resolveActivity } from './activity.js';
 import { appendAudit, appendLaneEventRequired, appendReplicatedEvent, listAudit } from './audit.js';
 import { getCursor, setCursor } from './cursors.js';
 import { getLane, openLane } from './lanes.js';
@@ -743,16 +743,19 @@ withDrivers('store', (o) => {
         activity: 'offline',
         state: null,
         last_status_at: null,
+        state_source: null,
       });
       expect(resolveActivity(true, null)).toEqual({
         activity: 'active',
         state: null,
         last_status_at: null,
+        state_source: null,
       });
       expect(resolveActivity(true, { state: 'refactoring auth', ts: 100 })).toEqual({
         activity: 'working',
         state: 'refactoring auth',
         last_status_at: 100,
+        state_source: 'status',
       });
     });
 
@@ -780,12 +783,14 @@ withDrivers('store', (o) => {
         activity: 'working',
         state: null,
         last_status_at: null,
+        state_source: 'steering',
       });
       // Steering keeps your own status text as the working label when you have one.
       expect(resolveActivity(true, { state: 'pairing on gate B', ts: 42 }, true)).toEqual({
         activity: 'working',
         state: 'pairing on gate B',
         last_status_at: 42,
+        state_source: 'steering',
       });
       // steering defaults false — the existing two-clocks behaviour is untouched.
       expect(resolveActivity(true, null).activity).toBe('active');
@@ -799,6 +804,7 @@ withDrivers('store', (o) => {
         activity: 'working',
         state: 'reviewing asks',
         last_status_at: fresh.ts,
+        state_source: 'status',
       });
       // Past it the read decays to active, but the claim is KEPT with its age — the renderer shows
       // `last: "<status>" \u00b7 20m ago`, never an erased history.
@@ -806,6 +812,7 @@ withDrivers('store', (o) => {
         activity: 'active',
         state: 'reviewing asks',
         last_status_at: stale.ts,
+        state_source: 'status',
       });
       // Steering outranks the decay — a live driver link is a current action, not a stale report.
       expect(resolveActivity(true, stale, true, 45_000).activity).toBe('working');
@@ -814,9 +821,84 @@ withDrivers('store', (o) => {
         activity: 'working',
         state: 'reviewing asks',
         last_status_at: stale.ts,
+        state_source: 'status',
       });
       // Not live stays offline regardless of the window.
       expect(resolveActivity(false, stale, false, 45_000).activity).toBe('offline');
+    });
+
+    it('resolveActivity: an agent that owns a claimed lane and acted in the window reads working on it (ADR 726)', () => {
+      const now = 1_000_000;
+      const recent = { title: 'lane watch build', others: 0, lastActionAt: now - 5 * 60_000 };
+      const old = { title: 'lane watch build', others: 0, lastActionAt: now - 20 * 60_000 };
+      const window = 15 * 60_000;
+      // No status at all: the lane is the label.
+      expect(resolveActivity(true, null, false, window, recent, now)).toEqual({
+        activity: 'working',
+        state: 'lane watch build',
+        last_status_at: recent.lastActionAt,
+        state_source: 'lane',
+      });
+      // Several claimed lanes: the newest names the label, the rest are counted.
+      expect(resolveActivity(true, null, false, window, { ...recent, others: 2 }, now).state).toBe(
+        'lane watch build (+2 more)',
+      );
+      // Past the window it decays to active, the lane kept with its age (ADR 316 Decision 2).
+      expect(resolveActivity(true, null, false, window, old, now)).toEqual({
+        activity: 'active',
+        state: 'lane watch build',
+        last_status_at: old.lastActionAt,
+        state_source: 'lane',
+      });
+      // A fresh status wins over the lane.
+      const status = { state: 'chasing a flaky test', ts: now - 60_000 };
+      expect(resolveActivity(true, status, false, window, recent, now)).toMatchObject({
+        activity: 'working',
+        state: 'chasing a flaky test',
+        state_source: 'status',
+      });
+      // A stale status loses to fresh lane evidence.
+      const staleStatus = { state: 'old note', ts: now - 30 * 60_000 };
+      expect(resolveActivity(true, staleStatus, false, window, recent, now).state_source).toBe(
+        'lane',
+      );
+      // Steering still outranks both, and not live is still offline.
+      expect(resolveActivity(true, null, true, window, recent, now).state_source).toBe('steering');
+      expect(resolveActivity(false, null, false, window, recent, now).activity).toBe('offline');
+    });
+
+    it('claimedLanesByOwner: newest claimed/active lane per seat, the rest counted; blocked and done ignored', async () => {
+      const { db, team } = await freshTeam();
+      await addMember(db, team, { name: 'Ada', kind: 'agent' });
+      await addMember(db, team, { name: 'Bo', kind: 'agent' });
+      await openLane(
+        db,
+        team.id,
+        team.slug,
+        'Ada',
+        { title: 'first', scope: ['a'], claim: true },
+        1_000,
+      );
+      await openLane(
+        db,
+        team.id,
+        team.slug,
+        'Ada',
+        { title: 'second', scope: ['b'], claim: true },
+        2_000,
+      );
+      const blocked = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'Bo',
+        { title: 'stuck', scope: ['c'], claim: true },
+        3_000,
+      );
+      await db.run('UPDATE lanes SET state = ? WHERE id = ?', ['blocked', blocked.id]);
+      const lanes = await claimedLanesByOwner(db, team.id);
+      expect(lanes.get('Ada')).toEqual({ title: 'second', others: 1 });
+      expect(lanes.has('Bo')).toBe(false);
     });
 
     it('latestStatusUpdate: takes the newest status_update, prefers meta.state, else body', async () => {

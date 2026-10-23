@@ -354,6 +354,14 @@ describe('activeClaimLine — the kept claim, aged (presence-honesty \u00a72.1/\
     );
   });
 
+  it('says a kept claim came from the seat\'s lane (ADR 726)', () => {
+    expect(
+      activeClaimLine(
+        m({ state: 'lane watch build', state_source: 'lane', last_status_at: Date.now() - 20 * 60_000 }),
+      ),
+    ).toBe('last on lane: \u201clane watch build\u201d \u00b7 20m ago');
+  });
+
   it('says no status yet when there is no claim to age', () => {
     expect(activeClaimLine(m({ state: null, last_status_at: null }))).toBe('no status yet');
   });

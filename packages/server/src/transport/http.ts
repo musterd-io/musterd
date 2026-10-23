@@ -240,7 +240,7 @@ import {
 } from '../protocol/laneReroute.js';
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
-import { resolveActivity } from '../store/activity.js';
+import { claimedLanesByOwner, resolveActivity } from '../store/activity.js';
 import {
   appEnrollPayload,
   confirmAppPairing,
@@ -2621,6 +2621,9 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
   // display fields. One audit read for the whole roster; a seat with no evidence is absent
   // from the map and reports `unknown` rather than borrowing the shape of quiet.
   const lastAction = await lastActionBySubject(ctx.db, teamId);
+  // ADR 726: each seat's claimed work, so an agent that owns a lane and acted recently reads
+  // `working` on it without a status_update. One read for the roster, beside `lastAction`.
+  const claimedLanes = await claimedLanesByOwner(ctx.db, teamId);
   // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once
   // per member, and /live refetches the roster on presence frames for every viewer.
   const statuses = await latestStatusUpdates(ctx.db, teamId);
@@ -2640,6 +2643,7 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
     residences,
     liveDrivers,
     lastAction,
+    claimedLanes,
     statuses,
     style,
     presenceRows,
@@ -2672,6 +2676,7 @@ async function summarize(
     residences,
     liveDrivers,
     lastAction,
+    claimedLanes,
     statuses,
     style,
     presenceRows,
@@ -2709,11 +2714,15 @@ async function summarize(
       // the presence timeout; agents get their own generous window — `working` requires fresh
       // evidence, and past it the read decays to `active` with the claim kept, aged.
       const status = statuses.get(s.member.id) ?? null;
+      // ADR 726: agents only — a claimed lane plus a recent audited action is evidence of work.
+      const lane = s.member.kind === 'agent' ? claimedLanes.get(s.member.name) : undefined;
+      const actedAt = lastAction.get(s.member.name);
       const activity = resolveActivity(
         live,
         openStatus ? (status?.open ?? null) : status,
         steering,
         s.member.kind === 'human' ? ctx.config.presenceTimeoutMs : ctx.config.agentIdleMs,
+        lane && actedAt !== undefined ? { ...lane, lastActionAt: actedAt } : null,
       );
       const member = toMember(s.member, teamSlug);
       const effectiveWorkingHours = member.working_hours ?? teamWorkingHours;

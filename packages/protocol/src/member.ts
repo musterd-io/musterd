@@ -249,6 +249,11 @@ export const QuiescenceSchema = z.object({
 export type Quiescence = z.infer<typeof QuiescenceSchema>;
 
 /** A Member plus a summary of where (if anywhere) they are currently present — used by roster/status. */
+/** ADR 726: the source of a roster row's `state` label. */
+export const STATE_SOURCES = ['status', 'lane', 'steering'] as const;
+export const StateSourceSchema = z.enum(STATE_SOURCES);
+export type StateSource = z.infer<typeof StateSourceSchema>;
+
 export const MemberSummarySchema = MemberSchema.extend({
   /** ADR 514: how seats talk to this human — the resolved dials, no prose. Null on agent rows and
    *  from an older daemon. A seat composing an act to this human reads these. */
@@ -267,6 +272,12 @@ export const MemberSummarySchema = MemberSchema.extend({
   state: z.string().nullish(),
   /** When `state` was last refreshed (ms epoch); drives staleness in the roster. */
   last_status_at: z.number().int().nullish(),
+  /**
+   * ADR 726: what `state` came from — a `status_update`, the agent's claimed lane plus a recent
+   * audited action, or steering. Null/absent from an older daemon. A value this client does not know
+   * reads as null rather than failing the roster.
+   */
+  state_source: StateSourceSchema.nullish().catch(null),
   /**
    * Composed roster posture (ADR 138) — `working | idle | away | offline`. Resolved server-side from
    * activity ∩ availability; the chip renders this token (no client synonym). Optional for back-compat;

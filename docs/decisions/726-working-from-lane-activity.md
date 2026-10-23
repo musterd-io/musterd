@@ -82,6 +82,13 @@ when it is fresher. Do not let a stale claim read as work.
   batched the way the roster already batches status reads.
 - Wake context's `lane.last_status_update` falls back to the lane's state and last action when no
   status names the lane.
+- _2026-10-23 (build, lane 01M5N3V9EP):_ (a) A fresh status wins over lane evidence outright, not
+  only when it is newer than the last action: the status send is itself an audited action, so
+  "newer than the action" could never hold for it. (b) The CLI roster prints the lane title where a
+  status would go, unchanged, so the terminal frames stay as they are. MCP prints `— on lane: <title>`,
+  and `/live`'s kept-claim line reads `last on lane: …`. (c) The wake-context fallback moves to lane
+  `01M5N3VG2D`. The wake packet schema is strict, so a new field there needs a rebuilt adapter, and
+  agents keep sending status updates until that lane removes the instruction.
 - Build lanes: `01M5N3V9EP` (server, wire, renderers), then `01M5N3VG2D` (instructions).
 
 Follows-up: 01M5N3V9EPHMZ08XJ4FDRN2DPX, 01M5N3VG2DG14Z81NRMHMXVFPC

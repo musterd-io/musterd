@@ -504,6 +504,9 @@ export function postureMeta(posture: Posture): StatusMeta {
 export function activeClaimLine(m: MemberSummary): string | null {
   if (memberPosture(m) !== 'active') return null;
   if (!m.state || m.last_status_at == null) return 'no status yet';
+  // ADR 726: a kept claim that came from the seat's lane, not a status it posted.
+  if (m.state_source === 'lane')
+    return `last on lane: \u201c${m.state}\u201d \u00b7 ${coarseAge(Date.now() - m.last_status_at)} ago`;
   return `last: \u201c${m.state}\u201d \u00b7 ${coarseAge(Date.now() - m.last_status_at)} ago`;
 }
 
