@@ -2254,3 +2254,16 @@ the daemon still held (ADR 721, #3242). Eager guard code shared by every route; 
 Local builds; CI measured about 450 B higher on the first run of this PR, so the raise covers that gap.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 362,300 B.
+
+### 2026-10-23 — localhost passkey recovery guidance (PR #3257; Miley authorized)
+
+| Budget   | Previous ceiling | Local branch | CI branch | New ceiling |
+| -------- | ---------------- | ------------ | --------- | ----------- |
+| total JS | 362,300 B        | 353.5 KB     | 353.9 KB  | 362,812 B   |
+
+Loopback URL normalization and the `/live` passkey `SecurityError` guidance make the verdict path
+recoverable when an IP address cannot satisfy WebAuthn's relying-party rules. CI measured 0.1 KB over
+the prior ceiling while the local build remained under it. Miley authorized a 512 B (0.5 KiB) increase;
+the new ceiling is 354.3 KB.
+
+- Falsify: CI `perf:check` for PR #3257 reports total JS at or under 362,812 B.
