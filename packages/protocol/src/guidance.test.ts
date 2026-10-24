@@ -259,6 +259,7 @@ describe('version-bump discipline (ADR 085)', () => {
     56: '08fdbde67bc0bfd6', // + the MCP wait names `until_lane` (ADR 705 fix C, lane 01M5GWB209)
     57: '7306e6bc111de4dd', // + closing teaches the ADR 603 two-stage risky-lane close; `lane_update` taught + pinned; `team_agent_create` pinned via the remote rail in guidance:check (lane 01M5GYXTK1)
     58: '9ca4f5a9bb68c7e2', // named inbox ids are historical reads; `--waiting` checks pending acts; answer request_help with accept/decline + reply_to, then resolve the thread when work is done (lane 01M5JTZWHQ)
+    59: 'f5384d800cf1085a', // ADR 726 follow-up: a claimed lane supplies roster status, so lane-picker and orientation no longer prompt redundant status_update sends
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
