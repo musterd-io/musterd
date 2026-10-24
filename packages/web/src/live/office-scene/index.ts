@@ -43,7 +43,7 @@ import {
   stepPet,
 } from './pet';
 import { createReceptionist, receptionistCue, stepReceptionist } from './receptionist';
-import { CORNER_CAMERA, fitBox, project, roomBox, type Camera, type Fit, type Pt } from './iso';
+import { CORNER_CAMERA, fitBox, project, roomBox, type Fit, type Pt } from './iso';
 import {
   CHAIR_OFF,
   COFFEE_STAND,
@@ -85,6 +85,7 @@ import {
   type Cue,
   type RenderOpts,
   type ScenePalette,
+  type SceneAnchors,
 } from './render';
 import {
   makeRecorder,
@@ -97,7 +98,7 @@ import {
 } from './damage';
 import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
 import { isRoomImage, roomImagesWanted } from './rendered/roomState';
-import { domImage, loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages, type RenderedAssets } from './rendered/assets';
+import { domImage, loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, syncImages, type RenderedAssets } from './rendered/assets';
 import { parseDogSpec } from './rendered/dogSheet';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
@@ -134,8 +135,6 @@ export type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode, OfficeStats } f
 
 
 const DPR_CAP = 2;
-/** How long the room is held invisible for the rendered art before the painted office shows instead. */
-const ART_WAIT_MS = 2500;
 
 /**
  * The synthetic head the receptionist's bubble hangs from, and the key `showSpeech` recognises as
@@ -422,18 +421,16 @@ export function mountOffice(
      fit, so stale entries would only waste memory) and on dispose. */
   const sprites = options.sprites === true ? makeSpriteCache({ dpr }) : undefined;
   const dirtyRects = sprites !== undefined && options.dirtyRects === true;
-  /* Pre-rendered art, the default; `?office=painted` opts out (office realism, spec 2026-10-20 §7). Read once at
-     mount like the other flags. The painted room draws until the images have decoded; then one
-     rebake switches every item whose asset arrived, and the sprite cache starts over (its keys
-     never saw the images). A manifest that is not there — a checkout before the art landed — logs
-     once and leaves the room painted. */
+  /* The pre-rendered art (office realism, spec 2026-10-20): the room, its light states, every static
+     item, the figure sheets and the dog. Nothing paints until it is in — the room is held invisible
+     (below) and `bake`/`paintRoom` draw nothing — then one bake paints the whole office. A manifest
+     that is not there (a checkout before the art landed) or will not load leaves the room empty and
+     says so once; the painters that used to stand in went with lane 01M5D8EJ40
+     (`docs/wiki/restoring-the-painted-office.md`). */
   let rendered: RenderedAssets | undefined;
-  /** The rendered art is on its way: `revealOffice` shows the room when it lands (below). */
-  let artPending = false;
-  const renderedFlag = typeof window !== 'undefined' && renderedOfficeFromSearch(window.location.search);
-  /* The rendered room is drawn from the corner camera (spec §2.2, plan Task 5); the painted room
-     keeps the iso it was drawn at. The camera rides on the fit, so every `project()` follows. */
-  const cam: Camera | undefined = renderedFlag ? CORNER_CAMERA : undefined;
+  /* The room is drawn from the corner camera (spec §2.2, plan Task 5). It rides on the fit, so every
+     `project()` follows. */
+  const cam = CORNER_CAMERA;
   /* The figure's sheet files and the asset URLs, once figure.json is in: what `wearNow` loads more
      of as the roster changes (lane 01M5GX1F3J — only what the team wears is fetched). */
   let figureFiles: Map<LayerId, string> | null = null;
@@ -468,15 +465,14 @@ export function mountOffice(
       if (!disposed && fig.sheets.size > before) bake();
     });
   }
-  if (renderedFlag) {
+  {
     const files = import.meta.glob('./rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<
       string,
       string
     >;
     const manifestUrl = files['./rendered/assets/manifest.json'];
-    artPending = !!manifestUrl;
     if (!manifestUrl) {
-      console.warn('office: rendered/assets/manifest.json is not in this build — painting');
+      console.warn('office: rendered/assets/manifest.json is not in this build — the room stays empty');
     } else {
       void fetch(manifestUrl)
         .then((r) => r.json())
@@ -493,18 +489,18 @@ export function mountOffice(
           return loadRenderedAssets(manifest, roomUrl, undefined, (id) => !isRoomImage(id) || now.has(id));
         })
         .then(async (r) => {
-          /* The dog (increment 4): no dog.json, or one that will not parse, leaves it painted. */
+          /* The dog (increment 4): no dog.json, or one that will not parse, means no dog. */
           const dogUrl = files['./rendered/assets/dog.json'];
           if (dogUrl) {
             try {
               const spec = parseDogSpec(await (await fetch(dogUrl)).json());
               r.dog = { spec, sheet: await domImage(files[`./rendered/assets/${spec.file}`] ?? spec.file) };
             } catch (e: unknown) {
-              console.warn('office: the rendered dog is unusable — painting it', e);
+              console.warn('office: the rendered dog is unusable — no dog', e);
             }
           }
           /* The figure sheets (increment 3) ride in beside the room: no figure.json, or one that
-             will not parse, leaves the members painted and says so once. */
+             will not parse, means no members are drawn, and says so once. */
           const figureUrl = files['./rendered/assets/figure.json'];
           if (figureUrl) {
             try {
@@ -514,11 +510,11 @@ export function mountOffice(
               // Only what the roster wears; `wearNow` fetches the rest of a wardrobe as members join.
               const fig = await loadFigureAssets(spec, figureSheetUrl, undefined, wornLayers(actors.nodes().values()));
               if (fig.missing.length) console.warn(`office: ${fig.missing.length} figure sheet(s) failed to load: ${fig.missing.join(', ')}`);
-              // No skin sheet means no figure at all: keep the painted members rather than draw nobody.
+              // No skin sheet means no figure at all.
               if (fig.sheets.has('skin')) r.figure = { spec: fig.spec, sheets: fig.sheets, scratch: fig.scratch };
-              else console.warn('office: the figure skin sheet did not load — members stay painted');
+              else console.warn('office: the figure skin sheet did not load — no members are drawn');
             } catch (e: unknown) {
-              console.warn('office: figure.json unusable — members stay painted', e);
+              console.warn('office: figure.json unusable — no members are drawn', e);
             }
           }
           return r;
@@ -533,7 +529,7 @@ export function mountOffice(
           wearNow(); // the roster may have grown while the sheets were in flight
         })
         .catch((e: unknown) => {
-          console.warn('office: rendered manifest unusable — painting', e);
+          console.warn('office: rendered manifest unusable — the room stays empty', e);
           revealOffice();
         });
     }
@@ -546,20 +542,15 @@ export function mountOffice(
   const canvas = document.createElement('canvas');
   canvas.style.display = 'block';
   host.appendChild(canvas);
-  /* No flash of the painted office (nick, 2026-10-23: "why does it show the old painted office briefly
-     before cutting over?"). While the rendered art loads, the room and its plates are held invisible,
-     so the page's ground shows; they fade in on the rendered room, or after ART_WAIT_MS with the
-     painted one if the art is slow or will not come. */
-  let artWait: ReturnType<typeof setTimeout> | null = null;
-  if (artPending) {
-    canvas.style.opacity = '0';
-    labelHost.style.opacity = '0';
-    artWait = setTimeout(revealOffice, ART_WAIT_MS);
-  }
+  /* While the art loads, the room and its plates are held invisible, so the page's ground shows; they
+     fade in together on the first bake with the art (nick, 2026-10-23: "why does it show the old painted
+     office briefly before cutting over?" — the painted office that used to show here is gone). */
+  let artHeld = true;
+  canvas.style.opacity = '0';
+  labelHost.style.opacity = '0';
   function revealOffice(): void {
-    if (artWait === null) return;
-    clearTimeout(artWait);
-    artWait = null;
+    if (!artHeld) return;
+    artHeld = false;
     for (const el of [canvas, labelHost]) {
       if (!reduced) el.style.transition = 'opacity 220ms ease-out';
       el.style.opacity = '';
@@ -1043,6 +1034,7 @@ export function mountOffice(
     setScenePalette(resolveScenePalette()); // follow the theme cascaded to the host before painting
     bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     bctx.clearRect(0, 0, width, height);
+    if (!rendered) return; // the art is not in yet: nothing to paint, and the room is held invisible
     const nodes = actors.nodes();
     const poses = actors.poses();
     const anchors = renderScene(
@@ -2203,7 +2195,8 @@ export function mountOffice(
     c: CanvasRenderingContext2D,
     units?: UnitHook,
     f: FrameInputs = frameInputs(),
-  ) {
+  ): SceneAnchors {
+    if (!rendered) return { heads: new Map(), bases: new Map() }; // the art is not in yet
     const anchors = renderScene(
       c,
       fit,
@@ -3464,6 +3457,12 @@ export function mountOffice(
     }
   }, LIGHT_TICK_MS);
 
+  /** The art, for the gate renders below — they run only once the room has painted a frame. */
+  function artNow(): RenderedAssets {
+    if (!rendered) throw new Error('office: the rendered art is not in yet');
+    return rendered;
+  }
+
   /**
    * Render the CURRENT scene state twice into two fresh offscreen canvases — once direct, once
    * through a fresh sprite cache — and compare the bytes. The gate
@@ -3478,7 +3477,8 @@ export function mountOffice(
    * not a confound: any difference is the cache's doing.
    */
   function spriteParity(only?: string): SpriteParity {
-    const paint = (c: CanvasRenderingContext2D, o: RenderOpts = {}): void => {
+    const art = artNow();
+    const paint = (c: CanvasRenderingContext2D, o: Omit<RenderOpts, 'rendered'> = {}): void => {
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, width, height);
       renderScene(
@@ -3495,7 +3495,7 @@ export function mountOffice(
         recep,
         wallBoardNow(),
         teamWorkingHours,
-        o,
+        { ...o, rendered: art },
       );
     };
     const surface = (): CanvasRenderingContext2D => {
@@ -3591,7 +3591,8 @@ export function mountOffice(
 
   /** DEBUG (gate only): magnified crops of the same region, painted direct and through a cache. */
   function spriteCrops(cx: number, cy: number, r: number, zoom = 8): Record<string, string> {
-    const paint = (o: RenderOpts = {}): HTMLCanvasElement => {
+    const art = artNow();
+    const paint = (o: Omit<RenderOpts, 'rendered'> = {}): HTMLCanvasElement => {
       const c = document.createElement('canvas');
       c.width = canvas.width;
       c.height = canvas.height;
@@ -3612,7 +3613,7 @@ export function mountOffice(
         recep,
         wallBoardNow(),
         teamWorkingHours,
-        o,
+        { ...o, rendered: art },
       );
       return c;
     };
@@ -3642,7 +3643,8 @@ export function mountOffice(
    * DEV only, like its siblings, so it costs the viewer bundle nothing.
    */
   function spriteImages(): { direct: string; sprite: string; diff: string } {
-    const paint = (o: RenderOpts = {}): HTMLCanvasElement => {
+    const art = artNow();
+    const paint = (o: Omit<RenderOpts, 'rendered'> = {}): HTMLCanvasElement => {
       const c = document.createElement('canvas');
       c.width = canvas.width;
       c.height = canvas.height;
@@ -3663,7 +3665,7 @@ export function mountOffice(
         recep,
         wallBoardNow(),
         teamWorkingHours,
-        o,
+        { ...o, rendered: art },
       );
       return c;
     };
@@ -3828,7 +3830,6 @@ export function mountOffice(
     },
     dispose: () => {
       disposed = true;
-      if (artWait !== null) clearTimeout(artWait);
       sprites?.clear();
       cancelAnimationFrame(raf);
       stopDrift(); // the heartbeat outlives nothing

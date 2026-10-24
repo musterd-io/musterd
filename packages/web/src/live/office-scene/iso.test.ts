@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   CORNER_CAMERA,
   FLOOR,
-  ISO_CAMERA,
   KX,
   KY,
   ROOM_BOX,
@@ -57,32 +56,23 @@ describe('fitBox', () => {
   });
 });
 
-describe('Camera (office realism Task 5: the corner camera behind ?office=rendered)', () => {
-  it('a Fit without a camera projects exactly as it always did', () => {
+describe('Camera (office realism: the corner camera is the camera, lane 01M5D8EJ40)', () => {
+  it('a Fit without a camera projects through the corner camera', () => {
     const fit = { ox: 100, oy: 50, scale: 2 };
-    expect(project(900, 0, fit)).toEqual({ x: 100 + 900 * KX * 2, y: 50 + 900 * KY * 2 });
-    expect(project(300, 500, fit)).toEqual({ x: 100 + (300 - 500) * KX * 2, y: 50 + 800 * KY * 2 });
-    expect(ISO_CAMERA).toEqual({ kx: KX, ky: KY });
+    expect(project(900, 0, fit)).toEqual({ x: 100 + 900 * CORNER_CAMERA.kx * 2, y: 50 + 900 * CORNER_CAMERA.ky * 2 });
+    expect(project(900, 0, { ...fit, cam: CORNER_CAMERA })).toEqual(project(900, 0, fit));
   });
 
-  it('a Fit carrying the corner camera projects through it', () => {
-    const fit = { ox: 100, oy: 50, scale: 2, cam: CORNER_CAMERA };
-    expect(project(900, 0, fit)).toEqual({
-      x: 100 + 900 * CORNER_CAMERA.kx * 2,
-      y: 50 + 900 * CORNER_CAMERA.ky * 2,
-    });
-  });
-
-  it('the corner camera is a touch lower than isometric and still a 45° corner view', () => {
+  it('the corner camera is a touch lower than the Figma iso and still a 45° corner view', () => {
     // Azimuth stays 45° — Blender renders with a square pixel, so kx is cos 45° for every camera.
     expect(CORNER_CAMERA.kx).toBeCloseTo(KX, 8);
-    // "Lower than today": a smaller elevation foreshortens the floor more, so ky drops.
+    // "Lower than today": a smaller elevation foreshortens the floor more, so ky drops below the 2:1 iso's.
     expect(CORNER_CAMERA.ky).toBeLessThan(KY);
     expect(CORNER_CAMERA.ky).toBeGreaterThan(0);
   });
 
-  it('roomBox(ISO_CAMERA) is ROOM_BOX, and the corner camera keeps the whole floor in the panel', () => {
-    expect(roomBox(ISO_CAMERA)).toEqual(ROOM_BOX);
+  it('roomBox() is ROOM_BOX, and the corner camera keeps the whole floor in the panel', () => {
+    expect(roomBox(CORNER_CAMERA)).toEqual(ROOM_BOX);
     expect(roomBox()).toEqual(ROOM_BOX);
     for (const [w, h] of [[1100, 640], [1920, 1080]] as const) {
       const fit = fitBox(w, h, roomBox(CORNER_CAMERA), 0.96, CORNER_CAMERA);
@@ -99,10 +89,8 @@ describe('Camera (office realism Task 5: the corner camera behind ?office=render
     }
   });
 
-  it('fitBox without a camera leaves cam unset so painted-path callers see the same object shape', () => {
-    const fit = fitBox(1000, 800, ROOM_BOX);
-    expect('cam' in fit).toBe(false);
-    expect(fitFloor(1000, 800)).toEqual(fit);
+  it('fitFloor fits the whole room through the corner camera', () => {
+    expect(fitFloor(1000, 800)).toEqual(fitBox(1000, 800, ROOM_BOX));
     expect(fitFloor(1000, 800, CORNER_CAMERA).cam).toBe(CORNER_CAMERA);
   });
 });

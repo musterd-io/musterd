@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, renderedOfficeFromSearch, syncImages } from './assets';
+import { loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, syncImages } from './assets';
 import { parseManifest } from './manifest';
 import { type LayerId, wornLayers } from './figure';
 import { appearanceOf } from '../appearance';
@@ -11,17 +11,6 @@ const manifest = parseManifest({
     { id: 'desk/base', file: 'office-desk-base.png', w: 4, h: 4, anchor: { x: 2, y: 3 }, scale: 2 },
     { id: 'desk/lamp-on', file: 'office-desk-lamp.png', w: 4, h: 4, anchor: { x: 2, y: 3 }, scale: 2 },
   ],
-});
-
-describe('renderedOfficeFromSearch', () => {
-  it('is on unless ?office=painted', () => {
-    expect(renderedOfficeFromSearch('?office=rendered')).toBe(true);
-    expect(renderedOfficeFromSearch('?team=revive&office=rendered')).toBe(true);
-    expect(renderedOfficeFromSearch('')).toBe(true);
-    expect(renderedOfficeFromSearch('?office')).toBe(true);
-    expect(renderedOfficeFromSearch('?office=painted')).toBe(false);
-    expect(renderedOfficeFromSearch('?team=revive&office=painted')).toBe(false);
-  });
 });
 
 describe('loadRenderedAssets', () => {

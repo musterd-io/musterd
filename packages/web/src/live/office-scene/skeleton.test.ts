@@ -1,218 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { DESK_UP, SEAT_TOP } from './layout';
 import {
-  CHAR,
   chairShift,
   chairYaw,
-  DESK_REACH,
   GESTURE,
   IDLE_GESTURES,
   isIdleGesture,
   handsInLap,
   PULSE_TYPING_PERIOD_S,
   seedOf,
-  solveSkeleton,
-  SPLIT_BEATS,
   STRIDE,
   typingBurst,
   typingFromPulse,
-  type SkelInput,
 } from './skeleton';
 
 /**
- * The character rig's contract. These are the properties that make the office read as *people* rather than
- * as sliding clip art — each one is a bug we can't see in a screenshot but would feel instantly on screen.
+ * The beat vocabulary's contract. The rig these beats used to drive (`solveSkeleton`) went with the
+ * painted office (lane 01M5D8EJ40); what survives is what the sprite path still leans on — the typing
+ * rhythm, the chair curves under a seated beat, and the seam between scheduler beats and errand overlays.
  */
-
-const base: SkelInput = {
-  phase: 0,
-  sit: 0,
-  stride: 0,
-  run: false,
-  t: 0,
-  typing: 0,
-  carry: null,
-  help: false,
-  gesture: 0,
-  gestureT: 0,
-  seed: 0.5,
-};
-const walk = (phase: number, o: Partial<SkelInput> = {}): SkelInput => ({ ...base, phase, stride: 1, ...o });
-const sit = (o: Partial<SkelInput> = {}): SkelInput => ({ ...base, sit: 1, ...o });
-
-describe('walk cycle', () => {
-  it('swings the legs — the feet are in different places through the stride', () => {
-    const a = solveSkeleton(walk(0));
-    const b = solveSkeleton(walk(0.5));
-    expect(Math.abs(a.ankle[1].z - b.ankle[1].z)).toBeGreaterThan(10);
-  });
-
-  it('swings the arms, and counter to the legs — the tell that separates walking from gliding', () => {
-    // Sample the *extremes* of the swing (phase 0 / 0.5). Phases 0.25 and 0.75 are the zero-crossings,
-    // where a perfectly good arm swing reads as no swing at all.
-    const s = solveSkeleton(walk(0));
-    // right leg forward ⇒ right arm back, and vice versa
-    expect(Math.sign(s.ankle[1].z - s.ankle[0].z)).toBe(-Math.sign(s.wrist[1].z - s.wrist[0].z));
-    const t = solveSkeleton(walk(0.5));
-    expect(Math.abs(s.wrist[1].z - t.wrist[1].z)).toBeGreaterThan(8);
-  });
-
-  it('never puts a foot through the floor, at any phase', () => {
-    for (let i = 0; i < 64; i++) {
-      const s = solveSkeleton(walk(i / 64, { run: true }));
-      for (const a of s.ankle) expect(a.y).toBeGreaterThanOrEqual(0);
-    }
-  });
-
-  it('lifts each foot exactly once per stride — a plant, then a swing', () => {
-    const lifted = (phase: number) => solveSkeleton(walk(phase)).ankle[1].y > CHAR.ankle + 1;
-    let flips = 0;
-    for (let i = 1; i <= 64; i++) if (lifted(i / 64) !== lifted((i - 1) / 64)) flips++;
-    expect(flips).toBe(2); // exactly one contiguous airborne window per cycle
-  });
-
-  it('is continuous across the phase wrap — no hitch as the cycle repeats', () => {
-    const a = solveSkeleton(walk(0.999));
-    const b = solveSkeleton(walk(0));
-    expect(Math.abs(a.ankle[1].z - b.ankle[1].z)).toBeLessThan(1);
-  });
-
-  it('runs bigger than it walks — longer reach, higher lift, deeper lean', () => {
-    const w = solveSkeleton(walk(0.25));
-    const r = solveSkeleton(walk(0.25, { run: true }));
-    expect(Math.abs(r.ankle[1].z)).toBeGreaterThan(Math.abs(w.ankle[1].z));
-    expect(r.lean).toBeGreaterThan(w.lean);
-  });
-
-  it('settles out of the stride continuously — a half-expressed stride is between idle and walking', () => {
-    const idle = solveSkeleton({ ...base, phase: 0.25 });
-    const full = solveSkeleton(walk(0.25));
-    const half = solveSkeleton({ ...base, phase: 0.25, stride: 0.5 });
-    const lo = Math.min(idle.ankle[1].z, full.ankle[1].z);
-    const hi = Math.max(idle.ankle[1].z, full.ankle[1].z);
-    expect(half.ankle[1].z).toBeGreaterThanOrEqual(lo);
-    expect(half.ankle[1].z).toBeLessThanOrEqual(hi);
-  });
-});
-
-describe('seated', () => {
-  it('puts the pelvis on the chair cushion, not on the floor', () => {
-    const s = solveSkeleton(sit());
-    expect(s.pelvis.y).toBeGreaterThanOrEqual(SEAT_TOP);
-    expect(s.pelvis.y).toBeLessThan(SEAT_TOP + 4);
-  });
-
-  it('keeps the feet on the floor and the knees forward of the hips', () => {
-    const s = solveSkeleton(sit());
-    for (const a of s.ankle) expect(a.y).toBeLessThan(8);
-    for (const i of [0, 1] as const) expect(s.knee[i].z).toBeGreaterThan(s.hip[i].z + 8);
-  });
-
-  it('rests the hands on the desk surface, within reach — this is the whole "at the desk" read', () => {
-    const s = solveSkeleton(sit());
-    for (const w of s.wrist) {
-      expect(w.y).toBeGreaterThan(DESK_UP); // on the surface, not through it
-      expect(w.z).toBeGreaterThan(15); // reaching forward to the keys, not in their lap
-    }
-    // and the arm is long enough to actually get there — no rubber-band limb
-    const reach = Math.hypot(
-      s.wrist[1].x - s.shoulder[1].x,
-      s.wrist[1].y - s.shoulder[1].y,
-      s.wrist[1].z - s.shoulder[1].z,
-    );
-    expect(reach).toBeLessThanOrEqual(CHAR.upperArm + CHAR.foreArm);
-  });
-
-  it('clears the desk with the shoulders and head — the "only tops of their heads" bug', () => {
-    const s = solveSkeleton(sit());
-    // The desk's far edge is what occludes a member sitting behind it; the shoulders must clear the
-    // surface, and the whole head must sit proudly above it.
-    expect(s.shoulder[0].y).toBeGreaterThan(DESK_UP);
-    expect(s.head.y - s.headR).toBeGreaterThan(DESK_UP + 8);
-  });
-
-  it('sits *down* — a half-blend is between standing and seated, never a teleport', () => {
-    const stand = solveSkeleton(base);
-    const seated = solveSkeleton(sit());
-    const half = solveSkeleton({ ...base, sit: 0.5 });
-    expect(half.pelvis.y).toBeLessThan(stand.pelvis.y);
-    expect(half.pelvis.y).toBeGreaterThan(seated.pelvis.y);
-  });
-});
-
-/**
- * Seated on furniture that is NOT a desk — the couch, the four meeting chairs, reception's waiting
- * chair. The bug this pins (nick, 2026-08-31): `solveSeated` IK-targeted `DESK_REACH` unconditionally,
- * so an idle member on the lounge couch sat with both arms reaching forward onto a keyboard that was
- * not there. There is no desk in front of these seats, so there is nothing for the hands to rest on.
- */
-describe('seated casually (no desk)', () => {
-  const lounge = (o: Partial<SkelInput> = {}): SkelInput => sit({ seat: 'casual', ...o });
-
-  it('rests the hands in the lap, not out at the keyboard', () => {
-    const s = solveSkeleton(lounge());
-    for (const w of s.wrist) {
-      expect(w.z).toBeLessThan(DESK_REACH.z - 10); // nowhere near the keys
-      expect(w.y).toBeLessThan(DESK_UP); // and below desk height, on the thighs
-      expect(w.y).toBeGreaterThan(s.pelvis.y); // resting on the lap, not dangling at the floor
-    }
-  });
-
-  it('reclines instead of leaning into the work — the posture IS the read', () => {
-    const desk = solveSkeleton(sit());
-    const s = solveSkeleton(lounge());
-    expect(s.lean).toBeLessThan(0); // past vertical, settled back
-    expect(s.lean).toBeLessThan(desk.lean);
-    expect(s.head.z).toBeLessThan(desk.head.z); // head back over the seat, not out over a desk
-  });
-
-  it('never types, even if the caller passes a typing intensity', () => {
-    const still = solveSkeleton(lounge({ t: 0, typing: 1 }));
-    const later = solveSkeleton(lounge({ t: 0.04, typing: 1 }));
-    expect(later.wrist[1].y).toBeCloseTo(still.wrist[1].y, 1);
-  });
-
-  it('still breathes and settles — a casual sitter is alive, just slower than a desk one', () => {
-    const ys = [0, 1.4, 2.8, 4.2, 5.6, 7].map((t) => solveSkeleton(lounge({ t })).chest.y);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.2);
-  });
-
-  it('keeps both feet on the floor and the arms within reach — no rubber-band limbs', () => {
-    const s = solveSkeleton(lounge());
-    for (const a of s.ankle) expect(a.y).toBeLessThan(8);
-    for (const i of [0, 1] as const) {
-      const reach = Math.hypot(
-        s.wrist[i].x - s.shoulder[i].x,
-        s.wrist[i].y - s.shoulder[i].y,
-        s.wrist[i].z - s.shoulder[i].z,
-      );
-      expect(reach).toBeLessThanOrEqual(CHAR.upperArm + CHAR.foreArm);
-    }
-  });
-
-  it('leaves the desk pose alone — `seat` defaults to the desk, so every existing caller is unchanged', () => {
-    const implicit = solveSkeleton(sit());
-    const explicit = solveSkeleton(sit({ seat: 'desk' }));
-    expect(explicit.wrist[1]).toEqual(implicit.wrist[1]);
-    expect(explicit.lean).toBe(implicit.lean);
-  });
-
-  it('rides the sit blend like the desk pose — standing up off a couch is still a motion', () => {
-    const stand = solveSkeleton({ ...base, seat: 'casual' });
-    const seated = solveSkeleton(lounge());
-    const half = solveSkeleton({ ...base, seat: 'casual', sit: 0.5 });
-    expect(half.pelvis.y).toBeLessThan(stand.pelvis.y);
-    expect(half.pelvis.y).toBeGreaterThan(seated.pelvis.y);
-  });
-});
 
 describe('typing', () => {
-  it('moves the hands while typing', () => {
-    const at = (t: number) => solveSkeleton(sit({ t, typing: 1 })).wrist[1].y;
-    const ys = [0, 0.02, 0.04, 0.06, 0.08].map(at);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.5);
-  });
-
   it('bursts rather than drumming forever — a member types, then pauses to think', () => {
     const seed = 0.3;
     const samples = Array.from({ length: 400 }, (_, i) => typingBurst(seed, i * 0.05));
@@ -265,66 +72,6 @@ describe('typing from the pulse (ADR 660)', () => {
 });
 
 describe('seated micro-beats', () => {
-  const kinds = Object.values(GESTURE);
-  const halves = new Set(SPLIT_BEATS.flat());
-
-  it('every beat starts and ends at the plain seated pose — no pop on entry or exit', () => {
-    const plain = solveSkeleton(sit());
-    for (const kind of kinds.filter((k) => !halves.has(k))) {
-      for (const gT of [0, 1]) {
-        const s = solveSkeleton(sit({ gesture: kind, gestureT: gT }));
-        expect(s.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
-        expect(s.head.z).toBeCloseTo(plain.head.z, 4);
-      }
-    }
-  });
-
-  it('a split beat is one motion: rest → the seam → rest, with no jump at the seam', () => {
-    const plain = solveSkeleton(sit());
-    for (const [first, second] of SPLIT_BEATS) {
-      const start = solveSkeleton(sit({ gesture: first, gestureT: 0 }));
-      const end = solveSkeleton(sit({ gesture: second, gestureT: 1 }));
-      expect(start.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
-      expect(end.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
-      const a = solveSkeleton(sit({ gesture: first, gestureT: 1 }));
-      const b = solveSkeleton(sit({ gesture: second, gestureT: 0 }));
-      expect(a.wrist[1].y).toBeCloseTo(b.wrist[1].y, 4);
-      expect(a.wrist[1].y).toBeGreaterThan(plain.wrist[1].y + 10); // and the seam is up at the board
-    }
-  });
-
-  it('produces finite joints across every beat window', () => {
-    for (const kind of kinds) {
-      for (const gT of [0, 0.25, 0.5, 0.75, 1]) {
-        const k = solveSkeleton(sit({ gesture: kind, gestureT: gT, t: 3 }));
-        for (const j of [k.pelvis, k.chest, k.head, ...k.ankle, ...k.wrist, ...k.knee, ...k.elbow]) {
-          expect(Number.isFinite(j.x) && Number.isFinite(j.y) && Number.isFinite(j.z)).toBe(true);
-        }
-      }
-    }
-  });
-
-  it('sip raises the right hand from the keys to the mouth mid-window', () => {
-    const rest = solveSkeleton(sit());
-    const mid = solveSkeleton(sit({ gesture: GESTURE.sip, gestureT: 0.5 }));
-    expect(mid.wrist[1].y).toBeGreaterThan(rest.wrist[1].y + 15);
-    expect(Math.abs(mid.wrist[1].y - mid.head.y)).toBeLessThan(12); // at the mouth, not the ceiling
-  });
-
-  it('chin holds a hand at the chin through the plateau', () => {
-    for (const gT of [0.3, 0.5, 0.7]) {
-      const s = solveSkeleton(sit({ gesture: GESTURE.chin, gestureT: gT }));
-      expect(Math.hypot(s.wrist[1].x - s.head.x, s.wrist[1].y - (s.head.y - 9), s.wrist[1].z - (s.head.z + 8))).toBeLessThan(3);
-    }
-  });
-
-  it('lean-back reclines the head behind the chest and drops the hands off the desk', () => {
-    const rest = solveSkeleton(sit());
-    const mid = solveSkeleton(sit({ gesture: GESTURE.lean, gestureT: 0.5 }));
-    expect(mid.head.z).toBeLessThan(rest.head.z - 2); // reclined back
-    for (const w of mid.wrist) expect(w.y).toBeLessThan(DESK_UP); // hands in the lap, below the desk
-  });
-
   it('chair curves are zero at both ends and move mid-window', () => {
     expect(chairShift(GESTURE.roll, 0)).toBeCloseTo(0, 6);
     expect(chairShift(GESTURE.roll, 1)).toBeCloseTo(0, 6);
@@ -348,41 +95,14 @@ describe('seated micro-beats', () => {
 });
 
 describe('rig invariants', () => {
-  it('reaches the keyboard by construction — the desk and the arm agree on where the keys are', () => {
-    expect(DESK_REACH.z).toBeLessThan(CHAR.upperArm + CHAR.foreArm);
-    expect(DESK_REACH.y).toBeGreaterThan(DESK_UP);
-  });
-
-  it('hangs the arms outside the torso, so the far arm is never swallowed by the body', () => {
-    expect(CHAR.shoulderW).toBeGreaterThan(12.5); // > TORSO_W/2 in character.ts
-  });
-
-  it('produces finite joints for every state it can be asked for', () => {
-    const states: SkelInput[] = [
-      base,
-      walk(0.3),
-      walk(0.7, { run: true, carry: 'box' }),
-      sit({ typing: 1, t: 5 }),
-      sit({ gesture: 1, gestureT: 0.5 }),
-      sit({ gesture: 2, gestureT: 0.5 }),
-      { ...base, help: true, t: 2 },
-      { ...base, sit: 0.37, stride: 0.62, phase: 0.4 },
-    ];
-    for (const s of states) {
-      const k = solveSkeleton(s);
-      for (const j of [k.pelvis, k.chest, k.head, ...k.ankle, ...k.wrist, ...k.knee, ...k.elbow]) {
-        expect(Number.isFinite(j.x) && Number.isFinite(j.y) && Number.isFinite(j.z)).toBe(true);
-      }
-    }
-  });
-
   it('seeds deterministically per name — a member looks the same across reloads', () => {
     expect(seedOf('miley')).toBe(seedOf('miley'));
     expect(seedOf('miley')).not.toBe(seedOf('izzo'));
   });
 
   it('has a stride long enough to be a step, not a shuffle', () => {
-    expect(STRIDE).toBeGreaterThan(CHAR.thigh);
+    // a thigh is ~17 floor units; a stride shorter than that is a shuffle
+    expect(STRIDE).toBeGreaterThan(17);
   });
 });
 
@@ -417,15 +137,5 @@ describe('the welcome wave gesture (lane 01M3F81DD9)', () => {
   it('exists, and the ambient scheduler can never pick it', () => {
     expect(GESTURE.wave).toBe(19);
     expect(IDLE_GESTURES).not.toContain(GESTURE.wave);
-  });
-});
-
-describe('the first-day moving box (lane 01M3F81DD9)', () => {
-  it('is held in both forearms at the chest, exactly like the handoff box', () => {
-    const box = solveSkeleton(walk(0.3, { carry: 'box' }));
-    const moving = solveSkeleton(walk(0.3, { carry: 'movingBox' }));
-    expect(moving.wrist).toEqual(box.wrist);
-    expect(moving.elbow).toEqual(box.elbow);
-    expect(moving.wrist).not.toEqual(solveSkeleton(walk(0.3)).wrist);
   });
 });

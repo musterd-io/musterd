@@ -50,9 +50,9 @@ function rendered(ids: string[]): RenderedAssets {
 describe('renderScene with rendered desk bases (plan Task 3)', () => {
   const fit = fitFloor(1200, 900);
   const empty = new Map();
-  const run = (r?: RenderedAssets) => {
+  const run = (r: RenderedAssets) => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, r ? { rendered: r } : {});
+    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
     return ops;
   };
 
@@ -66,7 +66,7 @@ describe('renderScene with rendered desk bases (plan Task 3)', () => {
     expect(ops.filter((o) => o.name === 'clip').length).toBeGreaterThanOrEqual(n - DESK_SLOTS.length);
   });
 
-  it('falls back to the painter for an orientation whose asset is missing', () => {
+  it('an orientation whose asset is missing draws no base there, and nothing in its place', () => {
     const sn = DESK_SLOTS.filter((s) => s.dir === 'S' || s.dir === 'N').length;
     const both = blits(run(rendered(['desk/base', 'desk/base-ew'])));
     const onlySn = blits(run(rendered(['desk/base'])));
@@ -76,11 +76,10 @@ describe('renderScene with rendered desk bases (plan Task 3)', () => {
     expect(onlySn + onlyEw).toBe(both);
   });
 
-  it('is byte-identical to the painted office without a manifest', () => {
-    const a = run();
-    const b = run({ manifest: parseManifest({ version: 1, camera: { kx: 1, ky: 1 }, assets: [] }), images: new Map(), missing: [] });
-    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
-    expect(blits(a)).toBe(0);
+  it('an empty manifest blits nothing and still draws a room (the props, the notes, the veil)', () => {
+    const ops = run({ manifest: parseManifest({ version: 1, camera: { kx: 1, ky: 1 }, assets: [] }), images: new Map(), missing: [] });
+    expect(blits(ops)).toBe(0);
+    expect(ops.length).toBeGreaterThan(50);
   });
 });
 
@@ -125,9 +124,9 @@ const STATIC_IDS: Record<string, number> = {
 describe('renderScene with the rendered room (plan Task 6)', () => {
   const fit = fitFloor(1200, 900);
   const empty = new Map();
-  const run = (r?: RenderedAssets) => {
+  const run = (r: RenderedAssets) => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, r ? { rendered: r } : {});
+    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
     return ops;
   };
   const blits = (ops: ReturnType<typeof run>) => ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
@@ -137,7 +136,7 @@ describe('renderScene with the rendered room (plan Task 6)', () => {
     expect(blits(run(rendered(Object.keys(STATIC_IDS))))).toBe(total);
   });
 
-  it('a missing asset falls back to its painter and only its own blits are gone', () => {
+  it('a missing asset is simply not drawn — only its own blits are gone', () => {
     for (const id of ['room/ceiling-on', 'plant/fiddle', 'nook/counter', 'rug/pod-1']) {
       const without = Object.keys(STATIC_IDS).filter((x) => x !== id);
       expect(blits(run(rendered(without)))).toBe(total - STATIC_IDS[id]!);
@@ -165,7 +164,7 @@ describe('renderScene with the rendered room (plan Task 6)', () => {
     expect(ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length).toBe(total - 1); // no ceiling-on
   });
 
-  it('the open fridge keeps its painter (a live state until Task 7)', () => {
+  it('the open fridge keeps its painter (a live state the render has no door for yet)', () => {
     const { ctx, ops } = recordingCtx();
     renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, { fridgeOpen: true, bottleCarriers: new Set() }, null, undefined, undefined, {
       rendered: rendered(Object.keys(STATIC_IDS)),
@@ -302,20 +301,16 @@ describe('the rendered figure (plan Task 13)', () => {
     const reads = scratch.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9 && (o.args[0] as { id?: string }).id !== undefined);
     expect(reads.filter((b) => b.args[2] === 9 * 232).length).toBe(10); // two reads per tint pass (draw, then destination-in)
     expect(reads.filter((b) => b.args[2] === (24 + 2) * 232).length).toBeGreaterThanOrEqual(6); // sit-idle row for S
-    // and no skeleton painting beside them: the painted character is dozens of fills more
-    const painted = recordingCtx();
-    renderScene(painted.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
-    expect(ops.length).toBeLessThan(painted.ops.length - 40);
   });
 
-  it('without figure sheets the member paints exactly as before', () => {
+  it('without figure sheets nobody is drawn — the room still paints, with no member and no receptionist', () => {
     const { poses, byName } = standing('ada');
     const a = recordingCtx();
-    renderScene(a.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, {});
+    renderScene(a.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
     const b = recordingCtx();
-    renderScene(b.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered([]) });
-    expect(JSON.stringify(b.ops)).toBe(JSON.stringify(a.ops));
+    renderScene(b.ctx, fit, new Map(), new Map(), new Map(), 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
     expect(a.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9)).toHaveLength(0);
+    expect(a.ops.filter((o) => o.name === 'quadraticCurveTo')).toHaveLength(b.ops.filter((o) => o.name === 'quadraticCurveTo').length); // no wisp
   });
 });
 

@@ -3,100 +3,15 @@ import type { FigureAssets } from './rendered/assets';
 import { drawFigureFrame } from './rendered/figure';
 import { type Anim, type CarryAnim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
-import { FWD } from './layout';
-import { arcEnv, GESTURE, holdEnv, type Skel, smooth, type V3 } from './skeleton';
+import { arcEnv, GESTURE, holdEnv, smooth } from './skeleton';
 import type { CarryKind, Dir, OfficeNode, Pose } from './types';
 
 /**
- * The character painter: flattens a `Skel` (3D joints, see `skeleton.ts`) onto the 2:1 iso canvas and
- * dresses it in an `Appearance` (see `appearance.ts`).
- *
- * Deliberately dumb about *motion* — every curve lives in the skeleton — so it stays swappable: this is
- * the file a future 3D renderer replaces, while the walk cycle and the sit survive it.
- *
- * Three things it does own, all of them spatial rather than animated:
- *  - **Facing.** Character space (+z forward, +x right) is rotated onto the floor by the member's facing,
- *    so one skeleton serves all four directions — no mirrored art, no baked profiles.
- *  - **Self-occlusion.** Limbs are depth-sorted *within* the character by their own world depth, so the
- *    near arm swings in front of the torso and the far arm behind it, at every facing, with no per-facing
- *    special cases. Far limbs shade down a touch, which is what stops a flat figure reading as a cut-out.
- *  - **The wardrobe.** Trousers, shoes, sleeves, hair, hats, facial hair. All of it must survive being
- *    ~40px tall, so everything differs by **silhouette and block colour**, never by fine detail.
+ * The character: which sprite clip a pose is in (`animFor`) and the one draw that puts a composed
+ * figure frame on the floor (`drawCharacter`), under the room's light tint, with the wisp over its
+ * crown. The skeleton painter that flattened `skeleton.ts` joints onto the canvas went with the painted
+ * office (lane 01M5D8EJ40, plan Task 19; `docs/wiki/restoring-the-painted-office.md`).
  */
-
-/** Torso thickness. Kept under 2×`CHAR.shoulderW` so the arms hang outside the body's silhouette. Nudged
- * 25 → 27 for the charm pass: a rounder, softer body to sit under the slightly larger head. */
-const TORSO_W = 27;
-
-/** Darken/lighten an `hsl()` string by a lightness factor (mirrors render.ts's `hslL`). */
-function hslL(color: string, f: number): string {
-  const m = /hsl\(\s*([\d.]+)[, ]+([\d.]+)%[, ]+([\d.]+)%/.exec(color);
-  if (!m) return color;
-  const [, h, s, l] = m;
-  return `hsl(${h}, ${s}%, ${Math.max(0, Math.min(100, Number(l) * f))}%)`;
-}
-/** Multiply a `#rrggbb` toward black — the far-side shading for hex wardrobe colours. */
-function shade(hex: string, f: number): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  const n = parseInt(m[1]!, 16);
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return `rgb(${c((n >> 16) & 255)}, ${c((n >> 8) & 255)}, ${c(n & 255)})`;
-}
-/** A limb on the character's far side — a cheap, effective depth cue for a flat-filled figure. */
-const FAR = 0.82;
-
-/** Where a character-space joint lands on screen, and how deep it is on the floor. */
-interface Proj {
-  p: Pt;
-  d: number;
-}
-
-/**
- * Project one joint. Character space (x right, y up, z forward) is rotated onto the floor by the facing,
- * added to the member's floor point, projected, then lifted by the joint's height.
- */
-function projector(
-  lx: number,
-  ly: number,
-  dir: Dir,
-  fit: Fit,
-  s: number,
-  heading?: number,
-  /**
-   * Idle sway, in character-space x per unit of joint height (see `drawCharacter`).
-   *
-   * Folded in HERE rather than applied to the joints, for two reasons. It is free: one multiply-add
-   * per joint, against the ~3.5 points of one core that rebuilding a Skel per character per frame
-   * measured at 19 members and 19fps (2026-09-14). And scaling it by `j.y` makes the body pivot at
-   * the hips — the feet stay planted, the shoulders travel furthest — which is what a weight shift
-   * actually looks like and what a flat offset on five joints did not.
-   */
-  sway = 0,
-): (j: V3) => Proj {
-  // A continuous heading rotates the basis to any angle mid-turn; the cardinal is the resting case.
-  const f: readonly [number, number] = heading !== undefined ? [Math.cos(heading), Math.sin(heading)] : FWD[dir];
-  const r: [number, number] = [f[1], -f[0]]; // the character's right, on the floor
-  return (j: V3): Proj => {
-    const jx = sway === 0 ? j.x : j.x + sway * j.y;
-    const wx = lx + (f[0] * j.z + r[0] * jx) * s;
-    const wy = ly + (f[1] * j.z + r[1] * jx) * s;
-    const p = project(wx, wy, fit);
-    return { p: { x: p.x, y: p.y - j.y * s * fit.scale }, d: wx + wy };
-  };
-}
-
-/** A limb segment: a rounded bar from a→b. Flat-filled and capped, to sit with the blocky furniture. */
-function bone(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, w: number, color: string): void {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = w;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-}
 
 function disc(ctx: CanvasRenderingContext2D, c: Pt, rx: number, ry: number, color: string): void {
   ctx.fillStyle = color;
@@ -110,11 +25,11 @@ export interface CharacterOpts {
   ly: number;
   dir: Dir;
   /**
-   * Pre-rendered figure sheets (office realism, plan Task 13). When present the character is a
-   * sprite frame — `anim`/`animStart` pick it — and the skeleton is not solved; the caller passes
-   * an empty one. `tint` is the room's light tint (`figureTintFor`); `topColor` the identity hue.
+   * The figure's sprite sheets (office realism, plan Task 13): the character is a composed frame —
+   * `anim`/`animStart` pick it. `tint` is the room's light tint (`figureTintFor`); `topColor` the
+   * identity hue.
    */
-  rendered?: FigureAssets | undefined;
+  rendered: FigureAssets;
   anim?: Anim;
   animStart?: number;
   /** A gesture clip's frame (`animFor`), when the beat rather than the clock picks it. */
@@ -122,7 +37,6 @@ export interface CharacterOpts {
   tint?: string;
   topColor?: string;
   node: OfficeNode;
-  skel: Skel;
   /** Continuous facing (radians, logical floor space) — overrides `dir`'s cardinal basis mid-turn. */
   heading?: number;
   /** Uniform size multiplier — nook/queue actors render at 0.72. */
@@ -152,22 +66,6 @@ export interface CharacterOpts {
   lanyard?: string;
 }
 
-/**
- * How open the eyes are, 0→1. A blink is *fast* (~130ms) and rare (every 4–8s, seeded per member), which
- * is precisely why it registers as alive rather than as a twitch — you never quite catch it happening.
- */
-function blink(t: number, seed: number): number {
-  const period = 4 + seed * 4;
-  const p = (t + seed * 20) % period;
-  if (p > 0.13) return 1;
-  return Math.abs(p - 0.065) / 0.065;
-}
-
-/**
- * Draw a member. `armsOnly` re-draws just the arms — the seated overlay pass, which paints the forearms
- * *over* the desk they are resting on (a seated member's whole arm is above the desk surface, so once the
- * desk slab has been painted the arms belong on top of it). See `renderScene`.
- */
 /**
  * Which sprite clip a pose is in, and when it started, so `frameRect` can count frames from the
  * scene clock (plan Task 13). The actor state machine is untouched: this reads what it already
@@ -276,482 +174,56 @@ export function drawCharacter(
   o: CharacterOpts,
   armsOnly = false,
 ): void {
-  const { skel: k, node, dir, size } = o;
-  if (o.rendered) {
-    // The rendered path: one composed sprite frame. The seated overlay (armsOnly) draws the same frame's
-    // arm cells again, over the desk slab (plan Task 16).
-    const look = lookOf(o);
-    const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
-    // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
-    let anim = o.anim ?? 'idle';
-    let frame = o.animFrame;
-    const spec = o.rendered.spec.anims[anim];
-    if (!spec || (spec.dirs && !spec.dirs.includes(dir8))) {
-      anim = anim.startsWith('g-') ? (o.anim && GESTURE_SEATED.has(o.anim) ? 'sit-idle' : 'idle') : 'idle';
-      frame = undefined;
-    }
-    drawFigureFrame({
-      ctx,
-      fit,
-      at: { lx: o.lx, ly: o.ly },
-      sheets: o.rendered.sheets,
-      spec: o.rendered.spec,
-      look,
-      kind: node.kind,
-      topColor: o.topColor ?? node.color,
-      held: {
-        carry: o.carry,
-        // the desk mug is in the hand only through the middle of the beat, as the painter has it
-        ...(o.mug !== undefined && anim === 'g-sip' && (o.gestureT ?? 0) > 0.12 && (o.gestureT ?? 0) < 0.95 ? { mug: o.mug } : {}),
-        ...(o.lanyard !== undefined ? { lanyard: o.lanyard } : {}),
-      },
-      part: armsOnly ? 'arms' : 'all',
-      anim,
-      dir: dir8,
-      t: o.t,
-      startT: o.animStart ?? 0,
-      ...(frame !== undefined ? { frame } : {}),
-      alpha: o.alpha,
-      tint: o.tint ?? '#ffffff',
-      size,
-      scratch: o.rendered.scratch,
-    });
-    if (!armsOnly && o.alpha > 0) {
-      // The wisp over the sprite's crown — lowered through a sit the way the nameplate is (render.ts).
-      const crown = o.rendered.spec.height ?? 96;
-      const u = fit.scale * size;
-      const p = project(o.lx, o.ly, fit);
-      const base = { x: p.x, y: p.y - (crown - 1 - (o.sit ?? 0) * 22 * (crown / 96)) * u };
-      const prev = ctx.globalAlpha;
-      if (o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
-      drawWisp(ctx, base, { x: base.x, y: base.y - 12 * u }, u, o.topColor ?? node.color, o.t, o.seed);
-      ctx.globalAlpha = prev;
-    }
-    return;
-  }
-  /*
-   * IDLE SWAY — the weight-shift a person makes when they are not doing anything (nick, 2026-09-14).
-   *
-   * Between beats a member used to be geometrically perfect and perfectly still, which is the single
-   * biggest thing separating this room from a room. This is a very slow, very small lean of the upper
-   * body, seeded per member so nineteen people are never in phase — an office breathing in unison is
-   * worse than an office holding its breath. Two periods beat against each other so it never reads as
-   * a metronome.
-   *
-   * It needs NO reduced-motion or STILL gate of its own, which is the point of driving it off the
-   * SCENE CLOCK rather than wall time: under reduced motion the loop never starts, and under `?still`
-   * it parks after the one play-through, so in both cases the clock stops and the sway freezes with
-   * it. The a11y sweep's settle detector therefore still sees a page that stops changing.
-   */
-  const swayT = o.t * 0.7 + o.seed * 11;
-  const sway = (Math.sin(swayT) * 0.026 + Math.sin(swayT * 0.37) * 0.011) * size;
-  const px = projector(o.lx, o.ly, dir, fit, size, o.heading, sway);
-  const u = fit.scale * size; // one logical unit, in screen px, at this character's size
+  const { node, dir, size } = o;
+  // The rendered path: one composed sprite frame. The seated overlay (armsOnly) draws the same frame's
+  // arm cells again, over the desk slab (plan Task 16).
   const look = lookOf(o);
-  const acc = node.color; // the identity hue — the top, and only the top
-  const accDark = hslL(acc, 0.72);
-
-  const prev = ctx.globalAlpha;
-  if (o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
-
-  interface Part {
-    d: number;
-    fn: () => void;
+  const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
+  // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
+  let anim = o.anim ?? 'idle';
+  let frame = o.animFrame;
+  const spec = o.rendered.spec.anims[anim];
+  if (!spec || (spec.dirs && !spec.dirs.includes(dir8))) {
+    anim = anim.startsWith('g-') ? (o.anim && GESTURE_SEATED.has(o.anim) ? 'sit-idle' : 'idle') : 'idle';
+    frame = undefined;
   }
-  const parts: Part[] = [];
-  const chestD = px(k.chest).d;
-
-  // ── an arm: sleeve to the elbow, then either sleeve or bare skin to the wrist ──
-  const arm = (i: 0 | 1): Part => {
-    const sh = px(k.shoulder[i]);
-    const el = px(k.elbow[i]);
-    const wr = px(k.wrist[i]);
-    const d = (sh.d + el.d + wr.d) / 3;
-    const back = d < chestD;
-    // A short sleeve leaves the forearm bare. On a 90-unit character that is a bigger, clearer difference
-    // than any pattern — it changes the arm's *colour*, not its texture.
-    const sleeve = back ? hslL(accDark, FAR) : accDark;
-    const fore = look.bareArms
-      ? back
-        ? shade(look.skin, FAR)
-        : look.skin
-      : sleeve;
-    const hand = back ? shade(look.skin, FAR) : look.skin;
-    return {
-      d,
-      fn: () => {
-        bone(ctx, sh.p, el.p, 8.4 * u, sleeve);
-        bone(ctx, el.p, wr.p, 7.2 * u, fore);
-        disc(ctx, wr.p, 4.4 * u, 4.1 * u, hand); // a soft mitten hand — rounder reads friendlier
-      },
-    };
-  };
-
-  // ── a leg: trouser to the ankle, then a shoe ──
-  const leg = (i: 0 | 1): Part => {
-    const hp = px(k.hip[i]);
-    const kn = px(k.knee[i]);
-    const an = px(k.ankle[i]);
-    const d = (hp.d + kn.d + an.d) / 3;
-    const back = d < px(k.pelvis).d;
-    const trouser = back ? shade(look.bottom, FAR) : look.bottom;
-    const shoe = back ? shade(look.shoes, FAR) : look.shoes;
-    return {
-      d,
-      fn: () => {
-        bone(ctx, hp.p, kn.p, 9.8 * u, trouser);
-        bone(ctx, kn.p, an.p, 8.6 * u, trouser);
-        // The shoe: a small slab pointing the way the character faces, with a rounded toe.
-        const toe = px({ x: k.ankle[i].x, y: 1.5, z: k.ankle[i].z + 6.5 });
-        bone(ctx, an.p, toe.p, 6.6 * u, shoe);
-        disc(ctx, toe.p, 3.3 * u, 2.6 * u, shoe); // a soft rounded toe cap
-      },
-    };
-  };
-
-  // The sip mug rides in the right hand through the middle of the beat (the desk copy is hidden then).
-  const sipMug =
-    o.mug !== undefined && o.gesture === GESTURE.sip && (o.gestureT ?? 0) > 0.12 && (o.gestureT ?? 0) < 0.95;
-
-  /**
-   * What is being carried, as a depth-sortable part rather than a final overpaint.
-   *
-   * It used to be `if (o.carry) drawCarry(...)` after the sort, which meant the carried thing ALWAYS
-   * painted last — over the torso, the arms, everything. That is wrong exactly when the object is on
-   * the far side of the body: a member walking away from the camera with their laptop tucked under
-   * the far arm showed the laptop THROUGH their own back (nick, 2026-09-14). A carried object is not
-   * chrome; it is a thing in the room at a place, and it occludes and is occluded like one.
-   *
-   * The key is the depth of the point `drawCarry` actually draws at, which is why the two agree here
-   * rather than each deciding for itself — the laptop rides between the right wrist and the chest,
-   * the plate between both wrists, and everything else at the right wrist.
-   */
-  const carryPart = (): Part | null => {
-    if (!o.carry) return null;
-    const wr = px(k.wrist[1]);
-    const d =
-      o.carry === 'laptop'
-        ? wr.d * 0.6 + px(k.chest).d * 0.4
-        : o.carry === 'plate'
-          ? (wr.d + px(k.wrist[0]).d) / 2
-          : o.carry === 'box' || o.carry === 'movingBox'
-            ? px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 }).d
-            : wr.d;
-    return { d, fn: () => drawCarry(ctx, px, k, u, o.carry!) };
-  };
-
-  if (armsOnly) {
-    const overlay: Part[] = [arm(0), arm(1)];
-    const c = carryPart();
-    if (c) overlay.push(c);
-    for (const p of overlay.sort((a, b) => a.d - b.d)) p.fn();
-    if (sipMug) drawSipMug(ctx, px, k, u, o.mug!);
-    ctx.globalAlpha = prev;
-    return;
-  }
-
-  // Contact shadow — a warm brown, not neutral black, so the character sits in the room's golden light
-  // rather than being cut out of it.
-  disc(ctx, project(o.lx, o.ly, fit), 21 * u, 5.5 * u, 'rgba(64, 38, 16, 0.15)');
-
-  parts.push(leg(0), leg(1));
-
-  // ── the torso, in the member's identity hue, cut by their `TopCut` ──
-  const pel = px(k.pelvis);
-  const ch = px(k.chest);
-  const nk = px(k.neck);
-  const shL = px(k.shoulder[0]);
-  const shR = px(k.shoulder[1]);
-  parts.push({
-    d: chestD,
-    fn: () => {
-      bone(ctx, pel.p, ch.p, TORSO_W * u, acc);
-      bone(ctx, ch.p, nk.p, (TORSO_W - 5) * u, acc);
-      // A soft rounded belly: a gentle bulge low on the torso so the body reads plush and cuddly rather
-      // than as a straight barrel. Sits between the pelvis and chest, in the identity hue.
-      const belly = { x: (pel.p.x + ch.p.x) / 2, y: pel.p.y + (ch.p.y - pel.p.y) * 0.36 };
-      disc(ctx, belly, TORSO_W * 0.6 * u, TORSO_W * 0.5 * u, acc);
-      bone(ctx, shL.p, shR.p, 9 * u, acc); // the shoulder line — what gives the silhouette shoulders
-
-      if (look.cut === 'stripe') {
-        // Two bands across the chest, in the identity hue's own dark — reads as a striped tee at 40px,
-        // where an actual stripe pattern would just turn to mush.
-        for (const f of [0.3, 0.62]) {
-          const a = px({ x: -TORSO_W / 2, y: k.pelvis.y + (k.chest.y - k.pelvis.y) * f, z: k.chest.z });
-          const b = px({ x: TORSO_W / 2, y: k.pelvis.y + (k.chest.y - k.pelvis.y) * f, z: k.chest.z });
-          bone(ctx, a.p, b.p, 4.5 * u, accDark);
-        }
-      } else if (look.cut === 'vest') {
-        // A darker panel down the front — a gilet over a bare-armed tee.
-        const a = px({ x: 0, y: k.pelvis.y, z: k.pelvis.z + 5 });
-        const b = px({ x: 0, y: k.chest.y + 2, z: k.chest.z + 5 });
-        bone(ctx, a.p, b.p, 15 * u, accDark);
-      } else if (look.cut === 'hoodie') {
-        // The hood: a bulge behind the neck. It sits at −z, so it depth-sorts behind the head naturally.
-        const hood = px({ x: 0, y: k.neck.y + 1, z: k.neck.z - 7 });
-        disc(ctx, hood.p, 11 * u, 8 * u, accDark);
-      }
-      if (node.kind === 'agent') disc(ctx, ch.p, 3 * u, 2.8 * u, '#74e08a'); // the chest LED
-      if (o.lanyard) drawLanyard(ctx, px, k, u, o.lanyard);
+  drawFigureFrame({
+    ctx,
+    fit,
+    at: { lx: o.lx, ly: o.ly },
+    sheets: o.rendered.sheets,
+    spec: o.rendered.spec,
+    look,
+    kind: node.kind,
+    topColor: o.topColor ?? node.color,
+    held: {
+      carry: o.carry,
+      // the desk mug is in the hand only through the middle of the beat, as the painter has it
+      ...(o.mug !== undefined && anim === 'g-sip' && (o.gestureT ?? 0) > 0.12 && (o.gestureT ?? 0) < 0.95 ? { mug: o.mug } : {}),
+      ...(o.lanyard !== undefined ? { lanyard: o.lanyard } : {}),
     },
+    part: armsOnly ? 'arms' : 'all',
+    anim,
+    dir: dir8,
+    t: o.t,
+    startT: o.animStart ?? 0,
+    ...(frame !== undefined ? { frame } : {}),
+    alpha: o.alpha,
+    tint: o.tint ?? '#ffffff',
+    size,
+    scratch: o.rendered.scratch,
   });
-
-  parts.push(arm(0), arm(1));
-  const carried = carryPart();
-  if (carried) parts.push(carried);
-  parts.sort((a, b) => a.d - b.d);
-  for (const p of parts) p.fn();
-
-  // The head paints last — it is the top of the silhouette at every facing and the thing the eye reads
-  // first, so it never gets clipped by an arm. The sip mug sorts against it: raised in front of the face
-  // when the sitter faces the camera, hidden behind the skull when they face away.
-  if (sipMug && px(k.wrist[1]).d <= px(k.head).d) drawSipMug(ctx, px, k, u, o.mug!);
-  drawHead(ctx, px, k, node, look, dir, u, acc, o.t, o.seed);
-  if (sipMug && px(k.wrist[1]).d > px(k.head).d) drawSipMug(ctx, px, k, u, o.mug!);
-
-  ctx.globalAlpha = prev;
-}
-
-/**
- * The head: neck, back hair, skull, front hair, hat, face, and the agent tell.
- *
- * Order matters and is the whole trick — hair that falls *behind* the skull (a bob's back mass, a
- * ponytail, an afro) is drawn before it, and hair that sits *on* it (the cap of every style) after. That
- * one split is what lets nine hairstyles read as nine silhouettes at 30px.
- */
-function drawHead(
-  ctx: CanvasRenderingContext2D,
-  px: (j: V3) => Proj,
-  k: Skel,
-  node: OfficeNode,
-  look: Appearance,
-  dir: Dir,
-  u: number,
-  acc: string,
-  t: number,
-  seed: number,
-): void {
-  const H = k.head;
-  const R = k.headR;
-  const hd = px(H);
-  const r = R * u;
-  const hc = look.hairColor;
-  // The face only reads when the character is turned toward the viewer; from behind it is just a head.
-  const facingUs = dir === 'S' || dir === 'E';
-  const at = (x: number, y: number, z: number): Pt => px({ x: H.x + x, y: H.y + y, z: H.z + z }).p;
-
-  bone(ctx, px(k.neck).p, hd.p, 6 * u, shade(look.skin, 0.86)); // a short neck — the head is *carried*
-
-  // ── a cosy scarf, wrapped round the neck under the chin (drawn before the skull so it tucks under) ──
-  if (look.accessory === 'scarf') {
-    const np = px(k.neck).p;
-    disc(ctx, { x: np.x, y: np.y - 1 * u }, r * 1.05, r * 0.5, look.accessoryColor);
-    disc(ctx, { x: np.x, y: np.y + 1.5 * u }, r * 0.86, r * 0.42, shade(look.accessoryColor, 0.86));
-    // a short hanging tail, front-and-centre
-    bone(ctx, { x: np.x + 2 * u, y: np.y }, { x: np.x + 3 * u, y: np.y + r * 0.9 }, 3.4 * u, look.accessoryColor);
+  if (!armsOnly && o.alpha > 0) {
+    // The wisp over the sprite's crown — lowered through a sit the way the nameplate is (render.ts).
+    const crown = o.rendered.spec.height ?? 96;
+    const u = fit.scale * size;
+    const p = project(o.lx, o.ly, fit);
+    const base = { x: p.x, y: p.y - (crown - 1 - (o.sit ?? 0) * 22 * (crown / 96)) * u };
+    const prev = ctx.globalAlpha;
+    if (o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
+    drawWisp(ctx, base, { x: base.x, y: base.y - 12 * u }, u, o.topColor ?? node.color, o.t, o.seed);
+    ctx.globalAlpha = prev;
   }
-
-  /**
-   * The face is **billboarded**: laid out in *screen* space around the head, nudged a little in the
-   * direction the character faces.
-   *
-   * The first cut placed the eyes and visor at a `+z` offset in character space — geometrically "correct",
-   * and it looked terrible. On a 2:1 iso floor **south projects to down-*left*, not straight down**, so
-   * offsetting a face along its facing slides it onto the cheek: the visor read as a monocle. Leaning it
-   * only "a little" toward the facing did not fix it either — it just made a smaller monocle.
-   *
-   * So the face does not use the projection at all. It is laid out in **pure screen space, centred on the
-   * skull**, level and symmetric, like a sticker on the front of a ball. The *body* already tells you which
-   * way a member is turned — the face only has to be legible, and at 25px across, legible means centred.
-   */
-  const face = (dx: number, dy: number): Pt => ({ x: hd.p.x + dx * r, y: hd.p.y + dy * r });
-
-  // ── hair behind the skull ──
-  //
-  // In SCREEN space, for the same reason the face is billboarded (see below): "long hair falls to the
-  // shoulders" is a silhouette against the torso, and the 2:1 iso sends character-space −z down-LEFT,
-  // so a mass offset that way slides off the side of the head instead of hanging behind it.
-  //
-  // These masses used to top out around r×1.16 — barely wider than the skull — which is why not one
-  // member on the floor read as having long hair (nick, 2026-07-30). At 30px the ONLY thing that
-  // carries hair length is how far the mass extends past the jaw, so `long` and `bob` now genuinely
-  // reach down over the shoulders. Drawn before the skull, so the face still sits clean on top.
-  const backHair = (dx: number, dy: number, rx: number, ry: number): void =>
-    disc(ctx, { x: hd.p.x + dx * r, y: hd.p.y + dy * r }, r * rx, r * ry, hc);
-
-  /**
-   * Where the hair stops, in screen px below the head centre — anchored to the SHOULDER, not to a
-   * multiple of the head radius.
-   *
-   * Sizing the fall off `r` was the bug behind "the receptionist looks like a seal": a mass 1.75×
-   * the head radius hanging below the skull is fine when you can see the whole body for scale, and
-   * reads as one rounded blob when the body is hidden behind a desk. Hair falls *to the shoulders* —
-   * so ask the skeleton where they are. It also keeps long hair honest across sitting, standing and
-   * walking, where the head-to-shoulder distance genuinely changes.
-   */
-  const shoulderDrop = Math.max(r * 0.5, (px(k.shoulder[0]).p.y + px(k.shoulder[1]).p.y) / 2 - hd.p.y);
-
-  if (look.hair === 'afro') backHair(0, -0.05, 1.24, 1.2);
-  else if (look.hair === 'long') {
-    // Centre it halfway to the shoulder and give it half that height, so the mass ENDS at the
-    // shoulder line rather than continuing down over the torso.
-    const fall = shoulderDrop * 0.62;
-    disc(ctx, { x: hd.p.x, y: hd.p.y + fall }, r * 1.02, Math.max(r * 0.9, fall + r * 0.55), hc);
-    backHair(0, 0.06, 1.1, 1.05); // and the mass around the skull itself
-  } else if (look.hair === 'bob') {
-    const fall = shoulderDrop * 0.34;
-    disc(ctx, { x: hd.p.x, y: hd.p.y + fall }, r * 1.16, Math.max(r * 0.95, fall + r * 0.6), hc);
-  } else if (look.hair === 'ponytail') {
-    backHair(0.1, 0.05, 1.08, 1.04); // gathered at the crown
-    backHair(0.62, 0.85, 0.34, 0.9); // the tail, hanging off to one side
-  } else if (look.hair === 'bun') {
-    backHair(0, 0.05, 1.06, 1.02);
-    disc(ctx, { x: hd.p.x, y: hd.p.y - r * 0.92 }, r * 0.46, r * 0.42, hc); // the knot on top
-  }
-
-  // ── the skull ──
-  disc(ctx, hd.p, r, r * 0.98, look.skin);
-
-  // ── hair (and hats) that sit ON the skull ──
-  //
-  // These are drawn as a disc *clipped to the head*, pushed up by `drop`. That clip is the whole trick: two
-  // overlapping circles meet in a straight line, so the visible hair is a crown with a clean **hairline**
-  // across the brow at `drop/2`. Drawn as an un-clipped flat ellipse instead (as this first did), hair reads
-  // as a beret balanced on a ball — the single ugliest thing on the first pass of this sheet. A bigger
-  // `drop` = a higher hairline = less hair.
-  const crown = (color: string, drop: number, overhang = 1) => {
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(hd.p.x, hd.p.y, r * overhang, r * 0.98 * overhang, 0, 0, Math.PI * 2);
-    ctx.clip();
-    disc(ctx, at(0, drop, 0), r * overhang, r * 0.98 * overhang, color);
-    ctx.restore();
-  };
-
-  if (look.hair !== 'bald') {
-    const DROP: Record<Exclude<typeof look.hair, 'bald'>, number> = {
-      buzz: 9.5, // a high, tight hairline
-      short: 8,
-      side: 7,
-      bob: 6,
-      long: 6,
-      ponytail: 7,
-      bun: 7,
-      afro: 4.5, // a low hairline — lots of hair
-    };
-    crown(hc, DROP[look.hair]);
-    // A side parting: a sweep of hair across one side of the brow, breaking the symmetry.
-    if (look.hair === 'side') disc(ctx, at(R * 0.42, 4.5, R * 0.34), r * 0.46, r * 0.3, hc);
-    // Face-framing strands for the long styles: a sliver of hair down each side of the face, IN FRONT
-    // of the skull. This is what sells long hair from the front — without it a long back mass just
-    // looks like a big head, because from this angle you cannot see behind the skull at all.
-    if (look.hair === 'long' || look.hair === 'bob') {
-      // Strands stop at the shoulder too — a strand that outruns the mass behind it reads as a beard.
-      const strand = Math.max(r * 0.5, shoulderDrop * (look.hair === 'long' ? 0.5 : 0.32));
-      for (const side of [-1, 1]) {
-        disc(ctx, { x: hd.p.x + side * r * 0.82, y: hd.p.y + strand * 0.5 }, r * 0.26, strand * 0.62, hc);
-      }
-    }
-  }
-
-  // ── the hat, over the hair ──
-  if (look.hat === 'beanie') {
-    crown(look.hatColor, 5, 1.06);
-    disc(ctx, at(0, 3.5, R * 0.3), r * 1.0, r * 0.2, shade(look.hatColor, 0.82)); // the turn-up
-  } else if (look.hat === 'cap') {
-    crown(look.hatColor, 6, 1.04);
-    // The peak, level across the brow — a cap reads as a cap by its flat front edge, not by its direction.
-    if (facingUs) {
-      bone(ctx, face(-0.72, -0.16), face(0.72, -0.16), r * 0.3, shade(look.hatColor, 0.78));
-    }
-  } else if (look.hat === 'band') {
-    bone(ctx, face(-0.86, -0.3), face(0.86, -0.3), r * 0.28, look.hatColor);
-  }
-
-  // ── headphones: a band over the crown + an ear cup each side. Screen-space around the skull, so they
-  // read from every facing (a member seen from behind is still visibly wearing them). ──
-  if (look.accessory === 'headphones') {
-    const col = look.accessoryColor;
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2.6 * u;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.ellipse(hd.p.x, hd.p.y - r * 0.12, r * 1.04, r * 1.06, 0, Math.PI * 1.08, Math.PI * 1.92);
-    ctx.stroke();
-    disc(ctx, { x: hd.p.x - r * 0.98, y: hd.p.y + r * 0.1 }, 3.0 * u, 3.9 * u, col);
-    disc(ctx, { x: hd.p.x + r * 0.98, y: hd.p.y + r * 0.1 }, 3.0 * u, 3.9 * u, col);
-    disc(ctx, { x: hd.p.x - r * 0.98, y: hd.p.y + r * 0.1 }, 1.4 * u, 1.9 * u, shade(col, 0.8));
-    disc(ctx, { x: hd.p.x + r * 0.98, y: hd.p.y + r * 0.1 }, 1.4 * u, 1.9 * u, shade(col, 0.8));
-  }
-
-  // ── the face — only ever drawn on the side the face is actually on ──
-  // The visor used to render at *every* facing, which painted a dark plate straight through the back of
-  // every agent's skull. A face belongs on a face: from behind, an agent is a head and an antenna.
-  //
-  // A curved mouth (a `∪` bowed downward in canvas space, whose corners turn *up*), for the warm faces.
-  const smile = (halfW: number, my: number, drop: number, color: string, lw: number): void => {
-    const a = face(-halfW, my);
-    const b = face(halfW, my);
-    const c = face(0, my + drop);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lw;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
-    ctx.stroke();
-  };
-  // Rosy cheeks — the single warmest cue, and it costs two soft discs. Given to agents too (a robot that
-  // blushes is exactly the quirky-cute the office is going for), tinted to their hue rather than coral.
-  const cheeks = (color: string): void => {
-    for (const dx of [-0.58, 0.58]) disc(ctx, face(dx, 0.34), r * 0.25, r * 0.2, color);
-  };
-
-  if (node.kind === 'agent' && facingUs) {
-    cheeks('rgba(255, 150, 120, 0.32)');
-    // A rounded visor housing with two friendly glowing eyes and a little smile of light in the member's
-    // own hue — reads as a cheerful robot, not a security camera. The glow in their colour is still the
-    // "awake across the room" tell the old slit carried.
-    bone(ctx, face(-0.52, 0.04), face(0.52, 0.04), r * 0.56, '#242d33');
-    for (const dx of [-0.26, 0.26]) {
-      disc(ctx, face(dx, 0.02), 2.6 * u, 2.6 * u, acc);
-      disc(ctx, face(dx - 0.06, -0.04), 0.9 * u, 0.9 * u, 'rgba(255,255,255,0.9)'); // catchlight
-    }
-    smile(0.22, 0.2, 0.12, acc, 1.7 * u);
-  } else if (node.kind === 'human' && facingUs) {
-    cheeks('rgba(233, 118, 100, 0.30)');
-    const open = blink(t, seed);
-    for (const dx of [-0.34, 0.34]) {
-      disc(ctx, face(dx, 0.04), 2.3 * u, 2.5 * u * open, '#2e2a26');
-      if (open > 0.6) disc(ctx, face(dx - 0.08, -0.04), 0.85 * u, 0.85 * u * open, 'rgba(255,255,255,0.85)');
-    }
-    // Round glasses over the eyes, with a bridge — the per-person quirk that needs a face to land on.
-    if (look.accessory === 'glasses') {
-      ctx.strokeStyle = '#33302a';
-      ctx.lineWidth = 1.5 * u;
-      for (const dx of [-0.34, 0.34]) {
-        const c = face(dx, 0.04);
-        ctx.beginPath();
-        ctx.ellipse(c.x, c.y, 3.2 * u, 3.1 * u, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      bone(ctx, face(-0.12, 0.02), face(0.12, 0.02), 1.1 * u, '#33302a');
-    }
-    // Facial hair, below the eyes and over the jaw.
-    const fh = look.facialHair;
-    if (fh === 'stubble') disc(ctx, face(0, 0.56), r * 0.6, r * 0.3, shade(hc, 0.72));
-    else if (fh === 'beard') disc(ctx, face(0, 0.58), r * 0.64, r * 0.4, hc);
-    else if (fh === 'goatee') disc(ctx, face(0, 0.66), r * 0.24, r * 0.22, hc);
-    else if (fh === 'moustache') disc(ctx, face(0, 0.34), r * 0.34, r * 0.11, hc);
-    // A gentle smile — but only where facial hair wouldn't swallow it (a beard/moustache hides the mouth).
-    if (fh !== 'beard' && fh !== 'moustache') {
-      const wide = look.smile === 'wide';
-      smile(wide ? 0.32 : 0.22, 0.44, wide ? 0.2 : 0.13, '#7a4335', 1.8 * u);
-    }
-  }
-
-  // ── the wisp (see `drawWisp`), from just off the crown ──
-  drawWisp(ctx, px({ x: H.x, y: H.y + R - 1, z: H.z }).p, px({ x: H.x, y: H.y + R + 11, z: H.z }).p, u, acc, t, seed);
 }
 
 /**
@@ -791,169 +263,4 @@ export function drawWisp(ctx: CanvasRenderingContext2D, base: Pt, top: Pt, u: nu
 /** The member's look: their own (the receptionist's is designed), or `lookFor`'s. */
 function lookOf(o: CharacterOpts): Appearance {
   return o.look ?? lookFor(o.node);
-}
-
-/** The little mug a sip beat raises — drawn at the right wrist in the desk mug's own colour. */
-function drawSipMug(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, color: string): void {
-  const wr = px(k.wrist[1]);
-  const w = 7.5 * u;
-  const h = 8 * u;
-  ctx.fillStyle = color;
-  ctx.fillRect(wr.p.x - w / 2, wr.p.y - h * 0.7, w, h);
-  disc(ctx, { x: wr.p.x, y: wr.p.y - h * 0.7 }, w / 2, w / 4.2, '#3a2416'); // the coffee surface
-}
-
-/** The moving box's kraft cardboard and the plant in it (lane 01M3F81DD9). */
-const MOVING_BOX = '#c9a26b';
-const MOVING_BOX_FLAP = '#a8834f';
-const PLANT_LEAF = '#4f8a4b';
-const PLANT_LEAF_LIT = '#79b36a';
-/** The lanyard's card — an off-white that reads as a badge against any identity hue. */
-const LANYARD_CARD = '#f7f3ea';
-
-/**
- * The first arrival's lanyard (lane 01M3F81DD9): a cord in their colour from the neck down to a small
- * card on the chest. Seen from behind it is just the cord round the back of the neck — a card painted
- * through the back would read as a hole in the shirt.
- */
-function drawLanyard(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, color: string): void {
-  const front = px({ x: 0, y: k.chest.y + 2, z: k.chest.z + 7 });
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(1, 1.6 * u);
-  if (front.d <= px(k.chest).d) {
-    // Facing away — which is most of a newcomer's walk, since the desks are up-screen. The cord still
-    // shows round the back of the neck, a line of their colour that says who just got their badge.
-    const l = px({ x: -5, y: k.neck.y - 1, z: k.neck.z - 2 });
-    const back = px({ x: 0, y: k.neck.y - 4, z: k.neck.z - 5 });
-    const r = px({ x: 5, y: k.neck.y - 1, z: k.neck.z - 2 });
-    ctx.beginPath();
-    ctx.moveTo(l.p.x, l.p.y);
-    ctx.quadraticCurveTo(back.p.x, back.p.y, r.p.x, r.p.y);
-    ctx.stroke();
-    return;
-  }
-  const l = px({ x: -4, y: k.neck.y, z: k.neck.z + 3 });
-  const r = px({ x: 4, y: k.neck.y, z: k.neck.z + 3 });
-  ctx.beginPath();
-  ctx.moveTo(l.p.x, l.p.y);
-  ctx.lineTo(front.p.x, front.p.y);
-  ctx.lineTo(r.p.x, r.p.y);
-  ctx.stroke();
-  ctx.fillStyle = LANYARD_CARD;
-  ctx.fillRect(front.p.x - 2.6 * u, front.p.y, 5.2 * u, 6.4 * u);
-  ctx.fillStyle = color; // the card's colour band — whose badge it is
-  ctx.fillRect(front.p.x - 2.6 * u, front.p.y, 5.2 * u, 1.8 * u);
-}
-
-/** The closed laptop's aluminium, its shut-lid seam, and the logo dot — the same silver the desk dock
- * stands one in, so the object you watched walk in is the object that lands in the dock. */
-const LAPTOP_SILVER = '#c7ccd2';
-const LAPTOP_SEAM = '#8e959d';
-const LAPTOP_LOGO = '#a3a9b1';
-
-/** Whatever's being carried, at the hands that hold it: the handoff box at the chest, an errand's
- * plate of food flat between both hands, a water bottle or mug riding the right hand, or the
- * member's own closed laptop tucked at their side. */
-function drawCarry(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, kind: CarryKind): void {
-  if (kind === 'movingBox') {
-    // A first day (lane 01M3F81DD9): a kraft cardboard box at the chest, its flaps open, and a potted
-    // plant poking out of it — the universal shorthand for "my things", readable at 40px.
-    const c = px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 });
-    ctx.fillStyle = MOVING_BOX;
-    ctx.fillRect(c.p.x - 11 * u, c.p.y - 8 * u, 22 * u, 16 * u);
-    ctx.fillStyle = MOVING_BOX_FLAP;
-    ctx.fillRect(c.p.x - 12 * u, c.p.y - 10 * u, 8 * u, 3 * u); // the open flaps
-    ctx.fillRect(c.p.x + 4 * u, c.p.y - 10 * u, 8 * u, 3 * u);
-    ctx.fillStyle = PLANT_LEAF; // the plant, leaning out of the top
-    disc(ctx, { x: c.p.x + 3 * u, y: c.p.y - 14 * u }, 5 * u, 4 * u, PLANT_LEAF);
-    disc(ctx, { x: c.p.x - 1 * u, y: c.p.y - 17 * u }, 3.5 * u, 3 * u, PLANT_LEAF_LIT);
-    return;
-  }
-  if (kind === 'box') {
-    const c = px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 });
-    ctx.fillStyle = '#8fd0dd';
-    ctx.fillRect(c.p.x - 11 * u, c.p.y - 9 * u, 22 * u, 17 * u);
-    ctx.fillStyle = '#2f8fa3';
-    ctx.fillRect(c.p.x - 11 * u, c.p.y - 9 * u, 22 * u, 5 * u);
-    return;
-  }
-  if (kind === 'plate') {
-    // A flat plate between the hands, with something worth walking for on it.
-    const l = px(k.wrist[0]);
-    const c = { x: (l.p.x + px(k.wrist[1]).p.x) / 2, y: (l.p.y + px(k.wrist[1]).p.y) / 2 };
-    disc(ctx, { x: c.x, y: c.y - 1.5 * u }, 8.5 * u, 3.2 * u, '#f2e7d5'); // the plate
-    disc(ctx, { x: c.x, y: c.y - 3 * u }, 4.5 * u, 2.4 * u, '#c9744a'); // the food
-    return;
-  }
-  if (kind === 'laptop') {
-    // The member's own laptop, closed, tucked at the side. It rides a point between the chest and the
-    // right wrist, which is the whole trick: standing, those joints put it under the arm; seated, they
-    // put it flat in the lap. One drawing, because the skeleton has already done the deciding — nothing
-    // here reads a pose name.
-    //
-    // SIZE, in two steps and now at the honest proportion. It was 15×9u — 0.56× `TORSO_W` at a 1.67
-    // aspect — and read as a wallet rather than a machine (nick, 2026-09-14). A closed 16-inch
-    // MacBook Pro is ~35.6cm wide and ~24.8cm deep against a ~45cm torso: 0.79× at 1.44. The first
-    // move went to 18×12u (0.67× at 1.50), deliberately short, hedging against nineteen of these
-    // across the floor reading as nineteen held-out objects rather than a shape at the elbow.
-    //
-    // Looked at on the floor, the hedge was the wrong call: at 0.67× it still read small for the
-    // thing it is, and the feared clutter did not materialise — the slab is tucked at the elbow and
-    // occluded by the body at most facings, so its silhouette cost is far below its area. 21×14.5u
-    // is the true 0.79× at 1.44, and the room is the evidence rather than the arithmetic.
-    const wr = px(k.wrist[1]);
-    const ch = px(k.chest);
-    const c = { x: wr.p.x * 0.6 + ch.p.x * 0.4, y: wr.p.y * 0.6 + ch.p.y * 0.4 };
-    const w = 21 * u;
-    const h = 14.5 * u;
-    ctx.fillStyle = LAPTOP_SILVER;
-    ctx.fillRect(c.x - w / 2, c.y - h / 2, w, h);
-    // The shut lid's dark seam along the bottom edge — it reads as closed. Proportional to the lid
-    // rather than a flat `u` count, so the seam stays a seam if the slab is ever resized again; at a
-    // fixed 1.4u it turned into a hairline the moment the lid grew.
-    const seam = h * 0.15;
-    ctx.fillStyle = LAPTOP_SEAM;
-    ctx.fillRect(c.x - w / 2, c.y + h / 2 - seam, w, seam);
-    disc(ctx, { x: c.x, y: c.y - u * 0.4 }, 2.3 * u, 2.3 * u, LAPTOP_LOGO); // the quiet logo dot
-    return;
-  }
-  const wr = px(k.wrist[1]);
-  if (kind === 'card') {
-    // The lane's card, off the wall board: the open column's unbleached paper with its washi tab still
-    // on it — the same note the wall was showing a second ago, so the eye follows it home.
-    // The wall's own sticky size (~17×11 units), so the card reads at room scale; the dark rim is what
-    // keeps pale paper legible against a pale shirt — at a first cut of 10×7 it vanished into the body.
-    const w = 15 * u;
-    const h = 10 * u;
-    ctx.fillStyle = 'rgba(60, 40, 20, 0.22)';
-    ctx.fillRect(wr.p.x - w / 2 + u, wr.p.y - h + u, w, h); // a hair of shadow
-    ctx.fillStyle = '#8f8470';
-    ctx.fillRect(wr.p.x - w / 2 - 0.7 * u, wr.p.y - h - 0.7 * u, w + 1.4 * u, h + 1.4 * u); // the rim
-    ctx.fillStyle = '#EFE8D8';
-    ctx.fillRect(wr.p.x - w / 2, wr.p.y - h, w, h);
-    ctx.fillStyle = 'rgba(180, 168, 143, 0.9)';
-    ctx.fillRect(wr.p.x - 3.5 * u, wr.p.y - h - 1.6 * u, 7 * u, 3 * u); // the washi tab
-    return;
-  }
-  if (kind === 'phone') {
-    // A phone, held at whatever the pose has done with the right hand — which on a call is the ear.
-    const w = 4.2 * u;
-    const h = 8 * u;
-    ctx.fillStyle = '#2b2b31';
-    ctx.fillRect(wr.p.x - w / 2, wr.p.y - h * 0.55, w, h);
-    ctx.fillStyle = '#6f7d8c'; // the lit screen edge, so it isn't a featureless black chip
-    ctx.fillRect(wr.p.x - w / 2 + u * 0.6, wr.p.y - h * 0.55 + u * 0.7, w - u * 1.2, h - u * 1.6);
-    return;
-  }
-  if (kind === 'bottle') {
-    // A mini of the desk water bottle (same blues), upright in the right hand.
-    const w = 5.5 * u;
-    const h = 12 * u;
-    ctx.fillStyle = '#bfe3f2';
-    ctx.fillRect(wr.p.x - w / 2, wr.p.y - h * 0.75, w, h);
-    ctx.fillStyle = '#5aa0c9';
-    ctx.fillRect(wr.p.x - w / 3, wr.p.y - h * 0.75 - 2 * u, (2 * w) / 3, 2 * u); // the cap
-    return;
-  }
-  drawSipMug(ctx, px, k, u, '#d6d0c6'); // 'mug': the break-nook ceramic, not a desk mug's colour
 }

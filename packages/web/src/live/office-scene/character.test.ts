@@ -5,7 +5,7 @@ import { fitFloor } from './iso';
 import { recordingCtx } from './recording-ctx';
 import type { FigureAssets } from './rendered/assets';
 import { GESTURE_ANIMS, type SheetSpec } from './rendered/figureSheet';
-import { GESTURE, IDLE_GESTURES, type Skel } from './skeleton';
+import { GESTURE, IDLE_GESTURES } from './skeleton';
 import type { OfficeNode, Pose } from './types';
 
 const anims: SheetSpec['anims'] = {
@@ -144,7 +144,7 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
       drawCharacter(
         ctx,
         fitFloor(1200, 900),
-        { lx: 300, ly: 300, dir: 'S', node, skel: {} as Skel, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
+        { lx: 300, ly: 300, dir: 'S', node, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
         armsOnly,
       );
     } finally {

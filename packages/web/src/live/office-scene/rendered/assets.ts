@@ -1,24 +1,15 @@
 /**
- * The rendered-art flag and loader (office realism, plan Task 2).
+ * The rendered-art loaders (office realism, plan Task 2).
  *
- * The pre-rendered office is the default (lane 01M5D8EJ40, nick 2026-10-23: default first, painters
- * go once the dog, welcome room and ambient overlays are rendered). `?office=painted` keeps the
- * painted office for one page load, for the broadcast A/B and as a rollback. Until the assets have decoded the
- * painted scene draws, and an asset that fails to load is listed in `missing` rather than failing
- * the load: a room with one painted desk among rendered ones beats a blank panel (Review Focus 1).
+ * The pre-rendered office is the office (lane 01M5D8EJ40: the painters and the `?office=painted`
+ * opt-out went with Task 19; `docs/wiki/restoring-the-painted-office.md` says how to get them back).
+ * An asset that fails to load is listed in `missing` rather than failing the load: a room with one
+ * item missing beats a blank panel (Review Focus 1).
  */
 import type { DogSpec } from './dogSheet';
 import type { FigureScratch, LayerId } from './figure';
 import { type Anim, ANIMS, CARRY_ANIMS, DIR8, type Dir8, type SheetSpec } from './figureSheet';
 import type { RenderedManifest } from './manifest';
-
-export function renderedOfficeFromSearch(search: string): boolean {
-  try {
-    return new URLSearchParams(search).get('office') !== 'painted';
-  } catch {
-    return true;
-  }
-}
 
 export interface RenderedAssets {
   manifest: RenderedManifest;

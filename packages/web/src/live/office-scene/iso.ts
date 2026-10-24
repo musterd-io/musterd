@@ -18,13 +18,12 @@ export interface Camera {
   ky: number;
 }
 
-/** The painted scene's camera: the 2:1 iso the Figma frames were drawn at (elevation 30°). */
-export const ISO_CAMERA: Camera = { kx: KX, ky: KY };
 /**
- * The rendered room's camera (office realism, spec §2.2): the same corner, "a touch lower than today"
- * so figures stand up and faces face the viewer — elevation ≈ 26°. The builder tunes `ky` against the
- * render with nick's eye (spec §6.2); `art/office/render.py --ky` must be rendered with the same number,
- * and `manifest.json` records what it was.
+ * The room's camera (office realism, spec §2.2): the Figma frames' corner, "a touch lower" than their
+ * 2:1 iso (`KY`, elevation 30°) so figures stand up and faces face the viewer — elevation ≈ 26°. The
+ * builder tuned `ky` against the render with nick's eye (spec §6.2); `art/office/render.py --ky` must
+ * be rendered with the same number, and `manifest.json` records what it was. Every fit projects
+ * through it (lane 01M5D8EJ40: the painted office and its iso camera are gone).
  */
 export const CORNER_CAMERA: Camera = { kx: KX, ky: 0.31 };
 /** Logical floor extent (both axes). Desk/furniture anchors live in [0, FLOOR]. */
@@ -52,18 +51,18 @@ export interface Fit {
   ox: number;
   oy: number;
   scale: number;
-  /** The camera this fit projects through; absent means `ISO_CAMERA`, so every painted-path caller is unchanged. */
+  /** The camera this fit projects through; absent means `CORNER_CAMERA`. */
   cam?: Camera;
 }
 
 /** The camera a fit projects through. */
 export function cameraOf(fit: Fit): Camera {
-  return fit.cam ?? ISO_CAMERA;
+  return fit.cam ?? CORNER_CAMERA;
 }
 
 /** Project a logical floor point (lx,ly) to screen pixels under a fit. */
 export function project(lx: number, ly: number, fit: Fit): Pt {
-  const cam = fit.cam ?? ISO_CAMERA;
+  const cam = fit.cam ?? CORNER_CAMERA;
   return {
     x: fit.ox + (lx - ly) * cam.kx * fit.scale,
     y: fit.oy + (lx + ly) * cam.ky * fit.scale,
@@ -116,7 +115,7 @@ export interface FitBox {
  * floor diamond (the old behaviour) let the wall tops clip off the top of the panel at wide/short aspect
  * ratios, which is why the back corner was getting cut off.
  */
-export function roomBox(cam: Camera = ISO_CAMERA): FitBox {
+export function roomBox(cam: Camera = CORNER_CAMERA): FitBox {
   return {
     left: -FLOOR * cam.kx,
     right: FLOOR * cam.kx,

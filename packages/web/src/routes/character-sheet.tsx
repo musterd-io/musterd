@@ -2,15 +2,17 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { canvasFont, preloadCanvasFont } from '../live/canvasFont';
 import { memberColor } from '../live/format';
-import type { CarryKind } from '../live/office-scene/types';
+import type { CarryKind, OfficeNode, Pose } from '../live/office-scene/types';
 
 /**
  * `/character-sheet` — the character turnaround. A design fixture, like `/office-preview`: it renders the
- * office character large, at every facing, across a roster of names, in each pose.
+ * office figure large, at every facing, across a roster of names, in each pose, from the same sprite
+ * sheets and the same `drawActor` the room uses (lane 01M5D8EJ40: the skeleton painter it used to draw is
+ * gone, so what this shows IS what the floor shows).
  *
  * This exists because the office draws people ~40px tall, and at that size a wardrobe bug (hair the size of
  * a beach ball, a green head under green hair) is invisible until it is shipped. Iterating on the character
- * *inside* the office is flying blind. Here, each figure is drawn at 4× so the silhouette, the hairline, the
+ * *inside* the office is flying blind. Here, each figure is drawn at ~4× so the silhouette, the hairline, the
  * face and the depth-sort can actually be judged — and it sweeps enough names to show the *distribution*,
  * which is the thing that actually matters: nobody cares whether one member looks good, only whether the
  * whole floor does.
@@ -43,15 +45,43 @@ function CharacterSheet() {
     void (async () => {
       // Client-only: the scene modules reach for canvas/DOM at import time.
       const [
-        { drawCharacter },
-        { solveSkeleton, seedOf, typingBurst, handsInLap },
+        { handsInLap },
         { drawDog, drawActor, deskStationItems, deskSeat, actorSortAnchor, actorDepth, seatedArmsDepth },
+        { domImage, loadFigureAssets, loadRenderedAssets, parseFigureSpec },
+        { parseDogSpec },
+        { parseManifest },
       ] = await Promise.all([
-        import('../live/office-scene/character'),
         import('../live/office-scene/skeleton'),
         import('../live/office-scene/render'),
+        import('../live/office-scene/rendered/assets'),
+        import('../live/office-scene/rendered/dogSheet'),
+        import('../live/office-scene/rendered/manifest'),
       ]);
       if (stop) return;
+
+      /* The art, loaded the way the room loads it (office-scene/index.ts): the manifest's items (the
+         seated cell draws a whole station — desk, chair, monitor), every figure sheet (the sheet exists
+         to show the whole wardrobe), and the dog. No manifest in the build means no sheet to draw. */
+      const files = import.meta.glob('../live/office-scene/rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+      const url = (file: string) => files[`../live/office-scene/rendered/assets/${file}`] ?? file;
+      const manifestUrl = url('manifest.json');
+      if (!files[`../live/office-scene/rendered/assets/manifest.json`]) {
+        console.warn('character-sheet: rendered/assets/manifest.json is not in this build — nothing to draw');
+        return;
+      }
+      const art = await loadRenderedAssets(parseManifest(await (await fetch(manifestUrl)).json()), url);
+      const figureSpec = parseFigureSpec(await (await fetch(url('figure.json'))).json());
+      const fig = await loadFigureAssets(figureSpec, url);
+      art.figure = { spec: fig.spec, sheets: fig.sheets, scratch: fig.scratch };
+      try {
+        const dogSpec = parseDogSpec(await (await fetch(url('dog.json'))).json());
+        art.dog = { spec: dogSpec, sheet: await domImage(url(dogSpec.file)) };
+      } catch (e: unknown) {
+        console.warn('character-sheet: the dog sheet is unusable — no dog row', e);
+      }
+      if (stop) return;
+      // The sheet is lit flat: no room tint, so the wardrobe's own colours are what is judged.
+      const figure = { assets: art.figure, tint: '#ffffff' };
 
       const CELL = 190;
       /* 250, not the 210 a lone body needed: the seated row draws a whole workstation now, and a desk
@@ -148,7 +178,7 @@ function CharacterSheet() {
             // Cycle the facing per column so every direction is on the sheet.
             const dir = DIRS[(col + m) % 4]!;
             const kind = i % 2 === 0 ? ('agent' as const) : ('human' as const);
-            const node = {
+            const node: OfficeNode = {
               name,
               kind,
               service: false,
@@ -172,20 +202,25 @@ function CharacterSheet() {
               // The character sheet draws BODIES, not sessions — nothing here came from a wake.
               woken: false,
             };
-            const seed = seedOf(name);
-            const skel = solveSkeleton({
-              phase: (t * 0.6 + i * 0.13) % 1,
-              sit: mode.sit,
-              stride: mode.stride,
-              run: false,
-              t,
-              typing: mode.sit ? typingBurst(seed, t) : 0,
+            const gestureT = gesture ? (t * 0.45) % 1 : 0;
+            /* The pose the room's actor system would hand `drawActor` for this cell: the walk is scrubbed
+               by the gait phase (distance, not clock, on the floor — here the clock stands in for it). */
+            const cellPose: Pose = {
+              lx: 0,
+              ly: 0,
+              dir,
+              small: false,
               carry,
-              help: false,
+              bubble: null,
+              alpha: 1,
+              moving: mode.stride > 0,
+              run: false,
               gesture,
-              gestureT: gesture ? (t * 0.45) % 1 : 0,
-              seed,
-            });
+              gestureT,
+              sit: mode.sit,
+              phase: (t * 0.6 + i * 0.13) % 1,
+              stride: mode.stride,
+            };
             // Draw at an explicit screen point by faking the projection origin.
             const f = { ...fit, ox: cx, oy: cy };
 
@@ -216,38 +251,24 @@ function CharacterSheet() {
               const slot = { id: i, lx: 0, ly: 0, dir, pod: -1, kind: 'pod' as const };
               // The room says where this desk seats somebody; the sheet does not work it out.
               const seat = deskSeat(slot);
-              const pose = {
-                lx: seat.lx,
-                ly: seat.ly,
-                dir,
-                small: false,
-                carry,
-                bubble: null,
-                alpha: 1,
-                moving: false,
-                run: false,
-                gesture,
-                gestureT: gesture ? (t * 0.45) % 1 : 0,
-                phase: 0,
-                stride: 0,
-                sit: 1,
-              };
+              const pose: Pose = { ...cellPose, lx: seat.lx, ly: seat.ly, moving: false, phase: 0, stride: 0, sit: 1 };
               const station = deskStationItems(ctx, sf, slot, node, {
                 ownerPose: pose,
                 teamName: 'revive',
                 t,
+                rendered: art,
               });
               const anchor = actorSortAnchor(pose, slot, undefined);
               const cellItems = [
                 ...station.items,
-                { d: actorDepth(anchor.lx, anchor.ly), fn: () => drawActor(ctx, sf, pose, node, t) },
+                { d: actorDepth(anchor.lx, anchor.ly), fn: () => drawActor(ctx, sf, pose, node, t, false, undefined, undefined, figure) },
               ];
               // The overlay, under the room's own gate: a beat that drops the hands into the lap must
               // NOT paint them over the slab, and a sheet that always drew it would hide that bug.
               if (!handsInLap(pose.gesture, pose.gestureT)) {
                 cellItems.push({
                   d: seatedArmsDepth(slot),
-                  fn: () => drawActor(ctx, sf, pose, node, t, true),
+                  fn: () => drawActor(ctx, sf, pose, node, t, true, undefined, undefined, figure),
                 });
               }
               for (const item of [...cellItems].sort((a, b) => a.d - b.d)) item.fn();
@@ -258,23 +279,7 @@ function CharacterSheet() {
               return;
             }
 
-            drawCharacter(ctx, f, {
-              lx: 0,
-              ly: 0,
-              dir,
-              node,
-              skel,
-              size: 1,
-              alpha: 1,
-              carry,
-              // The painter reads these too, not just the skeleton — the sip mug sorts against the head
-              // by gesture, so a sheet that solved the pose but drew with gesture 0 would disagree with
-              // the room about where a hand is.
-              gesture,
-              gestureT: gesture ? (t * 0.45) % 1 : 0,
-              t,
-              seed,
-            });
+            drawActor(ctx, f, cellPose, node, t, false, undefined, undefined, figure);
             ctx.fillStyle = 'rgba(30,20,10,.72)';
             ctx.font = canvasFont(11, '--font-mono', 400);
             ctx.textAlign = 'center';
@@ -286,17 +291,18 @@ function CharacterSheet() {
         // `face` is the drawn facing (+1 right → −1 left); the mid-turn cell holds it part-way through
         // so the swivel's foreshortening can be judged at 4× instead of only in a 150ms blur on the
         // floor — the one frame of that motion nobody could ever actually look at.
+        /* One cell per clip and heading the sheet has (`dog.json`: eight headings, the mirrored ones
+           flipped at draw time). `heading` is the floor heading in radians, 0 = +lx. */
         const PET_CELLS = [
-          { label: 'sleep', mode: 'sleep' as const, face: 1, depthSign: 1 as const },
-          { label: 'curl', mode: 'curl' as const, face: 1, depthSign: 1 as const },
-          { label: 'sit', mode: 'sit' as const, face: 1, depthSign: 1 as const },
-          { label: 'walk', mode: 'walk' as const, face: 1, depthSign: 1 as const },
-          { label: 'walk · flipped', mode: 'walk' as const, face: -1, depthSign: 1 as const },
-          { label: 'walk · mid-turn', mode: 'walk' as const, face: 0.38, depthSign: 1 as const },
-          // The narrow headings: the crossfaded chest-on / rump-on views (the old paper-thin frames).
-          { label: 'walk · toward', mode: 'walk' as const, face: 0.18, depthSign: 1 as const },
-          { label: 'walk · away', mode: 'walk' as const, face: 0.18, depthSign: -1 as const },
-          { label: 'stretch', mode: 'stretch' as const, face: 1, depthSign: 1 as const },
+          { label: 'sleep', mode: 'sleep' as const, heading: 0 },
+          { label: 'curl', mode: 'curl' as const, heading: 0 },
+          { label: 'sit', mode: 'sit' as const, heading: 0 },
+          { label: 'walk · E', mode: 'walk' as const, heading: 0 },
+          { label: 'walk · W (mirrored)', mode: 'walk' as const, heading: Math.PI },
+          { label: 'walk · SE', mode: 'walk' as const, heading: Math.PI / 4 },
+          { label: 'walk · S (toward)', mode: 'walk' as const, heading: Math.PI / 2 },
+          { label: 'walk · N (away)', mode: 'walk' as const, heading: -Math.PI / 2 },
+          { label: 'stretch', mode: 'stretch' as const, heading: 0 },
         ];
         PET_CELLS.forEach((cell, i) => {
           const cx = (i % cols) * CELL + CELL / 2;
@@ -310,10 +316,11 @@ function CharacterSheet() {
               mode: cell.mode,
               modeT: cell.mode === 'curl' ? (t * 0.9) % 1.1 : 1,
               phase: t * 1.3,
-              flip: cell.face < 0,
-              face: cell.face,
-              faceMag: Math.abs(cell.face),
-              depthSign: cell.depthSign,
+              flip: Math.cos(cell.heading) < 0,
+              face: Math.cos(cell.heading) < 0 ? -1 : 1,
+              faceMag: Math.abs(Math.cos(cell.heading)),
+              depthSign: Math.sin(cell.heading) >= 0 ? 1 : -1,
+              heading: cell.heading,
               path: [],
               seg: 0,
               plan: 'nap',
@@ -324,6 +331,7 @@ function CharacterSheet() {
               errand: null,
             },
             t,
+            art,
           );
           ctx.fillStyle = 'rgba(30,20,10,.72)';
           ctx.font = canvasFont(11, '--font-mono', 400);
