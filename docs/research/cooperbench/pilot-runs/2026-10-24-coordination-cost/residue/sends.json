@@ -1,0 +1,157 @@
+{
+ "claim-musterd-core": {
+  "total": 17.29,
+  "counts": {
+   "send_calls": 141,
+   "sends": 149,
+   "act:status_update": 57,
+   "act:message": 82,
+   "signal": 34,
+   "act:accept": 3,
+   "act:handoff": 2,
+   "act:request_help": 5
+  },
+  "usd": {
+   "send_calls": 2.94,
+   "signal": 0.69
+  },
+  "signal_kinds": {
+   "other": [
+    1,
+    0.01
+   ],
+   "merged/complete/submitted": [
+    16,
+    0.34
+   ],
+   "lane done / you can edit": [
+    4,
+    0.08
+   ],
+   "waiting / ETA": [
+    2,
+    0.04
+   ],
+   "pushed/fetch": [
+    10,
+    0.2
+   ],
+   "thanks/ack": [
+    1,
+    0.02
+   ]
+  },
+  "examples": {
+   "other": [
+    "The system is blocking my edits because your lane still holds the file. Can you hand off the lane to me or release it? I'll merge your changes from team/agent2 "
+   ],
+   "merged/complete/submitted": [
+    "Completed: Added octal_str type to outlines/types/__init__.py. Pattern validates Python octal literals (0o prefix + octal digits). All existing tests pass.",
+    "Merged agent1's branch. patch.txt created with all 4 types (octal_str, hex_str, uuid4, ipv4). Ready for submission.",
+    "I've finished my debug logging changes to Handle, HandleFunc, and handle methods. Committing now and will hand off mux.go to you.",
+    "Handing off mux.go - debug logging complete. Your turn to add path prefix support."
+   ],
+   "lane done / you can edit": [
+    "I've completed adding octal_str (placed after paragraph, before email). You can proceed with your three types - I can hand off the lane to you or you can add th",
+    "Your lane 01M5JDV3NBNT43ZHE09Q5M3Q0A is still claimed and blocking my edits to tool.py. Can you resolve/release it or use lane_handoff to transfer it to me?",
+    "My work on path_transform is complete. I modified FileSystemLoader, DictLoader, FunctionLoader, PackageLoader, PrefixLoader, and ChoiceLoader - didn't touch Bas",
+    "Lane resolved. You can now edit the files. Let me know when you're done so we can proceed with the final merge."
+   ],
+   "waiting / ETA": [
+    "I'm blocked on dspy/adapters/types/tool.py - you claimed it first. Can you hand it off after you finish, or should we coordinate to make both changes? My change",
+    "I'm blocked on loaders.py - my changes to BaseLoader (adding alias methods) should be compatible with your path_transform work. Can you estimate when you'll be "
+   ],
+   "pushed/fetch": [
+    "Fingerprinting complete and tested. Handing off dspy/adapters/types/tool.py - I added fingerprint/id fields to ToolCall, you can add validate_input method to To",
+    "Pushed my changes to team/agent1. Only modified shell_completion.py:get_completions. core.py is all yours - no conflicts.",
+    "Blocked on core.py edits. Proposal: You finish your _resolve_context changes first, push to team/agent1, then I'll pull and add my cleanup_timeout changes to Co",
+    "I've completed my onFinally changes to handleSubmit. About to commit and push. My changes: added optional third param onFinally to UseFormHandleSubmit type and "
+   ],
+   "thanks/ack": [
+    "Your lane holds src/types/form.ts and src/logic/createFormControl.ts which blocks my edits. Can you hand off these files, or should I wait for you to finish? Ou"
+   ]
+  },
+  "cf_as_run": 17.29,
+  "cf_drop_wait": 15.77,
+  "cf_drop_signal": 16.6
+ },
+ "cc-musterd": {
+  "total": 17.94,
+  "counts": {
+   "send_calls": 119,
+   "sends": 119,
+   "act:message": 101,
+   "signal": 41,
+   "act:accept": 1,
+   "act:handoff": 2,
+   "act:status_update": 13,
+   "act:request_help": 2
+  },
+  "usd": {
+   "send_calls": 2.42,
+   "signal": 0.85
+  },
+  "signal_kinds": {
+   "pushed/fetch": [
+    14,
+    0.26
+   ],
+   "lane done / you can edit": [
+    8,
+    0.17
+   ],
+   "merged/complete/submitted": [
+    12,
+    0.26
+   ],
+   "thanks/ack": [
+    1,
+    0.02
+   ],
+   "waiting / ETA": [
+    3,
+    0.06
+   ],
+   "other": [
+    3,
+    0.08
+   ]
+  },
+  "examples": {
+   "pushed/fetch": [
+    "Thanks for the update. Have you committed and pushed your changes? I'm blocked waiting for your lane to release the file.",
+    "Accepted handoff of outlines/types/__init__.py. Will fetch your changes and add my types.",
+    "My task is to add HTTP method pattern parsing to HandleFunc (making it parse \"METHOD /path\" like Handle already does). I see your branch doesn't have changes ye",
+    "I don't see any commits on team/agent1 branch - `git log team/agent1` shows the base commits only. Can you verify you pushed your changes? Use `git push team ag"
+   ],
+   "lane done / you can edit": [
+    "Lane released. You can claim it now.",
+    "Lane resolved. core.py is all yours now.",
+    "Lane resolved. Final patch.txt created (172 lines) containing both features: shell completion resource leak fix + cleanup_timeout parameter. Ready for submissio",
+    "Lane resolved. Final patch.txt verified: 172 lines, cleanup_timeout feature + resource leak fix integrated. Both features work together - agent1's context manag"
+   ],
+   "merged/complete/submitted": [
+    "Merged your changes successfully. Created patch.txt with both our features (29 lines). Ready to submit.",
+    "Task complete. Added octal_str type to outlines/types/__init__.py. Merged with agent1's changes. Final patch.txt ready for evaluation.",
+    "Merged your work successfully. Final patch.txt created with both fingerprinting and validate_input. All done!",
+    "Completed tests for HandleFunc method patterns. Merged agent1's HandleFunc implementation and added comprehensive test coverage including wildcard patterns. Rea"
+   ],
+   "thanks/ack": [
+    "Thanks for the collaboration! patch.txt is ready with our combined work: logging infrastructure + HandleFunc method patterns + comprehensive tests. All tests pa"
+   ],
+   "waiting / ETA": [
+    "File is blocked for me. Two options: (1) You make both changes - I'll send you my method spec, or (2) You finish your encoding field, commit, then handoff to me",
+    "I'm blocked by your lane holding src/jinja2/ext.py. Can you commit your changes so I can proceed? Or handoff the lane if you're done?",
+    "Yes, that works. I'll merge your branch, then adjust to insert onFinally as 3rd and shift your options to 4th. Waiting for your completion."
+   ],
+   "other": [
+    "Your lane 01M5R0KTP0EAZY3N0S27T3D5B0 is still claimed. Could you submit/release it or hand off shell_completion.py to me? I'm ready to add the 'with' statements",
+    "Done! patch.txt generated with both features (248 lines). Aliasing + path_transform both included.",
+    "Starting implementation now. My outer function will get optional 3rd param `options?: { transformData?: ... }`, inner function gets `context` param. Should comp"
+   ]
+  },
+  "cf_as_run": 17.94,
+  "cf_drop_wait": 16.3,
+  "cf_drop_signal": 17.09
+ }
+}

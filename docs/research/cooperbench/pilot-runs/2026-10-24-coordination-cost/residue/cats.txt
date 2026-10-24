@@ -1,0 +1,14 @@
+== claim-musterd-core total $17.29 calls 813 median calls/agent 43
+   work (read/edit/test/bash)        280 calls $  5.95   34%
+   musterd other / wait / gate       215 calls $  4.77   28%
+   git                               150 calls $  3.01   17%
+   messages                          104 calls $  2.18   13%
+   other                              44 calls $  0.84    5%
+   text-only                          20 calls $  0.54    3%
+== cc-musterd total $17.94 calls 845 median calls/agent 43
+   work (read/edit/test/bash)        247 calls $  5.36   30%
+   musterd other / wait / gate       246 calls $  5.34   30%
+   git                               179 calls $  3.57   20%
+   messages                          104 calls $  2.13   12%
+   other                              49 calls $  1.00    6%
+   text-only                          20 calls $  0.54    3%

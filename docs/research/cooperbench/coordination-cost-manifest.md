@@ -1,7 +1,7 @@
 # CooperBench coordination-cost run: pre-registration
 
 **Lane:** `01M5QDHJEE` (goal `coordination-cost`), asked by nick. **Status:** pre-registered 2026-10-24,
-before any pair ran. Nothing below changes once a measured pair has run; what the run teaches goes in
+before any pair ran; run the same day → [finding 025](../025-cooperbench-coordination-cost-run.md). Nothing below changes once a measured pair has run; what the run teaches goes in
 the finding, not here. **CooperBench:** `63b9d44`. **Before this:** [claim run](./claim-manifest.md) →
 [finding 021](../021-cooperbench-claim-run.md), [finding 022](../022-cooperbench-coordination-residue.md)
 (the diagnosis this run checks), [rider run](./rider-manifest.md) → [finding 024](../024-cooperbench-rider-run.md).
@@ -149,6 +149,6 @@ is stopped and reported.
 | Decision | Answer |
 | --- | --- |
 | Run the coordination-cost check on `core` with the musterd arm alone | nick, 2026-10-24 ("do 1 and 2") |
-| Spend | **asked**: ~$18, hard stop $25 — recorded here when answered |
+| Spend | nick, 2026-10-24, in session ("approved, run it"): ~$18, hard stop $25. Spent $17.94 on the arm, about $0.14 on smokes |
 | Pass rate | reported, no claim (this manifest) |
-| Finding number | the next free `docs/research/0NN` when the finding is written (025 if still free) |
+| Finding number | 025 |

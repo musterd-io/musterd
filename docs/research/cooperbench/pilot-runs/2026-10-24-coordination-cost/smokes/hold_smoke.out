@@ -1,0 +1,17 @@
+agent1: 1. Succeeded: `team_inbox_check` returned no new messages, and `lane_open` created lane "feature a" (id 01M5QZF45S02AHQRF3SN6EPJB4) with scope ["src/a.py"] and claimed it for agent1, with no warnings.
+2. Succeeded: `src/a.py` was written with `x = 1` and `# agent1` on two lines. The Write tool reported it as updated, not created, so the file already existed; I did not read it first.
+agent2: 1. **Succeeded:** `team_inbox_check` returned no messages. It did show a warning that this workspace's provisioning state is UNKNOWN, because no drift record has been written.
+2. **Succeeded:** `lane_open` created "feature b" (id `01M5QZFCHMK4MX007M66VJ9H29`), scope `["src/a.py"]`, claimed by agent2. It returned a surface-overlap warning: agent1's "feature a" (`01M5QZF45S02AHQRF3SN6EPJB4`) also covers `src/a.py`, and under block posture my edits there are refused until that lane finishes, narrows, or is handed off.
+3. **Refused:** The Write to `src/a.py` was blocked by a PreToolUse hook: `bloc
+waiting 110s for agent1's hold to lapse
+agent2: 1. `team_inbox_check`: succeeded. No new messages. It showed two held lanes on `src/a.py`: "feature a" (agent1) and "feature b" (yours).
+2. Write `src/a.py`: refused, and I did not retry or edit the file another way. The hook said: "blocked once: 'src/a.py' was held by agent1 (lane "feature a", now claimed) while you waited, so it has probably changed. Their work on it is on branch `master` at 9c19e17fa2a2: bring it in first (fetch, then merge or rebase onto it), then edit again. This is the one hand-over for that hold (ADR 697)."
+agent2: 1. `team_inbox_check`: succeeded. Nothing new was waiting, and the held-lanes list showed `src/a.py` under both my "feature b" lane and agent1's "feature a" lane.
+2. Write `src/a.py`: succeeded. The file now contains `x = 1` and `# agent2 again`. The write was not refused, but a PreToolUse hook reported that agent1's hold on `src/a.py` (lane "feature a") has lapsed because agent1 has left. The hook asked that agent1 be told what I changed in their lane. I did not send that message, since you asked for only these two steps. Say if you want me to send it.
+gate rows:
+  agent2 allow warned hold=lapsed
+  agent2 deny denied_handover hold=handover
+  agent2 deny denied hold=held
+  agent1 allow allowed hold=None
+agent1_edited=True agent2_first_refused=True agent2_again_allowed=True held_deny_audited=True handover_refusal_audited=True no_deaf_warning=True cost_usd=0.0086
+PASS
