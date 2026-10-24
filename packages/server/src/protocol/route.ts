@@ -291,6 +291,9 @@ export async function routeEnvelope(
   /** The WS connection the act arrived on, if any — it gets the `ack`, so the firehose skips it and
    *  only it. An HTTP send has none, and every firehose connection of the sender gets the act. */
   senderConnId?: string,
+  /** A forwarded authority-bearing answer is checked against the origin configured for this
+   *  enrolled node and must consume a descriptor issued to the same node. */
+  forwardedNodeId?: string,
 ): Promise<RouteResult> {
   if (daemonComposed) await refuseVoiceBoundElsewhere(ctx, team, sender);
   return withEnvelopeSpan(
@@ -304,6 +307,7 @@ export async function routeEnvelope(
         senderPresenceId,
         daemonComposed,
         senderConnId,
+        forwardedNodeId,
       ),
   );
 }
@@ -316,6 +320,7 @@ async function routeEnvelopeInner(
   senderPresenceId?: string,
   daemonComposed = false,
   senderConnId?: string,
+  forwardedNodeId?: string,
 ): Promise<RouteResult> {
   // ADR 231: a `handoff` that names no lane. Only `lane_handoff` ever wrote
   // `meta.lane_handoff.lane`, so a plain `team_send {act:'handoff'}` hands over work without saying
@@ -682,7 +687,12 @@ async function routeEnvelopeInner(
           target: approval.target,
           payload: approval.payload,
           proof: proof.success ? proof.data : undefined,
-          expectedOrigins: ctx.config.webauthnOrigins,
+          expectedOrigins: forwardedNodeId
+            ? [ctx.config.webauthnNodeOrigins[forwardedNodeId]?.origin].filter(
+                (origin): origin is string => typeof origin === 'string',
+              )
+            : ctx.config.webauthnOrigins,
+          ...(forwardedNodeId ? { expectedNodeId: forwardedNodeId } : {}),
         });
         if (!check.ok) {
           throw new MusterdError(
@@ -935,6 +945,7 @@ async function routeEnvelopeInner(
             env.act,
             env.body,
             env.meta,
+            forwardedNodeId,
           );
           laneVerdict = applied.verdict;
           laneAuthorityRefused = applied.authorityRefused;
@@ -1928,6 +1939,7 @@ async function applyAcceptanceVerdict(
   act: 'accept' | 'decline',
   body: string,
   meta?: Record<string, unknown> | null,
+  forwardedNodeId?: string,
 ): Promise<{
   verdict?: RouteResult['lane_verdict'];
   authorityRefused?: RouteResult['lane_authority_refused'];
@@ -1978,7 +1990,12 @@ async function applyAcceptanceVerdict(
       target: laneId,
       payload: { lane: laneId, verdict: act },
       proof: proofParsed.success ? proofParsed.data : undefined,
-      expectedOrigins: ctx.config.webauthnOrigins,
+      expectedOrigins: forwardedNodeId
+        ? [ctx.config.webauthnNodeOrigins[forwardedNodeId]?.origin].filter(
+            (origin): origin is string => typeof origin === 'string',
+          )
+        : ctx.config.webauthnOrigins,
+      ...(forwardedNodeId ? { expectedNodeId: forwardedNodeId } : {}),
     });
     if (!check.ok) {
       log.info({ msg: 'authority_verdict_refused', lane: laneId, decider: decider.name });

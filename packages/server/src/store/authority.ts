@@ -152,15 +152,32 @@ const ENROLLMENT_CODE_TTL_MS = 10 * 60 * 1000;
  */
 export async function issueEnrollmentChallenge(
   db: Driver,
-  input: { teamId: string; memberId: string; actor: string; now?: number },
+  input: {
+    teamId: string;
+    memberId: string;
+    actor: string;
+    nodeId?: string;
+    ceremonyOrigin?: string;
+    ceremonyRpId?: string;
+    now?: number;
+  },
 ): Promise<{ challenge: string; expiresAt: number }> {
   const now = input.now ?? Date.now();
   const challenge = randomBytes(32).toString('base64url');
   const codeHash = createHash('sha256').update(challenge, 'utf8').digest('hex');
   await db.run(
-    `INSERT INTO enrollment_codes (code_hash, team_id, member_id, expires_at, used_at)
-     VALUES (?, ?, ?, ?, NULL)`,
-    [codeHash, input.teamId, input.memberId, now + ENROLLMENT_CODE_TTL_MS],
+    `INSERT INTO enrollment_codes
+       (code_hash, team_id, member_id, expires_at, used_at, node_id, ceremony_origin, ceremony_rp_id)
+     VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`,
+    [
+      codeHash,
+      input.teamId,
+      input.memberId,
+      now + ENROLLMENT_CODE_TTL_MS,
+      input.nodeId ?? null,
+      input.ceremonyOrigin ?? null,
+      input.ceremonyRpId ?? null,
+    ],
   );
   await appendAudit(db, input.teamId, {
     actor: input.actor,
@@ -175,14 +192,32 @@ export async function issueEnrollmentChallenge(
 /** Spend a ceremony challenge: valid, unused, unexpired, and this member's. One use. */
 export async function consumeEnrollmentChallenge(
   db: Driver,
-  input: { teamId: string; memberId: string; challenge: string; now?: number },
+  input: {
+    teamId: string;
+    memberId: string;
+    challenge: string;
+    nodeId?: string;
+    ceremonyOrigin?: string;
+    ceremonyRpId?: string;
+    now?: number;
+  },
 ): Promise<boolean> {
   const now = input.now ?? Date.now();
   const codeHash = createHash('sha256').update(input.challenge, 'utf8').digest('hex');
   const spent = await db.run(
     `UPDATE enrollment_codes SET used_at = ?
-      WHERE team_id = ? AND code_hash = ? AND member_id = ? AND used_at IS NULL AND expires_at >= ?`,
-    [now, input.teamId, codeHash, input.memberId, now],
+      WHERE team_id = ? AND code_hash = ? AND member_id = ? AND used_at IS NULL AND expires_at >= ?
+        AND node_id IS ? AND ceremony_origin IS ? AND ceremony_rp_id IS ?`,
+    [
+      now,
+      input.teamId,
+      codeHash,
+      input.memberId,
+      now,
+      input.nodeId ?? null,
+      input.ceremonyOrigin ?? null,
+      input.ceremonyRpId ?? null,
+    ],
   );
   return spent.changes > 0;
 }
@@ -208,6 +243,9 @@ export async function enrollKeyGuarded(
     publicKey: string;
     kind: AuthenticatorKind;
     proof?: ApprovalProof | undefined;
+    expectedOrigins?: readonly string[] | undefined;
+    expectedNodeId?: string | undefined;
+    ceremonyOrigin?: string | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -233,6 +271,8 @@ export async function enrollKeyGuarded(
     target: input.member.name,
     payload: { action: 'enroll', public_key: input.publicKey, kind: input.kind },
     proof: input.proof,
+    expectedOrigins: input.expectedOrigins,
+    expectedNodeId: input.expectedNodeId,
     now,
   });
   if (!check.ok) return { ok: false, reason: check.reason };
@@ -267,6 +307,8 @@ export async function revokeKeyGuarded(
     member: { id: string; name: string; kind: string };
     keyId: string;
     proof?: ApprovalProof | undefined;
+    expectedOrigins?: readonly string[] | undefined;
+    expectedNodeId?: string | undefined;
     now?: number;
   },
 ): Promise<{ ok: true; via: 'approval' } | { ok: false; reason: string }> {
@@ -298,6 +340,8 @@ export async function revokeKeyGuarded(
     target: input.member.name,
     payload: { action: 'revoke', key_id: input.keyId },
     proof: input.proof,
+    expectedOrigins: input.expectedOrigins,
+    expectedNodeId: input.expectedNodeId,
     now,
   });
   if (!check.ok) return { ok: false, reason: check.reason };
@@ -318,6 +362,7 @@ interface NonceRow {
   descriptor_digest: string;
   expires_at: number;
   used_at: number | null;
+  node_id: string | null;
 }
 
 /**
@@ -335,6 +380,7 @@ export async function buildDescriptor(
     act: HighAuthorityAct;
     target: string;
     payload: unknown;
+    nodeId?: string;
     now?: number;
   },
 ): Promise<ApprovalDescriptor> {
@@ -351,8 +397,8 @@ export async function buildDescriptor(
   };
   await db.run(
     `INSERT INTO approval_nonces
-       (nonce, team_id, member_id, descriptor_digest, expires_at, used_at, actor, act, target, payload_digest)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+       (nonce, team_id, member_id, descriptor_digest, expires_at, used_at, actor, act, target, payload_digest, node_id)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
     [
       descriptor.nonce,
       input.teamId,
@@ -363,6 +409,7 @@ export async function buildDescriptor(
       descriptor.act,
       descriptor.target,
       descriptor.payload_digest,
+      input.nodeId ?? null,
     ],
   );
   return descriptor;
@@ -378,6 +425,7 @@ export async function getDescriptorByNonce(
   audience: string,
   nonce: string,
   now = Date.now(),
+  nodeId?: string,
 ): Promise<ApprovalDescriptor | null> {
   const row = await db.get<{
     member_id: string;
@@ -387,12 +435,14 @@ export async function getDescriptorByNonce(
     payload_digest: string | null;
     expires_at: number;
     used_at: number | null;
+    node_id: string | null;
   }>(
-    `SELECT member_id, actor, act, target, payload_digest, expires_at, used_at
+    `SELECT member_id, actor, act, target, payload_digest, expires_at, used_at, node_id
        FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
     [teamId, nonce],
   );
   if (!row || row.used_at !== null || now > Number(row.expires_at)) return null;
+  if (nodeId !== undefined && row.node_id !== nodeId) return null;
   if (!row.actor || !row.act || !row.target || !row.payload_digest) return null;
   if (!isHighAuthorityAct(row.act)) return null;
   return {
@@ -431,6 +481,8 @@ export async function requireAuthority(
     proof?: ApprovalProof | undefined;
     /** ADR 662 dec. 5: passkey ceremonies must be on one of these origins, when known. */
     expectedOrigins?: readonly string[] | undefined;
+    /** ADR 728: a forwarded ceremony nonce must have been created for this authenticated node. */
+    expectedNodeId?: string | undefined;
     /**
      * Run every check and stop before the spend (ADR 694): the nonce stays live and no approval
      * is audited; a refusal is audited as usual. For a caller that must not write the act it
@@ -469,11 +521,13 @@ export async function requireAuthority(
   if (!proof) return refuse('no_signature');
 
   const nonce = await db.get<NonceRow>(
-    `SELECT nonce, member_id, descriptor_digest, expires_at, used_at FROM approval_nonces
+    `SELECT nonce, member_id, descriptor_digest, expires_at, used_at, node_id FROM approval_nonces
       WHERE team_id = ? AND nonce = ?`,
     [input.teamId, proof.nonce],
   );
   if (!nonce || nonce.member_id !== input.presenter.id) return refuse('descriptor_mismatch');
+  if (input.expectedNodeId !== undefined && nonce.node_id !== input.expectedNodeId)
+    return refuse('descriptor_mismatch');
   if (nonce.used_at !== null) return refuse('nonce_reused');
   if (now > Number(nonce.expires_at)) return refuse('expired');
 
@@ -561,6 +615,7 @@ export async function storePasskeyProof(
     proof: ApprovalProof;
     /** ADR 662 dec. 5: the ceremony must be on one of these origins (the daemon's own). */
     expectedOrigins?: readonly string[] | undefined;
+    expectedNodeId?: string | undefined;
     now?: number;
   },
 ): Promise<boolean> {
@@ -569,6 +624,8 @@ export async function storePasskeyProof(
     input.teamId,
     input.audience,
     input.proof.nonce,
+    input.now ?? Date.now(),
+    input.expectedNodeId,
   );
   if (!descriptor) return false;
   const key = await getDeviceKey(db, input.teamId, input.proof.key_id);
@@ -679,6 +736,10 @@ export async function enrollPasskeyGuarded(
       | undefined;
     /** ADR 662 dec. 5: the ceremony must be on one of these origins (the daemon's own). */
     expectedOrigins?: readonly string[] | undefined;
+    expectedRpId?: string | undefined;
+    expectedNodeId?: string | undefined;
+    ceremonyOrigin?: string | undefined;
+    countersignExpectedOrigins?: readonly string[] | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -692,6 +753,7 @@ export async function enrollPasskeyGuarded(
       expectedChallenge: input.challenge,
       requireUserVerified: true,
       expectedOrigins: input.expectedOrigins,
+      expectedRpId: input.expectedRpId,
     });
   } catch {
     return { ok: false, reason: 'bad_registration' };
@@ -708,6 +770,7 @@ export async function enrollPasskeyGuarded(
       payload: { action: 'enroll', kind: 'passkey' },
       proof: input.proof,
       expectedOrigins: input.expectedOrigins,
+      expectedNodeId: input.expectedNodeId,
       now,
     });
     if (!check.ok) return { ok: false, reason: check.reason };
@@ -737,7 +800,7 @@ export async function enrollPasskeyGuarded(
         target: input.member.name,
         payload: { action: 'enroll', kind: 'passkey', member: input.member.name },
         proof: cs.proof,
-        expectedOrigins: input.expectedOrigins,
+        expectedOrigins: input.countersignExpectedOrigins ?? input.expectedOrigins,
         now,
       });
       if (!check.ok) return { ok: false, reason: check.reason };
@@ -747,6 +810,9 @@ export async function enrollPasskeyGuarded(
     teamId: input.teamId,
     memberId: input.member.id,
     challenge: input.challenge,
+    ...(input.expectedNodeId !== undefined ? { nodeId: input.expectedNodeId } : {}),
+    ...(input.ceremonyOrigin !== undefined ? { ceremonyOrigin: input.ceremonyOrigin } : {}),
+    ...(input.expectedRpId !== undefined ? { ceremonyRpId: input.expectedRpId } : {}),
     now,
   });
   if (!spent) return { ok: false, reason: 'bad_challenge' };

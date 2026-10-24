@@ -130,6 +130,7 @@ write when it cannot consult the hub.
 
 ## Consequences
 
+- 2026-10-23: [ADR 729](729-authority-relay-secret-boundary.md) narrows the relay's initial operation set to strict credential-free results. Secret-minting and credential-bearing response routes remain hub-local and refuse on joiners before mutation.
 - The node credential's scope from ADR 328 §3 gains one narrowly bounded surface. The hub still
   authenticates the node and checks each requested human's current residence before authority
   operations.

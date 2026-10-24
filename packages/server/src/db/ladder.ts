@@ -1060,6 +1060,28 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE gate_hold_refusals ADD COLUMN IF NOT EXISTS watch_fired_at BIGINT');
     },
   },
+  {
+    // ADR 728: one-use authority ceremonies created by a joiner are bound to the authenticated
+    // node and to the operator-configured browser origin/RP id. Existing hub-local rows stay null.
+    version: 131,
+    sqlite: (db) => {
+      for (const table of ['approval_nonces', 'enrollment_codes']) {
+        const cols = db.prepare(`SELECT name FROM pragma_table_info('${table}')`).pluck().all();
+        if (!cols.includes('node_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN node_id TEXT`);
+        if (!cols.includes('ceremony_origin'))
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ceremony_origin TEXT`);
+        if (!cols.includes('ceremony_rp_id'))
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ceremony_rp_id TEXT`);
+      }
+    },
+    postgres: async (d) => {
+      for (const table of ['approval_nonces', 'enrollment_codes']) {
+        await d.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS node_id TEXT`);
+        await d.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ceremony_origin TEXT`);
+        await d.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ceremony_rp_id TEXT`);
+      }
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

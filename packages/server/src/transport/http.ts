@@ -179,10 +179,14 @@ import {
   MemberCeilingSchema,
   APP_CHANNEL,
   ApprovalProofSchema,
+  LaneClaimsSchema,
   RelaySlackInstallSchema,
   AUTHENTICATOR_KINDS,
   HIGH_AUTHORITY_ACTS,
   type HighAuthorityAct,
+  type AuthorityRelayRequest,
+  type AuthorityRelayResponse,
+  AuthorityRelayRequestSchema,
 } from '@musterd/protocol';
 import { requestDecisionApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
@@ -605,6 +609,7 @@ import {
   pruneTraceContent,
 } from '../store/trace.js';
 import { deriveTraceReport } from '../store/traceReport.js';
+import { authorityAtHub, handleAuthorityRelay } from '../sync/authorityRelay.js';
 import {
   applyTrust,
   arbitrateClaim,
@@ -2010,6 +2015,37 @@ function webauthnExpectedOrigins(ctx: Ctx): string[] {
   return [...new Set(ctx.config.webauthnOrigins)];
 }
 
+/** Return the hub's strict relay result when this daemon is an enrolled joiner. */
+async function authorityRelayIfJoiner<T extends AuthorityRelayRequest>(
+  ctx: Ctx,
+  team: TeamRow,
+  request: T,
+): Promise<Extract<AuthorityRelayResponse, { op: T['op'] }> | null> {
+  const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+  if (!enrollment) return null;
+  try {
+    return await authorityAtHub(
+      enrollment,
+      team.slug,
+      parseOrBadRequest(AuthorityRelayRequestSchema, request) as T,
+    );
+  } catch (error) {
+    if (error instanceof HubUnreachableError) {
+      throw new MusterdError('hub_unreachable', error.message);
+    }
+    throw error;
+  }
+}
+
+async function requireHubLocalOnly(ctx: Ctx, team: TeamRow, operation: string): Promise<void> {
+  if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
+    throw new MusterdError(
+      'hub_local_required',
+      `${operation} returns or carries team authority and must be performed on a Surface attached to the hub`,
+    );
+  }
+}
+
 async function guardAuthority(
   ctx: Ctx,
   req: IncomingMessage,
@@ -2020,6 +2056,7 @@ async function guardAuthority(
   payload: unknown,
   proofRaw: unknown,
 ): Promise<void> {
+  await requireHubLocalOnly(ctx, team, `authority write ${act}`);
   const proof =
     proofRaw === undefined ? undefined : parseOrBadRequest(ApprovalProofSchema, proofRaw);
   const check = await requireAuthority(ctx.db, {
@@ -3317,6 +3354,7 @@ export async function handleHttp(
         const rawMember = (await readJson(req)) as { approval?: unknown };
         const body = parseOrBadRequest(AddMemberBody, rawMember);
         const provisioningTeam = await requireTeam(ctx.db, slug);
+        await requireHubLocalOnly(ctx, provisioningTeam, 'member creation');
         const roots = body.observer
           ? []
           : [...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])];
@@ -3477,6 +3515,7 @@ export async function handleHttp(
           bearer(req),
           actingSeat(req),
         );
+        await requireHubLocalOnly(ctx, team, 'agent connect-link minting');
         return sendJson(
           res,
           200,
@@ -4206,6 +4245,7 @@ export async function handleHttp(
                 viaHostKey: false,
                 host: null,
               };
+        await requireHubLocalOnly(ctx, team, 'grant issuance');
         // ADR 662: issuing a grant is a listed act. The sponsor/host-key seat-grant path is a
         // provisioning verb (decision 4) and stays off the list; the admin path signs.
         if (!sponsorScoped && !viaHostKey) {
@@ -4261,6 +4301,15 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/archive') {
         const { team, member } = await authAdmin(ctx, slug, req);
         const rawArchive = (await readJson(req)) as { approval?: unknown };
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'team.archive',
+          actor: member.name,
+          ...(rawArchive.approval !== undefined
+            ? { approval: parseOrBadRequest(ApprovalProofSchema, rawArchive.approval) }
+            : {}),
+        });
+        if (relayed)
+          return sendJson(res, 200, { ok: true, team: slug, archived_at: relayed.archived_at });
         // ADR 662: archiving is a team-settings change — a listed act.
         await guardAuthority(
           ctx,
@@ -4500,6 +4549,7 @@ export async function handleHttp(
       // ── ADR 450: team invites (admin-only). The secret is returned once at mint, never listed. ──
       if (method === 'POST' && rest === '/invites') {
         const { team, member } = await authAdmin(ctx, slug, req);
+        await requireHubLocalOnly(ctx, team, 'invite creation');
         const InviteBody = z
           .object({
             max_uses: z.number().int().min(1).optional(),
@@ -4566,6 +4616,15 @@ export async function handleHttp(
           rawCeiling,
         );
         const name = decodeURIComponent(ceilingMatch[1]!);
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'member.ceiling',
+          actor: admin.name,
+          target: name,
+          ceiling: body.ceiling,
+          ...(body.approval ? { approval: body.approval } : {}),
+        });
+        if (relayed)
+          return sendJson(res, 200, { member: relayed.target, ceiling: relayed.ceiling });
         // ADR 662: setting a member's ceiling is a roster change — a listed act.
         await guardAuthority(
           ctx,
@@ -5216,6 +5275,14 @@ export async function handleHttp(
             `no human member "${body.actor ?? member.name}" on ${slug}`,
           );
         }
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'descriptor.create',
+          actor: presenter.name,
+          act: body.act,
+          target: body.target,
+          payload_json: JSON.stringify(body.payload ?? null),
+        });
+        if (relayed) return sendJson(res, 201, { descriptor: relayed.descriptor });
         const descriptor = await buildDescriptor(ctx.db, {
           teamId: team.id,
           audience: team.slug,
@@ -5235,6 +5302,9 @@ export async function handleHttp(
       if (method === 'GET' && descriptorMatch) {
         const team = await requireTeam(ctx.db, slug);
         const nonce = decodeURIComponent(descriptorMatch[1]!);
+        const relayed = await authorityRelayIfJoiner(ctx, team, { op: 'descriptor.read', nonce });
+        if (relayed)
+          return sendJson(res, 200, { descriptor: relayed.descriptor, passkeys: relayed.passkeys });
         const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
         if (!descriptor) throw new MusterdError('not_found', 'no live descriptor for that nonce');
         const passkeys = await getPasskeysForDescriptor(ctx.db, team.id, nonce);
@@ -5243,6 +5313,8 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/authority/approvals') {
         const team = await requireTeam(ctx.db, slug);
         const proof = parseOrBadRequest(ApprovalProofSchema, await readJson(req));
+        const relayed = await authorityRelayIfJoiner(ctx, team, { op: 'proof.present', proof });
+        if (relayed) return sendJson(res, 200, { ok: true });
         const parked = await storePasskeyProof(ctx.db, {
           teamId: team.id,
           audience: team.slug,
@@ -5258,7 +5330,14 @@ export async function handleHttp(
       if (method === 'GET' && approvalMatch) {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
-        const proof = await getParkedProof(ctx.db, team.id, decodeURIComponent(approvalMatch[1]!));
+        const nonce = decodeURIComponent(approvalMatch[1]!);
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'proof.read',
+          actor: member.name,
+          nonce,
+        });
+        if (relayed) return sendJson(res, 200, { proof: relayed.proof });
+        const proof = await getParkedProof(ctx.db, team.id, nonce);
         if (!proof) throw new MusterdError('not_found', 'no approval parked for that nonce yet');
         return sendJson(res, 200, { proof });
       }
@@ -5269,6 +5348,15 @@ export async function handleHttp(
         if (!member || member.left_at !== null) {
           throw new MusterdError('validation', `no member "${body.actor}" on ${slug}`);
         }
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'passkeys.enroll',
+          actor: member.name,
+          challenge: body.challenge,
+          ...(body.approval ? { approval: body.approval } : {}),
+          ...(body.countersign ? { countersign: body.countersign } : {}),
+          registration: body.registration,
+        });
+        if (relayed) return sendJson(res, 201, { key: relayed.key });
         const confirmerRow = body.countersign
           ? await getMemberByName(ctx.db, team.id, body.countersign.confirmer)
           : null;
@@ -5314,6 +5402,15 @@ export async function handleHttp(
           );
         }
         if (method === 'POST' && rest === '/authority/enrollment-challenges') {
+          const relayed = await authorityRelayIfJoiner(ctx, team, {
+            op: 'enrollment.challenge.create',
+            actor: member.name,
+          });
+          if (relayed)
+            return sendJson(res, 201, {
+              challenge: relayed.challenge,
+              expires_at: relayed.expires_at,
+            });
           const issued = await issueEnrollmentChallenge(ctx.db, {
             teamId: team.id,
             memberId: member.id,
@@ -5326,6 +5423,11 @@ export async function handleHttp(
           });
         }
         if (method === 'GET' && rest === '/authority/keys') {
+          const relayed = await authorityRelayIfJoiner(ctx, team, {
+            op: 'keys.list',
+            actor: member.name,
+          });
+          if (relayed) return sendJson(res, 200, { keys: relayed.keys });
           const keys = await listDeviceKeys(ctx.db, team.id, member.id);
           return sendJson(res, 200, {
             keys: keys.map((k) => ({
@@ -5345,6 +5447,14 @@ export async function handleHttp(
               'a phone key is enrolled by pairing the musterd app',
             );
           }
+          const relayed = await authorityRelayIfJoiner(ctx, team, {
+            op: 'keys.enroll',
+            actor: member.name,
+            public_key: body.public_key,
+            kind: body.kind,
+            ...(body.approval ? { approval: body.approval } : {}),
+          });
+          if (relayed) return sendJson(res, 201, { key: relayed.key });
           const result = await enrollKeyGuarded(ctx.db, {
             teamId: team.id,
             audience: team.slug,
@@ -5364,6 +5474,13 @@ export async function handleHttp(
         const revokeMatch = /^\/authority\/keys\/([^/]+)\/revoke$/.exec(rest);
         if (method === 'POST' && revokeMatch) {
           const body = parseOrBadRequest(RevokeKeyBody, await readJson(req));
+          const relayed = await authorityRelayIfJoiner(ctx, team, {
+            op: 'keys.revoke',
+            actor: member.name,
+            key_id: decodeURIComponent(revokeMatch[1]!),
+            ...(body.approval ? { approval: body.approval } : {}),
+          });
+          if (relayed) return sendJson(res, 200, { ok: true });
           const result = await revokeKeyGuarded(ctx.db, {
             teamId: team.id,
             audience: team.slug,
@@ -7116,6 +7233,42 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req, { wakeLease: true });
         const body = (await readJson(req)) as { envelope?: unknown };
         const env = parseEnvelope(body.envelope);
+        // A human lane_review answer changes authoritative lane state. On a joiner, send the
+        // narrowly shaped answer to the hub so its descriptor, device key, and lane transition
+        // remain one authority record; never apply it to the joiner's replica first.
+        const replyTo = env.meta?.['in_reply_to'];
+        if (
+          member.kind === 'human' &&
+          (env.act === 'accept' || env.act === 'decline') &&
+          typeof replyTo === 'string'
+        ) {
+          const asked = await ctx.db.get<{ meta: string | null }>(
+            `SELECT meta FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'`,
+            [team.id, replyTo],
+          );
+          let askedMeta: unknown;
+          try {
+            askedMeta = asked?.meta ? JSON.parse(asked.meta) : null;
+          } catch {
+            askedMeta = null;
+          }
+          if (asked && askedMeta && typeof askedMeta === 'object' && 'lane_review' in askedMeta) {
+            const relayed = await authorityRelayIfJoiner(ctx, team, {
+              op: 'lane.answer',
+              actor: member.name,
+              ask_id: replyTo,
+              act: env.act,
+              body: env.body,
+              ...(env.meta?.['approval'] !== undefined
+                ? { approval: parseOrBadRequest(ApprovalProofSchema, env.meta['approval']) }
+                : {}),
+              ...(env.meta?.['claims'] !== undefined
+                ? { claims: parseOrBadRequest(LaneClaimsSchema, env.meta['claims']) }
+                : {}),
+            });
+            if (relayed) return sendJson(res, 201, relayed);
+          }
+        }
         // No sender occupancy id here by design (ADR 101): a POST is stateless — it authenticates a
         // *seat* (agent key + acting seat), not a live session, so there is no per-request occupancy
         // to key the model stamp on. routeEnvelope falls back to the member's newest *attested*
@@ -7419,6 +7572,21 @@ export async function handleHttp(
             push: { wedged: await readPushRefusal(ctx.db, team.id) },
           }),
         );
+      }
+
+      if (method === 'POST' && rest === '/sync/authority') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the authority relay authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const request = parseOrBadRequest(AuthorityRelayRequestSchema, await readJson(req));
+        const result = await handleAuthorityRelay(ctx, team, node, request);
+        return sendJson(res, 200, result);
       }
 
       // ── The sync surface (ADR 325 increment 3b-i). Authenticated by `msnode_` and by nothing
@@ -9224,9 +9392,10 @@ export async function handleHttp(
           body.owner_seat !== undefined &&
           body.owner_seat === member.name &&
           before.owner_seat !== member.name;
-        const enrollment = isOwnershipOrStatePatch(body)
-          ? await joinerEnrollment(ctx.db, team.id, team.slug)
-          : null;
+        const enrollment =
+          isOwnershipOrStatePatch(body) || body.merged?.authorized_by !== undefined
+            ? await joinerEnrollment(ctx.db, team.id, team.slug)
+            : null;
         let arbitrated: ArbitratedLanePatch | undefined;
         if (enrollment) {
           try {
@@ -9307,6 +9476,7 @@ export async function handleHttp(
         // human whose authority the merge attestation claims — the proof is theirs, relayed
         // by whoever submits. Unenrolled humans proceed as before (enrollment latches it).
         if (
+          !arbitrated &&
           body.state !== undefined &&
           LANE_TERMINAL_STATES.has(body.state) &&
           isAwaitingAcceptance(before.state) &&
@@ -9324,7 +9494,7 @@ export async function handleHttp(
             body.approval,
           );
         }
-        if (body.merged?.authorized_by) {
+        if (!arbitrated && body.merged?.authorized_by) {
           const authorizer = await getMemberByName(ctx.db, team.id, body.merged.authorized_by);
           if (authorizer && authorizer.kind === 'human' && authorizer.left_at === null) {
             await guardAuthority(
@@ -11519,6 +11689,16 @@ export async function handleHttp(
         const { team, member: caller, viaFallback } = await authGovernance(ctx, slug, req);
         const rawRemove = (await readJson(req)) as { approval?: unknown };
         const targetName = decodeURIComponent(removeMatch[1]!);
+        const relayed = await authorityRelayIfJoiner(ctx, team, {
+          op: 'member.remove',
+          actor: caller.name,
+          target: targetName,
+          ...(rawRemove.approval !== undefined
+            ? { approval: parseOrBadRequest(ApprovalProofSchema, rawRemove.approval) }
+            : {}),
+        });
+        if (relayed)
+          return sendJson(res, 200, { ok: true, member: relayed.target, kind: relayed.kind });
         // ADR 662: member removal is a roster change — a listed act.
         if (caller.kind === 'human') {
           await guardAuthority(

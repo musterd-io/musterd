@@ -57,6 +57,8 @@ export interface ResolvedConfig {
    * defaulting to the daemon's own loopback origins on its bound port. A relay-hosted
    * page's origin is never in this set, so its ceremonies never verify. */
   webauthnOrigins: string[];
+  /** ADR 728: ceremony origins owned by enrolled nodes, keyed by node id. */
+  webauthnNodeOrigins: Record<string, { origin: string; rp_id: string }>;
   /** The Slack ingress's Ed25519 public key (PEM or base64url DER), or null: Cloud-direct
    * Slack callbacks and install records are refused without it (spec: Slack ingress §3). */
   ingressPublicKey: string | null;
@@ -286,6 +288,7 @@ export interface ConfigOptions {
   trustProxy?: boolean;
   /** ADR 662 dec. 5: WebAuthn origins override (tests, hosted origins). */
   webauthnOrigins?: string[];
+  webauthnNodeOrigins?: Record<string, { origin: string; rp_id: string }>;
   /** The Slack ingress public key (tests); env MUSTERD_INGRESS_PUBLIC_KEY otherwise. */
   ingressPublicKey?: string;
   /** This server's public https origin when hosted (tests); env MUSTERD_PUBLIC_ORIGIN otherwise. */
@@ -346,6 +349,9 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
       (envList('MUSTERD_WEBAUTHN_ORIGINS').length > 0
         ? envList('MUSTERD_WEBAUTHN_ORIGINS')
         : defaultWebauthnOrigins({ scheme: tls ? 'https' : 'http', host, port })),
+    webauthnNodeOrigins:
+      opts?.webauthnNodeOrigins ??
+      parseWebauthnNodeOrigins(process.env['MUSTERD_WEBAUTHN_NODE_ORIGINS']),
     ingressPublicKey:
       opts?.ingressPublicKey ?? (process.env['MUSTERD_INGRESS_PUBLIC_KEY']?.trim() || null),
     publicOrigin: opts?.publicOrigin ?? (process.env['MUSTERD_PUBLIC_ORIGIN']?.trim() || null),
@@ -359,6 +365,41 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
 /** Resolve a web-root path to absolute, or null when unset/blank (static serving stays off). */
 function webRootOf(raw: string | undefined): string | null {
   return raw && raw.trim() ? resolve(raw.trim()) : null;
+}
+
+/** Parse the operator-owned node ceremony map. Never derive a node origin from a request. */
+function parseWebauthnNodeOrigins(
+  raw: string | undefined,
+): Record<string, { origin: string; rp_id: string }> {
+  if (!raw?.trim()) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('MUSTERD_WEBAUTHN_NODE_ORIGINS must be valid JSON');
+  }
+  const mapSchema = z.record(
+    z.string().min(1).max(128),
+    z.object({ origin: z.string().url().max(512), rp_id: z.string().min(1).max(253) }).strict(),
+  );
+  const map = mapSchema.parse(parsed);
+  for (const [nodeId, item] of Object.entries(map)) {
+    const url = new URL(item.origin);
+    if (
+      `${url.protocol}//${url.host}` !== item.origin ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error(`MUSTERD_WEBAUTHN_NODE_ORIGINS[${nodeId}].origin must be an origin only`);
+    }
+    if (url.hostname !== item.rp_id) {
+      throw new Error(
+        `MUSTERD_WEBAUTHN_NODE_ORIGINS[${nodeId}].rp_id must match the origin hostname`,
+      );
+    }
+  }
+  return map;
 }
 
 // ---------------------------------------------------------------------------

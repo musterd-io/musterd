@@ -40,6 +40,8 @@ const CODE_EXIT: Record<ErrorCode, number> = {
   rate_limited: 14,
   // ADR 446 decline 2: the request body exceeded the endpoint's byte cap — "send less".
   payload_too_large: 15,
+  // ADR 729: the operation must run on a Surface attached to the authority hub.
+  hub_local_required: 16,
 };
 
 export function exitForCode(code: ErrorCode): number {

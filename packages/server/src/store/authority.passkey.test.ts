@@ -5,6 +5,7 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
   buildDescriptor,
+  consumeEnrollmentChallenge,
   enrollDeviceKey,
   enrollPasskeyGuarded,
   getParkedProof,
@@ -194,6 +195,50 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
         expectedOrigins: ['https://example.com'],
       }),
     ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+  });
+
+  it('spends an enrollment challenge only for its bound node and WebAuthn origin', async () => {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const swetha = (await addMember(db, team, { name: 'swetha', kind: 'human' })).row;
+    const issued = await issueEnrollmentChallenge(db, {
+      teamId: team.id,
+      memberId: swetha.id,
+      actor: swetha.name,
+      nodeId: 'node-air2',
+      ceremonyOrigin: 'https://air2.example',
+      ceremonyRpId: 'air2.example',
+    });
+    await expect(
+      consumeEnrollmentChallenge(db, {
+        teamId: team.id,
+        memberId: swetha.id,
+        challenge: issued.challenge,
+        nodeId: 'node-hub',
+        ceremonyOrigin: 'https://air2.example',
+        ceremonyRpId: 'air2.example',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      consumeEnrollmentChallenge(db, {
+        teamId: team.id,
+        memberId: swetha.id,
+        challenge: issued.challenge,
+        nodeId: 'node-air2',
+        ceremonyOrigin: 'https://wrong.example',
+        ceremonyRpId: 'wrong.example',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      consumeEnrollmentChallenge(db, {
+        teamId: team.id,
+        memberId: swetha.id,
+        challenge: issued.challenge,
+        nodeId: 'node-air2',
+        ceremonyOrigin: 'https://air2.example',
+        ceremonyRpId: 'air2.example',
+      }),
+    ).resolves.toBe(true);
   });
 
   it('past genesis, a fabricated registration enrolls nothing without an admin countersign', async () => {

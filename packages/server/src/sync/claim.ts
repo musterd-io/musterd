@@ -17,6 +17,7 @@ import {
   type SyncClaimRequest,
   SyncClaimRefusalSchema,
   type SyncLanePatchRequest,
+  type HighAuthorityAct,
   type Policy,
   type PolicyOverride,
   type PullPollResponse,
@@ -39,6 +40,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { appendAudit, reviewRouting } from '../store/audit.js';
+import { requireAuthority } from '../store/authority.js';
 import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
   decideReadVerdict,
@@ -574,6 +576,59 @@ export async function arbitrateLanePatch(
       null,
       'unknown',
     );
+  }
+  const expectedOrigins = ctx.config.webauthnNodeOrigins[node.id]
+    ? [ctx.config.webauthnNodeOrigins[node.id]!.origin]
+    : [];
+  const requireForwardedAuthority = async (
+    presenter: MemberRow,
+    act: HighAuthorityAct,
+    target: string,
+    payload: unknown,
+  ): Promise<void> => {
+    const check = await requireAuthority(ctx.db, {
+      teamId: team.id,
+      audience: team.slug,
+      presenter,
+      credential: presenter.kind === 'human' ? 'human' : 'agent',
+      act,
+      target,
+      payload,
+      proof: req.patch.approval,
+      expectedOrigins,
+      expectedNodeId: node.id,
+      now,
+    });
+    if (!check.ok) {
+      throw new MusterdError(
+        'forbidden',
+        `authority refused (${check.reason}): ${act} requires an A2 device signature (ADR 662)`,
+      );
+    }
+  };
+  if (
+    req.patch.state !== undefined &&
+    LANE_TERMINAL_STATES.has(req.patch.state) &&
+    isAwaitingAcceptance(before.state) &&
+    seat.kind === 'human' &&
+    seat.name !== before.owner_seat
+  ) {
+    await requireForwardedAuthority(seat, 'human_accept', before.id, {
+      lane: before.id,
+      verdict: req.patch.state,
+    });
+  }
+  if (req.patch.merged?.authorized_by) {
+    const authorizer = await getMemberByName(ctx.db, team.id, req.patch.merged.authorized_by);
+    if (authorizer && authorizer.kind === 'human' && authorizer.left_at === null) {
+      await assertSeatAlreadyResident(ctx.db, team.id, authorizer, node, 'set authorized_by');
+      await requireForwardedAuthority(authorizer, 'set_authorized_by', before.id, {
+        lane: before.id,
+        authorized_by: req.patch.merged.authorized_by,
+        pr: req.patch.merged.pr ?? null,
+        sha: req.patch.merged.sha ?? null,
+      });
+    }
   }
   let decided: { patch: UpdateLane; guard: LaneExpectation | undefined };
   try {
