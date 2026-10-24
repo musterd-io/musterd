@@ -19,6 +19,7 @@ import {
   incidentBannerLines,
   laneDetailLines,
   laneIdQuery,
+  laneLanded,
   METRIC_SOURCES,
   metricNudge,
   BoardQuerySchema,
@@ -161,10 +162,13 @@ function laneResult(prefix: string, lane: Lane, warnings: LaneWarning[], given?:
  * the *remote* branch on merge, but the local one lingers in the worktree — and the naive cleanup
  * fails here: you can't `git checkout main` (a sibling worktree owns it) and `git branch -d` refuses
  * a squash-merged branch (it isn't an ancestor of main). The worktree-safe move detaches to fresh
- * `origin/main` (also the start state for the next lane) and force-deletes. Empty when no branch.
+ * `origin/main` (also the start state for the next lane) and force-deletes. Empty when no branch,
+ * and empty unless the lane's work verifiably landed (`laneLanded`): a `-D` on a branch nothing
+ * preserved destroys work, and an agent did exactly that on a counterpart-style close (lane
+ * 01M5G8VTK0).
  */
 function branchCleanupHint(lane: Lane): string {
-  if (!lane.branch) return '';
+  if (!lane.branch || !laneLanded(lane)) return '';
   return (
     `\n\nlanded? clear the local branch (the remote auto-deleted on merge):\n` +
     `  git fetch origin main --prune && git switch --detach origin/main && git branch -D ${lane.branch}`

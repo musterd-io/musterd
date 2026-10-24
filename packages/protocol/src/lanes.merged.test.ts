@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LaneSchema, UpdateLaneSchema, MERGE_VERIFICATION_TIERS } from './lanes.js';
+import { LaneSchema, UpdateLaneSchema, MERGE_VERIFICATION_TIERS, laneLanded } from './lanes.js';
 
 const base = {
   id: '01X',
@@ -56,5 +56,27 @@ describe('merged.verification (merge-verified submit)', () => {
       'fetch_failed',
       'unattested',
     ]);
+  });
+});
+
+// lane 01M5G8VTK0: the surfaces gate the "clear the local branch … -D" hint on this.
+describe('laneLanded', () => {
+  it('is true on an ancestor-verified attestation', () => {
+    expect(laneLanded({ merged: { verification: 'ancestor' } })).toBe(true);
+  });
+  it('is true on a confirmed commit_landed claim (the CLI rail stamps no tier)', () => {
+    expect(
+      laneLanded({ merged: null, claims: [{ kind: 'commit_landed', verdict: 'confirmed' }] }),
+    ).toBe(true);
+  });
+  it('is false with no attestation, an abstained tier, or an unconfirmed claim', () => {
+    expect(laneLanded({})).toBe(false);
+    expect(laneLanded({ merged: null })).toBe(false);
+    expect(laneLanded({ merged: { verification: 'unknown_object' } })).toBe(false);
+    expect(laneLanded({ merged: { verification: 'unattested' } })).toBe(false);
+    expect(laneLanded({ claims: [{ kind: 'commit_landed', verdict: 'unverifiable' }] })).toBe(
+      false,
+    );
+    expect(laneLanded({ claims: [{ kind: 'pr_merged', verdict: 'confirmed' }] })).toBe(false);
   });
 });

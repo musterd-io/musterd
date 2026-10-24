@@ -130,6 +130,12 @@ a docs/asset PR is never wedged.
   `packages/web` alone skips the two a11y leaves; `plan` decides from the diff and `gates` sanctions
   exactly those skips, so a leaf skipped for any other reason stays red. The repo is private and
   billed per minute since 2026-10-02; the rule here was written when minutes were free.
+- 2026-10-24 — lane `01M5G8VTK0`: the step-6 "clear the local branch … `git branch -D`" line that
+  `lane_resolve` / `musterd lane resolve` print is now printed only when the lane's work verifiably
+  landed (`laneLanded` in `@musterd/protocol`: the attested SHA verified `ancestor`, or a confirmed
+  `commit_landed` claim). The line is this repo's squash-merge cleanup; printed on every close with a
+  branch, it reached a CooperBench agent closing a lane in a repo with another workflow and no merge,
+  and the agent detached and force-deleted its own unmerged work branch (2026-10-21, pilot 3 smoke).
 
 ## Observability & Evaluation
 
