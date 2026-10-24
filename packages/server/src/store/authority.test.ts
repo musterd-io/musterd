@@ -116,6 +116,49 @@ withDrivers('human authority (ADR 662)', (o) => {
     expect(JSON.stringify(rows)).not.toContain(descriptor.nonce);
   });
 
+  it('binds a relayed descriptor proof to the authenticated node', async () => {
+    const db = await openStore();
+    const { team, nick } = await seed(db);
+    const kp = keypair();
+    const key = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: kp.publicKey,
+      kind: 'platform',
+    });
+    const descriptor = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: nick.name,
+      ...act,
+      nodeId: 'node-air2',
+    });
+    const proof = { key_id: key.id, nonce: descriptor.nonce, signature: kp.sign(descriptor) };
+    await expect(
+      requireAuthority(db, {
+        ...act,
+        teamId: team.id,
+        audience: team.slug,
+        presenter: nick,
+        credential: 'human',
+        proof,
+        expectedNodeId: 'node-hub',
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+    await expect(
+      requireAuthority(db, {
+        ...act,
+        teamId: team.id,
+        audience: team.slug,
+        presenter: nick,
+        credential: 'human',
+        proof,
+        expectedNodeId: 'node-air2',
+      }),
+    ).resolves.toMatchObject({ ok: true, assurance: 'A2' });
+  });
+
   it('a phone key signs as ECDSA P-256, DER; checkOnly verifies without spending (ADR 694)', async () => {
     const db = await openStore();
     const { team, nick } = await seed(db);

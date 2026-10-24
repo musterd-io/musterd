@@ -155,6 +155,23 @@ informational—no Presence or schedule enforcement is performed (ADR 206).
 
 The WS `send` and HTTP `POST …/messages` share one validation+route path on the server (`03-server.md`).
 
+## Human authority relay (ADR 728/729)
+
+`POST /teams/:slug/sync/authority` authenticates the enrolled `msnode_` node and parses a closed
+`AuthorityRelayRequestSchema` discriminator. It is not an HTTP proxy: method, path, headers, actor
+authority, and result type are not caller-selected. The hub resolves actor and residence from its
+own current Team state, then performs device-key ceremony operations or the explicitly supported
+credential-free high-authority write. `AuthorityRelayResponseSchema` is a strict operation-matched
+union; results contain only key metadata, one-use ceremony material, or minimal operation status.
+Human lane-review replies from a joiner use the `lane.answer` operation: the hub reconstructs the
+reply envelope from the ask id and bounded answer fields, applies node-bound A2 verification, and
+runs the existing message route before returning its minimal ack.
+Credentials, grants, invite codes, connect links, seat tokens, and human credentials never cross
+this channel. Credential-minting routes and any other unsupported operation return
+`hub_local_required` on a joiner before mutation. The hub validates WebAuthn origin and RP id using
+its node-id configuration; the joiner cannot select them with `Host` or forwarded headers.
+Joiner requests fail closed if the hub cannot answer.
+
 ## Governed model authorization (Increment 3, ADR 411)
 
 The governed contract is additive to the existing `musterd/0.3` message protocol and is exported by
@@ -281,6 +298,7 @@ request prose and artifact references.
 | `server_error`     | 500  | unexpected                                                                                                                                                                                                                         |
 | `claim_conflict`   | 409  | (P3, ADR 078/SPEC A.8) the target seat is already occupied                                                                                                                                                                         |
 | `expired_grant`    | 403  | (P3, ADR 078/SPEC A.8) the presented grant is past its lifetime (403, aligned with June's P3.1 ADR 076; SPEC A.8 allows 410/403)                                                                                                   |
+| `hub_local_required` | 409 | (ADR 729) a bearer credential would be returned; run the operation on the hub before any mutation |
 
 The CLI maps these to exit codes (`04-cli.md`).
 
