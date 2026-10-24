@@ -43,7 +43,8 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
      of a random `state`, the mode (`signin`, `invite` or `link`), the invite or member it was
      started for, and a 10-minute expiry. The callback consumes the record, so it works once;
    - sets a `__Host-musterd_signin` cookie holding that `state`: 10 minutes, HttpOnly, Secure,
-     **SameSite=None**. The console (`app.musterd.io`) and the team (`<slug>.musterd.dev`) are
+     Path=/, no Domain attribute, **SameSite=None**. A browser rejects a `__Host-` cookie that
+     lacks Secure or Path=/ or carries a Domain, so these three are required. The console (`app.musterd.io`) and the team (`<slug>.musterd.dev`) are
      different sites, and a browser does not send a SameSite=Lax cookie on a cross-site form
      POST, so a Lax cookie would never reach the callback. This is the OIDC `form_post` pattern.
      None does not weaken the state check: the cookie is a random handle that an attacker can
@@ -156,8 +157,9 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
     consumed, a foreign `Origin`, a replayed statement, the wrong `aud`, an unbound account, and
     a member who has left.
   - A real-browser test (Playwright, two hosts on two registrable domains) proves the signin
-    cookie reaches the cross-site POST callback. This is the test that would have caught a Lax
-    cookie.
+    cookie reaches the cross-site POST callback. It runs over HTTPS with the server's real
+    `Set-Cookie` header, so it also catches a Lax cookie or a `__Host-` cookie the browser
+    rejected for a missing Path=/ or a stray Domain.
   - Link binds the member pinned at start and no other. It is refused when the start had no valid
     `mscr_`, when the pinned member left between start and callback, and when the account or the
     member is already bound elsewhere.
