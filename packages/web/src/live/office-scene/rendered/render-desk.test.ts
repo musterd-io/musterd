@@ -349,3 +349,18 @@ describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
     }
   });
 });
+
+describe('rendered wall fixtures (lane 01M5D8EJ40)', () => {
+  const fit = fitFloor(1200, 900);
+  const room = ['room/light-day', 'room/ceiling-on'];
+  const fixtures = ['wall/art-0', 'wall/art-1', 'wall/art-2', 'wall/art-3', 'wall/art-4', 'wall/clock', 'wall/board', 'wall/hanger'];
+  const run = (ids: string[]) => {
+    const { ctx, ops } = recordingCtx();
+    renderScene(ctx, fit, new Map(), new Map(), new Map(), 0, 'revive', computeLightEnv(12, true), null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+    return ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
+  };
+
+  it('every fixture blits once over the rendered wall — the left wall’s prints and planter too, which the wall render lacks', () => {
+    expect(run([...room, ...fixtures]) - run(room)).toBe(fixtures.length);
+  });
+});

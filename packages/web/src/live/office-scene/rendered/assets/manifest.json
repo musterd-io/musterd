@@ -831,6 +831,94 @@
       "scale": 3.0
     },
     {
+      "id": "wall/art-0",
+      "file": "office-art-wall-art-0.webp",
+      "w": 128,
+      "h": 187,
+      "anchor": {
+        "x": 60.74,
+        "y": 400.9
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/art-1",
+      "file": "office-art-wall-art-1.webp",
+      "w": 67,
+      "h": 111,
+      "anchor": {
+        "x": 30.53,
+        "y": 429.2
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/art-2",
+      "file": "office-art-wall-art-2.webp",
+      "w": 58,
+      "h": 119,
+      "anchor": {
+        "x": 26.72,
+        "y": 422.16
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/art-3",
+      "file": "office-art-wall-art-3.webp",
+      "w": 75,
+      "h": 104,
+      "anchor": {
+        "x": 35.17,
+        "y": 304.63
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/art-4",
+      "file": "office-art-wall-art-4.webp",
+      "w": 141,
+      "h": 199,
+      "anchor": {
+        "x": 74.07,
+        "y": 417.85
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/board",
+      "file": "office-art-wall-board.webp",
+      "w": 331,
+      "h": 419,
+      "anchor": {
+        "x": 168.46,
+        "y": 518.28
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/clock",
+      "file": "office-art-wall-clock.webp",
+      "w": 130,
+      "h": 180,
+      "anchor": {
+        "x": 68.68,
+        "y": 429.92
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/hanger",
+      "file": "office-art-wall-hanger.webp",
+      "w": 105,
+      "h": 237,
+      "anchor": {
+        "x": 15.32,
+        "y": 424.92
+      },
+      "scale": 3.0
+    },
+    {
       "id": "welcome/wagon",
       "file": "office-art-welcome-wagon.webp",
       "w": 92,
