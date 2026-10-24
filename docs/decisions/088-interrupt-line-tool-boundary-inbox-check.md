@@ -127,6 +127,17 @@ nudge and the Notification hook's `inbox --waiting`, the reply-target lookups in
 that rings once more, not one that is lost. Falsify: on a daemon carrying this, an `inbox.rendered`
 row whose only preceding read by that seat carried `peek=1`.
 
+_(2026-10-23, lane 01M5N5KGZG, lazara.)_ Two gaps in clause (iv), found on one stale pointer: a
+huddle turn from 2026-10-05 in a `@team` room the seat had joined by speaking once rang at every
+tool boundary for 18 days. (a) A huddle turn had no discharge short of speaking again or the cursor
+passing it — and an elided backlog pins the cursor forever. (b) The by-id read the line itself
+names (`GET /inbox?ids=`) returned early and wrote no `inbox.rendered` row, for steers either. Now
+`renderableOnRead` names what a read discharges — steers and urgent acts directed here, plus the
+**newest huddle turn per room** rendered — and both the window read and the by-id read record it
+(`peek=1` still records nothing). `listInterruptCandidates` clause (vi) drops a rendered turn and
+every older turn in its room; a turn newer than anything shown still rings. Falsify: a huddle turn
+that rings at the boundary after the by-id read the line asked for.
+
 ## Amendment 3 — discharge (2026-09-14, lane 01M2GJFCQV)
 
 Six clauses of the doorbell contract (`docs/design/daemon-doorbell-contract.md`) governed delivery

@@ -263,6 +263,8 @@ async function buriedTurns(
  *        `inbox.rendered` row GET /inbox writes — is discharged, and the superseded steers under
  *        the newest one are dropped with it so none rises in its place (delta: stanley's steer
  *        01M2GC25MN rang ~20 boundaries after it was read and acted on);
+ *  (vi)  a huddle turn this seat has been SHOWN — by a window read or the by-id read the interrupt
+ *        line itself asks for — is discharged with every older turn in its room (lane 01M5N5KGZG);
  *  (v)   a handoff whose NAMED lane has left play — submitted for acceptance or terminal — is
  *        discharged, because a handoff is discharged by DOING THE WORK, never by a reply (#745).
  *        The idle seam (ADR 558) admits handoffs and the fold could only ever drop one on an
@@ -362,6 +364,39 @@ async function dischargeOutsideTheWindow(
       // direction ringing as if it were current.
       const dropAllSteers = steers.length > 0 && rendered.has(steers[0]!.id);
       out = out.filter((r) => !(r.act === 'steer' ? dropAllSteers : rendered.has(r.id)));
+    }
+  }
+
+  // (vi) huddle turns this seat was already shown (lane 01M5N5KGZG). A turn has no answering move
+  // either, and the fold rings a room for everything newer than the seat's own last turn in it —
+  // so a seat that read a room and moved on, never speaking again, rang at every boundary for as
+  // long as its cursor stayed behind the turn (lazara, 18 days, 2026-10-05 → 10-23). GET /inbox
+  // records the newest turn per room it renders (`renderableOnRead`); here the newest RENDERED turn
+  // in each thread discharges itself and every turn before it in that thread, the same shape as
+  // the steer rule above. A turn newer than anything shown still rings. Threads are keyed without
+  // their root: a rendered row on a non-huddle thread drops rows the fold would never have raised.
+  const turns = out.filter((r) => r.thread_id !== null && r.act === 'message');
+  if (turns.length > 0) {
+    const rendered = await listRenderedActs(
+      db,
+      member.team_id,
+      member.name,
+      turns.map((r) => r.id),
+    );
+    if (rendered.size > 0) {
+      const shownUpTo = new Map<string, { ts: number; id: string }>();
+      for (const r of turns) {
+        if (!rendered.has(r.id)) continue;
+        const cur = shownUpTo.get(r.thread_id!);
+        if (!cur || r.ts > cur.ts || (r.ts === cur.ts && r.id > cur.id))
+          shownUpTo.set(r.thread_id!, { ts: r.ts, id: r.id });
+      }
+      out = out.filter((r) => {
+        if (r.thread_id === null || r.act !== 'message') return true;
+        const upTo = shownUpTo.get(r.thread_id);
+        if (!upTo) return true;
+        return r.ts > upTo.ts || (r.ts === upTo.ts && r.id > upTo.id);
+      });
     }
   }
 

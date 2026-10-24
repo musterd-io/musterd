@@ -73,6 +73,68 @@ withDrivers('inbox-rendered', (_o, kind) => {
     return env;
   }
 
+  describe('a huddle turn is discharged by being read, including the by-id read the line asks for (clause 7(vi), lane 01M5N5KGZG)', () => {
+    async function turn(
+      from: string,
+      cred: string | AgentHttpAuth,
+      id: string,
+      thread: string,
+      meta?: Record<string, unknown>,
+    ) {
+      clock += 100;
+      const env = makeEnvelope({
+        id,
+        team: 'dawn',
+        from,
+        ts: clock,
+        to: { kind: 'team' },
+        act: 'message',
+        body: 'x',
+        thread: thread === id ? null : thread,
+        meta: meta ?? null,
+      });
+      const r = await post('/teams/dawn/messages', { envelope: env }, cred);
+      expect(r.status).toBe(201);
+      return env;
+    }
+    const huddle = {
+      huddle: {
+        topic: { kind: 'goal', id: 'dreaming' },
+        room: 'http://127.0.0.1:4851/b/h',
+        anchor: 'docs/wiki/huddles.md',
+      },
+    };
+
+    it('rings a room the seat joined by speaking until the by-id read renders the newest turn, then goes quiet', async () => {
+      // The stale-pointer shape (lazara, 2026-10-05 → 10-23): a @team room, one own turn, then
+      // teammates keep talking; the cursor never passes the turns (elided backlog), the seat never
+      // speaks again, and the line names a by-id read that recorded nothing.
+      await turn('nick', nickCred, 'h1', 'h1', huddle);
+      await turn('Ada', adaAuth, 'ada-spoke', 'h1');
+      await turn('nick', nickCred, 'turn-1', 'h1');
+      const last = await turn('nick', nickCred, 'turn-2', 'h1');
+
+      const before = await get('/teams/dawn/inbox/interrupt-check', adaAuth);
+      expect(before.json.raised).toBe(true);
+      expect(before.json.act.id).toBe(last.id);
+      expect(before.json.line).toContain(`ids:["${last.id}"]`);
+
+      // Exactly the read the line asks for.
+      const named = await get(`/teams/dawn/inbox?ids=${last.id}`, adaAuth);
+      expect(named.json.messages.map((m: { id: string }) => m.id)).toEqual([last.id]);
+
+      const after = await get('/teams/dawn/inbox/interrupt-check', adaAuth);
+      expect(after.json.raised).toBe(false);
+
+      // A later turn rings again; a peeked by-id read is not a read.
+      const next = await turn('nick', nickCred, 'turn-3', 'h1');
+      await get(`/teams/dawn/inbox?ids=${next.id}&peek=1`, adaAuth);
+      const fresh = await get('/teams/dawn/inbox/interrupt-check', adaAuth);
+      expect(fresh.json.raised).toBe(true);
+      expect(fresh.json.act.id).toBe(next.id);
+    });
+  });
+
   describe('a steer is discharged by being read (clause 7(iv))', () => {
     it('rings until GET /inbox renders it to the addressee, then goes quiet — with no cursor advance', async () => {
       const steer = await steerAda('drop the refactor, ship the fix');

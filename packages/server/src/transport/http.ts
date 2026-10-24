@@ -253,7 +253,8 @@ import {
   appendAudit,
   appendLaneEventRequired,
   hasInterruptRaised,
-  listRenderedActs,
+  recordRendered,
+  renderableOnRead,
   hasRecentInterruptRefusal,
   laneHistory,
   laneOwnerHistory,
@@ -10440,8 +10441,20 @@ export async function handleHttp(
         if (idsRaw !== null) {
           const ids = idsRaw.split(',').filter((id) => id.length > 0);
           const named = await listInbox(ctx.db, member, { ids });
+          const envelopes = await rowsToEnvelopes(ctx.db, team.slug, named);
+          // Clause 7(iv) on the by-id read too (lane 01M5N5KGZG): the interrupt line's own
+          // instruction is this read, so it must discharge what it shows — a steer, an urgent act
+          // or a huddle turn named here is rendered to its addressee exactly as a window read
+          // renders it. `peek=1` still writes nothing (a reply-target lookup shows nothing).
+          if (url.searchParams.get('peek') !== '1')
+            await recordRendered(
+              ctx.db,
+              team.id,
+              member.name,
+              renderableOnRead(envelopes, member.name),
+            );
           return sendJson(res, 200, {
-            messages: await rowsToEnvelopes(ctx.db, team.slug, named),
+            messages: envelopes,
             cursor: await getCursor(ctx.db, member.id),
           });
         }
@@ -10548,40 +10561,13 @@ export async function handleHttp(
         // it a background redraw discharged a steer the model never saw (idle-wake canary trial 3,
         // 2026-10-12: the Claude Code statusline's GET /inbox at 10:04:23 silenced a held steer).
         const peek = url.searchParams.get('peek') === '1';
-        const renderable = messages.filter(
-          (m) =>
-            !peek &&
-            m.from !== member.name &&
-            m.to.kind === 'member' &&
-            m.to.name === member.name &&
-            (m.act === 'steer' ||
-              (m.meta as { urgent?: unknown } | null | undefined)?.['urgent'] === true),
-        );
-        // Captured BEFORE the write below: the read that renders an act for the first time must
-        // still COUNT it (a seat that has never seen the act cannot have been shown it), so the
-        // clause 7(iv) discharge in `discharged` lands from the NEXT read on. Same set, read once.
-        const shownBeforeThisRead =
-          renderable.length === 0
-            ? new Set<string>()
-            : await listRenderedActs(
-                ctx.db,
-                team.id,
-                member.name,
-                renderable.map((m) => m.id),
-              );
-        if (renderable.length > 0) {
-          const already = shownBeforeThisRead;
-          for (const m of renderable) {
-            if (already.has(m.id)) continue;
-            await appendAudit(ctx.db, team.id, {
-              actor: member.name,
-              action: 'inbox.rendered',
-              target: member.name,
-              result: 'allow',
-              detail: { act: m.id, act_kind: m.act },
-            });
-          }
-        }
+        // Steers and urgent acts directed here, plus the newest huddle turn per room (lane
+        // 01M5N5KGZG — a turn has no answering move either, and a room the seat never speaks in
+        // again rang at every boundary for 18 days). `recordRendered` returns what was shown BEFORE
+        // this read: the read that renders an act for the first time must still COUNT it, so the
+        // clause 7(iv) discharge in `discharged` lands from the NEXT read on.
+        const renderable = peek ? [] : renderableOnRead(messages, member.name);
+        const shownBeforeThisRead = await recordRendered(ctx.db, team.id, member.name, renderable);
 
         // Which of my asks I have already answered — same reason the deferral fold reads the team
         // timeline rather than the inbox, and off the SAME scan, so it costs no extra query.
