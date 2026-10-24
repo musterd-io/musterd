@@ -318,3 +318,34 @@ describe('the rendered figure (plan Task 13)', () => {
     expect(a.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9)).toHaveLength(0);
   });
 });
+
+describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
+  const fit = fitFloor(1200, 900);
+  const styles = ['task', 'wheeled', 'wheeled-arms', 'exec', 'gamer'];
+  const ids = ['chair/shadow', ...styles.flatMap((s) => ['sn', 'ew'].flatMap((a) => [`chair/${s}/${a}/base`, `chair/${s}/${a}/back`]))];
+
+  it('each chair is its style’s sprite, tinted on a canvas the size of the sprite, never a default-sized one', () => {
+    // A fresh canvas is 300 × 150 and the tint only grows one: a chair blitted from that squeezed to a
+    // third of its width (nick, 2026-10-23: backs "at an angle", "paper thin").
+    const made: { width: number; height: number }[] = [];
+    const doc = globalThis.document;
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => {
+        const c = { width: 300, height: 150, getContext: () => recordingCtx().ctx };
+        made.push(c);
+        return c;
+      },
+    };
+    const byName = new Map([['ada', officeNode('ada')]]);
+    const placements = new Map([['ada', { kind: 'desk', slot: 0 }]]);
+    try {
+      const { ctx, ops } = recordingCtx();
+      renderScene(ctx, fit, placements as never, byName, new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+      const tintedBlits = ops.filter((o) => o.name === 'drawImage' && made.includes(o.args[0] as never));
+      expect(tintedBlits.length).toBeGreaterThan(0);
+      for (const c of made) expect([c.width, c.height]).toEqual([420, 300]);
+    } finally {
+      (globalThis as { document?: unknown }).document = doc;
+    }
+  });
+});

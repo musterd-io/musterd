@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 # ── layout.ts numbers (keep in step with layout.ts; the TypeScript is the source of truth) ────
 FLOOR = 900
@@ -724,6 +724,113 @@ def meeting_chair(asset_id: str, lx: float, ly: float, facing: str, zs: float, c
     return finish(asset_id, parts, lx, ly, col)
 
 
+# The desk chairs (lane 01M5D8EJ40; the painter's `chairBase` / `chairBack`). Rendered in neutral greys —
+# the painter's own shade ratios (`dim(color, k)`) as greys — and tinted with the member's colour at
+# draw time, as the figure is. The star base is the same from every side and the back is a symmetric
+# box, so a chair has one image per seat axis: `sn` (facing N or S) and `ew`.
+CHAIR_STYLES = {
+    # back_h: the backrest's own height; the seat top stays at SEAT_TOP, where a seated figure lands.
+    # nick 2026-10-23 on the first render: "don't look good and are too small" — so these are bigger
+    # than the painter's (a back to the shoulder blades or over the head, a 40-wide seat) and shaped
+    # like office chairs rather than boxes.
+    "task": dict(back_h=30, back_w=36, arms=False, headrest=False, wings=False),
+    "wheeled": dict(back_h=32, back_w=36, arms=False, headrest=False, wings=False),
+    "wheeled-arms": dict(back_h=32, back_w=36, arms=True, headrest=False, wings=False),
+    "exec": dict(back_h=40, back_w=40, arms=True, headrest=False, wings=False),
+    "gamer": dict(back_h=44, back_w=40, arms=True, headrest=True, wings=True),
+}
+_CHAIR_LIFT, _CHAIR_SEAT_H = 10, 12  # layout.ts CHAIR_LIFT, CHAIR_SEAT_H
+_SEAT_TOP = _CHAIR_LIFT + _CHAIR_SEAT_H
+_SEAT_W, _SEAT_D = 40, 34  # across the sitter, along their facing
+_STAR_R = 18
+
+
+def _grey(k: float) -> tuple[float, float, float]:
+    """A neutral grey at the painter's shade ratio `k` of a near-white base (tinted at runtime)."""
+    v = round(0.92 * k * 255)
+    return srgb(f"#{v:02x}{v:02x}{v:02x}")
+
+
+def chair_base(asset_id: str, style: str, sn: bool, zs: float, col) -> bpy.types.Object:
+    """What a member sits on: a five-star base of tapered arms on twin casters, the gas column and the
+    tilt plate, a thick rounded seat pan whose top is SEAT_TOP, and armrests on posts."""
+    st = CHAIR_STYLES[style]
+    lx = ly = FLOOR / 2
+    cush = fabric("chair-cushion", _grey(1.0), 1.2)
+    leg = paint("chair-leg", _grey(0.5), 0.35)
+    tyre = matte("chair-tyre", _grey(0.3), 0.6)
+    post = paint("chair-post", _grey(0.45), 0.3)
+    arm = paint("chair-arm", _grey(0.55), 0.5)
+    parts = []
+    for i in range(5):
+        a = i / 5 * math.tau + 0.4
+        ux, uy = math.cos(a), math.sin(a)
+        sp = cyl(f"{asset_id}/spoke", lx, ly, 0, 1.0, 1.6, _STAR_R - 2, leg, zs, 8)
+        # `cyl` keeps its mesh local (centred on the object, which stands at half its height): lay the
+        # mesh along +x from the hub, then lift it to the spoke height
+        h = (_STAR_R - 2) * zs
+        sp.data.transform(
+            Matrix.Translation(Vector((0, 0, 3.6 * zs - h / 2)))
+            @ Matrix.Rotation(a, 4, "Z")
+            @ Matrix.Rotation(-math.pi / 2, 4, "Y")
+            @ Matrix.Translation(Vector((0, 0, -h / 2)))
+        )
+        parts.append(sp)
+        for side in (-1, 1):
+            parts.append(ball(f"{asset_id}/caster", lx + ux * _STAR_R - uy * side * 1.3, ly + uy * _STAR_R + ux * side * 1.3, 0, 1.9, 1.0, 1.9, tyre, zs))
+    parts.append(cyl(f"{asset_id}/hubcap", lx, ly, 2.4, 3.6, 3.0, 2.4, leg, zs, 16))
+    parts.append(cyl(f"{asset_id}/column", lx, ly, 4.0, 2.0, 2.0, 11.0, post, zs, 16))
+    parts.append(box(f"{asset_id}/plate", lx, ly, 14.5, 14, 14, 2.0, post, zs))
+    w, d = (_SEAT_W, _SEAT_D) if sn else (_SEAT_D, _SEAT_W)
+    seat = box(f"{asset_id}/seat", lx, ly, 16.0, w, d, _SEAT_TOP - 16.0, cush, zs)
+    bevel(seat, 2.8, 5)
+    parts.append(seat)
+    if st["arms"]:
+        for sgn in (-1, 1):
+            ax, ay = (lx + sgn * (_SEAT_W / 2 + 1.5), ly) if sn else (lx, ly + sgn * (_SEAT_W / 2 + 1.5))
+            parts.append(box(f"{asset_id}/armpost", ax, ay, 16.0, 2.6, 2.6, 13.0, post, zs))
+            pad = box(f"{asset_id}/armpad", ax, ay, 29.0, 4 if sn else 20, 20 if sn else 4, 2.6, arm, zs)
+            bevel(pad, 1.2, 3)
+            parts.append(pad)
+    return finish(asset_id, parts, lx, ly, col)
+
+
+def chair_shadow(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """A desk chair's contact shadow on its own: the chairs are tinted at draw time, and a multiply over
+    a soft shadow's half-transparent pixels shows the tint colour instead of darkening the floor."""
+    lx = ly = FLOOR / 2
+    return finish(asset_id, [shadow(f"{asset_id}/shadow", lx, ly, 17, 17, zs)], lx, ly, col)
+
+
+def chair_back(asset_id: str, style: str, sn: bool, zs: float, col) -> bpy.types.Object:
+    """The backrest at its own floor point (the painter sorts it apart from the seat): a spine from the
+    tilt plate up to a rounded, padded back, and the racing chair's wings and headrest when the style
+    has them."""
+    st = CHAIR_STYLES[style]
+    lx = ly = FLOOR / 2
+    back = fabric("chair-back", _grey(0.85), 1.2)
+    wing = fabric("chair-wing", _grey(0.7), 1.2)
+    head = fabric("chair-head", _grey(0.78), 1.2)
+    post = paint("chair-post", _grey(0.45), 0.3)
+    z0 = _SEAT_TOP + 3
+    bw, bh = st["back_w"], st["back_h"]
+    parts = [box(f"{asset_id}/spine", lx, ly, 15.0, 3.0, 3.0, z0 + 4 - 15.0, post, zs)]
+    b = box(f"{asset_id}/back", lx, ly, z0, bw if sn else 5, 5 if sn else bw, bh, back, zs)
+    bevel(b, 2.4, 5)
+    parts.append(b)
+    if st["wings"]:
+        for sgn in (-1, 1):
+            wx, wy = (lx + sgn * (bw / 2 - 1), ly) if sn else (lx, ly + sgn * (bw / 2 - 1))
+            wb = box(f"{asset_id}/wing", wx, wy, z0 + bh * 0.35, 4, 4, bh * 0.65, wing, zs)
+            bevel(wb, 1.6, 3)
+            parts.append(wb)
+    if st["headrest"]:
+        hb = box(f"{asset_id}/headrest", lx, ly, z0 + bh + 1.5, 20 if sn else 5, 5 if sn else 20, 9, head, zs)
+        bevel(hb, 2.2, 4)
+        parts.append(hb)
+    return finish(asset_id, parts, lx, ly, col)
+
+
 def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     lx, ly = RECEPTION["end_table"]
     oak = wood("oak", OAK)
@@ -1094,6 +1201,11 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
         a[f"meeting/chair-{i}"] = meeting_chair(f"meeting/chair-{i}", MEETING["lx"] + dx, MEETING["ly"] + dy, facing, zs, export)
     a["printer"] = printer("printer", zs, export)
     a["welcome/wagon"] = wagon("welcome/wagon", zs, export)
+    a["chair/shadow"] = chair_shadow("chair/shadow", zs, export)
+    for style in CHAIR_STYLES:
+        for axis, sn in (("sn", True), ("ew", False)):
+            a[f"chair/{style}/{axis}/base"] = chair_base(f"chair/{style}/{axis}/base", style, sn, zs, export)
+            a[f"chair/{style}/{axis}/back"] = chair_back(f"chair/{style}/{axis}/back", style, sn, zs, export)
     a["desk/lamp-off"] = desk_lamp("desk/lamp-off", False, zs, export)
     a["desk/lamp-on"] = desk_lamp("desk/lamp-on", True, zs, export)
     for frame in range(4):
