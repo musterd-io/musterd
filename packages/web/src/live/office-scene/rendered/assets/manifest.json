@@ -402,6 +402,138 @@
       "scale": 3.0
     },
     {
+      "id": "monitor/dual/E",
+      "file": "office-art-monitor-dual-E.webp",
+      "w": 160,
+      "h": 148,
+      "anchor": {
+        "x": 80.0,
+        "y": 128.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/dual/N",
+      "file": "office-art-monitor-dual-N.webp",
+      "w": 160,
+      "h": 148,
+      "anchor": {
+        "x": 80.0,
+        "y": 128.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/dual/S",
+      "file": "office-art-monitor-dual-S.webp",
+      "w": 160,
+      "h": 148,
+      "anchor": {
+        "x": 80.0,
+        "y": 128.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/dual/W",
+      "file": "office-art-monitor-dual-W.webp",
+      "w": 160,
+      "h": 148,
+      "anchor": {
+        "x": 80.0,
+        "y": 128.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/single/E",
+      "file": "office-art-monitor-single-E.webp",
+      "w": 84,
+      "h": 126,
+      "anchor": {
+        "x": 42.0,
+        "y": 110.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/single/N",
+      "file": "office-art-monitor-single-N.webp",
+      "w": 84,
+      "h": 126,
+      "anchor": {
+        "x": 42.0,
+        "y": 110.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/single/S",
+      "file": "office-art-monitor-single-S.webp",
+      "w": 84,
+      "h": 126,
+      "anchor": {
+        "x": 42.0,
+        "y": 110.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/single/W",
+      "file": "office-art-monitor-single-W.webp",
+      "w": 84,
+      "h": 126,
+      "anchor": {
+        "x": 42.0,
+        "y": 110.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/ultrawide/E",
+      "file": "office-art-monitor-ultrawide-E.webp",
+      "w": 128,
+      "h": 133,
+      "anchor": {
+        "x": 64.0,
+        "y": 114.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/ultrawide/N",
+      "file": "office-art-monitor-ultrawide-N.webp",
+      "w": 128,
+      "h": 133,
+      "anchor": {
+        "x": 64.0,
+        "y": 114.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/ultrawide/S",
+      "file": "office-art-monitor-ultrawide-S.webp",
+      "w": 128,
+      "h": 133,
+      "anchor": {
+        "x": 64.0,
+        "y": 114.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "monitor/ultrawide/W",
+      "file": "office-art-monitor-ultrawide-W.webp",
+      "w": 128,
+      "h": 133,
+      "anchor": {
+        "x": 64.0,
+        "y": 114.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "nook/cooler",
       "file": "office-art-nook-cooler.webp",
       "w": 117,

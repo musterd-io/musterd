@@ -831,6 +831,53 @@ def chair_back(asset_id: str, style: str, sn: bool, zs: float, col) -> bpy.types
     return finish(asset_id, parts, lx, ly, col)
 
 
+# The desk monitors (lane 01M5D8EJ40; the painter's `monitor` / `monitorStand` / `screenPanel`). The same
+# dimensions as the painter's — a 3-deep panel at PANEL_UP on a slim neck and a base plate — so the live screen
+# face the painter still draws (the animated desktop, the idle glass, the bloom) lands on this panel's face.
+# Built from the floor (z = 0) and lifted to the desk's surface at draw time, so one image serves every desk.
+_PANEL_UP = 8  # render.ts PANEL_UP
+MONITOR_SETUPS = {
+    # setup: (plate across, [(across offset, panel width, panel height)])
+    "single": (15, [(0, 34, 22)]),
+    "dual": (22, [(-18, 34, 22), (18, 34, 22)]),
+    "ultrawide": (20, [(0, 54, 20)]),
+}
+_FWD = {"S": (0, 1), "N": (0, -1), "E": (1, 0), "W": (-1, 0)}
+
+
+def desk_monitor(asset_id: str, setup: str, facing: str, zs: float, col) -> bpy.types.Object:
+    """One monitor setup at a desk facing `facing`: the base plate, the neck, the panel(s) with a bezel,
+    a dark glass face toward the sitter and a plain back with a vent and a mount boss away from them."""
+    lx = ly = FLOOR / 2
+    f = _FWD[facing]
+    sn = facing in ("S", "N")
+    p = (-f[1], f[0])  # across the desk
+    plate_c = paint("mon-plate", srgb("#22262b"), 0.35)
+    neck_c = paint("mon-neck", srgb("#33383f"), 0.3)
+    shell = paint("mon-shell", srgb("#2a2e33"), 0.45)
+    glass = paint("mon-glass", srgb("#1b2a30"), 0.12)
+    vent = paint("mon-vent", srgb("#202429"), 0.6)
+    plate_across, panels = MONITOR_SETUPS[setup]
+    parts = []
+    plate = box(f"{asset_id}/plate", lx, ly, 0, plate_across if sn else 11, 11 if sn else plate_across, 1.5, plate_c, zs)
+    bevel(plate, 1.2, 3)
+    parts.append(plate)
+    parts.append(box(f"{asset_id}/neck", lx + f[0] * 1.5, ly + f[1] * 1.5, 1.5, 5 if sn else 3, 3 if sn else 5, _PANEL_UP + 6, neck_c, zs))
+    for off, w, h in panels:
+        cx, cy = lx + p[0] * off, ly + p[1] * off
+        body = box(f"{asset_id}/panel", cx, cy, _PANEL_UP, w if sn else 3, 3 if sn else w, h, shell, zs)
+        bevel(body, 0.9, 3)
+        parts.append(body)
+        # the glass, a hair proud of the face toward the sitter (−f), inside a 1.6-unit bezel
+        gx, gy = cx - f[0] * 1.55, cy - f[1] * 1.55
+        parts.append(box(f"{asset_id}/glass", gx, gy, _PANEL_UP + 1.6, (w - 3.2) if sn else 0.2, 0.2 if sn else (w - 3.2), h - 3.2, glass, zs))
+        # the back: a raised vent band and the mount boss, away from the sitter (+f)
+        bx_, by_ = cx + f[0] * 1.7, cy + f[1] * 1.7
+        parts.append(box(f"{asset_id}/vent", bx_, by_, _PANEL_UP + h * 0.55, (w * 0.6) if sn else 0.6, 0.6 if sn else (w * 0.6), h * 0.25, vent, zs))
+        parts.append(box(f"{asset_id}/boss", bx_, by_, _PANEL_UP + h * 0.25, 7 if sn else 1.2, 1.2 if sn else 7, 7, vent, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
 def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     lx, ly = RECEPTION["end_table"]
     oak = wood("oak", OAK)
@@ -1202,6 +1249,9 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["printer"] = printer("printer", zs, export)
     a["welcome/wagon"] = wagon("welcome/wagon", zs, export)
     a["chair/shadow"] = chair_shadow("chair/shadow", zs, export)
+    for setup in MONITOR_SETUPS:
+        for facing in ("N", "E", "S", "W"):
+            a[f"monitor/{setup}/{facing}"] = desk_monitor(f"monitor/{setup}/{facing}", setup, facing, zs, export)
     for style in CHAIR_STYLES:
         for axis, sn in (("sn", True), ("ew", False)):
             a[f"chair/{style}/{axis}/base"] = chair_base(f"chair/{style}/{axis}/base", style, sn, zs, export)
