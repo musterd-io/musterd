@@ -1,6 +1,6 @@
 {
   "name": "@musterd/mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "mcpName": "io.musterd/musterd",
   "description": "Your agents, on a team with you: one MCP server joins any MCP-capable agent to a musterd team. Every piece of work shows who did it and who accepted it.",
   "license": "MIT",
