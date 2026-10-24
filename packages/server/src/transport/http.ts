@@ -1411,6 +1411,13 @@ const StreamEpitaphBody = z.object({
   machine: z.string().max(64).optional(),
 });
 
+/**
+ * Body for `POST /teams/:slug/stream/winddown` (lane 01M5GDACC0) — when a queued `stream stop` will
+ * end the broadcast, so /broadcast can count down to it; `null` takes the card down. The CLI's
+ * state file holds the same number and is what actually stops the stream, so this is display only.
+ */
+const StreamWindDownBody = z.object({ stop_at: z.number().int().min(0).nullable() });
+
 function requestOrigin(req: IncomingMessage): string {
   const proto = req.headers['x-forwarded-proto'];
   return originFrom(req.headers.host, Array.isArray(proto) ? proto[0] : proto);
@@ -8987,6 +8994,36 @@ export async function handleHttp(
           },
         });
         return sendJson(res, 202, {});
+      }
+      // The queued stop's deadline (lane 01M5GDACC0), the same leaseless, presence-neutral audit
+      // artifact as the epitaph above: the streamwatch seat writes it, the stream's observer reads
+      // it. The newest row is the answer, so a cancel is a row with `stop_at: null`.
+      if (method === 'POST' && rest === '/stream/winddown') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          { leaseless: true },
+        );
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(StreamWindDownBody, await readJson(req));
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: 'stream.winddown',
+          target: null,
+          result: 'allow',
+          detail: { stop_at: body.stop_at },
+        });
+        return sendJson(res, 202, {});
+      }
+      if (method === 'GET' && rest === '/stream/winddown') {
+        const { team, member } = await authMember(ctx.db, slug, bearer(req), actingSeat(req));
+        assertSeatCanRead(member);
+        const [row] = await listAuditByAction(ctx.db, team.id, 'stream.winddown', 1);
+        const detail = row?.detail ? (JSON.parse(row.detail) as { stop_at?: number | null }) : {};
+        return sendJson(res, 200, { stop_at: detail.stop_at ?? null });
       }
       if (method === 'GET' && rest === '/stream/epitaph') {
         const { team, member } = await authMember(ctx.db, slug, bearer(req), actingSeat(req));

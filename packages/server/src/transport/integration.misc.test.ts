@@ -410,6 +410,34 @@ withDrivers('integration · misc', (_o, kind) => {
    * observer seat (read-only for SPEECH — this is an audit artifact, not an act), the reader any
    * readable seat (the streamwatch service seat, or an operator).
    */
+  /** Lane 01M5GDACC0: a queued `stream stop`'s deadline, read by /broadcast's wind-down card. */
+  describe('stream wind-down (lane 01M5GDACC0)', () => {
+    it('the newest row is the answer: a deadline, then a cancel', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential as string;
+      const stream = await post(
+        '/teams/dusk/members',
+        { name: 'broadcast-t1', kind: 'human', observer: true, observer_scope: 'broadcast' },
+        nickTok,
+      );
+      const streamTok = stream.json.human_credential as string;
+
+      expect((await get('/teams/dusk/stream/winddown', streamTok)).json).toEqual({ stop_at: null });
+      const stopAt = 1_787_001_800_000;
+      expect((await post('/teams/dusk/stream/winddown', { stop_at: stopAt }, nickTok)).status).toBe(
+        202,
+      );
+      expect((await get('/teams/dusk/stream/winddown', streamTok)).json).toEqual({
+        stop_at: stopAt,
+      });
+      await post('/teams/dusk/stream/winddown', { stop_at: null }, nickTok);
+      expect((await get('/teams/dusk/stream/winddown', streamTok)).json).toEqual({ stop_at: null });
+      expect((await post('/teams/dusk/stream/winddown', { stop_at: 'soon' }, nickTok)).status).toBe(
+        400,
+      );
+    });
+  });
+
   describe('stream epitaph (lane 01M52Z987280)', () => {
     async function seed() {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });

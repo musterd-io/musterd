@@ -65,6 +65,7 @@ describe('musterd stream', () => {
       sendAsk: async () => {},
       mintSeat: async (team) => ({ team, name: 'broadcast-test', token: 'mscr_test' }),
       stageSeat: () => ({ code: 0, output: '' }),
+      postWindDown: async () => true,
     };
   });
 
@@ -186,6 +187,125 @@ describe('musterd stream', () => {
       expect(await run(['status', '--app', 'other-app'], { exec })).toBe(0);
       expect(out.join('')).toContain('abc123');
       expect(out.join('')).toContain('other-app');
+    });
+  });
+
+  // ── wind-down: `stop` queues, the supervisor stops at the deadline (lane 01M5GDACC0) ─────────
+  describe('wind-down', () => {
+    const NOW = 1_787_000_000_000;
+    const DEADLINE = NOW + 30 * 60_000;
+    let statePath: string;
+    let posts: (number | null)[];
+    let calls: string[][];
+    let exec: Exec;
+
+    beforeEach(() => {
+      statePath = join(repo, 'stream-state.json');
+      posts = [];
+      calls = [];
+      const inner = greenExec({
+        'fly machine list': ok(JSON.stringify([{ id: 'abc123', state: 'started' }])),
+        'fly machine stop': ok(''),
+      });
+      exec = (cmd, args) => (calls.push([cmd, ...args]), inner(cmd, args));
+      writeStreamState(statePath, {
+        desired: 'live',
+        by: 'nick',
+        at: NOW - 3_600_000,
+        team: 'acme',
+        restarts: [],
+      });
+    });
+
+    const at = (now: number, over: Partial<StreamDeps> = {}): Partial<StreamDeps> => ({
+      exec,
+      statePath,
+      now: () => now,
+      fetchEpitaph: async () => null,
+      postWindDown: async (team, stopAt) => (expect(team).toBe('acme'), posts.push(stopAt), true),
+      ...over,
+    });
+    const stopped = () => calls.some((c) => c[1] === 'machine' && c[2] === 'stop');
+
+    it('stop on a live stream queues the stop 30 minutes out and tells the daemon', async () => {
+      expect(await run(['stop', '--reason', 'end of day'], at(NOW))).toBe(0);
+      expect(stopped()).toBe(false);
+      const s = readStreamState(statePath)!;
+      expect(s.desired).toBe('live');
+      expect(s.stopAt).toBe(DEADLINE);
+      expect(s.reason).toBe('end of day');
+      expect(posts).toEqual([DEADLINE]);
+      expect(out.join('')).toContain('wind-down card is up');
+    });
+
+    it('status names the queued stop', async () => {
+      await run(['stop'], at(NOW));
+      out.length = 0;
+      expect(await run(['status'], at(NOW + 10 * 60_000))).toBe(0);
+      expect(out.join('')).toMatch(/stopping at .*\(20 min\)/);
+    });
+
+    it('a second stop does not push the deadline out', async () => {
+      await run(['stop'], at(NOW));
+      await run(['stop'], at(NOW + 5 * 60_000));
+      expect(readStreamState(statePath)!.stopAt).toBe(DEADLINE);
+      expect(posts).toEqual([DEADLINE]);
+      expect(out.join('')).toContain('already stopping');
+    });
+
+    it('ensure leaves the stream up before the deadline and stops it after', async () => {
+      await run(['stop'], at(NOW));
+      expect(await run(['ensure'], at(DEADLINE - 60_000))).toBe(0);
+      expect(stopped()).toBe(false);
+      expect(await run(['ensure'], at(DEADLINE + 1))).toBe(0);
+      expect(stopped()).toBe(true);
+      const s = readStreamState(statePath)!;
+      expect(s.desired).toBe('stopped');
+      expect(s.stopAt).toBeUndefined();
+      expect(posts).toEqual([DEADLINE, null]);
+    });
+
+    it('a stream that crashes during the wind-down is not relaunched once the deadline passes', async () => {
+      let launches = 0;
+      await run(['stop'], at(NOW));
+      const gone = greenExec();
+      expect(
+        await run(
+          ['ensure'],
+          at(DEADLINE + 1, {
+            exec: gone,
+            launch: () => ((launches += 1), { code: 0, output: '' }),
+          }),
+        ),
+      ).toBe(0);
+      expect(launches).toBe(0);
+      expect(readStreamState(statePath)!.desired).toBe('stopped');
+    });
+
+    it('--now stops at once and takes a queued card down', async () => {
+      await run(['stop'], at(NOW));
+      expect(await run(['stop', '--now'], at(NOW + 60_000))).toBe(0);
+      expect(stopped()).toBe(true);
+      expect(readStreamState(statePath)!.desired).toBe('stopped');
+      expect(posts).toEqual([DEADLINE, null]);
+    });
+
+    it('--cancel keeps it live and takes the card down', async () => {
+      await run(['stop'], at(NOW));
+      expect(await run(['stop', '--cancel'], at(NOW + 60_000))).toBe(0);
+      const s = readStreamState(statePath)!;
+      expect(s.desired).toBe('live');
+      expect(s.stopAt).toBeUndefined();
+      expect(posts).toEqual([DEADLINE, null]);
+      expect(await run(['ensure'], at(DEADLINE + 1))).toBe(0);
+      expect(stopped()).toBe(false);
+    });
+
+    it('the stop still happens on time when the daemon cannot be told', async () => {
+      expect(await run(['stop'], at(NOW, { postWindDown: async () => false }))).toBe(0);
+      expect(out.join('')).toContain('no card shows');
+      await run(['ensure'], at(DEADLINE + 1, { postWindDown: async () => false }));
+      expect(stopped()).toBe(true);
     });
   });
 

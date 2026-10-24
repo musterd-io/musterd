@@ -228,6 +228,12 @@ access; roster handles and Presence remain visible.
   beat and clears. `/broadcast` shows the same banner read-only (`live/StreamAskBanner.tsx`: the
   `askBanner()` view-model and `lc-asks` markup, no buttons, no sheet, "+N more waiting" as
   words, type scaled for the 720p encode); the rotating `AsksReel` it replaced is gone.
+- **Wind-down card** (`live/WindDownCard.tsx`, lane 01M5GDACC0) — `/broadcast` only. When
+  `musterd stream stop` queues a stop, a paper card at the foot of the stage says "team <name> will
+  be ending its day in N minutes" and a small sun sinks to its horizon as the deadline nears.
+  `live/useWindDown.ts` polls `GET /teams/:slug/stream/winddown` each minute and redraws only when
+  the sentence changes (every five minutes, each minute in the last five; `live/windDown.ts`); no
+  animation loop runs. The deadline is the one the CLI stops the stream by, so the two cannot drift.
 - **Shared Seeds tray** (`live/SeedsTray.tsx`) — a read-only drawer from the `/live` top bar (ADR 319).
   Active uses the protocol's shared tray rule; history reveals completed/promoted work and links a
   promoted Seed to the ordinary focused Lane view. It refetches on firehose activity so promotion

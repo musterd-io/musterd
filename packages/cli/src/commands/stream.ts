@@ -50,6 +50,7 @@ import {
   standDownReport,
   readStreamState,
   writeStreamState,
+  WIND_DOWN_MS,
 } from '../broadcast/streamState.js';
 import { HttpClient } from '../client.js';
 import { configPath, loadConfig, serverProvenance, type ServerProvenance } from '../config.js';
@@ -61,7 +62,7 @@ import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.
 import { resolveRead } from './helpers.js';
 
 const USAGE =
-  'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--here] [--once] [--reason <text>] [--json]';
+  'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--here] [--once] [--reason <text>] [--now] [--cancel] [--json]';
 
 export interface StreamDeps {
   exec?: Exec;
@@ -89,6 +90,9 @@ export interface StreamDeps {
   mintSeat?: (team: string) => Promise<BroadcastSeat>;
   /** Stage the seat as the app's MUSTERD_BROADCAST_SEAT Fly secret, over stdin (ADR 594). */
   stageSeat?: (app: string, seat: BroadcastSeat) => { code: number; output: string };
+  /** Tell the daemon when the stream will stop (null: no stop queued), so /broadcast can show the
+   * wind-down card (lane 01M5GDACC0). False when the daemon could not be told. */
+  postWindDown?: (team: string, stopAt: number | null) => Promise<boolean>;
 }
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
@@ -131,6 +135,7 @@ export const STREAM_FLAGS = [
   'allowed-host',
   'app',
   'auth',
+  'cancel',
   'capture-nodes',
   'close',
   'data',
@@ -140,6 +145,7 @@ export const STREAM_FLAGS = [
   'git',
   'image',
   'inherit',
+  'now',
   'pipe',
   'reason',
   'response',
@@ -189,7 +195,19 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
     deps.mintSeat ??
     (async (team: string) => seatFromEnv(team) ?? (await mintBroadcastSeat(parsed.flags, team)));
   const stageSeat = deps.stageSeat ?? realStageSeat;
-  const sup = { statePath, now, who, launch, sleep, sendAsk, fetchEpitaph, mintSeat, stageSeat };
+  const postWindDown = deps.postWindDown ?? defaultPostWindDown;
+  const sup = {
+    statePath,
+    now,
+    who,
+    launch,
+    sleep,
+    sendAsk,
+    fetchEpitaph,
+    mintSeat,
+    stageSeat,
+    postWindDown,
+  };
 
   switch (sub) {
     case 'doctor':
@@ -412,6 +430,7 @@ interface Sup {
   fetchEpitaph: (team: string) => Promise<StreamEpitaph | null>;
   mintSeat: (team: string) => Promise<BroadcastSeat>;
   stageSeat: (app: string, seat: BroadcastSeat) => { code: number; output: string };
+  postWindDown: (team: string, stopAt: number | null) => Promise<boolean>;
 }
 
 /**
@@ -744,15 +763,66 @@ function machineListJson(exec: Exec, app: string): string {
   return r.code === 0 ? r.stdout : '[]';
 }
 
-function stopVerb(
+/**
+ * `stream stop` QUEUES the stop (lane 01M5GDACC0): a live stream gets WIND_DOWN_MS of notice, shown
+ * on /broadcast as a countdown card, and the supervisor's tick stops it at the deadline. `--now`
+ * is the old instant stop; `--cancel` takes a queued stop back. Nothing live means nothing to wind
+ * down, so that path stops (records the intent) at once, as it always did.
+ */
+async function stopVerb(
   a: { exec: Exec; app: string; parsed: Parsed; out: (s: string) => void } & Sup,
-): number {
+): Promise<number> {
+  const prev = readStreamState(a.statePath);
+  const team = prev?.team ?? process.env['MUSTERD_TEAM'] ?? 'revive';
+  if (a.parsed.flags['cancel'] === true) {
+    if (prev?.stopAt === undefined) {
+      a.out(theme.meta('○ no stop queued') + '\n');
+      return 0;
+    }
+    const { stopAt: _cancelled, ...rest } = prev;
+    writeStreamState(a.statePath, rest);
+    const told = await a.postWindDown(team, null);
+    a.out(
+      `${theme.ok('✓')} stop cancelled — stays live${told ? '' : theme.meta(' · the card may linger: the daemon could not be told')}\n`,
+    );
+    return 0;
+  }
+  const live = occupiedMachines(machineListJson(a.exec, a.app));
+  if (a.parsed.flags['now'] !== true && live.length > 0 && prev?.desired === 'live') {
+    if (prev.stopAt !== undefined) {
+      a.out(
+        `${theme.meta(`◷ already stopping at ${clock(prev.stopAt)}`)} ${theme.meta('· `--now` ends it now · `--cancel` keeps it live')}\n`,
+      );
+      return 0;
+    }
+    const reason =
+      typeof a.parsed.flags['reason'] === 'string' ? a.parsed.flags['reason'] : undefined;
+    const stopAt = a.now() + WIND_DOWN_MS;
+    writeStreamState(a.statePath, { ...prev, by: a.who(), stopAt, ...(reason ? { reason } : {}) });
+    const told = await a.postWindDown(team, stopAt);
+    a.out(
+      `${theme.ok('◷')} stopping at ${clock(stopAt)} ${theme.meta(
+        told
+          ? `· the wind-down card is up on /broadcast · \`--now\` ends it now · \`--cancel\` keeps it live`
+          : '· the daemon could not be told, so no card shows · `--now` ends it now',
+      )}\n`,
+    );
+    return 0;
+  }
+  return stopNow(a, prev, live);
+}
+
+/** The instant stop: `--now`, a queued stop's deadline, or a stop with nothing live to wind down. */
+async function stopNow(
+  a: { exec: Exec; app: string; parsed: Parsed; out: (s: string) => void } & Sup,
+  prev: ReturnType<typeof readStreamState>,
+  live: string[],
+): Promise<number> {
   // The stop record is written FIRST, whatever the machine list says: even mid-race with the
   // supervisor, a deliberate stop can never be resurrected — and a stop typed at an already-dead
   // stream (a crash the human noticed first) still records "this silence is intentional".
   const reason =
-    typeof a.parsed.flags['reason'] === 'string' ? a.parsed.flags['reason'] : undefined;
-  const prev = readStreamState(a.statePath);
+    typeof a.parsed.flags['reason'] === 'string' ? a.parsed.flags['reason'] : prev?.reason;
   writeStreamState(a.statePath, {
     desired: 'stopped',
     by: a.who(),
@@ -761,14 +831,20 @@ function stopVerb(
     ...(prev?.team ? { team: prev.team } : {}),
     restarts: [],
   });
+  // A card counting down to a stop that has now happened, or been overtaken by `--now`, comes down.
+  if (prev?.stopAt !== undefined)
+    await a.postWindDown(prev.team ?? process.env['MUSTERD_TEAM'] ?? 'revive', null);
   // Same question as `start`'s guard, so the same answer: stopping during the boot window used to
   // report "nothing live" and walk away from a machine that then came up and billed unattended.
-  const live = occupiedMachines(machineListJson(a.exec, a.app));
   const machine = live[0];
   if (!machine) {
     a.out(theme.meta('○ nothing live') + '\n');
     return 0;
   }
+  return stopMachine(a, machine);
+}
+
+function stopMachine(a: { exec: Exec; app: string; out: (s: string) => void }, machine: string) {
   // SIGINT is the broadcast CLI's graceful stop (ADR 159): ffmpeg finalizes the container, Chrome
   // exits, the process ends, and `--rm` destroys the machine — which is what ends the billing.
   const r = a.exec('fly', [
@@ -835,7 +911,20 @@ async function statusVerb(
       `machine ${live.join(', ')} · ${a.app}${state?.args ? ` · ${state.args}` : ''}`,
     )}\n`,
   );
+  if (state?.stopAt !== undefined) {
+    const mins = Math.max(0, Math.ceil((state.stopAt - a.now()) / 60_000));
+    a.out(
+      `${theme.warn('◷')} ${theme.meta(
+        `stopping at ${clock(state.stopAt)} (${mins} min) · queued by ${state.by ?? 'unknown'} · \`stream stop --cancel\` keeps it live`,
+      )}\n`,
+    );
+  }
   return 0;
+}
+
+/** A deadline as the wall-clock time a human reads it by. */
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // ── ensure: the supervisor's reconcile tick (ADR 293) ───────────────────────────────────────────
@@ -877,6 +966,16 @@ async function ensureVerb(
     recordedDigestAuthoritative: recorded?.source === 'machine',
   });
   switch (d.action) {
+    case 'stop': {
+      // The wind-down is over. The decision already says `stopped`, written before the machine is
+      // touched — the same order `stop` keeps, for the same reason.
+      writeStreamState(a.statePath, d.state);
+      await a.postWindDown(d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive', null);
+      a.out(`${theme.ok('◷')} ${d.note}\n`);
+      const machine = occupying[0];
+      if (machine) stopMachine(a, machine);
+      return 0;
+    }
     case 'noop':
       // A live tick is when the id is cheapest to learn. A stopped intent is not rewritten.
       if (occupying[0]) rememberMachine(a.statePath, occupying[0]);
@@ -996,6 +1095,25 @@ async function defaultFetchEpitaph(team: string): Promise<StreamEpitaph | null> 
     }
   } catch {
     return null;
+  }
+}
+
+/** Post the queued stop's deadline as the streamwatch seat, the identity the stream's other daemon
+ *  writes use. False on ANY failure: the stop still happens on time, only the card is missing. */
+async function defaultPostWindDown(team: string, stopAt: number | null): Promise<boolean> {
+  try {
+    const tokenFile = join(dirname(configPath()), 'stream', 'seat-token');
+    const token = readFileSync(tokenFile, 'utf8').trim();
+    const config = loadConfig();
+    const res = await fetch(`${config.server}/teams/${encodeURIComponent(team)}/stream/winddown`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ stop_at: stopAt }),
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
