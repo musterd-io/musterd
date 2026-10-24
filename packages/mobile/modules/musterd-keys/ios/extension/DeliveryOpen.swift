@@ -139,10 +139,12 @@ enum DeliveryOpen {
       }
       return .held(count: count)
     case "paired":
-      guard let member = object["member"] as? String, nonEmpty(object["device_key_id"]) != nil else {
+      guard let member = object["member"] as? String,
+        let deviceKeyId = nonEmpty(object["device_key_id"]), deviceKeyId.count <= 64
+      else {
         return nil
       }
-      return .paired(member: member)
+      return .paired(member: member, deviceKeyId: deviceKeyId)
     default:
       return nil
     }

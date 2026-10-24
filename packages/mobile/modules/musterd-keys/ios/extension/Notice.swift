@@ -20,7 +20,7 @@ enum Notice {
   enum Body {
     case ask(text: String, actionClass: String, hasApproval: Bool, waiting: Int, nonce: String)
     case held(count: Int)
-    case paired(member: String)
+    case paired(member: String, deviceKeyId: String)
   }
 
   /// Before the nonce store is written. A route expiry or an undrawable body is not consumed.
@@ -43,7 +43,7 @@ enum Notice {
     switch body {
     case .ask(let text, _, _, _, _):
       if text.isEmpty { return .unverified }
-    case .paired(let member):
+    case .paired(let member, _):
       if member.isEmpty { return .unverified }
     case .held:
       break
@@ -76,7 +76,7 @@ enum Notice {
     case .held(let count):
       let body = count == 1 ? "1 ask is held." : "\(count) asks are held."
       return Rendered(title: title, body: body, subtitle: nil, category: nil, sound: true)
-    case .paired(let member):
+    case .paired(let member, _):
       if member.isEmpty { return unverified() }
       return Rendered(
         title: title,

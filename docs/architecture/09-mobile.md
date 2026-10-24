@@ -16,8 +16,8 @@ phone, Android and the App Store are out of scope by name.
 
 The calendar shipped first (ADR 519 and ADR 520's app half) and left this package on 2026-10-22
 (lane `01M5K5ZJBZPE5SZC4HD6HHC0VJ`): screens, the local-first sync, the SQLite device store and the
-calendar wire client are gone. What remains is the asks shell and the pairing screen. The list and
-the descriptor screen are the next increment.
+calendar wire client are gone. What remains is the asks list, the ask and descriptor screen, and
+the pairing screen.
 
 It is a surface like the CLI and the MCP adapter: it talks over the wire and never imports
 `@musterd/server`. Frames go through the node-free `@musterd/protocol/app-channel` and
@@ -27,14 +27,16 @@ is parsed through a protocol schema at the boundary (hard rule 4).
 
 ## How it talks
 
-**The asks screen still does not fetch.** The calendar's HTTP client and its `mscr_` credential went
+**The app talks only to the relay.** The calendar's HTTP client and its `mscr_` credential went
 out with the calendar, and the app holds no team credential — its authority is the paired device key,
-not a bearer token (ADR 676 §3's trust table). The notification extension and the advisory answer
-action read a pairing pin from the keychain and, only when that pin names a binding, fetch a sealed
-body and POST an answer to the relay. Pairing writes the pin when the relay accepts the request, and
+not a bearer token (ADR 676 §3's trust table). The extension, the advisory answer action and the
+asks list read a pairing pin from the keychain and, only when that pin names a binding, fetch sealed
+bodies and POST answers to the relay. Pairing writes the pin when the relay accepts the request, and
 leaves `binding` off: the channel binding id does not exist until a standing key approves the phone.
 The extension writes that id back after the first delivery whose daemon signature verifies, and does
-not replace a binding it already stored. `app.json`'s App Transport Security exception for `ts.net`
+not replace a binding it already stored. The phone's device key id comes the same way, from the
+signed `paired` delivery (`device_key_id` on the pin): a listed-act answer names it as its proof's
+`key_id`. `app.json`'s App Transport Security exception for `ts.net`
 is a leftover of the calendar's direct link; it stays for the moment and dropping it is its own
 small change.
 
@@ -61,12 +63,24 @@ small change.
   that screen, because nothing else can deliver the binding.
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body.
+- **The list.** Notification Center says which asks reached the phone, not which are still open, so
+  each ref there is fetched by ref through the relay. The daemon answers only for an ask still live
+  on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask
+  drops out. Because a fetch spends the previous token, the list does not refresh while the ask
+  screen — which holds its own token — is in front.
+- **A listed act.** The ask screen fetches the ask again for fresh descriptors (they live five
+  minutes), hashes each offer's payload on the phone (`offer.ts`), shows nothing whose digest does not
+  match, and words the header with `approvalWording`. Approving signs the answer bytes and the
+  rebuilt descriptor under one Face ID (`signAll`; after the first signature the native side forbids
+  a second prompt). Decline also comes as "I did not expect this" (`reported`, written by the daemon
+  as `channel.answer_reported`).
 
 ## Screens
 
 | Route | What it is |
 | --- | --- |
-| `/` | The asks list. It opens on its empty state ("No asks yet"). An advisory notification action is answered from here, and the screen says so only when the answer did not leave. While this phone has no binding, the screen links to pairing. The list and the descriptor screen are the next increment. |
+| `/` | The asks list: every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting". A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. While this phone has no binding, the screen links to pairing. |
+| `/ask/[ref]` | One ask. A listed act is the descriptor screen (spec §7): the act in fixed wording, who asked, target, authority, requested at, expires in, and only below a rule, labelled as theirs, the asker's words and the lane title. Approve, Decline, and "Decline — I did not expect this". A sent answer says it is sent, not approved: only the daemon's receipt decides. |
 | `/pair` | Scan the daemon page's QR (or paste it), compare the fingerprint, send the sealed pair request, and wait. The phone does not approve itself. |
 
 ## Running it on a phone (TestFlight)
@@ -233,12 +247,14 @@ it ships.
 ```
 src/
   native/
-    answer.ts              // advisory answer from a notification action: sign, seal, POST
+    answer.ts              // sign, seal, POST an answer: the notification action's, and the app's (listed acts too)
+    asks.ts                // the asks list: Notification Center refs, each fetched live by ref; redeliver
     bytes.ts               // UTF-8 and base64url for a runtime with no Buffer and no TextEncoder
     delivery.ts            // the delivery composition — route AAD, inner {p,s}, the daemon's Ed25519 check
     nonceStore.ts          // seen-nonce verdicts; the extension's Swift copy follows this
     notice.ts              // lock-screen copy and which asks get actions
     notificationAnswers.ts // take a pending action once the app is open
+    offer.ts               // a listed act's offer as shown and signed: digest checked on the phone
     pair.ts                // after the fingerprint matches: keys, attestation, seal, POST, pin
     pairingPin.ts          // the keychain pin pairing writes and the extension reads
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
@@ -255,4 +271,7 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 src/app/_layout.tsx   // the Stack, themed from the palette
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
+src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
+src/ui/motion.tsx     // Rise, Squish, Breathe, Pop — RN Animated, off under Reduce Motion
+src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

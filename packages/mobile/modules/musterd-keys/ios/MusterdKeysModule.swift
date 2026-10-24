@@ -58,6 +58,10 @@ public final class MusterdKeysModule: Module {
       try run { try PhoneKeys.sign(message) }
     }
 
+    AsyncFunction("signAll") { (messages: [String]) -> [String] in
+      try run { try PhoneKeys.signAll(messages) }
+    }
+
     AsyncFunction("seal") { (input: SealInput) -> [String: Any] in
       let sealed = try run {
         try PhoneKeys.seal(
@@ -105,7 +109,11 @@ public final class MusterdKeysModule: Module {
       }
     }
 
-    Events("onPendingAnswer")
+    Events("onPendingAnswer", "onDelivery")
+
+    AsyncFunction("deliveredPushes") { () async -> [[String: Any]] in
+      await DeliveredPushes.list()
+    }
 
     OnCreate {
       PendingAnswers.emitter = self

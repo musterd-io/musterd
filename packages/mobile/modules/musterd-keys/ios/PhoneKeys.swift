@@ -118,6 +118,42 @@ enum PhoneKeys {
     }
   }
 
+  /// Sign each of `messages` (UTF-8) under one Face ID evaluation (ADR 694: a listed-act answer
+  /// carries the answer signature and the descriptor signature, made together). The key is loaded
+  /// with a fresh `LAContext`; the first signature evaluates it, and after that the context is
+  /// told `interactionNotAllowed`, so a second prompt can never appear — a signature that would
+  /// need one fails closed as `biometry-failed`. At most two messages: the one caller needs two.
+  static func signAll(_ messages: [String]) throws -> [String] {
+    guard !messages.isEmpty, messages.count <= 2 else {
+      throw PhoneKeysError.unavailable("signAll takes one or two messages")
+    }
+    guard let reference = loadReference(account: signingAccount) else {
+      throw PhoneKeysError.keyInvalidated("no signing key on this phone; pair again")
+    }
+    let context = LAContext()
+    context.localizedReason = "Sign your answer"
+    let key: SecureEnclave.P256.Signing.PrivateKey
+    do {
+      key = try SecureEnclave.P256.Signing.PrivateKey(
+        dataRepresentation: reference,
+        authenticationContext: context
+      )
+    } catch {
+      throw PhoneKeysError.keyInvalidated("the signing key was invalidated; pair again")
+    }
+    var signatures: [String] = []
+    for message in messages {
+      do {
+        let signature = try key.signature(for: Data(message.utf8))
+        signatures.append(b64url(signature.derRepresentation))
+      } catch {
+        throw PhoneKeysError.biometryFailed("Face ID did not authorize signing")
+      }
+      context.interactionNotAllowed = true
+    }
+    return signatures
+  }
+
   /// Seal `plaintext` to `recipientPublic` (a raw P-256 point, base64url) with the daemon's exact
   /// suite: DHKEM(P-256, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM, base mode, `info` =
   /// `musterd-app/v1 <purpose>`, `aad` = the canonical-JSON route bytes.

@@ -57,6 +57,36 @@ enum PendingAnswers {
   }
 }
 
+/// The asks list's source on the phone (lane 7h): what the extension already admitted and left in
+/// Notification Center, each with the `musterd` payload still carrying its route and inline seal.
+/// The app opens them again in TypeScript; nothing here reads a seal.
+enum DeliveredPushes {
+  static func list() async -> [[String: Any]] {
+    let delivered = await UNUserNotificationCenter.current().deliveredNotifications()
+    return delivered.compactMap { notification in
+      let userInfo = notification.request.content.userInfo
+      guard userInfo["musterd"] != nil,
+        JSONSerialization.isValidJSONObject(userInfo),
+        let data = try? JSONSerialization.data(withJSONObject: userInfo),
+        let text = String(data: data, encoding: .utf8)
+      else { return nil }
+      return [
+        "id": notification.request.identifier,
+        "userInfo": text,
+        "deliveredAt": Int(notification.date.timeIntervalSince1970 * 1000),
+      ]
+    }
+  }
+
+  /// Tell a running app that a delivery landed, so an open list refreshes.
+  static func announce(_ userInfo: [AnyHashable: Any]) {
+    guard userInfo["musterd"] != nil else { return }
+    DispatchQueue.main.async {
+      PendingAnswers.emitter?.sendEvent("onDelivery")
+    }
+  }
+}
+
 public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
   ExpoAppDelegateSubscriberProtocol,
   UNUserNotificationCenterDelegate
@@ -119,6 +149,7 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
+    DeliveredPushes.announce(notification.request.content.userInfo)
     if Self.previousDelegate?.userNotificationCenter?(
       center,
       willPresent: notification,

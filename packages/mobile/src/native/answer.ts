@@ -24,6 +24,7 @@ import { canonicalJson } from '@musterd/protocol/approval';
 import { b64urlEncode, utf8Encode } from './bytes';
 import { DeliveryExpiredError, openDelivery } from './delivery';
 import { STALE_TEXT, UNVERIFIED_TEXT } from './notice';
+import { showOffer, type ShownOffer } from './offer';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, phoneKeysErrorCode } from './phoneKeys';
 import { readFetchedBody, readPush, routeOf, type PushRoute } from './push';
@@ -72,20 +73,20 @@ function answerable(delivery: AppDelivery): delivery is AppDelivery & { kind: 'a
   );
 }
 
-function samePlace(pin: PairingPin, route: PushRoute): boolean {
+export function samePlace(pin: PairingPin, route: PushRoute): boolean {
   // A pin written at pair time has no binding yet. An answer waits until the extension has
   // learned it from a verified delivery, and a missing binding is not a match for any route.
   return pin.binding !== undefined && pin.team === route.team && pin.binding === route.binding;
 }
 
 /** `https://relay.example/app/<team>/...`, never leaving the pin's origin. */
-function relayUrl(relay: string, path: string): string | null {
+export function relayUrl(relay: string, path: string): string | null {
   const url = new URL(path, `${relay}/`);
   if (url.origin !== new URL(relay).origin) return null;
   return url.toString();
 }
 
-async function fetchBody(
+export async function fetchBody(
   relay: string,
   route: PushRoute,
   fetchImpl: typeof fetch,
@@ -156,23 +157,70 @@ export async function answerNotification(input: {
   if (delivery.ask.id !== resolved.route.ref) return 'unverified';
   if (delivery.expires_at !== resolved.route.expires_at) return 'unverified';
 
-  const reported = false;
+  return sendAnswer({
+    pin,
+    route: resolved.route,
+    delivery,
+    decision,
+    reported: false,
+    now,
+    ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+  });
+}
+
+/**
+ * Sign, seal and POST one answer to a verified delivery — the notification action's tail, and
+ * the whole of an answer from the app (lane 7h). The caller has opened the delivery and checked
+ * it against `route`.
+ *
+ * - An advisory ask signs `appAnswerSigningBytes` once.
+ * - A listed act (an `approval` on the delivery) signs the answer bytes and the descriptor the
+ *   phone rebuilt for `decision` ({@link showOffer}), both under one Face ID, and names this
+ *   phone's device key as the proof's `key_id`. A digest that does not match is never signed.
+ * - `reported` ("I did not expect this", ADR 676 §8) rides only on a reject.
+ */
+export async function sendAnswer(input: {
+  pin: PairingPin;
+  route: PushRoute;
+  delivery: AppDelivery & { kind: 'ask' };
+  decision: 'approve' | 'reject';
+  reported: boolean;
+  now: number;
+  fetchImpl?: typeof fetch;
+}): Promise<AnswerOutcome> {
+  const { pin, route, delivery, decision } = input;
+  if (!samePlace(pin, route)) return 'unverified';
+  const reported = input.reported && decision === 'reject';
   const message = appAnswerSigningBytes({
-    team: resolved.route.team,
-    binding: resolved.route.binding,
-    ask: resolved.route.ref,
+    team: route.team,
+    binding: route.binding,
+    ask: route.ref,
     token: delivery.token,
     decision,
     nonce: delivery.nonce,
     reported,
   });
-  let signature: string;
+
+  let offer: ShownOffer | null = null;
+  if (delivery.approval) {
+    if (!pin.device_key_id) return 'unpaired';
+    offer = showOffer(delivery.approval[decision], { team: route.team, now: input.now });
+    if (!offer) return 'unverified';
+  } else if (delivery.ask.action_class !== 'advisory') {
+    return 'refused';
+  }
+
+  let signatures: string[];
   try {
-    signature = await phoneKeys.sign(message);
+    signatures = offer
+      ? await phoneKeys.signAll([message, offer.signingBytes])
+      : [await phoneKeys.sign(message)];
   } catch (error) {
     if (phoneKeysErrorCode(error) === 'biometry-failed') return 'cancelled';
     return 'unverified';
   }
+  const [signature, descriptorSignature] = signatures;
+  if (!signature || (offer && !descriptorSignature)) return 'unverified';
 
   const answer = {
     v: 1 as const,
@@ -180,8 +228,19 @@ export async function answerNotification(input: {
     decision,
     nonce: delivery.nonce,
     signature,
+    ...(reported ? { reported: true } : {}),
+    ...(offer && descriptorSignature && pin.device_key_id
+      ? {
+          approval: {
+            key_id: pin.device_key_id,
+            nonce: offer.descriptor.nonce,
+            signature: descriptorSignature,
+          },
+        }
+      : {}),
   };
   if (!AppAnswerSchema.safeParse(answer).success) return 'unverified';
+  const resolved = { route };
   const routeJson = canonicalJson(resolved.route);
   let sealed;
   try {

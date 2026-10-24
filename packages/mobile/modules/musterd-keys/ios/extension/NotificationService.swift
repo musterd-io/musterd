@@ -107,6 +107,19 @@ final class NotificationService: UNNotificationServiceExtension {
         return Notice.unverified()
       }
     }
+    // The signed `paired` delivery is the one place the phone learns its device key id.
+    if case .paired(_, let deviceKeyId) = body {
+      guard let current = SharedStore.loadPairingPin(),
+        let updated = PinBinding.withDeviceKey(json: current, deviceKeyId: deviceKeyId)
+      else { return Notice.unverified() }
+      if updated != current {
+        do {
+          try SharedStore.savePairingPin(json: updated)
+        } catch {
+          return Notice.unverified()
+        }
+      }
+    }
 
     let now = Int(Date().timeIntervalSince1970 * 1000)
     switch Notice.gate(body: body, routeExpiresAt: opened.route.expiresAt, now: now) {
