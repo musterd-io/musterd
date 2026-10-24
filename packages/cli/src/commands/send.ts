@@ -307,8 +307,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   }
 
   const ackBody = await sendOrEcho(async () => {
+    let response: Awaited<ReturnType<HttpClient['send']>>;
     try {
-      return await http.send(team, envelope);
+      response = await http.send(team, envelope);
     } catch (err) {
       const askId = envelope.meta?.['in_reply_to'];
       if (
@@ -333,6 +334,50 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
         meta: { ...envelope.meta, approval },
       });
     }
+
+    const refused = response.lane_authority_refused;
+    if (!refused) return response;
+    if (
+      !identity.key.startsWith('mscr_') ||
+      (act !== 'accept' && act !== 'decline') ||
+      refused.reason !== 'no_signature'
+    ) {
+      throw new CliError(
+        `authority refused (${refused.reason}): this lane verdict did not count; no success was reported`,
+        1,
+      );
+    }
+
+    process.stdout.write('This answer needs your passkey.\n');
+    const { collectApproval, laneReviewApproval } = await import('./authority.js');
+    const authority = laneReviewApproval(refused.lane, act);
+    const approval = await collectApproval(
+      http,
+      team,
+      authority.act,
+      authority.target,
+      authority.payload,
+    );
+    // The unsigned attempt already landed as an uncounted message. Use a new id for the signed
+    // retry so idempotency cannot turn the refusal into a false success.
+    const signed = makeEnvelope({
+      id: ulid(),
+      team: envelope.team,
+      from: envelope.from,
+      to: envelope.to,
+      act: envelope.act,
+      body: envelope.body,
+      thread: envelope.thread ?? null,
+      meta: { ...(envelope.meta ?? {}), approval },
+    });
+    const retried = await http.send(team, signed);
+    if (retried.lane_authority_refused) {
+      throw new CliError(
+        `authority refused (${retried.lane_authority_refused.reason}): this lane verdict did not count; no success was reported`,
+        1,
+      );
+    }
+    return retried;
   }, envelope);
 
   // ADR 210: a successful threaded send means this session IS the dialogue on that thread, which is

@@ -450,6 +450,20 @@ describe('lane commands', () => {
 
   it('resolve --pr/--sha/--authorized-by attests the merge to the audit log (ADR 109)', async () => {
     const id = await openLane(['attested', '--claim', '--branch', 'feat/attested']);
+    const descriptor = {
+      actor: 'nick',
+      act: 'set_authorized_by',
+      target: id,
+      payload_digest: 'digest',
+      audience: 'dawn',
+      expiry: Date.now() + 60_000,
+      nonce: '1234567890123456',
+    };
+    const proof = { key_id: 'key-1', nonce: descriptor.nonce, signature: 'signature' };
+    const descriptorCall = vi
+      .spyOn(HttpClient.prototype, 'createAuthorityDescriptor')
+      .mockResolvedValue({ descriptor });
+    vi.spyOn(HttpClient.prototype, 'getParkedApproval').mockResolvedValue({ proof });
     const resolved = await capture(() =>
       laneCommand(
         parseArgs(['resolve', id, '--pr', '167', '--sha', 'abc123', '--authorized-by', 'nick']),
@@ -457,6 +471,12 @@ describe('lane commands', () => {
     );
     expect(resolved.code).toBe(0);
     expect(resolved.out).toContain('lane done');
+    expect(descriptorCall).toHaveBeenCalledWith('dawn', {
+      act: 'set_authorized_by',
+      target: id,
+      actor: 'nick',
+      payload: { lane: id, authorized_by: 'nick', pr: 167, sha: 'abc123' },
+    });
     const { auditCommand } = await import('./audit.js');
     const audit = await capture(() => auditCommand(parseArgs(['--json'])));
     const rows = JSON.parse(audit.out) as { action: string; detail: unknown }[];
