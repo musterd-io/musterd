@@ -61,6 +61,7 @@ export * from './lanes.js';
 export * from './laneChain.js';
 export * from './boardQuery.js';
 export * from './authority.js';
+export * from './authorityRelay.js';
 export * from './seeds.js';
 export * from './relay.js';
 export * from './appChannel.js';

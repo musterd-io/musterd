@@ -7,11 +7,11 @@ import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
-import { getMemberByName } from '../store/members.js';
+import { issueGrant } from '../store/grants.js';
+import { addMember, getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
-import { claimAgentHttp } from '../transport/test-auth.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
 
@@ -148,13 +148,41 @@ withDrivers('halt-sync', (_o, kind) => {
   let joinerAgentKey: string;
 
   async function addAda() {
-    for (const [base, cred] of [
-      [hubBase, nickOnHub],
-      [joinerBase, nickOnJoiner],
-    ] as const) {
-      const r = await post(base, '/teams/bravo/members', { name: 'ada', kind: 'agent' }, cred);
-      expect(r.status).toBeLessThan(300);
-    }
+    const created = await post(
+      hubBase,
+      '/teams/bravo/members',
+      { name: 'ada', kind: 'agent' },
+      nickOnHub,
+    );
+    expect(created.status).toBe(201);
+    // Member creation returns credentials and is hub-local (ADR 729), so seed the daemon replica
+    // directly as test state; the cases below exercise halt replication, not member provisioning.
+    await addMember(joiner.store, await joinerTeam(), { name: 'ada', kind: 'agent' });
+    expect(await getMemberByName(joiner.store, (await joinerTeam()).id, 'ada')).toBeDefined();
+  }
+
+  async function claimAda() {
+    // Grants are hub-local and carry a bearer token (ADR 729). This replica fixture needs an
+    // already-authorized agent session to exercise halt enforcement, so seed a synthetic grant
+    // directly in its test database rather than calling the production grant endpoint.
+    const team = await joinerTeam();
+    const { token } = await issueGrant(
+      joiner.store,
+      team.id,
+      { scope: 'seat', target: 'ada', lifetime: 'standing' },
+      'nick',
+    );
+    const claim = await post(joinerBase, '/teams/bravo/claim', {
+      key: joinerAgentKey,
+      target: { seat: 'ada' },
+      grant: token,
+      surface: 'cli',
+    });
+    expect(claim.status).toBe(200);
+    return {
+      key: claim.json.seat_credential as string,
+      sessionLease: claim.json.session_lease as string,
+    };
   }
   const haltedOn = async (store: RunningServer['store'], slug = 'bravo') => {
     const t = (await getTeamBySlug(store, slug))!;
@@ -164,7 +192,7 @@ withDrivers('halt-sync', (_o, kind) => {
   describe('halt replication (ADR 525)', () => {
     it('a halt on the hub refuses the seat on the joiner after one round trip', async () => {
       await addAda();
-      const ada = await claimAgentHttp(joinerBase, 'bravo', joinerAgentKey, nickOnJoiner, 'ada');
+      const ada = await claimAda();
       const halt = await post(
         hubBase,
         '/teams/bravo/members/ada/halt',

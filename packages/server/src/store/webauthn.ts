@@ -177,6 +177,7 @@ function checkRpAndChallenge(
   expectedType: string,
   expectedChallenge: string,
   expectedOrigins?: readonly string[],
+  expectedRpId?: string,
 ): { auth: ParsedAuthData; clientData: ClientData } {
   const clientData = parseClientData(clientDataJson);
   if (clientData.type !== expectedType) throw new Error('webauthn: wrong ceremony type');
@@ -192,7 +193,7 @@ function checkRpAndChallenge(
   if (!expectedOrigins.includes(clientData.origin)) {
     throw new Error('webauthn: origin not configured for this daemon');
   }
-  const rpId = new URL(clientData.origin).hostname;
+  const rpId = expectedRpId ?? new URL(clientData.origin).hostname;
   const rpHash = createHash('sha256').update(rpId, 'utf8').digest();
   const auth = parseAuthData(authData);
   if (!Buffer.from(auth.rpIdHash).equals(rpHash)) throw new Error('webauthn: rpId mismatch');
@@ -220,6 +221,7 @@ export function verifyRegistration(input: {
   requireUserVerified?: boolean;
   /** ADR 662 dec. 5: origins this daemon accepts ceremonies from (its own, musterd.io). */
   expectedOrigins?: readonly string[] | undefined;
+  expectedRpId?: string | undefined;
 }): { credentialId: string; publicKeySpki: string } {
   const { auth } = checkRpAndChallenge(
     input.authenticatorData,
@@ -227,6 +229,7 @@ export function verifyRegistration(input: {
     'webauthn.create',
     input.expectedChallenge,
     input.expectedOrigins,
+    input.expectedRpId,
   );
   if (input.requireUserVerified && !auth.userVerified) {
     throw new Error('webauthn: user verification not asserted');

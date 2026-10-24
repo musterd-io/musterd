@@ -17,14 +17,12 @@ import {
   type SyncClaimRequest,
   SyncClaimRefusalSchema,
   type SyncLanePatchRequest,
-  type Policy,
-  type PolicyOverride,
+  type HighAuthorityAct,
   type PullPollResponse,
   PullPollResponseSchema,
   type SyncHaltRequest,
   type SyncHoldRequest,
   type SyncNoteRecipientsRequest,
-  type SyncPolicyRequest,
   type SyncPullRequest,
   type SyncStatusLineRequest,
   type SyncStyleRequest,
@@ -39,6 +37,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { appendAudit, reviewRouting } from '../store/audit.js';
+import { requireAuthority } from '../store/authority.js';
 import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
   decideReadVerdict,
@@ -575,6 +574,59 @@ export async function arbitrateLanePatch(
       'unknown',
     );
   }
+  const expectedOrigins = ctx.config.webauthnNodeOrigins[node.id]
+    ? [ctx.config.webauthnNodeOrigins[node.id]!.origin]
+    : [];
+  const requireForwardedAuthority = async (
+    presenter: MemberRow,
+    act: HighAuthorityAct,
+    target: string,
+    payload: unknown,
+  ): Promise<void> => {
+    const check = await requireAuthority(ctx.db, {
+      teamId: team.id,
+      audience: team.slug,
+      presenter,
+      credential: presenter.kind === 'human' ? 'human' : 'agent',
+      act,
+      target,
+      payload,
+      proof: req.patch.approval,
+      expectedOrigins,
+      expectedNodeId: node.id,
+      now,
+    });
+    if (!check.ok) {
+      throw new MusterdError(
+        'forbidden',
+        `authority refused (${check.reason}): ${act} requires an A2 device signature (ADR 662)`,
+      );
+    }
+  };
+  if (
+    req.patch.state !== undefined &&
+    LANE_TERMINAL_STATES.has(req.patch.state) &&
+    isAwaitingAcceptance(before.state) &&
+    seat.kind === 'human' &&
+    seat.name !== before.owner_seat
+  ) {
+    await requireForwardedAuthority(seat, 'human_accept', before.id, {
+      lane: before.id,
+      verdict: req.patch.state,
+    });
+  }
+  if (req.patch.merged?.authorized_by) {
+    const authorizer = await getMemberByName(ctx.db, team.id, req.patch.merged.authorized_by);
+    if (authorizer && authorizer.kind === 'human' && authorizer.left_at === null) {
+      await assertSeatAlreadyResident(ctx.db, team.id, authorizer, node, 'set authorized_by');
+      await requireForwardedAuthority(authorizer, 'set_authorized_by', before.id, {
+        lane: before.id,
+        authorized_by: req.patch.merged.authorized_by,
+        pr: req.patch.merged.pr ?? null,
+        sha: req.patch.merged.sha ?? null,
+      });
+    }
+  }
   let decided: { patch: UpdateLane; guard: LaneExpectation | undefined };
   try {
     decided = await decideLanePatch(
@@ -839,65 +891,6 @@ export async function trustAtHub(
     throw new Error(`the hub answered ${res.status} to the trust act: ${JSON.stringify(body)}`);
   }
   return SeatNodeTrustedSchema.parse(body);
-}
-
-/**
- * Joiner side of the policy act (residence-2 census gap 1): forward the admin's sparse override to
- * the hub, write nothing locally. The hub's row is the fact; this daemon learns the answer back
- * through the fold, the same way it learns a lane it did not decide.
- *
- * Refusals relay with the hub's own code — an actor who is not an admin THERE is a 403 here, not a
- * local success. `HubUnreachableError` when no answer came: policy is not an act that may fork
- * (ADR 325 §Offline semantics), so the caller turns this into `hub_unreachable` and changes nothing.
- */
-export async function policyAtHub(
-  enrollment: { hub_url: string; credential: string },
-  slug: string,
-  req: SyncPolicyRequest,
-): Promise<{ policy: Policy; stored: PolicyOverride }> {
-  let res: Response;
-  try {
-    res = await fetch(new URL(`/teams/${slug}/sync/policy`, enrollment.hub_url), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${enrollment.credential}`,
-      },
-      body: JSON.stringify(req),
-      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
-    });
-  } catch (err) {
-    log.warn({
-      msg: 'sync_policy_hub_unreachable',
-      team: slug,
-      err: String(err),
-      code: failureCode(err),
-    });
-    throw await diagnoseHubFailure(enrollment.hub_url, err);
-  }
-  const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const b = body as { error?: { code?: string; message?: string } } | null;
-    // The hub's refusal is the answer, relayed with its code — `forbidden` for an actor who is no
-    // admin there, `not_found` for a seat its roster lacks, `bound_elsewhere` for a seat that does
-    // not live on this machine (gptbot's review of #1228), `conflict` for a change built on a copy
-    // of the policy the hub has moved past (ADR 587). Anything else is a fault, not a verdict: a 500
-    // here would tell the admin the hub is broken when it has in fact answered them.
-    if (
-      b?.error?.code === 'forbidden' ||
-      b?.error?.code === 'not_found' ||
-      b?.error?.code === 'bound_elsewhere' ||
-      b?.error?.code === 'conflict'
-    ) {
-      throw new MusterdError(
-        b.error.code === 'bound_elsewhere' ? 'forbidden' : b.error.code,
-        b.error.message ?? 'the hub refused the policy change',
-      );
-    }
-    throw new Error(`the hub answered ${res.status} to the policy change: ${JSON.stringify(body)}`);
-  }
-  const parsed = body as { policy: Policy; stored: PolicyOverride };
-  return { policy: parsed.policy, stored: parsed.stored };
 }
 
 /**

@@ -297,37 +297,43 @@ withDrivers('credentials', (_o, kind) => {
       expect(replicated.status).toBe(200);
       expect(replicated.json.orders).toEqual([]);
 
-      // Control: the same admin's key minted AT the joiner is team-wide there and takes the order.
-      const localKey = (
-        await post(
-          joinerBase,
-          '/teams/bravo/agent-bootstrap-credentials',
-          { use: 'host', target: 'cloud-ada' },
-          nickOnJoiner,
-        )
-      ).json.agent_key as string;
-      const local = await post(
-        joinerBase,
-        '/teams/bravo/residency/wake-leases',
-        { host: 'cloud-ada' },
-        localKey,
+      // A credential-mint operation stays hub-local and must refuse before creating a key.
+      const countBeforeLocalMint = await joiner.store.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM agent_bootstrap_credentials WHERE team_id = ? AND target = 'cloud-ada'",
+        [jt.id],
       );
-      expect(local.status).toBe(200);
-      expect(local.json.orders.map((o: any) => o.seat)).toEqual(['ada']);
+      const localMint = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'cloud-ada' },
+        nickOnJoiner,
+      );
+      expect(localMint.status).toBe(409);
+      expect(localMint.json.error.code).toBe('hub_local_required');
+      expect(
+        await joiner.store.get<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM agent_bootstrap_credentials WHERE team_id = ? AND target = 'cloud-ada'",
+          [jt.id],
+        ),
+      ).toEqual(countBeforeLocalMint);
     });
 
-    it('5. a joiner-side mint never poisons the joiner`s push: it stages no credential fact of its own', async () => {
-      expect(
-        (
-          await post(
-            joinerBase,
-            '/teams/bravo/agent-bootstrap-credentials',
-            { use: 'host', target: 'joiner-only' },
-            nickOnJoiner,
-          )
-        ).status,
-      ).toBe(201);
+    it('5. a joiner refuses a human credential mint before inserting a credential row', async () => {
+      const refused = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'joiner-only' },
+        nickOnJoiner,
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.code).toBe('hub_local_required');
       await expect(roundTrip()).resolves.toBeUndefined();
+      expect(
+        await joiner.store.get(
+          "SELECT id FROM agent_bootstrap_credentials WHERE team_id = ? AND target = 'joiner-only'",
+          [(await joinerTeam()).id],
+        ),
+      ).toBeUndefined();
       expect(
         await hub.store.get(
           "SELECT id FROM agent_bootstrap_credentials WHERE team_id = ? AND target = 'joiner-only'",

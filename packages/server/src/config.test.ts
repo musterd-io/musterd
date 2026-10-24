@@ -28,6 +28,7 @@ const TOUCHED = [
   'MUSTERD_ALLOWED_HOSTS',
   'MUSTERD_ALLOWED_ORIGINS',
   'MUSTERD_WEBAUTHN_ORIGINS',
+  'MUSTERD_WEBAUTHN_NODE_ORIGINS',
 ];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -189,6 +190,19 @@ describe('resolveConfig', () => {
     expect(
       resolveConfig({ port: 1, webauthnOrigins: ['https://example.com'] }).webauthnOrigins,
     ).toEqual(['https://example.com']);
+  });
+  it('loads only exact, operator-configured node ceremony origins', () => {
+    process.env['MUSTERD_WEBAUTHN_NODE_ORIGINS'] =
+      '{"node-air2":{"origin":"https://air2.example","rp_id":"air2.example"}}';
+    expect(resolveConfig().webauthnNodeOrigins).toEqual({
+      'node-air2': { origin: 'https://air2.example', rp_id: 'air2.example' },
+    });
+    process.env['MUSTERD_WEBAUTHN_NODE_ORIGINS'] =
+      '{"node-air2":{"origin":"https://air2.example/path","rp_id":"air2.example"}}';
+    expect(() => resolveConfig()).toThrow(/origin only/);
+    process.env['MUSTERD_WEBAUTHN_NODE_ORIGINS'] =
+      '{"node-air2":{"origin":"https://air2.example","rp_id":"other.example"}}';
+    expect(() => resolveConfig()).toThrow(/match the origin hostname/);
   });
   it('serves wss when both cert and key are configured', () => {
     const c = resolveConfig({ tlsCert: '/c.pem', tlsKey: '/k.pem' });

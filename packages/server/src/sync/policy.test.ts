@@ -9,6 +9,7 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { answerPolicyReview, raisePolicyReview } from '../store/policyReview.js';
 import { getPolicy, getStoredPolicy, getTeamBySlug, setPolicy } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { joinerEnrollment } from './claim.js';
@@ -23,8 +24,8 @@ withDrivers('policy', (_o, kind) => {
    * The census measured the gap: `setPolicy` wrote a local blob and nothing shipped it, so a joiner's
    * host actuator ran different `hourly_cap`/`cooldown`/`loops` than the hub after every `policy set`
    * — the one policy input to the wake ledger, forked silently per machine. These are the lane's
-   * falsifiers: the hub's change reaches the joiner, the joiner's own change is decided by the hub,
-   * and a joiner that cannot reach the hub refuses rather than forking.
+   * falsifiers: hub changes reach the joiner, while joiner policy writes and review answers fail
+   * hub-local before changing state or sending policy values.
    *
    * Harness copied from census.test.ts so this file stands alone.
    */
@@ -107,8 +108,8 @@ withDrivers('policy', (_o, kind) => {
 
   /**
    * Make nick resident on the joiner as far as the HUB is concerned — one ordinary act, replicated.
-   * Every forwarded policy change needs this, and every real admin already has it: the seat lives on
-   * the machine its human works from, and the first thing it does there binds it.
+   * A resident seat is needed for the other hub-authoritative writes covered by this fixture;
+   * policy writes themselves now remain hub-local under ADR 729.
    */
   async function residentOnJoiner() {
     const opened = await post(
@@ -299,11 +300,10 @@ withDrivers('policy', (_o, kind) => {
       expect(cleared.residency.hourly_cap).toBe(1); // the read above was taken BEFORE the reset
     });
 
-    it("an admin's change on the JOINER is decided by the hub and comes back through the fold", async () => {
-      // The seat has to be resident on this machine first — the strict residence check the forward
-      // gained from gptbot's review of #1228. Nick's ordinary work is what establishes that, so this
-      // line is not test scaffolding: it is the state any real admin is already in.
+    it("an admin's policy change on the JOINER is refused before it reaches the hub (ADR 729)", async () => {
       await residentOnJoiner();
+      const hubBefore = await getStoredPolicy(hub.store, (await hubTeam()).id);
+      const joinerBefore = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
 
       const set = await post(
         joinerBase,
@@ -311,32 +311,44 @@ withDrivers('policy', (_o, kind) => {
         { residency: { cooldown_ms: 2_400_000 } },
         nickOnJoiner,
       );
-      expect(set.status).toBe(200);
-      expect(set.json.policy.residency.cooldown_ms).toBe(2_400_000);
-
-      // The hub decided it — the event is the hub's, and the joiner minted nothing.
-      expect((await getPolicy(hub.store, (await hubTeam()).id)).residency.cooldown_ms).toBe(
-        2_400_000,
-      );
-      const hubStamped = await hub.store.get(
-        "SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change' AND origin_seq > 0",
-      );
-      expect(hubStamped).toEqual({ n: 1 });
+      expect(set.status).toBe(409);
+      expect(set.json.error.code).toBe('hub_local_required');
+      expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(hubBefore);
+      expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual(joinerBefore);
       expect(
-        await joiner.store.get(
-          `SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'
-             AND origin_node = (SELECT node_id FROM local_node WHERE team_id = ?)`,
-          [(await joinerTeam()).id],
-        ),
+        await joiner.store.get("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'"),
       ).toEqual({ n: 0 });
-
-      await roundTrip();
-      expect((await getPolicy(joiner.store, (await joinerTeam()).id)).residency.cooldown_ms).toBe(
-        2_400_000,
-      );
     });
 
-    it('a change built on a joiner copy the hub has moved past is refused, and the retry merges into the hub doc (ADR 587)', async () => {
+    it('a joiner policy-review answer refuses locally before sending policy values to the hub', async () => {
+      const jt = await joinerTeam();
+      await setPolicy(joiner.store, jt.id, {
+        ask_fallback_to_nonadmin: true,
+        review_by: Date.now() - 1,
+      });
+      const askId = await raisePolicyReview(joiner.store, jt, Date.now(), (from, env) =>
+        insertMessage(joiner.store, jt.id, from.id, null, env),
+      );
+      expect(askId).toBeTruthy();
+      const before = await getStoredPolicy(joiner.store, jt.id);
+      const nick = (await getMemberByName(joiner.store, jt.id, 'nick'))!;
+
+      // If this tries the old sync/policy forward, the closed hub produces hub_unreachable.
+      await hub.close();
+      await expect(
+        answerPolicyReview(joiner.store, jt, nick, askId!, 'accept'),
+      ).rejects.toMatchObject({
+        code: 'hub_local_required',
+      });
+      expect(await getStoredPolicy(joiner.store, jt.id)).toEqual(before);
+      expect(
+        await joiner.store.get(
+          "SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.review_answered'",
+        ),
+      ).toEqual({ n: 0 });
+    });
+
+    it('a policy change on a joiner is refused even when its copy is stale (ADR 729)', async () => {
       // 2026-09-06 on revive: a joiner whose copy of the policy was empty forwarded the CLI's
       // read-merge-write of `--dispatch on` — `{loops:{dispatch:true}}` — and the hub stored it as
       // given, turning off its review and sweep loops and dropping its seeds relay.
@@ -357,32 +369,13 @@ withDrivers('policy', (_o, kind) => {
         nickOnJoiner,
       );
       expect(stale.status).toBe(409);
-      expect(stale.json.error.code).toBe('conflict');
+      expect(stale.json.error.code).toBe('hub_local_required');
       expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(hubStored);
-
-      // The refusal pulled, so the admin's retry reads the hub's doc and merges into it.
-      const copy = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
-      expect(copy).toEqual(hubStored);
-      const retry = await post(
-        joinerBase,
-        '/teams/bravo/policy',
-        { ...copy, loops: { ...copy.loops, dispatch: true } },
-        nickOnJoiner,
-      );
-      expect(retry.status).toBe(200);
-      expect((await getPolicy(hub.store, (await hubTeam()).id)).loops).toEqual({
-        review: true,
-        sweep: true,
-        dispatch: true,
-      });
-      expect(
-        (await getStoredPolicy(hub.store, (await hubTeam()).id)).standing_reseat_known_agents,
-      ).toBe(true);
+      expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual({});
     });
 
-    it('a forward that names no base is refused and changes nothing — a pre-587 joiner cannot replace the doc (ADR 593)', async () => {
-      // lazara's review of #2540: with the missing base only logged, an older joiner's stale whole
-      // doc still landed as given — the 2026-09-06 write, unchanged.
+    it('the legacy node-authenticated policy endpoint refuses before inspecting copy freshness (ADR 729)', async () => {
+      // Even a pre-587-shaped request receives the hub-local refusal, with no policy mutation.
       await residentOnJoiner();
       const hubDoc = { loops: { review: true, sweep: true } };
       expect((await post(hubBase, '/teams/bravo/policy', hubDoc, nickOnHub)).status).toBe(200);
@@ -398,12 +391,11 @@ withDrivers('policy', (_o, kind) => {
       );
 
       expect(res.status).toBe(409);
-      expect(res.json.error.code).toBe('conflict');
-      expect(res.json.error.message).toMatch(/too old/);
+      expect(res.json.error.code).toBe('hub_local_required');
       expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(before);
     });
 
-    it('a joiner-side change with the hub down REFUSES hub_unreachable and changes nothing', async () => {
+    it('a joiner-side policy change with the hub down is refused as hub-local and changes nothing', async () => {
       const before = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
       await hub.close();
 
@@ -413,9 +405,8 @@ withDrivers('policy', (_o, kind) => {
         { residency: { hourly_cap: 9 } },
         nickOnJoiner,
       );
-      // ADR 325 §Offline semantics: policy is not an act that may fork, so the refusal is the answer.
-      expect(res.status).toBe(503);
-      expect(res.json.error.code).toBe('hub_unreachable');
+      expect(res.status).toBe(409);
+      expect(res.json.error.code).toBe('hub_local_required');
       expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual(before);
       expect(
         await joiner.store.get("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'"),
@@ -429,12 +420,17 @@ withDrivers('policy', (_o, kind) => {
       await hub.listen();
     });
 
-    it('setting policy never binds the admin to the hub — the seat still speaks from its own machine', async () => {
-      // Residence binds who may speak AS a seat; a policy change is a fact about the TEAM, minted by
-      // the hub on a joiner admin's behalf. Binding nick to the hub here would refuse nick's next
-      // push from the laptop the seat actually lives on.
-      await post(joinerBase, '/teams/bravo/policy', { residency: { hourly_cap: 3 } }, nickOnJoiner);
-      await roundTrip();
+    it('policy writes on a joiner do not bind the admin or alter policy', async () => {
+      const before = await getStoredPolicy(joiner.store, (await joinerTeam()).id);
+      const refused = await post(
+        joinerBase,
+        '/teams/bravo/policy',
+        { residency: { hourly_cap: 3 } },
+        nickOnJoiner,
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.code).toBe('hub_local_required');
+      expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual(before);
       const opened = await post(
         joinerBase,
         '/teams/bravo/lanes',
@@ -454,7 +450,7 @@ withDrivers('policy', (_o, kind) => {
      * speaking and never WHO it may speak for.
      */
     describe('an enrolled node that is not the hub cannot set policy (gptbot, 2026-09-03)', () => {
-      it('the forward is refused when the actor lives on a DIFFERENT machine', async () => {
+      it('node-authenticated policy writes are refused even for a resident admin', async () => {
         // nick's ordinary work on the joiner replicates, and binds the seat to that node on the hub.
         await residentOnJoiner();
         const before = await getStoredPolicy(hub.store, (await hubTeam()).id);
@@ -467,19 +463,15 @@ withDrivers('policy', (_o, kind) => {
           evil.credential,
         );
 
-        // Before the fix this was a 200: the node authenticated, `actor: 'nick'` was taken at its
-        // word, and nick's hub capabilities did the rest — so any enrolled machine could set the
-        // team's wake caps by naming an admin it had never been.
-        expect(res.status).toBe(403);
-        expect(res.json.error.code).toBe('bound_elsewhere');
-        expect(res.json.error.message).toMatch(/lives on/);
+        expect(res.status).toBe(409);
+        expect(res.json.error.code).toBe('hub_local_required');
         expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(before);
         expect(
           await hub.store.get("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'"),
         ).toEqual({ n: 0 });
       });
 
-      it('an UNBOUND admin seat is not up for grabs — the forward refuses instead of claiming it', async () => {
+      it('node-authenticated policy writes cannot claim an unbound admin seat', async () => {
         // The sharper half, and the reason this route uses the strict residence check rather than the
         // first-writer-wins one the lane routes use. Nobody has spoken for `ada` on any machine yet.
         // Under `assertSeatResident` the forward below would have BOUND the seat to the caller in the
@@ -500,8 +492,8 @@ withDrivers('policy', (_o, kind) => {
           evil.credential,
         );
 
-        expect(res.status).toBe(403);
-        expect(res.json.error.message).toMatch(/not resident on any machine yet/);
+        expect(res.status).toBe(409);
+        expect(res.json.error.code).toBe('hub_local_required');
         expect(await getStoredPolicy(hub.store, (await hubTeam()).id)).toEqual(before);
         // The refusal must not have created the binding it refused for want of.
         expect(

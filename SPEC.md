@@ -369,6 +369,7 @@ Sending an Envelope still requires the sender to **hold the occupancy** of `from
 ## A.8 Error / refusal codes
 
 Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `held` is a refusal by an enforced Team hold (A.15, ADR 516 — the message names the effect, the human and the end time). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets and, on Cloud, the per-team request budget (ADR 622) — the next move is retry, never re-authenticate.
+`hub_local_required` (409, ADR 729) means the operation would return a bearer credential and must be performed on a Surface attached to the hub.
 
 ## A.9 Migration
 
@@ -1047,6 +1048,24 @@ advisory for every listed act.
   client `human_authority_checked` marker and writes its own marker only after the gate succeeds;
   ADR 150 gate release ignores older bearer-only answer rows. `/live`, the CLI, and the phone run the
   same descriptor ceremony.
+- **Hub and joiner authority relay (ADR 728/729):** `POST /teams/:slug/sync/authority` is a
+  node-authenticated, closed operation relay, never a generic method/path proxy. Its strict
+  discriminated request and response schemas cover only device-key listing/enrollment/revocation,
+  descriptor and proof ceremony steps, lane acceptance/decline answers and `authorized_by`, member
+  removal and ceiling changes, and team archive. A joiner's human answer to a replicated
+  `lane_review` ask is re-routed to the hub as the closed `lane.answer` operation; the hub builds
+  the response envelope and runs the normal message path with A2 bound to the authenticated node.
+  The hub derives the node from `msnode_` authentication,
+  resolves the human on its own Team roster, checks current standing and residence on that node, and
+  verifies A2 against current hub state before a protected write. Descriptors and enrollment
+  challenges bind to the authenticated node and the hub's configured node-to-origin/RP-id mapping.
+  One-use challenges and proofs may cross only for their named operation; human credentials,
+  grants, invite codes, connect links, and other bearer credentials never cross the node channel.
+  Member creation, agent creation, grant issuance, credential mint/rotation, request approval that
+  returns a grant, and team-policy writes remain hub-local. A joiner refuses these before mutation
+  with `hub_local_required` (409); it never mints locally, queues the write, or returns a scrubbed
+  secret response. Each allowed operation returns a strict minimal result that cannot contain a
+  minted credential. The joiner fails closed when the hub is unavailable.
 - Every act on the closed list has a wired caller: human verdicts (act path and counterpart
   lane closes), `merged.authorized_by`, team and governed policy, grant issue on the admin
   path, agent create, roster add/remove/ceiling (`POST /members`, `…/remove`, `…/ceiling`),
