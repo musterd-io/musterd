@@ -92,7 +92,7 @@ export function readsFlags(src: string): Set<string> {
     // `onOff('deliver', current)`.
     /\b\w+\(\s*'([a-z0-9-]+)'\s*[,)]/g,
     // A list of names, read in a loop: `['title', 'date', 'kind'] as const`.
-    /\[\s*'([a-z0-9-]+)'(?:\s*,\s*'([a-z0-9-]+)')*\s*\]/g,
+    /(?<![\w$.])\[\s*'([a-z0-9-]+)'(?:\s*,\s*'([a-z0-9-]+)')*\s*\]/g,
     /\.flags\['([a-z0-9-]+)'\]/g,
     /\.flags\.([a-z][a-zA-Z0-9]*)/g,
     /(?<![.\w])flags\['([a-z0-9-]+)'\]/g,
