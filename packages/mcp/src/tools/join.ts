@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { type ClaimPolicy } from '@musterd/protocol';
+import { resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
 import {
   ClaimConflictError,
@@ -11,6 +12,7 @@ import type { MusterdClient } from '../client.js';
 import type { McpConfig } from '../config.js';
 import { repairHint, textResult } from './format.js';
 import { memoryLine } from './memory.js';
+import { orientationBlock } from './orientation.js';
 
 const DESCRIPTION =
   "Claim your seat and go online — the CLI spelling is `musterd claim` (ADR 075/377). Use as, role, or this Workspace's policy. May wait for approval; wait:0 returns at once.";
@@ -109,8 +111,14 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         const line = raised ? `\n\n${raised}` : '';
         const style = client.style ? `\n\n${client.style.block}` : '';
         if (client.style) client.markStyleShown?.();
+        // Lane 01M5N4ED6T: the first join answer a session sees is its orientation, even when the
+        // seat was auto-claimed before this call (ADR 707) — rendered once per session.
+        const orientation = client.joined
+          ? await orientationBlock(client, resolveProject(), { withDirected: true })
+          : '';
+        const oriented = orientation ? `\n\n${orientation}` : '';
         return textResult(
-          `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${style}${line}`,
+          `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${style}${oriented}${line}`,
         );
       }
 
@@ -155,12 +163,20 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         // dials — exactly as the daemon rendered it. Absent from an older daemon ⇒ nothing said.
         const style = client.style ? `\n\n${client.style.block}` : '';
         if (client.style) client.markStyleShown?.();
+        // Lane 01M5N4ED6T (finding 022): this answer IS the orientation — the held lanes on this
+        // project and the directed acts waiting — so no team_status / lane_board / inbox read is
+        // owed before the first claim.
+        const orientation = await orientationBlock(client, resolveProject(), {
+          withDirected: true,
+        });
+        const oriented = orientation ? `\n\n${orientation}` : '';
         return textResult(
           `Joined ${config.team} as ${result.member}${role} (${config.surface}). ` +
             `You are now the live occupant of this seat — that's who you are on this team. ` +
-            `The server authenticated this occupancy.${charter}${memory}${style}\n\n` +
-            `IMPORTANT — stay in sync: call team_inbox_check now, and again before you wait or hand ` +
-            `off. Your claimed lane is your roster status; hand work off with {act:'handoff'}.`,
+            `The server authenticated this occupancy.${charter}${memory}${style}${oriented}\n\n` +
+            `This answer is your orientation: claim a lane before you build. Call team_inbox_check ` +
+            `before you wait or hand off. Your claimed lane is your roster status; hand work off ` +
+            `with {act:'handoff'}.`,
         );
       } catch (err) {
         if (err instanceof ClaimConflictError) {
