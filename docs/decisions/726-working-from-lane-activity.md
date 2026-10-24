@@ -99,6 +99,9 @@ when it is fresher. Do not let a stale claim read as work.
   lane, the wake packet's lane block carries `activity: {state, last_action_at}`, and `team_wake_context`
   renders `lane state: <state>, your last action <age> ago`. The packet schema is strict, so this
   is feature epoch 39: an adapter behind it refuses such a packet until it is rebuilt.
+- _2026-10-23 (lane 01M5JTZWHQ):_ the generated guidance no longer asks for a `status_update` just
+  to announce a picked lane or finish orientation; it points the everyday loop at the claimed lane
+  for roster status. The remaining skill-file copy is tracked by dependent lane `01M5NBVB2Q`.
 - Build lanes: `01M5N3V9EP` (server, wire, renderers), then `01M5N3VG2D` (instructions).
 
 Follows-up: 01M5N3V9EPHMZ08XJ4FDRN2DPX, 01M5N3VG2DG14Z81NRMHMXVFPC
