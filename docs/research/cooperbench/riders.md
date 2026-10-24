@@ -76,3 +76,36 @@ for. ADR 724's own falsifier reads these numbers: holder signals do not fall, or
 still wait for the holder's reply rather than the act.
 
 **Not gaming.** As rider 1: no instruction, hint or tool is added to any arm for it.
+
+## Rider 3: did findings 022's product changes remove the calls they were for? (one-call orientation, ADR 726, ADR 724)
+
+**Lane:** `01M5QDHJEE`. **Status:** pre-registered 2026-10-24, before the run that reads it
+([coordination-cost manifest](./coordination-cost-manifest.md)).
+
+**What changed.** One call orients a seat at session start (#3289): the first reply carries the held
+lanes, the open count and directed acts, so no `team_status` / `lane_board` / inbox before a claim.
+ADR 726 (#3271, #3280, #3283, #3285): `working` is read from lane activity, and no instruction tells
+an agent to post a status update. ADR 724 (#3269, #3279): a held-file refusal watches the holder's
+lane and a directed act wakes the refused seat when the file frees up. The agents' instructions
+(#3177) are unchanged.
+
+**Measure.** Three counts over the 10 `core` pairs, by the claim run's residue scripts unchanged
+(`pilot-runs/2026-10-22-claim/residue/boardreads.py`, `sends.py`):
+
+| | Count | Claim run (`core`) |
+| --- | --- | --- |
+| R3a | board reads with `context = before first claim` | 27 of 100 |
+| R3b | `status_update` sends that `is_signal` does not mark | 40 calls, $0.94 |
+| R3c | sends `is_signal` marks, by kind | 34 calls, $0.69 (pushed 10, merged 16, lane done 4, ETA 2, other 2) |
+
+**Verdict rule**, read once from the first complete musterd run on a build at or after #3289 over all
+10 `core` pairs: R3a **≤ 9** "the one-call orientation removed the orientation reads", **≥ 22** "it
+did not"; R3b **≤ 13** "dropping the instruction removed the status updates", **≥ 32** "it did not";
+between the two, "part of it", reported with the labelled rows. R3c is reported by kind with no
+rule: the kinds ADR 724 carries are 4 and 16 calls, too few for a fair test at ten pairs, and
+"pushed" has no product event yet. Each rule stands alone.
+
+**Not gaming.** As riders 1 and 2: no instruction, hint or tool is added to any arm for it. The
+orientation block, the missing status instruction and the ADR 724 act are the product every seat on
+every team gets; the run measures them where finding 022 found the cost.
+
