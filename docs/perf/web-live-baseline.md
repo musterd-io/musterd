@@ -2380,6 +2380,25 @@ A defect worth keeping: the tinted copy was first drawn on a fresh canvas (300 �
 so every chair was blitted from a canvas wider than its sprite and squeezed to about a third of its width. The backs
 read "at an angle" and "paper thin" (nick). `render-desk.test.ts` pins the canvas to the sprite's size.
 
+## 2026-10-23 — the painters are deleted; Total JS TIGHTENED 369,998 → 358,000 B (lane 01M5D8EJ40, plan Task 19)
+
+The rendered office is the office. Deleted: every furniture, room-shell (floor, walls, windows, beams), dog, chair,
+monitor-body, desk-base, lamp and fan painter in `render.ts` (~1,900 lines), the skeleton painter in `character.ts`,
+the joint solver in `skeleton.ts` (what `animFor` and the chair beats read stays), the iso camera (`CORNER_CAMERA`
+is the camera) and the `?office=painted` switch. What still paints is live or printed: screen faces, the prints,
+clock hands, board notes, the hours sign, string lights, the tiny desk props, the open fridge, the overlays.
+
+| budget | before (local) | after (local) | ceiling |
+| --- | --- | --- | --- |
+| total JS gzip | 359.8 KB | **346.7 KB** (355,021 B) | 369,998 → **358,000 B** |
+| initial JS gzip | 148.0 KB ceiling | 147.6 KB | 151,520 (unchanged) |
+
+CI reads ~0.8 KB above local on this lane, so the new ceiling leaves ~2 KB over CI's reading. This pays back today's
+four raises (363,920 → 369,998) and the lane's own earlier ones down to where other lanes' growth since increment 1
+(the settings overlay, passkeys, status lines, charts: ~20 KB) sits; the plan's "pre-increment-1" 342,900 B is that
+other work away, not the office's. A re-baseline to measured + 15% would loosen (ADR 183), so this is a tightening,
+not a re-baseline. The `/character-sheet` fixture now draws the sprite figure and the dog sheet (it drew the skeleton).
+
 ## 2026-10-23 — rendered monitors and wall fixtures; Total JS RAISED +1,024 B (lane 01M5D8EJ40)
 
 The monitor bodies (#3287) and the wall fixtures (prints' frames, planter, clock body, lane board) blit with their

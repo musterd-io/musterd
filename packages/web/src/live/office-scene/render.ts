@@ -2,22 +2,17 @@ import { canvasFont } from '../canvasFont';
 import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { animFor, drawCharacter } from './character';
-import { cameraOf, depth, FLOOR, ISO_CAMERA, project, THICK, WALL_H, type Camera, type Fit, type FitBox, type Pt } from './iso';
+import { cameraOf, CORNER_CAMERA, depth, FLOOR, project, THICK, WALL_H, type Camera, type Fit, type FitBox, type Pt } from './iso';
 import type { SpriteCache } from './sprite-cache';
-import { STRIDE, type PetState } from './pet';
+import type { PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
 import {
   ART,
   BOOKSHELVES,
-  CHAIR_LIFT,
   CHAIR_OFF,
-  CHAIR_SEAT_H,
   DESK_D,
-  DESK_LEG_H,
-  DESK_SLAB,
   BENCH,
   DESK_SLOTS,
-  END_TABLE,
   DESK_UP,
   DESK_W,
   ENTRANCE,
@@ -29,24 +24,14 @@ import {
   LOUNGE,
   MEETING,
   NOOK,
-  NOOK_RUG,
-  NOOK_RUG_R,
   PLANTS,
   PODS,
-  POD_RUG,
-  POD_RUG_DUO,
-  POD_RUG_SOLO,
   PRINTER,
   RECEPTION,
-  SEAT_TOP,
-  SINK,
-  WAIT_CHAIR,
   WALL_BOARD,
   WORKING_HOURS_CALENDAR,
   WINDOWS,
-  type Bookshelf,
   type DeskSlot,
-  type Rug,
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, STICKY_CAP, stickySway, type WallBoard } from './wallboard';
@@ -55,7 +40,7 @@ import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
 import { pulseIntensity, pulseLive, runGlow } from '../pulse';
-import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
+import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
 import { blitAsset } from './rendered/blit';
 import { tintFrame } from './rendered/tint';
@@ -74,7 +59,6 @@ import { formatWorkingHours } from './workingHours';
  * Figma "Floor Plan": legged desks + task chairs + oriented glowing monitors, a rich break nook
  * (couch + armchairs + kitchenette), huddle spaces, and big floor plants.
  */
-
 
 /**
  * Theme-varying scene surfaces — the floor and the wooden/upholstered furniture. Furniture-*intrinsic*
@@ -104,11 +88,6 @@ export const DARK_PALETTE: ScenePalette = {
 let PAL: ScenePalette = DARK_PALETTE;
 export function setScenePalette(p: ScenePalette): void {
   PAL = p;
-}
-
-/** The lighter desk/counter surface — derived from the wood base so it tracks the theme in one place. */
-function woodTop(): string {
-  return mul(PAL.wood, 1.12);
 }
 
 // ── colour utils ──────────────────────────────────────────────────────────
@@ -299,43 +278,6 @@ function box(
   quad(ctx, [dn(D, lo), dn(C, lo), dn(C, hi), dn(D, hi)], shade(base, 0.86));
   quad(ctx, [dn(A, hi), dn(B, hi), dn(C, hi), dn(D, hi)], base);
 }
-/**
- * A `box` whose top footprint differs from its bottom — the shape of anything that tapers: a plant pot,
- * a waste bin, a lampshade. Same two visible side faces and the same shading as `box`, so a frustum and a
- * box sitting side by side read as the same material under the same light.
- */
-function frustum(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  w0: number,
-  d0: number,
-  w1: number,
-  d1: number,
-  hPx: number,
-  base: string,
-  baseUp = 0,
-): void {
-  const at = (w: number, d: number, u: number): Pt[] =>
-    [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ].map(([sx, sy]) => {
-      const p = project(lx + (sx! * w) / 2, ly + (sy! * d) / 2, fit);
-      return { x: p.x, y: p.y - u };
-    });
-  // A0 (the far-top corner) is occluded by the box's own faces — the hole keeps the positional
-  // destructure aligned with `at`'s corner order rather than renaming the three that are drawn.
-  const [, B0, C0, D0] = at(w0, d0, baseUp * fit.scale);
-  const [A1, B1, C1, D1] = at(w1, d1, (baseUp + hPx) * fit.scale);
-  contactPool(ctx, fit, lx, ly, w0, d0, baseUp);
-  quad(ctx, [B0!, C0!, C1!, B1!], shade(base, 0.72));
-  quad(ctx, [D0!, C0!, C1!, D1!], shade(base, 0.86));
-  quad(ctx, [A1!, B1!, C1!, D1!], base);
-}
 
 /** Face shading that also handles hsl bases (member-tinted furniture like chairs). */
 function shade(base: string, f: number): string {
@@ -393,76 +335,6 @@ function drawVignette(ctx: CanvasRenderingContext2D): void {
   ctx.restore();
 }
 
-// ── furniture ─────────────────────────────────────────────────────────────
-function drawFloor(ctx: CanvasRenderingContext2D, fit: Fit): void {
-  const c00 = project(0, 0, fit);
-  const c10 = project(FLOOR, 0, fit);
-  const c11 = project(FLOOR, FLOOR, fit);
-  const c01 = project(0, FLOOR, fit);
-  const th = THICK * fit.scale;
-  const dn = (p: Pt): Pt => ({ x: p.x, y: p.y + th });
-  quad(ctx, [c10, c11, dn(c11), dn(c10)], PAL.floor2);
-  quad(ctx, [c01, c11, dn(c11), dn(c01)], mul(PAL.floor2, 0.955));
-  quad(ctx, [c00, c10, c11, c01], PAL.floor);
-
-  // A basket-weave field of long ceramic tiles. Alternating paired orientations keeps the tactile scale
-  // of the first pass without turning the whole room into a checkerboard.
-  ctx.save();
-  ctx.strokeStyle = 'rgba(126, 73, 30, 0.24)';
-  ctx.lineWidth = Math.max(0.55, 0.85 * fit.scale);
-  const cell = 90;
-  const half = cell / 2;
-  const plank = (lx: number, ly: number, w: number, d: number, fill: string): void => {
-    const pts = [
-      project(lx, ly, fit),
-      project(lx + w, ly, fit),
-      project(lx + w, ly + d, fit),
-      project(lx, ly + d, fit),
-    ];
-    quad(ctx, pts, fill);
-    ctx.beginPath();
-    ctx.moveTo(pts[0]!.x, pts[0]!.y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
-    ctx.closePath();
-    ctx.stroke();
-  };
-  for (let lx = 0; lx < FLOOR; lx += cell) {
-    for (let ly = 0; ly < FLOOR; ly += cell) {
-      const warm = ((lx + ly) / cell) % 3 === 0;
-      const light = warm ? 'rgba(255, 247, 211, 0.18)' : 'rgba(255, 237, 191, 0.1)';
-      const shade = warm ? 'rgba(162, 88, 31, 0.065)' : 'rgba(136, 72, 25, 0.045)';
-      if ((lx / cell + ly / cell) % 2 === 0) {
-        plank(lx, ly, half, cell, light);
-        plank(lx + half, ly, half, cell, shade);
-      } else {
-        plank(lx, ly, cell, half, shade);
-        plank(lx, ly + half, cell, half, light);
-      }
-    }
-  }
-
-  // Pearlescent glints at a sparse, deterministic set of joints: a quiet "coordination dust" trail that
-  // makes the floor magical up close without turning the office into a particle effect.
-  ctx.globalCompositeOperation = 'lighter';
-  for (let gx = 1; gx < FLOOR / cell; gx++) {
-    for (let gy = 1; gy < FLOOR / cell; gy++) {
-      if ((gx * 7 + gy * 11) % 13 !== 0) continue;
-      const p = project(gx * cell, gy * cell, fit);
-      const glow = 7 * fit.scale;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glow);
-      g.addColorStop(0, 'rgba(255, 250, 213, 0.78)');
-      g.addColorStop(0.28, 'rgba(255, 226, 148, 0.35)');
-      g.addColorStop(1, 'rgba(255, 226, 148, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, glow, 0, Math.PI * 2);
-      ctx.fill();
-      ellipse(ctx, p, 2.5 * fit.scale, 1.5 * fit.scale, 'rgba(255, 252, 226, 0.92)');
-    }
-  }
-  ctx.restore();
-}
-
 // ── the room shell: the two back walls + their windows (office-walls-windows.md) ────────────────────────
 // The floor diamond's back corner is (0,0). The two back walls rise from the two upper edges meeting there:
 // the `ly=0` edge (back-right) and the `lx=0` edge (back-left, the one the door sits in). They are drawn
@@ -479,20 +351,6 @@ function drawFloor(ctx: CanvasRenderingContext2D, fit: Fit): void {
  * The glass colour: bright sky by day (warm at golden hour via `skyTint`), a dark pane with a faint city
  * glow by night. Interpolated on `daylight`, so it tracks the same PST clock as the beam and the veil.
  */
-/**
- * Brighten an `rgb(...)` string by a factor, staying in `rgb(...)`.
- *
- * `glassColor` returns `rgb()`, not hex, and `mul()` only parses hex — feeding one to the other gives
- * `#NaN0b15`, which canvas silently ignores while keeping whatever colour was loaded last. That is the
- * exact class of bug the parseable-colour guard in render.test.ts exists for, and this is the third
- * time this pass has walked into it. If you need to scale a colour, check what format it is in first.
- */
-function rgbMul(color: string, f: number): string {
-  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(color);
-  if (!m) return color;
-  const c = (v: string) => Math.round(Math.min(255, Math.max(0, Number(v) * f)));
-  return `rgb(${c(m[1]!)}, ${c(m[2]!)}, ${c(m[3]!)})`;
-}
 
 export function glassColor(env: LightEnv): string {
   const [sr, sg, sb] = hexRgb('#0f1626'); // night pane
@@ -675,20 +533,8 @@ function wallArt(
   w: number,
   h: number,
   motif: MotifName,
-  frame: 'thin' | 'thick' | 'none' = 'thick',
-  /** The frame and mat are rendered art (lane 01M5D8EJ40): paint only the print on the mat. */
-  printOnly = false,
 ): void {
-  const dt = w / 2 / FLOOR;
-  const du = h / 2 / WALL_H;
-  // Frame weight varies per piece. `none` is a stretched canvas — an unframed piece in a group is
-  // what stops six prints reading as one catalogue order.
-  if (frame !== 'none' && !printOnly) {
-    wallRect(ctx, fit, edge, tc - dt, uc - du, tc + dt, uc + du, DRESS.frame);
-  }
-  const inset = frame === 'thick' ? 0.88 : frame === 'thin' ? 0.95 : 1;
-  if (!printOnly) wallRect(ctx, fit, edge, tc - dt * inset, uc - du * inset, tc + dt * inset, uc + du * inset, DRESS.mat);
-
+  // The frame and mat are rendered art (`wall/art-N`, lane 01M5D8EJ40): only the print paints, on the mat.
   const hw = (w / 2) * 0.68; // the mat opening — a composition needs the area a lone colour block didn't
   const hh = (h / 2) * 0.68;
   const p = (a: number, b: number): Pt => wallPt(edge, tc + a / FLOOR, uc + b / WALL_H, fit);
@@ -750,44 +596,6 @@ export const CLOCK_NUMERALS: ReadonlyArray<{ hour: number; big: boolean }> = [
   { hour: 11, big: false },
 ];
 
-/**
- * Paint the dial.
- *
- * Twelve numerals do not fit. The face is R=25 — about 26 screen px at /live — and the first cut set
- * all twelve as hand-drawn stroke paths, which nick called horrible, correctly: at that size each
- * numeral is a 4px scribble, and twelve scribbles in a ring is grit, not a clock.
- *
- * So the quarters get REAL TYPE, set large enough to actually read, and the other eight hours get
- * ticks. That is a normal, handsome way to draw a clock, and it spends the whole numeral budget on
- * the four positions a person actually reads a wall clock by. The type goes through `wallText` (and
- * therefore `canvasFont`), so it shears onto the wall and honours the font tokens.
- */
-function drawClockNumerals(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  edge: (t: number) => [number, number],
-  tc: number,
-  uc: number,
-  R: number,
-): void {
-  ctx.save();
-  CLOCK_NUMERALS.forEach((n, i) => {
-    const a = (i / 12) * Math.PI * 2;
-    const ring = n.big ? 0.66 : 0.8;
-    const t = tc + (Math.sin(a) * R * ring) / FLOOR;
-    const u = uc + (Math.cos(a) * R * ring) / WALL_H;
-    if (!n.big) {
-      wallDisc(ctx, fit, edge, t, u, 1.3, DRESS.tick);
-      return;
-    }
-    // Alphabetic baseline: drop it by about half a cap height so the numeral sits centred on its
-    // ring position rather than hanging under it.
-    const size = 11;
-    wallText(ctx, fit, edge, t, u - (size * 0.35) / WALL_H, String(n.hour), size, DRESS.tick, 'center');
-  });
-  ctx.restore();
-}
-
 function wallClock(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -795,15 +603,9 @@ function wallClock(
   tc: number,
   uc: number,
   hours: number,
-  /** The rim, dial and numerals are rendered art (lane 01M5D8EJ40): paint only the hands. */
-  handsOnly = false,
 ): void {
+  // The rim, dial and numerals are rendered art (`wall/clock`, lane 01M5D8EJ40): only the hands paint.
   const R = 25;
-  if (!handsOnly) {
-    wallDisc(ctx, fit, edge, tc, uc, R + 2.5, DRESS.clockRim);
-    wallDisc(ctx, fit, edge, tc, uc, R, DRESS.clockFace);
-    drawClockNumerals(ctx, fit, edge, tc, uc, R);
-  }
   // Hands: 12 o'clock is straight up the wall (+u), sweeping clockwise toward +t.
   const hand = (turns: number, len: number, w: number): void => {
     const a = turns * Math.PI * 2;
@@ -848,8 +650,6 @@ function wallLaneBoard(
   fit: Fit,
   edge: (t: number) => [number, number],
   data: WallBoard | null,
-  /** The frame, cork and column caps are rendered art (lane 01M5D8EJ40): paint only the notes. */
-  notesOnly = false,
 ): void {
   const { tc, uc, w: W, h: H } = WALL_BOARD;
   const p = (a: number, b: number): Pt => wallPt(edge, tc + a / FLOOR, uc + b / WALL_H, fit);
@@ -871,33 +671,8 @@ function wallLaneBoard(
     ctx.restore();
   };
 
+  // The frame, cork and column caps are rendered art (`wall/board`, lane 01M5D8EJ40): only the notes paint.
   const FR = 3;
-  if (!notesOnly) {
-    rect(-W / 2 + 4, -H / 2 - 4, W / 2 + 4, H / 2 - 4, PINBOARD.cast); // soft cast
-
-    // The frame is LIGHTER than the cork, which is the whole reason it works: a dark surround would
-    // make the board a hole in the wall, while a pale one reads as a lit edge and lets the cork become
-    // the dark field the notes sit off. Thin, too — 3 units, a picture-frame lip, not a bulletin-board
-    // slab (nick, 2026-08-02: "I like the pale oak but make the frame thin").
-    rect(-W / 2, -H / 2, W / 2, H / 2, PINBOARD.oak);
-    stroke([[-W / 2, H / 2], [W / 2, H / 2]], 1, PINBOARD.oakLit); // sunlit top lip
-    stroke([[-W / 2, -H / 2], [W / 2, -H / 2]], 1, PINBOARD.oakShade); // shaded underside
-    rect(-W / 2 + FR, -H / 2 + FR, W / 2 - FR, H / 2 - FR, PINBOARD.cork);
-
-    // Cork freckle. Seeded off the index alone (not off lane data) so the surface is *the same cork*
-    // every frame — a texture that reshuffles on repaint reads as static, not as material. Kept to 150
-    // flecks: each one is four wall projections, and this paints inside the ambient loop.
-    for (let i = 0; i < 150; i++) {
-      const h = Math.imul(i + 1, 2654435761) >>> 0;
-      const a = -W / 2 + FR + 1.5 + ((h % 4096) / 4096) * (W - FR * 2 - 3);
-      const b = -H / 2 + FR + 1.5 + (((h >>> 12) % 4096) / 4096) * (H - FR * 2 - 3);
-      const sz = 0.9 + ((h >>> 24) % 3) * 0.35;
-      rect(a, b, a + sz, b + sz, PINBOARD.fleck[h % 3]!);
-    }
-    // Where the cork meets the frame's top lip, one darker line — the shadow the frame casts onto the
-    // cork. It is what seats the cork *inside* the frame instead of flush with it.
-    stroke([[-W / 2 + FR, H / 2 - FR], [W / 2 - FR, H / 2 - FR]], 1, PINBOARD.inner);
-  }
 
   // Six columns inside the frame. No ruled dividers any more: cork has no lines on it, and the cap
   // strips alone carry the column read.
@@ -908,8 +683,7 @@ function wallLaneBoard(
     const tone = WALLBOARD_TONES[i]!;
     const a0 = -W / 2 + M + i * colW;
     const mid = a0 + colW / 2;
-    // The cap strip: each column announces its state in full colour even when it holds nothing.
-    if (!notesOnly) rect(a0 + 2, H / 2 - M - 2.5, a0 + colW - 2, H / 2 - M, tone.cap);
+    // The cap strip — each column announcing its state even when it holds nothing — is in the render.
 
     const col = data?.[i];
     if (!col) continue;
@@ -1112,7 +886,6 @@ function wallText(
   ctx.restore();
 }
 
-
 /**
  * The largest of `size` that still fits `text` inside `maxUnits` logical wall units. Measured with the
  * wall transform *off*: one text unit is one logical FLOOR unit either way, and `measureText` is the only
@@ -1126,113 +899,18 @@ function fitTextSize(ctx: CanvasRenderingContext2D, text: string, size: number, 
   return width > maxUnits ? (size * maxUnits) / width : size;
 }
 
-/** A planter hung off the wall on a bracket, trailing vines — the one piece of dressing with some droop. */
-function wallHanger(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  edge: (t: number) => [number, number],
-  tc: number,
-  uTop: number,
-): void {
-  const pt = (t: number, u: number): Pt => wallPt(edge, t, u, fit);
-  // Short cords: run them long and the pot swings under a narrow V that reads as a handbag, not a planter.
-  const uPot = uTop - 17 / WALL_H;
-  const bt = 15 / FLOOR;
-
-  /**
-   * An ellipse in WALL space — a ring of `wallPt` samples rather than `ctx.ellipse`, so it shears with
-   * the wall like everything else on it. This is the shape that does the heavy lifting below: the whole
-   * "it looks flat, not 3D-ish" complaint (nick, 2026-07-30) came down to the pot having no visible
-   * opening. A trapezoid is a shape; a trapezoid with an ellipse across its mouth is a container.
-   */
-  const wallEllipse = (t: number, u: number, rt: number, ru: number, fill: string): void => {
-    const pts: Pt[] = [];
-    for (let i = 0; i < 18; i++) {
-      const th = (i / 18) * Math.PI * 2;
-      pts.push(pt(t + (Math.cos(th) * rt) / FLOOR, u + (Math.sin(th) * ru) / WALL_H));
-    }
-    quad(ctx, pts, fill);
-  };
-
-  /** One trailing vine. `back` runs it behind the pot, dimmed — see the ordering note below. */
-  const vine = (dt: number, drop: number, back: boolean): void => {
-    ctx.strokeStyle = back ? dim(DRESS.vine, 0.72) : DRESS.vine;
-    ctx.lineWidth = Math.max(0.8, (back ? 1.4 : 1.7) * fit.scale);
-    ctx.lineCap = 'round';
-    const a = pt(tc + dt / FLOOR, uPot);
-    const c = pt(tc + (dt * 1.9) / FLOOR, uPot - drop / 2 / WALL_H);
-    const b = pt(tc + (dt * 1.4) / FLOOR, uPot - drop / WALL_H);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
-    ctx.stroke();
-    ellipse(ctx, b, (back ? 2.8 : 3.4) * fit.scale, (back ? 2.1 : 2.6) * fit.scale, back ? dim(DRESS.vine, 0.72) : DRESS.vine);
-  };
-
-  // Cords, converging on ONE bracket point rather than running near-parallel — parallel cords are the
-  // other half of the flat read, because nothing in the picture recedes.
-  ctx.strokeStyle = DRESS.rope;
-  ctx.lineWidth = Math.max(0.6, 1.1 * fit.scale);
-  for (const dt of [-13 / FLOOR, 0, 13 / FLOOR]) {
-    ctx.beginPath();
-    const a = pt(tc, uTop);
-    const b = pt(tc + dt, uPot);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  }
-  ctx.beginPath(); // the bracket it all hangs from
-  const h0 = pt(tc, uTop);
-  ctx.arc(h0.x, h0.y, Math.max(0.8, 1.6 * fit.scale), 0, Math.PI * 2);
-  ctx.fillStyle = DRESS.rope;
-  ctx.fill();
-
-  // Painter's order is the whole trick, and it is why the vines are split rather than looped once:
-  // BACK vines → pot → rim → interior → FRONT vines. Foliage passing behind the pot is what states
-  // that the pot has a far side at all. Drawn in one pass they all sit in front, and the plant reads
-  // as a decal stuck on top of a bowl.
-  vine(-15, 30, true);
-  vine(9, 40, true);
-
-  // The bowl: a tapered body with a shaded side, so it is lit rather than filled flat.
-  quad(
-    ctx,
-    [pt(tc - bt, uPot), pt(tc + bt, uPot), pt(tc + bt * 0.62, uPot - 17 / WALL_H), pt(tc - bt * 0.62, uPot - 17 / WALL_H)],
-    DRESS.pot,
-  );
-  quad(
-    ctx,
-    [pt(tc + bt * 0.34, uPot), pt(tc + bt, uPot), pt(tc + bt * 0.62, uPot - 17 / WALL_H), pt(tc + bt * 0.38, uPot - 17 / WALL_H)],
-    dim(DRESS.pot, 0.86),
-  );
-  // The mouth: rim ellipse, then the shadowed interior inside it.
-  wallEllipse(tc, uPot, 15, 5.2, DRESS.potRim);
-  wallEllipse(tc, uPot - 0.4 / WALL_H, 12.2, 3.9, dim(DRESS.pot, 0.62));
-  wallEllipse(tc, uPot - 1.6 / WALL_H, 9.5, 2.6, DRESS.vine); // the soil/foliage crown in the opening
-
-  vine(-11, 34, false);
-  vine(2, 50, false);
-  vine(12, 27, false);
-}
-
 /**
- * Which slice of the walls to paint (sprite cache, spec 2026-09-17).
+ * What paints on the rendered walls (lane 01M5D8EJ40). The faces, windows, frames, mats, the planter, the
+ * clock's dial and the board's cork are in the room render and `wall/*` assets; this draws what is live or
+ * printed over them: the prints on their mats, the clock's hands (it reads the office hour), the
+ * working-hours sign (it reads `t`), the lane board's notes (they read the live board), and both walls'
+ * bulb strands.
  *
- * `static` is the cacheable wall: faces, windows, art, and the LEFT wall's bulb strand. `live` is
- * what has to paint on the stage every frame, in the order it already paints in — the clock (it
- * reads the office hour), the working-hours sign (it reads `t`), the lane board (it reads the live
- * board), and then the RIGHT wall's bulb strand.
- *
- * The strand is in the live half for a different reason from the other three, and it is the reason
- * the first cut of this failed the pixel gate 10/10 states at 14% of pixels: its glows composite
- * with `lighter`, which ADDS to whatever is already on the canvas. Rasterized into its own sprite it
- * added to transparency instead of to the wall, and blitting that back source-over replaced the wall
- * rather than brightening it. An additive pass cannot be separated from what it adds to — so it
- * stays on the stage, over the blitted wall. The left wall's strand is safe because its wall face is
- * inside the SAME sprite it adds to.
+ * The strands paint on the stage every frame, never into the background sprite: their glows composite
+ * with `lighter`, which ADDS to whatever is already on the canvas. Rasterised into their own sprite they
+ * added to transparency, and blitting that back source-over replaced the wall rather than brightening it
+ * (the first sprite-cache cut failed the pixel gate 10/10 states at 14% of pixels on exactly this).
  */
-export type WallSlice = 'all' | 'static' | 'live';
-
 export function drawWalls(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -1240,13 +918,11 @@ export function drawWalls(
   teamWorkingHours: WorkingHours | null = null,
   wallBoard: WallBoard | null = null,
   t = 0,
-  slice: WallSlice = 'all',
   /** The paint-sequence hook (RenderOpts.units): each live fixture is its own unit, so the sign's
    *  animation damages the sign and not the clock and the board beside it. */
   run: (draw: () => void) => void = (draw) => draw(),
-  /** Pre-rendered wall fixtures (lane 01M5D8EJ40): the frames, the planter, the clock body and the
-   *  board blit, and only what changes or is printed paints over them. */
-  art?: RenderedAssets,
+  /** The wall fixtures' assets: the prints' frames, the planter, the clock body and the board blit here. */
+  art: RenderedAssets,
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1254,116 +930,46 @@ export function drawWalls(
    * corner; the left wall gets a tall print between its windows and the hanging planter. Nothing sits below
    * u 0.36 (the bookshelves' height) or inside a window's `t` span.
    */
-  const wantsStatic = slice !== 'live';
-  const wantsFixtures = slice !== 'static';
-  /* The right wall's strand belongs to whichever half its wall face does NOT: see `WallSlice`. */
-  const wantsRightCable = slice === 'all' || slice === 'live';
-
   const dress = (edge: (t: number) => [number, number], wallIndex: 0 | 1): void => {
     // Nothing goes high near the back corner: that is where the wall is tallest on screen and the canvas
     // crops its top edge, so anything hung up there loses the wall behind it and floats.
     ART.forEach((a, i) => {
       if (a.wall !== wallIndex) return;
-      // rendered: the frame and mat blit at the print's floor point, and the print paints on the mat
+      // the frame and mat blit at the print's floor point, and the print paints on the mat
       const [fx, fy] = edge(a.tc);
-      if (wantsStatic) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif, a.frame);
-      else if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif, a.frame, true);
+      if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif);
     });
     if (wallIndex === 1) {
-      if (!wantsFixtures) return;
       const [cx, cy] = edge(0.52);
-      run(() => wallClock(ctx, fit, edge, 0.52, 0.62, env.hours, !wantsStatic && blitIf(ctx, fit, art, 'wall/clock', cx, cy))); // dead centre, between the windows
+      run(() => {
+        if (blitIf(ctx, fit, art, 'wall/clock', cx, cy)) wallClock(ctx, fit, edge, 0.52, 0.62, env.hours); // dead centre, between the windows
+      });
       // Painted with or without a schedule: on /live it is the door to the team's settings, so a team
       // that never set hours still needs something to reach for (nick, 2026-10-19).
       run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
       const [bx, by] = edge(WALL_BOARD.tc);
-      run(() => wallLaneBoard(ctx, fit, edge, wallBoard, !wantsStatic && blitIf(ctx, fit, art, 'wall/board', bx, by)));
+      run(() => {
+        if (blitIf(ctx, fit, art, 'wall/board', bx, by)) wallLaneBoard(ctx, fit, edge, wallBoard);
+      });
       return;
     }
     const [hx, hy] = edge(0.52);
-    if (wantsStatic) wallHanger(ctx, fit, edge, 0.52, 0.76); // between the windows — where you'd really hang one
-    else blitIf(ctx, fit, art, 'wall/hanger', hx, hy);
+    blitIf(ctx, fit, art, 'wall/hanger', hx, hy); // between the windows — where you'd really hang one
   };
-
-  const wall = (
-    edge: (t: number) => [number, number],
-    faceShade: number,
-    /** Which of this wall's pieces this call paints — the sprite-cache slice, see `WallSlice`. */
-    want: { shell: boolean; dress: boolean; cable: boolean },
-  ): void => {
-    const pt = (t: number, u: number): Pt => wallPt(edge, t, u, fit);
-    if (!want.shell) {
-      if (want.dress) dress(edge, edge === WALL_EDGES[1] ? 1 : 0);
-      if (want.cable) run(() => cableStrand(ctx, fit, edge));
-      return;
-    }
-    // the wall face
-    quad(ctx, [pt(0, 0), pt(1, 0), pt(1, 1), pt(0, 1)], shade(PAL.wall, faceShade));
-    // a darker top cap, so the wall has a lip where it meets the (absent) ceiling
-    quad(ctx, [pt(0, 1), pt(1, 1), pt(1, 1.04), pt(0, 1.04)], shade(PAL.wall, faceShade * 0.86));
-    // windows
-    const frame = shade(PAL.wall, faceShade * 0.7);
-    const glass = glassColor(env);
-    for (const w of WINDOWS) {
-      quad(ctx, [pt(w.t0, w.u0), pt(w.t1, w.u0), pt(w.t1, w.u1), pt(w.t0, w.u1)], frame); // reveal
-      const iT = (w.t1 - w.t0) * 0.08;
-      const iU = (w.u1 - w.u0) * 0.1;
-      // One sun: the nearer window is brighter. This is the change that buys most of the warmth, and
-      // it costs nothing in realism because it is simply what happens.
-      quad(ctx, [pt(w.t0 + iT, w.u0 + iU), pt(w.t1 - iT, w.u0 + iU), pt(w.t1 - iT, w.u1 - iU), pt(w.t0 + iT, w.u1 - iU)], rgbMul(glass, w.bright));
-      // Panes, so it reads as a window rather than a lit hole. The vertical count alternates between
-      // units — a real facade mixes them, and four identical windows was the complaint.
-      const midU = (w.u0 + w.u1) / 2;
-      for (let m = 1; m < w.mullions; m++) {
-        const t = w.t0 + ((w.t1 - w.t0) * m) / w.mullions;
-        quad(ctx, [pt(t - iT * 0.3, w.u0 + iU), pt(t + iT * 0.3, w.u0 + iU), pt(t + iT * 0.3, w.u1 - iU), pt(t - iT * 0.3, w.u1 - iU)], frame);
-      }
-      quad(ctx, [pt(w.t0 + iT, midU - iU * 0.35), pt(w.t1 - iT, midU - iU * 0.35), pt(w.t1 - iT, midU + iU * 0.35), pt(w.t0 + iT, midU + iU * 0.35)], frame);
-      // A bloom where the light spills onto the wall above the head — the glow a bright window
-      // actually throws, and the reason the top of the reveal never reads as a hard cut.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.16 * w.bright;
-      quad(ctx, [pt(w.t0 - 0.012, w.u1), pt(w.t1 + 0.012, w.u1), pt(w.t1 + 0.012, w.u1 + 0.07), pt(w.t0 - 0.012, w.u1 + 0.07)], '#ffe9b8');
-      ctx.restore();
-      // The sill, and whatever is standing on it. A window without a ledge is a hole in a wall.
-      const sillU = w.u0 - 0.018;
-      quad(ctx, [pt(w.t0 - 0.014, sillU), pt(w.t1 + 0.014, sillU), pt(w.t1 + 0.014, w.u0), pt(w.t0 - 0.014, w.u0)], shade(PAL.wall, faceShade * 1.06));
-      if (w.sill) {
-        const st = (w.t0 + w.t1) / 2 + (w.t1 - w.t0) * 0.24;
-        const sp = pt(st, w.u0);
-        const r = fit.scale;
-        if (w.sill === 'plant') {
-          ellipse(ctx, { x: sp.x, y: sp.y - 4 * r }, 4.5 * r, 4 * r, PLANT.pot);
-          ellipse(ctx, { x: sp.x, y: sp.y - 10 * r }, 6 * r, 5 * r, PLANT.leaf);
-          ellipse(ctx, { x: sp.x - 3 * r, y: sp.y - 12 * r }, 3.5 * r, 3 * r, PLANT.leafLit);
-        } else {
-          ellipse(ctx, { x: sp.x, y: sp.y - 4 * r }, 3.6 * r, 3.4 * r, '#f2e7d5');
-          ellipse(ctx, { x: sp.x, y: sp.y - 6 * r }, 3.2 * r, 1.6 * r, '#c9a887');
-        }
-      }
-    }
-
-    if (want.dress) dress(edge, edge === WALL_EDGES[1] ? 1 : 0);
-    if (want.cable) cableStrand(ctx, fit, edge);
-  };
-  // Two faces at slightly different shades so the back corner reads (like box()'s side faces).
-  // back-left wall (lx=0 edge) is a touch darker — more edge-on to the implied upper-left light.
-  // It carries no live fixture, so the `live` slice skips it entirely.
-  if (wantsStatic) wall(WALL_EDGES[0]!, 0.9, { shell: true, dress: true, cable: true });
-  // Over a rendered wall the left wall's dressing and string lights paint too: the wall render has
-  // neither (they went missing when the rendered office became the default — lane 01M5D8EJ40).
-  else if (art) wall(WALL_EDGES[0]!, 0.9, { shell: false, dress: true, cable: true });
-  // back-right wall (ly=0 edge) catches more of that light — and carries the clock, sign and board.
-  wall(WALL_EDGES[1]!, 0.99, { shell: wantsStatic, dress: true, cable: wantsRightCable });
+  // back-left wall (lx=0 edge): a print, the planter, and its strand. It carries no live fixture.
+  dress(WALL_EDGES[0]!, 0);
+  run(() => cableStrand(ctx, fit, WALL_EDGES[0]!));
+  // back-right wall (ly=0 edge): the clock, sign and board, then its strand over them.
+  dress(WALL_EDGES[1]!, 1);
+  run(() => cableStrand(ctx, fit, WALL_EDGES[1]!));
 }
 
 /**
  * A low, slightly sagging strand of warm bulbs — it turns the architectural shell into a place
  * people chose to inhabit. The bulbs stay on in daylight too, but read as tiny pearl pins rather
- * than glare. Its own function so a wall can paint it separately from its face (see `WallSlice`).
+ * than glare. Its own function because it paints on the stage, over the blitted wall (see `drawWalls`).
  */
 function cableStrand(ctx: CanvasRenderingContext2D, fit: Fit, edge: (t: number) => [number, number]): void {
   const cable = cablePts(edge, fit);
@@ -1480,7 +1086,7 @@ function magicRnd(n: number): number {
  */
 const FURNISHED_PAD = 6;
 const TOP_TRIM = 24;
-export function furnishedBox(cam: Camera = ISO_CAMERA): FitBox {
+export function furnishedBox(cam: Camera = CORNER_CAMERA): FitBox {
   const unit: Fit = { ox: 0, oy: 0, scale: 1, cam };
   const doorPlane = ENTRANCE.lx - 42; // drawEntrance's `wx`
   const doorOuter = project(doorPlane, ENTRANCE.ly + 44 + 5, unit); // the outer post, half its 10 out
@@ -1608,231 +1214,7 @@ export function magicAnchors(fit: Fit, hours = 12.75): { motes: Pt[]; bulbs: Pt[
   return { motes, bulbs };
 }
 
-/**
- * The daylight beams — a warm parallelogram of light cast from each window onto the floor, reaching into
- * the room and sheared sideways to imply an angled sun. Additive (it *adds* light), strength tied to
- * `skyStrength`, so at night there is simply no beam. Drawn on the floor before the furniture, so a desk
- * correctly sits *on* the light rather than glowing.
- */
-function drawWindowBeams(ctx: CanvasRenderingContext2D, fit: Fit, env: LightEnv): void {
-  if (env.skyStrength < 0.02) return;
-  const { len, shear } = sunBeam(env.hours); // a low sun throws long and leans; noon is short and straight
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const beam = (base: (t: number) => [number, number], into: (l: [number, number], d: number) => [number, number]): void => {
-    for (const w of WINDOWS) {
-      const a = base(w.t0);
-      const b = base(w.t1);
-      const far0 = into(a, len);
-      const far1 = into(b, len);
-      const pa = project(a[0], a[1], fit);
-      const pb = project(b[0], b[1], fit);
-      const pf0 = project(far0[0], far0[1], fit);
-      const pf1 = project(far1[0], far1[1], fit);
-      // fade along the throw: bright at the window sill, gone at the far end.
-      const grad = ctx.createLinearGradient((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, (pf0.x + pf1.x) / 2, (pf0.y + pf1.y) / 2);
-      const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(env.skyTint);
-      const [r, g, bl] = m ? [m[1], m[2], m[3]] : ['255', '210', '150'];
-      const peak = 0.5 * env.skyStrength;
-      grad.addColorStop(0, `rgba(${r}, ${g}, ${bl}, ${peak})`);
-      grad.addColorStop(1, `rgba(${r}, ${g}, ${bl}, 0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      for (const [i, p] of [pa, pb, pf1, pf0].entries()) {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-  };
-  // back-left wall (lx=0): beam throws into +lx, sheared along +ly.
-  beam((t) => [0, t * FLOOR], (l, d) => [d, l[1] + (d / len) * shear]);
-  // back-right wall (ly=0): beam throws into +ly, sheared along +lx.
-  beam((t) => [t * FLOOR, 0], (l, d) => [l[0] + (d / len) * shear, d]);
-  ctx.restore();
-}
-
-/** A round-ish iso rug (a filled iso square). */
-function rug(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, r: number, fill: string): void {
-  const A = project(lx - r, ly, fit);
-  const B = project(lx, ly - r, fit);
-  const C = project(lx + r, ly, fit);
-  const D = project(lx, ly + r, fit);
-  quad(ctx, [A, B, C, D], fill);
-}
-
-/** A rectangular iso rug — zones a pod / the meeting table / reception, which are rectangular, not round. */
-function rugRect(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  w: number,
-  d: number,
-  fill: string,
-): void {
-  quad(
-    ctx,
-    [
-      project(lx - w / 2, ly - d / 2, fit),
-      project(lx + w / 2, ly - d / 2, fit),
-      project(lx + w / 2, ly + d / 2, fit),
-      project(lx - w / 2, ly + d / 2, fit),
-    ],
-    fill,
-  );
-}
-
-/**
- * Paint a zone rug: its shape (rectangle or diamond) in its field colour, then its weave *inside* that
- * outline — an inset border, or stripes across the short axis. Every rug on the floor goes through here,
- * so a zone's rug is a piece of data (`Rug`) rather than a bespoke call, and no pattern can leak past a
- * rug's own edge onto the floor.
- */
-function drawRug(ctx: CanvasRenderingContext2D, fit: Fit, r: Rug, lx: number, ly: number, w: number, d: number): void {
-  if (r.shape === 'diamond') {
-    rug(ctx, fit, lx, ly, w / 2, r.fill);
-    if (r.weave === 'border') rug(ctx, fit, lx, ly, w / 2 - 14, r.mark);
-    return;
-  }
-  rugRect(ctx, fit, lx, ly, w, d, r.fill);
-  if (r.weave === 'border') {
-    rugRect(ctx, fit, lx, ly, w - 26, d - 26, r.mark);
-    rugRect(ctx, fit, lx, ly, w - 40, d - 40, r.fill);
-  } else if (r.weave === 'stripes') {
-    // bands running across the rug's short axis, inset from the ends so they read as woven, not painted on
-    const across = w >= d;
-    const span = across ? w : d;
-    const inset = 18;
-    for (let i = 0; i < 3; i++) {
-      const off = -span / 4 + (i * span) / 4;
-      const bw = across ? 16 : w - inset * 2;
-      const bd = across ? d - inset * 2 : 16;
-      rugRect(ctx, fit, lx + (across ? off : 0), ly + (across ? 0 : off), bw, bd, r.mark);
-    }
-  }
-  // Four tiny pom-poms give every woven rectangle a handmade edge. They also break up the strict
-  // box-on-box geometry without changing any footprints or painter-order assumptions.
-  for (const [sx, sy] of [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ] as const) {
-    const p = project(lx + sx * (w / 2 - 4), ly + sy * (d / 2 - 4), fit);
-    ellipse(ctx, p, 4.2 * fit.scale, 2.4 * fit.scale, r.mark);
-  }
-}
-
-/** The meeting table: a long slab on four legs, with four chairs pulled up to it. */
-function meetingTable(ctx: CanvasRenderingContext2D, fit: Fit): void {
-  const M = MEETING;
-  const s = project(M.lx, M.ly, fit);
-  ellipse(ctx, { x: s.x, y: s.y + 2 * fit.scale }, (M.w / 2) * fit.scale, 20 * fit.scale, 'rgba(0,0,0,0.12)');
-  for (const [sx, sy] of [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ] as const) {
-    box(ctx, fit, M.lx + sx * (M.w / 2 - 8), M.ly + sy * (M.d / 2 - 8), 8, 8, M.h - 6, dim(PAL.wood, 0.9));
-  }
-  box(ctx, fit, M.lx, M.ly, M.w, M.d, 6, woodTop(), M.h - 6);
-  // The conference speakerphone: a three-lobed puck with a dark grille and one LED. This is the object
-  // that tells you a table is a conference table rather than a long desk, which is the whole reason it
-  // is here. Static — a blinking LED would drag the still layer onto the animated one for nothing.
-  const hub = M.lx - 46;
-  for (const [dx, dy] of [
-    [0, -9],
-    [8, 5],
-    [-8, 5],
-  ] as const) {
-    box(ctx, fit, hub + dx, M.ly + dy, 13, 13, 3, '#3a3a3e', M.h);
-  }
-  box(ctx, fit, hub, M.ly, 17, 17, 4.5, '#2c2c30', M.h);
-  const puck = project(hub, M.ly, fit);
-  ellipse(ctx, { x: puck.x, y: puck.y - (M.h + 4.5) * fit.scale }, 5 * fit.scale, 2.4 * fit.scale, '#4a4a50');
-  box(ctx, fit, hub + 5, M.ly - 4, 1.8, 1.8, 0.7, '#6ee7a0', M.h + 4.5); // the LED
-
-  // A tiny shared centrepiece: ceramic pot, leaves, and mustard blossom. At office scale it reads as a
-  // warm irregularity on the long slab; in companion mode the individual pieces resolve.
-  box(ctx, fit, M.lx, M.ly, 14, 14, 9, '#efe2c6', M.h);
-  const vase = project(M.lx, M.ly, fit);
-  ellipse(ctx, { x: vase.x - 4 * fit.scale, y: vase.y - 43 * fit.scale }, 5 * fit.scale, 7 * fit.scale, '#6f985d');
-  ellipse(ctx, { x: vase.x + 4 * fit.scale, y: vase.y - 45 * fit.scale }, 5 * fit.scale, 7 * fit.scale, '#7eaa69');
-  ellipse(ctx, { x: vase.x, y: vase.y - 50 * fit.scale }, 3.5 * fit.scale, 3 * fit.scale, '#f4cf52');
-}
-
-/** A meeting chair — the same two-piece cushion/backrest trick as a task chair, in a plain wood tone. */
-function meetingChair(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, dir: Dir): void {
-  chairBase(ctx, fit, lx, ly, dir, '#8a6a4c');
-  const f = FWD[dir];
-  chairBack(ctx, fit, lx - f[0] * CHAIR_BACK_OFF, ly - f[1] * CHAIR_BACK_OFF, dir, '#8a6a4c');
-}
-
-/** The printer/supply station: a grey body with a paper tray and a stack of output on top. */
-function printer(ctx: CanvasRenderingContext2D, fit: Fit): void {
-  const P = PRINTER;
-  box(ctx, fit, P.lx, P.ly, P.w, P.d, P.h, '#9aa3ab');
-  box(ctx, fit, P.lx, P.ly, P.w - 12, P.d - 10, 5, '#6d757d', P.h); // output tray
-  box(ctx, fit, P.lx, P.ly, P.w - 20, P.d - 16, 4, '#f2f0ea', P.h + 5); // paper
-}
-
 /** Reception: a waiting couch turned toward the door, a low table, and a plant — the nook's vocabulary. */
-/**
- * The front desk: a counter with a RAISED TRANSACTION LEDGE — the ledge is the load-bearing detail,
- * because a counter without one is just a big desk, and the ledge is what makes the corner read as
- * reception rather than as a thirteenth workstation. Monitor turned away from the room (you see the
- * back of reception screens), a phone, a small plant, the visitor log.
- */
-function frontDesk(ctx: CanvasRenderingContext2D, fit: Fit, t: number, working: boolean): void {
-  const D = FRONT_DESK;
-  const f = FWD[D.dir];
-  const sn = f[1] !== 0; // S/N desks run their long axis along x
-  box(ctx, fit, D.lx, D.ly, D.long - 4, D.deep - 3, D.high - 4, dim(PAL.wood, 0.9)); // base
-  box(ctx, fit, D.lx, D.ly, D.long, D.deep, 4, woodTop(), D.high - 4); // worktop
-  // The transaction ledge along the visitor edge — the detail that says reception, not workstation.
-  box(ctx, fit, D.lx + f[0] * (D.deep / 2 - 4), D.ly + f[1] * (D.deep / 2 - 4), sn ? D.long - 8 : 8, sn ? 8 : D.long - 8, 9, dim(PAL.wood, 0.82), D.high);
-
-  /** Desk-relative placement, exactly as `drawWorkstation` does it: `along` runs toward the monitor,
-   *  `across` runs sideways. Reusing the members' own frame is what makes her station match theirs. */
-  const at = (along: number, across: number): [number, number] => {
-    const p: [number, number] = [-f[1], f[0]];
-    return [D.lx + f[0] * along + p[0] * across, D.ly + f[1] * along + p[1] * across];
-  };
-
-  // The SAME monitor, keyboard and mouse the desks use, in the same relative spots. She sits at
-  // SEAT_BACK behind the desk facing `dir`, so a monitor `deep/2 - 14` along that facing sits in
-  // front of her with its screen toward her and its back to the room — which is both what a real
-  // reception desk looks like and what makes her read as facing her screen rather than the camera.
-  const [mx, my] = at(D.deep / 2 - 17, 0);
-  monitor(ctx, fit, mx, my, D.dir, working, D.high, null, t);
-  const [kx, ky] = at(KEYBOARD_ALONG, 0);
-  deskKeyboard(ctx, fit, kx, ky, sn, D.high);
-  const [sx, sy] = at(KEYBOARD_ALONG + 2, 27);
-  deskMouse(ctx, fit, sx, sy, sn, D.high);
-
-  // A corded landline on her left — the phone `GESTURE.call` picks up. Base, cradled handset, keypad.
-  const [px_, py_] = at(-8, -40);
-  box(ctx, fit, px_, py_, 20, 15, 4, '#4a4a50', D.high);
-  box(ctx, fit, px_, py_ - 4, 21, 7, 5, '#3a3a3e', D.high + 4);
-  box(ctx, fit, px_, py_ + 3, 13, 5, 1.2, '#6a6a72', D.high + 4);
-
-  // A plant at the far end, foliage seated ON the rim (drawPlant's lesson: a gap reads as a bush
-  // hovering over a crate), and the visitor log open on the ledge side.
-  const [gx, gy] = at(-6, 44);
-  const POT_H = 11;
-  box(ctx, fit, gx, gy, 15, 15, POT_H, PLANT.pot, D.high);
-  box(ctx, fit, gx, gy, 17, 17, 2.5, PLANT.rim, D.high + POT_H);
-  const pp = project(gx, gy, fit);
-  const potTop = (D.high + POT_H + 2.5) * fit.scale;
-  ellipse(ctx, { x: pp.x, y: pp.y - potTop - 4 * fit.scale }, 11 * fit.scale, 7 * fit.scale, PLANT.leaf);
-  ellipse(ctx, { x: pp.x - 4 * fit.scale, y: pp.y - potTop - 8 * fit.scale }, 7 * fit.scale, 5 * fit.scale, PLANT.leafLit);
-  const [lx2, ly2] = at(2, -24);
-  box(ctx, fit, lx2, ly2, 24, 16, 1.6, '#f2ecd9', D.high);
-  box(ctx, fit, lx2, ly2, 2, 16, 2.2, '#c9bfa5', D.high);
-}
 
 /**
  * The receptionist, at her desk — a FULL member-sized character through the same `drawCharacter`
@@ -1932,8 +1314,8 @@ function drawReceptionist(
   fit: Fit,
   r: ReceptionistState,
   t: number,
-  /** The rendered figure (plan Task 13): she is a sprite like everyone else when the sheets are in. */
-  figure?: { assets: FigureAssets; tint: string },
+  /** The figure's sheets (plan Task 13): she is a sprite like everyone else. */
+  figure: { assets: FigureAssets; tint: string },
 ): void {
   const asleep = r.mode === 'asleep';
   const wake =
@@ -1963,34 +1345,17 @@ function drawReceptionist(
     moving: false,
   };
   const seed = RECEPTIONIST_SEED / 0xffffffff;
-  const rendered = figure
-    ? (() => {
-        const { anim, startT, frame } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
-        return { rendered: figure.assets, anim, animStart: startT, ...(frame !== undefined ? { animFrame: frame } : {}), tint: figure.tint };
-      })()
-    : {};
+  const { anim, startT, frame } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
   drawCharacter(ctx, fit, {
     lx: pose.lx,
     ly: pose.ly,
     dir: pose.dir,
     node: RECEPTIONIST_NODE,
-    skel: figure
-      ? EMPTY_SKEL
-      : solveSkeleton({
-          phase: 0,
-          sit: 1,
-          stride: 0,
-          run: false,
-          t,
-          // Her typing is the members' typing burst, on her own seed so she is not in lockstep with a desk.
-          typing: typing ? typingBurst(RECEPTIONIST_SEED, t) : 0,
-          carry: pose.carry,
-          help: false,
-          gesture,
-          gestureT,
-          seed: RECEPTIONIST_SEED,
-        }),
-    ...rendered,
+    rendered: figure.assets,
+    anim,
+    animStart: startT,
+    ...(frame !== undefined ? { animFrame: frame } : {}),
+    tint: figure.tint,
     size: 1,
     alpha: 1,
     carry: pose.carry,
@@ -2020,16 +1385,14 @@ function receptionItems(
   recep: ReceptionistState | null,
   t: number,
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
-  statKey = '',
-  rendered?: RenderedAssets,
-  figure?: { assets: FigureAssets; tint: string },
+  statKey: string,
+  rendered: RenderedAssets,
+  figure: { assets: FigureAssets; tint: string } | undefined,
 ): DepthItem[] {
   const R = RECEPTION;
-  /* Rendered (plan Task 6): the front desk's base is one asset; its screen's typing flicker is a
-     live part that Task 7 paints back on top. Until then a rendered front desk is a still one. */
-  const deskDraw = renderedOr(fit, rendered, 'reception/desk', FRONT_DESK.lx, FRONT_DESK.ly, (c) =>
-    frontDesk(c, fit, t, recep?.mode === 'typing'),
-  );
+  /* The front desk is one asset (plan Task 6); its screen is still — the typing flicker the painter had
+     is not rendered yet. */
+  const deskDraw = blitDraw(fit, rendered, 'reception/desk', FRONT_DESK.lx, FRONT_DESK.ly);
   const still = (d: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
     d,
     fn: () => draw(ctx),
@@ -2037,107 +1400,14 @@ function receptionItems(
   });
   return [
     // She sorts at her own feet, north of the counter, so the counter paints over her lower body.
-    {
-      d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly),
-      fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t, figure),
-    },
+    ...(figure
+      ? [{ d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly), fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t, figure) }]
+      : []),
     { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => deskDraw(ctx) },
-    still(
-      depth(R.endTable.lx, R.endTable.ly),
-      'recep·endtable',
-      renderedOr(fit, rendered, 'reception/endtable', R.endTable.lx, R.endTable.ly, (c) => endTable(c, fit, R.endTable.lx, R.endTable.ly)),
-    ),
-    still(
-      depth(R.chair.lx, R.chair.ly),
-      'recep·armchair',
-      renderedOr(fit, rendered, 'reception/armchair', R.chair.lx, R.chair.ly, (c) =>
-        armchair(c, fit, R.chair.lx, R.chair.ly, PAL.couch, R.chair.dir, WAIT_CHAIR),
-      ),
-    ),
-    still(
-      depth(R.plant.lx, R.plant.ly),
-      'recep·plant',
-      renderedOr(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly, (c) => drawPlant(c, fit, R.plant.lx, R.plant.ly, 'fiddle')),
-    ),
+    still(depth(R.endTable.lx, R.endTable.ly), 'recep·endtable', blitDraw(fit, rendered, 'reception/endtable', R.endTable.lx, R.endTable.ly)),
+    still(depth(R.chair.lx, R.chair.ly), 'recep·armchair', blitDraw(fit, rendered, 'reception/armchair', R.chair.lx, R.chair.ly)),
+    still(depth(R.plant.lx, R.plant.ly), 'recep·plant', blitDraw(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly)),
   ];
-}
-
-/**
- * Reception's end table: a small square top between the two waiting chairs, with a fanned pair of
- * magazines on it. The magazines are the whole point — an empty side table is a plinth, and a waiting
- * area reads as one the moment there is something on it somebody could have been reading.
- */
-function endTable(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
-  const s = project(lx, ly, fit);
-  ellipse(ctx, { x: s.x, y: s.y }, 20 * fit.scale, 7 * fit.scale, 'rgba(0,0,0,0.12)');
-  box(ctx, fit, lx, ly, END_TABLE, END_TABLE, 16, woodTop());
-  // Two magazines, offset so the lower one shows along one edge.
-  box(ctx, fit, lx - 2, ly + 1, 15, 11, 1.1, '#d9c7a8', 16);
-  box(ctx, fit, lx + 1, ly - 1, 15, 11, 1.1, '#c98f6a', 17.1);
-}
-
-function couch(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, c: string, dir: Dir): void {
-  const f = FWD[dir];
-  const p: [number, number] = [-f[1], f[0]];
-  const sn = f[1] !== 0;
-  const L = LOUNGE.couch.len;
-  const Dp = LOUNGE.couch.dep;
-  box(ctx, fit, lx - f[0] * (Dp / 2 - 4), ly - f[1] * (Dp / 2 - 4), sn ? L : 10, sn ? 10 : L, 34, dim(c, 0.9));
-  box(ctx, fit, lx, ly, sn ? L : Dp, sn ? Dp : L, 20, c);
-  box(ctx, fit, lx + p[0] * (L / 2 - 5), ly + p[1] * (L / 2 - 5), sn ? 10 : Dp, sn ? Dp : 10, 27, dim(c, 0.95));
-  box(ctx, fit, lx - p[0] * (L / 2 - 5), ly - p[1] * (L / 2 - 5), sn ? 10 : Dp, sn ? Dp : 10, 27, dim(c, 0.95));
-  // Three plump seat pads soften the block silhouette. Iso circles project to ellipses, so the cushions
-  // keep their rounded living-room character at every sofa facing.
-  for (const along of [-34, 0, 34]) {
-    const cp = project(lx + p[0] * along + f[0] * 4, ly + p[1] * along + f[1] * 4, fit);
-    ellipse(ctx, { x: cp.x, y: cp.y - 20 * fit.scale }, 18 * fit.scale, 7 * fit.scale, '#f3c95a');
-  }
-  // Two mismatched throw pillows: intentionally a little quirky, and small enough not to compete with
-  // member colours or act cues.
-  const pillowColors = ['#f1dcc0', '#6f9e8c'];
-  for (const [i, along] of [-25, 27].entries()) {
-    const pp = project(lx + p[0] * along - f[0] * 12, ly + p[1] * along - f[1] * 12, fit);
-    ellipse(ctx, { x: pp.x, y: pp.y - 36 * fit.scale }, 11 * fit.scale, 9 * fit.scale, pillowColors[i]!);
-  }
-}
-
-/**
- * An upholstered chair with a back. The break nook's armchairs were the only callers until the nook
- * lost them (2026-08-02); reception's waiting pair uses the same painter at a smaller `size`, because
- * a waiting-room chair *is* a small armchair and inventing a second one would put two upholstery
- * languages in one room.
- */
-function armchair(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  c: string,
-  dir: Dir,
-  size: number,
-): void {
-  const f = FWD[dir];
-  const sn = f[1] !== 0;
-  const S = size;
-  box(ctx, fit, lx - f[0] * (S / 2 - 6), ly - f[1] * (S / 2 - 6), sn ? S - 2 : 10, sn ? 10 : S - 2, 32, dim(c, 0.9));
-  box(ctx, fit, lx, ly, sn ? S - 2 : S, sn ? S : S - 2, 20, c);
-  const seat = project(lx + f[0] * 5, ly + f[1] * 5, fit);
-  ellipse(ctx, { x: seat.x, y: seat.y - 20 * fit.scale }, 21 * fit.scale, 8 * fit.scale, '#eabf50');
-}
-
-function ctable(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
-  const s = project(lx, ly, fit);
-  ellipse(ctx, { x: s.x, y: s.y }, 42 * fit.scale, 13 * fit.scale, 'rgba(0,0,0,0.12)');
-  box(ctx, fit, lx, ly, LOUNGE.table.w, LOUNGE.table.d, 16, woodTop());
-  // A tray with a couple of books left on it, beside the bowl. Showroom furniture is furniture nobody
-  // has used; the tray is the cheapest possible evidence that somebody sat here and put something down.
-  box(ctx, fit, lx - 13, ly + 3, 22, 15, 1.2, '#b98a5e', 16);
-  box(ctx, fit, lx - 13, ly + 3, 18, 12, 2.4, BOOK_COLORS[7]!, 17.2);
-  box(ctx, fit, lx - 12, ly + 3, 16, 11, 2, BOOK_COLORS[5]!, 19.6);
-  // Fruit bowl + a single flower keeps the lounge from reading like untouched showroom furniture.
-  ellipse(ctx, { x: s.x + 8 * fit.scale, y: s.y - 18 * fit.scale }, 10 * fit.scale, 4 * fit.scale, '#e8c17d');
-  ellipse(ctx, { x: s.x + 4 * fit.scale, y: s.y - 21 * fit.scale }, 3 * fit.scale, 2 * fit.scale, '#d8774f');
-  ellipse(ctx, { x: s.x + 11 * fit.scale, y: s.y - 22 * fit.scale }, 3 * fit.scale, 2 * fit.scale, '#f4cf52');
 }
 
 /**
@@ -2185,27 +1455,26 @@ export interface RenderOpts {
    */
   units?: UnitHook | undefined;
   /**
-   * Pre-rendered art (office realism, spec 2026-10-20). An item whose asset id is present blits the
-   * image where it painted vectors; one that is absent paints as before, so a partial manifest and
-   * a failed load both leave a room, never a hole. Absent → the painted office, byte-identical.
+   * The pre-rendered art (office realism, plan Task 2 onward): every static item, the room's light
+   * states, the figure sheets and the dog. An asset that failed to load is simply not drawn.
    */
-  rendered?: RenderedAssets | undefined;
+  rendered: RenderedAssets;
 }
 
 /**
  * Blit the rendered asset `id` at `(lx, ly)` when `rendered` carries it; answer false when it does
- * not, so the caller falls through to its painter.
+ * not (the asset failed to load, or the manifest predates it) — nothing is drawn in its place, so a
+ * missing asset is a missing item, never a hole in the room (Review Focus 1).
  */
 function blitIf(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
-  rendered: RenderedAssets | undefined,
+  rendered: RenderedAssets,
   id: string,
   lx: number,
   ly: number,
   alpha = 1,
 ): boolean {
-  if (!rendered) return false;
   const img = rendered.images.get(id);
   const a = rendered.manifest.assets.find((x) => x.id === id);
   if (!img || !a) return false;
@@ -2214,21 +1483,13 @@ function blitIf(
 }
 
 /**
- * A static item's painter, rendered-aware: blits the asset `id` at `(lx, ly)` when the manifest has
- * it, otherwise runs `paint`. Wraps the `draw` of a sprite part, so the sprite cache rasterises the
- * blit exactly as it rasterised the painter — the depth item, its key and its order do not change.
+ * A static item's draw: blits the asset `id` at `(lx, ly)`. It is the `draw` of a sprite part, so the
+ * sprite cache rasterises the blit like any other item — the depth item, its key and its order are the
+ * painters' (lane 01M5D8EJ40: the painters went; the items stayed).
  */
-function renderedOr(
-  fit: Fit,
-  rendered: RenderedAssets | undefined,
-  id: string,
-  lx: number,
-  ly: number,
-  paint: (c: CanvasRenderingContext2D) => void,
-): (c: CanvasRenderingContext2D) => void {
-  if (!rendered?.images.has(id)) return paint;
+function blitDraw(fit: Fit, rendered: RenderedAssets, id: string, lx: number, ly: number): (c: CanvasRenderingContext2D) => void {
   return (c) => {
-    if (!blitIf(c, fit, rendered, id, lx, ly)) paint(c);
+    blitIf(c, fit, rendered, id, lx, ly);
   };
 }
 
@@ -2249,77 +1510,47 @@ function hull(pts: Pt[]): Pt[] {
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
-/** The break-nook lounge, as depth items: the rug flat on the floor, every solid piece self-sorted. */
+/**
+ * The break nook's pieces (plan Task 6): each is one asset at its own floor point and a sprite in the
+ * cache; the rug belongs to the background layer. The open fridge is the one painter left in the nook —
+ * a live state the render has no door for yet — so while an errand browses it the fridge paints.
+ */
 function nookItems(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
-  fridgeOpen = false,
+  fridgeOpen: boolean,
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
-  statKey = '',
-  rendered?: RenderedAssets,
+  statKey: string,
+  rendered: RenderedAssets,
 ): { rug: (c: CanvasRenderingContext2D) => void; items: DepthItem[] } {
   const { lx, ly } = NOOK;
   const L = LOUNGE;
-  /* Rendered pieces (plan Task 6): each nook item is one asset at its own floor point. The open
-     fridge is a live state and keeps its painter until Task 7 renders the door. */
-  const r = (id: string, dx: number, dy: number, paint: (c: CanvasRenderingContext2D) => void) =>
-    renderedOr(fit, rendered, id, lx + dx, ly + dy, paint);
-  /* Every nook piece is still furniture, so each one is a sprite; `key` carries whatever else it
-     reads (the fridge door). */
+  const r = (id: string, dx: number, dy: number) => blitDraw(fit, rendered, id, lx + dx, ly + dy);
   const at = (dx: number, dy: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
     d: depth(lx + dx, ly + dy),
     fn: () => draw(ctx),
     parts: [{ kind: 'sprite', key: `nook·${key}·${statKey}`, draw }],
   });
   return {
-    // Flat floor paint: it belongs to the background layer, so it takes the context to draw on.
-    rug: renderedOr(fit, rendered, 'rug/nook', lx, ly, (c) => drawRug(c, fit, NOOK_RUG, lx, ly, NOOK_RUG_R * 2, NOOK_RUG_R * 2)),
+    rug: r('rug/nook', 0, 0),
     items: [
       at(
         L.fridge.dx,
         L.fridge.dy,
         `fridge·${fridgeOpen ? 'open' : 'shut'}`,
-        fridgeOpen
-          ? (ctx) => fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, true)
-          : r('nook/fridge', L.fridge.dx, L.fridge.dy, (ctx) => fridge(ctx, fit, lx + L.fridge.dx, ly + L.fridge.dy, false)),
+        fridgeOpen ? (c) => fridge(c, fit, lx + L.fridge.dx, ly + L.fridge.dy) : r('nook/fridge', L.fridge.dx, L.fridge.dy),
       ),
-      at(L.counter.dx, L.counter.dy, 'counter', r('nook/counter', L.counter.dx, L.counter.dy, (ctx) => {
-        // Base cabinets, then a slab that overhangs them — the overhang is what separates a worktop
-        // from a plain box, and it is most of why this now reads as a fitted kitchen run.
-        box(ctx, fit, lx + L.counter.dx, ly + L.counter.dy, L.counter.w - 4, L.counter.d - 3, L.counter.h - 4, dim(woodTop(), 0.88));
-        box(ctx, fit, lx + L.counter.dx, ly + L.counter.dy, L.counter.w, L.counter.d, 4, woodTop(), L.counter.h - 4);
-        // Backsplash upstand along the run's back edge. A worktop that just stops is a table; a
-        // worktop that turns up the wall is a kitchen, and this is the cheapest way to say so.
-        box(ctx, fit, lx + L.counter.dx, ly + L.counter.dy - L.counter.d / 2 + 1.5, L.counter.w, 3, 16, dim(woodTop(), 0.8), L.counter.h);
-        // Cabinet doors: two seams down the run, so the base is cabinetry rather than a solid plinth.
-        for (const seam of [-0.22, 0.22]) {
-          box(ctx, fit, lx + L.counter.dx + L.counter.w * seam, ly + L.counter.dy + L.counter.d / 2 - 2, 1.2, 1, L.counter.h - 8, dim(woodTop(), 0.72), 2);
-        }
-        coffeeMachine(ctx, fit, lx + L.machine.dx, ly + L.machine.dy, L.counter.h);
-        counterSink(ctx, fit, lx + SINK.dx, ly + SINK.dy, L.counter.h);
-        // What a counter actually carries beside the machine: the beans, and the mugs waiting their turn.
-        // The bag is kraft-paper warm on purpose — in dark roast brown it and the machine read as one
-        // black lump rather than two objects.
-        box(ctx, fit, lx + L.counter.dx + 18, ly + L.counter.dy + 1, 9, 8, 12, '#a97c50', L.counter.h);
-        box(ctx, fit, lx + L.counter.dx + 18, ly + L.counter.dy + 1, 9, 8, 2, '#59402f', L.counter.h + 12); // rolled top
-        for (let i = 0; i < 2; i++) {
-          frustum(ctx, fit, lx + L.counter.dx + 32, ly + L.counter.dy, 6, 6, 7, 7, 5, '#f2e7d5', L.counter.h + i * 5);
-        }
-      })),
-      at(L.cooler.dx, L.cooler.dy, 'cooler', r('nook/cooler', L.cooler.dx, L.cooler.dy, (ctx) => watercooler(ctx, fit, lx + L.cooler.dx, ly + L.cooler.dy))),
-      at(L.couch.dx, L.couch.dy, 'couch', r('nook/couch', L.couch.dx, L.couch.dy, (ctx) => couch(ctx, fit, lx + L.couch.dx, ly + L.couch.dy, PAL.couch, 'S'))),
-      at(L.table.dx, L.table.dy, 'table', r('nook/table', L.table.dx, L.table.dy, (ctx) => ctable(ctx, fit, lx + L.table.dx, ly + L.table.dy))),
+      at(L.counter.dx, L.counter.dy, 'counter', r('nook/counter', L.counter.dx, L.counter.dy)),
+      at(L.cooler.dx, L.cooler.dy, 'cooler', r('nook/cooler', L.cooler.dx, L.cooler.dy)),
+      at(L.couch.dx, L.couch.dy, 'couch', r('nook/couch', L.couch.dx, L.couch.dy)),
+      at(L.table.dx, L.table.dy, 'table', r('nook/table', L.table.dx, L.table.dy)),
     ],
   };
 }
 
 /**
- * The kitchenette's three appliances. Each was a plain block; each is now built the way the bookshelf
- * builds its books — small boxes stood proud of the room-facing (+y) face, which is the only face detail
- * can live on and still read at this projection.
- *
- * Their appliance white is warm (#e8e2d6), not the blue-grey a real office fridge is: this room is lit
- * amber from the windows down, and a genuinely cold white in it reads as a hole punched in the wall.
+ * The painted fridge's appliance white — warm (#e8e2d6), not the blue-grey a real office fridge is: this
+ * room is lit amber from the windows down, and a genuinely cold white in it reads as a hole in the wall.
  */
 const APPLIANCE = '#e8e2d6';
 
@@ -2327,297 +1558,25 @@ const APPLIANCE = '#e8e2d6';
  * warmer plate, so the plate's height is shared data rather than a constant repeated in two places. */
 export const MACHINE_H = 15;
 
-/** The fridge: two doors under a seam, handles, someone's note, and a crate parked on top. While an
- * errand browses it (`open`), the lower door swings out and the opening shows dark with a lit shelf. */
-function fridge(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, open = false): void {
+/**
+ * The OPEN fridge — the one furniture painter still standing (lane 01M5D8EJ40): while an errand browses
+ * it the lower door swings out and the opening shows dark with a lit shelf, and the render has no door
+ * for that yet. Shut, the fridge is `nook/fridge`. Boxes stood proud of the room-facing (+y) face, which
+ * is the only face detail can live on and still read at this projection.
+ */
+function fridge(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
   const f = LOUNGE.fridge;
   const front = ly + f.d / 2; // the room-facing face — everything below is proud of it by ~1 unit
   box(ctx, fit, lx, ly, f.w, f.d, f.h, APPLIANCE);
   box(ctx, fit, lx, front, f.w - 4, 1.5, 1.5, '#c3b9a8', 34); // the freezer/fridge seam
-  if (open) {
-    // The lower compartment stands open: a dark inset with one lit shelf line, and the door swung
-    // out as a slab perpendicular to the face, hinge at the west edge (box() can't rotate — at this
-    // scale a proud perpendicular slab *is* an open door).
-    box(ctx, fit, lx, front, f.w - 6, 1.2, 30, '#2e2a26', 3); // the dark opening
-    box(ctx, fit, lx, front, f.w - 10, 1.4, 1.6, '#f6ead2', 17); // a shelf catching the fridge light
-    box(ctx, fit, lx - f.w / 2 + 1, front + 8, 3, 16, 32, dim(APPLIANCE, 0.9), 2); // the swung door
-    box(ctx, fit, lx + 11, front, 2.5, 2.5, 12, '#6e6558', 38); // upper handle stays
-  } else {
-    for (const up of [38, 18]) box(ctx, fit, lx + 11, front, 2.5, 2.5, 12, '#6e6558', up); // door handles
-    box(ctx, fit, lx - 6, front, 7, 1.2, 8, '#f4cf52', 24); // a note, stuck on at eye height
-  }
+  // The lower compartment stands open: a dark inset with one lit shelf line, and the door swung out as
+  // a slab perpendicular to the face, hinge at the west edge (box() can't rotate — at this scale a
+  // proud perpendicular slab *is* an open door).
+  box(ctx, fit, lx, front, f.w - 6, 1.2, 30, '#2e2a26', 3); // the dark opening
+  box(ctx, fit, lx, front, f.w - 10, 1.4, 1.6, '#f6ead2', 17); // a shelf catching the fridge light
+  box(ctx, fit, lx - f.w / 2 + 1, front + 8, 3, 16, 32, dim(APPLIANCE, 0.9), 2); // the swung door
+  box(ctx, fit, lx + 11, front, 2.5, 2.5, 12, '#6e6558', 38); // upper handle stays
   box(ctx, fit, lx - 5, ly - 2, 15, 13, 9, '#c9744a', f.h); // a crate someone left on top
-}
-
-/** The counter sink: an inset basin with a rim and a little gooseneck faucet — the plate drop-off. */
-function counterSink(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, up: number): void {
-  // Scaled with the run: a 16-unit basin on a 120-unit counter reads as a soap dish.
-  box(ctx, fit, lx, ly, 26, 18, 1.4, '#cfd6d8', up); // the rim
-  box(ctx, fit, lx, ly, 20, 13, 1, '#7d8a90', up + 0.5); // the basin, reading dark against the rim
-  box(ctx, fit, lx - 10, ly - 6, 2.2, 2.2, 10, '#9aa8ae', up); // faucet riser at the back corner
-  box(ctx, fit, lx - 7, ly - 6, 7, 2.2, 1.8, '#9aa8ae', up + 10); // …bending over the basin
-}
-
-/** The espresso machine: a body with a warmer plate, a lit switch, a group head, and a cup under it. */
-function coffeeMachine(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number, up: number): void {
-  box(ctx, fit, lx, ly, 16, 12, MACHINE_H, '#3f3236', up); // body
-  box(ctx, fit, lx, ly, 12, 8, 2, '#8e8288', up + MACHINE_H); // the warmer plate on top
-  box(ctx, fit, lx - 5, ly + 6, 2, 1.2, 2, '#f4cf52', up + 9); // the little lit switch
-  box(ctx, fit, lx + 2, ly + 6.5, 5, 2, 4, '#6a5c62', up + 5); // group head + spout
-  box(ctx, fit, lx, ly + 5, 13, 4, 1.5, '#2b2226', up); // drip tray
-  frustum(ctx, fit, lx + 2, ly + 9, 3.5, 3.5, 4.5, 4.5, 5, '#f6ead2', up + 1.5); // a cup, catching it
-}
-
-/** The water cooler: a body with a tap and a cup tube, under a bottle that tapers like a real one. */
-function watercooler(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
-  const c = LOUNGE.cooler;
-  const front = ly + c.d / 2;
-  box(ctx, fit, lx, ly, c.w, c.d, c.h, APPLIANCE);
-  box(ctx, fit, lx, front, 8, 3, 5, '#5f6b70', 26); // the tap block
-  box(ctx, fit, lx, front + 1, 2, 3, 2, '#8fa6ae', 24); // and its spout
-  box(ctx, fit, lx - 7, front, 3, 2, 10, '#cfd6d8', 30); // the cup tube down one side
-  // The bottle, inverted as they are: a narrow neck flaring into the body, tapering back to a flat base.
-  frustum(ctx, fit, lx, ly, 8, 8, 14, 14, 5, '#a9dcea', c.h);
-  frustum(ctx, fit, lx, ly, 14, 14, 15, 15, 12, '#8fd0e6', c.h + 5);
-  frustum(ctx, fit, lx, ly, 15, 15, 12, 12, 5, '#7cc3db', c.h + 17);
-}
-
-/** A bookshelf: a wood carcass with three shelves of colourful book spines facing into the room. */
-/**
- * Stable per-book noise. Seeded, never `Math.random()`: the shelves live on the baked still layer and
- * get repainted on every resize, and a book that changes width between repaints flickers.
- */
-export function shelfRnd(shelf: number, book: number, salt: number): number {
-  let h = (shelf * 73856093) ^ (book * 19349663) ^ (salt * 83492791);
-  h = Math.imul(h ^ (h >>> 15), 2246822507);
-  h = Math.imul(h ^ (h >>> 13), 3266489909);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-/**
- * Spine colours. The white and the black are the point: a shelf of only saturated mid-tones is the
- * tell that a palette was picked rather than accumulated. They are punctuation against the warm
- * body, not equal members of it.
- */
-export const BOOK_COLORS: readonly string[] = [
-  '#c95c4a',
-  '#e0a72b',
-  '#5aa0c9',
-  '#6aa86a',
-  '#b06fc9',
-  '#d98b4a',
-  '#8c4a3a',
-  '#3f7a8c',
-  '#a8422f',
-  '#7a6ab0',
-  '#f4f1ea', // the white one
-  '#22201d', // the black one
-];
-
-/** Page-edges seen from the room. Cream and near-uniform — that flatness is the whole joke. */
-export const PAGE_EDGE = '#e8dcc4';
-
-/** Spines light enough that lettering has to go on in a dark ink to be seen at all. */
-const LIGHT_SPINES = new Set(['#f4f1ea', '#e0a72b']);
-
-export interface BookSpine {
-  /** Centre offset along the shelf, from the middle. */
-  along: number;
-  w: number;
-  h: number;
-  color: string;
-  /** 0 upright; otherwise the height squash of a book tipped against its neighbour. */
-  lean: number;
-  /** The spine title, or `''` for a book with nothing to read (a reversed shelf, or a narrow spine). */
-  title: string;
-  /** The title's ink. Chosen per book with the spine, so a shelf's lettering varies like its cloth. */
-  ink: string;
-}
-
-/**
- * Title inks, split by the VALUE of the spine they go on. Real books letter their spines in gilt,
- * cream, black, colours — a shelf where every dark spine carries the same white ink reads as one
- * printing run (nick, 2026-07-30: "they don't all have to be white text"). The split is the part
- * that is not negotiable: at four pixels wide, lettering is a value contrast or it is nothing, so a
- * dark spine draws from the light pool and a light spine from the dark pool — variety comes from
- * within the pool, never by relaxing the contrast rule.
- */
-const INK_ON_DARK: readonly string[] = ['#f5f2ec', '#e8c87a', '#c9dbe8', '#e8b4a8', '#d9c9ea'];
-const INK_ON_LIGHT: readonly string[] = ['#2a2622', '#5c3a2e', '#2e4a5c', '#6b2f3a'];
-
-/**
- * Spine titles. Short on purpose: a spine is a few units wide, so the text is set DOWN the spine and
- * its length is bounded by the book's height, not its width. Two or three short words is what fits.
- */
-const BOOK_TITLES: readonly string[] = [
-  'atlas',
-  'notes',
-  'iso',
-  'canvas',
-  'form',
-  'light',
-  'colour',
-  'type',
-  'grids',
-  'shape',
-  'depth',
-  'room',
-  'index',
-  'draft',
-  'plans',
-];
-
-/**
- * Pack one shelf band with books.
- *
- * Packed by WIDTH rather than by count, because the widths vary — a fixed count of varied spines
- * leaves a ragged gap at one end. Uniform verticals were the single biggest reason the old shelves
- * read as a texture swatch rather than as books, so the lean matters more than it looks: it is
- * applied as a height squash plus a gap on the lean side rather than a rotation, because `box()` is
- * axis-aligned and a real rotation would mean a new primitive for a two-pixel effect.
- *
- * `marks` is lettering, and it is deliberately not text. A spine is about 4 x 7 screen px at /live,
- * where real glyphs render as a grey smear and no font token can fix it — the problem is the pixel
- * count, not the family. Bars at a consistent cap height are what a title looks like across a room,
- * and they resolve into type-like texture at /broadcast and /office-preview scale.
- * **Do not "fix" these into real strings.**
- */
-export function packShelf(si: number, row: number, long: number, reversed: boolean): BookSpine[] {
-  const out: BookSpine[] = [];
-  const span = long * 0.9;
-  const seed = (i: number, salt: number): number => shelfRnd(si, row * 32 + i, salt);
-  let along = -span / 2;
-  for (let i = 0; along < span / 2 - 4; i++) {
-    // Narrower, and packed nearly touching. Books on a shelf lean on each other; the first cut had
-    // both a wide spine range and visible air between every volume, which is what made the row read
-    // as a colour swatch rather than as books (nick, 2026-07-30: "they don't look like books").
-    const w = 4 + seed(i, 1) * 3.5; // 4..7.5
-    if (along + w > span / 2) break; // never overhang the carcass
-    const h = 11 + seed(i, 2) * 5; // 11..16
-    const lean = seed(i, 4) < 0.14 ? 0.86 : 0;
-    const color = reversed
-      ? shade(PAGE_EDGE, 0.97 + seed(i, 6) * 0.06)
-      : BOOK_COLORS[Math.floor(seed(i, 3) * BOOK_COLORS.length)]!;
-    // A backwards shelf has nothing to read — that is what makes it read as backwards.
-    const title = reversed ? '' : BOOK_TITLES[Math.floor(seed(i, 5) * BOOK_TITLES.length)]!;
-    const pool = LIGHT_SPINES.has(color) ? INK_ON_LIGHT : INK_ON_DARK;
-    const ink = pool[Math.floor(seed(i, 7) * pool.length)]!;
-    out.push({ along: along + w / 2, w, h: h * (lean || 1), color, lean, title, ink });
-    along += w + (lean ? 1.8 : 0.25); // shoulder to shoulder; the leaner needs a gap to fall into
-  }
-  return out;
-}
-
-/**
- * A title running DOWN a book's spine, the way a title on a shelved book actually runs.
- *
- * Drawn in screen space and rotated a quarter turn, not sheared onto a face like `wallText`: a spine
- * is a narrow vertical strip, "up" projects straight up the screen in this isometric, and rotating
- * about the spine's centre puts the type exactly where a real title sits. Building a per-book face
- * matrix would buy nothing at four pixels wide.
- *
- * The size is bounded by the spine's WIDTH (the text's cap height has to fit across the spine) while
- * its length is bounded by the book's height — which is why `BOOK_TITLES` are all short words. Then
- * the whole thing is clipped to the spine rectangle, so a long word is cut off by the edge of the
- * book rather than running out over its neighbours.
- *
- * At /live this is fine lettering rather than legible words — that is what type this size is. It
- * resolves on /office-preview and /broadcast, which is where anybody reads a book title anyway.
- */
-function spineTitle(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  bx: number,
-  by: number,
-  baseUp: number,
-  b: BookSpine,
-): void {
-  const size = Math.min(b.w * 0.72, 4.6);
-  if (size < 2) return; // below this the ink is a smudge, and a smudge is worse than a plain spine
-  const p = project(bx, by, fit);
-  const cx = p.x;
-  const cy = p.y - (baseUp + b.h / 2) * fit.scale;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(cx - (b.w / 2) * fit.scale, cy - (b.h / 2) * fit.scale, b.w * fit.scale, b.h * fit.scale);
-  ctx.clip();
-  ctx.translate(cx, cy);
-  ctx.rotate(-Math.PI / 2);
-  ctx.font = canvasFont(Math.round(size * fit.scale * 10) / 10, '--font-sans', 700);
-  ctx.fillStyle = b.ink;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(b.title, 0, 0);
-  ctx.restore();
-}
-
-/**
- * One object on each shelf top.
- *
- * Its own small painters rather than `drawPlant` and friends: those carry a floor contact shadow and
- * floor-scale proportions, and a 19-unit pot with a shadow pooled under it reads as a plant standing
- * *behind* the shelf, not on it. Everything here is sized for a surface a metre and a half up.
- *
- * The photo leans rather than stands. Leaning is what makes an object read as *placed* by somebody,
- * and it is the cheapest possible break in the "every rectangle is square to the room" grid.
- */
-function shelfDecor(ctx: CanvasRenderingContext2D, fit: Fit, s: Bookshelf): void {
-  const up = s.high;
-  const f = FWD[s.dir];
-  const sn = f[1] !== 0;
-  // Nudge the object toward the room-facing edge so it sits on the front of the top, not the middle.
-  const dx = sn ? 0 : f[0] * 2;
-  const dy = sn ? f[1] * 2 : 0;
-  const x = s.lx + dx;
-  const y = s.ly + dy;
-  switch (s.decor) {
-    case 'plant': {
-      box(ctx, fit, x, y, 13, 13, 9, PLANT.pot, up);
-      box(ctx, fit, x, y, 15, 15, 2.5, PLANT.rim, up + 9);
-      ellipse(ctx, { x: project(x, y, fit).x, y: project(x, y, fit).y - (up + 15) * fit.scale }, 11 * fit.scale, 6 * fit.scale, PLANT.leaf);
-      ellipse(ctx, { x: project(x, y, fit).x - 5 * fit.scale, y: project(x, y, fit).y - (up + 18) * fit.scale }, 7 * fit.scale, 4 * fit.scale, PLANT.leafLit);
-      return;
-    }
-    case 'photo': {
-      box(ctx, fit, x, y, sn ? 18 : 4, sn ? 4 : 18, 22, DRESS.frame, up);
-      box(ctx, fit, x - dx * 0.6, y - dy * 0.6, sn ? 14 : 2, sn ? 2 : 14, 17, DRESS.mat, up + 2.5);
-      return;
-    }
-    case 'books': {
-      box(ctx, fit, x, y, sn ? 22 : 14, sn ? 14 : 22, 4, BOOK_COLORS[0]!, up);
-      box(ctx, fit, x, y, sn ? 19 : 12, sn ? 12 : 19, 3.5, BOOK_COLORS[3]!, up + 4);
-      box(ctx, fit, x, y, sn ? 16 : 11, sn ? 11 : 16, 3, BOOK_COLORS[10]!, up + 7.5);
-      return;
-    }
-    case 'trophy': {
-      box(ctx, fit, x, y, 10, 10, 4, '#6b5220', up);
-      box(ctx, fit, x, y, 4, 4, 7, '#c9a44a', up + 4);
-      ellipse(ctx, { x: project(x, y, fit).x, y: project(x, y, fit).y - (up + 13) * fit.scale }, 6 * fit.scale, 4 * fit.scale, '#d8b55c');
-      return;
-    }
-  }
-}
-
-export function bookshelf(ctx: CanvasRenderingContext2D, fit: Fit, s: Bookshelf, si: number): void {
-  const f = FWD[s.dir];
-  const sn = f[1] !== 0; // S/N run along x; E/W run along y
-  const wx = sn ? s.long : s.deep;
-  const dy = sn ? s.deep : s.long;
-  box(ctx, fit, s.lx, s.ly, wx, dy, s.high, mul(PAL.wood, s.tone)); // carcass
-  // Book rows on the front (room-facing) face. The bands are spread over the unit's own height
-  // rather than pinned at a fixed pitch, so a low-wide unit reads as a credenza with two shelves
-  // instead of a tall one with its top sliced off.
-  const bandGap = (s.high - 14) / s.rows;
-  for (let row = 0; row < s.rows; row++) {
-    const baseUp = 8 + row * bandGap;
-    for (const b of packShelf(si, row, s.long, s.reversed === true)) {
-      const bx = s.lx + (sn ? b.along : f[0] * (s.deep / 2 - 2));
-      const by = s.ly + (sn ? f[1] * (s.deep / 2 - 2) : b.along);
-      box(ctx, fit, bx, by, sn ? b.w : 3, sn ? 3 : b.w, b.h, b.color, baseUp);
-      if (b.title) spineTitle(ctx, fit, bx, by, baseUp, b);
-    }
-  }
-  shelfDecor(ctx, fit, s);
 }
 
 /** A faint floor pad marking one spot in the entrance waiting queue (drawn under an overflow member). */
@@ -2640,761 +1599,16 @@ function drawCountPill(ctx: CanvasRenderingContext2D, at: Pt, text: string, scal
   ctx.fillText(text, at.x, at.y);
 }
 
-export function drawEntrance(ctx: CanvasRenderingContext2D, fit: Fit): void {
-  const { lx, ly } = ENTRANCE;
-  const s = fit.scale;
-  const H = 96;
-  // The door is set into the back-left wall (the lx≈0 floor edge): it runs *along* the wall (±ly) and its
-  // plane sits `dx` back toward the edge (−lx), so the panel is flush with the perimeter, not floating
-  // inland. The mat sits just inside (+lx), its rear corner meeting the threshold.
-  const dx = 42;
-  const wx = lx - dx; // door plane, nestled against the floor edge
-  // welcome mat: a bordered two-tone mat instead of the old flat brown patch
-  rug(ctx, fit, lx + 28, ly, 70, '#6b4326');
-  rug(ctx, fit, lx + 28, ly, 58, '#8f5c33');
-  // contact shadow along the door base — grounds the posts on the floor (every other standing piece
-  // has one; without it the tall glass panel reads as floating)
-  const foot = project(wx, ly, fit);
-  ellipse(ctx, { x: foot.x, y: foot.y + 2 * s }, 52 * s, 15 * s, 'rgba(0,0,0,0.13)');
-  // threshold strip under the doorway (runs along the wall)
-  box(ctx, fit, wx, ly, 6, 94, 3, '#4e3a24');
-  // door posts
-  box(ctx, fit, wx, ly - 44, 10, 10, H, '#5c452c');
-  box(ctx, fit, wx, ly + 44, 10, 10, H, '#5c452c');
-  const a = project(wx, ly - 44, fit);
-  const b = project(wx, ly + 44, fit);
-  const up = H * s;
-  // glass: a vertical sky-tint gradient (brighter at the top) instead of one flat wash
-  const glass = ctx.createLinearGradient(0, Math.min(a.y, b.y) - up, 0, Math.max(a.y, b.y));
-  glass.addColorStop(0, 'rgba(207, 231, 238, 0.42)');
-  glass.addColorStop(0.6, 'rgba(207, 231, 238, 0.18)');
-  glass.addColorStop(1, 'rgba(207, 231, 238, 0.3)');
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.lineTo(b.x, b.y - up);
-  ctx.lineTo(a.x, a.y - up);
-  ctx.closePath();
-  ctx.fillStyle = glass;
-  ctx.fill();
-  // a soft diagonal sheen across the panes
-  ctx.clip();
-  ctx.globalAlpha = 0.14;
-  ctx.fillStyle = '#ffffff';
-  const shx = (b.x - a.x) * 0.22;
-  ctx.beginPath();
-  ctx.moveTo(a.x + shx, a.y);
-  ctx.lineTo(a.x + shx * 1.8, a.y - up);
-  ctx.lineTo(a.x + shx * 2.4, a.y - up);
-  ctx.lineTo(a.x + shx * 1.6, a.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.restore();
-  // double-door mullion + slim frame rails + handles
-  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  ctx.strokeStyle = 'rgba(94, 70, 44, 0.9)';
-  ctx.lineWidth = Math.max(1, 2.2 * s);
-  ctx.beginPath();
-  ctx.moveTo(mid.x, mid.y);
-  ctx.lineTo(mid.x, mid.y - up);
-  ctx.stroke();
-  ctx.lineWidth = Math.max(1, 1.2 * s);
-  ctx.strokeStyle = 'rgba(94, 70, 44, 0.55)';
-  for (const t of [0.32, 0.78]) {
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y - up * t + (mid.y - a.y) * 0);
-    ctx.lineTo(b.x, b.y - up * t);
-    ctx.stroke();
-  }
-  const hy = mid.y - up * 0.44;
-  ctx.fillStyle = '#3c2e1e';
-  roundRect(ctx, mid.x - 5.5 * s, hy - 7 * s, 2.6 * s, 14 * s, 1.3 * s, '#3c2e1e');
-  roundRect(ctx, mid.x + 2.9 * s, hy - 7 * s, 2.6 * s, 14 * s, 1.3 * s, '#3c2e1e');
-  // header beam over the doorway
-  box(ctx, fit, wx, ly, 8, 98, 10, '#6b4a2a', H);
-}
-
-const PLANT = {
-  pot: '#b9603a',
-  rim: '#cb6f45',
-  soil: '#4a3326',
-  trunk: '#7c5a3c',
-  stem: '#4e7a3c',
-  snake: '#3e6b3a',
-  snakeTip: '#6fa35a',
-  leaf: '#6e9e52',
-  leafLit: '#86b368',
-} as const;
-
-/** Planter geometry, in logical units: a tapered pot, then a rim band, then the soil the plant grows out of. */
-const POT = { base: 17, top: 25, h: 19, rimW: 27, rimH: 3.5 };
-const SOIL_UP = POT.h + POT.rimH;
+// ── the office dog (behaviour in pet.ts; the sheet is `rendered/assets/dog.json`) ──────────────────────
 
 /**
- * A potted plant, drawn as *one object*: a tapered planter, a rim, soil, and foliage that grows out of the
- * soil. The parts are joined on purpose — an earlier cut hung the fiddle's leaves ~30 units above the pot
- * with nothing in between, which read (fairly) as a stray crate on the floor with a bush hovering over it.
- * A fiddle-leaf fig gets the bare woody trunk it has in life; a snake plant's blades rise straight from the
- * soil. Either way, every green thing traces back to the pot it is standing in.
+ * Draw the office dog at its current pose: the clip and frame `dogFrame` picks for its mode, in the
+ * sheet's nearest of eight headings (`dogDir`, with hysteresis so a diagonal does not flutter), mirrored
+ * for the leftward ones. Small on purpose — dog-sized next to the figures — so judge it at 4× on
+ * /character-sheet, not here. No sheet (`dog.json` missing or unusable) draws no dog.
  */
-export function drawPlant(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  species: 'snake' | 'fiddle',
-): void {
-  const base = project(lx, ly, fit);
-  const s = fit.scale;
-  const at = (dx: number, up: number): Pt => ({ x: base.x + dx * s, y: base.y - up * s });
-  ellipse(ctx, { x: base.x, y: base.y + 3 * s }, 20 * s, 6 * s, 'rgba(0,0,0,0.14)');
-  frustum(ctx, fit, lx, ly, POT.base, POT.base, POT.top, POT.top, POT.h, PLANT.pot);
-  box(ctx, fit, lx, ly, POT.rimW, POT.rimW, POT.rimH, PLANT.rim, POT.h);
-  ellipse(ctx, at(0, SOIL_UP), 10 * s, 5 * s, PLANT.soil);
-
-  if (species === 'snake') {
-    // Blades straight out of the soil, tallest in the middle — each one starts *in* the pot.
-    for (const [dx, h] of [
-      [-9, 46],
-      [-3, 58],
-      [4, 51],
-      [10, 39],
-    ] as const) {
-      ellipse(ctx, at(dx, SOIL_UP + h / 2), 5 * s, (h / 2) * s, PLANT.snake);
-      ellipse(ctx, at(dx, SOIL_UP + h - 5), 3.4 * s, 5.5 * s, PLANT.snakeTip);
-    }
-    return;
-  }
-
-  // Fiddle-leaf fig: a trunk out of the soil, leaves hung off its top — so the canopy has something to
-  // hang from. Each leaf's stem runs back to the trunk, which is what stops the blobs reading as a cloud.
-  const CROWN = 27; // where the trunk ends and the canopy starts
-  const trunkTop = at(-2, SOIL_UP + CROWN);
-  ctx.strokeStyle = PLANT.trunk;
-  ctx.lineWidth = 3 * s;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(base.x, base.y - SOIL_UP * s);
-  ctx.quadraticCurveTo(base.x + 2 * s, base.y - (SOIL_UP + CROWN * 0.55) * s, trunkTop.x, trunkTop.y);
-  ctx.stroke();
-  for (const [dx, up, r] of [
-    [10, CROWN - 7, 8.5], // one leaf slung low off the trunk — without it the plant reads as a lollipop
-    [-14, CROWN + 4, 13],
-    [11, CROWN + 10, 12],
-    [-2, CROWN + 20, 11],
-  ] as const) {
-    const c = at(dx, SOIL_UP + up);
-    ctx.strokeStyle = PLANT.stem;
-    ctx.lineWidth = 1.6 * s;
-    ctx.beginPath();
-    ctx.moveTo(trunkTop.x, trunkTop.y);
-    ctx.lineTo(c.x, c.y);
-    ctx.stroke();
-    ellipse(ctx, c, r * s, (r - 2) * s, PLANT.leaf);
-    ellipse(ctx, { x: c.x + 4 * s, y: c.y + 4 * s }, r * 0.45 * s, r * 0.36 * s, PLANT.leafLit);
-  }
-}
-
-// ── the office dog (behaviour in pet.ts; this is only the painter) ──────────────────────────────────────
-
-const DOG = {
-  fur: '#f1ece2', // warm white — the floor is warm, and a pure white dog reads as a hole in it
-  /** The same coat in shadow, for the two legs on the far side of the body. A white dog trotting on
-   *  white legs is a body with four invisible sticks under it: the far pair has to sit *behind*
-   *  something, and depth on a flat painter is a tone, not a z-index. */
-  furFar: '#d6cec0',
-  patch: '#332e2a', // soft near-black; true #000 goes flat and lifts out of the room's palette
-  cream: '#fdfaf4', // muzzle, chest, paws, tail tip — a shade brighter than the coat, so it still separates
-  earIn: '#8a6a62',
-  collar: '#e3a72b', // the huddle-pouf mustard — the team dog wears the team colour
-  tag: '#f6d98a',
-  eye: '#2a2320',
-  nose: '#241d19',
-  tongue: '#e28a86',
-} as const;
-
-/**
- * How much bigger than its original build the dog is drawn. Applied to the whole figure by scaling the
- * unit multiplier once, so every radius, stroke width and offset in this painter moves together and the
- * proportions can't drift.
- */
-const DOG_SIZE = 1.25;
-
-/** Tail-wag rate (Hz). Fast enough to read as a wag at office scale without buzzing. */
-const WAG_HZ = 4.6;
-
-/**
- * How far a paw travels, in dog units, over one gait cycle — **derived from the walk, never tuned by
- * eye.** A planted paw tracks backward under the dog at exactly ground speed, so its reach has to
- * equal the ground the dog covers in a cycle, converted into the painter's units:
- *
- * · `STRIDE` logical units of floor per cycle (pet.ts owns the cadence);
- * · `× MEAN_KX` — the dog is a side-on billboard on a 2:1 iso, so only the screen-*x* part of its
- *   travel is visible as travel. That part is |cos θ − sin θ|·KX of the distance, whose mean over
- *   every heading is √2·(2/π)·KX ≈ 0.637. Averaging is the honest move: a per-heading reach would
- *   freeze the legs solid whenever the dog walked straight into the screen;
- * · `÷ DOG_SIZE` — the painter's units are the dog's own, and the dog got bigger.
- *
- * The bug this replaces was a hand-picked ±2-unit swing left behind when the dog was scaled up: the
- * paws moved a quarter of the ground the body did, so the animal skated across the room with its
- * feet twitching. Anything that changes the dog's size or cadence now moves this with it.
- */
-const MEAN_KX = 0.6366;
-const GAIT_REACH = (STRIDE * MEAN_KX) / DOG_SIZE;
-/** Fraction of each cycle a paw spends planted. A trot sits a shade above half. */
-const DUTY = 0.56;
-/** How high a paw lifts through its swing, dog units. */
-const GAIT_LIFT = 2.9;
-
-/**
- * Where one paw is in its cycle: `x` in units of `GAIT_REACH` (−0.5 behind the hip → +0.5 ahead),
- * `lift` in units of `GAIT_LIFT`.
- *
- * **Stance is a straight line and that is the whole point** — the paw is on the floor, so it tracks
- * backward at precisely the speed the floor passes under it and does not scrub. The return is a
- * Hermite whose end slopes *match that stance velocity at both handoffs*, so the paw is already
- * moving backward as it touches down and keeps moving backward as it plants: C¹ across the join,
- * with no hitch at the moment the weight lands. A sine would have stalled the paw dead at both ends
- * of the swing, which is the sewing-machine look every cheap walk cycle has.
- */
-export function pawCycle(u: number): { x: number; lift: number } {
-  const p = ((u % 1) + 1) % 1;
-  if (p < DUTY) return { x: 0.5 - p / DUTY, lift: 0 };
-  const q = (p - DUTY) / (1 - DUTY);
-  const v = -(1 - DUTY) / DUTY; // stance velocity, expressed in swing-normalised time
-  const q2 = q * q;
-  const q3 = q2 * q;
-  const x =
-    (2 * q3 - 3 * q2 + 1) * -0.5 + (q3 - 2 * q2 + q) * v + (-2 * q3 + 3 * q2) * 0.5 + (q3 - q2) * v;
-  // Lift weighted early: a paw leaves the floor smartly and comes down softly, which is what makes a
-  // trot land rather than stamp.
-  return { x, lift: Math.sin(Math.PI * Math.pow(q, 0.82)) };
-}
-
-/**
- * Draw the office dog at its current pose. Screen-space profile (like the members' billboarded faces): the
- * body reads side-on and `flip` mirrors it for leftward travel. Small on purpose — dog-sized next to ~40px
- * people — so judge it at 4× on /character-sheet, not here.
- *
- * Everything that makes this a *dog* rather than the cat that used to live here is in this function: ears
- * that flop instead of pricking up, a snout out front, cream paws, and a tail that wags where the cat's
- * curled. The behaviour machine driving it (pet.ts) never learned what species it is.
- *
- * The coat is white with black patches, which on a warm floor is a stronger silhouette than a solid
- * mid-tone ever was: the patches carry the shape, so the dog stays legible at office scale instead of
- * relying on its outline against whatever it happens to be standing on.
- */
-export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, rendered?: RenderedAssets): void {
-  const p = project(pet.lx, pet.ly, fit);
-  if (rendered?.dog) {
-    drawRenderedDog(ctx, fit, pet, t, rendered.dog);
-    return;
-  }
-  // The one place the dog's size is set: every offset and radius below is in these units, so scaling
-  // here scales the whole animal without touching a single pose.
-  const s = fit.scale * DOG_SIZE;
-
-  // The contact shadow is painted in world space, BEFORE the facing mirror. It belongs to the floor,
-  // not to the body: a pool of shade that narrowed as the dog swivelled would read as the light
-  // moving. During a trot it also breathes with the bob — the dog is lightest at the top of its
-  // stride, and a shadow that ignores that is what makes a walk cycle feel weightless.
-  const sh = DOG_SHADOW[pet.mode];
-  const air = pet.mode === 'walk' ? 0.06 * Math.cos(pet.phase * 4 * Math.PI) : 0;
-  ellipse(
-    ctx,
-    { x: p.x, y: p.y + 1.5 * s },
-    sh.r * (1 - air) * s,
-    sh.r * sh.flat * (1 - air) * s,
-    `rgba(0,0,0,${(sh.a * (1 - air * 1.6)).toFixed(3)})`,
-  );
-
-  ctx.save();
-  // Facing is a CONTINUOUS mirror (`pet.face`), not a boolean flip: a change of direction plays as
-  // the body narrowing, passing through square-on and opening out the other way. Applied as a canvas
-  // transform rather than a sign on every offset, so radii, stroke widths and clip paths all
-  // foreshorten together — half a turn drawn with mirrored offsets but unmirrored radii is a dog
-  // turning inside out.
-  //
-  // The floor is a RIBCAGE, not a degenerate-matrix guard. It used to be 0.03 — enough to keep the
-  // matrix invertible, and also the exact "sheet of paper turning edge-on" nick kept seeing: a flat
-  // profile squashed to 3% of its width IS a sheet of paper, geometrically. In life a dog seen from
-  // any angle is still as wide as its chest, so the profile never narrows past this before the
-  // chest-on view (below) has fully taken over and hidden it.
-  const m = pet.face >= 0 ? Math.max(pet.face, 0.16) : Math.min(pet.face, -0.16);
-  ctx.translate(p.x, p.y);
-  ctx.scale(m, 1);
-  const px = (dx: number, dy: number): Pt => ({ x: dx * s, y: dy * s });
-
-  const stroke = (a: Pt, b: Pt, w: number, color: string): void => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = w * s;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  };
-  /** A tapered tail along a quadratic, with the cream tip every dog in this office is issued. */
-  const tail = (x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, w: number): void => {
-    ctx.strokeStyle = DOG.patch;
-    ctx.lineWidth = w * s;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    const a = px(x0, y0);
-    const c = px(cx, cy);
-    const b = px(x1, y1);
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
-    ctx.stroke();
-    // The cream tip is the last stretch of the tail *restroked* at the same width, not a disc stuck on the
-    // end — a round cap plus a circle makes a bulb, and the tail reads as a balloon on a string.
-    const dx = x1 - cx;
-    const dy = y1 - cy;
-    const d = Math.hypot(dx, dy) || 1;
-    const back = px(x1 - (dx / d) * 2.4, y1 - (dy / d) * 2.4);
-    stroke(back, b, w, DOG.cream);
-  };
-  /**
-   * A leg, hip to paw. The hip stays pinned to the body and only the paw travels, which is the
-   * difference between a leg and the sliding pole this used to draw: a limb whose top moved with its
-   * foot never looked attached to the animal.
-   *
-   * The knee is a quadratic control point pushed off the hip→paw line by `bend`, so the leg flexes
-   * as it folds under and straightens as it reaches. Cheap, and at office scale indistinguishable
-   * from solving the joint properly.
-   */
-  const limb = (
-    hipX: number,
-    footX: number,
-    lift: number,
-    w: number,
-    bend: number,
-    far = false,
-  ): void => {
-    const hip = px(hipX, -9.2);
-    const foot = px(footX, -lift);
-    // Perpendicular to the leg, so the bend reads the same whatever angle the stride puts it at.
-    const dx = foot.x - hip.x;
-    const dy = foot.y - hip.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const knee = {
-      x: (hip.x + foot.x) / 2 + (dy / len) * bend * s * m,
-      y: (hip.y + foot.y) / 2 - (dx / len) * bend * s * m,
-    };
-    ctx.strokeStyle = far ? DOG.furFar : DOG.fur;
-    ctx.lineWidth = w * s;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.quadraticCurveTo(knee.x, knee.y, foot.x, foot.y);
-    ctx.stroke();
-    ellipse(ctx, foot, w * 0.56 * s, w * 0.42 * s, far ? DOG.furFar : DOG.cream);
-  };
-  /** A standing leg — straight down from the hip, for the poses that are not mid-stride. */
-  const leg = (x: number, lift: number, w = 2.6): void => limb(x, x, lift, w, 0);
-  /** A floppy ear: hangs down the side of the head and swings a little with the body. Both are black —
-   * on a white dog the ears are the markings that read first, at any size. */
-  const ear = (x: number, y: number, r: number, swing = 0): void => {
-    ellipse(ctx, px(x + swing * 0.4, y + r * 0.9), r * 0.78 * s, r * 1.45 * s, DOG.patch);
-    ellipse(ctx, px(x + swing * 0.4, y + r * 0.95), r * 0.4 * s, r * 0.85 * s, DOG.earIn);
-  };
-  /**
-   * The head, snout-first. `awake` opens the eye; a sleeping dog gets a lash line and its muzzle resting
-   * on its paws. Drawn ear-then-skull so the far ear tucks behind the head.
-   */
-  const head = (x: number, y: number, awake: boolean, swing = 0, tongue = false): void => {
-    ear(x - 3.6, y - 2.4, 2.5, swing); // far ear, behind the skull
-    ellipse(ctx, px(x, y), 5.8 * s, 5.2 * s, DOG.fur);
-    // The eye patch — one dark side to the face, clipped to the skull so it can't spill onto the snout.
-    // A white dog needs it: without a marking up here the head is a blank oval and the whole animal
-    // loses its expression at office scale.
-    ctx.save();
-    ctx.beginPath();
-    const skull = px(x, y);
-    ctx.ellipse(skull.x, skull.y, 5.8 * s, 5.2 * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ellipse(ctx, px(x + 0.4, y - 1.4), 3.4 * s, 3.8 * s, DOG.patch);
-    ctx.restore();
-    ellipse(ctx, px(x + 4.6, y + 2.2), 4.3 * s, 2.5 * s, DOG.cream); // snout, out front
-    if (tongue) ellipse(ctx, px(x + 5.4, y + 4), 1.5 * s, 1.1 * s, DOG.tongue);
-    ellipse(ctx, px(x + 8.2, y + 1.4), 1.25 * s, 1.05 * s, DOG.nose);
-    ellipse(ctx, px(x + 2.4, y - 3.4), 2.4 * s, 1.5 * s, DOG.patch); // brow — reads as the patch's top edge
-    // The eye sits *on* the patch, so it gets a pale rim: a dark eye on dark fur is no eye at all.
-    if (awake) {
-      ellipse(ctx, px(x + 1.4, y - 1), 1.55 * s, 1.7 * s, DOG.cream);
-      ellipse(ctx, px(x + 1.4, y - 1), 1 * s, 1.15 * s, DOG.eye);
-      ellipse(ctx, px(x + 1.75, y - 1.5), 0.34 * s, 0.34 * s, '#ffffff'); // catchlight — the whole charm of a face
-    } else {
-      ellipse(ctx, px(x + 1.4, y - 0.8), 1.7 * s, 1 * s, DOG.cream);
-      stroke(px(x + 0.5, y - 0.8), px(x + 2.3, y - 0.8), 0.8, DOG.eye);
-    }
-    ear(x + 2.6, y - 2.2, 2.7, swing); // near ear, over the cheek
-  };
-  /**
-   * Black patches, clipped to whichever body ellipse the pose just drew — so a marking always sits *on*
-   * the dog instead of floating beside it, whatever shape the pose folded it into.
-   *
-   * Blob placement is in fractions of the body's own radii rather than absolute units, which is what
-   * lets the same three markings ride a curled comma, an upright sit and a trotting flank and stay
-   * recognisably the same dog. They are deliberately off-centre and different sizes: three tidy blobs
-   * read as a pattern, three scruffy ones read as an animal.
-   */
-  const patches = (x: number, y: number, rx: number, ry: number): void => {
-    ctx.save();
-    ctx.beginPath();
-    const c = px(x, y);
-    ctx.ellipse(c.x, c.y, rx * s, ry * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    // Over the back and shoulders — the big one, and the marking that carries the silhouette.
-    ellipse(ctx, px(x - rx * 0.16, y - ry * 0.68), rx * 0.68 * s, ry * 0.92 * s, DOG.patch);
-    // Hip, thrown the other way so the two never merge into one stripe down the spine.
-    ellipse(ctx, px(x - rx * 0.66, y + ry * 0.18), rx * 0.36 * s, ry * 0.6 * s, DOG.patch);
-    // A small one low on the flank: the bit of asymmetry that stops it reading as two-tone.
-    ellipse(ctx, px(x + rx * 0.44, y + ry * 0.42), rx * 0.19 * s, ry * 0.28 * s, DOG.patch);
-    ctx.restore();
-  };
-  /** A single patch clipped to a smaller part (the chest), for the same reason. */
-  const patchOn = (x: number, y: number, rx: number, ry: number): void => {
-    ctx.save();
-    ctx.beginPath();
-    const c = px(x, y);
-    ctx.ellipse(c.x, c.y, rx * s, ry * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ellipse(ctx, px(x - rx * 0.5, y - ry * 0.45), rx * 0.62 * s, ry * 0.5 * s, DOG.patch);
-    ctx.restore();
-  };
-  /**
-   * The roundness pass: a warm belly shade and a crown of light, clipped to the body ellipse the pose
-   * just drew. Painted OVER the patches — light falls on the coat and its markings alike, which is
-   * what turns a flat sticker into a volume (nick, 2026-07-29: "the dog isn't really 3d looking like
-   * the members are"). Both stay on the warm axis: a neutral grey shade on a warm floor reads as dirt.
-   */
-  const shade = (x: number, y: number, rx: number, ry: number): void => {
-    ctx.save();
-    ctx.beginPath();
-    const c = px(x, y);
-    ctx.ellipse(c.x, c.y, rx * s, ry * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ellipse(ctx, px(x, y + ry * 0.66), rx * 1.08 * s, ry * 0.6 * s, 'rgba(88, 62, 40, 0.16)');
-    ellipse(ctx, px(x - rx * 0.12, y - ry * 0.58), rx * 0.8 * s, ry * 0.46 * s, 'rgba(255, 252, 243, 0.3)');
-    ctx.restore();
-  };
-  const collar = (x: number, y: number, r: number): void => {
-    ellipse(ctx, px(x, y), r * s, r * 0.42 * s, DOG.collar);
-    ellipse(ctx, px(x + r * 0.15, y + r * 0.5), r * 0.24 * s, r * 0.26 * s, DOG.tag);
-  };
-
-  switch (pet.mode) {
-    case 'sleep':
-    case 'curl': {
-      // Nose-to-tail comma: chin down on the front paws, tail draped round the flank (a dog flops where a
-      // cat wraps into a bun), slow breathing that damps in as the settle completes.
-      const settle = pet.mode === 'curl' ? Math.min(1, pet.modeT / CURL_VIS_S) : 1;
-      const breathe = 1 + 0.05 * Math.sin(t * 1.9) * settle;
-      tail(-9, -7, -14, 0.5, -4, 1, 2.8); // draped round the flank, behind the body — a dog flops, it doesn't wrap
-      ellipse(ctx, px(-0.5, -5.5), 12.5 * s, 6.8 * breathe * s, DOG.fur);
-      patches(-0.5, -5.5, 12.5, 6.8 * breathe);
-      shade(-0.5, -5.5, 12.5, 6.8 * breathe);
-      ellipse(ctx, px(7.5, -2), 3.6 * s, 1.8 * s, DOG.cream); // front paws, tucked under the chin
-      head(7, -6.5, false);
-      break;
-    }
-    case 'sit': {
-      // Upright on the haunches, front legs straight, tail sweeping the floor behind — the supervising
-      // pose, and the one members walk past. Tongue out: a sitting dog watching you work is a happy one.
-      const wag = Math.sin(t * WAG_HZ * Math.PI * 2);
-      tail(-6.5, -6, -12, -1 + wag * 1.2, -14.5, 0.5 + wag * 2.6, 2.8); // thumping the floor
-      ellipse(ctx, px(-1.5, -7.5), 8.2 * s, 8.5 * s, DOG.fur); // haunches
-      patches(-1.5, -7.5, 8.2, 8.5);
-      shade(-1.5, -7.5, 8.2, 8.5);
-      ellipse(ctx, px(3.5, -12), 5.4 * s, 7.2 * s, DOG.fur); // chest, up
-      // A patch over the shoulder rather than the old cream blaze, which is invisible now the coat is
-      // white. It also separates the chest from the haunches, which would otherwise merge into one blob.
-      patchOn(3.5, -12, 5.4, 7.2);
-      shade(3.5, -12, 5.4, 7.2);
-      leg(2.2, 0.5);
-      leg(5.4, 0.5);
-      collar(4.5, -18.5, 4.4);
-      head(5, -23, true, wag * 0.5, true);
-      break;
-    }
-    case 'stretch': {
-      // The play-bow every dog wakes up with: front paws reaching, chest to the floor, rump high, tail up.
-      const wag = Math.sin(t * WAG_HZ * Math.PI * 2);
-      tail(-9.5, -16, -14 + wag * 2, -22, -11 + wag * 3.5, -26, 2.8);
-      ellipse(ctx, px(-7, -13), 7.8 * s, 7.2 * s, DOG.fur); // haunches, up
-      patches(-7, -13, 7.8, 7.2);
-      shade(-7, -13, 7.8, 7.2);
-      leg(-9, 0.5, 3);
-      ellipse(ctx, px(2, -5.5), 8.5 * s, 4.4 * s, DOG.fur); // chest sweeping low
-      shade(2, -5.5, 8.5, 4.4);
-      stroke(px(4, -5.5), px(13, -1.5), 2.6, DOG.fur); // front legs reaching out flat
-      ellipse(ctx, px(13, -1.5), 1.5 * s, 1 * s, DOG.cream);
-      collar(9.5, -8.5, 4);
-      head(12, -12, true, 0, true);
-      break;
-    }
-    case 'walk': {
-      // Trotting: the two diagonal pairs, each paw planted for most of its cycle so the feet hold the
-      // floor while the body travels over them. Far legs, then body, then near legs — so it reads as
-      // four feet, not a comb.
-      const a = pawCycle(pet.phase); // far hind + near front
-      const b = pawCycle(pet.phase + 0.5); // far front + near hind
-      // Two beats of rise and fall per cycle (one per diagonal), and a matching fore/aft surge — the
-      // body is thrown forward as each pair drives and eases back as it swings through.
-      const bob = -Math.cos(pet.phase * 4 * Math.PI) * 0.95;
-      const surge = Math.sin(pet.phase * 4 * Math.PI) * 0.55;
-      const wag = Math.sin(t * WAG_HZ * Math.PI * 2);
-      // A hind leg folds forward under the dog, a front leg folds back — opposite knees, which is
-      // most of what separates a dog's trot from a pantomime horse.
-      const hind = (c: typeof a, hipX: number, w: number, far = false): void =>
-        limb(hipX, hipX + c.x * GAIT_REACH, c.lift * GAIT_LIFT + 0.5, w, -1.5 - c.lift * 1.4, far);
-      const front = (c: typeof a, hipX: number, w: number, far = false): void =>
-        limb(hipX, hipX + c.x * GAIT_REACH, c.lift * GAIT_LIFT + 0.5, w, 1.4 + c.lift * 1.3, far);
-      // A sabre, not a flagpole: it leaves the rump going BACKWARD and only then sweeps up, so the
-      // curve reads as a tail carried high rather than an aerial bolted to the hips. The wag swings
-      // the tip through the arc; the base barely moves, which is how a tail actually works.
-      tail(-10 + surge, -13.5 + bob, -18 + wag * 1.2, -19, -15.5 + wag * 3.2, -25, 2.8);
-      hind(a, -7 + surge, 2.4, true);
-      front(b, 6 + surge, 2.4, true);
-      ellipse(ctx, px(surge, -12.5 + bob), 11.5 * s, 6 * s, DOG.fur);
-      // Shoulder and haunch mass: two overlapping forms a half-tone off the barrel, the standard
-      // illustrator's fake for a rib cage. This is what the legs attach TO — without it they read as
-      // sticks under a shape, and the flat barrel is most of why a mid-turn dog read as paper even
-      // after the roundness pass below (the shade pass lights a volume; it cannot invent one).
-      // Under `patches`/`shade`, so markings and light fall across them like the rest of the coat.
-      ellipse(ctx, px(6.2 + surge, -12 + bob), 5.4 * s, 5.2 * s, 'rgba(214, 206, 192, 0.55)');
-      ellipse(ctx, px(-6.8 + surge, -12.2 + bob), 5.9 * s, 5.5 * s, 'rgba(214, 206, 192, 0.55)');
-      patches(surge, -12.5 + bob, 11.5, 6);
-      shade(surge, -12.5 + bob, 11.5, 6);
-      hind(b, -6 + surge, 2.9);
-      front(a, 7 + surge, 2.9);
-      collar(10.5 + surge, -16.5 + bob, 4);
-      // The head lags the body by a fraction of a beat — the follow-through that stops the whole dog
-      // reading as one rigid piece bouncing on springs.
-      const lag = -Math.cos((pet.phase - 0.055) * 4 * Math.PI) * 0.95;
-      head(12.5 + surge * 1.15, -21 + lag, true, -lag * 1.2, true);
-      break;
-    }
-  }
-  ctx.restore();
-
-  // ── the toward/away view ───────────────────────────────────────────────────────────────────────
-  // The profile above is a billboard: walking at or away from the camera the mirror narrows it toward
-  // a sliver, and a sliver held for a whole diagonal is the "extremely thin, like a piece of paper"
-  // read (nick, 2026-07-29). So once the mirror gets narrow, crossfade in the view the billboard
-  // never had — a chest-on (or rump-on) dog on the same gait cycles. The profile keeps painting
-  // underneath; by the time this is opaque the profile is a few pixels wide and fully hidden, so the
-  // fade never shows a double image.
-  const towardness = towardnessFor(pet.face);
-  if (pet.mode === 'walk' && towardness > 0) drawDogFacing(ctx, p, s, pet, t, towardness);
-}
-
-/**
- * How much of the chest-on view to blend in as the profile squashes.
- *
- * The window starts EARLIER than the original 0.55: the band between full profile and 0.55 was the
- * remaining "paper" band — squashed billboard, no chest-on view yet — and a walking dog turns
- * constantly, so it spent most of every turn inside it. The ramp ends at |face| 0.35, comfortably
- * above the 0.16 ribcage floor in `drawDog`, so the profile underneath is fully hidden while it is
- * still a plausible body width. Exported for the tests: this is pure geometry policy, no canvas.
- */
-export function towardnessFor(face: number): number {
-  return Math.min(1, Math.max(0, (0.75 - Math.abs(face)) / 0.4));
-}
-
-/**
- * The dog seen along its own spine — toward the camera (`pet.depthSign === 1`, we get the face) or
- * away (we get the rump and the back of the head). Deliberately the same vocabulary as the profile:
- * cream paws, one dark eye patch, the mustard collar, the wagging cream-tipped tail — so the
- * crossfade reads as the same animal turning, not a sprite swap.
- */
-function drawDogFacing(
-  ctx: CanvasRenderingContext2D,
-  p: Pt,
-  s: number,
-  pet: PetState,
-  t: number,
-  alpha: number,
-): void {
-  const toward = pet.depthSign === 1;
-  // A whisper of the dying profile heading, so the figure leans out of the turn rather than snapping
-  // to dead-symmetric the instant the crossfade starts.
-  const lean = pet.face * 2.2;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.translate(p.x, p.y);
-  const px = (dx: number, dy: number): Pt => ({ x: dx * s, y: dy * s });
-
-  const a = pawCycle(pet.phase);
-  const b = pawCycle(pet.phase + 0.5);
-  const bob = -Math.cos(pet.phase * 4 * Math.PI) * 0.95;
-  const wag = Math.sin(t * WAG_HZ * Math.PI * 2);
-  const lag = -Math.cos((pet.phase - 0.055) * 4 * Math.PI) * 0.95;
-
-  /** A straight leg seen end-on: only the lift and a little lateral sway of the stride survive the
-   *  foreshortening — the reach itself points along the view axis and vanishes. */
-  const leg = (x: number, c: { x: number; lift: number }, w: number, far = false): void => {
-    const hip = px(x + lean * 0.4, -9.2 + bob * 0.4);
-    const foot = px(x * (1 + 0.12 * c.x) + lean * 0.4, -(c.lift * GAIT_LIFT + 0.5));
-    ctx.strokeStyle = far ? DOG.furFar : DOG.fur;
-    ctx.lineWidth = w * s;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hip.x, hip.y);
-    ctx.lineTo(foot.x, foot.y);
-    ctx.stroke();
-    ellipse(ctx, foot, w * 0.56 * s, w * 0.42 * s, far ? DOG.furFar : DOG.cream);
-  };
-  /** The tail, end-on: base hidden by the body, the cream tip swinging wide of the rump. */
-  const tail = (): void => {
-    const bx = (pet.flip ? -1 : 1) * 1.6 + lean;
-    const base = px(bx, -14 + bob);
-    const mid = px(bx + wag * 1.4, -18.5 + bob);
-    const tip = px(bx + wag * 3, -21.5 + bob);
-    ctx.strokeStyle = DOG.patch;
-    ctx.lineWidth = 2.6 * s;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(base.x, base.y);
-    ctx.quadraticCurveTo(mid.x, mid.y, tip.x, tip.y);
-    ctx.stroke();
-    ctx.strokeStyle = DOG.cream;
-    ctx.beginPath();
-    ctx.moveTo((mid.x + tip.x) / 2, (mid.y + tip.y) / 2);
-    ctx.lineTo(tip.x, tip.y);
-    ctx.stroke();
-  };
-  /** The head, straight on (or from behind). Both ears show; the away view is all crown patch. */
-  const head = (): void => {
-    const hx = lean * 1.6;
-    const hy = -21 + lag;
-    // both floppy ears, hanging off the sides of the skull
-    for (const ex of [-4.6, 4.6]) {
-      ellipse(ctx, px(hx + ex, hy - 0.6), 1.9 * s, 3.5 * s, DOG.patch);
-      if (toward) ellipse(ctx, px(hx + ex * 0.98, hy - 0.4), 0.9 * s, 2 * s, DOG.earIn);
-    }
-    ellipse(ctx, px(hx, hy), 5.2 * s, 5 * s, DOG.fur);
-    ctx.save();
-    ctx.beginPath();
-    const skull = px(hx, hy);
-    ctx.ellipse(skull.x, skull.y, 5.2 * s, 5 * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    if (toward) {
-      // the one-sided eye patch, same side the profile wears it
-      ellipse(ctx, px(hx + (pet.flip ? -1.9 : 1.9), hy - 1.3), 2.9 * s, 3.5 * s, DOG.patch);
-    } else {
-      // back of the head: the patch saddles the whole crown and there is no face to draw
-      ellipse(ctx, px(hx, hy - 1.2), 4.5 * s, 4.2 * s, DOG.patch);
-    }
-    ctx.restore();
-    if (!toward) return;
-    ellipse(ctx, px(hx, hy + 2.6), 3.2 * s, 2.2 * s, DOG.cream); // muzzle, dead centre
-    ellipse(ctx, px(hx + 0.4, hy + 4.6), 1.2 * s, 1 * s, DOG.tongue);
-    ellipse(ctx, px(hx, hy + 1.7), 1.25 * s, 1 * s, DOG.nose);
-    for (const ex of [-2.1, 2.1]) {
-      ellipse(ctx, px(hx + ex, hy - 1), 1.35 * s, 1.5 * s, DOG.cream);
-      ellipse(ctx, px(hx + ex, hy - 1), 0.85 * s, 1 * s, DOG.eye);
-      ellipse(ctx, px(hx + ex + 0.3, hy - 1.4), 0.3 * s, 0.3 * s, '#ffffff');
-    }
-  };
-  /** The barrel: rounder than the profile's side view, with the same shade/highlight roundness pass. */
-  const body = (): void => {
-    const by = -12.5 + bob;
-    ellipse(ctx, px(lean, by), 7.2 * s, 6.2 * s, DOG.fur);
-    ctx.save();
-    ctx.beginPath();
-    const c = px(lean, by);
-    ctx.ellipse(c.x, c.y, 7.2 * s, 6.2 * s, 0, 0, Math.PI * 2);
-    ctx.clip();
-    if (toward) {
-      ellipse(ctx, px(lean - 2.6, by - 2.2), 3.2 * s, 3.4 * s, DOG.patch); // shoulder patch
-      ellipse(ctx, px(lean + 0.6, by + 2.4), 3.2 * s, 3.2 * s, DOG.cream); // chest blaze
-    } else {
-      ellipse(ctx, px(lean + 0.4, by - 1.6), 4.6 * s, 4.2 * s, DOG.patch); // the saddle over the back
-      ellipse(ctx, px(lean - 3.6, by + 1.4), 2 * s, 2.6 * s, DOG.patch);
-    }
-    ellipse(ctx, px(lean, by + 4), 7.6 * s, 3.6 * s, 'rgba(88, 62, 40, 0.16)');
-    ellipse(ctx, px(lean - 0.8, by - 3.6), 5.6 * s, 2.8 * s, 'rgba(255, 252, 243, 0.3)');
-    ctx.restore();
-  };
-  const collar = (): void => {
-    ellipse(ctx, px(lean, -17 + bob), 4.3 * s, 1.35 * s, DOG.collar);
-    if (toward) ellipse(ctx, px(lean + 0.6, -15.6 + bob), 1 * s, 1.1 * s, DOG.tag);
-  };
-
-  if (toward) {
-    tail(); // far side, peeking over the rump
-    leg(-4.4, a, 2.4, true);
-    leg(4.4, b, 2.4, true);
-    body();
-    leg(-2.5, b, 2.9);
-    leg(2.5, a, 2.9);
-    collar();
-    head();
-  } else {
-    head(); // beyond the body, so the shoulders overlap its chin
-    collar();
-    leg(-4.4, b, 2.4, true);
-    leg(4.4, a, 2.4, true);
-    body();
-    leg(-2.5, a, 2.9);
-    leg(2.5, b, 2.9);
-    tail(); // nearest the camera — over everything
-  }
-  ctx.restore();
-}
-
-/** The pool of shade each pose casts: radius and flatness in dog units, and its darkness. */
-const DOG_SHADOW: Record<PetState['mode'], { r: number; flat: number; a: number }> = {
-  sleep: { r: 15, flat: 0.307, a: 0.14 },
-  curl: { r: 15, flat: 0.307, a: 0.14 },
-  sit: { r: 13, flat: 0.323, a: 0.14 },
-  stretch: { r: 16, flat: 0.288, a: 0.14 },
-  walk: { r: 14.5, flat: 0.31, a: 0.12 },
-};
-
-/** How long the settle-down takes to visually damp the breathing in from the sit (matches pet.ts CURL_S). */
-const CURL_VIS_S = 1.1;
-
-/**
- * Solve a member's skeleton for this frame from their pose (see `skeleton.ts` — all the animation lives
- * there; this only decides *which* animation state the pose implies).
- */
-/** The rendered path never solves a skeleton; `drawCharacter` ignores this when `rendered` is set. */
-const EMPTY_SKEL = {} as ReturnType<typeof skelFor>;
-
-function skelFor(pose: Pose, node: OfficeNode, t: number) {
-  const seed = seedOf(node.name);
-  // Typing is gated on `posture`, **not `activity`** — the same source of truth the seating uses. A stale
-  // member keeps its last-known `activity: working` while the server projects its posture down to `idle`,
-  // so gating on activity left it drumming an imaginary keyboard on the lounge couch. Posture puts working
-  // members at desks and idle members on the furniture, so keying typing off it means only a member the
-  // floor placed at a desk types. The `sit > 0.9` guard still holds — no typing while rising from a chair.
-  // And no typing *through a gesture* — a member mid-stretch or mid-sip has their hands anywhere but the keys.
-  // ADR 660: the amplitude is the seat's PULSE — distinct harness tool calls in the last minute, read
-  // against the wall clock — not posture alone. A `working` seat with no live pulse (no hooks, or
-  // idle since) sits still at its lit screen; `typingBurst`'s seeded loop no longer plays at a desk.
-  const typing =
-    pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
-  return solveSkeleton({
-    // A deskless seat poses the hands in the lap instead of on a keyboard (nick, 2026-08-31): the
-    // couch, the meeting chairs and reception's waiting chair have nothing in front of them.
-    seat: pose.casual ? 'casual' : 'desk',
-    phase: pose.phase,
-    sit: pose.sit,
-    stride: pose.stride,
-    run: pose.run,
-    t,
-    typing,
-    carry: pose.carry,
-    help: pose.bubble !== null,
-    gesture: pose.gesture,
-    gestureT: pose.gestureT,
-    seed,
-  });
+export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, rendered: RenderedAssets): void {
+  if (rendered.dog) drawRenderedDog(ctx, fit, pet, t, rendered.dog);
 }
 
 /** A speech/thought bubble over an actor's head (raised-hand `?`, urgent `!`). Screen-space. */
@@ -3428,24 +1642,20 @@ export function drawActor(
   pose: Pose,
   node: OfficeNode,
   t: number,
-  armsOnly = false,
-  /** Mug colour while a sip beat is playing — the painter puts it in the raised hand. */
-  mug?: string,
+  armsOnly: boolean,
+  /** Mug colour while a sip beat is playing — in the raised hand through the middle of the beat. */
+  mug: string | undefined,
   /** A first arrival's lanyard colour (lane 01M3F81DD9). */
-  lanyard?: string,
-  /** The rendered figure (plan Task 13): sprite frames instead of a solved skeleton, under the room's tint. */
-  figure?: { assets: FigureAssets; tint: string },
+  lanyard: string | undefined,
+  /** The figure's sheets (plan Task 13) under the room's light tint (`figureTintFor`). */
+  figure: { assets: FigureAssets; tint: string },
 ): void {
-  // Rendered: pick the clip from the pose and skip the solver — the frame is the whole figure.
   const seed = seedOf(node.name);
-  const rendered = figure
-    ? (() => {
-        const typing =
-          pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
-        const { anim, startT, frame } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
-        return { rendered: figure.assets, anim, animStart: startT, ...(frame !== undefined ? { animFrame: frame } : {}), tint: figure.tint };
-      })()
-    : {};
+  // Typing is gated on posture (`sit > 0.9`, no beat playing) and its amplitude is the seat's PULSE —
+  // distinct harness tool calls in the last minute (ADR 660) — so a `working` seat with no live pulse
+  // sits still at its lit screen.
+  const typing = pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
+  const { anim, startT, frame } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
   drawCharacter(
     ctx,
     fit,
@@ -3455,8 +1665,11 @@ export function drawActor(
       dir: pose.dir,
       ...(pose.heading !== undefined ? { heading: pose.heading } : {}),
       node,
-      skel: figure ? EMPTY_SKEL : skelFor(pose, node, t),
-      ...rendered,
+      rendered: figure.assets,
+      anim,
+      animStart: startT,
+      ...(frame !== undefined ? { animFrame: frame } : {}),
+      tint: figure.tint,
       size: pose.small ? 0.72 : 1,
       alpha: pose.alpha,
       carry: pose.carry,
@@ -3472,8 +1685,8 @@ export function drawActor(
   );
   if (!armsOnly && pose.bubble) {
     const p = project(pose.lx, pose.ly, fit);
-    // Over the crown: the painted member's is 96 up; a rendered one's is in its spec.
-    const crown = figure?.assets.spec.height ?? 96;
+    // Over the crown, which the sheet's spec gives (96 was the painted member's).
+    const crown = figure.assets.spec.height ?? 96;
     bubble(ctx, p.x, p.y - (pose.small ? (crown + 2) * 0.76 : crown + 2) * fit.scale, pose.bubble, fit.scale);
   }
 }
@@ -3494,26 +1707,13 @@ const CHAIR_BACK_OFF = 14; // how far behind the seat centre the backrest stands
 // ── task-chair variety ──────────────────────────────────────────────────────────────────────────────
 // Not every desk gets the same chair. The *kind* is a stable per-desk hash (like the surface props), so a
 // desk always shows the same chair frame to frame but the pod reads as a real office — a plain task stool
-// here, a wheeled office chair there, an armed exec seat, the odd high-backed gamer chair. The variation
-// never touches the two load-bearing invariants: the cushion top stays at SEAT_TOP (where `skeleton.ts`
-// lands a seated pelvis) and the backrest keeps its footprint (so a sitter still sorts between the two).
+// here, a wheeled office chair there, an armed exec seat, the odd high-backed gamer chair. Every kind is
+// rendered in neutral greys per seat axis (`chair/<kind>/<sn|ew>/<base|back>`) and tinted at draw time; the
+// cushion top stays at SEAT_TOP and the backrest keeps its footprint, so a sitter still sorts between the two.
 type ChairKind = 'task' | 'wheeled' | 'exec' | 'gamer';
-interface ChairStyle {
-  backH: number; // backrest height
-  backW: number; // backrest width along the shoulders
-  arms: boolean; // a low armrest each side
-  headrest: boolean; // a headrest bump above the backrest
-  wings: boolean; // racing-style side bolsters on the backrest
-}
 const CHAIR_ARM_SALT = 22;
-/* Every chair in this office rolls (nick, 2026-09-14). It used to be a `caster` flag with the plain
-   task chair — and with it the meeting-room set, which takes this same default — standing on four
-   splayed legs. A room where three desks out of twelve cannot swivel is a room where the ambient
-   chair beats are unevenly distributed for a reason nobody can see, and the four-leg base was the
-   weaker drawing anyway: the star base has arms AND wheels, which is what makes it read as a chair
-   rather than as dots under a cushion. The flag is gone rather than set to true everywhere, so there
-   is no second state to keep working. */
-const TASK_CHAIR: ChairStyle = { backH: 26, backW: 34, arms: false, headrest: false, wings: false };
+/* Every chair in this office rolls (nick, 2026-09-14): the star base has arms AND wheels, which is what
+   makes it read as a chair rather than as dots under a cushion. */
 
 // The office is a *fixed* set of 12 desks (three pods of four). A probability hash over so few ids doesn't
 // guarantee coverage — it can (and did) bucket all 12 into one variant, so the variety never shows. Instead
@@ -3530,10 +1730,11 @@ const CHAIR_KINDS_BY_ID: readonly ChairKind[] = [
 function chairKindFor(id: number): ChairKind {
   return CHAIR_KINDS_BY_ID[id % CHAIR_KINDS_BY_ID.length]!;
 }
-/** The rendered chair sprite for a desk: its kind, and for a wheeled chair whether it has arms. */
+/** The rendered chair sprite for a desk: its kind, and for a wheeled chair whether it has arms (a stable
+ *  per-desk coin; the exec and gamer chairs always do, the task stool never). */
 function chairVariantFor(id: number): string {
   const kind = chairKindFor(id);
-  return kind === 'wheeled' && chairStyleFor(id).arms ? 'wheeled-arms' : kind;
+  return kind === 'wheeled' && deskRnd(id, CHAIR_ARM_SALT) < 0.5 ? 'wheeled-arms' : kind;
 }
 
 /** Tinted copies of rendered assets, by `<asset id>·<colour>`: a chair per member colour is a small image. */
@@ -3542,22 +1743,22 @@ const tintedArt = new WeakMap<RenderedAssets, Map<string, HTMLCanvasElement>>();
 /**
  * Blit the rendered asset `id` multiplied by `color` — the chairs are rendered in neutral greys at the
  * painter's own shade ratios, so one image serves every member colour. Answers false when the asset
- * is not in, so the caller paints.
+ * is not in (nothing is drawn).
  */
 function blitTinted(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
-  rendered: RenderedAssets | undefined,
+  rendered: RenderedAssets,
   id: string,
   lx: number,
   ly: number,
   color: string,
 ): boolean {
-  const img = rendered?.images.get(id);
-  const a = img && rendered!.manifest.assets.find((x) => x.id === id);
+  const img = rendered.images.get(id);
+  const a = img && rendered.manifest.assets.find((x) => x.id === id);
   if (!img || !a || typeof document === 'undefined') return false;
-  let cache = tintedArt.get(rendered!);
-  if (!cache) tintedArt.set(rendered!, (cache = new Map()));
+  let cache = tintedArt.get(rendered);
+  if (!cache) tintedArt.set(rendered, (cache = new Map()));
   const key = `${id}·${color}`;
   let tinted = cache.get(key);
   if (!tinted) {
@@ -3571,115 +1772,6 @@ function blitTinted(
   }
   blitAsset(ctx, fit, a, tinted, lx, ly);
   return true;
-}
-
-function chairStyleFor(id: number): ChairStyle {
-  const arms = deskRnd(id, CHAIR_ARM_SALT) < 0.5;
-  switch (chairKindFor(id)) {
-    case 'task':
-      return TASK_CHAIR;
-    case 'wheeled':
-      return { backH: 27, backW: 34, arms, headrest: false, wings: false };
-    case 'exec':
-      return { backH: 35, backW: 36, arms: true, headrest: false, wings: false };
-    case 'gamer':
-      return { backH: 43, backW: 38, arms: true, headrest: true, wings: true };
-  }
-}
-
-/** Legs + cushion — the part a member sits *on*, so it paints before them. */
-function chairBase(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  dir: Dir,
-  color: string,
-  style: ChairStyle = TASK_CHAIR,
-): void {
-  const sn = FWD[dir][1] !== 0;
-  const p: [number, number] = [-FWD[dir][1], FWD[dir][0]]; // across-seat unit
-  {
-    // A 5-star caster base: a central column, five ARMS radiating from it, and a wheel at each tip.
-    //
-    // The arms are the whole point of this block. Without them the base was five ellipses and a post
-    // with nothing between — five dots hovering under the seat (nick, 2026-08-03: "it just looks like
-    // 4 floats dots at the bottom"). A star base is *legs*; the wheels are only what the legs stand
-    // on, and drawing the wheels without the legs draws the wrong half of the object.
-    //
-    // `box()` is axis-aligned so it cannot draw a spoke pointing anywhere but N/S/E/W. Each arm is a
-    // projected quad instead: two points at the hub, two at the wheel, tapering outward the way a
-    // real cast-alloy leg does, and lifted just off the floor so it reads as sitting ON the castors.
-    const ARM_R = 14;
-    const LIFT = 3.4;
-    const arms: { d: number; a: number }[] = [];
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + 0.4;
-      arms.push({ a, d: Math.cos(a) + Math.sin(a) }); // iso depth of the tip
-    }
-    // Back arms before front ones, or a near arm is painted over by the far one across the hub.
-    arms.sort((m, n) => m.d - n.d);
-    for (const { a } of arms) {
-      const ux = Math.cos(a);
-      const uy = Math.sin(a);
-      const px = -uy;
-      const py = ux;
-      const at = (r: number, w: number): Pt => {
-        const s = project(lx + ux * r + px * w, ly + uy * r + py * w, fit);
-        return { x: s.x, y: s.y - LIFT * fit.scale };
-      };
-      quad(ctx, [at(1.5, 3.4), at(ARM_R, 2.1), at(ARM_R, -2.1), at(1.5, -3.4)], dim(color, 0.62));
-      // The castor at the tip: a dark tyre with a highlight, so it reads as a wheel under the leg
-      // rather than a smudge at the end of it.
-      const wp = project(lx + ux * ARM_R, ly + uy * ARM_R, fit);
-      ellipse(ctx, wp, 4 * fit.scale, 2.3 * fit.scale, dim(color, 0.42));
-      ellipse(
-        ctx,
-        { x: wp.x, y: wp.y - 1.4 * fit.scale },
-        2.4 * fit.scale,
-        1.2 * fit.scale,
-        dim(color, 0.72),
-      );
-    }
-    box(ctx, fit, lx, ly, 6, 6, CHAIR_LIFT, dim(color, 0.55));
-  }
-  // The cushion top is SEAT_TOP — the exact height `skeleton.ts` puts a seated pelvis at, so a member lands
-  // on the chair rather than near it.
-  box(ctx, fit, lx, ly, sn ? 34 : 30, sn ? 30 : 34, CHAIR_SEAT_H, color, CHAIR_LIFT);
-  // Armrests: a low rail either side, resting on the cushion (so they read beside the sitter's forearms).
-  if (style.arms) {
-    for (const s of [-1, 1] as const) {
-      const ax = lx + p[0] * s * 17;
-      const ay = ly + p[1] * s * 17;
-      box(ctx, fit, ax, ay, sn ? 7 : 5, sn ? 5 : 7, 6, dim(color, 0.72), SEAT_TOP);
-    }
-  }
-}
-
-/** The backrest — its own footprint, so it sorts behind or in front of the sitter purely by facing. */
-function chairBack(
-  ctx: CanvasRenderingContext2D,
-  fit: Fit,
-  lx: number,
-  ly: number,
-  dir: Dir,
-  color: string,
-  style: ChairStyle = TASK_CHAIR,
-): void {
-  const sn = FWD[dir][1] !== 0;
-  const p: [number, number] = [-FWD[dir][1], FWD[dir][0]];
-  box(ctx, fit, lx, ly, sn ? style.backW : 7, sn ? 7 : style.backW, style.backH, dim(color, 0.85), CHAIR_LIFT + 4);
-  if (style.wings) {
-    // Two darker vertical bolsters at the shoulders — the racing-chair silhouette.
-    for (const s of [-1, 1] as const) {
-      const wx = lx + p[0] * s * (style.backW / 2 - 2);
-      const wy = ly + p[1] * s * (style.backW / 2 - 2);
-      box(ctx, fit, wx, wy, 5, 5, style.backH + 3, dim(color, 0.68), CHAIR_LIFT + 4);
-    }
-  }
-  if (style.headrest) {
-    box(ctx, fit, lx, ly, sn ? 16 : 5, sn ? 5 : 16, 7, dim(color, 0.78), CHAIR_LIFT + 4 + style.backH);
-  }
 }
 
 // ── monitor variety ─────────────────────────────────────────────────────────────────────────────────
@@ -3723,7 +1815,6 @@ const CODE_HUES = ['#ffd166', '#7fe0ce', '#f4989c', '#c8b6f2', '#9ad1ff'] as con
 // Lit wallpaper brighter than the idle slab, so "glowing = working" still reads from across the room;
 // the editor panes are the dark thing, floating on it like real windows.
 const SCREEN_BG = '#2f9a8a';
-const SCREEN_IDLE = '#4a6b66';
 
 /** Map from screen-face UV (u across 0..1, v up 0..1) to canvas px. The face is a parallelogram: its
  * bottom edge runs BL→BR in projected space and its vertical is a straight screen-space lift of `vh`. */
@@ -3838,16 +1929,12 @@ function screenPanel(
   /** ADR 660: whether the screen is ALIVE (animated desktop + bloom — only while the owner's pulse is
    * live) and how hard a `run` lights it. Absent: alive follows `working` (the receptionist's desk). */
   life?: ScreenLife,
-  /** The body is rendered art: draw only the screen face, and no idle glass (the render has its own). */
-  faceOnly = false,
 ): void {
   const sn = dir === 'S' || dir === 'N';
-  // 3 deep, not 5: at this camera angle the panel's own side face is what made a monitor read as a
-  // chunky all-in-one PC rather than a thin screen on a stand. Paired with the slim `monitorStand`
-  // below — the depth and the foot were both doing it, and fixing one alone leaves the tower.
+  // The body is rendered art (`monitor/<setup>/<dir>`): this draws only the screen face over it, and no
+  // idle glass (the render has its own). The face is 3 deep — the panel's own thickness in the render.
   const pw = sn ? wAcross : 3;
   const pd = sn ? 3 : wAcross;
-  if (!faceOnly) box(ctx, fit, mx, my, pw, pd, h, '#2a2e33', up + PANEL_UP);
   const lo = (up + PANEL_UP) * fit.scale;
   const hi = (up + PANEL_UP + h) * fit.scale;
   const dn = (p: Pt, u: number): Pt => ({ x: p.x, y: p.y - u });
@@ -3872,8 +1959,6 @@ function screenPanel(
       // A lit screen is a fact of sitting at the desk; a MOVING one is a fact of working (ADR 660 §3):
       // with no live pulse the desktop is drawn once, still (`t` pinned), and nothing blooms.
       drawScreenLife(ctx, map, wPx, fit.scale, Math.abs(Math.round(mx * 7 + my * 13)), alive ? t : 0, wAcross >= 30 ? 2 : 1);
-    } else if (!faceOnly) {
-      quad(ctx, [dn(bl, lo), dn(br, lo), dn(br, hi), dn(bl, hi)], SCREEN_IDLE);
     }
     if (curved) {
       // Bow shading over whatever's on screen — translucent, so the animated desktop stays visible.
@@ -3946,19 +2031,10 @@ const PANEL_UP = 8;
  */
 export type WorkstationPhase = 'all' | 'pre' | 'monitor' | 'post';
 
-/** A monitor stand: a flat base plate on the desk and a slim neck up to the panel. It replaces the
- * 8×6×8 solid block that used to sit under every panel, which at this camera angle read as a tower —
- * a full PC with a screen stuck to it, which is exactly the thing nick said these should stop being.
- * `across` is the base plate's width along the shoulders (an ultrawide or a dual arm needs more foot). */
-function monitorStand(ctx: CanvasRenderingContext2D, fit: Fit, mx: number, my: number, sn: boolean, up: number, across: number): void {
-  box(ctx, fit, mx, my, sn ? across : 11, sn ? 11 : across, 1.5, '#22262b', up); // base plate
-  box(ctx, fit, mx, my, sn ? 5 : 3, sn ? 3 : 5, PANEL_UP, '#33383f', up + 1.5); // neck
-}
-
 /**
  * The rendered art the monitors read (lane 01M5D8EJ40), set by `renderScene` and `drawWorkstation` for
- * the draw in progress — four callers reach `monitor`, and the bench and the front desk carry no assets
- * of their own. Undefined: every monitor paints.
+ * the draw in progress — four callers reach `monitor`, and the bench seats carry no assets of their own.
+ * Unset (a draw before any scene set it): no monitor draws.
  */
 let monitorArt: RenderedAssets | undefined;
 
@@ -3975,38 +2051,19 @@ function monitor(
   life?: ScreenLife,
 ): void {
   const setup = id == null ? 'single' : monitorSetupFor(id);
-  const sn = dir === 'S' || dir === 'N';
   const p: [number, number] = [-FWD[dir][1], FWD[dir][0]]; // across-desk unit
-  // The rendered body (stand, panel, bezel, back), lifted to this desk's surface; the painter keeps only
-  // the live screen face on top of it — the desktop, the idle glass and the bloom.
-  const art = `monitor/${setup}/${dir}`;
-  if (monitorArt?.images.has(art)) {
-    ctx.save();
-    ctx.translate(0, -surfaceUp * fit.scale);
-    const drawn = blitIf(ctx, fit, monitorArt, art, mx, my);
-    ctx.restore();
-    if (drawn) {
-      const panels: [number, number, number, boolean][] =
-        setup === 'dual' ? [[-18, 34, 22, false], [18, 34, 22, false]] : setup === 'ultrawide' ? [[0, 54, 20, true]] : [[0, 34, 22, false]];
-      for (const [off, w, h, curved] of panels) {
-        screenPanel(ctx, fit, mx + p[0] * off, my + p[1] * off, dir, working, surfaceUp, w, h, curved, t, life, true);
-      }
-      return;
-    }
-  }
-  if (setup === 'dual') {
-    // Two full-size panels (each the size of a single monitor) on a shared dual-arm stand, sat side by
-    // side so they read as two real screens, not two half-screens. `[-1,1]` order paints the nearer last.
-    monitorStand(ctx, fit, mx, my, sn, surfaceUp, 22); // shared dual-arm foot, wide enough for two
-    for (const s of [-1, 1] as const) {
-      screenPanel(ctx, fit, mx + p[0] * s * 18, my + p[1] * s * 18, dir, working, surfaceUp, 34, 22, false, t, life);
-    }
-  } else if (setup === 'ultrawide') {
-    monitorStand(ctx, fit, mx, my, sn, surfaceUp, 20);
-    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 54, 20, true, t, life);
-  } else {
-    monitorStand(ctx, fit, mx, my, sn, surfaceUp, 15);
-    screenPanel(ctx, fit, mx, my, dir, working, surfaceUp, 34, 22, false, t, life);
+  // The rendered body (stand, panel, bezel, back), lifted to this desk's surface; over it only the live
+  // screen face — the desktop and the bloom. No asset, no monitor.
+  if (!monitorArt) return;
+  ctx.save();
+  ctx.translate(0, -surfaceUp * fit.scale);
+  const drawn = blitIf(ctx, fit, monitorArt, `monitor/${setup}/${dir}`, mx, my);
+  ctx.restore();
+  if (!drawn) return;
+  const panels: [number, number, number, boolean][] =
+    setup === 'dual' ? [[-18, 34, 22, false], [18, 34, 22, false]] : setup === 'ultrawide' ? [[0, 54, 20, true]] : [[0, 34, 22, false]];
+  for (const [off, w, h, curved] of panels) {
+    screenPanel(ctx, fit, mx + p[0] * off, my + p[1] * off, dir, working, surfaceUp, w, h, curved, t, life);
   }
 }
 
@@ -4243,37 +2300,6 @@ function deskPlant(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: numb
   ellipse(ctx, { x: g.x + 4 * fit.scale, y: ty - 6 * fit.scale }, 4.5 * fit.scale, 4 * fit.scale, '#6fa35a');
 }
 
-/** A desktop fan: a small base + neck holding a round grille disc. */
-function deskFan(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number): void {
-  box(ctx, fit, ix, iy, 9, 9, 5, '#556069', up); // base
-  box(ctx, fit, ix, iy, 3, 3, 12, '#4c565f', up + 4); // neck
-  const g = project(ix, iy, fit);
-  const cy = g.y - (up + 17) * fit.scale;
-  ellipse(ctx, { x: g.x, y: cy }, 11 * fit.scale, 8 * fit.scale, '#8794a0');
-  ellipse(ctx, { x: g.x, y: cy }, 8 * fit.scale, 5.5 * fit.scale, '#aeb9c2');
-  ellipse(ctx, { x: g.x, y: cy }, 2.4 * fit.scale, 1.8 * fit.scale, '#5a646e'); // hub
-}
-
-/** A desk lamp: base + slim pole + a shade that glows warm when lit. Re-introduced from #304's removal
- * under that PR's own objection: the fixture draws ONLY at an occupied desk now (the sitter brought it,
- * the sitter takes it), so an unattended lamp can never float over an empty desk again — and it lights
- * only when it's dark enough out to want it (`LightEnv.lampsOn`), with its floor pool cast in
- * `drawInteriorLight`. */
-function deskLamp(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number, lit: boolean): void {
-  box(ctx, fit, ix, iy, 10, 10, 3, '#3d4650', up); // base
-  box(ctx, fit, ix, iy, 3, 3, 22, '#4a545f', up + 3); // pole
-  const g = project(ix, iy, fit);
-  const ty = g.y - (up + 26) * fit.scale;
-  ellipse(ctx, { x: g.x, y: ty }, 9 * fit.scale, 5 * fit.scale, lit ? '#e9c46a' : '#aab0b8');
-  if (lit) ellipse(ctx, { x: g.x, y: ty + 2 * fit.scale }, 6 * fit.scale, 3 * fit.scale, '#fff1c2'); // warm glow
-  // The bulb *itself* is not drawn here. Everything in this function is furniture, and furniture is
-  // painted before `drawInteriorLight` lays the night veil over the whole canvas — so a shade painted
-  // '#fff1c2' here comes out veiled, and the lamp reads as an unlit fixture standing in a warm puddle
-  // it cannot be the source of (nick, 2026-09-03: "those seem to be emitting a light around them but I
-  // don't see the actual desk lamps lit up"). The emissive core is painted additively *after* the veil,
-  // by `lampHead` — this shade is only the object the light comes out of.
-}
-
 /** Where a desk lamp's shade sits on screen, for the emissive pass — the same anchor `deskLamp` draws
  * its shade at (`up + 26`), so the light and the fixture can never drift apart. */
 function lampHeadPoint(slot: { lx: number; ly: number; dir: Dir }, fit: Fit): Pt {
@@ -4466,30 +2492,17 @@ function deskNearHalf(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
   slot: DeskSlot,
-  rendered?: RenderedAssets,
+  rendered: RenderedAssets,
 ): void {
   const { lx, ly, dir } = slot;
   const sn = dir === 'S' || dir === 'N';
-  const wx = sn ? DESK_W : DESK_D;
-  const dy = sn ? DESK_D : DESK_W;
-  // Rendered: the same base image again, clipped to the near half's silhouette (the extruded box
-  // from the floor to the worktop) — the same pixels, so still additive by construction.
-  const id = sn ? 'desk/base' : 'desk/base-ew';
-  if (rendered?.images.has(id)) {
-    ctx.save();
-    clipToNearHalf(ctx, fit, slot);
-    blitIf(ctx, fit, rendered, id, lx, ly);
-    ctx.restore();
-    return;
-  }
-  // The half NEAREST THE CAMERA, which is +lx / +ly — a property of the projection, not of the facing.
-  // Getting that wrong is what the tests caught on the first cut of this function: on an N or W desk
-  // `FWD` points AWAY from the viewer, so "the side the desk faces" and "the side the viewer sees" are
-  // opposite, and a room-side half is the far half on half the floor.
-  for (const side of [-1, 1] as const) {
-    box(ctx, fit, lx + side * (wx / 2 - 6), ly + (dy / 2 - 6), 8, 8, DESK_LEG_H, dim(PAL.wood, 0.9));
-  }
-  box(ctx, fit, lx, ly + dy / 4, wx, dy / 2, DESK_SLAB, PAL.wood, DESK_LEG_H);
+  // The same base image again, clipped to the near half's silhouette (the extruded box from the floor
+  // to the worktop) — the same pixels, so additive by construction. The half NEAREST THE CAMERA is
+  // +lx / +ly — a property of the projection, not of the facing (`clipToNearHalf`).
+  ctx.save();
+  clipToNearHalf(ctx, fit, slot);
+  blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  ctx.restore();
 }
 
 /**
@@ -4532,12 +2545,12 @@ export function drawWorkstation(
   node: OfficeNode | null,
   teamName: string,
   /** This desk is a kept, bodiless desk — an offline owner's or a stepped-away member's (§4). */
-  owned = false,
-  t = 0,
+  owned: boolean,
+  t: number,
   /** Props to skip this frame — a prop currently "in the owner's hand" (sip mug) isn't on the desk. */
-  hide?: Set<PropKind>,
+  hide: Set<PropKind> | undefined,
   /** Is it dark enough out for desk lamps to be on? (`LightEnv.lampsOn`, threaded from the scene.) */
-  lampsLit = false,
+  lampsLit: boolean,
   /**
    * `workingAtDesk(owner, pose.sit)` — the owner is working AND has sat down here.
    *
@@ -4548,25 +2561,19 @@ export function drawWorkstation(
    * sound and the loop's park check read the same predicate, so the E2 §2 contract holds: eyes, ears
    * and loop cannot disagree.
    */
-  atWork = false,
-  phase: WorkstationPhase = 'all',
-  /** Pre-rendered art; the desk base blits when its asset is present (plan Task 3). */
-  rendered?: RenderedAssets,
+  atWork: boolean,
+  phase: WorkstationPhase,
+  /** The pre-rendered art: the desk base, lamp and fan (plan Tasks 3 and 7). */
+  rendered: RenderedAssets,
   /** Only the props on the near (+ly) half, and no base — the `nearHalfProps` pass. */
   nearOnly = false,
 ): void {
-  if (rendered) monitorArt = rendered;
+  monitorArt = rendered;
   const { lx, ly, dir, id } = slot;
   const f = FWD[dir];
   const p: [number, number] = [-f[1], f[0]]; // desk-left/right unit (perpendicular to facing)
   const sn = dir === 'S' || dir === 'N';
-  const W = DESK_W;
-  const Df = DESK_D;
-  const DH = DESK_LEG_H;
-  const ST = DESK_SLAB;
-  const wx = sn ? W : Df;
-  const dy = sn ? Df : W;
-  const up = DESK_UP; // desk-surface height — where every prop sits (DH + ST)
+  const up = DESK_UP; // desk-surface height — where every prop sits (legs + slab)
   // A lit screen full of scrolling code is the strongest "this seat is working" signal in the room, so
   // it follows `workingAtDesk` — posture (never `activity`, which lags) AND a body in this chair. An
   // idle member who spilled onto a desk, a stale member still carrying `activity: working`, and a
@@ -4586,35 +2593,9 @@ export function drawWorkstation(
     return;
   }
 
-  // The base — legs, slab and its bevelled lip — is one rendered image when the manifest has it
-  // (`desk/base` for a S/N desk, `desk/base-ew` for an E/W one); otherwise the painter below.
-  const baseRendered = phase !== 'post' && !nearOnly && blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
-  if (phase !== 'post' && !nearOnly && !baseRendered) {
-    for (const [sx, sy] of [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ] as const) {
-      box(ctx, fit, lx + sx * (wx / 2 - 6), ly + sy * (dy / 2 - 6), 8, 8, DH, dim(PAL.wood, 0.9));
-    }
-    box(ctx, fit, lx, ly, wx, dy, ST, PAL.wood, DH);
-  }
-  // Bevelled front lip (Delight D): a soft rim light along the slab's two viewer-facing top edges,
-  // so the worktop reads as a finished edge rather than a raw extrusion.
-  if (phase !== 'post' && !nearOnly && !baseRendered) {
-    const e = project(lx - wx / 2, ly + dy / 2, fit);
-    const s2 = project(lx + wx / 2, ly + dy / 2, fit);
-    const e2 = project(lx + wx / 2, ly - dy / 2, fit);
-    const yUp = up * fit.scale;
-    ctx.strokeStyle = 'rgba(255, 238, 205, 0.32)';
-    ctx.lineWidth = Math.max(1, 1.1 * fit.scale);
-    ctx.beginPath();
-    ctx.moveTo(e.x, e.y - yUp);
-    ctx.lineTo(s2.x, s2.y - yUp);
-    ctx.lineTo(e2.x, e2.y - yUp);
-    ctx.stroke();
-  }
+  // The base — legs, slab and its bevelled lip — is one rendered image: `desk/base` for a S/N desk,
+  // `desk/base-ew` for an E/W one (plan Task 3).
+  if (phase !== 'post' && !nearOnly) blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
 
   // Surface props, placed in desk-relative (along-facing, across) coords and self-sorted back-to-front so
   // overlaps paint correctly regardless of the desk's facing. `along` +toward the monitor, −toward the seat.
@@ -4677,12 +2658,11 @@ export function drawWorkstation(
   // The desk lamp is work gear, not a hashed personality prop: every OCCUPIED desk has one (the
   // sitter brought it), no empty desk ever does — see deskLamp for the #304 story. Lit only after dark.
   // Rendered (plan Task 7): the lamp is `desk/lamp-off` or `desk/lamp-on` (the lit one carries its
-  // own pool on the slab); the painter is the fallback. `lampHead`'s additive core still paints
-  // after the veil either way, so a lit lamp reads as lit at night.
+  // own pool on the slab). `lampHead`'s additive core still paints after the veil, so a lit lamp reads
+  // as lit at night.
   if (node)
     at(LAMP_ALONG, LAMP_ACROSS, (ix, iy) => {
-      const lit = lampsLit && !ownedEmpty;
-      if (!blitIf(ctx, fit, rendered, lit ? 'desk/lamp-on' : 'desk/lamp-off', ix, iy)) deskLamp(ctx, fit, ix, iy, up, lit);
+      blitIf(ctx, fit, rendered, lampsLit && !ownedEmpty ? 'desk/lamp-on' : 'desk/lamp-off', ix, iy);
     });
 
   // optional personal props — each present-or-not per desk by a stable hash, at its own station
@@ -4704,8 +2684,8 @@ export function drawWorkstation(
           // Rendered: four blade positions; the blades turn only while someone is at the desk
           // (spec §3.1 item 5 — a prop moves only with a sitter), 8 steps a second.
           const frame = node ? Math.floor(t * 8) % 4 : 0;
-          if (blitIf(ctx, fit, rendered, `desk/fan-${frame}`, ix, iy)) return;
-          return deskFan(ctx, fit, ix, iy, up);
+          blitIf(ctx, fit, rendered, `desk/fan-${frame}`, ix, iy);
+          return;
         }
         case 'notebook':
           return deskNotebook(ctx, fit, ix, iy, sn, up, NOTEBOOK_COVERS[Math.floor(deskRnd(id, 43) * NOTEBOOK_COVERS.length)]!);
@@ -4795,22 +2775,6 @@ export function workstationKey(k: {
     k.dpr,
     paletteKey(),
   ].join('·');
-}
-
-/**
- * The back-wall bench counter, drawn ONCE (not per seat): a long worktop in the desk vocabulary —
- * same leg height, same slab overhang — so it reads as workspace, not kitchenette. Sitters face the
- * wall; each seat's monitor and keyboard are per-slot items (`benchStation`) sorted a hair after the
- * counter, because a long box sorted at its centre would otherwise paint over the gear at its ends —
- * the couch/`depthAt` problem, solved the same way.
- */
-export function benchCounter(ctx: CanvasRenderingContext2D, fit: Fit): void {
-  const B = BENCH;
-  // Legs at the ends and thirds, then the top with a small overhang — a worktop, not a slab wall.
-  for (const along of [-B.long / 2 + 8, -B.long / 6, B.long / 6, B.long / 2 - 8]) {
-    box(ctx, fit, B.lx + along, B.ly, 8, 8, DESK_LEG_H, dim(PAL.wood, 0.9));
-  }
-  box(ctx, fit, B.lx, B.ly, B.long, B.deep, DESK_SLAB, PAL.wood, DESK_LEG_H);
 }
 
 /** One bench seat's gear: monitor + keyboard on the shared counter. The screen faces the sitter —
@@ -5056,8 +3020,8 @@ export function deskStationItems(
     lampsOn?: boolean | undefined;
     /** Device pixel ratio, for the sprite keys. Default 1. */
     dpr?: number | undefined;
-    /** Pre-rendered art (`RenderOpts.rendered`), threaded to the desk painters. */
-    rendered?: RenderedAssets | undefined;
+    /** The pre-rendered art (`RenderOpts.rendered`), threaded to the desk draws. */
+    rendered: RenderedAssets;
   },
 ): { items: DepthItem[]; lampLit: boolean } {
   const out: DepthItem[] = [];
@@ -5188,23 +3152,22 @@ export function deskStationItems(
   const bx = cx + bdx * Math.cos(yaw) - bdy * Math.sin(yaw);
   const by = cy + bdx * Math.sin(yaw) + bdy * Math.cos(yaw);
   const chairColor = node ? hslL(node.color, 0.5) : '#4a5560';
-  const chairStyle = chairStyleFor(slot.id);
   /* A chair at rest is furniture, so it is a sprite keyed on where it rests (seated or vacant) and its
      colour. Mid-beat (a roll-back, a swivel) it moves every frame, and a sprite per position would
      only churn the cache, so it paints live until the beat ends. */
   const resting = shift === 0 && yaw === 0;
   const chairKey = `chair·${slot.id}·${vacantPeek}·${chairColor}·${statKey}`;
-  // The rendered chair (lane 01M5D8EJ40): the style's sprite for this seat axis, tinted with the chair
-  // colour; the painter when the art is not in.
+  // The rendered chair (lane 01M5D8EJ40): the kind's sprite for this seat axis, tinted with the chair colour.
   const axis = FWD[slot.dir][1] !== 0 ? 'sn' : 'ew';
   const chairArt = `chair/${chairVariantFor(slot.id)}/${axis}`;
   const drawBase = (c: CanvasRenderingContext2D) => {
     // the shadow untinted under the tinted chair (a multiply would show the tint in its soft edge)
-    if (opts.rendered?.images.has(`${chairArt}/base`)) blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
-    if (!blitTinted(c, fit, opts.rendered, `${chairArt}/base`, cx, cy, chairColor)) chairBase(c, fit, cx, cy, slot.dir, chairColor, chairStyle);
+    if (opts.rendered.images.has(`${chairArt}/base`)) blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
+    blitTinted(c, fit, opts.rendered, `${chairArt}/base`, cx, cy, chairColor);
   };
-  const drawBack = (c: CanvasRenderingContext2D) =>
-    blitTinted(c, fit, opts.rendered, `${chairArt}/back`, bx, by, chairColor) || chairBack(c, fit, bx, by, slot.dir, chairColor, chairStyle);
+  const drawBack = (c: CanvasRenderingContext2D) => {
+    blitTinted(c, fit, opts.rendered, `${chairArt}/back`, bx, by, chairColor);
+  };
   out.push({
     d: depth(cx, cy) - 0.2,
     fn: () => drawBase(ctx),
@@ -5304,26 +3267,14 @@ function blitSprite(
 
 /**
  * The room shell's sprite key. It carries what the shell actually READS off the lighting envelope —
- * the window glass colour, the sky wash and the daylight ramp — and not `veilAlpha` or `lampsOn`,
- * which only `drawInteriorLight` reads and which is never cached. `hours` is absent on purpose: the
- * clock is the live fixture that reads it.
+ * the room's light state and its fade (`roomMixFor`), and the daylight the ceiling overlay fades with —
+ * and not `veilAlpha` or `lampsOn`, which only `drawInteriorLight` reads and which is never cached.
+ * `hours` is absent on purpose: the clock is the live fixture that reads it. The state follows the
+ * clock quantised, so a 45-minute fade re-bakes in 32 steps, not every frame (plan Task 8).
  */
-export function backgroundKey(fit: Fit, env: LightEnv, dpr: number, renderedShell = false): string {
+export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
   const m = roomMixFor(env);
-  return [
-    'bg',
-    // The rendered shell paints the room's STATE, so its key follows the clock — quantised, so a
-    // 45-minute fade re-bakes in 32 steps, not every frame. The painted shell reads only the env
-    // facts below and must not follow the hour (its test pins that).
-    renderedShell ? `${m.from}→${m.to}@${Math.round(m.mix * 32)}` : '',
-    glassColor(env),
-    env.skyTint,
-    env.skyStrength.toFixed(3),
-    env.daylight.toFixed(3),
-    fitKey(fit),
-    dpr,
-    paletteKey(),
-  ].join('·');
+  return ['bg', `${m.from}→${m.to}@${Math.round(m.mix * 32)}`, env.daylight.toFixed(3), fitKey(fit), dpr, paletteKey()].join('·');
 }
 
 /**
@@ -5344,14 +3295,14 @@ export function renderScene(
   pet: PetState | null = null,
   /** Errand scene effects, derived per-frame by the actor system (`actors.sceneFx()`): an open fridge
    * door, desks whose water bottle is currently in its owner's hand. Absent → everything at rest. */
-  fx?: { fridgeOpen: boolean; bottleCarriers: Set<string> },
+  fx: { fridgeOpen: boolean; bottleCarriers: Set<string> } | undefined,
   /** The receptionist's state (receptionist.ts). Absent → asleep, which is the empty-office truth. */
   recep: ReceptionistState | null = null,
   /** The real lane board squinted down for the wall (wallboard.ts). Null → the empty board hangs. */
   wallBoard: WallBoard | null = null,
   /** Optional Team schedule for the wall sign. */
   teamWorkingHours: WorkingHours | null = null,
-  opts: RenderOpts = {},
+  opts: RenderOpts,
 ): SceneAnchors {
   const cache = opts.sprites;
   const dpr = opts.dpr ?? 1;
@@ -5374,14 +3325,13 @@ export function renderScene(
      is, and what the theme resolved to. A resize or a theme flip is one cold frame, then cached. */
   const rendered = opts.rendered;
   monitorArt = rendered;
-  const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}${rendered ? '·r' : ''}`;
-  /* Pre-rendered art (plan Task 6): a static item blits its asset where its painter ran, through
-     the same depth item and sprite key, so nothing about order or caching changes. */
-  const ro = (id: string, lx: number, ly: number, paint: (c: CanvasRenderingContext2D) => void) =>
-    renderedOr(fit, rendered, id, lx, ly, paint);
+  const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}`;
+  /* A static item blits its asset (plan Task 6) through the depth item and sprite key its painter had,
+     so nothing about order or caching changed when the painters went (lane 01M5D8EJ40). */
+  const ro = (id: string, lx: number, ly: number) => blitDraw(fit, rendered, id, lx, ly);
 
   PLANTS.forEach((plant, pi) => {
-    const draw = ro(`plant/${plant.species}`, plant.lx, plant.ly, (c) => drawPlant(c, fit, plant.lx, plant.ly, plant.species));
+    const draw = ro(`plant/${plant.species}`, plant.lx, plant.ly);
     items.push({
       d: depth(plant.lx, plant.ly),
       fn: () => draw(ctx),
@@ -5391,7 +3341,7 @@ export function renderScene(
   BOOKSHELVES.forEach((s, si) => {
     // The index is the book seed — it is what makes shelf 0 and shelf 2 hold different books
     // despite being the same size.
-    const draw = ro(`shelf/${si}`, s.lx, s.ly, (c) => bookshelf(c, fit, s, si));
+    const draw = ro(`shelf/${si}`, s.lx, s.ly);
     items.push({
       d: depth(s.lx, s.ly),
       fn: () => draw(ctx),
@@ -5401,89 +3351,69 @@ export function renderScene(
   const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false, statKey, rendered);
   items.push(...nook.items);
 
-  /* THE ROOM SHELL, painted before the depth-sorted loop: the ground shadow the diorama sits on, the
-     floor, the back walls and windows behind every item, the daylight beams they cast under every
-     item, and the flat rugs (drawn with the floor so a member standing on one is never over-painted
-     by it). All of it is static per lighting step — so with a cache it is two sprites around the
-     three live wall fixtures, and with none it paints exactly as it always has. */
-  /* Rendered shell (plan Tasks 6 and 8): the floor and the two back walls are one image per day
-     state (`room/light-<day|evening|night>`), crossfaded by `roomMixFor` — `from` at alpha 1, `to`
-     at `mix` — and the ceiling bank is an additive overlay (`room/ceiling-<on|spill>`). The walls'
-     fixtures — clock, hours sign, board, calendar — are live and still paint on top (the 'live'
-     slice); the painted dressing (art, hanger, cable) is in the wall render, and the painted
-     window beams are in the light layers, so they are skipped. */
+  /* THE ROOM SHELL, before the depth-sorted loop: the ground shadow the diorama sits on, then the floor
+     and the two back walls as one image per day state (`room/light-<day|evening|night>`, plan Tasks 6
+     and 8), crossfaded by `roomMixFor` — `from` at alpha 1, `to` at `mix` — with the ceiling bank as an
+     additive overlay (`room/ceiling-<on|spill>`), and the flat rugs (drawn with the floor so a member
+     standing on one is never over-painted by it). Static per lighting step — so with a cache it is two
+     sprites around the live wall fixtures, and with none it paints in the same order. The window beams
+     and the walls' dressing are in the renders. */
   const mix = roomMixFor(env);
-  const shellRendered = !!rendered?.images.has(`room/light-${dayOf(mix.from)}`);
-  /* The rendered figure (plan Task 13): when the sheets are loaded every member is a sprite frame
-     under the room's light tint; the painted skeleton otherwise. */
-  const figure = rendered?.figure ? { assets: rendered.figure, tint: figureTintFor(env) } : undefined;
+  /* The figure (plan Task 13): every member is a sprite frame under the room's light tint. No sheets
+     (figure.json missing or its skin sheet failed) draws nobody — the loader said so once. */
+  const figure = rendered.figure ? { assets: rendered.figure, tint: figureTintFor(env) } : undefined;
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
-    if (shellRendered) {
-      blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
-      if (mix.mix > 0) blitIf(c, fit, rendered, `room/light-${dayOf(mix.to)}`, 0, 0, mix.mix);
-      const ceiling = ceilingOf(mix.from);
-      if (ceiling !== 'off') {
-        // The overlay was measured at night (night-on minus night-off). By day the same light adds
-        // far less to an already-lit room, so it fades with the daylight — continuous, like the veil.
-        c.save();
-        c.globalCompositeOperation = 'lighter';
-        blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
-        c.restore();
-      }
-      if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, 'live', undefined, rendered);
-    } else {
-      drawFloor(c, fit);
-      drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, cache ? 'static' : 'all');
-      if (!cache) drawWindowBeams(c, fit, env);
+    blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
+    if (mix.mix > 0) blitIf(c, fit, rendered, `room/light-${dayOf(mix.to)}`, 0, 0, mix.mix);
+    const ceiling = ceilingOf(mix.from);
+    if (ceiling !== 'off') {
+      // The overlay was measured at night (night-on minus night-off). By day the same light adds
+      // far less to an already-lit room, so it fades with the daylight — continuous, like the veil.
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
+      c.restore();
     }
+    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered);
     if (!cache) rugs(c);
   };
   /* Flat floor paint, drawn with the floor (before every solid and every actor) so a member standing
      anywhere on a rug is never over-painted by it. Solid pieces self-sort at their footprints. */
   function rugs(c: CanvasRenderingContext2D): void {
-    for (const pod of PODS) {
-      const ns = pod.axis === 'ns';
-      const dims = pod.size === 1 ? POD_RUG_SOLO : pod.size === 2 ? POD_RUG_DUO : POD_RUG;
-      const w = ns ? dims.across : dims.along;
-      const d = ns ? dims.along : dims.across;
-      ro(`rug/pod-${pod.id}`, pod.cx, pod.cy, (g) => drawRug(g, fit, pod.rug, pod.cx, pod.cy, w, d))(c);
-    }
-    ro('rug/meeting', MEETING.lx, MEETING.ly, (g) => drawRug(g, fit, MEETING.rug, MEETING.lx, MEETING.ly, MEETING.rug.w, MEETING.rug.d))(c);
-    ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly, (g) =>
-      drawRug(g, fit, RECEPTION.rug, RECEPTION.rug.lx, RECEPTION.rug.ly, RECEPTION.rug.w, RECEPTION.rug.d),
-    )(c);
+    for (const pod of PODS) ro(`rug/pod-${pod.id}`, pod.cx, pod.cy)(c);
+    ro('rug/meeting', MEETING.lx, MEETING.ly)(c);
+    ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly)(c);
     nook.rug(c);
   }
   if (cache) {
-    const bg = backgroundKey(fit, env, dpr, shellRendered);
+    const bg = backgroundKey(fit, env, dpr);
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
-    // On the stage, in their existing order: three fixtures that are not static, then the right
-    // wall's additive strand, then the additive daylight beams. See `WallSlice`.
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live', run, shellRendered ? rendered : undefined);
-    if (!shellRendered) run(() => drawWindowBeams(ctx, fit, env));
-    // Source-over floor paint, so it caches cleanly on top of the beams it is painted over.
+    // On the stage, in their existing order: the live fixtures over the blitted walls, then the
+    // additive bulb strands (see `drawWalls`).
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered);
+    // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {
     run(() => shell(ctx));
   }
   {
-    const draw = ro('meeting/table', MEETING.lx, MEETING.ly, (c) => meetingTable(c, fit));
+    const draw = ro('meeting/table', MEETING.lx, MEETING.ly);
     items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw }] });
   }
   MEETING.chairs.forEach((c, ci) => {
     const cx = MEETING.lx + c.dx;
     const cy = MEETING.ly + c.dy;
-    const draw = ro(`meeting/chair-${ci}`, cx, cy, (g) => meetingChair(g, fit, cx, cy, c.dir));
+    const draw = ro(`meeting/chair-${ci}`, cx, cy);
     items.push({ d: depth(cx, cy), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw }] });
   });
   items.push(...receptionItems(ctx, fit, recep, t, statKey, rendered, figure));
   {
-    const draw = ro('printer', PRINTER.lx, PRINTER.ly, (c) => printer(c, fit));
+    const draw = ro('printer', PRINTER.lx, PRINTER.ly);
     items.push({ d: depth(PRINTER.lx, PRINTER.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw }] });
   }
   {
-    const draw = ro('entrance', ENTRANCE.lx, ENTRANCE.ly, (c) => drawEntrance(c, fit));
+    const draw = ro('entrance', ENTRANCE.lx, ENTRANCE.ly);
     items.push({ d: depth(ENTRANCE.lx, ENTRANCE.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `entrance·${statKey}`, draw }] });
   }
 
@@ -5492,7 +3422,7 @@ export function renderScene(
   // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
   if (pet?.cargo === 'wagon') {
     const w = wagonTrail(pet);
-    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => blitIf(ctx, fit, rendered, 'welcome/wagon', w.lx, w.ly) || drawWagon(ctx, fit, w.lx, w.ly) });
+    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => blitIf(ctx, fit, rendered, 'welcome/wagon', w.lx, w.ly) });
   }
   // The label maker's strips, curling up off the front desk's arrivals end.
   for (const label of opts.welcome?.labels ?? []) {
@@ -5507,7 +3437,7 @@ export function renderScene(
   // The bench's shared counter, once — its seats' gear rides per-slot below.
   // 300 long: the widest footprint on the floor, so the centre-vs-edge error is largest here.
   {
-    const draw = ro('bench/base', BENCH.lx, BENCH.ly, (c) => benchCounter(c, fit));
+    const draw = ro('bench/base', BENCH.lx, BENCH.ly);
     items.push({ d: depth(BENCH.lx, BENCH.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `bench·${statKey}`, draw }] });
   }
 
@@ -5574,7 +3504,7 @@ export function renderScene(
     // A lanyard still in the air is not on them yet — it lands at the end of its flight.
     const inFlight = opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
     const lanyard = inFlight ? undefined : opts.welcome?.lanyards.get(name);
-    items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
+    if (figure) items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
 
     // Seated overlay: the desk paints over a member sitting behind it (correct — that is what a desk does
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
@@ -5582,7 +3512,7 @@ export function renderScene(
     // hands disappear into the desk and the typing is invisible. Skipped while a beat has dropped the
     // hands into the lap — lap arms painted over the slab would float on the desk. The rendered figure
     // does the same with the arm cells its seated clips store (plan Task 16).
-    if (seated && !handsInLap(pose.gesture, pose.gestureT)) {
+    if (figure && seated && !handsInLap(pose.gesture, pose.gestureT)) {
       items.push({
         d: seatedArmsDepth(slot),
         fn: () => drawActor(ctx, fit, pose, node, t, true, mug, undefined, figure),
@@ -5593,8 +3523,8 @@ export function renderScene(
     // The label rides above the crown — higher for a standing member than a seated one, so it tracks the
     // head through a sit rather than floating where the head used to be. Lifted clear of the firefly wisp
     // that now hovers over the head (see `drawHead`), so the name reads as a plate floating above the mote.
-    // The label rides 20 above the crown: 116 for the painted 96-unit member, the spec's crown for a
-    // rendered one — otherwise a smaller figure's name floats in the air above it.
+    // The label rides 20 above the crown the sheet's spec gives (96 was the painted member's) —
+    // otherwise a smaller figure's name floats in the air above it.
     const crown = figure?.assets.spec.height ?? 96;
     heads.set(name, { x: b.x, y: b.y - (pose.small ? (crown + 20) * 0.78 : crown + 20 - pose.sit * 22 * (crown / 96)) * fit.scale });
   }
@@ -5731,24 +3661,6 @@ function drawRenderedDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState,
   } else {
     ctx.drawImage(dog.sheet, c.sx, c.sy, c.sw, c.sh, dx, dy, c.sw * k, c.sh * k);
   }
-}
-
-/** The welcome wagon: a small red cart on four dark wheels, loaded with a monitor box and a plant. */
-function drawWagon(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
-  for (const [dx, dy] of [
-    [-9, -6],
-    [9, -6],
-    [-9, 6],
-    [9, 6],
-  ] as const) {
-    box(ctx, fit, lx + dx, ly + dy, 4, 4, 4, '#2b2622');
-  }
-  box(ctx, fit, lx, ly, 24, 16, 6, WAGON_RED, 3); // the bed
-  box(ctx, fit, lx, ly, 24, 16, 1.5, dim(WAGON_RED, 0.75), 9); // the rim
-  box(ctx, fit, lx + 4, ly, 12, 10, 9, '#c9a26b', 9); // the monitor, still boxed
-  box(ctx, fit, lx - 6, ly + 2, 6, 6, 5, '#8a5a3b', 9); // the pot…
-  box(ctx, fit, lx - 6, ly + 2, 7, 7, 7, '#4f8a4b', 14); // …and its plant
-  box(ctx, fit, lx - 5, ly - 5, 6, 1, 2, POLAROID_WHITE, 18); // the nameplate, riding on top
 }
 
 /** A label strip in the newcomer's colour, printed out of the counter's label maker and curling up. */

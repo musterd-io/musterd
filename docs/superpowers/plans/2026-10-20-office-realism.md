@@ -363,12 +363,12 @@
 
 ### Task 19: Remove the flag, delete the painters
 
-**Files:** `index.ts`, `iso.ts` (`ISO_CAMERA` goes; `CORNER_CAMERA` is the camera), `render.ts`, `character.ts`, `skeleton.ts` (only what `animFor` still reads stays), `scene-pixel-check.mjs`, `08-web.md`, `packages/web/src/components/site/*` (hero), `routes/office-preview.tsx`
+**Files:** `index.ts`, `iso.ts` (`ISO_CAMERA` goes; `CORNER_CAMERA` is the camera), `render.ts`, `character.ts`, `skeleton.ts` (only what `animFor` still reads stays), `scene-pixel-check.mjs`, `08-web.md`, `routes/character-sheet.tsx` (the hero and `/office-preview` mount the same scene and needed nothing)
 
-- [ ] **Step 1:** Delete every painter branch the rendered path replaced; `rendered` becomes required in `RenderOpts`; the hero and `/office-preview` load assets the same way `/live` does (`fitFloor` keeps framing the full wall height).
-- [ ] **Step 2:** `scene-pixel-check.mjs` re-baselines against the rendered scene (it is the new "room that was there before").
-- [ ] **Step 3:** `pnpm perf:check` — total JS must be **at or below** the pre-increment-1 number (log it); `a11y:check` and `a11y:targets:check` green.
-- [ ] **Step 4:** Commit `feat(office): the rendered office is the office; painters removed (lane 01M5D8EJ40)`.
+- [x] **Step 1:** Delete every painter branch the rendered path replaced; `rendered` becomes required in `RenderOpts`; the hero and `/office-preview` load assets the same way `/live` does (`fitFloor` keeps framing the full wall height).
+- [x] **Step 2:** (2026-10-23: the gate is a direct-vs-cache parity check with no stored baseline, so it needed no change — the rendered scene is the only scene it can measure.) `scene-pixel-check.mjs` re-baselines against the rendered scene (it is the new "room that was there before").
+- [x] **Step 3:** `pnpm perf:check` — total JS must be **at or below** the pre-increment-1 number (log it); `a11y:check` and `a11y:targets:check` green.
+- [x] **Step 4:** Commit `feat(office): the rendered office is the office; painters removed (lane 01M5D8EJ40)`.
 
 ### Task 20: Broadcast frame-time A/B
 

@@ -857,11 +857,14 @@ function couchSeats(zone: LeisureSpot['zone'], lx: number, ly: number, dir: Dir)
  * comfortably apart on the floor plan into the same patch of pixels. (The break nook's right armchair and
  * the couch's right cushion are 64 apart on the floor and 37 apart on screen: one avatar, visibly.)
  *
- * 52 is calibrated against what the room already draws: pairs at ~59+ read as two people sitting near
- * each other, ~37 reads as one smeared avatar. `layout.test.ts` holds every pair to it, so a spot added
- * to a zone can't quietly re-create the pile.
+ * 52 was calibrated against the 2:1 iso: pairs at ~59+ read as two people sitting near each other, ~37
+ * reads as one smeared avatar. The corner camera (`CORNER_CAMERA`, ky 0.31 against the iso's 0.354) is
+ * the room's camera since the painters went (2026-10-23, lane 01M5D8EJ40), so the same floor gaps are
+ * 0.877× as tall on screen; 46 is 52 at that ratio, the same calibration seen through the lower
+ * camera. `layout.test.ts` holds every pair to it, so a spot added to a zone can't quietly re-create
+ * the pile.
  */
-export const MIN_SPOT_GAP = 52;
+export const MIN_SPOT_GAP = 46;
 
 /**
  * Where an **idle** member goes (ADR 140 posture): the room's programmed leisure furniture. A member who

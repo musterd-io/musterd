@@ -21,22 +21,19 @@ import {
 } from './layout';
 import { computeLightEnv } from './lighting';
 import type { PetMode, PetState } from './pet';
+import { ART_IDS, FAKE_IMG, fakeArt } from './rendered/fixtures';
 import type { ReceptionistState } from './receptionist';
 import { GESTURE } from './skeleton';
 import {
   BOOT_LED,
-  drawActor,
   receptionistPose,
   confettiColor,
   plateText,
-  WAGON_RED,
   wagonTrail,
   actorSortAnchor,
   animatedDeskAnchors,
   deskHasProp,
   boardAnchor,
-  BOOK_COLORS,
-  CLOCK_NUMERALS,
   coffeeAnchor,
   contactPool,
   actorDepth,
@@ -57,31 +54,62 @@ import {
   drawWorkstation,
   backgroundKey,
   drawWalls,
-  benchCounter,
-  bookshelf,
-  drawEntrance,
-  drawPlant,
   DARK_PALETTE,
   paletteKey,
   setScenePalette,
   ownedDeskWarmAlpha,
   workstationKey,
-  glassColor,
   MACHINE_H,
   MONITOR_ALONG,
-  packShelf,
-  pawCycle,
   renderScene,
-  shelfRnd,
   WIDEST_PANEL_HALF,
   furnishedBox,
 } from './render';
 import { assignSeats } from './seating';
+import type { RenderOpts } from './render';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
 import { projectWallBoard, STICKY_CAP, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
 import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import type { Lane, LaneState, WorkingHours } from '@musterd/protocol';
+
+/** The art every scene in this file renders with (fake images, the shipped manifest and dog). */
+const ART = fakeArt();
+
+/** `renderScene` with the art supplied — every positional default spelled out so a test can skip to `opts`. */
+function scene(
+  ctx: CanvasRenderingContext2D,
+  fit: Parameters<typeof renderScene>[1],
+  placements: Parameters<typeof renderScene>[2],
+  byName: Parameters<typeof renderScene>[3],
+  poses: Parameters<typeof renderScene>[4],
+  t = 0,
+  teamName = 'revive',
+  env?: Parameters<typeof renderScene>[7],
+  pet: Parameters<typeof renderScene>[8] = null,
+  fx?: Parameters<typeof renderScene>[9],
+  recep: Parameters<typeof renderScene>[10] = null,
+  wallBoard: Parameters<typeof renderScene>[11] = null,
+  hours: Parameters<typeof renderScene>[12] = null,
+  opts: Omit<RenderOpts, 'rendered'> & { rendered?: RenderOpts['rendered'] } = {},
+) {
+  return renderScene(ctx, fit, placements, byName, poses, t, teamName, env, pet, fx, recep, wallBoard, hours, { rendered: ART, ...opts });
+}
+
+/** `drawWorkstation` with the art supplied, in the painters' positional order. */
+const ws = (
+  ctx: CanvasRenderingContext2D,
+  fit: Parameters<typeof drawWorkstation>[1],
+  slot: Parameters<typeof drawWorkstation>[2],
+  node: Parameters<typeof drawWorkstation>[3],
+  teamName: string,
+  owned: boolean,
+  t: number,
+  hide: Parameters<typeof drawWorkstation>[7],
+  lampsLit: boolean,
+  atWork: boolean,
+  phase: Parameters<typeof drawWorkstation>[10],
+) => drawWorkstation(ctx, fit, slot, node, teamName, owned, t, hide, lampsLit, atWork, phase, ART);
 
 /** The real cache's measuring rule, unmemoized — a test double that skips an item drawing nothing. */
 const measuredBox: SpriteCache['box'] = (_key, draw) => {
@@ -289,7 +317,7 @@ describe('working monitor desktop', () => {
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
     const paints: string[] = [];
-    renderScene(mockCtx(paints), fit, placements, members, homePoses(placements, members), 2.4);
+    scene(mockCtx(paints), fit, placements, members, homePoses(placements, members), 2.4);
     return paints;
   }
 
@@ -372,8 +400,8 @@ describe('the wall agile board', () => {
 
   const roster = (nodes: OfficeNode[]): Map<string, OfficeNode> =>
     new Map(nodes.map((n) => [n.name, n]));
-  const scene = (ctx: CanvasRenderingContext2D, wall: WallBoard | null): void =>
-    void renderScene(
+  const boardScene = (ctx: CanvasRenderingContext2D, wall: WallBoard | null): void =>
+    void scene(
       ctx,
       fit,
       new Map(),
@@ -391,7 +419,7 @@ describe('the wall agile board', () => {
   it('paints the face and the lanes in state tones, never member roster colours', () => {
     const paints: string[] = [];
     const nodes = ['ada', 'bo'].map((n) => node(n, 'working'));
-    renderScene(
+    scene(
       textCtx(paints, []),
       fit,
       new Map(),
@@ -405,10 +433,9 @@ describe('the wall agile board', () => {
       null,
       wallData(),
     );
-    expect(paints).toContain('#C98F52'); // the cork face
-    expect(paints).toContain('#DCBF8E'); // the pale oak frame
-    expect(paints).toContain('#3F74C4'); // the active cap — --lc-lane's hex twin
-    expect(paints).toContain('#D1503F'); // the blocked cap
+    // the cork and the pale oak frame are rendered art (`wall/board`); only the notes paint
+    expect(paints).not.toContain('#C98F52');
+    expect(paints).not.toContain('#3F74C4'); // the caps are in the render too
     expect(paints).toContain('#EFE8D8'); // an open sticky's paper wash
     expect(paints).toContain('rgba(180, 168, 143, 0.75)'); // its washi tab, at the cap's tone
     for (const n of nodes) expect(paints).not.toContain(n.color);
@@ -416,7 +443,7 @@ describe('the wall agile board', () => {
 
   it('pins one tag per dated read on the strip, overdue in the accent (ADR 644 inc 3)', () => {
     const paints: string[] = [];
-    scene(
+    boardScene(
       textCtx(paints, []),
       Object.assign(wallData(), { reads: ['overdue', 'waiting', 'read'] as const }),
     );
@@ -428,7 +455,7 @@ describe('the wall agile board', () => {
 
   it('hangs a bare strip when nothing is dated', () => {
     const paints: string[] = [];
-    scene(textCtx(paints, []), wallData());
+    boardScene(textCtx(paints, []), wallData());
     expect(paints).not.toContain('#F6DFA4');
     expect(paints).not.toContain('#EDE6D8');
     expect(paints).not.toContain('#5E5446');
@@ -436,9 +463,9 @@ describe('the wall agile board', () => {
 
   it('hangs an empty board when no team is connected: face and caps, zero paper', () => {
     const paints: string[] = [];
-    scene(textCtx(paints, []), null);
-    expect(paints).toContain('#C98F52'); // cork
-    expect(paints).toContain('#3F74C4'); // caps announce their column even bare
+    boardScene(textCtx(paints, []), null);
+    expect(paints).not.toContain('#C98F52'); // the cork is rendered, not painted
+    expect(paints).not.toContain('#3F74C4'); // the caps are in the render too
     expect(paints).not.toContain('#EFE8D8'); // …but no sticky paper hangs under them
     expect(paints).not.toContain('#D8D4F3');
     expect(paints).not.toContain('rgba(180, 168, 143, 0.75)'); // and no tape holding nothing
@@ -452,7 +479,7 @@ describe('the wall agile board', () => {
       start: '11:00',
       end: '15:00',
     };
-    renderScene(
+    scene(
       textCtx([], texts),
       fit,
       new Map(),
@@ -477,10 +504,10 @@ describe('the wall agile board', () => {
       lanes: Array.from({ length: STICKY_CAP + 2 }, (_, i) => laneFix(`L${i}`, 'open')),
       warnings: [],
     })!;
-    scene(textCtx([], texts), crowded);
+    boardScene(textCtx([], texts), crowded);
     expect(texts).toContain('+2');
     const quiet: string[] = [];
-    scene(textCtx([], quiet), wallData());
+    boardScene(textCtx([], quiet), wallData());
     expect(quiet.some((t) => /^\+\d+$/.test(t))).toBe(false);
   });
 
@@ -494,7 +521,7 @@ describe('the wall agile board', () => {
       ),
       warnings: [],
     })!;
-    scene(textCtx(paints, []), flood);
+    boardScene(textCtx(paints, []), flood);
     const paper = new Set(['#EFE8D8', '#E6E3F8', '#D8D4F3', '#F5DAD4', '#DFDCF6', '#D5ECDF']);
     const notes = paints.filter((c) => paper.has(c)).length;
     expect(notes).toBeGreaterThan(0);
@@ -504,11 +531,11 @@ describe('the wall agile board', () => {
   // A stopped plan's cards (lane 01M4V9YKMG): sun-bleached paper, paler tape, a curled corner.
   it("paints a stalled lane's sticky sun-faded, and a fresh one at full wash", () => {
     const fresh: string[] = [];
-    scene(textCtx(fresh, []), projectWallBoard({ lanes: [laneFix('L1', 'open')], warnings: [] }));
+    boardScene(textCtx(fresh, []), projectWallBoard({ lanes: [laneFix('L1', 'open')], warnings: [] }));
     expect(fresh).toContain('#EFE8D8');
     expect(fresh).not.toContain('#E4DED1');
     const faded: string[] = [];
-    scene(
+    boardScene(
       textCtx(faded, []),
       projectWallBoard({ lanes: [laneFix('L1', 'open')], warnings: [] }, new Set(['L1'])),
     );
@@ -548,92 +575,11 @@ describe('the wall agile board', () => {
   });
 });
 
-/**
- * The books. Packing is a pure function so it can be checked without a canvas — the interesting
- * behaviour is all in the numbers (does a shelf vary, does it stay inside its carcass, is it stable
- * across repaints), and none of it needs a pixel to assert.
- */
-describe('packShelf — the books are not a texture swatch', () => {
-  const shelf = () => packShelf(0, 0, 58, false);
 
-  it('varies spine width, height and colour across one shelf', () => {
-    const run = shelf();
-    expect(run.length).toBeGreaterThan(4);
-    expect(new Set(run.map((b) => b.w)).size).toBeGreaterThan(1);
-    expect(new Set(run.map((b) => b.h)).size).toBeGreaterThan(1);
-    expect(new Set(run.map((b) => b.color)).size).toBeGreaterThan(2);
-  });
-
-  it('offers a white and a black spine — a shelf of mid-tones reads as a picked palette', () => {
-    expect(BOOK_COLORS).toContain('#f4f1ea');
-    expect(BOOK_COLORS).toContain('#22201d');
-  });
-
-  it('leans a few books and leaves most upright', () => {
-    // Sample several shelves: one row is a small sample, and the point is the *proportion*.
-    const all = [0, 1, 2, 3].flatMap((si) => [0, 1].flatMap((r) => packShelf(si, r, 58, false)));
-    const leaning = all.filter((b) => b.lean !== 0);
-    expect(leaning.length).toBeGreaterThan(0);
-    expect(leaning.length).toBeLessThan(all.length / 2);
-  });
-
-  it('is deterministic — a baked layer that changes between repaints flickers', () => {
-    expect(packShelf(2, 1, 58, false)).toEqual(packShelf(2, 1, 58, false));
-    expect(shelfRnd(1, 2, 3)).toBe(shelfRnd(1, 2, 3));
-  });
-
-  it('gives different shelves different books', () => {
-    expect(packShelf(0, 0, 58, false)).not.toEqual(packShelf(1, 0, 58, false));
-  });
-
-  it('keeps every book inside the carcass', () => {
-    for (const long of [44, 58, 76]) {
-      for (const b of packShelf(1, 0, long, false)) {
-        expect(Math.abs(b.along) + b.w / 2).toBeLessThanOrEqual(long / 2);
-      }
-    }
-  });
-
-  it('shelves a reversed unit as page edges with no lettering to read', () => {
-    const run = packShelf(1, 0, 76, true);
-    expect(run.every((b) => b.title === '')).toBe(true);
-    expect(run.every((b) => b.color !== '#22201d')).toBe(true);
-  });
-
-  it('titles every spine on a normal shelf', () => {
-    const run = [0, 1, 2, 3].flatMap((si) => packShelf(si, 0, 58, false));
-    expect(run.every((b) => b.title.length > 0)).toBe(true);
-    expect(new Set(run.map((b) => b.title)).size).toBeGreaterThan(2);
-  });
-
-  it('letters in more than one ink — a shelf of all-white titles reads as one printing run', () => {
-    const run = [0, 1, 2, 3].flatMap((si) => [0, 1].flatMap((r) => packShelf(si, r, 58, false)));
-    expect(new Set(run.map((b) => b.ink)).size).toBeGreaterThan(2);
-  });
-
-  it('packs the books nearly shoulder to shoulder — an airy row reads as a colour swatch', () => {
-    const run = packShelf(0, 0, 58, false);
-    for (let i = 1; i < run.length; i++) {
-      const gap = run[i]!.along - run[i]!.w / 2 - (run[i - 1]!.along + run[i - 1]!.w / 2);
-      expect(gap).toBeLessThan(2);
-    }
-  });
-});
-
-describe('the wall clock has a numbered dial', () => {
+describe('the wall by default', () => {
   const fit = fitFloor(1200, 900);
   const roster = (nodes: OfficeNode[]): Map<string, OfficeNode> =>
     new Map(nodes.map((n) => [n.name, n]));
-
-  it('sets twelve numerals with the quarters heavier', () => {
-    expect(CLOCK_NUMERALS).toHaveLength(12);
-    const heavy = CLOCK_NUMERALS.filter((n) => n.big).map((n) => n.hour);
-    expect([...heavy].sort((a, b) => a - b)).toEqual([3, 6, 9, 12]);
-  });
-
-  it('runs the hours in clock order from 12', () => {
-    expect(CLOCK_NUMERALS.map((n) => n.hour)).toEqual([12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-  });
 
   /** Collects every string the scene sets with `fillText`. */
   function sceneText(): string[] {
@@ -652,27 +598,17 @@ describe('the wall clock has a numbered dial', () => {
         set: () => true,
       },
     ) as unknown as CanvasRenderingContext2D;
-    renderScene(ctx, fit, new Map(), roster([node('ada', 'working')]), new Map());
+    scene(ctx, fit, new Map(), roster([node('ada', 'working')]), new Map());
     return texts;
   }
-
-  it('sets the quarters as real type — twelve scribbles on a 26px face is grit, not a clock', () => {
-    const texts = sceneText();
-    for (const n of CLOCK_NUMERALS.filter((c) => c.big)) {
-      expect(texts).toContain(String(n.hour));
-    }
-  });
-
-  it('leaves the other eight hours as ticks rather than cramming in more numerals', () => {
-    const texts = sceneText();
-    for (const n of CLOCK_NUMERALS.filter((c) => !c.big)) {
-      expect(texts).not.toContain(String(n.hour));
-    }
-  });
 
   it('writes no words on the agile board by default — an empty board has nothing to say', () => {
     const texts = sceneText();
     expect(texts.some((t) => /^\+\d+$/.test(t))).toBe(false);
+  });
+
+  it('sets no numerals: the clock dial is rendered art, and only the hands paint', () => {
+    expect(sceneText().filter((t) => /^(3|6|9|12)$/.test(t))).toEqual([]);
   });
 });
 
@@ -710,7 +646,7 @@ describe('the working-hours clock companion', () => {
       },
     ) as unknown as CanvasRenderingContext2D;
 
-    renderScene(
+    scene(
       ctx,
       fit,
       new Map(),
@@ -767,7 +703,7 @@ describe('the working-hours clock companion', () => {
     ) as unknown as CanvasRenderingContext2D;
 
     const listed: WorkingHours = { ...schedule, days: ['mon', 'wed', 'fri'] };
-    renderScene(
+    scene(
       ctx,
       fit,
       new Map(),
@@ -798,12 +734,12 @@ describe('renderScene draws the whole office without throwing', () => {
   const empty = new Map();
 
   it('renders an empty office (all desks vacant) — every chair style + monitor setup drawn', () => {
-    expect(() => renderScene(mockCtx(), fit, empty, new Map(), new Map())).not.toThrow();
+    expect(() => scene(mockCtx(), fit, empty, new Map(), new Map())).not.toThrow();
   });
 
   it('renders through the day and the night lighting envelopes', () => {
     expect(() =>
-      renderScene(
+      scene(
         mockCtx(),
         fit,
         empty,
@@ -815,7 +751,7 @@ describe('renderScene draws the whole office without throwing', () => {
       ),
     ).not.toThrow();
     expect(() =>
-      renderScene(
+      scene(
         mockCtx(),
         fit,
         empty,
@@ -841,7 +777,7 @@ describe('renderScene draws the whole office without throwing', () => {
     const byName = new Map(nodes.map((n) => [n.name, n]));
     const placements = assignSeats(nodes);
     const poses = homePoses(placements, byName);
-    renderScene(
+    scene(
       mockCtx(paints),
       fit,
       placements,
@@ -857,171 +793,47 @@ describe('renderScene draws the whole office without throwing', () => {
   });
 });
 
-/**
- * The gait. These are the numbers behind "his feet are barely moving" (nick, 2026-07-28), and each one
- * is a property of the walk rather than a snapshot of it — a resize of the dog must not be able to
- * quietly reintroduce the skate.
- */
-describe('pawCycle (the dog does not skate)', () => {
-  it('carries the paw the full reach, once per cycle', () => {
-    const xs = Array.from({ length: 400 }, (_, i) => pawCycle(i / 400).x);
-    // Reach is normalised to 1, ±a few percent of overshoot at each end: the paw carries on backward
-    // for an instant after lift-off and reaches a little past the plant before it comes down, because
-    // the swing leaves and re-enters at stance velocity. That overshoot is the follow-through — a paw
-    // that stopped dead on the reach marks would be the sewing machine again.
-    expect(Math.max(...xs)).toBeGreaterThan(0.5);
-    expect(Math.max(...xs)).toBeLessThan(0.58);
-    expect(Math.min(...xs)).toBeLessThan(-0.5);
-    expect(Math.min(...xs)).toBeGreaterThan(-0.58);
-    expect(pawCycle(0).x).toBeCloseTo(pawCycle(1).x, 10);
-  });
 
-  it('holds the floor at a constant speed through stance — the no-scrub rule', () => {
-    // A planted paw must track backward at EXACTLY ground speed. Any wobble here is the foot sliding
-    // on the floor, which is the entire visual bug this cycle replaced.
-    const step = 0.001;
-    const vs: number[] = [];
-    for (let p = 0.02; p < 0.5; p += 0.02) vs.push((pawCycle(p + step).x - pawCycle(p).x) / step);
-    const v0 = vs[0]!;
-    for (const v of vs) expect(v).toBeCloseTo(v0, 6);
-    expect(v0).toBeLessThan(0); // and backward, not forward
-  });
-
-  it('is C¹ across both handoffs, so the paw never stalls mid-air or hitches on landing', () => {
-    // One-sided slopes taken right up against each join — a central difference would straddle it and
-    // average the very discontinuity under test.
-    const h = 1e-6;
-    const after = (p: number) => (pawCycle(p + h).x - pawCycle(p).x) / h;
-    const before = (p: number) => (pawCycle(p).x - pawCycle(p - h).x) / h;
-    const stance = after(0.3);
-    expect(after(0.56)).toBeCloseTo(stance, 3); // lift-off: still going backward at ground speed
-    expect(before(1)).toBeCloseTo(stance, 3); // touch-down: already going backward at ground speed
-  });
-
-  it('lifts the paw only while it is swinging', () => {
-    for (let p = 0; p < 0.55; p += 0.05) expect(pawCycle(p).lift).toBe(0);
-    expect(pawCycle(0.78).lift).toBeGreaterThan(0.5);
-    expect(pawCycle(0.999).lift).toBeLessThan(0.05); // back on the floor as it lands
-  });
-});
-
-/** Every dog pose gets painted somewhere — sleeping in the baked frame, trotting in the live loop — and a
- * pose that throws would take the whole scene's frame down with it, not just the dog. */
-describe('drawDog paints every pose', () => {
+/** Every dog pose blits one frame of the sheet — sleeping in the baked frame, trotting in the live loop —
+ * and a pose with no cell would take the whole scene's frame down with it, not just the dog. */
+describe('drawDog draws every pose from the sheet', () => {
   const fit = fitFloor(1200, 900);
   const modes: PetMode[] = ['sleep', 'curl', 'sit', 'stretch', 'walk'];
+  const pet = (mode: PetMode, flip: boolean): PetState => ({
+    lx: 300,
+    ly: 300,
+    mode,
+    modeT: 0.4,
+    phase: 1.7,
+    flip,
+    path: [],
+    seg: 0,
+    plan: 'nap',
+    sitFor: 5,
+    speed: 55,
+    face: flip ? -1 : 1,
+    faceMag: 1,
+    depthSign: 1,
+    vel: 55,
+    cargo: 'none',
+    errand: null,
+  });
 
-  it.each(modes)('draws the %s pose without throwing, both facings', (mode) => {
+  it.each(modes)('blits one sheet frame for the %s pose, both facings', (mode) => {
     for (const flip of [false, true]) {
-      const pet: PetState = {
-        lx: 300,
-        ly: 300,
-        mode,
-        modeT: 0.4,
-        phase: 1.7,
-        flip,
-        path: [],
-        seg: 0,
-        plan: 'nap',
-        sitFor: 5,
-        speed: 55,
-        face: flip ? -1 : 1,
-        faceMag: 1,
-        depthSign: 1,
-        vel: 55,
-        cargo: 'none',
-        errand: null,
-      };
-      expect(() => drawDog(mockCtx(), fit, pet, 3.2)).not.toThrow();
+      const r = recordingCtx();
+      drawDog(r.ctx, fit, pet(mode, flip), 3.2, ART);
+      expect(r.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG && o.args.length === 9)).toHaveLength(1);
     }
   });
 
-  /** The narrow walk headings crossfade in the chest-on/rump-on view — both must paint. */
-  it.each([1, -1] as const)(
-    'draws the walk at a narrow facing (depthSign %d) without throwing',
-    (depthSign) => {
-      const pet: PetState = {
-        lx: 300,
-        ly: 300,
-        mode: 'walk',
-        modeT: 0.4,
-        phase: 1.7,
-        flip: false,
-        path: [],
-        seg: 0,
-        plan: 'nap',
-        sitFor: 5,
-        speed: 55,
-        face: 0.18,
-        faceMag: 0.18,
-        depthSign,
-        vel: 55,
-        cargo: 'none',
-        errand: null,
-      };
-      expect(() => drawDog(mockCtx(), fit, pet, 3.2)).not.toThrow();
-    },
-  );
-
-  /**
-   * The dog is white with black patches, and both halves of that have to survive every pose. A coat
-   * that loses its markings in one pose is the failure worth catching: the patches are what carry the
-   * silhouette on a warm floor, so a pose painted in flat white is a dog-shaped hole in the room.
-   */
-  it.each(modes)('gives the %s pose both a white coat and black markings', (mode) => {
-    const paints: string[] = [];
-    const pet: PetState = {
-      lx: 300,
-      ly: 300,
-      mode,
-      modeT: 0.4,
-      phase: 1.7,
-      flip: false,
-      path: [],
-      seg: 0,
-      plan: 'nap',
-      sitFor: 5,
-      speed: 55,
-      face: 1,
-      faceMag: 1,
-      depthSign: 1,
-      vel: 55,
-      cargo: 'none',
-      errand: null,
-    };
-    drawDog(mockCtx(paints), fit, pet, 3.2);
-    const lum = (hex: string) => {
-      const m = /^#([0-9a-f]{6})$/i.exec(hex);
-      if (!m) return null;
-      const n = parseInt(m[1]!, 16);
-      return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-    };
-    const lums = paints.map(lum).filter((l): l is number => l !== null);
-    expect(lums.some((l) => l > 0.85)).toBe(true); // the coat
-    expect(lums.some((l) => l < 0.25)).toBe(true); // the markings
+  it('draws no dog without a sheet', () => {
+    const r = recordingCtx();
+    drawDog(r.ctx, fit, pet('walk', false), 3.2, fakeArt({ dog: false }));
+    expect(r.ops.filter((o) => o.name === 'drawImage')).toHaveLength(0);
   });
 });
 
-/** The window glass reads from the same PST lighting as the beams and the veil — bright sky by day, a
- * dark pane by night — so the whole room tells one time-of-day story (office-walls-windows.md). */
-describe('glassColor (windows track the day cycle)', () => {
-  const rgb = (s: string) => (/rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(s) ?? []).slice(1).map(Number);
-  const luma = ([r, g, b]: number[]) => 0.299 * r! + 0.587 * g! + 0.114 * b!;
-
-  it('is a bright pane at midday and a dark pane at deep night', () => {
-    const day = luma(rgb(glassColor(computeLightEnv(12, true))));
-    const night = luma(rgb(glassColor(computeLightEnv(1, false))));
-    expect(day).toBeGreaterThan(night + 80); // unmistakably lit vs unlit
-    expect(night).toBeLessThan(60); // genuinely dark, not just dimmer
-  });
-
-  it('warms toward golden hour rather than staying cold blue', () => {
-    // dawn/dusk skew warm (more red than blue); flat midday is the coolest.
-    const [dr, , db] = rgb(glassColor(computeLightEnv(6.5, true))); // dawn ramp
-    const [nr, , nb] = rgb(glassColor(computeLightEnv(12, true))); // noon
-    expect(dr! - db!).toBeGreaterThan(nr! - nb!);
-  });
-});
 
 describe('where an actor sorts against the furniture', () => {
   const slot = DESK_SLOTS[0]!;
@@ -1304,7 +1116,7 @@ describe('one station, one set of keys — the room and the character sheet', ()
   it('builds the station every facing needs: slab, near half, and the chair in two pieces', () => {
     for (const dir of FACINGS) {
       const slot = slotAt(dir);
-      const { items } = deskStationItems(ctx, FIT, slot, null, { teamName: 'revive' });
+      const { items } = deskStationItems(ctx, FIT, slot, null, { rendered: ART, teamName: 'revive' });
       expect(items.length, `a ${dir} desk`).toBe(4);
       // The slab first, its room-side half after it — the whole point of the #1410 split.
       expect(items[1]!.d).toBeGreaterThan(items[0]!.d);
@@ -1314,7 +1126,7 @@ describe('one station, one set of keys — the room and the character sheet', ()
   it('the near half is the same key `deskNearDepth` reports — not a second spelling of it', () => {
     for (const dir of FACINGS) {
       const slot = slotAt(dir);
-      const { items } = deskStationItems(ctx, FIT, slot, null, { teamName: 'revive' });
+      const { items } = deskStationItems(ctx, FIT, slot, null, { rendered: ART, teamName: 'revive' });
       expect(items[1]!.d).toBe(deskNearDepth(slot, null));
     }
   });
@@ -1331,7 +1143,7 @@ describe('one station, one set of keys — the room and the character sheet', ()
     for (const dir of FACINGS) {
       const slot = slotAt(dir);
       const seat = deskSeat(slot);
-      const { items } = deskStationItems(ctx, FIT, slot, null, { teamName: 'revive' });
+      const { items } = deskStationItems(ctx, FIT, slot, null, { rendered: ART, teamName: 'revive' });
       const [slab, , base, back] = [items[0]!, items[1]!, items[2]!, items[3]!];
       const body = actorDepth(seat.lx, seat.ly);
       // You always paint over the cushion you are sitting on — a chair drawn as ONE box swallows the
@@ -1349,7 +1161,7 @@ describe('one station, one set of keys — the room and the character sheet', ()
   it('seated forearms come back on top of the slab, one constant after it — #1397', () => {
     for (const dir of FACINGS) {
       const slot = slotAt(dir);
-      const { items } = deskStationItems(ctx, FIT, slot, null, { teamName: 'revive' });
+      const { items } = deskStationItems(ctx, FIT, slot, null, { rendered: ART, teamName: 'revive' });
       expect(seatedArmsDepth(slot)).toBeGreaterThan(items[0]!.d);
       // …and still before the near half, which is the desk edge in FRONT of the arms.
       expect(seatedArmsDepth(slot)).toBeLessThan(items[1]!.d);
@@ -1620,7 +1432,7 @@ describe('sprite parts', () => {
   it('with a cache, renderScene emits the direct path’s ops in the same order (blit bookkeeping aside)', () => {
     const { placements, byName, poses } = fullRoom();
     const a = recordingCtx();
-    renderScene(
+    scene(
       a.ctx,
       fit,
       placements,
@@ -1636,7 +1448,7 @@ describe('sprite parts', () => {
       schedule,
     );
     const b = recordingCtx();
-    renderScene(
+    scene(
       b.ctx,
       fit,
       placements,
@@ -1703,10 +1515,10 @@ describe('workstation phases (sprite cache)', () => {
   for (const [label, n, atWork] of cases) {
     it(`${label}: pre ++ monitor ++ post == all`, () => {
       const all = recordingCtx();
-      drawWorkstation(all.ctx, fit, slot, n, 'revive', false, 3, undefined, true, atWork, 'all');
+      ws(all.ctx, fit, slot, n, 'revive', false, 3, undefined, true, atWork, 'all');
       const split = recordingCtx();
       for (const phase of ['pre', 'monitor', 'post'] as const) {
-        drawWorkstation(
+        ws(
           split.ctx,
           fit,
           slot,
@@ -1727,10 +1539,10 @@ describe('workstation phases (sprite cache)', () => {
   it('an owned, stepped-away desk (afterglow prop at the monitor’s station) splits the same way', () => {
     const away: OfficeNode = { ...owner, presence: 'away', last_seen_at: Date.now() - 60_000 };
     const all = recordingCtx();
-    drawWorkstation(all.ctx, fit, slot, away, 'revive', true, 3, undefined, true, false, 'all');
+    ws(all.ctx, fit, slot, away, 'revive', true, 3, undefined, true, false, 'all');
     const split = recordingCtx();
     for (const phase of ['pre', 'monitor', 'post'] as const) {
-      drawWorkstation(split.ctx, fit, slot, away, 'revive', true, 3, undefined, true, false, phase);
+      ws(split.ctx, fit, slot, away, 'revive', true, 3, undefined, true, false, phase);
     }
     expect(fmtOps(split.ops)).toEqual(fmtOps(all.ops));
     expect(fmtOps(all.ops).some((o) => o.includes('rgba(122, 148, 156'))).toBe(true); // the afterglow painted
@@ -1743,13 +1555,13 @@ describe('workstation phases (sprite cache)', () => {
     };
     for (const phase of ['pre', 'post'] as const) {
       const a = recordingCtx();
-      drawWorkstation(a.ctx, fit, slot, pulsing, 'revive', false, 1, undefined, true, true, phase);
+      ws(a.ctx, fit, slot, pulsing, 'revive', false, 1, undefined, true, true, phase);
       const b = recordingCtx();
-      drawWorkstation(b.ctx, fit, slot, pulsing, 'revive', false, 9, undefined, true, true, phase);
+      ws(b.ctx, fit, slot, pulsing, 'revive', false, 9, undefined, true, true, phase);
       expect(fmtOps(a.ops)).toEqual(fmtOps(b.ops));
     }
     const c = recordingCtx();
-    drawWorkstation(
+    ws(
       c.ctx,
       fit,
       facingSlot,
@@ -1763,7 +1575,7 @@ describe('workstation phases (sprite cache)', () => {
       'monitor',
     );
     const d = recordingCtx();
-    drawWorkstation(
+    ws(
       d.ctx,
       fit,
       facingSlot,
@@ -1782,7 +1594,7 @@ describe('workstation phases (sprite cache)', () => {
   describe('the screen follows the pulse, not the posture (ADR 660 §3)', () => {
     const paint = (n: typeof owner, t = 3) => {
       const r = recordingCtx();
-      drawWorkstation(
+      ws(
         r.ctx,
         fit,
         facingSlot,
@@ -1842,7 +1654,7 @@ describe('workstation phases (sprite cache)', () => {
     for (const [, n, atWork] of cases) {
       for (const phase of ['pre', 'post'] as const) {
         const r = recordingCtx();
-        drawWorkstation(r.ctx, fit, slot, n, 'revive', false, 3, undefined, true, atWork, phase);
+        ws(r.ctx, fit, slot, n, 'revive', false, 3, undefined, true, atWork, phase);
         expect(readsBeforeWrites(r.ops)).toEqual([]);
       }
     }
@@ -1850,12 +1662,14 @@ describe('workstation phases (sprite cache)', () => {
   it('deskStationItems carries sprite·live·sprite parts for a desk slot and no workstation parts for a bench seat', () => {
     const r = recordingCtx();
     const desk = deskStationItems(r.ctx, fit, slot, owner, {
+      rendered: ART,
       teamName: 'revive',
       t: 3,
       lampsOn: true,
     });
     expect(desk.items[0]!.parts!.map((p) => p.kind)).toEqual(['sprite', 'live', 'sprite']);
     const bench = deskStationItems(r.ctx, fit, DESK_SLOTS.find((s) => s.kind === 'bench')!, owner, {
+      rendered: ART,
       teamName: 'revive',
     });
     // A bench seat has no workstation; only its resting chair is still furniture, and sprites as such.
@@ -1870,6 +1684,7 @@ describe('workstation phases (sprite cache)', () => {
     const seat = deskSeat(desk);
     const at = (gesture: number, gestureT: number) =>
       deskStationItems(r.ctx, fit, desk, owner, {
+        rendered: ART,
         teamName: 'revive',
         ownerPose: { lx: seat.lx, ly: seat.ly, dir: desk.dir, sit: 1, gesture, gestureT } as Pose,
       }).items.filter((i) =>
@@ -1932,7 +1747,7 @@ describe('static furniture sprites', () => {
       clear: () => {},
     };
     const r = recordingCtx();
-    renderScene(
+    scene(
       r.ctx,
       fit,
       placements,
@@ -1958,21 +1773,6 @@ describe('static furniture sprites', () => {
     expect(count('bench')).toBe(1);
     expect(new Set(keys).size).toBe(keys.length); // no two items share a key
   });
-  it('each one sets every state it reads, so a sprite starting from the 2D defaults is equivalent', () => {
-    const draws: [string, (c: CanvasRenderingContext2D) => void][] = [
-      ['plant snake', (c) => drawPlant(c, fit, PLANTS[0]!.lx, PLANTS[0]!.ly, 'snake')],
-      ['plant fiddle', (c) => drawPlant(c, fit, PLANTS[0]!.lx, PLANTS[0]!.ly, 'fiddle')],
-      ['shelf', (c) => bookshelf(c, fit, BOOKSHELVES[0]!, 0)],
-      ['entrance', (c) => drawEntrance(c, fit)],
-      ['bench', (c) => benchCounter(c, fit)],
-    ];
-    for (const [label, draw] of draws) {
-      const r = recordingCtx();
-      draw(r.ctx);
-      expect(r.ops.length, label).toBeGreaterThan(5);
-      expect(readsBeforeWrites(r.ops), label).toEqual([]);
-    }
-  });
   it('every sprite part in the room sets every state it reads — the furniture made sprites for dirty rects too', () => {
     const { placements, byName, poses } = fullRoom();
     const draws = new Map<string, (c: CanvasRenderingContext2D) => void>();
@@ -1985,7 +1785,7 @@ describe('static furniture sprites', () => {
       size: () => 0,
       clear: () => {},
     };
-    renderScene(
+    scene(
       recordingCtx().ctx,
       fit,
       placements,
@@ -2034,42 +1834,20 @@ describe('background layer (sprite cache)', () => {
   const board = (): WallBoard =>
     projectWallBoard({ lanes: [laneFix('a', 'open'), laneFix('b', 'active')], warnings: [] })!;
 
-  it('static ++ live emits exactly what the whole wall emits, in order', () => {
-    const all = recordingCtx();
-    drawWalls(all.ctx, fit, env, schedule, board(), 3, 'all');
-    const split = recordingCtx();
-    for (const slice of ['static', 'live'] as const) {
-      drawWalls(split.ctx, fit, env, schedule, board(), 3, slice);
-    }
-    expect(fmtOps(split.ops)).toEqual(fmtOps(all.ops));
-    expect(all.ops.length).toBeGreaterThan(200);
-  });
-
-  it('the static slices read neither t nor the office hour — only the live fixtures do', () => {
-    const a = recordingCtx();
-    drawWalls(a.ctx, fit, computeLightEnv(9, true), schedule, board(), 1, 'static');
-    const b = recordingCtx();
-    drawWalls(
-      b.ctx,
-      fit,
-      { ...computeLightEnv(9, true), hours: 16.5 },
-      schedule,
-      board(),
-      9,
-      'static',
-    );
-    expect(fmtOps(a.ops)).toEqual(fmtOps(b.ops));
+  it('the walls read the office hour only through the clock hands', () => {
     const live1 = recordingCtx();
-    drawWalls(live1.ctx, fit, { ...env, hours: 9 }, schedule, board(), 3, 'live');
+    drawWalls(live1.ctx, fit, { ...env, hours: 9 }, schedule, board(), 3, undefined, ART);
     const live2 = recordingCtx();
-    drawWalls(live2.ctx, fit, { ...env, hours: 16.5 }, schedule, board(), 3, 'live');
+    drawWalls(live2.ctx, fit, { ...env, hours: 16.5 }, schedule, board(), 3, undefined, ART);
     expect(fmtOps(live1.ops)).not.toEqual(fmtOps(live2.ops)); // the clock hands moved
+    // every fixture blits its art once, and the prints paint on their mats
+    expect(live1.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG)).toHaveLength(ART_IDS.filter((id) => id.startsWith('wall/')).length);
   });
 
   it('a card that just landed sways on its tape, a taken one leaves a pin hole, and both settle (L5)', () => {
     const draw = (w: WallBoard) => {
       const r = recordingCtx();
-      drawWalls(r.ctx, fit, env, schedule, w, 3, 'live');
+      drawWalls(r.ctx, fit, env, schedule, w, 3, undefined, ART);
       return fmtOps(r.ops);
     };
     const plain = board();
@@ -2087,7 +1865,7 @@ describe('background layer (sprite cache)', () => {
   it('a slot a card has held keeps its tack hole; a slot none has held stays clean (L5, history)', () => {
     const draw = (w: WallBoard) => {
       const r = recordingCtx();
-      drawWalls(r.ctx, fit, env, schedule, w, 3, 'live');
+      drawWalls(r.ctx, fit, env, schedule, w, 3, undefined, ART);
       return fmtOps(r.ops);
     };
     const holeFills = (ops: string[]) =>
@@ -2109,40 +1887,35 @@ describe('background layer (sprite cache)', () => {
     expect(holeFills(draw(oneBack))).toBe(4);
   });
 
-  it('the live slice paints the clock, the sign and the board and nothing else', () => {
+  it('the sign and the board paint only when there is one; the clock hands always do', () => {
     const live = recordingCtx();
-    drawWalls(live.ctx, fit, env, schedule, board(), 3, 'live');
+    drawWalls(live.ctx, fit, env, schedule, board(), 3, undefined, ART);
     const noFixtures = recordingCtx();
-    drawWalls(noFixtures.ctx, fit, env, null, null, 3, 'live');
+    drawWalls(noFixtures.ctx, fit, env, null, null, 3, undefined, ART);
     expect(live.ops.length).toBeGreaterThan(noFixtures.ops.length); // sign + board are in there
     expect(noFixtures.ops.length).toBeGreaterThan(0); // the clock always hangs
   });
 
-  it('backgroundKey follows what the shell paints with, and not the office hour', () => {
+  it('backgroundKey follows the room state and its fade in 32 steps, the daylight, the fit and the dpr — not the hour (plan Task 8)', () => {
     const k = backgroundKey(fit, env, 1);
-    expect(backgroundKey(fit, { ...env, hours: (env.hours + 3) % 24 }, 1)).toBe(k);
-    expect(backgroundKey(fit, { ...env, skyStrength: env.skyStrength + 0.2 }, 1)).not.toBe(k);
-    expect(backgroundKey(fit, { ...env, skyTint: 'rgb(1, 2, 3)' }, 1)).not.toBe(k);
+    expect(backgroundKey(fit, env, 1)).toBe(k);
+    // the same day state at another hour is the same key…
+    expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
+    // …a fade step is not; and two instants 10 s apart inside a fade share a step
+    const a = backgroundKey(fit, { ...env, hours: 16.6 }, 1);
+    expect(a).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
+    expect(backgroundKey(fit, { ...env, hours: 16.6 + 10 / 3600 }, 1)).toBe(a);
+    // what the shell paints with
     expect(backgroundKey(fit, { ...env, daylight: env.daylight / 2 }, 1)).not.toBe(k);
     expect(backgroundKey({ ...fit, oy: fit.oy + 1 }, env, 1)).not.toBe(k);
     expect(backgroundKey(fit, env, 2)).not.toBe(k);
+    // what it does not read: the painted shell's sky wash is gone with it
+    expect(backgroundKey(fit, { ...env, skyStrength: env.skyStrength + 0.2 }, 1)).toBe(k);
   });
 
-  it('the RENDERED shell’s key follows the room state and its fade, in 32 steps (plan Task 8)', () => {
-    const k = backgroundKey(fit, env, 1, true);
-    expect(backgroundKey(fit, env, 1, true)).toBe(k);
-    expect(k).not.toBe(backgroundKey(fit, env, 1));
-    // the same day state at another hour is the same key…
-    expect(backgroundKey(fit, { ...env, hours: 10 }, 1, true)).toBe(backgroundKey(fit, { ...env, hours: 14 }, 1, true));
-    // …a fade step is not; and two instants 10 s apart inside a fade share a step
-    const a = backgroundKey(fit, { ...env, hours: 16.6 }, 1, true);
-    expect(a).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1, true));
-    expect(backgroundKey(fit, { ...env, hours: 16.6 + 10 / 3600 }, 1, true)).toBe(a);
-  });
-
-  it('the shell sets every state it reads, so its sprite can start from the 2D defaults', () => {
+  it('the wall fixtures set every state they read, so a sprite can start from the 2D defaults', () => {
     const r = recordingCtx();
-    drawWalls(r.ctx, fit, env, schedule, board(), 3, 'static');
+    drawWalls(r.ctx, fit, env, schedule, board(), 3, undefined, ART);
     expect(readsBeforeWrites(r.ops)).toEqual([]);
   });
 });
@@ -2219,44 +1992,24 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
   });
 
   it('draws the wagon only while the dog is hauling it', () => {
-    const hauling: string[] = [];
-    renderScene(
-      recCtx(hauling),
-      fit,
-      new Map(),
-      new Map(),
-      new Map(),
-      1,
-      'revive',
-      undefined,
-      walkingPet({ cargo: 'wagon' }),
-    );
-    expect(hauling).toContain(WAGON_RED);
-    const free: string[] = [];
-    renderScene(
-      recCtx(free),
-      fit,
-      new Map(),
-      new Map(),
-      new Map(),
-      1,
-      'revive',
-      undefined,
-      walkingPet(),
-    );
-    expect(free).not.toContain(WAGON_RED);
+    // The wagon is rendered art (`welcome/wagon`): one more blit of the art while the dog hauls it.
+    const blits = (pet: PetState) => {
+      const r = recordingCtx();
+      scene(r.ctx, fit, new Map(), new Map(), new Map(), 1, 'revive', undefined, pet);
+      return r.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG).length;
+    };
+    expect(blits(walkingPet({ cargo: 'wagon' }))).toBe(blits(walkingPet()) + 1);
   });
 
-  it('paints the lanyard, the label strip, the hello and the blink', () => {
+  it('paints the label strip, the hello and the blink (the lanyard is a figure layer now)', () => {
     const member = node('ada', 'working');
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
     const home = homePoses(placements, members).get('ada')!;
-    // Standing and facing the camera, so the lanyard's card is on the visible side of the chest.
     const poses = new Map([['ada', { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 }]]);
     const paints: string[] = [];
     const texts: string[] = [];
-    renderScene(
+    scene(
       recCtx(paints, texts),
       fit,
       placements,
@@ -2279,7 +2032,6 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
         }),
       },
     );
-    expect(paints).toContain('hsl(11, 68%, 62%)'); // the lanyard
     expect(paints).toContain('hsl(22, 68%, 62%)'); // the label strip
     expect(paints).toContain(BOOT_LED); // the agent's boot blink
     expect(texts).toContain('hello');
@@ -2287,7 +2039,7 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
 
   it('draws a lanyard in flight from the front desk, and only while it flies', () => {
     const flying: string[] = [];
-    renderScene(
+    scene(
       recCtx(flying),
       fit,
       new Map(),
@@ -2307,7 +2059,7 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     );
     expect(flying).toContain('hsl(44, 68%, 62%)');
     const landed: string[] = [];
-    renderScene(
+    scene(
       recCtx(landed),
       fit,
       new Map(),
@@ -2342,38 +2094,13 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     expect(receptionistPose(r('idle')).gesture).toBe(0);
   });
 
-  it('paints the first-day moving box when a member carries it', () => {
-    const member = node('ada', 'working');
-    const members = new Map([[member.name, member]]);
-    const placements = assignSeats([member]);
-    const home = homePoses(placements, members).get('ada')!;
-    const standing = { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 };
-    const carrying: string[] = [];
-    drawActor(recCtx(carrying), fit, { ...standing, carry: 'movingBox' }, member, 1);
-    expect(carrying).toContain('#c9a26b'); // the kraft cardboard
-    const empty: string[] = [];
-    drawActor(recCtx(empty), fit, { ...standing, carry: null }, member, 1);
-    expect(empty).not.toContain('#c9a26b');
-  });
-
-  it('shows the lanyard cord from behind too — newcomers walk away from the camera to their desks', () => {
-    const member = node('ada', 'working');
-    const members = new Map([[member.name, member]]);
-    const placements = assignSeats([member]);
-    const home = homePoses(placements, members).get('ada')!;
-    const away = { ...home, dir: 'N' as const, heading: -Math.PI / 2, sit: 0 };
-    const paints: string[] = [];
-    drawActor(recCtx(paints), fit, away, member, 1, false, undefined, 'hsl(55, 68%, 62%)');
-    expect(paints).toContain('hsl(55, 68%, 62%)');
-  });
-
   it('a spent welcome paints nothing of itself', () => {
     const member = node('ada', 'working');
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
     const paints: string[] = [];
     const texts: string[] = [];
-    renderScene(
+    scene(
       recCtx(paints, texts),
       fit,
       placements,
@@ -2431,7 +2158,6 @@ describe('furnishedBox (2026-10-01: /live and /broadcast fit the furnished room)
       const b = boardAnchor(fit);
       expect(b.x + b.w).toBeLessThanOrEqual(w);
     }
-    // eslint-disable-next-line no-console
     console.log('furnished/room scale', {
       laptop: wide,
       broadcast: grow(1459, 1080),

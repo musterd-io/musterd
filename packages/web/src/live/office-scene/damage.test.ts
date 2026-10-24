@@ -6,6 +6,7 @@ import { fitFloor } from './iso';
 import { computeLightEnv } from './lighting';
 import { fmtOps, recordingCtx } from './recording-ctx';
 import { renderScene } from './render';
+import { fakeArt } from './rendered/fixtures';
 import { assignSeats } from './seating';
 import type { OfficeNode } from './types';
 
@@ -181,6 +182,7 @@ describe('planning a repaint', () => {
 });
 
 describe('renderScene through the unit hook', () => {
+  const ART = fakeArt();
   function room() {
     const node = (name: string): OfficeNode =>
       ({
@@ -217,10 +219,11 @@ describe('renderScene through the unit hook', () => {
   it('running every unit paints exactly what the plain render paints', () => {
     const { placements, byName, poses } = room();
     const a = recordingCtx();
-    renderScene(a.ctx, fit, placements, byName, poses, 3, 'revive', env);
+    renderScene(a.ctx, fit, placements, byName, poses, 3, 'revive', env, null, undefined, null, null, null, { rendered: ART });
     const b = recordingCtx();
     let n = 0;
     renderScene(b.ctx, fit, placements, byName, poses, 3, 'revive', env, null, undefined, null, null, null, {
+      rendered: ART,
       units: {
         run(draw) {
           n++;
@@ -238,6 +241,7 @@ describe('renderScene through the unit hook', () => {
     rec.reset([1, 0, 0, 1, 0, 0]);
     const units: Unit[] = [];
     renderScene(rec.ctx, fit, placements, byName, poses, 3, 'revive', env, null, undefined, null, null, null, {
+      rendered: ART,
       units: {
         run(draw) {
           rec.begin();
@@ -248,6 +252,7 @@ describe('renderScene through the unit hook', () => {
     });
     let i = 0;
     renderScene(recordingCtx().ctx, fit, placements, byName, poses, 3, 'revive', env, null, undefined, null, null, null, {
+      rendered: ART,
       units: { run: () => void i++ },
     });
     expect(i).toBe(units.length);
