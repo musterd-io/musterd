@@ -29,7 +29,6 @@ import {
   receptionistPose,
   confettiColor,
   plateText,
-  WAGON_RED,
   wagonTrail,
   actorSortAnchor,
   animatedDeskAnchors,
@@ -1993,40 +1992,20 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
   });
 
   it('draws the wagon only while the dog is hauling it', () => {
-    const hauling: string[] = [];
-    scene(
-      recCtx(hauling),
-      fit,
-      new Map(),
-      new Map(),
-      new Map(),
-      1,
-      'revive',
-      undefined,
-      walkingPet({ cargo: 'wagon' }),
-    );
-    expect(hauling).toContain(WAGON_RED);
-    const free: string[] = [];
-    scene(
-      recCtx(free),
-      fit,
-      new Map(),
-      new Map(),
-      new Map(),
-      1,
-      'revive',
-      undefined,
-      walkingPet(),
-    );
-    expect(free).not.toContain(WAGON_RED);
+    // The wagon is rendered art (`welcome/wagon`): one more blit of the art while the dog hauls it.
+    const blits = (pet: PetState) => {
+      const r = recordingCtx();
+      scene(r.ctx, fit, new Map(), new Map(), new Map(), 1, 'revive', undefined, pet);
+      return r.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG).length;
+    };
+    expect(blits(walkingPet({ cargo: 'wagon' }))).toBe(blits(walkingPet()) + 1);
   });
 
-  it('paints the lanyard, the label strip, the hello and the blink', () => {
+  it('paints the label strip, the hello and the blink (the lanyard is a figure layer now)', () => {
     const member = node('ada', 'working');
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
     const home = homePoses(placements, members).get('ada')!;
-    // Standing and facing the camera, so the lanyard's card is on the visible side of the chest.
     const poses = new Map([['ada', { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 }]]);
     const paints: string[] = [];
     const texts: string[] = [];
@@ -2053,7 +2032,6 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
         }),
       },
     );
-    expect(paints).toContain('hsl(11, 68%, 62%)'); // the lanyard
     expect(paints).toContain('hsl(22, 68%, 62%)'); // the label strip
     expect(paints).toContain(BOOT_LED); // the agent's boot blink
     expect(texts).toContain('hello');

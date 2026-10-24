@@ -14,11 +14,12 @@ import {
 } from './iso';
 
 describe('fitFloor', () => {
-  it('is exactly the whole-room fit it always was (the hero and /office-preview rely on it)', () => {
-    // The pre-2026-10-01 formula, written out: scale off the whole box, centred on the panel.
+  it('is the whole-room fit through the corner camera (the hero and /office-preview rely on it)', () => {
+    // The pre-2026-10-01 formula, written out: scale off the whole box, centred on the panel — through
+    // the corner camera, which has been the room's camera since the painters went (lane 01M5D8EJ40).
     const old = (w: number, h: number) => {
       const projW = FLOOR * KX * 2;
-      const projH = SCENE_RISE + FLOOR * KY * 2 + SCENE_DROP;
+      const projH = SCENE_RISE + FLOOR * CORNER_CAMERA.ky * 2 + SCENE_DROP;
       const scale = Math.max(0.05, Math.min((w * 0.96) / projW, (h * 0.96) / projH));
       return { ox: w / 2, oy: (h - projH * scale) / 2 + SCENE_RISE * scale, scale };
     };
