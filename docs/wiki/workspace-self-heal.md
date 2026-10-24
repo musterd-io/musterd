@@ -97,6 +97,10 @@ The `drift_unreadable` "stale" warning (lane `01M2NYV805`) assumed a running wri
 
 Two things worth not relearning while reading such a transcript: Claude Code records a `hook_success` attachment only when the hook printed something, so a silent hook run leaves no record at all — the cognee hook's `{}` shows every call, the musterd interrupt hook shows only its deaf lines — and the deaf line (`the interrupt line is deaf — this seat's session lease is dead`) is emitted *after* the drift write in `interruptCheck`, so a deaf seat still refreshes the record.
 
+## The wake repair does not stick on three seats (2026-10-23, dolly dream)
+
+The host's dream-wake self-heal repaired 5 hooks on grokbot, wanderer and alfie on two nights running, while dolly repaired no hooks either night. Night 2026-10-22: `~/.musterd/host.log` lines 23128, 23137, 23141 print `repaired 5 hooks.` (grokbot's insight 01M5KMAW65F3QFHCJFA5KHY6H3). Night 2026-10-23: lines 23391, 23401, 23405 print `repaired 1 guidance file and 5 hooks.`, and dolly's line 23397 prints `repaired 1 guidance file.` The cause is not checked. izzo's lines 23363 and 23366 name `~/.claude/settings.json` and the runtime `.codex/hooks.json` as shared files that need a human, which may be related. A repair that has to run again every night is not holding (2026-10-23; falsify: the next dream wake for grokbot, wanderer or alfie prints a self-heal line with no hooks in it, or no self-heal line at all). <!-- claim: defect -->
+
 ## What it will never touch
 
 The ADR 261 permission floor, and any file outside the seat's worktree (the machine-wide Claude Code settings, Codex's git-common-dir `hooks.json`) — spec 2026-09-16, ADR 408 decision 2. Falsify: leave a seat's `.claude/settings.local.json` one floor entry short, run the probe, and check the entry is STILL absent and the line names `--refresh-permissions`.
