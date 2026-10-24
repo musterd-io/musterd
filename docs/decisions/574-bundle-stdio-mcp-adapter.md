@@ -1,6 +1,6 @@
 # ADR 574: Bundle the stdio MCP adapter to one file
 
-- Status: proposed
+- Status: accepted (2026-10-24, nick, in chat). Bundle shipped in #2435; the mcp-fast-path lanes closed confirmed.
 - Date: 2026-10-12
 - Deciders: TJ (lane owner), lazara (goal owner)
 - Lane: `01M4S37QV76WG0DS3K92J18E0Y`, goal `mcp-fast-path`

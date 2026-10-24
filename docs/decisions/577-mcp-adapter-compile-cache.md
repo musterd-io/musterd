@@ -1,6 +1,6 @@
 # ADR 577: Enable Node's compile cache for the launched MCP adapter
 
-- Status: proposed
+- Status: accepted (2026-10-24, nick, in chat). Compile cache shipped in #2458; the mcp-fast-path lanes closed confirmed.
 - Date: 2026-10-12
 - Deciders: TJ (lane owner), lazara (goal owner)
 - Lane: `01M4S9SJJPTD1J6SM2RG8R5DH7`, goal `mcp-fast-path`

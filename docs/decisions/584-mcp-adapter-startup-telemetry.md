@@ -1,6 +1,6 @@
 # 584 — The MCP adapter reports its own startup on every real launch
 
-- Status: proposed
+- Status: accepted (2026-10-24, nick, in chat). Startup telemetry shipped in #2527; the mcp-fast-path lanes closed confirmed.
 - Date: 2026-10-13
 - Deciders: TJ (lane owner), nick (asked for continuous measurement)
 - Lane: `01M4VNTKV4AAZQPVEX9WZB3QRM`, goal `mcp-fast-path`
