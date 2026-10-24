@@ -43,6 +43,7 @@ export const PUBLIC_ALLOW = [
   // /blog/rss.xml need no entry of their own: they are emitted INSIDE the already-allowed `docs`
   // and `blog` directories, which this list copies whole.
   'llms-full.txt',
+  'context7.json',
   '_headers',
   // The ADR 135 build stamp ({ ref, builtAt }), so the public origin says which commit it serves
   // and `musterd service site-gap` can measure landed-versus-live (ADR 308 §Observability, lane

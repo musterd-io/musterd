@@ -367,6 +367,7 @@ describe('siteFiles', () => {
         // subscription that never arrives, so the blog section is withheld whole instead.
         ...(postMirrors().length > 0 ? ['blog/rss.xml'] : []),
         'llms-full.txt',
+        'context7.json',
         'llms.txt',
         'robots.txt',
         'sitemap.xml',

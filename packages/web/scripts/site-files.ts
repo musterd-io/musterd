@@ -539,6 +539,18 @@ export function allMirrors(): SiteMirror[] {
 }
 
 /** Everything this module contributes to the build, keyed by the filename it ships as. */
+/** context7.json — proves musterd.io owns the Context7 library built from /llms.txt. */
+export function context7Json(): string {
+  return `${JSON.stringify(
+    {
+      url: 'https://context7.com/llmstxt/musterd_io_llms_txt',
+      public_key: 'pk_EQNgYN1f7kl3bsIQj5Zta',
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 export function siteFiles(): Record<string, string | Uint8Array> {
   const mirrors = allMirrors();
   return {
@@ -551,6 +563,9 @@ export function siteFiles(): Record<string, string | Uint8Array> {
     'sitemap.xml': sitemapXml(siteUrls(), mirrors),
     'llms.txt': llmsTxt(),
     'llms-full.txt': llmsFullTxt(),
+    // Context7's ownership proof for the llms.txt library it indexes (context7.com/llmstxt/
+    // musterd_io_llms_txt). The key is public by design: it names the claim, it grants nothing.
+    'context7.json': context7Json(),
     // No feed while there are no posts — an empty channel is a subscription that never arrives.
     ...(blogEntries().length > 0 ? { 'blog/rss.xml': rssXml() } : {}),
     // `/docs/spec` is a directory of prerendered HTML, so `/docs/spec.md` sits beside it rather
