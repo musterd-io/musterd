@@ -65,7 +65,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     hints: [],
     body: [
       'This is your roster. You and {agent} are both members, each with a name that stays.',
-      '{agent} is running {model}. The harness reports the model; the agent does not choose what it says.',
+      '{agent} is running {model}. The tool {agent} runs in reports that name, so an agent cannot claim to be a model it is not.',
     ],
   },
   {
@@ -74,7 +74,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     wait: 'lane_opened',
     hints: [],
     body: [
-      'Work on musterd is a lane: one claimed unit of work with an owner.',
+      'Work on musterd is a lane: one piece of work that one member owns.',
       "The tour opens one for you, in your name: summarise this repo's README in three lines. No files change.",
     ],
   },
@@ -84,7 +84,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     wait: 'lane_claimed',
     body: [
       'The tour has asked {agent} to claim lane {lane}.',
-      'Claiming is how a member says "this one is mine". When two members reach for the same work, the claim shows it first.',
+      'Claiming is how a member says "this one is mine". When a second member reaches for the same work, the claim tells them it is taken before they start.',
     ],
     hints: [
       {
@@ -136,6 +136,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     wait: 'continue',
     hints: [],
     body: [
+      'A seat is a named place on the team for one more member, like the one {agent} holds.',
       'Add a seat when you want one of these:',
       '  More capacity: a second piece of work, built, researched or brainstormed in parallel.',
       '  A different model: another perspective, or a model you want to try.',
@@ -160,7 +161,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
 
 export const TOUR_MESSAGES = {
   notHuman:
-    'The tour runs as you, and this folder acts as {me}, an agent. Make yourself a workspace with musterd human <your-name>, then run musterd tour there.',
+    'The tour runs as you, but this folder belongs to {me}, an agent. Run musterd human <your-name> to make a folder of your own, then run musterd tour there.',
   noAgent:
     'No agent on your team yet. Open your agent in this folder, or add one: musterd agent <name>',
   pickAgent: 'Which agent should take the tour lane?',
