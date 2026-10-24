@@ -997,6 +997,8 @@ export class HttpClient {
     /** ADR 202 on the ack (lane 01M2GQFJXG): the lane this accept/decline moved by answering a
      *  `lane_review` ask. Absent when the act moved nothing, and from an older daemon. */
     lane_verdict?: { lane: string; state: 'done' | 'active' };
+    /** ADR 662: this human lane-review answer was recorded but did not count without A2. */
+    lane_authority_refused?: { lane: string; reason: string };
     /** ADR 539: this accept was the peer confirmation on a risky lane; who (if anyone) was asked. */
     lane_escalation?: { lane: string; human: string | null };
     lane_ack?: { lane: string };
@@ -1031,6 +1033,7 @@ export class HttpClient {
     return this.request('POST', `/teams/${slug}/messages`, { envelope }) as Promise<{
       ask_contract?: AskContract;
       lane_verdict?: { lane: string; state: 'done' | 'active' };
+      lane_authority_refused?: { lane: string; reason: string };
       lane_escalation?: { lane: string; human: string | null };
       lane_ack?: { lane: string };
       lane_superseded?: {

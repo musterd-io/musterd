@@ -442,10 +442,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : null;
     if (changeLabel) Object.assign(merged, changeLabel);
     let approval: ApprovalProof | undefined;
-    if (submit && merged.authorized_by !== undefined) {
+    if (sub !== 'claim' && merged.authorized_by !== undefined) {
       if (merged.authorized_by !== identity.name) {
         throw new CliError(
-          `A2 approval must be collected by the named human; run lane submit as ${merged.authorized_by}`,
+          `A2 approval must be collected by the named human; run lane ${sub} as ${merged.authorized_by}`,
           1,
         );
       }

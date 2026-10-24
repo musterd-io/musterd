@@ -28,6 +28,15 @@ const USAGE =
 type Http = ReturnType<typeof resolve>['http'];
 type Proof = Awaited<ReturnType<Http['getParkedApproval']>>['proof'];
 
+/** ADR 662 / ADR 694: a human's verdict on an acceptance ask signs the lane verdict, not the ask id. */
+export function laneReviewApproval(lane: string, verdict: 'accept' | 'decline') {
+  return {
+    act: 'human_accept' as const,
+    target: lane,
+    payload: { lane, verdict },
+  };
+}
+
 function printJson(value: unknown): number {
   process.stdout.write(JSON.stringify(value, null, 2) + '\n');
   return 0;
