@@ -3817,6 +3817,8 @@ function screenPanel(
   /** ADR 660: whether the screen is ALIVE (animated desktop + bloom — only while the owner's pulse is
    * live) and how hard a `run` lights it. Absent: alive follows `working` (the receptionist's desk). */
   life?: ScreenLife,
+  /** The body is rendered art: draw only the screen face, and no idle glass (the render has its own). */
+  faceOnly = false,
 ): void {
   const sn = dir === 'S' || dir === 'N';
   // 3 deep, not 5: at this camera angle the panel's own side face is what made a monitor read as a
@@ -3824,7 +3826,7 @@ function screenPanel(
   // below — the depth and the foot were both doing it, and fixing one alone leaves the tower.
   const pw = sn ? wAcross : 3;
   const pd = sn ? 3 : wAcross;
-  box(ctx, fit, mx, my, pw, pd, h, '#2a2e33', up + PANEL_UP);
+  if (!faceOnly) box(ctx, fit, mx, my, pw, pd, h, '#2a2e33', up + PANEL_UP);
   const lo = (up + PANEL_UP) * fit.scale;
   const hi = (up + PANEL_UP + h) * fit.scale;
   const dn = (p: Pt, u: number): Pt => ({ x: p.x, y: p.y - u });
@@ -3849,7 +3851,7 @@ function screenPanel(
       // A lit screen is a fact of sitting at the desk; a MOVING one is a fact of working (ADR 660 §3):
       // with no live pulse the desktop is drawn once, still (`t` pinned), and nothing blooms.
       drawScreenLife(ctx, map, wPx, fit.scale, Math.abs(Math.round(mx * 7 + my * 13)), alive ? t : 0, wAcross >= 30 ? 2 : 1);
-    } else {
+    } else if (!faceOnly) {
       quad(ctx, [dn(bl, lo), dn(br, lo), dn(br, hi), dn(bl, hi)], SCREEN_IDLE);
     }
     if (curved) {
@@ -3932,6 +3934,13 @@ function monitorStand(ctx: CanvasRenderingContext2D, fit: Fit, mx: number, my: n
   box(ctx, fit, mx, my, sn ? 5 : 3, sn ? 3 : 5, PANEL_UP, '#33383f', up + 1.5); // neck
 }
 
+/**
+ * The rendered art the monitors read (lane 01M5D8EJ40), set by `renderScene` and `drawWorkstation` for
+ * the draw in progress — four callers reach `monitor`, and the bench and the front desk carry no assets
+ * of their own. Undefined: every monitor paints.
+ */
+let monitorArt: RenderedAssets | undefined;
+
 function monitor(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -3947,6 +3956,23 @@ function monitor(
   const setup = id == null ? 'single' : monitorSetupFor(id);
   const sn = dir === 'S' || dir === 'N';
   const p: [number, number] = [-FWD[dir][1], FWD[dir][0]]; // across-desk unit
+  // The rendered body (stand, panel, bezel, back), lifted to this desk's surface; the painter keeps only
+  // the live screen face on top of it — the desktop, the idle glass and the bloom.
+  const art = `monitor/${setup}/${dir}`;
+  if (monitorArt?.images.has(art)) {
+    ctx.save();
+    ctx.translate(0, -surfaceUp * fit.scale);
+    const drawn = blitIf(ctx, fit, monitorArt, art, mx, my);
+    ctx.restore();
+    if (drawn) {
+      const panels: [number, number, number, boolean][] =
+        setup === 'dual' ? [[-18, 34, 22, false], [18, 34, 22, false]] : setup === 'ultrawide' ? [[0, 54, 20, true]] : [[0, 34, 22, false]];
+      for (const [off, w, h, curved] of panels) {
+        screenPanel(ctx, fit, mx + p[0] * off, my + p[1] * off, dir, working, surfaceUp, w, h, curved, t, life, true);
+      }
+      return;
+    }
+  }
   if (setup === 'dual') {
     // Two full-size panels (each the size of a single monitor) on a shared dual-arm stand, sat side by
     // side so they read as two real screens, not two half-screens. `[-1,1]` order paints the nearer last.
@@ -4508,6 +4534,7 @@ export function drawWorkstation(
   /** Only the props on the near (+ly) half, and no base — the `nearHalfProps` pass. */
   nearOnly = false,
 ): void {
+  if (rendered) monitorArt = rendered;
   const { lx, ly, dir, id } = slot;
   const f = FWD[dir];
   const p: [number, number] = [-f[1], f[0]]; // desk-left/right unit (perpendicular to facing)
@@ -5325,6 +5352,7 @@ export function renderScene(
   /* Every static item's key ends with the same three facts: where the pixel grid is, how dense it
      is, and what the theme resolved to. A resize or a theme flip is one cold frame, then cached. */
   const rendered = opts.rendered;
+  monitorArt = rendered;
   const statKey = `${fitKey(fit)}·${opts.dpr ?? 1}·${paletteKey()}${rendered ? '·r' : ''}`;
   /* Pre-rendered art (plan Task 6): a static item blits its asset where its painter ran, through
      the same depth item and sprite key, so nothing about order or caching changes. */

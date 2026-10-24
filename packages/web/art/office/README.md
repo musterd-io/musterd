@@ -269,6 +269,14 @@ multiply tint over a soft shadow's half-transparent edge shows the tint colour i
 bigger than the painter's chairs: a 40-wide seat, backs to the shoulders or above (nick, 2026-10-23: the first, painter-sized
 render was "too small"), with the seat top kept at `SEAT_TOP`, where a seated figure lands.
 
+## The desk monitors (lane 01M5D8EJ40)
+
+`scene.py` `desk_monitor`: the three setups (single, dual, ultrawide) × four facings, at the painter's dimensions (a
+3-deep panel at `PANEL_UP` on a neck and a base plate), with a dark glass face toward the sitter inside a bezel and a
+vent and mount boss on the back. Built from the floor and lifted to the desk's surface at draw time, so the bench, the
+pods and the front desk share the images. The painter keeps only the live screen face on top (`screenPanel(…, faceOnly)`):
+the animated desktop, the curved monitor's bow shading and the bloom. The idle glass is the render's own.
+
 ## Original art
 
 Everything in this folder is ours. No game's assets, palettes or character designs are referenced
